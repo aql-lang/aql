@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // boru:sift is implemented in boru (sift.boru, embedded + run by BuildSiftModule).

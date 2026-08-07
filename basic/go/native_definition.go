@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // DefinitionNatives covers the binding / function-definition words:
@@ -301,7 +303,7 @@ func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// event is stored to a frame local rather than left on the simulated stack.
 	r.Check.Recorder().MarkValueDef(value)
 	// A rebind of a LOOP-CARRIED def (a pre-loop binding an armed for-body
-	// rebinds — eng.AnalyseLoopBody registered it via NoteLoopCarried) stores
+	// rebinds — check.AnalyseLoopBody registered it via NoteLoopCarried) stores
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
 	r.Check.Recorder().RecordDefRebind(name, value, pos)
@@ -340,7 +342,7 @@ const capCheckFnCarrierBinds = "engine.check.fn-carrier-binds"
 
 // NoteCheckFnCarrierBind records name → carrier in the per-pass table.
 func NoteCheckFnCarrierBind(r *Registry, name string, v Value) {
-	if m, ok, _ := eng.Cap[map[string]Value](r, capCheckFnCarrierBinds); ok && m != nil {
+	if m, ok, _ := core.Cap[map[string]Value](r, capCheckFnCarrierBinds); ok && m != nil {
 		m[name] = v
 		return
 	}
@@ -350,7 +352,7 @@ func NoteCheckFnCarrierBind(r *Registry, name string, v Value) {
 // CheckFnCarrierBind returns the fn carrier def-bound to name during this
 // check pass, if any.
 func CheckFnCarrierBind(r *Registry, name string) (Value, bool) {
-	m, ok, _ := eng.Cap[map[string]Value](r, capCheckFnCarrierBinds)
+	m, ok, _ := core.Cap[map[string]Value](r, capCheckFnCarrierBinds)
 	if !ok || m == nil {
 		return Value{}, false
 	}
@@ -443,9 +445,9 @@ func DefFormVia(base *Signature, offset int, genChain bool) func([]Value, map[st
 				var err error
 				switch {
 				case v.Parent.Equal(TMap) && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v):
-					ctorArgs[i], err = eng.AutoEvalConsumedMap(r, v, false)
+					ctorArgs[i], err = core.AutoEvalConsumedMap(r, v, false)
 				case v.Parent.Equal(TList):
-					ctorArgs[i], err = eng.AutoEvalConsumedList(r, v)
+					ctorArgs[i], err = core.AutoEvalConsumedList(r, v)
 				}
 				if err != nil {
 					return nil, err
@@ -456,7 +458,7 @@ func DefFormVia(base *Signature, offset int, genChain bool) func([]Value, map[st
 			// deferred call above becomes a no-op).
 			restore()
 		}
-		vals, err := eng.DispatchSig(base, ctorArgs, r)
+		vals, err := core.DispatchSig(base, ctorArgs, r)
 		if err != nil {
 			return nil, err
 		}
@@ -629,7 +631,7 @@ func DefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		// the kernel type installer — the same path the `type` word
 		// uses — so object/predicate lattice-minting and all
 		// type-installation validation happen in exactly one place.
-		return nil, eng.InstallType(r, name, body)
+		return nil, core.InstallType(r, name, body)
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
@@ -679,7 +681,7 @@ func DefWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, e
 		return false, nil
 	}
 	existing := r.Lookup(name)
-	if existing == nil || !eng.HasLockedSigs(existing) {
+	if existing == nil || !core.HasLockedSigs(existing) {
 		return false, nil
 	}
 	// Mirror InstallAndRecordDef's use-snapshot: the merge's
@@ -687,7 +689,7 @@ func DefWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, e
 	// would otherwise record a spurious self-use.
 	checking := r.Check.IsActive()
 	prevUsed := checking && r.Check.DefsUsed != nil && r.Check.DefsUsed[name]
-	if err := eng.InstallWordExtension(r, name, fnDef); err != nil {
+	if err := core.InstallWordExtension(r, name, fnDef); err != nil {
 		return true, err
 	}
 	r.Check.RecordDef(name, pos)
@@ -794,8 +796,8 @@ func defFnPredicateBind(r *Registry, name, typeName string, constraint, body Val
 	// scalar). The PredicateInputType check below mirrors the
 	// InstallType decision so the two paths stay aligned.
 	var reparentTo *Type
-	if typeName != "" && eng.PredicateInputType(constraint) != nil {
-		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+	if typeName != "" && core.PredicateInputType(constraint) != nil {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin != core.OriginBuiltin {
 			out = ReparentValue(out, def)
 			reparentTo = def
 		}
@@ -805,10 +807,10 @@ func defFnPredicateBind(r *Registry, name, typeName string, constraint, body Val
 	// short-circuited on the carrier in check mode, so the runtime bind is
 	// the first real evaluation. reparentTo carries the SAME reparent
 	// decision the interpreter just took, so the two engines agree.
-	out = RecordTypedBindOrRefuseConcrete(r, func() eng.TypedBindSpec {
+	out = RecordTypedBindOrRefuseConcrete(r, func() core.TypedBindSpec {
 		predCons := constraint
-		return eng.TypedBindSpec{
-			Kind: eng.TypedBindPredicate, Name: name, Describe: describeType(),
+		return core.TypedBindSpec{
+			Kind: core.TypedBindPredicate, Name: name, Describe: describeType(),
 			Def: reparentTo, Cons: &predCons,
 		}
 	}, body, out, pos, func() { MarkFnPredicateBindUncompilable(r, name) })
@@ -836,7 +838,7 @@ func MarkFnPredicateBindUncompilable(r *Registry, name string) {
 // the raw operand the runtime bind consumes. mkSpec is a THUNK so the spec
 // (its Describe renders the constraint) is only built when a bind is actually
 // recorded — a plain interpreter run pays nothing it did not pay before.
-func RecordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
+func RecordTypedBindOrRefuse(r *Registry, mkSpec func() core.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
 	if es := r.Check.Recorder(); es.Active() && !IsConcrete(body) {
 		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
 			return out
@@ -850,7 +852,7 @@ func RecordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body,
 // concrete-body decline: the fn-PREDICATE bind is a runtime evaluation for
 // every body shape (the predicate can transform, raise, or read live state),
 // so a concrete operand records the bind rather than riding the const pool.
-func RecordTypedBindOrRefuseConcrete(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
+func RecordTypedBindOrRefuseConcrete(r *Registry, mkSpec func() core.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
 	if es := r.Check.Recorder(); es.Active() {
 		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
 			return out
@@ -931,8 +933,8 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// arrives as a sugar marker; lower it to its paren form so the
 	// ParenExpr arm below evaluates it like the spelt-out
 	// `def b:(Box of [Integer])`.
-	if sinfo, sok := eng.AsSugar(constraint); sok {
-		if exp, serr := eng.SugarExpansion(r, sinfo, constraint, false); serr == nil && len(exp) == 1 {
+	if sinfo, sok := core.AsSugar(constraint); sok {
+		if exp, serr := core.SugarExpansion(r, sinfo, constraint, false); serr == nil && len(exp) == 1 {
 			constraint = exp[0]
 		}
 	}
@@ -959,7 +961,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// `def xs:[:(Pair of [String Integer])] […]` — needs the child
 	// evaluated the same way a top-level paren annotation is (the
 	// parser leaves it as a raw ParenExpr payload).
-	if evaluated, cerr := eng.ResolveChildTypeExpr(r, constraint); cerr != nil {
+	if evaluated, cerr := core.ResolveChildTypeExpr(r, constraint); cerr != nil {
 		return nil, fmt.Errorf("def %s: type annotation: %w", name, cerr)
 	} else {
 		constraint = evaluated
@@ -971,10 +973,10 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			fmt.Sprintf("def %s: type annotation must be a type value, got %s", name, constraint.String()), "def")
 		// An unresolved WORD annotation is almost always a misspelt type
 		// name — suggest the near-miss (diagnostics phase 4).
-		if ae, ok := err.(*eng.BoruError); ok && eng.IsWord(constraint) {
-			if w, werr := eng.AsWord(constraint); werr == nil {
-				if s := eng.DidYouMean(w.Name, r.SuggestionCandidates()); s != "" {
-					ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+		if ae, ok := err.(*core.BoruError); ok && core.IsWord(constraint) {
+			if w, werr := core.AsWord(constraint); werr == nil {
+				if s := core.DidYouMean(w.Name, r.SuggestionCandidates()); s != "" {
+					ae.Suggestions = append(ae.Suggestions, core.DiagSuggestion{Message: s})
 				}
 			}
 		}
@@ -993,7 +995,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// branches below (the ObjectType branch constructs class
 	// instances, etc.). Uninferable, undefaulted parameters error.
 	if IsTypeSchema(constraint) {
-		inst, ierr := eng.InferAndInstantiateSchema(r, constraint, body)
+		inst, ierr := core.InferAndInstantiateSchema(r, constraint, body)
 		if ierr != nil {
 			return nil, fmt.Errorf("def %s: %w", name, ierr)
 		}
@@ -1032,10 +1034,10 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// instance has the same provenance an explicit make gives it (a
 			// downstream `b typeof` then compiles). Outside emit mode this is a
 			// no-op and the concrete instance is bound.
-			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
+			if carrier, ok := check.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
 				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
 			}
-			result, err := eng.MakeObject(info, body, r)
+			result, err := core.MakeObject(info, body, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
@@ -1061,7 +1063,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// looks the schema up by name when the constraint carries no body.
 	if resInfo, isRes := ResolveResourceTypeInfo(r, constraint); isRes {
 		if body.Parent.Equal(TMap) {
-			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
+			if carrier, ok := check.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
 				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
 			}
 			provided, merr := AsMutableMap(body)
@@ -1103,10 +1105,10 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// predicate, no registry — over the runtime value, raising the
 			// byte-identical unify error on failure and binding Unify's result
 			// (base tag kept, no reparent) on success.
-			bound := RecordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
+			bound := RecordTypedBindOrRefuse(r, func() core.TypedBindSpec {
 				depCons := constraint
-				return eng.TypedBindSpec{
-					Kind: eng.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
+				return core.TypedBindSpec{
+					Kind: core.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
 				}
 			}, body, body, args[0].Pos(), func() {
 				if es := r.Check.Recorder(); es.Active() {
@@ -1125,9 +1127,9 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// when one side is bare and subtype-ordered) instead of the
 	// body's payload — `def x:Foo 1` would silently bind x to the
 	// Foo-tagged type literal, not the integer 1.
-	if IsBareTypeNode(constraint) && constraint.Origin == eng.OriginUserDef &&
+	if IsBareTypeNode(constraint) && constraint.Origin == core.OriginUserDef &&
 		typeName != "" && constraint.Parent != nil {
-		if def := r.LookupTypeName(typeName); def != nil && def.Origin == eng.OriginUserDef {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin == core.OriginUserDef {
 			// Walk up the lattice past any intervening user refines
 			// (e.g. `Foo refine Item refine String`) to the nearest
 			// builtin ancestor and unify against THAT. A sibling-of-
@@ -1136,7 +1138,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// match the immediate parent literal but does match the
 			// shared kernel base.
 			root := def.Parent
-			for root != nil && root.Origin == eng.OriginUserDef {
+			for root != nil && root.Origin == core.OriginUserDef {
 				root = root.Parent
 			}
 			if root == nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
@@ -1148,9 +1150,9 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				// A DYNAMIC body records a typed-bind event: OpBindTyped re-runs
 				// this exact Unify-against-builtin-ancestor + reparent over the
 				// runtime value, so compiled typeof/sig-dispatch see the newtype.
-				bound := RecordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
-					return eng.TypedBindSpec{
-						Kind: eng.TypedBindRefine, Name: name, Describe: describeType(), Def: def,
+				bound := RecordTypedBindOrRefuse(r, func() core.TypedBindSpec {
+					return core.TypedBindSpec{
+						Kind: core.TypedBindRefine, Name: name, Describe: describeType(), Def: def,
 					}
 				}, body, ReparentValue(body, def), args[0].Pos(),
 					func() { markRefineDefUncompilable(r, name, body) })
@@ -1209,7 +1211,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// shape (FnDefInfo) is unchanged, accessors keep working, just
 	// the dispatch identity flips.
 	if constraint.Parent.Equal(TFnUndef) && typeName != "" {
-		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin != core.OriginBuiltin {
 			unified = ReparentValue(unified, def)
 		}
 	}
@@ -1224,7 +1226,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// analysis) must not commit the deletion of an ENCLOSING binding: the
 	// region may never run, so popping here leaked `undefined_word` onto
 	// clean programs (`def x 1 do [7] error [undef x 9] x` — the
-	// wrapped-undef FP class; eng.Registry.SpecUndefBlocked). The binding
+	// wrapped-undef FP class; core.Registry.SpecUndefBlocked). The binding
 	// stays in the model — lenient in the one direction check mode is
 	// allowed to be. In-region bindings still pop (teardown untouched);
 	// top-level and `do`-body undefs still commit (leak fidelity).
@@ -1237,7 +1239,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		// state (design/OPEN-WORDS.0.md §2.1). The base native binding
 		// itself stays frozen.
 		if entry, ok := r.Defs.TopEntry(name); ok {
-			if _, isExt := eng.IsWordExtension(entry.Body); isExt {
+			if _, isExt := core.IsWordExtension(entry.Body); isExt {
 				UninstallDef(r, name)
 				return nil, nil
 			}
@@ -1459,9 +1461,9 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 	// ComputeCaptures' baseline check.
 	perSig := make([][]CapturedBinding, len(fnDef.Signatures))
 	for i := range fnDef.Signatures {
-		perSig[i] = eng.ComputeCaptures(r, &fnDef.Signatures[i])
+		perSig[i] = core.ComputeCaptures(r, &fnDef.Signatures[i])
 	}
-	fnDef.Captured = eng.MergeCaptures(perSig)
+	fnDef.Captured = core.MergeCaptures(perSig)
 
 	// Check mode, generic fns: declaration-time ABSTRACT check
 	// (Phase 5). Analyse each body once with carrier args of the
@@ -1511,7 +1513,7 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 				// A CONCRETE or BOUNDED (`T extends C`) param keeps a strict
 				// carrier so its real shape is still checked against the bound;
 				// a genuine misuse or undefined word in the body still surfaces.
-				if t.Equal(TAny) || eng.IsUnconstrainedTypeParam(t) || unconstrained[t.Leaf()] {
+				if t.Equal(TAny) || core.IsUnconstrainedTypeParam(t) || unconstrained[t.Leaf()] {
 					// A value of an unconstrained type parameter (or Any) is
 					// statically ANY type, so bind dynamic(Any) — a body word
 					// then matches gradually. dynamic(T) is NOT enough: the
@@ -1522,7 +1524,7 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 					carrierArgs[j] = NewCarrier(t)
 				}
 			}
-			eng.AnalyseFnBody(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns, fnDef.Anonymous)
+			check.AnalyseFnBody(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns, fnDef.Anonymous)
 		}
 		PopGenBindings(r, genSpec)
 	}
@@ -1532,8 +1534,8 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 	// can never fire (the dead-clause analogue). A static property of the
 	// sig list, emitted once at fn construction.
 	if r.Check.IsActive() && len(fnDef.Signatures) > 1 {
-		for _, d := range eng.DeadSignatures(fnDef.Signatures) {
-			r.Check.AddDiagnostic(eng.CheckDiagnostic{
+		for _, d := range check.DeadSignatures(fnDef.Signatures) {
+			r.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code:   "unreachable_signature",
 				Detail: "fn overload " + FnSigArgList(d.Sig) + " is unreachable — the earlier signature " + FnSigArgList(d.ShadowedBy) + " already accepts every call it would match",
 				Word:   "fn",
@@ -1546,7 +1548,7 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 
 // FnSigArgList renders a signature's argument types as a short
 // `[Integer String]` list for the unreachable_signature diagnostic.
-func FnSigArgList(s eng.Signature) string {
+func FnSigArgList(s core.Signature) string {
 	ts := s.ArgTypes()
 	parts := make([]string, len(ts))
 	for i, t := range ts {
@@ -1563,7 +1565,7 @@ func FnSigArgList(s eng.Signature) string {
 // with a single signature. Mirrors the per-triple shape of ParseFnDef
 // (eng/go/fn_def.go) for one triple: auto-wraps non-list input and body
 // into single-element lists, parses params via the shared
-// eng.ParseFnParams, and constructs the FnSig with Returns=[TAny] and
+// core.ParseFnParams, and constructs the FnSig with Returns=[TAny] and
 // Anonymous=true. Static Returns is conservative so call sites that
 // inspect the type without invoking see `Any`; check-mode dispatch
 // reads the Anonymous flag and runs AnalyseFnBody for real propagation.
@@ -1610,17 +1612,17 @@ func AfnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Returns:    []*Type{TAny},
 		Impl:       Boru(bodyElems),
 		BarrierPos: barrierPos,
-		QuoteArgs:  eng.QuoteArgsFromParams(params),
+		QuoteArgs:  core.QuoteArgsFromParams(params),
 		// The lambda dispatches from this authored FnSig directly (no
 		// normalizeSig), so carry value/keyword patterns onto it too —
 		// otherwise a keyword param (`in/q`) would capture any word
-		// instead of only its literal. See eng.PatternsFromParams.
-		Patterns: eng.PatternsFromParams(params),
+		// instead of only its literal. See core.PatternsFromParams.
+		Patterns: core.PatternsFromParams(params),
 	}
 	fnDef := FnDefInfo{
 		Signatures: []FnSig{sig},
 		Anonymous:  true,
-		Captured:   eng.ComputeCaptures(r, &sig),
+		Captured:   core.ComputeCaptures(r, &sig),
 	}
 	return []Value{NewFunction(fnDef)}, nil
 }
@@ -1683,9 +1685,9 @@ func ArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 func PopArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	// The Args pop and the FnBaseline pop must move together (closure-
 	// capture detection on subsequent fn constructions reads the
-	// baseline). eng.PopFrameArgs is the single home of that pairing,
+	// baseline). core.PopFrameArgs is the single home of that pairing,
 	// shared with any eager frame teardown, so the two cannot drift.
-	if err := eng.PopFrameArgs(r); err != nil {
+	if err := core.PopFrameArgs(r); err != nil {
 		return nil, err
 	}
 	return nil, nil

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // The canonical rule table is EXPRESSED IN boru — fmt-rules.boru is the
@@ -68,10 +68,10 @@ func parseRulesSource(src string) (Rules, error) {
 	if err != nil {
 		return Rules{}, fmt.Errorf("fmt rules stylesheet: %w", err)
 	}
-	var table *eng.Value
+	var table *core.Value
 	for i := range vals {
 		v := vals[i]
-		if _, merr := eng.AsMap(v); merr == nil {
+		if _, merr := core.AsMap(v); merr == nil {
 			if table != nil {
 				return Rules{}, fmt.Errorf("fmt rules stylesheet: more than one rule table in the source")
 			}
@@ -90,7 +90,7 @@ func parseRulesSource(src string) (Rules, error) {
 // DefaultRules as the base). Every key and enum value is validated — an
 // unknown rule key, node kind, attach class, or strategy name is an error,
 // not a silent no-op.
-func MergeRulesValue(base Rules, v eng.Value) (Rules, error) {
+func MergeRulesValue(base Rules, v core.Value) (Rules, error) {
 	return mergeRulesValue(base, v, false)
 }
 
@@ -110,9 +110,9 @@ func requiredRuleKeys() []string {
 	}
 }
 
-func mergeRulesValue(base Rules, v eng.Value, requireAll bool) (Rules, error) {
+func mergeRulesValue(base Rules, v core.Value, requireAll bool) (Rules, error) {
 	ru := base
-	m, err := eng.RequireConcreteMap(v, "fmt format-with")
+	m, err := core.RequireConcreteMap(v, "fmt format-with")
 	if err != nil {
 		return ru, err
 	}
@@ -189,7 +189,7 @@ func mergeRulesValue(base Rules, v eng.Value, requireAll bool) (Rules, error) {
 }
 
 // intRuleField reads a bounded integer rule-table field (width / indent).
-func intRuleField(v eng.Value, field string) (int, error) {
+func intRuleField(v core.Value, field string) (int, error) {
 	n, err := v.AsConcreteInteger()
 	if err != nil {
 		return 0, fmt.Errorf("fmt rules: %s must be an Integer: %w", field, err)
@@ -205,12 +205,12 @@ func intRuleField(v eng.Value, field string) (int, error) {
 // stylesheet path) leaves an unevaluated map's `true` as a WORD — it only
 // becomes a Boolean under engine evaluation — and the two paths must read
 // the same table the same way.
-func boolRuleField(v eng.Value, field string) (bool, error) {
+func boolRuleField(v core.Value, field string) (bool, error) {
 	if b, err := v.AsConcreteBoolean(); err == nil {
 		return b, nil
 	}
-	if eng.IsWord(v) {
-		if info, werr := eng.AsWord(v); werr == nil {
+	if core.IsWord(v) {
+		if info, werr := core.AsWord(v); werr == nil {
 			switch info.Name {
 			case "true":
 				return true, nil
@@ -223,8 +223,8 @@ func boolRuleField(v eng.Value, field string) (bool, error) {
 }
 
 // stringListField reads a rule-table field that must be a List of Strings.
-func stringListField(v eng.Value, field string) ([]string, error) {
-	lst, err := eng.RequireConcreteList(v, "fmt rules")
+func stringListField(v core.Value, field string) ([]string, error) {
+	lst, err := core.RequireConcreteList(v, "fmt rules")
 	if err != nil {
 		return nil, fmt.Errorf("fmt rules: %s must be a List: %w", field, err)
 	}
@@ -242,8 +242,8 @@ func stringListField(v eng.Value, field string) ([]string, error) {
 // readAttach reads the attach-class map ({comma:'prev' colon:'both' …})
 // into the Rules' AttachPrev/AttachNext kind sets. Setting the key REPLACES
 // the whole policy: kinds absent from the map attach nothing.
-func readAttach(v eng.Value, ru *Rules) error {
-	m, err := eng.RequireConcreteMap(v, "fmt rules")
+func readAttach(v core.Value, ru *Rules) error {
+	m, err := core.RequireConcreteMap(v, "fmt rules")
 	if err != nil {
 		return fmt.Errorf("fmt rules: attach must be a Map: %w", err)
 	}
@@ -303,8 +303,8 @@ var templateOp = map[string]string{
 // their op. In merge mode a named kind's body replaces that kind's
 // compiled form; in strict (stylesheet) mode every kind is required, so
 // the file fully defines every template.
-func readTemplates(v eng.Value, ru *Rules, requireAll bool) error {
-	m, err := eng.RequireConcreteMap(v, "fmt rules")
+func readTemplates(v core.Value, ru *Rules, requireAll bool) error {
+	m, err := core.RequireConcreteMap(v, "fmt rules")
 	if err != nil {
 		return fmt.Errorf("fmt rules: templates must be a Map: %w", err)
 	}
@@ -324,7 +324,7 @@ func readTemplates(v eng.Value, ru *Rules, requireAll bool) error {
 		}
 		seen[name] = true
 		bv, _ := m.Get(name)
-		body, berr := eng.RequireConcreteList(bv, "fmt rules")
+		body, berr := core.RequireConcreteList(bv, "fmt rules")
 		if berr != nil {
 			return fmt.Errorf("fmt rules: templates.%s must be a List: %w", name, berr)
 		}
@@ -334,7 +334,7 @@ func readTemplates(v eng.Value, ru *Rules, requireAll bool) error {
 		op := ""
 		for i := 0; i < body.Len(); i++ {
 			part := body.Get(i)
-			if part.Is(eng.TAtom) {
+			if part.Is(core.TAtom) {
 				a, aerr := part.AsConcreteAtom()
 				if aerr != nil {
 					return fmt.Errorf("fmt rules: templates.%s[%d]: %w", name, i, aerr)

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // BenchmarkTuiKeystrokeStorm floods one driver session with key events
@@ -44,9 +44,9 @@ func BenchmarkTuiKeystrokeStorm(b *testing.B) {
 	app.updateInfo, _ = native.FnDefFromValue(app.update)
 	app.viewInfo, _ = native.FnDefFromValue(app.view)
 	if reg.Procs == nil {
-		reg.Procs = eng.NewProcessRuntime()
+		reg.Procs = core.NewProcessRuntime()
 	}
-	proc := eng.NewProcess(reg.Procs, eng.DefaultMailboxBound, eng.OverflowBlock)
+	proc := core.NewProcess(reg.Procs, core.DefaultMailboxBound, core.OverflowBlock)
 	if err := reg.Procs.Insert(proc); err != nil {
 		b.Fatal(err)
 	}

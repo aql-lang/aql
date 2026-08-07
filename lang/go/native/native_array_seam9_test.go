@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Coverage for the error/edge arms of the array words (native_array.go):

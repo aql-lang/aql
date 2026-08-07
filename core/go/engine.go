@@ -3769,12 +3769,26 @@ func spliceIsData(info SpliceInfo) bool {
 // the "is the value at the pointer being collected?" probe shared by
 // stepLiteral's collection dispatch and the splice-word paren expansion in
 // stepWord's def-substitution branch.
+// The scan reads each cell ONCE: Tape.At returns a Value by value, and a
+// Value is 104 bytes, so probing the same cell twice doubled this loop's
+// runtime.duffcopy — measured at 36% of its own profile on a long flat
+// program (design/INTERPRETER-SPEED-PLAN.10.md #1A shrank the struct; this
+// halves the number of copies).
 func (e *Engine) pendingForwardIdx() int {
+	// No Forward anywhere on the tape ⇒ no index to find, so skip the walk.
+	// This is the dominant case (a plain literal push, a dispatch with all
+	// args already on the stack) and the walk it skips is O(stack depth):
+	// without it, a residual-accumulating program with no paren or forward
+	// barrier below the pointer — `for N [add 1 2]` — is O(N^2).
+	if !e.Tape.hasForward() {
+		return -1
+	}
 	for i := e.Pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.Tape.At(i)) {
+		v := e.Tape.At(i)
+		if IsOpenParen(v) {
 			return -1
 		}
-		if IsForward(e.Tape.At(i)) {
+		if IsForward(v) {
 			return i
 		}
 	}
@@ -7642,16 +7656,15 @@ func (e *Engine) EffectiveResolved() []Value {
 // isInsidePendingForward returns true if the current pointer is within the
 // collection scope of a pending forward (i.e., another function is waiting
 // to collect this function's result as a forward arg).
+//
+// This is pendingForwardIdx's predicate form and MUST stay a delegation, not
+// a second copy of the scan: the barrier stop conditions belong in one place.
+// Forward gathering already spans two phases that "live in different
+// functions, walk different representations, and — before the fix — enforced
+// different stop conditions" (design/FORWARD-COLLECTION-PHASES.10.md); a
+// third, hand-duplicated copy of the backward barrier walk is the same trap.
 func (e *Engine) isInsidePendingForward() bool {
-	for i := e.Pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.Tape.At(i)) {
-			return false
-		}
-		if IsForward(e.Tape.At(i)) {
-			return true
-		}
-	}
-	return false
+	return e.pendingForwardIdx() >= 0
 }
 
 // curryOrStack handles a terminated forward. If the word at funcIdx can

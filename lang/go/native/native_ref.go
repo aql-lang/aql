@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // refNatives registers the two words that complete boru's first-class
@@ -23,7 +23,7 @@ import (
 //
 // Both words sit in lang because every other built-in does (eng
 // ships only kernel-level shapes and parser features). The actual
-// name-resolution algorithm lives in eng.ResolveRef so that
+// name-resolution algorithm lives in core.ResolveRef so that
 // stepWord's `/r` short-circuit and this `ref` handler share one
 // definition.
 var refNatives = []NativeFunc{
@@ -186,21 +186,21 @@ var refNatives = []NativeFunc{
 // stack-args / forward-args mirror usurp: a value form (wrap a Function) and
 // a by-name form (resolve a function word, then wrap).
 func stackArgsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	return rebarrierResult(eng.ForceStackFunction, args[0], "stack-args", reg)
+	return rebarrierResult(core.ForceStackFunction, args[0], "stack-args", reg)
 }
 func forwardArgsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	return rebarrierResult(eng.ForceForwardFunction, args[0], "forward-args", reg)
+	return rebarrierResult(core.ForceForwardFunction, args[0], "forward-args", reg)
 }
 func stackArgsAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	return rebarrierAtom(eng.ForceStackFunction, args, "stack-args", reg)
+	return rebarrierAtom(core.ForceStackFunction, args, "stack-args", reg)
 }
 func forwardArgsAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	return rebarrierAtom(eng.ForceForwardFunction, args, "forward-args", reg)
+	return rebarrierAtom(core.ForceForwardFunction, args, "forward-args", reg)
 }
 
 func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	n, _ := args[0].AsConcreteInteger()
-	wrapped, ok := eng.ForceArityFunction(args[1], int(n))
+	wrapped, ok := core.ForceArityFunction(args[1], int(n))
 	if !ok {
 		if out, gradual := checkModeGradualFn(reg, args[1]); gradual {
 			recordGradualWrap(reg, "force-arity", args, out)
@@ -223,9 +223,9 @@ func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 // path offers (diagnostics phase 4).
 func unboundNameError(reg *Registry, detail, name string) error {
 	err := reg.BoruError("undefined_word", detail, name)
-	if ae, ok := err.(*eng.BoruError); ok {
-		if s := eng.DidYouMean(name, reg.SuggestionCandidates()); s != "" {
-			ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+	if ae, ok := err.(*core.BoruError); ok {
+		if s := core.DidYouMean(name, reg.SuggestionCandidates()); s != "" {
+			ae.Suggestions = append(ae.Suggestions, core.DiagSuggestion{Message: s})
 		}
 	}
 	return err
@@ -236,14 +236,14 @@ func forceArityAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Reg
 	if err != nil {
 		return nil, fmt.Errorf("force-arity: expected an atom name, got %s", args[1].Parent.String())
 	}
-	v, ok := eng.ResolveRef(reg, name)
+	v, ok := core.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
 			return nil, unboundNameError(reg, "force-arity: name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("force-arity: name %s is not bound", name)
 	}
-	if !eng.IsFunctionRef(v) {
+	if !core.IsFunctionRef(v) {
 		// reg is provably non-nil here: ResolveRef only returns ok for a
 		// non-nil registry, so a resolved-but-non-fn binding cannot occur
 		// with reg == nil (design/TEST-SEAMS.10.md dead-guard removal).
@@ -281,14 +281,14 @@ func rebarrierAtom(wrap func(Value) (Value, bool), args []Value, word string, re
 	if err != nil {
 		return nil, fmt.Errorf("%s: expected an atom name, got %s", word, args[0].Parent.String())
 	}
-	v, ok := eng.ResolveRef(reg, name)
+	v, ok := core.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
 			return nil, unboundNameError(reg, word+": name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("%s: name %s is not bound", word, name)
 	}
-	if !eng.IsFunctionRef(v) {
+	if !core.IsFunctionRef(v) {
 		// reg is provably non-nil here (ResolveRef only returns ok for a
 		// non-nil registry); the former reg==nil arm was dead.
 		detail := word + " requires a function word: " + name + " is bound to " + v.Parent.String()
@@ -311,14 +311,14 @@ func usurpAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry
 	if err != nil {
 		return nil, fmt.Errorf("usurp: expected an atom name, got %s", args[0].Parent.String())
 	}
-	v, ok := eng.ResolveRef(reg, name)
+	v, ok := core.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
 			return nil, unboundNameError(reg, "usurp: name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("usurp: name %s is not bound", name)
 	}
-	if !eng.IsFunctionRef(v) {
+	if !core.IsFunctionRef(v) {
 		// reg is provably non-nil here (ResolveRef only returns ok for a
 		// non-nil registry); the former reg==nil arm was dead.
 		detail := "usurp requires a function word: " + name + " is bound to " + v.Parent.String()
@@ -339,7 +339,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 	if err != nil {
 		return nil, fmt.Errorf("ref: expected an atom name, got %s", args[0].Parent.String())
 	}
-	v, ok := eng.ResolveRef(reg, name)
+	v, ok := core.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
 			return nil, unboundNameError(reg, "ref: name "+name+" is not bound", name)
@@ -349,7 +349,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 	// `ref` is the function-form companion of the `/r` suffix and shares
 	// its rule: only function words may be referenced. A non-fn binding
 	// (plain value, type body) is rejected so both surfaces behave alike.
-	if !eng.IsFunctionRef(v) {
+	if !core.IsFunctionRef(v) {
 		// reg is provably non-nil here (ResolveRef only returns ok for a
 		// non-nil registry); the former reg==nil arm was dead.
 		detail := "ref requires a function word: " + name + " is bound to " + v.Parent.String()
@@ -417,11 +417,11 @@ func rebindHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 
 // usurpHandler wraps a Function value so its signature argument order is
 // reversed: the wrapper called `usurped a b c` dispatches the original as
-// `f c b a`. Mirrors the /u modifier (eng.UsurpFunction). The wrapper is
+// `f c b a`. Mirrors the /u modifier (core.UsurpFunction). The wrapper is
 // returned unquoted, so — like a bare function word — it dispatches
 // immediately when args follow, and stays inert when captured with quote.
 func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	wrapped, ok := eng.UsurpFunction(args[0])
+	wrapped, ok := core.UsurpFunction(args[0])
 	if !ok {
 		if out, gradual := checkModeGradualFn(reg, args[0]); gradual {
 			recordGradualWrap(reg, "usurp", args, out)
@@ -453,7 +453,7 @@ func recordGradualWrap(reg *Registry, word string, args, outs []Value) {
 	if reg == nil {
 		return
 	}
-	pos := eng.SrcPos{}
+	pos := core.SrcPos{}
 	if len(args) > 0 {
 		pos = args[len(args)-1].Pos()
 	}

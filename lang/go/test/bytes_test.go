@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestBytes runs every line of bytes.tsv as a parse+run+compare test.
@@ -92,42 +92,42 @@ func TestBytes(t *testing.T) {
 
 // TestBytesGoBridge covers the eng []byte <-> Bytes bridge. Importing the
 // native package installs the bridge (registerBytesType runs at package
-// init), so eng.FromNative / eng.ToNative round-trip through the Bytes type.
+// init), so core.FromNative / core.ToNative round-trip through the Bytes type.
 func TestBytesGoBridge(t *testing.T) {
 	if _, err := native.DefaultRegistry(); err != nil {
 		t.Fatal(err)
 	}
 
 	raw := []byte{0x68, 0x69} // "hi"
-	v := eng.FromNative(raw)
+	v := core.FromNative(raw)
 	if v.Parent == nil || !v.Parent.ConformsTo(native.TBytes) {
 		t.Fatalf("FromNative([]byte) returned %v, want a Bytes value", v.Parent)
 	}
 
 	// copy-on-ingest: mutating the source slice must not affect the value.
 	raw[0] = 0x00
-	back, ok := eng.ToNative(v).([]byte)
+	back, ok := core.ToNative(v).([]byte)
 	if !ok {
-		t.Fatalf("ToNative(Bytes) returned %T, want []byte", eng.ToNative(v))
+		t.Fatalf("ToNative(Bytes) returned %T, want []byte", core.ToNative(v))
 	}
 	if string(back) != "hi" {
 		t.Errorf("round-trip got %q, want %q (copy-on-ingest failed?)", string(back), "hi")
 	}
 
 	// negative: a non-Bytes value must not come back as []byte.
-	if _, ok := eng.ToNative(native.NewString("x")).([]byte); ok {
+	if _, ok := core.ToNative(native.NewString("x")).([]byte); ok {
 		t.Error("ToNative(String) unexpectedly returned []byte")
 	}
 
 	// copy-on-export: mutating the slice ToNative hands back must not corrupt
 	// the immutable Bytes value (the export twin of copy-on-ingest).
-	v2 := eng.FromNative([]byte{0x61, 0x62}) // "ab"
-	exported, ok := eng.ToNative(v2).([]byte)
+	v2 := core.FromNative([]byte{0x61, 0x62}) // "ab"
+	exported, ok := core.ToNative(v2).([]byte)
 	if !ok {
-		t.Fatalf("ToNative(Bytes) returned %T, want []byte", eng.ToNative(v2))
+		t.Fatalf("ToNative(Bytes) returned %T, want []byte", core.ToNative(v2))
 	}
 	exported[0] = 0x00
-	again, _ := eng.ToNative(v2).([]byte)
+	again, _ := core.ToNative(v2).([]byte)
 	if string(again) != "ab" {
 		t.Errorf("mutating an exported slice corrupted the Bytes value: got %q, want %q", string(again), "ab")
 	}

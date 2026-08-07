@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // behave BEHAVIOR FN
@@ -81,7 +81,7 @@ var behaveNative = NativeFunc{
 // moved to the boru:struct module (see struct_module.go); the handler stays
 // here next to its sibling `behave`.
 func nodifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	out, err := eng.NodifyValue(args[0])
+	out, err := core.NodifyValue(args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +92,10 @@ type behaviorEntry struct {
 	// validate inspects the fn's first sig and returns the target
 	// *Type the body should be attached to, or an error if the shape
 	// doesn't match the behavior's contract.
-	validate func(sig eng.FnSig) (*eng.Type, error)
+	validate func(sig core.FnSig) (*core.Type, error)
 	// install mutates the userBehavior wrapper to record the body
 	// under the appropriate capability slot.
-	install func(u *userBehavior, body []eng.Value)
+	install func(u *userBehavior, body []core.Value)
 }
 
 // behaviors is the kernel-known table of behavior names → wiring
@@ -106,19 +106,19 @@ type behaviorEntry struct {
 var behaviors = map[string]behaviorEntry{
 	"compare": {
 		validate: validateCompareSig,
-		install:  func(u *userBehavior, body []eng.Value) { u.compareBody = body },
+		install:  func(u *userBehavior, body []core.Value) { u.compareBody = body },
 	},
 	"canon": {
 		validate: validateCanonSig,
-		install:  func(u *userBehavior, body []eng.Value) { u.canonBody = body },
+		install:  func(u *userBehavior, body []core.Value) { u.canonBody = body },
 	},
 	"nodify": {
 		validate: validateNodifySig,
-		install:  func(u *userBehavior, body []eng.Value) { u.nodifyBody = body },
+		install:  func(u *userBehavior, body []core.Value) { u.nodifyBody = body },
 	},
 	"unify": {
 		validate: validateUnifySig,
-		install:  func(u *userBehavior, body []eng.Value) { u.unifyBody = body },
+		install:  func(u *userBehavior, body []core.Value) { u.unifyBody = body },
 	},
 	// The three slots below close the gap between what the kernel can
 	// dispatch and what boru can install. `Sizer` already existed and was
@@ -128,15 +128,15 @@ var behaviors = map[string]behaviorEntry{
 	// or when two of its values are the same.
 	"truthy": {
 		validate: validateTruthySig,
-		install:  func(u *userBehavior, body []eng.Value) { u.truthyBody = body },
+		install:  func(u *userBehavior, body []core.Value) { u.truthyBody = body },
 	},
 	"deq": {
 		validate: validateDeqSig,
-		install:  func(u *userBehavior, body []eng.Value) { u.deqBody = body },
+		install:  func(u *userBehavior, body []core.Value) { u.deqBody = body },
 	},
 	"size": {
 		validate: validateSizeSig,
-		install:  func(u *userBehavior, body []eng.Value) { u.sizeBody = body },
+		install:  func(u *userBehavior, body []core.Value) { u.sizeBody = body },
 	},
 }
 
@@ -180,7 +180,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if target == nil {
 		return nil, r.BoruError("behave_error", fmt.Sprintf("behave %s: could not infer target type from fn sig", name), "behave")
 	}
-	if target.Origin == eng.OriginBuiltin {
+	if target.Origin == core.OriginBuiltin {
 		return nil, fmt.Errorf("behave %s: cannot install on builtin type %s", name, target.Leaf())
 	}
 
@@ -214,16 +214,16 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 
 // extractFnDefInfo unwraps a TFunction value into its
 // FnDefInfo payload. Returns an error for anything else.
-func extractFnDefInfo(v Value) (eng.FnDefInfo, error) {
+func extractFnDefInfo(v Value) (core.FnDefInfo, error) {
 	if v.Parent == nil {
-		return eng.FnDefInfo{}, errors.New("fn arg is nil")
+		return core.FnDefInfo{}, errors.New("fn arg is nil")
 	}
-	if !v.Parent.Equal(eng.TFunction) {
-		return eng.FnDefInfo{}, fmt.Errorf("fn arg must be a Function (got %s)", v.Parent.String())
+	if !v.Parent.Equal(core.TFunction) {
+		return core.FnDefInfo{}, fmt.Errorf("fn arg must be a Function (got %s)", v.Parent.String())
 	}
-	info, ok := v.Data.(eng.FnDefInfo)
+	info, ok := v.Data.(core.FnDefInfo)
 	if !ok {
-		return eng.FnDefInfo{}, fmt.Errorf("fn arg has invalid payload (%T)", v.Data)
+		return core.FnDefInfo{}, fmt.Errorf("fn arg has invalid payload (%T)", v.Data)
 	}
 	return info, nil
 }
@@ -232,11 +232,11 @@ func extractFnDefInfo(v Value) (eng.FnDefInfo, error) {
 // returns T. Both input params must be the same type; the kernel will
 // only dispatch the comparator when both operands share an ancestor
 // at or below T.
-func validateCompareSig(sig eng.FnSig) (*eng.Type, error) {
+func validateCompareSig(sig core.FnSig) (*core.Type, error) {
 	if len(sig.Params) != 2 {
 		return nil, fmt.Errorf("compare: fn must take 2 args (got %d)", len(sig.Params))
 	}
-	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TInteger) {
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(core.TInteger) {
 		return nil, fmt.Errorf("compare: fn must return Integer")
 	}
 	t0 := sig.Params[0].Type
@@ -252,11 +252,11 @@ func validateCompareSig(sig eng.FnSig) (*eng.Type, error) {
 
 // validateCanonSig enforces shape `[[T] [String] [body]]` and returns
 // T. The body produces a canonical-source string for values of type T.
-func validateCanonSig(sig eng.FnSig) (*eng.Type, error) {
+func validateCanonSig(sig core.FnSig) (*core.Type, error) {
 	if len(sig.Params) != 1 {
 		return nil, fmt.Errorf("canon: fn must take 1 arg (got %d)", len(sig.Params))
 	}
-	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TString) {
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(core.TString) {
 		return nil, fmt.Errorf("canon: fn must return String")
 	}
 	t := sig.Params[0].Type
@@ -271,7 +271,7 @@ func validateCanonSig(sig eng.FnSig) (*eng.Type, error) {
 // the output stays in the boru data domain (Integer, String, Map,
 // List, …) rather than a serialised JSON string, so callers can
 // compose with other data transforms before encoding.
-func validateNodifySig(sig eng.FnSig) (*eng.Type, error) {
+func validateNodifySig(sig core.FnSig) (*core.Type, error) {
 	if len(sig.Params) != 1 {
 		return nil, fmt.Errorf("nodify: fn must take 1 arg (got %d)", len(sig.Params))
 	}
@@ -297,7 +297,7 @@ func validateNodifySig(sig eng.FnSig) (*eng.Type, error) {
 // degrade to Any — accepting Any here keeps the surface usable while
 // the kernel still validates at call time that the body returned a
 // value compatible with the target type.
-func validateUnifySig(sig eng.FnSig) (*eng.Type, error) {
+func validateUnifySig(sig core.FnSig) (*core.Type, error) {
 	if len(sig.Params) != 2 {
 		return nil, fmt.Errorf("unify: fn must take 2 args (got %d)", len(sig.Params))
 	}
@@ -312,7 +312,7 @@ func validateUnifySig(sig eng.FnSig) (*eng.Type, error) {
 	if !t0.Equal(t1) {
 		return nil, fmt.Errorf("unify: both params must be the same type (got %s and %s)", t0, t1)
 	}
-	if !sig.Returns[0].Equal(t0) && !sig.Returns[0].Equal(eng.TAny) {
+	if !sig.Returns[0].Equal(t0) && !sig.Returns[0].Equal(core.TAny) {
 		return nil, fmt.Errorf("unify: return type must match input type or be Any (got %s, want %s)", sig.Returns[0], t0)
 	}
 	return t0, nil
@@ -322,11 +322,11 @@ func validateUnifySig(sig eng.FnSig) (*eng.Type, error) {
 // T. The body decides what a value of T means in a boolean position —
 // `if`, the connectives, loop conditions. Without it a type outside the
 // kernel's truthiness cascade is simply truthy whatever it holds.
-func validateTruthySig(sig eng.FnSig) (*eng.Type, error) {
+func validateTruthySig(sig core.FnSig) (*core.Type, error) {
 	if len(sig.Params) != 1 {
 		return nil, fmt.Errorf("truthy: fn must take 1 arg (got %d)", len(sig.Params))
 	}
-	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TBoolean) {
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(core.TBoolean) {
 		return nil, fmt.Errorf("truthy: fn must return Boolean")
 	}
 	t := sig.Params[0].Type
@@ -339,11 +339,11 @@ func validateTruthySig(sig eng.FnSig) (*eng.Type, error) {
 // validateDeqSig enforces shape `[[T T] [Boolean] [body]]` and returns
 // T — the same two-same-type shape `compare` requires, since deep
 // equality is likewise a closed operation on T.
-func validateDeqSig(sig eng.FnSig) (*eng.Type, error) {
+func validateDeqSig(sig core.FnSig) (*core.Type, error) {
 	if len(sig.Params) != 2 {
 		return nil, fmt.Errorf("deq: fn must take 2 args (got %d)", len(sig.Params))
 	}
-	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TBoolean) {
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(core.TBoolean) {
 		return nil, fmt.Errorf("deq: fn must return Boolean")
 	}
 	t0 := sig.Params[0].Type
@@ -360,11 +360,11 @@ func validateDeqSig(sig eng.FnSig) (*eng.Type, error) {
 // validateSizeSig enforces shape `[[T] [Integer] [body]]` and returns T.
 // The body answers `size` for values of T — the kernel rule being "the
 // length of the collection the value stands for".
-func validateSizeSig(sig eng.FnSig) (*eng.Type, error) {
+func validateSizeSig(sig core.FnSig) (*core.Type, error) {
 	if len(sig.Params) != 1 {
 		return nil, fmt.Errorf("size: fn must take 1 arg (got %d)", len(sig.Params))
 	}
-	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TInteger) {
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(core.TInteger) {
 		return nil, fmt.Errorf("size: fn must return Integer")
 	}
 	t := sig.Params[0].Type
@@ -397,17 +397,17 @@ func validateSizeSig(sig eng.FnSig) (*eng.Type, error) {
 // fix (fork-local capability execution state) needs its own design
 // pass and applies to all seven slots alike.
 type userBehavior struct {
-	prev        eng.TypeBehavior
+	prev        core.TypeBehavior
 	registry    *Registry
 	typeName    string
 	compareBody []Value
 	canonBody   []Value
 	nodifyBody  []Value
 	unifyBody   []Value
-	unifyTarget *eng.Type // T from `behave unify/q (fn [[T T] [_] [...]])`
+	unifyTarget *core.Type // T from `behave unify/q (fn [[T T] [_] [...]])`
 	// target is the type node this wrapper is installed on — what
 	// Size's keep-walking arm resumes SizeOf's chain walk above.
-	target     *eng.Type
+	target     *core.Type
 	truthyBody []Value
 	deqBody    []Value
 	sizeBody   []Value
@@ -426,23 +426,23 @@ func (u *userBehavior) Match(v Value, t *Type) bool {
 	if u.prev != nil {
 		return u.prev.Match(v, t)
 	}
-	return eng.DefaultBehavior.Match(v, t)
+	return core.DefaultBehavior.Match(v, t)
 }
 
 // DelegatesMatchTo exposes the wrapped behavior for the ownership-anchor
-// content check (eng.MatchDelegating): because Match delegates to prev,
+// content check (core.MatchDelegating): because Match delegates to prev,
 // this wrapper's membership IS prev's, so a behave'd predicate/surface must
 // still be seen as content-based and excluded from anchoring an extension
 // (design/OPEN-WORDS.1.md §3.1). Returns prev (nil-terminating the walk;
 // a nil prev means Match falls to DefaultBehavior, which is nominal).
-func (u *userBehavior) DelegatesMatchTo() eng.TypeBehavior { return u.prev }
+func (u *userBehavior) DelegatesMatchTo() core.TypeBehavior { return u.prev }
 
 // Equal also delegates — equality stays structural by default.
 func (u *userBehavior) Equal(a, b Value) bool {
 	if u.prev != nil {
 		return u.prev.Equal(a, b)
 	}
-	return eng.DefaultBehavior.Equal(a, b)
+	return core.DefaultBehavior.Equal(a, b)
 }
 
 // Format runs the installed canon body if any, otherwise delegates
@@ -453,7 +453,7 @@ func (u *userBehavior) Format(v Value) string {
 		if u.prev != nil {
 			return u.prev.Format(v)
 		}
-		return eng.DefaultBehavior.Format(v)
+		return core.DefaultBehavior.Format(v)
 	}
 	u.inRender = true
 	defer func() { u.inRender = false }()
@@ -471,10 +471,10 @@ func (u *userBehavior) Compare(a, b Value) (int, error) {
 	if len(u.compareBody) > 0 {
 		return u.runCompareBody(a, b)
 	}
-	if cmp, ok := u.prev.(eng.Comparer); ok {
+	if cmp, ok := u.prev.(core.Comparer); ok {
 		return cmp.Compare(a, b)
 	}
-	return 0, eng.ErrNoComparer
+	return 0, core.ErrNoComparer
 }
 
 func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
@@ -488,7 +488,7 @@ func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
 	defer r.Defs.Pop("b")
 
 	tokens := append([]Value{}, u.compareBody...)
-	result, err := eng.RunPooledTop(r, tokens)
+	result, err := core.RunPooledTop(r, tokens)
 	if err != nil {
 		return 0, fmt.Errorf("behave compare %s: %w", u.typeName, err)
 	}
@@ -496,10 +496,10 @@ func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
 		return 0, fmt.Errorf("behave compare %s: body produced no result", u.typeName)
 	}
 	top := result[len(result)-1]
-	if !top.Parent.ConformsTo(eng.TInteger) {
+	if !top.Parent.ConformsTo(core.TInteger) {
 		return 0, fmt.Errorf("behave compare %s: body must return Integer, got %s", u.typeName, top.Parent.String())
 	}
-	n, err := eng.AsInteger(top)
+	n, err := core.AsInteger(top)
 	if err != nil {
 		return 0, fmt.Errorf("behave compare %s: %w", u.typeName, err)
 	}
@@ -520,10 +520,10 @@ func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
 // `tonode` on a nested value of the same type would otherwise loop.
 func (u *userBehavior) Nodify(v Value) (Value, error) {
 	if len(u.nodifyBody) == 0 {
-		if n, ok := u.prev.(eng.Nodifier); ok {
+		if n, ok := u.prev.(core.Nodifier); ok {
 			return n.Nodify(v)
 		}
-		return Value{}, eng.ErrNoNodifier
+		return Value{}, core.ErrNoNodifier
 	}
 	if u.inNodify {
 		// Re-entry on the same type — fall through so the body
@@ -543,31 +543,31 @@ func (u *userBehavior) Nodify(v Value) (Value, error) {
 // dispatchUnifier walk continues up the parent chain. Re-entrancy is
 // guarded the same way Format/Nodify are — a unifier body that
 // recursively unifies values of the same type would otherwise loop.
-func (u *userBehavior) Unify(a, b Value) (Value, *eng.UnifyError) {
+func (u *userBehavior) Unify(a, b Value) (Value, *core.UnifyError) {
 	if len(u.unifyBody) == 0 {
-		if next, ok := u.prev.(eng.Unifier); ok {
+		if next, ok := u.prev.(core.Unifier); ok {
 			return next.Unify(a, b)
 		}
-		return Value{}, eng.ErrNoUnifier
+		return Value{}, core.ErrNoUnifier
 	}
 	if u.inUnify {
 		// Body recurses into a same-type Unify — fall through so
 		// recursion terminates. Return the structural narrowing
 		// candidate via the prev chain.
-		if next, ok := u.prev.(eng.Unifier); ok {
+		if next, ok := u.prev.(core.Unifier); ok {
 			return next.Unify(a, b)
 		}
-		return Value{}, eng.ErrNoUnifier
+		return Value{}, core.ErrNoUnifier
 	}
 	u.inUnify = true
 	defer func() { u.inUnify = false }()
 	return u.runUnifyBody(a, b)
 }
 
-func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
+func (u *userBehavior) runUnifyBody(a, b Value) (Value, *core.UnifyError) {
 	r := u.registry
 	if r == nil {
-		return Value{}, &eng.UnifyError{
+		return Value{}, &core.UnifyError{
 			Reason: fmt.Sprintf("behave unify %s: no registry attached", u.typeName),
 		}
 	}
@@ -577,14 +577,14 @@ func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
 	defer r.Defs.Pop("b")
 
 	tokens := append([]Value{}, u.unifyBody...)
-	result, err := eng.RunPooledTop(r, tokens)
+	result, err := core.RunPooledTop(r, tokens)
 	if err != nil {
-		return Value{}, &eng.UnifyError{
+		return Value{}, &core.UnifyError{
 			Reason: fmt.Sprintf("behave unify %s: %v", u.typeName, err),
 		}
 	}
 	if len(result) == 0 {
-		return Value{}, &eng.UnifyError{
+		return Value{}, &core.UnifyError{
 			Reason: fmt.Sprintf("behave unify %s: body produced no result", u.typeName),
 		}
 	}
@@ -592,8 +592,8 @@ func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
 	// A `None` return signals "no unification" — same convention as
 	// predicate types use for "doesn't match". Anything else is the
 	// unified value.
-	if eng.IsNoneShape(top) {
-		return Value{}, &eng.UnifyError{
+	if core.IsNoneShape(top) {
+		return Value{}, &core.UnifyError{
 			Reason: fmt.Sprintf("behave unify %s: body returned None", u.typeName),
 			A:      a,
 			B:      b,
@@ -619,7 +619,7 @@ func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
 			tp.IsAncestor(u.unifyTarget) ||
 			u.unifyTarget.IsAncestor(tp)
 		if !matches {
-			return Value{}, &eng.UnifyError{
+			return Value{}, &core.UnifyError{
 				Reason: fmt.Sprintf("behave unify %s: body returned %s, expected a value in the %s family",
 					u.typeName, tp.String(), u.unifyTarget.Leaf()),
 				A: a,
@@ -627,7 +627,7 @@ func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
 			}
 		}
 		if u.unifyTarget.IsAncestor(tp) && !tp.Equal(u.unifyTarget) {
-			top = eng.ReparentValue(top, u.unifyTarget)
+			top = core.ReparentValue(top, u.unifyTarget)
 		}
 	}
 	return top, nil
@@ -642,7 +642,7 @@ func (u *userBehavior) runNodifyBody(v Value) (Value, error) {
 	defer r.Defs.Pop("a")
 
 	tokens := append([]Value{}, u.nodifyBody...)
-	result, err := eng.RunPooledTop(r, tokens)
+	result, err := core.RunPooledTop(r, tokens)
 	if err != nil {
 		return Value{}, fmt.Errorf("behave nodify %s: %w", u.typeName, err)
 	}
@@ -663,13 +663,13 @@ func (u *userBehavior) runNodifyBody(v Value) (Value, error) {
 // terminates.
 func (u *userBehavior) Truthy(v Value) (bool, error) {
 	if len(u.truthyBody) == 0 {
-		if tr, ok := u.prev.(eng.Truther); ok {
+		if tr, ok := u.prev.(core.Truther); ok {
 			return tr.Truthy(v)
 		}
-		return false, eng.ErrNoTruther
+		return false, core.ErrNoTruther
 	}
 	if u.inTruthy {
-		return false, eng.ErrNoTruther
+		return false, core.ErrNoTruther
 	}
 	u.inTruthy = true
 	defer func() { u.inTruthy = false }()
@@ -681,11 +681,11 @@ func (u *userBehavior) runTruthyBody(v Value) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if !top.Parent.ConformsTo(eng.TBoolean) {
+	if !top.Parent.ConformsTo(core.TBoolean) {
 		return false, fmt.Errorf("behave truthy %s: body must return Boolean, got %s",
 			u.typeName, top.Parent.String())
 	}
-	return eng.AsBoolean(top)
+	return core.AsBoolean(top)
 }
 
 // DeepEqualValues runs the installed deq body if any, else delegates to
@@ -693,13 +693,13 @@ func (u *userBehavior) runTruthyBody(v Value) (bool, error) {
 // continues its walk and reaches its terminal verdict.
 func (u *userBehavior) DeepEqualValues(a, b Value) (bool, error) {
 	if len(u.deqBody) == 0 {
-		if de, ok := u.prev.(eng.DeepEqualer); ok {
+		if de, ok := u.prev.(core.DeepEqualer); ok {
 			return de.DeepEqualValues(a, b)
 		}
-		return false, eng.ErrNoDeepEqualer
+		return false, core.ErrNoDeepEqualer
 	}
 	if u.inDeq {
-		return false, eng.ErrNoDeepEqualer
+		return false, core.ErrNoDeepEqualer
 	}
 	u.inDeq = true
 	defer func() { u.inDeq = false }()
@@ -717,7 +717,7 @@ func (u *userBehavior) runDeqBody(a, b Value) (bool, error) {
 	defer r.Defs.Pop("b")
 
 	tokens := append([]Value{}, u.deqBody...)
-	result, err := eng.RunPooledTop(r, tokens)
+	result, err := core.RunPooledTop(r, tokens)
 	if err != nil {
 		return false, fmt.Errorf("behave deq %s: %w", u.typeName, err)
 	}
@@ -725,16 +725,16 @@ func (u *userBehavior) runDeqBody(a, b Value) (bool, error) {
 		return false, fmt.Errorf("behave deq %s: body produced no result", u.typeName)
 	}
 	top := result[len(result)-1]
-	if !top.Parent.ConformsTo(eng.TBoolean) {
+	if !top.Parent.ConformsTo(core.TBoolean) {
 		return false, fmt.Errorf("behave deq %s: body must return Boolean, got %s",
 			u.typeName, top.Parent.String())
 	}
-	return eng.AsBoolean(top)
+	return core.AsBoolean(top)
 }
 
 // Size runs the installed size body if any, else delegates to prev's
 // Sizer, else CONTINUES SizeOf's walk above the owning type. That last
-// arm is load-bearing: this wrapper satisfies eng.Sizer structurally
+// arm is load-bearing: this wrapper satisfies core.Sizer structurally
 // whether or not a size body was ever installed, so without it a
 // `behave canon` on an Integer refine would silently change `size x`
 // from the magnitude rule to 0 — the walk would stop here with nothing
@@ -744,10 +744,10 @@ func (u *userBehavior) runDeqBody(a, b Value) (bool, error) {
 // the walk, for the same reason erroring Truther bodies do.
 func (u *userBehavior) Size(v Value) int {
 	sizeAbove := func() int {
-		if sz, ok := u.prev.(eng.Sizer); ok {
+		if sz, ok := u.prev.(core.Sizer); ok {
 			return sz.Size(v)
 		}
-		return eng.SizeOfAbove(u.target, v)
+		return core.SizeOfAbove(u.target, v)
 	}
 	if len(u.sizeBody) == 0 || u.inSize {
 		return sizeAbove()
@@ -755,10 +755,10 @@ func (u *userBehavior) Size(v Value) int {
 	u.inSize = true
 	defer func() { u.inSize = false }()
 	top, err := u.runUnaryBody(u.sizeBody, v, "size")
-	if err != nil || !top.Parent.ConformsTo(eng.TInteger) {
+	if err != nil || !top.Parent.ConformsTo(core.TInteger) {
 		return sizeAbove()
 	}
-	n, err := eng.AsInteger(top)
+	n, err := core.AsInteger(top)
 	if err != nil {
 		return sizeAbove()
 	}
@@ -778,7 +778,7 @@ func (u *userBehavior) runUnaryBody(body []Value, v Value, slot string) (Value, 
 	defer r.Defs.Pop("a")
 
 	tokens := append([]Value{}, body...)
-	result, err := eng.RunPooledTop(r, tokens)
+	result, err := core.RunPooledTop(r, tokens)
 	if err != nil {
 		return Value{}, fmt.Errorf("behave %s %s: %w", slot, u.typeName, err)
 	}
@@ -797,7 +797,7 @@ func (u *userBehavior) runCanonBody(v Value) (string, error) {
 	defer r.Defs.Pop("a")
 
 	tokens := append([]Value{}, u.canonBody...)
-	result, err := eng.RunPooledTop(r, tokens)
+	result, err := core.RunPooledTop(r, tokens)
 	if err != nil {
 		return "", err
 	}
@@ -805,10 +805,10 @@ func (u *userBehavior) runCanonBody(v Value) (string, error) {
 		return "", fmt.Errorf("body produced no result")
 	}
 	top := result[len(result)-1]
-	if !top.Parent.ConformsTo(eng.TString) {
+	if !top.Parent.ConformsTo(core.TString) {
 		return "", fmt.Errorf("body must return String, got %s", top.Parent.String())
 	}
-	s, err := eng.AsString(top)
+	s, err := core.AsString(top)
 	if err != nil {
 		return "", err
 	}

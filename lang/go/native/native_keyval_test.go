@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // A KeyVal is a Map subtype: it IS a KeyVal, it IS a Map, and its type leaf is
@@ -79,7 +79,7 @@ func TestKeyValNominal(t *testing.T) {
 // it — the name can be used in annotations and `is` checks (e.g.
 // `[e:KeyVal] => …`, `e is KeyVal`). Verified end-to-end with `boru do 'KeyVal'`.
 func TestKeyValNameResolves(t *testing.T) {
-	got := eng.Builtin.LookupBuiltinByName("KeyVal")
+	got := core.Builtin.LookupBuiltinByName("KeyVal")
 	if got == nil {
 		t.Fatalf("type name %q is not registered for source resolution", "KeyVal")
 	}

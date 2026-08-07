@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestMicronLeafTableSync guards the property table in members.go against
@@ -14,7 +14,7 @@ import (
 func TestMicronLeafTableSync(t *testing.T) {
 	r := seam5Reg(t)
 	for _, leaf := range MicronLeafNames() {
-		lt := eng.Builtin.Lookup("Scalar/Micron/" + leaf)
+		lt := core.Builtin.Lookup("Scalar/Micron/" + leaf)
 		if lt == nil {
 			t.Fatalf("leaf type Scalar/Micron/%s not registered", leaf)
 			continue

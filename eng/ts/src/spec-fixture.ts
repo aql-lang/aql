@@ -3,13 +3,14 @@
 // compiled differential gate (corpus.test.ts). Extracted verbatim from the
 // original spec.test.ts so the two gates run the identical fixture set.
 
+import type { EmitState } from './emit.ts'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { canon } from './canon.ts'
+import { canon } from '@voxgig/borucore'
 import { parse } from './parser/index.ts'
-import { resolveWordsDeep } from './resolve.ts'
+import { resolveWordsDeep } from '@voxgig/borucore'
 import {
   coerceBoolean,
   isRecordShape,
@@ -17,8 +18,8 @@ import {
   isValueOfType,
   pathOf,
   typeOf,
-} from './coretype.ts'
-import { makeIdealHandler, makeScalarHandler, makeScalarOptsHandler } from './make.ts'
+} from '@voxgig/borucore'
+import { makeIdealHandler, makeScalarHandler, makeScalarOptsHandler } from '@voxgig/borucore'
 import {
   BoruError,
   type BoruType,
@@ -138,7 +139,7 @@ function enforceTypeConstraint(
   // (`[:Integer]` arrives with child word(Integer)) — resolve them
   // through the canonical cascade before validating.
   constraint = resolveWordsDeep(constraint, registry)
-  const emit = registry.check.emit
+  const emit = registry.check.emit as EmitState | undefined
   if (registry.check.isActive()) {
     if (emit === undefined) return false // pure check mode: lenient
     const concrete = recoverConcrete(emit, value)
@@ -848,7 +849,7 @@ function registerSpecWords(r: Registry): void {
         // binding is compile-time only (not live in the VM) — refuse it.
         returnsFn: (args, registry) => {
           const out = newDynamicCarrier(TMap)
-          const emit = registry.check.emit
+          const emit = registry.check.emit as EmitState | undefined
           if (emit !== undefined) {
             const a = args[0]!
             const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
@@ -868,10 +869,9 @@ function registerSpecWords(r: Registry): void {
               // A def bound to a compile-time-known value (a type / enum /
               // sig / fn, or a literal recovered through its carrier): its
               // inspection is fixed, so bake the precomputed result.
-              let concrete: import('./value.ts').Value | null = top.carrier ? null : top
+              let concrete: import('@voxgig/borucore').Value | null = top.carrier ? null : top
               if (concrete === null) {
-                const op = emit.classify(top)
-                if (op !== null && op.kind === 'const') concrete = op.value
+                concrete = emit.constValueOf(emit.classify(top))
               }
               if (concrete !== null) {
                 emit.recordTokenIsland(
@@ -1172,7 +1172,7 @@ function registerSpecWords(r: Registry): void {
         recordsOwnEvent: true,
         returnsFn: (args, registry) => {
           const out = newDynamicCarrier(TAtom)
-          const emit = registry.check.emit
+          const emit = registry.check.emit as EmitState | undefined
           if (emit !== undefined) {
             const a = args[0]!
             const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
@@ -1200,13 +1200,13 @@ function registerSpecWords(r: Registry): void {
         recordsOwnEvent: true,
         returnsFn: (args, registry) => {
           const out = newDynamicCarrier(TAny)
-          const emit = registry.check.emit
+          const emit = registry.check.emit as EmitState | undefined
           const a = args[0]!
           if (emit !== undefined) {
             // A raw value (eval-list/map) bakes verbatim (quote returns it
             // unevaluated); a stripped literal / type operand bakes via its
             // classified const original (quote 5, quote Integer).
-            let tok: import('./value.ts').Value | null = a.isConcrete() ? a : null
+            let tok: import('@voxgig/borucore').Value | null = a.isConcrete() ? a : null
             if (tok === null) {
               const op = emit.classify(a)
               if (op !== null && op.kind === 'const') tok = op.value

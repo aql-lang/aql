@@ -1,0 +1,27 @@
+# The step loop, the registry, signature matching and dispatch — exercised
+# through ONE fixture word so no word library is needed. `addq` is declared
+# Integer Integer -> Integer, forward-collecting, exactly as the eng/spec
+# fixtures declare it.
+#
+# expr	expected	note
+
+# --- bare literals reach the residual unchanged ---
+run 1	1	a lone literal is the result
+run 1 2	1 2	multiple residual values are the result, in order
+run 'x'	'x'	a string literal
+
+# --- dispatch ---
+run addq 1 2	3	forward collection: the word takes the two following literals
+run addq 0 0	0	
+run addq -1 1	0	
+run 1 2 addq	3	stack form: the same word over the two preceding values
+run addq 1 2 addq 3 4	3 7	two independent dispatches leave two residuals
+
+# --- dispatch failure taxonomy ---
+run addq 1	ERROR:signature_error	an under-supplied call must not silently succeed (REFERENCE.md:1071 — signature_error is the RUNTIME code; no_signature is the check-mode diagnostic)
+run addq 'a' 1	ERROR:signature_error	a type mismatch selects no overload
+run nosuchword	ERROR:undefined_word	an unbound word is an error, not a value
+
+# --- parens group and evaluate first ---
+run ( addq 1 2 )	3	a paren group collapses to its result
+run addq ( addq 1 2 ) 4	7	a nested group supplies an argument

@@ -18,7 +18,7 @@ import (
 //
 // This is the entry point that wires the host-side capabilities
 // (FileOps, format registry, SQLite store) onto the bare
-// eng.Registry returned by eng.NewRegistry. borueng itself knows
+// core.Registry returned by core.NewRegistry. borueng itself knows
 // nothing about these — it just stores them in opaque capability slots
 // for the host's word handlers to retrieve.
 //

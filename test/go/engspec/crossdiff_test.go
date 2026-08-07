@@ -40,9 +40,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/specfix"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // crossRec is one engine's result for one corpus row.
@@ -60,7 +60,7 @@ func crossKey(mode, file string, line int) string {
 }
 
 // goValueResult runs one row through the Go kernel exactly as TestSpec does,
-// rendering success via eng.Canon and failure as the BoruError taxonomy code
+// rendering success via core.Canon and failure as the BoruError taxonomy code
 // (so error-parity is compared by code, not message text — the same shape the
 // TS dumper emits).
 func goValueResult(input string) (bool, string) {
@@ -72,18 +72,18 @@ func goValueResult(input string) (bool, string) {
 		// (xml syntax) keeps the TOKENIZE: message form.
 		return false, errTag(err, "TOKENIZE:")
 	}
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		return false, "UNEXPECTED:newRegistry"
 	}
 	specfix.RegisterSpecWords(r)
 	basic.InstallMicronIdeals(r)
 	r.InitRootContext()
-	out, runErr := eng.NewTop(r).Run(values)
+	out, runErr := core.NewTop(r).Run(values)
 	if runErr != nil {
 		return false, errTag(runErr, "UNEXPECTED:")
 	}
-	return true, eng.Canon(out)
+	return true, core.Canon(out)
 }
 
 // goCheckResult runs one row through the Go checker (mirrors runCheckRow),
@@ -100,7 +100,7 @@ func goCheckResult(input string) (bool, string) {
 // <fallbackPrefix><message> when it is not a BoruError — matching the TS
 // dumper's classification so error-parity compares by code.
 func errTag(err error, fallbackPrefix string) string {
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if errors.As(err, &ae) {
 		return ae.Code
 	}

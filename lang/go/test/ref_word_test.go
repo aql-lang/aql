@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -42,13 +42,13 @@ func TestRefBuildsDispatchTable(t *testing.T) {
 		if !ok {
 			t.Fatalf("ops[%q] missing", key)
 		}
-		if !v.Parent.Equal(eng.TFunction) {
+		if !v.Parent.Equal(core.TFunction) {
 			t.Errorf("ops[%q].Parent = %s, want Function", key, v.Parent.String())
 		}
 		if v.Quoted {
 			t.Errorf("ops[%q] is Quoted — captured Function should be unquoted (live call-site)", key)
 		}
-		fnDef, ok := v.Data.(eng.FnDefInfo)
+		fnDef, ok := v.Data.(core.FnDefInfo)
 		if !ok {
 			t.Fatalf("ops[%q] payload type = %T, want FnDefInfo", key, v.Data)
 		}
@@ -78,7 +78,7 @@ func TestRefMapRetrievalViaDotInvokesWithForwardArgs(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(result), result)
 	}
-	got, err := eng.AsInteger(result[0])
+	got, err := core.AsInteger(result[0])
 	if err != nil {
 		t.Fatalf("AsInteger: %v", err)
 	}
@@ -103,10 +103,10 @@ func TestRefMapRetrievalAsData(t *testing.T) {
 		t.Fatalf("got %d results, want 1", len(result))
 	}
 	v := result[0]
-	if !v.Parent.Equal(eng.TFunction) {
+	if !v.Parent.Equal(core.TFunction) {
 		t.Fatalf("ops.plus type = %s, want Function", v.Parent.String())
 	}
-	fnDef, _ := v.Data.(eng.FnDefInfo)
+	fnDef, _ := v.Data.(core.FnDefInfo)
 	if fnDef.Name != "myadd" {
 		t.Errorf("ops.plus fnDef.Name = %q, want %q", fnDef.Name, "myadd")
 	}
@@ -127,7 +127,7 @@ func TestRefSurvivesRedefinition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
-	got, err := eng.AsInteger(result[0])
+	got, err := core.AsInteger(result[0])
 	if err != nil {
 		t.Fatalf("AsInteger: %v", err)
 	}
@@ -184,13 +184,13 @@ func TestRefSuffixHoldsArgsUndispatched(t *testing.T) {
 	if len(result) != 3 {
 		t.Fatalf("got %d results, want 3 [Function 2 3]: %v", len(result), result)
 	}
-	if !result[0].Parent.Equal(eng.TFunction) {
+	if !result[0].Parent.Equal(core.TFunction) {
 		t.Errorf("result[0].Parent=%s, want Function (held, not dispatched)", result[0].Parent.String())
 	}
-	if a, _ := eng.AsInteger(result[1]); a != 2 {
+	if a, _ := core.AsInteger(result[1]); a != 2 {
 		t.Errorf("result[1]=%v, want 2 (arg not consumed)", result[1])
 	}
-	if b, _ := eng.AsInteger(result[2]); b != 3 {
+	if b, _ := core.AsInteger(result[2]); b != 3 {
 		t.Errorf("result[2]=%v, want 3 (arg not consumed)", result[2])
 	}
 	// Call path: the bare word still dispatches.
@@ -201,7 +201,7 @@ func TestRefSuffixHoldsArgsUndispatched(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bare: %v", err)
 	}
-	if got, _ := eng.AsInteger(bare[0]); got != 5 {
+	if got, _ := core.AsInteger(bare[0]); got != 5 {
 		t.Errorf("myadd 2 3 = %d, want 5", got)
 	}
 }
@@ -218,7 +218,7 @@ func TestInlineFnLiteralDispatchesWithStackArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inline fn: %v", err)
 	}
-	got, _ := eng.AsInteger(result[0])
+	got, _ := core.AsInteger(result[0])
 	if got != 5 {
 		t.Errorf("inline fn dispatch = %d, want 5", got)
 	}
@@ -239,7 +239,7 @@ func TestApplyOnQuotedCapture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	got, _ := eng.AsInteger(result[0])
+	got, _ := core.AsInteger(result[0])
 	if got != 5 {
 		t.Errorf("2 3 (quote (myadd/r)) apply = %d, want 5", got)
 	}
@@ -285,8 +285,8 @@ func TestRefMatchesSlashR(t *testing.T) {
 		if len(refRes) != 1 || len(rRes) != 1 {
 			t.Fatalf("%s: ref=%v /r=%v, want 1 value each", c.name, refRes, rRes)
 		}
-		refIsFn := refRes[0].Parent.Equal(eng.TFunction)
-		rIsFn := rRes[0].Parent.Equal(eng.TFunction)
+		refIsFn := refRes[0].Parent.Equal(core.TFunction)
+		rIsFn := rRes[0].Parent.Equal(core.TFunction)
 		if refIsFn != rIsFn {
 			t.Errorf("%s: ref-is-fn=%v but /r-is-fn=%v — ref and /r must match", c.name, refIsFn, rIsFn)
 		}
@@ -331,8 +331,8 @@ func TestRefInListHoldsFunctionAnyArity(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s [f/r]: %v", c.name, err)
 		}
-		l, _ := eng.AsList(res[0])
-		if l.Len() != 1 || !l.Get(0).Parent.Equal(eng.TFunction) {
+		l, _ := core.AsList(res[0])
+		if l.Len() != 1 || !l.Get(0).Parent.Equal(core.TFunction) {
 			t.Errorf("%s [f/r] = %v, want [Function] (held, not dispatched)", c.name, res[0])
 		}
 	}

@@ -11,9 +11,9 @@ import (
 
 	"github.com/chzyer/readline"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/parser/go"
 
 	"github.com/boru-lang/boru/cmd/go/internal/termback"
 	"github.com/boru-lang/boru/lang/go/capabilities"

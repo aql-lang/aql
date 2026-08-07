@@ -63,6 +63,18 @@ func coldSet(dir, out, qual string) (map[string]bool, error) {
 	// The scan is AST-based on purpose — a text scan counts identifiers in
 	// COMMENTS and STRING LITERALS, which silently marks a cold wrapper
 	// "used" and leaves its body uncovered under the ADR-008 gate.
+	//
+	// SCOPE matters as much as syntax. A BARE identifier reaches the wrapper
+	// only from inside the facade's own package; every other package must
+	// spell it `eng.X`. Counting bare identifiers everywhere was sound only
+	// while the sibling alias tables re-exported the FACADE — with
+	// `ApplyReach = eng.ApplyReach` in lang/go/native/aliases.go, lang's bare
+	// `ApplyReach(...)` really did land on the wrapper. Once those tables
+	// were repointed at the owning module (`= core.ApplyReach`), the same
+	// bare call resolves locally and the wrapper became unreachable — but
+	// still counted as used, so ~120 wrapper bodies stayed emitted and sat
+	// permanently uncovered. Resolve by package, not by spelling.
+	facadePkg := packageNameOf(filepath.Dir(out))
 	consumers := []string{"eng", "basic", "lang", "cmd", "calc", "wpg", "test", "utils"}
 	for _, c := range consumers {
 		root := filepath.Join(repo, c)
@@ -83,55 +95,56 @@ func coldSet(dir, out, qual string) (map[string]bool, error) {
 			if !strings.HasSuffix(p, ".go") || filepath.Base(p) == facade {
 				return nil
 			}
+			// TESTS do not keep a wrapper hot. Demotion is behaviour-preserving —
+			// `var X = core.X` has the same call syntax and semantics — so the only
+			// reason to emit a BODY is inlining on a production hot path, which the
+			// alloc-ceiling tests gate. A wrapper reached solely from _test.go
+			// (including every Benchmark, which never runs under the coverage
+			// profile at all) would otherwise sit permanently uncovered.
+			if strings.HasSuffix(p, "_test.go") {
+				return nil
+			}
 			fset := token.NewFileSet()
 			f, perr := parser.ParseFile(fset, p, nil, 0)
 			if perr != nil {
 				return nil
 			}
-			var visit func(ast.Node) bool
-			visit = func(n ast.Node) bool {
-				// A qualified reference (pkg.Name) resolves to the real
-				// symbol; only the bare identifier reaches the wrapper.
-				if sel, ok := n.(*ast.SelectorExpr); ok {
-					ast.Inspect(sel.X, visit)
-					return false
+			// Outside the facade's own package a bare identifier cannot name the
+			// wrapper, so only `<engImport>.X` counts. engImportName is "" when the
+			// file does not import the facade package at all, in which case nothing
+			// in it can reach a wrapper.
+			inFacadePkg := f.Name.Name == facadePkg
+			engName := ""
+			if !inFacadePkg {
+				engName = engImportName(f, facadePkg)
+				if engName == "" {
+					return nil
 				}
-				// A DECLARED name is not a reference. Consumers re-export
-				// the facade wholesale (`Foo = eng.Foo` in basic's and
-				// lang's aliases.go), and the left side of that spec is an
-				// unqualified Ident spelled exactly like the wrapper — so
-				// counting it marks every re-exported func "used" and leaves
-				// the genuinely-uncalled wrappers as uncovered bodies. Walk
-				// the parts that can REFERENCE, never the naming parts.
-				switch d := n.(type) {
-				case *ast.ValueSpec:
-					if d.Type != nil {
-						ast.Inspect(d.Type, visit)
+			}
+			// Only a CALL keeps a wrapper hot. A func-VALUE reference
+			// (`eng.Go(eng.MakeWithOpts)`) is served identically by a re-export —
+			// it yields core's function directly, one hop less — so counting it
+			// pinned a body that nothing ever entered. Restricting to call
+			// position also makes the old declaration-name special cases moot: a
+			// ValueSpec/TypeSpec/FuncDecl name is never in call position.
+			mark := func(fun ast.Expr) {
+				switch fn := fun.(type) {
+				case *ast.Ident:
+					if inFacadePkg {
+						used[fn.Name] = true
 					}
-					for _, v := range d.Values {
-						ast.Inspect(v, visit)
+				case *ast.SelectorExpr:
+					if inFacadePkg {
+						return
 					}
-					return false
-				case *ast.TypeSpec:
-					ast.Inspect(d.Type, visit)
-					return false
-				case *ast.FuncDecl:
-					if d.Recv != nil {
-						ast.Inspect(d.Recv, visit)
+					if x, ok := fn.X.(*ast.Ident); ok && x.Name == engName {
+						used[fn.Sel.Name] = true
 					}
-					ast.Inspect(d.Type, visit)
-					if d.Body != nil {
-						ast.Inspect(d.Body, visit)
-					}
-					return false
-				case *ast.Field:
-					if d.Type != nil {
-						ast.Inspect(d.Type, visit)
-					}
-					return false
 				}
-				if id, ok := n.(*ast.Ident); ok {
-					used[id.Name] = true
+			}
+			visit := func(n ast.Node) bool {
+				if call, ok := n.(*ast.CallExpr); ok {
+					mark(call.Fun)
 				}
 				return true
 			}
@@ -380,4 +393,56 @@ func renderResults(sig *types.Signature, qual types.Qualifier) string {
 		return " " + rs[0]
 	}
 	return " (" + strings.Join(rs, ", ") + ")"
+}
+
+// packageNameOf reports the package clause of the first parsable .go file in
+// dir. It is how coldSet learns the facade's own package name ("eng") rather
+// than assuming it from the path, so a rename of the facade module does not
+// silently turn every wrapper cold.
+func packageNameOf(dir string) string {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+			continue
+		}
+		f, perr := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, e.Name()), nil, parser.PackageClauseOnly)
+		if perr != nil {
+			continue
+		}
+		name := strings.TrimSuffix(f.Name.Name, "_test")
+		if name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// engImportName reports the local name a file uses for the facade package —
+// the explicit alias when there is one, else the package's own name. It
+// returns "" when the file does not import the facade at all, which is the
+// signal that nothing in the file can reach a wrapper.
+func engImportName(f *ast.File, facadePkg string) string {
+	for _, im := range f.Imports {
+		path := strings.Trim(im.Path.Value, `"`)
+		if filepath.Base(path) != "go" && filepath.Base(path) != facadePkg {
+			continue
+		}
+		// The module is .../<facadePkg>/go, so the directory ABOVE the
+		// trailing "go" carries the name.
+		base := filepath.Base(path)
+		if base == "go" {
+			base = filepath.Base(filepath.Dir(path))
+		}
+		if base != facadePkg {
+			continue
+		}
+		if im.Name != nil {
+			return im.Name.Name
+		}
+		return facadePkg
+	}
+	return ""
 }

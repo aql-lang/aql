@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 func runDefForm(t *testing.T, src string) ([]Value, error) {
@@ -42,7 +42,7 @@ func TestDefGenChainTailEvalErrorPropagates(t *testing.T) {
 func TestRegisterDefKeywordFormsGuards(t *testing.T) {
 	// A registry with NO blessed constructors registered: every
 	// Lookup misses and synthesis is a no-op (the fnDef==nil guard).
-	bare, err := eng.NewRegistry()
+	bare, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestRegisterDefKeywordFormsGuards(t *testing.T) {
 
 	// A constructor whose aggregate carries a Fallback sig: the
 	// Fallback is skipped, real sigs mirror.
-	r2, err := eng.NewRegistry()
+	r2, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}

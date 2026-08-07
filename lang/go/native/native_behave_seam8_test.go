@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // --- fake Behaviors used as the `prev` slot on a userBehavior ---
@@ -27,7 +27,7 @@ func (w8Cap) Format(v Value) string           { return "w8cap-format" }
 func (w8Cap) Equal(a, b Value) bool           { return true }
 func (w8Cap) Compare(a, b Value) (int, error) { return 7, nil }
 func (w8Cap) Nodify(v Value) (Value, error)   { return NewString("w8cap-nodify"), nil }
-func (w8Cap) Unify(a, b Value) (Value, *eng.UnifyError) {
+func (w8Cap) Unify(a, b Value) (Value, *core.UnifyError) {
 	return NewString("w8cap-unify"), nil
 }
 
@@ -121,7 +121,7 @@ func TestW8BehaveHandlerFnNoSignatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fnVal := Value{Parent: TFunction, Data: eng.FnDefInfo{}} // no signatures
+	fnVal := Value{Parent: TFunction, Data: core.FnDefInfo{}} // no signatures
 	_, herr := behaveHandler([]Value{NewAtom("compare"), fnVal}, nil, nil, r)
 	if herr == nil {
 		t.Fatal("behave: fn with no signatures must error")
@@ -136,12 +136,12 @@ func TestW8BehaveHandlerTargetNil(t *testing.T) {
 	// Install a temporary behavior whose validate returns (nil, nil) so
 	// the handler reaches the "could not infer target type" guard.
 	behaviors["w8fake"] = behaviorEntry{
-		validate: func(sig eng.FnSig) (*eng.Type, error) { return nil, nil },
-		install:  func(u *userBehavior, body []eng.Value) {},
+		validate: func(sig core.FnSig) (*core.Type, error) { return nil, nil },
+		install:  func(u *userBehavior, body []core.Value) {},
 	}
 	t.Cleanup(func() { delete(behaviors, "w8fake") })
 
-	fnVal := Value{Parent: TFunction, Data: eng.FnDefInfo{
+	fnVal := Value{Parent: TFunction, Data: core.FnDefInfo{
 		Signatures: []Signature{{
 			Params:  []FnParam{{Type: TInteger}},
 			Returns: []*Type{TInteger},
@@ -199,7 +199,7 @@ func TestW8UserBehaviorCompareDelegates(t *testing.T) {
 func TestW8UserBehaviorCompareNoComparer(t *testing.T) {
 	u := &userBehavior{prev: w8Plain{}} // prev not a Comparer, no body
 	_, err := u.Compare(NewInteger(1), NewInteger(2))
-	if err != eng.ErrNoComparer {
+	if err != core.ErrNoComparer {
 		t.Errorf("Compare should return ErrNoComparer, got %v", err)
 	}
 }
@@ -263,7 +263,7 @@ func TestW8UserBehaviorNodifyDelegates(t *testing.T) {
 
 func TestW8UserBehaviorNodifyNoNodifier(t *testing.T) {
 	u := &userBehavior{prev: w8Plain{}} // prev not a Nodifier, no body
-	if _, err := u.Nodify(NewInteger(1)); err != eng.ErrNoNodifier {
+	if _, err := u.Nodify(NewInteger(1)); err != core.ErrNoNodifier {
 		t.Errorf("Nodify should return ErrNoNodifier, got %v", err)
 	}
 }
@@ -294,7 +294,7 @@ func TestW8UserBehaviorUnifyDelegates(t *testing.T) {
 
 func TestW8UserBehaviorUnifyNoUnifier(t *testing.T) {
 	u := &userBehavior{prev: w8Plain{}} // prev not a Unifier, no body
-	if _, uerr := u.Unify(NewInteger(1), NewInteger(2)); uerr != eng.ErrNoUnifier {
+	if _, uerr := u.Unify(NewInteger(1), NewInteger(2)); uerr != core.ErrNoUnifier {
 		t.Errorf("Unify should return ErrNoUnifier, got %v", uerr)
 	}
 }
@@ -312,7 +312,7 @@ func TestW8UserBehaviorUnifyReentryDelegates(t *testing.T) {
 
 func TestW8UserBehaviorUnifyReentryNoUnifier(t *testing.T) {
 	u := &userBehavior{unifyBody: []Value{NewInteger(0)}, prev: w8Plain{}, inUnify: true}
-	if _, uerr := u.Unify(NewInteger(1), NewInteger(2)); uerr != eng.ErrNoUnifier {
+	if _, uerr := u.Unify(NewInteger(1), NewInteger(2)); uerr != core.ErrNoUnifier {
 		t.Errorf("Unify re-entry without prev Unifier should return ErrNoUnifier, got %v", uerr)
 	}
 }

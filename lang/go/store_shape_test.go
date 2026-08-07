@@ -3,7 +3,7 @@ package lang
 // Store-identity context typing, stage 1 (design/checker-precision-
 // fronts.0.md §2): store-class containers — context Store layers,
 // `flex` maps, patrun dispatch tables — carry an abstract
-// eng.StoreShapeInfo minted per creation site / live layer in CHECK
+// core.StoreShapeInfo minted per creation site / live layer in CHECK
 // MODE, and set/get/add/find over a shaped carrier read/write ITS
 // shape instead of the flat CheckState.ContextTypes namespace. The
 // flat map remains the compatibility fallback for any store the
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -251,7 +251,7 @@ func TestStoreShapeObservationFree(t *testing.T) {
 		t.Fatalf("parse: %v", perr)
 	}
 	done := reg.Check.Begin()
-	_, runErr := eng.NewTop(reg).Run(values)
+	_, runErr := core.NewTop(reg).Run(values)
 	done()
 	if runErr != nil {
 		t.Fatalf("check run: %v", runErr)

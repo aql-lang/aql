@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // dxRun parses and runs source, returning the canonical render of the

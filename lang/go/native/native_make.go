@@ -1,6 +1,9 @@
 package native
 
-import "github.com/boru-lang/boru/eng/go"
+import (
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // makeNatives installs the `make` word — the universal constructor
 // for typed values (scalars, class instances, records, tables).
@@ -18,13 +21,13 @@ import "github.com/boru-lang/boru/eng/go"
 // shape, and dispatch wiring.
 // makeObjReturns is the class/Resource make sig's check-mode result:
 // ReturnsFreshInstance(0) plus the schema-decidable construction validation
-// (eng.CheckMakeConstruction — unknown / missing / mistyped fields on a
+// (check.CheckMakeConstruction — unknown / missing / mistyped fields on a
 // concrete construction map, with the byte-identical runtime messages).
 func makeObjReturns() ReturnsFunc {
 	fresh := ReturnsFreshInstance(0)
 	return func(args []Value, r *Registry) []Value {
 		if len(args) >= 2 {
-			eng.CheckMakeConstruction(r, args[0], args[1], args[0].Pos())
+			check.CheckMakeConstruction(r, args[0], args[1], args[0].Pos())
 		}
 		return fresh(args, r)
 	}
@@ -58,7 +61,7 @@ func makeNodeReturns() ReturnsFunc {
 	fresh := ReturnsFreshInstance(0)
 	return func(args []Value, r *Registry) []Value {
 		out := fresh(args, r)
-		if len(args) != 2 || len(out) != 1 || !eng.IsBareTypeNode(args[0]) {
+		if len(args) != 2 || len(out) != 1 || !core.IsBareTypeNode(args[0]) {
 			return out
 		}
 		target, src := args[0], args[1]
@@ -68,7 +71,7 @@ func makeNodeReturns() ReturnsFunc {
 		}
 		if elem, ok := src.ElemConstraint(); ok {
 			out[0].SetElemConstraint(elem)
-		} else if ci, cerr := eng.AsChildType(src); weakTarget && cerr == nil {
+		} else if ci, cerr := core.AsChildType(src); weakTarget && cerr == nil {
 			out[0].SetElemConstraint(ci.Child)
 		}
 		return out
@@ -87,17 +90,17 @@ var makeNatives = []NativeFunc{
 			// would return the SAME type-literal value (one Value.ID), which
 			// collapses two `make P {}` operands onto one in the bytecode
 			// lowerer's per-value provenance. See ReturnsFreshInstance.
-			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarOptsHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeObjHandler), ReturnsFn: makeObjReturns(), BarrierPos: -1},
+			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(core.MakeScalarOptsHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Impl: Go(core.MakeObjHandler), ReturnsFn: makeObjReturns(), BarrierPos: -1},
 			// Node-family targets: make FlexMap/FlexList (mutable deep
 			// copy) and make Map/List (deep immutable conversion — the
 			// inverse). Structural type bodies that land in the Node
 			// TypeArgs slot are deferred back to MakeHandler inside
 			// the handler.
-			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeNodeHandler), ReturnsFn: makeNodeReturns(), BarrierPos: -1},
-			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarHandler), ReturnsFn: makeScalarReturns(), BarrierPos: -1},
-			{Args: []*Type{TAny, TAny, TMap}, Impl: Go(eng.MakeWithOpts), Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Impl: Go(eng.MakeHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(core.MakeNodeHandler), ReturnsFn: makeNodeReturns(), BarrierPos: -1},
+			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(core.MakeScalarHandler), ReturnsFn: makeScalarReturns(), BarrierPos: -1},
+			{Args: []*Type{TAny, TAny, TMap}, Impl: Go(core.MakeWithOpts), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(core.MakeHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 }

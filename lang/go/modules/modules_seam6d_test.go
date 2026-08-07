@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Wave-6 agent-D coverage for the modules package infrastructure: the

@@ -31,8 +31,6 @@ var _ = check.DispatchBraid
 var _ compiler.EmitState
 
 type (
-	BranchRecord   = compiler.BranchRecord
-	CodeEffectInfo = compiler.CodeEffectInfo
 	CompiledFn     = compiler.CompiledFn
 	CompiledFnRef  = compiler.CompiledFnRef
 	ConstLocalRef  = compiler.ConstLocalRef
@@ -124,30 +122,20 @@ const (
 // hot path starts calling it.
 var (
 	AnalyseCodeEffectCarrier = compiler.AnalyseCodeEffectCarrier
+	ClosureWantsKeyVal       = compiler.ClosureWantsKeyVal
 	CompiledRef              = compiler.CompiledRef
 	ConstOperand             = compiler.ConstOperand
 	EventOperand             = compiler.EventOperand
 	InterpBodyInert          = compiler.InterpBodyInert
 	InterpMemberInert        = compiler.InterpMemberInert
+	IsCompiledClosure        = compiler.IsCompiledClosure
+	NewClosure               = compiler.NewClosure
+	NewEmitState             = compiler.NewEmitState
 	RewritePromotedRefs      = compiler.RewritePromotedRefs
 	StampCompiledRef         = compiler.StampCompiledRef
+	StampDetachedFn          = compiler.StampDetachedFn
 	StampDetachedSig         = compiler.StampDetachedSig
 	StampFnValue             = compiler.StampFnValue
+	StampFnValueInPlace      = compiler.StampFnValueInPlace
 	TryRecordFallback        = compiler.TryRecordFallback
 )
-
-func ClosureWantsKeyVal(a0 core.Value) bool { return compiler.ClosureWantsKeyVal(a0) }
-
-func IsCompiledClosure(a0 core.Value) bool { return compiler.IsCompiledClosure(a0) }
-
-func NewClosure(a0 int, a1 []core.Value) core.Value { return compiler.NewClosure(a0, a1) }
-
-func NewEmitState() *compiler.EmitState { return compiler.NewEmitState() }
-
-func StampDetachedFn(a0 *core.Registry, a1 core.FnDefInfo, a2 core.SrcPos) (*compiler.CompiledFnRef, bool) {
-	return compiler.StampDetachedFn(a0, a1, a2)
-}
-
-func StampFnValueInPlace(a0 *core.Registry, a1 core.Value) bool {
-	return compiler.StampFnValueInPlace(a0, a1)
-}

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 	eng "github.com/boru-lang/boru/eng/go"
 )
 
@@ -89,26 +91,26 @@ func registerStash(t *testing.T) *Boru {
 	}
 	a.Register("stash", Signature{
 		Args: []*Type{TMap, TAny},
-		Impl: eng.Go(func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+		Impl: core.Go(func(args []Value, _ map[string]Value, _ []Value, _ *core.Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
 		}),
 		Returns:       []*Type{TMap},
 		BarrierPos:    -1,
-		CompileEffect: eng.CompileStoresFn,
+		CompileEffect: core.CompileStoresFn,
 	})
 	return a
 }
 
 // firstStampedHandler returns the first FnDefInfo const in prog whose own sig
 // carries a compiled-unit ref, or nil.
-func firstStampedHandler(prog *eng.Program) *eng.Signature {
+func firstStampedHandler(prog *compiler.Program) *core.Signature {
 	for _, c := range prog.Consts {
-		fd, ok := c.Data.(eng.FnDefInfo)
+		fd, ok := c.Data.(core.FnDefInfo)
 		if !ok {
 			continue
 		}
 		for i := range fd.Signatures {
-			if eng.CompiledRef(&fd.Signatures[i]) != nil {
+			if compiler.CompiledRef(&fd.Signatures[i]) != nil {
 				return &fd.Signatures[i]
 			}
 		}
@@ -129,7 +131,7 @@ func TestStoredFnCompilesAndRunsOnVM(t *testing.T) {
 	if sig == nil {
 		t.Fatal("handler was not compiled + stamped with a CompiledFnRef")
 	}
-	ref := eng.CompiledRef(sig)
+	ref := compiler.CompiledRef(sig)
 	if ref.Prog != prog {
 		t.Fatalf("Finalize did not back-stamp ref.Prog (got %p, want %p)", ref.Prog, prog)
 	}
@@ -162,7 +164,7 @@ func TestInvokeCallbackVMAndFallbackAgree(t *testing.T) {
 	reg := a.NativeRegistry()
 
 	// Idle registry → VM path (RunUnit).
-	vmOut, err := eng.InvokeCallback(reg, sig, []Value{NewInteger(5)}, nil)
+	vmOut, err := core.InvokeCallback(reg, sig, []Value{NewInteger(5)}, nil)
 	if err != nil {
 		t.Fatalf("InvokeCallback (VM): %v", err)
 	}
@@ -182,9 +184,9 @@ func TestInvokeCallbackVMAndFallbackAgree(t *testing.T) {
 
 // firstHandlerSig returns the first FnDefInfo const's first own sig, stamped or
 // not — used to reach an UN-stamped handler for the fallback path.
-func firstHandlerSig(prog *eng.Program) *eng.Signature {
+func firstHandlerSig(prog *compiler.Program) *core.Signature {
 	for _, c := range prog.Consts {
-		fd, ok := c.Data.(eng.FnDefInfo)
+		fd, ok := c.Data.(core.FnDefInfo)
 		if !ok {
 			continue
 		}
@@ -214,7 +216,7 @@ func TestStoredFnNonCompilingBodyFallsBack(t *testing.T) {
 	if sig == nil {
 		t.Fatal("no handler sig found")
 	}
-	out, err := eng.InvokeCallback(a.NativeRegistry(), sig, []Value{NewInteger(5)}, nil)
+	out, err := core.InvokeCallback(a.NativeRegistry(), sig, []Value{NewInteger(5)}, nil)
 	if err != nil {
 		t.Fatalf("InvokeCallback fallback: %v", err)
 	}
@@ -270,12 +272,12 @@ func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 	}
 	stamped := 0
 	for _, c := range prog.Consts {
-		fd, ok := c.Data.(eng.FnDefInfo)
+		fd, ok := c.Data.(core.FnDefInfo)
 		if !ok {
 			continue
 		}
 		for i := range fd.Signatures {
-			if eng.CompiledRef(&fd.Signatures[i]) != nil {
+			if compiler.CompiledRef(&fd.Signatures[i]) != nil {
 				stamped++
 			}
 		}
@@ -293,12 +295,12 @@ func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 	}
 	stamped2 := 0
 	for _, c := range prog2.Consts {
-		fd, ok := c.Data.(eng.FnDefInfo)
+		fd, ok := c.Data.(core.FnDefInfo)
 		if !ok {
 			continue
 		}
 		for i := range fd.Signatures {
-			if eng.CompiledRef(&fd.Signatures[i]) != nil {
+			if compiler.CompiledRef(&fd.Signatures[i]) != nil {
 				stamped2++
 			}
 		}
@@ -315,14 +317,14 @@ func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 	if err3 != nil || prog3 == nil {
 		t.Fatalf("compile: reason=%q err=%v", reason3, err3)
 	}
-	refs := map[*eng.CompiledFnRef]bool{}
+	refs := map[*compiler.CompiledFnRef]bool{}
 	for _, c := range prog3.Consts {
-		fd, ok := c.Data.(eng.FnDefInfo)
+		fd, ok := c.Data.(core.FnDefInfo)
 		if !ok {
 			continue
 		}
 		for i := range fd.Signatures {
-			if ref := eng.CompiledRef(&fd.Signatures[i]); ref != nil {
+			if ref := compiler.CompiledRef(&fd.Signatures[i]); ref != nil {
 				refs[ref] = true
 			}
 		}

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/debugserve"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // stepServer runs src under a Session fronted by a Remote mounted on an

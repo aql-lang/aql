@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 )
@@ -22,8 +22,8 @@ import (
 // nothing else; its Format redacts.
 var TVaultIdentity = registerVaultType("Ideal/VaultIdentity", 5012, vaultIdentityBehavior{})
 
-func registerVaultType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, id, "boru:vault", b)
+func registerVaultType(path string, id int, b core.TypeBehavior) *core.Type {
+	t, err := core.Builtin.RegisterType(path, id, "boru:vault", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("vault: register %s: %w", path, err))
 	}
@@ -59,7 +59,7 @@ func (vaultIdentityBehavior) Equal(a, b native.Value) bool {
 func (vaultIdentityBehavior) Format(native.Value) string { return "<vault identity>" }
 
 func asVaultIdentity(v native.Value) (*vaultIdentityRef, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, false
 	}
@@ -93,7 +93,7 @@ func vaultIdentityHandler(args []native.Value, _ map[string]native.Value, _ []na
 		func(capabilities.CertRequest) (*tls.Certificate, error) {
 			return vaultCertificate(r, alias)
 		}))
-	return []native.Value{eng.NewExtension(TVaultIdentity, &vaultIdentityRef{alias: alias, name: name})}, nil
+	return []native.Value{core.NewExtension(TVaultIdentity, &vaultIdentityRef{alias: alias, name: name})}, nil
 }
 
 // vaultCertificate reveals the alias through the host vault backend and

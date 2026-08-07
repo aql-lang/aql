@@ -21,6 +21,7 @@ that module:
 
 - Engine kernel (types, values, matching, parser): [eng/go/CLAUDE.md](eng/go/CLAUDE.md)
 - Interpreter core (the standalone module cut from eng; kernel conventions apply): [core/go/CLAUDE.md](core/go/CLAUDE.md)
+- Parser (the standalone front end: source text → `[]core.Value`; a leaf over core, gated at 100%): [parser/go/CLAUDE.md](parser/go/CLAUDE.md)
 - Type checker (the check module: analysis pass, carriers, diagnostics; kernel conventions apply): [check/go/CLAUDE.md](check/go/CLAUDE.md)
 - Compiler (the compiler module: recorder, lowering, bytecode emitter; kernel conventions apply): [compiler/go/CLAUDE.md](compiler/go/CLAUDE.md)
 - Base language layer (fundamental words, predefined content types): [basic/go/CLAUDE.md](basic/go/CLAUDE.md)

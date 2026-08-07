@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -19,7 +21,7 @@ import (
 
 // modelStampEvent finds the stamp attempt with the given name, failing loudly
 // when no attempt was recorded at all.
-func modelStampEvent(t *testing.T, r *native.Registry, name string) eng.StampEvent {
+func modelStampEvent(t *testing.T, r *native.Registry, name string) core.StampEvent {
 	t.Helper()
 	for _, ev := range r.StampEvents() {
 		if ev.Name == name {
@@ -27,7 +29,7 @@ func modelStampEvent(t *testing.T, r *native.Registry, name string) eng.StampEve
 		}
 	}
 	t.Fatalf("no stamp attempt named %q recorded; events: %v", name, r.StampEvents())
-	return eng.StampEvent{}
+	return core.StampEvent{}
 }
 
 func TestModelActionStampsAtBuild(t *testing.T) {
@@ -69,7 +71,7 @@ func TestModelActionStampsAtBuild(t *testing.T) {
 			t.Fatalf("spec action %q is not a fn value: %v", key, fnV)
 		}
 		for i := range fd.Signatures {
-			if eng.CompiledRef(&fd.Signatures[i]) != nil {
+			if compiler.CompiledRef(&fd.Signatures[i]) != nil {
 				t.Errorf("spec action %q carries a compiled ref — the stamp must live on the model's private clone only", key)
 			}
 		}

@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // The Tier-2 app runtime of design/TUI.0.md §2 — "native loop, real
-// mailbox": Tui.run binds the app to a real eng.Process (registered as
+// mailbox": Tui.run binds the app to a real core.Process (registered as
 // "tui", so any process can `send` to it), pumps decoded input into the
 // mailbox, folds events through the app's update word, renders the pure
 // view word's widget tree via the P2 layout core, and presents frames
@@ -153,7 +153,7 @@ func tuiRunHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	}
 	rt := r.Procs
 	if rt == nil {
-		rt = eng.NewProcessRuntime()
+		rt = core.NewProcessRuntime()
 		r.Procs = rt
 	}
 	// RegisterName REPLACES an existing binding (BEAM re-register
@@ -161,7 +161,7 @@ func tuiRunHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	if _, taken := rt.Whereis(tuiRegisteredName); taken {
 		return nil, r.BoruError("already_running", "run: another TUI app already owns the terminal", "run")
 	}
-	proc := eng.NewProcess(rt, eng.DefaultMailboxBound, eng.OverflowBlock)
+	proc := core.NewProcess(rt, core.DefaultMailboxBound, core.OverflowBlock)
 	if err := rt.Insert(proc); err != nil {
 		return nil, mapTuiErr(r, "run", err)
 	}
@@ -222,7 +222,7 @@ type tuiDriver struct {
 	events <-chan tuikit.Event
 	paint  func(tree native.Value, cols, rows int) error
 	finish func()
-	proc   *eng.Process
+	proc   *core.Process
 	cols   int
 	rows   int
 }
@@ -372,7 +372,7 @@ func (d *tuiDriver) applyUpdate(state, msg native.Value) (native.Value, bool, er
 	if sig == nil {
 		return native.Value{}, false, d.reg.BoruError("tui_error", "run: update does not accept (state, event)", "run")
 	}
-	out, err := eng.InvokeCallback(d.reg, sig, []native.Value{state, msg}, d.app.updateInfo.Captured)
+	out, err := core.InvokeCallback(d.reg, sig, []native.Value{state, msg}, d.app.updateInfo.Captured)
 	if err != nil {
 		return native.Value{}, false, err
 	}
@@ -394,7 +394,7 @@ func (d *tuiDriver) applyUpdate(state, msg native.Value) (native.Value, bool, er
 func (d *tuiDriver) applyServiceUpdate(msg native.Value) (native.Value, bool, error) {
 	out, err := native.DispatchServiceValue(d.reg, d.app.service, msg)
 	if err != nil {
-		var ae *eng.BoruError
+		var ae *core.BoruError
 		if errors.As(err, &ae) && ae.Code == "no_match" {
 			state, _ := native.ServiceStateOf(d.app.service)
 			return state, false, nil
@@ -415,7 +415,7 @@ func (d *tuiDriver) render(state native.Value) error {
 	if sig == nil {
 		return d.reg.BoruError("tui_error", "run: view does not accept the state", "run")
 	}
-	out, err := eng.InvokeCallback(d.reg, sig, []native.Value{state}, d.app.viewInfo.Captured)
+	out, err := core.InvokeCallback(d.reg, sig, []native.Value{state}, d.app.viewInfo.Captured)
 	if err != nil {
 		return err
 	}

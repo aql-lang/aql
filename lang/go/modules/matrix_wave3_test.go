@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -137,7 +137,7 @@ func TestMatrixConverterNoPayloadWave3(t *testing.T) {
 	}
 	tt := MintTensorTypes(r)
 	// A Matrix-typed extension carrying a non-TensorData body.
-	odd := eng.NewExtension(tt.Matrix, "not-a-tensor")
+	odd := core.NewExtension(tt.Matrix, "not-a-tensor")
 	lv, lerr := tensorFormatBehavior{}.ToList(odd)
 	if lerr != nil {
 		t.Fatalf("ToList no payload: %v", lerr)

@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Shared helpers for the *_seam5_test.go coverage suites

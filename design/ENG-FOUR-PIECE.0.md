@@ -175,6 +175,12 @@ VIRTUAL pieces inside eng/go … until their own cuts".
   committed generated output with no committed generator, so the
   "regenerate after any surface change" instruction currently has no
   runnable subject.
+  *(Settled in c03c9b7: `tools/piecetool` is now committed and
+  `make facades` regenerates all three files, so the instruction is
+  runnable. It earned its keep on 2026-08-07 — moving `BranchRecord` and
+  `CodeEffectInfo` from compiler to core needed matching edits in two
+  facades, and regenerating caught an `EmitFragmentRef` alias a hand-fix
+  had missed.)*
 - **Test triage was compiler-driven.** Rather than argue about which
   suite owns a given test file, every file was moved DOWN to the lowest
   module that plausibly owned it and the type checker adjudicated: an

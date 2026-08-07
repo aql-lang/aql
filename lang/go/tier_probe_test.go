@@ -3,7 +3,7 @@ package lang
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestTierFeasibilityProbe validates the two load-bearing claims of
@@ -39,8 +39,8 @@ func TestTierFeasibilityProbe(t *testing.T) {
 
 	// Pre-install the reserved argument name as a dynamic carrier so the
 	// compile pass sees a gradual binding (not a foldable constant).
-	eng.InstallDef(a.registry, "__tier0", eng.NewDynamicCarrier(eng.TInteger))
-	defer eng.UninstallDef(a.registry, "__tier0")
+	core.InstallDef(a.registry, "__tier0", core.NewDynamicCarrier(core.TInteger))
+	defer core.UninstallDef(a.registry, "__tier0")
 	prog, reason, _, err := a.CompileCheck(`tpfib __tier0`)
 	if err != nil {
 		t.Fatalf("CompileCheck: %v", err)

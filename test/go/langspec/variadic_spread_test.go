@@ -3,7 +3,9 @@ package langspec
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestVariadicSpreadOracle pins the soundness-oracle contract for a
@@ -13,23 +15,23 @@ import (
 // leak is still flagged. Pairs the positive (Integer spread covers N Integers)
 // with the negatives (a String among the Integers, and a wrong fixed prefix).
 func TestVariadicSpreadOracle(t *testing.T) {
-	varInt := eng.NewVariadicCarrier(eng.NewTypeLiteral(eng.TInteger))
-	i := eng.NewInteger(6)
-	s := eng.NewString("x")
-	strCarrier := eng.NewCarrier(eng.TString)
+	varInt := check.NewVariadicCarrier(core.NewTypeLiteral(core.TInteger))
+	i := core.NewInteger(6)
+	s := core.NewString("x")
+	strCarrier := core.NewCarrier(core.TString)
 
 	cases := []struct {
 		name    string
-		checked []eng.Value
-		actual  []eng.Value
+		checked []core.Value
+		actual  []core.Value
 		want    bool
 	}{
-		{"three integers covered", []eng.Value{varInt}, []eng.Value{i, i, i}, true},
-		{"zero trailing covered", []eng.Value{varInt}, nil, true},
-		{"string leak rejected", []eng.Value{varInt}, []eng.Value{i, s, i}, false},
-		{"fixed prefix + integer spread", []eng.Value{varInt, strCarrier}, []eng.Value{i, i, s}, true},
-		{"fixed prefix wrong type", []eng.Value{varInt, strCarrier}, []eng.Value{i, i, i}, false},
-		{"missing fixed prefix", []eng.Value{varInt, strCarrier}, nil, false},
+		{"three integers covered", []core.Value{varInt}, []core.Value{i, i, i}, true},
+		{"zero trailing covered", []core.Value{varInt}, nil, true},
+		{"string leak rejected", []core.Value{varInt}, []core.Value{i, s, i}, false},
+		{"fixed prefix + integer spread", []core.Value{varInt, strCarrier}, []core.Value{i, i, s}, true},
+		{"fixed prefix wrong type", []core.Value{varInt, strCarrier}, []core.Value{i, i, i}, false},
+		{"missing fixed prefix", []core.Value{varInt, strCarrier}, nil, false},
 	}
 	for _, c := range cases {
 		if got := stackTypeCovered(c.checked, c.actual); got != c.want {

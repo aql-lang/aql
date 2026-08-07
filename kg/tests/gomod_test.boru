@@ -216,25 +216,43 @@ end
 "check/go depends on core/go" Test.test end
 [(deps-of "compiler-go") ["check-go" "core-go"] Assert.equal]
 "compiler/go depends on check and core" Test.test end
-[(deps-of "eng-go") ["check-go" "compiler-go" "core-go"] Assert.equal]
-"eng/go depends on all three lower pieces" Test.test end
+[(deps-of "eng-go") ["check-go" "compiler-go" "core-go" "parser-go"]
+      Assert.equal
+  ]
+"eng/go depends on the four pieces below it" Test.test end
+[(deps-of "parser-go") ["core-go"] Assert.equal]
+"parser/go depends on core alone — it is a leaf over the kernel"
+Test.test end
+[(deps-of "basic-go") ["check-go" "core-go" "parser-go"] Assert.equal]
+"basic/go depends on core, check and parser — not compiler (ADR-013)"
+Test.test end
 
-# The question that started this: a package is not a module.
-[((by-key "eng-go-parser") is None) false Assert.equal]
-"eng/go/parser is discovered as a code unit" Test.test end
-[(KgUtil.get-or ((by-key "eng-go-parser") get "attributes")
+# The question that started this: a package is not a module. eng/go/parser
+# used to be the example, but the parser became a top-level module — so it
+# now demonstrates the OTHER half of the same distinction, and a package
+# that is still a package carries the original point.
+[((by-key "lang-go-modules") is None) false Assert.equal]
+"lang/go/modules is discovered as a code unit" Test.test end
+[(KgUtil.get-or ((by-key "lang-go-modules") get "attributes")
           "unit" ""
       )
       "go-package" Assert.equal
   ]
-"eng/go/parser is a PACKAGE, not a module" Test.test end
+"lang/go/modules is a PACKAGE, not a module" Test.test end
+[((by-key "eng-go-parser") is None) true Assert.equal]
+"eng/go/parser is no longer discovered — it moved out to parser/go"
+Test.test end
+[(KgUtil.get-or ((by-key "parser-go") get "attributes") "unit" "")
+      "go-module" Assert.equal
+  ]
+"…and parser/go is discovered as a MODULE" Test.test end
 [(KgUtil.get-or ((by-key "core-go") get "attributes") "unit" "")
       "go-module" Assert.equal
   ]
 "core/go is a module" Test.test end
 [((filter
               [var
-                  [[a] ((a get "subject") eq "eng-go-parser") and
+                  [[a] ((a get "subject") eq "lang-go-modules") and
                       ((a get "predicate") eq "part_of")
                   ]
               ]
@@ -281,7 +299,7 @@ end
 
 def manifest (KgGoMod.tree-manifest-text "../go.work" [])
 
-[(StringUtil.contains "eng/go/parser" manifest) true Assert.equal]
+[(StringUtil.contains "lang/go/modules" manifest) true Assert.equal]
 "the manifest lists the discovered packages" Test.test end
 [(StringUtil.contains "core/go" manifest) true Assert.equal]
 "the manifest lists the modules" Test.test end

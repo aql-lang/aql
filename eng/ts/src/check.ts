@@ -11,196 +11,22 @@
 // contagion, and the diagnostic store. Fn-body analysis, the step
 // budget's fixed-point machinery, disjunct partitioning, and the
 // bytecode recording pass land in later phases.
-import type { EmitState } from './emit.ts'
-import { BoruType, TAny } from './type.ts'
-import type { Signature } from './signature.ts'
-import {
-  isSugar, newCarrier, newDynamicCarrier, Value } from './value.ts'
-import type { Registry } from './registry.ts'
+import { BoruType, TAny } from '@voxgig/borucore'
+import type { Signature } from '@voxgig/borucore'
+import { isSugar, newCarrier, newDynamicCarrier, Value } from '@voxgig/borucore'
+import type { Registry } from '@voxgig/borucore'
 
-/** Severity classes for a diagnostic, mirroring eng CheckSeverity. */
-export type CheckSeverity = 'error' | 'warning' | 'info'
+// The analysis STATE lives in core (core/ts/src/check-state.ts, the twin of
+// core/go/check_state.go); this piece owns the analysis LOGIC. Re-exported
+// here so every existing consumer of `check.ts` keeps working unchanged.
+import { installAnalysisImpl } from '@voxgig/borucore'
+export {
+  CheckState,
+  DEFAULT_CHECK_STEP_BUDGET,
+  severityFor,
+} from '@voxgig/borucore'
+export type { CheckDiagnostic, CheckSeverity } from '@voxgig/borucore'
 
-/** One static-analysis finding. Mirrors eng CheckDiagnostic. */
-export interface CheckDiagnostic {
-  code: string
-  detail: string
-  word?: string
-  severity: CheckSeverity
-  /** Emitted during fn-body analysis (call-time code) — see forward-ref rescue. */
-  fnBody?: boolean
-}
-
-// checkCodeSeverity maps a diagnostic code to its default severity,
-// mirroring eng/go/registry.go::checkCodeSeverity.
-const CHECK_CODE_SEVERITY: Record<string, CheckSeverity> = {
-  no_signature: 'error',
-  undefined_word: 'error',
-  fn_body_error: 'error',
-  branch_error: 'error',
-  type_error: 'error',
-  uncalled_function: 'error',
-  constraint_violation: 'error',
-  unbound_param: 'error',
-  arity_mismatch: 'error',
-  unreachable_signature: 'warning',
-  partial_dispatch: 'warning',
-  index_out_of_range: 'warning',
-  missing_returns: 'warning',
-  step_budget_exceeded: 'warning',
-  body_error: 'warning',
-  static_warning: 'warning',
-  analysis_truncated: 'info',
-  forward_strands_operand: 'info',
-  mixed_form_call: 'info',
-  speculative_forward_commit: 'info',
-}
-
-/** Default severity for a diagnostic code (info when unmapped). */
-export function severityFor(code: string): CheckSeverity {
-  return CHECK_CODE_SEVERITY[code] ?? 'info'
-}
-
-/** DefaultCheckStepBudget caps total check-mode steps across sub-engines. */
-export const DEFAULT_CHECK_STEP_BUDGET = 500_000
-
-/**
- * CheckState is the per-pass static-analysis state bundle, mirroring
- * eng/go/registry.go::CheckState (Phase-1 subset). It hangs off the
- * Registry; handlers consult `mode` to suppress side effects and the
- * engine routes dispatch through carrierResults while it is active.
- */
-export class CheckState {
-  mode = false
-  diagnostics: CheckDiagnostic[] = []
-  stepCount = 0
-  /** -1 is the "unset" sentinel resolved to DEFAULT_CHECK_STEP_BUDGET. */
-  stepBudget = -1
-  budgetTripped = false
-  /** Names installed via def during the pass (→ unused_def warnings). */
-  defsInstalled = new Map<string, void>()
-  /** Names referenced during the pass. */
-  defsUsed = new Set<string>()
-  /** Nesting depth of fn-body analysis (diagnostics tagged fnBody when > 0). */
-  fnBodyDepth = 0
-  /**
-   * Keys (name#arity) of fn-body analyses currently running, so a
-   * recursive self-call breaks the cycle instead of looping. Mirrors
-   * CheckState.FnInflight (Phase-2 subset — no memoized summaries /
-   * fixed-point refinement yet).
-   */
-  fnInflight = new Set<string>()
-
-  /**
-   * When > 0, error-level DISPATCH diagnostics (no_signature /
-   * undefined_word) are dropped: the enclosing analysis runs a body under
-   * args a real match already REJECTED (the best-fit recovery), so its
-   * dispatch failures are cascade noise — the one honest diagnostic is the
-   * recovery's own no_signature. Mirrors the Go engine's
-   * SuppressBodyErrors discipline.
-   */
-  suppressBodyErrors = 0
-  /**
-   * When set, the check pass doubles as the bytecode recording pass:
-   * each native dispatch is offered to emit.recordCall. Null for a plain
-   * check. Mirrors CheckState.Emit. Recording is passive — it never
-   * changes the carriers returned.
-   */
-  emit: EmitState | undefined
-
-  /** Deep copy the mutable analysis state for speculative passes. */
-  clone(): CheckState {
-    const cp = new CheckState()
-    cp.mode = this.mode
-    cp.diagnostics = this.diagnostics.map((d) => ({ ...d }))
-    cp.stepCount = this.stepCount
-    cp.stepBudget = this.stepBudget
-    cp.budgetTripped = this.budgetTripped
-    cp.defsInstalled = new Map(this.defsInstalled)
-    cp.defsUsed = new Set(this.defsUsed)
-    cp.fnBodyDepth = this.fnBodyDepth
-    cp.fnInflight = new Set(this.fnInflight)
-    cp.emit = this.emit
-    return cp
-  }
-
-  /** Restore this object in place from a clone. */
-  restoreFrom(snapshot: CheckState): void {
-    this.mode = snapshot.mode
-    this.diagnostics = snapshot.diagnostics.map((d) => ({ ...d }))
-    this.stepCount = snapshot.stepCount
-    this.stepBudget = snapshot.stepBudget
-    this.budgetTripped = snapshot.budgetTripped
-    this.defsInstalled = new Map(snapshot.defsInstalled)
-    this.defsUsed = new Set(snapshot.defsUsed)
-    this.fnBodyDepth = snapshot.fnBodyDepth
-    this.fnInflight = new Set(snapshot.fnInflight)
-    this.emit = snapshot.emit
-  }
-
-  /** Whether check mode is currently on. */
-  isActive(): boolean {
-    return this.mode
-  }
-
-  /** Enable check mode and reset per-pass state. Returns a disable fn. */
-  begin(): () => void {
-    this.mode = true
-    this.diagnostics = []
-    this.stepCount = 0
-    this.budgetTripped = false
-    this.defsInstalled = new Map()
-    this.defsUsed = new Set()
-    this.fnBodyDepth = 0
-    this.fnInflight = new Set()
-    return () => {
-      this.mode = false
-    }
-  }
-
-  /** Append a diagnostic, defaulting severity from its code. */
-  addDiagnostic(d: Omit<CheckDiagnostic, 'severity'> & { severity?: CheckSeverity }): void {
-    const diag: CheckDiagnostic = {
-      ...d,
-      severity: d.severity ?? severityFor(d.code),
-    }
-    if (
-      this.suppressBodyErrors > 0 &&
-      diag.severity === 'error' &&
-      (diag.code === 'no_signature' || diag.code === 'undefined_word')
-    ) {
-      return
-    }
-    if (this.fnBodyDepth > 0) diag.fnBody = true
-    this.diagnostics.push(diag)
-  }
-
-  /** Mark a name installed via def (for unused-def analysis). */
-  recordDef(name: string): void {
-    if (!this.isActive() || name === '' || name.startsWith('_')) return
-    this.defsInstalled.set(name, undefined)
-    this.defsUsed.delete(name)
-  }
-
-  /** Mark a name referenced during check mode. */
-  recordUse(name: string): void {
-    if (!this.isActive() || name === '') return
-    this.defsUsed.add(name)
-  }
-
-  /** Emit unused_def warnings for installed-but-never-used names. */
-  emitUnusedDefDiagnostics(): void {
-    for (const name of this.defsInstalled.keys()) {
-      if (this.defsUsed.has(name)) continue
-      this.addDiagnostic({
-        code: 'unused_def',
-        detail: `def ${name} is never used`,
-        word: name,
-        severity: 'warning',
-      })
-    }
-  }
-}
 
 /**
  * toCarrier strips a concrete value to a type-only carrier. Structural
@@ -309,3 +135,10 @@ export function joinCarriers(a: Value, b: Value): Value {
   }
   return newCarrier(common.length > 0 ? new BoruType(common) : TAny)
 }
+
+
+// Install this piece's implementations over core's NAMED inactive defaults —
+// the TS twin of check/go's init replacing core/go's AnalysisImpl. Importing
+// check.ts is what arms analysis; a core-only build runs the inactive
+// defaults instead (pinned by core/ts/src/seams.test.ts).
+installAnalysisImpl({ stripToCarriers, carrierResults })

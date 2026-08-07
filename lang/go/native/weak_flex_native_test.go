@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // weakRunErr runs source and returns the error (nil on success), for
@@ -37,19 +37,19 @@ func weakReg(t *testing.T) *Registry {
 
 func TestSetWeakFlexMapHandlerArms(t *testing.T) {
 	r := weakReg(t)
-	w := eng.NewWeakFlexMap()
+	w := core.NewWeakFlexMap()
 	// Success: scalar stores strongly, node returns.
-	out, err := setWeakFlexMapHandler([]Value{eng.NewAtom("k"), eng.NewInteger(1), w}, nil, nil, r)
-	if err != nil || len(out) != 1 || !eng.IsWeakFlexMap(out[0]) {
+	out, err := setWeakFlexMapHandler([]Value{core.NewAtom("k"), core.NewInteger(1), w}, nil, nil, r)
+	if err != nil || len(out) != 1 || !core.IsWeakFlexMap(out[0]) {
 		t.Fatalf("success arm: %v", err)
 	}
 	// Refusal: immutable map.
-	_, err = setWeakFlexMapHandler([]Value{eng.NewAtom("k"), eng.NewMap(eng.NewOrderedMap()), w}, nil, nil, r)
+	_, err = setWeakFlexMapHandler([]Value{core.NewAtom("k"), core.NewMap(core.NewOrderedMap()), w}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "weak_value_error") {
 		t.Fatalf("refusal arm: %v", err)
 	}
 	// Wrong container payload (a bare literal reaching the handler).
-	_, err = setWeakFlexMapHandler([]Value{eng.NewAtom("k"), eng.NewInteger(1), eng.NewTypeLiteral(TWeakFlexMap)}, nil, nil, r)
+	_, err = setWeakFlexMapHandler([]Value{core.NewAtom("k"), core.NewInteger(1), core.NewTypeLiteral(TWeakFlexMap)}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "expected a WeakFlexMap") {
 		t.Fatalf("container arm: %v", err)
 	}
@@ -57,33 +57,33 @@ func TestSetWeakFlexMapHandlerArms(t *testing.T) {
 
 func TestSetWeakFlexListHandlerArms(t *testing.T) {
 	r := weakReg(t)
-	w := eng.NewWeakFlexList()
+	w := core.NewWeakFlexList()
 	wd, _ := AsWeakFlexList(w)
-	if refusal := wd.Append(eng.NewInteger(1)); refusal != nil {
+	if refusal := wd.Append(core.NewInteger(1)); refusal != nil {
 		t.Fatal("fixture append refused")
 	}
 	// Success.
-	out, err := setWeakFlexListHandler([]Value{eng.NewInteger(0), eng.NewInteger(9), w}, nil, nil, r)
-	if err != nil || !eng.IsWeakFlexList(out[0]) {
+	out, err := setWeakFlexListHandler([]Value{core.NewInteger(0), core.NewInteger(9), w}, nil, nil, r)
+	if err != nil || !core.IsWeakFlexList(out[0]) {
 		t.Fatalf("success arm: %v", err)
 	}
 	// Bounds.
-	_, err = setWeakFlexListHandler([]Value{eng.NewInteger(5), eng.NewInteger(9), w}, nil, nil, r)
+	_, err = setWeakFlexListHandler([]Value{core.NewInteger(5), core.NewInteger(9), w}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "out of bounds for WeakFlexList") {
 		t.Fatalf("bounds arm: %v", err)
 	}
 	// Non-integer index (unreachable via the sig; the guard is direct).
-	_, err = setWeakFlexListHandler([]Value{eng.NewString("x"), eng.NewInteger(9), w}, nil, nil, r)
+	_, err = setWeakFlexListHandler([]Value{core.NewString("x"), core.NewInteger(9), w}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "concrete integer") {
 		t.Fatalf("index arm: %v", err)
 	}
 	// Refusal at index.
-	_, err = setWeakFlexListHandler([]Value{eng.NewInteger(0), eng.NewList(nil), w}, nil, nil, r)
+	_, err = setWeakFlexListHandler([]Value{core.NewInteger(0), core.NewList(nil), w}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "weak_value_error") {
 		t.Fatalf("refusal arm: %v", err)
 	}
 	// Wrong container.
-	_, err = setWeakFlexListHandler([]Value{eng.NewInteger(0), eng.NewInteger(1), eng.NewTypeLiteral(TWeakFlexList)}, nil, nil, r)
+	_, err = setWeakFlexListHandler([]Value{core.NewInteger(0), core.NewInteger(1), core.NewTypeLiteral(TWeakFlexList)}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "expected a WeakFlexList") {
 		t.Fatalf("container arm: %v", err)
 	}
@@ -91,12 +91,12 @@ func TestSetWeakFlexListHandlerArms(t *testing.T) {
 
 func TestSetWeakFlexXmlHandlerArms(t *testing.T) {
 	r := weakReg(t)
-	w := eng.NewWeakFlexXml("a")
-	out, err := setWeakFlexXmlHandler([]Value{eng.NewAtom("k"), eng.NewString("v"), w}, nil, nil, r)
-	if err != nil || !eng.IsWeakFlexXml(out[0]) {
+	w := core.NewWeakFlexXml("a")
+	out, err := setWeakFlexXmlHandler([]Value{core.NewAtom("k"), core.NewString("v"), w}, nil, nil, r)
+	if err != nil || !core.IsWeakFlexXml(out[0]) {
 		t.Fatalf("success arm: %v", err)
 	}
-	_, err = setWeakFlexXmlHandler([]Value{eng.NewAtom("k"), eng.NewString("v"), eng.NewTypeLiteral(TWeakFlexXml)}, nil, nil, r)
+	_, err = setWeakFlexXmlHandler([]Value{core.NewAtom("k"), core.NewString("v"), core.NewTypeLiteral(TWeakFlexXml)}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "expected a WeakFlexXml") {
 		t.Fatalf("container arm: %v", err)
 	}
@@ -104,29 +104,29 @@ func TestSetWeakFlexXmlHandlerArms(t *testing.T) {
 
 func TestAppendWeakHandlersArms(t *testing.T) {
 	r := weakReg(t)
-	w := eng.NewWeakFlexList()
-	out, err := appendWeakElemHandler([]Value{eng.NewInteger(1), w}, nil, nil, r)
-	if err != nil || !eng.IsWeakFlexList(out[0]) {
+	w := core.NewWeakFlexList()
+	out, err := appendWeakElemHandler([]Value{core.NewInteger(1), w}, nil, nil, r)
+	if err != nil || !core.IsWeakFlexList(out[0]) {
 		t.Fatalf("elem success: %v", err)
 	}
-	_, err = appendWeakElemHandler([]Value{eng.NewList(nil), w}, nil, nil, r)
+	_, err = appendWeakElemHandler([]Value{core.NewList(nil), w}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "weak_value_error") {
 		t.Fatalf("elem refusal: %v", err)
 	}
-	_, err = appendWeakElemHandler([]Value{eng.NewInteger(1), eng.NewTypeLiteral(TWeakFlexList)}, nil, nil, r)
+	_, err = appendWeakElemHandler([]Value{core.NewInteger(1), core.NewTypeLiteral(TWeakFlexList)}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "expected a WeakFlexList") {
 		t.Fatalf("elem container: %v", err)
 	}
-	x := eng.NewWeakFlexXml("t")
-	out, err = appendWeakXmlChildHandler([]Value{eng.NewString("hi"), x}, nil, nil, r)
-	if err != nil || !eng.IsWeakFlexXml(out[0]) {
+	x := core.NewWeakFlexXml("t")
+	out, err = appendWeakXmlChildHandler([]Value{core.NewString("hi"), x}, nil, nil, r)
+	if err != nil || !core.IsWeakFlexXml(out[0]) {
 		t.Fatalf("xml success: %v", err)
 	}
-	_, err = appendWeakXmlChildHandler([]Value{eng.NewMap(eng.NewOrderedMap()), x}, nil, nil, r)
+	_, err = appendWeakXmlChildHandler([]Value{core.NewMap(core.NewOrderedMap()), x}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "weak_value_error") {
 		t.Fatalf("xml refusal: %v", err)
 	}
-	_, err = appendWeakXmlChildHandler([]Value{eng.NewString("hi"), eng.NewTypeLiteral(TWeakFlexXml)}, nil, nil, r)
+	_, err = appendWeakXmlChildHandler([]Value{core.NewString("hi"), core.NewTypeLiteral(TWeakFlexXml)}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "expected a WeakFlexXml") {
 		t.Fatalf("xml container: %v", err)
 	}
@@ -226,43 +226,43 @@ func countWeakDiags(r *Registry) int {
 func TestWeakValueMirrorBranches(t *testing.T) {
 	// Outside check mode the mirror is inert.
 	plain := weakReg(t)
-	weakValueMirror(plain, eng.NewMap(eng.NewOrderedMap()), "set", "WeakFlexMap")
+	weakValueMirror(plain, core.NewMap(core.NewOrderedMap()), "set", "WeakFlexMap")
 	if len(plain.Check.Diagnostics) != 0 {
 		t.Fatalf("non-check registry collected diagnostics: %+v", plain.Check.Diagnostics)
 	}
 
 	r := mirrorReg(t)
-	wm := eng.NewWeakFlexMap()
-	wl := eng.NewWeakFlexList()
-	wx := eng.NewWeakFlexXml("a")
+	wm := core.NewWeakFlexMap()
+	wl := core.NewWeakFlexList()
+	wx := core.NewWeakFlexXml("a")
 
 	// Dynamic value: proves nothing, stays silent.
-	weakSetMapReturns([]Value{eng.NewAtom("k"), NewCarrier(TMap), wm}, r)
+	weakSetMapReturns([]Value{core.NewAtom("k"), NewCarrier(TMap), wm}, r)
 	if n := countWeakDiags(r); n != 0 {
 		t.Fatalf("dynamic value flagged: %d", n)
 	}
 	// Valid handle: silent.
-	flexOM := eng.NewOrderedMap()
-	weakSetMapReturns([]Value{eng.NewAtom("k"), eng.NewFlexMap(flexOM), wm}, r)
+	flexOM := core.NewOrderedMap()
+	weakSetMapReturns([]Value{core.NewAtom("k"), core.NewFlexMap(flexOM), wm}, r)
 	if n := countWeakDiags(r); n != 0 {
 		t.Fatalf("valid handle flagged: %d", n)
 	}
 	// Concrete refusal through each ReturnsFn (distinct containers keep
 	// the dedupe key distinct).
-	weakSetMapReturns([]Value{eng.NewAtom("k"), eng.NewMap(eng.NewOrderedMap()), wm}, r)
-	weakSetListReturns([]Value{eng.NewInteger(0), eng.NewList([]Value{eng.NewInteger(1)}), wl}, r)
-	weakAppendListReturns([]Value{eng.NewMap(eng.NewOrderedMap()), wl}, r)
-	weakAppendXmlReturns([]Value{eng.NewList([]Value{eng.NewInteger(1)}), wx}, r)
+	weakSetMapReturns([]Value{core.NewAtom("k"), core.NewMap(core.NewOrderedMap()), wm}, r)
+	weakSetListReturns([]Value{core.NewInteger(0), core.NewList([]Value{core.NewInteger(1)}), wl}, r)
+	weakAppendListReturns([]Value{core.NewMap(core.NewOrderedMap()), wl}, r)
+	weakAppendXmlReturns([]Value{core.NewList([]Value{core.NewInteger(1)}), wx}, r)
 	if n := countWeakDiags(r); n != 4 {
 		t.Fatalf("refusals flagged = %d, want 4: %+v", n, r.Check.Diagnostics)
 	}
 	// A bare type literal is statically refused too.
-	weakSetMapReturns([]Value{eng.NewAtom("k"), eng.NewTypeLiteral(TInteger), wm}, r)
+	weakSetMapReturns([]Value{core.NewAtom("k"), core.NewTypeLiteral(TInteger), wm}, r)
 	if n := countWeakDiags(r); n != 5 {
 		t.Fatalf("type literal not flagged: %d", n)
 	}
 	// A None-typed carrier is provably none (single inhabitant).
-	weakSetMapReturns([]Value{eng.NewAtom("k"), NewCarrier(eng.TNone), wm}, r)
+	weakSetMapReturns([]Value{core.NewAtom("k"), NewCarrier(core.TNone), wm}, r)
 	if n := countWeakDiags(r); n != 6 {
 		t.Fatalf("None carrier not flagged: %d", n)
 	}
@@ -275,15 +275,15 @@ func TestWeakValueMirrorBranches(t *testing.T) {
 func TestMakeNodeReturnsTagCarry(t *testing.T) {
 	r := mirrorReg(t)
 	fn := makeNodeReturns()
-	intLit := eng.NewTypeLiteral(TInteger)
+	intLit := core.NewTypeLiteral(TInteger)
 
-	om := eng.NewOrderedMap()
-	om.Set("a", eng.NewInteger(1))
-	headerMap := eng.NewMap(om)
+	om := core.NewOrderedMap()
+	om.Set("a", core.NewInteger(1))
+	headerMap := core.NewMap(om)
 	headerMap.SetElemConstraint(intLit)
-	literalMap := eng.NewValueRaw(TMap, eng.ChildTypeInfo{
+	literalMap := core.NewValueRaw(TMap, core.ChildTypeInfo{
 		Child:   intLit,
-		Entries: []eng.ChildEntry{{Key: "a", Value: eng.NewInteger(1)}},
+		Entries: []core.ChildEntry{{Key: "a", Value: core.NewInteger(1)}},
 	})
 
 	for _, tc := range []struct {
@@ -299,7 +299,7 @@ func TestMakeNodeReturnsTagCarry(t *testing.T) {
 		{"flex map, typed literal (runtime drops it)", TFlexMap, literalMap, false},
 		{"plain Map target (no tag home)", TMap, headerMap, false},
 	} {
-		out := fn([]Value{eng.NewTypeLiteral(tc.target), tc.src}, r)
+		out := fn([]Value{core.NewTypeLiteral(tc.target), tc.src}, r)
 		if len(out) != 1 {
 			t.Fatalf("%s: residual = %v", tc.name, out)
 		}
@@ -309,10 +309,10 @@ func TestMakeNodeReturnsTagCarry(t *testing.T) {
 		}
 	}
 	// Arity and non-bare-target guards pass through untouched.
-	if out := fn([]Value{eng.NewTypeLiteral(TWeakFlexMap)}, r); len(out) != 1 {
+	if out := fn([]Value{core.NewTypeLiteral(TWeakFlexMap)}, r); len(out) != 1 {
 		t.Errorf("short-args residual = %v", out)
 	}
-	if out := fn([]Value{eng.NewMap(om), headerMap}, r); len(out) != 1 {
+	if out := fn([]Value{core.NewMap(om), headerMap}, r); len(out) != 1 {
 		t.Errorf("concrete-target residual = %v", out)
 	}
 }
@@ -322,29 +322,29 @@ func TestMakeNodeReturnsTagCarry(t *testing.T) {
 // non-conforming write with type_error and accepts a conforming one.
 func TestWeakHandlersEnforceElemTag(t *testing.T) {
 	r := weakReg(t)
-	intLit := eng.NewTypeLiteral(TInteger)
+	intLit := core.NewTypeLiteral(TInteger)
 
-	wm := eng.NewWeakFlexMap()
+	wm := core.NewWeakFlexMap()
 	wm.SetElemConstraint(intLit)
-	if _, err := setWeakFlexMapHandler([]Value{eng.NewAtom("k"), eng.NewString("x"), wm}, nil, nil, r); err == nil || !strings.Contains(err.Error(), "type_error") {
+	if _, err := setWeakFlexMapHandler([]Value{core.NewAtom("k"), core.NewString("x"), wm}, nil, nil, r); err == nil || !strings.Contains(err.Error(), "type_error") {
 		t.Fatalf("map: non-conforming write accepted: %v", err)
 	}
-	if _, err := setWeakFlexMapHandler([]Value{eng.NewAtom("k"), eng.NewInteger(1), wm}, nil, nil, r); err != nil {
+	if _, err := setWeakFlexMapHandler([]Value{core.NewAtom("k"), core.NewInteger(1), wm}, nil, nil, r); err != nil {
 		t.Fatalf("map: conforming write refused: %v", err)
 	}
 
-	wl := eng.NewWeakFlexList()
+	wl := core.NewWeakFlexList()
 	wl.SetElemConstraint(intLit)
-	if _, err := appendWeakElemHandler([]Value{eng.NewString("x"), wl}, nil, nil, r); err == nil || !strings.Contains(err.Error(), "type_error") {
+	if _, err := appendWeakElemHandler([]Value{core.NewString("x"), wl}, nil, nil, r); err == nil || !strings.Contains(err.Error(), "type_error") {
 		t.Fatalf("list append: non-conforming write accepted: %v", err)
 	}
-	if _, err := appendWeakElemHandler([]Value{eng.NewInteger(1), wl}, nil, nil, r); err != nil {
+	if _, err := appendWeakElemHandler([]Value{core.NewInteger(1), wl}, nil, nil, r); err != nil {
 		t.Fatalf("list append: conforming write refused: %v", err)
 	}
-	if _, err := setWeakFlexListHandler([]Value{eng.NewInteger(0), eng.NewString("x"), wl}, nil, nil, r); err == nil || !strings.Contains(err.Error(), "type_error") {
+	if _, err := setWeakFlexListHandler([]Value{core.NewInteger(0), core.NewString("x"), wl}, nil, nil, r); err == nil || !strings.Contains(err.Error(), "type_error") {
 		t.Fatalf("list set: non-conforming write accepted: %v", err)
 	}
-	if _, err := setWeakFlexListHandler([]Value{eng.NewInteger(0), eng.NewInteger(2), wl}, nil, nil, r); err != nil {
+	if _, err := setWeakFlexListHandler([]Value{core.NewInteger(0), core.NewInteger(2), wl}, nil, nil, r); err != nil {
 		t.Fatalf("list set: conforming write refused: %v", err)
 	}
 }

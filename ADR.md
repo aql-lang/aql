@@ -1003,7 +1003,7 @@ the moved types a single owned home instead of scatter across
 
 ---
 
-## ADR-013 — The base language is a component: `eng ← basic ← lang ← cmd` is a hard dependency chain {#adr-013}
+## ADR-013 — The base language is a component: `basic` sits below `lang` and depends only on the pieces it uses {#adr-013}
 
 **Status:** Accepted · **Date:** 2026-08-04 · Recorded on explicit
 maintainer instruction; realises the middle component ADR-012 rule 1
@@ -1017,20 +1017,139 @@ here) and widens its charter to the fundamental words.
 `github.com/boru-lang/boru/basic/go`) is the boru base language
 layer, and the module dependencies around it are HARD RULES:**
 
-1. **`basic` depends on `eng`, and on `eng` only.** Its `go.mod`
-   requires no other boru sibling and no host-capability
-   dependency (no sqlite, no filesystem abstraction, no format
-   stack). A change that adds one is wrong by definition; fix the
-   design, not the go.mod.
+1. **`basic` depends on the pieces it actually uses, and on nothing
+   else.** Since the four-piece + parser cuts those are `core`,
+   `check` and `parser` — NOT `eng`, and not `compiler`. Its `go.mod`
+   requires no other boru sibling and no host-capability dependency (no
+   sqlite, no filesystem abstraction, no format stack). A change that
+   adds one is wrong by definition; fix the design, not the go.mod.
+
+   > **Amendment (2026-08-07) — `eng only` was measured and found
+   > false.** As written on 2026-08-04 this rule said "`basic` depends
+   > on `eng`, and on `eng` only", which was accurate then: `eng` was
+   > one module containing the kernel, the checker, the compiler and
+   > the parser. The four-piece cut (design/ENG-FOUR-PIECE.0.md,
+   > complete 2026-08-06) and the parser cut split those out, and
+   > `eng/go/aliases_*.go` was introduced so downstream code would
+   > compile unchanged across the split — a migration shim, not an
+   > architectural claim.
+   >
+   > Measured against the AST-derived owner map of all 1,127 exported
+   > symbols in core/check/compiler/parser (zero collisions), `basic`'s
+   > 755 production references resolve as: **core 700, check 45,
+   > compiler 9, eng 0**. The single apparent eng symbol
+   > (`RegisterCoreFnSig`) occurs only inside a comment. `basic` uses
+   > check and compiler because it implements `if` / `case` / `for` /
+   > `fn` / `def`, and control flow must participate in the check pass
+   > (carrier joins, guard narrowing, fn-body analysis) and in bytecode
+   > recording (branch and loop fragments) — that is not expressible
+   > against core alone.
+   >
+   > So the old rule pinned a dependency that carried no symbols while
+   > the three it truly depends on were invisible to the gate. `basic`
+   > now imports them directly and `eng` is gone from its `go.mod`;
+   > `depsgate_test.go` enforces the real set. The prohibition the rule
+   > exists for is unchanged and now strictly tighter: nothing reaching
+   > up into `lang`/`cmd`, no host-capability dependency, and no
+   > dependency that is not actually used.
+   >
+   > The same measurement was applied to every other facade consumer,
+   > and the shim turned out to be load-bearing almost nowhere:
+   > `calc` and `cmd` also dropped `eng` entirely, and only `lang` and
+   > `test/go` still import it — for the VM and the fork/run entry
+   > points (`RunProgram`, `ForkConcurrent`, `RunUnit`), which `eng`
+   > genuinely owns. Two of the apparent `eng` dependencies were
+   > SHADOWING artefacts: `eng := native.New(reg)` makes `eng.Run` a
+   > method call on a local, not a package reference. Regex cannot see
+   > that; the compiler can, and it disproved them.
+
+   > **Amendment (2026-08-07, second) — `compiler` was a seam gap;
+   > `check` is structural.** The amendment above left `basic` requiring
+   > `compiler` (9 references) and `check` (45). Asked why a layer that
+   > is "just additional basic language elements on the interpreter"
+   > needs either, both were re-examined. They are not the same case,
+   > and the difference is behavioural rather than a matter of effort.
+   >
+   > **`compiler` is gone.** All 9 references were reaching past a seam
+   > that already existed. `basic`'s `if` / `case` / `for` handlers
+   > record branch and loop fragments through `core.EmitRecorder` — but
+   > that interface stopped short of the branch/loop group, so
+   > `recorderState` had to downcast the recorder to
+   > `*compiler.EmitState` to reach `RecordBranch` and friends. The
+   > downcast was the dependency. Widening the core interface with
+   > `TakeFragment` / `RecordBranch` / `RecordLoop` (plus
+   > `core.BranchRecord`, `core.CodeEffectInfo` — which `payload.go`
+   > already named — and the opaque `core.EmitFragmentRef`, so core
+   > need not know what a fragment is) removed both. That is a legitimate
+   > seam because an INACTIVE recorder is *correct* behaviour: with no
+   > compiler linked nothing is recorded and the program runs
+   > interpreted, which is exactly what the named no-op defaults do.
+   >
+   > **`check` stays, and the rule now says so deliberately.** The
+   > surface is larger than the earlier count suggested — that count saw
+   > only qualified `check.` references outside `basic/go/aliases.go`
+   > and missed everything reached through the aliases. Measured
+   > properly: **23 check symbols over 63 non-test call sites**
+   > (`RunCarrierBody` / `WithDefs` / `KeepDefs` / `CondBody`,
+   > `ApplyGuardNarrowing`, `ApplyComplementNarrowing`,
+   > `InstallJoinedDefs`, `JoinCarriers`, `JoinCarrierStacks`,
+   > `CommonAncestorType`, `AnalyseFnBody`, `AnalyseLoopBody`,
+   > `RecordTypedDefMake`, `DeadSignatures`, `CheckAddUniqueDiagnostic`,
+   > the `Returns*` builders, the carrier constructors).
+   >
+   > Every one of them takes and returns core types only, so forwarding
+   > them through a core-owned table — the shape `AnalysisImpl` already
+   > uses for its ten — is mechanically possible. It is nonetheless
+   > REJECTED, because it would be a mailbox rather than a seam. Each
+   > native control word has an analysis half as well as a runtime half,
+   > and the analysis half is written in the checker's vocabulary: `if`
+   > cannot be type-checked without narrowing the guard across the
+   > then-arm, re-entering the pass on each arm, and joining the arms'
+   > carriers. Unlike the recorder there is no correct inactive default —
+   > "do not narrow, do not join" is not a feature switched off, it is
+   > wrong analysis. `basic` would still require `check` at run time
+   > while `go.mod` stopped declaring it, which inverts the purpose of
+   > the gate.
+   >
+   > The honest route to `basic → core` alone, if it is ever wanted, is
+   > to move the carrier lattice itself (`JoinCarriersInner` and the
+   > narrowing machinery) down into `core`, where `Value`, `NewCarrier`,
+   > `CheckState` and `ReturnsFunc` already live. That is a checker
+   > refactor with real consequences for `check`'s cohesion, not a
+   > dependency edit, and it is not undertaken here.
+
 2. **`lang` depends on `basic`** (and, as before, on `eng`). The
    full word library builds ON the base layer; nothing in `basic`
    may reach up into `lang` — Go's import-cycle rule makes the
    reverse edge impossible, and rule 1 keeps the dependency list
    closed so the layering cannot erode by accretion.
-3. The resulting chain is `eng ← basic ← lang ← cmd` (`calc`
-   stays an eng-only client; `wpg` and the test harnesses sit with
-   `cmd` at the top). Skipping edges downward (lang → eng,
-   cmd → eng) remain legal; every upward edge is forbidden.
+3. `basic` sits BELOW `lang`, and every edge points downward.
+   Skipping edges downward remain legal; every upward edge is
+   forbidden — Go's import-cycle rule makes the reverse impossible.
+
+   > **Amendment (2026-08-07).** As written this rule named the chain
+   > `eng ← basic ← lang ← cmd`, with `calc` an "eng-only client".
+   > The four-piece cut, the parser cut and the facade re-pointing
+   > (rule 1's amendments below) falsified every part of that
+   > sentence, so it is restated as the invariant it was always
+   > about — direction and position, not a specific edge list, which
+   > `go.mod` states better than prose can. Derived from the
+   > manifests, the graph is now:
+   >
+   > ```
+   > core   ← check ← compiler ← eng
+   > core   ← parser
+   > basic  ← core, check, parser
+   > lang   ← basic, eng, core, check, compiler, parser
+   > cmd    ← lang, basic, core, check, compiler, parser
+   > calc   ← core, parser
+   > ```
+   >
+   > `calc` is no longer an eng client at all; it builds on core and
+   > the parser. `wpg` and the test harnesses still sit at the top
+   > with `cmd`. The knowledge graph derives these edges from
+   > `go.work` / `go.mod` (`kg/gomod.boru`), so the authoritative
+   > answer lives in the manifests, not here.
 
 **`basic` owns two kinds of content**, moved out of `lang`:
 
@@ -1086,12 +1205,16 @@ spec rows.
 
 ### Consequences
 
-- Layering becomes `eng ← basic ← lang ← cmd`. A future language
-  imports eng and, optionally, basic; `calc` is unchanged.
+- Layering puts `basic` below `lang`. A future language imports the
+  pieces it needs and, optionally, `basic`. (As recorded in rule 3's
+  amendment, the specific edges have since changed: `calc` dropped
+  `eng` for core + parser, and `basic` requires core, check and
+  parser.)
 - **Enforcement is mechanical.** Go's compiler rejects upward
   imports (cycles), and `basic/go`'s deps gate
-  (`basic/go/depsgate_test.go`) pins rule 1: the module's only
-  boru-sibling requirement is `eng/go`. FixedIDs are untouched —
+  (`basic/go/depsgate_test.go`) pins rule 1 — as amended, that the
+  module requires core, check and parser, and bans `eng` and
+  `compiler` by name with the reason. FixedIDs are untouched —
   `lang/go/test/fixedid_stability_test.go` still guards the wire
   format across the move.
 - ADR-008's 100% coverage gate applies to `basic/go` from its

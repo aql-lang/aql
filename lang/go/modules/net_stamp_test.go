@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -57,14 +59,14 @@ func stampNetReg(t *testing.T, armed bool, steps []string) *native.Registry {
 	return reg
 }
 
-func codecRef(t *testing.T, v native.Value) *eng.CompiledFnRef {
+func codecRef(t *testing.T, v native.Value) *compiler.CompiledFnRef {
 	t.Helper()
-	fd, ok := v.Data.(eng.FnDefInfo)
+	fd, ok := v.Data.(core.FnDefInfo)
 	if !ok {
 		t.Fatalf("codec slot is not a fn value: %v", v)
 	}
 	for i := range fd.Signatures {
-		if ref := eng.CompiledRef(&fd.Signatures[i]); ref != nil {
+		if ref := compiler.CompiledRef(&fd.Signatures[i]); ref != nil {
 			return ref
 		}
 	}
@@ -162,7 +164,7 @@ func TestCustomCodecStampedDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatalf("probe (armed=%v): %v", armed, err)
 		}
-		s, err := eng.AsString(out[len(out)-1])
+		s, err := core.AsString(out[len(out)-1])
 		if err != nil {
 			t.Fatalf("probe result (armed=%v): %v", armed, out)
 		}
@@ -208,7 +210,7 @@ func TestCustomCodecStampedSplitWrite(t *testing.T) {
 				t.Fatalf("split probe step %q (armed=%v): %v", step, armed, err)
 			}
 		}
-		s, err := eng.AsString(out[len(out)-1])
+		s, err := core.AsString(out[len(out)-1])
 		if err != nil {
 			t.Fatalf("split probe result (armed=%v): %v", armed, out)
 		}

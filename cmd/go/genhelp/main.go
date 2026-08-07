@@ -15,10 +15,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/native/help"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // outputPath returns the absolute path of the generated file, derived from

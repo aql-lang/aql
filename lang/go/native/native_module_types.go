@@ -3,7 +3,8 @@ package native
 import (
 	"fmt"
 
-	"github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Module namespaces — what `import` binds — and the Ideal/Module
@@ -12,7 +13,7 @@ import (
 // When boru code runs `import "boru:math-util"`, the bound name `MathUtil`
 // is a PLAIN MAP of the raw exports (one per `export "Name" {…}`
 // declaration) carrying the kernel's module-namespace FACET
-// (eng.ModuleNSInfo — NUR038: provenance is a facet on a plain value,
+// (core.ModuleNSInfo — NUR038: provenance is a facet on a plain value,
 // never a wrapper type that masks the value). Exported values are exactly
 // what the module exported — a fn stays a Function, a constant stays that
 // constant, a type stays a plain type — while the facet answers the
@@ -36,9 +37,9 @@ import (
 // the aliases below keep this package's historical spellings for the
 // namespace glue that stays here.
 var (
-	asModuleDesc      = eng.AsModuleDesc
-	moduleKind        = eng.ModuleKind
-	moduleExportNames = eng.ModuleExportNames
+	asModuleDesc      = core.AsModuleDesc
+	moduleKind        = core.ModuleKind
+	moduleExportNames = core.ModuleExportNames
 )
 
 // moduleExportFieldModule and …Name are the synthetic keys a module
@@ -59,17 +60,17 @@ func NewModuleNamespace(name string, fields *OrderedMap, module Value) Value {
 	if fields == nil {
 		fields = NewOrderedMap()
 	}
-	return eng.WithModuleNS(NewMap(fields), name, module)
+	return core.WithModuleNS(NewMap(fields), name, module)
 }
 
 // moduleNSFields returns the export-fields map behind a bound module
 // namespace (a concrete Map carrying the module-namespace facet), or nil
 // for anything else.
 func moduleNSFields(v Value) *OrderedMap {
-	if eng.ModuleNSOf(v) == nil || !IsConcrete(v) {
+	if core.ModuleNSOf(v) == nil || !IsConcrete(v) {
 		return nil
 	}
-	if mp, ok := v.Data.(eng.MapPayload); ok {
+	if mp, ok := v.Data.(core.MapPayload); ok {
 		return mp.M
 	}
 	return nil
@@ -102,7 +103,7 @@ func moduleNamespaceExport(r *Registry, name, target string) (Value, bool) {
 // map. ok=false when v carries no facet or the key is neither synthetic
 // nor an export.
 func moduleExportGet(v Value, key string) (Value, bool) {
-	ns := eng.ModuleNSOf(v)
+	ns := core.ModuleNSOf(v)
 	if ns == nil {
 		return Value{}, false
 	}
@@ -176,7 +177,7 @@ func moduleInstGetReturns(args []Value, _ *Registry) []Value {
 // map. ok=false for a non-namespace receiver or a plain key (which then
 // takes the normal map read).
 func moduleNSGetSynthetic(container Value, key string) (Value, bool) {
-	if eng.ModuleNSOf(container) == nil {
+	if core.ModuleNSOf(container) == nil {
 		return Value{}, false
 	}
 	switch key {
@@ -190,7 +191,7 @@ func moduleNSGetSynthetic(container Value, key string) (Value, bool) {
 // namespace — "export … not found in module", with the did-you-mean
 // suggestion over the export keys — replacing the generic map wording so
 // a typo'd export points at the module contract, not at a mutable map.
-func moduleNSGetrMiss(r *Registry, container Value, k string, keyPos eng.SrcPos) error {
+func moduleNSGetrMiss(r *Registry, container Value, k string, keyPos core.SrcPos) error {
 	var keys []string
 	if fields := moduleNSFields(container); fields != nil {
 		keys = fields.Keys()
@@ -209,7 +210,7 @@ func moduleNSGetrMiss(r *Registry, container Value, k string, keyPos eng.SrcPos)
 // may fold — module_export_growth.go). ok=false for a non-namespace
 // receiver.
 func moduleNSGetReturns(args []Value) ([]Value, bool) {
-	if len(args) != 2 || eng.ModuleNSOf(args[1]) == nil || !IsConcrete(args[1]) {
+	if len(args) != 2 || core.ModuleNSOf(args[1]) == nil || !IsConcrete(args[1]) {
 		return nil, false
 	}
 	if IsConcrete(args[0]) {
@@ -236,7 +237,7 @@ func moduleNSGetReturns(args []Value) ([]Value, bool) {
 // and keeps the lenient Any fallback. ok=false for a non-namespace
 // receiver.
 func moduleNSGetrReturns(args []Value, r *Registry) ([]Value, bool) {
-	if len(args) != 2 || eng.ModuleNSOf(args[1]) == nil || !IsConcrete(args[1]) {
+	if len(args) != 2 || core.ModuleNSOf(args[1]) == nil || !IsConcrete(args[1]) {
 		return nil, false
 	}
 	if IsConcrete(args[0]) {
@@ -251,7 +252,7 @@ func moduleNSGetrReturns(args []Value, r *Registry) ([]Value, bool) {
 		// keeps compiling (TestModuleExportGetrNotFoundTrapCompiles pins
 		// it).
 		if r.Check.IsActive() {
-			eng.CheckAddUniqueDiagnostic(r, "not_found",
+			check.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos())
 		}
 		// Record the SAME rich error the runtime path raises (with the

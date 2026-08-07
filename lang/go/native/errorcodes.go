@@ -1,6 +1,8 @@
 package native
 
-import eng "github.com/boru-lang/boru/eng/go"
+import (
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // Error-code registration for the language layer — the codes every built-in
 // word, module and capability attaches. The mechanism, the naming rule and
@@ -83,6 +85,6 @@ var langErrorCodes = []string{
 var _ = registerLangErrorCodes()
 
 func registerLangErrorCodes() struct{} {
-	eng.RegisterErrorCodes(OwnerLang, langErrorCodes...)
+	core.RegisterErrorCodes(OwnerLang, langErrorCodes...)
 	return struct{}{}
 }

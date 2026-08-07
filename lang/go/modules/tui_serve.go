@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
 )
@@ -232,7 +232,7 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 	rt := r.Procs
 	if rt == nil {
-		rt = eng.NewProcessRuntime()
+		rt = core.NewProcessRuntime()
 		r.Procs = rt
 	}
 	if _, taken := rt.Whereis(tuiRegisteredName); taken {
@@ -262,7 +262,7 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		hub.readers.Wait()
 	}
 
-	proc := eng.NewProcess(rt, eng.DefaultMailboxBound, eng.OverflowBlock)
+	proc := core.NewProcess(rt, core.DefaultMailboxBound, core.OverflowBlock)
 	if err := rt.Insert(proc); err != nil {
 		teardown()
 		return nil, mapTuiErr(r, "serve", err)

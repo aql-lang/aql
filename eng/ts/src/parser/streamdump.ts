@@ -1,6 +1,6 @@
 // TS half of the parser-parity stream oracle: parse every eng/spec row
 // with the jsonic-based TS parser and print one line per row in the
-// SAME format as eng/go/parser's TestStreamDump —
+// SAME format as parser/go's TestStreamDump —
 //
 //	<file>:<line>\tOK\t<Value.toString of each value, space-joined>
 //	<file>:<line>\tERR\t<error text first line>
@@ -11,7 +11,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { BoruError } from '../error.ts'
+import { BoruError } from '@voxgig/borucore'
 import { parse } from './convert.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

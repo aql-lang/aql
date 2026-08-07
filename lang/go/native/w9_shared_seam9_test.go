@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Wave-9 (cluster nativeA) shared drivers for the *_seam9_test.go

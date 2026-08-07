@@ -20,6 +20,19 @@ Two rules specific to this module:
   (`TestInactiveAnalysisImpl`, `TestInactiveCheckBraid`). A new slot
   follows the same pattern — an anonymous default replaced at init is
   unreachable and fails the merged ADR-008 gate.
+
+  `EmitRecorder` (`emit_recorder.go`) is the widest of these and the
+  one with a consumer OUTSIDE this module: `basic`'s `if` / `case` /
+  `for` record control flow through it. That is why the interface
+  carries the branch/loop group (`TakeFragment`, `RecordBranch`,
+  `RecordLoop`) and why `BranchRecord`, `CodeEffectInfo` and the
+  deliberately opaque `EmitFragmentRef` (`any`) are declared here
+  rather than in compiler — a word library must be able to record a
+  fragment without naming `*compiler.EmitState`. core never inspects a
+  fragment; it hands the same reference back untouched. If a caller
+  outside compiler ever has to type-assert the recorder, the interface
+  is short a method: widen it rather than let the downcast stand
+  (ADR-013's 2026-08-07 second amendment).
 - **The eng facade mirrors this surface.** `eng/go/aliases_core.go`
   is GENERATED (`piecetool -facade`); after changing core's exported
   surface, regenerate it (generic functions go in the hand-written

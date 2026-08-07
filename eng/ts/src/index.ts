@@ -1,7 +1,7 @@
 // Public entry point for the TypeScript port of borueng.
 
-export { BoruError } from './error.ts'
-export { cap } from './capability.ts'
+export { BoruError } from '@voxgig/borucore'
+export { cap } from '@voxgig/borucore'
 export {
   CheckState,
   carrierResults,
@@ -10,7 +10,7 @@ export {
   stripToCarriers,
   toCarrier,
 } from './check.ts'
-export { coerceBoolean } from './coretype.ts'
+export { coerceBoolean } from '@voxgig/borucore'
 export type { CheckDiagnostic, CheckSeverity } from './check.ts'
 export {
   CodeBuilder,
@@ -49,23 +49,23 @@ export type { FinalizeResult } from './lower.ts'
 export { runProgram } from './vm.ts'
 export { compile, compileCheck, runCompiled } from './compile.ts'
 export type { RunCompiledResult } from './compile.ts'
-export { Engine } from './engine.ts'
-export type { FunctionEntry } from './registry.ts'
-export { Registry } from './registry.ts'
+export { Engine } from '@voxgig/borucore'
+export type { FunctionEntry } from '@voxgig/borucore'
+export { Registry } from '@voxgig/borucore'
 export type {
   Handler,
   NativeFunc,
   NativeSig,
   ReturnsFunc,
   Signature,
-} from './signature.ts'
+} from '@voxgig/borucore'
 export {
   signatureScore,
   sortSignatures,
-} from './signature.ts'
-export type { BoruType } from './type.ts'
-export type { SugarInfo, SugarKind } from './value.ts'
-export { sugarExpansion } from './sugar.ts'
+} from '@voxgig/borucore'
+export type { BoruType } from '@voxgig/borucore'
+export type { SugarInfo, SugarKind } from '@voxgig/borucore'
+export { sugarExpansion } from '@voxgig/borucore'
 export {
   TAbsent,
   TAny,
@@ -116,7 +116,7 @@ export {
   builtinRank,
   newType,
   typeNameTable,
-} from './type.ts'
+} from '@voxgig/borucore'
 export {
   ChildType,
   ClassTypeInfo,
@@ -166,7 +166,7 @@ export {
   newXml,
   newXmlInterp,
   withQuoted,
-} from './value.ts'
+} from '@voxgig/borucore'
 export type {
   FnDefInfo,
   FnParam,
@@ -180,4 +180,4 @@ export type {
   XmlChildTmpl,
   XmlElement,
   XmlTmpl,
-} from './value.ts'
+} from '@voxgig/borucore'

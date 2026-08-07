@@ -1,7 +1,7 @@
 package native
 
 import (
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
@@ -33,20 +33,20 @@ func isFileTypeAtom(v Value) bool {
 // from boru only through the module export `IO.FileType`. It is an Atom
 // subtype whose inhabitants are exactly file/dir/symlink/other.
 func MintFileType(r *Registry) *Type {
-	return r.Types.MintMemberType("FileType", eng.TAtom, isFileTypeAtom)
+	return r.Types.MintMemberType("FileType", core.TAtom, isFileTypeAtom)
 }
 
 // NewFileType mints a standalone FileType (into its own dynamic type table)
 // for test helpers that register the io words under bare names without a host
 // registry to mint into (mirrors NewStreamKind).
 func NewFileType() *Type {
-	return eng.NewDynamicTypeTable().MintMemberType("FileType", eng.TAtom, isFileTypeAtom)
+	return core.NewDynamicTypeTable().MintMemberType("FileType", core.TAtom, isFileTypeAtom)
 }
 
 // newFileTypeAtom returns the FileType atom for a name, tagged with the given
 // FileType node so its static and runtime types agree.
 func newFileTypeAtom(name string, fileType *Type) Value {
-	return eng.ReparentValue(eng.NewAtom(name), fileType)
+	return core.ReparentValue(core.NewAtom(name), fileType)
 }
 
 // fileTypeName classifies a FileInfo into its FileType atom name.

@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // w8Reg builds a fresh DefaultRegistry with the I/O words seeded, the

@@ -3,8 +3,8 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestPathModifiers pins the `/`-modifier-on-a-paren/path feature: the
@@ -23,7 +23,7 @@ func TestPathModifiers(t *testing.T) {
 		if e != nil {
 			return "ERR:" + e.Error()
 		}
-		return eng.Canon(o)
+		return core.Canon(o)
 	}
 	cases := []struct{ src, want string }{
 		{`def m {a:add/r} end m.a/u 1 2`, "3"},   // usurp
@@ -62,7 +62,7 @@ func TestForceFnComposition(t *testing.T) {
 		if e != nil {
 			return "ERR:" + e.Error()
 		}
-		return eng.Canon(o)
+		return core.Canon(o)
 	}
 	cases := []struct{ src, want string }{
 		{`def m {s:sub/r} end usurp (forward-args (m.s)) 10 3`, "7"},

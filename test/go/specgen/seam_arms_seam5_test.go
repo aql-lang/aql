@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
@@ -47,7 +47,7 @@ func writeTSV(t *testing.T, dir, name, content string) string {
 func TestRunRegistryFailure(t *testing.T) {
 	prev := newNativeRegistry
 	t.Cleanup(func() { newNativeRegistry = prev })
-	newNativeRegistry = func(...func(*eng.Registry)) (*eng.Registry, error) {
+	newNativeRegistry = func(...func(*core.Registry)) (*core.Registry, error) {
 		return nil, errors.New("registry boom")
 	}
 	if _, err := run("1"); err == nil || !strings.Contains(err.Error(), "registry boom") {
@@ -88,7 +88,7 @@ func TestExtendFiveRegistryFailure(t *testing.T) {
 	prevCPU, prevReg := numCPU, newNativeRegistry
 	t.Cleanup(func() { numCPU, newNativeRegistry = prevCPU, prevReg })
 	numCPU = func() int { return 0 }
-	newNativeRegistry = func(...func(*eng.Registry)) (*eng.Registry, error) {
+	newNativeRegistry = func(...func(*core.Registry)) (*core.Registry, error) {
 		return nil, errors.New("no registry")
 	}
 

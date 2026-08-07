@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
@@ -120,7 +120,7 @@ func TestInstallStdinLinesNilRegistry(t *testing.T) {
 // false for a real terminal inside any forked context.
 func TestUnwrapWriterPeelsSyncWriter(t *testing.T) {
 	var sink strings.Builder
-	wrapped := eng.NewSyncWriter(eng.NewSyncWriter(&sink))
+	wrapped := core.NewSyncWriter(core.NewSyncWriter(&sink))
 	if got := unwrapWriter(wrapped); got != io.Writer(&sink) {
 		t.Errorf("unwrapWriter did not reach the destination: got %T", got)
 	}

@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // mcovReg builds a registry with the module resolver wired.
@@ -565,7 +565,7 @@ func TestMiniCovRunReDirect(t *testing.T) {
 		!strings.Contains(err.Error(), "not a compiled pattern") {
 		t.Errorf("a non-extension carrier should be refused, got %v", err)
 	}
-	args[0] = eng.NewExtension(tMini, "not-a-regexp")
+	args[0] = core.NewExtension(tMini, "not-a-regexp")
 	if _, err := miniRunReHandler(args, nil, nil, r); err == nil ||
 		!strings.Contains(err.Error(), "not a compiled pattern") {
 		t.Errorf("a wrong-body extension should be refused, got %v", err)

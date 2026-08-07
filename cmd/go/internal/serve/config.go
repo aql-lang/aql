@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // loadConfig parses path and returns the segment list that the

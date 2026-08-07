@@ -3,9 +3,9 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // fmtFormatHandler returns the raw Go handler behind the boru:fmt "format"
@@ -15,9 +15,9 @@ func fmtFormatHandler(t *testing.T) native.Handler {
 	t.Helper()
 	for _, nf := range FmtNatives {
 		if nf.Name == "format" {
-			gi, ok := nf.Signatures[0].Impl.(*eng.GoImpl)
+			gi, ok := nf.Signatures[0].Impl.(*core.GoImpl)
 			if !ok {
-				t.Fatalf("format: Impl is %T, want *eng.GoImpl", nf.Signatures[0].Impl)
+				t.Fatalf("format: Impl is %T, want *core.GoImpl", nf.Signatures[0].Impl)
 			}
 			return gi.Handler
 		}

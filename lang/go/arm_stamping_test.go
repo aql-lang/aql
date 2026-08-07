@@ -6,7 +6,7 @@ import (
 )
 
 // storeSiteSrc constructs a service handler at runtime — the canonical
-// detached-stamp trigger (eng.StampDetachedFn fires at the store site).
+// detached-stamp trigger (compiler.StampDetachedFn fires at the store site).
 const storeSiteSrc = `def svc (service {}) add {cmd:"X"} ([req:Map state:Any] => [ 42 ]) svc (call {cmd:"X"} svc)`
 
 // ArmRuntimeStamping is the caller-side half of the Stage-J explicit

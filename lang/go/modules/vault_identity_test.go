@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 )
@@ -239,7 +239,7 @@ func TestVaultIdentityNameHook(t *testing.T) {
 		t.Errorf("VaultIdentityName = %q %v, want \"vault:acme\" true", name, ok)
 	}
 	for _, other := range []native.Value{
-		native.NewString("acme"), native.NewInteger(1), eng.NewExtension(TSocket, nil),
+		native.NewString("acme"), native.NewInteger(1), core.NewExtension(TSocket, nil),
 	} {
 		if _, ok := VaultIdentityName(other); ok {
 			t.Errorf("VaultIdentityName accepted %v", other)

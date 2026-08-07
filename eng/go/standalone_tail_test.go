@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 func TestFnSpecParamMatrix(t *testing.T) {

@@ -20,12 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // specClock freezes time at a fixed instant so temporal words (`now`,
@@ -53,7 +54,7 @@ func TestSpecProdTCODisabled(t *testing.T) {
 
 func runSpecProd(t *testing.T, tcoDisabled bool) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
-	specfix.RunDir(t, specDir, func(input string) ([]eng.Value, error) {
+	specfix.RunDir(t, specDir, func(input string) ([]core.Value, error) {
 		values, err := parser.Parse(input)
 		if err != nil {
 			return nil, err

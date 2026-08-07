@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
@@ -78,7 +78,7 @@ func nscTCPPair(t *testing.T) (net.Conn, net.Conn) {
 // nscCode unwraps the BoruError code from a handler error.
 func nscCode(t *testing.T, err error) string {
 	t.Helper()
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if !errors.As(err, &ae) {
 		t.Fatalf("expected a BoruError, got %v", err)
 	}

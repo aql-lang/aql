@@ -3,14 +3,14 @@ package lang
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // checkResidual runs src through a fresh check pass and returns the residual
 // stack values (raw, pre-render).
-func checkResidual(t *testing.T, src string) []eng.Value {
+func checkResidual(t *testing.T, src string) []core.Value {
 	t.Helper()
 	a, err := New()
 	if err != nil {
@@ -52,7 +52,7 @@ func TestScalarConstFold(t *testing.T) {
 		if len(out) != 1 {
 			t.Fatalf("%q: %d residuals", c.src, len(out))
 		}
-		b, ok := out[0].Data.(eng.BoolPayload)
+		b, ok := out[0].Data.(core.BoolPayload)
 		if !ok {
 			t.Errorf("%q: residual not a concrete boolean (Data=%T carrier=%v)", c.src, out[0].Data, out[0].Carrier)
 			continue
@@ -68,7 +68,7 @@ func TestScalarConstFold(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("fn-body eq: %d residuals", len(out))
 	}
-	if _, concrete := out[0].Data.(eng.BoolPayload); concrete {
+	if _, concrete := out[0].Data.(core.BoolPayload); concrete {
 		// x inside the body is a param carrier — folding it would claim
 		// knowledge the checker does not have.
 		if !out[0].Carrier {

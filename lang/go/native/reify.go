@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The "reify" word — StructUtil.reify — hydrates a class instance from
@@ -132,7 +132,7 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 
 	// Hydration IS construction: route through make (defaults fill,
 	// required fields enforced, predicates run, sealing applies).
-	results, err := eng.MakeObject(*info, NewMap(provided), r)
+	results, err := core.MakeObject(*info, NewMap(provided), r)
 	if err != nil {
 		return nil, r.BoruError("reify_error", err.Error(), "reify")
 	}
@@ -142,7 +142,7 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 // resolveReifyTarget returns the class ClassTypeInfo to construct:
 // a direct class target (with $class cross-checked when present), or
 // a member selected by $class from a tor union of classes.
-func resolveReifyTarget(target Value, className string, r *Registry) (*eng.ClassTypeInfo, error) {
+func resolveReifyTarget(target Value, className string, r *Registry) (*core.ClassTypeInfo, error) {
 	if IsClassType(target) {
 		info, _ := AsClassType(target)
 		if className != "" && className != classShortName(&info) {
@@ -176,7 +176,7 @@ func resolveReifyTarget(target Value, className string, r *Registry) (*eng.Class
 
 // classShortName is the user-facing class name — the last segment of
 // the installed path ("Class/Point" → "Point").
-func classShortName(info *eng.ClassTypeInfo) string {
+func classShortName(info *core.ClassTypeInfo) string {
 	name := info.Name
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		name = name[i+1:]
@@ -223,7 +223,7 @@ func reifyFieldValue(raw any, constraint Value, r *Registry) (Value, error) {
 	}
 
 	// Already conforming (per the strict class rule) — done.
-	if _, ferr := eng.MakeClassFieldValue(val, constraint, r); ferr == nil {
+	if _, ferr := core.MakeClassFieldValue(val, constraint, r); ferr == nil {
 		return val, nil
 	}
 
@@ -233,7 +233,7 @@ func reifyFieldValue(raw any, constraint Value, r *Registry) (Value, error) {
 	// contract — it only recovers representation.
 	ct := targetTypeOf(constraint)
 	if ct != nil {
-		if converted, cerr := eng.MakeConvert(val, ct); cerr == nil {
+		if converted, cerr := core.MakeConvert(val, ct); cerr == nil {
 			return converted, nil
 		}
 	}
@@ -244,9 +244,9 @@ func reifyFieldValue(raw any, constraint Value, r *Registry) (Value, error) {
 // the node itself for a bare type constraint, the default's own type
 // for a concrete default. Predicate/disjunction constraints return nil
 // (no single conversion target — the value must already conform).
-func targetTypeOf(constraint Value) *eng.Type {
+func targetTypeOf(constraint Value) *core.Type {
 	if IsBareTypeNode(constraint) {
-		return eng.ValueType(constraint)
+		return core.ValueType(constraint)
 	}
 	// A DepScalar predicate constraint ((Float gte 0.0)) recovers
 	// toward its BASE type — the predicate itself re-runs strictly in
@@ -255,10 +255,10 @@ func targetTypeOf(constraint Value) *eng.Type {
 	if constraint.IsDepScalar() {
 		return constraint.Parent
 	}
-	if pt := eng.PredicateInputType(constraint); pt != nil {
+	if pt := core.PredicateInputType(constraint); pt != nil {
 		return pt
 	}
-	if IsConcrete(constraint) && !eng.IsTypeBody(constraint) {
+	if IsConcrete(constraint) && !core.IsTypeBody(constraint) {
 		return constraint.Parent
 	}
 	return nil

@@ -1,5 +1,5 @@
 // The conversion layer of the boru TS parser — the port of
-// eng/go/parser/parse.go (stage 3 of Go Parse). parse(src) runs the
+// parser/go/parse.go (stage 3 of Go Parse). parse(src) runs the
 // configured jsonic instance (grammar.ts makeBoruJsonic) over src and
 // converts the jsonic output into engine Values, throwing BoruError on
 // syntax errors (jsonic failures are translated by errors.ts
@@ -34,10 +34,10 @@ import {
   newSugar,
   newCloseParen,
   newEnd,
-} from '../value.ts'
-import type { WordInfo, ReachSeg, ReachInfo, SugarInfo, InterpSegment } from '../value.ts'
-import { TWord, TNone, TAbsent, TBigInteger, TBigDecimal } from '../type.ts'
-import { BoruError } from '../error.ts'
+} from '@voxgig/borucore'
+import type { WordInfo, ReachSeg, ReachInfo, SugarInfo, InterpSegment } from '@voxgig/borucore'
+import { TWord, TNone, TAbsent, TBigInteger, TBigDecimal } from '@voxgig/borucore'
+import { BoruError } from '@voxgig/borucore'
 import {
   ParenGroup,
   UnclosedParen,

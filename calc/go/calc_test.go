@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // newCalc constructs a Calc with a buffer-backed output writer so
@@ -24,12 +24,12 @@ func newCalc(t *testing.T) (*Calc, *bytes.Buffer) {
 
 // asInt extracts an int64 from a single-element stack, failing the
 // test with an informative message if the shape is wrong.
-func asInt(t *testing.T, stk []eng.Value, label string) int64 {
+func asInt(t *testing.T, stk []core.Value, label string) int64 {
 	t.Helper()
 	if len(stk) != 1 {
 		t.Fatalf("%s: want 1 result, got %d (%v)", label, len(stk), stk)
 	}
-	n, err := eng.AsInteger(stk[0])
+	n, err := core.AsInteger(stk[0])
 	if err != nil {
 		t.Fatalf("%s: AsInteger: %v (value=%s)", label, err, stk[0].String())
 	}
@@ -37,12 +37,12 @@ func asInt(t *testing.T, stk []eng.Value, label string) int64 {
 }
 
 // asDec extracts a float64 from a single-element stack.
-func asDec(t *testing.T, stk []eng.Value, label string) float64 {
+func asDec(t *testing.T, stk []core.Value, label string) float64 {
 	t.Helper()
 	if len(stk) != 1 {
 		t.Fatalf("%s: want 1 result, got %d (%v)", label, len(stk), stk)
 	}
-	f, err := eng.AsNumber(stk[0])
+	f, err := core.AsNumber(stk[0])
 	if err != nil {
 		t.Fatalf("%s: AsNumber: %v", label, err)
 	}
@@ -106,7 +106,7 @@ func TestArithFloats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !stk[0].Parent.ConformsTo(eng.TFloat) {
+	if !stk[0].Parent.ConformsTo(core.TFloat) {
 		t.Errorf("1 div 2: want Float result, got %s", stk[0].Parent.String())
 	}
 	if got := asDec(t, stk, "1 div 2"); got != 0.5 {
@@ -196,7 +196,7 @@ func TestStackOps(t *testing.T) {
 	if len(stk) != 4 {
 		t.Fatalf("dup: want 4 items, got %d", len(stk))
 	}
-	n3, _ := eng.AsInteger(stk[3])
+	n3, _ := core.AsInteger(stk[3])
 	if n3 != 3 {
 		t.Errorf("dup: top = %d, want 3", n3)
 	}
@@ -209,8 +209,8 @@ func TestStackOps(t *testing.T) {
 	if len(stk) != 2 {
 		t.Fatalf("swap: want 2 items, got %d", len(stk))
 	}
-	a, _ := eng.AsInteger(stk[0])
-	b, _ := eng.AsInteger(stk[1])
+	a, _ := core.AsInteger(stk[0])
+	b, _ := core.AsInteger(stk[1])
 	if a != 2 || b != 1 {
 		t.Errorf("swap: got [%d %d], want [2 1]", a, b)
 	}
@@ -232,7 +232,7 @@ func TestStackOps(t *testing.T) {
 	if len(stk) != 4 {
 		t.Fatalf("over: want 4 items, got %d", len(stk))
 	}
-	top, _ := eng.AsInteger(stk[3])
+	top, _ := core.AsInteger(stk[3])
 	if top != 2 {
 		t.Errorf("over: top = %d, want 2", top)
 	}
@@ -256,7 +256,7 @@ func TestDepth(t *testing.T) {
 	if len(stk) != 4 {
 		t.Fatalf("depth: want 4 items, got %d", len(stk))
 	}
-	n, _ := eng.AsInteger(stk[3])
+	n, _ := core.AsInteger(stk[3])
 	if n != 3 {
 		t.Errorf("depth: top = %d, want 3", n)
 	}
@@ -332,9 +332,9 @@ func TestStackReturnsCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	stk := c.Stack()
-	stk[0] = eng.NewInteger(99)
+	stk[0] = core.NewInteger(99)
 	stk2 := c.Stack()
-	n, _ := eng.AsInteger(stk2[0])
+	n, _ := core.AsInteger(stk2[0])
 	if n != 1 {
 		t.Errorf("Stack() returned a live reference; mutating the copy changed the internal stack to %d", n)
 	}
@@ -385,14 +385,14 @@ func TestFormatStackEmpty(t *testing.T) {
 }
 
 func TestFormatStackOne(t *testing.T) {
-	v := eng.NewInteger(42)
-	if got := FormatStack([]eng.Value{v}); got != "42" {
+	v := core.NewInteger(42)
+	if got := FormatStack([]core.Value{v}); got != "42" {
 		t.Errorf("FormatStack([42]) = %q, want 42", got)
 	}
 }
 
 func TestFormatStackMany(t *testing.T) {
-	stk := []eng.Value{eng.NewInteger(1), eng.NewInteger(2), eng.NewInteger(3)}
+	stk := []core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)}
 	if got := FormatStack(stk); got != "1 2 3" {
 		t.Errorf("FormatStack([1 2 3]) = %q, want 1 2 3", got)
 	}

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -48,14 +48,14 @@ func TestW9IdealListToAnyErrorArms(t *testing.T) {
 	// 75: a converter whose ToList returns a real error.
 	tErr := r.Types.MintTypeWithBehavior("W9ListErr", native.TIdeal,
 		w9ListConv{err: errors.New("boom")})
-	if out := idealListToAny(eng.NewExtension(tErr, "x")); out == nil {
+	if out := idealListToAny(core.NewExtension(tErr, "x")); out == nil {
 		t.Error("idealListToAny(convert-error) should fall back to ValueToAny")
 	}
 
 	// 79: a converter whose ToList succeeds but returns a non-list value.
 	tNL := r.Types.MintTypeWithBehavior("W9ListNL", native.TIdeal,
 		w9ListConv{list: native.NewInteger(7)})
-	if out := idealListToAny(eng.NewExtension(tNL, "x")); out == nil {
+	if out := idealListToAny(core.NewExtension(tNL, "x")); out == nil {
 		t.Error("idealListToAny(non-list result) should fall back to ValueToAny")
 	}
 }

@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	voxgigstruct "github.com/voxgig/struct/go"
 )
 
@@ -11,7 +11,7 @@ import (
 // natives.go.
 //
 // Custom-type projection hook: before serialising, the handlers call
-// eng.NodifyValue, which walks the value's type chain looking for a
+// core.NodifyValue, which walks the value's type chain looking for a
 // Nodifier behavior installed via `behave nodify/q (fn [[T] [Any]
 // [body]])`. The body produces a Node or Scalar (data-shape, not a
 // JSON string); the serialiser then encodes that. With no custom
@@ -20,7 +20,7 @@ import (
 //
 // jsonifyDefaultHandler calls voxgigstruct.Jsonify with default settings.
 func jsonifyDefaultHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	projected, err := eng.NodifyValue(args[0])
+	projected, err := core.NodifyValue(args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func jsonifyFlagsHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 	if !ok {
 		return nil, fmt.Errorf("jsonify: expected map for flags, got %T", valueToAny(args[0]))
 	}
-	projected, err := eng.NodifyValue(args[1])
+	projected, err := core.NodifyValue(args[1])
 	if err != nil {
 		return nil, err
 	}

@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	basic "github.com/boru-lang/boru/basic/go"
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -83,7 +83,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// PROVABLY stable None (`MiniLang.Gen` — module-minilang.tsv) instead of
 	// the blanket fold decline unregistered maps get. See
 	// eng/go/module_export_growth.go.
-	eng.RegisterModuleExportGrowth(parent, exports)
+	core.RegisterModuleExportGrowth(parent, exports)
 
 	// langs collects the FIXED built-in kinds by NAME (a Map) — re, bf, gex,
 	// math, hb, bb, micron, m, jp, jq, xp, sp — so no per-kind lang_<name>
@@ -597,7 +597,7 @@ func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 }
 
 // miniHexBytesHandler — args[0]=src, args[1]=opts. Decodes an even-length
-// hex string to Bytes. The value is built via eng.FromNative (the
+// hex string to Bytes. The value is built via core.FromNative (the
 // []byte→Bytes bridge), which runs here at runtime where the bridge is live.
 func miniHexBytesHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
@@ -609,7 +609,7 @@ func miniHexBytesHandler(args []native.Value, _ map[string]native.Value, _ []nat
 		return nil, r.BoruErrorHint("mini_parse_error", fmt.Sprintf("hb: %v", derr), "lang_hb",
 			"use an even number of hex digits, e.g. +hb/deadbeef/")
 	}
-	return []native.Value{eng.FromNative(b)}, nil
+	return []native.Value{core.FromNative(b)}, nil
 }
 
 // miniBinBytesHandler — args[0]=src, args[1]=opts. Decodes a string of 0/1
@@ -642,7 +642,7 @@ func miniBinBytesHandler(args []native.Value, _ map[string]native.Value, _ []nat
 		}
 		out[i] = v
 	}
-	return []native.Value{eng.FromNative(out)}, nil
+	return []native.Value{core.FromNative(out)}, nil
 }
 
 // miniReHandler — args[0]=src, args[1]=opts, args[2]=subject.
@@ -801,7 +801,7 @@ func reMatchResult(re *regexp.Regexp, subject string, limit int64) native.Value 
 // The compiled consumer for `re`: the pattern was compiled at the call site by
 // miniReCompile, so this just matches.
 func miniRunReHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	ep, ok := args[0].Data.(eng.ExtensionPayload)
+	ep, ok := args[0].Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, r.BoruError("mini_error", "run-re: not a compiled pattern", "run-re")
 	}
@@ -839,7 +839,7 @@ func miniReCompileFor(tMini *native.Type) func(string, native.Value, *native.Reg
 				native.NewString(src), opts, native.NewEnd(),
 			}, nil
 		}
-		carrier := eng.NewExtension(tMini, re)
+		carrier := core.NewExtension(tMini, re)
 		return []native.Value{
 			native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("run-re"),
 			carrier, opts, native.NewEnd(),

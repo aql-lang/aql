@@ -1,6 +1,6 @@
 // This file translates tabnas/jsonic lexer-and-grammar failures into
 // boru-voice BoruErrors (design/DIAGNOSTICS.0.md, phase 2) — the TS twin
-// of eng/go/parser/parse_error.go (the REFERENCE). The library's own
+// of parser/go/parse_error.go (the REFERENCE). The library's own
 // rendering is disabled at the source (errMsgOptions / colorOff below
 // kill the always-on ANSI palette, the `--internal:` suffix block, and
 // the library docs link), and every JsonicError is rebuilt as an
@@ -11,7 +11,7 @@
 
 import { JsonicError } from '@tabnas/jsonic'
 
-import { BoruError } from '../error.ts'
+import { BoruError } from '@voxgig/borucore'
 
 // colorOff pins the library renderer's color off; the translated
 // BoruError owns presentation (color is caller-resolved there).

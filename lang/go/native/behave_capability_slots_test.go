@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // `behave` exposed four capability slots — compare, canon, nodify,
@@ -40,7 +40,7 @@ func bcTop(t *testing.T, src string) Value {
 func bcBool(t *testing.T, src string) bool {
 	t.Helper()
 	v := bcTop(t, src)
-	b, err := eng.AsBoolean(v)
+	b, err := core.AsBoolean(v)
 	if err != nil {
 		t.Fatalf("run %q: not a boolean: %v (%s)", src, err, v.String())
 	}
@@ -60,13 +60,13 @@ def lo:Level 3
 def hi:Level 9
 [(if lo [true] [false]) (if hi [true] [false]) (if 3 [true] [false])]`
 	got := bcTop(t, src)
-	elems, err := eng.AsMutableList(got)
+	elems, err := core.AsMutableList(got)
 	if err != nil || len(elems) != 3 {
 		t.Fatalf("expected a 3-element list, got %s (%v)", got.String(), err)
 	}
-	lo, _ := eng.AsBoolean(elems[0])
-	hi, _ := eng.AsBoolean(elems[1])
-	plain, _ := eng.AsBoolean(elems[2])
+	lo, _ := core.AsBoolean(elems[0])
+	hi, _ := core.AsBoolean(elems[1])
+	plain, _ := core.AsBoolean(elems[2])
 	if lo {
 		t.Error("Level 3 must be falsy — the installed body said so")
 	}
@@ -95,14 +95,14 @@ def Level (refine Integer)
 behave size/q (fn [[Level] [Integer] [42]])
 def x:Level 3
 size x`)
-	n, err := eng.AsInteger(v)
+	n, err := core.AsInteger(v)
 	if err != nil || n != 42 {
 		t.Errorf("size = %s (%v), want 42 from the installed body", v.String(), err)
 	}
 	// The builtin rule is untouched: a plain Integer sizes to its floored
 	// magnitude.
 	v = bcTop(t, "size 3")
-	if n, _ := eng.AsInteger(v); n != 3 {
+	if n, _ := core.AsInteger(v); n != 3 {
 		t.Errorf("plain size 3 = %s, want 3", v.String())
 	}
 }
@@ -123,7 +123,7 @@ behave deq/q (fn [[Tag Tag] [Boolean] [true]])`); err != nil {
 	if ty == nil {
 		t.Fatal("Tag was not installed")
 	}
-	de, ok := ty.Behavior().(eng.DeepEqualer)
+	de, ok := ty.Behavior().(core.DeepEqualer)
 	if !ok {
 		t.Fatal("the deq slot did not produce a DeepEqualer")
 	}
@@ -231,17 +231,17 @@ behave size/q   (fn [[Level] [Integer] [99]])
 behave canon/q  (fn [[Level] [String]  ["<lvl>"]])
 def x:Level 3
 [(if x [true] [false]) (size x) (canon x)]`)
-	elems, err := eng.AsMutableList(v)
+	elems, err := core.AsMutableList(v)
 	if err != nil || len(elems) != 3 {
 		t.Fatalf("expected a 3-element list, got %s (%v)", v.String(), err)
 	}
-	if b, _ := eng.AsBoolean(elems[0]); b {
+	if b, _ := core.AsBoolean(elems[0]); b {
 		t.Error("the truthy slot was lost when size/canon were installed")
 	}
-	if n, _ := eng.AsInteger(elems[1]); n != 99 {
+	if n, _ := core.AsInteger(elems[1]); n != 99 {
 		t.Errorf("size = %s, want 99 — the size slot was lost", elems[1].String())
 	}
-	if s, _ := eng.AsString(elems[2]); !strings.Contains(s, "lvl") {
+	if s, _ := core.AsString(elems[2]); !strings.Contains(s, "lvl") {
 		t.Errorf("canon = %q, want the installed rendering — the canon slot was lost", s)
 	}
 }
@@ -270,7 +270,7 @@ behave nope/q (fn [[T] [Boolean] [true]])`)
 }
 
 // TestBehaveSizeDoesNotSwallowTheWalk pins the regression the PR #325
-// review surfaced: the wrapper satisfies eng.Sizer structurally whether
+// review surfaced: the wrapper satisfies core.Sizer structurally whether
 // or not a size body was installed, and Sizer has no decline channel —
 // so installing ANY slot must not change `size` for a type that never
 // installed one. Before the fix, `behave canon` alone turned an Integer
@@ -281,7 +281,7 @@ def Level (refine Integer)
 behave canon/q (fn [[Level] [String] ["L"]])
 def x:Level 7
 size x`)
-	if n, err := eng.AsInteger(v); err != nil || n != 7 {
+	if n, err := core.AsInteger(v); err != nil || n != 7 {
 		t.Errorf("size = %s (%v), want 7 — a canon-only install must keep the magnitude rule", v.String(), err)
 	}
 }
@@ -320,7 +320,7 @@ behave size/q (fn [[Bag] [Integer] [99]])`); err != nil {
 	// is still the kernel List node.
 	plain := w9List(NewInteger(1), NewInteger(2))
 	out = sizeReturns([]Value{plain}, r)
-	if n, err := eng.AsInteger(out[0]); err != nil || n != 2 {
+	if n, err := core.AsInteger(out[0]); err != nil || n != 2 {
 		t.Errorf("plain-list fold regressed: %v (%v)", out[0].String(), err)
 	}
 	if _, err := w9Run(t, r, `def Sack (refine List)`); err != nil {
@@ -329,7 +329,7 @@ behave size/q (fn [[Bag] [Integer] [99]])`); err != nil {
 	sack := w9List(NewInteger(1), NewInteger(2))
 	sack.Parent = r.LookupTypeName("Sack")
 	out = sizeReturns([]Value{sack}, r)
-	if n, err := eng.AsInteger(out[0]); err != nil || n != 2 {
+	if n, err := core.AsInteger(out[0]); err != nil || n != 2 {
 		t.Errorf("a body-less refinement must keep the fold: %v (%v)", out[0].String(), err)
 	}
 }

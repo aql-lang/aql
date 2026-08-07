@@ -30,10 +30,38 @@ Go and ts need total parity.")
      cover-gate-core` holds **100** (13,978/13,978 statements,
      104 proof-carrying allowlist exclusions).
    - TS: `make test-ts`, floor `TS_GATE_LINES` (root Makefile).
-     Current: **93** (measured 93.09% lines; branches 87.2%,
-     functions 90.9% recorded but not yet gated).
+     Current: **96** (measured 96.80% SOURCE lines; branches 91.9%,
+     functions 94.8% recorded but not yet gated).
+     The denominator is source only — `--test-coverage-exclude=
+     '**/*.test.ts'`. node:test instruments every file it loads,
+     including the test files themselves, so without the exclusion
+     the gate counted its own test code as covered source. Go's
+     `-coverpkg` metric never counts `_test.go` statements, so the
+     equivalence in (2) below only holds with the exclusion; the
+     floor RE-BASED 97 → 96 when it landed, for the same reason
+     `ENG_GATE_FLOOR` re-based at the four-piece cut — the
+     measurement universe changed, so the old number is not
+     comparable (same commit: 97.06% counting test files, 96.80%
+     source only).
+   - TS core: `make test-ts-core`, floor `TS_CORE_GATE_LINES` (root
+     Makefile). Current: **62** (measured 62.06% source lines over the
+     whole `core/ts` package). This is the twin of `cover-gate-core`
+     and completes the set: each of the four pieces now has a
+     standalone gate on both implementations.
    Raise the floor in the same PR that raises coverage; lowering
    either floor is a build break by intent.
+
+   **The parity instrument is now core-level too.** `core/spec/*.tsv`
+   is replayed by `core/go/corespec_test.go` and
+   `core/ts/src/corespec.test.ts` — two runners sharing no code, each
+   implementing the corpus's parser-free notation independently
+   (neither core has a parser, which is the point of the core cut).
+   Unlike `eng/spec` it is a SPEC, not an agreement set: the `expected`
+   column is written from REFERENCE.md rather than from either
+   engine's behaviour, so a row can legitimately fail on BOTH engines.
+   That is precisely the class of defect `eng/spec` is structurally
+   blind to — design/CORE-GO-TS-DEFECTS.0.md documents 22 of them that
+   the 1808-row engine differential is green across.
 4. **Parity of corpus.** The shared `eng/spec` corpus remains the
    behavioral contract both engines replay row-for-row (the
    cross-engine differential). Corpus growth serves both engines'
@@ -176,3 +204,5 @@ differential guards the aligned behaviors permanently.
 | 2026-08-05 | 89 | 97 | Go wave: `eachq` — the battery's lambda-hook Callable (quotation AND Function-value forms over the InvokeBody seam, with the element-carrier model in its ReturnsFn), the standalone driver for tryRecordLambdaClosure / lambdaHookCompatible / lambdaCallbackInputs; 8 battery rows all VM-executed. eng/go standalone 90.1→90.3 (callable_words 65→69). |
 | 2026-08-05 | 84 (re-base) + core 80 | 97 | Four-piece Stage 4 cut: the interpreter core and ~120 kernel test files moved to core/go. The Go gate re-bases over eng/go alone (measured 84.6%) and gains a twin, `cover-gate-core` (floor 80, measured 80.5%); the pair covers the same statements the old single gate did, both ratcheting to 100 (design/ENG-FOUR-PIECE.0.md). |
 | 2026-08-06 | 84 + core 100 | 97 | Stage-5 core campaign: three test waves (eleven parallel agent batteries + a final sweep) close all 2,833 post-cut uncovered statements in core/go's own suite — the process registry, trace layout, value render/classify families, the store clone graph, compile-pass arming, ParseFnParams/ResolveSigType, the dispatch-trap and step-loop arms via stub recorders and slot stubs, the unify/canon tail, and 181 scattered edge arms. Four pragmas whose guards became covered were stripped; zero new pragmas. cover-gate-core: 80.5 → 100.0 (13,978/13,978), CORE_GATE_FLOOR ratchets to 100. |
+| 2026-08-06 | 84 + core 100 | 96 (re-base) | TS coverage denominator corrected to SOURCE ONLY (`--test-coverage-exclude='**/*.test.ts'`). node:test was counting the 19 `*.test.ts` files as instrumented source, and several of them carry uncovered lines (check.test.ts 82.1%, crossdiff.test.ts 88.5%, fixture-compiled.test.ts 89.8%), so the gate was measuring its own test code — not the Go metric, which never counts `_test.go` statements. Same commit measured both ways: 97.06% with test files (which is what let the 97 floor pass), 96.80% source only. Floor re-bases 97 → 96 over the corrected universe and ratchets from there; no coverage was lost. |
+| 2026-08-07 | 84 + core 100 | 96 + ts-core 62 | The TS core cut. `core/ts` (@voxgig/borucore) extracted as the twin of core/go, with the same boundary: core owns CheckState/CheckDiagnostic/EmitRecorder/AnalysisImpl, the check piece owns toCarrier/stripToCarriers/carrierResults. Two upward imports inverted through the AnalysisImpl seam core/go already declared; NAMED inactive defaults pinned by core/ts/src/seams.test.ts. Zero upward imports and zero dependencies, enforced structurally (the package declares no dependency on @voxgig/borueng). New gates `make test-ts-core` (floor 62, the honest figure over the full package — the stage-1 71 covered only the seven files that suite loaded) and the core-level parity corpus `core/spec` (35 rows, green on both engines from independent runners). One real divergence fixed en route: the TS engine pattern-matched the compiler's Operand union in three places, which core/go structurally cannot do; core now asks via EmitRecorder.constValueOf. eng/ts 4059/4059, cross-engine 1808/1808, 0 divergences. |

@@ -4,14 +4,14 @@ import (
 	"crypto/tls"
 	"net/http"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // HostClientIdents returns the registry's client-identity registry, or
 // nil when the host registered none.
 func HostClientIdents(r *Registry) map[string]capabilities.ClientIdentity {
-	ids, _, _ := eng.Cap[map[string]capabilities.ClientIdentity](r, CapClientIdents)
+	ids, _, _ := core.Cap[map[string]capabilities.ClientIdentity](r, CapClientIdents)
 	return ids
 }
 
@@ -108,7 +108,7 @@ func ResolveTransport(r *Registry, p capabilities.TLSProfile, word string) (http
 	if err != nil {
 		return nil, err
 	}
-	cache, _, _ := eng.Cap[map[capabilities.TLSProfile]http.RoundTripper](r, CapHTTPTransports)
+	cache, _, _ := core.Cap[map[capabilities.TLSProfile]http.RoundTripper](r, CapHTTPTransports)
 	if rt, ok := cache[p]; ok {
 		return rt, nil
 	}

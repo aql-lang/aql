@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Typed FLEX nodes (design/TYPED-CONTAINER-TAG-RETENTION.0.md, flex layer).
@@ -137,15 +137,15 @@ func TestTypedFlexTagThroughFlexDeepCopy(t *testing.T) {
 	// direct FlexDeepCopy preserves elem.
 	om := NewOrderedMap()
 	om.Set("a", NewInteger(1))
-	typed, _ := eng.Unify(NewMap(om), eng.NewTypedMap(NewTypeLiteral(TInteger)))
-	flexed, ferr := eng.FlexDeepCopy(typed)
+	typed, _ := core.Unify(NewMap(om), core.NewTypedMap(NewTypeLiteral(TInteger)))
+	flexed, ferr := core.FlexDeepCopy(typed)
 	if ferr != nil {
 		t.Fatalf("FlexDeepCopy: %v", ferr)
 	}
 	if c, okc := flexed.ElemConstraint(); !okc || !c.Equal(TInteger) {
 		t.Errorf("FlexDeepCopy dropped the {:Integer} tag (ok=%v)", okc)
 	}
-	if !eng.IsFlexMap(flexed) {
+	if !core.IsFlexMap(flexed) {
 		t.Errorf("FlexDeepCopy result is not a FlexMap")
 	}
 }
@@ -166,15 +166,15 @@ func TestTypedFlexUntypedUnchanged(t *testing.T) {
 func TestTypedFlexPreservesMutability(t *testing.T) {
 	om := NewOrderedMap()
 	om.Set("a", NewInteger(1))
-	typed, _ := eng.Unify(NewMap(om), eng.NewTypedMap(NewTypeLiteral(TInteger)))
-	flexed, _ := eng.FlexDeepCopy(typed)
-	if !eng.IsFlexMap(flexed) {
+	typed, _ := core.Unify(NewMap(om), core.NewTypedMap(NewTypeLiteral(TInteger)))
+	flexed, _ := core.FlexDeepCopy(typed)
+	if !core.IsFlexMap(flexed) {
 		t.Fatalf("typed flex is not a FlexMap")
 	}
 	// list twin
-	lt, _ := eng.Unify(NewList([]Value{NewInteger(1)}), eng.NewTypedList(NewTypeLiteral(TInteger)))
-	fl, _ := eng.FlexDeepCopy(lt)
-	if !eng.IsFlexList(fl) {
+	lt, _ := core.Unify(NewList([]Value{NewInteger(1)}), core.NewTypedList(NewTypeLiteral(TInteger)))
+	fl, _ := core.FlexDeepCopy(lt)
+	if !core.IsFlexList(fl) {
 		t.Errorf("typed list flex is not a FlexList")
 	}
 	if c, okc := fl.ElemConstraint(); !okc || !c.Equal(TInteger) {
@@ -359,18 +359,18 @@ func TestTypedFlexNodeRoundTrip(t *testing.T) {
 	// direct NodeDeepCopy preserves elem, map and list.
 	om := NewOrderedMap()
 	om.Set("a", NewInteger(1))
-	tfm, _ := eng.Unify(NewMap(om), eng.NewTypedMap(NewTypeLiteral(TInteger)))
-	fm, _ := eng.FlexDeepCopy(tfm)
-	nm, nerr := eng.NodeDeepCopy(fm)
+	tfm, _ := core.Unify(NewMap(om), core.NewTypedMap(NewTypeLiteral(TInteger)))
+	fm, _ := core.FlexDeepCopy(tfm)
+	nm, nerr := core.NodeDeepCopy(fm)
 	if nerr != nil {
 		t.Fatalf("NodeDeepCopy map: %v", nerr)
 	}
 	if c, ok := nm.ElemConstraint(); !ok || !c.Equal(TInteger) {
 		t.Errorf("NodeDeepCopy dropped the {:Integer} map tag")
 	}
-	tfl, _ := eng.Unify(NewList([]Value{NewInteger(1)}), eng.NewTypedList(NewTypeLiteral(TInteger)))
-	fl, _ := eng.FlexDeepCopy(tfl)
-	nl, lerr := eng.NodeDeepCopy(fl)
+	tfl, _ := core.Unify(NewList([]Value{NewInteger(1)}), core.NewTypedList(NewTypeLiteral(TInteger)))
+	fl, _ := core.FlexDeepCopy(tfl)
+	nl, lerr := core.NodeDeepCopy(fl)
 	if lerr != nil {
 		t.Fatalf("NodeDeepCopy list: %v", lerr)
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 )
@@ -244,7 +244,7 @@ func TestModelWave4StartStop(t *testing.T) {
 func TestModelWave4BadHandles(t *testing.T) {
 	r := mcovReg(t)
 	notModel := native.NewInteger(7)
-	foreign := eng.NewExtension(native.TMap, "not-a-model-handle")
+	foreign := core.NewExtension(native.TMap, "not-a-model-handle")
 	handlers := map[string]native.Handler{
 		"run":   modelRunHandler,
 		"start": modelStartHandler,

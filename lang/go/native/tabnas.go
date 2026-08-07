@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 	tabnascsv "github.com/tabnas/csv/go"
 	tabnasfeed "github.com/tabnas/feed/go"
 	tabnasini "github.com/tabnas/ini/go"

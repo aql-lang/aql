@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/capabilities"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestNestedMountUnwindsLIFO pins the PR-review fix: nested mounts unwind in

@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -16,7 +16,7 @@ func TestReachConstructorIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if len(res) != 1 || !eng.IsReach(res[0]) {
+	if len(res) != 1 || !core.IsReach(res[0]) {
 		t.Fatalf("reach should yield an inert Reach value, got %v", res)
 	}
 }
@@ -28,7 +28,7 @@ func TestReachConstructorEncodesOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	info, err := eng.AsReach(res[0])
+	info, err := core.AsReach(res[0])
 	if err != nil {
 		t.Fatalf("AsReach: %v", err)
 	}
@@ -92,10 +92,10 @@ func TestReceiverlessReachIsInertLens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if len(res) != 1 || !eng.IsReach(res[0]) {
+	if len(res) != 1 || !core.IsReach(res[0]) {
 		t.Fatalf("$.name should be an inert Reach value, got %v", res)
 	}
-	info, _ := eng.AsReach(res[0])
+	info, _ := core.AsReach(res[0])
 	if len(info.Receiver) != 0 || info.Eval {
 		t.Fatalf("$.name must be receiverless + inert, got %+v", info)
 	}
@@ -109,7 +109,7 @@ func TestReachApplyAndRebind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 7 {
+	if n, _ := core.AsInteger(res[0]); n != 7 {
 		t.Errorf("apply $.a.b p = %v, want 7", res[0])
 	}
 	// getr strictness survives apply: a missing strict key errors.
@@ -121,7 +121,7 @@ func TestReachApplyAndRebind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rebind: %v", err)
 	}
-	if len(res) != 1 || !eng.IsReach(res[0]) {
+	if len(res) != 1 || !core.IsReach(res[0]) {
 		t.Fatalf("rebind should yield a Reach value, got %v", res)
 	}
 }
@@ -137,11 +137,11 @@ func TestReachAsFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("each lens: %v", err)
 	}
-	l, err := eng.AsList(res[0])
+	l, err := core.AsList(res[0])
 	if err != nil || l.Len() != 2 {
 		t.Fatalf("each $.name should yield 2 names, got %v", res[0])
 	}
-	if s, _ := eng.AsString(l.Get(0)); s != "ada" {
+	if s, _ := core.AsString(l.Get(0)); s != "ada" {
 		t.Errorf("each $.name[0] = %v, want ada", l.Get(0))
 	}
 	// filter keeps elements whose lens is truthy.
@@ -152,7 +152,7 @@ func TestReachAsFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filter lens: %v", err)
 	}
-	l, err = eng.AsList(res[0])
+	l, err = core.AsList(res[0])
 	if err != nil || l.Len() != 1 {
 		t.Fatalf("filter $.on should keep 1 element, got %v", res[0])
 	}
@@ -172,7 +172,7 @@ func TestParsedDotAccessStaysEager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 7 {
+	if n, _ := core.AsInteger(res[0]); n != 7 {
 		t.Errorf("m.a.b = %v, want 7 (eager)", res[0])
 	}
 }

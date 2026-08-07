@@ -11,7 +11,7 @@ package langspec
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 func TestReturnsAnnotationNarrowing(t *testing.T) {
@@ -107,35 +107,35 @@ func TestReturnsAnnotationNarrowing(t *testing.T) {
 // TestDeclaresCheckReturnsPredicate pins the four annotation surfaces the
 // coverage gate accepts — and that an unannotated Go sig is refused.
 func TestDeclaresCheckReturnsPredicate(t *testing.T) {
-	noop := func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+	noop := func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 		return nil, nil
 	}
-	unannotated := eng.Signature{Args: []*eng.Type{eng.TAny}, Impl: eng.Go(noop)}
+	unannotated := core.Signature{Args: []*core.Type{core.TAny}, Impl: core.Go(noop)}
 	if unannotated.DeclaresCheckReturns() {
 		t.Fatalf("unannotated Go sig must NOT declare check returns")
 	}
-	declared := eng.Signature{Args: []*eng.Type{eng.TAny}, Impl: eng.Go(noop),
-		Returns: []*eng.Type{eng.TInteger}}
+	declared := core.Signature{Args: []*core.Type{core.TAny}, Impl: core.Go(noop),
+		Returns: []*core.Type{core.TInteger}}
 	if !declared.DeclaresCheckReturns() {
 		t.Fatalf("declared Returns must count")
 	}
-	nothing := eng.Signature{Impl: eng.Go(noop), Returns: []*eng.Type{}}
+	nothing := core.Signature{Impl: core.Go(noop), Returns: []*core.Type{}}
 	if !nothing.DeclaresCheckReturns() {
 		t.Fatalf("empty non-nil Returns (produces nothing) must count")
 	}
-	withFn := eng.Signature{Impl: eng.Go(noop),
-		ReturnsFn: func(_ []eng.Value, _ *eng.Registry) []eng.Value { return nil }}
+	withFn := core.Signature{Impl: core.Go(noop),
+		ReturnsFn: func(_ []core.Value, _ *core.Registry) []core.Value { return nil }}
 	if !withFn.DeclaresCheckReturns() {
 		t.Fatalf("ReturnsFn must count")
 	}
-	fullStack := eng.Signature{Impl: eng.Go(noop, eng.FullStack(),
-		eng.CheckFullStack(func(_ []eng.Value, stack []eng.Value, _ *eng.Registry) []eng.Value {
+	fullStack := core.Signature{Impl: core.Go(noop, core.FullStack(),
+		core.CheckFullStack(func(_ []core.Value, stack []core.Value, _ *core.Registry) []core.Value {
 			return stack
 		}))}
 	if !fullStack.DeclaresCheckReturns() {
 		t.Fatalf("CheckFullStack shape fn must count")
 	}
-	boruBody := eng.Signature{Impl: eng.Boru([]eng.Value{eng.NewWord("dup")})}
+	boruBody := core.Signature{Impl: core.Boru([]core.Value{core.NewWord("dup")})}
 	if !boruBody.DeclaresCheckReturns() {
 		t.Fatalf("a boru body (analyser-derived returns) must count")
 	}

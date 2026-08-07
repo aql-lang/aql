@@ -1389,7 +1389,7 @@ func (es *EmitState) BodyAnalysisGuard() func() {
 
 // TakeFragment returns the last captured fragment (nil when the
 // capture never armed — plain check runs, suspended recordings).
-func (es *EmitState) TakeFragment() *EmitFragment {
+func (es *EmitState) TakeFragment() core.EmitFragmentRef {
 	if es == nil {
 		return nil
 	}
@@ -2595,20 +2595,11 @@ func eventDivergesDeep(ev *EmitEvent) bool {
 	return false
 }
 
-// BranchRecord carries one `if` dispatch into RecordBranch.
-type BranchRecord struct {
-	Cond            core.Value    // pre-evaluated condition (paren/value form)
-	CondFrag        *EmitFragment // list-form condition body, when analysed
-	CondStk         []core.Value  // its residual stack
-	ConstCond       *bool         // statically-known condition: only Then captured
-	HasElse         bool
-	Then, Els       *EmitFragment
-	ThenStk, ElsStk []core.Value
-	ThenValue       *core.Value // non-nil: the then arm is this already-evaluated VALUE, not a body
-	ElsValue        *core.Value // non-nil: the else arm is this already-evaluated VALUE, not a body
-	Out             core.Value
-	Pos             core.SrcPos
-}
+// The argument struct — core.BranchRecord — is declared in core beside the
+// EmitRecorder interface, not here: basic's `if` handler fills one in, and it
+// must be able to do that without importing this module. Its fragment fields
+// are core.EmitFragmentRef (an opaque `any`); asFragment below converts them
+// back to *EmitFragment, which is the one place that knows the concrete type.
 
 // RecordBranch records an `if` dispatch: condition (pre-evaluated,
 // list-form fragment, or statically known), the captured arm
@@ -2643,10 +2634,20 @@ func (es *EmitState) stripZeroOutPhantoms(stk []core.Value) []core.Value {
 	return kept
 }
 
-func (es *EmitState) RecordBranch(b BranchRecord) {
+// asFragment converts core's opaque fragment handle back to this package's
+// concrete fragment. The assertion lives HERE, in the package that owns the
+// type — that is the whole point of the seam. A nil or foreign ref yields nil,
+// which every arm below already treats as "not captured".
+func asFragment(ref core.EmitFragmentRef) *EmitFragment {
+	f, _ := ref.(*EmitFragment)
+	return f
+}
+
+func (es *EmitState) RecordBranch(b core.BranchRecord) {
 	if !es.Active() {
 		return
 	}
+	bThen, bEls, bCondFrag := asFragment(b.Then), asFragment(b.Els), asFragment(b.CondFrag)
 	// Strip 0-output statement guards' phantom (None) results from the arm
 	// residuals BEFORE any counting. A nested both-arms-void `if` (the welford
 	// `if … [set … s] [if … [set … s] []]` shape) registers a phantom result the
@@ -2687,8 +2688,8 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	// Condition.
 	if b.ConstCond == nil {
 		switch {
-		case b.CondFrag != nil:
-			if fragDiverges(b.CondFrag) || len(b.CondStk) == 0 {
+		case bCondFrag != nil:
+			if fragDiverges(bCondFrag) || len(b.CondStk) == 0 {
 				es.MarkUncompilable("if: condition body produces no value")
 				return
 			}
@@ -2697,7 +2698,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				es.MarkUncompilable("if: condition result of unknown provenance")
 				return
 			}
-			ev.br.condFrag, ev.br.condOut = b.CondFrag, op
+			ev.br.condFrag, ev.br.condOut = bCondFrag, op
 		default:
 			condOp, ok := es.resolveOperand(b.Cond)
 			if !ok {
@@ -2713,12 +2714,12 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	// run time — a trailing residual arg over it is a conditional apply.
 	mayBeFn := false
 	if b.ConstCond != nil {
-		out, has, ok := resolveArm(b.Then, b.ThenStk, "taken")
+		out, has, ok := resolveArm(bThen, b.ThenStk, "taken")
 		if !ok {
 			return
 		}
-		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, out, has
-	} else if !b.HasElse && (len(b.ThenStk) == 0 || fragDiverges(b.Then)) {
+		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = bThen, out, has
+	} else if !b.HasElse && (len(b.ThenStk) == 0 || fragDiverges(bThen)) {
 		// 2-arg if (no else) whose then produces 0 values — a 0-value word
 		// (raise/set/printstr) or a diverging arm (break/continue/raise): the
 		// if produces 0 values on BOTH paths (true→0/diverge, false→0), so it
@@ -2727,11 +2728,11 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		// zeroOut: the lowerer emits no slot, and Finalize skips the (phantom
 		// None) result it still registers below — the registration is kept so
 		// RecordCall's double-record guard still elides this if dispatch.
-		if b.Then == nil {
+		if bThen == nil {
 			es.MarkUncompilable("if: then-branch not captured")
 			return
 		}
-		ev.br.then, ev.br.hasThenOut = b.Then, false
+		ev.br.then, ev.br.hasThenOut = bThen, false
 		zeroOut = true
 	} else {
 		var hasThen bool
@@ -2765,11 +2766,11 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				ev.br.thenIsVal, ev.br.thenVal, ev.br.hasThenOut, hasThen = true, op, true, true
 			}
 		} else {
-			thenOut, h, ok := resolveArm(b.Then, b.ThenStk, "then")
+			thenOut, h, ok := resolveArm(bThen, b.ThenStk, "then")
 			if !ok {
 				return
 			}
-			ev.br.then, ev.br.thenOut, ev.br.hasThenOut, hasThen = b.Then, thenOut, h, h
+			ev.br.then, ev.br.thenOut, ev.br.hasThenOut, hasThen = bThen, thenOut, h, h
 		}
 		if b.HasElse {
 			if b.ElsValue != nil {
@@ -2819,11 +2820,11 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 					ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
 				}
 			} else {
-				elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
+				elsOut, hasEls, ok := resolveArm(bEls, b.ElsStk, "else")
 				if !ok {
 					return
 				}
-				ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
+				ev.br.els, ev.br.elsOut, ev.br.hasElsOut = bEls, elsOut, hasEls
 				if !hasThen && !hasEls {
 					// Both arms produce 0 values — an empty `[]`, a 0-value word
 					// (set/printstr), or a diverging break/continue/raise on BOTH
@@ -2879,7 +2880,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 // [c]`); or either arm's own result is itself variadic (a nested variadic if).
 // Over-marking is sound (it only refuses external fixed-arity consumption); a
 // diverging arm never reaches the merge, so it does not count toward a mismatch.
-func (es *EmitState) branchVariadicResult(b BranchRecord) bool {
+func (es *EmitState) branchVariadicResult(b core.BranchRecord) bool {
 	thenN, elsN := len(b.ThenStk), len(b.ElsStk)
 	if b.ConstCond != nil {
 		// Only the taken (then) arm is inlined; its result IS the branch result.
@@ -2891,8 +2892,9 @@ func (es *EmitState) branchVariadicResult(b BranchRecord) bool {
 	if thenN > 1 || elsN > 1 {
 		return true
 	}
-	thenDiv := b.Then != nil && fragDiverges(b.Then)
-	elsDiv := b.Els != nil && fragDiverges(b.Els)
+	thenFrag, elsFrag := asFragment(b.Then), asFragment(b.Els)
+	thenDiv := thenFrag != nil && fragDiverges(thenFrag)
+	elsDiv := elsFrag != nil && fragDiverges(elsFrag)
 	// A diverging arm (raise / break / continue / tail) never reaches the
 	// merge, so the surviving arm's count is unconditional. A runtime-variable
 	// 0-or-1 result therefore arises only from a count MISMATCH between two
@@ -2922,7 +2924,7 @@ func (es *EmitState) armOutVariadic(stk []core.Value) bool {
 // condition body (lowered inline), or a const / local / type cond (pushed). A
 // statically-known (const-folded) condition is handled by the disjoint
 // const-cond path, never here.
-func computedArmCondOK(b BranchRecord, cond EmitOperand) bool {
+func computedArmCondOK(b core.BranchRecord, cond EmitOperand) bool {
 	if b.ConstCond != nil {
 		return false
 	}
@@ -3303,7 +3305,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 	es.fnArm = true
 	finish = func(bodyStk []core.Value) {
 		resume()
-		rec.frag = es.TakeFragment()
+		rec.frag = asFragment(es.TakeFragment())
 		// forceOrder mirrors Finalize's program-residual promotion for THIS
 		// unit: when the residual is out of order (an event result above an
 		// inert bottom), every residual event is promoted to a frame local so
@@ -3863,7 +3865,8 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []core.Valu
 // dispatch's result carrier — registered so the dispatch isn't
 // re-recorded, and marked VARIADIC at lowering, so only the program
 // residual may absorb the accumulation.
-func (es *EmitState) RecordLoop(start, end, step core.Value, body *EmitFragment, bodyStk []core.Value, iterID string, out core.Value, regionN int, pos core.SrcPos) {
+func (es *EmitState) RecordLoop(start, end, step core.Value, bodyRef core.EmitFragmentRef, bodyStk []core.Value, iterID string, out core.Value, regionN int, pos core.SrcPos) {
+	body := asFragment(bodyRef)
 	if !es.Active() {
 		return
 	}

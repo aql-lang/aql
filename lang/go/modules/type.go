@@ -3,7 +3,8 @@ package modules
 import (
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -458,7 +459,7 @@ var typeModuleNatives = []native.NativeFunc{
 				for _, k := range bf.Keys() {
 					vb, _ := bf.Get(k)
 					if existing, ok := newFields.Get(k); ok {
-						unified, uok := eng.Unify(existing, vb)
+						unified, uok := core.Unify(existing, vb)
 						if !uok {
 							return nil, r.BoruError("type_error",
 								fmt.Sprintf("TypeUtil.merge: field %q cannot unify (%s vs %s)", k, existing.String(), vb.String()), "merge")
@@ -625,7 +626,7 @@ var typeModuleNatives = []native.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				// eng.CommonAncestorType uses pointer identity, but
+				// check.CommonAncestorType uses pointer identity, but
 				// latticeNode returns &v of a stack-local Value copy —
 				// pointers don't match canonical kernel nodes. Walk by
 				// ID instead.

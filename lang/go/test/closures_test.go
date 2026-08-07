@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -28,7 +30,7 @@ func intResult(t *testing.T, vals []native.Value) int64 {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(vals), vals)
 	}
-	n, err := eng.AsInteger(vals[0])
+	n, err := core.AsInteger(vals[0])
 	if err != nil {
 		t.Fatalf("expected Integer, got %s: %v", vals[0].Parent.String(), err)
 	}
@@ -160,7 +162,7 @@ func TestClosureTopLevelFnHasNoCaptures(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(out))
 	}
-	fnDef, ok := out[0].Data.(eng.FnDefInfo)
+	fnDef, ok := out[0].Data.(core.FnDefInfo)
 	if !ok {
 		t.Fatalf("payload type = %T, want FnDefInfo", out[0].Data)
 	}
@@ -182,7 +184,7 @@ func TestClosureInnerFnHasCaptures(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(out))
 	}
-	fnDef, ok := out[0].Data.(eng.FnDefInfo)
+	fnDef, ok := out[0].Data.(core.FnDefInfo)
 	if !ok {
 		t.Fatalf("payload type = %T, want FnDefInfo", out[0].Data)
 	}
@@ -192,7 +194,7 @@ func TestClosureInnerFnHasCaptures(t *testing.T) {
 	if fnDef.Captured[0].Name != "x" {
 		t.Errorf("captured name = %q, want x", fnDef.Captured[0].Name)
 	}
-	n, _ := eng.AsInteger(fnDef.Captured[0].Value)
+	n, _ := core.AsInteger(fnDef.Captured[0].Value)
 	if n != 5 {
 		t.Errorf("captured x = %d, want 5", n)
 	}
@@ -212,7 +214,7 @@ func TestClosureParamShadowsCapture(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(out), out)
 	}
-	s, err := eng.AsString(out[0])
+	s, err := core.AsString(out[0])
 	if err != nil {
 		t.Fatalf("expected String, got %s: %v", out[0].Parent.String(), err)
 	}
@@ -280,7 +282,7 @@ add5 3`
 	if !v.Carrier {
 		t.Errorf("expected carrier in check mode, got %v", v)
 	}
-	if !v.Parent.Equal(eng.TInteger) {
+	if !v.Parent.Equal(core.TInteger) {
 		t.Errorf("carrier Parent = %s, want Integer (capture flowed through factory→def→call)", v.Parent.String())
 	}
 }
@@ -301,21 +303,21 @@ func TestClosureCheckModeAnalyseFnBodyUsesCaptures(t *testing.T) {
 	defer func() { reg.Check.Mode = false }()
 
 	// Body: x add 1 — references captured x, no params.
-	body := []eng.Value{
-		eng.NewWord("x"),
-		eng.NewWord("add"),
-		eng.NewInteger(1),
+	body := []core.Value{
+		core.NewWord("x"),
+		core.NewWord("add"),
+		core.NewInteger(1),
 	}
-	captures := []eng.CapturedBinding{
-		{Name: "x", Value: eng.NewCarrier(eng.TInteger)},
+	captures := []core.CapturedBinding{
+		{Name: "x", Value: core.NewCarrier(core.TInteger)},
 	}
 
-	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, captures, nil, false)
+	result := check.AnalyseFnBody(reg, "test", nil, body, nil, captures, nil, false)
 	if len(result) != 1 {
 		t.Fatalf("got %d residual values, want 1: %v", len(result), result)
 	}
 	v := result[0]
-	if !v.Parent.Equal(eng.TInteger) {
+	if !v.Parent.Equal(core.TInteger) {
 		t.Errorf("residual Parent = %s, want Integer (capture flowed through)", v.Parent.String())
 	}
 
@@ -345,13 +347,13 @@ func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
 	reg.Check.Mode = true
 	defer func() { reg.Check.Mode = false }()
 
-	body := []eng.Value{
-		eng.NewWord("x"),
-		eng.NewWord("add"),
-		eng.NewInteger(1),
+	body := []core.Value{
+		core.NewWord("x"),
+		core.NewWord("add"),
+		core.NewInteger(1),
 	}
 	// Same body, no captures — x is undefined in body's scope.
-	eng.AnalyseFnBody(reg, "test", nil, body, nil, nil, nil, false)
+	check.AnalyseFnBody(reg, "test", nil, body, nil, nil, nil, false)
 
 	foundUndefinedX := false
 	for _, d := range reg.Check.Diagnostics {
@@ -382,10 +384,10 @@ func TestClosureArgsStaysDynamic(t *testing.T) {
 	}
 	// captured-lam was invoked with no args, so its `args` should
 	// be an empty list — not outer's [42].
-	if !out[0].Parent.Equal(eng.TList) {
+	if !out[0].Parent.Equal(core.TList) {
 		t.Fatalf("expected list, got %s", out[0].Parent.String())
 	}
-	lst, _ := eng.AsList(out[0])
+	lst, _ := core.AsList(out[0])
 	if lst.Len() != 0 {
 		t.Errorf("args inside captured fn = %s, want empty (its own call args, not outer's)", out[0].String())
 	}

@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -113,7 +115,7 @@ var typeNatives = []NativeFunc{
 			Args:     []*Type{TAny},
 			TypeArgs: map[int]bool{0: true},
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{eng.PathOf(args[0])}, nil
+				return []Value{core.PathOf(args[0])}, nil
 			}),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
@@ -232,7 +234,7 @@ var typeNatives = []NativeFunc{
 	},
 	// `tor` (disjunct union) and `tand` (intersection) — type-level
 	// connective words. Algorithm primitives live in eng
-	// (eng.TorHandler / eng.TandHandler / eng.TandValues); the
+	// (core.TorHandler / core.TandHandler / core.TandValues); the
 	// registrations here own the names and dispatch wiring.
 	{
 		Name:          "tor",
@@ -241,8 +243,8 @@ var typeNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
-			Impl:          Go(eng.TorHandler),
-			ReturnsFn:     eng.TorReturnsFn,
+			Impl:          Go(core.TorHandler),
+			ReturnsFn:     core.TorReturnsFn,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
@@ -253,14 +255,14 @@ var typeNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
-			Impl:          Go(eng.TandHandler),
-			ReturnsFn:     eng.TandReturnsFn,
+			Impl:          Go(core.TandHandler),
+			ReturnsFn:     core.TandReturnsFn,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	// `tnot` (type negation / complement) — closes the type algebra
 	// under Boolean operations. `tnot T` matches v iff v does not match
-	// T. Algorithm lives in eng (eng.TnotHandler / eng.NegateType).
+	// T. Algorithm lives in eng (core.TnotHandler / core.NegateType).
 	{
 		Name:          "tnot",
 		CompileEffect: CompileIslandPure,
@@ -268,8 +270,8 @@ var typeNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:          []*Type{TAny},
 			BarrierPos:    -1,
-			Impl:          Go(eng.TnotHandler),
-			ReturnsFn:     eng.TnotReturnsFn,
+			Impl:          Go(core.TnotHandler),
+			ReturnsFn:     core.TnotReturnsFn,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
@@ -413,7 +415,7 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		// for base, so any user-installed Behavior on base (via
 		// `behave`) propagates to the LCA walk for sibling subtypes
 		// downstream. The prefab carries no Name; the paired `def`
-		// recognises it (eng.IsRefinePrefab) and renames-and-binds.
+		// recognises it (core.IsRefinePrefab) and renames-and-binds.
 		anon := r.Types.MintRefinePrefab(CanonicalType(r, &base))
 		return []Value{NewTypeLiteral(anon)}, nil
 	}
@@ -497,7 +499,7 @@ func installIdeals(r *Registry) {
 		recordTypeInitErr(fmt.Errorf("native_type: define BinarySpec: %w", err))
 		return
 	}
-	r.Ideals.Register(&eng.Ideal{
+	r.Ideals.Register(&core.Ideal{
 		Name:    "BinarySpec",
 		Enabled: true,
 		Accepts: func(v Value) bool { return IsBareTypeNode(v) && v.Equal(bspec) },
@@ -614,7 +616,7 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 // bodies (records, predicates, disjuncts) and plain values refuse with
 // as_error rather than silently ascribing something dispatch cannot walk.
 func asTargetType(r *Registry, t Value) (*Type, error) {
-	if !eng.IsTypeLiteral(t) {
+	if !core.IsTypeLiteral(t) {
 		return nil, r.BoruErrorHint("as_error",
 			"as needs a type to dispatch as, got "+t.String(),
 			"as", "spell the target type by name: value as FlexMap")
@@ -642,7 +644,7 @@ func asValidate(r *Registry, target *Type, v Value) error {
 				" — as widens dispatch only",
 			"as", "ascribe an ancestor of the value's own type; to construct a subtype use def x:"+name+" instead")
 	}
-	if eng.IsTypeLiteral(v) || v.Parent == nil {
+	if core.IsTypeLiteral(v) || v.Parent == nil {
 		return refuse()
 	}
 	if v.Dynamic {
@@ -688,15 +690,15 @@ func asHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 // before any consumer dispatches on it).
 func asReturns(args []Value, r *Registry) []Value {
 	degrade := func(err error) []Value {
-		if eng.CheckAtUncaughtTopLevel(r) {
+		if check.CheckAtUncaughtTopLevel(r) {
 			code, detail := "as_error", err.Error()
-			var ae *eng.BoruError
+			var ae *core.BoruError
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "as", args[1].Pos())
+			check.CheckAddUniqueDiagnostic(r, code, detail, "as", args[1].Pos())
 		}
-		return []Value{eng.NewDynamicCarrier(TAny)}
+		return []Value{core.NewDynamicCarrier(TAny)}
 	}
 	target, terr := asTargetType(r, args[0])
 	if terr != nil {
@@ -709,9 +711,9 @@ func asReturns(args []Value, r *Registry) []Value {
 	if v.Dynamic && !v.Parent.ConformsTo(target) {
 		// Gradually admitted: statically all that is known post-as is
 		// "conforms to target" (the runtime validation guarantees it).
-		c := eng.NewCarrier(target)
+		c := core.NewCarrier(target)
 		c.SetAscribed(target)
-		return []Value{eng.WithPos(c, v)}
+		return []Value{core.WithPos(c, v)}
 	}
 	out := v
 	out.SetAscribed(target)
@@ -736,7 +738,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// bare-refine bodies have Data==nil so they already route through
 	// the b.Data==nil branch below; only Object/Table bodies need
 	// this redirect.
-	if (IsClassType(b) || IsTableType(b) || eng.IsMicronType(b)) && b.Parent != nil {
+	if (IsClassType(b) || IsTableType(b) || core.IsMicronType(b)) && b.Parent != nil {
 		latticeNode := b.Parent
 		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
 	}
@@ -839,7 +841,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			return []Value{NewBoolean(true)}, nil
 		}
 	}
-	unified, ok := eng.UnifyR(a, b, r)
+	unified, ok := core.UnifyR(a, b, r)
 	if !ok {
 		return []Value{NewBoolean(false)}, nil
 	}
@@ -1034,7 +1036,7 @@ func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 }
 
 // torHandler, torReturnsFn, tandHandler: moved to eng/go/core_boolean.go.
-// tand's `tall` reduction (below) calls eng.TandValues directly.
+// tand's `tall` reduction (below) calls core.TandValues directly.
 
 // ---- tany / tall ----
 
@@ -1320,11 +1322,11 @@ func convertScalarReturns(args []Value, r *Registry) []Value {
 		args[1].Parent != nil && args[1].Parent.ConformsTo(TFloat) && ValueType(args[0]) != nil {
 		switch {
 		case ValueType(args[0]).ConformsTo(TBigInteger):
-			eng.CheckAddUniqueDiagnostic(r, "convert_error",
+			check.CheckAddUniqueDiagnostic(r, "convert_error",
 				"convert: cannot convert Float to BigInteger (a binary Float is inexact; convert to Integer first)",
 				"convert", args[1].Pos())
 		case ValueType(args[0]).ConformsTo(TBigDecimal):
-			eng.CheckAddUniqueDiagnostic(r, "convert_error",
+			check.CheckAddUniqueDiagnostic(r, "convert_error",
 				"convert: cannot convert Float to BigDecimal (a binary Float is already rounded; build the BigDecimal from a String or the 0d literal)",
 				"convert", args[1].Pos())
 		}
@@ -1539,13 +1541,13 @@ func convertIdealHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	t := ValueType(target)
 	switch {
 	case t.Equal(TMap):
-		m, err := eng.ConvertIdealToMap(src)
+		m, err := core.ConvertIdealToMap(src)
 		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return nil, r.BoruError("convert_error", "convert to Map: "+err.Error(), "convert")
 		}
 		return []Value{m}, nil
 	case t.Equal(TList):
-		l, err := eng.ConvertIdealToList(src)
+		l, err := core.ConvertIdealToList(src)
 		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return nil, r.BoruError("convert_error", "convert to List: "+err.Error(), "convert")
 		}

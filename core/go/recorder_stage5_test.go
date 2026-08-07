@@ -134,6 +134,16 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 	if _, ok := e.SplitEventRegionBind("n", Value{}); ok {
 		t.Fatal("inactive SplitEventRegionBind must decline")
 	}
+	// TakeFragment / RecordBranch / RecordLoop are the group that lets a word
+	// library outside compiler (basic's if / case / for) record control flow
+	// without naming *compiler.EmitState. A nil fragment is the honest inactive
+	// answer — there is nothing to hand back — and the two recorders drop their
+	// records, which is what "no compiler linked, runs interpreted" means.
+	if frag := e.TakeFragment(); frag != nil {
+		t.Fatalf("inactive TakeFragment must be nil, got %v", frag)
+	}
+	e.RecordBranch(BranchRecord{})
+	e.RecordLoop(Value{}, Value{}, Value{}, nil, nil, "iter", Value{}, 0, SrcPos{})
 	if e.RecordInterpXml(XmlTmpl{}, nil, Value{}, SrcPos{}) {
 		t.Fatal("inactive RecordInterpXml must decline")
 	}

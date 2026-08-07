@@ -10,7 +10,7 @@ import (
 
 	"github.com/boru-lang/boru/cmd/go/internal/command"
 	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 type cmd struct{}

@@ -14,30 +14,31 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '8611477980658612148');
-INSERT INTO input_files VALUES ('../AGENTS.md', '3431707151627853843', 9106);
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '1795584580289389003');
+INSERT INTO input_files VALUES ('../AGENTS.md', '3639440694240945864', 9586);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
-INSERT INTO input_files VALUES ('../README.md', '4007682936187334400', 11951);
-INSERT INTO input_files VALUES ('../basic/go/go.mod', '4772013590321139641', 461);
-INSERT INTO input_files VALUES ('../calc/go/go.mod', '2259875794928783937', 584);
+INSERT INTO input_files VALUES ('../README.md', '5494549853626060108', 12217);
+INSERT INTO input_files VALUES ('../basic/go/go.mod', '2972491875848958804', 562);
+INSERT INTO input_files VALUES ('../calc/go/go.mod', '8123838604180080966', 605);
 INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221);
-INSERT INTO input_files VALUES ('../cmd/go/go.mod', '3805820403446162774', 4008);
+INSERT INTO input_files VALUES ('../cmd/go/go.mod', '1168351960312314743', 4184);
 INSERT INTO input_files VALUES ('../compiler/go/go.mod', '142593282390199928', 331);
 INSERT INTO input_files VALUES ('../core/go/go.mod', '2316996521694161686', 98);
-INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '9175434319202237811', 3095);
-INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2710686247634158461', 16764);
+INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
+INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '7142639343639143644', 20171);
 INSERT INTO input_files VALUES ('../design/LANG-ENG-CONTENT-AUDIT.0.md', '4534620810048850672', 42667);
 INSERT INTO input_files VALUES ('../design/checker-compiler-completeness-review.0.md', '5862232790816677050', 39943);
 INSERT INTO input_files VALUES ('../editors/tree-sitter/bindings/go/go.mod', '8359550297204300245', 134);
-INSERT INTO input_files VALUES ('../eng/go/go.mod', '4972365014831577544', 555);
-INSERT INTO input_files VALUES ('../go.work', '6220935540429242625', 517);
-INSERT INTO input_files VALUES ('../lang/go/go.mod', '7239260611813850986', 2148);
-INSERT INTO input_files VALUES ('../test/go/go.mod', '1913162748224177686', 2395);
+INSERT INTO input_files VALUES ('../eng/go/go.mod', '957440270513375970', 683);
+INSERT INTO input_files VALUES ('../go.work', '4924620830580584237', 530);
+INSERT INTO input_files VALUES ('../lang/go/go.mod', '2619999066487741686', 2423);
+INSERT INTO input_files VALUES ('../parser/go/go.mod', '3554763054779601734', 350);
+INSERT INTO input_files VALUES ('../test/go/go.mod', '7400423513495145622', 2503);
 INSERT INTO input_files VALUES ('../test/solardemo/go.mod', '8784937342672483810', 59);
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '1909195114285173430', 2582);
-INSERT INTO input_files VALUES ('<go tree: modules + packages>', '8051012087205118093', 505);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '6129020650546848020', 19247);
+INSERT INTO input_files VALUES ('<go tree: modules + packages>', '4995374428202383702', 501);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '4756635367327217245', 19386);
 INSERT INTO sources VALUES ('src:agents', 'text', 'AGENTS.md', 'AGENTS.md agent guide', NULL, 'agents-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -100,6 +101,10 @@ INSERT INTO sources VALUES ('src:gomod:lang-go', 'text', 'lang/go/go.mod', 'lang
   "derived_from": "code",
   "repository": "boru-lang/boru"
 }');
+INSERT INTO sources VALUES ('src:gomod:parser-go', 'text', 'parser/go/go.mod', 'parser/go go.mod', NULL, 'gomod-parser-go', 'primary', '{
+  "derived_from": "code",
+  "repository": "boru-lang/boru"
+}');
 INSERT INTO sources VALUES ('src:gomod:test-go', 'text', 'test/go/go.mod', 'test/go go.mod', NULL, 'gomod-test-go', 'primary', '{
   "derived_from": "code",
   "repository": "boru-lang/boru"
@@ -131,7 +136,7 @@ INSERT INTO entity_attributes VALUES ('ent:Concept:6094411313845087998', 'role',
 INSERT INTO entities VALUES ('ent:Concept:7376417356888575267', 'Concept', 'Executable language spec', 'executable language spec', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:1344160336771235777', 'Document', 'EXPLANATION.md', 'explanation.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:203047846460430642', 'Document', 'design/DECLARATIVE-GRAMMAR.0.md', 'design/declarative-grammar.0.md', 'accepted');
-INSERT INTO entity_attributes VALUES ('ent:Document:203047846460430642', 'role', 'the shared declarative tabnas grammar artifact (eng/go/parser/grammar.json): contract, loader pair, and the batch-migration state');
+INSERT INTO entity_attributes VALUES ('ent:Document:203047846460430642', 'role', 'the shared declarative tabnas grammar artifact (parser/go/grammar.json): contract, loader pair, and the batch-migration state');
 INSERT INTO entities VALUES ('ent:Document:3080274854606714513', 'Document', 'ADR.md', 'adr.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:3294415633888265368', 'Document', 'design/checker-compiler-completeness-review.0.md', 'design/checker-compiler-completeness-review.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:3294415633888265368', 'role', 'the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work');
@@ -148,6 +153,7 @@ INSERT INTO entities VALUES ('ent:Document:5292060467150439417', 'Document', 'NU
 INSERT INTO entities VALUES ('ent:Document:6176355086953937469', 'Document', 'TUTORIAL.md', 'tutorial.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:6369673620858945660', 'Document', 'eng/go/CLAUDE.md', 'eng/go/claude.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:7770110494347118706', 'Document', 'lang/go/CLAUDE.md', 'lang/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:9071667555031388966', 'Document', 'parser/go/CLAUDE.md', 'parser/go/claude.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Organization:8832543031059216933', 'Organization', 'boru-lang', 'boru-lang', 'accepted');
 INSERT INTO entities VALUES ('ent:Product:2046405728378673079', 'Product', 'kg knowledge-graph pipeline', 'kg knowledge-graph pipeline', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:2046405728378673079', 'path', 'kg');
@@ -292,16 +298,16 @@ INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6698255711474724668', 
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6698255711474724668', 'parent_module', 'eng/go');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6698255711474724668', 'path', 'eng/go/specfix');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6698255711474724668', 'unit', 'go-package');
+INSERT INTO entities VALUES ('ent:SoftwareModule:6706536563979604982', 'SoftwareModule', 'parser/go module', 'parser/go module', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6706536563979604982', 'go_module', 'github.com/boru-lang/boru/parser/go');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6706536563979604982', 'path', 'parser/go');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6706536563979604982', 'unit', 'go-module');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6706536563979604982', 'workspace_member', 'true');
 INSERT INTO entities VALUES ('ent:SoftwareModule:6880687338933514154', 'SoftwareModule', 'compiler/go module', 'compiler/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6880687338933514154', 'go_module', 'github.com/boru-lang/boru/compiler/go');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6880687338933514154', 'path', 'compiler/go');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6880687338933514154', 'unit', 'go-module');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:6880687338933514154', 'workspace_member', 'true');
-INSERT INTO entities VALUES ('ent:SoftwareModule:7232631394529101208', 'SoftwareModule', 'eng/go/parser package', 'eng/go/parser package', 'accepted');
-INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7232631394529101208', 'go_module', 'github.com/boru-lang/boru/eng/go');
-INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7232631394529101208', 'parent_module', 'eng/go');
-INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7232631394529101208', 'path', 'eng/go/parser');
-INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7232631394529101208', 'unit', 'go-package');
 INSERT INTO entities VALUES ('ent:SoftwareModule:7327774866203707838', 'SoftwareModule', 'tools/piecetool module', 'tools/piecetool module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7327774866203707838', 'go_module', 'github.com/boru-lang/boru/tools/piecetool');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7327774866203707838', 'path', 'tools/piecetool');
@@ -339,6 +345,8 @@ INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:927371487649425292', '
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:927371487649425292', 'unit', 'go-package');
 INSERT INTO assertions VALUES ('ast:1048763594130214961', 'ent:SoftwareModule:591370078981669488', 'part_of', 'entity', 'ent:SoftwareModule:5138375578915662736', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1048763594130214961', 'src:go-tree', 'test/go/engspec', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:1126534628156470241', 'ent:SoftwareModule:5138375578915662736', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:1126534628156470241', 'src:gomod:test-go', 'require block', 'github.com/boru-lang/boru/parser/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:1200607522753691950', 'ent:Document:5105101056062860425', 'supports', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1200607522753691950', 'src:coverage-parity', 'The contract', 'eng proves itself with its OWN suite, on both implementations.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:128749266603685013', 'ent:SoftwareModule:6698255711474724668', 'part_of', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -349,12 +357,14 @@ INSERT INTO assertions VALUES ('ast:1374144917814367558', 'ent:Concept:385439590
 INSERT INTO assertion_evidence VALUES ('ast:1374144917814367558', 'src:readme', 'intro', 'Underneath, boru is concatenative: words can equally take their arguments from a value stack', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1529088506745454642', 'ent:SoftwareModule:6880687338933514154', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1529088506745454642', 'src:go-work', 'use block', './compiler/go', 'rule', 'kg-gomod');
-INSERT INTO assertions VALUES ('ast:159294682051184291', 'ent:SoftwareModule:7232631394529101208', 'part_of', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:159294682051184291', 'src:go-tree', 'eng/go/parser', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:1536707264993433580', 'ent:SoftwareModule:4559967244660037230', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:1536707264993433580', 'src:gomod:basic-go', 'require block', 'github.com/boru-lang/boru/parser/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:1731838044320190440', 'ent:Product:9122085017676103232', 'part_of', 'entity', 'ent:SoftwareModule:4361728672720029650', NULL, NULL, NULL, NULL, 0.97, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1731838044320190440', 'src:readme', 'Repository layout', 'cmd/go/ | The boru CLI / REPL', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1778398845817128450', 'ent:SoftwareModule:4629987360876655630', 'part_of', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1778398845817128450', 'src:go-tree', 'lang/go/native', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:1803749198783100155', 'ent:SoftwareModule:5919856352625365594', 'depends_on', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:1803749198783100155', 'src:gomod:calc-go', 'require block', 'github.com/boru-lang/boru/core/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:1910960561653111690', 'ent:SoftwareModule:4765954660468613608', 'part_of', 'entity', 'ent:SoftwareModule:5138375578915662736', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1910960561653111690', 'src:go-tree', 'test/go/cliexamples', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:2099674608751247787', 'ent:SoftwareModule:5138375578915662736', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -371,6 +381,8 @@ INSERT INTO assertions VALUES ('ast:2308356135508106004', 'ent:Document:52920604
 INSERT INTO assertion_evidence VALUES ('ast:2308356135508106004', 'src:readme', 'Documentation', 'Non-Uniformity Register | You want the recorded deviations from the language''s uniform rules, each pending, resolved, or explicitly allowed.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2313048313946518913', 'ent:Product:8635404738244704660', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2313048313946518913', 'src:agents', 'Repository layout', 'utils/ | A coreutils subset written in boru — real programs that prove the CLI story (argv, exit codes, streams, baked permissions).', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:2321418037316607481', 'ent:SoftwareModule:5919856352625365594', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:2321418037316607481', 'src:gomod:calc-go', 'require block', 'github.com/boru-lang/boru/parser/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:2457753349338579625', 'ent:Document:4990200910103175455', 'supports', 'entity', 'ent:Product:9122085017676103232', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2457753349338579625', 'src:readme', 'Documentation', 'CLI Reference | You want to drive the boru binary from the shell.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2510153559955756366', 'ent:Concept:7376417356888575267', 'part_of', 'entity', 'ent:Product:5770789618934008141', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -389,8 +401,12 @@ INSERT INTO assertions VALUES ('ast:3002920817860690706', 'ent:SoftwareModule:82
 INSERT INTO assertion_evidence VALUES ('ast:3002920817860690706', 'src:gomod:lang-go', 'require block', 'github.com/boru-lang/boru/basic/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:303023300656590935', 'ent:Document:1344160336771235777', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:303023300656590935', 'src:readme', 'Documentation', 'Explanation | You want to understand why boru is the way it is.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:311117795035296475', 'ent:SoftwareModule:8275629451197117420', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:311117795035296475', 'src:gomod:lang-go', 'require block', 'github.com/boru-lang/boru/parser/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:314582934812456120', 'ent:Document:3904106568037504161', 'mentions', 'entity', 'ent:Concept:5837115061456563631', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:314582934812456120', 'src:agents', 'First: let the tool document itself', 'Before grepping source or guessing a word''s signature, ask the binary.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:3178522596510652426', 'ent:SoftwareModule:6706536563979604982', 'depends_on', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:3178522596510652426', 'src:gomod:parser-go', 'require block', 'github.com/boru-lang/boru/core/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3211344478610580799', 'ent:Concept:3854395902791518463', 'related_to', 'entity', 'ent:Concept:4587555710592773395', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3211344478610580799', 'src:readme', 'Forward arguments', 'the defining feature of the surface syntax is forward arguments', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3438862149494160814', 'ent:SoftwareModule:4589894982256403754', 'part_of', 'entity', 'ent:SoftwareModule:4361728672720029650', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -403,6 +419,8 @@ INSERT INTO assertions VALUES ('ast:3656929081728712135', 'ent:SoftwareModule:73
 INSERT INTO assertion_evidence VALUES ('ast:3656929081728712135', 'src:go-work', 'use block', './tools/piecetool', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3727255686445494517', 'ent:SoftwareModule:3568378724923050340', 'part_of', 'entity', 'ent:SoftwareModule:5138375578915662736', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3727255686445494517', 'src:go-tree', 'test/go/specgen', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:3820981091835606929', 'ent:SoftwareModule:4361728672720029650', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:3820981091835606929', 'src:gomod:cmd-go', 'require block', 'github.com/boru-lang/boru/parser/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3940080421122549792', 'ent:Document:203047846460430642', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3940080421122549792', 'src:decl-grammar', 'title', 'DECLARATIVE-GRAMMAR.0 — one grammar artifact for both parser twins', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4109835522011898628', 'ent:Concept:3854395902791518463', 'has_attribute', 'literal', NULL, '"typed, word-based query language"', 'String', NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -413,10 +431,6 @@ INSERT INTO assertions VALUES ('ast:4193417245179262389', 'ent:SoftwareModule:42
 INSERT INTO assertion_evidence VALUES ('ast:4193417245179262389', 'src:gomod:eng-go', 'require block', 'github.com/boru-lang/boru/compiler/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4235718707717393125', 'ent:SoftwareModule:4648368824093240216', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4235718707717393125', 'src:go-tree', 'editors/tree-sitter/bindings/go/go.mod', NULL, 'rule', 'kg-gomod');
-INSERT INTO assertions VALUES ('ast:4246743912190855526', 'ent:Document:203047846460430642', 'supports', 'entity', 'ent:SoftwareModule:7232631394529101208', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:4246743912190855526', 'src:decl-grammar', 'The contract', 'eng/go/parser/grammar.json is the single source of the boru grammar''s STRUCTURE, loaded by both parsers', 'direct_record', 'kg-ingest');
-INSERT INTO assertions VALUES ('ast:43073348279127577', 'ent:SoftwareModule:4559967244660037230', 'depends_on', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:43073348279127577', 'src:gomod:basic-go', 'require block', 'github.com/boru-lang/boru/eng/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4367944145334365650', 'ent:SoftwareModule:4559967244660037230', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4367944145334365650', 'src:go-work', 'use block', './basic/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4503779949059601989', 'ent:SoftwareModule:425341189454841366', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/eng/go"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -425,6 +439,8 @@ INSERT INTO assertions VALUES ('ast:4539802379148808939', 'ent:Document:30802748
 INSERT INTO assertion_evidence VALUES ('ast:4539802379148808939', 'src:readme', 'Documentation', 'Architecture Design Record | You want the key architectural decisions and the reasoning behind them.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:459410346719323347', 'ent:Document:520435226487613788', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:459410346719323347', 'src:readme', 'Repository layout', 'Internal design notes and proposals.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:4649598326942754342', 'ent:SoftwareModule:425341189454841366', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:4649598326942754342', 'src:gomod:eng-go', 'require block', 'github.com/boru-lang/boru/parser/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4713193859377278200', 'ent:SoftwareModule:5128065373905771552', 'part_of', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4713193859377278200', 'src:go-tree', 'eng/go/stackform', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4722992453068743762', 'ent:SoftwareModule:6880687338933514154', 'depends_on', 'entity', 'ent:SoftwareModule:559301050642427014', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -435,14 +451,14 @@ INSERT INTO assertions VALUES ('ast:4932254227310747047', 'ent:SoftwareModule:68
 INSERT INTO assertion_evidence VALUES ('ast:4932254227310747047', 'src:gomod:compiler-go', 'module directive', 'module github.com/boru-lang/boru/compiler/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4950098273738144333', 'ent:SoftwareModule:4598127138166596702', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/test/solardemo"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4950098273738144333', 'src:gomod:test-solardemo', 'module directive', 'module github.com/boru-lang/boru/test/solardemo', 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:5214003688923155039', 'ent:SoftwareModule:6706536563979604982', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:5214003688923155039', 'src:go-work', 'use block', './parser/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:5245330609796646290', 'ent:SoftwareModule:425341189454841366', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5245330609796646290', 'src:go-work', 'use block', './eng/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:534808747601329006', 'ent:Document:6369673620858945660', 'supports', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:534808747601329006', 'src:agents', 'Working in the code', 'Engine kernel — types, values, signatures, matching, the step loop, the parser bridge | eng/go/CLAUDE.md', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5359122693730754691', 'ent:SoftwareModule:6519065918608370232', 'part_of', 'entity', 'ent:SoftwareModule:4192460694199531608', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5359122693730754691', 'src:go-tree', 'wpg/wasm', NULL, 'rule', 'kg-gomod');
-INSERT INTO assertions VALUES ('ast:5461764103129372658', 'ent:SoftwareModule:4361728672720029650', 'depends_on', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:5461764103129372658', 'src:gomod:cmd-go', 'require block', 'github.com/boru-lang/boru/eng/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:5532600402363181981', 'ent:Document:7770110494347118706', 'supports', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5532600402363181981', 'src:agents', 'Working in the code', 'Language layer — native words, modules, registry, help/describe, capabilities | lang/go/CLAUDE.md', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5555847556064706927', 'ent:SoftwareModule:4192460694199531608', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -491,8 +507,6 @@ INSERT INTO assertions VALUES ('ast:758093515468550172', 'ent:Product:8635404738
 INSERT INTO assertion_evidence VALUES ('ast:758093515468550172', 'src:readme', 'Repository layout', 'real programs, built with boru build', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7616275222305495199', 'ent:SoftwareModule:8650101979302333988', 'part_of', 'entity', 'ent:SoftwareModule:4361728672720029650', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:7616275222305495199', 'src:go-tree', 'cmd/go/boru', NULL, 'rule', 'kg-gomod');
-INSERT INTO assertions VALUES ('ast:7632576821794974106', 'ent:SoftwareModule:5919856352625365594', 'depends_on', 'entity', 'ent:SoftwareModule:425341189454841366', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:7632576821794974106', 'src:gomod:calc-go', 'require block', 'github.com/boru-lang/boru/eng/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:7661116843982840438', 'ent:Product:5770789618934008141', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:7661116843982840438', 'src:readme', 'Repository layout', 'lang/spec/ | Engine spec TSV files (the language''s executable spec).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7825661200694944199', 'ent:SoftwareModule:4361728672720029650', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -501,6 +515,10 @@ INSERT INTO assertions VALUES ('ast:7828550185343127', 'ent:Document:41634898136
 INSERT INTO assertion_evidence VALUES ('ast:7828550185343127', 'src:agents', 'header', 'New to the repo? Skim README.md first.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7875690729105221344', 'ent:Concept:3854395902791518463', 'related_to', 'entity', 'ent:Concept:4841193570246608846', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:7875690729105221344', 'src:readme', 'intro', 'words can equally take their arguments from a value stack, which is what makes point-free pipelines compose', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:7916954283464366890', 'ent:SoftwareModule:4559967244660037230', 'depends_on', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:7916954283464366890', 'src:gomod:basic-go', 'require block', 'github.com/boru-lang/boru/core/go v0.0.0', 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:7998841693250995627', 'ent:SoftwareModule:4559967244660037230', 'depends_on', 'entity', 'ent:SoftwareModule:559301050642427014', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:7998841693250995627', 'src:gomod:basic-go', 'require block', 'github.com/boru-lang/boru/check/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:8143463681370129906', 'ent:SoftwareModule:4192460694199531608', 'depends_on', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8143463681370129906', 'src:gomod:wpg', 'require block', 'github.com/boru-lang/boru/lang/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:8189213360333637896', 'ent:Product:4976123614970806523', 'part_of', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -525,12 +543,16 @@ INSERT INTO assertions VALUES ('ast:8927535347315204632', 'ent:Concept:609441131
 INSERT INTO assertion_evidence VALUES ('ast:8927535347315204632', 'src:cli-md', 'The vault', 'HTTP wire protocol for secret provision', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8933845283517661039', 'ent:SoftwareModule:8376380866775607244', 'part_of', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8933845283517661039', 'src:go-tree', 'lang/go/formatter', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:8955705768046061429', 'ent:Document:203047846460430642', 'supports', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:8955705768046061429', 'src:decl-grammar', 'The contract', 'parser/go/grammar.json is the single source of the boru grammar''s STRUCTURE, loaded by both parsers', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:897358123486782210', 'ent:Document:3294415633888265368', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:897358123486782210', 'src:completeness-review', 'title', 'Type checker + bytecode compiler — completeness review', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8982543179606202117', 'ent:SoftwareModule:8275629451197117420', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8982543179606202117', 'src:go-work', 'use block', './lang/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:8989313594377163134', 'ent:SoftwareModule:2224184413468547100', 'part_of', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8989313594377163134', 'src:go-tree', 'lang/go/test', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:9059850742711593788', 'ent:SoftwareModule:6706536563979604982', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/parser/go"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:9059850742711593788', 'src:gomod:parser-go', 'module directive', 'module github.com/boru-lang/boru/parser/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:9138469699059997665', 'ent:SoftwareModule:4559967244660037230', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/basic/go"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:9138469699059997665', 'src:gomod:basic-go', 'module directive', 'module github.com/boru-lang/boru/basic/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:914658451831503592', 'ent:Document:6176355086953937469', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);

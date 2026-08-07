@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Seam-9 coverage (W9_nativeC) for native_bytes.go: the pack/unpack
@@ -111,11 +111,11 @@ func TestW9DecodeSegsErrorArms(t *testing.T) {
 	}
 }
 
-// init() export closure: eng.ToNative of a Bytes-typed value whose payload
+// init() export closure: core.ToNative of a Bytes-typed value whose payload
 // is not []byte declines via the !ok arm (44.11,46.5).
 func TestW9BytesBridgeExportDeclines(t *testing.T) {
-	foreign := eng.NewValueRaw(TBytes, &TimeoutInfo{})
-	if out, ok := eng.ToNative(foreign).([]byte); ok {
+	foreign := core.NewValueRaw(TBytes, &TimeoutInfo{})
+	if out, ok := core.ToNative(foreign).([]byte); ok {
 		t.Fatalf("ToNative(Bytes with foreign payload) = %v, want decline", out)
 	}
 }

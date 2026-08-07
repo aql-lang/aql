@@ -1,6 +1,8 @@
 package native
 
-import "github.com/boru-lang/boru/eng/go"
+import (
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // printNatives covers `print` — the one output word that stays in core so
 // basic output needs no import. `print` writes its argument's formatted
@@ -15,7 +17,7 @@ var printNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny},
-			Impl:    Go(eng.PrintHandler),
+			Impl:    Go(core.PrintHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},

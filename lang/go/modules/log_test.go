@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // fixedLogClock freezes time so emitted record timestamps are
@@ -34,7 +34,7 @@ func newLogReg(t *testing.T) (*native.Registry, *bytes.Buffer) {
 	return reg, &buf
 }
 
-func runLog(t *testing.T, reg *native.Registry, src string) []eng.Value {
+func runLog(t *testing.T, reg *native.Registry, src string) []core.Value {
 	t.Helper()
 	vals, err := parser.Parse(src)
 	if err != nil {

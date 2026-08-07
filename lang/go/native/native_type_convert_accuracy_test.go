@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Coverage for the opt-in Float → BigDecimal conversion: the pure
@@ -163,7 +163,7 @@ func runConvertAccuracy(t *testing.T, src string) string {
 	if err != nil {
 		return "ERR:" + err.Error()
 	}
-	return eng.Canon(out)
+	return core.Canon(out)
 }
 
 func TestConvertAccuracyHandlerPaths(t *testing.T) {

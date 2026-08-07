@@ -15,7 +15,7 @@ import {
   newList,
   sugarExpansion,
 } from './index.ts'
-import { indexDecl, newType } from './type.ts'
+import { indexDecl, newType } from '@voxgig/borucore'
 
 function boundRegistry(): Registry {
   const r = new Registry()

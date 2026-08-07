@@ -3,7 +3,7 @@ package modules
 import (
 	"math/big"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/itchyny/gojq"
 	"github.com/ohler55/ojg/jp"
@@ -54,7 +54,7 @@ func docToAny(v native.Value) any {
 	default:
 		// Other Ideals (Store, …) project to a map; everything else (scalars)
 		// falls through to the standard conversion.
-		if mv, err := eng.ConvertIdealToMap(v); err == nil {
+		if mv, err := core.ConvertIdealToMap(v); err == nil {
 			if m, e2 := native.AsMap(mv); e2 == nil && m != nil && m.Len() > 0 {
 				out := make(map[string]any, m.Len())
 				for _, k := range m.Keys() {
@@ -71,7 +71,7 @@ func docToAny(v native.Value) any {
 // idealListToAny projects an Ideal (Array, Table, …) to a []any via its
 // IdealConverter list projection.
 func idealListToAny(v native.Value) any {
-	lv, err := eng.ConvertIdealToList(v)
+	lv, err := core.ConvertIdealToList(v)
 	if err != nil {
 		return native.ValueToAny(v)
 	}

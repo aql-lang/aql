@@ -25,38 +25,38 @@ func TestStartFnCompileEmptyParamNames(t *testing.T) {
 func TestRecordBranchRefusals(t *testing.T) {
 	// condFrag present but empty stack → refuse.
 	es := NewEmitState()
-	es.RecordBranch(BranchRecord{CondFrag: &EmitFragment{}, CondStk: nil})
+	es.RecordBranch(core.BranchRecord{CondFrag: &EmitFragment{}, CondStk: nil})
 	if es.Compilable {
 		t.Fatal("empty condition body should refuse")
 	}
 	// condFrag result unresolvable.
 	es = NewEmitState()
-	es.RecordBranch(BranchRecord{CondFrag: &EmitFragment{}, CondStk: []core.Value{carrierVal(core.TInteger)}})
+	es.RecordBranch(core.BranchRecord{CondFrag: &EmitFragment{}, CondStk: []core.Value{carrierVal(core.TInteger)}})
 	if es.Compilable {
 		t.Fatal("unresolvable condition result should refuse")
 	}
 	// default cond unresolvable.
 	es = NewEmitState()
-	es.RecordBranch(BranchRecord{Cond: carrierVal(core.TInteger)})
+	es.RecordBranch(core.BranchRecord{Cond: carrierVal(core.TInteger)})
 	if es.Compilable {
 		t.Fatal("unresolvable condition should refuse")
 	}
 	// const-cond with an uncaptured then arm.
 	es = NewEmitState()
 	tru := true
-	es.RecordBranch(BranchRecord{ConstCond: &tru, Then: nil})
+	es.RecordBranch(core.BranchRecord{ConstCond: &tru, Then: nil})
 	if es.Compilable {
 		t.Fatal("uncaptured taken arm should refuse")
 	}
 	// then VALUE unresolvable (else-form).
 	es = NewEmitState()
-	es.RecordBranch(BranchRecord{Cond: core.NewInteger(1), HasElse: true, ThenValue: ptrVal(carrierVal(core.TInteger))})
+	es.RecordBranch(core.BranchRecord{Cond: core.NewInteger(1), HasElse: true, ThenValue: ptrVal(carrierVal(core.TInteger))})
 	if es.Compilable {
 		t.Fatal("unresolvable then value should refuse")
 	}
 	// else VALUE unresolvable.
 	es = NewEmitState()
-	es.RecordBranch(BranchRecord{Cond: core.NewInteger(1), HasElse: true, ThenValue: ptrVal(core.NewInteger(2)), ElsValue: ptrVal(carrierVal(core.TInteger))})
+	es.RecordBranch(core.BranchRecord{Cond: core.NewInteger(1), HasElse: true, ThenValue: ptrVal(core.NewInteger(2)), ElsValue: ptrVal(carrierVal(core.TInteger))})
 	if es.Compilable {
 		t.Fatal("unresolvable else value should refuse")
 	}

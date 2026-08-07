@@ -4,7 +4,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestMapFunctionAccess verifies that a function stored in a plain map

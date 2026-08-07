@@ -3,7 +3,6 @@ module github.com/boru-lang/boru/cmd/go
 go 1.24.7
 
 require (
-	github.com/boru-lang/boru/eng/go v0.0.0
 	github.com/boru-lang/boru/lang/go v0.0.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -20,6 +19,9 @@ require (
 
 require (
 	github.com/boru-lang/boru/basic/go v0.0.0 // indirect
+	github.com/boru-lang/boru/check/go v0.0.0 // indirect
+	github.com/boru-lang/boru/compiler/go v0.0.0 // indirect
+	github.com/boru-lang/boru/core/go v0.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 )
 
@@ -27,6 +29,7 @@ require (
 	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/boru-lang/boru/parser/go v0.0.0
 	github.com/catppuccin/go v0.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
@@ -84,8 +87,6 @@ require (
 	modernc.org/sqlite v1.46.1 // indirect
 )
 
-replace github.com/boru-lang/boru/eng/go => ../../eng/go
-
 replace github.com/boru-lang/boru/basic/go => ../../basic/go
 
 replace github.com/boru-lang/boru/lang/go => ../../lang/go
@@ -95,3 +96,5 @@ replace github.com/boru-lang/boru/core/go => ../../core/go
 replace github.com/boru-lang/boru/check/go => ../../check/go
 
 replace github.com/boru-lang/boru/compiler/go => ../../compiler/go
+
+replace github.com/boru-lang/boru/parser/go => ../../parser/go

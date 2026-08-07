@@ -3,8 +3,8 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestMembershipGoBoruParity is the convergence proof: a type defined in
@@ -34,7 +34,7 @@ func TestMembershipGoBoruParity(t *testing.T) {
 
 	// Go path: the same rule as a Go predicate, minted into the same
 	// registry via the host helper.
-	posGo := r.Types.MintMemberType("PosGo", eng.TInteger, func(v Value) bool {
+	posGo := r.Types.MintMemberType("PosGo", core.TInteger, func(v Value) bool {
 		n, err := v.AsConcreteInteger()
 		return err == nil && n > 10
 	})

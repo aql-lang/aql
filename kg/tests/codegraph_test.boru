@@ -32,7 +32,8 @@ def graph
 
 def core (KgQuery.code-unit-by-path graph "core/go")
 def eng (KgQuery.code-unit-by-path graph "eng/go")
-def parser (KgQuery.code-unit-by-path graph "eng/go/parser")
+def parser (KgQuery.code-unit-by-path graph "parser/go")
+def old-parser (KgQuery.code-unit-by-path graph "eng/go/parser")
 
 [(((KgQuery.modules graph) size) gt 0) true Assert.equal]
 "the graph knows its modules" Test.test end
@@ -46,23 +47,31 @@ def parser (KgQuery.code-unit-by-path graph "eng/go/parser")
 "an unknown path answers none — which is the answer to 'is it a module?'"
 Test.test end
 
-# The question this whole exercise came from. The graph now answers it
-# positively (parser exists, and it is a package inside eng/go) rather
-# than by absence.
+# The question this whole exercise came from. The graph answers it
+# positively (the parser exists, and the graph says what KIND of unit it
+# is) rather than by absence. The answer itself changed when the parser
+# was cut out of the kernel into its own top-level module — which is
+# exactly the kind of move a code-derived graph is supposed to track
+# without anyone editing prose.
 [((parser is None)) false Assert.equal]
-"eng/go/parser is in the graph" Test.test end
-[(KgQuery.unit-of parser) "go-package" Assert.equal]
-"eng/go/parser is a package" Test.test end
+"parser/go is in the graph" Test.test end
+[(KgQuery.unit-of parser) "go-module" Assert.equal]
+"parser/go is a module, not a package" Test.test end
+[((old-parser is None)) true Assert.equal]
+"eng/go/parser is gone — the cut is visible in the graph, not just the tree"
+Test.test end
 [(KgQuery.unit-of core) "go-module" Assert.equal]
 "core/go is a module" Test.test end
-[((filter [eq parser.id]
+[(((filter [eq parser.id]
               (each [dot id] (KgQuery.modules graph))
           )
           size
       )
-      0 Assert.equal
+      gt 0
+   )
+      true Assert.equal
   ]
-"eng/go/parser is NOT among the modules" Test.test end
+"parser/go IS among the modules" Test.test end
 
 # -- direction ------------------------------------------------------------
 #
@@ -91,9 +100,9 @@ end
 [(((KgQuery.dependents-of graph core.id) size) gt 0) true Assert.equal]
 "but things depend ON core/go" Test.test end
 [(names (KgQuery.dependencies-of graph eng.id))
-      ["check/go" "compiler/go" "core/go"] Assert.equal
+      ["check/go" "compiler/go" "core/go" "parser/go"] Assert.equal
   ]
-"eng/go depends on check, compiler and core" Test.test end
+"eng/go depends on check, compiler, core and parser" Test.test end
 [((filter [eq "core/go"]
               (names (KgQuery.dependents-of graph eng.id))
           )
@@ -138,7 +147,7 @@ def json-size ((StructUtil.jsonify graph) size)
 [(((md size) mul 4) lt json-size) true Assert.equal]
 "…and by a wide margin — it is the read path, not a second copy"
 Test.test end
-[(StringUtil.contains "eng/go/parser" md) true Assert.equal]
+[(StringUtil.contains "lang/go/modules" md) true Assert.equal]
 "the projection names the packages" Test.test end
 [(StringUtil.contains
           "depends on: check/go, compiler/go, core/go" md

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // The end-to-end debugger transcripts live with the CLI entry
@@ -126,7 +126,7 @@ func TestDataStackSnapshotFallback(t *testing.T) {
 	// A retained snapshot reconstructs the resolved region, markers
 	// filtered, and clamps a pointer beyond the snapshot.
 	s.curStack = []native.Value{
-		native.NewInteger(6), eng.NewOpenParen(), native.NewInteger(0),
+		native.NewInteger(6), core.NewOpenParen(), native.NewInteger(0),
 	}
 	s.curPointer = 99
 	vals, ok := s.dataStack()
@@ -166,8 +166,8 @@ func TestRowLabel(t *testing.T) {
 }
 
 func TestLiveFrameDepth(t *testing.T) {
-	meta := &eng.FnFrameMeta{Name: "f"}
-	openF, openP, closeP := eng.NewFrameOpen(meta), eng.NewOpenParen(), eng.NewCloseParen()
+	meta := &core.FnFrameMeta{Name: "f"}
+	openF, openP, closeP := core.NewFrameOpen(meta), core.NewOpenParen(), core.NewCloseParen()
 	val := native.NewInteger(1)
 	if got := liveFrameDepth(nil, 0); got != 0 {
 		t.Errorf("empty = %d", got)
@@ -494,9 +494,9 @@ func TestLineAtOutOfRange(t *testing.T) {
 // ── liveFrames ──────────────────────────────────────────────────────────
 
 func TestLiveFramesEdges(t *testing.T) {
-	meta := &eng.FnFrameMeta{Name: "f", InstallNames: []string{"x"}}
-	openF := eng.NewFrameOpen(meta)
-	closeP := eng.NewCloseParen()
+	meta := &core.FnFrameMeta{Name: "f", InstallNames: []string{"x"}}
+	openF := core.NewFrameOpen(meta)
+	closeP := core.NewCloseParen()
 	val := native.NewInteger(1)
 
 	// A frame whose close paren sits before the pointer is not live.
@@ -513,17 +513,17 @@ func TestLiveFramesEdges(t *testing.T) {
 		t.Errorf("clamped scan must still find the live frame; got %v", got)
 	}
 	// Negative: a meta-less frame open (defensive) contributes nothing.
-	if got := liveFrames([]native.Value{eng.NewFrameOpen(nil)}, 1); len(got) != 0 {
+	if got := liveFrames([]native.Value{core.NewFrameOpen(nil)}, 1); len(got) != 0 {
 		t.Errorf("a nil-meta frame must be skipped; got %v", got)
 	}
 	// Negative: a plain grouping paren is not a frame.
-	if got := liveFrames([]native.Value{eng.NewOpenParen(), val}, 2); len(got) != 0 {
+	if got := liveFrames([]native.Value{core.NewOpenParen(), val}, 2); len(got) != 0 {
 		t.Errorf("a plain paren must not appear; got %v", got)
 	}
 	// Nested parens: the frame's close is the DEPTH-MATCHED one — an inner
 	// group's close must not be mistaken for it.
 	nested := []native.Value{
-		openF, eng.NewOpenParen(), val, closeP, val, eng.NewCloseParen(),
+		openF, core.NewOpenParen(), val, closeP, val, core.NewCloseParen(),
 	}
 	if got := liveFrames(nested, 5); len(got) != 1 || got[0].name != "f" {
 		t.Errorf("inner close must not close the frame; got %v", got)

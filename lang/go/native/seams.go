@@ -31,8 +31,8 @@ var newSubRegistry = DefaultRegistry
 // owns that round-trip guarantee, not this package.
 var structConvert = anyToValue
 
-// newEngRegistry seams eng.NewRegistry for the kernel-init error arm of
-// DefaultRegistryWithPolicy (setup.go) — eng.NewRegistry fails only on
+// newEngRegistry seams core.NewRegistry for the kernel-init error arm of
+// DefaultRegistryWithPolicy (setup.go) — core.NewRegistry fails only on
 // an init-time builtin-table error, which is unreachable from here.
 var newEngRegistry = NewRegistry
 

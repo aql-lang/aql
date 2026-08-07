@@ -28,7 +28,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // parseRegRow is the module-parse.tsv:14 shape — grammar built by builder
@@ -94,7 +94,7 @@ func TestParseFnDispatchMissParity(t *testing.T) {
 	if codeOf(errC) != "parse_error" || codeOf(errI) != "parse_error" {
 		t.Fatalf("miss parity: compiled=[%s] interp=[%s], want both parse_error", codeOf(errC), codeOf(errI))
 	}
-	var aeC, aeI *eng.BoruError
+	var aeC, aeI *core.BoruError
 	if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
 		t.Fatalf("non-Boru error: compiled=%v interp=%v", errC, errI)
 	}
@@ -224,7 +224,7 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 		if codeOf(errC) != "signature_error" || codeOf(errI) != "signature_error" {
 			t.Fatalf("%s: compiled=[%s] interp=[%s], want both signature_error", c.name, codeOf(errC), codeOf(errI))
 		}
-		var aeC, aeI *eng.BoruError
+		var aeC, aeI *core.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
 			t.Fatalf("%s: non-Boru error: compiled=%v interp=%v", c.name, errC, errI)
 		}
@@ -241,7 +241,7 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 // normalising the incidental value-rendering non-determinism the two
 // engines legitimately have (counter-based IDs) — the diagnostic
 // STRUCTURE is what parity requires.
-func diagNotesEqual(a, b *eng.BoruError) bool {
+func diagNotesEqual(a, b *core.BoruError) bool {
 	if len(a.Notes) != len(b.Notes) {
 		return false
 	}

@@ -1,4 +1,4 @@
-// Embedded XML literals — the TS twin of eng/go/parser/xml_literal.go
+// Embedded XML literals — the TS twin of parser/go/xml_literal.go
 // (the REFERENCE; port function-by-function). The xml_literal lex
 // matcher, when armed by the xml rule's BO (rule.k["boru_xml"]), scans
 // the whole balanced `<tag …>…</tag>` element and emits ONE #XML token
@@ -8,8 +8,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { Value, XmlTmpl, XmlElement, InterpSegment, XmlChildTmpl } from '../value.ts'
-import { newXml, newXmlInterp } from '../value.ts'
+import type { Value, XmlTmpl, XmlElement, InterpSegment, XmlChildTmpl } from '@voxgig/borucore'
+import { newXml, newXmlInterp } from '@voxgig/borucore'
 import { XmlElemVal } from './nodes.ts'
 import type { ParserTokens } from './grammar.ts'
 import { parse } from './convert.ts'

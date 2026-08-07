@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 	eng "github.com/boru-lang/boru/eng/go"
 )
 
@@ -104,9 +106,9 @@ func sharedMutableKind(v Value) string {
 // the raw token list (interpreted) or the BoruImpl body carried by a
 // compiled fn-value (the shape runParallelBranch unwraps via RunUnit).
 func branchTokens(elem Value) []Value {
-	if fd, ok := elem.Data.(eng.FnDefInfo); ok {
+	if fd, ok := elem.Data.(core.FnDefInfo); ok {
 		for i := range fd.Signatures {
-			if a, isBoru := fd.Signatures[i].Impl.(*eng.BoruImpl); isBoru {
+			if a, isBoru := fd.Signatures[i].Impl.(*core.BoruImpl); isBoru {
 				return a.Body
 			}
 		}
@@ -234,7 +236,7 @@ func branchSharingViolation(r *Registry, elems []Value) (string, string) {
 					}
 				}
 				for i := range fd.Signatures {
-					if a, isBoru := fd.Signatures[i].Impl.(*eng.BoruImpl); isBoru {
+					if a, isBoru := fd.Signatures[i].Impl.(*core.BoruImpl); isBoru {
 						work = append(work, a.Body)
 					}
 				}
@@ -319,19 +321,19 @@ func makeBranchForks(r *Registry, elems []Value) ([]*Registry, error) {
 // pattern) and runs via RunUnit on the fork; a raw list runs as an
 // interpreter sub-program; anything else is returned as a single value.
 func runParallelBranch(reg *Registry, elem Value) parallelResult {
-	if fd, ok := elem.Data.(eng.FnDefInfo); ok {
+	if fd, ok := elem.Data.(core.FnDefInfo); ok {
 		for i := range fd.Signatures {
-			ref := eng.CompiledRef(&fd.Signatures[i])
+			ref := compiler.CompiledRef(&fd.Signatures[i])
 			if ref == nil || ref.Prog == nil {
 				continue
 			}
 			effectsAt := reg.Effects.Count()
 			result, runErr := eng.RunUnit(ref, reg, nil)
-			if eng.IsInternalError(runErr) && reg.Effects.Count() == effectsAt {
+			if core.IsInternalError(runErr) && reg.Effects.Count() == effectsAt {
 				// A VM soundness bail with NO observable effect: re-run the raw
 				// tokens on the interpreter, exactly as the branch would have run
 				// without the stamp (the C1 fence — see InvokeCallback).
-				if a, isBoru := fd.Signatures[i].Impl.(*eng.BoruImpl); isBoru {
+				if a, isBoru := fd.Signatures[i].Impl.(*core.BoruImpl); isBoru {
 					return interpretBranchBody(reg, a.Body)
 				}
 			}

@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -52,10 +54,10 @@ import (
 // direct application. Params are authored (not legacy Args) because a
 // constructed Function value compiles through compileFnDef, which
 // derives the forward barrier from len(Params).
-func goFn(name string, arity int, handler eng.Handler) native.Value {
-	params := make([]eng.FnParam, arity)
+func goFn(name string, arity int, handler core.Handler) native.Value {
+	params := make([]core.FnParam, arity)
 	for i := range params {
-		params[i] = eng.FnParam{Type: native.TAny}
+		params[i] = core.FnParam{Type: native.TAny}
 	}
 	sig := native.Signature{
 		Params:     params,
@@ -78,7 +80,7 @@ func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native
 	}
 	for i := range fnInfo.Signatures {
 		s := &fnInfo.Signatures[i]
-		if gi, isGo := s.Impl.(*eng.GoImpl); isGo && gi.Handler != nil && len(s.Params) == len(args) {
+		if gi, isGo := s.Impl.(*core.GoImpl); isGo && gi.Handler != nil && len(s.Params) == len(args) {
 			res, err := gi.Handler(args, nil, nil, r)
 			if err != nil {
 				return native.Value{}, err
@@ -95,7 +97,7 @@ func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native
 	}
 	// InvokeCallback runs a compiled codec body on the VM (nested in the live run,
 	// or fresh on an idle connection fork) and falls back to CallBoru otherwise.
-	res, err := eng.InvokeCallback(r, sig, args, fnInfo.Captured)
+	res, err := core.InvokeCallback(r, sig, args, fnInfo.Captured)
 	if err != nil {
 		return native.Value{}, err
 	}
@@ -134,16 +136,16 @@ func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, 
 	// bodies — returning the value unchanged, so behaviour is byte-identical
 	// on every decline. Stamp BEFORE the client-side defaulting below so a
 	// symmetric codec's aliases share one stamped clone (one compile, not two).
-	dec, _ = eng.StampFnValue(r, dec)
-	enc, _ = eng.StampFnValue(r, enc)
+	dec, _ = compiler.StampFnValue(r, dec)
+	enc, _ = compiler.StampFnValue(r, enc)
 	cf.decode, cf.encode = dec, enc
 	if v, ok := get("encode-req"); ok {
-		cf.encodeReq, _ = eng.StampFnValue(r, v)
+		cf.encodeReq, _ = compiler.StampFnValue(r, v)
 	} else {
 		cf.encodeReq = enc
 	}
 	if v, ok := get("decode-resp"); ok {
-		cf.decodeResp, _ = eng.StampFnValue(r, v)
+		cf.decodeResp, _ = compiler.StampFnValue(r, v)
 	} else {
 		cf.decodeResp = dec
 	}
@@ -311,7 +313,7 @@ func dispatchDecoded(r *native.Registry, svc native.Value, msg native.Value, pee
 		}
 	}
 	if err != nil {
-		var ae *eng.BoruError
+		var ae *core.BoruError
 		code, detail := "error", err.Error()
 		if errors.As(err, &ae) {
 			code, detail = ae.Code, ae.Detail
@@ -328,7 +330,7 @@ func dispatchDecoded(r *native.Registry, svc native.Value, msg native.Value, pee
 }
 
 func isNoMatch(err error) bool {
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	return errors.As(err, &ae) && ae.Code == "no_match"
 }
 
@@ -577,7 +579,7 @@ func makeLinesCodec() native.Value {
 	encode := func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		var text string
 		v := args[0]
-		if s, err := eng.AsString(v); err == nil {
+		if s, err := core.AsString(v); err == nil {
 			text = s
 		} else if mp, _ := native.AsMap(v); mp != nil {
 			if lv, ok := mp.Get("line"); ok {
@@ -867,7 +869,7 @@ func renderHTTPBody(v native.Value) ([]byte, string) {
 	if b, ok := native.AsBytesValue(v); ok {
 		return b, "application/octet-stream"
 	}
-	if s, err := eng.AsString(v); err == nil {
+	if s, err := core.AsString(v); err == nil {
 		return []byte(s), "text/plain; charset=utf-8"
 	}
 	if !native.IsConcrete(v) {

@@ -6,7 +6,10 @@ import (
 	"strconv"
 	"time"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 	eng "github.com/boru-lang/boru/eng/go"
+
 	"github.com/boru-lang/boru/lang/go/native/internal/patrun"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
@@ -20,7 +23,7 @@ import (
 // `spawn`.
 //
 // Message-passing semantics (deliberate divergences noted):
-//   - Messages are DEEP-COPIED at `send` (eng.CloneValue): plain List/Map
+//   - Messages are DEEP-COPIED at `send` (core.CloneValue): plain List/Map
 //     payloads ARE mutated in place by `set` in today's boru, so zero-copy
 //     sharing across goroutines (the PROCESSES.0.md §6 aspiration) is not
 //     yet safe for containers. Scalars, Bytes, and handles still share
@@ -125,10 +128,10 @@ func checkProcessPolicy(r *Registry) error {
 }
 
 // procRuntime returns the registry's shared process runtime, creating one
-// defensively for registries not built by eng.NewRegistry (test fixtures).
-func procRuntime(r *Registry) *eng.ProcessRuntime {
+// defensively for registries not built by core.NewRegistry (test fixtures).
+func procRuntime(r *Registry) *core.ProcessRuntime {
 	if r.Procs == nil {
-		r.Procs = eng.NewProcessRuntime()
+		r.Procs = core.NewProcessRuntime()
 	}
 	return r.Procs
 }
@@ -137,12 +140,12 @@ func procRuntime(r *Registry) *eng.ProcessRuntime {
 // lazily creating the implicit main process for a top-level registry (so a
 // top-level program can `self`/`receive` replies from actors it spawned —
 // the PROCESSES.0.md §10 shape).
-func ensureSelfProc(r *Registry) (*eng.Process, error) {
+func ensureSelfProc(r *Registry) (*core.Process, error) {
 	if r.Proc != nil {
 		return r.Proc, nil
 	}
 	rt := procRuntime(r)
-	p := eng.NewProcess(rt, eng.DefaultMailboxBound, eng.OverflowBlock)
+	p := core.NewProcess(rt, core.DefaultMailboxBound, core.OverflowBlock)
 	if err := rt.Insert(p); err != nil {
 		return nil, r.BoruError("process_error", "process runtime is shut down", "self")
 	}
@@ -158,10 +161,10 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// CompiledFnRef (CompileStoresBody); an interpreted / refused body arrives as
 	// a raw code-list. Run the former via RunUnit on the fork, the latter via a
 	// fresh interpreter sub-engine.
-	var compiledRef *eng.CompiledFnRef
-	if fd, ok := args[0].Data.(eng.FnDefInfo); ok {
+	var compiledRef *compiler.CompiledFnRef
+	if fd, ok := args[0].Data.(core.FnDefInfo); ok {
 		for i := range fd.Signatures {
-			if ref := eng.CompiledRef(&fd.Signatures[i]); ref != nil && ref.Prog != nil {
+			if ref := compiler.CompiledRef(&fd.Signatures[i]); ref != nil && ref.Prog != nil {
 				compiledRef = ref
 				break
 			}
@@ -176,8 +179,8 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		tokens = make([]Value, bodyList.Len())
 		copy(tokens, bodyList.Slice())
 	}
-	bound := eng.DefaultMailboxBound
-	overflow := eng.OverflowBlock
+	bound := core.DefaultMailboxBound
+	overflow := core.OverflowBlock
 	if len(args) >= 2 {
 		if opts, _ := AsMap(args[1]); opts != nil {
 			if v, ok := opts.Get("mailbox"); ok {
@@ -190,12 +193,12 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			if v, ok := opts.Get("overflow"); ok {
 				s := ValToString(v)
 				switch s {
-				case eng.OverflowBlock, eng.OverflowFail, eng.OverflowDrop:
+				case core.OverflowBlock, core.OverflowFail, core.OverflowDrop:
 					overflow = s
 				default:
 					return nil, r.BoruError("spawn_error",
 						fmt.Sprintf("spawn: opts.overflow must be %q, %q or %q, got %q",
-							eng.OverflowBlock, eng.OverflowFail, eng.OverflowDrop, s), "spawn")
+							core.OverflowBlock, core.OverflowFail, core.OverflowDrop, s), "spawn")
 				}
 			}
 		}
@@ -207,7 +210,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	fork := r.ForkConcurrent()
 	fork.Output = rt.SyncOutput(r.Output)
 	fork.ErrOutput = rt.SyncOutput(r.ErrOutput)
-	p := eng.NewProcess(rt, bound, overflow)
+	p := core.NewProcess(rt, bound, overflow)
 	fork.Proc = p
 	if err := rt.Insert(p); err != nil {
 		return nil, r.BoruError("spawn_error", "spawn: process runtime is shut down", "spawn")
@@ -247,7 +250,7 @@ func selfHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 
 // resolveSendTarget resolves a Pid / registered-name target. A dead or
 // unknown target returns nil — `send` is fire-and-forget (BEAM semantics).
-func resolveSendTarget(r *Registry, v Value) *eng.Process {
+func resolveSendTarget(r *Registry, v Value) *core.Process {
 	if p, ok := asPid(v); ok {
 		return p
 	}
@@ -264,21 +267,21 @@ func resolveSendTarget(r *Registry, v Value) *eng.Process {
 // at the boundary); Store / Object / Table / Flex nodes are refused.
 func sendableViolation(v Value) string {
 	switch d := v.Data.(type) {
-	case *eng.StoreInstanceInfo:
+	case *core.StoreInstanceInfo:
 		return "Store"
-	case eng.ClassInstanceInfo:
+	case core.ClassInstanceInfo:
 		return "Object"
-	case eng.TableData:
+	case core.TableData:
 		return "Table"
-	case *eng.FlexListData:
+	case *core.FlexListData:
 		return "Flex"
-	case eng.ListPayload:
+	case core.ListPayload:
 		for _, e := range d.Elems {
 			if s := sendableViolation(e); s != "" {
 				return s
 			}
 		}
-	case eng.MapPayload:
+	case core.MapPayload:
 		if d.M != nil {
 			for _, k := range d.M.Keys() {
 				e, _ := d.M.Get(k)
@@ -305,7 +308,7 @@ func sendHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// Deep-copy at the boundary so the receiver can never observe the
 	// sender mutating a shared container (see the file comment).
 	if err := target.Send(CloneValue(msg)); err != nil {
-		if err == eng.ErrMailboxOverload {
+		if err == core.ErrMailboxOverload {
 			return nil, r.BoruError("overload", "send: target mailbox is full", "send")
 		}
 		return nil, r.BoruError("process_error", "send: "+err.Error(), "send")
@@ -351,7 +354,7 @@ func unregisterHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 
 type recvBind struct {
 	name string
-	t    *eng.Type
+	t    *core.Type
 }
 
 type recvClause struct {
@@ -379,7 +382,7 @@ func parseReceiveClauses(r *Registry, list Value) ([]recvClause, *recvAfter, err
 	for i := 0; i < len(elems); i++ {
 		e := elems[i]
 		// `after <ms> [body]` — the timeout clause.
-		if w, ok := e.Data.(eng.WordInfo); ok && w.Name == "after" {
+		if w, ok := e.Data.(core.WordInfo); ok && w.Name == "after" {
 			if i+2 >= len(elems) {
 				return nil, nil, r.BoruError("receive_error", "receive: `after` needs <ms> and [body]", "receive")
 			}
@@ -439,10 +442,10 @@ func splitClausePattern(r *Registry, pat Value) (recvClause, error) {
 		// The clause list is NoEvalArgs (raw), so a type name in the
 		// pattern map arrives as an unevaluated Word — resolve it against
 		// the active type bindings/builtins (`reply: Pid`, `n: Integer`).
-		if w, ok := v.Data.(eng.WordInfo); ok {
+		if w, ok := v.Data.(core.WordInfo); ok {
 			t := r.LookupTypeName(w.Name) // user `def Foo …` type bindings
 			if t == nil {
-				t = eng.TypeNameTable()[w.Name] // builtin / external names (Pid, Integer, …)
+				t = core.TypeNameTable()[w.Name] // builtin / external names (Pid, Integer, …)
 			}
 			if t != nil {
 				c.binds = append(c.binds, recvBind{name: k, t: CanonicalType(r, t)})
@@ -456,8 +459,8 @@ func splitClausePattern(r *Registry, pat Value) (recvClause, error) {
 		case IsConcrete(v) && v.Parent.ConformsTo(TScalar):
 			c.route[k] = ValToString(v)
 		case IsTypeLiteral(v):
-			t := eng.ValueType(v)
-			if t == nil { //covergate:allow IsTypeLiteral(v) implies a bare type node, so eng.ValueType returns a non-nil pointer; the t==nil default cannot fire (§native)
+			t := core.ValueType(v)
+			if t == nil { //covergate:allow IsTypeLiteral(v) implies a bare type node, so core.ValueType returns a non-nil pointer; the t==nil default cannot fire (§native)
 				t = TAny
 			}
 			c.binds = append(c.binds, recvBind{name: k, t: CanonicalType(r, t)})
@@ -557,7 +560,7 @@ type recvBinding struct {
 func runClauseBody(r *Registry, binds []recvBinding, body []Value) ([]Value, error) {
 	names := make([]string, 0, len(binds))
 	for _, b := range binds {
-		eng.InstallFrameBinding(r, b.name, b.val)
+		core.InstallFrameBinding(r, b.name, b.val)
 		names = append(names, b.name)
 	}
 	tokens := make([]Value, len(body))

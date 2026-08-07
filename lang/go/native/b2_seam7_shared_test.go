@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Wave-7 (cluster B2) shared drivers for the *_seam7_test.go coverage

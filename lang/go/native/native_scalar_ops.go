@@ -43,7 +43,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // arithOps is the set of binary arithmetic words this file gives
@@ -279,7 +280,7 @@ func booleanArithHandler(op string) Handler {
 func booleanArithReturns(op string) ReturnsFunc {
 	return func(args []Value, r *Registry) []Value {
 		if atUncaughtTopLevel(r) && len(args) == 2 && IsConcrete(args[0]) && IsConcrete(args[1]) {
-			eng.CheckAddUniqueDiagnostic(r, "type_error", booleanArithDetail(op), op, args[0].Pos())
+			check.CheckAddUniqueDiagnostic(r, "type_error", booleanArithDetail(op), op, args[0].Pos())
 		}
 		return []Value{}
 	}
@@ -310,8 +311,8 @@ func micronBinaryOp(r *Registry, op string, left, right Value) (Value, error) {
 // micronFieldwiseOp applies op field by field over the two primary field
 // maps and rebuilds the result through the kind's single make validator.
 func micronFieldwiseOp(r *Registry, op string, left, right Value) (Value, error) {
-	lf, lerr := eng.AsMicronFields(left)
-	rf, rerr := eng.AsMicronFields(right)
+	lf, lerr := core.AsMicronFields(left)
+	rf, rerr := core.AsMicronFields(right)
 	if lerr != nil || rerr != nil { //covergate:allow only non-Pathon Microns reach here (Pathon is special-cased), and every one carries a MicronPayload, so the projection cannot fail
 		return Value{}, opCrossTypeError(r, op, left, right)
 	}
@@ -341,7 +342,7 @@ func micronFieldwiseOp(r *Registry, op string, left, right Value) (Value, error)
 // field map, routing through the kind's single `make` validator (so an
 // invalid combination surfaces as a loud make error).
 func remakeMicron(r *Registry, kind *Type, fields *OrderedMap) (Value, error) {
-	out, err := eng.MakeScalarHandler([]Value{NewTypeLiteral(kind), NewMap(fields)}, nil, nil, r)
+	out, err := core.MakeScalarHandler([]Value{NewTypeLiteral(kind), NewMap(fields)}, nil, nil, r)
 	if err != nil {
 		return Value{}, err
 	}
@@ -373,8 +374,8 @@ func boruErrorDetail(err error) string {
 func qionOp(r *Registry, op string, left, right Value) (Value, error) {
 	switch op {
 	case "add", "sub":
-		lf, _ := eng.AsMicronFields(left)
-		rf, _ := eng.AsMicronFields(right)
+		lf, _ := core.AsMicronFields(left)
+		rf, _ := core.AsMicronFields(right)
 		lc, _ := lf.Get("code")
 		rc, _ := rf.Get("code")
 		lcs, _ := lc.AsConcreteString()
@@ -418,7 +419,7 @@ func pathonOp(r *Registry, op string, left, right Value) (Value, error) {
 				"drop the leading separator from the right operand")
 		}
 		parts := append(append([]string{}, li.Parts...), ri.Parts...)
-		return eng.NewPathonVol(li.Volume, parts, li.Abs), nil
+		return core.NewPathonVol(li.Volume, parts, li.Abs), nil
 	case "sub":
 		if ri.Abs {
 			return Value{}, r.BoruErrorHint("type_error",
@@ -426,7 +427,7 @@ func pathonOp(r *Registry, op string, left, right Value) (Value, error) {
 				"drop the leading separator from the right operand")
 		}
 		parts := stripSegSuffix(li.Parts, ri.Parts)
-		return eng.NewPathonVol(li.Volume, parts, li.Abs), nil
+		return core.NewPathonVol(li.Volume, parts, li.Abs), nil
 	default:
 		return Value{}, r.BoruErrorHint("type_error",
 			op+": is not defined between two Pathon values — only add (join) and sub (strip trailing segments) are", op,
@@ -575,13 +576,13 @@ func seqReturnType(op string, elem *Type) *Type {
 // mirrorOpError emits err as a check-mode guaranteed-error diagnostic
 // with the byte-identical runtime code and detail (the
 // CheckAddUniqueDiagnostic discipline).
-func mirrorOpError(r *Registry, op string, err error, pos eng.SrcPos) {
+func mirrorOpError(r *Registry, op string, err error, pos core.SrcPos) {
 	code, detail := "type_error", err.Error()
 	var ae *BoruError
 	if errors.As(err, &ae) {
 		code, detail = ae.Code, ae.Detail
 	}
-	eng.CheckAddUniqueDiagnostic(r, code, detail, op, pos)
+	check.CheckAddUniqueDiagnostic(r, code, detail, op, pos)
 }
 
 // seqOpReturns is the check-mode ReturnsFn for the occurrence-package

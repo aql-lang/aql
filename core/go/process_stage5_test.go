@@ -7,6 +7,13 @@ package core
 // self-wake, and explicit cond broadcasts) — never bare sleeps as
 // assertions. Every goroutine started here is joined before the test
 // returns, and every runtime is shut down.
+//
+// The three tests that park a goroutine and wait out waitWithWake's 100ms
+// self-wake are t.Parallel: their cost is WALL CLOCK, not CPU, and each
+// owns its own ProcessRuntime and Process, so they overlap safely (the
+// package's shared counters — markCounter, idState, regIDCounter — are all
+// atomic). They were 0.31s of a 0.71s package run; overlapping them costs
+// nothing and hides the wait. Verified under `go test -race ./...`.
 
 import (
 	"bytes"
@@ -254,6 +261,7 @@ func TestStage5PopFrontImmediatePaths(t *testing.T) {
 }
 
 func TestStage5PopFrontDeadlineTimerExpires(t *testing.T) {
+	t.Parallel()
 	rt := NewProcessRuntime()
 	defer rt.Shutdown()
 
@@ -291,6 +299,7 @@ func TestStage5PopFrontDownRuntime(t *testing.T) {
 // for real with a Send (which broadcasts). The sleep only biases the
 // schedule; the assertions hold under any interleaving.
 func TestStage5PopFrontBlocksUntilSend(t *testing.T) {
+	t.Parallel()
 	rt := NewProcessRuntime()
 	defer rt.Shutdown()
 
@@ -334,6 +343,7 @@ func TestStage5PopFrontBlocksUntilSend(t *testing.T) {
 // 100ms self-wake is the backstop, so the assertions hold under any
 // interleaving; the sleep only biases the schedule toward parking.
 func TestStage5SendBlocksUntilSpace(t *testing.T) {
+	t.Parallel()
 	rt := NewProcessRuntime()
 	defer rt.Shutdown()
 
@@ -386,6 +396,7 @@ func TestStage5SendBlocksUntilSpace(t *testing.T) {
 // else touches this process, so only its own 100ms timer can end the
 // wait — the periodic-wake callback is the deterministic wake path.
 func TestStage5WaitWithWakeSelfTimer(t *testing.T) {
+	t.Parallel()
 	rt := NewProcessRuntime()
 	defer rt.Shutdown()
 	p := NewProcess(rt, 4, OverflowBlock)

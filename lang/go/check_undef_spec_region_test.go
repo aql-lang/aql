@@ -10,7 +10,7 @@ import (
 // `undef` of an ENCLOSING binding inside a SPECULATIVE check region — a
 // skipped error handler, a higher-order body over a possibly-empty
 // collection, an uncalled fn body — must not leak the deletion into the
-// pass model (eng.Registry.SpecUndefBlocked, consulted by the undef
+// pass model (core.Registry.SpecUndefBlocked, consulted by the undef
 // handler; baselines pushed by the rolled-back nested-body run, the
 // fn-body analysis, and the higher-order body analysis).
 func TestUndefInSpeculativeRegionKeepsBinding(t *testing.T) {

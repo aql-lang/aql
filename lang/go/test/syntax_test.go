@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // errorPatterns maps error codes used in syntax.tsv to substrings that must

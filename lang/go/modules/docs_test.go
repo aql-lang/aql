@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestModuleExportDocs asserts that every native-module FUNCTION export has a

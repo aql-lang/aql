@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end coverage for the Tier-2 app runtime (tui_run.go) and the
@@ -214,9 +214,9 @@ func TestTuiRunAlreadyRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 	if reg.Procs == nil {
-		reg.Procs = eng.NewProcessRuntime()
+		reg.Procs = core.NewProcessRuntime()
 	}
-	squatter := eng.NewProcess(reg.Procs, 4, eng.OverflowDrop)
+	squatter := core.NewProcess(reg.Procs, 4, core.OverflowDrop)
 	if err := reg.Procs.Insert(squatter); err != nil {
 		t.Fatal(err)
 	}

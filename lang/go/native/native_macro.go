@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Macro system words. See design/MACROS.8.md and design/MACROS-PHASE1.10.md.
@@ -349,7 +349,7 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	fnDef := FnDefInfo{
 		Signatures: []FnSig{sig},
 		Macro:      true,
-		Captured:   eng.ComputeCaptures(r, &sig),
+		Captured:   core.ComputeCaptures(r, &sig),
 	}
 	// (Re)constructing a macro invalidates any memoized expansions: a
 	// redefined macro must re-expand at its call sites.
@@ -370,9 +370,9 @@ func spliceOutsideMacroHandler(_ []Value, _ map[string]Value, _ []Value, r *Regi
 
 // macroexpandHandler returns the expansion of a macro call as a List, without
 // splicing or running it. args[0] is the raw `(mac operand…)` form (FormArgs);
-// it delegates to the kernel expander via eng.ExpandMacroForm.
+// it delegates to the kernel expander via core.ExpandMacroForm.
 func macroexpandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	toks, err := eng.ExpandMacroForm(r, args[0])
+	toks, err := core.ExpandMacroForm(r, args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -990,7 +990,7 @@ func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool
 	if !r.Check.Compiling || !rec.Active() {
 		return Value{}, false
 	}
-	sig, ok, _ := eng.Cap[*Signature](r, capParseLangFnDispatch)
+	sig, ok, _ := core.Cap[*Signature](r, capParseLangFnDispatch)
 	if !ok || sig == nil {
 		return Value{}, false
 	}

@@ -1,7 +1,7 @@
 package shrink
 
 import (
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
@@ -58,32 +58,32 @@ func ShrinkCost(form *stackform.StackForm, policy *Policy) int {
 //     true→false even though both PushLits have the same Op base.
 //   - List: element count + recursive complexity of each element.
 //   - Other (atom, map, paths, …): 1 placeholder.
-func literalComplexity(v eng.Value) int {
+func literalComplexity(v core.Value) int {
 	if v.Parent == nil {
 		return 0
 	}
 	switch {
-	case v.Parent.ConformsTo(eng.TInteger):
-		if n, err := eng.AsInteger(v); err == nil {
+	case v.Parent.ConformsTo(core.TInteger):
+		if n, err := core.AsInteger(v); err == nil {
 			return intMagnitude(n)
 		}
-	case v.Parent.ConformsTo(eng.TFloat):
-		if f, err := eng.AsFloat(v); err == nil {
+	case v.Parent.ConformsTo(core.TFloat):
+		if f, err := core.AsFloat(v); err == nil {
 			return intMagnitude(int64(f))
 		}
-	case v.Parent.ConformsTo(eng.TString):
-		if s, err := eng.AsString(v); err == nil {
+	case v.Parent.ConformsTo(core.TString):
+		if s, err := core.AsString(v); err == nil {
 			return len(s)
 		}
-	case v.Parent.ConformsTo(eng.TBoolean):
-		if b, err := eng.AsBoolean(v); err == nil {
+	case v.Parent.ConformsTo(core.TBoolean):
+		if b, err := core.AsBoolean(v); err == nil {
 			if b {
 				return 1
 			}
 		}
 		return 0
-	case v.Parent.ConformsTo(eng.TList):
-		if lst, err := eng.RequireConcreteList(v, "literalComplexity"); err == nil {
+	case v.Parent.ConformsTo(core.TList):
+		if lst, err := core.RequireConcreteList(v, "literalComplexity"); err == nil {
 			c := lst.Len()
 			for i := 0; i < lst.Len(); i++ {
 				c += literalComplexity(lst.Get(i))

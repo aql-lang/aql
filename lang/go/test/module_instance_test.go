@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -16,7 +16,7 @@ func TestModuleInstanceFileModule(t *testing.T) {
 	files := map[string]string{
 		"proj/lib.boru": `export "Lib" {answer: 42}`,
 	}
-	run := func(step string) eng.Value {
+	run := func(step string) core.Value {
 		t.Helper()
 		res, err := runModuleSteps(t, files, []string{`import "./proj/lib.boru"`, step})
 		if err != nil {
@@ -25,7 +25,7 @@ func TestModuleInstanceFileModule(t *testing.T) {
 		return res[len(res)-1]
 	}
 
-	if ns := run(`Lib`); eng.ModuleNSOf(ns) == nil || !ns.Parent.Equal(native.TMap) {
+	if ns := run(`Lib`); core.ModuleNSOf(ns) == nil || !ns.Parent.Equal(native.TMap) {
 		t.Errorf("Lib = %s (type %s), want a facet-carrying namespace Map", ns.String(), ns.Parent)
 	}
 	if v := run(`Lib.answer`); func() bool { n, _ := native.AsInteger(v); return n != 42 }() {

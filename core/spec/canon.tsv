@@ -1,0 +1,37 @@
+# Canonical rendering of core values — the contract both engines are held to.
+# The differential compares SUCCESS rows by canonical render, so a divergence
+# here is a divergence the engine-level gate would report as a hard failure.
+#
+# expr	expected	note
+
+# --- integers (REFERENCE.md:84, signed 64-bit) ---
+int 0	0	zero
+int 42	42	positive
+int -7	-7	negative
+int 9223372036854775807	9223372036854775807	int64 max renders exactly, no float rounding
+int -9223372036854775808	-9223372036854775808	int64 min renders exactly
+int 1000000	1000000	no digit grouping in the canonical form
+
+# --- booleans and none ---
+bool true	true	
+bool false	false	
+none 	none	None is spelled none, and is its own sole inhabitant
+
+# --- strings: quoting and escaping ---
+str hello	'hello'	a plain string canonicalises single-quoted
+str 	''	the empty string
+str with space	'with space'	spaces need no escape
+
+# --- type literals (REFERENCE.md: type names push type-literal values) ---
+typelit Integer	Integer	
+typelit String	String	
+typelit Boolean	Boolean	
+typelit List	List	
+typelit Map	Map	
+typelit Any	Any	the lattice top
+typelit None	None	the unit type
+
+# --- lists ---
+list 	[]	the empty list
+list 1	[1]	one element
+list 1 2 3	[1 2 3]	elements are space-separated, no commas

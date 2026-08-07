@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end tests for the networking verification apps written in boru
@@ -58,7 +58,7 @@ func appLastString(t *testing.T, vals []native.Value) string {
 	if len(vals) == 0 {
 		t.Fatal("no result")
 	}
-	s, err := eng.AsString(vals[len(vals)-1])
+	s, err := core.AsString(vals[len(vals)-1])
 	if err != nil {
 		t.Fatalf("expected String result, got %v", vals)
 	}

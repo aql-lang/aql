@@ -1,6 +1,8 @@
 package native
 
-import "github.com/boru-lang/boru/eng/go"
+import (
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // The list-mutation words (push/pop/unshift/shift) are registered via the
 // consolidated Natives slice in natives.go.
@@ -35,7 +37,7 @@ func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 	}
 	// The copy-returning column stays ENTIRELY immutable: an element
 	// with flex inside is snapshot to its plain shape (AdoptIntoNode).
-	newElem, aerr := eng.AdoptIntoNode(tagged)
+	newElem, aerr := core.AdoptIntoNode(tagged)
 	if aerr != nil {
 		return nil, r.BoruError("push_error", aerr.Error(), "push")
 	}
@@ -84,7 +86,7 @@ func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	}
 	// Entirely-immutable invariant for the copy-returning column: see
 	// pushHandler.
-	newElem, aerr := eng.AdoptIntoNode(tagged)
+	newElem, aerr := core.AdoptIntoNode(tagged)
 	if aerr != nil {
 		return nil, r.BoruError("unshift_error", aerr.Error(), "unshift")
 	}
@@ -135,8 +137,8 @@ func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, werr
 	}
 	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
-	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
-	elem, aerr := eng.AdoptIntoFlex(tagged)
+	// flexed on the way in (core.AdoptIntoFlex; flex handles share).
+	elem, aerr := core.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.BoruError("push_error", aerr.Error(), "push")
 	}
@@ -168,7 +170,7 @@ func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		return nil, werr
 	}
 	// Entirely-mutable invariant: adopt a plain Node element into flex.
-	elem, aerr := eng.AdoptIntoFlex(tagged)
+	elem, aerr := core.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.BoruError("unshift_error", aerr.Error(), "unshift")
 	}

@@ -1,5 +1,5 @@
-.PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler facades \
+.PHONY: all build install test test-race test-ts test-ts-core vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
+        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -11,6 +11,8 @@
 # The repo is a collection of Go modules:
 #
 #   core/go        — the pure-interpreter kernel (values, types, dispatch, step loop)
+#   parser/go      — boru source text -> []core.Value (jsonic grammar); depends
+#                    on core alone, and nothing depends on it but the layers above
 #   eng/go         — check + compiler + VM over core, plus the parser bridge
 #   basic/go       — the base language layer (fundamental words +
 #                    predefined content types; depends on eng only)
@@ -27,7 +29,7 @@
 
 # Order matters for `make test`: eng must build before basic, basic
 # before lang, etc.
-MODULES := core/go check/go compiler/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
+MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
@@ -138,7 +140,7 @@ test:
 # exception: its 5941-row differential is single-threaded per row (race adds no
 # value) and times out under the detector, so only its concurrency rows run
 # here.
-RACE_MODULES := core/go check/go compiler/go eng/go basic/go lang/go
+RACE_MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go
 test-race:
 	@set -e; for m in $(RACE_MODULES); do \
 	  echo "==> test-race $$m"; \
@@ -199,8 +201,8 @@ BENCH_TIME ?= 1s
 bench:
 	@echo "==> bench eng/go (kernel primitives)"
 	cd eng/go && go test -run '^$$' -bench 'BenchmarkKernel|BenchmarkTape' -benchmem -benchtime $(BENCH_TIME) .
-	@echo "==> bench eng/go/parser (parse shapes)"
-	cd eng/go && go test -run '^$$' -bench 'BenchmarkParse' -benchmem -benchtime $(BENCH_TIME) ./parser/
+	@echo "==> bench parser/go (parse shapes)"
+	cd parser/go && go test -run '^$$' -bench 'BenchmarkParse' -benchmem -benchtime $(BENCH_TIME) .
 	@echo "==> bench lang/go (dispatch, exec, words, check, compile)"
 	cd lang/go && go test -run '^$$' -bench 'BenchmarkBytecodeBaseline|BenchmarkStage6|BenchmarkParens|BenchmarkPerf' -benchmem -benchtime $(BENCH_TIME) .
 
@@ -213,13 +215,76 @@ bench:
 # ratchet (design/ENG-COVERAGE-PARITY.0.md; Go statements ≡ TS lines,
 # both measured by the engine's OWN suite): raise TS_GATE_LINES as
 # coverage grows towards the 100% target; never lower it.
-TS_GATE_LINES ?= 97
+#
+# The denominator is SOURCE ONLY. node:test instruments every file it loads,
+# which includes the *.test.ts files themselves; counting those made the gate
+# measure its own test code. That is not the Go metric — `go test -coverpkg`
+# never counts _test.go statements — so the parity equivalence (Go statements
+# ≡ TS lines) only holds with the exclusion below.
+#
+# RE-BASED 97 -> 96 when the exclusion landed, for the same reason
+# ENG_GATE_FLOOR re-based at the four-piece cut: the measurement UNIVERSE
+# changed, so the old number is not comparable. Measured both ways on the same
+# commit: 97.06% with test files counted (which is what let the 97 floor pass),
+# 96.80% source-only. The floor tracks the source-only figure from here and
+# ratchets up as before — never down.
+TS_GATE_LINES ?= 96
 test-ts:
 	@echo "==> typecheck eng/ts"
 	cd eng/ts && npx tsc
-	@echo "==> test eng/ts (line-coverage floor $(TS_GATE_LINES)%)"
+	@echo "==> test eng/ts (source line-coverage floor $(TS_GATE_LINES)%)"
 	cd eng/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_GATE_LINES) \
+	  --test-coverage-exclude='**/*.test.ts' \
+	  'src/**/*.test.ts'
+
+# ---- TypeScript interpreter core (core/ts) -----------------------------
+#
+# @voxgig/borucore is the TS twin of the core/go module — values, types,
+# signatures, matching, the registry, and the step loop, with NO check pass,
+# NO compiler, NO parser and no dependencies at all (core/go at least needs
+# apd; the TS core needs nothing). It is the fourth gate in the standalone
+# set, the direct counterpart of `make cover-gate-core`:
+#
+#   cover-gate-core    core/go by its own suite   floor 100
+#   test-ts-core       core/ts by its own suite   floor $(TS_CORE_GATE_LINES)
+#
+# Same source-only denominator as test-ts, and the same ratchet discipline:
+# raise the floor in the change that raises coverage, never lower it.
+#
+# The no-upward-imports rule (core/go/CLAUDE.md) is what makes this gate
+# meaningful, and it is STRUCTURALLY enforced here rather than by convention:
+# core/ts has no dependency on @voxgig/borueng, so a core file that reached
+# for the check pass or the compiler would fail to resolve. The check piece
+# reaches core only through the seam tables core owns — AnalysisImpl
+# (analysis-hooks.ts) and EmitRecorder (emit-recorder.ts) — each with NAMED
+# inactive defaults pinned by a core-side test, exactly as core/go requires.
+# Floor 62, RE-BASED DOWN from the stage-1 71 — read the reason before
+# treating this as a regression, because it is the opposite of one.
+#
+# node:test only instruments files a test actually loads. At stage 1 the suite
+# loaded seven of core/ts's seventeen files (the seam tables, canon, type,
+# signature and their dependencies), so 71.76% was 71.76% *of those seven*.
+# The core/spec corpus loads the whole package — engine, match, resolve, make,
+# sugar, coretype, check-state — and those arrive largely uncovered, so the
+# honest figure over the FULL core surface is 62.06%.
+#
+# Same re-base as ENG_GATE_FLOOR at the four-piece cut and TS_GATE_LINES at
+# the source-only correction: the measurement universe changed, so the old
+# number is not comparable to the new one. Nothing became less tested — the
+# denominator got honest. From here the ratchet only rises, and the corpus is
+# the instrument: rows added to core/spec lift both engines at once.
+#
+# Current per-file, worst first: make 38, coretype 39, resolve 42, engine 42,
+# sugar 47, check-state 66, canon 70, value 72, registry 74, match 77.
+TS_CORE_GATE_LINES ?= 62
+test-ts-core:
+	@echo "==> typecheck core/ts"
+	cd core/ts && npx tsc
+	@echo "==> test core/ts (source line-coverage floor $(TS_CORE_GATE_LINES)%)"
+	cd core/ts && node --test --experimental-strip-types --no-warnings \
+	  --experimental-test-coverage --test-coverage-lines=$(TS_CORE_GATE_LINES) \
+	  --test-coverage-exclude='**/*.test.ts' \
 	  'src/**/*.test.ts'
 
 # ---- cross-engine differential -----------------------------------------
@@ -491,6 +556,24 @@ cover-gate-core:
 # measure how much each piece proves on its own.
 CHECK_GATE_FLOOR ?= 56
 COMPILER_GATE_FLOOR ?= 62
+
+# cover-gate-parser — the parser's own gate. The parser is a LEAF over core
+# (it uses 109 core symbols and nothing else from the repo), which is what
+# makes a 100% standalone floor reasonable here from day one rather than as a
+# ratchet: there is no other module's suite that could be covering it, and no
+# seam whose far side lives elsewhere. Same .engout-family isolation as the
+# other standalone gates so the merged cover-check never merges a stale
+# profile.
+PARSER_GATE_FLOOR ?= 100
+cover-gate-parser:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/parser_standalone.engout
+	@echo "==> cover-gate-parser (standalone, floor $(PARSER_GATE_FLOOR)%)"
+	@( cd parser/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/parser/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/parser_standalone.engout ./... > $(abspath $(COVER_DIR))/parser_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-parser test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/parser_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(PARSER_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/parser_standalone.engout
 
 cover-gate-check:
 	@mkdir -p $(COVER_DIR)

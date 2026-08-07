@@ -5,8 +5,8 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/capabilities"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // runMemFSModuleSteps sets up an in-memory filesystem with pre-populated files,

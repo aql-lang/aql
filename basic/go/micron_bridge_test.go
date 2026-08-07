@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestMicronRenderBridgeBackstop pins the display-string backstop in
@@ -18,9 +18,9 @@ func TestMicronRenderBridgeBackstop(t *testing.T) {
 	om := NewOrderedMap()
 	om.Set("user", NewString("u"))
 	om.Set("host", NewString("h.io"))
-	v := eng.NewValueRaw(kind, MicronPayload{Fields: om})
+	v := core.NewValueRaw(kind, MicronPayload{Fields: om})
 
-	got := eng.DefaultBehavior.Format(v)
+	got := core.DefaultBehavior.Format(v)
 	if got != micronRender(v) {
 		t.Errorf("backstop render = %q, want micronRender's %q", got, micronRender(v))
 	}

@@ -19,7 +19,7 @@
 //   - MINTED — extracted from the construction sites themselves (codes are
 //     string literals at ~700 of them), which is what a program can actually
 //     observe.
-//   - REGISTERED — the engine-owned enumeration, eng.ErrorCodes()
+//   - REGISTERED — the engine-owned enumeration, core.ErrorCodes()
 //     (eng/go/errorcodes.go plus each layer's registration). This did not
 //     exist when the gate was first written, which is why the gate was
 //     one-directional then.
@@ -57,7 +57,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	_ "github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -76,8 +76,15 @@ import (
 // so the gate has to link the layers it means to check. `basic/go` carries
 // the fundamental words' minting sites (def / if / case / fn / var / gen …)
 // since the ADR-013 layering split; `core/go` carries the kernel sites that
-// moved with the interpreter-core cut (design/ENG-FOUR-PIECE.0.md Stage 4).
-var codeSourceRoots = []string{"core/go", "check/go", "compiler/go", "eng/go", "basic/go", "lang/go"}
+// moved with the interpreter-core cut (design/ENG-FOUR-PIECE.0.md Stage 4);
+// `parser/go` carries the syntax sites (float_overflow, integer_overflow,
+// syntax_error …) that moved with the parser cut.
+//
+// This list is COUPLED TO THE MODULE LAYOUT. Extracting a module without
+// adding it here does not fail at the extraction — it fails later as
+// "registered but attached by no site", which is how the parser cut was
+// caught (float_overflow, minted in parse.go, fell out of every root).
+var codeSourceRoots = []string{"core/go", "check/go", "compiler/go", "parser/go", "eng/go", "basic/go", "lang/go"}
 
 // codeMintPatterns match every shape that ATTACHES an error code to an
 // error or a diagnostic. Capture group 1 is the code.
@@ -339,7 +346,7 @@ func TestReferenceErrorCodeTableHasNoDuplicates(t *testing.T) {
 // registeredCodes returns the engine-owned enumeration as a set.
 func registeredCodes() map[string]string {
 	out := map[string]string{}
-	for _, ec := range eng.ErrorCodes() {
+	for _, ec := range core.ErrorCodes() {
 		out[ec.Code] = ec.Owner
 	}
 	return out
@@ -430,7 +437,7 @@ func TestDocumentedCodesAreRegistered(t *testing.T) {
 	for _, code := range documentedCodes(t) {
 		if _, ok := registered[code]; !ok {
 			t.Errorf("REFERENCE.md documents `%s`, which is not in the "+
-				"engine-owned enumeration — tooling that reads eng.ErrorCodes() "+
+				"engine-owned enumeration — tooling that reads core.ErrorCodes() "+
 				"cannot resolve a code the manual tells readers to handle", code)
 		}
 	}

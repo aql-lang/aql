@@ -9,7 +9,7 @@
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 
-import { canon } from '../canon.ts'
+import { canon } from '@voxgig/borucore'
 import { parse } from './index.ts'
 
 function render(src: string): string {

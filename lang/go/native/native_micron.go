@@ -15,7 +15,7 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
 )
 
 func getMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -77,7 +77,7 @@ func setMicronDetail(args []Value) string {
 // message.
 func setMicronReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 3 {
-		eng.CheckAddUniqueDiagnostic(r, "type_error", setMicronDetail(args), "set", args[0].Pos())
+		check.CheckAddUniqueDiagnostic(r, "type_error", setMicronDetail(args), "set", args[0].Pos())
 	}
 	return []Value{}
 }
@@ -102,7 +102,7 @@ func delMicronDetail(args []Value) string {
 // handler, mirroring setMicronReturns.
 func delMicronReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 {
-		eng.CheckAddUniqueDiagnostic(r, "type_error", delMicronDetail(args), "del", args[0].Pos())
+		check.CheckAddUniqueDiagnostic(r, "type_error", delMicronDetail(args), "del", args[0].Pos())
 	}
 	return []Value{}
 }
@@ -121,7 +121,7 @@ func getrMicronReturns(args []Value, r *Registry) []Value {
 		if args[1].Parent != nil {
 			kind = args[1].Parent.Leaf()
 		}
-		eng.CheckAddUniqueDiagnostic(r, "not_found",
+		check.CheckAddUniqueDiagnostic(r, "not_found",
 			fmt.Sprintf("getr: %s has no property %q", kind, getKey(args[0])), "getr", args[0].Pos())
 	}
 	return out

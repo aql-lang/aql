@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // File-module battery for open words (design/OPEN-WORDS.0.md): the

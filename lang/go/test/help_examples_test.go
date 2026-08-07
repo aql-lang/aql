@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/native/help"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestHandAuthoredExamplesWin verifies §5.2/§9.5: when a word's help

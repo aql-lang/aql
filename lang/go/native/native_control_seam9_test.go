@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Seam-9 coverage (W9_nativeC) for native_control.go: for/do/case/if
@@ -92,7 +92,7 @@ func TestW9ErrorReturnsFnNonListPayload(t *testing.T) {
 	r := seam5Reg(t)
 	r.Check.Mode = true
 	r.Check.Compiling = true
-	bad := NewValueRaw(TList, eng.IntPayload{N: 1})
+	bad := NewValueRaw(TList, core.IntPayload{N: 1})
 	out := errorReturnsFn([]Value{bad, NewInteger(7)}, r)
 	if len(out) != 1 || !out[0].Dynamic || !out[0].Parent.Equal(TAny) {
 		t.Fatalf("non-list payload must stay dynamic(Any), got %v", out)

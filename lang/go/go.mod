@@ -34,6 +34,9 @@ require (
 )
 
 require (
+	github.com/boru-lang/boru/check/go v0.0.0 // indirect
+	github.com/boru-lang/boru/compiler/go v0.0.0 // indirect
+	github.com/boru-lang/boru/core/go v0.0.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/tabnas/directive/go v0.4.0 // indirect
 	github.com/tabnas/hoover/go v0.2.1 // indirect
@@ -41,6 +44,7 @@ require (
 )
 
 require (
+	github.com/boru-lang/boru/parser/go v0.0.0
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -64,3 +68,5 @@ replace github.com/boru-lang/boru/core/go => ../../core/go
 replace github.com/boru-lang/boru/check/go => ../../check/go
 
 replace github.com/boru-lang/boru/compiler/go => ../../compiler/go
+
+replace github.com/boru-lang/boru/parser/go => ../../parser/go

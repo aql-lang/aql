@@ -19,9 +19,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/specfix"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // runCheckRow parses input, runs it through the engine in check mode
@@ -33,7 +33,7 @@ func runCheckRow(input string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		return "", err
 	}
@@ -44,7 +44,7 @@ func runCheckRow(input string) (string, error) {
 	r.Source = input
 
 	done := r.Check.Begin()
-	out, runErr := eng.NewTop(r).Run(values)
+	out, runErr := core.NewTop(r).Run(values)
 	r.RescueForwardRefDiagnostics()
 	r.Check.EmitUnusedDefDiagnostics()
 	diags := r.Check.Diagnostics

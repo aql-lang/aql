@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
@@ -20,7 +20,7 @@ func TestPrintStampReport(t *testing.T) {
 
 	b.Reset()
 	PrintStampReport(&b, []lang.StampEvent{
-		{Name: "kv-read", Pos: eng.SrcPos{Row: 73, Col: 5}, Stamped: true},
+		{Name: "kv-read", Pos: core.SrcPos{Row: 73, Col: 5}, Stamped: true},
 		{Name: "", Reason: "lexical captures (interpreter keeps the body)"},
 		{Name: "redis-serve", Reason: ""}, // empty reason → generic text
 	})

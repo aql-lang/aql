@@ -125,7 +125,7 @@
     { key: "compiler-go", type: "SoftwareModule", label: "compiler/go module" }
     { key: "calc-go", type: "SoftwareModule", label: "calc/go module" }
     { key: "wpg", type: "SoftwareModule", label: "wpg module" }
-    { key: "eng-go-parser", type: "SoftwareModule", label: "eng/go/parser package" }
+    { key: "parser-go", type: "SoftwareModule", label: "parser/go module" }
     # kg is a boru pipeline, not a Go module — no go.mod, so no code
     # evidence, so it stays a Product.
     { key: "kg", type: "Product", label: "kg knowledge-graph pipeline"
@@ -146,6 +146,7 @@
     { key: "adr", type: "Document", label: "ADR.md" }
     { key: "nur", type: "Document", label: "NUR.md" }
     { key: "eng-guide", type: "Document", label: "eng/go/CLAUDE.md" }
+    { key: "parser-guide", type: "Document", label: "parser/go/CLAUDE.md" }
     { key: "lang-guide", type: "Document", label: "lang/go/CLAUDE.md" }
     { key: "vault", type: "Concept", label: "secrets vault"
       attributes: { role: "encrypted API-key / token store, driven by the boru vault subcommand" } }
@@ -156,7 +157,7 @@
     { key: "completeness-review", type: "Document", label: "design/checker-compiler-completeness-review.0.md"
       attributes: { role: "the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work" } }
     { key: "decl-grammar", type: "Document", label: "design/DECLARATIVE-GRAMMAR.0.md"
-      attributes: { role: "the shared declarative tabnas grammar artifact (eng/go/parser/grammar.json): contract, loader pair, and the batch-migration state" } }
+      attributes: { role: "the shared declarative tabnas grammar artifact (parser/go/grammar.json): contract, loader pair, and the batch-migration state" } }
     { key: "coverage-parity", type: "Document", label: "design/ENG-COVERAGE-PARITY.0.md"
       attributes: { role: "the standalone 100%/100% coverage program for eng/go and eng/ts: the ratcheting gate floors (make cover-gate-eng, make test-ts), the gap inventories, and the staged plans" } }
     { key: "org", type: "Organization", label: "boru-lang" }
@@ -332,15 +333,16 @@
       evidence: [{ source: "src:decl-grammar", locator: "title",
         quote: "DECLARATIVE-GRAMMAR.0 — one grammar artifact for both parser twins" }]
       confidence: 0.95 }
-    # Pointed at the PACKAGE, not the module. eng/go/parser is a package
-    # inside the eng/go module — gomod.boru asserts that structurally
-    # (eng-go-parser part_of eng-go, evidenced by the filesystem), and
-    # this is the prose that explains what it is. The pair is the point:
-    # code says where a unit sits, docs say what it does.
+    # This used to point at eng-go-parser, the PACKAGE, back when the
+    # parser was a package inside the eng/go module. It is now its own
+    # top-level module, so gomod.boru emits parser-go from go.work and
+    # never emits eng-go-parser at all — leaving the old key here would
+    # dangle. The pair is still the point: code says where a unit sits
+    # (parser-go depends_on core-go, from go.mod), docs say what it does.
     { subject: "decl-grammar", predicate: "supports"
-      object: { kind: "entity", entity: "eng-go-parser" }
+      object: { kind: "entity", entity: "parser-go" }
       evidence: [{ source: "src:decl-grammar", locator: "The contract",
-        quote: "eng/go/parser/grammar.json is the single source of the boru grammar's STRUCTURE, loaded by both parsers" }]
+        quote: "parser/go/grammar.json is the single source of the boru grammar's STRUCTURE, loaded by both parsers" }]
       confidence: 0.95 }
     { subject: "coverage-parity", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }

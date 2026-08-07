@@ -4,7 +4,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 func runBoruText(t *testing.T, r *native.Registry, src string) ([]native.Value, error) {

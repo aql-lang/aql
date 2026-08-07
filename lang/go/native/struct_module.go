@@ -4,7 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // StructModuleNatives holds the voxgig-struct data-manipulation words that
@@ -211,10 +212,10 @@ func d2DynamicTypedResidual(data Value) Value {
 	// that kind, so base is Map or List here — not-Map is List (no unreachable arm).
 	var typed Value
 	if base.Parent.ConformsTo(TMap) {
-		typed = eng.NewTypedMap(elem)
+		typed = core.NewTypedMap(elem)
 		typed.Carrier = true
 	} else {
-		typed = eng.NewCarrierTypedListValue(elem)
+		typed = check.NewCarrierTypedListValue(elem)
 	}
 	typed.Dynamic = true
 	typed.SetElemConstraint(elem)
@@ -327,7 +328,7 @@ func reifyReturns(args []Value, r *Registry) []Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "reify", args[1].Pos())
+			check.CheckAddUniqueDiagnostic(r, code, detail, "reify", args[1].Pos())
 		}
 	}
 	if IsDisjunct(target) {
@@ -369,7 +370,7 @@ func parseTextReturns(args []Value, r *Registry) []Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "parse", args[0].Pos())
+			check.CheckAddUniqueDiagnostic(r, code, detail, "parse", args[0].Pos())
 		}
 		return dyn
 	}

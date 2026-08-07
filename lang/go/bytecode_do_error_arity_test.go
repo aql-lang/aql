@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // bytecode_do_error_arity_test.go pins the §8.2(6) ZERO-NETTING handler
@@ -46,11 +46,11 @@ func TestZeroNettingHandlerDynamicKeepsRefusal(t *testing.T) {
 func TestFullStackHostOverloadParity(t *testing.T) {
 	host := func(a *Boru) {
 		a.Register("depth", Signature{
-			Args:       []*eng.Type{eng.TInteger},
-			Returns:    []*eng.Type{eng.TInteger, eng.TInteger},
+			Args:       []*core.Type{core.TInteger},
+			Returns:    []*core.Type{core.TInteger, core.TInteger},
 			BarrierPos: 0,
-			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				return []eng.Value{args[0], eng.NewInteger(99)}, nil
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				return []core.Value{args[0], core.NewInteger(99)}, nil
 			}),
 		})
 	}

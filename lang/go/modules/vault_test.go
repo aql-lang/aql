@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end coverage for the boru:vault bridge words (vault.go) over a

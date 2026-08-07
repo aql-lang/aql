@@ -59,13 +59,18 @@ jobs:
       - name: Cover gate (ADR-008)
         run: make cover-gate
 
-      # The STANDALONE kernel gates: each of the four pieces covered by
-      # its OWN suite alone (no cross-suite merge). core is already at
-      # the 100% contract; check, compiler and eng carry ratchet floors
-      # that only ever rise. See design/ENG-FOUR-PIECE.0.md and
+      # The STANDALONE gates: each piece covered by its OWN suite alone
+      # (no cross-suite merge). core and parser are at the 100% contract;
+      # check, compiler and eng carry ratchet floors that only ever rise.
+      # parser starts AT 100 rather than on a ratchet because it is a leaf
+      # over core — nothing else's suite could have been covering it, so
+      # there was no incidental coverage to unwind. See design/ENG-FOUR-PIECE.0.md and
       # design/ENG-COVERAGE-PARITY.0.md.
       - name: Cover gate — core standalone (100%)
         run: make cover-gate-core
+
+      - name: Cover gate — parser standalone (100%)
+        run: make cover-gate-parser
 
       - name: Cover gate — check standalone (ratchet)
         run: make cover-gate-check
@@ -76,16 +81,22 @@ jobs:
       - name: Cover gate — eng standalone (ratchet)
         run: make cover-gate-eng
 
-      # The TS half of the standalone-parity pair: typecheck + the full
-      # eng/ts suite with its line-coverage ratchet (Go statements ≡ TS
-      # lines). Node >= 24 per eng/ts engines; npm ci restores the
-      # pinned toolchain.
+      # The TS half of the standalone-parity pair: typecheck + the suites
+      # with their line-coverage ratchets (Go statements ≡ TS lines, both
+      # measured source-only). core/ts runs FIRST and on its own — it is the
+      # twin of `make cover-gate-core`, and running it before eng/ts is what
+      # proves the core package really does stand alone: it has no dependency
+      # on @voxgig/borueng, so a core file that reached upward would fail to
+      # resolve here, before the engine is ever installed. Node >= 24 per the
+      # packages' engines; npm ci restores the pinned toolchains.
       - name: Test eng/ts (typecheck + coverage ratchet)
         uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Run eng/ts gate
+      - name: Run TS gates (core standalone, then the engine)
         run: |
+          ( cd core/ts && npm ci )
+          make test-ts-core
           ( cd eng/ts && npm ci )
           make test-ts
 

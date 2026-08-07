@@ -6,7 +6,7 @@ import (
 	"io"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
@@ -36,8 +36,8 @@ func (li *LockInfo) Release() error {
 // lockFormatBehavior renders a Lock as "Lock(id,path)".
 type lockFormatBehavior struct{}
 
-func (lockFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (lockFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (lockFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (lockFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (lockFormatBehavior) Format(v Value) string {
 	if li, ok := asLockInfo(v); ok {
 		return fmt.Sprintf("Lock(%s,%s)", li.ID, li.Path)
@@ -48,10 +48,10 @@ func (lockFormatBehavior) Format(v Value) string {
 // MintLockType / NewLockType mint the module-scoped Lock resource type
 // (per-import, like Watcher/File).
 func MintLockType(r *Registry) *Type {
-	return r.Types.MintTypeWithBehavior("Lock", eng.TIdeal, lockFormatBehavior{})
+	return r.Types.MintTypeWithBehavior("Lock", core.TIdeal, lockFormatBehavior{})
 }
 func NewLockType() *Type {
-	return eng.NewDynamicTypeTable().MintTypeWithBehavior("Lock", eng.TIdeal, lockFormatBehavior{})
+	return core.NewDynamicTypeTable().MintTypeWithBehavior("Lock", core.TIdeal, lockFormatBehavior{})
 }
 
 // asLockInfo unwraps a Lock handle's payload.
@@ -84,7 +84,7 @@ func doLockWord(args []Value, r *Registry, lockType *Type) ([]Value, error) {
 		return nil, r.BoruError("lock_error", fmt.Sprintf("lock: %v", err), "lock")
 	}
 	info := &LockInfo{ID: GenerateID("L_"), Path: path, Shared: shared, closer: closer}
-	return []Value{eng.NewValueRaw(lockType, ExtensionPayload{Body: info})}, nil
+	return []Value{core.NewValueRaw(lockType, ExtensionPayload{Body: info})}, nil
 }
 
 // doUnlockWord implements IO.unlock l: release an advisory lock.

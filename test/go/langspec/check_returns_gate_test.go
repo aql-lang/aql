@@ -31,10 +31,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // nativeReturnsOptOut is the explicit opt-out list: "word/arity" (or
@@ -59,7 +59,7 @@ func TestNativeReturnsCoverage(t *testing.T) {
 	seen := map[string]bool{} // opt-out keys actually encountered
 	var missing []string
 
-	scanReg := func(prefix string, r *eng.Registry) {
+	scanReg := func(prefix string, r *core.Registry) {
 		for _, name := range r.RegisteredWordNames() {
 			if !r.IsBuiltinWord(name) {
 				continue // def-bound values, not registered natives

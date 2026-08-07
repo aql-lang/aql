@@ -5,7 +5,7 @@ import (
 	"math"
 	"unicode/utf8"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // A binary frame layout is modelled as a sealed CLASS that carries a wire
@@ -774,7 +774,7 @@ func frameInstance(specVal Value, b []byte, r *Registry, word string) (Value, []
 		return Value{}, nil, derr
 	}
 	ot, _ := AsClassType(specVal)
-	inst, ierr := eng.MakeObject(ot, NewMap(m), r)
+	inst, ierr := core.MakeObject(ot, NewMap(m), r)
 	if ierr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return Value{}, nil, ierr
 	}

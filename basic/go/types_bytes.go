@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Scalar/Bytes — the immutable byte-string content type, moved out of
@@ -25,8 +25,8 @@ import (
 // reference TBytes see a non-nil pointer at slice-init time.
 var TBytes = registerBytesType()
 
-func registerBytesType() *eng.Type {
-	t, err := eng.Builtin.RegisterType("Scalar/Bytes", 1009, eng.OwnerKernel, BytesBehavior{})
+func registerBytesType() *core.Type {
+	t, err := core.Builtin.RegisterType("Scalar/Bytes", 1009, core.OwnerKernel, BytesBehavior{})
 	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		recordTypeInitErr(fmt.Errorf("types_bytes: register Scalar/Bytes: %w", err))
 	}
@@ -40,9 +40,9 @@ func registerBytesType() *eng.Type {
 // reference to NewBytes (-> TBytes) does not form a var-initialisation
 // cycle — same reason lang builds miscNatives in init().
 func init() {
-	eng.RegisterBytesBridge(
+	core.RegisterBytesBridge(
 		func(b []byte) Value { return NewBytes(append([]byte(nil), b...)) },
-		// copy-on-export: a host that calls eng.ToNative gets a fresh copy,
+		// copy-on-export: a host that calls core.ToNative gets a fresh copy,
 		// so mutating it cannot corrupt the immutable Bytes value's backing
 		// array (the export twin of FromNative's copy-on-ingest, §4.2).
 		func(v Value) ([]byte, bool) {
@@ -61,7 +61,7 @@ func init() {
 // safe precisely because no word mutates a Bytes in place (BYTES.10.md
 // §4). Construction at a trust boundary (the Go bridge, a future socket
 // recv) must hand newBytes a fresh copy.
-func NewBytes(b []byte) Value { return eng.NewExtension(TBytes, b) }
+func NewBytes(b []byte) Value { return core.NewExtension(TBytes, b) }
 
 // NewBytesValue wraps an OWNED []byte as a Bytes value without copying —
 // same contract as newBytes (the caller must never retain or mutate the
@@ -92,10 +92,10 @@ func AsBytes(v Value) ([]byte, bool) {
 // default for non-Bytes operands.
 type BytesBehavior struct{}
 
-func (BytesBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (BytesBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
 
 // BakeableConst opts Bytes into the compiler's const pool
-// (eng.ConstBakeable): Bytes is immutable — no word mutates the backing
+// (core.ConstBakeable): Bytes is immutable — no word mutates the backing
 // array in place (BYTES.10.md §4; NewBytes's ownership contract) — and
 // already shares that array zero-copy on clone/fork/send, so a pooled
 // const shares exactly as the interpreter does. This is what lets a
@@ -133,7 +133,7 @@ func (BytesBehavior) Equal(a, b Value) bool {
 	ab, aok := AsBytes(a)
 	bb, bok := AsBytes(b)
 	if !aok || !bok {
-		return eng.DefaultBehavior.Equal(a, b)
+		return core.DefaultBehavior.Equal(a, b)
 	}
 	return bytes.Equal(ab, bb)
 }
@@ -145,7 +145,7 @@ func (BytesBehavior) Compare(a, b Value) (int, error) {
 	aLit, bLit := IsBareTypeNode(a), IsBareTypeNode(b)
 	switch {
 	case aLit && bLit:
-		return 0, eng.ErrNoComparer
+		return 0, core.ErrNoComparer
 	case aLit:
 		return -1, nil
 	case bLit:
@@ -154,7 +154,7 @@ func (BytesBehavior) Compare(a, b Value) (int, error) {
 	ab, aok := AsBytes(a)
 	bb, bok := AsBytes(b)
 	if !aok || !bok {
-		return 0, eng.ErrNoComparer
+		return 0, core.ErrNoComparer
 	}
 	return bytes.Compare(ab, bb), nil
 }

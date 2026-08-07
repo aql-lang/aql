@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestTemporalMatchDelegates keeps the temporal behaviors' Match and
@@ -13,16 +13,16 @@ import (
 // own node and a foreign node stays out, and equality follows the
 // kernel's value equality.
 func TestTemporalMatchDelegates(t *testing.T) {
-	if !(timeOfDayFormatBehavior{}).Match(eng.NewCarrier(TTime), TTime) {
+	if !(timeOfDayFormatBehavior{}).Match(core.NewCarrier(TTime), TTime) {
 		t.Fatal("TimeOfDay delegate match failed")
 	}
-	if (clkDurationFormatBehavior{}).Match(eng.NewCarrier(TTime), TDate) {
+	if (clkDurationFormatBehavior{}).Match(core.NewCarrier(TTime), TDate) {
 		t.Fatal("ClockDuration delegate must reject a non-conforming node")
 	}
-	if !(timezoneFormatBehavior{}).Match(eng.NewCarrier(TDate), TTime) {
+	if !(timezoneFormatBehavior{}).Match(core.NewCarrier(TDate), TTime) {
 		t.Fatal("Timezone delegate match failed")
 	}
-	one, two := eng.NewInteger(1), eng.NewInteger(2)
+	one, two := core.NewInteger(1), core.NewInteger(2)
 	if !(timeOfDayFormatBehavior{}).Equal(one, one) || (timeOfDayFormatBehavior{}).Equal(one, two) {
 		t.Fatal("timeOfDayFormatBehavior.Equal delegates to the kernel default")
 	}

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The three kernel type-kinds are registered as Ideals on every
@@ -34,7 +34,7 @@ func TestIdeals_CustomKindDispatchesThroughType(t *testing.T) {
 	}
 	registerIOWords(r)
 	called := false
-	r.Ideals.Register(&eng.Ideal{
+	r.Ideals.Register(&core.Ideal{
 		Name:    "Stringy",
 		Enabled: true,
 		Accepts: func(base Value) bool {
@@ -64,7 +64,7 @@ func TestIdeals_CustomKindInstantiatesThroughMake(t *testing.T) {
 	}
 	registerIOWords(r)
 	called := false
-	r.Ideals.Register(&eng.Ideal{
+	r.Ideals.Register(&core.Ideal{
 		Name:    "Listy",
 		Enabled: true,
 		Accepts: func(v Value) bool {

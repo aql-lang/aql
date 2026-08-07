@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -39,7 +39,7 @@ func TestS7B_MiniByteLiteralSrcErrors(t *testing.T) {
 func TestS7B_MiniRunReSubjectError(t *testing.T) {
 	r := mcovReg(t)
 	tMini := r.Types.MintType("S7bCompiled", native.TIdeal)
-	ext := eng.NewExtension(tMini, regexp.MustCompile("a"))
+	ext := core.NewExtension(tMini, regexp.MustCompile("a"))
 	args := []native.Value{ext, s7bMap(), native.NewTypeLiteral(native.TString)}
 	if _, err := miniRunReHandler(args, nil, nil, r); err == nil {
 		t.Error("run-re: non-concrete subject should error")

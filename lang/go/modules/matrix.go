@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -51,7 +51,7 @@ type TensorData struct {
 	Data  []float64
 }
 
-// DeepClone satisfies eng.DeepCloner so the universal `clone` word
+// DeepClone satisfies core.DeepCloner so the universal `clone` word
 // produces an independent tensor: the Shape and Data slices are copied
 // rather than shared, so mutating the clone cannot touch the original.
 func (t TensorData) DeepClone() any {
@@ -152,7 +152,7 @@ func (tensorFormatBehavior) Format(v native.Value) string {
 
 // Size of a tensor is its entry count — the number of scalars in the
 // dense array, so a 3x3 Matrix sizes to 9 and a length-5 Vector to 5.
-// This satisfies the kernel's eng.Sizer capability, which SizeOf (the
+// This satisfies the kernel's core.Sizer capability, which SizeOf (the
 // `size` word) consults.
 func (tensorFormatBehavior) Size(v native.Value) int {
 	return len(AsTensor(v).Data)
@@ -163,7 +163,7 @@ func (tensorFormatBehavior) Size(v native.Value) int {
 // to a particular import's mints (the format Behavior carries no
 // state) and user refines (`def UMat refine (MatrixUtil.Matrix)`)
 // report their kind through their ancestry.
-func tensorKindName(vt *eng.Type) string {
+func tensorKindName(vt *core.Type) string {
 	for t := vt; t != nil; t = t.Parent {
 		switch t.Name() {
 		case "Vector", "Matrix", "Tensor":
@@ -190,7 +190,7 @@ func shapeString(shape []int) string {
 
 // tensorPayload extracts the TensorData payload from a tensor value.
 func tensorPayload(v native.Value) (TensorData, bool) {
-	if ep, ok := v.Data.(eng.ExtensionPayload); ok {
+	if ep, ok := v.Data.(core.ExtensionPayload); ok {
 		td, ok := ep.Body.(TensorData)
 		return td, ok
 	}
@@ -274,8 +274,8 @@ func (tt TensorModuleTypes) matrixScaleCore(factor, mat native.Value) ([]native.
 }
 
 // tensorValue wraps a TensorData as a value of the given tensor type.
-func tensorValue(vt *eng.Type, td TensorData) native.Value {
-	return eng.NewExtension(vt, td)
+func tensorValue(vt *core.Type, td TensorData) native.Value {
+	return core.NewExtension(vt, td)
 }
 
 // newMatrix builds a rank-2 tensor — a Matrix value of this import's mint.
@@ -997,7 +997,7 @@ func matDet(m TensorData) (float64, error) {
 	return det, nil
 }
 
-// ToMap / ToList implement native.IdealConverter (eng.IdealConverter) for
+// ToMap / ToList implement native.IdealConverter (core.IdealConverter) for
 // the tensor kinds: ToList gives the nested row structure; ToMap gives
 // {shape:[…] values:[flat]}.
 func (tensorFormatBehavior) ToList(v native.Value) (native.Value, error) {

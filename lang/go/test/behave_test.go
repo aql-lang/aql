@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestBehave runs the behavior-dispatch spec at behave.tsv. Each row
@@ -95,7 +95,7 @@ func TestBehave(t *testing.T) {
 			if err != nil {
 				t.Fatalf("engine error: %v", err)
 			}
-			got := eng.Canon(result)
+			got := core.Canon(result)
 			if got != expected {
 				t.Errorf("\n  expr: %s\n  got:  %q\n  want: %q", expr, got, expected)
 			}

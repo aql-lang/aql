@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/capabilities"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Wave-4 coverage for native_query.go (the boru:query DSL handlers),

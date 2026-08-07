@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
+	parser "github.com/boru-lang/boru/parser/go"
 	tabnasabnf "github.com/tabnas/abnf/go"
 	tabnas "github.com/tabnas/parser/go"
 )

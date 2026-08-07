@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
 	"github.com/boru-lang/boru/lang/go/tuikit"
@@ -40,8 +40,8 @@ import (
 // fixedid_stability_test.go.
 var TTerminal = registerTuiType("Ideal/Terminal", 5011, terminalBehavior{})
 
-func registerTuiType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, id, "boru:tui", b)
+func registerTuiType(path string, id int, b core.TypeBehavior) *core.Type {
+	t, err := core.Builtin.RegisterType(path, id, "boru:tui", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("tui: register %s: %w", path, err))
 	}
@@ -66,11 +66,11 @@ func newTerminalValue(b tuikit.Backend, info tuikit.Info) native.Value {
 		backend: b,
 		grid:    tuikit.NewFrame(info.Cols, info.Rows),
 	}
-	return eng.NewExtension(TTerminal, ts)
+	return core.NewExtension(TTerminal, ts)
 }
 
 func asTerminal(v native.Value) (*termState, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, false
 	}
@@ -135,7 +135,7 @@ type tuiHostState struct {
 }
 
 func tuiHostStateFor(r *native.Registry, create bool) *tuiHostState {
-	if s, ok, _ := eng.Cap[*tuiHostState](r, capTuiHost); ok && s != nil {
+	if s, ok, _ := core.Cap[*tuiHostState](r, capTuiHost); ok && s != nil {
 		return s
 	}
 	if !create {

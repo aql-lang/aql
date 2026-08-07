@@ -17,7 +17,7 @@ import (
 // the conforming type occupies. Conformance is EXPLICIT (no structural
 // duck typing): `exposes` checks the word's overload table with
 // Self := candidate substituted (contravariant params, covariant
-// returns — eng.FnSigSatisfiesSpec), then records the candidate in the
+// returns — core.FnSigSatisfiesSpec), then records the candidate in the
 // surface's conformance set. Membership (sig dispatch, `is`, the type
 // algebra) is a parent-chain probe of that set via eng.surfaceUnifier,
 // so subclass instances of an exposer conform.
@@ -53,7 +53,7 @@ func surfaceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // exposesHandler implements `<Type> exposes <Surface>` — the explicit
 // conformance declaration. For every required operation it asks the
 // word's overload table whether some signature satisfies the shape
-// with Self := candidate (eng.FnDefHasSig). All-or-nothing and loud:
+// with Self := candidate (core.FnDefHasSig). All-or-nothing and loud:
 // any unsatisfied operation raises surface_unsatisfied listing every
 // gap with its expected substituted shape. Success registers the
 // candidate's lattice node in the conformance set. Idempotent.

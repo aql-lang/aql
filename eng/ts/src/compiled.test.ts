@@ -8,10 +8,11 @@
 // Fixtures here carry BOTH real handlers (so the VM produces concrete
 // results) AND `returns` annotations (so the check/record pass produces
 // typed carriers). Later stages extend coverage to the full spec corpus.
+import type { EmitState } from './emit.ts'
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 
-import { canon } from './canon.ts'
+import { canon } from '@voxgig/borucore'
 import {
   BoruError,
   Engine,
@@ -159,7 +160,7 @@ function registerFixtures(r: Registry): void {
             ? new Engine(r).run([...args[1]!.asList()])
             : new Engine(r).run([...args[2]!.asList()]),
         returnsFn: (args, r) => {
-          const emit = r.check.emit
+          const emit = r.check.emit as EmitState | undefined
           const thenList = args[1]!
           const elseList = args[2]!
           if (emit === undefined) {
@@ -256,7 +257,7 @@ function registerFixtures(r: Registry): void {
         },
         returnsFn: (args, r) => {
           const body = args[1]!
-          const emit = r.check.emit
+          const emit = r.check.emit as EmitState | undefined
           if (emit === undefined) {
             const iter = newCarrier(TInteger)
             r.pushDef('i', iter)
@@ -327,7 +328,7 @@ function registerFixtures(r: Registry): void {
         returns: [],
         handler: (_args, _ctx, _stk, r) => {
           if (r.check.isActive()) {
-            const emit = r.check.emit
+            const emit = r.check.emit as EmitState | undefined
             if (emit !== undefined && !emit.recordTrap('trap_error', 'trapq: deliberate runtime trap', 'trapq')) {
               emit.markUncompilable('trapq: trap in conditional context')
             }

@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
@@ -178,7 +178,7 @@ func TestRunKnownSequences(t *testing.T) {
 			t.Errorf("run(%q): unexpected error %v", c.input, err)
 			continue
 		}
-		if got := eng.Canon(stack); got != c.want {
+		if got := core.Canon(stack); got != c.want {
 			t.Errorf("run(%q) = %q, want %q", c.input, got, c.want)
 		}
 	}
@@ -821,7 +821,7 @@ func checkExtendLayer(t *testing.T, dir, passing, pass1 string, passSet, pass1Se
 			t.Errorf("extend passing row %q does not run: %v", in, rerr)
 			continue
 		}
-		if got := eng.Canon(stack); got != want {
+		if got := core.Canon(stack); got != want {
 			t.Errorf("extend passing row %q = %q, want recorded %q", in, got, want)
 		}
 	}

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // runReferent runs one program and returns its canonical result.
@@ -14,7 +14,7 @@ func runReferent(t *testing.T, src string) string {
 	if err != nil {
 		t.Fatalf("run %q: %v", src, err)
 	}
-	return eng.Canon(res)
+	return core.Canon(res)
 }
 
 // TestReferentQuoteCaptures pins that `quote` snapshots the binding a name
@@ -53,7 +53,7 @@ func TestReferentPostParsePass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if got := eng.Canon(res); got != "7" {
+	if got := core.Canon(res); got != "7" {
 		t.Errorf("post-parse referent = %q, want 7", got)
 	}
 }

@@ -30,7 +30,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // errCode returns a boru error's taxonomy code (or "" for nil, "non-boru"
@@ -39,7 +39,7 @@ func errCode(e error) string {
 	if e == nil {
 		return ""
 	}
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if errors.As(e, &ae) {
 		return ae.Code
 	}
@@ -47,8 +47,8 @@ func errCode(e error) string {
 }
 
 // asBoruError unwraps e to a *BoruError, or nil for a non-Boru / nil error.
-func asBoruError(e error) *eng.BoruError {
-	var ae *eng.BoruError
+func asBoruError(e error) *core.BoruError {
+	var ae *core.BoruError
 	if e != nil && errors.As(e, &ae) {
 		return ae
 	}
@@ -63,7 +63,7 @@ func asBoruError(e error) *eng.BoruError {
 // Detail. The PRIMARY caret position is deliberately excluded (the VM points
 // inside the shared fn unit where the interpreter points at the call site — the
 // documented return-error difference, gated separately by position PRESENCE).
-func diagPayloadMismatch(aeC, aeI *eng.BoruError) string {
+func diagPayloadMismatch(aeC, aeI *core.BoruError) string {
 	if !normSliceEq(aeC.Notes, aeI.Notes) {
 		return "notes:\n  compiled=" + strings.Join(aeC.Notes, " | ") +
 			"\n  interpreted=" + strings.Join(aeI.Notes, " | ")
@@ -127,7 +127,7 @@ func strSliceEq(a, b []string) bool {
 	return true
 }
 
-func suggestionMsgs(ae *eng.BoruError) []string {
+func suggestionMsgs(ae *core.BoruError) []string {
 	out := make([]string, len(ae.Suggestions))
 	for i, s := range ae.Suggestions {
 		out[i] = s.Message
@@ -138,7 +138,7 @@ func suggestionMsgs(ae *eng.BoruError) []string {
 // spanKeys renders each secondary span as "label@row:col" so both the label
 // and the location are compared (the produced-value and declaration spans must
 // point at the same place in both engines).
-func spanKeys(ae *eng.BoruError) []string {
+func spanKeys(ae *core.BoruError) []string {
 	out := make([]string, len(ae.Spans))
 	for i, s := range ae.Spans {
 		out[i] = s.Label + "@" + itoa(s.Pos.Row) + ":" + itoa(s.Pos.Col)

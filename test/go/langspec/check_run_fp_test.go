@@ -15,7 +15,7 @@ import (
 	"os"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // pinnedCheckRunDivergent is the measured count of generated programs the
@@ -134,7 +134,7 @@ func checkRejects(t *testing.T, src string) bool {
 		return false
 	}
 	for _, d := range cr.Diagnostics {
-		if d.Severity == eng.SeverityError {
+		if d.Severity == core.SeverityError {
 			return true
 		}
 	}
