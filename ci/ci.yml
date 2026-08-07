@@ -91,14 +91,22 @@ jobs:
 
       # The project knowledge graph (kg/) must stay in sync with the
       # sources that generate it: type-check the boru pipeline, run its
-      # test suite, rebuild the bundle, and fail if the committed
-      # kg/out/graph.json or kg/out/graph.sql drifts from the rebuild —
-      # the "keep the graph updated with each PR" rule, enforced. The
-      # build is deterministic, so an in-sync graph diffs empty.
+      # test suite, check the committed bundle's input digest against the
+      # tree, rebuild, and fail if anything under kg/out drifts from the
+      # rebuild — the "keep the graph updated with each PR" rule,
+      # enforced. The build is deterministic, so an in-sync graph diffs
+      # empty.
+      #
+      # `verify` is a strictly weaker check than the rebuild-and-diff
+      # that follows it, and is run anyway for two reasons: it names the
+      # input files that moved (a rebuild diff only shows the result),
+      # and it keeps the verifier itself exercised in CI rather than
+      # only on developer machines.
       - name: Knowledge graph (check, test, freshness)
         run: |
           make -C kg check
           make -C kg test
+          make -C kg verify
           make -C kg graph
           git diff --exit-code kg/out
 

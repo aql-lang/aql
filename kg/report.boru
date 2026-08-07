@@ -67,12 +67,21 @@ def coverage-when fn ok:Boolean String [
   if ok ["fully_answerable"] ["not_answerable"]
 ]
 
-# The twelve competency questions, answered against the finished graph.
+# Render a code unit's repository path, falling back to the id when the
+# entity carries no path attribute.
+def path-of fn [[index:Map id:String] [String] [
+  def e (index get id)
+  if (e is None) [id]
+    [KgUtil.get-or (KgUtil.get-or e "attributes" {}) "path" id]
+]]
+
+# The thirteen competency questions, answered against the finished graph.
 def competency-report fn bundle:Map List [
   def entities (KgUtil.list-at bundle "entities")
   def assertions (KgUtil.list-at bundle "assertions")
   def sources (KgUtil.list-at bundle "sources")
   def canonical (filter [var [[e] not (e.status eq "merged")]] entities)
+  def index (KgEnt.index-by-id entities)
   def has-entities ((entities size) gt 0)
   def has-assertions ((assertions size) gt 0)
   def sample-entity (if has-entities [(canonical get 0)] [none])
@@ -268,14 +277,53 @@ def competency-report fn bundle:Map List [
             "human-review-items" []
             "identity reviews, disputed/unresolved and low-confidence assertions, error issues"
         )
+        (cq
+            "Which code units does the repository build from, what does each depend on, and what depends on it?"
+            (coverage-when (((KgQuery.modules bundle) size) gt 0))
+            (KgUtil.as-map
+                {modules:(each
+                      [var
+                          [[m] KgUtil.as-map
+                              {path:(path-of index m.id)
+                                depends_on:(each [var [[d] path-of index d]]
+                                    (KgQuery.dependencies-of bundle
+                                        m.id
+                                    )
+                                )
+                                depended_on_by:(each [var [[d] path-of index d]]
+                                    (KgQuery.dependents-of bundle m.id)
+                                )
+                              }
+                          ]
+                      ]
+                      (KgQuery.modules bundle)
+                  )
+                  packages:(each [var [[p] path-of index p.id]]
+                      (KgQuery.packages bundle)
+                  )
+                }
+            )
+            "modules / packages / code-unit-by-path / dependencies-of / dependents-of"
+            (if (((KgQuery.modules bundle) size) gt 0) [[]]
+                [["the go.work / go.mod code bundle"]]
+            )
+            "code-derived: go.work membership and DIRECT go.mod requires; depends_on is directed, so the two lists differ"
+        )
     ]
 ]
 
 # ---- the pipeline -------------------------------------------------------
 
 # Build the finished bundle from a list of candidate bundles.
-# opts: {recorded_at generated_at proposals} — the two stamps are
-# explicit so a rebuild over identical input is byte-identical.
+# opts: {recorded_at generated_at proposals input_digest} — the two
+# stamps are explicit so a rebuild over identical input is
+# byte-identical, which is exactly why they cannot double as a freshness
+# signal; input_digest (digest.boru) carries that instead.
+#
+# Candidate ORDER is significant: entities with the same id unify with
+# the FIRST occurrence winning on attribute conflicts, so the caller
+# passes the code bundle before the prose bundle to keep go.mod
+# authoritative over the documentation.
 def build-graph fn [[candidates:List opts:Map] [Map] [
   def recorded_at
     (KgUtil.get-or opts "recorded_at" "1970-01-01T00:00:00Z")
@@ -316,6 +364,7 @@ def build-graph fn [[candidates:List opts:Map] [Map] [
     (KgUtil.as-map
         {schema_version:"boru-kg/1"
           generated_at:generated_at
+          input_digest:(KgUtil.get-or opts "input_digest" {})
           sources:sources
           entities:entities
           assertions:assertions

@@ -11,16 +11,27 @@ tools for the task in front of you; it does not duplicate them. Read the
 linked source — it is authoritative, this page is just the index.
 
 > **The repo as data — the project knowledge graph.** The repository
-> ships a machine-readable map of itself: modules, documents, tools,
-> and core concepts, with every relation backed by a quoted passage
-> from the docs — [`kg/out/graph.json`](kg/out/graph.json), built by
-> the boru pipeline in [`kg/`](kg/README.md). Read it to orient fast;
-> query it with `kg/queries.boru`. **If your PR changes the repository's
-> structure, tooling, or documentation set, update
-> [`kg/project/boru-project.jsonic`](kg/project/boru-project.jsonic) and
-> rebuild with `make -C kg graph` so the committed graph stays
-> current** (the build is deterministic — unchanged input, unchanged
-> bytes).
+> ships a map of itself: Go modules and packages, documents, tools, and
+> core concepts, every relation backed by evidence. Structure comes from
+> **code** — `go.work` and every `go.mod`, quoting the actual `require`
+> lines, so `depends_on` is directed and cannot drift from the build;
+> the rest comes from quoted passages in the docs.
+>
+> **To orient, read [`kg/out/graph.md`](kg/out/graph.md)** — a few
+> hundred lines, module dependency view first ("what does `eng/go`
+> depend on, and what depends on it?"). The full bundle is
+> [`kg/out/graph.json`](kg/out/graph.json): the machine contract, ~115 KB,
+> not something to read whole. Query either with `kg/queries.boru`
+> (`modules`, `code-unit-by-path`, `dependencies-of`, `dependents-of`, …).
+>
+> The code half refreshes itself. **If your PR changes the repository's
+> documentation set, update
+> [`kg/project/boru-project.jsonic`](kg/project/boru-project.jsonic);
+> either way rebuild with `make -C kg graph`** so the committed graph
+> stays current (the build is deterministic — unchanged input, unchanged
+> bytes). `make -C kg verify` tells you whether it is current without
+> rebuilding, and names the files that moved: the `generated_at` stamp
+> is pinned and is NOT a freshness signal, the input digest is.
 
 
 ## First: let the tool document itself (`boru describe` / `boru help`)
@@ -99,7 +110,8 @@ Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
 | The recorded non-uniformities of the language and their verdicts | [NUR.md](NUR.md) |
 | The formal semantics | [FORMAL-SPEC.md](FORMAL-SPEC.md) |
 | The executable language spec (the rows tests run against) | [`lang/spec/*.tsv`](lang/spec/) |
-| See the repository itself as a graph (modules, docs, concepts, evidence) | [`kg/out/graph.json`](kg/out/graph.json) — guide: [kg/README.md](kg/README.md) |
+| See the repository itself as a graph (modules, packages, docs, concepts, evidence) | [`kg/out/graph.md`](kg/out/graph.md) to read, [`kg/out/graph.json`](kg/out/graph.json) to query — guide: [kg/README.md](kg/README.md) |
+| Know what a Go module depends on, or what depends on it | [`kg/out/graph.md`](kg/out/graph.md) §Code units — read from `go.work` + `go.mod`, not from prose |
 
 
 ## Build, test, verify
