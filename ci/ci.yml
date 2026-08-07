@@ -102,6 +102,14 @@ jobs:
           ( cd eng/ts && npm ci )
           make test-ts
 
+      # The parser twins, diffed row-for-row over eng/spec. Both dumpers
+      # shipped with the TS port and nothing ever ran the comparison, which
+      # is how three render defects lived in the gap between them — the
+      # engine-level `crossdiff` cannot see a parser difference that still
+      # evaluates alike (design/TS-PARITY-AUDIT.0.md).
+      - name: Parser differential (parser/go vs parser/ts)
+        run: make parser-crossdiff
+
       # The project knowledge graph (kg/) must stay in sync with the
       # sources that generate it: type-check the boru pipeline, run its
       # test suite, check the committed bundle's input digest against the

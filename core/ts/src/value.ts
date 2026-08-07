@@ -349,8 +349,17 @@ export class Value {
   toString(): string {
     if (this.isNone()) return 'none'
     if (this.data === null) {
-      if (this.vType.equal(TNone)) return 'none'
-      return this.vType.toString()
+      // A bare TYPE LITERAL renders by its LEAF name — `Integer`, not
+      // `Scalar/Number/Integer`. Go is the reference here
+      // (core.NewTypeLiteral(core.TInteger).String() is `Integer`) and
+      // canonValue already drew the same line with vType.leaf(); only this
+      // render used the full path.
+      //
+      // None is included deliberately, with no special case: only the none
+      // VALUE renders lowercase, and isNone() above (data === NONE_SENTINEL)
+      // has already taken it. A TNone arm here rendered the None ALTERNATIVE
+      // of a union as `none` instead of `None`.
+      return this.vType.leaf()
     }
     if (this.vType.equal(TSugar)) {
       return renderSugar(this.data as SugarInfo)
@@ -427,6 +436,16 @@ export class Value {
       // order-insensitive map equality (coretype.ts valuesEqual).
       const parts = m.keys().map((k) => `${k}:${m.get(k)!.toString()}`)
       return `{${parts.join(' ')}}`
+    }
+    // A disjunction renders as its alternatives joined by ` tor `, matching
+    // Go's kernelFormatDefault (core/go/value.go:3660). Without this arm the
+    // fallthrough below reached String(DisjunctInfo) and produced the literal
+    // '[object Object]' — the defect the parser stream oracle was built to
+    // catch and never ran to find (design/TS-PARITY-AUDIT.0.md).
+    if (this.isDisjunct()) {
+      return this.asDisjunct()
+        .alternatives.map((alt) => alt.toString())
+        .join(' tor ')
     }
     return String(this.data)
   }

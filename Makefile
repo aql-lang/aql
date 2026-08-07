@@ -1,5 +1,5 @@
 .PHONY: all build install test test-race test-ts test-ts-core test-ts-parser vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
+        spec-gen spec-test crossdiff parser-crossdiff cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -341,6 +341,36 @@ test-ts-parser:
 crossdiff:
 	@echo "==> cross-engine differential (Go kernel vs TS engine; value + check)"
 	cd test/go && go test ./engspec/ -run TestCrossEngineDifferential -v
+
+# ---- parser-level cross-engine differential -----------------------------
+#
+# The PARSER twins, diffed row-for-row over eng/spec. Both dumpers have
+# existed since the TS port — parser/go/streamdump_test.go and
+# parser/ts/src/streamdump.ts, each emitting `<file>:<line> OK|ERR <render>`
+# — and NOTHING ever ran the comparison. With STREAMDUMP_FILE unset the Go
+# side dumps to a temp dir and discards it, so the corpus only proved every
+# row parses.
+#
+# That gap is not covered by `crossdiff` above: it compares the two ENGINES
+# and hard-fails only when both produce a value and the values differ, so a
+# parser-level render difference that still evaluates alike is invisible to
+# it. Three real defects were living in that blind spot — a disjunction
+# rendering as the literal '[object Object]', the None type literal
+# rendering as the none value, and every type literal rendering by full path
+# instead of leaf name (design/TS-PARITY-AUDIT.0.md).
+#
+# parser/spec is the curated contract; this is the breadth sweep over the
+# 1765 rows of eng/spec that the contract does not enumerate.
+parser-crossdiff:
+	@echo "==> parser differential (parser/go vs parser/ts over eng/spec)"
+	@mkdir -p "$(abspath $(COVER_DIR))"
+	@cd parser/go && STREAMDUMP_FILE="$(abspath $(COVER_DIR))/go-streams.tsv" \
+	  go test -run TestStreamDump >/dev/null
+	@cd parser/ts && node --experimental-strip-types --no-warnings src/streamdump.ts \
+	  > "$(abspath $(COVER_DIR))/ts-streams.tsv"
+	@diff -u "$(abspath $(COVER_DIR))/go-streams.tsv" "$(abspath $(COVER_DIR))/ts-streams.tsv" \
+	  && echo "==> parser-crossdiff: IDENTICAL ($$(wc -l < "$(abspath $(COVER_DIR))/go-streams.tsv") rows)" \
+	  || { echo "==> parser-crossdiff FAILED: the parser twins disagree (see the diff above)"; exit 1; }
 
 # ---- compiled-coverage status surface ----------------------------------
 #
