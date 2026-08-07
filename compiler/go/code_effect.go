@@ -32,35 +32,9 @@ import (
 // keeps REFUSING to lower (whole-program interpreter fallback) —
 // lang/go/code_effect_test.go pins the refusal.
 
-// CodeEffectInfo is the carrier payload for a typed CODE VALUE: the
-// stack effect of a quoted code list held as data. It mirrors
-// ChildTypeInfo's conventions — a Value with Parent=TList and
-// Carrier=true carries it as Data, the way typed-list carriers carry
-// ChildTypeInfo (the non-nil payload also keeps satisfying
-// positionalMatch's concrete-list rule for TList slots).
-type CodeEffectInfo struct {
-	core.PayloadBase
-	// In is the input types the body consumes from the stack, top
-	// first. Stage-1 producers analyse bodies against NO inputs (the
-	// `do` invocation shape, which runs its body in a fresh sub-stack),
-	// so In is always empty today; the field exists for the staged
-	// higher-order consumers (each/fold/filter bodies), which analyse
-	// against synthetic inputs.
-	In []*core.Type
-	// Out is the body's net residual types in bottom-to-top stack
-	// order — the FULL residual `do` leaves (mirroring doListHandler's
-	// whole-stack return, so a multi-value body nets every value).
-	Out []*core.Type
-	// Analysed is true when the body analysis completed cleanly (no
-	// diagnostics, no divergence, every residual representable). A
-	// carrier without the payload — or with Analysed=false — has an
-	// UNKNOWN effect and must stay dynamic(Any) at every consumer.
-	Analysed bool
-}
-
 // AnalyseCodeEffectCarrier converts a CONCRETE quoted code list — a
 // stored body, recognised by containing at least one Word token — into
-// a TList carrier carrying its analysed CodeEffectInfo. ok=false means
+// a TList carrier carrying its analysed core.CodeEffectInfo. ok=false means
 // the effect could not be computed soundly and the caller must keep
 // its existing conversion (a plain type carrier), so precision only
 // ever increases; a code value the analysis cannot type stays
@@ -139,6 +113,6 @@ func AnalyseCodeEffectCarrier(r *core.Registry, body core.Value) (core.Value, bo
 		out[i] = v.Parent
 	}
 	c := core.NewCarrier(core.TList)
-	c.Data = CodeEffectInfo{Out: out, Analysed: true}
+	c.Data = core.CodeEffectInfo{Out: out, Analysed: true}
 	return c, true
 }

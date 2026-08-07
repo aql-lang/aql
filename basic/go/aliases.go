@@ -10,16 +10,16 @@ package basic
 
 import (
 	check "github.com/boru-lang/boru/check/go"
-	compiler "github.com/boru-lang/boru/compiler/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
 // *Type aliases — every exported type from borueng is re-exported here.
 type (
-	BranchRecord       = compiler.BranchRecord
-	EmitState          = compiler.EmitState
+	BranchRecord       = core.BranchRecord
+	CodeEffectInfo     = core.CodeEffectInfo
+	EmitRecorder       = core.EmitRecorder
 	DeqIndex           = core.DeqIndex
-	EmitFragment       = compiler.EmitFragment
+	EmitFragmentRef    = core.EmitFragmentRef
 	BoruError          = core.BoruError
 	RenderOpts         = core.RenderOpts
 	DiagSpan           = core.DiagSpan
@@ -30,7 +30,6 @@ type (
 	CheckSeverity      = core.CheckSeverity
 	CheckState         = core.CheckState
 	ChildTypeInfo      = core.ChildTypeInfo
-	CodeEffectInfo     = compiler.CodeEffectInfo
 	ReachInfo          = core.ReachInfo
 	ReachSeg           = core.ReachSeg
 	ChildEntry         = core.ChildEntry
@@ -482,8 +481,6 @@ var (
 	InvokeBody               = core.InvokeBody
 	ConvertIdealToMap        = core.ConvertIdealToMap
 	ConvertIdealToList       = core.ConvertIdealToList
-	IsCompiledClosure        = compiler.IsCompiledClosure
-	ClosureWantsKeyVal       = compiler.ClosureWantsKeyVal
 	CloneValue               = core.CloneValue
 	NewSyncWriter            = core.NewSyncWriter
 	NewReadList              = core.NewReadList
@@ -505,7 +502,6 @@ var (
 	NewBoolean               = core.NewBoolean
 	// NewCalendarDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = core.NewCarrier
-	StampFnValueInPlace      = compiler.StampFnValueInPlace
 	StampModuleCallGates     = core.StampModuleCallGates
 	NewElementCarrier        = check.NewElementCarrier
 	ElementCarrierFromValue  = check.ElementCarrierFromValue
@@ -579,7 +575,6 @@ var (
 	// NewTimeout moved to lang/go/engine/native_misc.go (Step 8).
 	// NewTimezone moved to lang/go/engine/native_temporal.go (Step 8).
 	NewTop                 = core.NewTop
-	NewEmitState           = compiler.NewEmitState
 	NewType                = core.NewType
 	NewTypeLiteral         = core.NewTypeLiteral
 	NewBoundedType         = core.NewBoundedType
@@ -620,7 +615,6 @@ var (
 	NewCarrierTypedListLen = check.NewCarrierTypedListLen
 	RunCarrierBody         = check.RunCarrierBody
 	RunCarrierBodyKeepDefs = check.RunCarrierBodyKeepDefs
-	AnalyseCodeEffect      = compiler.AnalyseCodeEffectCarrier
 	SetIDSeed              = core.SetIDSeed
 	SeverityFor            = core.SeverityFor
 	CompareSignatures      = core.CompareSignatures

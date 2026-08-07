@@ -4,7 +4,6 @@ go 1.24.7
 
 require (
 	github.com/boru-lang/boru/check/go v0.0.0
-	github.com/boru-lang/boru/compiler/go v0.0.0
 	github.com/boru-lang/boru/core/go v0.0.0
 	github.com/boru-lang/boru/parser/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
@@ -19,7 +18,5 @@ require (
 replace github.com/boru-lang/boru/core/go => ../../core/go
 
 replace github.com/boru-lang/boru/check/go => ../../check/go
-
-replace github.com/boru-lang/boru/compiler/go => ../../compiler/go
 
 replace github.com/boru-lang/boru/parser/go => ../../parser/go

@@ -31,8 +31,6 @@ var _ = check.DispatchBraid
 var _ compiler.EmitState
 
 type (
-	BranchRecord   = compiler.BranchRecord
-	CodeEffectInfo = compiler.CodeEffectInfo
 	CompiledFn     = compiler.CompiledFn
 	CompiledFnRef  = compiler.CompiledFnRef
 	ConstLocalRef  = compiler.ConstLocalRef

@@ -213,17 +213,17 @@
     { subject: "basic-go", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }
       evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "basic/go/ | The base language layer: fundamental words and predefined content types, on core+check+compiler (ADR-013)." }]
+        quote: "basic/go/ | The base language layer: fundamental words and predefined content types, on core+check+parser (ADR-013)." }]
       confidence: 0.98 }
     { subject: "basic-go", predicate: "related_to"
       object: { kind: "entity", entity: "core-go" }
       evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "basic/go/ | The base language layer: fundamental words and predefined content types, on core+check+compiler (ADR-013)." }]
+        quote: "basic/go/ | The base language layer: fundamental words and predefined content types, on core+check+parser (ADR-013)." }]
       confidence: 0.95 }
     { subject: "lang-go", predicate: "related_to"
       object: { kind: "entity", entity: "basic-go" }
       evidence: [{ source: "src:agents", locator: "Repository layout",
-        quote: "basic/go/ | The base language layer: fundamental words (stack, definition, control, type-generics) + predefined content types. Depends on core+check+compiler (ADR-013)." }]
+        quote: "basic/go/ | The base language layer: fundamental words (stack, definition, control, type-generics) + predefined content types. Depends on core+check+parser — not compiler, which it reaches through `core.EmitRecorder` (ADR-013)." }]
       confidence: 0.95 }
     { subject: "calc-go", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }

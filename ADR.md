@@ -1019,10 +1019,10 @@ layer, and the module dependencies around it are HARD RULES:**
 
 1. **`basic` depends on the pieces it actually uses, and on nothing
    else.** Since the four-piece + parser cuts those are `core`,
-   `check`, `compiler` and `parser` — NOT `eng`. Its `go.mod` requires
-   no other boru sibling and no host-capability dependency (no sqlite,
-   no filesystem abstraction, no format stack). A change that adds one
-   is wrong by definition; fix the design, not the go.mod.
+   `check` and `parser` — NOT `eng`, and not `compiler`. Its `go.mod`
+   requires no other boru sibling and no host-capability dependency (no
+   sqlite, no filesystem abstraction, no format stack). A change that
+   adds one is wrong by definition; fix the design, not the go.mod.
 
    > **Amendment (2026-08-07) — `eng only` was measured and found
    > false.** As written on 2026-08-04 this rule said "`basic` depends
@@ -1062,6 +1062,61 @@ layer, and the module dependencies around it are HARD RULES:**
    > SHADOWING artefacts: `eng := native.New(reg)` makes `eng.Run` a
    > method call on a local, not a package reference. Regex cannot see
    > that; the compiler can, and it disproved them.
+
+   > **Amendment (2026-08-07, second) — `compiler` was a seam gap;
+   > `check` is structural.** The amendment above left `basic` requiring
+   > `compiler` (9 references) and `check` (45). Asked why a layer that
+   > is "just additional basic language elements on the interpreter"
+   > needs either, both were re-examined. They are not the same case,
+   > and the difference is behavioural rather than a matter of effort.
+   >
+   > **`compiler` is gone.** All 9 references were reaching past a seam
+   > that already existed. `basic`'s `if` / `case` / `for` handlers
+   > record branch and loop fragments through `core.EmitRecorder` — but
+   > that interface stopped short of the branch/loop group, so
+   > `recorderState` had to downcast the recorder to
+   > `*compiler.EmitState` to reach `RecordBranch` and friends. The
+   > downcast was the dependency. Widening the core interface with
+   > `TakeFragment` / `RecordBranch` / `RecordLoop` (plus
+   > `core.BranchRecord`, `core.CodeEffectInfo` — which `payload.go`
+   > already named — and the opaque `core.EmitFragmentRef`, so core
+   > need not know what a fragment is) removed both. That is a legitimate
+   > seam because an INACTIVE recorder is *correct* behaviour: with no
+   > compiler linked nothing is recorded and the program runs
+   > interpreted, which is exactly what the named no-op defaults do.
+   >
+   > **`check` stays, and the rule now says so deliberately.** The
+   > surface is larger than the earlier count suggested — that count saw
+   > only qualified `check.` references outside `basic/go/aliases.go`
+   > and missed everything reached through the aliases. Measured
+   > properly: **23 check symbols over 63 non-test call sites**
+   > (`RunCarrierBody` / `WithDefs` / `KeepDefs` / `CondBody`,
+   > `ApplyGuardNarrowing`, `ApplyComplementNarrowing`,
+   > `InstallJoinedDefs`, `JoinCarriers`, `JoinCarrierStacks`,
+   > `CommonAncestorType`, `AnalyseFnBody`, `AnalyseLoopBody`,
+   > `RecordTypedDefMake`, `DeadSignatures`, `CheckAddUniqueDiagnostic`,
+   > the `Returns*` builders, the carrier constructors).
+   >
+   > Every one of them takes and returns core types only, so forwarding
+   > them through a core-owned table — the shape `AnalysisImpl` already
+   > uses for its ten — is mechanically possible. It is nonetheless
+   > REJECTED, because it would be a mailbox rather than a seam. Each
+   > native control word has an analysis half as well as a runtime half,
+   > and the analysis half is written in the checker's vocabulary: `if`
+   > cannot be type-checked without narrowing the guard across the
+   > then-arm, re-entering the pass on each arm, and joining the arms'
+   > carriers. Unlike the recorder there is no correct inactive default —
+   > "do not narrow, do not join" is not a feature switched off, it is
+   > wrong analysis. `basic` would still require `check` at run time
+   > while `go.mod` stopped declaring it, which inverts the purpose of
+   > the gate.
+   >
+   > The honest route to `basic → core` alone, if it is ever wanted, is
+   > to move the carrier lattice itself (`JoinCarriersInner` and the
+   > narrowing machinery) down into `core`, where `Value`, `NewCarrier`,
+   > `CheckState` and `ReturnsFunc` already live. That is a checker
+   > refactor with real consequences for `check`'s cohesion, not a
+   > dependency edit, and it is not undertaken here.
 
 2. **`lang` depends on `basic`** (and, as before, on `eng`). The
    full word library builds ON the base layer; nothing in `basic`

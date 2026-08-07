@@ -708,15 +708,15 @@ func TestEventsThroughSeqMiss(t *testing.T) {
 func TestComputedArmCondOKDirect(t *testing.T) {
 	tru := true
 	// ConstCond set → false (the disjoint const-cond path owns it).
-	if computedArmCondOK(BranchRecord{ConstCond: &tru}, EmitOperand{}) {
+	if computedArmCondOK(core.BranchRecord{ConstCond: &tru}, EmitOperand{}) {
 		t.Fatal("const-cond should not be a computed-arm cond")
 	}
 	// opNone / default cond → false.
-	if computedArmCondOK(BranchRecord{}, EmitOperand{kind: opNone}) {
+	if computedArmCondOK(core.BranchRecord{}, EmitOperand{kind: opNone}) {
 		t.Fatal("opNone cond should be rejected")
 	}
 	// A stack event cond → true.
-	if !computedArmCondOK(BranchRecord{}, EmitOperand{kind: opEvent}) {
+	if !computedArmCondOK(core.BranchRecord{}, EmitOperand{kind: opEvent}) {
 		t.Fatal("event cond should be accepted")
 	}
 }

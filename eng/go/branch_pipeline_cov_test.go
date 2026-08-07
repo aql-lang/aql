@@ -56,7 +56,7 @@ func cifReturns(args []Value, r *Registry) []Value {
 		return []Value{out}
 	}
 
-	armOf := func(arg Value, then bool) (*EmitFragment, []Value, map[string]Value, *Value) {
+	armOf := func(arg Value, then bool) (EmitFragmentRef, []Value, map[string]Value, *Value) {
 		if IsConcrete(arg) && arg.Parent.ConformsTo(TList) {
 			var restore func()
 			if then {

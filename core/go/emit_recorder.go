@@ -1,5 +1,33 @@
 package core
 
+// EmitFragmentRef is an OPAQUE recorded-fragment handle. The recorder mints
+// one (TakeFragment) and receives it back unread (RecordBranch / RecordLoop);
+// core never inspects one, and neither does any word library.
+//
+// It is `any` for the same reason core/ts's RecorderOperand is `unknown`: the
+// concrete fragment is the compiler's representation, and naming it here would
+// invert the dependency this seam exists to prevent. A word library that
+// downcasts this to reach the compiler's type has defeated the seam — which is
+// exactly what basic/go's `if` did before this contract existed.
+type EmitFragmentRef any
+
+// BranchRecord is the `if` shape a word library hands the recorder. It lives
+// HERE, not in the compiler, so a word implementing branching names only core.
+// Its fragment fields are opaque refs; every other field is a core value.
+type BranchRecord struct {
+	Cond            Value           // pre-evaluated condition (paren/value form)
+	CondFrag        EmitFragmentRef // list-form condition body, when analysed
+	CondStk         []Value         // its residual stack
+	ConstCond       *bool           // statically-known condition: only Then captured
+	HasElse         bool
+	Then, Els       EmitFragmentRef
+	ThenStk, ElsStk []Value
+	ThenValue       *Value // non-nil: the then arm is this already-evaluated VALUE
+	ElsValue        *Value // non-nil: the else arm is this already-evaluated VALUE
+	Out             Value
+	Pos             SrcPos
+}
+
 // EmitRecorder is the checker-side view of the bytecode recording pass —
 // the NARROW seam between static analysis and compilation (G9 / completion
 // plan 4.5; comprehensive review Tier-2 item 6). Everything the check side
@@ -101,6 +129,15 @@ type EmitRecorder interface {
 	RememberStrippedOriginals(pre, stripped []Value)
 
 	// --- branches / loops ------------------------------------------------
+	//
+	// TakeFragment / RecordBranch / RecordLoop are what let a word library
+	// implement control flow WITHOUT naming a compiler symbol. They were added
+	// when basic/go's `if` was found downcasting CheckState.Recorder() to the
+	// concrete *EmitState to reach them — the seam existed, it just did not
+	// cover branching, so the one caller that needed it punched through.
+	TakeFragment() EmitFragmentRef
+	RecordBranch(b BranchRecord)
+	RecordLoop(start, end, step Value, body EmitFragmentRef, bodyStk []Value, iterID string, out Value, regionN int, pos SrcPos)
 	ArmBranchCapture()
 	PeekCaptureArm() bool
 	ArmLoopCapture()
@@ -159,6 +196,11 @@ func (inactiveEmit) TopFrameOnly() bool                                     { re
 func (inactiveEmit) SuspendedNow() bool                                     { return false }
 func (inactiveEmit) BodyAnalysisGuard() func()                              { return func() {} }
 func (inactiveEmit) FnBodyGuard() func()                                    { return func() {} }
+
+func (inactiveEmit) TakeFragment() EmitFragmentRef { return nil }
+func (inactiveEmit) RecordBranch(BranchRecord)     {}
+func (inactiveEmit) RecordLoop(Value, Value, Value, EmitFragmentRef, []Value, string, Value, int, SrcPos) {
+}
 
 func (inactiveEmit) MarkUncompilable(string) {}
 func (inactiveEmit) SetCatchVariadic(bool)   {}

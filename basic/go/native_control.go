@@ -639,7 +639,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	// paren result), exactly like the else arm below. A non-body then pushes its
 	// value directly in the then arm; no capture is armed (there is no body).
 	thenIsBody := IsConcrete(args[1]) && args[1].Parent.ConformsTo(TList)
-	var thenFrag *EmitFragment
+	var thenFrag EmitFragmentRef
 	var thenStk []Value
 	var thenDefs map[string]Value
 	var thenValue *Value
@@ -673,7 +673,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	// capture (there is no body to run); pass the value through so the
 	// lowering pushes it directly in the else arm.
 	elseIsBody := IsConcrete(args[2]) && args[2].Parent.ConformsTo(TList)
-	var elseFrag *EmitFragment
+	var elseFrag EmitFragmentRef
 	var elseStk []Value
 	var elseDefs map[string]Value
 	var elseValue *Value
@@ -853,8 +853,8 @@ func reduceStaticArm(r *Registry, cond, arm Value, isThen bool) []Value {
 // so it rides RunCarrierCondBody — the CondBodyDepth-exempt body run: an
 // in-place fn redefinition in a condition is not path-dependent and stays
 // compilable, exactly like its paren-`do` condition twin.
-func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
-	es, _ := r.Check.Recorder().(*EmitState)
+func analyseCondFragment(r *Registry, cond Value) (EmitFragmentRef, []Value) {
+	es := r.Check.Recorder()
 	if !es.Armed() || !IsConcrete(cond) || !cond.Parent.ConformsTo(TList) {
 		return nil, nil
 	}
@@ -1071,7 +1071,7 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value, countArg int) []Value {
 	body := args[len(args)-1]
 	iter := NewCarrier(iterType)
-	es, _ := r.Check.Recorder().(*EmitState)
+	es := r.Check.Recorder()
 
 	// Statically-zero loop pruning: a `for` whose count operand is a CONCRETE
 	// non-positive Integer never enters its body — at run time both engines
@@ -1409,13 +1409,13 @@ func ErrorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	return out, nil
 }
 
-// recorderState unwraps the concrete recording backend behind the check
-// state's recorder. Under a plain-check pass the recorder is the inactive
-// no-op, so this returns a nil *EmitState whose methods no-op through the
-// kernel's nil-receiver guards — the same decline the fragment/branch
-// methods' interface no-ops provided before the S2 surface reduction
-// homed the recorder interface check-side.
-func recorderState(c *CheckState) *EmitState {
-	es, _ := c.Recorder().(*EmitState)
-	return es
+// recorderState returns the check state's recorder through core's INTERFACE.
+// It used to downcast to the concrete *EmitState, because RecordBranch /
+// RecordLoop / TakeFragment were not on EmitRecorder — that downcast was the
+// only reason this package depended on the compiler at all. The seam now
+// covers branching, so a word library implements control flow naming core
+// alone. Under a plain-check pass the recorder is core's named inactive
+// default and every call declines.
+func recorderState(c *CheckState) EmitRecorder {
+	return c.Recorder()
 }

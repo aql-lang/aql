@@ -212,7 +212,7 @@ func TestPayloadMarkersInvoke(t *testing.T) {
 		core.DisjunctInfo{},
 		core.NegationInfo{},
 		core.ChildTypeInfo{},
-		CodeEffectInfo{},
+		core.CodeEffectInfo{},
 		core.RecordTypeInfo{},
 		core.OptionsTypeInfo{},
 		core.TableTypeInfo{},
@@ -291,7 +291,7 @@ func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 		}
 		out := stk[len(stk)-1]
 		taken := lit
-		testRecorderState(es).RecordBranch(BranchRecord{
+		testRecorderState(es).RecordBranch(core.BranchRecord{
 			ConstCond: &taken, HasElse: true,
 			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos(),
 		})
@@ -310,7 +310,7 @@ func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 			stk, defs := check.RunCarrierBodyWithDefs(r, arg)
 			frag := testRecorderState(es).TakeFragment()
 			restore()
-			return frag, stk, defs, nil
+			return asFragment(frag), stk, defs, nil
 		}
 		v := arg
 		return nil, []core.Value{v}, nil, &v
@@ -321,7 +321,7 @@ func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 	joined := check.JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
 		out := core.NewCarrier(core.TNone)
-		testRecorderState(es).RecordBranch(BranchRecord{
+		testRecorderState(es).RecordBranch(core.BranchRecord{
 			Cond: args[0], HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -337,7 +337,7 @@ func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 		}
 	}
 	out := joined[len(joined)-1]
-	testRecorderState(es).RecordBranch(BranchRecord{
+	testRecorderState(es).RecordBranch(core.BranchRecord{
 		Cond: args[0], HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),

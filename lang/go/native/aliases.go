@@ -17,9 +17,9 @@ import (
 
 // *Type aliases — every exported type from borueng is re-exported here.
 type (
-	BranchRecord       = compiler.BranchRecord
+	BranchRecord       = core.BranchRecord
 	DeqIndex           = core.DeqIndex
-	EmitFragment       = compiler.EmitFragment
+	EmitFragment       = core.EmitFragmentRef
 	BoruError          = core.BoruError
 	RenderOpts         = core.RenderOpts
 	DiagSpan           = core.DiagSpan
@@ -31,7 +31,7 @@ type (
 	CheckState         = core.CheckState
 	EmitState          = compiler.EmitState
 	ChildTypeInfo      = core.ChildTypeInfo
-	CodeEffectInfo     = compiler.CodeEffectInfo
+	CodeEffectInfo     = core.CodeEffectInfo
 	ReachInfo          = core.ReachInfo
 	ReachSeg           = core.ReachSeg
 	ChildEntry         = core.ChildEntry

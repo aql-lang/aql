@@ -38,6 +38,7 @@ type (
 	BoolPayload          = core.BoolPayload
 	BoruError            = core.BoruError
 	BoruImpl             = core.BoruImpl
+	BranchRecord         = core.BranchRecord
 	CalDurationData      = core.CalDurationData
 	CallableSpec         = core.CallableSpec
 	CandidateFailure     = core.CandidateFailure
@@ -53,6 +54,7 @@ type (
 	ClassTypeInfo        = core.ClassTypeInfo
 	ClosureInShape       = core.ClosureInShape
 	ClosurePayload       = core.ClosurePayload
+	CodeEffectInfo       = core.CodeEffectInfo
 	Comparer             = core.Comparer
 	CompileEffect        = core.CompileEffect
 	CompileSandbox       = core.CompileSandbox
@@ -83,6 +85,7 @@ type (
 	EffectLedger         = core.EffectLedger
 	EmitCheckpoint       = core.EmitCheckpoint
 	EmitCheckpointBase   = core.EmitCheckpointBase
+	EmitFragmentRef      = core.EmitFragmentRef
 	EmitRecorder         = core.EmitRecorder
 	Engine               = core.Engine
 	EngineState          = core.EngineState

@@ -72,7 +72,7 @@ func fixIf3Handler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *e
 
 // fixCondFragment captures the condition body as its own fragment when
 // emitting, so the lowering runs it inline before JMP_IF_FALSE.
-func fixCondFragment(r *eng.Registry, cond eng.Value) (*eng.EmitFragment, []eng.Value) {
+func fixCondFragment(r *eng.Registry, cond eng.Value) (eng.EmitFragmentRef, []eng.Value) {
 	es, _ := r.Check.Recorder().(*eng.EmitState)
 	if !es.Armed() || !eng.IsConcrete(cond) || !cond.Parent.ConformsTo(eng.TList) {
 		return nil, nil
@@ -131,7 +131,7 @@ func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 
 	condFrag, condStk := fixCondFragment(r, args[0])
 
-	arm := func(v eng.Value, narrow func() func()) (frag *eng.EmitFragment, stk []eng.Value, defs map[string]eng.Value, value *eng.Value) {
+	arm := func(v eng.Value, narrow func() func()) (frag eng.EmitFragmentRef, stk []eng.Value, defs map[string]eng.Value, value *eng.Value) {
 		if fixIsCodeBody(v) {
 			restore := narrow()
 			es.Recorder().ArmBranchCapture()
