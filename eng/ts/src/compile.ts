@@ -4,14 +4,14 @@
 // recording pass) and finalises the trace into a Program. runCompiled
 // compiles and executes via the VM, falling back to the interpreter for
 // any source the compiler refuses.
-import { Engine } from './engine.ts'
+import { Engine } from '@voxgig/borucore'
 import { EmitState } from './emit.ts'
-import { BoruError } from './error.ts'
+import { BoruError } from '@voxgig/borucore'
 import { finalize, type FinalizeResult } from './lower.ts'
 import type { Program } from './bytecode.ts'
-import type { Registry } from './registry.ts'
+import type { Registry } from '@voxgig/borucore'
 import { runProgram } from './vm.ts'
-import type { Value } from './value.ts'
+import type { Value } from '@voxgig/borucore'
 
 /**
  * Compile `input` to a Program, or refuse with the first blocking

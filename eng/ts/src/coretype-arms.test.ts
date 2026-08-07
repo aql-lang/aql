@@ -19,8 +19,8 @@ import {
   newTypedList,
   newWord,
   OrderedMap,
-} from './value.ts'
-import { TInteger, TList } from './type.ts'
+} from '@voxgig/borucore'
+import { TInteger, TList } from '@voxgig/borucore'
 import { registerSpecWords, renderStack, tokenize } from './spec-fixture.ts'
 
 describe('boolean coercion table', () => {

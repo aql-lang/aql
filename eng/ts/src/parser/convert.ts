@@ -34,10 +34,10 @@ import {
   newSugar,
   newCloseParen,
   newEnd,
-} from '../value.ts'
-import type { WordInfo, ReachSeg, ReachInfo, SugarInfo, InterpSegment } from '../value.ts'
-import { TWord, TNone, TAbsent, TBigInteger, TBigDecimal } from '../type.ts'
-import { BoruError } from '../error.ts'
+} from '@voxgig/borucore'
+import type { WordInfo, ReachSeg, ReachInfo, SugarInfo, InterpSegment } from '@voxgig/borucore'
+import { TWord, TNone, TAbsent, TBigInteger, TBigDecimal } from '@voxgig/borucore'
+import { BoruError } from '@voxgig/borucore'
 import {
   ParenGroup,
   UnclosedParen,

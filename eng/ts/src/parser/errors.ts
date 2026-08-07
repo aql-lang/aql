@@ -11,7 +11,7 @@
 
 import { JsonicError } from '@tabnas/jsonic'
 
-import { BoruError } from '../error.ts'
+import { BoruError } from '@voxgig/borucore'
 
 // colorOff pins the library renderer's color off; the translated
 // BoruError owns presentation (color is caller-resolved there).

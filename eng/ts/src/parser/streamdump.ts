@@ -11,7 +11,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { BoruError } from '../error.ts'
+import { BoruError } from '@voxgig/borucore'
 import { parse } from './convert.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

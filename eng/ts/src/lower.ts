@@ -31,7 +31,7 @@ import {
   type TrapSpec,
 } from './bytecode.ts'
 import type { EmitState, Event, FallbackEvent, LoopEvent, Operand, TrapEvent } from './emit.ts'
-import type { Value } from './value.ts'
+import type { Value } from '@voxgig/borucore'
 
 /** Either a compiled Program or the first reason compilation refused. */
 export type FinalizeResult = { program: Program } | { refused: string }

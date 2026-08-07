@@ -18,10 +18,10 @@ import {
   runProgram,
 } from './index.ts'
 import { OpCallNativePoly, OpFallback, disassemble } from './bytecode.ts'
-import { canonValue } from './canon.ts'
-import { matchValues } from './match.ts'
-import { TInteger } from './type.ts'
-import { newFloat, newMark, newWord } from './value.ts'
+import { canonValue } from '@voxgig/borucore'
+import { matchValues } from '@voxgig/borucore'
+import { TInteger } from '@voxgig/borucore'
+import { newFloat, newMark, newWord } from '@voxgig/borucore'
 
 function prog(p: Omit<Partial<Program>, 'ops' | 'args'> & { ops: number[]; args: number[] }): Program {
   return {

@@ -13,147 +13,26 @@
 // convention: this package declares no dependency on @voxgig/borueng, so a
 // core file reaching upward simply fails to resolve.
 
+// The core surface is exported WHOLE, deliberately. The curated list this
+// replaced was inherited from eng/ts, where consumers could reach past the
+// barrel into './value.ts' directly; across a package boundary they cannot,
+// so anything a consumer legitimately needs has to be on the barrel. A
+// narrower list would only push callers back to deep imports, which is the
+// coupling the package boundary exists to prevent.
 
-export { BoruError } from './error.ts'
-export { cap } from './capability.ts'
-export { CheckState, severityFor, DEFAULT_CHECK_STEP_BUDGET } from './check-state.ts'
-export { coerceBoolean } from './coretype.ts'
-export type { CheckDiagnostic, CheckSeverity } from './check-state.ts'
-export { Engine } from './engine.ts'
-export type { FunctionEntry } from './registry.ts'
-export { Registry } from './registry.ts'
-export type {
-  Handler,
-  NativeFunc,
-  NativeSig,
-  ReturnsFunc,
-  Signature,
-} from './signature.ts'
-export {
-  signatureScore,
-  sortSignatures,
-} from './signature.ts'
-export type { BoruType } from './type.ts'
-export type { SugarInfo, SugarKind } from './value.ts'
-export { sugarExpansion } from './sugar.ts'
-export {
-  TAbsent,
-  TAny,
-  TAtom,
-  TBigDecimal,
-  TBigInteger,
-  TBoolean,
-  TDecimal,
-  TDisjunct,
-  TEnum,
-  TError,
-  TFloat,
-  TFnUndef,
-  TForward,
-  TFunction,
-  TIdeal,
-  TInspect,
-  TInterpString,
-  TInteger,
-  TList,
-  TMap,
-  TMark,
-  TMove,
-  TNegation,
-  TNever,
-  TNode,
-  TNone,
-  TNumber,
-  TClass,
-  TOpenParen,
-  TOptions,
-  TPathon,
-  TReach,
-  TRecord,
-  TScalar,
-  TCloseParen,
-  TEnd,
-  TSplice,
-  TStore,
-  TString,
-  TStringEmpty,
-  TStringProper,
-  TSugar,
-  TTable,
-  TType,
-  TWord,
-  TXml,
-  builtinRank,
-  newType,
-  typeNameTable,
-} from './type.ts'
-export {
-  ChildType,
-  ClassTypeInfo,
-  OptionsData,
-  OrderedMap,
-  Value,
-  newAny,
-  newAtom,
-  newBoolean,
-  newCarrier,
-  newConstrainedWord,
-  newDynamicCarrier,
-  newDecimal,
-  newDisjunct,
-  newEnum,
-  newFloat,
-  newFnDef,
-  newFnUndef,
-  newForwardMarker,
-  newInspect,
-  newInterpString,
-  newInteger,
-  newList,
-  newMap,
-  asSugar,
-  isCloseParen,
-  isEnd,
-  isOpenParen,
-  isSugar,
-  newCloseParen,
-  newEnd,
-  newMark,
-  newMove,
-  newClassType,
-  newErrorValue,
-  newNone,
-  newOpenParen,
-  newSugar,
-  renderSugar,
-  newOptions,
-  newParenExpr,
-  newString,
-  newTypedList,
-  newTypedMap,
-  newTypeLiteral,
-  newWord,
-  newXml,
-  newXmlInterp,
-  withQuoted,
-} from './value.ts'
-export type {
-  FnDefInfo,
-  FnParam,
-  FnSig,
-  ForwardMarker,
-  InterpSegment,
-  MarkInfo,
-  MoveInfo,
-  WordInfo,
-  XmlAttrTmpl,
-  XmlChildTmpl,
-  XmlElement,
-  XmlTmpl,
-} from './value.ts'
-
-// ---- the seams the upper pieces install into -----------------------------
-export { AnalysisImpl, installAnalysisImpl, inactiveCarrierResults, inactiveStripToCarriers } from './analysis-hooks.ts'
-export type { AnalysisHooks } from './analysis-hooks.ts'
-export { inactiveEmitRecorder } from './emit-recorder.ts'
-export type { EmitRecorder, RecorderOperand } from './emit-recorder.ts'
+export * from './error.ts'
+export * from './type.ts'
+export * from './value.ts'
+export * from './canon.ts'
+export * from './coretype.ts'
+export * from './signature.ts'
+export * from './match.ts'
+export * from './registry.ts'
+export * from './resolve.ts'
+export * from './sugar.ts'
+export * from './make.ts'
+export * from './capability.ts'
+export * from './engine.ts'
+export * from './check-state.ts'
+export * from './analysis-hooks.ts'
+export * from './emit-recorder.ts'

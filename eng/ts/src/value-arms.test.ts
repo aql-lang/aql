@@ -11,7 +11,7 @@ import {
   TMap,
   TNone,
   TString,
-} from './type.ts'
+} from '@voxgig/borucore'
 import {
   ChildType,
   ClassTypeInfo,
@@ -42,7 +42,7 @@ import {
   newTypedMap,
   newWord,
   renderSugar,
-} from './value.ts'
+} from '@voxgig/borucore'
 import { tokenize } from './spec-fixture.ts'
 
 describe('value predicate table', () => {

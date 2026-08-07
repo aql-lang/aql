@@ -13,10 +13,11 @@
 //
 // PARITY NOTE: still mono-only / concrete-operand / single-result; poly,
 // dynamic, loops, user fns, containers, and fallback islands land later.
-import type { Registry } from './registry.ts'
-import type { Signature } from './signature.ts'
-import { newCarrier, newWord, OrderedMap, type FnDefInfo, type Value } from './value.ts'
-import { TList, TMap } from './type.ts'
+import type { RecorderOperand } from '@voxgig/borucore'
+import type { Registry } from '@voxgig/borucore'
+import type { Signature } from '@voxgig/borucore'
+import { newCarrier, newWord, OrderedMap, Value, type FnDefInfo } from '@voxgig/borucore'
+import { TList, TMap } from '@voxgig/borucore'
 
 /**
  * fnCaptureFree reports whether a fn VALUE is self-contained — every body
@@ -529,6 +530,22 @@ export class EmitState {
    * tokens (an interpolated-string island capturing `def x quote [..]`) can
    * inline this span where it cannot bake `v` as a const.
    */
+  /**
+   * The baked constant a `const` operand carries, or null for anything else.
+   *
+   * core's EmitRecorder asks for this rather than reading `op.kind` inline:
+   * the step loop needs to know whether an operand is bakeable (to const-fold
+   * an inert computed container, and to bake a const-bound word into an
+   * island) but must not know how an Operand is represented. Keeping the
+   * answer here is what lets core treat the operand as opaque — the same
+   * split core/go has, where EmitRecorder's methods take only core types.
+   */
+  constValueOf(op: RecorderOperand | null): Value | null {
+    if (op === null || typeof op !== 'object') return null
+    const o = op as { kind?: unknown; value?: unknown }
+    return o.kind === 'const' && o.value instanceof Value ? o.value : null
+  }
+
   islandTokensFor(v: Value): readonly Value[] | null {
     return this.islandTokens.get(v) ?? null
   }
