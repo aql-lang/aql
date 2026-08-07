@@ -1,0 +1,534 @@
+# gomod.boru — the CODE bundle: facts read from go.work and go.mod.
+#
+# Everything else in this pipeline is derived from PROSE — README.md,
+# AGENTS.md, design notes — and prose has two failure modes a knowledge
+# graph cannot detect on its own:
+#
+#   1. It is undirected. "core/go … eng builds on it" became a
+#      related_to edge, which cannot tell "eng depends on core" from
+#      "core depends on eng" — so the graph could not answer the most
+#      basic question asked of it.
+#   2. It states intent as fact. A design note that says "the parser
+#      re-points to core" reads exactly like a note that says it HAS,
+#      and ingesting the first as the second silently asserts something
+#      the code contradicts.
+#
+# go.work and go.mod are machine-readable ground truth for both. This
+# module reads them and emits a candidate bundle in the ordinary shape
+# (ingest.boru), so code facts flow through the same identity
+# resolution, conflict marking and validation as everything else — they
+# just carry `require` lines as their evidence quotes instead of prose.
+#
+# What it emits:
+#   - one SoftwareModule entity per go.work member (plus any extras)
+#   - one SoftwareModule entity per one-level Go package inside them
+#   - <module> part_of  <repo>       evidence: the go.work `use` line
+#   - <package> part_of <module>     evidence: filesystem discovery
+#   - <module> depends_on <module>   evidence: the go.mod `require` line
+#   - <module> has_attribute <path>  evidence: the go.mod `module` line
+#
+# Only DIRECT requires become depends_on: an `// indirect` line records
+# what the module graph drags in, not what this module was written
+# against, and conflating the two makes every module look like it
+# depends on everything.
+#
+# Paths are relative to kg/ (the working directory for the pipeline), so
+# the repository root is "..".
+
+import "boru:io"
+import "boru:string-util"
+import "boru:array-util"
+import "./util.boru"
+
+def boru-prefix "github.com/boru-lang/boru/"
+
+def read-text fn path:String String [
+  IO.read (make Pathon path) {fmt:"text"}
+]
+
+# StringUtil.split drops empty fields, so blank lines never reach the
+# line scanners below.
+def lines-of fn text:String List [StringUtil.split "\n" text]
+
+def strip-prefix fn [[prefix:String s:String] [String] [
+  if (KgUtil.starts-with prefix s) [StringUtil.replace prefix "" s] [s]
+]]
+
+# "core/go" -> "core-go"; the candidate key the project file also uses,
+# so a module declared in both bundles resolves to ONE entity.
+def key-of fn path:String String [
+  StringUtil.replace "/" "-" path {scope:"all"}
+]
+
+def module-label fn path:String String [`${path} module`]
+def package-label fn path:String String [`${path} package`]
+
+# Cut a directive line at its first `//` comment.
+#
+# go.work and go.mod both permit trailing comments, and `go work edit
+# -fmt` PRESERVES them, so `./eng/go // engine` is a form the tree can
+# legitimately contain. Without this, that line stored the member path
+# `eng/go // engine` and the build then tried to read
+# `../eng/go // engine/go.mod`.
+#
+# Used only where the rest of the line is a whole value — a use path, a
+# module path, a block delimiter. A require ENTRY deliberately keeps its
+# comment, because `// indirect` is what tells a direct dependency apart
+# from a transitive one.
+#
+# i < 0 is no comment; i == 0 is a whole-line comment, which the callers
+# already filter by prefix. Only a comment AFTER content is stripped.
+def strip-comment fn s:String String [
+  def i (StringUtil.indexof "//" s)
+  if (i lte 0) [s] [StringUtil.trim ((StringUtil.split "//" s) get 0)]
+]
+
+# ---- go.work ------------------------------------------------------------
+
+# The `use (...)` block, as repo-relative member paths. A single-line
+# `use ./x` form is accepted too.
+def parse-work-uses fn text:String List [
+  def st
+    (fold
+        [var
+            [[l acc]
+              def t (strip-comment (StringUtil.trim l))
+              def inb (KgUtil.get-or acc "in" false)
+              def out (KgUtil.list-at acc "out")
+              if (t eq "use (") [KgUtil.as-map {in:true out:out}]
+                [if (inb and (t eq ")"))
+                    [KgUtil.as-map {in:false out:out}]
+                    [if (inb and (KgUtil.starts-with "./" t))
+                        [KgUtil.as-map
+                            {in:true
+                              out:(push (strip-prefix "./" t) out)
+                            }
+                        ]
+                        [if (KgUtil.starts-with "use ./" t)
+                            [KgUtil.as-map
+                                {in:inb
+                                  out:(push (strip-prefix "use ./" t) out)
+                                }
+                            ]
+                            [acc]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        (lines-of text) {in:false out:[]}
+    )
+    sort (KgUtil.list-at st "out")
+]
+
+# ---- go.mod -------------------------------------------------------------
+
+def parse-module-path fn text:String String [
+  def hits
+    (filter
+        [var [[l] KgUtil.starts-with "module " (StringUtil.trim l)]]
+        (lines-of text)
+    )
+  if ((hits size) eq 0) [""]
+    [strip-comment
+        (StringUtil.trim
+            (strip-prefix "module " (StringUtil.trim (hits get 0)))
+        )
+    ]
+]
+
+# One require entry: {path version indirect line}. `line` is kept
+# verbatim because it becomes the evidence quote.
+def require-entry fn t:String Map [
+  def parts (StringUtil.split " " t) KgUtil.as-map
+    {path:(if ((parts size) gt 0) [parts get 0] [""])
+      version:(if ((parts size) gt 1) [parts get 1] [""])
+      indirect:(StringUtil.contains "// indirect" t)
+      line:t
+    }
+]
+
+# Every require entry, from both the block form and the single-line
+# form. A `replace (` block is left alone: only a `require (` opener
+# arms the block scanner, so the replace block's `)` never closes it.
+def parse-requires fn text:String List [
+  def st
+    (fold
+        [var
+            [[l acc]
+                # `t` keeps its comment because require-entry needs to see
+              # `// indirect`; `d` is the comment-free form, used only
+              # for the block delimiters (a `) // done` terminator must
+              # still close the block).
+              def t (StringUtil.trim l)
+              def d (strip-comment t)
+              def inb (KgUtil.get-or acc "in" false)
+              def out (KgUtil.list-at acc "out")
+              if (d eq "require (") [KgUtil.as-map {in:true out:out}]
+                [if (inb and (d eq ")"))
+                    [KgUtil.as-map {in:false out:out}]
+                    [if (inb and (not (KgUtil.starts-with "//" t)))
+                        [KgUtil.as-map
+                            {in:true out:(push (require-entry t) out)}
+                        ]
+                        [if (KgUtil.starts-with "require " t)
+                            [KgUtil.as-map
+                                {in:inb
+                                  out:(push
+                                      (require-entry
+                                          (strip-prefix "require " t)
+                                      )
+                                      out
+                                  )
+                                }
+                            ]
+                            [acc]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        (lines-of text) {in:false out:[]}
+    )
+    KgUtil.list-at st "out"
+]
+
+# Direct requires on a sibling module of this repository.
+def sibling-deps fn text:String List [
+  filter
+    [var
+        [[r] (KgUtil.starts-with boru-prefix r.path) and
+            (not r.indirect)
+        ]
+    ]
+    (parse-requires text)
+]
+
+# ---- package discovery --------------------------------------------------
+
+def subdirs fn dir:String List [
+  def entries (IO.list (make Pathon dir) {detail:true})
+  def names
+    (each [dot name]
+        (filter [var [[e] (convert String (e get "type")) eq "dir"]]
+            entries
+        )
+    )
+    sort names
+]
+
+def has-go-files fn dir:String Boolean [
+  ((IO.list (make Pathon dir) {match:"*.go"}) size) gt 0
+]
+
+# One-level Go packages inside a module directory. Deeper nesting is out
+# of scope on purpose: the point is to name the units people ask about
+# (eng/go/parser, lang/go/native), not to mirror the whole tree.
+def packages-of fn member:String List [
+  filter [var [[d] has-go-files `../${member}/${d}`]]
+    (subdirs `../${member}`)
+]
+
+# ---- candidate-bundle assembly -----------------------------------------
+
+def gowork-source-id "src:go-work"
+def gotree-source-id "src:go-tree"
+
+def gomod-source-id fn member:String String [
+  `src:gomod:${key-of member}`
+]
+
+# content_hash is a stable version LABEL, never a content digest — see
+# digest.boru for why, and for where the real digests live.
+def mk-sources fn members:List List [
+  flatten
+    [[(KgUtil.as-map
+                {id:gowork-source-id
+                  kind:"text"
+                  locator:"go.work"
+                  title:"Go workspace file"
+                  retrieved_at:none
+                  content_hash:"go-work"
+                  authority:"primary"
+                  metadata:{repository:"boru-lang/boru" derived_from:"code"}
+                }
+            )
+            (KgUtil.as-map
+                {id:gotree-source-id
+                  kind:"api"
+                  locator:"workspace tree"
+                  title:"Go package discovery (filesystem walk)"
+                  retrieved_at:none
+                  content_hash:"go-tree"
+                  authority:"primary"
+                  metadata:{repository:"boru-lang/boru" derived_from:"code"}
+                }
+            )
+        ]
+        (each
+            [var
+                [[m] KgUtil.as-map
+                    {id:(gomod-source-id m)
+                      kind:"text"
+                      locator:`${m}/go.mod`
+                      title:`${m} go.mod`
+                      retrieved_at:none
+                      content_hash:`gomod-${key-of m}`
+                      authority:"primary"
+                      metadata:{repository:"boru-lang/boru" derived_from:"code"}
+                    }
+                ]
+            ]
+            members
+        )
+    ]
+]
+
+# `quote` is a built-in word and cannot be a binding name, so the
+# parameter is `passage` and only the candidate FIELD is called quote.
+def ev fn [[source:String locator:String passage:Any] [Map] [
+  KgUtil.as-map
+    {source:source
+      locator:locator
+      quote:passage
+      extraction_method:"rule"
+      extractor:"kg-gomod"
+    }
+]]
+
+# The repository entity is re-declared here so `part_of` resolves inside
+# this bundle. Type, label and key match the project file exactly, so
+# both declarations fingerprint to one id and unify.
+def repo-entity
+(KgUtil.as-map
+      {key:"repo"
+        type:"Product"
+        label:"boru-lang/boru repository"
+        external_ids:{github:"boru-lang/boru"}
+      }
+  )
+
+# Read one member: its go.mod facts plus its packages.
+def read-member fn [[member:String in-work:Boolean] [Map] [
+  def text (read-text `../${member}/go.mod`) KgUtil.as-map
+    {path:member
+      key:(key-of member)
+      module_path:(parse-module-path text)
+      deps:(sibling-deps text)
+      packages:(packages-of member)
+      workspace_member:in-work
+    }
+]]
+
+def member-entity fn m:Map Map [
+  KgUtil.as-map
+    {key:m.key
+      type:"SoftwareModule"
+      label:(module-label m.path)
+      attributes:{path:m.path
+        go_module:m.module_path
+        unit:"go-module"
+        workspace_member:(if m.workspace_member ["true"] ["false"])
+      }
+    }
+]
+
+def package-entities fn m:Map List [
+  each
+    [var
+        [[p] KgUtil.as-map
+            {key:(key-of `${m.path}/${p}`)
+              type:"SoftwareModule"
+              label:(package-label `${m.path}/${p}`)
+              attributes:{path:`${m.path}/${p}`
+                go_module:m.module_path
+                unit:"go-package"
+                parent_module:m.path
+              }
+            }
+        ]
+    ]
+    (KgUtil.list-at m "packages")
+]
+
+def ast fn
+[[subject:String predicate:String object:Map evidence:List
+          confidence:Number
+      ]
+      [Map]
+      [KgUtil.as-map
+          {subject:subject
+            predicate:predicate
+            object:object
+            evidence:evidence
+            confidence:confidence
+          }
+      ]
+  ]
+
+def entity-obj fn key:String Map [
+  KgUtil.as-map {kind:"entity" entity:key}
+]
+
+def member-assertions fn m:Map List [
+  def in-work-ev [(ev gowork-source-id "use block" `./${m.path}`)]
+  def membership
+    (if m.workspace_member
+        [[(ast m.key "part_of" (entity-obj "repo") in-work-ev 1.0)]]
+        [[(ast m.key "part_of" (entity-obj "repo")
+                    [(ev gotree-source-id `${m.path}/go.mod` none)]
+                    0.98
+                )
+            ]
+        ]
+    )
+  def modpath
+    [(ast m.key "has_attribute"
+            (KgUtil.as-map
+                {kind:"literal"
+                  value:m.module_path
+                  datatype:"String"
+                  unit:"go-module-path"
+                }
+            )
+            [(ev (gomod-source-id m.path) "module directive"
+                    `module ${m.module_path}`
+                )
+            ]
+            1.0
+        )
+    ]
+  def deps
+    (each
+        [var
+            [[d] ast m.key "depends_on"
+                (entity-obj (key-of (strip-prefix boru-prefix d.path)))
+                [(ev (gomod-source-id m.path) "require block" d.line)]
+                1.0
+            ]
+        ]
+        (KgUtil.list-at m "deps")
+    )
+  def pkgs
+    (each
+        [var
+            [[p] ast (key-of `${m.path}/${p}`) "part_of"
+                (entity-obj m.key)
+                [(ev gotree-source-id `${m.path}/${p}` none)] 1.0
+            ]
+        ]
+        (KgUtil.list-at m "packages")
+    )
+    flatten [membership modpath deps pkgs]
+]
+
+# Build the whole code bundle. `extra-modules` names go.mod directories
+# that are real modules but deliberately outside the workspace (they
+# build on their own); they are ingested with workspace_member false so
+# the distinction stays visible rather than being lost.
+def candidate-bundle fn [[work-path:String extra-modules:List] [Map] [
+  def members (parse-work-uses (read-text work-path))
+  def read-all
+    (flatten
+        [(each [var [[m] read-member m true]] members)
+            (each [var [[m] read-member m false]] extra-modules)
+        ]
+    )
+  def sorted (read-all ArrayUtil.sortby (each [dot path] read-all))
+  def entities
+    (flatten
+        [[repo-entity] (each [var [[m] member-entity m]] sorted)
+            (flatten (each [var [[m] package-entities m]] sorted))
+        ]
+    )
+  def assertions
+    (flatten (each [var [[m] member-assertions m]] sorted))
+    KgUtil.as-map
+    {sources:(mk-sources (sort (each [dot path] sorted)))
+      entities:entities
+      assertions:assertions
+    }
+]]
+
+# The code bundle's TREE SHAPE, as deterministic text for the input
+# digest: every module path it will ingest, then every package directory
+# it discovered.
+#
+# The file digests cannot see either of these. A package directory that
+# appears — or loses its last .go file — changes the package entities a
+# rebuild emits while every tracked FILE stays byte-identical, so
+# `make -C kg verify` would report CURRENT for a graph a rebuild would
+# change. That is a false negative in the one direction that matters.
+# The out-of-workspace module list has the same problem from the other
+# side: it lives in main.boru, not in any file the digest reads.
+#
+# Only the QUALIFYING set is recorded, never the .go filenames inside a
+# package: adding a file to an existing package does not change the
+# graph, and hashing filenames would report staleness that isn't there.
+def tree-manifest-text fn [[work-path:String extra-modules:List]
+  [String] [
+  def members (parse-work-uses (read-text work-path))
+  def mods (sort (flatten [members extra-modules]))
+  def pkgs
+    (sort
+        (flatten
+            (each
+                [var [[m] each [var [[p] `${m}/${p}`]] (packages-of m)]]
+                mods
+            )
+        )
+    )
+    StringUtil.concat (flatten [["modules:"] mods ["packages:"] pkgs])
+    {sep:"\n"}
+]]
+
+# The manifest as a synthetic digest row (see digest.boru).
+def tree-manifest fn [[work-path:String extra-modules:List] [Map] [
+  KgUtil.as-map
+    {path:"<go tree: modules + packages>"
+      text:(tree-manifest-text work-path extra-modules)
+    }
+]]
+
+# The files this bundle reads, for the input digest (digest.boru).
+def input-paths fn [[work-path:String extra-modules:List] [List] [
+  def members (parse-work-uses (read-text work-path)) sort
+    (flatten
+        [[work-path]
+            (each [var [[m] `../${m}/go.mod`]]
+                (flatten [members extra-modules])
+            )
+        ]
+    )
+]]
+
+export "KgGoMod" {
+  boru-prefix:boru-prefix
+  read-text:read-text/r
+  lines-of:lines-of/r
+  strip-prefix:strip-prefix/r
+  strip-comment:strip-comment/r
+  key-of:key-of/r
+  module-label:module-label/r
+  package-label:package-label/r
+  parse-work-uses:parse-work-uses/r
+  parse-module-path:parse-module-path/r
+  require-entry:require-entry/r
+  parse-requires:parse-requires/r
+  sibling-deps:sibling-deps/r
+  subdirs:subdirs/r
+  has-go-files:has-go-files/r
+  packages-of:packages-of/r
+  gowork-source-id:gowork-source-id
+  gotree-source-id:gotree-source-id
+  gomod-source-id:gomod-source-id/r
+  mk-sources:mk-sources/r
+  read-member:read-member/r
+  member-entity:member-entity/r
+  package-entities:package-entities/r
+  member-assertions:member-assertions/r
+  candidate-bundle:candidate-bundle/r
+  tree-manifest-text:tree-manifest-text/r
+  tree-manifest:tree-manifest/r
+  input-paths:input-paths/r
+}

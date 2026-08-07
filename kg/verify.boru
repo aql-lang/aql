@@ -1,0 +1,72 @@
+# verify.boru — is the committed graph still true of this working tree?
+#
+# Run FROM THE kg/ DIRECTORY:
+#
+#   cd kg
+#   ../cmd/go/bin/boru verify.boru      # or: make -C kg verify
+#
+# The problem this solves: out/graph.json's `generated_at` is pinned to
+# a constant so rebuilds are byte-identical, which means it says nothing
+# about whether the bundle matches the repository. Worse, it reads like
+# it does — a reader who sees a stamp two weeks older than the commit
+# that added a module will conclude the graph is stale, or (if the stamp
+# happens to be recent) that it is fresh, and both conclusions are
+# unfounded.
+#
+# So the freshness signal is a real content digest instead. The build
+# records one per input file plus a combined digest (digest.boru); this
+# recomputes them from the tree and reports the difference. The input
+# SET is recomputed too, not read back from the bundle, so a document
+# newly cited by the project file — or a module added to go.work —
+# registers as `added` rather than passing unnoticed.
+#
+# Exits non-zero when the graph is stale, so CI and the pre-commit
+# checklist can gate on it.
+
+import "boru:io"
+import "boru:string-util"
+import "./util.boru"
+import "./digest.boru"
+import "./gomod.boru"
+
+def project-file "project/boru-project.jsonic"
+def work-file "../go.work"
+def extra-modules ["editors/tree-sitter/bindings/go"]
+def graph-file "out/graph.json"
+
+def bundle (IO.read (make Pathon graph-file))
+def stored (KgUtil.get-or bundle "input_digest" {})
+
+def current
+(KgDigest.mk-input-digest
+      (KgDigest.project-inputs project-file
+          (KgGoMod.input-paths work-file extra-modules)
+      )
+      [(KgGoMod.tree-manifest work-file extra-modules)]
+  )
+
+def result (KgDigest.compare stored current)
+
+def changed (KgUtil.list-at result "changed")
+def missing (KgUtil.list-at result "missing")
+def added (KgUtil.list-at result "added")
+
+def bullets fn [[title:String xs:List] [String] [
+  if ((xs size) eq 0) [""]
+    [`\n${title}:\n${StringUtil.concat (each [var [[x] `  - ${x}`]] xs) {sep:"\n"}}`
+    ]
+]]
+
+if (KgUtil.get-or result "fresh" false)
+[print
+      `kg: graph.json is CURRENT — ${KgUtil.get-or current "file_count" 0} input file(s), ${KgUtil.get-or current "algorithm" ""}=${KgUtil.get-or current "combined" ""}`
+  ]
+[print
+      `kg: graph.json is STALE — stored ${KgUtil.get-or result "combined_stored" ""}, tree ${KgUtil.get-or result "combined_current" ""}`
+      print
+      `${bullets "changed since the graph was built" changed}${bullets "no longer an input" missing}${bullets "new input, not yet in the graph" added}`
+      print
+      "kg: rebuild with `make -C kg graph` and commit out/graph.*"
+      raise kg_graph_stale
+      "the committed knowledge graph does not match the working tree"
+  ]

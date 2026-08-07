@@ -1,11 +1,34 @@
-# boru-project.jsonic — candidate facts about the boru-lang/boru repository
-# itself: the modules, the documentation set, the tools, and the core
-# language concepts. This is the input that kg/main.boru turns into the
-# project knowledge graph (kg/out/graph.json).
+# boru-project.jsonic — the PROSE half of the project knowledge graph:
+# candidate facts about the boru-lang/boru repository drawn from its
+# documentation. This is one of the two inputs kg/main.boru turns into
+# kg/out/graph.json.
 #
-# Every assertion quotes its supporting passage from README.md or
-# AGENTS.md. When the repository structure or documentation changes in a
-# PR, update the affected entries here and rebuild (see kg/README.md).
+# THE OTHER HALF IS CODE, AND CODE WINS ON CODE FACTS. kg/gomod.boru
+# reads go.work and every go.mod and emits the module inventory, the
+# package inventory, and the directed depends_on edges, quoting the
+# actual `use` and `require` lines as evidence. So those facts are NOT
+# repeated here: this file no longer asserts `<module> part_of repo` or
+# module-to-module edges, because prose could only say "eng builds on
+# it" — undirected, and drifting the moment a go.mod changes.
+#
+# What stays here is what only prose knows: which document explains
+# which module, what the language's design concepts are, and how the
+# shipped artifacts relate.
+#
+# ONE COUPLING TO RESPECT. A candidate `entity` reference resolves only
+# within its own bundle, so any module or package this file makes an
+# assertion ABOUT must also be declared here — and its `key`, `type` and
+# `label` must match kg/gomod.boru exactly (key `core-go`, type
+# `SoftwareModule`, label `core/go module`; packages are
+# `<path> package`), or the two declarations fingerprint to two
+# different ids and silently split into two entities. The
+# kg_module_without_code_evidence validation rule fails the build if
+# that ever happens. Module ATTRIBUTES (path, go_module, unit) are owned
+# by gomod.boru and deliberately absent below.
+#
+# Every assertion here quotes its supporting passage. When the
+# documentation changes in a PR, update the affected entries and rebuild
+# (see kg/README.md).
 {
   sources: [
     {
@@ -90,26 +113,21 @@
     { key: "stack", type: "Concept", label: "Value stack" }
     { key: "describe", type: "Concept", label: "boru describe discovery" }
     { key: "spec", type: "Concept", label: "Executable language spec" }
-    { key: "cmd-go", type: "Product", label: "cmd/go module"
-      attributes: { path: "cmd/go" } }
-    { key: "lang-go", type: "Product", label: "lang/go module"
-      attributes: { path: "lang/go" } }
-    { key: "basic-go", type: "Product", label: "basic/go module"
-      attributes: { path: "basic/go" } }
-    { key: "eng-go", type: "Product", label: "eng/go module"
-      attributes: { path: "eng/go" } }
-    { key: "core-go", type: "Product", label: "core/go module"
-      attributes: { path: "core/go" } }
-    { key: "parser-go", type: "Product", label: "parser/go module"
-      attributes: { path: "parser/go" } }
-    { key: "check-go", type: "Product", label: "check/go module"
-      attributes: { path: "check/go" } }
-    { key: "compiler-go", type: "Product", label: "compiler/go module"
-      attributes: { path: "compiler/go" } }
-    { key: "calc-go", type: "Product", label: "calc/go module"
-      attributes: { path: "calc/go" } }
-    { key: "wpg", type: "Product", label: "wpg playground module"
-      attributes: { path: "wpg" } }
+    # Go modules and packages: declared so the prose assertions below can
+    # reference them. Type, label and key MUST match kg/gomod.boru; the
+    # attributes come from go.mod and are set there, not here.
+    { key: "cmd-go", type: "SoftwareModule", label: "cmd/go module" }
+    { key: "lang-go", type: "SoftwareModule", label: "lang/go module" }
+    { key: "basic-go", type: "SoftwareModule", label: "basic/go module" }
+    { key: "eng-go", type: "SoftwareModule", label: "eng/go module" }
+    { key: "core-go", type: "SoftwareModule", label: "core/go module" }
+    { key: "check-go", type: "SoftwareModule", label: "check/go module" }
+    { key: "compiler-go", type: "SoftwareModule", label: "compiler/go module" }
+    { key: "calc-go", type: "SoftwareModule", label: "calc/go module" }
+    { key: "wpg", type: "SoftwareModule", label: "wpg module" }
+    { key: "parser-go", type: "SoftwareModule", label: "parser/go module" }
+    # kg is a boru pipeline, not a Go module — no go.mod, so no code
+    # evidence, so it stays a Product.
     { key: "kg", type: "Product", label: "kg knowledge-graph pipeline"
       attributes: { path: "kg" } }
     { key: "lang-spec", type: "Product", label: "lang/spec directory"
@@ -155,86 +173,11 @@
       evidence: [{ source: "src:readme", locator: "Repository layout",
         quote: "cmd/go/ | The boru CLI / REPL" }]
       confidence: 0.97 }
-    { subject: "cmd-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "cmd/go/ | The boru CLI / REPL (github.com/boru-lang/boru/cmd/go)." }]
-      confidence: 0.98 }
-    { subject: "lang-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "lang/go/ | The language layer: public lang API and the consolidated native word library." }]
-      confidence: 0.98 }
-    { subject: "eng-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "eng/go/ | Engine kernel, parser, and kernel spec runner." }]
-      confidence: 0.98 }
-    { subject: "core-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it." }]
-      confidence: 0.98 }
-    { subject: "eng-go", predicate: "related_to"
-      object: { kind: "entity", entity: "core-go" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it." }]
-      confidence: 0.95 }
-    { subject: "parser-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "parser/go/ | The parser module: boru source text to kernel values (tabnas/jsonic lexer plus the embedded declarative grammar). Depends on core alone." }]
-      confidence: 0.98 }
-    { subject: "parser-go", predicate: "related_to"
-      object: { kind: "entity", entity: "core-go" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "parser/go/ | The parser module: boru source text to kernel values (tabnas/jsonic lexer plus the embedded declarative grammar). Depends on core alone." }]
-      confidence: 0.95 }
-    { subject: "check-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "check/go/ | The type checker: the analysis pass over core. Depends on core only." }]
-      confidence: 0.98 }
-    { subject: "check-go", predicate: "related_to"
-      object: { kind: "entity", entity: "core-go" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "check/go/ | The type checker: the analysis pass over core. Depends on core only." }]
-      confidence: 0.95 }
-    { subject: "compiler-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "compiler/go/ | The compiler: the recorder, lowering, and bytecode emitter over check and core." }]
-      confidence: 0.98 }
-    { subject: "compiler-go", predicate: "related_to"
-      object: { kind: "entity", entity: "check-go" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "compiler/go/ | The compiler: the recorder, lowering, and bytecode emitter over check and core." }]
-      confidence: 0.95 }
-    { subject: "basic-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "basic/go/ | The base language layer: fundamental words and predefined content types, on core+check+parser (ADR-013)." }]
-      confidence: 0.98 }
-    { subject: "basic-go", predicate: "related_to"
-      object: { kind: "entity", entity: "core-go" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "basic/go/ | The base language layer: fundamental words and predefined content types, on core+check+parser (ADR-013)." }]
-      confidence: 0.95 }
-    { subject: "lang-go", predicate: "related_to"
-      object: { kind: "entity", entity: "basic-go" }
-      evidence: [{ source: "src:agents", locator: "Repository layout",
-        quote: "basic/go/ | The base language layer: fundamental words (stack, definition, control, type-generics) + predefined content types. Depends on core+check+parser — not compiler, which it reaches through `core.EmitRecorder` (ADR-013)." }]
-      confidence: 0.95 }
-    { subject: "calc-go", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "calc/go/ | A small calculator built directly on core + parser (learning example)." }]
-      confidence: 0.98 }
-    { subject: "wpg", predicate: "part_of"
-      object: { kind: "entity", entity: "repo" }
-      evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "wpg/ | The wasm web playground (wpg/wasm + wpg/serve)." }]
-      confidence: 0.98 }
+    # NOTE: `<module> part_of repo` and every module-to-module edge used
+    # to live here, quoted from the README layout table. They are now
+    # produced by kg/gomod.boru from go.work and go.mod as directed
+    # depends_on edges — better evidence, and a direction prose did not
+    # carry. Do not re-add them here.
     { subject: "kg", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }
       evidence: [{ source: "src:agents", locator: "Repository layout",
@@ -248,7 +191,7 @@
     { subject: "utils", predicate: "related_to"
       object: { kind: "entity", entity: "boru-cli" }
       evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "utils/ | A coreutils subset written in boru (cat, wc, head, grep, ...) — real programs, built with boru build." }]
+        quote: "utils/ | A coreutils subset written in boru (cat, wc, head, grep, …) — real programs, built with boru build." }]
       confidence: 0.95 }
     { subject: "boru-cli", predicate: "part_of"
       object: { kind: "entity", entity: "lang-go" }
@@ -368,7 +311,7 @@
     { subject: "lang-eng-audit", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }
       evidence: [{ source: "src:audit", locator: "title",
-        quote: "lang/eng content audit" }]
+        quote: "Lang/Eng Content Audit — and the Types-Module Proposal" }]
       confidence: 0.98 }
     { subject: "lang-eng-audit", predicate: "supports"
       object: { kind: "entity", entity: "eng-go" }
@@ -390,10 +333,16 @@
       evidence: [{ source: "src:decl-grammar", locator: "title",
         quote: "DECLARATIVE-GRAMMAR.0 — one grammar artifact for both parser twins" }]
       confidence: 0.95 }
+    # This used to point at eng-go-parser, the PACKAGE, back when the
+    # parser was a package inside the eng/go module. It is now its own
+    # top-level module, so gomod.boru emits parser-go from go.work and
+    # never emits eng-go-parser at all — leaving the old key here would
+    # dangle. The pair is still the point: code says where a unit sits
+    # (parser-go depends_on core-go, from go.mod), docs say what it does.
     { subject: "decl-grammar", predicate: "supports"
-      object: { kind: "entity", entity: "eng-go" }
+      object: { kind: "entity", entity: "parser-go" }
       evidence: [{ source: "src:decl-grammar", locator: "The contract",
-        quote: "eng/go/parser/grammar.json is the single source of the boru grammar's STRUCTURE, loaded by both parsers" }]
+        quote: "parser/go/grammar.json is the single source of the boru grammar's STRUCTURE, loaded by both parsers" }]
       confidence: 0.95 }
     { subject: "coverage-parity", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }

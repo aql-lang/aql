@@ -720,6 +720,83 @@ def check-collisions fn bundle:Map List [
     (KgId.collisions claims)
 ]
 
+# ---- code units ---------------------------------------------------------
+
+# A SoftwareModule must be evidenced by CODE, not only by prose.
+#
+# This rule exists to make one specific silent failure loud. A module or
+# package must be declared in BOTH bundles — kg/gomod.boru so the facts
+# are code-derived, and project/boru-project.jsonic so prose assertions
+# can reference it by key — and the two declarations unify into one
+# entity only when type, normalized label and key fingerprint alike. Get
+# the label wrong by a word and nothing errors: you simply get two
+# entities, one carrying the go.mod truth and one carrying the prose,
+# each looking complete on its own. That is the exact class of drift a
+# knowledge graph is supposed to prevent, so it fails the build.
+#
+# It also catches the reverse: a module deleted from go.work whose prose
+# declaration lingers, which would otherwise keep asserting a module
+# that no longer exists.
+def check-code-units fn bundle:Map List [
+  def sources (KgUtil.list-at bundle "sources")
+  def code-source-ids
+    (each [dot id]
+        (filter
+            [var
+                [[s]
+                    (KgUtil.get-or s "metadata" {} get "derived_from")
+                    eq "code"
+                ]
+            ]
+            sources
+        )
+    )
+  def evidenced
+    (fold
+        [var
+            [[a acc]
+              def hit
+                (((filter
+                            [var
+                                [[ev]
+                                    ((filter [eq ev.source_id]
+                                            code-source-ids
+                                        )
+                                        size
+                                    )
+                                    gt 0
+                                ]
+                            ]
+                            (KgUtil.list-at a "evidence")
+                        )
+                        size
+                    )
+                    gt 0
+                )
+              if hit [acc set (a.subject_id) true] [acc]
+            ]
+        ]
+        (KgUtil.list-at bundle "assertions") {}
+    )
+    each
+    [var
+        [[e] iss "error" "kg_module_without_code_evidence" "entity"
+            e.id
+            `SoftwareModule ${e.label} carries no assertion evidenced by go.work or go.mod; either it is not a real code unit, or its key/type/label no longer match kg/gomod.boru and the entity has split in two`
+        ]
+    ]
+    (filter
+        [var
+            [[e] (e.type eq "SoftwareModule") and
+                ((evidenced get e.id) is None)
+            ]
+        ]
+        (filter [var [[e] not (e.status eq "merged")]]
+            (KgUtil.list-at bundle "entities")
+        )
+    )
+]
+
 # ---- the whole bundle ---------------------------------------------------
 
 def validate-bundle fn bundle:Map List [
@@ -732,6 +809,7 @@ def validate-bundle fn bundle:Map List [
         (check-assertions assertions entities sources)
         (check-identities decisions entities)
         (check-proposals proposals) (check-collisions bundle)
+        (check-code-units bundle)
     ]
 ]
 
@@ -745,5 +823,6 @@ export "KgValidate" {
   check-identities:check-identities/r
   check-proposals:check-proposals/r
   check-collisions:check-collisions/r
+  check-code-units:check-code-units/r
   validate-bundle:validate-bundle/r
 }

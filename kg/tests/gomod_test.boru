@@ -1,0 +1,334 @@
+# gomod_test.boru — the go.work / go.mod reader.
+#
+# The line scanners are tested against INLINE fixture text, not against
+# the repository's own files, so a legitimate change to go.mod cannot
+# turn a parser test red. The end-to-end section then checks the real
+# tree, but only for invariants that must hold whatever the workspace
+# contains (core depends on nothing; every module reaches the repo).
+# Run from kg/:  ../cmd/go/bin/boru tests/gomod_test.boru
+
+import "boru:test"
+import "boru:string-util"
+import "./util.boru"
+import "./gomod.boru"
+
+# -- key and label derivation --------------------------------------------
+
+[(KgGoMod.key-of "core/go") "core-go" Assert.equal]
+"a path becomes the candidate key the project file also uses" Test.test
+end
+[(KgGoMod.key-of "eng/go/parser") "eng-go-parser" Assert.equal]
+"nested paths key on every segment" Test.test end
+[(KgGoMod.module-label "core/go") "core/go module" Assert.equal]
+"module labels are derived, so both bundles agree on them" Test.test end
+[(KgGoMod.package-label "eng/go/parser") "eng/go/parser package"
+      Assert.equal
+  ]
+"package labels are distinct from module labels" Test.test end
+
+# -- go.work --------------------------------------------------------------
+
+def work-text
+"go 1.24.7\n\n// a comment\nuse (\n\t./basic/go\n\t./core/go\n)\n"
+
+[(KgGoMod.parse-work-uses work-text) ["basic/go" "core/go"]
+      Assert.equal
+  ]
+"the use block yields sorted repo-relative member paths" Test.test end
+[(KgGoMod.parse-work-uses "go 1.24.7\nuse ./solo\n") ["solo"]
+      Assert.equal
+  ]
+"the single-line use form is accepted too" Test.test end
+[((KgGoMod.parse-work-uses "go 1.24.7\n") size) 0 Assert.equal]
+"a workspace with no use block yields no members" Test.test end
+
+# -- inline comments ------------------------------------------------------
+#
+# go.work and go.mod both permit trailing comments and `go work edit
+# -fmt` preserves them, so these are forms the tree can legitimately
+# contain. Before the fix, `./eng/go // engine` stored the member path
+# `eng/go // engine` and the build tried to read
+# `../eng/go // engine/go.mod`, failing both graph and verify.
+
+[(KgGoMod.strip-comment "./eng/go // engine") "./eng/go" Assert.equal]
+"a trailing comment is cut and the value trimmed" Test.test end
+[(KgGoMod.strip-comment "./eng/go") "./eng/go" Assert.equal]
+"a line without a comment is returned unchanged" Test.test end
+[(KgGoMod.strip-comment "// whole line") "// whole line" Assert.equal]
+"a whole-line comment is left alone for the caller to filter" Test.test
+end
+
+[(KgGoMod.parse-work-uses
+          "use (\n\t./eng/go // engine\n\t./core/go\n)\n"
+      )
+      ["core/go" "eng/go"] Assert.equal
+  ]
+"a commented use path yields the bare path" Test.test end
+[(KgGoMod.parse-work-uses "use ./solo // only one\n") ["solo"]
+      Assert.equal
+  ]
+"the single-line use form strips its comment too" Test.test end
+[(KgGoMod.parse-work-uses "use (\n\t./a\n) // done\n") ["a"]
+      Assert.equal
+  ]
+"a commented block terminator still closes the block" Test.test end
+[(KgGoMod.parse-module-path
+          "module github.com/x/y // the module\n"
+      )
+      "github.com/x/y" Assert.equal
+  ]
+"a commented module directive yields the bare path" Test.test end
+
+# The one place a comment must SURVIVE: `// indirect` is the marker that
+# tells a direct dependency from a transitive one, so stripping it here
+# would silently promote every indirect require to a depends_on edge.
+[(((KgGoMod.parse-requires
+                  "require (\n\tgithub.com/a/b v1.0.0 // indirect\n)\n"
+              )
+              get 0
+          )
+          get "indirect"
+      )
+      true Assert.equal
+  ]
+"a require entry KEEPS its comment so // indirect still reads" Test.test
+end
+
+# -- go.mod: the module directive ----------------------------------------
+
+def mod-single
+"module github.com/x/one\n\ngo 1.24.7\n\nrequire github.com/y/two v1.2.3\n\nrequire github.com/z/three v0.1.0 // indirect\n\nreplace github.com/y/two => ../two\n"
+
+def mod-block
+"module github.com/x/four\n\ngo 1.24.7\n\nrequire (\n\tgithub.com/a/aa v1.0.0\n\tgithub.com/b/bb v2.0.0 // indirect\n)\n\nreplace (\n\tgithub.com/a/aa => ../aa\n\tgithub.com/b/bb => ../bb\n)\n"
+
+[(KgGoMod.parse-module-path mod-single) "github.com/x/one" Assert.equal]
+"the module directive is read" Test.test end
+[(KgGoMod.parse-module-path "go 1.24.7\n") "" Assert.equal]
+"a go.mod with no module directive yields the empty path" Test.test end
+
+# -- go.mod: requires -----------------------------------------------------
+
+[((KgGoMod.parse-requires mod-single) size) 2 Assert.equal]
+"both single-line require forms are collected" Test.test end
+[((KgGoMod.parse-requires mod-block) size) 2 Assert.equal]
+"the block require form is collected" Test.test end
+
+# The replace block also parenthesizes; only a `require (` opener may arm
+# the block scanner, or the replace entries would be read as requires.
+[((filter
+              [var
+                  [[r] KgUtil.starts-with "github.com/a/aa"
+                      (r get "path")
+                  ]
+              ]
+              (KgGoMod.parse-requires mod-block)
+          )
+          size
+      )
+      1 Assert.equal
+  ]
+"a replace block is not mistaken for a require block" Test.test end
+
+[(((KgGoMod.parse-requires mod-block) get 1) get "indirect") true
+      Assert.equal
+  ]
+"an // indirect entry is marked indirect" Test.test end
+[(((KgGoMod.parse-requires mod-block) get 0) get "version") "v1.0.0"
+      Assert.equal
+  ]
+"the version is captured beside the path" Test.test end
+[(((KgGoMod.parse-requires mod-block) get 0) get "line")
+      "github.com/a/aa v1.0.0" Assert.equal
+  ]
+"the verbatim line is kept — it becomes the evidence quote" Test.test
+end
+
+# -- sibling deps: direct only -------------------------------------------
+
+def mod-siblings
+"module github.com/boru-lang/boru/eng/go\n\nrequire (\n\tgithub.com/boru-lang/boru/core/go v0.0.0\n\tgithub.com/cockroachdb/apd/v3 v3.2.3\n)\n\nrequire github.com/boru-lang/boru/basic/go v0.0.0 // indirect\n"
+
+[((KgGoMod.sibling-deps mod-siblings) size) 1 Assert.equal]
+"third-party requires are not sibling dependencies" Test.test end
+[(((KgGoMod.sibling-deps mod-siblings) get 0) get "path")
+      "github.com/boru-lang/boru/core/go" Assert.equal
+  ]
+"the direct sibling require is the one kept" Test.test end
+
+# An indirect sibling records what the module graph drags in, not what
+# this module was written against; conflating them makes everything look
+# like it depends on everything.
+[((filter
+              [var
+                  [[r] KgUtil.starts-with
+                      "github.com/boru-lang/boru/basic/go"
+                      (r get "path")
+                  ]
+              ]
+              (KgGoMod.sibling-deps mod-siblings)
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"an indirect sibling require is NOT a depends_on edge" Test.test end
+
+# -- the bundle over the real workspace ----------------------------------
+
+def bundle (KgGoMod.candidate-bundle "../go.work" [])
+def ents (KgUtil.list-at bundle "entities")
+def asts (KgUtil.list-at bundle "assertions")
+
+def by-key fn k:String Any [
+  def hits (filter [var [[e] (KgUtil.get-or e "key" "") eq k]] ents)
+  if ((hits size) eq 0) [none] [hits get 0]
+]
+
+def deps-of fn k:String List [
+  sort
+    (each [var [[a] KgUtil.get-or (a get "object") "entity" ""]]
+        (filter
+            [var
+                [[a] ((a get "subject") eq k) and
+                    ((a get "predicate") eq "depends_on")
+                ]
+            ]
+            asts
+        )
+    )
+]
+
+[((by-key "core-go") is None) false Assert.equal]
+"the workspace members are discovered from go.work" Test.test end
+[((by-key "core-go") get "type") "SoftwareModule" Assert.equal]
+"a module is typed SoftwareModule, not Product" Test.test end
+[((by-key "core-go") get "label") "core/go module" Assert.equal]
+"the module label matches the one the project file declares" Test.test
+end
+
+# The kernel chain, read from go.mod rather than from prose. This is the
+# fact the graph could not previously state: related_to could not say
+# which way round it went.
+[(deps-of "core-go") [] Assert.equal]
+"core/go depends on no sibling — the chain's base" Test.test end
+[(deps-of "check-go") ["core-go"] Assert.equal]
+"check/go depends on core/go" Test.test end
+[(deps-of "compiler-go") ["check-go" "core-go"] Assert.equal]
+"compiler/go depends on check and core" Test.test end
+[(deps-of "eng-go") ["check-go" "compiler-go" "core-go" "parser-go"]
+      Assert.equal
+  ]
+"eng/go depends on the four pieces below it" Test.test end
+[(deps-of "parser-go") ["core-go"] Assert.equal]
+"parser/go depends on core alone — it is a leaf over the kernel"
+Test.test end
+[(deps-of "basic-go") ["check-go" "core-go" "parser-go"] Assert.equal]
+"basic/go depends on core, check and parser — NOT compiler, which it\n reaches through core.EmitRecorder (ADR-013)" Test.test end
+
+# The question that started this: a package is not a module. eng/go/parser
+# used to be the example, but the parser became a top-level module — so it
+# now demonstrates the OTHER half of the same distinction, and a package
+# that is still a package carries the original point.
+[((by-key "lang-go-modules") is None) false Assert.equal]
+"lang/go/modules is discovered as a code unit" Test.test end
+[(KgUtil.get-or ((by-key "lang-go-modules") get "attributes")
+          "unit" ""
+      )
+      "go-package" Assert.equal
+  ]
+"lang/go/modules is a PACKAGE, not a module" Test.test end
+[((by-key "eng-go-parser") is None) true Assert.equal]
+"eng/go/parser is no longer discovered — it moved out to parser/go"
+Test.test end
+[(KgUtil.get-or ((by-key "parser-go") get "attributes") "unit" "")
+      "go-module" Assert.equal
+  ]
+"…and parser/go is discovered as a MODULE" Test.test end
+[(KgUtil.get-or ((by-key "core-go") get "attributes") "unit" "")
+      "go-module" Assert.equal
+  ]
+"core/go is a module" Test.test end
+[((filter
+              [var
+                  [[a] ((a get "subject") eq "lang-go-modules") and
+                      ((a get "predicate") eq "part_of")
+                  ]
+              ]
+              asts
+          )
+          size
+      )
+      1 Assert.equal
+  ]
+"the parser package is asserted part_of its module" Test.test end
+
+# -- every assertion is evidenced ----------------------------------------
+
+[((filter
+              [var [[a] ((KgUtil.list-at a "evidence") size) eq 0]]
+              asts
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"no code assertion is emitted without evidence" Test.test end
+
+[((filter
+              [var
+                  [[a]
+                    def e ((KgUtil.list-at a "evidence") get 0) not
+                      ((KgUtil.get-or e "extractor" "") eq "kg-gomod")
+                  ]
+              ]
+              asts
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"every code assertion names kg-gomod as its extractor" Test.test end
+
+# -- the tree manifest ----------------------------------------------------
+#
+# The file digests cannot see a package directory appearing or losing
+# its last .go file: the graph changes while every tracked file stays
+# byte-identical. The manifest closes that hole.
+
+def manifest (KgGoMod.tree-manifest-text "../go.work" [])
+
+[(StringUtil.contains "lang/go/modules" manifest) true Assert.equal]
+"the manifest lists the discovered packages" Test.test end
+[(StringUtil.contains "core/go" manifest) true Assert.equal]
+"the manifest lists the modules" Test.test end
+[(KgGoMod.tree-manifest-text "../go.work" []) manifest Assert.equal]
+"the manifest is deterministic" Test.test end
+
+# An out-of-workspace module lives in main.boru, not in any file the
+# digest reads, so the manifest has to carry it or editing that list
+# would leave the graph looking current.
+[((KgGoMod.tree-manifest-text "../go.work"
+              ["editors/tree-sitter/bindings/go"]
+          )
+          eq manifest
+      )
+      false Assert.equal
+  ]
+"changing the extra-module list changes the manifest" Test.test end
+
+[((KgGoMod.tree-manifest "../go.work" []) get "text") manifest
+      Assert.equal
+  ]
+"tree-manifest wraps the text as a synthetic digest row" Test.test end
+
+# -- the digest input list -----------------------------------------------
+
+def paths (KgGoMod.input-paths "../go.work" ["extra/mod"])
+[((filter [eq "../go.work"] paths) size) 1 Assert.equal]
+"go.work itself is an input to the digest" Test.test end
+[((filter [eq "../extra/mod/go.mod"] paths) size) 1 Assert.equal]
+"an out-of-workspace module's go.mod is an input too" Test.test end
+
+print (Test.report)
+if ((Test.fail-count) gt 0) [raise test_failed "gomod_test failures"]

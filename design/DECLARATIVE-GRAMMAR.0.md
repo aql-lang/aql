@@ -6,11 +6,13 @@ should use").
 
 ## The contract
 
-`eng/go/parser/grammar.json` is the single source of the boru
+`parser/go/grammar.json` is the single source of the boru
 grammar's STRUCTURE, loaded by both parsers:
 
-- **Go** embeds it (`go:embed`, `eng/go/parser/declgrammar.go`) and
-  applies it in `Parse`'s stage-2 setup.
+- **Go** embeds it (`go:embed`, `parser/go/declgrammar.go`) and
+  applies it in `Parse`'s stage-2 setup. It moved with the parser when
+  that became a top-level module — it was `eng/go/parser/grammar.json`
+  while the parser was a package inside the kernel.
 - **TS** reads the same file relatively
   (`eng/ts/src/parser/declgrammar.ts`, the `SPEC_DIR` precedent) and
   applies it in `makeBoruJsonic`.

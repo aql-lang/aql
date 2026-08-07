@@ -7,9 +7,14 @@ straight from the tool with **`boru describe`** (words, categories, modules)
 and **`boru help`** (the CLI's subcommands).
 
 For a fast, structured orientation, the repository also ships a
-**project knowledge graph** — modules, docs, tools, and concepts with
-evidence-backed relations — at [kg/out/graph.json](kg/out/graph.json)
-(guide: [kg/README.md](kg/README.md)).
+**project knowledge graph** — modules, packages, docs, tools, and
+concepts with evidence-backed relations. **Read
+[kg/out/graph.md](kg/out/graph.md)**: it is the short outline, with the
+module dependency view (what each Go module depends on and what depends
+on it, read from `go.work` and every `go.mod`) first. The full bundle is
+[kg/out/graph.json](kg/out/graph.json) — the machine contract, and far
+too large to read whole. Guide: [kg/README.md](kg/README.md); check the
+graph against the tree with `make -C kg verify`.
 
 Module-specific deep guides — read the relevant one **before** changing
 that module:

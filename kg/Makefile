@@ -6,9 +6,9 @@
 
 BORU ?= ../cmd/go/bin/boru
 
-.PHONY: all build check fmt test graph
+.PHONY: all build check fmt test graph verify
 
-all: fmt check test graph
+all: fmt check test graph verify
 
 # Ensure the boru binary exists.
 build:
@@ -46,6 +46,19 @@ test:
 	  $(BORU) $$f || exit 1; \
 	done
 
-# Rebuild the committed project knowledge graph (out/graph.json + .sql).
+# Rebuild the committed project knowledge graph
+# (out/graph.json + .sql + .md).
 graph:
 	$(BORU) main.boru
+
+# Is the COMMITTED graph still true of this working tree? Recomputes a
+# content digest of every input file (go.work, every go.mod, the project
+# candidate file, and each document it cites) and compares it with the
+# digest stored in out/graph.json. Exits non-zero when they differ, so
+# this can gate a commit.
+#
+# This is the check the `generated_at` stamp cannot do: that stamp is
+# pinned to a constant so rebuilds stay byte-identical, which makes it
+# useless as a freshness signal and actively misleading as one.
+verify:
+	$(BORU) verify.boru

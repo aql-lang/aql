@@ -1,0 +1,179 @@
+# digest_test.boru — input digests and the staleness comparison.
+#
+# The file-reading tests use fixtures/ rather than the repository's real
+# documents, so an ordinary edit to README.md cannot turn them red; the
+# comparison tests build their stored/current blocks by hand, so they
+# assert the DIFFING logic without depending on any file at all.
+# Run from kg/:  ../cmd/go/bin/boru tests/digest_test.boru
+
+import "boru:test"
+import "./util.boru"
+import "./digest.boru"
+
+# -- the hash itself ------------------------------------------------------
+
+[(KgDigest.digest-text "hello") (KgDigest.digest-text "hello")
+      Assert.equal
+  ]
+"the same text always digests the same" Test.test end
+[((KgDigest.digest-text "hello") eq
+          (KgDigest.digest-text "hello ")
+      )
+      false Assert.equal
+  ]
+"a one-character change changes the digest" Test.test end
+
+# -- distinct -------------------------------------------------------------
+
+[(KgDigest.distinct ["b" "a" "b" "c" "a"]) ["b" "a" "c"] Assert.equal]
+"distinct keeps first occurrences and drops repeats" Test.test end
+
+# -- file digests ---------------------------------------------------------
+
+def two ["fixtures/conflicts.jsonic" "fixtures/valid.jsonic"]
+def rows (KgDigest.file-digests two)
+
+[(rows size) 2 Assert.equal]
+"one row per input file" Test.test end
+[((rows get 0) get "path") "fixtures/conflicts.jsonic" Assert.equal]
+"rows are sorted by path, not by discovery order" Test.test end
+[(KgDigest.file-digests
+          ["fixtures/valid.jsonic" "fixtures/conflicts.jsonic"]
+      )
+      rows Assert.equal
+  ]
+"argument order does not change the digest block" Test.test end
+[(KgDigest.file-digests
+          ["fixtures/valid.jsonic" "fixtures/conflicts.jsonic"
+              "fixtures/valid.jsonic"
+          ]
+      )
+      rows Assert.equal
+  ]
+"a file listed twice is still one input" Test.test end
+[(((rows get 0) get "chars") gt 0) true Assert.equal]
+"each row records the file's size" Test.test end
+
+# -- the combined digest --------------------------------------------------
+
+def whole (KgDigest.mk-input-digest two [])
+[(whole get "algorithm") "fnv64" Assert.equal]
+"the block names its algorithm" Test.test end
+[(whole get "file_count") 2 Assert.equal]
+"the block counts its inputs" Test.test end
+[((KgDigest.mk-input-digest two []) get "combined")
+      (whole get "combined") Assert.equal
+  ]
+"the combined digest is deterministic" Test.test end
+
+# Dropping an input must move the combined digest, or removing a file
+# from the graph's input set would go unnoticed.
+[(((KgDigest.mk-input-digest ["fixtures/valid.jsonic"] []) get
+              "combined"
+          )
+          eq (whole get "combined")
+      )
+      false Assert.equal
+  ]
+"removing an input changes the combined digest" Test.test end
+
+# -- synthetic inputs ------------------------------------------------------
+#
+# Not every input is a file. The code bundle discovers packages by
+# walking directories, so its tree SHAPE has to be digested too or
+# `verify` reports CURRENT for a graph a rebuild would change.
+
+def syn [{path:"<tree>" text:"a\nb"}]
+def with-syn (KgDigest.mk-input-digest two syn)
+
+[(with-syn get "file_count") 3 Assert.equal]
+"a synthetic row counts as an input" Test.test end
+[(((with-syn get "combined") eq (whole get "combined"))) false
+      Assert.equal
+  ]
+"adding a synthetic row changes the combined digest" Test.test end
+[(((KgDigest.mk-input-digest two
+                  [{path:"<tree>" text:"a\nc"}]
+              )
+              get "combined"
+          )
+          eq (with-syn get "combined")
+      )
+      false Assert.equal
+  ]
+"a synthetic row with different content digests differently" Test.test
+end
+
+# The verdict must NAME the tree, not just move the combined digest —
+# otherwise "something changed" is all a reader learns.
+def tree-moved
+(KgDigest.compare with-syn
+      (KgDigest.mk-input-digest two [{path:"<tree>" text:"a\nc"}])
+  )
+[(KgUtil.list-at tree-moved "changed") ["<tree>"] Assert.equal]
+"a changed tree shape is reported by name" Test.test end
+
+# -- comparison: the staleness verdict ------------------------------------
+
+def blk fn files:List Map [
+  KgUtil.as-map
+    {algorithm:"fnv64"
+      file_count:(files size)
+      combined:(KgDigest.combine files)
+      files:files
+    }
+]
+
+def a1 (KgUtil.as-map {path:"a" digest:"1" chars:1})
+def a2 (KgUtil.as-map {path:"a" digest:"2" chars:1})
+def b1 (KgUtil.as-map {path:"b" digest:"9" chars:1})
+
+def same (KgDigest.compare (blk [a1 b1]) (blk [a1 b1]))
+[(same get "fresh") true Assert.equal]
+"an unchanged tree compares fresh" Test.test end
+[((KgUtil.list-at same "changed") size) 0 Assert.equal]
+"nothing is reported changed when nothing changed" Test.test end
+
+def edited (KgDigest.compare (blk [a1 b1]) (blk [a2 b1]))
+[(edited get "fresh") false Assert.equal]
+"an edited input compares stale" Test.test end
+[(KgUtil.list-at edited "changed") ["a"] Assert.equal]
+"the edited file is named" Test.test end
+
+def grown (KgDigest.compare (blk [a1]) (blk [a1 b1]))
+[(KgUtil.list-at grown "added") ["b"] Assert.equal]
+"a new input is reported as added, not silently accepted" Test.test end
+[(grown get "fresh") false Assert.equal]
+"an added input makes the graph stale" Test.test end
+
+def shrunk (KgDigest.compare (blk [a1 b1]) (blk [a1]))
+[(KgUtil.list-at shrunk "missing") ["b"] Assert.equal]
+"a removed input is reported as missing" Test.test end
+
+# A file that changed AND a file that appeared are reported separately —
+# `changed` must not swallow `added`, or a rename reads as an edit.
+def both (KgDigest.compare (blk [a1]) (blk [a2 b1]))
+[(KgUtil.list-at both "changed") ["a"] Assert.equal]
+"changed and added are reported independently (changed)" Test.test end
+[(KgUtil.list-at both "added") ["b"] Assert.equal]
+"changed and added are reported independently (added)" Test.test end
+
+# -- the canonical input surface -----------------------------------------
+
+def inputs
+(KgDigest.project-inputs "project/boru-project.jsonic" ["../go.work"])
+
+[((filter [eq "project/boru-project.jsonic"] inputs) size) 1
+      Assert.equal
+  ]
+"the project candidate file is its own input" Test.test end
+[((filter [eq "../README.md"] inputs) size) 1 Assert.equal]
+"every cited document is an input, resolved from the repo root"
+Test.test end
+[((filter [eq "../go.work"] inputs) size) 1 Assert.equal]
+"the code paths passed in are inputs too" Test.test end
+[(inputs (sort inputs) Assert.equal)]
+"the input list is sorted" Test.test end
+
+print (Test.report)
+if ((Test.fail-count) gt 0) [raise test_failed "digest_test failures"]
