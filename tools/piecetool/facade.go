@@ -63,6 +63,18 @@ func coldSet(dir, out, qual string) (map[string]bool, error) {
 	// The scan is AST-based on purpose — a text scan counts identifiers in
 	// COMMENTS and STRING LITERALS, which silently marks a cold wrapper
 	// "used" and leaves its body uncovered under the ADR-008 gate.
+	//
+	// SCOPE matters as much as syntax. A BARE identifier reaches the wrapper
+	// only from inside the facade's own package; every other package must
+	// spell it `eng.X`. Counting bare identifiers everywhere was sound only
+	// while the sibling alias tables re-exported the FACADE — with
+	// `ApplyReach = eng.ApplyReach` in lang/go/native/aliases.go, lang's bare
+	// `ApplyReach(...)` really did land on the wrapper. Once those tables
+	// were repointed at the owning module (`= core.ApplyReach`), the same
+	// bare call resolves locally and the wrapper became unreachable — but
+	// still counted as used, so ~120 wrapper bodies stayed emitted and sat
+	// permanently uncovered. Resolve by package, not by spelling.
+	facadePkg := packageNameOf(filepath.Dir(out))
 	consumers := []string{"eng", "basic", "lang", "cmd", "calc", "wpg", "test", "utils"}
 	for _, c := range consumers {
 		root := filepath.Join(repo, c)
@@ -88,13 +100,42 @@ func coldSet(dir, out, qual string) (map[string]bool, error) {
 			if perr != nil {
 				return nil
 			}
+			// Outside the facade's own package a bare identifier cannot name
+			// the wrapper, so only `<engImport>.X` counts. engImportName is
+			// "" when the file does not import the facade package at all, in
+			// which case nothing in it can reach a wrapper.
+			inFacadePkg := f.Name.Name == facadePkg
+			engName := ""
+			if !inFacadePkg {
+				engName = engImportName(f, facadePkg)
+				if engName == "" {
+					return nil
+				}
+			}
 			var visit func(ast.Node) bool
 			visit = func(n ast.Node) bool {
-				// A qualified reference (pkg.Name) resolves to the real
-				// symbol; only the bare identifier reaches the wrapper.
+				// A qualified reference (pkg.Name) normally resolves to the
+				// real symbol, so only the bare identifier reaches the
+				// wrapper — EXCEPT when the qualifier is the facade package
+				// itself, which is the only way an outside package can name
+				// a wrapper at all.
 				if sel, ok := n.(*ast.SelectorExpr); ok {
+					if !inFacadePkg {
+						if x, ok := sel.X.(*ast.Ident); ok && x.Name == engName {
+							used[sel.Sel.Name] = true
+							return false
+						}
+					}
 					ast.Inspect(sel.X, visit)
 					return false
+				}
+				// Outside the facade package a bare identifier names
+				// something local, never a wrapper. Keep walking for nested
+				// selectors, but record nothing.
+				if !inFacadePkg {
+					if _, ok := n.(*ast.Ident); ok {
+						return false
+					}
 				}
 				// A DECLARED name is not a reference. Consumers re-export
 				// the facade wholesale (`Foo = eng.Foo` in basic's and
@@ -380,4 +421,56 @@ func renderResults(sig *types.Signature, qual types.Qualifier) string {
 		return " " + rs[0]
 	}
 	return " (" + strings.Join(rs, ", ") + ")"
+}
+
+// packageNameOf reports the package clause of the first parsable .go file in
+// dir. It is how coldSet learns the facade's own package name ("eng") rather
+// than assuming it from the path, so a rename of the facade module does not
+// silently turn every wrapper cold.
+func packageNameOf(dir string) string {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+			continue
+		}
+		f, perr := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, e.Name()), nil, parser.PackageClauseOnly)
+		if perr != nil {
+			continue
+		}
+		name := strings.TrimSuffix(f.Name.Name, "_test")
+		if name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// engImportName reports the local name a file uses for the facade package —
+// the explicit alias when there is one, else the package's own name. It
+// returns "" when the file does not import the facade at all, which is the
+// signal that nothing in the file can reach a wrapper.
+func engImportName(f *ast.File, facadePkg string) string {
+	for _, im := range f.Imports {
+		path := strings.Trim(im.Path.Value, `"`)
+		if filepath.Base(path) != "go" && filepath.Base(path) != facadePkg {
+			continue
+		}
+		// The module is .../<facadePkg>/go, so the directory ABOVE the
+		// trailing "go" carries the name.
+		base := filepath.Base(path)
+		if base == "go" {
+			base = filepath.Base(filepath.Dir(path))
+		}
+		if base != facadePkg {
+			continue
+		}
+		if im.Name != nil {
+			return im.Name.Name
+		}
+		return facadePkg
+	}
+	return ""
 }
