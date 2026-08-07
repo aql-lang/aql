@@ -1,0 +1,171 @@
+# digest.boru — content digests over the pipeline's INPUT FILES.
+#
+# Why this is separate from KgSource.content_hash: a source's
+# content_hash is a stable VERSION LABEL, deliberately NOT a content
+# digest. Source ids fingerprint locator|content_hash, and assertion ids
+# fingerprint their evidence source ids (identifiers.boru), so putting a
+# real digest there would re-key every assertion in the bundle whenever
+# any cited document was edited — unreadable diffs, and no stable
+# identifier to link against.
+#
+# The freshness signal lives here instead. file-digests walks the actual
+# input files; the result rides in the finished bundle as `input_digest`,
+# so a reader can verify a committed graph against the working tree in
+# one pass (kg/verify.boru, `make -C kg verify`) without destabilizing a
+# single identifier.
+#
+# The bundle's generated_at stamp cannot do this job: it is pinned to a
+# constant (main.boru's run-stamp) so a rebuild over unchanged input is
+# byte-identical. A pinned stamp is by construction not a freshness
+# signal — input_digest is.
+
+import "boru:io"
+import "boru:bin-util"
+import "boru:string-util"
+import "boru:array-util"
+import "./util.boru"
+
+def algorithm "fnv64"
+
+# 64-bit FNV-1a over the text, rendered as a decimal string — the same
+# primitive the identifier policy uses, so there is one hash in the
+# pipeline, not two.
+def digest-text fn text:String String [
+  convert String (BinUtil.fnv64 text)
+]
+
+def read-text fn path:String String [
+  IO.read (make Pathon path) {fmt:"text"}
+]
+
+# Order-independent dedupe used on the input list: a path cited by two
+# sources is still one input file.
+def distinct fn xs:List List [
+  fold
+    [var
+        [[x acc]
+          if (((filter [eq x] acc) size) gt 0) [acc] [push x acc]
+        ]
+    ]
+    xs []
+]
+
+# One {path digest chars} record per input file, sorted by path so the
+# block is deterministic regardless of discovery order.
+def file-digests fn paths:List List [
+  def rows
+    (each
+        [var
+            [[p]
+              def text (read-text p) KgUtil.as-map
+                {path:p digest:(digest-text text) chars:(text size)}
+            ]
+        ]
+        (distinct paths)
+    )
+    rows ArrayUtil.sortby (each [dot path] rows)
+]
+
+# The combined digest fingerprints the sorted `path|digest` lines, so it
+# changes when any input's CONTENT changes and also when an input is
+# added or removed.
+def combine fn entries:List String [
+  digest-text
+    (StringUtil.concat
+        (sort (each [var [[e] `${e.path}|${e.digest}`]] entries))
+        {sep:"\n"}
+    )
+]
+
+def mk-input-digest fn paths:List Map [
+  def entries (file-digests paths) KgUtil.as-map
+    {algorithm:algorithm
+      file_count:(entries size)
+      combined:(combine entries)
+      files:entries
+    }
+]
+
+# ---- the canonical input surface ---------------------------------------
+
+# Every file the build reads, expressed relative to kg/ (the working
+# directory for the whole pipeline):
+#   - the project candidate file itself
+#   - every document its `sources` cite, via ../<locator>
+#   - the Go workspace files the code bundle reads (gomod.boru supplies
+#     these; passing them in keeps this module free of a gomod import)
+#
+# main.boru and verify.boru both call this, so the verifier can never
+# drift from the builder by checking a different set of files.
+def project-inputs fn [[project:String code-paths:List] [List] [
+  def raw (IO.read (make Pathon project))
+  def locators
+    (each [var [[s] `../${KgUtil.get-or s "locator" ""}`]]
+        (KgUtil.list-at raw "sources")
+    )
+    sort (distinct (flatten [[project] locators code-paths]))
+]]
+
+# ---- verification -------------------------------------------------------
+
+# Compare a stored input_digest block against a freshly computed one.
+# Result: {fresh changed missing added combined_stored combined_current}
+# where `fresh` is true only when every file still hashes identically and
+# the input SET is unchanged.
+def compare fn [[stored:Map current:Map] [Map] [
+  def old-files (KgUtil.list-at stored "files")
+  def new-files (KgUtil.list-at current "files")
+  def old-paths (each [dot path] old-files)
+  def new-paths (each [dot path] new-files)
+  def digest-of
+    (fold [var [[f acc] acc set (f.path) f.digest]] old-files {})
+  def changed
+    (sort
+        (each [dot path]
+            (filter
+                [var
+                    [[f]
+                      def prev (digest-of get f.path)
+                        (not (prev is None)) and
+                        (not (prev eq f.digest))
+                    ]
+                ]
+                new-files
+            )
+        )
+    )
+  def missing
+    (sort
+        (filter [var [[p] ((filter [eq p] new-paths) size) eq 0]]
+            old-paths
+        )
+    )
+  def added
+    (sort
+        (filter [var [[p] ((filter [eq p] old-paths) size) eq 0]]
+            new-paths
+        )
+    )
+    KgUtil.as-map
+    {fresh:((KgUtil.get-or stored "combined" "") eq
+          (KgUtil.get-or current "combined" "-")
+      )
+      changed:changed
+      missing:missing
+      added:added
+      combined_stored:(KgUtil.get-or stored "combined" "")
+      combined_current:(KgUtil.get-or current "combined" "")
+    }
+]]
+
+export "KgDigest" {
+  algorithm:algorithm
+  digest-text:digest-text/r
+  read-text:read-text/r
+  distinct:distinct/r
+  file-digests:file-digests/r
+  combine:combine/r
+  mk-input-digest:mk-input-digest/r
+  project-inputs:project-inputs/r
+  compare:compare/r
+}

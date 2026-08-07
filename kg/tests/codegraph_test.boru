@@ -1,0 +1,233 @@
+# codegraph_test.boru — the code half of the graph, end to end: the
+# code-unit queries, the Markdown projection, and the validation rule
+# that keeps the code and prose bundles from silently splitting apart.
+# Run from kg/:  ../cmd/go/bin/boru tests/codegraph_test.boru
+
+import "boru:io"
+import "boru:test"
+import "boru:string-util"
+import "boru:struct-util"
+import "./util.boru"
+import "./report.boru"
+import "./queries.boru"
+import "./storage.boru"
+import "./gomod.boru"
+
+def stamp "2026-01-01T00:00:00Z"
+
+# The real graph, built exactly as main.boru builds it — code bundle
+# first so go.mod stays authoritative over the documentation.
+def graph
+(KgReport.build-graph
+      [(KgGoMod.candidate-bundle "../go.work" [])
+          (IO.read (make Pathon "project/boru-project.jsonic"))
+      ]
+      {recorded_at:stamp generated_at:stamp}
+  )
+
+[((graph get "summary") get "error_count") 0 Assert.equal]
+"the project graph builds without validation errors" Test.test end
+
+# -- code-unit lookups ----------------------------------------------------
+
+def core (KgQuery.code-unit-by-path graph "core/go")
+def eng (KgQuery.code-unit-by-path graph "eng/go")
+def parser (KgQuery.code-unit-by-path graph "eng/go/parser")
+
+[(((KgQuery.modules graph) size) gt 0) true Assert.equal]
+"the graph knows its modules" Test.test end
+[(((KgQuery.packages graph) size) gt 0) true Assert.equal]
+"the graph knows its packages" Test.test end
+[((core is None) or (eng is None)) false Assert.equal]
+"a module is findable by repository path" Test.test end
+[((KgQuery.code-unit-by-path graph "does/not/exist") is None) true
+      Assert.equal
+  ]
+"an unknown path answers none — which is the answer to 'is it a module?'"
+Test.test end
+
+# The question this whole exercise came from. The graph now answers it
+# positively (parser exists, and it is a package inside eng/go) rather
+# than by absence.
+[((parser is None)) false Assert.equal]
+"eng/go/parser is in the graph" Test.test end
+[(KgQuery.unit-of parser) "go-package" Assert.equal]
+"eng/go/parser is a package" Test.test end
+[(KgQuery.unit-of core) "go-module" Assert.equal]
+"core/go is a module" Test.test end
+[((filter [eq parser.id]
+              (each [dot id] (KgQuery.modules graph))
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"eng/go/parser is NOT among the modules" Test.test end
+
+# -- direction ------------------------------------------------------------
+#
+# The whole point of replacing related_to with depends_on: these two
+# answers must differ, and each must be the right way round.
+
+def names fn ids:List List [
+  sort
+    (each
+        [var
+            [[i]
+              def e (KgQuery.entity-by-id graph i)
+              if (e is None) [i]
+                [KgUtil.get-or (KgUtil.get-or e "attributes" {})
+                    "path" i
+                ]
+            ]
+        ]
+        ids
+    )
+]
+
+[(names (KgQuery.dependencies-of graph core.id)) [] Assert.equal]
+"core/go depends on nothing — it is the base of the chain" Test.test
+  end
+[(((KgQuery.dependents-of graph core.id) size) gt 0) true Assert.equal]
+"but things depend ON core/go" Test.test end
+[(names (KgQuery.dependencies-of graph eng.id))
+      ["check/go" "compiler/go" "core/go"] Assert.equal
+  ]
+"eng/go depends on check, compiler and core" Test.test end
+[((filter [eq "core/go"]
+              (names (KgQuery.dependents-of graph eng.id))
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"core/go does not depend on eng/go — the direction is not symmetric"
+Test.test end
+
+# -- evidence is the require line -----------------------------------------
+
+def eng-deps
+(filter
+      [var
+          [[a] (a.subject_id eq eng.id) and
+              (a.predicate eq "depends_on")
+          ]
+      ]
+      (KgUtil.list-at graph "assertions")
+  )
+
+[((eng-deps size) gt 0) true Assert.equal]
+"eng/go's depends_on edges are in the bundle" Test.test end
+[(StringUtil.contains "github.com/boru-lang/boru/"
+          (KgUtil.get-or
+              ((KgUtil.list-at (eng-deps get 0) "evidence") get 0)
+              "quote" ""
+          )
+      )
+      true Assert.equal
+  ]
+"a depends_on edge quotes the verbatim require line" Test.test end
+
+# -- the Markdown projection ---------------------------------------------
+
+def md (KgStore.emit-markdown graph)
+def json-size ((StructUtil.jsonify graph) size)
+
+[((md size) lt json-size) true Assert.equal]
+"the Markdown projection is smaller than the JSON bundle" Test.test end
+[(((md size) mul 4) lt json-size) true Assert.equal]
+"…and by a wide margin — it is the read path, not a second copy"
+Test.test end
+[(StringUtil.contains "eng/go/parser" md) true Assert.equal]
+"the projection names the packages" Test.test end
+[(StringUtil.contains
+          "depends on: check/go, compiler/go, core/go" md
+      )
+      true Assert.equal
+  ]
+"the projection renders the dependency direction in place" Test.test end
+[(StringUtil.contains "NOT a freshness signal" md) true Assert.equal]
+"the projection warns that generated_at is not a freshness signal"
+Test.test end
+
+# -- the code-evidence rule ----------------------------------------------
+#
+# A SoftwareModule declared in the prose bundle whose label no longer
+# matches gomod.boru would resolve to its OWN entity, carrying prose
+# assertions and no code evidence — two entities where there should be
+# one, each looking complete. That must fail the build, not pass quietly.
+
+def orphan-candidate
+(KgUtil.as-map
+      {sources:[{id:"src:doc"
+              kind:"text"
+              locator:"DOC.md"
+              title:"a document"
+              content_hash:"doc-1"
+              authority:"primary"
+            }
+        ]
+        entities:[{key:"ghost" type:"SoftwareModule" label:"ghost/go module"}
+            {key:"doc" type:"Document" label:"DOC.md"}
+        ]
+        assertions:[{subject:"doc"
+              predicate:"supports"
+              object:{kind:"entity" entity:"ghost"}
+              evidence:[{source:"src:doc"
+                    locator:"intro"
+                    quote:"the ghost module"
+                  }
+              ]
+              confidence:0.9
+            }
+        ]
+      }
+  )
+
+def orphan-graph
+(KgReport.build-graph [orphan-candidate] {recorded_at:stamp})
+
+def orphan-errors
+(filter [dot rule eq "kg_module_without_code_evidence"]
+      (KgUtil.list-at orphan-graph "validation_issues")
+  )
+
+[((orphan-errors size) eq 1) true Assert.equal]
+"a SoftwareModule with no code evidence is reported" Test.test end
+[((orphan-errors get 0) get "severity") "error" Assert.equal]
+"…as an error, so it fails the build" Test.test end
+[(((orphan-graph get "summary") get "error_count") gt 0) true
+      Assert.equal
+  ]
+"…and it counts toward the bundle's error total" Test.test end
+
+# The real graph must of course be clean under the same rule.
+[((filter [dot rule eq "kg_module_without_code_evidence"]
+              (KgUtil.list-at graph "validation_issues")
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"every SoftwareModule in the project graph is code-evidenced" Test.test
+end
+
+# A Document is unaffected by the rule — it has no code to be evidenced by.
+[((filter
+              [var
+                  [[i] (i.rule eq "kg_module_without_code_evidence")
+                      and (StringUtil.contains "Document" i.message)
+                  ]
+              ]
+              (KgUtil.list-at orphan-graph "validation_issues")
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"the rule applies only to SoftwareModule entities" Test.test end
+
+print (Test.report)
+if ((Test.fail-count) gt 0) [
+  raise test_failed "codegraph_test failures"
+]

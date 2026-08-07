@@ -24,6 +24,8 @@ import "boru:struct-util"
 import "boru:array-util"
 import "./util.boru"
 import "./identifiers.boru"
+import "./entities.boru"
+import "./queries.boru"
 
 # Deterministic ordering: every object list is sorted by id.
 def sort-by-id fn xs:List List [xs ArrayUtil.sortby (each [dot id] xs)]
@@ -63,7 +65,9 @@ def sql-row fn [[table:String cells:List] [String] [
 ]]
 
 def sql-ddl [
-  "CREATE TABLE sources (id TEXT PRIMARY KEY, kind TEXT NOT NULL, locator TEXT NOT NULL, title TEXT, retrieved_at TEXT, content_hash TEXT NOT NULL, authority TEXT NOT NULL, metadata_json TEXT);"
+  "CREATE TABLE bundle_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+    "CREATE TABLE input_files (path TEXT PRIMARY KEY, digest TEXT NOT NULL, chars INTEGER NOT NULL);"
+    "CREATE TABLE sources (id TEXT PRIMARY KEY, kind TEXT NOT NULL, locator TEXT NOT NULL, title TEXT, retrieved_at TEXT, content_hash TEXT NOT NULL, authority TEXT NOT NULL, metadata_json TEXT);"
     "CREATE TABLE entities (id TEXT PRIMARY KEY, type TEXT NOT NULL, label TEXT NOT NULL, normalized_label TEXT NOT NULL, status TEXT NOT NULL);"
     "CREATE TABLE entity_aliases (entity_id TEXT NOT NULL REFERENCES entities(id), alias TEXT NOT NULL);"
     "CREATE TABLE entity_external_ids (entity_id TEXT NOT NULL REFERENCES entities(id), scheme TEXT NOT NULL, value TEXT NOT NULL);"
@@ -73,6 +77,39 @@ def sql-ddl [
     "CREATE TABLE identity_decisions (id TEXT PRIMARY KEY, left_entity_id TEXT NOT NULL REFERENCES entities(id), right_entity_id TEXT NOT NULL REFERENCES entities(id), decision TEXT NOT NULL, confidence REAL NOT NULL, review_required INTEGER NOT NULL, supporting_json TEXT, conflicting_json TEXT);"
     "CREATE TABLE validation_issues (id TEXT PRIMARY KEY, severity TEXT NOT NULL, rule TEXT NOT NULL, target_kind TEXT NOT NULL, target_id TEXT NOT NULL, message TEXT NOT NULL, suggested_correction TEXT, automatic_correction_safe INTEGER NOT NULL);"
     "CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, term TEXT NOT NULL, definition TEXT NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL, domain_json TEXT, range_json TEXT, examples_json TEXT, possible_equivalents_json TEXT);"
+]
+
+# The bundle's own header, including the input digest — so a SQL reader
+# can check a loaded graph against the tree exactly as kg/verify.boru
+# does against the JSON.
+def meta-rows fn bundle:Map List [
+  def dig (KgUtil.get-or bundle "input_digest" {}) flatten
+    [[(sql-row "bundle_meta"
+                ["schema_version"
+                    (KgUtil.get-or bundle "schema_version" "")
+                ]
+            )
+            (sql-row "bundle_meta"
+                ["generated_at"
+                    (KgUtil.get-or bundle "generated_at" "")
+                ]
+            )
+            (sql-row "bundle_meta"
+                ["input_digest_algorithm"
+                    (KgUtil.get-or dig "algorithm" "")
+                ]
+            )
+            (sql-row "bundle_meta"
+                ["input_digest_combined"
+                    (KgUtil.get-or dig "combined" "")
+                ]
+            )
+        ]
+        (each
+            [var [[f] sql-row "input_files" [f.path f.digest f.chars]]]
+            (KgUtil.list-at dig "files")
+        )
+    ]
 ]
 
 def source-rows fn sources:List List [
@@ -213,7 +250,7 @@ def proposal-rows fn proposals:List List [
 def emit-sql fn bundle:Map String [
   def lines
     (flatten
-        [["BEGIN TRANSACTION;"] sql-ddl
+        [["BEGIN TRANSACTION;"] sql-ddl (meta-rows bundle)
             (source-rows (KgUtil.list-at bundle "sources"))
             (entity-rows (KgUtil.list-at bundle "entities"))
             (assertion-rows (KgUtil.list-at bundle "assertions"))
@@ -230,6 +267,245 @@ def write-sql fn [[bundle:Map path:String] [Any] [
   IO.write (make Pathon path) (emit-sql bundle) {fmt:"text"}
 ]]
 
+# ---- Markdown projection ------------------------------------------------
+#
+# out/graph.md exists because out/graph.json does not fit a reader's
+# budget. The JSON is ~60 KB of fingerprints and nested evidence — call
+# it 16-20k tokens — to convey a few dozen facts, and an agent asked a
+# question about this repository will (correctly) read AGENTS.md's
+# layout table instead, because that costs 400 tokens and says more.
+#
+# So the JSON stays the machine contract and this is the READ path: the
+# same graph as a few hundred lines of outline, keyed by repository path
+# and label rather than by hash, with the module dependency view — the
+# thing people actually come here for — first.
+
+def attr-of fn [[e:Map k:String] [String] [
+  KgUtil.get-or (KgUtil.get-or e "attributes" {}) k ""
+]]
+
+# Modules and packages render as their repository path; everything else
+# as its label.
+def name-of fn [[index:Map id:String] [String] [
+  def e (index get id)
+  if (e is None) [id]
+    [def p (attr-of e "path") if (p eq "") [e.label] [p]]
+]]
+
+def join-or-none fn xs:List String [
+  if ((xs size) eq 0) ["—"] [StringUtil.concat xs {sep:", "}]
+]
+
+def md-modules fn [[bundle:Map index:Map] [List] [
+  def pkgs (KgQuery.packages bundle) flatten
+    (each
+        [var
+            [[m]
+              def path (attr-of m "path")
+              def gomod (attr-of m "go_module")
+              def outside
+                (if ((attr-of m "workspace_member") eq "false")
+                    [" _(outside go.work)_"] [""]
+                )
+              def own
+                (join-or-none
+                    (sort
+                        (each [var [[p] attr-of p "path"]]
+                            (filter
+                                [var
+                                    [[p] (attr-of p "parent_module")
+                                        eq path
+                                    ]
+                                ]
+                                pkgs
+                            )
+                        )
+                    )
+                )
+              def deps
+                (join-or-none
+                    (sort
+                        (each [var [[d] name-of index d]]
+                            (KgQuery.dependencies-of bundle m.id)
+                        )
+                    )
+                )
+              def rdeps
+                (join-or-none
+                    (sort
+                        (each [var [[d] name-of index d]]
+                            (KgQuery.dependents-of bundle m.id)
+                        )
+                    )
+                )
+                [`- **${path}** — \`${gomod}\`${outside}`
+                    `  - depends on: ${deps}`
+                    `  - required by: ${rdeps}` `  - packages: ${own}`
+                ]
+            ]
+        ]
+        (KgQuery.modules bundle)
+    )
+]]
+
+# Non-code entities, grouped by type.
+def md-entities fn bundle:Map List [
+  def rest
+    (filter
+        [var
+            [[e] (not (e.type eq "SoftwareModule")) and
+                (not (e.status eq "merged"))
+            ]
+        ]
+        (KgUtil.list-at bundle "entities")
+    )
+  def types (KgEnt.distinct-sorted (each [dot type] rest)) flatten
+    (each
+        [var
+            [[t] flatten
+                [[`### ${t}`]
+                    (sort
+                        (each [var [[e] `- ${e.label}`]]
+                            (filter [dot type eq t] rest)
+                        )
+                    )
+                    [""]
+                ]
+            ]
+        ]
+        types
+    )
+]
+
+# Local object-shape test: storage must not depend on schema.boru just
+# to read a discriminator that is one field. Defined BEFORE its callers —
+# a def is not hoisted, and a forward reference silently yields the
+# wrong branch rather than erroring.
+def is-entity-object fn object:Map Boolean [
+  (KgUtil.get-or object "kind" "") eq "entity"
+]
+
+def md-assertions fn [[bundle:Map index:Map] [List] [
+  sort
+    (each
+        [var
+            [[a]
+              def lit (KgUtil.get-or a.object "value" "")
+              def obj
+                (if (is-entity-object a.object)
+                    [name-of index
+                        (KgUtil.get-or a.object "entity_id" "")
+                    ]
+                    [`"${lit}"`]
+                )
+              def subj (name-of index a.subject_id)
+              def pred a.predicate
+              def srcs
+                (StringUtil.concat
+                    (sort
+                        (KgEnt.distinct-sorted
+                            (each [dot source_id]
+                                (KgUtil.list-at a "evidence")
+                            )
+                        )
+                    )
+                    {sep:","}
+                )
+                `- ${subj} -[${pred}]-> ${obj}  · ${srcs}`
+            ]
+        ]
+        (KgUtil.list-at bundle "assertions")
+    )
+]]
+
+def emit-markdown fn bundle:Map String [
+  def index (KgEnt.index-by-id (KgUtil.list-at bundle "entities"))
+  def s (KgUtil.get-or bundle "summary" {})
+  def dig (KgUtil.get-or bundle "input_digest" {})
+  def issues (KgUtil.list-at bundle "validation_issues")
+  def proposals (KgUtil.list-at bundle "schema_proposals")
+  def n-files (KgUtil.get-or dig "file_count" 0)
+  def schema-version (KgUtil.get-or bundle "schema_version" "")
+  def n-ent (KgUtil.get-or s "entity_count" 0)
+  def n-ast (KgUtil.get-or s "assertion_count" 0)
+  def n-src (KgUtil.get-or s "source_count" 0)
+  def n-disputed (KgUtil.get-or s "disputed_assertion_count" 0)
+  def n-unres (KgUtil.get-or s "unresolved_identity_count" 0)
+  def n-err (KgUtil.get-or s "error_count" 0)
+  def n-warn (KgUtil.get-or s "warning_count" 0)
+  def dig-alg (KgUtil.get-or dig "algorithm" "")
+  def dig-combined (KgUtil.get-or dig "combined" "")
+  def lines
+    (flatten
+        [["# boru project knowledge graph" ""
+                `Generated by \`make -C kg graph\` from ${n-files} input files. Machine-readable form: \`out/graph.json\` (and \`out/graph.sql\`).`
+                "" `- schema: \`${schema-version}\``
+                `- entities: ${n-ent} · assertions: ${n-ast} · sources: ${n-src}`
+                `- disputed: ${n-disputed} · unresolved identities: ${n-unres} · errors: ${n-err} · warnings: ${n-warn}`
+                `- input digest (\`${dig-alg}\`): \`${dig-combined}\` — verify with \`make -C kg verify\``
+                ""
+                "The `generated_at` stamp in the JSON is pinned so rebuilds are byte-identical; it is NOT a freshness signal. The input digest is."
+                "" "## Code units" ""
+                "Read from `go.work` and every `go.mod`; `depends on` lists DIRECT requires only."
+                ""
+            ]
+            (md-modules bundle index) ["" "## Other entities" ""]
+            (md-entities bundle)
+            ["## Assertions" ""
+                "Every claim, with the source ids backing it. Full quotes live in `out/graph.json`."
+                ""
+            ]
+            (md-assertions bundle index)
+            (if ((issues size) eq 0) [[]]
+                [flatten
+                    [["" "## Validation issues" ""]
+                        (sort
+                            (each
+                                [var
+                                    [[i]
+                                      def sev i.severity
+                                      def rule i.rule
+                                      def tgt i.target_id
+                                      def msg i.message
+                                        `- **${sev}** \`${rule}\` ${tgt} — ${msg}`
+                                    ]
+                                ]
+                                issues
+                            )
+                        )
+                    ]
+                ]
+            )
+            (if ((proposals size) eq 0) [[]]
+                [flatten
+                    [["" "## Schema proposals (require approval)" ""]
+                        (sort
+                            (each
+                                [var
+                                    [[p]
+                                      def kind p.term_kind
+                                      def term p.term
+                                      def defn p.definition
+                                      def why p.reason
+                                        `- \`${kind}\` **${term}** — ${defn} (${why})`
+                                    ]
+                                ]
+                                proposals
+                            )
+                        )
+                    ]
+                ]
+            )
+            [""]
+        ]
+    )
+    StringUtil.concat lines {sep:"\n"}
+]
+
+def write-markdown fn [[bundle:Map path:String] [Any] [
+  IO.write (make Pathon path) (emit-markdown bundle) {fmt:"text"}
+]]
+
 export "KgStore" {
   sort-by-id:sort-by-id/r
   write-bundle:write-bundle/r
@@ -238,6 +514,15 @@ export "KgStore" {
   sql-escape:sql-escape/r
   sql-lit:sql-lit/r
   sql-row:sql-row/r
+  meta-rows:meta-rows/r
   emit-sql:emit-sql/r
   write-sql:write-sql/r
+  attr-of:attr-of/r
+  name-of:name-of/r
+  join-or-none:join-or-none/r
+  md-modules:md-modules/r
+  md-entities:md-entities/r
+  md-assertions:md-assertions/r
+  emit-markdown:emit-markdown/r
+  write-markdown:write-markdown/r
 }

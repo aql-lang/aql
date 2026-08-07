@@ -16,16 +16,27 @@ import "boru:struct-util"
 
 # ---- approved vocabularies ---------------------------------------------
 
+# SoftwareModule was approved on 2026-08-07, discharging the standing
+# proposal in main.boru ("Repository modules are currently typed Product,
+# which blurs shipped artifacts and source-tree modules"). It names a
+# buildable code unit — a Go module or one of its packages — and is
+# reserved for units the CODE bundle can evidence from go.work / go.mod
+# (kg/gomod.boru). Shipped artifacts (the boru binary), plain source
+# directories (lang/spec) and boru-level modules stay Product.
 def entity-types [
   "Person" "Organization" "Place" "Event" "Document" "Product"
-    "Concept" "Role" "Identifier" "Other"
+    "Concept" "Role" "Identifier" "SoftwareModule" "Other"
 ]
 
+# depends_on is DIRECTED: subject depends on object. It replaced
+# related_to for module edges, which could not distinguish "eng builds on
+# core" from "core builds on eng" — the single most-asked fact about this
+# repository was the one the graph could not answer.
 def predicates [
   "type" "same_as" "part_of" "located_in" "member_of" "works_for"
     "owns" "created_by" "participated_in" "has_role" "occurred_at"
     "mentions" "supports" "contradicts" "supersedes" "related_to"
-    "has_attribute"
+    "depends_on" "has_attribute"
 ]
 
 # Predicates treated as single-valued per subject: two accepted

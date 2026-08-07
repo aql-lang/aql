@@ -4,60 +4,91 @@
 # the working directory):
 #
 #   cd kg
-#   ../cmd/go/bin/boru main.boru        # or: go run ../cmd/go/boru main.boru
+#   ../cmd/go/bin/boru main.boru        # or: make -C kg graph
 #
-# Reads project/boru-project.jsonic (candidate facts about this
-# repository, each with quoted evidence), runs the full pipeline —
-# ingest, identity resolution, conflict marking, validation, competency
-# report — and writes:
+# TWO INPUT BUNDLES, and the order matters:
 #
+#   1. CODE — kg/gomod.boru reads go.work and every member go.mod, and
+#      emits the module inventory, the package inventory, and the
+#      DIRECTED depends_on edges, quoting the actual `use` and `require`
+#      lines as evidence.
+#   2. PROSE — project/boru-project.jsonic: what only the documentation
+#      knows (which guide covers which module, the language concepts,
+#      the shipped artifacts).
+#
+# Code goes first because same-id entities unify with the FIRST
+# occurrence winning on attribute conflicts, so go.mod stays
+# authoritative over the docs on every fact both could state.
+#
+# Writes:
 #   out/graph.json   the boru-kg/1 bundle (committed; refresh each PR)
-#   out/graph.sql    the same graph as normalized SQL (see storage.boru)
+#   out/graph.sql    the same graph as normalized SQL (storage.boru)
+#   out/graph.md     the read path — the same graph as a short outline
 #
-# Both stamps below are pinned so a rebuild over unchanged input is
-# byte-identical; bump run-stamp when you regenerate after a change.
+# The two stamps below are pinned so a rebuild over unchanged input is
+# byte-identical. A pinned stamp cannot double as a freshness signal, so
+# the bundle also carries `input_digest`: a real content digest of every
+# file the build read (digest.boru), which `make -C kg verify` checks
+# against the working tree.
 
 import "boru:io"
 import "./util.boru"
 import "./schema.boru"
 import "./identifiers.boru"
+import "./digest.boru"
+import "./gomod.boru"
 import "./report.boru"
 import "./storage.boru"
 
-def run-stamp "2026-07-22T00:00:00Z"
+def run-stamp "2026-08-07T00:00:00Z"
 
-# The one schema-term gap found while modelling the repository —
-# proposed, not silently added (see kg/README.md §schema proposals).
-def proposals [
-  (KgSchema.mk-proposal
-        {id:(KgId.proposal-id "entity_type" "SoftwareModule")
-          term_kind:"entity_type"
-          term:"SoftwareModule"
-          definition:"A buildable code module or package within a software repository."
-          domain:["SoftwareModule"]
-          range:["Product" "Concept"]
-          examples:["cmd/go" "lang/go" "eng/go"]
-          reason:"Repository modules are currently typed Product, which blurs shipped artifacts and source-tree modules."
-          possible_equivalents:["Product"]
-        }
-    )
-]
+def project-file "project/boru-project.jsonic"
+def work-file "../go.work"
 
-def candidates [(IO.read (make Pathon "project/boru-project.jsonic"))]
+# Real Go modules that are deliberately NOT go.work members — they build
+# on their own. Listing them explicitly keeps "is this a module?"
+# answerable for the whole repository, while `workspace_member: false`
+# preserves the distinction rather than flattening it.
+def extra-modules ["editors/tree-sitter/bindings/go"]
+
+# The schema-term gap found while modelling the repository was APPROVED
+# on 2026-08-07: SoftwareModule is now an entity type in schema.boru,
+# carrying the definition this proposal argued for. Nothing else is
+# pending, so the bundle ships an empty proposal list rather than a
+# stale one.
+def proposals []
+
+def code-bundle (KgGoMod.candidate-bundle work-file extra-modules)
+def prose-bundle (IO.read (make Pathon project-file))
+def candidates [code-bundle prose-bundle]
+
+def input-digest
+(KgDigest.mk-input-digest
+      (KgDigest.project-inputs project-file
+          (KgGoMod.input-paths work-file extra-modules)
+      )
+  )
 
 def bundle
 (KgReport.build-graph candidates
-      {recorded_at:run-stamp generated_at:run-stamp proposals:proposals}
+      {recorded_at:run-stamp
+        generated_at:run-stamp
+        proposals:proposals
+        input_digest:input-digest
+      }
   )
 
 IO.folder (make Pathon "out") drop
 KgStore.write-bundle bundle "out/graph.json" drop
 KgStore.write-sql bundle "out/graph.sql" drop
+KgStore.write-markdown bundle "out/graph.md" drop
 
 def summary (bundle get "summary")
-print `kg: wrote out/graph.json and out/graph.sql`
+print `kg: wrote out/graph.json, out/graph.sql and out/graph.md`
 print
 `kg: sources=${summary get "source_count"} entities=${summary get "entity_count"} assertions=${summary get "assertion_count"} disputed=${summary get "disputed_assertion_count"} unresolved=${summary get "unresolved_identity_count"} errors=${summary get "error_count"} warnings=${summary get "warning_count"}`
+print
+`kg: input digest ${input-digest get "algorithm"}=${input-digest get "combined"} over ${input-digest get "file_count"} file(s)`
 print
 `kg: review queue: ${(bundle get "human_review_queue") size} item(s)`
 

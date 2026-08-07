@@ -207,6 +207,101 @@ def two-hop-paths fn [[bundle:Map a:String b:String] [List] [
     )
 ]]
 
+# ---- code-unit queries --------------------------------------------------
+#
+# The questions this graph is actually asked — "is X a module?", "what
+# does X depend on?", "what breaks if X changes?" — answered against the
+# code-derived half of the graph (kg/gomod.boru). depends_on is
+# DIRECTED, so dependencies-of and dependents-of are genuinely different
+# answers; with the old related_to edge they could not have been.
+
+def unit-of fn e:Map String [
+  KgUtil.get-or (KgUtil.get-or e "attributes" {}) "unit" ""
+]
+
+def code-units fn bundle:Map List [
+  entities-by-type bundle "SoftwareModule"
+]
+
+# Every Go module, sorted by repository path.
+def modules fn bundle:Map List [
+  def hits
+    (filter [var [[e] (unit-of e) eq "go-module"]] (code-units bundle))
+    hits ArrayUtil.sortby
+    (each
+        [var
+            [[e] KgUtil.get-or (KgUtil.get-or e "attributes" {})
+                "path" ""
+            ]
+        ]
+        hits
+    )
+]
+
+# Every discovered Go package, sorted by repository path.
+def packages fn bundle:Map List [
+  def hits
+    (filter [var [[e] (unit-of e) eq "go-package"]] (code-units bundle))
+    hits ArrayUtil.sortby
+    (each
+        [var
+            [[e] KgUtil.get-or (KgUtil.get-or e "attributes" {})
+                "path" ""
+            ]
+        ]
+        hits
+    )
+]
+
+# Look a code unit up by its repository path ("eng/go", "eng/go/parser").
+# Returns none when the path names nothing the code bundle found — which
+# is itself the answer to "is this a module?".
+def code-unit-by-path fn [[bundle:Map path:String] [Any] [
+  def hits
+    (filter
+        [var
+            [[e]
+                (KgUtil.get-or (KgUtil.get-or e "attributes" {})
+                    "path" ""
+                )
+                eq path
+            ]
+        ]
+        (code-units bundle)
+    )
+  if ((hits size) eq 0) [none] [hits get 0]
+]]
+
+# Ids this entity directly depends on (subject -> object).
+def dependencies-of fn [[bundle:Map id:String] [List] [
+  def cid (KgEnt.canonical-id (eindex bundle) id) KgEnt.distinct-sorted
+    (each [var [[e] e get "to"]]
+        (filter
+            [var
+                [[e] ((e get "from") eq cid) and
+                    ((e get "predicate") eq "depends_on")
+                ]
+            ]
+            (edge-list bundle)
+        )
+    )
+]]
+
+# Ids that directly depend on this entity — the blast radius of a change.
+def dependents-of fn [[bundle:Map id:String] [List] [
+  def cid (KgEnt.canonical-id (eindex bundle) id) KgEnt.distinct-sorted
+    (each [var [[e] e get "from"]]
+        (filter
+            [var
+                [[e] ((e get "to") eq cid) and
+                    ((e get "predicate") eq "depends_on")
+                ]
+            ]
+            (edge-list bundle)
+        )
+    )
+]]
+
 # ---- review-oriented views ----------------------------------------------
 
 def unresolved-identities fn bundle:Map List [
@@ -327,6 +422,13 @@ export "KgQuery" {
   evidence-for-assertion:evidence-for-assertion/r
   edge-list:edge-list/r
   neighbors:neighbors/r
+  unit-of:unit-of/r
+  code-units:code-units/r
+  modules:modules/r
+  packages:packages/r
+  code-unit-by-path:code-unit-by-path/r
+  dependencies-of:dependencies-of/r
+  dependents-of:dependents-of/r
   one-hop-paths:one-hop-paths/r
   two-hop-paths:two-hop-paths/r
   unresolved-identities:unresolved-identities/r
