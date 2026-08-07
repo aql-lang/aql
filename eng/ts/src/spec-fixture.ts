@@ -8,9 +8,9 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { canon } from '@voxgig/borucore'
-import { parse } from '@voxgig/boruparser'
-import { resolveWordsDeep } from '@voxgig/borucore'
+import { canon } from '@boru-lang/core'
+import { parse } from '@boru-lang/parser'
+import { resolveWordsDeep } from '@boru-lang/core'
 import {
   coerceBoolean,
   isRecordShape,
@@ -18,8 +18,8 @@ import {
   isValueOfType,
   pathOf,
   typeOf,
-} from '@voxgig/borucore'
-import { makeIdealHandler, makeScalarHandler, makeScalarOptsHandler } from '@voxgig/borucore'
+} from '@boru-lang/core'
+import { makeIdealHandler, makeScalarHandler, makeScalarOptsHandler } from '@boru-lang/core'
 import {
   BoruError,
   type BoruType,
@@ -869,7 +869,7 @@ function registerSpecWords(r: Registry): void {
               // A def bound to a compile-time-known value (a type / enum /
               // sig / fn, or a literal recovered through its carrier): its
               // inspection is fixed, so bake the precomputed result.
-              let concrete: import('@voxgig/borucore').Value | null = top.carrier ? null : top
+              let concrete: import('@boru-lang/core').Value | null = top.carrier ? null : top
               if (concrete === null) {
                 concrete = emit.constValueOf(emit.classify(top))
               }
@@ -1206,7 +1206,7 @@ function registerSpecWords(r: Registry): void {
             // A raw value (eval-list/map) bakes verbatim (quote returns it
             // unevaluated); a stripped literal / type operand bakes via its
             // classified const original (quote 5, quote Integer).
-            let tok: import('@voxgig/borucore').Value | null = a.isConcrete() ? a : null
+            let tok: import('@boru-lang/core').Value | null = a.isConcrete() ? a : null
             if (tok === null) {
               const op = emit.classify(a)
               if (op !== null && op.kind === 'const') tok = op.value

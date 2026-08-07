@@ -592,7 +592,7 @@ Both succeed with different values — the hard-fail class, and it is precisely 
 
 **Two corrections to the original claim, both material.**
 1. The culprit is the TS **test fixture**, not the TS engine. `parseFnParam` lives only in `spec-fixture.ts`. Go's fixture *delegates* to the real engine (`eng/go/specfix/words.go:486,562` → `eng.ParseFnDef` → `core.ParseFnParams`, shipped and used by `basic/go/native_definition.go:1397`). TS has no port of `ParseFnParams` at all. This is an unported feature surfacing through scaffolding.
-2. "surfaces as an internal crash to any embedder" is **false**. `index.ts` does not export `spec-fixture` (grep count 0), and `package.json`'s `exports` map is subpath-restricting, so `@voxgig/borueng/src/spec-fixture.ts` resolves to `ERR_PACKAGE_PATH_NOT_EXPORTED`. The missing `BoruError` code is fixture hygiene, not an embedder-facing defect.
+2. "surfaces as an internal crash to any embedder" is **false**. `index.ts` does not export `spec-fixture` (grep count 0), and `package.json`'s `exports` map is subpath-restricting, so `@boru-lang/eng/src/spec-fixture.ts` resolves to `ERR_PACKAGE_PATH_NOT_EXPORTED`. The missing `BoruError` code is fixture hygiene, not an embedder-facing defect.
 
 Real value of this finding: it bounds what the 1808/1808 result actually attests to. `eng/ts/src/signature.ts:30/:35/:56` already carry `barrierPos`, `patterns` and `quoteArgs`, and fixture native words use them — only the boru-source declaration path is missing, so the TS engine can never express its own dispatch model from source.
 

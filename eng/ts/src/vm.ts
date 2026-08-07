@@ -30,12 +30,12 @@ import {
   OpTrap,
   type Program,
 } from './bytecode.ts'
-import { coerceBoolean } from '@voxgig/borucore'
-import { Engine } from '@voxgig/borucore'
-import { BoruError } from '@voxgig/borucore'
-import { matchValues } from '@voxgig/borucore'
-import type { Registry } from '@voxgig/borucore'
-import { newInteger, newList, newMap, OrderedMap, Value } from '@voxgig/borucore'
+import { coerceBoolean } from '@boru-lang/core'
+import { Engine } from '@boru-lang/core'
+import { BoruError } from '@boru-lang/core'
+import { matchValues } from '@boru-lang/core'
+import type { Registry } from '@boru-lang/core'
+import { newInteger, newList, newMap, OrderedMap, Value } from '@boru-lang/core'
 
 /** Active counted-loop state in the VM. */
 interface VmLoop {

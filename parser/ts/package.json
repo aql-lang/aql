@@ -1,7 +1,7 @@
 {
-  "name": "@voxgig/boruparser",
+  "name": "@boru-lang/parser",
   "version": "0.1.0",
-  "description": "TypeScript port of the boru parser — source text to Value[]. The TS twin of the parser/go module: the front end and nothing else, a leaf over @voxgig/borucore with no engine, no check pass and no compiler.",
+  "description": "TypeScript port of the boru parser — source text to Value[]. The TS twin of the parser/go module: the front end and nothing else, a leaf over @boru-lang/core with no engine, no check pass and no compiler.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -22,7 +22,7 @@
   "dependencies": {
     "@tabnas/jsonic": "^0.4.1",
     "@tabnas/parser": "^0.4.1",
-    "@voxgig/borucore": "file:../../core/ts"
+    "@boru-lang/core": "file:../../core/ts"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

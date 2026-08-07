@@ -86,7 +86,7 @@ jobs:
       # measured source-only). core/ts runs FIRST and on its own — it is the
       # twin of `make cover-gate-core`, and running it before eng/ts is what
       # proves the core package really does stand alone: it has no dependency
-      # on @voxgig/borueng, so a core file that reached upward would fail to
+      # on @boru-lang/eng, so a core file that reached upward would fail to
       # resolve here, before the engine is ever installed. Node >= 24 per the
       # packages' engines; npm ci restores the pinned toolchains.
       - name: Test eng/ts (typecheck + coverage ratchet)

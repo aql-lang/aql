@@ -7,7 +7,7 @@ import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 
 import { BoruError, Engine, Registry, TSugar, Value, compile, newInteger, newMark, newMove, newWord } from './index.ts'
-import { newOpenParen } from '@voxgig/borucore'
+import { newOpenParen } from '@boru-lang/core'
 import { registerSpecWords, renderStack, tokenize } from './spec-fixture.ts'
 
 function run(input: string): string {

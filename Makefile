@@ -208,7 +208,7 @@ bench:
 
 # ---- TypeScript engine port (eng/ts) -----------------------------------
 #
-# @voxgig/borueng mirrors the Go kernel and must stay row-for-row green on
+# @boru-lang/eng mirrors the Go kernel and must stay row-for-row green on
 # the SAME eng/spec/*.tsv corpus as the Go engspec runner. Runs the
 # typechecker then the node:test suite (Node >= 24, type-stripping).
 # The line-coverage threshold is the TS half of the standalone-parity
@@ -229,8 +229,8 @@ bench:
 # 96.80% source-only. The floor tracks the source-only figure from here and
 # ratchets up as before — never down.
 # RE-BASED 96 -> 97 when --test-coverage-include landed, and this one was a
-# CORRECTNESS fix, not just a denominator change. @voxgig/borucore (and now
-# @voxgig/boruparser) are `file:` dependencies, which npm installs as symlinks;
+# CORRECTNESS fix, not just a denominator change. @boru-lang/core (and now
+# @boru-lang/parser) are `file:` dependencies, which npm installs as symlinks;
 # node resolves through the symlink to the real path, so node:test was
 # instrumenting core/ts's and parser/ts's sources and folding them into eng's
 # figure. That is precisely the cross-suite coverage the standalone gates exist
@@ -253,7 +253,7 @@ test-ts:
 
 # ---- TypeScript interpreter core (core/ts) -----------------------------
 #
-# @voxgig/borucore is the TS twin of the core/go module — values, types,
+# @boru-lang/core is the TS twin of the core/go module — values, types,
 # signatures, matching, the registry, and the step loop, with NO check pass,
 # NO compiler, NO parser and no dependencies at all (core/go at least needs
 # apd; the TS core needs nothing). It is the fourth gate in the standalone
@@ -267,7 +267,7 @@ test-ts:
 #
 # The no-upward-imports rule (core/go/CLAUDE.md) is what makes this gate
 # meaningful, and it is STRUCTURALLY enforced here rather than by convention:
-# core/ts has no dependency on @voxgig/borueng, so a core file that reached
+# core/ts has no dependency on @boru-lang/eng, so a core file that reached
 # for the check pass or the compiler would fail to resolve. The check piece
 # reaches core only through the seam tables core owns — AnalysisImpl
 # (analysis-hooks.ts) and EmitRecorder (emit-recorder.ts) — each with NAMED
@@ -303,9 +303,9 @@ test-ts-core:
 
 # ---- TypeScript parser (parser/ts) -------------------------------------
 #
-# @voxgig/boruparser is the TS twin of the parser/go module — source text to
+# @boru-lang/parser is the TS twin of the parser/go module — source text to
 # Value[], the front end and nothing else. Cut out of eng/ts/src/parser so the
-# TS side mirrors the Go module graph: a leaf over @voxgig/borucore that the
+# TS side mirrors the Go module graph: a leaf over @boru-lang/core that the
 # engine depends on, rather than a directory inside the engine.
 #
 # It is the fifth gate in the standalone set:

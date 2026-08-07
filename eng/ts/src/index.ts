@@ -1,7 +1,7 @@
 // Public entry point for the TypeScript port of borueng.
 
-export { BoruError } from '@voxgig/borucore'
-export { cap } from '@voxgig/borucore'
+export { BoruError } from '@boru-lang/core'
+export { cap } from '@boru-lang/core'
 export {
   CheckState,
   carrierResults,
@@ -10,7 +10,7 @@ export {
   stripToCarriers,
   toCarrier,
 } from './check.ts'
-export { coerceBoolean } from '@voxgig/borucore'
+export { coerceBoolean } from '@boru-lang/core'
 export type { CheckDiagnostic, CheckSeverity } from './check.ts'
 export {
   CodeBuilder,
@@ -49,23 +49,23 @@ export type { FinalizeResult } from './lower.ts'
 export { runProgram } from './vm.ts'
 export { compile, compileCheck, runCompiled } from './compile.ts'
 export type { RunCompiledResult } from './compile.ts'
-export { Engine } from '@voxgig/borucore'
-export type { FunctionEntry } from '@voxgig/borucore'
-export { Registry } from '@voxgig/borucore'
+export { Engine } from '@boru-lang/core'
+export type { FunctionEntry } from '@boru-lang/core'
+export { Registry } from '@boru-lang/core'
 export type {
   Handler,
   NativeFunc,
   NativeSig,
   ReturnsFunc,
   Signature,
-} from '@voxgig/borucore'
+} from '@boru-lang/core'
 export {
   signatureScore,
   sortSignatures,
-} from '@voxgig/borucore'
-export type { BoruType } from '@voxgig/borucore'
-export type { SugarInfo, SugarKind } from '@voxgig/borucore'
-export { sugarExpansion } from '@voxgig/borucore'
+} from '@boru-lang/core'
+export type { BoruType } from '@boru-lang/core'
+export type { SugarInfo, SugarKind } from '@boru-lang/core'
+export { sugarExpansion } from '@boru-lang/core'
 export {
   TAbsent,
   TAny,
@@ -116,7 +116,7 @@ export {
   builtinRank,
   newType,
   typeNameTable,
-} from '@voxgig/borucore'
+} from '@boru-lang/core'
 export {
   ChildType,
   ClassTypeInfo,
@@ -166,7 +166,7 @@ export {
   newXml,
   newXmlInterp,
   withQuoted,
-} from '@voxgig/borucore'
+} from '@boru-lang/core'
 export type {
   FnDefInfo,
   FnParam,
@@ -180,4 +180,4 @@ export type {
   XmlChildTmpl,
   XmlElement,
   XmlTmpl,
-} from '@voxgig/borucore'
+} from '@boru-lang/core'

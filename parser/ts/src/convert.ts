@@ -34,10 +34,10 @@ import {
   newSugar,
   newCloseParen,
   newEnd,
-} from '@voxgig/borucore'
-import type { WordInfo, ReachSeg, ReachInfo, SugarInfo, InterpSegment } from '@voxgig/borucore'
-import { TWord, TNone, TAbsent, TBigInteger, TBigDecimal } from '@voxgig/borucore'
-import { BoruError } from '@voxgig/borucore'
+} from '@boru-lang/core'
+import type { WordInfo, ReachSeg, ReachInfo, SugarInfo, InterpSegment } from '@boru-lang/core'
+import { TWord, TNone, TAbsent, TBigInteger, TBigDecimal } from '@boru-lang/core'
+import { BoruError } from '@boru-lang/core'
 import {
   ParenGroup,
   UnclosedParen,

@@ -13,11 +13,11 @@
 //
 // PARITY NOTE: still mono-only / concrete-operand / single-result; poly,
 // dynamic, loops, user fns, containers, and fallback islands land later.
-import type { RecorderOperand } from '@voxgig/borucore'
-import type { Registry } from '@voxgig/borucore'
-import type { Signature } from '@voxgig/borucore'
-import { newCarrier, newWord, OrderedMap, Value, type FnDefInfo } from '@voxgig/borucore'
-import { TList, TMap } from '@voxgig/borucore'
+import type { RecorderOperand } from '@boru-lang/core'
+import type { Registry } from '@boru-lang/core'
+import type { Signature } from '@boru-lang/core'
+import { newCarrier, newWord, OrderedMap, Value, type FnDefInfo } from '@boru-lang/core'
+import { TList, TMap } from '@boru-lang/core'
 
 /**
  * fnCaptureFree reports whether a fn VALUE is self-contained — every body

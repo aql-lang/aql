@@ -10,7 +10,7 @@ import { strict as assert } from 'node:assert'
 
 import { JsonicError } from '@tabnas/jsonic'
 
-import { BoruError } from '@voxgig/borucore'
+import { BoruError } from '@boru-lang/core'
 import { colorOff, errMsgOptions, parseErrText, translateParseError } from './errors.ts'
 
 interface FakeFields {
