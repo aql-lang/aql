@@ -359,7 +359,36 @@ func writeDiscovery(path, bind, token string) {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(path, data, 0o600)
+	// Publish ATOMICALLY, the way api.writeDiscoveryFile already does for
+	// $TMPDIR/boru-api.json — this function was the odd one out. Two reasons,
+	// both real:
+	//
+	//  1. TEARING. A reader (`attach` below, and any supervisor waiting for
+	//     serve to come up) polls for this path and reads it the moment it
+	//     exists. os.WriteFile creates+truncates first and writes after, so
+	//     the reader can stat a file that is still zero-length and fail with
+	//     "unexpected end of JSON input". Reproducible under CPU load.
+	//  2. SYMLINK TOCTOU. This file carries the bearer TOKEN and lives in a
+	//     shared temp dir. os.WriteFile follows a pre-planted symlink at the
+	//     target, writing the token wherever the link points. os.CreateTemp
+	//     uses O_CREATE|O_EXCL with an unpredictable name, and rename
+	//     replaces the link rather than following it.
+	//
+	// CreateTemp opens at 0600, so the mode the old WriteFile asked for is
+	// preserved. Rename within one directory is atomic: a reader sees either
+	// no file or the complete one, never a prefix.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".boru-debug-*.json")
+	if err != nil {
+		return
+	}
+	name := tmp.Name()
+	_, werr := tmp.Write(data)
+	cerr := tmp.Close()
+	// Still best-effort, as before: every failure leaves NO discovery file
+	// rather than a partial one, and serve carries on unadvertised.
+	if werr != nil || cerr != nil || os.Rename(name, path) != nil {
+		_ = os.Remove(name)
+	}
 }
 
 func readDiscovery(path string) (url, token string, err error) {
