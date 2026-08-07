@@ -45,7 +45,7 @@ import {
   TXml,
   TXmlInterp,
 } from './type.ts'
-import { canonXml, formatFloat } from './canon.ts'
+import { canonValue, canonXml, formatFloat } from './canon.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
 export interface WordInfo {
@@ -446,6 +446,23 @@ export class Value {
       return this.asDisjunct()
         .alternatives.map((alt) => alt.toString())
         .join(' tor ')
+    }
+    // Payload kinds whose debug render IS the canonical one. Go's
+    // kernelFormatDefault and CanonValue agree on every one of these —
+    // `a/b`, `/a/b`, `error(msg)`, `m.k/q` — and canonValue already
+    // implemented them all while toString had no arm at all, so each of
+    // these printed the literal '[object Object]'. Delegating keeps the two
+    // renders from drifting apart again, which is how the disjunction arm
+    // above came to be missing in the first place.
+    if (
+      this.vType.equal(TPathon) ||
+      this.vType.equal(TEmailon) ||
+      this.vType.equal(TUrlon) ||
+      this.vType.equal(TError) ||
+      this.vType.equal(TReach) ||
+      this.data instanceof OptionsData
+    ) {
+      return canonValue(this)
     }
     return String(this.data)
   }
