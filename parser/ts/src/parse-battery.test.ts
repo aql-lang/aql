@@ -313,6 +313,77 @@ describe('parse battery', () => {
     ['Box<lower>', 'sugar(angle Box [word(lower)])'],
     ['Box<T extends Integer,U>', 'sugar(angle Box [word(T) word(extends) word(Integer) word(U)])'],
     ['def Box<T> (refine List)', 'word(def) sugar(angle Box [word(T)]) paren([word(refine) word(List)])'],
+
+    // Word-literal specials: booleans and the float words are WORDS at parse
+    // time (ADR-012 rule 4 — the parser resolves no names); only the
+    // float specials become values.
+    ["true", "word(true)"],
+    ["false", "word(false)"],
+    ["inf", "inf"],
+    ["-inf", "-inf"],
+    ["nan", "nan"],
+    ["Foo", "word(Foo)"],
+
+    // Word modifiers: each valid flag, each rejected pairing, and the
+    // digit-run arity form. Pinned against parser/go's canon.
+    ["a/u", "word(a)"],
+    ["a/s", "word(a)"],
+    ["a/f", "word(a)"],
+    ["a/2", "word(a)"],
+    ["a/q", "a/q"],
+    ["a/r", "word(a)"],
+    ["a/t", "sugar(type-bound [[a]])"],
+    ["a/qq", "ERR [boru/syntax_error]: invalid word modifier /qq on \"a\""],
+    ["a/fs", "ERR [boru/syntax_error]: invalid word modifier /fs on \"a\""],
+    ["a/ur", "word(a)"],
+    ["a/uq", "ERR [boru/syntax_error]: invalid word modifier /uq on \"a\""],
+    ["a/rq", "ERR [boru/syntax_error]: invalid word modifier /rq on \"a\""],
+    ["a/tt", "ERR [boru/syntax_error]: invalid word modifier /tt on \"a\""],
+    ["a/0", "word(a)"],
+    ["a/1f", "word(a)"],
+    ["a/su", "word(a)"],
+
+    // Numeric bases and underscore placement.
+    ["0x1f", "31"],
+    ["0o17", "15"],
+    ["0b1011", "11"],
+    ["0xFFFFFFFFFFFFFFFFF", "ERR [boru/integer_overflow]: integer literal out of range: 0xFFFFFFFFFFFFFFFFF exceeds the Integer range (-9223372036854775808..9223372036854775807)"],
+    ["1_0", "10"],
+    ["1__0", "ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0"],
+    ["_1", "word(_1)"],
+    ["0x_1", "1"],
+    ["0b", "ERR [boru/syntax_error]: invalid numeric literal: 0b"],
+    ["0x", "ERR [boru/syntax_error]: invalid numeric literal: 0x"],
+
+    // XML: bare interpolation as a whole attribute value, interpolation in
+    // text, and the element error taxonomy.
+    ["<a n=${1}/>", "interp-xml(<a n=\"${1}\"/>)"],
+    ["<a n=${x}/>", "interp-xml(<a n=\"${word(x)}\"/>)"],
+    ["<a>${1}</a>", "interp-xml(<a>${1}</a>)"],
+    ["<a>t${1}u</a>", "interp-xml(<a>t${1}u</a>)"],
+    ["<a n='a\\'b'/>", "ERR xml: invalid attribute name in <a>"],
+    ["<a n=\"a\\\"b\"/>", "ERR xml: invalid attribute name in <a>"],
+    ["<a>", "ERR xml: unterminated element <a>"],
+    ["</a>", "ERR xml: expected a tag name after '<'"],
+    ["<a></b>", "ERR xml: mismatched closing tag </b> for <a>"],
+    ["<a n/>", "<a n=\"\"/>"],
+    ["<>", "ERR xml: expected a tag name after '<'"],
+
+    // Reach chains, typed containers, interpolation escapes, parens.
+    ["a.b", "a.b"],
+    ["a.b.c", "a.b.c"],
+    ["a.'k'", "a.'k'"],
+    ["a.0", "a.0"],
+    ["{:Integer}", "{:word(Integer)}"],
+    ["{}", "{}"],
+    ["[]", "[]"],
+    ["`a\\`b`", "'a`b'"],
+    ["`a\\$b`", "'a$b'"],
+    ["`a\\nb`", "'a\\nb'"],
+    ["( 1 )", "paren([1])"],
+    ["(", "ERR [boru/syntax_error]: unmatched opening parenthesis"],
+    ["1 tor 2", "1 word(tor) 2"],
+    ["Integer tor String", "word(Integer) word(tor) word(String)"],
   ]
   it('deep nesting refuses at the TS-safe bound; shallow nesting parses', () => {
     const deep = '['.repeat(501) + '1' + ']'.repeat(501)
