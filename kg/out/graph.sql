@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '1795584580289389003');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '5202003317056177540');
 INSERT INTO input_files VALUES ('../AGENTS.md', '3639440694240945864', 9586);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '5494549853626060108', 12217);
@@ -25,7 +25,7 @@ INSERT INTO input_files VALUES ('../cmd/go/go.mod', '1168351960312314743', 4184)
 INSERT INTO input_files VALUES ('../compiler/go/go.mod', '142593282390199928', 331);
 INSERT INTO input_files VALUES ('../core/go/go.mod', '2316996521694161686', 98);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
-INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '7142639343639143644', 20171);
+INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
 INSERT INTO input_files VALUES ('../design/LANG-ENG-CONTENT-AUDIT.0.md', '4534620810048850672', 42667);
 INSERT INTO input_files VALUES ('../design/checker-compiler-completeness-review.0.md', '5862232790816677050', 39943);
 INSERT INTO input_files VALUES ('../editors/tree-sitter/bindings/go/go.mod', '8359550297204300245', 134);
