@@ -49,9 +49,14 @@ const (
 // to leave uncovered; a name moves back up to a wrapper func when a
 // hot path starts calling it.
 var (
+	AdoptShapeValue               = check.AdoptShapeValue
+	AnalyseFnBody                 = check.AnalyseFnBody
 	AnyAnyCarrier                 = check.AnyAnyCarrier
 	AnyDynamicCarrier             = check.AnyDynamicCarrier
 	AnyNonConcreteOperand         = check.AnyNonConcreteOperand
+	BodyFreeForFallback           = check.BodyFreeForFallback
+	BodyHasSentinel               = check.BodyHasSentinel
+	BodyHasSentinelDeep           = check.BodyHasSentinelDeep
 	BodyRefsFnLocalFn             = check.BodyRefsFnLocalFn
 	BuildFnBodyReturnsFn          = check.BuildFnBodyReturnsFn
 	CarrierResults                = check.CarrierResults
@@ -59,17 +64,24 @@ var (
 	CheckAddUniqueDiagnostic      = check.CheckAddUniqueDiagnostic
 	CheckAtIndices                = check.CheckAtIndices
 	CheckAtUncaughtTopLevel       = check.CheckAtUncaughtTopLevel
+	CheckListIndex                = check.CheckListIndex
 	CheckMakeConstruction         = check.CheckMakeConstruction
+	CommonAncestorType            = check.CommonAncestorType
 	DeadSignatures                = check.DeadSignatures
 	DeferredParamListResidual     = check.DeferredParamListResidual
 	DryPassReturns                = check.DryPassReturns
 	DryPassWrap                   = check.DryPassWrap
 	DynamicReachableOverloadCount = check.DynamicReachableOverloadCount
+	FnAnalysisKey                 = check.FnAnalysisKey
 	FnPredicateOverloadHazard     = check.FnPredicateOverloadHazard
+	FoldVariadicArms              = check.FoldVariadicArms
 	IsDeferredWordList            = check.IsDeferredWordList
 	IsVariadicSpread              = check.IsVariadicSpread
+	JoinCarriers                  = check.JoinCarriers
 	JoinCarriersInner             = check.JoinCarriersInner
 	MintFlexShapeCarrier          = check.MintFlexShapeCarrier
+	NewCarrierTypedListLen        = check.NewCarrierTypedListLen
+	NewDynamicCarrierValue        = check.NewDynamicCarrierValue
 	NewVariadicCarrier            = check.NewVariadicCarrier
 	OrderingReturnsFn             = check.OrderingReturnsFn
 	ParamBodyCarrier              = check.ParamBodyCarrier
@@ -83,19 +95,15 @@ var (
 	ReturnsStatic                 = check.ReturnsStatic
 	RunFnBodyOnce                 = check.RunFnBodyOnce
 	ScalarFoldOperand             = check.ScalarFoldOperand
+	ShapeFieldRead                = check.ShapeFieldRead
 	SpliceFnValueCheckResult      = check.SpliceFnValueCheckResult
+	StaticListLen                 = check.StaticListLen
 	StoreShapeOf                  = check.StoreShapeOf
 	StripToCarriers               = check.StripToCarriers
 	TryRecordMethodApply          = check.TryRecordMethodApply
 	TryShapedMethodDispatch       = check.TryShapedMethodDispatch
 	UnionCarrierForType           = check.UnionCarrierForType
 )
-
-func AdoptShapeValue(a0 core.Value, a1 int) core.Value { return check.AdoptShapeValue(a0, a1) }
-
-func AnalyseFnBody(a0 *core.Registry, a1 string, a2 []string, a3 []core.Value, a4 []core.Value, a5 []core.CapturedBinding, a6 []*core.Type, a7 bool) []core.Value {
-	return check.AnalyseFnBody(a0, a1, a2, a3, a4, a5, a6, a7)
-}
 
 func AnalyseLoopBody(a0 *core.Registry, a1 core.Value, a2 []string, a3 []core.Value, a4 bool) []core.Value {
 	return check.AnalyseLoopBody(a0, a1, a2, a3, a4)
@@ -109,37 +117,11 @@ func ApplyGuardNarrowing(a0 *core.Registry, a1 core.Value) func() {
 	return check.ApplyGuardNarrowing(a0, a1)
 }
 
-func BodyFreeForFallback(a0 *core.Registry, a1 core.Value) bool {
-	return check.BodyFreeForFallback(a0, a1)
-}
-
-func BodyHasSentinel(a0 core.Value) bool { return check.BodyHasSentinel(a0) }
-
-func BodyHasSentinelDeep(a0 *core.Registry, a1 core.Value) bool {
-	return check.BodyHasSentinelDeep(a0, a1)
-}
-
 func BoolWord(a0 bool) string { return check.BoolWord(a0) }
-
-func CheckListIndex(a0 *core.Registry, a1 core.Value, a2 core.Value, a3 string) {
-	check.CheckListIndex(a0, a1, a2, a3)
-}
-
-func CommonAncestorType(a0 *core.Type, a1 *core.Type) *core.Type {
-	return check.CommonAncestorType(a0, a1)
-}
 
 func DataListElemTypeFromValue(a0 core.Value) *core.Type { return check.DataListElemTypeFromValue(a0) }
 
 func ElementCarrierFromValue(a0 core.Value) core.Value { return check.ElementCarrierFromValue(a0) }
-
-func FnAnalysisKey(a0 uint64, a1 string, a2 []core.Value, a3 []core.CapturedBinding, a4 []core.Value) string {
-	return check.FnAnalysisKey(a0, a1, a2, a3, a4)
-}
-
-func FoldVariadicArms(a0 []core.Value, a1 []core.Value) (core.Value, bool) {
-	return check.FoldVariadicArms(a0, a1)
-}
 
 func InstallJoinedDefs(a0 *core.Registry, a1 map[string]core.Value, a2 map[string]core.Value) {
 	check.InstallJoinedDefs(a0, a1, a2)
@@ -149,19 +131,11 @@ func JoinCarrierStacks(a0 []core.Value, a1 []core.Value) []core.Value {
 	return check.JoinCarrierStacks(a0, a1)
 }
 
-func JoinCarriers(a0 core.Value, a1 core.Value) core.Value { return check.JoinCarriers(a0, a1) }
-
 func LiteralCondValue(a0 core.Value) (bool, bool) { return check.LiteralCondValue(a0) }
 
 func NewCarrierTypedList(a0 *core.Type) core.Value { return check.NewCarrierTypedList(a0) }
 
-func NewCarrierTypedListLen(a0 *core.Type, a1 int) core.Value {
-	return check.NewCarrierTypedListLen(a0, a1)
-}
-
 func NewCarrierTypedListValue(a0 core.Value) core.Value { return check.NewCarrierTypedListValue(a0) }
-
-func NewDynamicCarrierValue(a0 core.Value) core.Value { return check.NewDynamicCarrierValue(a0) }
 
 func NewElementCarrier(a0 *core.Type) core.Value { return check.NewElementCarrier(a0) }
 
@@ -184,7 +158,3 @@ func RunCarrierBodyWithDefs(a0 *core.Registry, a1 core.Value) ([]core.Value, map
 func RunCarrierCondBody(a0 *core.Registry, a1 core.Value) ([]core.Value, map[string]core.Value) {
 	return check.RunCarrierCondBody(a0, a1)
 }
-
-func ShapeFieldRead(a0 core.Value) core.Value { return check.ShapeFieldRead(a0) }
-
-func StaticListLen(a0 core.Value) (int, bool) { return check.StaticListLen(a0) }

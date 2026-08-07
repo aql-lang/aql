@@ -95,15 +95,24 @@ func coldSet(dir, out, qual string) (map[string]bool, error) {
 			if !strings.HasSuffix(p, ".go") || filepath.Base(p) == facade {
 				return nil
 			}
+			// TESTS do not keep a wrapper hot. Demotion is behaviour-preserving —
+			// `var X = core.X` has the same call syntax and semantics — so the only
+			// reason to emit a BODY is inlining on a production hot path, which the
+			// alloc-ceiling tests gate. A wrapper reached solely from _test.go
+			// (including every Benchmark, which never runs under the coverage
+			// profile at all) would otherwise sit permanently uncovered.
+			if strings.HasSuffix(p, "_test.go") {
+				return nil
+			}
 			fset := token.NewFileSet()
 			f, perr := parser.ParseFile(fset, p, nil, 0)
 			if perr != nil {
 				return nil
 			}
-			// Outside the facade's own package a bare identifier cannot name
-			// the wrapper, so only `<engImport>.X` counts. engImportName is
-			// "" when the file does not import the facade package at all, in
-			// which case nothing in it can reach a wrapper.
+			// Outside the facade's own package a bare identifier cannot name the
+			// wrapper, so only `<engImport>.X` counts. engImportName is "" when the
+			// file does not import the facade package at all, in which case nothing
+			// in it can reach a wrapper.
 			inFacadePkg := f.Name.Name == facadePkg
 			engName := ""
 			if !inFacadePkg {
@@ -112,67 +121,30 @@ func coldSet(dir, out, qual string) (map[string]bool, error) {
 					return nil
 				}
 			}
-			var visit func(ast.Node) bool
-			visit = func(n ast.Node) bool {
-				// A qualified reference (pkg.Name) normally resolves to the
-				// real symbol, so only the bare identifier reaches the
-				// wrapper — EXCEPT when the qualifier is the facade package
-				// itself, which is the only way an outside package can name
-				// a wrapper at all.
-				if sel, ok := n.(*ast.SelectorExpr); ok {
-					if !inFacadePkg {
-						if x, ok := sel.X.(*ast.Ident); ok && x.Name == engName {
-							used[sel.Sel.Name] = true
-							return false
-						}
+			// Only a CALL keeps a wrapper hot. A func-VALUE reference
+			// (`eng.Go(eng.MakeWithOpts)`) is served identically by a re-export —
+			// it yields core's function directly, one hop less — so counting it
+			// pinned a body that nothing ever entered. Restricting to call
+			// position also makes the old declaration-name special cases moot: a
+			// ValueSpec/TypeSpec/FuncDecl name is never in call position.
+			mark := func(fun ast.Expr) {
+				switch fn := fun.(type) {
+				case *ast.Ident:
+					if inFacadePkg {
+						used[fn.Name] = true
 					}
-					ast.Inspect(sel.X, visit)
-					return false
-				}
-				// Outside the facade package a bare identifier names
-				// something local, never a wrapper. Keep walking for nested
-				// selectors, but record nothing.
-				if !inFacadePkg {
-					if _, ok := n.(*ast.Ident); ok {
-						return false
+				case *ast.SelectorExpr:
+					if inFacadePkg {
+						return
+					}
+					if x, ok := fn.X.(*ast.Ident); ok && x.Name == engName {
+						used[fn.Sel.Name] = true
 					}
 				}
-				// A DECLARED name is not a reference. Consumers re-export
-				// the facade wholesale (`Foo = eng.Foo` in basic's and
-				// lang's aliases.go), and the left side of that spec is an
-				// unqualified Ident spelled exactly like the wrapper — so
-				// counting it marks every re-exported func "used" and leaves
-				// the genuinely-uncalled wrappers as uncovered bodies. Walk
-				// the parts that can REFERENCE, never the naming parts.
-				switch d := n.(type) {
-				case *ast.ValueSpec:
-					if d.Type != nil {
-						ast.Inspect(d.Type, visit)
-					}
-					for _, v := range d.Values {
-						ast.Inspect(v, visit)
-					}
-					return false
-				case *ast.TypeSpec:
-					ast.Inspect(d.Type, visit)
-					return false
-				case *ast.FuncDecl:
-					if d.Recv != nil {
-						ast.Inspect(d.Recv, visit)
-					}
-					ast.Inspect(d.Type, visit)
-					if d.Body != nil {
-						ast.Inspect(d.Body, visit)
-					}
-					return false
-				case *ast.Field:
-					if d.Type != nil {
-						ast.Inspect(d.Type, visit)
-					}
-					return false
-				}
-				if id, ok := n.(*ast.Ident); ok {
-					used[id.Name] = true
+			}
+			visit := func(n ast.Node) bool {
+				if call, ok := n.(*ast.CallExpr); ok {
+					mark(call.Fun)
 				}
 				return true
 			}
