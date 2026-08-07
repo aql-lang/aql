@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Codex round-6 fixes (design/TYPED-CONTAINER-TAG-RETENTION.0.md):
@@ -26,11 +26,11 @@ func TestFlexParamIdentityPreserved(t *testing.T) {
 	}
 	// The last value is the caller's `u` — it must reflect the in-body mutation.
 	u := out[len(out)-1]
-	lst, lerr := eng.AsList(u)
+	lst, lerr := core.AsList(u)
 	if lerr != nil {
 		t.Fatalf("caller value is not a list: %v", lerr)
 	}
-	if got, _ := eng.AsInteger(lst.Get(0)); got != 99 {
+	if got, _ := core.AsInteger(lst.Get(0)); got != 99 {
 		t.Errorf("flex identity lost: caller's u[0] = %v, want 99 (body write should mutate the shared flex)", got)
 	}
 	// The tag still enforces a bad write inside the body.
@@ -46,7 +46,7 @@ func TestFlexMapParamIdentityPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("flex map param write: %v", err)
 	}
-	m, merr := eng.AsMap(out[len(out)-1])
+	m, merr := core.AsMap(out[len(out)-1])
 	if merr != nil || m == nil {
 		t.Fatalf("caller value is not a map: %v", merr)
 	}

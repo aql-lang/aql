@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	core "github.com/boru-lang/boru/core/go"
 	eng "github.com/boru-lang/boru/eng/go"
 )
 
@@ -135,7 +136,7 @@ func TestCompiledConcurrencyRaceFree(t *testing.T) {
 
 // renderResidual renders a residual engine stack the way convertResults
 // does, joined into one comparable string.
-func renderResidual(vs []eng.Value) string {
+func renderResidual(vs []core.Value) string {
 	out := convertResults(vs)
 	parts := make([]string, len(out))
 	for i, v := range out {

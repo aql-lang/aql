@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // New's error arms are drivable only through the seams
@@ -15,13 +15,13 @@ func TestNewErrorArms(t *testing.T) {
 	prevReg, prevErr := newRegistry, registryErr
 	t.Cleanup(func() { newRegistry, registryErr = prevReg, prevErr })
 
-	newRegistry = func() (*eng.Registry, error) { return nil, errors.New("boom") }
+	newRegistry = func() (*core.Registry, error) { return nil, errors.New("boom") }
 	if _, err := New(nil); err == nil || !strings.Contains(err.Error(), "registry") {
 		t.Errorf("New with failing registry: got %v, want registry error", err)
 	}
 	newRegistry = prevReg
 
-	registryErr = func(*eng.Registry) error { return errors.New("dup word") }
+	registryErr = func(*core.Registry) error { return errors.New("dup word") }
 	if _, err := New(nil); err == nil || !strings.Contains(err.Error(), "word registration") {
 		t.Errorf("New with registration error: got %v, want registration error", err)
 	}

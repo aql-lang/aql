@@ -2,7 +2,7 @@
 // the prose docs against the production language layer and compares the
 // rendered stack to the documented result.
 //
-// Render path: the comparison string is eng.Canon of the residual stack
+// Render path: the comparison string is core.Canon of the residual stack
 // — canonical boru source, which is the value form the docs are written
 // in (quoted strings, lowercase `none`, comma-free lists/maps, `name/q`
 // atoms). This is the same renderer the .tsv spec suites use
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/parser/go"
@@ -174,7 +174,7 @@ func runProgram(t *testing.T, src string) string {
 }
 
 // runProgramErr evaluates src against a fresh production registry and
-// renders the residual stack as canonical boru source (eng.Canon).
+// renders the residual stack as canonical boru source (core.Canon).
 func runProgramErr(src string) (string, error) {
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -192,7 +192,7 @@ func runProgramErr(src string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return eng.Canon(result), nil
+	return core.Canon(result), nil
 }
 
 // sanitise makes a short, filesystem-safe subtest fragment from an expr.

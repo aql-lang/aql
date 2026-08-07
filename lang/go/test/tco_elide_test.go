@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end battery for tail-call elimination on direct

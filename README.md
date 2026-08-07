@@ -164,13 +164,13 @@ Suggested reading orders:
 |------|------------|
 | `cmd/go/` | The `boru` CLI / REPL (`github.com/boru-lang/boru/cmd/go`). |
 | `lang/go/` | The language layer: public `lang` API and the consolidated `native` word library. |
-| `basic/go/` | The base language layer: fundamental words and predefined content types, on eng only (ADR-013). |
-| `eng/go/` | Engine kernel (check + compiler + VM over core) and the kernel spec runner. |
+| `basic/go/` | The base language layer: fundamental words and predefined content types, on core+check+compiler (ADR-013). |
+| `eng/go/` | The VM and the run/fork entry points over core+check+compiler, plus the kernel spec runner. Only `lang` and the harnesses depend on it. |
 | `compiler/go/` | The compiler module: the emit recorder, lowering, and the bytecode emitter. Builds on check and core; eng runs its bytecode. |
 | `check/go/` | The type-checker module: the analysis pass, carriers, and check-mode diagnostics. Builds on core alone. |
 | `core/go/` | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it. |
 | `parser/go/` | The parser module: boru source text to kernel values (tabnas/jsonic lexer plus the embedded declarative grammar). Depends on core alone. |
-| `calc/go/` | A small calculator built directly on `eng` (learning example). |
+| `calc/go/` | A small calculator built directly on `core` + `parser` (learning example). |
 | `wpg/` | The wasm web playground (`wpg/wasm` + `wpg/serve`). |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP test fixtures. |
 | `kg/` | The project knowledge graph: a boru-built, evidence-backed map of the repo (pipeline + committed bundle). |

@@ -3,7 +3,7 @@ package basic
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // newTestRegistry mirrors the eng test helper of the same name for the
@@ -13,7 +13,7 @@ import (
 // tests that construct through it.
 func newTestRegistry(t *testing.T) *Registry {
 	t.Helper()
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}

@@ -21,7 +21,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/parser/go"
 )
 
@@ -32,17 +32,17 @@ import (
 // stack and a subsequent `add` collapses them to [3]. This matches the
 // REPL's "carry the work-in-progress between lines" intuition.
 type Calc struct {
-	Registry *eng.Registry
+	Registry *core.Registry
 	Out      io.Writer
-	stack    []eng.Value
+	stack    []core.Value
 }
 
 // Test seams (design/TEST-SEAMS.10.md): registry construction and the
 // registration-error read cannot fail on a healthy build, so tests
 // swap these to drive New's error arms.
 var (
-	newRegistry = eng.NewRegistry
-	registryErr = (*eng.Registry).Err
+	newRegistry = core.NewRegistry
+	registryErr = (*core.Registry).Err
 )
 
 // New constructs a Calc with a fresh registry and the calculator
@@ -70,17 +70,17 @@ func New(out io.Writer) (*Calc, error) {
 //
 // A parse or runtime error leaves the previous stack intact — failed
 // evaluations don't corrupt the REPL state.
-func (c *Calc) Eval(src string) ([]eng.Value, error) {
+func (c *Calc) Eval(src string) ([]core.Value, error) {
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
 	}
 
-	seed := make([]eng.Value, 0, len(c.stack)+len(values))
+	seed := make([]core.Value, 0, len(c.stack)+len(values))
 	seed = append(seed, c.stack...)
 	seed = append(seed, values...)
 
-	result, err := eng.NewTop(c.Registry).Run(seed)
+	result, err := core.NewTop(c.Registry).Run(seed)
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +90,8 @@ func (c *Calc) Eval(src string) ([]eng.Value, error) {
 
 // Stack returns a copy of the current stack so the caller can inspect
 // it without risk of mutating the engine's view.
-func (c *Calc) Stack() []eng.Value {
-	out := make([]eng.Value, len(c.stack))
+func (c *Calc) Stack() []core.Value {
+	out := make([]core.Value, len(c.stack))
 	copy(out, c.stack)
 	return out
 }
@@ -105,7 +105,7 @@ func (c *Calc) Reset() {
 // FormatStack renders a stack as a single space-separated line — the
 // same form `show` writes — for callers that want to print the stack
 // outside the engine's word machinery.
-func FormatStack(stk []eng.Value) string {
+func FormatStack(stk []core.Value) string {
 	if len(stk) == 0 {
 		return "(empty)"
 	}

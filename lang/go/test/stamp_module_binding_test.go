@@ -3,16 +3,16 @@ package test
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // stampEventsFor loads src as an inline module body (module load is the
 // detached-stamp trigger site) with runtime stamping armed, then returns
 // the stamp events recorded for its fns.
-func stampEventsFor(t *testing.T, src string) []eng.StampEvent {
+func stampEventsFor(t *testing.T, src string) []core.StampEvent {
 	t.Helper()
 	reg, err := native.DefaultRegistry()
 	if err != nil {
@@ -72,9 +72,9 @@ func runStampedModule(t *testing.T, modSrc, prog string) []native.Value {
 	return runModule(t, modSrc, prog, true)
 }
 
-func asStringVal(v native.Value) (string, error) { return eng.AsString(v) }
+func asStringVal(v native.Value) (string, error) { return core.AsString(v) }
 
-func stampOutcome(evs []eng.StampEvent, name string) (string, bool) {
+func stampOutcome(evs []core.StampEvent, name string) (string, bool) {
 	for _, ev := range evs {
 		if ev.Name == name {
 			if ev.Stamped {

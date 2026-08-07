@@ -3,17 +3,17 @@ package test
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
-func asIntegerVal(v eng.Value) (int64, error) { return eng.AsInteger(v) }
+func asIntegerVal(v core.Value) (int64, error) { return core.AsInteger(v) }
 
 // stampEventsForNet is stampEventsFor with the module resolver installed,
 // for module bodies that import boru:net (the serve-raw storing shape).
-func stampEventsForNet(t *testing.T, src string) []eng.StampEvent {
+func stampEventsForNet(t *testing.T, src string) []core.StampEvent {
 	t.Helper()
 	reg, err := native.DefaultRegistry()
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
@@ -470,8 +470,8 @@ type mountStack struct {
 // new backend is installed, so IO.unmount can restore it — supporting nested
 // mounts rather than clobbering a single saved slot.
 func pushMountPrev(r *Registry) {
-	prevOps, hadOps, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
-	stack, ok, _ := eng.Cap[*mountStack](r, mountPrevKey)
+	prevOps, hadOps, _ := core.Cap[capabilities.FileOps](r, CapFileOps)
+	stack, ok, _ := core.Cap[*mountStack](r, mountPrevKey)
 	if !ok || stack == nil {
 		stack = &mountStack{}
 		_ = r.Capabilities.Set(mountPrevKey, stack)
@@ -552,7 +552,7 @@ func doMountZipWord(args []Value, r *Registry, opts Value) ([]Value, error) {
 // host-backed `.jsonic` include would still resolve through the unmounted
 // filesystem.
 func doUnmountWord(_ []Value, r *Registry) ([]Value, error) {
-	stack, ok, _ := eng.Cap[*mountStack](r, mountPrevKey)
+	stack, ok, _ := core.Cap[*mountStack](r, mountPrevKey)
 	if !ok || stack == nil || len(stack.entries) == 0 {
 		return nil, r.BoruError("unmount_error", "unmount: no mounted filesystem to unmount", "unmount")
 	}

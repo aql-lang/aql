@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // queryRegistry returns a registry with the boru:query module installed

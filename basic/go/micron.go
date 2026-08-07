@@ -48,7 +48,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // requireMicronName enforces the Micron naming rule: the last
@@ -100,7 +100,7 @@ type micronBehavior struct {
 	info *MicronTypeInfo
 }
 
-func (micronBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (micronBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
 
 func (micronBehavior) Format(v Value) string {
 	if IsMicronValue(v) {
@@ -114,7 +114,7 @@ func (micronBehavior) Format(v Value) string {
 		}
 		return "Micron " + NewMap(info.Fields).String()
 	}
-	return eng.DefaultBehavior.Format(v)
+	return core.DefaultBehavior.Format(v)
 }
 
 func (micronBehavior) Equal(a, b Value) bool {
@@ -126,21 +126,21 @@ func (micronBehavior) Equal(a, b Value) bool {
 	}
 	if am, ok := a.Data.(MicronPayload); ok {
 		if bm, ok := b.Data.(MicronPayload); ok {
-			return eng.MicronFieldsEqual(am.Fields, bm.Fields)
+			return core.MicronFieldsEqual(am.Fields, bm.Fields)
 		}
 		return false
 	}
-	return eng.DefaultBehavior.Equal(a, b)
+	return core.DefaultBehavior.Equal(a, b)
 }
 
 func (mb micronBehavior) Compare(a, b Value) (int, error) {
 	// Type-literal-first rule, inside the family only (the cross-family
 	// scalar catch-all on TScalar stays Rank-only).
-	if c, ok := eng.LitVsConcreteOrder(a, b); ok {
+	if c, ok := core.LitVsConcreteOrder(a, b); ok {
 		return c, nil
 	}
 	if IsBareTypeNode(a) && IsBareTypeNode(b) {
-		return eng.LitVsLitOrder(a, b), nil
+		return core.LitVsLitOrder(a, b), nil
 	}
 	// Two concrete Microns. This Comparer owns the pair only when it
 	// sits on a leaf kind — the LCA walk lands there exactly when both
@@ -152,7 +152,7 @@ func (mb micronBehavior) Compare(a, b Value) (int, error) {
 		return 0, ErrNoComparer
 	}
 	if mb.kind.ConformsTo(TPathon) {
-		return eng.ComparePathons(a, b), nil
+		return core.ComparePathons(a, b), nil
 	}
 	if mb.kind.ConformsTo(TSemveron) {
 		return compareSemverons(a, b), nil
@@ -186,7 +186,7 @@ func micronCompareKey(v Value) string {
 func micronRender(v Value) string {
 	fields, err := AsMicronFields(v)
 	if err != nil {
-		return eng.DefaultBehavior.Format(v)
+		return core.DefaultBehavior.Format(v)
 	}
 	switch {
 	case v.Parent.ConformsTo(TEmailon):
@@ -283,10 +283,10 @@ func init() {
 	}
 	// The display-string backstop for wrapper-Behavior micron values
 	// renders through this bridge (eng value.go).
-	eng.RegisterMicronRenderBridge(micronRender)
+	core.RegisterMicronRenderBridge(micronRender)
 }
 
-// ValidateSubtypeName implements eng.SubtypeNamer (ADR-012 rule 5): the
+// ValidateSubtypeName implements core.SubtypeNamer (ADR-012 rule 5): the
 // family's -on naming rule, applied by the kernel to every subtype
 // minted beneath a Micron kind — typed defs, bare-nominal refines,
 // dependent scalars, host member types.
@@ -294,7 +294,7 @@ func (micronBehavior) ValidateSubtypeName(name string) error {
 	return requireMicronName(name)
 }
 
-// MintSubtypeBehavior implements eng.MicronSubtypeMinter: a
+// MintSubtypeBehavior implements core.MicronSubtypeMinter: a
 // `refine Micron {fields}` body bound to a capitalised name mints its
 // subtype with the family Behavior carrying the schema, so `make`
 // finds it through the parent walk.
@@ -309,7 +309,7 @@ func (micronBehavior) MintSubtypeBehavior(def *Type, info *MicronTypeInfo) TypeB
 // registry that should construct microns installs this, the way
 // lang's installIdeals wires Object/Record/Table.
 func InstallMicronIdeals(r *Registry) {
-	r.Ideals.Register(&eng.Ideal{
+	r.Ideals.Register(&core.Ideal{
 		Name:        "Micron",
 		Enabled:     true,
 		Accepts:     micronAccepts,

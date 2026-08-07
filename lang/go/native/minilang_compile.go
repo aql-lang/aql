@@ -3,7 +3,7 @@ package native
 import (
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Compiled mini-languages (design/MINILANG.5.md §13). A kind may register an
@@ -41,7 +41,7 @@ func miniHookToksMaterialisable(toks []Value) bool {
 		// carrier type) is CONCRETE by the payload predicate yet has no
 		// const-pool materialisation — the exact shape this screen exists
 		// to divert onto the standard call.
-		if _, ext := v.Data.(eng.ExtensionPayload); ext {
+		if _, ext := v.Data.(core.ExtensionPayload); ext {
 			return false
 		}
 		// Everything else is either concrete data, a bare type node, or a
@@ -71,7 +71,7 @@ type miniCompileState struct {
 }
 
 func miniCompileStateFor(r *Registry, create bool) *miniCompileState {
-	if s, ok, _ := eng.Cap[*miniCompileState](r, capMiniCompile); ok && s != nil {
+	if s, ok, _ := core.Cap[*miniCompileState](r, capMiniCompile); ok && s != nil {
 		return s
 	}
 	if !create {

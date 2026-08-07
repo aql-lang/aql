@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Direct unit coverage for net_codec.go's package-level pieces: the
@@ -119,7 +119,7 @@ func TestInvokeFnDirectArms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("const Go handler: %v", err)
 	}
-	if s, sErr := eng.AsString(res); sErr != nil || s != "ok" {
+	if s, sErr := core.AsString(res); sErr != nil || s != "ok" {
 		t.Errorf("const Go handler = %v, want ok", res)
 	}
 }
@@ -638,7 +638,7 @@ func TestJSONValueConversionArms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f, fErr := eng.AsFloat(v); fErr != nil || f != 1.5 {
+	if f, fErr := core.AsFloat(v); fErr != nil || f != 1.5 {
 		t.Errorf("1.5 = %v, want Float 1.5", v)
 	}
 	// Arrays convert element-wise.
@@ -665,7 +665,7 @@ func TestJSONValueConversionArms(t *testing.T) {
 	}
 	// The defensive default leaf renders as a string.
 	dv := anyJSONToValue(7)
-	if s, sErr := eng.AsString(dv); sErr != nil || s != "7" {
+	if s, sErr := core.AsString(dv); sErr != nil || s != "7" {
 		t.Errorf("default leaf = %v, want \"7\"", dv)
 	}
 	// A non-concrete value serializes as null.

@@ -7,13 +7,15 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+	eng "github.com/boru-lang/boru/eng/go"
+	parser "github.com/boru-lang/boru/parser/go"
 
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
-	"github.com/boru-lang/boru/parser/go"
 
 	udk "github.com/voxgig/udk/go"
 )
@@ -141,7 +143,7 @@ type Options struct {
 	Streams capabilities.StreamProbe
 	// Steps caps evaluation: the interpreter's Run loop, a single
 	// paren-group evaluation, and the VM's step counter. Zero uses the
-	// engine defaults (eng.DefaultStepLimit / DefaultSubStepLimit). Set
+	// engine defaults (core.DefaultStepLimit / DefaultSubStepLimit). Set
 	// via the CLI's --options flag (e.g. `--options steps:50000000`) when
 	// a legitimately long computation trips the default ceiling, or
 	// downward to bound an untrusted program.
@@ -349,27 +351,27 @@ func (a *Boru) Check(src string) (CheckResult, error) {
 // Program is the bytecode unit the compile pass produces — re-exported
 // from the engine kernel for host callers (Stage 1 of
 // design/boru-bytecode-plan.0.md).
-type Program = eng.Program
+type Program = compiler.Program
 
 // StampEvent is one detached-stamp attempt (re-exported for hosts and the
 // CLI's -compile-report surface).
-type StampEvent = eng.StampEvent
+type StampEvent = core.StampEvent
 
 // StampReport returns the detached-stamp attribution recorded on this
 // instance's registry (design/RUNTIME-STAMPING.0.md Phase 5): one event per
 // stamp ATTEMPT — runtime-constructed codec fns, service handlers, and
 // module fns — with the refusal reason when the compile declined. Nil when
 // runtime stamping was never armed (a plain Run / -no-compile execution).
-func (a *Boru) StampReport() []eng.StampEvent {
+func (a *Boru) StampReport() []core.StampEvent {
 	return a.registry.StampEvents()
 }
 
 // InterpEntry / BailEvent are the observability-seam event types (eng
 // interp_entry.go), re-exported for the frontier test suite.
-type InterpEntry = eng.InterpEntry
+type InterpEntry = core.InterpEntry
 
 // BailEvent is one designed VM defer-to-interpreter (see InterpEntry).
-type BailEvent = eng.BailEvent
+type BailEvent = core.BailEvent
 
 // ArmInterpEntryHook forwards to the registry's interpreter-entry
 // observability seam (eng interp_entry.go — a TEST seam, not API): fn fires
@@ -386,7 +388,7 @@ func (a *Boru) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 	return a.registry.ArmRuntimeBailHook(fn)
 }
 
-// ArmRuntimeStamping arms detached fn-unit stamping (eng.StampDetachedFn) on
+// ArmRuntimeStamping arms detached fn-unit stamping (compiler.StampDetachedFn) on
 // this instance and returns the restoring disarm func. RunCompiled /
 // RunAutoValues arm it themselves for the duration of the call; this is the
 // caller-side half of the Stage-J explicit-fallback contract: a host or CLI
@@ -490,7 +492,7 @@ func (a *Boru) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	// through eng, so a non-EmitState recorder here means a host reassigned
 	// the exported core hook. Refuse to compile rather than assert — a
 	// failed assertion would panic, which ADR-005 forbids.
-	es, isReal := a.registry.Check.Recorder().(*eng.EmitState)
+	es, isReal := a.registry.Check.Recorder().(*compiler.EmitState)
 	if !isReal { //covergate:allow compiler's init always installs the *EmitState hook that eng links in, so only a host-swapped core.NewEmitStateHook reaches this belt (§compiler)
 		return nil, "no bytecode recorder installed (uncompilable)", res, nil
 	}
@@ -605,7 +607,7 @@ func (a *Boru) RegisterNativeFunc(n native.NativeFunc) {
 }
 
 // DefineType installs a user type from a body Value by the SAME path the
-// `def Name body` word uses (eng.InstallType), and returns the minted
+// `def Name body` word uses (core.InstallType), and returns the minted
 // type handle for use in Register'd signatures. This is the embedding-API
 // counterpart of running `def`, but with the *Type handed back — closing
 // the gap where an embedder could define a type in source yet never
@@ -888,7 +890,7 @@ func (a *Boru) runValues(src string) ([]native.Value, error) {
 
 // convertResults maps a residual engine stack to host-friendly Go
 // values — the same projection Run has always applied.
-func convertResults(result []eng.Value) []any {
+func convertResults(result []core.Value) []any {
 	out := make([]any, len(result))
 	for i, v := range result {
 		switch {
@@ -953,7 +955,7 @@ func convertResults(result []eng.Value) []any {
 //     then PROPAGATES the internal_error, annotated with a run-with
 //     --no-compile hint, instead of silently re-running.
 //   - The step budget. The interpreter counts it per tape token stepped, the
-//     VM per bytecode instruction, both capped at eng.DefaultStepLimit. Only
+//     VM per bytecode instruction, both capped at core.DefaultStepLimit. Only
 //     iteration/recursion can approach that ceiling, and for those the compiled
 //     stream is leaner than the expanded token stream — so the VM reaches at
 //     least as far as the interpreter and never spuriously raises
@@ -1026,14 +1028,14 @@ func (a *Boru) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	// and counts, exactly the ownership the fence needs. Installed before
 	// arming so the writer wrappers capture the fresh ledger.
 	savedEffects := a.registry.Effects
-	a.registry.Effects = &eng.EffectLedger{}
+	a.registry.Effects = &core.EffectLedger{}
 	defer func() { a.registry.Effects = savedEffects }()
 	disarmFence := a.registry.ArmEffectFence()
 	defer disarmFence()
 	effectsAt := a.registry.Effects.Count()
 	// Compiled execution requested: arm detached fn-unit stamping so
 	// runtime-constructed callbacks (service handlers, custom codec fns)
-	// compile to units at their store sites (eng.StampDetachedFn). The flag
+	// compile to units at their store sites (compiler.StampDetachedFn). The flag
 	// stays armed through the interpreter FALLBACK below — the top level then
 	// interprets but stored callbacks still earn the VM path, which is the
 	// compiled mode's contract. It is RESTORED to its prior state on return
@@ -1251,7 +1253,7 @@ func checkDiagnosticsDetail(reason string, res CheckResult) string {
 // what failed and what to do about it.
 func fenceBlockedFallback(r *native.Registry, err error) error {
 	const note = "the interpreter fallback was blocked: output was already emitted, so re-running would duplicate it; run with --no-compile and report this as a compiler bug"
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if errors.As(err, &ae) {
 		// A designed defer that PREPARED for this arm (a no-match whose site
 		// proved the interpreter would also fail the dispatch) carries the
@@ -1281,11 +1283,11 @@ func runtimeShouldFallback(err error) bool {
 	// verdict — the interpreter raises the same checker error — never a
 	// bail (a re-run would evaluate the program twice and diverge behind
 	// the effect fence).
-	var pd eng.PolicyDenied
+	var pd core.PolicyDenied
 	if errors.As(err, &pd) {
 		return false
 	}
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if !errors.As(err, &ae) {
 		return true
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // runExpr parses and runs a multi-line boru expression with a fresh registry.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/parser/go"
 )
 
@@ -16,9 +16,9 @@ import (
 // against the kernel alone — one probe per registration group, plus
 // the negative half (an unregistered word still errors).
 func TestRegisterStandalone(t *testing.T) {
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
-		t.Fatalf("eng.NewRegistry: %v", err)
+		t.Fatalf("core.NewRegistry: %v", err)
 	}
 	if err := Register(r); err != nil {
 		t.Fatalf("basic.Register: %v", err)
@@ -27,22 +27,22 @@ func TestRegisterStandalone(t *testing.T) {
 	r.InitRootContext()
 	r.MarkReady()
 
-	asInt := func(v eng.Value) int64 {
+	asInt := func(v core.Value) int64 {
 		t.Helper()
-		n, err := eng.AsInteger(v)
+		n, err := core.AsInteger(v)
 		if err != nil {
 			t.Fatalf("AsInteger(%v): %v", v, err)
 		}
 		return n
 	}
 
-	run := func(src string) []eng.Value {
+	run := func(src string) []core.Value {
 		t.Helper()
 		values, err := parser.Parse(src)
 		if err != nil {
 			t.Fatalf("parse %q: %v", src, err)
 		}
-		out, err := eng.NewTop(r).Run(values)
+		out, err := core.NewTop(r).Run(values)
 		if err != nil {
 			t.Fatalf("run %q: %v", src, err)
 		}
@@ -72,7 +72,7 @@ func TestRegisterStandalone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse negative probe: %v", err)
 	}
-	if _, err := eng.NewTop(r).Run(values); err == nil || !strings.Contains(err.Error(), "undefined_word") {
+	if _, err := core.NewTop(r).Run(values); err == nil || !strings.Contains(err.Error(), "undefined_word") {
 		t.Fatalf("expected undefined_word for a lang-layer word, got %v", err)
 	}
 }
@@ -86,9 +86,9 @@ func TestRegisterRefusesOnTypeInitError(t *testing.T) {
 	prev := SwapTypeInitErrs([]error{boom})
 	defer SwapTypeInitErrs(prev)
 
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
-		t.Fatalf("eng.NewRegistry: %v", err)
+		t.Fatalf("core.NewRegistry: %v", err)
 	}
 	if got := Register(r); !errors.Is(got, boom) {
 		t.Fatalf("Register must surface the init-time error, got %v", got)

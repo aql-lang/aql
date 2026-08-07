@@ -6,7 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/eng/go/stackform"
 	"github.com/boru-lang/boru/lang/go/modules/test/shrink"
 	"github.com/boru-lang/boru/lang/go/native"
@@ -259,7 +261,7 @@ func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
 // activeRun returns the testRun associated with the parent registry,
 // lazily creating it on first access.
 func activeRun(parent *native.Registry) *testRun {
-	if run, ok, _ := eng.Cap[*testRun](parent, capTestRun); ok && run != nil {
+	if run, ok, _ := core.Cap[*testRun](parent, capTestRun); ok && run != nil {
 		return run
 	}
 	run := &testRun{}
@@ -765,7 +767,7 @@ func runSkipProp(parent *native.Registry, args []native.Value) ([]native.Value, 
 // yields tokens only, and the caller builds today's throwaway CallBoru sig.
 func storedBodyArg(arg native.Value, what string) (*native.FnSig, []native.Value, error) {
 	if fd, ok := arg.Data.(native.FnDefInfo); ok && len(fd.Signatures) == 1 {
-		if impl, isBoru := fd.Signatures[0].Impl.(*eng.BoruImpl); isBoru && eng.CompiledRef(&fd.Signatures[0]) != nil {
+		if impl, isBoru := fd.Signatures[0].Impl.(*core.BoruImpl); isBoru && compiler.CompiledRef(&fd.Signatures[0]) != nil {
 			return &fd.Signatures[0], impl.Body, nil
 		}
 	}
@@ -822,7 +824,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		// CallBoru frame; a raw body builds today's throwaway sig.
 		var genResults []native.Value
 		if genSigC != nil {
-			genResults, err = eng.InvokeCallback(parent, genSigC, []native.Value{native.NewMap(randMap)}, nil)
+			genResults, err = core.InvokeCallback(parent, genSigC, []native.Value{native.NewMap(randMap)}, nil)
 		} else {
 			genSig := native.FnSig{
 				Params:     []native.FnParam{{Name: "r", Type: native.TMap}},
@@ -854,7 +856,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		// work). Body must leave a Boolean; anything else is a failure.
 		var propResults []native.Value
 		if propSigC != nil {
-			propResults, err = eng.InvokeCallback(parent, propSigC, []native.Value{input}, nil)
+			propResults, err = core.InvokeCallback(parent, propSigC, []native.Value{input}, nil)
 		} else {
 			propSig := native.FnSig{
 				Params:     []native.FnParam{{Type: native.TAny}},

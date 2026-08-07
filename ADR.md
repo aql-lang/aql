@@ -1017,31 +1017,52 @@ here) and widens its charter to the fundamental words.
 `github.com/boru-lang/boru/basic/go`) is the boru base language
 layer, and the module dependencies around it are HARD RULES:**
 
-1. **`basic` depends on `eng`, and on `eng` only.** Its `go.mod`
-   requires no other boru sibling and no host-capability
-   dependency (no sqlite, no filesystem abstraction, no format
-   stack). A change that adds one is wrong by definition; fix the
-   design, not the go.mod.
+1. **`basic` depends on the pieces it actually uses, and on nothing
+   else.** Since the four-piece + parser cuts those are `core`,
+   `check`, `compiler` and `parser` — NOT `eng`. Its `go.mod` requires
+   no other boru sibling and no host-capability dependency (no sqlite,
+   no filesystem abstraction, no format stack). A change that adds one
+   is wrong by definition; fix the design, not the go.mod.
 
-   > **Amendment (2026-08-07) — `eng only` becomes `eng and the parser`.**
-   > When this rule was written the parser was a PACKAGE INSIDE the eng
-   > module (`eng/go/parser`), so "requires eng" already granted it. The
-   > parser has since been cut out as its own top-level module
-   > (`parser/go`, a leaf over `core`), which changed the module map
-   > without changing any dependency that existed before: basic's test
-   > suite parsed boru source then, and parses it now.
+   > **Amendment (2026-08-07) — `eng only` was measured and found
+   > false.** As written on 2026-08-04 this rule said "`basic` depends
+   > on `eng`, and on `eng` only", which was accurate then: `eng` was
+   > one module containing the kernel, the checker, the compiler and
+   > the parser. The four-piece cut (design/ENG-FOUR-PIECE.0.md,
+   > complete 2026-08-06) and the parser cut split those out, and
+   > `eng/go/aliases_*.go` was introduced so downstream code would
+   > compile unchanged across the split — a migration shim, not an
+   > architectural claim.
    >
-   > The rule therefore reads: basic's `go.mod` may require `eng/go` and
-   > `parser/go`, and NO other boru sibling. The prohibition it exists to
-   > enforce is untouched — nothing reaching up into `lang`/`cmd`, and no
-   > host-capability dependency. `basic/go/depsgate_test.go` allows exactly
-   > those two modules and still fails on anything else.
+   > Measured against the AST-derived owner map of all 1,127 exported
+   > symbols in core/check/compiler/parser (zero collisions), `basic`'s
+   > 755 production references resolve as: **core 700, check 45,
+   > compiler 9, eng 0**. The single apparent eng symbol
+   > (`RegisterCoreFnSig`) occurs only inside a comment. `basic` uses
+   > check and compiler because it implements `if` / `case` / `for` /
+   > `fn` / `def`, and control flow must participate in the check pass
+   > (carrier joins, guard narrowing, fn-body analysis) and in bytecode
+   > recording (branch and loop fragments) — that is not expressible
+   > against core alone.
    >
-   > The alternative — hand-building token streams so the go.mod stays
-   > literally one line — was rejected: it would degrade the very test
-   > that makes this ADR executable (`TestRegisterStandalone` runs
-   > `def ident fn [[a:Integer] [Integer] [a]] ident 5` against a bare
-   > registry) in order to preserve wording whose premise had changed.
+   > So the old rule pinned a dependency that carried no symbols while
+   > the three it truly depends on were invisible to the gate. `basic`
+   > now imports them directly and `eng` is gone from its `go.mod`;
+   > `depsgate_test.go` enforces the real set. The prohibition the rule
+   > exists for is unchanged and now strictly tighter: nothing reaching
+   > up into `lang`/`cmd`, no host-capability dependency, and no
+   > dependency that is not actually used.
+   >
+   > The same measurement was applied to every other facade consumer,
+   > and the shim turned out to be load-bearing almost nowhere:
+   > `calc` and `cmd` also dropped `eng` entirely, and only `lang` and
+   > `test/go` still import it — for the VM and the fork/run entry
+   > points (`RunProgram`, `ForkConcurrent`, `RunUnit`), which `eng`
+   > genuinely owns. Two of the apparent `eng` dependencies were
+   > SHADOWING artefacts: `eng := native.New(reg)` makes `eng.Run` a
+   > method call on a local, not a package reference. Regex cannot see
+   > that; the compiler can, and it disproved them.
+
 2. **`lang` depends on `basic`** (and, as before, on `eng`). The
    full word library builds ON the base layer; nothing in `basic`
    may reach up into `lang` — Go's import-cycle rule makes the

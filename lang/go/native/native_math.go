@@ -7,7 +7,9 @@ import (
 	"math/big"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -156,7 +158,7 @@ func returnsIntFaultOn(base ReturnsFunc, op string, faultFn func(a, b int64) err
 					if errors.As(err, &ae) {
 						code, detail = ae.Code, ae.Detail
 					}
-					eng.CheckAddUniqueDiagnostic(r, code, detail, op, args[0].Pos())
+					check.CheckAddUniqueDiagnostic(r, code, detail, op, args[0].Pos())
 				}
 			}
 		}
@@ -253,7 +255,7 @@ var (
 	divTowerOps = towerOps{
 		intFn: func(a, b int64) (Value, error) {
 			if a == 0 {
-				return Value{}, eng.MakeBoruError("arith_error", "division by zero", "div", "", "")
+				return Value{}, core.MakeBoruError("arith_error", "division by zero", "div", "", "")
 			}
 			// MinInt64 / -1 is the single int64 division overflow — Go
 			// wraps it back to MinInt64 (the same pair checkedMulInt
@@ -265,7 +267,7 @@ var (
 		},
 		bigFn: func(a, b *big.Int) (Value, error) {
 			if a.Sign() == 0 {
-				return Value{}, eng.MakeBoruError("arith_error", "division by zero", "div", "", "")
+				return Value{}, core.MakeBoruError("arith_error", "division by zero", "div", "", "")
 			}
 			return NewBigInteger(new(big.Int).Quo(b, a)), nil
 		},
@@ -279,13 +281,13 @@ var (
 	modTowerOps = towerOps{
 		intFn: func(a, b int64) (Value, error) {
 			if a == 0 {
-				return Value{}, eng.MakeBoruError("arith_error", "modulo by zero", "mod", "", "")
+				return Value{}, core.MakeBoruError("arith_error", "modulo by zero", "mod", "", "")
 			}
 			return NewInteger(b % a), nil
 		},
 		bigFn: func(a, b *big.Int) (Value, error) {
 			if a.Sign() == 0 {
-				return Value{}, eng.MakeBoruError("arith_error", "modulo by zero", "mod", "", "")
+				return Value{}, core.MakeBoruError("arith_error", "modulo by zero", "mod", "", "")
 			}
 			return NewBigInteger(new(big.Int).Rem(b, a)), nil // truncated remainder, sign of dividend
 		},

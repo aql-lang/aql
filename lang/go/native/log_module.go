@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
 
@@ -478,9 +478,9 @@ func renderJSON(rec LogRecord) string {
 		"time":     rec.Timestamp.UTC().Format(time.RFC3339),
 		"level":    rec.Severity.Text(),
 		"severity": int(rec.Severity),
-		"msg":      eng.ToNative(rec.Body),
+		"msg":      core.ToNative(rec.Body),
 	}
-	if attrs, ok := eng.ToNative(rec.attributesOrEmpty()).(map[string]any); ok && len(attrs) > 0 {
+	if attrs, ok := core.ToNative(rec.attributesOrEmpty()).(map[string]any); ok && len(attrs) > 0 {
 		obj["attributes"] = attrs
 	}
 	// Correlation fields log shippers need to join a record to its logger

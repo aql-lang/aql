@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // In-process services — the language surface of design/SERVICES.0.md
@@ -74,7 +75,7 @@ func NewServiceValue(initial *OrderedMap) Value {
 			om.Set(k, v)
 		}
 	}
-	st, err := eng.FlexDeepCopy(NewMap(om))
+	st, err := core.FlexDeepCopy(NewMap(om))
 	if err != nil {
 		// A plain map of already-constructed values always flexes; fall
 		// back to the map itself rather than failing construction.
@@ -85,7 +86,7 @@ func NewServiceValue(initial *OrderedMap) Value {
 		stacks: map[string][]Value{},
 		state:  st,
 	}
-	return eng.NewExtension(TService, s)
+	return core.NewExtension(TService, s)
 }
 
 // NewRemoteServiceValue builds an Endpoint: a Service whose call/send
@@ -121,7 +122,7 @@ func ServiceStateOf(v Value) (Value, bool) {
 }
 
 func asService(v Value) (*serviceState, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, false
 	}
@@ -246,7 +247,7 @@ func serviceAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// already stamped, capturing, refusing body) returning the input
 	// unchanged, so behaviour is byte-identical on every decline; the stamp
 	// runs BEFORE the lock (it forks the registry, no service state).
-	handler, _ := eng.StampFnValue(r, args[1])
+	handler, _ := compiler.StampFnValue(r, args[1])
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.stacks[sig]; !exists {
@@ -270,7 +271,7 @@ func serviceWrapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		return nil, err
 	}
 	// Same store-site stamping as `add` (see serviceAddHandler).
-	wrap, _ := eng.StampFnValue(r, args[0])
+	wrap, _ := compiler.StampFnValue(r, args[0])
 	s.mu.Lock()
 	s.wraps = append(s.wraps, wrap)
 	s.mu.Unlock()
@@ -415,11 +416,11 @@ func runHandlerChain(r *Registry, state Value, req Value, chain []Value) ([]Valu
 	priorFn := makePriorFn(r, state, rest)
 	args3 := []Value{req, state, priorFn}
 	if sig := MatchFnSig(handler, args3); sig != nil {
-		return eng.InvokeCallback(r, sig, args3, fnInfo.Captured)
+		return core.InvokeCallback(r, sig, args3, fnInfo.Captured)
 	}
 	args2 := []Value{req, state}
 	if sig := MatchFnSig(handler, args2); sig != nil {
-		return eng.InvokeCallback(r, sig, args2, fnInfo.Captured)
+		return core.InvokeCallback(r, sig, args2, fnInfo.Captured)
 	}
 	return nil, r.BoruErrorHint("service_error",
 		"handler signature must be [req state] or [req state prior]",
@@ -437,7 +438,7 @@ func makePriorFn(r *Registry, state Value, rest []Value) Value {
 	// Function value dispatches through compileFnDef, which derives the
 	// forward barrier from len(Params).
 	sig := Signature{
-		Params:     []eng.FnParam{{Type: TAny}},
+		Params:     []core.FnParam{{Type: TAny}},
 		Impl:       Go(handler),
 		Returns:    []*Type{TAny},
 		BarrierPos: 1,

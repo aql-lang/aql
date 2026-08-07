@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	tabnasabnf "github.com/tabnas/abnf/go"
 	tabnas "github.com/tabnas/parser/go"
@@ -14,7 +14,7 @@ import (
 // handlers directly (the carrier satisfies asParseGrammar).
 func w8ParseGrammar() (native.Value, *parseGrammar) {
 	g := &parseGrammar{j: tabnas.Make(), markActions: tabnasabnf.ActionsMap{}}
-	return eng.NewExtension(native.TIdeal, g), g
+	return core.NewExtension(native.TIdeal, g), g
 }
 
 // w8LitS is a non-concrete String type literal (passes a TString sig, refused

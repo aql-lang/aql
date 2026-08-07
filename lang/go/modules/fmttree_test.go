@@ -6,7 +6,7 @@ import (
 
 	"github.com/boru-lang/boru/lang/go/formatter"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestFmtTreeStructure drives Fmt.tree over source exercising every node kind

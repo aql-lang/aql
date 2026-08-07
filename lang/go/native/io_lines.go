@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // io_lines.go — incremental line reads (IO.read-line) and the buffered
@@ -36,7 +36,7 @@ import (
 // idiom EffectiveFileOps already uses for the in-memory-FS toggle
 // (capabilities.go). Two alternatives were rejected:
 //
-//   - A field on eng.Registry. Input is already an eng field, so this looks
+//   - A field on core.Registry. Input is already an eng field, so this looks
 //     natural, but module sub-registries copy Input by assignment in five
 //     places (modules/repl.go, modules/test.go, modules/sift.go,
 //     modules/vault_tui.go, native_module_module.go). Each would get its own
@@ -109,7 +109,7 @@ func installStdinLines(r *Registry) {
 // from the previous one are not the program's input any more — but it does
 // mean a host must not swap Input mid-line and expect continuity.
 func stdinReader(r *Registry) io.Reader {
-	holder, _, _ := eng.Cap[*stdinLines](r, CapStdinLines)
+	holder, _, _ := core.Cap[*stdinLines](r, CapStdinLines)
 	if holder == nil {
 		return r.Input
 	}
@@ -121,7 +121,7 @@ func stdinReader(r *Registry) io.Reader {
 // same buffer. Falls back to an unlocked drain only when no holder is
 // installed, which no production path produces.
 func stdinReadAll(r *Registry) ([]byte, error) {
-	if holder, _, _ := eng.Cap[*stdinLines](r, CapStdinLines); holder != nil {
+	if holder, _, _ := core.Cap[*stdinLines](r, CapStdinLines); holder != nil {
 		return holder.readAll(r.Input)
 	}
 	return io.ReadAll(stdinReader(r))
@@ -151,7 +151,7 @@ type lineSource interface {
 type stdinLineSource struct{ r *Registry }
 
 func (s stdinLineSource) ReadLine() (string, bool, error) {
-	if holder, _, _ := eng.Cap[*stdinLines](s.r, CapStdinLines); holder != nil {
+	if holder, _, _ := core.Cap[*stdinLines](s.r, CapStdinLines); holder != nil {
 		return holder.readLine(s.r.Input)
 	}
 	return readLineFrom(lineReaderForStdin(s.r))
@@ -350,7 +350,7 @@ func ttyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // that redirected a stream therefore gets the honest answer for free.
 //
 // Engine-side wrappers are unwrapped first. Every concurrency fork rewraps
-// the output writers in an eng.SyncWriter (eng/go/process.go), which is a
+// the output writers in an core.SyncWriter (eng/go/process.go), which is a
 // serialization detail the program never chose — without unwrapping, IO.is-tty
 // would answer FALSE for a genuine terminal inside any forked context, and
 // answer it silently.

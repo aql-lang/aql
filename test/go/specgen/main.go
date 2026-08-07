@@ -35,7 +35,7 @@
 // The evaluation recipe (parse → fresh DefaultRegistry → q-fixtures →
 // parse func → module resolver → frozen clock → NewTop().Run) is a
 // deliberate mirror of test/go/langspec/langspec_test.go: same engine,
-// same canonical rendering (eng.Canon), same frozen instant, so a row
+// same canonical rendering (core.Canon), same frozen instant, so a row
 // this tool writes is a row the runner reproduces exactly.
 //
 // A second mode derives the PASSING SUBSET — the rows that clear all
@@ -69,7 +69,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/specfix"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
@@ -142,7 +142,7 @@ var specClock = capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, tim
 // run evaluates one input through a fresh production registry and
 // returns the resulting stack — a faithful copy of langspec_test.go's
 // Run closure so generated rows reproduce under the real spec runner.
-func run(input string) ([]eng.Value, error) {
+func run(input string) ([]core.Value, error) {
 	values, err := parser.Parse(input)
 	if err != nil {
 		return nil, err
@@ -297,7 +297,7 @@ func main() {
 			note = fmt.Sprintf("%d-elem rejected", n)
 			errs++
 		} else {
-			expected = eng.Canon(stack)
+			expected = core.Canon(stack)
 			note = fmt.Sprintf("%d-elem → %d value(s)", n, len(stack))
 			values++
 		}
@@ -322,7 +322,7 @@ func writeHeader(w *bufio.Writer, max int) {
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# Every sequence of 1..%d atoms drawn from a fixed alphabet, evaluated\n", max)
 	fmt.Fprintf(w, "# through the production language layer. `expected` is the canonical\n")
-	fmt.Fprintf(w, "# eng.Canon rendering of the result stack; `ERROR:<code>` rows pin the\n")
+	fmt.Fprintf(w, "# core.Canon rendering of the result stack; `ERROR:<code>` rows pin the\n")
 	fmt.Fprintf(w, "# error CLASS (the stable [boru/<code>] tag), not its message text.\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# These rows are exhaustive over the alphabet, so they form a frozen\n")
@@ -609,7 +609,7 @@ func writePassingHeader(w *bufio.Writer, scanned, kept, maxLen int) {
 		fmt.Fprintf(w, "# Scope: combinations of length 1..%d only.\n", maxLen)
 		fmt.Fprintf(w, "#\n")
 	}
-	fmt.Fprintf(w, "# `expected` is the canonical eng.Canon value carried over verbatim from\n")
+	fmt.Fprintf(w, "# `expected` is the canonical core.Canon value carried over verbatim from\n")
 	fmt.Fprintf(w, "# the full matrix. Every row here is a trusted, three-way-agreed program;\n")
 	fmt.Fprintf(w, "# syntax_matrix_test.go re-verifies the invariant on each one.\n")
 	fmt.Fprintf(w, "#\n")
@@ -961,10 +961,10 @@ func freshDivergence(s string) (string, bool) {
 	return "", false
 }
 
-// canonOf renders one input's canonical (eng.Canon) value via a reused
+// canonOf renders one input's canonical (core.Canon) value via a reused
 // native registry — the same recipe as the full matrix — or "" when the
 // input does not parse or does not run cleanly.
-func canonOf(reg *eng.Registry, s string) string {
+func canonOf(reg *core.Registry, s string) string {
 	values, perr := parser.Parse(s)
 	if perr != nil {
 		return ""
@@ -973,7 +973,7 @@ func canonOf(reg *eng.Registry, s string) string {
 	if rerr != nil {
 		return ""
 	}
-	return eng.Canon(out)
+	return core.Canon(out)
 }
 
 func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, runtimeOut, mismatchOut string) {
@@ -1024,7 +1024,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 				osExit(1)
 			}
 			la.SetClock(specClock)
-			// A reused native registry produces the canonical (eng.Canon)
+			// A reused native registry produces the canonical (core.Canon)
 			// value for passing rows — same recipe as the full matrix.
 			reg, e2 := newNativeRegistry()
 			if e2 != nil {
@@ -1252,7 +1252,7 @@ func writeLen5Header(w *bufio.Writer, kind string, n int) {
 	switch kind {
 	case "passing":
 		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = expected. These clear interpret + check +\n")
-		fmt.Fprintf(w, "# compile; `expected` is the canonical eng.Canon result.\n")
+		fmt.Fprintf(w, "# compile; `expected` is the canonical core.Canon result.\n")
 	case "type-check":
 		fmt.Fprintf(w, "# Format: FRONT-CODED + legend, extra = detail code. The type checker\n")
 		fmt.Fprintf(w, "# rejects these; the compiler, which runs the checker first, refuses them.\n")

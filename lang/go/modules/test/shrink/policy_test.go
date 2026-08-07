@@ -3,7 +3,7 @@ package shrink
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
@@ -87,9 +87,9 @@ func TestShrinkCost_PureTransparentAddsNoPolicyBias(t *testing.T) {
 	// the literal-complexity contributions (not zero — the cost
 	// model knows PushLit(1) is cheaper than PushLit(1000000)).
 	form := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1)}, // 1 base + 1 mag = 2
-		stackform.PushLit{V: eng.NewInteger(2)}, // 1 base + 2 mag = 3
-		stackform.Call{Name: "add", Arity: 2},   // 2 base + 0 weight = 2
+		stackform.PushLit{V: core.NewInteger(1)}, // 1 base + 1 mag = 2
+		stackform.PushLit{V: core.NewInteger(2)}, // 1 base + 2 mag = 3
+		stackform.Call{Name: "add", Arity: 2},    // 2 base + 0 weight = 2
 	}}
 	p := DefaultPolicy()
 	got := ShrinkCost(form, p)
@@ -102,8 +102,8 @@ func TestShrinkCost_PureTransparentAddsNoPolicyBias(t *testing.T) {
 	// be 2 + Opaque-weight (5) = 7. So swapping the word changes
 	// only the Call contribution.
 	formOpaque := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1)},
-		stackform.PushLit{V: eng.NewInteger(2)},
+		stackform.PushLit{V: core.NewInteger(1)},
+		stackform.PushLit{V: core.NewInteger(2)},
 		stackform.Call{Name: "unknown-word", Arity: 2},
 	}}
 	gotOpaque := ShrinkCost(formOpaque, p)
@@ -116,13 +116,13 @@ func TestShrinkCost_PureTransparentAddsNoPolicyBias(t *testing.T) {
 func TestShrinkCost_GeneratorAddsBias(t *testing.T) {
 	// rand-int call should cost more than an equivalent add.
 	gen := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(0)},
-		stackform.PushLit{V: eng.NewInteger(100)},
+		stackform.PushLit{V: core.NewInteger(0)},
+		stackform.PushLit{V: core.NewInteger(100)},
 		stackform.Call{Name: "rand-int", Arity: 2},
 	}}
 	add := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(0)},
-		stackform.PushLit{V: eng.NewInteger(100)},
+		stackform.PushLit{V: core.NewInteger(0)},
+		stackform.PushLit{V: core.NewInteger(100)},
 		stackform.Call{Name: "add", Arity: 2},
 	}}
 	p := DefaultPolicy()

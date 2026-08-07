@@ -5,7 +5,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // RegisterWords installs the calculator's word vocabulary on r. The set is
@@ -16,7 +16,7 @@ import (
 //
 // out is where `print` and `show` write their output; pass os.Stdout for
 // the CLI or a *bytes.Buffer in tests.
-func RegisterWords(r *eng.Registry, out io.Writer) {
+func RegisterWords(r *core.Registry, out io.Writer) {
 	registerArith(r)
 	registerUnary(r)
 	registerConstants(r)
@@ -28,13 +28,13 @@ func RegisterWords(r *eng.Registry, out io.Writer) {
 // arg is Float the result is Float; otherwise Integer division falls
 // back to Float when op signals fractional output. div is the one
 // exception: it always returns Float so 1 div 2 = 0.5 rather than 0.
-func numHandler(op func(a, b float64) (float64, error), preferInt bool) eng.Handler {
-	return func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-		a, err := eng.AsNumber(args[0])
+func numHandler(op func(a, b float64) (float64, error), preferInt bool) core.Handler {
+	return func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+		a, err := core.AsNumber(args[0])
 		if err != nil {
 			return nil, err
 		}
-		b, err := eng.AsNumber(args[1])
+		b, err := core.AsNumber(args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -43,29 +43,29 @@ func numHandler(op func(a, b float64) (float64, error), preferInt bool) eng.Hand
 			return nil, err
 		}
 		if preferInt &&
-			args[0].Parent.ConformsTo(eng.TInteger) &&
-			args[1].Parent.ConformsTo(eng.TInteger) &&
+			args[0].Parent.ConformsTo(core.TInteger) &&
+			args[1].Parent.ConformsTo(core.TInteger) &&
 			res == math.Trunc(res) &&
 			!math.IsInf(res, 0) &&
 			!math.IsNaN(res) {
-			return []eng.Value{eng.NewInteger(int64(res))}, nil
+			return []core.Value{core.NewInteger(int64(res))}, nil
 		}
-		return []eng.Value{eng.NewFloat(res)}, nil
+		return []core.Value{core.NewFloat(res)}, nil
 	}
 }
 
-func registerArith(r *eng.Registry) {
+func registerArith(r *core.Registry) {
 	// Args are [a b] in surface order ("a sub b" => sig=[b,a]); to match
 	// the engine convention every binary handler computes args[1] op args[0]
 	// so the swap form reads naturally. See lang/CLAUDE.md "Non-commutative
 	// two-arg sanity check" for the reasoning.
 	bin := func(name string, op func(a, b float64) (float64, error), preferInt bool) {
 		h := numHandler(op, preferInt)
-		r.RegisterNativeFunc(eng.NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: name,
 
-			Signatures: []eng.Signature{
-				{Args: []*eng.Type{eng.TNumber, eng.TNumber}, Impl: eng.Go(h), Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
+			Signatures: []core.Signature{
+				{Args: []*core.Type{core.TNumber, core.TNumber}, Impl: core.Go(h), Returns: []*core.Type{core.TNumber}, BarrierPos: -1},
 			},
 		})
 	}
@@ -89,10 +89,10 @@ func registerArith(r *eng.Registry) {
 	}, true)
 }
 
-func registerUnary(r *eng.Registry) {
+func registerUnary(r *core.Registry) {
 	unary := func(name string, op func(float64) (float64, error), preferInt bool) {
-		h := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-			x, err := eng.AsNumber(args[0])
+		h := func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+			x, err := core.AsNumber(args[0])
 			if err != nil {
 				return nil, err
 			}
@@ -100,16 +100,16 @@ func registerUnary(r *eng.Registry) {
 			if err != nil {
 				return nil, err
 			}
-			if preferInt && args[0].Parent.ConformsTo(eng.TInteger) && res == math.Trunc(res) {
-				return []eng.Value{eng.NewInteger(int64(res))}, nil
+			if preferInt && args[0].Parent.ConformsTo(core.TInteger) && res == math.Trunc(res) {
+				return []core.Value{core.NewInteger(int64(res))}, nil
 			}
-			return []eng.Value{eng.NewFloat(res)}, nil
+			return []core.Value{core.NewFloat(res)}, nil
 		}
-		r.RegisterNativeFunc(eng.NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: name,
 
-			Signatures: []eng.Signature{
-				{Args: []*eng.Type{eng.TNumber}, Impl: eng.Go(h), Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
+			Signatures: []core.Signature{
+				{Args: []*core.Type{core.TNumber}, Impl: core.Go(h), Returns: []*core.Type{core.TNumber}, BarrierPos: -1},
 			},
 		})
 	}
@@ -123,94 +123,94 @@ func registerUnary(r *eng.Registry) {
 	}, false)
 }
 
-func registerConstants(r *eng.Registry) {
-	push := func(name string, v eng.Value) {
-		r.RegisterNativeFunc(eng.NativeFunc{
+func registerConstants(r *core.Registry) {
+	push := func(name string, v core.Value) {
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: name,
-			Signatures: []eng.Signature{{
-				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-					return []eng.Value{v}, nil
+			Signatures: []core.Signature{{
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+					return []core.Value{v}, nil
 				}),
-				Returns: []*eng.Type{eng.TNumber}, BarrierPos: 0,
+				Returns: []*core.Type{core.TNumber}, BarrierPos: 0,
 			}},
 		})
 	}
-	push("pi", eng.NewFloat(math.Pi))
-	push("e", eng.NewFloat(math.E))
+	push("pi", core.NewFloat(math.Pi))
+	push("e", core.NewFloat(math.E))
 }
 
-func registerStackOps(r *eng.Registry) {
+func registerStackOps(r *core.Registry) {
 	// dup / drop / swap / over operate on the full stack via FullStack
 	// signatures. Calc keeps its stack vocabulary small — the production
 	// language layer in lang/ has the full Forth-style set.
-	full := func(name string, n int, fn func(stk []eng.Value) ([]eng.Value, error)) {
-		r.RegisterNativeFunc(eng.NativeFunc{
+	full := func(name string, n int, fn func(stk []core.Value) ([]core.Value, error)) {
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: name,
-			Signatures: []eng.Signature{{
-				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Signatures: []core.Signature{{
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, stk []core.Value, _ *core.Registry) ([]core.Value, error) {
 					if len(stk) < n {
 						return nil, fmt.Errorf("%s: needs %d items, stack has %d", name, n, len(stk))
 					}
 					return fn(stk)
-				}, eng.FullStack()),
-				Returns: []*eng.Type{}, BarrierPos: 0,
+				}, core.FullStack()),
+				Returns: []*core.Type{}, BarrierPos: 0,
 			}},
 		})
 	}
-	full("dup", 1, func(stk []eng.Value) ([]eng.Value, error) {
-		return append(append([]eng.Value{}, stk...), stk[len(stk)-1]), nil
+	full("dup", 1, func(stk []core.Value) ([]core.Value, error) {
+		return append(append([]core.Value{}, stk...), stk[len(stk)-1]), nil
 	})
-	full("drop", 1, func(stk []eng.Value) ([]eng.Value, error) {
-		return append([]eng.Value{}, stk[:len(stk)-1]...), nil
+	full("drop", 1, func(stk []core.Value) ([]core.Value, error) {
+		return append([]core.Value{}, stk[:len(stk)-1]...), nil
 	})
-	full("swap", 2, func(stk []eng.Value) ([]eng.Value, error) {
-		out := append([]eng.Value{}, stk...)
+	full("swap", 2, func(stk []core.Value) ([]core.Value, error) {
+		out := append([]core.Value{}, stk...)
 		i := len(out) - 1
 		out[i], out[i-1] = out[i-1], out[i]
 		return out, nil
 	})
-	full("over", 2, func(stk []eng.Value) ([]eng.Value, error) {
-		return append(append([]eng.Value{}, stk...), stk[len(stk)-2]), nil
+	full("over", 2, func(stk []core.Value) ([]core.Value, error) {
+		return append(append([]core.Value{}, stk...), stk[len(stk)-2]), nil
 	})
-	full("clear", 0, func(_ []eng.Value) ([]eng.Value, error) {
-		return []eng.Value{}, nil
+	full("clear", 0, func(_ []core.Value) ([]core.Value, error) {
+		return []core.Value{}, nil
 	})
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "depth",
-		Signatures: []eng.Signature{{
-			Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				out := append([]eng.Value{}, stk...)
-				return append(out, eng.NewInteger(int64(len(stk)))), nil
-			}, eng.FullStack()),
-			Returns: []*eng.Type{eng.TInteger}, BarrierPos: 0,
+		Signatures: []core.Signature{{
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, stk []core.Value, _ *core.Registry) ([]core.Value, error) {
+				out := append([]core.Value{}, stk...)
+				return append(out, core.NewInteger(int64(len(stk)))), nil
+			}, core.FullStack()),
+			Returns: []*core.Type{core.TInteger}, BarrierPos: 0,
 		}},
 	})
 }
 
-func registerDisplay(r *eng.Registry, out io.Writer) {
+func registerDisplay(r *core.Registry, out io.Writer) {
 	if out == nil {
 		out = io.Discard
 	}
 	// print — consume the top value and write its String() representation
 	// followed by a newline. Returns nothing.
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "print",
-		Signatures: []eng.Signature{{
-			Args: []*eng.Type{eng.TAny},
-			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TAny},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 				fmt.Fprintln(out, args[0].String())
 				return nil, nil
 			}),
-			Returns: []*eng.Type{}, BarrierPos: 0,
+			Returns: []*core.Type{}, BarrierPos: 0,
 		}},
 	})
 	// show — write the full stack without consuming it. The output is one
 	// space-separated line followed by a newline, matching the REPL's
 	// end-of-line printout for non-interactive inspection.
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "show",
-		Signatures: []eng.Signature{{
-			Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		Signatures: []core.Signature{{
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, stk []core.Value, _ *core.Registry) ([]core.Value, error) {
 				parts := make([]string, len(stk))
 				for i, v := range stk {
 					parts[i] = v.String()
@@ -226,9 +226,9 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 					}
 					fmt.Fprintln(out)
 				}
-				return append([]eng.Value{}, stk...), nil
-			}, eng.FullStack()),
-			Returns: []*eng.Type{}, BarrierPos: 0,
+				return append([]core.Value{}, stk...), nil
+			}, core.FullStack()),
+			Returns: []*core.Type{}, BarrierPos: 0,
 		}},
 	})
 }

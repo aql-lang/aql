@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
@@ -127,7 +127,7 @@ func TestUsurpReffedIsInertData(t *testing.T) {
 	if len(res) != 1 {
 		t.Fatalf("inc/ur left %d values, want 1 (the wrapper)", len(res))
 	}
-	if !res[0].Parent.Equal(eng.TFunction) {
+	if !res[0].Parent.Equal(core.TFunction) {
 		t.Errorf("inc/ur top is %s, want Function", res[0].Parent.String())
 	}
 }
@@ -148,7 +148,7 @@ func TestUsurpReffedStaysInertWithTrailingArgs(t *testing.T) {
 	if len(res) != 3 {
 		t.Fatalf("sub2/ur 10 3 left %d values, want 3 (wrapper + 2 literals)", len(res))
 	}
-	if !res[0].Parent.Equal(eng.TFunction) {
+	if !res[0].Parent.Equal(core.TFunction) {
 		t.Errorf("bottom value is %s, want the inert Function wrapper", res[0].Parent.String())
 	}
 }
@@ -182,7 +182,7 @@ func TestUsurpQuotedIsInertData(t *testing.T) {
 	if len(res) != 1 {
 		t.Fatalf("quoted usurp left %d values, want 1", len(res))
 	}
-	if !res[0].Parent.Equal(eng.TFunction) {
+	if !res[0].Parent.Equal(core.TFunction) {
 		t.Errorf("quoted usurp top is %s, want Function", res[0].Parent.String())
 	}
 }
@@ -356,7 +356,7 @@ func TestUsurpByNameHeldWrapper(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if len(res) != 1 || !res[len(res)-1].Parent.Equal(eng.TFunction) {
+	if len(res) != 1 || !res[len(res)-1].Parent.Equal(core.TFunction) {
 		t.Errorf("usurp sub2 = %v, want a single held Function value", res)
 	}
 }
@@ -369,7 +369,7 @@ func TestUsurpByNameNonFnRejected(t *testing.T) {
 	if err == nil {
 		t.Fatalf("usurp x (x=5) should error")
 	}
-	if ae, ok := err.(*eng.BoruError); !ok || ae.Code != "illegal_ref" {
+	if ae, ok := err.(*core.BoruError); !ok || ae.Code != "illegal_ref" {
 		t.Errorf("usurp x error = %v, want illegal_ref", err)
 	}
 }
@@ -381,7 +381,7 @@ func TestUsurpByNameUnboundRejected(t *testing.T) {
 	if err == nil {
 		t.Fatalf("usurp nope should error")
 	}
-	if ae, ok := err.(*eng.BoruError); !ok || ae.Code != "undefined_word" {
+	if ae, ok := err.(*core.BoruError); !ok || ae.Code != "undefined_word" {
 		t.Errorf("usurp nope error = %v, want undefined_word", err)
 	}
 }

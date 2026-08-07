@@ -8,7 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	model "github.com/voxgig/model/go"
@@ -151,7 +153,7 @@ func registerModelWord(tModel *native.Type, subReg *native.Registry, exports *na
 
 // asModelHandle unwraps a Model value's *modelHandle.
 func asModelHandle(v native.Value) (*modelHandle, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, false
 	}
@@ -233,7 +235,7 @@ func modelNewHandlerFor(tModel *native.Type) native.Handler {
 		h.build = build
 		h.watch = model.NewWatch(build, "model", model.DefaultIdle)
 
-		return []native.Value{eng.NewExtension(tModel, h)}, nil
+		return []native.Value{core.NewExtension(tModel, h)}, nil
 	}
 }
 
@@ -325,7 +327,7 @@ func stampActionFn(r *native.Registry, name string, fnVal native.Value) native.V
 		fd.Name = name
 		fnVal.Data = fd
 	}
-	stamped, _ := eng.StampFnValue(r, fnVal)
+	stamped, _ := compiler.StampFnValue(r, fnVal)
 	return stamped
 }
 
@@ -372,7 +374,7 @@ func parseStep(s string) model.Step {
 }
 
 // makeAction wraps a boru Function as a model.Action. The callback hands the
-// unified model (as a boru Map) to the function via eng.InvokeCallback on
+// unified model (as a boru Map) to the function via core.InvokeCallback on
 // h.actionReg — the foreground registry for Model.run, an isolated fork for
 // Model.start — and reads its result: a Boolean is the OK flag; a Map supplies
 // {ok, reload}; anything else (including no result) is treated as OK. An error
@@ -398,7 +400,7 @@ func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.Actio
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: no matching signature (declare one param for the model Map)"))
 				return model.ActionResult{OK: false}
 			}
-			res, err := eng.InvokeCallback(h.actionReg, sig, []native.Value{modelVal}, caps)
+			res, err := core.InvokeCallback(h.actionReg, sig, []native.Value{modelVal}, caps)
 			if err != nil {
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: %w", err))
 				return model.ActionResult{OK: false}

@@ -28,7 +28,7 @@ import (
 //
 // Neither decision is wrong on its own. The first block of tests below pins
 // the info diagnostic that made the behaviour visible; the second pins the
-// actual repair — the THIRD MODE (eng.CheckState.ModelEffects), which carries
+// actual repair — the THIRD MODE (core.CheckState.ModelEffects), which carries
 // the handler-substitution half of check mode into the module sub-registry
 // while leaving values concrete, so the body still produces real export names
 // and its effects go nowhere.
@@ -348,7 +348,7 @@ IO.write (make Pathon '` + target + `') 'top level' drop`
 // the exports are baked, and the VM never re-imports — so a mode that modelled
 // effects for every check-mode pass would not deduplicate the effect, it would
 // DELETE it: measured, this program went from one line of output to none.
-// eng.CheckState.Compiling is what separates a pure check pass (nobody's
+// core.CheckState.Compiling is what separates a pure check pass (nobody's
 // execution — modelled) from a compile pass (the execution — real).
 //
 // So: exactly one. Not two, and not zero.

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // s7dbgReg builds a fresh DefaultRegistry. When parse is true the parser is

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// End-to-end tests for the detached-stamp primitive (eng.StampFnValue) over
+// End-to-end tests for the detached-stamp primitive (compiler.StampFnValue) over
 // REAL fn bodies — the compile path eng's own tests cannot drive (eng has no
 // def/fn words). Positive paths pair with negatives per lang/go/CLAUDE.md.
 
@@ -37,7 +39,7 @@ func stampHarness(t *testing.T, src, name string, armed bool) (*Boru, Value) {
 // the codec / service words do: MatchFnSig then InvokeCallback.
 func invokeFnValue(t *testing.T, a *Boru, fn Value, args ...Value) []Value {
 	t.Helper()
-	fd, ok := fn.Data.(eng.FnDefInfo)
+	fd, ok := fn.Data.(core.FnDefInfo)
 	if !ok {
 		t.Fatalf("not a fn value: %v", fn)
 	}
@@ -45,7 +47,7 @@ func invokeFnValue(t *testing.T, a *Boru, fn Value, args ...Value) []Value {
 	if sig == nil {
 		t.Fatalf("MatchFnSig found no signature for %d args", len(args))
 	}
-	out, err := eng.InvokeCallback(a.registry, sig, args, fd.Captured)
+	out, err := core.InvokeCallback(a.registry, sig, args, fd.Captured)
 	if err != nil {
 		t.Fatalf("InvokeCallback: %v", err)
 	}
@@ -59,22 +61,22 @@ func TestStampFnValueRealBodyVMMatchesInterpreter(t *testing.T) {
 	const src = `def h (fn [[x:Integer] [Integer] [x add 1]])`
 
 	a, plain := stampHarness(t, src, "h", false)
-	if _, ok := eng.StampFnValue(a.registry, plain); ok {
+	if _, ok := compiler.StampFnValue(a.registry, plain); ok {
 		t.Fatalf("unarmed registry must not stamp")
 	}
-	interp := invokeFnValue(t, a, plain, eng.NewInteger(41))
+	interp := invokeFnValue(t, a, plain, core.NewInteger(41))
 
 	a2, v2 := stampHarness(t, src, "h", true)
-	stamped, ok := eng.StampFnValue(a2.registry, v2)
+	stamped, ok := compiler.StampFnValue(a2.registry, v2)
 	if !ok {
 		t.Fatalf("armed registry must stamp the compilable body")
 	}
-	fd := stamped.Data.(eng.FnDefInfo)
-	ref := eng.CompiledRef(&fd.Signatures[0])
+	fd := stamped.Data.(core.FnDefInfo)
+	ref := compiler.CompiledRef(&fd.Signatures[0])
 	if ref == nil || ref.Prog == nil {
 		t.Fatalf("stamped value must carry a finalized CompiledFnRef")
 	}
-	vm := invokeFnValue(t, a2, stamped, eng.NewInteger(41))
+	vm := invokeFnValue(t, a2, stamped, core.NewInteger(41))
 
 	if len(vm) != len(interp) || len(vm) != 1 {
 		t.Fatalf("result shape: vm=%v interp=%v", vm, interp)
@@ -86,20 +88,20 @@ func TestStampFnValueRealBodyVMMatchesInterpreter(t *testing.T) {
 	}
 
 	// The ORIGINAL value is untouched by the clone-and-stamp.
-	origFd := v2.Data.(eng.FnDefInfo)
-	if eng.CompiledRef(&origFd.Signatures[0]) != nil {
+	origFd := v2.Data.(core.FnDefInfo)
+	if compiler.CompiledRef(&origFd.Signatures[0]) != nil {
 		t.Fatalf("StampFnValue must not mutate the input value's shared impl")
 	}
 
 	// A DEP-FREE body (a literal — no module-level name reads) stamps with an
 	// empty snapshot and stays vacuously fresh across invokes.
 	a3, v3 := stampHarness(t, `def k (fn [[x:Integer] [Integer] [42]])`, "k", true)
-	depFree, ok := eng.StampFnValue(a3.registry, v3)
+	depFree, ok := compiler.StampFnValue(a3.registry, v3)
 	if !ok {
 		t.Fatalf("dep-free literal body must stamp")
 	}
 	for i := 0; i < 2; i++ {
-		out := invokeFnValue(t, a3, depFree, eng.NewInteger(1))
+		out := invokeFnValue(t, a3, depFree, core.NewInteger(1))
 		if n, _ := out[len(out)-1].AsConcreteInteger(); n != 42 {
 			t.Fatalf("dep-free stamped fn: got %d, want 42", n)
 		}
@@ -118,18 +120,18 @@ func TestStampFnValueComputedMapBodyVMMatchesInterpreter(t *testing.T) {
 
 	a, plain := stampHarness(t, src, "h", false)
 	arg := func() Value {
-		om := eng.NewOrderedMap()
-		om.Set("who", eng.NewString("bob"))
-		return eng.NewMap(om)
+		om := core.NewOrderedMap()
+		om.Set("who", core.NewString("bob"))
+		return core.NewMap(om)
 	}
 	interp := invokeFnValue(t, a, plain, arg())
 
 	a2, v2 := stampHarness(t, src, "h", true)
-	stamped, ok := eng.StampFnValue(a2.registry, v2)
+	stamped, ok := compiler.StampFnValue(a2.registry, v2)
 	if !ok {
 		t.Fatalf("armed registry must stamp the computed-map callback body")
 	}
-	ref := eng.CompiledRef(&stamped.Data.(eng.FnDefInfo).Signatures[0])
+	ref := compiler.CompiledRef(&stamped.Data.(core.FnDefInfo).Signatures[0])
 	if ref == nil || ref.Prog == nil {
 		t.Fatalf("stamped value must carry a finalized CompiledFnRef")
 	}
@@ -151,11 +153,11 @@ func TestStampFnValueDepRebindFallsBackLive(t *testing.T) {
 def bump 10
 def h (fn [[x:Integer] [Integer] [x add bump]])
 `, "h", true)
-	stamped, ok := eng.StampFnValue(a.registry, v)
+	stamped, ok := compiler.StampFnValue(a.registry, v)
 	if !ok {
 		t.Fatalf("stamp declined for the dep-reading body")
 	}
-	out := invokeFnValue(t, a, stamped, eng.NewInteger(1))
+	out := invokeFnValue(t, a, stamped, core.NewInteger(1))
 	if n, _ := out[0].AsConcreteInteger(); n != 11 {
 		t.Fatalf("pre-rebind: got %d, want 11", n)
 	}
@@ -165,7 +167,7 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 	if _, err := a.RunInterp(`def bump 20`); err != nil {
 		t.Fatalf("rebind: %v", err)
 	}
-	out = invokeFnValue(t, a, stamped, eng.NewInteger(1))
+	out = invokeFnValue(t, a, stamped, core.NewInteger(1))
 	if n, _ := out[0].AsConcreteInteger(); n != 21 {
 		t.Fatalf("post-rebind: got %d, want the LIVE 21 (interpreter fallback)", n)
 	}
@@ -179,13 +181,13 @@ func TestStampFnValueRefusingBodyInterpretsUnchanged(t *testing.T) {
 	a, v := stampHarness(t, `
 def h (fn [[x:Integer] [Integer] [ (((fn [[a:Integer] [Function] [(fn [[b:Integer] [Function] [(fn [[c:Integer] [Integer] [x add a add b add c]])]])]]) 1) 2) 3 ]])
 `, "h", true)
-	stamped, ok := eng.StampFnValue(a.registry, v)
+	stamped, ok := compiler.StampFnValue(a.registry, v)
 	if ok {
 		t.Fatalf("refusing body must decline the stamp")
 	}
 	// The returned value is the input, and it still runs on the interpreter:
 	// x + 1 + 2 + 3 = 7+6 = 13.
-	out := invokeFnValue(t, a, stamped, eng.NewInteger(7))
+	out := invokeFnValue(t, a, stamped, core.NewInteger(7))
 	if n, _ := out[len(out)-1].AsConcreteInteger(); n != 13 {
 		t.Fatalf("declined value must interpret unchanged: got %d, want 13", n)
 	}
@@ -252,7 +254,7 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 	depthBase, depthH := r.Defs.Depth("bump"), r.Defs.Depth("h")
 	genBase := r.Defs.Gen("bump")
 
-	if _, ok := eng.StampFnValue(r, v); !ok {
+	if _, ok := compiler.StampFnValue(r, v); !ok {
 		t.Fatalf("stamp declined")
 	}
 
@@ -282,7 +284,7 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 const stampModuleSrc = `module [ def helper (fn [[x:Integer] [Integer] [x add 1]]) export "M" {helper: helper/r} ]`
 
 // countStamped returns how many report events stamped a fn of the given name.
-func countStamped(events []eng.StampEvent, name string) int {
+func countStamped(events []core.StampEvent, name string) int {
 	n := 0
 	for _, ev := range events {
 		if ev.Name == name && ev.Stamped {
@@ -413,7 +415,7 @@ func TestModuleRegistryInheritsRuntimeStamping(t *testing.T) {
 	if !ok {
 		t.Fatalf("hh not bound after armed import")
 	}
-	fd, isFn := helper.Data.(eng.FnDefInfo)
+	fd, isFn := helper.Data.(core.FnDefInfo)
 	if !isFn || fd.Registry == nil {
 		t.Fatalf("M.helper is not a module fn with a sub-registry")
 	}
@@ -429,7 +431,7 @@ func TestModuleRegistryInheritsRuntimeStamping(t *testing.T) {
 	if !ok {
 		t.Fatalf("hh not bound after unarmed import")
 	}
-	fd2, isFn2 := h2.Data.(eng.FnDefInfo)
+	fd2, isFn2 := h2.Data.(core.FnDefInfo)
 	if !isFn2 {
 		t.Fatalf("M.helper (unarmed) is not a fn value")
 	}
@@ -450,17 +452,17 @@ def helper (fn [[st:Any k:String] [Any] [ def kv2 st.kv  kv2 get k ]])
 def h (fn [[req:Map state:Any] [Any] [ helper state "a" ]])
 `
 	a, v := stampHarness(t, src, "h", true)
-	stamped, ok := eng.StampFnValue(a.registry, v)
+	stamped, ok := compiler.StampFnValue(a.registry, v)
 	if !ok {
 		t.Fatalf("gradual nesting must let the Any-param dot callee compile")
 	}
 
-	om := eng.NewOrderedMap()
-	om.Set("a", eng.NewInteger(42))
-	stOm := eng.NewOrderedMap()
-	stOm.Set("kv", eng.NewMap(om))
-	req := eng.NewMap(eng.NewOrderedMap())
-	state := eng.NewMap(stOm)
+	om := core.NewOrderedMap()
+	om.Set("a", core.NewInteger(42))
+	stOm := core.NewOrderedMap()
+	stOm.Set("kv", core.NewMap(om))
+	req := core.NewMap(core.NewOrderedMap())
+	state := core.NewMap(stOm)
 
 	vm := invokeFnValue(t, a, stamped, req, state)
 	interp := invokeFnValue(t, a, v, req, state)
@@ -497,13 +499,13 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 		}
 		return v
 	}
-	refOf := func(v Value) *eng.CompiledFnRef {
-		fd, isFn := v.Data.(eng.FnDefInfo)
+	refOf := func(v Value) *compiler.CompiledFnRef {
+		fd, isFn := v.Data.(core.FnDefInfo)
 		if !isFn {
 			t.Fatalf("not a fn value")
 		}
 		for i := range fd.Signatures {
-			if r := eng.CompiledRef(&fd.Signatures[i]); r != nil {
+			if r := compiler.CompiledRef(&fd.Signatures[i]); r != nil {
 				return r
 			}
 		}
@@ -516,7 +518,7 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 	inner := func(a *Boru, name string) Value {
 		t.Helper()
 		w := fetch(a, name)
-		fd, isFn := w.Data.(eng.FnDefInfo)
+		fd, isFn := w.Data.(core.FnDefInfo)
 		if !isFn || fd.Registry == nil {
 			t.Fatalf("%s: export is not a module fn wrapper", name)
 		}

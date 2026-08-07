@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
 	"github.com/boru-lang/boru/lang/go/tuikit"
@@ -244,7 +244,7 @@ func TestTuiRunRuntimeShutdownMidRun(t *testing.T) {
 		t.Fatal(oErr)
 	}
 	rt := reg.Procs
-	proc := eng.NewProcess(rt, 8, eng.OverflowBlock)
+	proc := core.NewProcess(rt, 8, core.OverflowBlock)
 	if err := rt.Insert(proc); err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +418,7 @@ func TestTuiRunViewerGoneArms(t *testing.T) {
 	rt := reg.Procs
 	newDriver := func(paint func(native.Value, int, int) error, evs chan tuikit.Event) *tuiDriver {
 		t.Helper()
-		proc := eng.NewProcess(rt, 8, eng.OverflowBlock)
+		proc := core.NewProcess(rt, 8, core.OverflowBlock)
 		if err := rt.Insert(proc); err != nil {
 			t.Fatal(err)
 		}

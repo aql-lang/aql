@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
@@ -84,8 +84,8 @@ func (fh *FileHandleInfo) Close() error {
 // fileHandleFormatBehavior renders a File as "File(id,path)".
 type fileHandleFormatBehavior struct{}
 
-func (fileHandleFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (fileHandleFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (fileHandleFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (fileHandleFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (fileHandleFormatBehavior) Format(v Value) string {
 	if fh, ok := asFileHandle(v); ok {
 		return fmt.Sprintf("File(%s,%s)", fh.ID, fh.Path)
@@ -98,13 +98,13 @@ func (fileHandleFormatBehavior) Format(v Value) string {
 // FileType (the file/dir/symlink/other atom enum): this is a live
 // open-file handle carrying an fd / mem cursor.
 func MintFileHandleType(r *Registry) *Type {
-	return r.Types.MintTypeWithBehavior("File", eng.TIdeal, fileHandleFormatBehavior{})
+	return r.Types.MintTypeWithBehavior("File", core.TIdeal, fileHandleFormatBehavior{})
 }
 
 // NewFileHandleType mints a standalone File type (own dynamic table) for
 // test helpers that register the io words under bare names.
 func NewFileHandleType() *Type {
-	return eng.NewDynamicTypeTable().MintTypeWithBehavior("File", eng.TIdeal, fileHandleFormatBehavior{})
+	return core.NewDynamicTypeTable().MintTypeWithBehavior("File", core.TIdeal, fileHandleFormatBehavior{})
 }
 
 // asFileHandle unwraps a File handle's payload (two-value assertion, so a
@@ -173,7 +173,7 @@ func doOpenWord(args []Value, r *Registry, fileType *Type) ([]Value, error) {
 		return nil, r.BoruError("open_error", fmt.Sprintf("open: %v", err), "open")
 	}
 	info := &FileHandleInfo{ID: GenerateID("F_"), Path: path, h: h}
-	return []Value{eng.NewValueRaw(fileType, ExtensionPayload{Body: info})}, nil
+	return []Value{core.NewValueRaw(fileType, ExtensionPayload{Body: info})}, nil
 }
 
 // doSeekWord implements IO.seek f n {from:start|current|end} → new offset.

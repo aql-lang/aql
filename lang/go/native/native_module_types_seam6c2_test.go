@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Seam-6 coverage for native_module_types.go, typeinit.go, and setup.go
@@ -90,7 +90,7 @@ func TestSeam6C2ModuleNSFieldsNonNamespace(t *testing.T) {
 	// A facet-carrying value whose payload is not a map answers nil too
 	// (defensive: the facet is only ever stamped on maps by
 	// NewModuleNamespace, but the reader must not assume).
-	odd := eng.WithModuleNS(NewInteger(1), "E", Value{})
+	odd := core.WithModuleNS(NewInteger(1), "E", Value{})
 	if moduleNSFields(odd) != nil {
 		t.Fatal("non-map payload must answer nil fields")
 	}
@@ -121,10 +121,10 @@ func TestSeam6C2AsModuleDescNonModule(t *testing.T) {
 	// of one instance share the identity.
 	src := ModuleDesc{ID: "m"}
 	inst := NewModuleInstance(src)
-	if !eng.ExactEqual(inst, inst) || !eng.DeepEqual(inst, inst) {
+	if !core.ExactEqual(inst, inst) || !core.DeepEqual(inst, inst) {
 		t.Fatal("a module instance must be eq/deq to itself")
 	}
-	if eng.ExactEqual(inst, NewModuleInstance(src)) {
+	if core.ExactEqual(inst, NewModuleInstance(src)) {
 		t.Fatal("two separately-built instances must be eq-distinct (per-import-instance identity)")
 	}
 }
@@ -135,7 +135,7 @@ func TestSeam6C2ModuleExportGetArms(t *testing.T) {
 		t.Fatal("a facet-less value must answer no keys")
 	}
 	// A facet-carrying non-map answers synthetics but no fields.
-	odd := eng.WithModuleNS(NewInteger(1), "E", Value{})
+	odd := core.WithModuleNS(NewInteger(1), "E", Value{})
 	if _, ok := moduleExportGet(odd, "missing"); ok {
 		t.Fatal("nil fields must answer no keys")
 	}
@@ -258,7 +258,7 @@ func TestSeam6C2ModuleNSSyntheticAndMiss(t *testing.T) {
 		t.Fatal("a non-namespace must not answer synthetics")
 	}
 	// The strict-miss error carries the module wording + the export keys.
-	err := moduleNSGetrMiss(r, ns, "zz", eng.SrcPos{})
+	err := moduleNSGetrMiss(r, ns, "zz", core.SrcPos{})
 	if err == nil || !strings.Contains(err.Error(), `export "zz" not found in module`) {
 		t.Fatalf("expected the module-flavored miss, got %v", err)
 	}

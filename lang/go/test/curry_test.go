@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/modules"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // runSteps executes a sequence of boru expressions on a shared engine,

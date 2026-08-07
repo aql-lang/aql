@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Gate tests for the post-opacity resolution arms the spec suites reach
@@ -26,7 +26,7 @@ func TestCaseNumericValueNonConcrete(t *testing.T) {
 // so the guard is the seam against a mis-installed schema.
 func TestLookupResourceTypeByNameNonResourcePayload(t *testing.T) {
 	r := seam5Reg(t)
-	InstallDef(r, eng.ResourceDefKey("BogusRes"), NewInteger(1))
+	InstallDef(r, core.ResourceDefKey("BogusRes"), NewInteger(1))
 	if _, ok := lookupResourceTypeByName(r, "BogusRes"); ok {
 		t.Fatal("a non-ResourceType hidden binding must not resolve")
 	}
@@ -47,9 +47,9 @@ func TestGetResourceReturnsDeclineArms(t *testing.T) {
 	ft := MintTestType("Ideal/FakeRes")
 	fields := NewOrderedMap()
 	fields.Set("run", NewTypeLiteral(TFunction))
-	InstallDef(r, eng.ResourceDefKey("FakeRes"),
+	InstallDef(r, core.ResourceDefKey("FakeRes"),
 		NewResourceType(ft, ResourceTypeInfo{Fields: fields, Name: "FakeRes"}))
-	inst := eng.NewValueRaw(ft, eng.IntPayload{N: 1})
+	inst := core.NewValueRaw(ft, core.IntPayload{N: 1})
 	out = getResourceReturns([]Value{NewString("run"), inst}, r)
 	if len(out) != 1 || !out[0].Dynamic {
 		t.Fatalf("a Function-typed field must decline to dynamic, got %v", out)

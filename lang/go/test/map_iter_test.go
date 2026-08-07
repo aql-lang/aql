@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // runMapIter runs src and returns the rendered residual stack and captured

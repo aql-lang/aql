@@ -4,7 +4,9 @@ import (
 	"errors"
 	"math/big"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -206,7 +208,7 @@ func returnsDivMod(detail string) ReturnsFunc {
 		if len(args) == 2 && isStaticZeroIntDivisor(args[0]) &&
 			!args[0].Parent.ConformsTo(TFloat) && !args[1].Parent.ConformsTo(TFloat) {
 			if atUncaughtTopLevel(r) {
-				eng.CheckAddUniqueDiagnostic(r, "arith_error", detail, "", args[0].Pos())
+				check.CheckAddUniqueDiagnostic(r, "arith_error", detail, "", args[0].Pos())
 			}
 			return nil // divergence: no residual (raise-like)
 		}
@@ -233,7 +235,7 @@ func checkBigFloatMix(r *Registry, args []Value) {
 		(lb == leafFloat && (la == leafBigInteger || la == leafBigDecimal)) {
 		var ae *BoruError
 		if errors.As(bigFloatMixError(r, args[0], args[1]), &ae) {
-			eng.CheckAddUniqueDiagnostic(r, ae.Code, ae.Detail, "", args[0].Pos())
+			check.CheckAddUniqueDiagnostic(r, ae.Code, ae.Detail, "", args[0].Pos())
 		}
 	}
 }
@@ -242,7 +244,7 @@ func checkBigFloatMix(r *Registry, args []Value) {
 // CheckAtUncaughtTopLevel (eng/go/drypass.go) — see there for the
 // reachability contract.
 func atUncaughtTopLevel(r *Registry) bool {
-	return eng.CheckAtUncaughtTopLevel(r)
+	return check.CheckAtUncaughtTopLevel(r)
 }
 
 // isStaticZeroIntDivisor reports whether v is a concrete exact-family value
@@ -281,7 +283,7 @@ func apdBin(fn func(d, x, y *apd.Decimal) (apd.Condition, error), x, y *apd.Deci
 	if _, err := fn(out, x, y); err != nil {
 		// Normalise the library error into the arith_error taxonomy the
 		// check pass already uses for the same failures (phase 5).
-		return Value{}, eng.MakeBoruError("arith_error", err.Error(), "", "", "")
+		return Value{}, core.MakeBoruError("arith_error", err.Error(), "", "", "")
 	}
 	return NewBigDecimal(out), nil
 }

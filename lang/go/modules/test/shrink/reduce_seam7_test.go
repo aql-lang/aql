@@ -3,7 +3,7 @@ package shrink
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
@@ -12,9 +12,9 @@ import (
 // reduction proceeds normally.
 func TestReduce_NilProfileDefaults(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1)},
-		stackform.PushLit{V: eng.NewInteger(7)},
-		stackform.PushLit{V: eng.NewInteger(2)},
+		stackform.PushLit{V: core.NewInteger(1)},
+		stackform.PushLit{V: core.NewInteger(7)},
+		stackform.PushLit{V: core.NewInteger(2)},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
 		return formHasInt(f, 7)
@@ -54,7 +54,7 @@ func TestReduce_NilInitial(t *testing.T) {
 // leaving the form unchanged.
 func TestGreedyReduce_BreaksOnNonImprovingCandidate(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewFloat(0.5)},
+		stackform.PushLit{V: core.NewFloat(0.5)},
 	}}
 	// Failure: the form contains a PushLit op. Dropping it (→ empty
 	// form) loses the failure; shrinking 0.5→0.0 keeps a PushLit but
@@ -76,7 +76,7 @@ func TestGreedyReduce_BreaksOnNonImprovingCandidate(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected PushLit, got %T", reduced.Ops[0])
 	}
-	f, _ := eng.AsFloat(lit.V)
+	f, _ := core.AsFloat(lit.V)
 	if f != 0.5 {
 		t.Errorf("expected the equal-cost break to leave 0.5 unchanged, got %v", f)
 	}
@@ -87,10 +87,10 @@ func TestGreedyReduce_BreaksOnNonImprovingCandidate(t *testing.T) {
 // beam to 16 and still reduce a genuine counterexample.
 func TestBestFirst_DefaultBeamWidth(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1)},
-		stackform.PushLit{V: eng.NewInteger(7)},
-		stackform.PushLit{V: eng.NewInteger(2)},
-		stackform.PushLit{V: eng.NewInteger(3)},
+		stackform.PushLit{V: core.NewInteger(1)},
+		stackform.PushLit{V: core.NewInteger(7)},
+		stackform.PushLit{V: core.NewInteger(2)},
+		stackform.PushLit{V: core.NewInteger(3)},
 		stackform.Call{Name: "add", Arity: 2},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
@@ -117,8 +117,8 @@ func TestBestFirst_DefaultBeamWidth(t *testing.T) {
 // the break on the second candidate of the first expansion.
 func TestBestFirst_MaxStepsMidLoop(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(7)},
-		stackform.PushLit{V: eng.NewInteger(3)},
+		stackform.PushLit{V: core.NewInteger(7)},
+		stackform.PushLit{V: core.NewInteger(3)},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
 		return formHasInt(f, 7)
@@ -144,10 +144,10 @@ func TestBestFirst_MaxStepsMidLoop(t *testing.T) {
 func TestInsertSorted_InsertsBeforeCostlier(t *testing.T) {
 	policy := DefaultPolicy()
 	costly := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(5)}, // cost 1+5 = 6
+		stackform.PushLit{V: core.NewInteger(5)}, // cost 1+5 = 6
 	}}
 	cheap := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(2)}, // cost 1+2 = 3
+		stackform.PushLit{V: core.NewInteger(2)}, // cost 1+2 = 3
 	}}
 	// Sanity on the cost ordering the test relies on.
 	if ShrinkCost(costly, policy) <= ShrinkCost(cheap, policy) {
@@ -171,10 +171,10 @@ func TestInsertSorted_InsertsBeforeCostlier(t *testing.T) {
 func TestInsertSorted_AppendsWhenNotCostlier(t *testing.T) {
 	policy := DefaultPolicy()
 	cheap := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(2)}, // cost 3
+		stackform.PushLit{V: core.NewInteger(2)}, // cost 3
 	}}
 	costly := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(5)}, // cost 6
+		stackform.PushLit{V: core.NewInteger(5)}, // cost 6
 	}}
 	out := insertSorted([]*stackform.StackForm{cheap}, costly, policy)
 	if len(out) != 2 {

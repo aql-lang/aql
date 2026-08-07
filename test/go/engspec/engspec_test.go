@@ -1,7 +1,7 @@
 // Spec-runner test for the engine kernel — runs the shared corpus at
 // boru/eng/spec/*.tsv (sibling of eng/go/ and eng/ts/, so Go and TypeScript
 // ports run the same .tsv files). Each row is parsed with the boru parser
-// (eng/go/parser) and run against a fresh eng.Registry pre-populated with
+// (eng/go/parser) and run against a fresh core.Registry pre-populated with
 // kernel-only spec-runner fixtures (q-suffixed plus minimal copies of
 // the words eng/spec rows exercise — def, fn, dup, …). After the
 // eng→lang migration eng itself ships no word registrations; engspec
@@ -23,25 +23,25 @@ import (
 	"testing"
 
 	basic "github.com/boru-lang/boru/basic/go"
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/parser/go"
 )
 
 func TestSpec(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "eng", "spec")
-	specfix.RunDir(t, specDir, func(input string) ([]eng.Value, error) {
+	specfix.RunDir(t, specDir, func(input string) ([]core.Value, error) {
 		values, err := parser.Parse(input)
 		if err != nil {
 			return nil, err
 		}
-		r, err := eng.NewRegistry()
+		r, err := core.NewRegistry()
 		if err != nil {
 			return nil, err
 		}
 		specfix.RegisterSpecWords(r)
 		basic.InstallMicronIdeals(r)
 		r.InitRootContext()
-		return eng.NewTop(r).Run(values)
+		return core.NewTop(r).Run(values)
 	})
 }

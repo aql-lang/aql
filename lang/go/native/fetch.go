@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
@@ -106,7 +106,7 @@ type FetchModuleTypes struct {
 // MintFetchTypes mints the Fetch family into r's type table (r is
 // boru:net's sub-registry) and returns the nodes.
 func MintFetchTypes(r *Registry) FetchModuleTypes {
-	fetch := r.Types.MintType("Fetch", eng.TIdeal)
+	fetch := r.Types.MintType("Fetch", core.TIdeal)
 	return FetchModuleTypes{
 		Fetch:    fetch,
 		Request:  r.Types.MintTypeWithBehavior("Request", fetch, fetchConvertBehavior{}),
@@ -326,9 +326,9 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 // values) to its map via IdealConverter. Format/Match/Equal stay default.
 type fetchConvertBehavior struct{}
 
-func (fetchConvertBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (fetchConvertBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
-func (fetchConvertBehavior) Format(v Value) string       { return eng.DefaultBehavior.Format(v) }
+func (fetchConvertBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (fetchConvertBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
+func (fetchConvertBehavior) Format(v Value) string       { return core.DefaultBehavior.Format(v) }
 func (fetchConvertBehavior) ToMap(v Value) (Value, error) {
 	out := NewOrderedMap()
 	if m, err := AsMap(v); err == nil {

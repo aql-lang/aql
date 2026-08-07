@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
@@ -351,7 +351,7 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 // newSquatter registers a placeholder process under the tui name.
 func newSquatter(t *testing.T, reg *native.Registry) interface{ Close() } {
 	t.Helper()
-	sq := eng.NewProcess(reg.Procs, 4, eng.OverflowDrop)
+	sq := core.NewProcess(reg.Procs, 4, core.OverflowDrop)
 	if err := reg.Procs.Insert(sq); err != nil {
 		t.Fatal(err)
 	}

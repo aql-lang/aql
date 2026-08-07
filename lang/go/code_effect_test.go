@@ -2,11 +2,11 @@ package lang
 
 // Typed code values, stage 1 (design/checker-precision-fronts.0.md §1 —
 // the `do` escape hatch): a QUOTED code list stored in data carries its
-// analysed stack effect (eng.CodeEffectInfo) on the carrier the checker
+// analysed stack effect (compiler.CodeEffectInfo) on the carrier the checker
 // holds for it, so `do` over the NON-literal body types the effect's
 // outs — as BOUNDED dynamic(T) carriers, never a strict commitment —
 // instead of the dynamic(Any) hatch. Producer: getIntKeyReturns (the
-// `get`/`dot` integer-index element read) via eng.AnalyseCodeEffectCarrier.
+// `get`/`dot` integer-index element read) via compiler.AnalyseCodeEffectCarrier.
 // Consumer: doListReturnsFn. Both are gated to plain (non-Compiling)
 // check passes: checker precision must NOT imply compile coverage.
 

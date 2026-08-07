@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/capabilities"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Coverage tests for native_misc.go: help/describe, referent, the inline

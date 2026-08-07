@@ -1,7 +1,7 @@
 package native
 
 import (
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // streamSentinels maps each admitted stream atom to the internal routing
@@ -45,7 +45,7 @@ func isStreamAtom(v Value) bool {
 // stdin/stdout/stderr — a closed enumeration the read/write signatures
 // use to tell a stream target apart from a file path.
 func MintStreamKind(r *Registry) *Type {
-	return r.Types.MintMemberType("StreamKind", eng.TAtom, isStreamAtom)
+	return r.Types.MintMemberType("StreamKind", core.TAtom, isStreamAtom)
 }
 
 // NewStreamKind mints a standalone StreamKind (into its own dynamic type
@@ -55,7 +55,7 @@ func MintStreamKind(r *Registry) *Type {
 // name-based, so a standalone StreamKind tags and admits the handles
 // exactly like a per-import one.
 func NewStreamKind() *Type {
-	return eng.NewDynamicTypeTable().MintMemberType("StreamKind", eng.TAtom, isStreamAtom)
+	return core.NewDynamicTypeTable().MintMemberType("StreamKind", core.TAtom, isStreamAtom)
 }
 
 // newStreamAtom returns the Atom handle for a standard stream, tagged
@@ -65,7 +65,7 @@ func NewStreamKind() *Type {
 // atom-aware path (rendering, comparison, `quote`) treats it as the
 // symbol it is.
 func newStreamAtom(name string, streamKind *Type) Value {
-	return eng.ReparentValue(eng.NewAtom(name), streamKind)
+	return core.ReparentValue(core.NewAtom(name), streamKind)
 }
 
 // streamSentinel maps a stream-handle value to its internal routing

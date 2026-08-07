@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // (Uses the testRegistry / runTestBoru helpers from test_test.go and the

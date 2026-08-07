@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestAsValidateDynamicArms pins asValidate's gradual admission over
@@ -20,17 +20,17 @@ func TestAsValidateDynamicArms(t *testing.T) {
 	}
 
 	// Bound ⊑ target: proven upcast, passes.
-	down := eng.NewDynamicCarrier(TString)
-	if verr := asValidate(r, eng.TScalar, down); verr != nil {
+	down := core.NewDynamicCarrier(TString)
+	if verr := asValidate(r, core.TScalar, down); verr != nil {
 		t.Errorf("dynamic(String) as Scalar must pass (bound conforms): %v", verr)
 	}
 	// Target ⊑ bound: optimistic gradual pass (runtime validates).
-	up := eng.NewDynamicCarrier(TAny)
+	up := core.NewDynamicCarrier(TAny)
 	if verr := asValidate(r, TMap, up); verr != nil {
 		t.Errorf("dynamic(Any) as Map must pass gradually: %v", verr)
 	}
 	// Disjoint bound: the tree lattice refutes it — refuse.
-	dis := eng.NewDynamicCarrier(TString)
+	dis := core.NewDynamicCarrier(TString)
 	verr := asValidate(r, TMap, dis)
 	if verr == nil {
 		t.Fatal("dynamic(String) as Map must refuse (provably disjoint)")

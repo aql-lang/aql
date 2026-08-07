@@ -1,6 +1,9 @@
 package native
 
-import "github.com/boru-lang/boru/eng/go"
+import (
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // flexNatives installs the flex-node words:
 //
@@ -140,12 +143,12 @@ func flexReturns(args []Value, r *Registry) []Value {
 	switch p := args[0].Parent; {
 	case p.ConformsTo(TMap):
 		if shapes {
-			if ss, ok := eng.StoreShapeOf(args[0]); ok {
+			if ss, ok := check.StoreShapeOf(args[0]); ok {
 				v := NewCarrier(TFlexMap)
 				v.Data = ss.CloneShape()
 				return []Value{d2RetainElem(v, args[0])}
 			}
-			if v, ok := eng.MintFlexShapeCarrier(args[0], 0); ok {
+			if v, ok := check.MintFlexShapeCarrier(args[0], 0); ok {
 				return []Value{d2RetainElem(v, args[0])}
 			}
 		}
@@ -182,7 +185,7 @@ func flexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("flex_error", "flex: expected a concrete map or list, got "+args[0].String(), "flex")
 	}
-	out, err := eng.FlexDeepCopy(args[0])
+	out, err := core.FlexDeepCopy(args[0])
 	if err != nil {
 		return nil, r.BoruError("flex_error", err.Error(), "flex")
 	}
@@ -193,7 +196,7 @@ func nodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("node_error", "node: expected a concrete map or list, got "+args[0].String(), "node")
 	}
-	out, err := eng.NodeDeepCopy(args[0])
+	out, err := core.NodeDeepCopy(args[0])
 	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, r.BoruError("node_error", err.Error(), "node")
 	}
@@ -211,8 +214,8 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, werr
 	}
 	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
-	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
-	elem, aerr := eng.AdoptIntoFlex(tagged)
+	// flexed on the way in (core.AdoptIntoFlex; flex handles share).
+	elem, aerr := core.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.BoruError("append_error", aerr.Error(), "append")
 	}
@@ -259,7 +262,7 @@ func appendXmlChildHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	}
 	// A flex tree stays entirely mutable: a plain Node/Xml child is
 	// deep-flexed on the way in; flex handles share.
-	child, aerr := eng.AdoptIntoFlex(args[0])
+	child, aerr := core.AdoptIntoFlex(args[0])
 	if aerr != nil {
 		return nil, r.BoruError("append_error", aerr.Error(), "append")
 	}
@@ -278,7 +281,7 @@ func appendXmlListHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 	}
 	elems := src.Slice()
 	for _, el := range elems {
-		child, aerr := eng.AdoptIntoFlex(el)
+		child, aerr := core.AdoptIntoFlex(el)
 		if aerr != nil {
 			return nil, r.BoruError("append_error", aerr.Error(), "append")
 		}
@@ -307,7 +310,7 @@ func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		if terr != nil {
 			return nil, terr
 		}
-		a, aerr := eng.AdoptIntoFlex(tagged)
+		a, aerr := core.AdoptIntoFlex(tagged)
 		if aerr != nil {
 			return nil, r.BoruError("append_error", aerr.Error(), "append")
 		}

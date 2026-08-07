@@ -1,7 +1,7 @@
 package basic
 
 import (
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The predefined Resource / Entity object types (Ideal/Resource,
@@ -50,5 +50,5 @@ func InstallResourceTypes(r *Registry) {
 }
 
 // ResourceDefKey re-exports the eng hidden-key convention
-// (eng.ResourceDefKey) — see that helper for the rationale.
-func ResourceDefKey(name string) string { return eng.ResourceDefKey(name) }
+// (core.ResourceDefKey) — see that helper for the rationale.
+func ResourceDefKey(name string) string { return core.ResourceDefKey(name) }

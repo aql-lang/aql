@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/parser/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // flexRun parses and runs source, returning the final stack (or fails
@@ -83,7 +83,7 @@ func TestFlexMutatorsReturnSameContainer(t *testing.T) {
 // Growth through AsFlexList must be visible across handler calls: the
 // pointer-backed store is the whole point of the dedicated payload.
 func TestFlexListGrowthAcrossCalls(t *testing.T) {
-	fl := eng.NewFlexList([]Value{eng.NewInteger(1)})
+	fl := core.NewFlexList([]Value{core.NewInteger(1)})
 	fd, err := AsFlexList(fl)
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestFlexListGrowthAcrossCalls(t *testing.T) {
 	// Mutate through the pointer, then read through a COPY of the
 	// Value struct — the copy must observe the growth.
 	cp := fl
-	fd.Elems = append(fd.Elems, eng.NewInteger(2))
+	fd.Elems = append(fd.Elems, core.NewInteger(2))
 	lst, err := AsList(cp)
 	if err != nil {
 		t.Fatal(err)
@@ -108,8 +108,8 @@ func TestFlexDeepCopyIsolation(t *testing.T) {
 	if len(out) != 2 {
 		t.Fatalf("expected 2 results, got %s", Canon(out))
 	}
-	src, _ := eng.AsInteger(out[0])
-	flexed, _ := eng.AsInteger(out[1])
+	src, _ := core.AsInteger(out[0])
+	flexed, _ := core.AsInteger(out[1])
 	if src != 1 {
 		t.Fatalf("source map was mutated through the flex copy: m.a.b=%d", src)
 	}
@@ -121,8 +121,8 @@ func TestFlexDeepCopyIsolation(t *testing.T) {
 // node on a plain container with no flex inside is identity — the same
 // container comes back (preserves eq/container identity).
 func TestNodeIdentityOnPlain(t *testing.T) {
-	m := eng.NewMap(NewOrderedMap())
-	out, err := eng.NodeDeepCopy(m)
+	m := core.NewMap(NewOrderedMap())
+	out, err := core.NodeDeepCopy(m)
 	if err != nil {
 		t.Fatal(err)
 	}

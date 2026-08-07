@@ -3,7 +3,8 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // accessorNatives covers strict-access words.
@@ -290,7 +291,7 @@ func getrXmlReturns(args []Value, r *Registry) []Value {
 		// A bare `Xml` type literal in the value slot would signature-
 		// error at runtime, not not_found — exclude it from the claim.
 		if r != nil && r.Check.IsActive() && !IsBareTypeNode(args[1]) {
-			eng.CheckAddUniqueDiagnostic(r, "not_found",
+			check.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: Xml has no field %q (tag / attr / cren)", k), "getr", args[0].Pos())
 		}
 		return dyn
@@ -320,13 +321,13 @@ func getrNodeReturns(args []Value, r *Registry) []Value {
 	}
 	key, container := args[0], args[1]
 	if container.Parent.ConformsTo(TList) && !key.Parent.ConformsTo(TInteger) {
-		eng.CheckAddUniqueDiagnostic(r, "getr_error",
+		check.CheckAddUniqueDiagnostic(r, "getr_error",
 			fmt.Sprintf("getr: expected a map, got %s", container.Parent.String()), "getr", key.Pos())
 		return out
 	}
 	if m, err := AsMap(container); err == nil && m != nil && container.Parent.ConformsTo(TMap) {
 		if _, ok := m.Get(getKey(key)); !ok {
-			eng.CheckAddUniqueDiagnostic(r, "not_found",
+			check.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: key %q not found in map", getKey(key)), "getr", key.Pos())
 		}
 	}
@@ -355,7 +356,7 @@ func getrObjectReturns(args []Value, r *Registry) []Value {
 		return out
 	}
 	if _, ok := info.AllFields().Get(getKey(args[0])); !ok {
-		eng.CheckAddUniqueDiagnostic(r, "not_found",
+		check.CheckAddUniqueDiagnostic(r, "not_found",
 			fmt.Sprintf("getr: field %q not found in object", getKey(args[0])), "getr", args[0].Pos())
 	}
 	return out
@@ -369,8 +370,8 @@ func getrObjectReturns(args []Value, r *Registry) []Value {
 // (the sig never produces a value).
 func getrNoneReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 &&
-		eng.IsNoneShape(args[1]) && !args[1].Dynamic {
-		eng.CheckAddUniqueDiagnostic(r, "not_found",
+		core.IsNoneShape(args[1]) && !args[1].Dynamic {
+		check.CheckAddUniqueDiagnostic(r, "not_found",
 			"getr: parent is None — nothing to read a key from", "getr", args[0].Pos())
 	}
 	return []Value{}
@@ -382,17 +383,17 @@ func getrNoneReturns(args []Value, r *Registry) []Value {
 // the key's source position, so the report points at the offending
 // access. The compiled path records the SAME error (built by
 // buildNotFoundKeyError) via RecordTrapErr, so the two engines match.
-func notFoundKeyError(r *Registry, detail, key string, keyPos eng.SrcPos, keys []string) error {
+func notFoundKeyError(r *Registry, detail, key string, keyPos core.SrcPos, keys []string) error {
 	return buildNotFoundKeyError(r, detail, key, keyPos, keys)
 }
 
 // buildNotFoundKeyError is the shared not_found builder both the runtime
 // handlers and the compile-time trap use, so the strict-read miss error
 // is byte-identical across engines.
-func buildNotFoundKeyError(r *Registry, detail, key string, keyPos eng.SrcPos, keys []string) *eng.BoruError {
-	ae := eng.MakeBoruErrorAt("not_found", detail, "getr", srcOf(r), "", keyPos)
-	if s := eng.DidYouMean(key, keys); s != "" {
-		ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+func buildNotFoundKeyError(r *Registry, detail, key string, keyPos core.SrcPos, keys []string) *core.BoruError {
+	ae := core.MakeBoruErrorAt("not_found", detail, "getr", srcOf(r), "", keyPos)
+	if s := core.DidYouMean(key, keys); s != "" {
+		ae.Suggestions = append(ae.Suggestions, core.DiagSuggestion{Message: s})
 	}
 	return ae
 }
@@ -445,7 +446,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	val, ok := m.Get(k)
 	if !ok {
-		if eng.ModuleNSOf(container) != nil {
+		if core.ModuleNSOf(container) != nil {
 			return nil, moduleNSGetrMiss(r, container, k, key.Pos())
 		}
 		return nil, notFoundKeyError(r, fmt.Sprintf("getr: key %q not found in map", k), k, key.Pos(), m.Keys())

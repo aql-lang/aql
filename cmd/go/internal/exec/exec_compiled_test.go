@@ -4,7 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
@@ -21,7 +21,7 @@ func TestExecRunsCompiled(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		a.ArmInterpEntryHook(func(e eng.InterpEntry) {
+		a.ArmInterpEntryHook(func(e core.InterpEntry) {
 			if e.Attribution == "" {
 				entries = append(entries, e.Seam)
 			}

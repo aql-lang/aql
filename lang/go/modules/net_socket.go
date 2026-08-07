@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
@@ -50,8 +50,8 @@ var (
 	TListener = registerNetType("Ideal/Listener", 5010, listenerBehavior{})
 )
 
-func registerNetType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, id, "boru:net", b)
+func registerNetType(path string, id int, b core.TypeBehavior) *core.Type {
+	t, err := core.Builtin.RegisterType(path, id, "boru:net", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("net: register %s: %w", path, err))
 	}
@@ -76,11 +76,11 @@ func newSocketValue(conn net.Conn) native.Value {
 		conn: conn,
 		br:   bufio.NewReader(conn),
 	}
-	return eng.NewExtension(TSocket, sc)
+	return core.NewExtension(TSocket, sc)
 }
 
 func asSocket(v native.Value) (*socketConn, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, false
 	}
@@ -117,11 +117,11 @@ func newListenerValue(ln net.Listener) native.Value {
 // `accept` reads from ln and sets deadlines on deadlineOn.
 func newListenerValueOn(ln, deadlineOn net.Listener) native.Value {
 	nl := &netListener{id: native.GenerateID("LS_"), ln: ln, deadlineOn: deadlineOn}
-	return eng.NewExtension(TListener, nl)
+	return core.NewExtension(TListener, nl)
 }
 
 func asListener(v native.Value) (*netListener, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, false
 	}
@@ -386,7 +386,7 @@ func listenHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 // sentinels describe a malformed option, so they read as net_error
 // rather than as a transport fault nobody wrote.
 func listenTLSErr(r *native.Registry, err error) error {
-	var coded *eng.BoruError
+	var coded *core.BoruError
 	if errors.As(err, &coded) {
 		return err
 	}
@@ -596,10 +596,10 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 				// is idle, the body runs on the VM (RunUnit) — closing the ~19x
 				// interpreter penalty the networking benchmark measured — else it
 				// falls back to CallBoru, byte-identical.
-				if _, hErr := eng.InvokeCallback(connFork, sig, []native.Value{sock}, fnInfo.Captured); hErr != nil {
+				if _, hErr := core.InvokeCallback(connFork, sig, []native.Value{sock}, fnInfo.Captured); hErr != nil {
 					// `closed` is the normal end of a connection; anything
 					// else is a real handler failure worth logging.
-					var ae *eng.BoruError
+					var ae *core.BoruError
 					if !errors.As(hErr, &ae) || ae.Code != "closed" {
 						fmt.Fprintf(connFork.ErrOutput, "[boru/net] connection handler error: %v\n", hErr)
 					}

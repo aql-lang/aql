@@ -4,20 +4,20 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/parser/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Two user-defined Ideal types registered in NATIVE (Go) code: one with no
 // converter (must hit the base Ideal fallback → {} / []) and one whose
-// Behavior implements eng.IdealConverter (override → custom Map / List).
+// Behavior implements core.IdealConverter (override → custom Map / List).
 var (
 	tConvNoOverride = mustRegisterIdeal("Ideal/ConvNoOverride", 10001, nil)
 	tConvOverride   = mustRegisterIdeal("Ideal/ConvOverride", 10002, convOverrideBehavior{})
 )
 
-func mustRegisterIdeal(path string, id int, b eng.TypeBehavior) *Type {
-	t, err := eng.Builtin.RegisterType(path, id, "plugin:test", b)
+func mustRegisterIdeal(path string, id int, b core.TypeBehavior) *Type {
+	t, err := core.Builtin.RegisterType(path, id, "plugin:test", b)
 	if err != nil {
 		panic(err)
 	}
@@ -26,9 +26,9 @@ func mustRegisterIdeal(path string, id int, b eng.TypeBehavior) *Type {
 
 type convOverrideBehavior struct{}
 
-func (convOverrideBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (convOverrideBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
-func (convOverrideBehavior) Format(v Value) string       { return eng.DefaultBehavior.Format(v) }
+func (convOverrideBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (convOverrideBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
+func (convOverrideBehavior) Format(v Value) string       { return core.DefaultBehavior.Format(v) }
 func (convOverrideBehavior) ToMap(Value) (Value, error) {
 	m := NewOrderedMap()
 	m.Set("greeting", NewString("hi"))
@@ -51,7 +51,7 @@ func runConvert(t *testing.T, val Value, src string) string {
 	if err != nil {
 		t.Fatalf("%q: %v", src, err)
 	}
-	return eng.Canon(out)
+	return core.Canon(out)
 }
 
 // TestConvertIdealNativeFallback: a native Ideal with no IdealConverter

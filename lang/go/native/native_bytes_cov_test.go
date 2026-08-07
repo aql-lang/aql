@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/parser/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Coverage tests for native_bytes.go: the Bytes scalar behaviors, the
@@ -164,10 +164,10 @@ func TestBytesCovBehaviorFallbacks(t *testing.T) {
 	if got := b.Size(NewInteger(1)); got != 0 {
 		t.Errorf("Size(non-bytes) = %d, want 0", got)
 	}
-	if _, err := b.Compare(newBytes([]byte("a")), NewInteger(1)); !errors.Is(err, eng.ErrNoComparer) {
+	if _, err := b.Compare(newBytes([]byte("a")), NewInteger(1)); !errors.Is(err, core.ErrNoComparer) {
 		t.Errorf("Compare(bytes, int) err = %v, want ErrNoComparer", err)
 	}
-	if _, err := b.Compare(NewTypeLiteral(TBytes), NewTypeLiteral(TBytes)); !errors.Is(err, eng.ErrNoComparer) {
+	if _, err := b.Compare(NewTypeLiteral(TBytes), NewTypeLiteral(TBytes)); !errors.Is(err, core.ErrNoComparer) {
 		t.Errorf("Compare(lit, lit) err = %v, want ErrNoComparer", err)
 	}
 	if _, ok := asBytes(Value{}); ok {
@@ -360,7 +360,7 @@ func TestBytesCovFrameInstanceSurface(t *testing.T) {
 // copy-on-ingest and copy-on-export.
 func TestBytesCovGoBridge(t *testing.T) {
 	src := []byte("ab")
-	v := eng.FromNative(src)
+	v := core.FromNative(src)
 	b, ok := asBytes(v)
 	if !ok || string(b) != "ab" {
 		t.Fatalf("FromNative([]byte) = %v", v)
@@ -371,7 +371,7 @@ func TestBytesCovGoBridge(t *testing.T) {
 		t.Error("FromNative must copy-on-ingest")
 	}
 
-	out, isBytes := eng.ToNative(v).([]byte)
+	out, isBytes := core.ToNative(v).([]byte)
 	if !isBytes || string(out) != "ab" {
 		t.Fatalf("ToNative(Bytes) = %v", out)
 	}
@@ -382,7 +382,7 @@ func TestBytesCovGoBridge(t *testing.T) {
 	}
 
 	// A non-Bytes value declines the hook.
-	if _, isBytes := eng.ToNative(NewInteger(1)).([]byte); isBytes {
+	if _, isBytes := core.ToNative(NewInteger(1)).([]byte); isBytes {
 		t.Error("ToNative(Integer) must not produce []byte")
 	}
 }
@@ -423,10 +423,10 @@ func TestBytesCovHandlerErrorBranches(t *testing.T) {
 		t.Error("binaryInstanceLayout(Integer) must decline")
 	}
 	// A Bytes-typed value with a foreign payload is not Bytes data.
-	if _, ok := asBytes(eng.NewValueRaw(TBytes, &TimeoutInfo{})); ok {
+	if _, ok := asBytes(core.NewValueRaw(TBytes, &TimeoutInfo{})); ok {
 		t.Error("asBytes(non-extension payload) must decline")
 	}
-	if _, ok := asBytes(eng.NewExtension(TBytes, "not-bytes")); ok {
+	if _, ok := asBytes(core.NewExtension(TBytes, "not-bytes")); ok {
 		t.Error("asBytes(extension with non-[]byte body) must decline")
 	}
 	if (bytesBehavior{}).Equal(NewInteger(1), newBytes([]byte("a"))) {

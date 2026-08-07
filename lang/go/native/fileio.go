@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/boru-lang/boru/lang/go/capabilities"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 

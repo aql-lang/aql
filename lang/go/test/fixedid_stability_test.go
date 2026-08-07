@@ -3,9 +3,9 @@ package test
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	// Side-effect imports: trigger the init() / var initialisers that
-	// register externally-owned types into eng.Builtin so the snapshot
+	// register externally-owned types into core.Builtin so the snapshot
 	// below sees the full set.
 	_ "github.com/boru-lang/boru/lang/go/modules"
 	_ "github.com/boru-lang/boru/lang/go/native"
@@ -158,7 +158,7 @@ func TestFixedIDStability(t *testing.T) {
 	}
 
 	for path, want := range expected {
-		def := eng.Builtin.Lookup(path)
+		def := core.Builtin.Lookup(path)
 		if def == nil {
 			t.Errorf("Builtin.Lookup(%q) returned nil — type not registered", path)
 			continue

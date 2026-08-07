@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
@@ -40,7 +40,7 @@ func codeOf(t *testing.T, a *lang.Boru, src string) string {
 	if err == nil {
 		t.Fatalf("expected a failure from:\n%s", src)
 	}
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if !errors.As(err, &ae) {
 		t.Fatalf("failure carries no BoruError at all, so it can never have a "+
 			"code:\n%s\n  → %v", src, err)

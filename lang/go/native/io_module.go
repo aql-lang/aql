@@ -3,7 +3,7 @@ package native
 import (
 	"sort"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // IOModuleNativeFuncs builds the input/output words that were moved out
@@ -11,7 +11,7 @@ import (
 // `IO`). They are registered ONLY into that module's sub-registry by
 // modules.BuildIOModule — deliberately absent from the global registry.
 // Most handlers live in their feature files (native_print.go's
-// eng.PrintstrHandler, native_trace.go's eng.TraceHandler,
+// core.PrintstrHandler, native_trace.go's core.TraceHandler,
 // native_misc.go's read/write in this package).
 //
 // `streamKind` is the per-import StreamKind type (minted by
@@ -152,7 +152,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			Name: "printstr",
 			Signatures: []Signature{{
 				Args:    []*Type{TAny},
-				Impl:    Go(eng.PrintstrHandler),
+				Impl:    Go(core.PrintstrHandler),
 				Returns: []*Type{}, BarrierPos: -1,
 			}},
 		},
@@ -340,7 +340,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			Name: "trace",
 			Signatures: []Signature{{
 				Args:    []*Type{TList},
-				Impl:    Go(eng.TraceHandler),
+				Impl:    Go(core.TraceHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			}},
 		},
@@ -557,11 +557,11 @@ func IOWordExtensions(fileType *Type) []FnDefInfo {
 		}
 	}
 	return []FnDefInfo{
-		NewWordExtension(eng.OwnerKernel, "list", []Signature{
+		NewWordExtension(core.OwnerKernel, "list", []Signature{
 			{Args: []*Type{TPathon, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
 			{Args: []*Type{TPathon}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
 		}),
-		NewWordExtension(eng.OwnerKernel, "remove", []Signature{
+		NewWordExtension(core.OwnerKernel, "remove", []Signature{
 			{Args: []*Type{TPathon, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 			{Args: []*Type{TPathon}, Impl: Go(ioRemoveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 		}),
@@ -632,5 +632,5 @@ func exitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 				"and 128+n means killed by signal n — a program that returns one "+
 				"of those misreports how it died", args[0].Pos())
 	}
-	return nil, eng.NewExitError(code, r.Source, args[0].Pos())
+	return nil, core.NewExitError(code, r.Source, args[0].Pos())
 }

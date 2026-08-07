@@ -1,7 +1,7 @@
 package shrink
 
 import (
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
@@ -79,95 +79,95 @@ func literalShrinkCandidates(form *stackform.StackForm) []*stackform.StackForm {
 //   - String : → "" (if non-empty); → first char only (if len > 1).
 //   - Boolean: true → false.
 //   - List   : → [] (if non-empty); → first half; → first element.
-func shrinkLiteral(v eng.Value) []eng.Value {
+func shrinkLiteral(v core.Value) []core.Value {
 	if v.Parent == nil {
 		return nil
 	}
 	switch {
-	case v.Parent.ConformsTo(eng.TInteger):
+	case v.Parent.ConformsTo(core.TInteger):
 		return shrinkInteger(v)
-	case v.Parent.ConformsTo(eng.TFloat):
+	case v.Parent.ConformsTo(core.TFloat):
 		return shrinkFloat(v)
-	case v.Parent.ConformsTo(eng.TString):
+	case v.Parent.ConformsTo(core.TString):
 		return shrinkString(v)
-	case v.Parent.ConformsTo(eng.TBoolean):
+	case v.Parent.ConformsTo(core.TBoolean):
 		return shrinkBoolean(v)
-	case v.Parent.ConformsTo(eng.TList):
+	case v.Parent.ConformsTo(core.TList):
 		return shrinkList(v)
 	}
 	return nil
 }
 
-func shrinkInteger(v eng.Value) []eng.Value {
-	n, err := eng.AsInteger(v)
+func shrinkInteger(v core.Value) []core.Value {
+	n, err := core.AsInteger(v)
 	if err != nil {
 		return nil
 	}
-	var out []eng.Value
+	var out []core.Value
 	if n != 0 {
-		out = append(out, eng.NewInteger(0))
+		out = append(out, core.NewInteger(0))
 	}
 	// Binary halving (toward 0). Drops a high bit per step.
 	if n > 1 || n < -1 {
-		out = append(out, eng.NewInteger(n/2))
+		out = append(out, core.NewInteger(n/2))
 	}
 	// Unit step (toward 0). After halving stalls (e.g. 12→6 makes
 	// the property pass, but 11/10 still fails), this finds the
 	// exact minimum violator one step at a time.
 	if n > 0 {
-		out = append(out, eng.NewInteger(n-1))
+		out = append(out, core.NewInteger(n-1))
 	} else if n < 0 {
-		out = append(out, eng.NewInteger(n+1))
+		out = append(out, core.NewInteger(n+1))
 	}
 	return out
 }
 
-func shrinkFloat(v eng.Value) []eng.Value {
-	f, err := eng.AsFloat(v)
+func shrinkFloat(v core.Value) []core.Value {
+	f, err := core.AsFloat(v)
 	if err != nil {
 		return nil
 	}
-	var out []eng.Value
+	var out []core.Value
 	if f != 0 {
-		out = append(out, eng.NewFloat(0))
+		out = append(out, core.NewFloat(0))
 	}
 	if f > 1 || f < -1 {
-		out = append(out, eng.NewFloat(f/2))
+		out = append(out, core.NewFloat(f/2))
 	}
 	return out
 }
 
-func shrinkString(v eng.Value) []eng.Value {
-	s, err := eng.AsString(v)
+func shrinkString(v core.Value) []core.Value {
+	s, err := core.AsString(v)
 	if err != nil {
 		return nil
 	}
-	var out []eng.Value
+	var out []core.Value
 	if s != "" {
-		out = append(out, eng.NewString(""))
+		out = append(out, core.NewString(""))
 	}
 	if len(s) > 1 {
-		out = append(out, eng.NewString(s[:1]))
+		out = append(out, core.NewString(s[:1]))
 	}
 	if len(s) > 2 {
-		out = append(out, eng.NewString(s[:len(s)/2]))
+		out = append(out, core.NewString(s[:len(s)/2]))
 	}
 	return out
 }
 
-func shrinkBoolean(v eng.Value) []eng.Value {
-	b, err := eng.AsBoolean(v)
+func shrinkBoolean(v core.Value) []core.Value {
+	b, err := core.AsBoolean(v)
 	if err != nil {
 		return nil
 	}
 	if b {
-		return []eng.Value{eng.NewBoolean(false)}
+		return []core.Value{core.NewBoolean(false)}
 	}
 	return nil
 }
 
-func shrinkList(v eng.Value) []eng.Value {
-	lst, err := eng.RequireConcreteList(v, "shrinkList")
+func shrinkList(v core.Value) []core.Value {
+	lst, err := core.RequireConcreteList(v, "shrinkList")
 	if err != nil {
 		return nil
 	}
@@ -175,21 +175,21 @@ func shrinkList(v eng.Value) []eng.Value {
 	if n == 0 {
 		return nil
 	}
-	var out []eng.Value
+	var out []core.Value
 	// Empty list — biggest single shrink.
-	out = append(out, eng.NewList(nil))
+	out = append(out, core.NewList(nil))
 	// First half.
 	if n > 1 {
 		half := n / 2
-		els := make([]eng.Value, half)
+		els := make([]core.Value, half)
 		for i := 0; i < half; i++ {
 			els[i] = lst.Get(i)
 		}
-		out = append(out, eng.NewList(els))
+		out = append(out, core.NewList(els))
 	}
 	// First element only.
 	if n > 1 {
-		out = append(out, eng.NewList([]eng.Value{lst.Get(0)}))
+		out = append(out, core.NewList([]core.Value{lst.Get(0)}))
 	}
 	return out
 }

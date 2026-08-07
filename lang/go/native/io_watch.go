@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
@@ -53,8 +53,8 @@ func (wi *WatcherInfo) Done() <-chan struct{} { return wi.done }
 // watcherFormatBehavior renders a Watcher as "Watcher(id,path)".
 type watcherFormatBehavior struct{}
 
-func (watcherFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (watcherFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (watcherFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (watcherFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (watcherFormatBehavior) Format(v Value) string {
 	if wi, ok := asWatcherInfo(v); ok {
 		return fmt.Sprintf("Watcher(%s,%s)", wi.ID, wi.Path)
@@ -65,7 +65,7 @@ func (watcherFormatBehavior) Format(v Value) string {
 // MintWatcherType mints the module-scoped Watcher resource type —
 // per-import, like StreamKind/FileType, never a global builtin.
 func MintWatcherType(r *Registry) *Type {
-	return r.Types.MintTypeWithBehavior("Watcher", eng.TIdeal, watcherFormatBehavior{})
+	return r.Types.MintTypeWithBehavior("Watcher", core.TIdeal, watcherFormatBehavior{})
 }
 
 // NewWatcherType mints a standalone Watcher type (into its own dynamic
@@ -73,7 +73,7 @@ func MintWatcherType(r *Registry) *Type {
 // names without a host registry to mint into — the NewStreamKind /
 // NewFileType twin. Production code mints per import via MintWatcherType.
 func NewWatcherType() *Type {
-	return eng.NewDynamicTypeTable().MintTypeWithBehavior("Watcher", eng.TIdeal, watcherFormatBehavior{})
+	return core.NewDynamicTypeTable().MintTypeWithBehavior("Watcher", core.TIdeal, watcherFormatBehavior{})
 }
 
 // asWatcherInfo unwraps a Watcher handle's payload.
@@ -153,7 +153,7 @@ func doWatchWord(args []Value, r *Registry, watcherType *Type, opts Value) ([]Va
 			_, _ = sub.Run(input)
 		}
 	}()
-	return []Value{eng.NewValueRaw(watcherType, ExtensionPayload{Body: info})}, nil
+	return []Value{core.NewValueRaw(watcherType, ExtensionPayload{Body: info})}, nil
 }
 
 // watchOverflowOp names the coalesced buffer-overflow marker event — it must

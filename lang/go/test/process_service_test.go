@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -24,7 +24,7 @@ func oneResult(t *testing.T, vals []native.Value) native.Value {
 
 func wantString(t *testing.T, vals []native.Value, want string) {
 	t.Helper()
-	got, err := eng.AsString(oneResult(t, vals))
+	got, err := core.AsString(oneResult(t, vals))
 	if err != nil {
 		t.Fatalf("expected String, got %v: %v", vals, err)
 	}
@@ -35,7 +35,7 @@ func wantString(t *testing.T, vals []native.Value, want string) {
 
 func wantInt(t *testing.T, vals []native.Value, want int64) {
 	t.Helper()
-	got, err := eng.AsInteger(oneResult(t, vals))
+	got, err := core.AsInteger(oneResult(t, vals))
 	if err != nil {
 		t.Fatalf("expected Integer, got %v: %v", vals, err)
 	}
@@ -156,7 +156,7 @@ func TestProcessWhereisMissReturnsNone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	b, bErr := eng.AsBoolean(oneResult(t, out))
+	b, bErr := core.AsBoolean(oneResult(t, out))
 	if bErr != nil || !b {
 		t.Errorf("whereis miss must be None, got %v", out)
 	}
@@ -198,7 +198,7 @@ func TestProcessSelfIsAPid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	b, bErr := eng.AsBoolean(oneResult(t, out))
+	b, bErr := core.AsBoolean(oneResult(t, out))
 	if bErr != nil || !b {
 		t.Errorf("typeof self must be Pid, got %v", out)
 	}

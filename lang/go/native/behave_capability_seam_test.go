@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Seam coverage for the three capability slots' fall-through arms —
@@ -16,31 +16,31 @@ import (
 
 // bsPrev is a previous-Behavior stub that implements all three
 // capabilities, so the delegate arms have something to delegate to.
-type bsPrev struct{ eng.TypeBehavior }
+type bsPrev struct{ core.TypeBehavior }
 
-func (bsPrev) Truthy(eng.Value) (bool, error)               { return true, nil }
-func (bsPrev) DeepEqualValues(a, b eng.Value) (bool, error) { return true, nil }
-func (bsPrev) Size(eng.Value) int                           { return 7 }
+func (bsPrev) Truthy(core.Value) (bool, error)               { return true, nil }
+func (bsPrev) DeepEqualValues(a, b core.Value) (bool, error) { return true, nil }
+func (bsPrev) Size(core.Value) int                           { return 7 }
 
 // bsBare is a previous-Behavior stub implementing NONE of them.
-type bsBare struct{ eng.TypeBehavior }
+type bsBare struct{ core.TypeBehavior }
 
-func bsWrapper(t *testing.T, prev eng.TypeBehavior) *userBehavior {
+func bsWrapper(t *testing.T, prev core.TypeBehavior) *userBehavior {
 	t.Helper()
 	return &userBehavior{prev: prev, registry: w9Reg(t), typeName: "Seam"}
 }
 
 func TestBehaveTruthySeam(t *testing.T) {
 	// No body, prev has the capability → delegate.
-	u := bsWrapper(t, bsPrev{eng.DefaultBehavior})
+	u := bsWrapper(t, bsPrev{core.DefaultBehavior})
 	got, err := u.Truthy(NewInteger(0))
 	if err != nil || !got {
 		t.Errorf("delegate arm: got %v, %v; want true, nil", got, err)
 	}
 
 	// No body, prev has not → decline so the cascade answers.
-	u = bsWrapper(t, bsBare{eng.DefaultBehavior})
-	if _, err := u.Truthy(NewInteger(0)); err != eng.ErrNoTruther {
+	u = bsWrapper(t, bsBare{core.DefaultBehavior})
+	if _, err := u.Truthy(NewInteger(0)); err != core.ErrNoTruther {
 		t.Errorf("decline arm: err = %v, want ErrNoTruther", err)
 	}
 
@@ -48,7 +48,7 @@ func TestBehaveTruthySeam(t *testing.T) {
 	// must not loop — the guard declines on the inner call.
 	u.truthyBody = []Value{NewBoolean(true)}
 	u.inTruthy = true
-	if _, err := u.Truthy(NewInteger(0)); err != eng.ErrNoTruther {
+	if _, err := u.Truthy(NewInteger(0)); err != core.ErrNoTruther {
 		t.Errorf("re-entrancy arm: err = %v, want ErrNoTruther", err)
 	}
 	u.inTruthy = false
@@ -75,19 +75,19 @@ func TestBehaveTruthySeam(t *testing.T) {
 func TestBehaveDeqSeam(t *testing.T) {
 	a, b := NewInteger(1), NewInteger(2)
 
-	u := bsWrapper(t, bsPrev{eng.DefaultBehavior})
+	u := bsWrapper(t, bsPrev{core.DefaultBehavior})
 	if got, err := u.DeepEqualValues(a, b); err != nil || !got {
 		t.Errorf("delegate arm: got %v, %v; want true, nil", got, err)
 	}
 
-	u = bsWrapper(t, bsBare{eng.DefaultBehavior})
-	if _, err := u.DeepEqualValues(a, b); err != eng.ErrNoDeepEqualer {
+	u = bsWrapper(t, bsBare{core.DefaultBehavior})
+	if _, err := u.DeepEqualValues(a, b); err != core.ErrNoDeepEqualer {
 		t.Errorf("decline arm: err = %v, want ErrNoDeepEqualer", err)
 	}
 
 	u.deqBody = []Value{NewBoolean(true)}
 	u.inDeq = true
-	if _, err := u.DeepEqualValues(a, b); err != eng.ErrNoDeepEqualer {
+	if _, err := u.DeepEqualValues(a, b); err != core.ErrNoDeepEqualer {
 		t.Errorf("re-entrancy arm: err = %v, want ErrNoDeepEqualer", err)
 	}
 	u.inDeq = false
@@ -111,12 +111,12 @@ func TestBehaveDeqSeam(t *testing.T) {
 	u.deqBody = []Value{}
 	u.deqBody = append(u.deqBody, NewBoolean(true))
 	u.deqBody = u.deqBody[:0]
-	if _, err := u.DeepEqualValues(a, b); err != eng.ErrNoDeepEqualer {
+	if _, err := u.DeepEqualValues(a, b); err != core.ErrNoDeepEqualer {
 		t.Errorf("an emptied body falls back to the decline arm, got %v", err)
 	}
 
 	// No registry: the body cannot run at all.
-	u = &userBehavior{prev: bsBare{eng.DefaultBehavior}, typeName: "Seam",
+	u = &userBehavior{prev: bsBare{core.DefaultBehavior}, typeName: "Seam",
 		deqBody: []Value{NewBoolean(true)}}
 	if _, err := u.DeepEqualValues(a, b); err == nil ||
 		!strings.Contains(err.Error(), "no registry") {
@@ -128,13 +128,13 @@ func TestBehaveSizeSeam(t *testing.T) {
 	v := NewInteger(3)
 
 	// No body, prev has a Sizer → delegate.
-	u := bsWrapper(t, bsPrev{eng.DefaultBehavior})
+	u := bsWrapper(t, bsPrev{core.DefaultBehavior})
 	if got := u.Size(v); got != 7 {
 		t.Errorf("delegate arm: got %d, want 7", got)
 	}
 
 	// No body, prev has none → 0, matching SizeOf's own no-Sizer answer.
-	u = bsWrapper(t, bsBare{eng.DefaultBehavior})
+	u = bsWrapper(t, bsBare{core.DefaultBehavior})
 	if got := u.Size(v); got != 0 {
 		t.Errorf("no-sizer arm: got %d, want 0", got)
 	}
@@ -167,7 +167,7 @@ func TestBehaveSizeSeam(t *testing.T) {
 // TestBehaveUnaryBodySeam drives runUnaryBody's own arms — the shared
 // runner behind the truthy and size slots.
 func TestBehaveUnaryBodySeam(t *testing.T) {
-	u := &userBehavior{prev: bsBare{eng.DefaultBehavior}, typeName: "Seam"}
+	u := &userBehavior{prev: bsBare{core.DefaultBehavior}, typeName: "Seam"}
 	if _, err := u.runUnaryBody([]Value{NewInteger(1)}, NewInteger(0), "truthy"); err == nil ||
 		!strings.Contains(err.Error(), "no registry") {
 		t.Errorf("nil-registry arm: err = %v", err)
@@ -191,19 +191,19 @@ func TestBehaveUnaryBodySeam(t *testing.T) {
 // degrades an untyped param to Any, not nil), so the guard is reachable
 // only from Go callers handing in a hand-built FnSig.
 func TestBehaveValidatorNilTypeArms(t *testing.T) {
-	unary := eng.FnSig{Params: []eng.FnParam{{}}, Returns: []*eng.Type{TBoolean}}
+	unary := core.FnSig{Params: []core.FnParam{{}}, Returns: []*core.Type{TBoolean}}
 	if _, err := validateTruthySig(unary); err == nil ||
 		!strings.Contains(err.Error(), "must declare a type") {
 		t.Errorf("truthy nil-type arm: err = %v", err)
 	}
-	unary.Returns = []*eng.Type{TInteger}
+	unary.Returns = []*core.Type{TInteger}
 	if _, err := validateSizeSig(unary); err == nil ||
 		!strings.Contains(err.Error(), "must declare a type") {
 		t.Errorf("size nil-type arm: err = %v", err)
 	}
-	binary := eng.FnSig{
-		Params:  []eng.FnParam{{Type: TInteger}, {}},
-		Returns: []*eng.Type{TBoolean},
+	binary := core.FnSig{
+		Params:  []core.FnParam{{Type: TInteger}, {}},
+		Returns: []*core.Type{TBoolean},
 	}
 	if _, err := validateDeqSig(binary); err == nil ||
 		!strings.Contains(err.Error(), "must declare a type") {
@@ -216,7 +216,7 @@ func TestBehaveValidatorNilTypeArms(t *testing.T) {
 // whose top CONFORMS to Integer without carrying one (a bare type
 // literal) so the accessor's own failure path reports 0.
 func TestBehaveBodyResultEdgeArms(t *testing.T) {
-	u := bsWrapper(t, bsBare{eng.DefaultBehavior})
+	u := bsWrapper(t, bsBare{core.DefaultBehavior})
 
 	// `1 drop` runs fine and produces nothing.
 	u.deqBody = []Value{NewInteger(1), NewWord("drop")}
@@ -234,7 +234,7 @@ func TestBehaveBodyResultEdgeArms(t *testing.T) {
 	// A DepScalar over Integer (`Integer gt 5`) CONFORMS to Integer but
 	// carries DepScalarInfo, so it passes the ConformsTo gate and fails
 	// in AsInteger itself — the arm the literal above cannot reach.
-	u.sizeBody = []Value{eng.NewDepScalar(eng.DepGT, NewInteger(5))}
+	u.sizeBody = []Value{core.NewDepScalar(core.DepGT, NewInteger(5))}
 	if got := u.Size(NewInteger(3)); got != 0 {
 		t.Errorf("size depscalar-top arm: got %d, want 0", got)
 	}

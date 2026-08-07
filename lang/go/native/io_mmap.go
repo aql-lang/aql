@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
@@ -99,8 +99,8 @@ func (mi *MmapInfo) flush() error {
 // mmapFormatBehavior renders a Mmap as "Mmap(id,path)".
 type mmapFormatBehavior struct{}
 
-func (mmapFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (mmapFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (mmapFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (mmapFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (mmapFormatBehavior) Format(v Value) string {
 	if mi, ok := asMmapInfo(v); ok {
 		return fmt.Sprintf("Mmap(%s,%s)", mi.ID, mi.Path)
@@ -110,10 +110,10 @@ func (mmapFormatBehavior) Format(v Value) string {
 
 // MintMmapType / NewMmapType mint the module-scoped Mmap resource type.
 func MintMmapType(r *Registry) *Type {
-	return r.Types.MintTypeWithBehavior("Mmap", eng.TIdeal, mmapFormatBehavior{})
+	return r.Types.MintTypeWithBehavior("Mmap", core.TIdeal, mmapFormatBehavior{})
 }
 func NewMmapType() *Type {
-	return eng.NewDynamicTypeTable().MintTypeWithBehavior("Mmap", eng.TIdeal, mmapFormatBehavior{})
+	return core.NewDynamicTypeTable().MintTypeWithBehavior("Mmap", core.TIdeal, mmapFormatBehavior{})
 }
 
 // asMmapInfo unwraps a Mmap handle's payload.
@@ -148,7 +148,7 @@ func doMmapWord(args []Value, r *Registry, mmapType *Type) ([]Value, error) {
 		return nil, r.BoruError("mmap_error", fmt.Sprintf("mmap: %v", err), "mmap")
 	}
 	info := &MmapInfo{ID: GenerateID("M_"), Path: path, Writable: writable, region: region}
-	return []Value{eng.NewValueRaw(mmapType, ExtensionPayload{Body: info})}, nil
+	return []Value{core.NewValueRaw(mmapType, ExtensionPayload{Body: info})}, nil
 }
 
 // readMmapWord reads from a mapped region: {offset}/{length} window it,

@@ -3,7 +3,7 @@ package shrink
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
@@ -28,7 +28,7 @@ func TestShrinkCost_DoEval(t *testing.T) {
 // TestLiteralComplexity_NilParent covers the v.Parent == nil guard: a
 // zero-value Value has complexity 0.
 func TestLiteralComplexity_NilParent(t *testing.T) {
-	if got := literalComplexity(eng.Value{}); got != 0 {
+	if got := literalComplexity(core.Value{}); got != 0 {
 		t.Errorf("literalComplexity(zero Value) = %d, want 0", got)
 	}
 }
@@ -36,16 +36,16 @@ func TestLiteralComplexity_NilParent(t *testing.T) {
 // TestLiteralComplexity_Float covers the Float arm: complexity is the
 // integer magnitude of the (truncated) float value.
 func TestLiteralComplexity_Float(t *testing.T) {
-	if got := literalComplexity(eng.NewFloat(8.0)); got != 8 {
+	if got := literalComplexity(core.NewFloat(8.0)); got != 8 {
 		t.Errorf("literalComplexity(8.0) = %d, want 8", got)
 	}
 	// Fractional value truncates toward zero before magnitude.
-	if got := literalComplexity(eng.NewFloat(3.9)); got != 3 {
+	if got := literalComplexity(core.NewFloat(3.9)); got != 3 {
 		t.Errorf("literalComplexity(3.9) = %d, want 3 (int64 truncation)", got)
 	}
 	// Confirm it flows through ShrinkCost too (PushLit base + complexity).
 	form := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewFloat(8.0)},
+		stackform.PushLit{V: core.NewFloat(8.0)},
 	}}
 	if got := ShrinkCost(form, DefaultPolicy()); got != 9 {
 		t.Errorf("ShrinkCost([PushLit 8.0]) = %d, want 9 (1 base + 8)", got)
@@ -55,14 +55,14 @@ func TestLiteralComplexity_Float(t *testing.T) {
 // TestLiteralComplexity_List covers the List arm: complexity is the
 // element count plus the recursive complexity of each element.
 func TestLiteralComplexity_List(t *testing.T) {
-	list := eng.NewList([]eng.Value{eng.NewInteger(1), eng.NewInteger(2)})
+	list := core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2)})
 	// c = Len(2) + complexity(1)=1 + complexity(2)=2 = 5.
 	if got := literalComplexity(list); got != 5 {
 		t.Errorf("literalComplexity([1,2]) = %d, want 5", got)
 	}
 	// Nested list recurses: [[3]] → Len(1) + (Len(1) + complexity(3)=3).
-	nested := eng.NewList([]eng.Value{
-		eng.NewList([]eng.Value{eng.NewInteger(3)}),
+	nested := core.NewList([]core.Value{
+		core.NewList([]core.Value{core.NewInteger(3)}),
 	})
 	// outer: 1 + inner; inner: 1 + 3 = 4; total = 1 + 4 = 5.
 	if got := literalComplexity(nested); got != 5 {
@@ -73,7 +73,7 @@ func TestLiteralComplexity_List(t *testing.T) {
 // TestLiteralComplexity_UnhandledIsOne covers the final `return 1`
 // placeholder for a value whose type matches none of the arms (Atom).
 func TestLiteralComplexity_UnhandledIsOne(t *testing.T) {
-	if got := literalComplexity(eng.NewAtom("foo")); got != 1 {
+	if got := literalComplexity(core.NewAtom("foo")); got != 1 {
 		t.Errorf("literalComplexity(atom) = %d, want 1", got)
 	}
 }

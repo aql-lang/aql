@@ -5,7 +5,7 @@ import (
 
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TestStampServiceFilterLambda pins the mini-s3 bucket-list wall: an

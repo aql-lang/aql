@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -21,9 +21,9 @@ func s7bTypeNative(t *testing.T, name string) native.NativeFunc {
 
 func s7bTypeHandler(t *testing.T, name string) native.Handler {
 	t.Helper()
-	gi, ok := s7bTypeNative(t, name).Signatures[0].Impl.(*eng.GoImpl)
+	gi, ok := s7bTypeNative(t, name).Signatures[0].Impl.(*core.GoImpl)
 	if !ok {
-		t.Fatalf("%s: Impl not *eng.GoImpl", name)
+		t.Fatalf("%s: Impl not *core.GoImpl", name)
 	}
 	return gi.Handler
 }

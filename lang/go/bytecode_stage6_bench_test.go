@@ -5,7 +5,7 @@ import (
 
 	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // Stage-6 measurement harness (design/boru-bytecode-plan.0.md Stage 6):

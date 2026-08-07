@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // storageNatives covers `set` / `get` / `context`. The unified
@@ -522,7 +523,7 @@ func d2AdoptTyped(r *Registry, container, v Value, word string) (Value, error) {
 		// instead (#9, Codex round 9) — validation already passed via Unify.
 		if IsFlexMap(v) || IsFlexList(v) {
 			if ci, cerr := AsChildType(elem); cerr == nil {
-				return eng.RetagFlexElem(v, ci.Child), nil
+				return core.RetagFlexElem(v, ci.Child), nil
 			}
 		}
 		return unified, nil
@@ -570,9 +571,9 @@ func d2ReTagContainer(r *Registry, typedSrc, result Value, word string) (Value, 
 	var constraint Value
 	switch {
 	case result.Parent.ConformsTo(TMap):
-		constraint = eng.NewTypedMap(elem)
+		constraint = core.NewTypedMap(elem)
 	case result.Parent.ConformsTo(TList):
-		constraint = eng.NewCarrierTypedListValue(elem)
+		constraint = check.NewCarrierTypedListValue(elem)
 	default:
 		return result, nil
 	}
@@ -616,7 +617,7 @@ func d2TypedListResidual(src Value) Value {
 	if !ok {
 		return NewCarrier(TList)
 	}
-	v := eng.NewCarrierTypedListValue(elem)
+	v := check.NewCarrierTypedListValue(elem)
 	v.SetElemConstraint(elem)
 	return v
 }
@@ -626,7 +627,7 @@ func d2TypedMapResidual(src Value) Value {
 	if !ok {
 		return NewCarrier(TMap)
 	}
-	v := eng.NewTypedMap(elem)
+	v := core.NewTypedMap(elem)
 	v.Carrier = true
 	v.SetElemConstraint(elem)
 	return v
@@ -646,7 +647,7 @@ func d2CheckWrite(r *Registry, recv, v Value, word string, pos SrcPos) {
 	if !ok || d2WriteConforms(elem, v) {
 		return
 	}
-	eng.CheckAddUniqueDiagnostic(r, "type_error",
+	check.CheckAddUniqueDiagnostic(r, "type_error",
 		fmt.Sprintf("%s: value %s does not conform to element type %s", word, v.String(), elem.String()),
 		word, pos)
 }
@@ -665,7 +666,7 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	}
 	key := StoreKey(args[0])
 	// The copy-returning column stays ENTIRELY immutable: a value with
-	// flex inside is snapshot to its plain shape (eng.AdoptIntoNode),
+	// flex inside is snapshot to its plain shape (core.AdoptIntoNode),
 	// so the "immutable" result can never change underneath through a
 	// live flex handle. Flex-free values pass through untouched.
 	// R2: a write into a typed container ({:T}) must conform to the element tag
@@ -674,7 +675,7 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if werr != nil {
 		return nil, werr
 	}
-	val, aerr := eng.AdoptIntoNode(tagged)
+	val, aerr := core.AdoptIntoNode(tagged)
 	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}
@@ -815,7 +816,7 @@ func delStoreReturnsFn(args []Value, r *Registry) []Value {
 	}
 	key := StoreKey(args[0])
 	if !r.Check.Compiling {
-		if ss, ok := eng.StoreShapeOf(args[1]); ok {
+		if ss, ok := check.StoreShapeOf(args[1]); ok {
 			ss.RecordKey(key, NewCarrier(TAny))
 		}
 	}
@@ -846,7 +847,7 @@ func delClassDetail(args []Value) string {
 // always-erroring handler.
 func delClassInstanceReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 {
-		eng.CheckAddUniqueDiagnostic(r, "type_error", delClassDetail(args), "del", args[0].Pos())
+		check.CheckAddUniqueDiagnostic(r, "type_error", delClassDetail(args), "del", args[0].Pos())
 	}
 	return []Value{}
 }
@@ -874,7 +875,7 @@ func delListDetail(args []Value) string {
 // delListReturns is the guaranteed-error mirror of delListHandler.
 func delListReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 {
-		eng.CheckAddUniqueDiagnostic(r, "type_error", delListDetail(args), "del", args[0].Pos())
+		check.CheckAddUniqueDiagnostic(r, "type_error", delListDetail(args), "del", args[0].Pos())
 	}
 	return []Value{}
 }
@@ -902,7 +903,7 @@ func delMapTypedReturns(args []Value, _ *Registry) []Value {
 // legacy fresh FlexMap carrier, exactly as set's twin does.
 func delFlexMapReturns(args []Value, r *Registry) []Value {
 	if r != nil && !r.Check.Compiling && len(args) >= 2 {
-		if ss, ok := eng.StoreShapeOf(args[1]); ok {
+		if ss, ok := check.StoreShapeOf(args[1]); ok {
 			ss.RecordKey(StoreKey(args[0]), NewCarrier(TAny))
 			return []Value{args[1]}
 		}
@@ -955,14 +956,14 @@ func setClassInstanceReturns(args []Value, r *Registry) []Value {
 		if name == "" {
 			name = args[2].Parent.Name()
 		}
-		eng.CheckAddUniqueDiagnostic(r, "sealed_field",
+		check.CheckAddUniqueDiagnostic(r, "sealed_field",
 			fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
 			"set", args[0].Pos())
 		return []Value{}
 	}
 	if IsConcrete(args[1]) {
 		if _, err := MakeClassFieldValue(args[1], constraint, r); err != nil {
-			eng.CheckAddUniqueDiagnostic(r, "type_error",
+			check.CheckAddUniqueDiagnostic(r, "type_error",
 				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set", args[0].Pos())
 		}
 	}
@@ -1023,7 +1024,7 @@ func setFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// A flex tree stays ENTIRELY mutable: a plain Node value is deep-
 	// flexed on the way in — otherwise a later write into the immutable
 	// inner is copy-returning and silently lost. Flex handles share.
-	val, aerr := eng.AdoptIntoFlex(tagged)
+	val, aerr := core.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.BoruError("set_error", aerr.Error(), "set")
 	}
@@ -1068,11 +1069,11 @@ func weakValueMirror(r *Registry, v Value, word, container string) {
 	// literal, or ANY None-shaped check value — None has a single
 	// inhabitant, so even a None carrier is provably the none the
 	// runtime refuses.
-	if !IsConcrete(v) && !eng.IsBareTypeNode(v) && !eng.IsNoneShape(v) {
+	if !IsConcrete(v) && !core.IsBareTypeNode(v) && !core.IsNoneShape(v) {
 		return
 	}
-	if refusal := eng.ClassifyWeakRefusal(v); refusal != nil {
-		eng.CheckAddUniqueDiagnostic(r, "weak_value_error",
+	if refusal := core.ClassifyWeakRefusal(v); refusal != nil {
+		check.CheckAddUniqueDiagnostic(r, "weak_value_error",
 			fmt.Sprintf("%s: cannot store %s in a %s", word, refusal.Kind, container),
 			word, v.Pos())
 	}
@@ -1185,7 +1186,7 @@ func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		return nil, werr
 	}
 	// Entirely-mutable invariant: adopt a plain Node element into flex.
-	val, aerr := eng.AdoptIntoFlex(tagged)
+	val, aerr := core.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.BoruError("set_error", aerr.Error(), "set")
 	}
@@ -1200,7 +1201,7 @@ func setFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.BoruError("set_error", "set: expected a FlexXml, got "+container.Parent.String(), "set")
 	}
 	name := StoreKey(args[0])
-	if !eng.IsValidXmlName(name) {
+	if !core.IsValidXmlName(name) {
 		return nil, r.BoruErrorHint("set_error",
 			"set: "+name+" is not a valid XML attribute name", "set",
 			"attribute names start with a letter or '_' and contain letters, digits, '-', '.', or ':'")
@@ -1400,10 +1401,10 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	// while the dispatch itself still records a runtime-re-matching poly
 	// whose NOut claim the VM enforces (a hidden-writer bound miss defers
 	// to the interpreter instead of shifting the stack).
-	if ss, ok := eng.StoreShapeOf(container); ok {
+	if ss, ok := check.StoreShapeOf(container); ok {
 		if r != nil {
 			if v, hit := ss.LookupKey(getKey(key)); hit {
-				return []Value{eng.ShapeFieldRead(v)}
+				return []Value{check.ShapeFieldRead(v)}
 			}
 		}
 		return dyn
@@ -1704,7 +1705,7 @@ func setStoreReturnsFn(args []Value, r *Registry) []Value {
 	// only: the compiled stream must stay byte-identical (store rows
 	// compile natively through the flat-map typing today).
 	if r != nil && !r.Check.Compiling && len(args) >= 3 {
-		if ss, ok := eng.StoreShapeOf(args[2]); ok {
+		if ss, ok := check.StoreShapeOf(args[2]); ok {
 			ss.RecordKey(StoreKey(args[0]), args[1])
 		}
 	}
@@ -1763,7 +1764,7 @@ func getStoreReturnsFn(args []Value, r *Registry) []Value {
 		return []Value{NewDynamicCarrier(TAny)}
 	}
 	if r != nil && !r.Check.Compiling {
-		if ss, ok := eng.StoreShapeOf(args[1]); ok {
+		if ss, ok := check.StoreShapeOf(args[1]); ok {
 			if v, hit := ss.LookupKey(StoreKey(args[0])); hit {
 				return []Value{v}
 			}
@@ -1834,8 +1835,8 @@ func setFlexMapReturns(args []Value, r *Registry) []Value {
 	// len guard: the no-signature recovery can assume this sig with a
 	// short arg window (defensive — panic prevention).
 	if r != nil && !r.Check.Compiling && len(args) >= 3 {
-		if ss, ok := eng.StoreShapeOf(args[2]); ok {
-			ss.RecordKey(StoreKey(args[0]), eng.AdoptShapeValue(args[1], 1))
+		if ss, ok := check.StoreShapeOf(args[2]); ok {
+			ss.RecordKey(StoreKey(args[0]), check.AdoptShapeValue(args[1], 1))
 			return []Value{args[2]}
 		}
 	}
@@ -1901,7 +1902,7 @@ func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	// Entirely-immutable invariant for the copy-returning column: see
 	// setMapHandler.
-	val, aerr := eng.AdoptIntoNode(tagged)
+	val, aerr := core.AdoptIntoNode(tagged)
 	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}

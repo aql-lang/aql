@@ -10,7 +10,9 @@ package native
 // members: Micron properties, class/record/table/resource fields, and
 // user-defined Micron kinds.
 
-import eng "github.com/boru-lang/boru/eng/go"
+import (
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // Member is one dot-accessible member of a value or type.
 type Member struct {
@@ -50,13 +52,13 @@ func MembersOfType(typeName string, r *Registry) []Member {
 // list and fall to the caller's map-key recovery instead.
 func membersOfTypeBody(body Value) []Member {
 	switch d := body.Data.(type) {
-	case eng.ClassTypeInfo:
+	case core.ClassTypeInfo:
 		return fieldsToMembers(d.AllFields(), "field")
-	case eng.RecordTypeInfo:
+	case core.RecordTypeInfo:
 		return fieldsToMembers(d.Fields, "field")
-	case eng.TableTypeInfo:
+	case core.TableTypeInfo:
 		return fieldsToMembers(d.Record.Fields, "field")
-	case eng.MicronTypeInfo:
+	case core.MicronTypeInfo:
 		return fieldsToMembers(d.Fields, "property")
 	}
 	return nil
@@ -64,7 +66,7 @@ func membersOfTypeBody(body Value) []Member {
 
 // fieldsToMembers converts a field/property schema map to members, rendering
 // each entry's value as the member's type name for the completion detail.
-func fieldsToMembers(m *eng.OrderedMap, kind string) []Member {
+func fieldsToMembers(m *core.OrderedMap, kind string) []Member {
 	if m == nil {
 		return nil
 	}

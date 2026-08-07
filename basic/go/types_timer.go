@@ -3,7 +3,7 @@ package basic
 import (
 	"fmt"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The Timeout / Interval timer types are owned by boru:time-util — the
@@ -17,21 +17,21 @@ import (
 // NewTimeout constructs a Timeout value carrying the given
 // TimeoutInfo payload.
 func (tt TemporalModuleTypes) NewTimeout(info *TimeoutInfo) Value {
-	return eng.NewValueRaw(tt.Timeout, info)
+	return core.NewValueRaw(tt.Timeout, info)
 }
 
 // NewInterval constructs an Interval value carrying the given
 // IntervalInfo payload. See NewTimeout.
 func (tt TemporalModuleTypes) NewInterval(info *IntervalInfo) Value {
-	return eng.NewValueRaw(tt.Interval, info)
+	return core.NewValueRaw(tt.Interval, info)
 }
 
 // TimeoutFormatBehavior renders a Timeout as "Timeout(id,Nms)".
 // Moved from eng/coretype_format_behaviors.go at Step 8.
 type TimeoutFormatBehavior struct{}
 
-func (TimeoutFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (TimeoutFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (TimeoutFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (TimeoutFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (TimeoutFormatBehavior) Format(v Value) string {
 	if ti, ok := v.Data.(*TimeoutInfo); ok {
 		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
@@ -42,8 +42,8 @@ func (TimeoutFormatBehavior) Format(v Value) string {
 // IntervalFormatBehavior renders an Interval as "Interval(id,Nms)".
 type IntervalFormatBehavior struct{}
 
-func (IntervalFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (IntervalFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (IntervalFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (IntervalFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (IntervalFormatBehavior) Format(v Value) string {
 	if ii, ok := v.Data.(*IntervalInfo); ok {
 		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
@@ -51,7 +51,7 @@ func (IntervalFormatBehavior) Format(v Value) string {
 	return "Interval(nil)"
 }
 
-// ToMap / ToList implement eng.IdealConverter for Timeout / Interval:
+// ToMap / ToList implement core.IdealConverter for Timeout / Interval:
 // {id:… ms:…} and [id ms].
 func (TimeoutFormatBehavior) ToMap(v Value) (Value, error) {
 	m := NewOrderedMap()

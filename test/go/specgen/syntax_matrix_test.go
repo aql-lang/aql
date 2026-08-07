@@ -50,7 +50,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
@@ -276,7 +276,7 @@ func TestSyntaxMatrixInterpreter(t *testing.T) {
 		if err != nil {
 			got = errorClass(err)
 		} else {
-			got = eng.Canon(out)
+			got = core.Canon(out)
 		}
 		if got != r.expected {
 			sink.fail("L%d %q: interpreter gave %q, spec records %q", r.line, r.input, got, r.expected)
@@ -731,7 +731,7 @@ func verifyPassing(t *testing.T, set frontierSet) {
 			sink.fail("L%d %q: passing row failed to interpret: %v", r.line, r.input, err)
 			return
 		}
-		if got := eng.Canon(out); got != r.expected {
+		if got := core.Canon(out); got != r.expected {
 			sink.fail("L%d %q: interpreter gave %q, passing row records %q", r.line, r.input, got, r.expected)
 			return
 		}

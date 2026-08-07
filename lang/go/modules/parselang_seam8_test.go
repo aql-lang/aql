@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -115,11 +115,11 @@ func TestW8ParseFoldableValue(t *testing.T) {
 		t.Error("a map with a carrier value is not foldable")
 	}
 	// list-typed value whose payload AsList refuses (405 → return false).
-	if parseFoldableValue(eng.NewExtension(native.TList, "w8")) {
+	if parseFoldableValue(core.NewExtension(native.TList, "w8")) {
 		t.Error("a list value AsList cannot read is not foldable")
 	}
 	// map-typed value whose payload AsMap refuses (416 → return false).
-	if parseFoldableValue(eng.NewExtension(native.TMap, "w8")) {
+	if parseFoldableValue(core.NewExtension(native.TMap, "w8")) {
 		t.Error("a map value AsMap cannot read is not foldable")
 	}
 }
@@ -132,7 +132,7 @@ func TestW8ResolveParseSourceBad(t *testing.T) {
 		t.Error("resolveParseSource: an Integer source should error")
 	}
 	// 441: a concrete TMap-typed value AsMap reads as nil.
-	if _, err := resolveParseSource(eng.NewExtension(native.TMap, "w8"), r); err == nil {
+	if _, err := resolveParseSource(core.NewExtension(native.TMap, "w8"), r); err == nil {
 		t.Error("resolveParseSource: an unreadable source map should error")
 	}
 }

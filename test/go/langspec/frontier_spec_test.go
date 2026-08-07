@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/specfix"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/modules"
@@ -87,7 +87,7 @@ func loadFrontierRows(t *testing.T) []frontierRow {
 
 // runFrontierInterp evaluates a row on the interpreter with the SAME wiring
 // as the production spec runner (langspec_test.go's closure) and reports the
-// canonical outcome string (eng.Canon of the stack, or ERROR:<text>).
+// canonical outcome string (core.Canon of the stack, or ERROR:<text>).
 func runFrontierInterp(input string) (string, error) {
 	values, err := parser.Parse(input)
 	if err != nil {
@@ -105,7 +105,7 @@ func runFrontierInterp(input string) (string, error) {
 	if rerr != nil {
 		return "ERROR:" + rerr.Error(), nil
 	}
-	return eng.Canon(out), nil
+	return core.Canon(out), nil
 }
 
 // TestFrontierSpecInterp — the semantics oracle: every frontier row must PASS

@@ -3,7 +3,7 @@ package formatter
 import (
 	"strings"
 
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // TabnasParse is the tabnas-lexer front end for the formatter: it tokenises

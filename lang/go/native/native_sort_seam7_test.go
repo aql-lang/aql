@@ -35,7 +35,7 @@ func TestSortMapHandlerArms(t *testing.T) {
 		t.Fatal("sort of Map type literal: expected error")
 	}
 	// NOTE: the `if m == nil` guard (native_sort.go:69) is unreachable —
-	// eng.AsMap returns either (m, nil) or (nil, err); it never returns a
+	// core.AsMap returns either (m, nil) or (nil, err); it never returns a
 	// nil ReadMap interface with a nil error. (A MapPayload{M:nil} yields a
 	// typed-nil *OrderedMap wrapped in a non-nil interface, which the
 	// `m == nil` check does not catch.) Documented dead guard.

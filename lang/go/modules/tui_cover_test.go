@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
 	"github.com/boru-lang/boru/lang/go/tuikit"
@@ -34,7 +34,7 @@ func tcErrContains(t *testing.T, err error, want string) {
 
 func tcCode(t *testing.T, err error) string {
 	t.Helper()
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if !errors.As(err, &ae) {
 		t.Fatalf("not a BoruError: %v", err)
 	}
@@ -416,9 +416,9 @@ func TestTuiDeliverEvents(t *testing.T) {
 		t.Fatalf("no Terminal in %v", out)
 	}
 	if reg.Procs == nil {
-		reg.Procs = eng.NewProcessRuntime()
+		reg.Procs = core.NewProcessRuntime()
 	}
-	proc := eng.NewProcess(reg.Procs, 8, eng.OverflowBlock)
+	proc := core.NewProcess(reg.Procs, 8, core.OverflowBlock)
 	if err := reg.Procs.Insert(proc); err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +463,7 @@ func TestTuiDeliverEvents(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	proc2 := eng.NewProcess(reg.Procs, 8, eng.OverflowBlock)
+	proc2 := core.NewProcess(reg.Procs, 8, core.OverflowBlock)
 	if err := reg.Procs.Insert(proc2); err != nil {
 		t.Fatal(err)
 	}

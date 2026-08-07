@@ -30,7 +30,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
@@ -325,7 +327,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 		return true
 	}
 	for _, d := range diags {
-		if d.Severity == eng.SeverityError {
+		if d.Severity == core.SeverityError {
 			return true
 		}
 	}
@@ -420,7 +422,7 @@ func TestCheckTypeSoundness(t *testing.T) {
 
 // checkRow runs one row in check mode and returns the residual
 // carrier stack plus whether the checker flagged it.
-func checkRow(t *testing.T, input string) ([]eng.Value, bool) {
+func checkRow(t *testing.T, input string) ([]core.Value, bool) {
 	t.Helper()
 	values, err := parser.Parse(input)
 	if err != nil {
@@ -443,7 +445,7 @@ func checkRow(t *testing.T, input string) ([]eng.Value, bool) {
 		return nil, true
 	}
 	for _, d := range diags {
-		if d.Severity == eng.SeverityError {
+		if d.Severity == core.SeverityError {
 			return nil, true
 		}
 	}
@@ -453,7 +455,7 @@ func checkRow(t *testing.T, input string) ([]eng.Value, bool) {
 // runRow executes one row at runtime; ok=false when the row needs an
 // environment this harness doesn't provide (it errored at runtime
 // although the spec expects a value — fixtures, network, files).
-func runRow(t *testing.T, input string) ([]eng.Value, bool) {
+func runRow(t *testing.T, input string) ([]core.Value, bool) {
 	t.Helper()
 	values, err := parser.Parse(input)
 	if err != nil {
@@ -478,7 +480,7 @@ func runRow(t *testing.T, input string) ([]eng.Value, bool) {
 // carrier stack position-for-position from the TOP. A checked stack
 // may be longer (None padding from branch joins); a runtime stack
 // longer than the checked one is a violation.
-func stackTypeCovered(checked, actual []eng.Value) bool {
+func stackTypeCovered(checked, actual []core.Value) bool {
 	// Variadic-spread bottom carrier (a `[]`-declared recursive fn whose depth
 	// is a runtime value, e.g. recursion.tsv:53 → 0-or-more Integers): the
 	// fixed prefix `checked[1:]` is checked top-aligned as usual, and the bottom
@@ -486,7 +488,7 @@ func stackTypeCovered(checked, actual []eng.Value) bool {
 	// real typeCovered(elem, ·), so this adds COUNT flexibility only, never TYPE
 	// flexibility (a wrong-typed leak is still flagged).
 	if len(checked) > 0 {
-		if elem, ok := eng.IsVariadicSpread(checked[0]); ok {
+		if elem, ok := check.IsVariadicSpread(checked[0]); ok {
 			fixed := checked[1:]
 			if len(actual) < len(fixed) {
 				return false
@@ -519,7 +521,7 @@ func stackTypeCovered(checked, actual []eng.Value) bool {
 
 // typeCovered reports whether one checked carrier admits the runtime
 // value's type.
-func typeCovered(checked, actual eng.Value) bool {
+func typeCovered(checked, actual core.Value) bool {
 	if checked.Dynamic {
 		return true
 	}
@@ -532,18 +534,18 @@ func typeCovered(checked, actual eng.Value) bool {
 	// enum mints share members and differ only by ID).
 	if actualIsTypeValue(actual) {
 		cnode := checked.Parent
-		if eng.IsBareTypeNode(checked) {
-			cnode = eng.ValueType(checked)
+		if core.IsBareTypeNode(checked) {
+			cnode = core.ValueType(checked)
 		}
-		if cnode != nil && eng.TType.ConformsTo(cnode) {
+		if cnode != nil && core.TType.ConformsTo(cnode) {
 			return true
 		}
-		if dn := eng.ValueType(actual); dn != nil && cnode != nil && dn.ConformsTo(cnode) {
+		if dn := core.ValueType(actual); dn != nil && cnode != nil && dn.ConformsTo(cnode) {
 			return true
 		}
 	}
-	if eng.IsDisjunct(checked) {
-		di, err := eng.AsDisjunct(checked)
+	if core.IsDisjunct(checked) {
+		di, err := core.AsDisjunct(checked)
 		if err != nil {
 			return false
 		}
@@ -555,8 +557,8 @@ func typeCovered(checked, actual eng.Value) bool {
 		return false
 	}
 	node := checked.Parent
-	if eng.IsBareTypeNode(checked) {
-		node = eng.ValueType(checked)
+	if core.IsBareTypeNode(checked) {
+		node = core.ValueType(checked)
 	}
 	if node == nil {
 		return false
@@ -582,12 +584,12 @@ func typeCovered(checked, actual eng.Value) bool {
 // shape, or a Type/-rooted value (Function / Disjunct / Enum). Used by
 // typeCovered so a `typeof`/type-algebra result is judged by its
 // type-membership, not by its denoted type's lattice parent.
-func actualIsTypeValue(v eng.Value) bool {
-	return eng.IsBareTypeNode(v) || eng.IsTypeBody(v) ||
-		eng.IsRecordShape(v) || v.Parent.ConformsTo(eng.TType)
+func actualIsTypeValue(v core.Value) bool {
+	return core.IsBareTypeNode(v) || core.IsTypeBody(v) ||
+		core.IsRecordShape(v) || v.Parent.ConformsTo(core.TType)
 }
 
-func stackTypes(vs []eng.Value) string {
+func stackTypes(vs []core.Value) string {
 	parts := make([]string, len(vs))
 	for i, v := range vs {
 		parts[i] = v.Parent.Leaf()
@@ -687,9 +689,9 @@ func TestCheckAnyFrontier(t *testing.T) {
 // residualHasAnyFrontier reports whether any carrier in a residual stack
 // is Any-bounded (strict Any carrier or dynamic(Any)) — the "gave up to
 // Any" shape the frontier metric counts.
-func residualHasAnyFrontier(stk []eng.Value) bool {
+func residualHasAnyFrontier(stk []core.Value) bool {
 	for _, v := range stk {
-		if v.Parent != nil && v.Parent.Equal(eng.TAny) {
+		if v.Parent != nil && v.Parent.Equal(core.TAny) {
 			return true
 		}
 	}

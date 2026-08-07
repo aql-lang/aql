@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The `|` token marks the forward/stack boundary in an `fn` parameter
@@ -29,7 +29,7 @@ func TestStackBarrierAliasMidPosition(t *testing.T) {
 		t.Fatalf("got %d results, want 2: %v", len(result), result)
 	}
 	for i, want := range []int64{7, 7} {
-		got, err := eng.AsInteger(result[i])
+		got, err := core.AsInteger(result[i])
 		if err != nil {
 			t.Fatalf("result[%d] AsInteger: %v", i, err)
 		}
@@ -61,7 +61,7 @@ func TestStackBarrierAliasLeadingPosition(t *testing.T) {
 		t.Fatalf("got %d results, want 2: %v", len(result), result)
 	}
 	for i, want := range []int64{11, 11} {
-		got, _ := eng.AsInteger(result[i])
+		got, _ := core.AsInteger(result[i])
 		if got != want {
 			t.Errorf("result[%d] = %d, want %d", i, got, want)
 		}
@@ -98,7 +98,7 @@ func TestStackBarrierAliasTrailingPosition(t *testing.T) {
 		t.Fatalf("got %d results, want 2: %v", len(result), result)
 	}
 	for i, want := range []int64{5, 9} {
-		got, _ := eng.AsInteger(result[i])
+		got, _ := core.AsInteger(result[i])
 		if got != want {
 			t.Errorf("result[%d] = %d, want %d", i, got, want)
 		}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Span is a host-facing, read-only view of a span, passed to a host
@@ -81,7 +81,7 @@ func omToNative(m *OrderedMap) map[string]any {
 
 // valToNativeMap converts a Map Value to a Go map, or nil.
 func valToNativeMap(v Value) map[string]any {
-	if m, ok := eng.ToNative(v).(map[string]any); ok {
+	if m, ok := core.ToNative(v).(map[string]any); ok {
 		return m
 	}
 	return nil

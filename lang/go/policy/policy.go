@@ -37,7 +37,7 @@ type Policy interface {
 	// dispatch gates call — the per-export twin of CheckWord.
 	// Equivalent to Check("modules", "call", {module, export}), but
 	// exposed as a dedicated method so eng/ can take it via a
-	// one-method interface (eng.ModuleCallChecker), and so the
+	// one-method interface (core.ModuleCallChecker), and so the
 	// implementation can short-circuit in O(1) for profiles that
 	// declare no per-export rules (the common case — the decision is
 	// fully static per (module, export), so a profile-compile-time
@@ -142,7 +142,7 @@ type WordChecker interface {
 // ModuleCallChecker is the engine-side per-export shim, mirroring
 // WordChecker: the engine's module-export dispatch gates ask "may
 // this (module, export) be called?" without importing policy/.
-// The eng twin is eng.ModuleCallChecker (policy_hook.go).
+// The eng twin is core.ModuleCallChecker (policy_hook.go).
 type ModuleCallChecker interface {
 	CheckModuleCall(module, export string) error
 }

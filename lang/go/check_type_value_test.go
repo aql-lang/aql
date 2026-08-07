@@ -267,7 +267,7 @@ func TestTypedDefDepScalarCheck(t *testing.T) {
 // A `make` whose target resolves to a class / Resource schema and whose
 // construction map is CONCRETE is validated at check time — unknown field,
 // missing non-defaulted field, concrete field-value type — with the
-// byte-identical runtime messages (eng.CheckMakeConstruction via
+// byte-identical runtime messages (check.CheckMakeConstruction via
 // makeObjReturns). Value-dependent shapes stay with the runtime constructor.
 func TestMakeConstructionCheck(t *testing.T) {
 	flagged := []string{

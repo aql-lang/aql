@@ -7,7 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
 	tabnasabnf "github.com/tabnas/abnf/go"
 	tabnas "github.com/tabnas/parser/go"
@@ -141,7 +143,7 @@ func composeAltActions(acts []tabnasabnf.ActionFn) tabnas.AltAction {
 
 // asParseGrammar unwraps a Grammar carrier, or errors with a clear message.
 func asParseGrammar(v native.Value, word string, r *native.Registry) (*parseGrammar, error) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if ok {
 		if g, ok := ep.Body.(*parseGrammar); ok {
 			return g, nil
@@ -361,7 +363,7 @@ func parseGrammarHandlerFor(gT *native.Type) native.Handler {
 			j:           tabnas.Make(), // bare engine — the user's grammar is the whole grammar
 			markActions: tabnasabnf.ActionsMap{},
 		}
-		return []native.Value{eng.NewExtension(gT, g)}, nil
+		return []native.Value{core.NewExtension(gT, g)}, nil
 	}
 }
 
@@ -449,11 +451,11 @@ func parseSpecReturns(args []native.Value, r *native.Registry) []native.Value {
 		scratch := &parseGrammar{j: tabnas.Make(), markActions: tabnasabnf.ActionsMap{}}
 		if err := applySpecMap(scratch, args[1], r, true); err != nil {
 			code, detail := "parse_bad_spec", err.Error()
-			var ae *eng.BoruError
+			var ae *core.BoruError
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "Parse.spec", args[1].Pos())
+			check.CheckAddUniqueDiagnostic(r, code, detail, "Parse.spec", args[1].Pos())
 		}
 	}
 	return []native.Value{}
@@ -1181,7 +1183,7 @@ func specAnyValue(v native.Value) any {
 			return out
 		}
 	}
-	return eng.ToNative(v)
+	return core.ToNative(v)
 }
 
 // isCallableValue reports whether v is a function-like value (a Function or an

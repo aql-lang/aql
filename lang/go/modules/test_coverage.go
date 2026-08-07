@@ -4,7 +4,7 @@ import (
 	"sort"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -61,7 +61,7 @@ func (c *testCover) coveredRows(id string) map[int]bool {
 
 // activeCover returns the testCover on the parent registry, lazily creating it.
 func activeCover(parent *native.Registry) *testCover {
-	if c, ok, _ := eng.Cap[*testCover](parent, capTestCover); ok && c != nil {
+	if c, ok, _ := core.Cap[*testCover](parent, capTestCover); ok && c != nil {
 		return c
 	}
 	c := &testCover{}

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Phase 0 (design/MACROS-PHASE1.10.md §7): gensym mints fresh, never-colliding
@@ -14,17 +14,17 @@ func TestGensymUniqueAndMonotonic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	l, err := eng.AsList(res[0])
+	l, err := core.AsList(res[0])
 	if err != nil || l.Len() != 3 {
 		t.Fatalf("expected 3 gensyms, got %v", res[0])
 	}
 	seen := map[string]bool{}
 	for i := 0; i < l.Len(); i++ {
 		v := l.Get(i)
-		if !eng.IsAtom(v) {
+		if !core.IsAtom(v) {
 			t.Fatalf("gensym[%d] should be an Atom, got %s", i, v.Parent)
 		}
-		name, _ := eng.AsAtom(v)
+		name, _ := core.AsAtom(v)
 		if !strings.HasPrefix(name, "tmp$g") {
 			t.Errorf("gensym name %q should start with tmp$g", name)
 		}
@@ -42,7 +42,7 @@ func TestGensymUniqueAndMonotonic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("eq run: %v", err)
 	}
-	if b, _ := eng.AsBoolean(res[0]); b {
+	if b, _ := core.AsBoolean(res[0]); b {
 		t.Error("(gensym) eq (gensym) should be false (always distinct)")
 	}
 }
@@ -59,7 +59,7 @@ func TestMacroExpandAndHygiene(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unless: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 42 {
+	if n, _ := core.AsInteger(res[0]); n != 42 {
 		t.Errorf("unless false [42] = %v, want 42", res[0])
 	}
 
@@ -72,7 +72,7 @@ func TestMacroExpandAndHygiene(t *testing.T) {
 	if err != nil {
 		t.Fatalf("splice: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 6 {
+	if n, _ := core.AsInteger(res[0]); n != 6 {
 		t.Errorf("callit add3 [1 2 3] = %v, want 6", res[0])
 	}
 
@@ -85,7 +85,7 @@ func TestMacroExpandAndHygiene(t *testing.T) {
 	if err != nil {
 		t.Fatalf("myor: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 42 {
+	if n, _ := core.AsInteger(res[0]); n != 42 {
 		t.Errorf("hygienic myor false tmp = %v, want 42 (user tmp untouched)", res[0])
 	}
 
@@ -114,7 +114,7 @@ func TestMacroAutoHygiene(t *testing.T) {
 	if err != nil {
 		t.Fatalf("auto-hygiene myor2: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 42 {
+	if n, _ := core.AsInteger(res[0]); n != 42 {
 		t.Errorf("auto-hygienic myor2 false tmp = %v, want 42 (user tmp untouched)", res[0])
 	}
 
@@ -127,7 +127,7 @@ func TestMacroAutoHygiene(t *testing.T) {
 	if err != nil {
 		t.Fatalf("defconst: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 42 {
+	if n, _ := core.AsInteger(res[0]); n != 42 {
 		t.Errorf("defconst answer 42; answer = %v, want 42 (user-visible binding)", res[0])
 	}
 }
@@ -150,7 +150,7 @@ func TestMacroStaging(t *testing.T) {
 	if err != nil {
 		t.Fatalf("call-time staging: %v", err)
 	}
-	if n, _ := eng.AsInteger(res[0]); n != 10 {
+	if n, _ := core.AsInteger(res[0]); n != 10 {
 		t.Errorf("f 5 = %v, want 10 (twice expands at call time)", res[0])
 	}
 }

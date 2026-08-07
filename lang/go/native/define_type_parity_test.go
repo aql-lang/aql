@@ -3,13 +3,13 @@ package native
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/parser/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // installBoruType runs `def Name <bodySrc>` and returns the minted *Type,
 // so a Go-defined type can be compared against its boru twin.
-func installBoruType(t *testing.T, r *Registry, name, bodySrc string) *eng.Type {
+func installBoruType(t *testing.T, r *Registry, name, bodySrc string) *core.Type {
 	t.Helper()
 	toks, err := parser.Parse("def " + name + " " + bodySrc)
 	if err != nil {
@@ -27,7 +27,7 @@ func installBoruType(t *testing.T, r *Registry, name, bodySrc string) *eng.Type 
 
 // assertParity checks that a boru-defined type and a Go-defined type
 // answer `is` identically for every probe value.
-func assertParity(t *testing.T, label string, boruT, goT *eng.Type, probes []Value) {
+func assertParity(t *testing.T, label string, boruT, goT *core.Type, probes []Value) {
 	t.Helper()
 	for _, v := range probes {
 		if a, g := v.Is(boruT), v.Is(goT); a != g {
@@ -51,7 +51,7 @@ func TestDefineTypeGoBoruParity(t *testing.T) {
 		r, _ := DefaultRegistry()
 		boru := installBoruType(t, r, "ColorA", "(red/q tor green/q)")
 		// Go twin: the same closed set of atom values.
-		go_, err := r.DefineEnum("ColorG", eng.NewAtom("red"), eng.NewAtom("green"))
+		go_, err := r.DefineEnum("ColorG", core.NewAtom("red"), core.NewAtom("green"))
 		if err != nil {
 			t.Fatalf("DefineEnum: %v", err)
 		}
@@ -66,7 +66,7 @@ func TestDefineTypeGoBoruParity(t *testing.T) {
 		r, _ := DefaultRegistry()
 		boru := installBoruType(t, r, "NumOrStrA", "(Integer tor String)")
 		go_, err := r.DefineEnum("NumOrStrG",
-			eng.NewTypeLiteral(eng.TInteger), eng.NewTypeLiteral(eng.TString))
+			core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString))
 		if err != nil {
 			t.Fatalf("DefineEnum: %v", err)
 		}
@@ -79,7 +79,7 @@ func TestDefineTypeGoBoruParity(t *testing.T) {
 	t.Run("negation (tnot)", func(t *testing.T) {
 		r, _ := DefaultRegistry()
 		boru := installBoruType(t, r, "NotStrA", "(tnot String)")
-		go_, err := r.DefineType("NotStrG", eng.NewNegation(eng.NewTypeLiteral(eng.TString)))
+		go_, err := r.DefineType("NotStrG", core.NewNegation(core.NewTypeLiteral(core.TString)))
 		if err != nil {
 			t.Fatalf("DefineType: %v", err)
 		}
@@ -95,7 +95,7 @@ func TestDefineTypeGoBoruParity(t *testing.T) {
 // capitalised, exactly as the `def` word requires.
 func TestDefineTypeRejectsBadName(t *testing.T) {
 	r, _ := DefaultRegistry()
-	if _, err := r.DefineType("lowercase", eng.NewTypeLiteral(eng.TInteger)); err == nil {
+	if _, err := r.DefineType("lowercase", core.NewTypeLiteral(core.TInteger)); err == nil {
 		t.Error("DefineType accepted a lowercase type name")
 	}
 }

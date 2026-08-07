@@ -6,7 +6,7 @@ import (
 
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end coverage for the boru:tui Tier-1 words (tui.go) over the

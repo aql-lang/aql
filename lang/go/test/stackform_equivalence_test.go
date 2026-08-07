@@ -12,10 +12,10 @@ package test
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/stackform"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 func stackformReg(t *testing.T) *native.Registry {
@@ -47,13 +47,13 @@ func equivalentRun(t *testing.T, src string) {
 
 	// Direct run on a fresh engine for the baseline.
 	directReg := stackformReg(t)
-	direct, err := native.NewTop(directReg).Run(append([]eng.Value(nil), tokens...))
+	direct, err := native.NewTop(directReg).Run(append([]core.Value(nil), tokens...))
 	if err != nil {
 		t.Fatalf("direct run %q: %v", src, err)
 	}
 
 	// Compile + Eval round-trip.
-	_, form, err := stackform.Compile(r, append([]eng.Value(nil), tokens...))
+	_, form, err := stackform.Compile(r, append([]core.Value(nil), tokens...))
 	if err != nil {
 		t.Fatalf("compile %q: %v", src, err)
 	}
@@ -68,12 +68,12 @@ func equivalentRun(t *testing.T, src string) {
 	}
 }
 
-func stacksEqual(a, b []eng.Value) bool {
+func stacksEqual(a, b []core.Value) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		if !eng.DeepEqual(a[i], b[i]) {
+		if !core.DeepEqual(a[i], b[i]) {
 			return false
 		}
 	}
@@ -179,7 +179,7 @@ func TestStackFormPrettyRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, form1, err := stackform.Compile(r, append([]eng.Value(nil), tokens...))
+			_, form1, err := stackform.Compile(r, append([]core.Value(nil), tokens...))
 			if err != nil {
 				t.Fatal(err)
 			}

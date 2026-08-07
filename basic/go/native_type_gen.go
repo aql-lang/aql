@@ -21,7 +21,7 @@ import (
 // fnsig / fn) consume it from the trailing stack position, build their
 // body with the placeholders live, pop the bindings, and return a
 // TypeSchema that `def` installs (InstallType's TypeSchema branch).
-// `of` instantiates via eng.InstantiateSchema (constraint check +
+// `of` instantiates via core.InstantiateSchema (constraint check +
 // per-(schema,args) memoised node mint).
 var GenNatives = []NativeFunc{
 	{

@@ -1,6 +1,9 @@
 package native
 
-import "github.com/boru-lang/boru/eng/go"
+import (
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // comparisonNatives is the consolidated set of comparison words —
 // lt / gt / lte / gte / cmp / tcmp / eq / neq / deq — plus the closed-
@@ -35,12 +38,12 @@ var comparisonNatives = []NativeFunc{
 		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
-			eng.MakeDepScalarSig("lt", eng.DepLT),
+			core.MakeDepScalarSig("lt", core.DepLT),
 			{
 				Args:      []*Type{TAny, TAny},
-				Impl:      Go(eng.LtHandler),
+				Impl:      Go(core.LtHandler),
 				Returns:   []*Type{TBoolean},
-				ReturnsFn: eng.OrderingReturnsFn(eng.LtHandler, TBoolean), BarrierPos: -1,
+				ReturnsFn: check.OrderingReturnsFn(core.LtHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -49,12 +52,12 @@ var comparisonNatives = []NativeFunc{
 		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
-			eng.MakeDepScalarSig("gt", eng.DepGT),
+			core.MakeDepScalarSig("gt", core.DepGT),
 			{
 				Args:      []*Type{TAny, TAny},
-				Impl:      Go(eng.GtHandler),
+				Impl:      Go(core.GtHandler),
 				Returns:   []*Type{TBoolean},
-				ReturnsFn: eng.OrderingReturnsFn(eng.GtHandler, TBoolean), BarrierPos: -1,
+				ReturnsFn: check.OrderingReturnsFn(core.GtHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -63,12 +66,12 @@ var comparisonNatives = []NativeFunc{
 		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
-			eng.MakeDepScalarSig("lte", eng.DepLTE),
+			core.MakeDepScalarSig("lte", core.DepLTE),
 			{
 				Args:      []*Type{TAny, TAny},
-				Impl:      Go(eng.LteHandler),
+				Impl:      Go(core.LteHandler),
 				Returns:   []*Type{TBoolean},
-				ReturnsFn: eng.OrderingReturnsFn(eng.LteHandler, TBoolean), BarrierPos: -1,
+				ReturnsFn: check.OrderingReturnsFn(core.LteHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -77,12 +80,12 @@ var comparisonNatives = []NativeFunc{
 		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
-			eng.MakeDepScalarSig("gte", eng.DepGTE),
+			core.MakeDepScalarSig("gte", core.DepGTE),
 			{
 				Args:      []*Type{TAny, TAny},
-				Impl:      Go(eng.GteHandler),
+				Impl:      Go(core.GteHandler),
 				Returns:   []*Type{TBoolean},
-				ReturnsFn: eng.OrderingReturnsFn(eng.GteHandler, TBoolean), BarrierPos: -1,
+				ReturnsFn: check.OrderingReturnsFn(core.GteHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -96,9 +99,9 @@ var comparisonNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:      []*Type{TAny, TAny},
-			Impl:      Go(eng.CmpHandler),
+			Impl:      Go(core.CmpHandler),
 			Returns:   []*Type{TInteger},
-			ReturnsFn: eng.OrderingReturnsFn(eng.CmpHandler, TInteger), BarrierPos: -1,
+			ReturnsFn: check.OrderingReturnsFn(core.CmpHandler, TInteger), BarrierPos: -1,
 		}},
 	},
 	{
@@ -112,7 +115,7 @@ var comparisonNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Impl:    Go(eng.TcmpHandler),
+			Impl:    Go(core.TcmpHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
@@ -123,7 +126,7 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:       []*Type{TScalar, TScalar, TScalar},
 			TypeArgs:   map[int]bool{2: true},
-			Impl:       Go(eng.BetweenHandler, RunInCheck()),
+			Impl:       Go(core.BetweenHandler, RunInCheck()),
 			Returns:    []*Type{TScalar},
 			BarrierPos: -1,
 		}},
@@ -134,7 +137,7 @@ var comparisonNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Impl:    Go(eng.EqHandler),
+			Impl:    Go(core.EqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},
@@ -144,7 +147,7 @@ var comparisonNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Impl:    Go(eng.NeqHandler),
+			Impl:    Go(core.NeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},
@@ -154,7 +157,7 @@ var comparisonNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Impl:    Go(eng.DeqHandler),
+			Impl:    Go(core.DeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},

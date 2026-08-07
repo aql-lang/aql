@@ -5,7 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+
 	"github.com/boru-lang/boru/lang/go/native/internal/patrun"
 )
 
@@ -49,21 +51,21 @@ type patrunMatcher struct {
 	pm      *patrun.Patrun
 	side    map[string]patrunRule
 	order   []string
-	valType *eng.Type // the DECLARED type of every stored value (`patrun T`)
+	valType *core.Type // the DECLARED type of every stored value (`patrun T`)
 }
 
-func newPatrunMatcher(valType *eng.Type) *patrunMatcher {
+func newPatrunMatcher(valType *core.Type) *patrunMatcher {
 	return &patrunMatcher{pm: patrun.New(), side: map[string]patrunRule{}, valType: valType}
 }
 
 // NewPatrun builds a fresh empty Patrun whose stored values are declared to be
 // of type valType.
-func NewPatrun(valType *eng.Type) Value {
-	return eng.NewExtension(TPatrun, newPatrunMatcher(valType))
+func NewPatrun(valType *core.Type) Value {
+	return core.NewExtension(TPatrun, newPatrunMatcher(valType))
 }
 
 func asPatrun(v Value) (*patrunMatcher, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
+	ep, ok := v.Data.(core.ExtensionPayload)
 	if !ok {
 		return nil, false
 	}
@@ -132,9 +134,9 @@ func patrunNewHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 // patrunValType extracts the declared value type from `patrun T`'s type-literal
 // argument, defaulting to TAny defensively (the no-signature recovery may call
 // with a short window).
-func patrunValType(args []Value) *eng.Type {
+func patrunValType(args []Value) *core.Type {
 	if len(args) >= 1 {
-		if t := eng.ValueType(args[0]); t != nil {
+		if t := core.ValueType(args[0]); t != nil {
 			return t
 		}
 	}
@@ -162,8 +164,8 @@ func patrunNewReturns(args []Value, r *Registry) []Value {
 	if r == nil || r.Check.Compiling {
 		return []Value{NewCarrier(TPatrun)}
 	}
-	c := eng.NewStoreShapeCarrier(TPatrun, 0)
-	if ss, ok := eng.StoreShapeOf(c); ok {
+	c := core.NewStoreShapeCarrier(TPatrun, 0)
+	if ss, ok := check.StoreShapeOf(c); ok {
 		ss.DeclaredVal = patrunValType(args) // the declared value type rides the shape
 	}
 	return []Value{c}
@@ -177,9 +179,9 @@ func patrunAddReturns(args []Value, r *Registry) []Value {
 	// the whole class to runtime. Abstract / carrier values can't be proven and
 	// stay a runtime check. Plain-check only — the diagnostic never bakes.
 	if r != nil && !r.Check.Compiling && len(args) >= 3 {
-		if ss, ok := eng.StoreShapeOf(args[2]); ok && ss.DeclaredVal != nil &&
+		if ss, ok := check.StoreShapeOf(args[2]); ok && ss.DeclaredVal != nil &&
 			!ss.DeclaredVal.Equal(TAny) && IsConcrete(args[1]) && !args[1].Is(ss.DeclaredVal) {
-			r.Check.AddDiagnostic(eng.CheckDiagnostic{
+			r.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code:   "patrun_error",
 				Detail: fmt.Sprintf("add: value must be a %s, got %s", ss.DeclaredVal.Leaf(), args[1].Parent.String()),
 				Word:   "add",
@@ -193,12 +195,12 @@ func patrunAddReturns(args []Value, r *Registry) []Value {
 
 func patrunFindReturns(args []Value, r *Registry) []Value {
 	if r != nil && !r.Check.Compiling && len(args) >= 2 {
-		if ss, ok := eng.StoreShapeOf(args[1]); ok && ss.DeclaredVal != nil {
+		if ss, ok := check.StoreShapeOf(args[1]); ok && ss.DeclaredVal != nil {
 			// A typed table: surface the DECLARED element type ∪ None (an
 			// unmatched subject reads None, patrunFindHandler's miss path). No
 			// poisoning — the type is a declaration, not an inference.
-			bound := eng.JoinCarriers(NewCarrier(ss.DeclaredVal), NewCarrier(eng.TNone))
-			return []Value{eng.NewDynamicCarrierValue(bound)}
+			bound := check.JoinCarriers(NewCarrier(ss.DeclaredVal), NewCarrier(core.TNone))
+			return []Value{check.NewDynamicCarrierValue(bound)}
 		}
 	}
 	return []Value{NewDynamicCarrier(TAny)} // unshaped fallback (recovery / no shape)

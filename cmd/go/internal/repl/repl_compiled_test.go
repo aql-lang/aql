@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
@@ -29,7 +29,7 @@ func armedRegistry(t *testing.T, entries *[]string) {
 		if err != nil {
 			return nil, err
 		}
-		reg.ArmInterpEntryHook(func(e eng.InterpEntry) {
+		reg.ArmInterpEntryHook(func(e core.InterpEntry) {
 			if e.Attribution == "" {
 				*entries = append(*entries, e.Seam)
 			}

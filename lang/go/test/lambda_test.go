@@ -3,9 +3,10 @@ package test
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
 )
 
 // Lambda syntax `a => b` is sugar for `a afn b`. The `=>` token parses
@@ -35,10 +36,10 @@ func TestArrowTokenAliasesAfn(t *testing.T) {
 		t.Fatalf("token count: => produced %d, afn produced %d", len(a), len(b))
 	}
 	for i := range a {
-		if info, ok := eng.AsSugar(a[i]); ok {
+		if info, ok := core.AsSugar(a[i]); ok {
 			// The arrow position: a lambda marker where the literal
 			// spelling has word(afn).
-			if info.Kind != eng.SugarLambda {
+			if info.Kind != core.SugarLambda {
 				t.Errorf("token[%d]: marker kind %q, want lambda", i, info.Kind)
 			}
 			if b[i].String() != "word(afn)" {
@@ -70,7 +71,7 @@ func TestLambdaIdentity(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(result), result)
 	}
-	n, _ := eng.AsInteger(result[0])
+	n, _ := core.AsInteger(result[0])
 	if n != 7 {
 		t.Errorf("identity lambda → %d, want 7", n)
 	}
@@ -87,7 +88,7 @@ func TestLambdaLiteralBody(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(result), result)
 	}
-	n, _ := eng.AsInteger(result[0])
+	n, _ := core.AsInteger(result[0])
 	if n != 42 {
 		t.Errorf("literal-body lambda → %d, want 42", n)
 	}
@@ -103,7 +104,7 @@ func TestLambdaForwardApply(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(result), result)
 	}
-	n, _ := eng.AsInteger(result[0])
+	n, _ := core.AsInteger(result[0])
 	if n != 6 {
 		t.Errorf("(x:Integer => [x add 1]) 5 → %d, want 6", n)
 	}
@@ -119,7 +120,7 @@ func TestLambdaTwoArgs(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(result), result)
 	}
-	n, _ := eng.AsInteger(result[0])
+	n, _ := core.AsInteger(result[0])
 	if n != 5 {
 		t.Errorf("got %d, want 5", n)
 	}
@@ -135,7 +136,7 @@ func TestLambdaAfnAlias(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(result), result)
 	}
-	n, _ := eng.AsInteger(result[0])
+	n, _ := core.AsInteger(result[0])
 	if n != 6 {
 		t.Errorf("got %d, want 6", n)
 	}
@@ -152,7 +153,7 @@ func TestLambdaDefBinding(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(result), result)
 	}
-	n, _ := eng.AsInteger(result[0])
+	n, _ := core.AsInteger(result[0])
 	if n != 10 {
 		t.Errorf("got %d, want 10", n)
 	}
@@ -169,10 +170,10 @@ func TestLambdaProducesAnonymousFunction(t *testing.T) {
 		t.Fatalf("got %d results, want 1", len(result))
 	}
 	v := result[0]
-	if !v.Parent.Equal(eng.TFunction) {
+	if !v.Parent.Equal(core.TFunction) {
 		t.Fatalf("Parent = %s, want Function", v.Parent.String())
 	}
-	fnDef, ok := v.Data.(eng.FnDefInfo)
+	fnDef, ok := v.Data.(core.FnDefInfo)
 	if !ok {
 		t.Fatalf("payload type = %T, want FnDefInfo", v.Data)
 	}
@@ -183,7 +184,7 @@ func TestLambdaProducesAnonymousFunction(t *testing.T) {
 	if len(ownSigs) != 1 {
 		t.Errorf("got %d sigs, want 1", len(ownSigs))
 	}
-	if len(ownSigs[0].Returns) != 1 || ownSigs[0].Returns[0] != eng.TAny {
+	if len(ownSigs[0].Returns) != 1 || ownSigs[0].Returns[0] != core.TAny {
 		t.Errorf("Returns = %v, want [Any]", ownSigs[0].Returns)
 	}
 }
@@ -198,7 +199,7 @@ func TestFnNamedIsNotAnonymous(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	v := result[0]
-	fnDef, ok := v.Data.(eng.FnDefInfo)
+	fnDef, ok := v.Data.(core.FnDefInfo)
 	if !ok {
 		t.Fatalf("payload type = %T, want FnDefInfo", v.Data)
 	}
@@ -214,7 +215,7 @@ var _ = native.NewTop
 // Check-mode inference: an anonymous lambda's return carrier reflects
 // the body's actual output type, not the conservative static
 // `Returns=[Any]`. The Anonymous flag on FnDefInfo routes dispatch
-// through eng.AnalyseFnBody instead of body-splice + ReturnCheck.
+// through check.AnalyseFnBody instead of body-splice + ReturnCheck.
 func runCheckMode(t *testing.T, src string) []native.Value {
 	t.Helper()
 	reg, err := native.DefaultRegistry()
@@ -247,7 +248,7 @@ func TestLambdaCheckModeInfersInteger(t *testing.T) {
 	if !v.Carrier {
 		t.Errorf("expected carrier in check mode, got %v", v)
 	}
-	if !v.Parent.Equal(eng.TInteger) {
+	if !v.Parent.Equal(core.TInteger) {
 		t.Errorf("carrier Parent = %s, want Integer", v.Parent.String())
 	}
 }
@@ -262,7 +263,7 @@ double 5`)
 	if !v.Carrier {
 		t.Errorf("expected carrier in check mode, got %v", v)
 	}
-	if !v.Parent.Equal(eng.TInteger) {
+	if !v.Parent.Equal(core.TInteger) {
 		t.Errorf("carrier Parent = %s, want Integer", v.Parent.String())
 	}
 }
@@ -282,7 +283,7 @@ func TestLambdaCheckModeStaticAnyIsIgnored(t *testing.T) {
 	// concrete value; the inspect-static Returns=[Any] doesn't matter
 	// here because we haven't called the lambda yet — this just
 	// confirms it constructs without error.
-	if !v.Parent.Equal(eng.TFunction) {
+	if !v.Parent.Equal(core.TFunction) {
 		t.Errorf("constructed lambda Parent = %s, want Function", v.Parent.String())
 	}
 }

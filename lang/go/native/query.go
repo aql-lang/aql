@@ -223,7 +223,7 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 // materializeAll executes the accumulated query with `SELECT *` and
 // returns the result as TableData. It is the raw (pointer-receiver)
 // engine path; the public value-receiver Materialize (which satisfies
-// eng.Materializer and handles the FROM-required check + column
+// core.Materializer and handles the FROM-required check + column
 // projection) delegates here for the no-projection case.
 func (qb *QueryBuilder) materializeAll() (TableData, error) {
 	tableName, ownsTmp, err := qb.ensureSource()
@@ -407,7 +407,7 @@ func wrapQB(qb QueryBuilder) Value {
 }
 
 // Materialize runs the accumulated query and returns concrete rows.
-// Implements eng.Materializer (value receiver so it satisfies the
+// Implements core.Materializer (value receiver so it satisfies the
 // interface when stored by value in MaterializerPayload). A query with
 // no FROM table — a `select` that was never given a `from` — errors
 // here rather than silently producing nothing.
@@ -423,7 +423,7 @@ func (qb QueryBuilder) Materialize() (TableData, error) {
 }
 
 // SourceRecord returns the query's result schema without running it.
-// Implements eng.Materializer. Cheap: derived from the source/join
+// Implements core.Materializer. Cheap: derived from the source/join
 // schema (and projected columns when present), no SQLite hit.
 func (qb QueryBuilder) SourceRecord() RecordTypeInfo {
 	if !qb.HasSource {

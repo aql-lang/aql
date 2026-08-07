@@ -3,7 +3,8 @@ package native
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Store-site stamping (Phase 2 of design/RUNTIME-STAMPING.0.md): `add` and
@@ -26,7 +27,7 @@ func stampSvcReg(t *testing.T, armed bool) *Registry {
 
 // storedHandlerRefs returns the CompiledFnRef (or nil) of every handler
 // stored on the service bound to name, in stack order.
-func storedHandlerRefs(t *testing.T, r *Registry, name string) []*eng.CompiledFnRef {
+func storedHandlerRefs(t *testing.T, r *Registry, name string) []*compiler.CompiledFnRef {
 	t.Helper()
 	v, ok := r.Defs.Top(name)
 	if !ok {
@@ -36,7 +37,7 @@ func storedHandlerRefs(t *testing.T, r *Registry, name string) []*eng.CompiledFn
 	if !isSvc {
 		t.Fatalf("%q is not a service", name)
 	}
-	var refs []*eng.CompiledFnRef
+	var refs []*compiler.CompiledFnRef
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, sig := range s.pm.order {
@@ -45,9 +46,9 @@ func storedHandlerRefs(t *testing.T, r *Registry, name string) []*eng.CompiledFn
 			if !isFn {
 				t.Fatalf("stored handler is not a fn")
 			}
-			var ref *eng.CompiledFnRef
+			var ref *compiler.CompiledFnRef
 			for i := range fd.Signatures {
-				if r := eng.CompiledRef(&fd.Signatures[i]); r != nil {
+				if r := compiler.CompiledRef(&fd.Signatures[i]); r != nil {
 					ref = r
 				}
 			}
@@ -94,8 +95,8 @@ add {cmd:"GET"} ([req:Map state:Any] => [ def kv2 state.kv  kv2 get "a" ]) svc
 		t.Fatalf("unarmed call: %v", err)
 	}
 
-	nA, _ := eng.AsInteger(outA[len(outA)-1])
-	nP, _ := eng.AsInteger(outP[len(outP)-1])
+	nA, _ := core.AsInteger(outA[len(outA)-1])
+	nP, _ := core.AsInteger(outP[len(outP)-1])
 	if nA != nP || nA != 42 {
 		t.Fatalf("stamped=%d interpreted=%d, want both 42", nA, nP)
 	}
@@ -125,7 +126,7 @@ def svc (mk 7)
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
-	if n, _ := eng.AsInteger(out[len(out)-1]); n != 7 {
+	if n, _ := core.AsInteger(out[len(out)-1]); n != 7 {
 		t.Fatalf("captured handler answered %d, want 7", n)
 	}
 }
@@ -146,7 +147,7 @@ wrap ([req:Map state:Any prior:Any] => [ add 1 (prior req) ]) svc
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
-	if n, _ := eng.AsInteger(out[len(out)-1]); n != 11 {
+	if n, _ := core.AsInteger(out[len(out)-1]); n != 11 {
 		t.Fatalf("wrapped chain answered %d, want 11", n)
 	}
 }
@@ -193,8 +194,8 @@ add {} ([req:Map state:Any] => [ {message: (join "" ["unknown '" req.cmd "'"])} 
 		t.Fatalf("unarmed call: %v", err)
 	}
 
-	sA, _ := eng.AsString(outA[len(outA)-1])
-	sP, _ := eng.AsString(outP[len(outP)-1])
+	sA, _ := core.AsString(outA[len(outA)-1])
+	sP, _ := core.AsString(outP[len(outP)-1])
 	if sA != sP || sA != "unknown 'BOGUS'" {
 		t.Fatalf("stamped=%q interpreted=%q, want both \"unknown 'BOGUS'\"", sA, sP)
 	}

@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // User-defined refinement subtypes must dispatch like system types — a
@@ -85,7 +85,7 @@ func TestUserTypeBindingShape_ObjectRefinement(t *testing.T) {
 
 	// 3. ResolveSigType (the dispatcher's entry point) consults the
 	//    dedicated flag and returns the lattice node, NOT TAny.
-	tp, _, err := eng.ResolveSigType(r, NewWord("Foo"))
+	tp, _, err := core.ResolveSigType(r, NewWord("Foo"))
 	if err != nil {
 		t.Fatalf("ResolveSigType: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestResolveSigType_AllUserTypeKinds(t *testing.T) {
 			}
 
 			// And ResolveSigType must use it — not fall through to TAny.
-			tp, _, err := eng.ResolveSigType(r, NewWord("X"))
+			tp, _, err := core.ResolveSigType(r, NewWord("X"))
 			if err != nil {
 				t.Fatalf("ResolveSigType: %v", err)
 			}

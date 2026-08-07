@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end coverage for the boru:net socket tier (net_socket.go) and
@@ -44,7 +44,7 @@ func lastString(t *testing.T, vals []native.Value) string {
 	if len(vals) == 0 {
 		t.Fatal("no result")
 	}
-	s, err := eng.AsString(vals[len(vals)-1])
+	s, err := core.AsString(vals[len(vals)-1])
 	if err != nil {
 		t.Fatalf("expected String result, got %v", vals)
 	}
@@ -286,7 +286,7 @@ func TestNetJSONLinesCodecEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	n, nErr := eng.AsInteger(out[len(out)-1])
+	n, nErr := core.AsInteger(out[len(out)-1])
 	if nErr != nil || n != 5 {
 		t.Errorf("json-lines sum = %v, want 5", out)
 	}

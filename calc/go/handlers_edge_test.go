@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The numeric handlers' guard arms are unreachable through dispatch
@@ -14,12 +14,12 @@ import (
 // a zero-value result.
 func TestNumHandlerRejectsNonNumbers(t *testing.T) {
 	h := numHandler(func(a, b float64) (float64, error) { return a + b, nil }, true)
-	str := eng.NewString("x")
-	num := eng.NewInteger(1)
-	if _, err := h([]eng.Value{str, num}, nil, nil, nil); err == nil {
+	str := core.NewString("x")
+	num := core.NewInteger(1)
+	if _, err := h([]core.Value{str, num}, nil, nil, nil); err == nil {
 		t.Error("numHandler with string arg[0]: want error, got none")
 	}
-	if _, err := h([]eng.Value{num, str}, nil, nil, nil); err == nil {
+	if _, err := h([]core.Value{num, str}, nil, nil, nil); err == nil {
 		t.Error("numHandler with string arg[1]: want error, got none")
 	}
 }
@@ -29,19 +29,19 @@ func TestNumHandlerRejectsNonNumbers(t *testing.T) {
 // inputs.
 func TestNumHandlerNonFiniteStaysFloat(t *testing.T) {
 	inf := numHandler(func(a, b float64) (float64, error) { return math.Inf(1), nil }, true)
-	out, err := inf([]eng.Value{eng.NewInteger(1), eng.NewInteger(2)}, nil, nil, nil)
+	out, err := inf([]core.Value{core.NewInteger(1), core.NewInteger(2)}, nil, nil, nil)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("inf handler: %v %v", out, err)
 	}
-	if !out[0].Parent.ConformsTo(eng.TFloat) {
+	if !out[0].Parent.ConformsTo(core.TFloat) {
 		t.Errorf("Inf result type = %s, want Float", out[0].Parent)
 	}
 	nan := numHandler(func(a, b float64) (float64, error) { return math.NaN(), nil }, true)
-	out, err = nan([]eng.Value{eng.NewInteger(1), eng.NewInteger(2)}, nil, nil, nil)
+	out, err = nan([]core.Value{core.NewInteger(1), core.NewInteger(2)}, nil, nil, nil)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("nan handler: %v %v", out, err)
 	}
-	if !out[0].Parent.ConformsTo(eng.TFloat) {
+	if !out[0].Parent.ConformsTo(core.TFloat) {
 		t.Errorf("NaN result type = %s, want Float", out[0].Parent)
 	}
 }
@@ -60,11 +60,11 @@ func TestUnaryHandlerErrorArms(t *testing.T) {
 	if fn == nil || len(fn.Signatures) == 0 {
 		t.Fatal("sqrt not registered")
 	}
-	impl, ok := fn.Signatures[0].Impl.(*eng.GoImpl)
+	impl, ok := fn.Signatures[0].Impl.(*core.GoImpl)
 	if !ok {
 		t.Fatalf("sqrt impl is %T, want *GoImpl", fn.Signatures[0].Impl)
 	}
-	if _, err := impl.Handler([]eng.Value{eng.NewString("x")}, nil, nil, nil); err == nil {
+	if _, err := impl.Handler([]core.Value{core.NewString("x")}, nil, nil, nil); err == nil {
 		t.Error("sqrt on string: want error, got none")
 	}
 }

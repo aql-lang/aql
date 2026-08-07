@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
+
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
 )
 
 // The LOAD-BEARING app regression (design/RUNTIME-STAMPING.0.md): the REAL
@@ -58,7 +60,7 @@ func miniRedisSession(t *testing.T, armed bool, cmds []string) ([]string, *nativ
 	replies := make([]string, 0, len(cmds))
 	for _, c := range cmds {
 		out := run(`MiniRedis.cmd ep ` + strconv.Quote(c))
-		s, err := eng.AsString(out[len(out)-1])
+		s, err := core.AsString(out[len(out)-1])
 		if err != nil {
 			t.Fatalf("cmd %q reply not a string: %v", c, out)
 		}
@@ -71,25 +73,25 @@ func miniRedisSession(t *testing.T, armed bool, cmds []string) ([]string, *nativ
 	if !ok {
 		t.Fatal("wrapper not bound")
 	}
-	fd, isFn := w.Data.(eng.FnDefInfo)
+	fd, isFn := w.Data.(core.FnDefInfo)
 	if !isFn || fd.Registry == nil {
 		t.Fatal("MiniRedis.cmd is not a module fn wrapper")
 	}
 	return replies, fd.Registry
 }
 
-func moduleFnRef(t *testing.T, modReg *native.Registry, name string) *eng.CompiledFnRef {
+func moduleFnRef(t *testing.T, modReg *native.Registry, name string) *compiler.CompiledFnRef {
 	t.Helper()
 	v, ok := modReg.Defs.Top(name)
 	if !ok {
 		t.Fatalf("module fn %q not bound", name)
 	}
-	fd, isFn := v.Data.(eng.FnDefInfo)
+	fd, isFn := v.Data.(core.FnDefInfo)
 	if !isFn {
 		t.Fatalf("module binding %q is not a fn", name)
 	}
 	for i := range fd.Signatures {
-		if r := eng.CompiledRef(&fd.Signatures[i]); r != nil {
+		if r := compiler.CompiledRef(&fd.Signatures[i]); r != nil {
 			return r
 		}
 	}

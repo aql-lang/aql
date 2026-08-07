@@ -3,7 +3,6 @@ module github.com/boru-lang/boru/cmd/go
 go 1.24.7
 
 require (
-	github.com/boru-lang/boru/eng/go v0.0.0
 	github.com/boru-lang/boru/lang/go v0.0.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -87,8 +86,6 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
 )
-
-replace github.com/boru-lang/boru/eng/go => ../../eng/go
 
 replace github.com/boru-lang/boru/basic/go => ../../basic/go
 

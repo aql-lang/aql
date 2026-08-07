@@ -6,19 +6,23 @@ import (
 	"testing"
 )
 
-// TestBasicDependsOnEngOnly pins ADR-013 rule 1: basic's go.mod
-// requires eng/go (plus parser/go, per the rule's 2026-08-07 amendment)
-// and NO other boru sibling — and go.mod is where the rule lives, since
-// Go's import resolution enforces what is written there.
+// TestBasicDependsOnItsRealPieces pins ADR-013 rule 1: basic's go.mod
+// requires exactly the modules it uses — core, check, compiler, parser —
+// and NO other boru sibling. go.mod is where the rule lives, since Go's
+// import resolution enforces what is written there.
 //
-// parser/go is allowed because it USED to be eng/go/parser, a package
-// inside the eng module: "requires eng" already granted it, and the
-// parser cut changed the module map without adding any dependency that
-// was not already there. Nothing else may join this list.
-// The negative direction (nothing upward: basic never imports lang or
-// cmd) is the same gate seen from the other side — an upward require
-// would have to appear in this file to compile.
-func TestBasicDependsOnEngOnly(t *testing.T) {
+// eng is deliberately ABSENT. Until the 2026-08-07 amendment this gate
+// asserted "eng only", which was true when eng was one module holding the
+// kernel, checker, compiler and parser. After those cuts basic reached them
+// through eng/go/aliases_*.go — a migration shim — so the gate was pinning a
+// dependency that carried no symbols (measured: 700 core, 45 check, 9
+// compiler, 0 eng) while the three real ones were invisible to it. basic now
+// imports them directly.
+//
+// check and compiler are not incidental: basic implements if / case / for /
+// fn / def, and control flow has to join carriers and record branch and loop
+// fragments. That is not expressible against core alone.
+func TestBasicDependsOnItsRealPieces(t *testing.T) {
 	data, err := os.ReadFile("go.mod")
 	if err != nil {
 		t.Fatalf("read go.mod: %v", err)
@@ -34,12 +38,22 @@ func TestBasicDependsOnEngOnly(t *testing.T) {
 		siblings = append(siblings, mod)
 	}
 	allowed := map[string]bool{
-		"github.com/boru-lang/boru/eng/go":    true,
-		"github.com/boru-lang/boru/parser/go": true, // ADR-013 amendment, 2026-08-07
+		"github.com/boru-lang/boru/core/go":     true,
+		"github.com/boru-lang/boru/check/go":    true,
+		"github.com/boru-lang/boru/compiler/go": true,
+		"github.com/boru-lang/boru/parser/go":   true,
 	}
 	for _, mod := range siblings {
 		if !allowed[mod] {
-			t.Errorf("ADR-013: basic/go must depend on eng/go and parser/go only; go.mod references %s", mod)
+			t.Errorf("ADR-013: basic/go must depend on core/check/compiler/parser only; go.mod references %s", mod)
+		}
+	}
+	// The negative half: eng must NOT come back. A future edit that reaches
+	// for the facade instead of the piece would otherwise pass silently,
+	// since the allowlist above only rejects names it does not know.
+	for _, mod := range siblings {
+		if mod == "github.com/boru-lang/boru/eng/go" {
+			t.Error("ADR-013: basic/go must not depend on eng/go — import the piece that owns the symbol")
 		}
 	}
 	if len(siblings) == 0 {

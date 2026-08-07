@@ -1,6 +1,8 @@
 package native
 
-import "github.com/boru-lang/boru/eng/go"
+import (
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // unifyNatives covers the `unify` word — the surface-level entry
 // point to the engine's structural unification algorithm.
@@ -10,7 +12,7 @@ import "github.com/boru-lang/boru/eng/go"
 //
 // The algorithm (Unify and friends) lives in eng/go/unify.go; this
 // file owns the word name, dispatch wiring, and the Go-level adapter
-// (unifyHandler) that converts an eng.Unify result into the boru
+// (unifyHandler) that converts an core.Unify result into the boru
 // stack shape.
 var unifyNatives = []NativeFunc{
 	{
@@ -90,7 +92,7 @@ func unifyFoldable(v Value) bool {
 }
 
 func unifyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	unified, ok := eng.UnifyR(args[0], args[1], r)
+	unified, ok := core.UnifyR(args[0], args[1], r)
 	if ok {
 		return []Value{unified, NewBoolean(true)}, nil
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
@@ -63,7 +63,7 @@ type vaultHostState struct {
 }
 
 func vaultHostStateFor(r *native.Registry, create bool) *vaultHostState {
-	if s, ok, _ := eng.Cap[*vaultHostState](r, capVaultHost); ok && s != nil {
+	if s, ok, _ := core.Cap[*vaultHostState](r, capVaultHost); ok && s != nil {
 		return s
 	}
 	if !create {

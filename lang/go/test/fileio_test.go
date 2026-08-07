@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/capabilities"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // runWithFiles creates a registry with in-memory files and runs Boru.

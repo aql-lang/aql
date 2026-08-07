@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -278,7 +278,7 @@ func TestEndpointDispatchErrorArms(t *testing.T) {
 		if len(res) != 1 {
 			t.Fatalf("dispatch results = %v", res)
 		}
-		if s, sErr := eng.AsString(res[0]); sErr != nil || s != "ok" {
+		if s, sErr := core.AsString(res[0]); sErr != nil || s != "ok" {
 			t.Errorf("reply = %v, want ok", res[0])
 		}
 		if string(tr.buf) != "left" {

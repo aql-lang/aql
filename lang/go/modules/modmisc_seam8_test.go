@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -41,7 +41,7 @@ func TestW8QueryIdealListToAnyError(t *testing.T) {
 // whose payloads the list/map accessors refuse.
 func TestW8FormatValueFallbacks(t *testing.T) {
 	// A TList value whose payload AsList cannot read (not a table either).
-	extList := eng.NewExtension(native.TList, "w8-not-a-list")
+	extList := core.NewExtension(native.TList, "w8-not-a-list")
 
 	// 130: formatTableValue's AsList error fallback.
 	if s := formatTableValue(extList); s == "" {
@@ -52,7 +52,7 @@ func TestW8FormatValueFallbacks(t *testing.T) {
 		t.Error("formatListValue(ext-list) should fall back to a printed form")
 	}
 	// 143: a plain list whose first row is a TMap-typed value AsMap refuses.
-	rowExt := eng.NewExtension(native.TMap, "w8-not-a-map")
+	rowExt := core.NewExtension(native.TMap, "w8-not-a-map")
 	if s := formatTableValue(native.NewList([]native.Value{rowExt})); s == "" {
 		t.Error("formatTableValue(list of ext-map row) should fall back")
 	}

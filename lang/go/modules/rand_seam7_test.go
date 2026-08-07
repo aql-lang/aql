@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // s7bRandHandler returns the raw Go handler for a named rand native bound
@@ -17,9 +17,9 @@ func s7bRandHandler(t *testing.T, name string) native.Handler {
 	t.Helper()
 	for _, nf := range randNativesForState(newRandState(1)) {
 		if nf.Name == name {
-			gi, ok := nf.Signatures[0].Impl.(*eng.GoImpl)
+			gi, ok := nf.Signatures[0].Impl.(*core.GoImpl)
 			if !ok {
-				t.Fatalf("%s: Impl is %T, want *eng.GoImpl", name, nf.Signatures[0].Impl)
+				t.Fatalf("%s: Impl is %T, want *core.GoImpl", name, nf.Signatures[0].Impl)
 			}
 			return gi.Handler
 		}

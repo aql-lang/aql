@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // sort VALUE
 //
 // Reorder a List or Map ascending by each element's natural order.
 // The comparison dispatches through the kernel's Comparer capability
-// (eng.CompareValues), so:
+// (core.CompareValues), so:
 //
 //   - Lists of homogeneous scalars sort numerically / lexically /
 //     by atom-name as appropriate (Integer / Float / String /
@@ -46,7 +46,7 @@ var sortNative = NativeFunc{
 }
 
 func sortListHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	lst, err := eng.AsList(args[0])
+	lst, err := core.AsList(args[0])
 	if err != nil {
 		return nil, fmt.Errorf("sort: %w", err)
 	}
@@ -60,11 +60,11 @@ func sortListHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	})
 	// #4 (round 3): sort reorders the list in place of a copy — retain the
 	// source [:T] tag so downstream reads/writes stay typed.
-	return []Value{d2RetainElem(eng.NewList(out), args[0])}, nil
+	return []Value{d2RetainElem(core.NewList(out), args[0])}, nil
 }
 
 func sortMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	m, err := eng.AsMap(args[0])
+	m, err := core.AsMap(args[0])
 	if err != nil {
 		return nil, fmt.Errorf("sort: %w", err)
 	}
@@ -84,22 +84,22 @@ func sortMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	sort.SliceStable(pairs, func(i, j int) bool {
 		return compareForSort(pairs[i].v, pairs[j].v) < 0
 	})
-	out := eng.NewOrderedMap()
+	out := core.NewOrderedMap()
 	for _, p := range pairs {
 		out.Set(p.k, p.v)
 	}
 	// #4 (round 3): sorting a {:T} map by value reorders its entries without
 	// changing them — the result is still {:T}, so retain the tag (a map DOES
 	// carry an element tag, symmetric with the list reorders above).
-	return []Value{d2RetainElem(eng.NewMap(out), args[0])}, nil
+	return []Value{d2RetainElem(core.NewMap(out), args[0])}, nil
 }
 
-// compareForSort wraps eng.CompareValues with a string-form fallback
+// compareForSort wraps core.CompareValues with a string-form fallback
 // for pairs the kernel can't order (different scalar branches, value
 // shapes without a Comparer). Mirrors the lang/go/native array-sort
 // pattern so sort stays total.
 func compareForSort(a, b Value) int {
-	cmp, err := eng.CompareValues(a, b)
+	cmp, err := core.CompareValues(a, b)
 	if err == nil {
 		return cmp
 	}

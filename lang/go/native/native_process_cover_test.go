@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 func wantProcErr(t *testing.T, err error, sub string) {
@@ -47,9 +47,9 @@ func TestProcessCoverRegisterPidTypeDuplicate(t *testing.T) {
 }
 
 func TestProcessCoverPidBehaviorFormatEqual(t *testing.T) {
-	rt := eng.NewProcessRuntime()
-	p1 := eng.NewProcess(rt, 4, eng.OverflowBlock)
-	p2 := eng.NewProcess(rt, 4, eng.OverflowBlock)
+	rt := core.NewProcessRuntime()
+	p1 := core.NewProcess(rt, 4, core.OverflowBlock)
+	p2 := core.NewProcess(rt, 4, core.OverflowBlock)
 	b := pidBehavior{}
 
 	if got := b.Format(NewPid(p1)); !strings.HasPrefix(got, "Pid<P_") {
@@ -81,7 +81,7 @@ func TestProcessCoverPolicyNilRegistry(t *testing.T) {
 }
 
 func TestProcessCoverProcRuntimeLazyCreate(t *testing.T) {
-	r := &Registry{} // not built by eng.NewRegistry: Procs starts nil
+	r := &Registry{} // not built by core.NewRegistry: Procs starts nil
 	rt := procRuntime(r)
 	if rt == nil || r.Procs != rt {
 		t.Fatalf("procRuntime must create and pin a runtime, got %v (Procs %v)", rt, r.Procs)
@@ -148,7 +148,7 @@ func TestProcessCoverSpawnValidOpts(t *testing.T) {
 	r := seam5Reg(t)
 	opts := NewOrderedMap()
 	opts.Set("mailbox", NewInteger(2))
-	opts.Set("overflow", NewString(eng.OverflowDrop))
+	opts.Set("overflow", NewString(core.OverflowDrop))
 	out, err := spawnHandler([]Value{NewList([]Value{NewInteger(0)}), NewMap(opts)}, nil, nil, r)
 	if err != nil {
 		t.Fatalf("spawn with valid opts: %v", err)
@@ -236,12 +236,12 @@ func TestProcessCoverSendableViolations(t *testing.T) {
 		v    Value
 		want string
 	}{
-		{"object", Value{Parent: TMap, Data: eng.ClassInstanceInfo{}}, "Object"},
-		{"table", Value{Parent: TMap, Data: eng.TableData{}}, "Table"},
-		{"flex", Value{Parent: TList, Data: &eng.FlexListData{}}, "Flex"},
+		{"object", Value{Parent: TMap, Data: core.ClassInstanceInfo{}}, "Object"},
+		{"table", Value{Parent: TMap, Data: core.TableData{}}, "Table"},
+		{"flex", Value{Parent: TList, Data: &core.FlexListData{}}, "Flex"},
 		{"store-in-list", NewList([]Value{
 			NewInteger(1),
-			{Parent: TStore, Data: &eng.StoreInstanceInfo{}},
+			{Parent: TStore, Data: &core.StoreInstanceInfo{}},
 		}), "Store"},
 		{"clean-list", NewList([]Value{NewInteger(1), NewString("a")}), ""},
 	}
@@ -254,10 +254,10 @@ func TestProcessCoverSendableViolations(t *testing.T) {
 
 func TestProcessCoverSendOverloadAndShutdown(t *testing.T) {
 	r := seam5Reg(t)
-	rt := eng.NewProcessRuntime()
+	rt := core.NewProcessRuntime()
 
 	// "fail" policy on a full mailbox surfaces as the overload error.
-	full := eng.NewProcess(rt, 1, eng.OverflowFail)
+	full := core.NewProcess(rt, 1, core.OverflowFail)
 	if err := full.Send(NewInteger(1)); err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestProcessCoverSendOverloadAndShutdown(t *testing.T) {
 
 	// A blocked send that cannot make progress after runtime shutdown
 	// surfaces as a generic process_error.
-	blocked := eng.NewProcess(rt, 1, eng.OverflowBlock)
+	blocked := core.NewProcess(rt, 1, core.OverflowBlock)
 	if err := blocked.Send(NewInteger(1)); err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestProcessCoverRegisterErrors(t *testing.T) {
 	_, err := registerHandler([]Value{NewString("cover-name"), NewTypeLiteral(TPid)}, nil, nil, r)
 	wantProcErr(t, err, "expected a Pid")
 
-	p := eng.NewProcess(procRuntime(r), 4, eng.OverflowBlock)
+	p := core.NewProcess(procRuntime(r), 4, core.OverflowBlock)
 	_, err = registerHandler([]Value{NewString(""), NewPid(p)}, nil, nil, r)
 	wantProcErr(t, err, "non-empty")
 
@@ -302,7 +302,7 @@ func TestProcessCoverRegisterErrors(t *testing.T) {
 
 	// RegisterName refuses after runtime shutdown.
 	r2 := seam5Reg(t)
-	p2 := eng.NewProcess(procRuntime(r2), 4, eng.OverflowBlock)
+	p2 := core.NewProcess(procRuntime(r2), 4, core.OverflowBlock)
 	r2.Procs.Shutdown()
 	_, err = registerHandler([]Value{NewString("late"), NewPid(p2)}, nil, nil, r2)
 	wantProcErr(t, err, "shut down")
@@ -408,7 +408,7 @@ func TestProcessCoverBindClauseRefusals(t *testing.T) {
 		t.Error("non-map message must refuse binding slots")
 	}
 	// Map-conforming value with no OrderedMap payload (AsMap returns nil).
-	if _, ok := bindClause(c, Value{Parent: TMap, Data: eng.TableData{}}); ok {
+	if _, ok := bindClause(c, Value{Parent: TMap, Data: core.TableData{}}); ok {
 		t.Error("map-typed value without an OrderedMap payload must refuse")
 	}
 	// Field missing.
@@ -443,7 +443,7 @@ func TestProcessCoverReceiveRuntimeErrors(t *testing.T) {
 
 	// PopFront failure: live process, but the runtime shuts down under it.
 	r2 := seam5Reg(t)
-	p := eng.NewProcess(r2.Procs, 4, eng.OverflowBlock)
+	p := core.NewProcess(r2.Procs, 4, core.OverflowBlock)
 	if err := r2.Procs.Insert(p); err != nil {
 		t.Fatal(err)
 	}

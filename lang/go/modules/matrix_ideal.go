@@ -3,7 +3,7 @@ package modules
 import (
 	"fmt"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -17,18 +17,18 @@ import (
 // TensorTypeInfo is a constructed (shaped) tensor type — the result of
 // `type Matrix {rows:3 cols:3}`. Kind names the type-kind ("Tensor",
 // "Matrix", "Vector"); Shape is the fixed shape every instance must
-// match. It embeds eng.HostTypeBody so the kernel's type machinery
+// match. It embeds core.HostTypeBody so the kernel's type machinery
 // (IsTypeBody, TypeOf, InstallType) recognises a value carrying it,
 // through ExtensionPayload, as a type rather than an instance.
 type TensorTypeInfo struct {
-	eng.HostTypeBody
+	core.HostTypeBody
 	Kind  string
 	Shape []int
 }
 
 // tensorTypeInfo extracts a TensorTypeInfo from a constructed-type value.
 func tensorTypeInfo(v native.Value) (TensorTypeInfo, bool) {
-	if ep, ok := v.Data.(eng.ExtensionPayload); ok {
+	if ep, ok := v.Data.(core.ExtensionPayload); ok {
 		ti, ok := ep.Body.(TensorTypeInfo)
 		return ti, ok
 	}
@@ -45,14 +45,14 @@ func registerTensorIdeals(r *native.Registry, tt TensorModuleTypes) {
 	if r == nil {
 		return
 	}
-	tensor := &eng.Ideal{
+	tensor := &core.Ideal{
 		Name:        "Tensor",
 		Enabled:     true,
 		Accepts:     tensorAccepts(tt.Tensor, "Tensor"),
 		Construct:   tensorConstruct("Tensor", tt.Tensor),
 		Instantiate: tensorInstantiate("Tensor", tt.Tensor),
 	}
-	matrix := &eng.Ideal{
+	matrix := &core.Ideal{
 		Name:        "Matrix",
 		Enabled:     true,
 		Refines:     tensor,
@@ -60,7 +60,7 @@ func registerTensorIdeals(r *native.Registry, tt TensorModuleTypes) {
 		Construct:   tensorConstruct("Matrix", tt.Matrix),
 		Instantiate: tensorInstantiate("Matrix", tt.Matrix),
 	}
-	vector := &eng.Ideal{
+	vector := &core.Ideal{
 		Name:        "Vector",
 		Enabled:     true,
 		Refines:     tensor,
@@ -77,7 +77,7 @@ func registerTensorIdeals(r *native.Registry, tt TensorModuleTypes) {
 // claims the bare kind literal and any constructed type of that kind.
 // It deliberately does not claim instances — Accepts answers "is this
 // a type of my kind", the question `type` and `make` ask of a target.
-func tensorAccepts(vt *eng.Type, kind string) func(native.Value) bool {
+func tensorAccepts(vt *core.Type, kind string) func(native.Value) bool {
 	return func(v native.Value) bool {
 		if native.IsBareTypeNode(v) {
 			// A bare type literal IS its lattice node (by-value copy
@@ -92,7 +92,7 @@ func tensorAccepts(vt *eng.Type, kind string) func(native.Value) bool {
 
 // tensorConstruct is the Ideal.Construct body for a tensor kind — it
 // builds a shaped type from `refine <kind> <shape-spec>`.
-func tensorConstruct(kind string, vt *eng.Type) func(base, arg native.Value, r *native.Registry) ([]native.Value, error) {
+func tensorConstruct(kind string, vt *core.Type) func(base, arg native.Value, r *native.Registry) ([]native.Value, error) {
 	return func(base, arg native.Value, r *native.Registry) ([]native.Value, error) {
 		if base.Data != nil {
 			return nil, r.BoruError("type_error",
@@ -103,7 +103,7 @@ func tensorConstruct(kind string, vt *eng.Type) func(base, arg native.Value, r *
 		if err != nil {
 			return nil, r.BoruError("type_error", err.Error(), "refine")
 		}
-		return []native.Value{eng.NewExtension(vt, TensorTypeInfo{Kind: kind, Shape: shape})}, nil
+		return []native.Value{core.NewExtension(vt, TensorTypeInfo{Kind: kind, Shape: shape})}, nil
 	}
 }
 
@@ -111,7 +111,7 @@ func tensorConstruct(kind string, vt *eng.Type) func(base, arg native.Value, r *
 // it builds a concrete tensor from `make <type> <data>`, validating
 // the data shape against the type's fixed shape when the target is a
 // constructed (shaped) type.
-func tensorInstantiate(kind string, vt *eng.Type) func(typ, data native.Value, r *native.Registry) ([]native.Value, error) {
+func tensorInstantiate(kind string, vt *core.Type) func(typ, data native.Value, r *native.Registry) ([]native.Value, error) {
 	return func(typ, data native.Value, _ *native.Registry) ([]native.Value, error) {
 		td, err := buildTensor(kind, data)
 		if err != nil {

@@ -93,7 +93,7 @@ func TestMatrixModuleExports(t *testing.T) {
 }
 
 // TestTensorSize covers the Sizer behaviour: the kernel `size` word
-// (eng.SizeOf) reports a tensor's entry count.
+// (core.SizeOf) reports a tensor's entry count.
 func TestTensorSize(t *testing.T) {
 	tt := testTensorTypes(t)
 	m := tensorValue(tt.Matrix, TensorData{Shape: []int{2, 3}, Data: []float64{1, 2, 3, 4, 5, 6}})

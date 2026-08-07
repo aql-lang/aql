@@ -8,7 +8,7 @@ import (
 
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // debugRegistry builds a registry with boru:debug installed and its Output

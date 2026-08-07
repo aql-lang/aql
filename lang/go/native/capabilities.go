@@ -1,21 +1,20 @@
 package native
 
 import (
-	"github.com/boru-lang/boru/eng/go"
-
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Host-side capability keys. The host installs implementations under
-// these names on eng.Registry; word handlers retrieve them through
+// these names on core.Registry; word handlers retrieve them through
 // the typed accessors in this file. borueng itself never sees them.
 const (
 	CapFileOps        = "engine.fileops"         // active capabilities.FileOps
 	CapMemFileOps     = "engine.fileops.mem"     // lazily created in-memory FileOps
 	CapOverlayFileOps = "engine.fileops.overlay" // lazily created mem-over-host overlay
 	// CapModelledFileOps holds the overlay that MODELS filesystem effects for
-	// a registry running with eng.CheckState.ModelEffects — a module body
+	// a registry running with core.CheckState.ModelEffects — a module body
 	// executed during `boru check`. Distinct from CapOverlayFileOps so a body
 	// that also opts into `__sys.fs overlay` gets its own layer rather than
 	// silently sharing the modelling one.
@@ -48,7 +47,7 @@ const (
 // any transport is resolved, so removing the slot would only fall back
 // to the default and could not deny anything.
 func EffectiveHTTPOps(r *Registry) capabilities.HTTPOps {
-	if ops, ok, _ := eng.Cap[capabilities.HTTPOps](r, CapHTTPOps); ok && ops != nil {
+	if ops, ok, _ := core.Cap[capabilities.HTTPOps](r, CapHTTPOps); ok && ops != nil {
 		return ops
 	}
 	return capabilities.DefaultHTTPOps{}
@@ -68,7 +67,7 @@ func SetHostHTTPOps(r *Registry, ops capabilities.HTTPOps) {
 // false) when none is installed. Debug.step uses it for an interactive
 // step controller; with no DebugOps it falls back to printing the trace.
 func EffectiveDebugOps(r *Registry) (capabilities.DebugOps, bool) {
-	if ops, ok, _ := eng.Cap[capabilities.DebugOps](r, CapDebugOps); ok && ops != nil {
+	if ops, ok, _ := core.Cap[capabilities.DebugOps](r, CapDebugOps); ok && ops != nil {
 		return ops, true
 	}
 	return nil, false
@@ -100,7 +99,7 @@ func RemoveHostDebugOps(r *Registry) {
 // capabilities.FixedClock for deterministic tests. When none is installed,
 // a real wall clock is used. Never returns nil.
 func EffectiveClock(r *Registry) capabilities.Clock {
-	if clk, ok, _ := eng.Cap[capabilities.Clock](r, CapClock); ok && clk != nil {
+	if clk, ok, _ := core.Cap[capabilities.Clock](r, CapClock); ok && clk != nil {
 		return clk
 	}
 	return capabilities.WallClock{}
@@ -120,7 +119,7 @@ func SetHostClock(r *Registry, clk capabilities.Clock) {
 // which lazily creates and installs a default registry (console sink
 // attached) on first use — mirroring how `print` needs no host wiring.
 func HostLogSinks(r *Registry) *LogSinkRegistry {
-	lsr, _, _ := eng.Cap[*LogSinkRegistry](r, CapLogSinks)
+	lsr, _, _ := core.Cap[*LogSinkRegistry](r, CapLogSinks)
 	return lsr
 }
 
@@ -145,7 +144,7 @@ func SetHostLogSinks(r *Registry, lsr *LogSinkRegistry) {
 // every capability wrapper treat that as allow-everything (the
 // default opt-in posture).
 func HostPolicy(r *Registry) policy.Policy {
-	p, _, _ := eng.Cap[policy.Policy](r, CapPolicy)
+	p, _, _ := core.Cap[policy.Policy](r, CapPolicy)
 	return p
 }
 
@@ -173,7 +172,7 @@ func HostFileOps(r *Registry) capabilities.FileOps {
 	if r == nil {
 		return nil
 	}
-	ops, ok, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
+	ops, ok, _ := core.Cap[capabilities.FileOps](r, CapFileOps)
 	if !ok || ops == nil {
 		return notInstalledFileOps{}
 	}
@@ -218,7 +217,7 @@ func rewireFileOpsResolver(r *Registry, ops capabilities.FileOps) {
 // none. The map is owned by the host and may be mutated in place to
 // register or replace individual formats.
 func HostFormats(r *Registry) map[string]Format {
-	formats, _, _ := eng.Cap[map[string]Format](r, CapFormats)
+	formats, _, _ := core.Cap[map[string]Format](r, CapFormats)
 	return formats
 }
 
@@ -239,7 +238,7 @@ func SetHostFormats(r *Registry, formats map[string]Format) {
 // place (e.g. by RegisterFormat) to add or override extension mappings.
 // Keys are lowercase, without the leading dot.
 func HostExtensions(r *Registry) map[string]string {
-	exts, _, _ := eng.Cap[map[string]string](r, CapExtensions)
+	exts, _, _ := core.Cap[map[string]string](r, CapExtensions)
 	return exts
 }
 
@@ -259,7 +258,7 @@ func SetHostExtensions(r *Registry, exts map[string]string) {
 // set none — IO.args renders nil and empty identically, as an empty
 // list.
 func HostScriptArgs(r *Registry) []string {
-	args, _, _ := eng.Cap[[]string](r, CapScriptArgs)
+	args, _, _ := core.Cap[[]string](r, CapScriptArgs)
 	return args
 }
 
@@ -276,7 +275,7 @@ func SetHostScriptArgs(r *Registry, args []string) {
 
 // HostSQLite returns the SQLite store installed on r, or nil if none.
 func HostSQLite(r *Registry) *SQLiteStore {
-	store, _, _ := eng.Cap[*SQLiteStore](r, CapSQLite)
+	store, _, _ := core.Cap[*SQLiteStore](r, CapSQLite)
 	return store
 }
 
@@ -312,7 +311,7 @@ func SetHostSQLite(r *Registry, store *SQLiteStore) {
 // can call methods without a nil guard and get a clean error.
 // Returns nil only when r itself is nil (a misconfigured registry).
 //
-// This logic used to live on eng.Registry; it now lives here
+// This logic used to live on core.Registry; it now lives here
 // because borueng has no fileops concept.
 func EffectiveFileOps(r *Registry) capabilities.FileOps {
 	if r == nil {
@@ -323,7 +322,7 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 		return hostOrModelled(r)
 	}
 	if fsFlag(fsStore, "mem") {
-		if mem, _, _ := eng.Cap[capabilities.FileOps](r, CapMemFileOps); mem != nil {
+		if mem, _, _ := core.Cap[capabilities.FileOps](r, CapMemFileOps); mem != nil {
 			return mem
 		}
 		mem := capabilities.NewMem()
@@ -331,7 +330,7 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 		return mem
 	}
 	if fsFlag(fsStore, "overlay") {
-		if ov, _, _ := eng.Cap[capabilities.FileOps](r, CapOverlayFileOps); ov != nil {
+		if ov, _, _ := core.Cap[capabilities.FileOps](r, CapOverlayFileOps); ov != nil {
 			return ov
 		}
 		ov := capabilities.NewOverlay(capabilities.NewMem(), HostFileOps(r))
@@ -342,7 +341,7 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 }
 
 // hostOrModelled returns the host FileOps — or, when this registry MODELS
-// effects (eng.CheckState.ModelEffects: a module body running under
+// effects (core.CheckState.ModelEffects: a module body running under
 // `boru check`), a mem-over-host overlay so the body's filesystem mutations
 // are contained and discarded while its reads still resolve against the real
 // filesystem.
@@ -371,7 +370,7 @@ func hostOrModelled(r *Registry) capabilities.FileOps {
 	if !r.Check.ModelsEffects() {
 		return host
 	}
-	if ov, _, _ := eng.Cap[capabilities.FileOps](r, CapModelledFileOps); ov != nil {
+	if ov, _, _ := core.Cap[capabilities.FileOps](r, CapModelledFileOps); ov != nil {
 		return ov
 	}
 	mem := capabilities.NewMem()
@@ -426,7 +425,7 @@ func fsFlag(fsStore *StoreInstanceInfo, key string) bool {
 // default: IO.env then reports every name as unset rather than reaching for
 // the real process environment behind the host's back.
 func HostEnvOps(r *Registry) capabilities.EnvOps {
-	ops, _, _ := eng.Cap[capabilities.EnvOps](r, CapEnv)
+	ops, _, _ := core.Cap[capabilities.EnvOps](r, CapEnv)
 	return ops
 }
 
@@ -484,7 +483,7 @@ func (p permissionedEnvOps) All() []string {
 // default: IO.is-tty answers false rather than the runtime asking the operating
 // system a question the host did not authorise.
 func HostStreamProbe(r *Registry) capabilities.StreamProbe {
-	probe, _, _ := eng.Cap[capabilities.StreamProbe](r, CapStreamProbe)
+	probe, _, _ := core.Cap[capabilities.StreamProbe](r, CapStreamProbe)
 	return probe
 }
 

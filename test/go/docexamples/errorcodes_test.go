@@ -19,7 +19,7 @@
 //   - MINTED — extracted from the construction sites themselves (codes are
 //     string literals at ~700 of them), which is what a program can actually
 //     observe.
-//   - REGISTERED — the engine-owned enumeration, eng.ErrorCodes()
+//   - REGISTERED — the engine-owned enumeration, core.ErrorCodes()
 //     (eng/go/errorcodes.go plus each layer's registration). This did not
 //     exist when the gate was first written, which is why the gate was
 //     one-directional then.
@@ -57,7 +57,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	_ "github.com/boru-lang/boru/lang/go/native"
 )
 
@@ -346,7 +346,7 @@ func TestReferenceErrorCodeTableHasNoDuplicates(t *testing.T) {
 // registeredCodes returns the engine-owned enumeration as a set.
 func registeredCodes() map[string]string {
 	out := map[string]string{}
-	for _, ec := range eng.ErrorCodes() {
+	for _, ec := range core.ErrorCodes() {
 		out[ec.Code] = ec.Owner
 	}
 	return out
@@ -437,7 +437,7 @@ func TestDocumentedCodesAreRegistered(t *testing.T) {
 	for _, code := range documentedCodes(t) {
 		if _, ok := registered[code]; !ok {
 			t.Errorf("REFERENCE.md documents `%s`, which is not in the "+
-				"engine-owned enumeration — tooling that reads eng.ErrorCodes() "+
+				"engine-owned enumeration — tooling that reads core.ErrorCodes() "+
 				"cannot resolve a code the manual tells readers to handle", code)
 		}
 	}

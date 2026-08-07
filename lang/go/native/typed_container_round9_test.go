@@ -10,7 +10,7 @@ import (
 //	P1 d2AdoptTyped rebuilt an already-flex child on the WRITE path (Unify's flex
 //	   branch allocates a fresh store), detaching it — a later mutation through
 //	   the child was invisible through the container. Now retags the flex child
-//	   IN PLACE (eng.RetagFlexElem) after validating.
+//	   IN PLACE (core.RetagFlexElem) after validating.
 //	P2 the list-copy check residuals (ReturnsPreserveListAt) now copy the source
 //	   ElemConstraint, so a chained write after reverse/take/... is diagnosed.
 

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
@@ -23,12 +23,12 @@ func TestRuntimeShouldFallback(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{"internal_error falls back", eng.MakeBoruError("internal_error", "boom", "", "", ""), true},
+		{"internal_error falls back", core.MakeBoruError("internal_error", "boom", "", "", ""), true},
 		{"foreign (non-Boru) error falls back", errors.New("some go error"), true},
-		{"type_error surfaces", eng.MakeBoruError("type_error", "bad", "", "", ""), false},
-		{"evaluation_limit surfaces (fast-fail by design)", eng.MakeBoruError("evaluation_limit", "too long", "", "", ""), false},
-		{"tape_exhausted surfaces", eng.MakeBoruError("tape_exhausted", "too big", "", "", ""), false},
-		{"signature_error surfaces", eng.MakeBoruError("signature_error", "no sig", "", "", ""), false},
+		{"type_error surfaces", core.MakeBoruError("type_error", "bad", "", "", ""), false},
+		{"evaluation_limit surfaces (fast-fail by design)", core.MakeBoruError("evaluation_limit", "too long", "", "", ""), false},
+		{"tape_exhausted surfaces", core.MakeBoruError("tape_exhausted", "too big", "", "", ""), false},
+		{"signature_error surfaces", core.MakeBoruError("signature_error", "no sig", "", "", ""), false},
 	}
 	for _, c := range cases {
 		if got := runtimeShouldFallback(c.err); got != c.want {
@@ -62,7 +62,7 @@ func TestRunCompiledSurfacesGenuineError(t *testing.T) {
 }
 
 func codeOf(err error) string {
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if errors.As(err, &ae) {
 		return ae.Code
 	}
@@ -1556,9 +1556,9 @@ func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 		a.Register("add3",
 			Signature{
 				Args: []*Type{TNumber, TNumber},
-				Impl: eng.Go(func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
-					x, _ := eng.AsInteger(args[0])
-					y, _ := eng.AsInteger(args[1])
+				Impl: core.Go(func(args []Value, _ map[string]Value, _ []Value, _ *core.Registry) ([]Value, error) {
+					x, _ := core.AsInteger(args[0])
+					y, _ := core.AsInteger(args[1])
 					return []Value{NewInteger(x + y)}, nil
 				}),
 				Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -1568,7 +1568,7 @@ func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 			// forward arity 3).
 			Signature{
 				Args: []*Type{TMap, TAny, TAny},
-				Impl: eng.Go(func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+				Impl: core.Go(func(args []Value, _ map[string]Value, _ []Value, _ *core.Registry) ([]Value, error) {
 					return []Value{args[0]}, nil
 				}),
 				Returns: []*Type{TMap}, BarrierPos: -1,
@@ -1817,7 +1817,7 @@ func TestIslandBurndownEmptyBodyAndCaseTrap(t *testing.T) {
 			t.Errorf("%s: fell back at run time", c.name)
 		}
 		_, errI := mustNew(t).Run(c.src)
-		var aeC, aeI *eng.BoruError
+		var aeC, aeI *core.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
 			t.Errorf("%s: expected BoruError from both engines, got c=%v i=%v", c.name, errC, errI)
 			continue
@@ -3825,7 +3825,7 @@ func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
 		}
 		// Byte-identical taxonomy: code (above) AND detail; position present
 		// whenever the interpreter's is (the full-corpus error lane's contract).
-		var aeC, aeI *eng.BoruError
+		var aeC, aeI *core.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
 			t.Fatalf("%s: non-Boru error: compiled=%v interp=%v", c.name, errC, errI)
 		}

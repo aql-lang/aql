@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The Scalar/Time type family splits across two owners:
@@ -73,13 +73,13 @@ func MintTemporalModuleTypes(r *Registry) TemporalModuleTypes {
 		CalendarDuration: r.Types.MintTypeWithBehavior("CalendarDuration", duration, CalDurationFormatBehavior{}),
 		ClockDuration:    r.Types.MintTypeWithBehavior("ClockDuration", duration, ClkDurationFormatBehavior{}),
 		Timezone:         r.Types.MintTypeWithBehavior("Timezone", TTime, TimezoneFormatBehavior{}),
-		Timeout:          r.Types.MintTypeWithBehavior("Timeout", eng.TIdeal, TimeoutFormatBehavior{}),
-		Interval:         r.Types.MintTypeWithBehavior("Interval", eng.TIdeal, IntervalFormatBehavior{}),
+		Timeout:          r.Types.MintTypeWithBehavior("Timeout", core.TIdeal, TimeoutFormatBehavior{}),
+		Interval:         r.Types.MintTypeWithBehavior("Interval", core.TIdeal, IntervalFormatBehavior{}),
 	}
 }
 
-func RegisterTemporalType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, fixedID, "boru:time-util", behavior)
+func RegisterTemporalType(path string, fixedID int, behavior core.TypeBehavior) *core.Type {
+	t, err := core.Builtin.RegisterType(path, fixedID, "boru:time-util", behavior)
 	if err != nil {
 		// Init-time registration error — recorded, not panicked.
 		// See ADR-005 and typeinit.go.
@@ -93,15 +93,15 @@ func RegisterTemporalType(path string, fixedID int, behavior eng.TypeBehavior) *
 // it doesn't own.
 
 func NewDate(t time.Time) Value {
-	return eng.NewValueRaw(TDate, eng.TimePayload{T: t})
+	return core.NewValueRaw(TDate, core.TimePayload{T: t})
 }
 
 func NewDateTime(t time.Time) Value {
-	return eng.NewValueRaw(TDateTime, eng.TimePayload{T: t})
+	return core.NewValueRaw(TDateTime, core.TimePayload{T: t})
 }
 
 func NewInstant(t time.Time) Value {
-	return eng.NewValueRaw(TInstant, eng.TimePayload{T: t.UTC()})
+	return core.NewValueRaw(TInstant, core.TimePayload{T: t.UTC()})
 }
 
 // The module-owned constructors are methods on TemporalModuleTypes:
@@ -109,19 +109,19 @@ func NewInstant(t time.Time) Value {
 // module instance produces carries the instance's own type identity.
 
 func (tt TemporalModuleTypes) NewTimeOfDay(d time.Duration) Value {
-	return eng.NewValueRaw(tt.TimeOfDay, eng.DurationPayload{D: d})
+	return core.NewValueRaw(tt.TimeOfDay, core.DurationPayload{D: d})
 }
 
 func (tt TemporalModuleTypes) NewCalendarDuration(years, months, days int) Value {
-	return eng.NewValueRaw(tt.CalendarDuration, eng.CalDurationData{Years: years, Months: months, Days: days})
+	return core.NewValueRaw(tt.CalendarDuration, core.CalDurationData{Years: years, Months: months, Days: days})
 }
 
 func (tt TemporalModuleTypes) NewClockDuration(d time.Duration) Value {
-	return eng.NewValueRaw(tt.ClockDuration, eng.DurationPayload{D: d})
+	return core.NewValueRaw(tt.ClockDuration, core.DurationPayload{D: d})
 }
 
 func (tt TemporalModuleTypes) NewTimezone(loc *time.Location) Value {
-	return eng.NewValueRaw(tt.Timezone, eng.TimezonePayload{Loc: loc})
+	return core.NewValueRaw(tt.Timezone, core.TimezonePayload{Loc: loc})
 }
 
 // As* accessors for the time-family types. Moved from
@@ -133,7 +133,7 @@ func (tt TemporalModuleTypes) NewTimezone(loc *time.Location) Value {
 
 // AsDate extracts the time.Time from a Date value.
 func AsDate(v Value) time.Time {
-	if tp, ok := v.Data.(eng.TimePayload); ok {
+	if tp, ok := v.Data.(core.TimePayload); ok {
 		if t, ok := tp.T.(time.Time); ok {
 			return t
 		}
@@ -143,7 +143,7 @@ func AsDate(v Value) time.Time {
 
 // AsDateTime extracts the time.Time from a DateTime value.
 func AsDateTime(v Value) time.Time {
-	if tp, ok := v.Data.(eng.TimePayload); ok {
+	if tp, ok := v.Data.(core.TimePayload); ok {
 		if t, ok := tp.T.(time.Time); ok {
 			return t
 		}
@@ -153,7 +153,7 @@ func AsDateTime(v Value) time.Time {
 
 // AsInstant extracts the time.Time from an Instant value.
 func AsInstant(v Value) time.Time {
-	if tp, ok := v.Data.(eng.TimePayload); ok {
+	if tp, ok := v.Data.(core.TimePayload); ok {
 		if t, ok := tp.T.(time.Time); ok {
 			return t
 		}
@@ -163,7 +163,7 @@ func AsInstant(v Value) time.Time {
 
 // AsTimeOfDay extracts the time.Duration offset for a TimeOfDay value.
 func AsTimeOfDay(v Value) time.Duration {
-	if dp, ok := v.Data.(eng.DurationPayload); ok {
+	if dp, ok := v.Data.(core.DurationPayload); ok {
 		if d, ok := dp.D.(time.Duration); ok {
 			return d
 		}
@@ -172,16 +172,16 @@ func AsTimeOfDay(v Value) time.Duration {
 }
 
 // AsCalendarDuration extracts the CalDurationData payload.
-func AsCalendarDuration(v Value) (eng.CalDurationData, bool) {
-	if d, ok := v.Data.(eng.CalDurationData); ok {
+func AsCalendarDuration(v Value) (core.CalDurationData, bool) {
+	if d, ok := v.Data.(core.CalDurationData); ok {
 		return d, true
 	}
-	return eng.CalDurationData{}, false
+	return core.CalDurationData{}, false
 }
 
 // AsClockDuration extracts the time.Duration payload for a ClockDuration value.
 func AsClockDuration(v Value) (time.Duration, bool) {
-	if dp, ok := v.Data.(eng.DurationPayload); ok {
+	if dp, ok := v.Data.(core.DurationPayload); ok {
 		if d, ok := dp.D.(time.Duration); ok {
 			return d, true
 		}
@@ -191,7 +191,7 @@ func AsClockDuration(v Value) (time.Duration, bool) {
 
 // AsTimezone extracts the *time.Location for a Timezone value.
 func AsTimezone(v Value) *time.Location {
-	if tp, ok := v.Data.(eng.TimezonePayload); ok {
+	if tp, ok := v.Data.(core.TimezonePayload); ok {
 		if loc, ok := tp.Loc.(*time.Location); ok {
 			return loc
 		}
@@ -204,10 +204,10 @@ func AsTimezone(v Value) *time.Location {
 
 type DateFormatBehavior struct{}
 
-func (DateFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (DateFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (DateFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (DateFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (DateFormatBehavior) Format(v Value) string {
-	if tp, ok := v.Data.(eng.TimePayload); ok {
+	if tp, ok := v.Data.(core.TimePayload); ok {
 		if t, ok := tp.T.(time.Time); ok {
 			return t.Format("2006-01-02")
 		}
@@ -216,7 +216,7 @@ func (DateFormatBehavior) Format(v Value) string {
 }
 
 // Compare orders Date values chronologically (earlier < later).
-// Implements eng.Comparer so `lt`/`gt`/`sort` work on Dates via the
+// Implements core.Comparer so `lt`/`gt`/`sort` work on Dates via the
 // canonical CompareValues lattice dispatch.
 func (DateFormatBehavior) Compare(a, b Value) (int, error) {
 	return compareTimePayloads(a, b), nil
@@ -224,10 +224,10 @@ func (DateFormatBehavior) Compare(a, b Value) (int, error) {
 
 type DateTimeFormatBehavior struct{}
 
-func (DateTimeFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (DateTimeFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (DateTimeFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (DateTimeFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (DateTimeFormatBehavior) Format(v Value) string {
-	if tp, ok := v.Data.(eng.TimePayload); ok {
+	if tp, ok := v.Data.(core.TimePayload); ok {
 		if t, ok := tp.T.(time.Time); ok {
 			return t.Format("2006-01-02T15:04:05.999999999")
 		}
@@ -241,10 +241,10 @@ func (DateTimeFormatBehavior) Compare(a, b Value) (int, error) {
 
 type InstantFormatBehavior struct{}
 
-func (InstantFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (InstantFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (InstantFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (InstantFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (InstantFormatBehavior) Format(v Value) string {
-	if tp, ok := v.Data.(eng.TimePayload); ok {
+	if tp, ok := v.Data.(core.TimePayload); ok {
 		if t, ok := tp.T.(time.Time); ok {
 			return t.Format(time.RFC3339Nano)
 		}
@@ -258,10 +258,10 @@ func (InstantFormatBehavior) Compare(a, b Value) (int, error) {
 
 type TimeOfDayFormatBehavior struct{}
 
-func (TimeOfDayFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (TimeOfDayFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (TimeOfDayFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (TimeOfDayFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (TimeOfDayFormatBehavior) Format(v Value) string {
-	dp, ok := v.Data.(eng.DurationPayload)
+	dp, ok := v.Data.(core.DurationPayload)
 	if !ok {
 		return "TimeOfDay(nil)"
 	}
@@ -284,7 +284,7 @@ func (TimeOfDayFormatBehavior) Compare(a, b Value) (int, error) {
 }
 
 // compareTimePayloads returns -1/0/1 for two values whose Data is an
-// eng.TimePayload wrapping a time.Time. Non-Time payloads compare as
+// core.TimePayload wrapping a time.Time. Non-Time payloads compare as
 // equal — the matching dispatch already filters by Parent, so this
 // only fires on well-formed temporal values.
 func compareTimePayloads(a, b Value) int {
@@ -325,15 +325,15 @@ func compareDurationPayloads(a, b Value) int {
 // the family-restricted ordering words reject them in favour of tcmp.
 type TimeCompareBehavior struct{}
 
-func (TimeCompareBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (TimeCompareBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
-func (TimeCompareBehavior) Format(v Value) string       { return eng.DefaultBehavior.Format(v) }
+func (TimeCompareBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (TimeCompareBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
+func (TimeCompareBehavior) Format(v Value) string       { return core.DefaultBehavior.Format(v) }
 
 func (TimeCompareBehavior) Compare(a, b Value) (int, error) {
 	ta, aok := timeFromValue(a)
 	tb, bok := timeFromValue(b)
 	if !aok || !bok {
-		return 0, eng.ErrNoComparer
+		return 0, core.ErrNoComparer
 	}
 	switch {
 	case ta.Before(tb):
@@ -346,7 +346,7 @@ func (TimeCompareBehavior) Compare(a, b Value) (int, error) {
 }
 
 func timeFromValue(v Value) (time.Time, bool) {
-	tp, ok := v.Data.(eng.TimePayload)
+	tp, ok := v.Data.(core.TimePayload)
 	if !ok {
 		return time.Time{}, false
 	}
@@ -355,7 +355,7 @@ func timeFromValue(v Value) (time.Time, bool) {
 }
 
 func DurationFromValue(v Value) time.Duration {
-	dp, ok := v.Data.(eng.DurationPayload)
+	dp, ok := v.Data.(core.DurationPayload)
 	if !ok {
 		return 0
 	}
@@ -369,11 +369,11 @@ func DurationFromValue(v Value) time.Duration {
 type CalDurationFormatBehavior struct{}
 
 func (CalDurationFormatBehavior) Match(v Value, t *Type) bool {
-	return eng.DefaultBehavior.Match(v, t)
+	return core.DefaultBehavior.Match(v, t)
 }
-func (CalDurationFormatBehavior) Equal(a, b Value) bool { return eng.DefaultBehavior.Equal(a, b) }
+func (CalDurationFormatBehavior) Equal(a, b Value) bool { return core.DefaultBehavior.Equal(a, b) }
 func (CalDurationFormatBehavior) Format(v Value) string {
-	if cd, ok := v.Data.(eng.CalDurationData); ok {
+	if cd, ok := v.Data.(core.CalDurationData); ok {
 		return fmt.Sprintf("P%dY%dM%dD", cd.Years, cd.Months, cd.Days)
 	}
 	return "CalendarDuration(nil)"
@@ -382,11 +382,11 @@ func (CalDurationFormatBehavior) Format(v Value) string {
 type ClkDurationFormatBehavior struct{}
 
 func (ClkDurationFormatBehavior) Match(v Value, t *Type) bool {
-	return eng.DefaultBehavior.Match(v, t)
+	return core.DefaultBehavior.Match(v, t)
 }
-func (ClkDurationFormatBehavior) Equal(a, b Value) bool { return eng.DefaultBehavior.Equal(a, b) }
+func (ClkDurationFormatBehavior) Equal(a, b Value) bool { return core.DefaultBehavior.Equal(a, b) }
 func (ClkDurationFormatBehavior) Format(v Value) string {
-	if dp, ok := v.Data.(eng.DurationPayload); ok {
+	if dp, ok := v.Data.(core.DurationPayload); ok {
 		if d, ok := dp.D.(time.Duration); ok {
 			return d.String()
 		}
@@ -400,10 +400,10 @@ func (ClkDurationFormatBehavior) Compare(a, b Value) (int, error) {
 
 type TimezoneFormatBehavior struct{}
 
-func (TimezoneFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (TimezoneFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (TimezoneFormatBehavior) Match(v Value, t *Type) bool { return core.DefaultBehavior.Match(v, t) }
+func (TimezoneFormatBehavior) Equal(a, b Value) bool       { return core.DefaultBehavior.Equal(a, b) }
 func (TimezoneFormatBehavior) Format(v Value) string {
-	if tp, ok := v.Data.(eng.TimezonePayload); ok {
+	if tp, ok := v.Data.(core.TimezonePayload); ok {
 		if loc, ok := tp.Loc.(*time.Location); ok {
 			return loc.String()
 		}

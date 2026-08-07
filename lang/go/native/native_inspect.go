@@ -1,6 +1,8 @@
 package native
 
-import "github.com/boru-lang/boru/eng/go"
+import (
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // inspectNatives installs `inspect` — the machine-readable
 // counterpart of `help` for words, values, and types.
@@ -47,7 +49,7 @@ var inspectNatives = []NativeFunc{
 		},
 	},
 
-	// canon — render any value as canonical boru source (eng.CanonValue):
+	// canon — render any value as canonical boru source (core.CanonValue):
 	// the same renderer the spec suites and the doc-example harness
 	// compare against. For DATA values — scalars, atoms (`name/q`),
 	// paths, none, type literals, plain and flex Node trees — the
@@ -67,7 +69,7 @@ var inspectNatives = []NativeFunc{
 }
 
 func canonHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(eng.CanonValue(args[0]))}, nil
+	return []Value{NewString(core.CanonValue(args[0]))}, nil
 }
 
 func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -87,7 +89,7 @@ func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	// parser init reaches this handler as a captured Atom (`inspect
 	// Date`), exactly like a user type — without this arm it rendered
 	// kind:unknown (NUR059).
-	if t, ok := eng.ResolveBuiltinTypeName(name); ok {
+	if t, ok := core.ResolveBuiltinTypeName(name); ok {
 		return []Value{buildTypeInspection(name, NewTypeLiteral(t))}, nil
 	}
 	return []Value{buildInspection(r, name)}, nil

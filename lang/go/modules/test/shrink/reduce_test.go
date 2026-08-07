@@ -3,7 +3,7 @@ package shrink
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
@@ -29,7 +29,7 @@ func formHasInt(form *stackform.StackForm, n int64) bool {
 	for _, op := range form.Ops {
 		switch o := op.(type) {
 		case stackform.PushLit:
-			if got, err := eng.AsInteger(o.V); err == nil && got == n {
+			if got, err := core.AsInteger(o.V); err == nil && got == n {
 				return true
 			}
 		case stackform.Quote:
@@ -47,10 +47,10 @@ func formHasInt(form *stackform.StackForm, n int64) bool {
 // should drop them.
 func TestReduce_DropsUnrelatedOps(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1)},
-		stackform.PushLit{V: eng.NewInteger(7)}, // the witness
-		stackform.PushLit{V: eng.NewInteger(2)},
-		stackform.PushLit{V: eng.NewInteger(3)},
+		stackform.PushLit{V: core.NewInteger(1)},
+		stackform.PushLit{V: core.NewInteger(7)}, // the witness
+		stackform.PushLit{V: core.NewInteger(2)},
+		stackform.PushLit{V: core.NewInteger(3)},
 		stackform.Call{Name: "add", Arity: 2},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
@@ -72,7 +72,7 @@ func TestReduce_DropsUnrelatedOps(t *testing.T) {
 // toward 0 when the failure condition is "contains some Integer".
 func TestReduce_ShrinksIntegerLiterals(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(42)},
+		stackform.PushLit{V: core.NewInteger(42)},
 	}}
 	// Failure: ANY integer present. Reducer should shrink the
 	// value all the way to 0.
@@ -92,7 +92,7 @@ func TestReduce_ShrinksIntegerLiterals(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected PushLit, got %T", reduced.Ops[0])
 	}
-	n, _ := eng.AsInteger(lit.V)
+	n, _ := core.AsInteger(lit.V)
 	if n != 0 {
 		t.Errorf("expected shrunk to 0, got %d", n)
 	}
@@ -103,7 +103,7 @@ func TestReduce_ShrinksIntegerLiterals(t *testing.T) {
 // positive value does.
 func TestReduce_ShrinksToMinimumNonZero(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(100)},
+		stackform.PushLit{V: core.NewInteger(100)},
 	}}
 	// Failure: integer > 0. So 0 doesn't qualify but 1 does.
 	eval := fpEval(func(f *stackform.StackForm) bool {
@@ -114,12 +114,12 @@ func TestReduce_ShrinksToMinimumNonZero(t *testing.T) {
 		if !ok {
 			return false
 		}
-		n, err := eng.AsInteger(lit.V)
+		n, err := core.AsInteger(lit.V)
 		return err == nil && n > 0
 	})
 	reduced := Reduce(initial, eval, DefaultProfile())
 	lit, _ := reduced.Ops[0].(stackform.PushLit)
-	n, _ := eng.AsInteger(lit.V)
+	n, _ := core.AsInteger(lit.V)
 	if n <= 0 {
 		t.Errorf("reducer broke the failure condition: got %d, want >0", n)
 	}
@@ -132,7 +132,7 @@ func TestReduce_ShrinksToMinimumNonZero(t *testing.T) {
 // "" (or shortest possible) when the failure is just "has a string".
 func TestReduce_ShrinksStrings(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewString("hello world")},
+		stackform.PushLit{V: core.NewString("hello world")},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
 		if len(f.Ops) == 0 {
@@ -143,7 +143,7 @@ func TestReduce_ShrinksStrings(t *testing.T) {
 	})
 	reduced := Reduce(initial, eval, DefaultProfile())
 	lit, _ := reduced.Ops[0].(stackform.PushLit)
-	s, _ := eng.AsString(lit.V)
+	s, _ := core.AsString(lit.V)
 	if s != "" {
 		t.Errorf("expected shrunk to \"\", got %q", s)
 	}
@@ -153,7 +153,7 @@ func TestReduce_ShrinksStrings(t *testing.T) {
 // when both preserve the failure.
 func TestReduce_ShrinksBoolean(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewBoolean(true)},
+		stackform.PushLit{V: core.NewBoolean(true)},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
 		if len(f.Ops) == 0 {
@@ -164,7 +164,7 @@ func TestReduce_ShrinksBoolean(t *testing.T) {
 	})
 	reduced := Reduce(initial, eval, DefaultProfile())
 	lit, _ := reduced.Ops[0].(stackform.PushLit)
-	b, _ := eng.AsBoolean(lit.V)
+	b, _ := core.AsBoolean(lit.V)
 	if b {
 		t.Error("expected shrunk to false")
 	}
@@ -174,9 +174,9 @@ func TestReduce_ShrinksBoolean(t *testing.T) {
 // shrunk too — the reducer walks the tree, not just the top level.
 func TestReduce_RecursesIntoQuoteBody(t *testing.T) {
 	inner := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1)},
-		stackform.PushLit{V: eng.NewInteger(99)}, // the witness, nested
-		stackform.PushLit{V: eng.NewInteger(2)},
+		stackform.PushLit{V: core.NewInteger(1)},
+		stackform.PushLit{V: core.NewInteger(99)}, // the witness, nested
+		stackform.PushLit{V: core.NewInteger(2)},
 	}}
 	initial := &stackform.StackForm{Ops: []stackform.Op{
 		stackform.Quote{Body: inner},
@@ -203,7 +203,7 @@ func TestReduce_RecursesIntoQuoteBody(t *testing.T) {
 // form alone when every op is essential.
 func TestReduce_NoOpWhenAllOpsRequired(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(7)},
+		stackform.PushLit{V: core.NewInteger(7)},
 	}}
 	// Failure: contains 7. Already minimal (single op, 0 wouldn't
 	// satisfy the condition).
@@ -220,8 +220,8 @@ func TestReduce_NoOpWhenAllOpsRequired(t *testing.T) {
 // won't accept a mutation that loses the failure condition.
 func TestReduce_RejectsCandidatesThatBreakFailure(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(7)},
-		stackform.PushLit{V: eng.NewInteger(3)},
+		stackform.PushLit{V: core.NewInteger(7)},
+		stackform.PushLit{V: core.NewInteger(3)},
 	}}
 	// Failure: top-of-stack is 7 (i.e. the SECOND PushLit's value).
 	eval := fpEval(func(f *stackform.StackForm) bool {
@@ -232,7 +232,7 @@ func TestReduce_RejectsCandidatesThatBreakFailure(t *testing.T) {
 		if !ok {
 			return false
 		}
-		n, _ := eng.AsInteger(lit.V)
+		n, _ := core.AsInteger(lit.V)
 		return n == 7
 	})
 	// Start: top is 3, not 7 — eval returns Pass.
@@ -252,10 +252,10 @@ func TestReduce_RejectsCandidatesThatBreakFailure(t *testing.T) {
 // reaches the same minimum as greedy on cases where greedy works.
 func TestReduce_BestFirst_FindsMinimum(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1)},
-		stackform.PushLit{V: eng.NewInteger(7)}, // the witness
-		stackform.PushLit{V: eng.NewInteger(2)},
-		stackform.PushLit{V: eng.NewInteger(3)},
+		stackform.PushLit{V: core.NewInteger(1)},
+		stackform.PushLit{V: core.NewInteger(7)}, // the witness
+		stackform.PushLit{V: core.NewInteger(2)},
+		stackform.PushLit{V: core.NewInteger(3)},
 		stackform.Call{Name: "add", Arity: 2},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
@@ -288,8 +288,8 @@ func TestReduce_BestFirst_FindsMinimum(t *testing.T) {
 // greedy and doesn't regress.
 func TestReduce_BestFirst_AtLeastMatchesGreedy(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(100)},
-		stackform.PushLit{V: eng.NewInteger(200)},
+		stackform.PushLit{V: core.NewInteger(100)},
+		stackform.PushLit{V: core.NewInteger(200)},
 		stackform.Call{Name: "add", Arity: 2},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
@@ -331,7 +331,7 @@ func TestReduce_BestFirst_AtLeastMatchesGreedy(t *testing.T) {
 // respects the "only shrink genuine counterexamples" contract.
 func TestReduce_BestFirst_NoFailDoesntShrink(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(5)},
+		stackform.PushLit{V: core.NewInteger(5)},
 	}}
 	// Eval always returns Pass.
 	eval := fpEval(func(_ *stackform.StackForm) bool { return false })
@@ -352,7 +352,7 @@ func TestReduce_BestFirst_RespectsBeamWidth(t *testing.T) {
 	// Form with many PushLits → many drop candidates per step.
 	ops := []stackform.Op{}
 	for i := 0; i < 20; i++ {
-		ops = append(ops, stackform.PushLit{V: eng.NewInteger(int64(i))})
+		ops = append(ops, stackform.PushLit{V: core.NewInteger(int64(i))})
 	}
 	initial := &stackform.StackForm{Ops: ops}
 	eval := fpEval(func(f *stackform.StackForm) bool {
@@ -381,7 +381,7 @@ func TestReduce_BestFirst_RespectsBeamWidth(t *testing.T) {
 // loop terminates.
 func TestReduce_RespectsMaxSteps(t *testing.T) {
 	initial := &stackform.StackForm{Ops: []stackform.Op{
-		stackform.PushLit{V: eng.NewInteger(1024)},
+		stackform.PushLit{V: core.NewInteger(1024)},
 	}}
 	eval := fpEval(func(f *stackform.StackForm) bool {
 		if len(f.Ops) == 0 {
@@ -391,13 +391,13 @@ func TestReduce_RespectsMaxSteps(t *testing.T) {
 		if !ok {
 			return false
 		}
-		n, err := eng.AsInteger(lit.V)
+		n, err := core.AsInteger(lit.V)
 		return err == nil && n > 0
 	})
 	profile := &Profile{MaxSteps: 2, Policy: DefaultPolicy()}
 	reduced := Reduce(initial, eval, profile)
 	lit, _ := reduced.Ops[0].(stackform.PushLit)
-	n, _ := eng.AsInteger(lit.V)
+	n, _ := core.AsInteger(lit.V)
 	if n == 1 {
 		t.Errorf("reducer converged all the way to 1 — MaxSteps=2 not respected (would need ~10 halvings)")
 	}
