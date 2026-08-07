@@ -1,6 +1,6 @@
 # CORE-TS-COVERAGE.0 — taking core/ts from 62% to 100%
 
-**Status:** Specified, not started · **Started:** 2026-08-07 (maintainer
+**Status:** Stages 1-3 DONE, 4 partial, 5 partial — 62.43% -> 87.27% · **Started:** 2026-08-07 (maintainer
 instruction: "Bring ts up to 100%", then — on being told the corpus could not
 do it — "Spec it")
 
@@ -152,3 +152,65 @@ core-level rows, but coverage and parity are different gates: a fully covered
 `canonValue` can still disagree with `CanonValue`. `TS-PARITY-AUDIT.0.md`
 tracks those separately, and `make parser-crossdiff` is what watches the
 render surface.
+
+## Outcome — 62.43% to 87.27%
+
+| stage | scope | target | landed |
+|---|---|---:|---:|
+| 1 | the 19 never-called exported functions | 70 | **71.24** |
+| 2 | render surface, type, signature | 78 | 74.34 |
+| 3 | match, registry, check-state | 82 | **76.45** |
+| 4 | engine.ts, non-check | 96 | 87.27 |
+| 5 | engine.ts check arms, fake AnalysisImpl | 100 | (partial) |
+
+Stages 1 and 3 beat their targets; 2 fell short and 4 stopped at 87.27
+rather than 96. Floor 62 → 87, never lowered. **100% was not reached.**
+
+Per-file, everything except `engine.ts` and `match.ts` is at or near done:
+`analysis-hooks`, `capability`, `check-state`, `emit-recorder`, `error`,
+`index`, `signature`, `sugar` at 100; `canon` 99.35, `type` 99.67, `make`
+98.09, `registry` 96.86, `value` 96.05, `resolve` 95.65, `coretype` 93.98,
+`match` 84.86. **`engine.ts` is 67.46%** and holds ~535 of the ~660 lines
+still uncovered.
+
+### What the last 13 points actually need
+
+The stage-4 estimate assumed engine.ts's methods were reachable by
+constructing programs. Most are; four clusters are not, and they are what
+remains:
+
+- **`substituteInterp` (49 lines)** needs a live `EmitRecorder` on
+  `registry.check.emit` — the bytecode-island path, where a captured binding
+  is baked to a const or its producer's token span is inlined. Reaching it
+  means building an emit fixture, not a program.
+- **`preEvalParens` (49)** has arms keyed on signature shape that the
+  three-word fixture does not produce.
+- **`dispatchFnDefCheck` (39) + `checkModeAssumeSig` (31) + `analyseFnBody`
+  (20)** are covered only at their entry. The fake `AnalysisImpl` returns a
+  fixed carrier; the arms below it branch on carrier shape and on fn-body
+  recursion, so the fake has to model those to go deeper.
+- **`fireMarker` (33) + `beginForward` (25) + `stepLiteral` (35)** are the
+  forward-marker machinery. `barrierPos` stops forward collection at the next
+  word, so the deferral path needs a word declared without a barrier — the
+  fixture words all have one.
+
+### Two contract corrections this work produced
+
+Both were tests written against an assumption and corrected against the code:
+
+- `isValueOfType` does **not** inherit `unifiesValue`'s exact-key-set rule.
+  Maps route through the record-shape/open-subset path at every depth, so
+  `{a:1 b:2}` satisfies `{a:1}` nested or not.
+- `barrierPos` means `addq 1 addq 2 3` is a **signature error**, not
+  `1 + (2+3)`. Nested values must be parenthesised to be collected.
+
+### And a third defect family
+
+Stage 1 turned up six more `Value.toString()` payload kinds with no arm —
+Pathon, Emailon, Urlon, Error, Options, Reach — all rendering the literal
+`[object Object]`. The parser stream oracle could not see them because those
+values are minted by `make`, an engine word, not by parsing. `canonValue`
+already rendered every one correctly, so `toString` now delegates for exactly
+those kinds. The render tests assert against `[object Object]` as a class
+rather than one kind at a time, since this is now the *third* time a missing
+arm has shipped.

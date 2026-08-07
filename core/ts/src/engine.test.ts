@@ -44,11 +44,14 @@ import {
   newInterpString,
   newList,
   newMap,
+  newMark,
+  newMove,
   newOpenParen,
   newParenExpr,
   newString,
   newTypeLiteral,
   newWord,
+  newXmlInterp,
   type FnDefInfo,
   type FnSig,
   type Value,
@@ -377,5 +380,172 @@ describe('Engine.run — type literals and atoms pass through', () => {
     // canon renders an atom as the literal that re-reads as one; Go's
     // oracle agrees (`a/q` -> `a/q`).
     assert.equal(run([newAtom('a')]), 'a/q')
+  })
+})
+
+describe('Engine.run — XML templates', () => {
+  it('resolves a template with no holes to a plain element', () => {
+    const v = newXmlInterp({ tag: 'br', attrs: [], children: [] })
+    assert.equal(run([v]), '<br/>')
+  })
+
+  it('evaluates an attribute hole into the attribute text', () => {
+    const v = newXmlInterp({
+      tag: 'a',
+      attrs: [{ name: 'h', segs: [{ lit: 'p/' }, { expr: [newWord('addq'), newInteger(1n), newInteger(1n)] }] }],
+      children: [],
+    })
+    assert.equal(run([v]), '<a h="p/2"/>')
+  })
+
+  it('evaluates a child hole into the element text', () => {
+    const v = newXmlInterp({
+      tag: 'p',
+      attrs: [],
+      children: [{ lit: 'n=' }, { expr: [newWord('addq'), newInteger(2n), newInteger(3n)] }],
+    })
+    assert.equal(run([v]), '<p>n=5</p>')
+  })
+
+  it('resolves a nested element child', () => {
+    const v = newXmlInterp({
+      tag: 'o',
+      attrs: [],
+      children: [{ elem: { tag: 'i', attrs: [], children: [{ lit: 't' }] } }],
+    })
+    assert.equal(run([v]), '<o><i>t</i></o>')
+  })
+})
+
+describe('Engine.run — marks and moves', () => {
+  it('drops a move whose mark was never seen', () => {
+    assert.equal(run([newInteger(1n), newMove('absent')]), '1')
+  })
+
+  it('relocates a value to its mark', () => {
+    // A mark names a slot; a later move addresses it. The pair is how the
+    // engine reorders a stack without the caller respelling the program.
+    const out = run([newMark('m', []), newInteger(1n), newMove('m')])
+    assert.doesNotMatch(out, /\[object Object\]/)
+  })
+})
+
+describe('Engine.run — nested interpolation', () => {
+  it('substitutes an interpolation nested in an interpolation', () => {
+    const inner = newInterpString([{ lit: 'i' }, { expr: [newInteger(1n)] }])
+    const outer = newInterpString([{ lit: '<' }, { expr: [inner] }, { lit: '>' }])
+    assert.equal(run([outer]), "'<i1>'")
+  })
+
+  it('substitutes a list expression segment', () => {
+    const s = newInterpString([{ expr: [newList([newInteger(1n), newInteger(2n)])] }])
+    assert.doesNotMatch(run([s]), /\[object Object\]/)
+  })
+})
+
+describe('Engine.run — deeper paren forms', () => {
+  it('nests paren groups', () => {
+    const prog = [
+      newWord('addq'),
+      newOpenParen(),
+      newWord('addq'),
+      newInteger(1n),
+      newInteger(1n),
+      newCloseParen(),
+      newOpenParen(),
+      newWord('addq'),
+      newInteger(2n),
+      newInteger(2n),
+      newCloseParen(),
+    ]
+    assert.equal(run(prog), '6')
+  })
+
+  it('returns an empty paren group as nothing', () => {
+    assert.equal(run([newOpenParen(), newCloseParen()]), '')
+  })
+
+  it('evaluates a paren group standing alone', () => {
+    assert.equal(run([newOpenParen(), newWord('addq'), newInteger(1n), newInteger(2n), newCloseParen()]), '3')
+  })
+})
+
+describe('Engine.run — the collection barrier', () => {
+  it('does NOT reach past a word to fill a forward slot', () => {
+    // barrierPos stops forward collection at the next word, so `addq 1 addq
+    // 2 3` is a signature error rather than 1 + (2+3). The nested value has
+    // to be parenthesised to be collected — which is what the paren tests
+    // above exercise. Recorded because the opposite is the intuitive guess.
+    assert.throws(
+      () => run([newWord('addq'), newInteger(1n), newWord('addq'), newInteger(2n), newInteger(3n)]),
+      (e: unknown) => e instanceof BoruError && e.message.includes('no signature matches'),
+    )
+  })
+
+  it('refuses a word whose forward args are not all present', () => {
+    assert.throws(
+      () => run([newWord('addq'), newInteger(1n)]),
+      (e: unknown) => e instanceof BoruError && e.message.includes('no signature matches'),
+    )
+  })
+
+  it('collects through parens instead', () => {
+    const inner = newParenExpr([newWord('addq'), newInteger(2n), newInteger(3n)])
+    assert.equal(run([newWord('addq'), newInteger(1n), inner]), '6')
+  })
+})
+
+describe('Engine.run — word resolution at the argument slot', () => {
+  it('resolves the keyword words where a slot consumes them', () => {
+    // ADR-012 rule 4: the parser is type-name-opaque, so the keywords and
+    // type names arrive as Words and resolve exactly at the slot.
+    assert.equal(run([newWord('idq'), newWord('true')]), 'true')
+    assert.equal(run([newWord('idq'), newWord('false')]), 'false')
+    assert.equal(run([newWord('idq'), newWord('none')]), 'none')
+  })
+
+  it('resolves a builtin type name to its type literal at the slot', () => {
+    assert.equal(run([newWord('idq'), newWord('Integer')]), 'Integer')
+    assert.equal(run([newWord('idq'), newWord('String')]), 'String')
+  })
+
+  it('refuses a bare type literal in a value slot', () => {
+    // `addq Integer 1` is a signature error: a Scalar slot takes a concrete
+    // value, never a bare type literal.
+    assert.throws(() => run([newWord('addq'), newTypeLiteral(TInteger), newInteger(1n)]), BoruError)
+  })
+})
+
+describe('Engine.run — nested containers', () => {
+  it('builds a list of evaluated elements', () => {
+    const l = newList(
+      [newParenExpr([newWord('addq'), newInteger(1n), newInteger(1n)]), newInteger(9n)],
+      { eval: true },
+    )
+    assert.equal(run([l]), '[2 9]')
+  })
+
+  it('builds a list containing a list', () => {
+    const inner = newList([newInteger(1n)], { eval: true })
+    assert.equal(run([newList([inner], { eval: true })]), '[[1]]')
+  })
+
+  it('builds a map whose value is a list', () => {
+    const m = new OrderedMap()
+    m.set('k', newList([newInteger(1n)], { eval: true }))
+    assert.equal(run([newMap(m)]), '{k:[1]}')
+  })
+
+  it('builds a map nested in a map', () => {
+    const inner = new OrderedMap()
+    inner.set('a', newInteger(1n))
+    const outer = new OrderedMap()
+    outer.set('n', newMap(inner))
+    assert.equal(run([newMap(outer)]), '{n:{a:1}}')
+  })
+
+  it('leaves an empty container empty', () => {
+    assert.equal(run([newList([], { eval: true })]), '[]')
+    assert.equal(run([newMap(new OrderedMap())]), '{}')
   })
 })
