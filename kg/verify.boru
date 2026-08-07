@@ -42,6 +42,7 @@ def current
       (KgDigest.project-inputs project-file
           (KgGoMod.input-paths work-file extra-modules)
       )
+      [(KgGoMod.tree-manifest work-file extra-modules)]
   )
 
 def result (KgDigest.compare stored current)

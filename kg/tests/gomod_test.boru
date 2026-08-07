@@ -8,6 +8,7 @@
 # Run from kg/:  ../cmd/go/bin/boru tests/gomod_test.boru
 
 import "boru:test"
+import "boru:string-util"
 import "./util.boru"
 import "./gomod.boru"
 
@@ -40,6 +41,58 @@ def work-text
 "the single-line use form is accepted too" Test.test end
 [((KgGoMod.parse-work-uses "go 1.24.7\n") size) 0 Assert.equal]
 "a workspace with no use block yields no members" Test.test end
+
+# -- inline comments ------------------------------------------------------
+#
+# go.work and go.mod both permit trailing comments and `go work edit
+# -fmt` preserves them, so these are forms the tree can legitimately
+# contain. Before the fix, `./eng/go // engine` stored the member path
+# `eng/go // engine` and the build tried to read
+# `../eng/go // engine/go.mod`, failing both graph and verify.
+
+[(KgGoMod.strip-comment "./eng/go // engine") "./eng/go" Assert.equal]
+"a trailing comment is cut and the value trimmed" Test.test end
+[(KgGoMod.strip-comment "./eng/go") "./eng/go" Assert.equal]
+"a line without a comment is returned unchanged" Test.test end
+[(KgGoMod.strip-comment "// whole line") "// whole line" Assert.equal]
+"a whole-line comment is left alone for the caller to filter" Test.test
+end
+
+[(KgGoMod.parse-work-uses
+          "use (\n\t./eng/go // engine\n\t./core/go\n)\n"
+      )
+      ["core/go" "eng/go"] Assert.equal
+  ]
+"a commented use path yields the bare path" Test.test end
+[(KgGoMod.parse-work-uses "use ./solo // only one\n") ["solo"]
+      Assert.equal
+  ]
+"the single-line use form strips its comment too" Test.test end
+[(KgGoMod.parse-work-uses "use (\n\t./a\n) // done\n") ["a"]
+      Assert.equal
+  ]
+"a commented block terminator still closes the block" Test.test end
+[(KgGoMod.parse-module-path
+          "module github.com/x/y // the module\n"
+      )
+      "github.com/x/y" Assert.equal
+  ]
+"a commented module directive yields the bare path" Test.test end
+
+# The one place a comment must SURVIVE: `// indirect` is the marker that
+# tells a direct dependency from a transitive one, so stripping it here
+# would silently promote every indirect require to a depends_on edge.
+[(((KgGoMod.parse-requires
+                  "require (\n\tgithub.com/a/b v1.0.0 // indirect\n)\n"
+              )
+              get 0
+          )
+          get "indirect"
+      )
+      true Assert.equal
+  ]
+"a require entry KEEPS its comment so // indirect still reads" Test.test
+end
 
 # -- go.mod: the module directive ----------------------------------------
 
@@ -89,7 +142,7 @@ def mod-block
       "github.com/a/aa v1.0.0" Assert.equal
   ]
 "the verbatim line is kept — it becomes the evidence quote" Test.test
-  end
+end
 
 # -- sibling deps: direct only -------------------------------------------
 
@@ -219,6 +272,38 @@ end
       0 Assert.equal
   ]
 "every code assertion names kg-gomod as its extractor" Test.test end
+
+# -- the tree manifest ----------------------------------------------------
+#
+# The file digests cannot see a package directory appearing or losing
+# its last .go file: the graph changes while every tracked file stays
+# byte-identical. The manifest closes that hole.
+
+def manifest (KgGoMod.tree-manifest-text "../go.work" [])
+
+[(StringUtil.contains "eng/go/parser" manifest) true Assert.equal]
+"the manifest lists the discovered packages" Test.test end
+[(StringUtil.contains "core/go" manifest) true Assert.equal]
+"the manifest lists the modules" Test.test end
+[(KgGoMod.tree-manifest-text "../go.work" []) manifest Assert.equal]
+"the manifest is deterministic" Test.test end
+
+# An out-of-workspace module lives in main.boru, not in any file the
+# digest reads, so the manifest has to carry it or editing that list
+# would leave the graph looking current.
+[((KgGoMod.tree-manifest-text "../go.work"
+              ["editors/tree-sitter/bindings/go"]
+          )
+          eq manifest
+      )
+      false Assert.equal
+  ]
+"changing the extra-module list changes the manifest" Test.test end
+
+[((KgGoMod.tree-manifest "../go.work" []) get "text") manifest
+      Assert.equal
+  ]
+"tree-manifest wraps the text as a synthetic digest row" Test.test end
 
 # -- the digest input list -----------------------------------------------
 

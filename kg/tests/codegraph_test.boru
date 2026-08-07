@@ -87,7 +87,7 @@ def names fn ids:List List [
 
 [(names (KgQuery.dependencies-of graph core.id)) [] Assert.equal]
 "core/go depends on nothing — it is the base of the chain" Test.test
-  end
+end
 [(((KgQuery.dependents-of graph core.id) size) gt 0) true Assert.equal]
 "but things depend ON core/go" Test.test end
 [(names (KgQuery.dependencies-of graph eng.id))

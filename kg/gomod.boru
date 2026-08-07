@@ -63,6 +63,26 @@ def key-of fn path:String String [
 def module-label fn path:String String [`${path} module`]
 def package-label fn path:String String [`${path} package`]
 
+# Cut a directive line at its first `//` comment.
+#
+# go.work and go.mod both permit trailing comments, and `go work edit
+# -fmt` PRESERVES them, so `./eng/go // engine` is a form the tree can
+# legitimately contain. Without this, that line stored the member path
+# `eng/go // engine` and the build then tried to read
+# `../eng/go // engine/go.mod`.
+#
+# Used only where the rest of the line is a whole value — a use path, a
+# module path, a block delimiter. A require ENTRY deliberately keeps its
+# comment, because `// indirect` is what tells a direct dependency apart
+# from a transitive one.
+#
+# i < 0 is no comment; i == 0 is a whole-line comment, which the callers
+# already filter by prefix. Only a comment AFTER content is stripped.
+def strip-comment fn s:String String [
+  def i (StringUtil.indexof "//" s)
+  if (i lte 0) [s] [StringUtil.trim ((StringUtil.split "//" s) get 0)]
+]
+
 # ---- go.work ------------------------------------------------------------
 
 # The `use (...)` block, as repo-relative member paths. A single-line
@@ -72,7 +92,7 @@ def parse-work-uses fn text:String List [
     (fold
         [var
             [[l acc]
-              def t (StringUtil.trim l)
+              def t (strip-comment (StringUtil.trim l))
               def inb (KgUtil.get-or acc "in" false)
               def out (KgUtil.list-at acc "out")
               if (t eq "use (") [KgUtil.as-map {in:true out:out}]
@@ -110,8 +130,10 @@ def parse-module-path fn text:String String [
         (lines-of text)
     )
   if ((hits size) eq 0) [""]
-    [StringUtil.trim
-        (strip-prefix "module " (StringUtil.trim (hits get 0)))
+    [strip-comment
+        (StringUtil.trim
+            (strip-prefix "module " (StringUtil.trim (hits get 0)))
+        )
     ]
 ]
 
@@ -134,11 +156,16 @@ def parse-requires fn text:String List [
     (fold
         [var
             [[l acc]
+                # `t` keeps its comment because require-entry needs to see
+              # `// indirect`; `d` is the comment-free form, used only
+              # for the block delimiters (a `) // done` terminator must
+              # still close the block).
               def t (StringUtil.trim l)
+              def d (strip-comment t)
               def inb (KgUtil.get-or acc "in" false)
               def out (KgUtil.list-at acc "out")
-              if (t eq "require (") [KgUtil.as-map {in:true out:out}]
-                [if (inb and (t eq ")"))
+              if (d eq "require (") [KgUtil.as-map {in:true out:out}]
+                [if (inb and (d eq ")"))
                     [KgUtil.as-map {in:false out:out}]
                     [if (inb and (not (KgUtil.starts-with "//" t)))
                         [KgUtil.as-map
@@ -423,6 +450,46 @@ def candidate-bundle fn [[work-path:String extra-modules:List] [Map] [
     }
 ]]
 
+# The code bundle's TREE SHAPE, as deterministic text for the input
+# digest: every module path it will ingest, then every package directory
+# it discovered.
+#
+# The file digests cannot see either of these. A package directory that
+# appears — or loses its last .go file — changes the package entities a
+# rebuild emits while every tracked FILE stays byte-identical, so
+# `make -C kg verify` would report CURRENT for a graph a rebuild would
+# change. That is a false negative in the one direction that matters.
+# The out-of-workspace module list has the same problem from the other
+# side: it lives in main.boru, not in any file the digest reads.
+#
+# Only the QUALIFYING set is recorded, never the .go filenames inside a
+# package: adding a file to an existing package does not change the
+# graph, and hashing filenames would report staleness that isn't there.
+def tree-manifest-text fn [[work-path:String extra-modules:List]
+  [String] [
+  def members (parse-work-uses (read-text work-path))
+  def mods (sort (flatten [members extra-modules]))
+  def pkgs
+    (sort
+        (flatten
+            (each
+                [var [[m] each [var [[p] `${m}/${p}`]] (packages-of m)]]
+                mods
+            )
+        )
+    )
+    StringUtil.concat (flatten [["modules:"] mods ["packages:"] pkgs])
+    {sep:"\n"}
+]]
+
+# The manifest as a synthetic digest row (see digest.boru).
+def tree-manifest fn [[work-path:String extra-modules:List] [Map] [
+  KgUtil.as-map
+    {path:"<go tree: modules + packages>"
+      text:(tree-manifest-text work-path extra-modules)
+    }
+]]
+
 # The files this bundle reads, for the input digest (digest.boru).
 def input-paths fn [[work-path:String extra-modules:List] [List] [
   def members (parse-work-uses (read-text work-path)) sort
@@ -440,6 +507,7 @@ export "KgGoMod" {
   read-text:read-text/r
   lines-of:lines-of/r
   strip-prefix:strip-prefix/r
+  strip-comment:strip-comment/r
   key-of:key-of/r
   module-label:module-label/r
   package-label:package-label/r
@@ -460,5 +528,7 @@ export "KgGoMod" {
   package-entities:package-entities/r
   member-assertions:member-assertions/r
   candidate-bundle:candidate-bundle/r
+  tree-manifest-text:tree-manifest-text/r
+  tree-manifest:tree-manifest/r
   input-paths:input-paths/r
 }

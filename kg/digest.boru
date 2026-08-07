@@ -77,14 +77,40 @@ def combine fn entries:List String [
     )
 ]
 
-def mk-input-digest fn paths:List Map [
-  def entries (file-digests paths) KgUtil.as-map
+# SYNTHETIC inputs: content the build DERIVES rather than reads from one
+# file, supplied by the caller as {path text} and digested into the same
+# row shape as a real file. `path` is a bracketed label, not a
+# filesystem path, so it cannot collide with one.
+#
+# This exists because not every input to the graph is a file. The code
+# bundle discovers packages by walking directories, so a package
+# appearing — or losing its last .go file — changes what a rebuild emits
+# while every tracked file stays byte-identical. Digesting only files
+# would report CURRENT for a graph a rebuild would change, which is the
+# one direction of error a freshness check must not make.
+def synthetic-rows fn items:List List [
+  each
+    [var
+        [[i] KgUtil.as-map
+            {path:i.path
+              digest:(digest-text i.text)
+              chars:(i.text size)
+            }
+        ]
+    ]
+    items
+]
+
+def mk-input-digest fn [[paths:List synthetic:List] [Map] [
+  def rows (flatten [(file-digests paths) (synthetic-rows synthetic)])
+  def entries (rows ArrayUtil.sortby (each [dot path] rows))
+    KgUtil.as-map
     {algorithm:algorithm
       file_count:(entries size)
       combined:(combine entries)
       files:entries
     }
-]
+]]
 
 # ---- the canonical input surface ---------------------------------------
 
@@ -164,6 +190,7 @@ export "KgDigest" {
   read-text:read-text/r
   distinct:distinct/r
   file-digests:file-digests/r
+  synthetic-rows:synthetic-rows/r
   combine:combine/r
   mk-input-digest:mk-input-digest/r
   project-inputs:project-inputs/r

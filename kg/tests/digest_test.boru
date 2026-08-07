@@ -56,19 +56,19 @@ def rows (KgDigest.file-digests two)
 
 # -- the combined digest --------------------------------------------------
 
-def whole (KgDigest.mk-input-digest two)
+def whole (KgDigest.mk-input-digest two [])
 [(whole get "algorithm") "fnv64" Assert.equal]
 "the block names its algorithm" Test.test end
 [(whole get "file_count") 2 Assert.equal]
 "the block counts its inputs" Test.test end
-[((KgDigest.mk-input-digest two) get "combined")
+[((KgDigest.mk-input-digest two []) get "combined")
       (whole get "combined") Assert.equal
   ]
 "the combined digest is deterministic" Test.test end
 
 # Dropping an input must move the combined digest, or removing a file
 # from the graph's input set would go unnoticed.
-[(((KgDigest.mk-input-digest ["fixtures/valid.jsonic"]) get
+[(((KgDigest.mk-input-digest ["fixtures/valid.jsonic"] []) get
               "combined"
           )
           eq (whole get "combined")
@@ -76,6 +76,42 @@ def whole (KgDigest.mk-input-digest two)
       false Assert.equal
   ]
 "removing an input changes the combined digest" Test.test end
+
+# -- synthetic inputs ------------------------------------------------------
+#
+# Not every input is a file. The code bundle discovers packages by
+# walking directories, so its tree SHAPE has to be digested too or
+# `verify` reports CURRENT for a graph a rebuild would change.
+
+def syn [{path:"<tree>" text:"a\nb"}]
+def with-syn (KgDigest.mk-input-digest two syn)
+
+[(with-syn get "file_count") 3 Assert.equal]
+"a synthetic row counts as an input" Test.test end
+[(((with-syn get "combined") eq (whole get "combined"))) false
+      Assert.equal
+  ]
+"adding a synthetic row changes the combined digest" Test.test end
+[(((KgDigest.mk-input-digest two
+                  [{path:"<tree>" text:"a\nc"}]
+              )
+              get "combined"
+          )
+          eq (with-syn get "combined")
+      )
+      false Assert.equal
+  ]
+"a synthetic row with different content digests differently" Test.test
+end
+
+# The verdict must NAME the tree, not just move the combined digest —
+# otherwise "something changed" is all a reader learns.
+def tree-moved
+(KgDigest.compare with-syn
+      (KgDigest.mk-input-digest two [{path:"<tree>" text:"a\nc"}])
+  )
+[(KgUtil.list-at tree-moved "changed") ["<tree>"] Assert.equal]
+"a changed tree shape is reported by name" Test.test end
 
 # -- comparison: the staleness verdict ------------------------------------
 
@@ -125,7 +161,7 @@ def both (KgDigest.compare (blk [a1]) (blk [a2 b1]))
 # -- the canonical input surface -----------------------------------------
 
 def inputs
-  (KgDigest.project-inputs "project/boru-project.jsonic" ["../go.work"])
+(KgDigest.project-inputs "project/boru-project.jsonic" ["../go.work"])
 
 [((filter [eq "project/boru-project.jsonic"] inputs) size) 1
       Assert.equal

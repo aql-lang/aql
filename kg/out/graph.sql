@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '7749137809217438158');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '8611477980658612148');
 INSERT INTO input_files VALUES ('../AGENTS.md', '3431707151627853843', 9106);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '4007682936187334400', 11951);
@@ -36,6 +36,7 @@ INSERT INTO input_files VALUES ('../test/go/go.mod', '1913162748224177686', 2395
 INSERT INTO input_files VALUES ('../test/solardemo/go.mod', '8784937342672483810', 59);
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '1909195114285173430', 2582);
+INSERT INTO input_files VALUES ('<go tree: modules + packages>', '8051012087205118093', 505);
 INSERT INTO input_files VALUES ('project/boru-project.jsonic', '6129020650546848020', 19247);
 INSERT INTO sources VALUES ('src:agents', 'text', 'AGENTS.md', 'AGENTS.md agent guide', NULL, 'agents-2026-07', 'primary', '{
   "repository": "boru-lang/boru"

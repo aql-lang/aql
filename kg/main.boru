@@ -62,11 +62,15 @@ def code-bundle (KgGoMod.candidate-bundle work-file extra-modules)
 def prose-bundle (IO.read (make Pathon project-file))
 def candidates [code-bundle prose-bundle]
 
+# Files the build reads, plus one synthetic row for the code tree's
+# SHAPE — the discovered package directories and the module list, which
+# no file digest can see (gomod.boru tree-manifest).
 def input-digest
 (KgDigest.mk-input-digest
       (KgDigest.project-inputs project-file
           (KgGoMod.input-paths work-file extra-modules)
       )
+      [(KgGoMod.tree-manifest work-file extra-modules)]
   )
 
 def bundle
