@@ -201,8 +201,8 @@ BENCH_TIME ?= 1s
 bench:
 	@echo "==> bench eng/go (kernel primitives)"
 	cd eng/go && go test -run '^$$' -bench 'BenchmarkKernel|BenchmarkTape' -benchmem -benchtime $(BENCH_TIME) .
-	@echo "==> bench eng/go/parser (parse shapes)"
-	cd eng/go && go test -run '^$$' -bench 'BenchmarkParse' -benchmem -benchtime $(BENCH_TIME) ./parser/
+	@echo "==> bench parser/go (parse shapes)"
+	cd parser/go && go test -run '^$$' -bench 'BenchmarkParse' -benchmem -benchtime $(BENCH_TIME) .
 	@echo "==> bench lang/go (dispatch, exec, words, check, compile)"
 	cd lang/go && go test -run '^$$' -bench 'BenchmarkBytecodeBaseline|BenchmarkStage6|BenchmarkParens|BenchmarkPerf' -benchmem -benchtime $(BENCH_TIME) .
 

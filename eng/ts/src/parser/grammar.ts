@@ -1,5 +1,5 @@
 // The boru grammar on @tabnas/jsonic — the TS twin of
-// eng/go/parser/grammar.go (the REFERENCE; port function-by-function).
+// parser/go/grammar.go (the REFERENCE; port function-by-function).
 // makeBoruJsonic() builds the configured jsonic instance with every boru
 // token, matcher, and rule extension installed (stages 1-2 of Go Parse),
 // returning the instance plus the registered token ids.

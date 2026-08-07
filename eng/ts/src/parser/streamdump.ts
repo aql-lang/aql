@@ -1,6 +1,6 @@
 // TS half of the parser-parity stream oracle: parse every eng/spec row
 // with the jsonic-based TS parser and print one line per row in the
-// SAME format as eng/go/parser's TestStreamDump —
+// SAME format as parser/go's TestStreamDump —
 //
 //	<file>:<line>\tOK\t<Value.toString of each value, space-joined>
 //	<file>:<line>\tERR\t<error text first line>

@@ -2,7 +2,7 @@
 // between the grammar layer (grammar.ts, which builds these inside jsonic
 // rule actions) and the conversion layer (convert.ts, which type-switches
 // on them to build engine Values). Each class mirrors the same-named Go
-// type in eng/go/parser (parse.go / grammar.go / xml_literal.go); keep
+// type in parser/go (parse.go / grammar.go / xml_literal.go); keep
 // the shapes in lockstep — the Go side is the reference.
 //
 // Discrimination is by `instanceof` (the TS analogue of Go's type

@@ -1,6 +1,6 @@
-// The declarative grammar loader — the TS twin of eng/go/parser/
+// The declarative grammar loader — the TS twin of parser/go/
 // declgrammar.go. Both engines load the SAME committed artifact
-// (eng/go/parser/grammar.json; the Go side embeds it, this side reads
+// (parser/go/grammar.json; the Go side embeds it, this side reads
 // it relatively, the SPEC_DIR precedent) so the grammar's structure —
 // the token table and the rule-spec amendments — has one source of
 // truth. Behavior that data cannot express binds by NAME from the
@@ -11,7 +11,12 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const GRAMMAR_PATH = path.resolve(__dirname, '..', '..', '..', 'go', 'parser', 'grammar.json')
+// Four levels up from eng/ts/src/parser is the repository root: the
+// artifact lives in the top-level parser MODULE now, not in a package
+// inside the kernel. It was eng/go/parser/grammar.json — i.e. three
+// levels up then go/parser — until the parser was cut out, and this
+// path is the reason that cut is not purely a Go-side concern.
+const GRAMMAR_PATH = path.resolve(__dirname, '..', '..', '..', '..', 'parser', 'go', 'grammar.json')
 
 export interface DeclToken {
   name: string

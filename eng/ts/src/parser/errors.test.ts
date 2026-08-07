@@ -1,5 +1,5 @@
 // Unit campaign for the parse-error translation layer (the TS twin of
-// eng/go/parser/parse_error.go): every tabnas code's boru-voice text,
+// parser/go/parse_error.go): every tabnas code's boru-voice text,
 // the {src} recovery from the library's message templates, and the
 // translateParseError entry across its input kinds. JsonicError
 // instances are built via Object.create so the library constructor's

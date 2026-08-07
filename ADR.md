@@ -1003,7 +1003,7 @@ the moved types a single owned home instead of scatter across
 
 ---
 
-## ADR-013 — The base language is a component: `eng ← basic ← lang ← cmd` is a hard dependency chain {#adr-013}
+## ADR-013 — The base language is a component: `basic` sits below `lang` and depends only on the pieces it uses {#adr-013}
 
 **Status:** Accepted · **Date:** 2026-08-04 · Recorded on explicit
 maintainer instruction; realises the middle component ADR-012 rule 1
@@ -1123,10 +1123,33 @@ layer, and the module dependencies around it are HARD RULES:**
    may reach up into `lang` — Go's import-cycle rule makes the
    reverse edge impossible, and rule 1 keeps the dependency list
    closed so the layering cannot erode by accretion.
-3. The resulting chain is `eng ← basic ← lang ← cmd` (`calc`
-   stays an eng-only client; `wpg` and the test harnesses sit with
-   `cmd` at the top). Skipping edges downward (lang → eng,
-   cmd → eng) remain legal; every upward edge is forbidden.
+3. `basic` sits BELOW `lang`, and every edge points downward.
+   Skipping edges downward remain legal; every upward edge is
+   forbidden — Go's import-cycle rule makes the reverse impossible.
+
+   > **Amendment (2026-08-07).** As written this rule named the chain
+   > `eng ← basic ← lang ← cmd`, with `calc` an "eng-only client".
+   > The four-piece cut, the parser cut and the facade re-pointing
+   > (rule 1's amendments below) falsified every part of that
+   > sentence, so it is restated as the invariant it was always
+   > about — direction and position, not a specific edge list, which
+   > `go.mod` states better than prose can. Derived from the
+   > manifests, the graph is now:
+   >
+   > ```
+   > core   ← check ← compiler ← eng
+   > core   ← parser
+   > basic  ← core, check, parser
+   > lang   ← basic, eng, core, check, compiler, parser
+   > cmd    ← lang, basic, core, check, compiler, parser
+   > calc   ← core, parser
+   > ```
+   >
+   > `calc` is no longer an eng client at all; it builds on core and
+   > the parser. `wpg` and the test harnesses still sit at the top
+   > with `cmd`. The knowledge graph derives these edges from
+   > `go.work` / `go.mod` (`kg/gomod.boru`), so the authoritative
+   > answer lives in the manifests, not here.
 
 **`basic` owns two kinds of content**, moved out of `lang`:
 
@@ -1182,12 +1205,16 @@ spec rows.
 
 ### Consequences
 
-- Layering becomes `eng ← basic ← lang ← cmd`. A future language
-  imports eng and, optionally, basic; `calc` is unchanged.
+- Layering puts `basic` below `lang`. A future language imports the
+  pieces it needs and, optionally, `basic`. (As recorded in rule 3's
+  amendment, the specific edges have since changed: `calc` dropped
+  `eng` for core + parser, and `basic` requires core, check and
+  parser.)
 - **Enforcement is mechanical.** Go's compiler rejects upward
   imports (cycles), and `basic/go`'s deps gate
-  (`basic/go/depsgate_test.go`) pins rule 1: the module's only
-  boru-sibling requirement is `eng/go`. FixedIDs are untouched —
+  (`basic/go/depsgate_test.go`) pins rule 1 — as amended, that the
+  module requires core, check and parser, and bans `eng` and
+  `compiler` by name with the reason. FixedIDs are untouched —
   `lang/go/test/fixedid_stability_test.go` still guards the wire
   format across the move.
 - ADR-008's 100% coverage gate applies to `basic/go` from its
