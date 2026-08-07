@@ -24,7 +24,8 @@
     "@tabnas/json": "^0.4.1",
     "@tabnas/jsonic": "^0.4.1",
     "@tabnas/parser": "^0.4.1",
-    "@voxgig/borucore": "file:../../core/ts"
+    "@voxgig/borucore": "file:../../core/ts",
+    "@voxgig/boruparser": "file:../../parser/ts"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

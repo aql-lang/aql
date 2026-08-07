@@ -93,10 +93,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Run TS gates (core standalone, then the engine)
+      - name: Run TS gates (bottom-up: core, parser, then the engine)
         run: |
           ( cd core/ts && npm ci )
           make test-ts-core
+          ( cd parser/ts && npm ci )
+          make test-ts-parser
           ( cd eng/ts && npm ci )
           make test-ts
 

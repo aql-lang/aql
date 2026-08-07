@@ -1,0 +1,35 @@
+{
+  "name": "@voxgig/boruparser",
+  "version": "0.1.0",
+  "description": "TypeScript port of the boru parser — source text to Value[]. The TS twin of the parser/go module: the front end and nothing else, a leaf over @voxgig/borucore with no engine, no check pass and no compiler.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'",
+    "streamdump": "node --experimental-strip-types --no-warnings src/streamdump.ts"
+  },
+  "dependencies": {
+    "@tabnas/jsonic": "^0.4.1",
+    "@tabnas/parser": "^0.4.1",
+    "@voxgig/borucore": "file:../../core/ts"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "@types/node": "^24.7.0"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
+}

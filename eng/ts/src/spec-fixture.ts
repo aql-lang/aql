@@ -9,7 +9,7 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { canon } from '@voxgig/borucore'
-import { parse } from './parser/index.ts'
+import { parse } from '@voxgig/boruparser'
 import { resolveWordsDeep } from '@voxgig/borucore'
 import {
   coerceBoolean,

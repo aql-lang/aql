@@ -1,4 +1,4 @@
-.PHONY: all build install test test-race test-ts test-ts-core vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
+.PHONY: all build install test test-race test-ts test-ts-core test-ts-parser vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
         spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
@@ -228,7 +228,19 @@ bench:
 # commit: 97.06% with test files counted (which is what let the 97 floor pass),
 # 96.80% source-only. The floor tracks the source-only figure from here and
 # ratchets up as before — never down.
-TS_GATE_LINES ?= 96
+# RE-BASED 96 -> 97 when --test-coverage-include landed, and this one was a
+# CORRECTNESS fix, not just a denominator change. @voxgig/borucore (and now
+# @voxgig/boruparser) are `file:` dependencies, which npm installs as symlinks;
+# node resolves through the symlink to the real path, so node:test was
+# instrumenting core/ts's and parser/ts's sources and folding them into eng's
+# figure. That is precisely the cross-suite coverage the standalone gates exist
+# to forbid — the TS analogue of measuring core/go's statements from eng/go's
+# suite. --test-coverage-include='src/**' scopes the gate to eng/ts's OWN
+# source, the same universe `go test -coverpkg` gives the Go half.
+#
+# Measured both ways on the same commit: 90.00% with the symlinked deps folded
+# in, 97.25% eng-only. The floor tracks the eng-only figure from here.
+TS_GATE_LINES ?= 97
 test-ts:
 	@echo "==> typecheck eng/ts"
 	cd eng/ts && npx tsc
@@ -236,6 +248,7 @@ test-ts:
 	cd eng/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_GATE_LINES) \
 	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-include='src/**' \
 	  'src/**/*.test.ts'
 
 # ---- TypeScript interpreter core (core/ts) -----------------------------
@@ -285,6 +298,35 @@ test-ts-core:
 	cd core/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_CORE_GATE_LINES) \
 	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-include='src/**' \
+	  'src/**/*.test.ts'
+
+# ---- TypeScript parser (parser/ts) -------------------------------------
+#
+# @voxgig/boruparser is the TS twin of the parser/go module — source text to
+# Value[], the front end and nothing else. Cut out of eng/ts/src/parser so the
+# TS side mirrors the Go module graph: a leaf over @voxgig/borucore that the
+# engine depends on, rather than a directory inside the engine.
+#
+# It is the fifth gate in the standalone set:
+#
+#   cover-gate-parser  parser/go by its own suite   floor 100
+#   test-ts-parser     parser/ts by its own suite   floor $(TS_PARSER_GATE_LINES)
+#
+# Same source-only, own-module denominator as the other two, and the same
+# ratchet discipline: raise the floor in the change that raises coverage,
+# never lower it. parser/go's gate has sat at 100 since the module was cut
+# (parser/go/CLAUDE.md: a leaf over core has no other suite that could be
+# covering it), so this floor is the honest measure of the parity gap.
+TS_PARSER_GATE_LINES ?= 92
+test-ts-parser:
+	@echo "==> typecheck parser/ts"
+	cd parser/ts && npx tsc
+	@echo "==> test parser/ts (source line-coverage floor $(TS_PARSER_GATE_LINES)%)"
+	cd parser/ts && node --test --experimental-strip-types --no-warnings \
+	  --experimental-test-coverage --test-coverage-lines=$(TS_PARSER_GATE_LINES) \
+	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-include='src/**' \
 	  'src/**/*.test.ts'
 
 # ---- cross-engine differential -----------------------------------------

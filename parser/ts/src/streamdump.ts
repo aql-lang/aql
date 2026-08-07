@@ -5,7 +5,7 @@
 //	<file>:<line>\tOK\t<Value.toString of each value, space-joined>
 //	<file>:<line>\tERR\t<error text first line>
 //
-// Run:  node --experimental-strip-types src/parser/streamdump.ts > ts-streams.tsv
+// Run:  node --experimental-strip-types src/streamdump.ts > ts-streams.tsv
 // Diff against the Go dump to drive the port to parity.
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -15,7 +15,11 @@ import { BoruError } from '@voxgig/borucore'
 import { parse } from './convert.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const specDir = path.resolve(__dirname, '..', '..', '..', 'spec')
+// eng/spec is a shared CORPUS, not a code dependency: parser/go's
+// TestStreamDump reads the identical directory (streamdump_test.go), and
+// the two dumps are diffed row-for-row. Three levels up from parser/ts/src
+// is the repository root.
+const specDir = path.resolve(__dirname, '..', '..', '..', 'eng', 'spec')
 
 const names = fs
   .readdirSync(specDir)
