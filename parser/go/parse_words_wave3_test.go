@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // --- shared wave3 helpers ---
 
 // parseWave3 parses src, failing the test if Parse panics: every input —
 // well-formed or malformed — must produce values or a clean error.
-func parseWave3(t *testing.T, src string) (vals []eng.Value, err error) {
+func parseWave3(t *testing.T, src string) (vals []core.Value, err error) {
 	t.Helper()
 	defer func() {
 		if r := recover(); r != nil {
@@ -23,7 +23,7 @@ func parseWave3(t *testing.T, src string) (vals []eng.Value, err error) {
 }
 
 // mustParseWave3 parses src and fails on error, returning the values.
-func mustParseWave3(t *testing.T, src string) []eng.Value {
+func mustParseWave3(t *testing.T, src string) []core.Value {
 	t.Helper()
 	vals, err := parseWave3(t, src)
 	if err != nil {
@@ -46,12 +46,12 @@ func wantParseErrWave3(t *testing.T, src, sub string) {
 }
 
 // wordNameWave3 asserts v is a Word and returns its info.
-func wordNameWave3(t *testing.T, v eng.Value, ctx string) eng.WordInfo {
+func wordNameWave3(t *testing.T, v core.Value, ctx string) core.WordInfo {
 	t.Helper()
-	if !eng.IsWord(v) {
+	if !core.IsWord(v) {
 		t.Fatalf("%s: expected a Word, got %s", ctx, v.String())
 	}
-	w, err := eng.AsWord(v)
+	w, err := core.AsWord(v)
 	if err != nil {
 		t.Fatalf("%s: AsWord: %v", ctx, err)
 	}
@@ -62,7 +62,7 @@ func wordNameWave3(t *testing.T, v eng.Value, ctx string) eng.WordInfo {
 
 func TestParseWave3NoneLiteral(t *testing.T) {
 	vals := mustParseWave3(t, "none")
-	if len(vals) != 1 || !eng.IsNone(vals[0]) {
+	if len(vals) != 1 || !core.IsNone(vals[0]) {
 		t.Fatalf("none: expected the unique None value, got %v", vals)
 	}
 }
@@ -81,7 +81,7 @@ func TestParseWave3FloatSpecialLiterals(t *testing.T) {
 		if len(vals) != 1 {
 			t.Fatalf("%q: got %d values, want 1", c.src, len(vals))
 		}
-		f, err := eng.AsFloat(vals[0])
+		f, err := core.AsFloat(vals[0])
 		if err != nil {
 			t.Fatalf("%q: AsFloat: %v", c.src, err)
 		}
@@ -106,7 +106,7 @@ func TestParseWave3MarkerTokens(t *testing.T) {
 		}
 	}
 	vals := mustParseWave3(t, ")")
-	if len(vals) != 1 || !eng.IsCloseParen(vals[0]) {
+	if len(vals) != 1 || !core.IsCloseParen(vals[0]) {
 		t.Fatalf("bare `)`: expected a close-paren marker, got %v", vals)
 	}
 	// A trailing `!` with no following `.` stays a bare `!` word.
@@ -128,8 +128,8 @@ func TestParseWave3TypeBoundSugar(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("Map/t: expected one value, got %v", vals)
 	}
-	info, ok := eng.AsSugar(vals[0])
-	if !ok || info.Kind != eng.SugarTypeBound {
+	info, ok := core.AsSugar(vals[0])
+	if !ok || info.Kind != core.SugarTypeBound {
 		t.Fatalf("Map/t: expected a type-bound sugar marker, got %v", vals[0])
 	}
 }
@@ -204,7 +204,7 @@ func TestParseWave3WordContextTypePath(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("Scalar/Number/Integer: expected one value, got %v", vals)
 	}
-	if w, err := eng.AsWord(vals[0]); err != nil || w.Name != "Scalar/Number/Integer" {
+	if w, err := core.AsWord(vals[0]); err != nil || w.Name != "Scalar/Number/Integer" {
 		t.Fatalf("Scalar/Number/Integer: expected word(Scalar/Number/Integer), got %v", vals)
 	}
 }
@@ -227,7 +227,7 @@ func TestParseWave3NumberEdges(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("0e1: got %d values, want 1", len(vals))
 	}
-	if n, err := eng.AsInteger(vals[0]); err != nil || n != 0 {
+	if n, err := core.AsInteger(vals[0]); err != nil || n != 0 {
 		t.Errorf("0e1: got %v (err %v), want Integer 0", vals[0], err)
 	}
 	// int64 min in hex is exactly representable; jsonic cannot lex it as a
@@ -236,7 +236,7 @@ func TestParseWave3NumberEdges(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("-0x8000000000000000: got %d values, want 1", len(vals))
 	}
-	if n, err := eng.AsInteger(vals[0]); err != nil || n != math.MinInt64 {
+	if n, err := core.AsInteger(vals[0]); err != nil || n != math.MinInt64 {
 		t.Errorf("-0x8000000000000000: got %v (err %v), want int64 min", vals[0], err)
 	}
 }
@@ -257,7 +257,7 @@ func TestParseWave3NumberEdgeErrors(t *testing.T) {
 			t.Errorf("Parse(%q): expected [boru/%s], got nil", c.src, c.code)
 			continue
 		}
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != c.code {
 			t.Errorf("Parse(%q): expected [boru/%s], got %v", c.src, c.code, err)
 		}
@@ -272,7 +272,7 @@ func TestParseWave3BigNumEdges(t *testing.T) {
 	}
 	for src, want := range cases {
 		vals := mustParseWave3(t, src)
-		if len(vals) != 1 || !vals[0].Parent.ConformsTo(eng.TBigDecimal) {
+		if len(vals) != 1 || !vals[0].Parent.ConformsTo(core.TBigDecimal) {
 			t.Fatalf("%q: expected one BigDecimal, got %v", src, vals)
 		}
 		if got := vals[0].String(); got != want {
@@ -282,10 +282,10 @@ func TestParseWave3BigNumEdges(t *testing.T) {
 	// `+0d5`: a digit after `+` is not a minilang name start, so the
 	// big-number matcher claims the signed literal.
 	vals := mustParseWave3(t, "+0d5")
-	if len(vals) != 1 || !vals[0].Parent.ConformsTo(eng.TBigInteger) {
+	if len(vals) != 1 || !vals[0].Parent.ConformsTo(core.TBigInteger) {
 		t.Fatalf("+0d5: expected one BigInteger, got %v", vals)
 	}
-	n, _ := eng.AsBigInteger(vals[0])
+	n, _ := core.AsBigInteger(vals[0])
 	if n.Int64() != 5 {
 		t.Errorf("+0d5: got %s, want 5", n)
 	}
@@ -295,7 +295,7 @@ func TestParseWave3BigNumMalformed(t *testing.T) {
 	// A `0d` prefix with a non-digit body is a clean 0d syntax error.
 	for _, src := range []string{"0dx", "0de", "0d1_"} {
 		_, err := parseWave3(t, src)
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "syntax_error" {
 			t.Errorf("Parse(%q): expected [boru/syntax_error], got %v", src, err)
 		}
@@ -330,7 +330,7 @@ func TestResolveTextValueWave3Specials(t *testing.T) {
 		"nan":  math.IsNaN,
 	} {
 		v := resolveTextValue(src)
-		f, err := eng.AsFloat(v)
+		f, err := core.AsFloat(v)
 		if err != nil || !check(f) {
 			t.Errorf("resolveTextValue(%q) = %v (err %v), wrong special float", src, v, err)
 		}
@@ -338,7 +338,7 @@ func TestResolveTextValueWave3Specials(t *testing.T) {
 	// A full builtin type PATH is data here, an Atom — the parser is
 	// type-name-opaque (ADR-012 rule 4).
 	v := resolveTextValue("Scalar/Number/Integer")
-	if s, err := eng.AsAtom(v); err != nil || s != "Scalar/Number/Integer" {
+	if s, err := core.AsAtom(v); err != nil || s != "Scalar/Number/Integer" {
 		t.Errorf("resolveTextValue(Scalar/Number/Integer) = %v, want Atom(Scalar/Number/Integer)", v)
 	}
 }
@@ -352,7 +352,7 @@ func TestParseWave3TopLevelImplicitMapAutoEval(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("a:1: got %d values, want 1", len(vals))
 	}
-	if !vals[0].Parent.ConformsTo(eng.TMap) {
+	if !vals[0].Parent.ConformsTo(core.TMap) {
 		t.Fatalf("a:1: expected a Map, got %s", vals[0].String())
 	}
 	if !vals[0].Eval {

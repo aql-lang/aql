@@ -1022,6 +1022,26 @@ layer, and the module dependencies around it are HARD RULES:**
    dependency (no sqlite, no filesystem abstraction, no format
    stack). A change that adds one is wrong by definition; fix the
    design, not the go.mod.
+
+   > **Amendment (2026-08-07) — `eng only` becomes `eng and the parser`.**
+   > When this rule was written the parser was a PACKAGE INSIDE the eng
+   > module (`eng/go/parser`), so "requires eng" already granted it. The
+   > parser has since been cut out as its own top-level module
+   > (`parser/go`, a leaf over `core`), which changed the module map
+   > without changing any dependency that existed before: basic's test
+   > suite parsed boru source then, and parses it now.
+   >
+   > The rule therefore reads: basic's `go.mod` may require `eng/go` and
+   > `parser/go`, and NO other boru sibling. The prohibition it exists to
+   > enforce is untouched — nothing reaching up into `lang`/`cmd`, and no
+   > host-capability dependency. `basic/go/depsgate_test.go` allows exactly
+   > those two modules and still fails on anything else.
+   >
+   > The alternative — hand-building token streams so the go.mod stays
+   > literally one line — was rejected: it would degrade the very test
+   > that makes this ADR executable (`TestRegisterStandalone` runs
+   > `def ident fn [[a:Integer] [Integer] [a]] ident 5` against a bare
+   > registry) in order to preserve wording whose premise had changed.
 2. **`lang` depends on `basic`** (and, as before, on `eng`). The
    full word library builds ON the base layer; nothing in `basic`
    may reach up into `lang` — Go's import-cycle rule makes the

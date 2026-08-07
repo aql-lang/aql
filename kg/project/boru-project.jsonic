@@ -100,6 +100,8 @@
       attributes: { path: "eng/go" } }
     { key: "core-go", type: "Product", label: "core/go module"
       attributes: { path: "core/go" } }
+    { key: "parser-go", type: "Product", label: "parser/go module"
+      attributes: { path: "parser/go" } }
     { key: "check-go", type: "Product", label: "check/go module"
       attributes: { path: "check/go" } }
     { key: "compiler-go", type: "Product", label: "compiler/go module"
@@ -126,6 +128,7 @@
     { key: "adr", type: "Document", label: "ADR.md" }
     { key: "nur", type: "Document", label: "NUR.md" }
     { key: "eng-guide", type: "Document", label: "eng/go/CLAUDE.md" }
+    { key: "parser-guide", type: "Document", label: "parser/go/CLAUDE.md" }
     { key: "lang-guide", type: "Document", label: "lang/go/CLAUDE.md" }
     { key: "vault", type: "Concept", label: "secrets vault"
       attributes: { role: "encrypted API-key / token store, driven by the boru vault subcommand" } }
@@ -136,7 +139,7 @@
     { key: "completeness-review", type: "Document", label: "design/checker-compiler-completeness-review.0.md"
       attributes: { role: "the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work" } }
     { key: "decl-grammar", type: "Document", label: "design/DECLARATIVE-GRAMMAR.0.md"
-      attributes: { role: "the shared declarative tabnas grammar artifact (eng/go/parser/grammar.json): contract, loader pair, and the batch-migration state" } }
+      attributes: { role: "the shared declarative tabnas grammar artifact (parser/go/grammar.json): contract, loader pair, and the batch-migration state" } }
     { key: "coverage-parity", type: "Document", label: "design/ENG-COVERAGE-PARITY.0.md"
       attributes: { role: "the standalone 100%/100% coverage program for eng/go and eng/ts: the ratcheting gate floors (make cover-gate-eng, make test-ts), the gap inventories, and the staged plans" } }
     { key: "org", type: "Organization", label: "boru-lang" }
@@ -176,6 +179,16 @@
       object: { kind: "entity", entity: "core-go" }
       evidence: [{ source: "src:readme", locator: "Repository layout",
         quote: "core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it." }]
+      confidence: 0.95 }
+    { subject: "parser-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "parser/go/ | The parser module: boru source text to kernel values (tabnas/jsonic lexer plus the embedded declarative grammar). Depends on core alone." }]
+      confidence: 0.98 }
+    { subject: "parser-go", predicate: "related_to"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "parser/go/ | The parser module: boru source text to kernel values (tabnas/jsonic lexer plus the embedded declarative grammar). Depends on core alone." }]
       confidence: 0.95 }
     { subject: "check-go", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -38,13 +38,13 @@ func translateParseError(err error, src string) error {
 		return fmt.Errorf("parse error: %w", err)
 	}
 	detail, note, help := parseErrText(te)
-	ae := eng.MakeBoruErrorAt("syntax_error", detail, te.Src, src, "",
-		eng.SrcPos{Row: te.Row, Col: te.Col, Src: te.Src})
+	ae := core.MakeBoruErrorAt("syntax_error", detail, te.Src, src, "",
+		core.SrcPos{Row: te.Row, Col: te.Col, Src: te.Src})
 	if note != "" {
 		ae.Notes = append(ae.Notes, note)
 	}
 	if help != "" {
-		ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: help})
+		ae.Suggestions = append(ae.Suggestions, core.DiagSuggestion{Message: help})
 	}
 	return ae
 }

@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // docFiles are the prose docs scanned for `# returns` examples, relative to

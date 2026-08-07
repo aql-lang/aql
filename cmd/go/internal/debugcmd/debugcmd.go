@@ -45,10 +45,10 @@ import (
 	"github.com/boru-lang/boru/cmd/go/internal/command"
 	"github.com/boru-lang/boru/cmd/go/internal/debugger"
 	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
-	"github.com/boru-lang/boru/eng/go/parser"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/debugserve"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to

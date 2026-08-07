@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/debugserve"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // runDebug invokes the subcommand the way main does.

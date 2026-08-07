@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/policy"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // fixedLogClock freezes time so emitted record timestamps are

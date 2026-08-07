@@ -31,7 +31,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 var updateGolden = flag.Bool("update", false, "update the equivalence golden file")

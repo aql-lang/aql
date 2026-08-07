@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // Typed-container tag retention + write enforcement

@@ -1,5 +1,5 @@
 .PHONY: all build install test test-race test-ts test-ts-core vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler facades \
+        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -11,6 +11,8 @@
 # The repo is a collection of Go modules:
 #
 #   core/go        — the pure-interpreter kernel (values, types, dispatch, step loop)
+#   parser/go      — boru source text -> []core.Value (jsonic grammar); depends
+#                    on core alone, and nothing depends on it but the layers above
 #   eng/go         — check + compiler + VM over core, plus the parser bridge
 #   basic/go       — the base language layer (fundamental words +
 #                    predefined content types; depends on eng only)
@@ -27,7 +29,7 @@
 
 # Order matters for `make test`: eng must build before basic, basic
 # before lang, etc.
-MODULES := core/go check/go compiler/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
+MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
@@ -138,7 +140,7 @@ test:
 # exception: its 5941-row differential is single-threaded per row (race adds no
 # value) and times out under the detector, so only its concurrency rows run
 # here.
-RACE_MODULES := core/go check/go compiler/go eng/go basic/go lang/go
+RACE_MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go
 test-race:
 	@set -e; for m in $(RACE_MODULES); do \
 	  echo "==> test-race $$m"; \
@@ -554,6 +556,24 @@ cover-gate-core:
 # measure how much each piece proves on its own.
 CHECK_GATE_FLOOR ?= 56
 COMPILER_GATE_FLOOR ?= 62
+
+# cover-gate-parser — the parser's own gate. The parser is a LEAF over core
+# (it uses 109 core symbols and nothing else from the repo), which is what
+# makes a 100% standalone floor reasonable here from day one rather than as a
+# ratchet: there is no other module's suite that could be covering it, and no
+# seam whose far side lives elsewhere. Same .engout-family isolation as the
+# other standalone gates so the merged cover-check never merges a stale
+# profile.
+PARSER_GATE_FLOOR ?= 100
+cover-gate-parser:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/parser_standalone.engout
+	@echo "==> cover-gate-parser (standalone, floor $(PARSER_GATE_FLOOR)%)"
+	@( cd parser/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/parser/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/parser_standalone.engout ./... > $(abspath $(COVER_DIR))/parser_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-parser test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/parser_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(PARSER_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/parser_standalone.engout
 
 cover-gate-check:
 	@mkdir -p $(COVER_DIR)

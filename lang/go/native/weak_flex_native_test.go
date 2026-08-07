@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // weakRunErr runs source and returns the error (nil on success), for

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -16,13 +16,13 @@ import (
 // wasm DOM).
 
 // parseErrOf runs Parse on bad source and returns the translated error.
-func parseErrOf(t *testing.T, src string) *eng.BoruError {
+func parseErrOf(t *testing.T, src string) *core.BoruError {
 	t.Helper()
 	_, err := Parse(src)
 	if err == nil {
 		t.Fatalf("Parse(%q) must fail", src)
 	}
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if !errors.As(err, &ae) {
 		t.Fatalf("Parse(%q) must yield a *BoruError, got %T: %v", src, err, err)
 	}
@@ -84,7 +84,7 @@ func TestParseErrorSyntheticCodes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.te.Code, func(t *testing.T) {
 			err := translateParseError(c.te, "x")
-			var ae *eng.BoruError
+			var ae *core.BoruError
 			if !errors.As(err, &ae) {
 				t.Fatalf("want *BoruError, got %T", err)
 			}
@@ -105,7 +105,7 @@ func TestParseErrorNonJsonicFallback(t *testing.T) {
 	if err == nil || err.Error() != "parse error: boom" {
 		t.Fatalf("non-jsonic errors keep the parse error wrap, got %v", err)
 	}
-	var ae *eng.BoruError
+	var ae *core.BoruError
 	if errors.As(err, &ae) {
 		t.Fatal("non-jsonic errors must not be reshaped into BoruError")
 	}

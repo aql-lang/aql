@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // ADR-008 coverage for BuildVaultTuiModule's guard arms, mirroring

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -353,7 +353,7 @@ func TestS5bENumberValFallbacksAndOverflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dotted fallback: %v", err)
 	}
-	f, err := eng.AsFloat(v)
+	f, err := core.AsFloat(v)
 	if err != nil || f != 7.5 {
 		t.Errorf("fallback float = %v (%v), want 7.5", f, err)
 	}

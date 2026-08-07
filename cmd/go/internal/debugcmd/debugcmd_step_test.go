@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/boru-lang/boru/cmd/go/internal/debugger"
-	"github.com/boru-lang/boru/eng/go/parser"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/debugserve"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // stepTestServer mounts a real program under a Remote-fronted session on

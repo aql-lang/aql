@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // The canonical rule table is EXPRESSED IN boru — fmt-rules.boru is the

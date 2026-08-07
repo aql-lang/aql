@@ -42,7 +42,7 @@ INSERT INTO entity_attributes VALUES ('ent:Concept:6094411313845087998', 'role',
 INSERT INTO entities VALUES ('ent:Concept:7376417356888575267', 'Concept', 'Executable language spec', 'executable language spec', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:1344160336771235777', 'Document', 'EXPLANATION.md', 'explanation.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:203047846460430642', 'Document', 'design/DECLARATIVE-GRAMMAR.0.md', 'design/declarative-grammar.0.md', 'accepted');
-INSERT INTO entity_attributes VALUES ('ent:Document:203047846460430642', 'role', 'the shared declarative tabnas grammar artifact (eng/go/parser/grammar.json): contract, loader pair, and the batch-migration state');
+INSERT INTO entity_attributes VALUES ('ent:Document:203047846460430642', 'role', 'the shared declarative tabnas grammar artifact (parser/go/grammar.json): contract, loader pair, and the batch-migration state');
 INSERT INTO entities VALUES ('ent:Document:3080274854606714513', 'Document', 'ADR.md', 'adr.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:3294415633888265368', 'Document', 'design/checker-compiler-completeness-review.0.md', 'design/checker-compiler-completeness-review.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:3294415633888265368', 'role', 'the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work');
@@ -59,6 +59,7 @@ INSERT INTO entities VALUES ('ent:Document:5292060467150439417', 'Document', 'NU
 INSERT INTO entities VALUES ('ent:Document:6176355086953937469', 'Document', 'TUTORIAL.md', 'tutorial.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:6369673620858945660', 'Document', 'eng/go/CLAUDE.md', 'eng/go/claude.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:7770110494347118706', 'Document', 'lang/go/CLAUDE.md', 'lang/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:9071667555031388966', 'Document', 'parser/go/CLAUDE.md', 'parser/go/claude.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Organization:8832543031059216933', 'Organization', 'boru-lang', 'boru-lang', 'accepted');
 INSERT INTO entities VALUES ('ent:Product:1578575807542004434', 'Product', 'eng/go module', 'eng/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:1578575807542004434', 'path', 'eng/go');
@@ -66,6 +67,8 @@ INSERT INTO entities VALUES ('ent:Product:1628071779061296422', 'Product', 'calc
 INSERT INTO entity_attributes VALUES ('ent:Product:1628071779061296422', 'path', 'calc/go');
 INSERT INTO entities VALUES ('ent:Product:2046405728378673079', 'Product', 'kg knowledge-graph pipeline', 'kg knowledge-graph pipeline', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:2046405728378673079', 'path', 'kg');
+INSERT INTO entities VALUES ('ent:Product:247893255613018706', 'Product', 'parser/go module', 'parser/go module', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Product:247893255613018706', 'path', 'parser/go');
 INSERT INTO entities VALUES ('ent:Product:4032424380612892464', 'Product', 'boru-lang/boru repository', 'boru-lang/boru repository', 'accepted');
 INSERT INTO entity_external_ids VALUES ('ent:Product:4032424380612892464', 'github', 'boru-lang/boru');
 INSERT INTO entities VALUES ('ent:Product:4938585304473715098', 'Product', 'basic/go module', 'basic/go module', 'accepted');
@@ -101,6 +104,8 @@ INSERT INTO assertions VALUES ('ast:1638267057731290625', 'ent:Document:20304784
 INSERT INTO assertion_evidence VALUES ('ast:1638267057731290625', 'src:decl-grammar', 'The contract', 'eng/go/parser/grammar.json is the single source of the boru grammar''s STRUCTURE, loaded by both parsers', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1970337823730676342', 'ent:Document:7770110494347118706', 'supports', 'entity', 'ent:Product:5397757900009317848', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1970337823730676342', 'src:agents', 'Working in the code', 'Language layer — native words, modules, registry, help/describe, capabilities | lang/go/CLAUDE.md', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:2116615243097114079', 'ent:Product:247893255613018706', 'related_to', 'entity', 'ent:Product:5136370952190450338', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:2116615243097114079', 'src:readme', 'Repository layout', 'parser/go/ | The parser module: boru source text to kernel values (tabnas/jsonic lexer plus the embedded declarative grammar). Depends on core alone.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2190303907985753377', 'ent:Document:3955423872539901697', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2190303907985753377', 'src:readme', 'Documentation', 'How-To Guides | You have a specific task and want a recipe.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2308356135508106004', 'ent:Document:5292060467150439417', 'mentions', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -149,6 +154,8 @@ INSERT INTO assertions VALUES ('ast:5406505729946615323', 'ent:Document:63696736
 INSERT INTO assertion_evidence VALUES ('ast:5406505729946615323', 'src:agents', 'Working in the code', 'Engine kernel — types, values, signatures, matching, the step loop, the parser bridge | eng/go/CLAUDE.md', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5434947745222255640', 'ent:Product:9152211458201666591', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5434947745222255640', 'src:readme', 'Install', 'A wasm-powered browser playground is bundled in docs/index.html', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:5496270037575797833', 'ent:Product:247893255613018706', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:5496270037575797833', 'src:readme', 'Repository layout', 'parser/go/ | The parser module: boru source text to kernel values (tabnas/jsonic lexer plus the embedded declarative grammar). Depends on core alone.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5569270398049625658', 'ent:Product:8635404738244704660', 'related_to', 'entity', 'ent:Product:4976123614970806523', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5569270398049625658', 'src:readme', 'Repository layout', 'utils/ | A coreutils subset written in boru (cat, wc, head, grep, ...) — real programs, built with boru build.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5780911143793158294', 'ent:Product:9152211458201666591', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);

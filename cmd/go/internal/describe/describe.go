@@ -20,10 +20,10 @@ import (
 	"strings"
 
 	"github.com/boru-lang/boru/cmd/go/internal/command"
-	parse "github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
 	helppkg "github.com/boru-lang/boru/lang/go/native/help"
+	parse "github.com/boru-lang/boru/parser/go"
 )
 
 // The built-in module catalog (names + one-line summaries) lives in the help

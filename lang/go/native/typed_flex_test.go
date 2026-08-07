@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // Typed FLEX nodes (design/TYPED-CONTAINER-TAG-RETENTION.0.md, flex layer).

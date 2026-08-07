@@ -14,6 +14,7 @@ use (
 	./core/go
 	./eng/go
 	./lang/go
+	./parser/go
 	./test/go
 	./tools/piecetool
 	./test/solardemo

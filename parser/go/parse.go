@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/cockroachdb/apd/v3"
 	jsonic "github.com/tabnas/jsonic/go"
 )
@@ -61,7 +61,7 @@ type iexprGroup []any
 // Overload" violation (see eng/go/CLAUDE.md) — no decision reads a zero Pos.
 type sited struct {
 	Node any
-	Pos  eng.SrcPos
+	Pos  core.SrcPos
 }
 
 // deSite unwraps a sited wrapper, returning the inner node and its
@@ -69,18 +69,18 @@ type sited struct {
 // (unknown) Pos. Idempotent and safe on any node — call it wherever a
 // raw jsonic node is type-switched so the wrapper never leaks past the
 // converter's dispatch points.
-func deSite(v any) (any, eng.SrcPos) {
+func deSite(v any) (any, core.SrcPos) {
 	if s, ok := v.(sited); ok {
 		return s.Node, s.Pos
 	}
-	return v, eng.SrcPos{}
+	return v, core.SrcPos{}
 }
 
 // withPos stamps a source position onto v, unless pos is unknown (zero
 // Row), in which case v is returned untouched. The guard avoids both
 // storing the unknown and clobbering a position a deeper converter
 // already set on a nested value.
-func withPos(v eng.Value, pos eng.SrcPos) eng.Value {
+func withPos(v core.Value, pos core.SrcPos) core.Value {
 	if pos.Row != 0 {
 		v.SetPos(pos)
 	}
@@ -117,7 +117,7 @@ type parseDepth struct {
 func (d *parseDepth) enter() error {
 	d.cur++
 	if d.cur > maxParseNestingDepth {
-		return eng.MakeBoruError("evaluation_limit",
+		return core.MakeBoruError("evaluation_limit",
 			fmt.Sprintf("source nesting exceeds the depth limit of %d — lists, maps, and parentheses are nested too deeply", maxParseNestingDepth),
 			"", d.src,
 			"flatten the structure or split it across definitions; nesting this deep is almost always generated, not intended")
@@ -128,7 +128,7 @@ func (d *parseDepth) enter() error {
 // leave ascends one container level. Always deferred immediately after enter.
 func (d *parseDepth) leave() { d.cur-- }
 
-// Parse tokenizes the boru source string into a slice of eng.Value.
+// Parse tokenizes the boru source string into a slice of core.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
 // unquoted text (words).
@@ -142,13 +142,13 @@ func (d *parseDepth) leave() { d.cur-- }
 //   - Inside maps (including implicit): all text → scalar data.
 //   - Inside lists at the top level: unquoted text → words (quotation).
 //   - Inside lists inside maps: all text → scalar data.
-func Parse(src string) ([]eng.Value, error) {
+func Parse(src string) ([]core.Value, error) {
 	// Program tokens must carry compile identities even though parsing
 	// runs outside any check/compile pass — the emitter's provenance
 	// tracking keys on the IDs of the parsed literals themselves. Runtime
 	// value mints elide IDs (eng mode-gated elision); this scope re-arms
 	// minting for the parse.
-	defer eng.BeginIDMintScope()()
+	defer core.BeginIDMintScope()()
 	j := SafeMake(jsonic.Options{
 		// tabnas groups the output-shaping flags under Info: Text wraps
 		// scalars in Text{Str,Quote} (quoted/unquoted distinction), List/Map
@@ -222,7 +222,7 @@ func Parse(src string) ([]eng.Value, error) {
 			if err != nil {
 				return nil, err
 			}
-			return []eng.Value{tv}, nil
+			return []core.Value{tv}, nil
 		}
 		if !val.Implicit {
 			// Explicit list [...]  — a single list value (quotation).
@@ -230,7 +230,7 @@ func Parse(src string) ([]eng.Value, error) {
 			if err != nil {
 				return nil, err
 			}
-			return []eng.Value{lv}, nil
+			return []core.Value{lv}, nil
 		}
 		// Implicit list — top-level stack values.
 		return convertTopLevel(val.Val, d)
@@ -240,7 +240,7 @@ func Parse(src string) ([]eng.Value, error) {
 			if err != nil {
 				return nil, err
 			}
-			return []eng.Value{tv}, nil
+			return []core.Value{tv}, nil
 		}
 		mv, err := convertMapData(val.Val, val.Implicit, d, val.Meta)
 		if err != nil {
@@ -251,9 +251,9 @@ func Parse(src string) ([]eng.Value, error) {
 		if val.Implicit && !mv.Eval {
 			mv.Eval = true
 		}
-		return []eng.Value{mv}, nil
+		return []core.Value{mv}, nil
 	case unclosedParen:
-		return nil, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", src, "")
+		return nil, core.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", src, "")
 
 	case parenGroup:
 		// Single paren group at top level: expand to paren markers.
@@ -265,7 +265,7 @@ func Parse(src string) ([]eng.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return []eng.Value{withPos(iv, rootPos)}, nil
+		return []core.Value{withPos(iv, rootPos)}, nil
 
 	default:
 		// Single top-level scalar/word: stamp the position the root deSite
@@ -274,7 +274,7 @@ func Parse(src string) ([]eng.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return []eng.Value{withPos(v, rootPos)}, nil
+		return []core.Value{withPos(v, rootPos)}, nil
 	}
 }
 
@@ -304,7 +304,7 @@ func isToken(item any, tok string) bool {
 // A lone "." / "!." with no receiver still emits the bare word (and errors
 // at runtime, as before). All other items convert to engine values
 // directly.
-func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
+func convertTopLevelItems(items []any, d *parseDepth) ([]core.Value, error) {
 	if err := d.enter(); err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 	// position slice. The token helpers (isToken/startsDot/isChainReceiver)
 	// then see bare jsonic nodes, while the emitted operator-marker words
 	// (get/getr) and primaries are still stamped from poss[i].
-	poss := make([]eng.SrcPos, len(items))
+	poss := make([]core.SrcPos, len(items))
 	if anySited(items) {
 		bare := make([]any, len(items))
 		for i, it := range items {
@@ -322,7 +322,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 		items = bare
 	}
 
-	values := make([]eng.Value, 0, len(items))
+	values := make([]core.Value, 0, len(items))
 	for i := 0; i < len(items); i++ {
 		// Minilang literal `+name<delim>src<delim>`: emit the three tokens
 		// `mini name 'src'` INLINE in word context (top level, list elements,
@@ -336,7 +336,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 		// convertTopLevelValueInner.
 		if ml, ok := items[i].(miniLitVal); ok {
 			values = append(values,
-				withPos(eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: ml.Name, Src: ml.Src}), poss[i]))
+				withPos(core.NewSugar(core.SugarInfo{Kind: core.SugarMini, Name: ml.Name, Src: ml.Src}), poss[i]))
 			continue
 		}
 		// Dotted-access chain: a receiver primary followed by one or more
@@ -359,18 +359,18 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 			// is emitted AFTER for execFnDefLiteral to peek.
 			// Build a first-class Reach node (design/REACH.10.md Phase B):
 			// receiver tokens + per-segment {op, literal-or-computed key}.
-			var recv []eng.Value
+			var recv []core.Value
 			if err := emitPrimary(&recv, items[i], poss[i], d); err != nil {
 				return nil, err
 			}
-			var segs []eng.ReachSeg
+			var segs []core.ReachSeg
 			j := i + 1
-			var pfx, sfx []eng.Value
+			var pfx, sfx []core.Value
 		chain:
 			for j < len(items) {
 				var getr bool
 				var keyItem any
-				var kpos eng.SrcPos
+				var kpos core.SrcPos
 				switch {
 				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
 					getr, keyItem, kpos = true, items[j+2], poss[j+2]
@@ -385,7 +385,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 				if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
 					keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
 				}
-				seg := eng.ReachSeg{Getr: getr}
+				seg := core.ReachSeg{Getr: getr}
 				if pg, ok := keyItem.(parenGroup); ok {
 					// Computed key: m.(expr) — store the paren's tokens.
 					inner, err := convertTopLevelItems([]any(pg), d)
@@ -396,7 +396,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 					seg.KeyExpr = inner
 				} else {
 					// Literal key (word → atom-via-get/q, string, number).
-					var tmp []eng.Value
+					var tmp []core.Value
 					if err := emitPrimary(&tmp, keyItem, kpos, d); err != nil {
 						return nil, err
 					}
@@ -411,11 +411,11 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 			// reusable accessor (`people each $.name`) and applied/rebound to a
 			// receiver later. `$` is reserved as a user word (see
 			// ValidateWordName), so this never shadows a real binding.
-			reachInfo := eng.ReachInfo{Receiver: recv, Segments: segs, Eval: true}
+			reachInfo := core.ReachInfo{Receiver: recv, Segments: segs, Eval: true}
 			if isDollarReceiver(recv) {
 				reachInfo.Receiver, reachInfo.Eval = nil, false
 			}
-			pe := withPos(eng.NewReach(reachInfo), poss[i])
+			pe := withPos(core.NewReach(reachInfo), poss[i])
 			// A standalone `/mod` token immediately after the path also
 			// applies to the result (`(a.b)/mod`).
 			if pfx == nil && sfx == nil && j < len(items) {
@@ -452,7 +452,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 		// Unclosed paren: error at parse time.
 		if up, ok := items[i].(unclosedParen); ok {
 			_ = up
-			return nil, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
+			return nil, core.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
 		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
@@ -506,11 +506,11 @@ func startsDot(items []any, j int) bool {
 // isDollarReceiver reports whether a dot-chain receiver is the lone reserved
 // `$` sentinel — the marker for a receiverless reach (`$.name` → a lens). The
 // receiver emits as a single Word("$") (see emitPrimary / convertTopLevelValue).
-func isDollarReceiver(recv []eng.Value) bool {
-	if len(recv) != 1 || !eng.IsWord(recv[0]) {
+func isDollarReceiver(recv []core.Value) bool {
+	if len(recv) != 1 || !core.IsWord(recv[0]) {
 		return false
 	}
-	w, _ := eng.AsWord(recv[0])
+	w, _ := core.AsWord(recv[0])
 	return w.Name == "$"
 }
 
@@ -538,7 +538,7 @@ func isChainReceiver(item any) bool {
 // SUFFIXED for execFnDefLiteral to peek. So `a.b/u` parses as
 // `usurp (a get b)` and `a.b/2` as `force-arity 2 (a get b)`. ok=false for
 // a plain word (no modifier).
-func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) {
+func groupModifier(item any) (base string, prefix, suffix []core.Value, ok bool) {
 	node, _ := deSite(item)
 	t, isText := node.(jsonic.Text)
 	if !isText || t.Quote != "" {
@@ -550,15 +550,15 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 	}
 	switch {
 	case u:
-		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarUsurp})}, nil, true
+		return b, []core.Value{core.NewSugar(core.SugarInfo{Kind: core.SugarUsurp})}, nil, true
 	case fs:
-		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarStackArgs})}, nil, true
+		return b, []core.Value{core.NewSugar(core.SugarInfo{Kind: core.SugarStackArgs})}, nil, true
 	case ff:
-		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarForwardArgs})}, nil, true
+		return b, []core.Value{core.NewSugar(core.SugarInfo{Kind: core.SugarForwardArgs})}, nil, true
 	case argCount >= 0:
-		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarForceArity, N: int64(argCount)})}, nil, true
+		return b, []core.Value{core.NewSugar(core.SugarInfo{Kind: core.SugarForceArity, N: int64(argCount)})}, nil, true
 	case r || q:
-		return b, nil, []eng.Value{eng.NewDispatchMod(eng.DispatchModInfo{Ref: r, Quote: q})}, true
+		return b, nil, []core.Value{core.NewDispatchMod(core.DispatchModInfo{Ref: r, Quote: q})}, true
 	}
 	return "", nil, nil, false
 }
@@ -572,13 +572,13 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 // Step 1, design/PAREN-REPRESENTATION.9.md), the same representation data
 // context already uses. The engine evaluates it via evalParenExprResults
 // (Step 2 at the pointer, Step 3 in a forward window).
-func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos, d *parseDepth) error {
+func emitPrimary(dst *[]core.Value, item any, pos core.SrcPos, d *parseDepth) error {
 	if pg, ok := item.(parenGroup); ok {
 		inner, err := convertTopLevelItems([]any(pg), d)
 		if err != nil {
 			return err
 		}
-		*dst = append(*dst, withPos(eng.NewParenExpr(inner), pos))
+		*dst = append(*dst, withPos(core.NewParenExpr(inner), pos))
 		return nil
 	}
 	v, err := convertTopLevelValue(item, d)
@@ -592,15 +592,15 @@ func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos, d *parseDepth) erro
 }
 
 // convertTopLevel converts a top-level implicit list from jsonic into
-// a slice of eng.Value using word context.
-func convertTopLevel(items []any, d *parseDepth) ([]eng.Value, error) {
+// a slice of core.Value using word context.
+func convertTopLevel(items []any, d *parseDepth) ([]core.Value, error) {
 	return convertTopLevelItems(items, d)
 }
 
 // convertTopLevelValue converts a single value in word context.
 // Unquoted text → word, quoted text → string. The value is stamped with
 // the source position captured by the val-rule BC (if any).
-func convertTopLevelValue(v any, d *parseDepth) (eng.Value, error) {
+func convertTopLevelValue(v any, d *parseDepth) (core.Value, error) {
 	node, pos := deSite(v)
 	res, err := convertTopLevelValueInner(node, d)
 	if err != nil {
@@ -609,17 +609,17 @@ func convertTopLevelValue(v any, d *parseDepth) (eng.Value, error) {
 	return withPos(res, pos), nil
 }
 
-func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
+func convertTopLevelValueInner(v any, d *parseDepth) (core.Value, error) {
 	switch val := v.(type) {
 	case arrowTag:
 		// `=>` — the lambda sugar marker; the engine lowers it to the
 		// role-bound constructor word (ADR-012 rule 3 amendment).
-		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarLambda}), nil
+		return core.NewSugar(core.SugarInfo{Kind: core.SugarLambda}), nil
 	case jsonic.Text:
 		if val.Quote == "" {
 			return parseWord(val.Str)
 		}
-		return eng.NewString(val.Str), nil
+		return core.NewString(val.Str), nil
 
 	case interpGroup:
 		return convertInterpGroup(val, d)
@@ -630,13 +630,13 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// mini call, so a stack subject, a trailing opts Map, the
 		// unknown-kind error, and check mode all behave exactly as if the
 		// user had typed `mini name 'src'`.
-		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: val.Name, Src: val.Src}), nil
+		return core.NewSugar(core.SugarInfo{Kind: core.SugarMini, Name: val.Name, Src: val.Src}), nil
 
 	case xmlElemVal:
 		// Embedded XML literal `<tag>…</tag>`: the matcher already built
 		// the immutable Node/Xml value; surface any build error here.
 		if val.Err != nil {
-			return eng.Value{}, val.Err
+			return core.Value{}, val.Err
 		}
 		return val.V, nil
 
@@ -689,10 +689,10 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 		return angleUseSite(val, d)
 
 	case unclosedAngle:
-		return eng.Value{}, unclosedAngleError(val)
+		return core.Value{}, unclosedAngleError(val)
 
 	case bool:
-		return eng.NewBoolean(val), nil
+		return core.NewBoolean(val), nil
 
 	case nil:
 		// An untyped-nil element is an EMPTY list slot — `[1,,2]`, `[,1]`,
@@ -700,10 +700,10 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// jsonic.Text token "null", handled above, so this case only fires
 		// for a genuinely empty element.) A repeated or leading comma is a
 		// typo, not a value — reject it rather than fabricating a `null`.
-		return eng.Value{}, emptyElementError()
+		return core.Value{}, emptyElementError()
 
 	default:
-		return eng.Value{}, fmt.Errorf("unsupported value type %T", v)
+		return core.Value{}, fmt.Errorf("unsupported value type %T", v)
 	}
 }
 
@@ -712,7 +712,7 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 // boru has no implicit "hole" value; commas are optional separators, so a
 // missing element is a typo. Use `none` for an explicit empty value.
 func emptyElementError() error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)",
 	}
@@ -736,8 +736,8 @@ func isNumberLiteral(item any) bool {
 // malformed numeric literal), `1 . 2`, or `5 . foo` can never be a valid
 // reach. Caught at parse time instead of surfacing the runtime
 // "no matching signature for get".
-func numberReceiverError(pos eng.SrcPos) error {
-	return &eng.BoruError{
+func numberReceiverError(pos core.SrcPos) error {
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "a number has no members to access with `.`",
 		Hint:   "this looks like a malformed numeric literal (e.g. `1.2.3`) or `.`-access on a number — numbers have no fields or keys",
@@ -752,8 +752,8 @@ func numberReceiverError(pos eng.SrcPos) error {
 // a value (`m.key`); a leading `.` is never valid. In particular `.5` is
 // not a fraction — write `0.5`. The receiverless reach `$.name` is the
 // supported way to write a detached accessor.
-func danglingDotError(pos eng.SrcPos) error {
-	return &eng.BoruError{
+func danglingDotError(pos core.SrcPos) error {
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "`.` member access has no receiver",
 		Hint:   "a `.`/`!.` access must follow a value (e.g. `m.key`); a leading `.` is not valid — write `0.5` for a fraction, or `$.key` for a detached accessor",
@@ -766,12 +766,12 @@ func danglingDotError(pos eng.SrcPos) error {
 // convertWordList converts a list in word context (top-level list).
 // The resulting list is marked for auto-evaluation: its contents will
 // be executed at the end of Run unless quoted or consumed by a word.
-func convertWordList(items []any, d *parseDepth) (eng.Value, error) {
+func convertWordList(items []any, d *parseDepth) (core.Value, error) {
 	elems, err := convertTopLevelItems(items, d)
 	if err != nil {
-		return eng.Value{}, err
+		return core.Value{}, err
 	}
-	return eng.NewEvalList(elems), nil
+	return core.NewEvalList(elems), nil
 }
 
 // convertMapData converts a map in data context. All text values are
@@ -780,12 +780,12 @@ func convertWordList(items []any, d *parseDepth) (eng.Value, error) {
 // [x:Integer] rather than {x:Integer}).
 // Explicit maps are marked for auto-evaluation (Eval=true).
 // The optional meta parameter receives MapRef.Meta for optional field detection.
-func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[string]any) (eng.Value, error) {
+func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[string]any) (core.Value, error) {
 	if err := d.enter(); err != nil {
-		return eng.Value{}, err
+		return core.Value{}, err
 	}
 	defer d.leave()
-	om := eng.NewOrderedMap()
+	om := core.NewOrderedMap()
 	if implicit {
 		om.Implicit = true
 	}
@@ -819,7 +819,7 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 			continue
 		}
 		if _, _, _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
-			return eng.Value{}, fmt.Errorf(
+			return core.Value{}, fmt.Errorf(
 				"[boru/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
 				key, key)
 		}
@@ -863,7 +863,7 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 	}
 
 	for _, key := range orderedKeys(union, ko) {
-		var child eng.Value
+		var child core.Value
 		var err error
 		if _, inMap := m[key]; inMap {
 			child, err = convertDataValue(m[key], d)
@@ -871,7 +871,7 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 			child, err = parseWord(synth[key])
 		}
 		if err != nil {
-			return eng.Value{}, err
+			return core.Value{}, err
 		}
 		// Optional field: `?:T` means "None or absent, universally" —
 		// desugared to `disjunct(T, None, Absent)`. The Absent
@@ -894,20 +894,20 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 			optional = true
 		}
 		if optional {
-			alts := []eng.Value{
+			alts := []core.Value{
 				child,
-				eng.NewTypeLiteral(eng.TNone),
-				eng.NewTypeLiteral(eng.TAbsent),
+				core.NewTypeLiteral(core.TNone),
+				core.NewTypeLiteral(core.TAbsent),
 			}
 			// An unresolved type-name child (a Word, post-ADR-012) cannot
 			// be reasoned about here; the engine's resolve prepass
 			// re-simplifies the disjunct after resolving the name, which
 			// restores the `{a?:T}` ≡ `{a:(T tor None tor Absent)}`
 			// canonical equality at every consumption boundary.
-			if !implicit && !eng.IsWord(child) {
-				alts = eng.SimplifyDisjunctAlts(alts)
+			if !implicit && !core.IsWord(child) {
+				alts = core.SimplifyDisjunctAlts(alts)
 			}
-			child = eng.NewDisjunct(alts)
+			child = core.NewDisjunct(alts)
 		}
 		om.Set(realKey, child)
 	}
@@ -921,15 +921,15 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 	// Explicit maps (from {...} syntax) are marked for auto-evaluation.
 	// Implicit maps (from pair syntax [x:Integer]) are structural and not evaluated.
 	if !implicit {
-		return eng.NewEvalMap(om), nil
+		return core.NewEvalMap(om), nil
 	}
-	return eng.NewMap(om), nil
+	return core.NewMap(om), nil
 }
 
 // convertDataValue converts a value in data context (inside maps).
 // Quoted text → strings, unquoted text → words (executable). The value is
 // stamped with the source position captured by the val-rule BC (if any).
-func convertDataValue(v any, d *parseDepth) (eng.Value, error) {
+func convertDataValue(v any, d *parseDepth) (core.Value, error) {
 	node, pos := deSite(v)
 	res, err := convertDataValueInner(node, d)
 	if err != nil {
@@ -938,15 +938,15 @@ func convertDataValue(v any, d *parseDepth) (eng.Value, error) {
 	return withPos(res, pos), nil
 }
 
-func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
+func convertDataValueInner(v any, d *parseDepth) (core.Value, error) {
 	switch val := v.(type) {
 	case arrowTag:
 		// `=>` in data context — the same lambda sugar marker.
-		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarLambda}), nil
+		return core.NewSugar(core.SugarInfo{Kind: core.SugarLambda}), nil
 	case jsonic.Text:
 		if val.Quote != "" {
 			// Quoted text (e.g. "hello") → string
-			return eng.NewString(val.Str), nil
+			return core.NewString(val.Str), nil
 		}
 		// Unquoted text → word (same as top-level word context).
 		// This allows map values like {r:rv} to evaluate rv.
@@ -961,13 +961,13 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// mini call, so a stack subject, a trailing opts Map, the
 		// unknown-kind error, and check mode all behave exactly as if the
 		// user had typed `mini name 'src'`.
-		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: val.Name, Src: val.Src}), nil
+		return core.NewSugar(core.SugarInfo{Kind: core.SugarMini, Name: val.Name, Src: val.Src}), nil
 
 	case xmlElemVal:
 		// Embedded XML literal in data context (a map value): same
 		// immutable Node/Xml value the matcher built.
 		if val.Err != nil {
-			return eng.Value{}, val.Err
+			return core.Value{}, val.Err
 		}
 		return val.V, nil
 
@@ -996,16 +996,16 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 		return convertDataList(val.Val, d)
 
 	case unclosedParen:
-		return eng.Value{}, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
+		return core.Value{}, core.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 
 	case parenGroup:
 		// Paren group in data context: convert items in word context
 		// and wrap as a ParenExpr for inline evaluation by autoEvalMap.
 		items, err := convertTopLevelItems([]any(val), d)
 		if err != nil {
-			return eng.Value{}, err
+			return core.Value{}, err
 		}
-		return eng.NewParenExpr(items), nil
+		return core.NewParenExpr(items), nil
 
 	case angleGroup:
 		// Use-site sugar in data context — `{x: Box<Integer>}`, the
@@ -1015,10 +1015,10 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 		return angleUseSite(val, d)
 
 	case unclosedAngle:
-		return eng.Value{}, unclosedAngleError(val)
+		return core.Value{}, unclosedAngleError(val)
 
 	case bool:
-		return eng.NewBoolean(val), nil
+		return core.NewBoolean(val), nil
 
 	case nil:
 		// An untyped-nil element is an EMPTY list slot — `[1,,2]`, `[,1]`,
@@ -1026,10 +1026,10 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// jsonic.Text token "null", handled above, so this case only fires
 		// for a genuinely empty element.) A repeated or leading comma is a
 		// typo, not a value — reject it rather than fabricating a `null`.
-		return eng.Value{}, emptyElementError()
+		return core.Value{}, emptyElementError()
 
 	default:
-		return eng.Value{}, fmt.Errorf("unsupported value type %T", v)
+		return core.Value{}, fmt.Errorf("unsupported value type %T", v)
 	}
 }
 
@@ -1040,27 +1040,27 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 // (`[v0 :T v1]`), each element is converted in data context and
 // retained on the resulting Value's ChildTypeInfo.Elements; the
 // runtime `is` validates them against Child on demand.
-func convertTypedList(lr jsonic.ListRef, d *parseDepth) (eng.Value, error) {
+func convertTypedList(lr jsonic.ListRef, d *parseDepth) (core.Value, error) {
 	if err := d.enter(); err != nil {
-		return eng.Value{}, err
+		return core.Value{}, err
 	}
 	defer d.leave()
 	childVal, err := convertDataValue(lr.Child, d)
 	if err != nil {
-		return eng.Value{}, err
+		return core.Value{}, err
 	}
 	if len(lr.Val) == 0 {
-		return eng.NewTypedList(childVal), nil
+		return core.NewTypedList(childVal), nil
 	}
-	elems := make([]eng.Value, 0, len(lr.Val))
+	elems := make([]core.Value, 0, len(lr.Val))
 	for _, item := range lr.Val {
 		ev, err := convertDataValue(item, d)
 		if err != nil {
-			return eng.Value{}, err
+			return core.Value{}, err
 		}
 		elems = append(elems, ev)
 	}
-	return eng.NewTypedListWithElements(childVal, elems), nil
+	return core.NewTypedListWithElements(childVal, elems), nil
 }
 
 // hasMapChild reports whether a jsonic map contains the "child$" key
@@ -1078,14 +1078,14 @@ func hasMapChild(m map[string]any) bool {
 // constraint (`{k:v :T}`), each entry is converted in data context
 // and retained on the resulting Value's ChildTypeInfo.Entries; the
 // runtime `is` validates each entry's value against Child on demand.
-func convertTypedMap(m map[string]any, d *parseDepth, meta ...map[string]any) (eng.Value, error) {
+func convertTypedMap(m map[string]any, d *parseDepth, meta ...map[string]any) (core.Value, error) {
 	if err := d.enter(); err != nil {
-		return eng.Value{}, err
+		return core.Value{}, err
 	}
 	defer d.leave()
 	childVal, err := convertDataValue(m["child$"], d)
 	if err != nil {
-		return eng.Value{}, err
+		return core.Value{}, err
 	}
 	// Collect non-`child$` entries as concrete values, in SOURCE order
 	// (D1 — design/FLEX-ATTRS.1.md §3). The `child$` constraint is not a
@@ -1103,17 +1103,17 @@ func convertTypedMap(m map[string]any, d *parseDepth, meta ...map[string]any) (e
 		union[k] = v
 	}
 	if len(union) == 0 {
-		return eng.NewTypedMap(childVal), nil
+		return core.NewTypedMap(childVal), nil
 	}
-	entries := make([]eng.ChildEntry, 0, len(union))
+	entries := make([]core.ChildEntry, 0, len(union))
 	for _, k := range orderedKeys(union, ko) {
 		ev, err := convertDataValue(m[k], d)
 		if err != nil {
-			return eng.Value{}, err
+			return core.Value{}, err
 		}
-		entries = append(entries, eng.ChildEntry{Key: k, Value: ev})
+		entries = append(entries, core.ChildEntry{Key: k, Value: ev})
 	}
-	return eng.NewTypedMapWithEntries(childVal, entries), nil
+	return core.NewTypedMapWithEntries(childVal, entries), nil
 }
 
 // angleUseSite converts an angle group to ONE structural sugar marker
@@ -1122,12 +1122,12 @@ func convertTypedMap(m map[string]any, d *parseDepth, meta ...map[string]any) (e
 // when the items are not a valid param list). The engine picks the
 // form at dispatch. Each item converts in word context; nested sugar
 // (`Box<Pair<A, B>>`) recurses through the angleGroup case.
-func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
-	args := make([]eng.Value, 0, len(ag.Items))
+func angleUseSite(ag angleGroup, d *parseDepth) (core.Value, error) {
+	args := make([]core.Value, 0, len(ag.Items))
 	for _, it := range ag.Items {
 		v, err := convertTopLevelValue(it, d)
 		if err != nil {
-			return eng.Value{}, err
+			return core.Value{}, err
 		}
 		args = append(args, v)
 	}
@@ -1137,13 +1137,13 @@ func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
 	// the use-site apply. A head form whose items are not a valid
 	// param list carries the error text instead — it surfaces only if
 	// the head form is actually selected.
-	info := eng.SugarInfo{Kind: eng.SugarAngle, Name: ag.Name, Items: args}
-	if head, herr := angleGenList(ag.Items, eng.SrcPos{}, d); herr == nil {
+	info := core.SugarInfo{Kind: core.SugarAngle, Name: ag.Name, Items: args}
+	if head, herr := angleGenList(ag.Items, core.SrcPos{}, d); herr == nil {
 		info.Head = head
 	} else {
 		info.HeadErr = herr.Error()
 	}
-	return eng.NewSugar(info), nil
+	return core.NewSugar(info), nil
 }
 
 // angleGenList desugars an angle group's items to the canonical
@@ -1161,14 +1161,14 @@ func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
 // like list elements), so entries are recognised by the grammar above:
 // a capitalised name, optionally followed by an `extends`/`=` operator
 // and its operand.
-func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error) {
-	entries := make([]eng.Value, 0, len(items))
+func angleGenList(items []any, pos core.SrcPos, d *parseDepth) (core.Value, error) {
+	entries := make([]core.Value, 0, len(items))
 	i := 0
 	for i < len(items) {
 		node, epos := deSite(items[i])
 		txt, ok := node.(jsonic.Text)
 		if !ok || txt.Quote != "" || txt.Str == "" || !(txt.Str[0] >= 'A' && txt.Str[0] <= 'Z') {
-			return eng.Value{}, &eng.BoruError{
+			return core.Value{}, &core.BoruError{
 				Code:   "syntax_error",
 				Detail: "generic parameter must be a capitalised name",
 				Hint:   "write def Name<T> / def Name<T extends Bound> / def Name<T = Default>",
@@ -1188,7 +1188,7 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 				}
 				if kw != "" {
 					if i+2 >= len(items) {
-						return eng.Value{}, &eng.BoruError{
+						return core.Value{}, &core.BoruError{
 							Code:   "syntax_error",
 							Detail: "generic parameter " + name + ": " + opTxt.Str + " needs a value",
 							Row:    epos.Row, Col: epos.Col, Src: epos.Src,
@@ -1196,17 +1196,17 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 					}
 					operand, err := convertTopLevelValue(items[i+2], d)
 					if err != nil { //covergate:allow angleUseSite's Items loop converts every raw item with the same converter before angleGenList runs, so a failing operand errors there first
-						return eng.Value{}, err
+						return core.Value{}, err
 					}
-					op := eng.NewWord(opTxt.Str)
+					op := core.NewWord(opTxt.Str)
 					if kw == "default" {
 						// `=` is not a legal word name — it rides as
 						// the gen-default sugar marker; `extends` is
 						// the user-written word itself.
-						op = eng.NewSugar(eng.SugarInfo{Kind: eng.SugarGenDefault})
+						op = core.NewSugar(core.SugarInfo{Kind: core.SugarGenDefault})
 					}
-					entries = append(entries, withPos(eng.NewParenExpr([]eng.Value{
-						eng.NewWord(name),
+					entries = append(entries, withPos(core.NewParenExpr([]core.Value{
+						core.NewWord(name),
 						op,
 						operand,
 					}), epos))
@@ -1215,15 +1215,15 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 				}
 			}
 		}
-		entries = append(entries, withPos(eng.NewWord(name), epos))
+		entries = append(entries, withPos(core.NewWord(name), epos))
 		i++
 	}
-	return withPos(eng.NewEvalList(entries), pos), nil
+	return withPos(core.NewEvalList(entries), pos), nil
 }
 
 // unclosedAngleError is raised for an angle group auto-closed at EOF.
 func unclosedAngleError(ua unclosedAngle) error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "unclosed angle bracket: " + ua.Name + "<… has no matching `>`",
 	}
@@ -1231,35 +1231,35 @@ func unclosedAngleError(ua unclosedAngle) error {
 
 // convertDataList converts a list in data context (inside maps).
 // Lists use word context and are marked for auto-evaluation.
-func convertDataList(items []any, d *parseDepth) (eng.Value, error) {
+func convertDataList(items []any, d *parseDepth) (core.Value, error) {
 	elems, err := convertTopLevelItems(items, d)
 	if err != nil {
-		return eng.Value{}, err
+		return core.Value{}, err
 	}
-	return eng.NewEvalList(elems), nil
+	return core.NewEvalList(elems), nil
 }
 
 // resolveTextValue converts a bare text string into the appropriate
 // boru value — type literal, boolean, or atom.
 // Unquoted text is never a string; only quoted text produces strings.
-func resolveTextValue(text string) eng.Value {
+func resolveTextValue(text string) core.Value {
 	if text == "true" {
-		return eng.NewBoolean(true)
+		return core.NewBoolean(true)
 	}
 	if text == "false" {
-		return eng.NewBoolean(false)
+		return core.NewBoolean(false)
 	}
 	switch text {
 	case "inf":
-		return eng.NewFloat(math.Inf(1))
+		return core.NewFloat(math.Inf(1))
 	case "-inf":
-		return eng.NewFloat(math.Inf(-1))
+		return core.NewFloat(math.Inf(-1))
 	case "nan":
-		return eng.NewFloat(math.NaN())
+		return core.NewFloat(math.NaN())
 	}
 	// Type names are not resolved (ADR-012 rule 4 — parseWord has the
 	// same rule); a capitalised name is data here, an Atom.
-	return eng.NewAtom(text)
+	return core.NewAtom(text)
 }
 
 // orderedKeys returns the keys of a map in SOURCE order — the D1
@@ -1448,11 +1448,11 @@ func wordBaseName(text string) string {
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
-func parseWord(text string) (eng.Value, error) {
+func parseWord(text string) (core.Value, error) {
 	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, valid := scanWordModifier(text)
 
 	if name == "" {
-		return eng.Value{}, fmt.Errorf("empty word")
+		return core.Value{}, fmt.Errorf("empty word")
 	}
 
 	// An invalid modifier combination spelled entirely from the modifier
@@ -1463,7 +1463,7 @@ func parseWord(text string) (eng.Value, error) {
 	// names, builtin type paths).
 	if !valid {
 		if idx := strings.LastIndex(text, "/"); idx >= 0 && idx < len(text)-1 && isModifierAlphabet(text[idx+1:]) {
-			return eng.Value{}, &eng.BoruError{
+			return core.Value{}, &core.BoruError{
 				Code:   "syntax_error",
 				Detail: fmt.Sprintf("invalid word modifier /%s on %q", text[idx+1:], text[:idx]),
 				Src:    text,
@@ -1481,8 +1481,8 @@ func parseWord(text string) (eng.Value, error) {
 	// happens entirely inside `of`; a non-type X fails there with
 	// of's error — the parser owns no semantics.
 	if typeFlag {
-		bound := eng.NewList([]eng.Value{eng.NewAtom(name)})
-		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarTypeBound, Items: []eng.Value{bound}}), nil
+		bound := core.NewList([]core.Value{core.NewAtom(name)})
+		return core.NewSugar(core.SugarInfo{Kind: core.SugarTypeBound, Items: []core.Value{bound}}), nil
 	}
 
 	// `0d…` arbitrary-precision literals (BigInteger / BigDecimal). The
@@ -1497,7 +1497,7 @@ func parseWord(text string) (eng.Value, error) {
 	// in the same suffix are accepted but ignored — the atom is data,
 	// not a function call.
 	if quoteFlag {
-		return eng.NewAtom(name), nil
+		return core.NewAtom(name), nil
 	}
 
 	// /u emits a usurp-word that resolves the name to its bound Function
@@ -1506,7 +1506,7 @@ func parseWord(text string) (eng.Value, error) {
 	// with /r: /u alone dispatches the wrapper, /ur leaves it as data.
 	// Argument-shape modifiers don't apply (the wrapper supplies its own).
 	if usurpFlag {
-		return eng.NewWordUsurp(name, refFlag), nil
+		return core.NewWordUsurp(name, refFlag), nil
 	}
 
 	// /r emits a ref-word that, when reached at the pointer, resolves the
@@ -1517,11 +1517,11 @@ func parseWord(text string) (eng.Value, error) {
 	// bypasses dispatch entirely; they're accepted syntactically but
 	// ignored.
 	if refFlag {
-		return eng.NewWordRef(name), nil
+		return core.NewWordRef(name), nil
 	}
 
 	if forceStack || forceForward || argCount >= 0 {
-		return eng.NewWordModified(name, argCount, forceStack, forceForward), nil
+		return core.NewWordModified(name, argCount, forceStack, forceForward), nil
 	}
 
 	// `none` is the unique inhabitant of None — a value, not a type.
@@ -1529,7 +1529,7 @@ func parseWord(text string) (eng.Value, error) {
 	// nil:`; here in word context bare `null` falls through as a Word
 	// for engine-side resolution).
 	if name == "none" {
-		return eng.NewNone(), nil
+		return core.NewNone(), nil
 	}
 
 	// IEEE-754 special-value literals, following the boru reserved-literal
@@ -1539,11 +1539,11 @@ func parseWord(text string) (eng.Value, error) {
 	// identity. `inf negate` is the long form for -inf.
 	switch name {
 	case "inf":
-		return eng.NewFloat(math.Inf(1)), nil
+		return core.NewFloat(math.Inf(1)), nil
 	case "-inf":
-		return eng.NewFloat(math.Inf(-1)), nil
+		return core.NewFloat(math.Inf(-1)), nil
 	case "nan":
-		return eng.NewFloat(math.NaN()), nil
+		return core.NewFloat(math.NaN()), nil
 	}
 
 	// Reserved tape-syntax tokens emit typed marker values so the
@@ -1552,9 +1552,9 @@ func parseWord(text string) (eng.Value, error) {
 	// would have to name-dispatch in stepWord.
 	switch name {
 	case "end":
-		return eng.NewEnd(), nil
+		return core.NewEnd(), nil
 	case ")":
-		return eng.NewCloseParen(), nil
+		return core.NewCloseParen(), nil
 	}
 
 	// Type names are NOT resolved here — the parser is type-name-opaque
@@ -1571,16 +1571,16 @@ func parseWord(text string) (eng.Value, error) {
 	// literals never reach this path — jsonic lexes them as numbers.)
 	if isBasePrefixedInteger(name) {
 		if strings.IndexByte(name, '_') >= 0 && !validUnderscores(name) {
-			return eng.Value{}, &eng.BoruError{Code: "syntax_error", Src: name,
+			return core.Value{}, &core.BoruError{Code: "syntax_error", Src: name,
 				Detail: "misplaced `_` in numeric literal: " + name,
 				Hint:   "`_` is a single digit-separator — use one between digits"}
 		}
 		n, err := strconv.ParseInt(stripUnderscores(name), 0, 64)
 		if err == nil {
-			return eng.NewInteger(n), nil
+			return core.NewInteger(n), nil
 		}
 		if isRangeError(err) {
-			return eng.Value{}, integerLiteralOverflowError(name, 0, 0)
+			return core.Value{}, integerLiteralOverflowError(name, 0, 0)
 		}
 		// Other parse errors (e.g. an invalid digit) fall through to the
 		// numeric-shape classification below.
@@ -1596,12 +1596,12 @@ func parseWord(text string) (eng.Value, error) {
 	if isDigitLed(name) {
 		f, err := strconv.ParseFloat(stripUnderscores(name), 64)
 		if isRangeError(err) || math.IsInf(f, 0) {
-			return eng.Value{}, floatLiteralOverflowError(name)
+			return core.Value{}, floatLiteralOverflowError(name)
 		}
-		return eng.Value{}, malformedNumberError(name)
+		return core.Value{}, malformedNumberError(name)
 	}
 
-	return eng.NewWord(name), nil
+	return core.NewWord(name), nil
 }
 
 // isDigitLed reports whether s starts (after an optional sign) with a
@@ -1624,7 +1624,7 @@ func isRangeError(err error) bool {
 // floatLiteralOverflowError reports a floating-point literal whose
 // magnitude overflows binary64 to ±infinity (e.g. 1e309).
 func floatLiteralOverflowError(src string) error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "float_overflow",
 		Detail: "floating-point literal out of range: " + src + " overflows to infinity",
 		Src:    src,
@@ -1637,7 +1637,7 @@ func floatLiteralOverflowError(src string) error {
 // a botched numeric literal (`1e`, `0x1p4`) or a digit-first name (`2dup`
 // — the stack words are now `dup2`/`swap2`/`drop2`/`over2`).
 func malformedNumberError(src string) error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "invalid numeric literal: " + src,
 		Src:    src,
@@ -1648,27 +1648,27 @@ func malformedNumberError(src string) error {
 // convertInterpGroup converts an interpGroup (produced by the interp/ielem/iexpr
 // jsonic rules) into an engine InterpString value, or a plain string if there
 // are no expression parts.
-func convertInterpGroup(grp interpGroup, d *parseDepth) (eng.Value, error) {
+func convertInterpGroup(grp interpGroup, d *parseDepth) (core.Value, error) {
 	if len(grp) == 0 {
-		return eng.NewString(""), nil
+		return core.NewString(""), nil
 	}
-	var parts []eng.InterpPart
+	var parts []core.InterpPart
 	hasExpr := false
 	for _, item := range grp {
 		item, _ := deSite(item) // interp parts are not normally sited; guard anyway
 		switch v := item.(type) {
 		case jsonic.Text:
 			// Template literal segment (Quote="tl").
-			parts = append(parts, eng.InterpPart{Lit: v.Str})
+			parts = append(parts, core.InterpPart{Lit: v.Str})
 		case iexprGroup:
 			hasExpr = true
 			exprVals, err := convertTopLevelItems([]any(v), d)
 			if err != nil {
-				return eng.Value{}, fmt.Errorf("interpolation expression error: %w", err)
+				return core.Value{}, fmt.Errorf("interpolation expression error: %w", err)
 			}
-			parts = append(parts, eng.InterpPart{Expr: exprVals})
+			parts = append(parts, core.InterpPart{Expr: exprVals})
 		default:
-			return eng.Value{}, fmt.Errorf("unexpected interp part type %T", item)
+			return core.Value{}, fmt.Errorf("unexpected interp part type %T", item)
 		}
 	}
 	if !hasExpr {
@@ -1677,9 +1677,9 @@ func convertInterpGroup(grp interpGroup, d *parseDepth) (eng.Value, error) {
 		for _, p := range parts {
 			buf.WriteString(p.Lit)
 		}
-		return eng.NewString(buf.String()), nil
+		return core.NewString(buf.String()), nil
 	}
-	return eng.NewInterpString(parts), nil
+	return core.NewInterpString(parts), nil
 }
 
 // processTemplateEscapes processes escape sequences in template literal text.
@@ -1731,11 +1731,11 @@ type numberVal struct {
 
 // floatToValue converts a JSON float64 to the appropriate boru numeric value.
 // Whole numbers become integers; fractional values become decimals.
-func floatToValue(f float64) eng.Value {
+func floatToValue(f float64) core.Value {
 	if f == float64(int64(f)) && !math.IsInf(f, 0) && !math.IsNaN(f) {
-		return eng.NewInteger(int64(f))
+		return core.NewInteger(int64(f))
 	}
-	return eng.NewFloat(f)
+	return core.NewFloat(f)
 }
 
 // numberValToValue converts a numberVal (float64 + source) to the
@@ -1755,12 +1755,12 @@ func floatToValue(f float64) eng.Value {
 //     which already matches jsonic's own base interpretation.
 //
 // See design/INTEGER-OVERFLOW-STRATEGY.5.md.
-func numberValToValue(nv numberVal) (eng.Value, error) {
+func numberValToValue(nv numberVal) (core.Value, error) {
 	// `_` is a single digit-separator only: it must sit between two
 	// digits (no leading, trailing, or repeated underscores). `1__0` and
 	// `1_` are rejected.
 	if strings.IndexByte(nv.Src, '_') >= 0 && !validUnderscores(nv.Src) {
-		return eng.Value{}, underscoreError(nv)
+		return core.Value{}, underscoreError(nv)
 	}
 	if strings.Contains(nv.Src, ".") {
 		// A leading `.` (with or without a sign) is not a valid number —
@@ -1768,7 +1768,7 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 		// `.5` is caught earlier as a stray `.` token; the signed forms
 		// reach here because jsonic lexes them as one number token.
 		if isLeadingDotFloat(nv.Src) {
-			return eng.Value{}, leadingDotNumberError(nv)
+			return core.Value{}, leadingDotNumberError(nv)
 		}
 		// Parse the Float from its exact source digits for a guaranteed
 		// correctly-rounded (round-ties-to-even) decimal→binary64
@@ -1776,16 +1776,16 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 		// strconv.ParseFloat is IEEE-correct; fall back to jsonic's value
 		// only if the (jsonic-validated) token somehow fails to reparse.
 		if f, err := strconv.ParseFloat(stripUnderscores(nv.Src), 64); err == nil {
-			return eng.NewFloat(f), nil
+			return core.NewFloat(f), nil
 		}
-		return eng.NewFloat(nv.Val), nil
+		return core.NewFloat(nv.Val), nil
 	}
 	if isPlainDecimalInteger(nv.Src) {
 		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 10, 64)
 		if err != nil {
-			return eng.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
+			return core.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
 		}
-		return eng.NewInteger(n), nil
+		return core.NewInteger(n), nil
 	}
 	if isBasePrefixedInteger(nv.Src) {
 		// base 0 auto-detects the 0x / 0o / 0b prefix; parsing the exact
@@ -1793,9 +1793,9 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 		// the decimal path (out of int64 range → integer_overflow).
 		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 0, 64)
 		if err != nil {
-			return eng.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
+			return core.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
 		}
-		return eng.NewInteger(n), nil
+		return core.NewInteger(n), nil
 	}
 	return floatToValue(nv.Val), nil
 }
@@ -1806,12 +1806,12 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 // by the source text. Returns ok=false for any non-numberVal input so the
 // caller falls through to its default conversion. The numberVal type stays
 // unexported; this is the single public seam data-decode paths use.
-func ConvertParsedNumber(v any) (eng.Value, bool, error) {
+func ConvertParsedNumber(v any) (core.Value, bool, error) {
 	if nv, ok := v.(numberVal); ok {
 		ev, err := numberValToValue(nv)
 		return ev, true, err
 	}
-	return eng.Value{}, false, nil
+	return core.Value{}, false, nil
 }
 
 // isBigNumberLiteral reports whether src is a `0d`/`0D`-prefixed literal
@@ -1830,9 +1830,9 @@ func isBigNumberLiteral(src string) bool {
 // otherwise a BigInteger (math/big, unbounded). Sign and `_` separators
 // are handled like the int/float paths. Errors carry no source position
 // (parseWord has none — mirrors the other parseWord numeric errors).
-func parseBigNumber(src string) (eng.Value, error) {
+func parseBigNumber(src string) (core.Value, error) {
 	if strings.IndexByte(src, '_') >= 0 && !validUnderscores(src) {
-		return eng.Value{}, bigLiteralError(src)
+		return core.Value{}, bigLiteralError(src)
 	}
 	body := src
 	sign := ""
@@ -1842,25 +1842,25 @@ func parseBigNumber(src string) (eng.Value, error) {
 	}
 	digits := stripUnderscores(body[2:]) // body[0:2] is the 0d / 0D prefix
 	if digits == "" {
-		return eng.Value{}, bigLiteralError(src)
+		return core.Value{}, bigLiteralError(src)
 	}
 	text := sign + digits
 	if strings.ContainsAny(digits, ".eE") {
 		d, _, err := apd.NewFromString(text)
 		if err != nil {
-			return eng.Value{}, bigLiteralError(src)
+			return core.Value{}, bigLiteralError(src)
 		}
-		return eng.NewBigDecimal(d), nil
+		return core.NewBigDecimal(d), nil
 	}
 	n, ok := new(big.Int).SetString(text, 10)
 	if !ok {
-		return eng.Value{}, bigLiteralError(src)
+		return core.Value{}, bigLiteralError(src)
 	}
-	return eng.NewBigInteger(n), nil
+	return core.NewBigInteger(n), nil
 }
 
 func bigLiteralError(src string) error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "invalid 0d numeric literal: " + src,
 		Src:    src,
@@ -1966,7 +1966,7 @@ func stripUnderscores(src string) string {
 // arbitrary-precision (Phase 1 of design/INTEGER-OVERFLOW-STRATEGY.5.md),
 // this is a hard parse error rather than a silent fall-back to Float.
 func integerLiteralOverflowError(src string, row, col int) error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "integer_overflow",
 		Detail: "integer literal out of range: " + src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
 		Row:    row,
@@ -1979,7 +1979,7 @@ func integerLiteralOverflowError(src string, row, col int) error {
 // underscoreError reports a misused `_` digit-separator (leading, trailing,
 // or repeated) in a numeric literal.
 func underscoreError(nv numberVal) error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "misplaced `_` in numeric literal: " + nv.Src,
 		Row:    nv.Row,
@@ -1992,7 +1992,7 @@ func underscoreError(nv numberVal) error {
 // leadingDotNumberError reports a `.`-leading numeric literal (`-.5`,
 // `+.5`); a number needs a digit before the decimal point.
 func leadingDotNumberError(nv numberVal) error {
-	return &eng.BoruError{
+	return &core.BoruError{
 		Code:   "syntax_error",
 		Detail: "numeric literal has no digit before `.`: " + nv.Src,
 		Row:    nv.Row,

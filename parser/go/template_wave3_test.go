@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestTemplateWave3Escapes pins every escape sequence in template literal
@@ -23,7 +23,7 @@ func TestTemplateWave3Escapes(t *testing.T) {
 		if len(vals) != 1 {
 			t.Fatalf("%q: got %d values, want 1", c.src, len(vals))
 		}
-		s, err := eng.AsString(vals[0])
+		s, err := core.AsString(vals[0])
 		if err != nil {
 			t.Fatalf("%q: AsString: %v", c.src, err)
 		}
@@ -57,7 +57,7 @@ func TestTemplateWave3Multiline(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("multiline template: got %d values, want 1", len(vals))
 	}
-	if s, _ := eng.AsString(vals[0]); s != "line1\nline2" {
+	if s, _ := core.AsString(vals[0]); s != "line1\nline2" {
 		t.Errorf("multiline template: got %q", s)
 	}
 }
@@ -68,7 +68,7 @@ func TestTemplateWave3Boundaries(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("``: got %d values, want 1", len(vals))
 	}
-	if s, _ := eng.AsString(vals[0]); s != "" {
+	if s, _ := core.AsString(vals[0]); s != "" {
 		t.Errorf("``: got %q, want empty string", s)
 	}
 	// Unterminated with text: auto-closes at EOF with the literal.
@@ -76,7 +76,7 @@ func TestTemplateWave3Boundaries(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("`abc: got %d values, want 1", len(vals))
 	}
-	if s, _ := eng.AsString(vals[0]); s != "abc" {
+	if s, _ := core.AsString(vals[0]); s != "abc" {
 		t.Errorf("`abc: got %q, want abc", s)
 	}
 	// A lone backtick is rejected by the grammar (no panic).
@@ -84,7 +84,7 @@ func TestTemplateWave3Boundaries(t *testing.T) {
 	// Unterminated WITH a hole: auto-closes to an InterpString.
 	for _, src := range []string{"`${x}", "`${x"} {
 		vals := mustParseWave3(t, src)
-		if len(vals) != 1 || !eng.IsInterpString(vals[0]) {
+		if len(vals) != 1 || !core.IsInterpString(vals[0]) {
 			t.Errorf("%q: expected one InterpString, got %v", src, vals)
 		}
 	}
@@ -109,12 +109,12 @@ func TestTemplateWave3InterpNested(t *testing.T) {
 	}
 	// An interpolated map value stays an InterpString.
 	vals := mustParseWave3(t, "{a:`${1}`}")
-	m, err := eng.AsMap(vals[0])
+	m, err := core.AsMap(vals[0])
 	if err != nil {
 		t.Fatalf("{a:`${1}`}: AsMap: %v", err)
 	}
 	v, ok := m.Get("a")
-	if !ok || !eng.IsInterpString(v) {
+	if !ok || !core.IsInterpString(v) {
 		t.Errorf("{a:`${1}`}: value %v is not an InterpString", v)
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestXmlWave3AcceptedForms pins well-formed variants of the embedded XML
@@ -30,7 +30,7 @@ func TestXmlWave3AcceptedForms(t *testing.T) {
 	}
 	for _, c := range cases {
 		vals := mustParseWave3(t, c.src)
-		if len(vals) != 1 || !vals[0].Is(eng.TXml) {
+		if len(vals) != 1 || !vals[0].Is(core.TXml) {
 			t.Errorf("%q: expected one Node/Xml, got %v", c.src, vals)
 			continue
 		}
@@ -51,7 +51,7 @@ func TestXmlWave3InterpolationForms(t *testing.T) {
 		`<p>${"a\"}"}</p>`,      // escaped quote inside a string in the hole
 	} {
 		vals := mustParseWave3(t, src)
-		if len(vals) != 1 || !vals[0].Is(eng.TXmlInterp) {
+		if len(vals) != 1 || !vals[0].Is(core.TXmlInterp) {
 			t.Errorf("%q: expected one deferred Word/__XI skeleton, got %v", src, vals)
 		}
 	}
@@ -63,12 +63,12 @@ func TestXmlWave3DataContext(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("{a:<b/>}: got %d values, want 1", len(vals))
 	}
-	m, err := eng.AsMap(vals[0])
+	m, err := core.AsMap(vals[0])
 	if err != nil {
 		t.Fatalf("{a:<b/>}: AsMap: %v", err)
 	}
 	v, ok := m.Get("a")
-	if !ok || !v.Is(eng.TXml) {
+	if !ok || !v.Is(core.TXml) {
 		t.Errorf("{a:<b/>}: value %v is not a Node/Xml", v)
 	}
 	// …and a malformed one surfaces its build error through the map path.

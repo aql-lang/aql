@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // boru fns and lambdas use implicit lexical capture: at construction

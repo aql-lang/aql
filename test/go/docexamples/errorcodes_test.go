@@ -76,8 +76,15 @@ import (
 // so the gate has to link the layers it means to check. `basic/go` carries
 // the fundamental words' minting sites (def / if / case / fn / var / gen …)
 // since the ADR-013 layering split; `core/go` carries the kernel sites that
-// moved with the interpreter-core cut (design/ENG-FOUR-PIECE.0.md Stage 4).
-var codeSourceRoots = []string{"core/go", "check/go", "compiler/go", "eng/go", "basic/go", "lang/go"}
+// moved with the interpreter-core cut (design/ENG-FOUR-PIECE.0.md Stage 4);
+// `parser/go` carries the syntax sites (float_overflow, integer_overflow,
+// syntax_error …) that moved with the parser cut.
+//
+// This list is COUPLED TO THE MODULE LAYOUT. Extracting a module without
+// adding it here does not fail at the extraction — it fails later as
+// "registered but attached by no site", which is how the parser cut was
+// caught (float_overflow, minted in parse.go, fell out of every root).
+var codeSourceRoots = []string{"core/go", "check/go", "compiler/go", "parser/go", "eng/go", "basic/go", "lang/go"}
 
 // codeMintPatterns match every shape that ATTACHES an error code to an
 // error or a diagnostic. Capture group 1 is the code.

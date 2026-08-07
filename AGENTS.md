@@ -128,6 +128,7 @@ Read the relevant one before changing that module:
 | Area | Guide |
 |------|-------|
 | Engine kernel — types, values, signatures, matching, the step loop, the parser bridge | [eng/go/CLAUDE.md](eng/go/CLAUDE.md) |
+| The parser — source text to kernel values, and the never-invent-names rule | [parser/go/CLAUDE.md](parser/go/CLAUDE.md) |
 | Language layer — native words, modules, registry, help/describe, capabilities | [lang/go/CLAUDE.md](lang/go/CLAUDE.md) |
 
 A few rules from those guides that bite hardest when missed:
@@ -153,10 +154,11 @@ A few rules from those guides that bite hardest when missed:
 | `cmd/go/` | The `boru` CLI / REPL (and the `help`/`describe` plumbing). |
 | `lang/go/` | The language layer: public `lang` API + the `native` word library + loadable `modules`. |
 | `basic/go/` | The base language layer: fundamental words (stack, definition, control, type-generics) + predefined content types. Depends on eng only (ADR-013). |
-| `eng/go/` | Engine kernel, jsonic parser, kernel spec runner. |
+| `eng/go/` | Engine kernel (check + compiler + VM over core) and the kernel spec runner. The parser moved out to `parser/go`. |
 | `compiler/go/` | The compiler module: the emit recorder, lowering, and the bytecode emitter. Builds on check and core; eng runs its bytecode. |
 | `check/go/` | The type-checker module: the analysis pass, carriers, and check-mode diagnostics. Builds on core alone. |
 | `core/go/` | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it. |
+| `parser/go/` | The parser module: boru source text → `[]core.Value` (tabnas/jsonic lexer + the embedded declarative grammar). Depends on core alone. |
 | `lang/spec/` | The executable language spec (TSV files). |
 | `calc/go/` | A small calculator built on `eng` (learning example). |
 | `wpg/` | The wasm web playground. |

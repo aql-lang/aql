@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // parseOne parses src and requires exactly one resulting value.
-func parseOneXml(t *testing.T, src string) eng.Value {
+func parseOneXml(t *testing.T, src string) core.Value {
 	t.Helper()
 	vals, err := Parse(src)
 	if err != nil {
@@ -36,8 +36,8 @@ func TestXmlLiteralBasic(t *testing.T) {
 	}
 	for _, c := range cases {
 		v := parseOneXml(t, c.src)
-		if !v.Is(eng.TXml) {
-			t.Errorf("%q: value is not Node/Xml (got %s)", c.src, eng.ValueType(v).Path())
+		if !v.Is(core.TXml) {
+			t.Errorf("%q: value is not Node/Xml (got %s)", c.src, core.ValueType(v).Path())
 			continue
 		}
 		if got := v.String(); got != c.render {
@@ -48,11 +48,11 @@ func TestXmlLiteralBasic(t *testing.T) {
 
 func TestXmlLiteralStructure(t *testing.T) {
 	v := parseOneXml(t, `<a x="1" y="hi">text<b/></a>`)
-	x, err := eng.AsXmlElement(v)
+	x, err := core.AsXmlElement(v)
 	if err != nil {
 		t.Fatalf("AsXmlElement: %v", err)
 	}
-	str := func(v eng.Value) string { s, _ := eng.AsString(v); return s }
+	str := func(v core.Value) string { s, _ := core.AsString(v); return s }
 	if x.Tag != "a" {
 		t.Errorf("tag = %q, want a", x.Tag)
 	}
@@ -68,7 +68,7 @@ func TestXmlLiteralStructure(t *testing.T) {
 	if str(x.Cren[0]) != "text" {
 		t.Errorf("cren[0] = %v, want text node", x.Cren[0])
 	}
-	if !x.Cren[1].Is(eng.TXml) {
+	if !x.Cren[1].Is(core.TXml) {
 		t.Errorf("cren[1] is not an element: %v", x.Cren[1])
 	}
 }
@@ -77,10 +77,10 @@ func TestXmlLiteralEquality(t *testing.T) {
 	a := parseOneXml(t, `<a x="1"><b/></a>`)
 	b := parseOneXml(t, `<a x="1"><b/></a>`)
 	c := parseOneXml(t, `<a x="2"><b/></a>`)
-	if !eng.TXml.Behavior().Equal(a, b) {
+	if !core.TXml.Behavior().Equal(a, b) {
 		t.Errorf("equal elements compared unequal")
 	}
-	if eng.TXml.Behavior().Equal(a, c) {
+	if core.TXml.Behavior().Equal(a, c) {
 		t.Errorf("different attrs compared equal")
 	}
 }
@@ -94,7 +94,7 @@ func TestXmlLiteralGenericsUntouched(t *testing.T) {
 		t.Fatalf("Box<Integer> parse error: %v", err)
 	}
 	for _, v := range vals {
-		if v.Is(eng.TXml) {
+		if v.Is(core.TXml) {
 			t.Fatalf("Box<Integer> produced a Node/Xml value: %v", vals)
 		}
 	}
@@ -107,8 +107,8 @@ func TestXmlLiteralFreezeVsInterp(t *testing.T) {
 	// No interpolation → constant Node/Xml.
 	for _, src := range []string{`<a/>`, `<a x="1">t<b/></a>`} {
 		v := parseOneXml(t, src)
-		if !v.Is(eng.TXml) {
-			t.Errorf("%q: want Node/Xml (frozen), got %s", src, eng.ValueType(v).Path())
+		if !v.Is(core.TXml) {
+			t.Errorf("%q: want Node/Xml (frozen), got %s", src, core.ValueType(v).Path())
 		}
 	}
 	// Any ${} hole (text, attribute, or child position) → deferred skeleton.
@@ -120,8 +120,8 @@ func TestXmlLiteralFreezeVsInterp(t *testing.T) {
 		`<a><b>${x}</b></a>`,
 	} {
 		v := parseOneXml(t, src)
-		if !v.Is(eng.TXmlInterp) {
-			t.Errorf("%q: want Word/__XI (deferred), got %s", src, eng.ValueType(v).Path())
+		if !v.Is(core.TXmlInterp) {
+			t.Errorf("%q: want Word/__XI (deferred), got %s", src, core.ValueType(v).Path())
 		}
 	}
 }

@@ -10,8 +10,8 @@ import (
 	jsonic "github.com/tabnas/jsonic/go"
 	multisource "github.com/tabnas/multisource/go"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // Format encodes and decodes file content for a named representation

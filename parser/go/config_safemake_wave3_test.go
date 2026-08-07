@@ -6,7 +6,7 @@ import (
 
 	jsonic "github.com/tabnas/jsonic/go"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // --- ParseConfig (the CLI --options backing parser) ---
@@ -73,7 +73,7 @@ func TestSafeParseDataWave3(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("ConvertParsedNumber(42.0): ok=%v err=%v", ok, err)
 	}
-	if f, ferr := eng.AsFloat(ev); ferr != nil || f != 42.0 {
+	if f, ferr := core.AsFloat(ev); ferr != nil || f != 42.0 {
 		t.Errorf("ConvertParsedNumber(42.0) = %v, want Float 42.0", ev)
 	}
 	// "42" stays an Integer.
@@ -85,7 +85,7 @@ func TestSafeParseDataWave3(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("ConvertParsedNumber(42): ok=%v err=%v", ok, err)
 	}
-	if n, nerr := eng.AsInteger(ev); nerr != nil || n != 42 {
+	if n, nerr := core.AsInteger(ev); nerr != nil || n != 42 {
 		t.Errorf("ConvertParsedNumber(42) = %v, want Integer 42", ev)
 	}
 	// A malformed separator errors through the same seam.

@@ -13,7 +13,7 @@ import (
 // 2026-08-04 amendment: the parser emits STRUCTURE, never names. Every
 // Word the parser constructs must be spelled by the user — built from
 // the token's own source text — and every piece of surface sugar must
-// parse to a structural marker (`eng.NewSugar`) that the engine lowers
+// parse to a structural marker (`core.NewSugar`) that the engine lowers
 // through the registry's sugar-role table. A parser that bakes a word
 // name into a string literal re-couples the grammar to one language's
 // vocabulary and breaks the "eng is mechanism" boundary.
@@ -21,22 +21,22 @@ import (
 // The gate scans the package's non-test sources for the two ways a
 // name could sneak back in:
 //
-//  1. `eng.NewWord("…")` / `eng.NewAtom("…")` with a literal string —
+//  1. `core.NewWord("…")` / `core.NewAtom("…")` with a literal string —
 //     a word the user never wrote. (Constructing from a variable is
 //     fine: that's the token's own text.)
 //  2. A `jsonic.Text{Str: "…"}` grammar substitution whose literal is
 //     not one of the allowlisted STRUCTURAL spellings. The allowlist
 //     covers punctuation the user actually typed being re-emitted as
 //     its own text (`)`, `?`, `!`, `|`, `.`) plus `;` → "end", whose
-//     conversion lands on the kernel End marker (`eng.NewEnd()`), not
+//     conversion lands on the kernel End marker (`core.NewEnd()`), not
 //     a name-dispatched word.
 //
 // If a new sugar needs a word, bind a sugar role (eng/go/sugar.go,
 // `BindSugarWord`) and emit a marker — do not extend the allowlist
 // with a word name.
 var namelessGateStructuralText = map[string]bool{
-	")":   true, // close paren → eng.NewCloseParen()
-	"end": true, // `;` statement separator → eng.NewEnd()
+	")":   true, // close paren → core.NewCloseParen()
+	"end": true, // `;` statement separator → core.NewEnd()
 	"?":   true, // sig optional marker (user-typed punctuation)
 	"!":   true, // strict-reach marker (user-typed punctuation)
 	"|":   true, // sig barrier marker (user-typed punctuation)
@@ -44,7 +44,7 @@ var namelessGateStructuralText = map[string]bool{
 }
 
 var (
-	namelessGateLiteralWord = regexp.MustCompile(`eng\.New(?:Word|Atom)\(\s*"`)
+	namelessGateLiteralWord = regexp.MustCompile(`core\.New(?:Word|Atom)\(\s*"`)
 	namelessGateTextSubst   = regexp.MustCompile(`jsonic\.Text\{Str:\s*"((?:[^"\\]|\\.)*)"`)
 )
 
@@ -99,17 +99,17 @@ func TestParserNeverInventsNames(t *testing.T) {
 // flag the legitimate ones, or the gate is protection that isn't there.
 func TestParserNeverInventsNamesCatches(t *testing.T) {
 	for _, bad := range []string{
-		`return eng.NewWord("afn"), nil`,
-		`out = append(out, eng.NewAtom("gen"))`,
-		`v := eng.NewWord( "of")`,
+		`return core.NewWord("afn"), nil`,
+		`out = append(out, core.NewAtom("gen"))`,
+		`v := core.NewWord( "of")`,
 	} {
 		if !namelessGateLiteralWord.MatchString(bad) {
 			t.Errorf("gate must flag literal name construction: %s", bad)
 		}
 	}
 	for _, good := range []string{
-		`return eng.NewWord(name), nil`,
-		`op := eng.NewWord(opTxt.Str)`,
+		`return core.NewWord(name), nil`,
+		`op := core.NewWord(opTxt.Str)`,
 	} {
 		if namelessGateLiteralWord.MatchString(good) {
 			t.Errorf("gate must not flag source-text construction: %s", good)

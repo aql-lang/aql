@@ -3,8 +3,8 @@ package lang
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // Interpreter-mode allocation guard — the interpreter twin of

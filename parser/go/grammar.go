@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -711,7 +711,7 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 	})
 
 	// Capture source position: wrap every value node with the row/col of its
-	// opening token, so the converter can stamp eng.Value.Pos for precise
+	// opening token, so the converter can stamp core.Value.Pos for precise
 	// error reporting (mirrors aontu's addsite). This runs in the AFTER-CLOSE
 	// (AC) phase, NOT before-close: the tabnas jsonic grammar installs a
 	// `@val-ac` hook that re-resolves a primitive value from its token after
@@ -729,9 +729,9 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 			if _, already := r.Node.(sited); already {
 				return
 			}
-			var pos eng.SrcPos
+			var pos core.SrcPos
 			if r.O0 != nil && !r.O0.IsNoToken() {
-				pos = eng.SrcPos{Row: r.O0.RI, Col: r.O0.CI, Src: r.O0.Src}
+				pos = core.SrcPos{Row: r.O0.RI, Col: r.O0.CI, Src: r.O0.Src}
 			}
 			r.Node = sited{Node: r.Node, Pos: pos}
 		})
@@ -1419,7 +1419,7 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 					return
 				}
 				recv := r.Parent.Node
-				var pos eng.SrcPos
+				var pos core.SrcPos
 				if s, ok := recv.(sited); ok {
 					pos, recv = s.Pos, s.Node
 				}

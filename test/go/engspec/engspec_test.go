@@ -24,8 +24,8 @@ import (
 
 	basic "github.com/boru-lang/boru/basic/go"
 	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/eng/go/specfix"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 func TestSpec(t *testing.T) {

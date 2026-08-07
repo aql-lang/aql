@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end coverage for the Tier-2 app runtime (tui_run.go) and the

@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestParseBigIntegerLiteral pins that `0d…` (no dot/exponent) parses to a
@@ -24,11 +24,11 @@ func TestParseBigIntegerLiteral(t *testing.T) {
 			t.Errorf("Parse(%q) error: %v", src, err)
 			continue
 		}
-		if len(got) != 1 || !got[0].Parent.ConformsTo(eng.TBigInteger) {
+		if len(got) != 1 || !got[0].Parent.ConformsTo(core.TBigInteger) {
 			t.Errorf("Parse(%q): expected one BigInteger, got %v", src, got)
 			continue
 		}
-		n, _ := eng.AsBigInteger(got[0])
+		n, _ := core.AsBigInteger(got[0])
 		if n.Cmp(mustBig(want)) != 0 {
 			t.Errorf("Parse(%q): got %s, want %s", src, n, want)
 		}
@@ -46,7 +46,7 @@ func TestParseBigDecimalLiteralDotSplit(t *testing.T) {
 			t.Errorf("Parse(%q) error: %v", src, err)
 			continue
 		}
-		if len(got) != 1 || !got[0].Parent.ConformsTo(eng.TBigDecimal) {
+		if len(got) != 1 || !got[0].Parent.ConformsTo(core.TBigDecimal) {
 			t.Errorf("Parse(%q): expected one BigDecimal, got %v", src, got)
 		}
 	}
@@ -58,7 +58,7 @@ func TestParseBigDecimalLiteralDotSplit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse(0d5.foo) error: %v", err)
 	}
-	if len(got) != 1 || got[0].Parent.ConformsTo(eng.TNumber) {
+	if len(got) != 1 || got[0].Parent.ConformsTo(core.TNumber) {
 		t.Errorf("0d5.foo: expected one non-number (reach) value, got %v", got)
 	}
 	if got[0].String() != "0d5.foo" {
@@ -70,7 +70,7 @@ func TestParseBigDecimalLiteralDotSplit(t *testing.T) {
 func TestParseBigNumberMalformed(t *testing.T) {
 	for _, src := range []string{"0d", "0d1__0"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "syntax_error" {
 			t.Errorf("Parse(%q): expected [boru/syntax_error], got %v", src, err)
 		}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -14,7 +14,7 @@ import (
 // hands V through. A build failure rides in Err so the converter can
 // surface a clean error rather than a generic jsonic parse error.
 type xmlElemVal struct {
-	V   eng.Value
+	V   core.Value
 	Err error
 }
 
@@ -80,12 +80,12 @@ func setupXmlMatcher(j *jsonic.Jsonic, t parserTokens) {
 		// No interpolation anywhere → freeze to a constant Node/Xml (the
 		// Increment-1 path). Otherwise emit the skeleton; the engine
 		// evaluates it to a Node/Xml at runtime. See evalXmlInterp.
-		var v eng.Value
+		var v core.Value
 		if err == nil {
 			if cv, ok := freezeXmlTmpl(tmpl); ok {
 				v = cv
 			} else {
-				v = eng.NewXmlInterp(*tmpl)
+				v = core.NewXmlInterp(*tmpl)
 			}
 		}
 		la := afterLA - 1
@@ -129,7 +129,7 @@ func isXmlSpace(c byte) bool {
 // so the matcher can still advance the cursor and surface the error through
 // conversion. When the very first character is not a tag name, it returns
 // end == i so the matcher declines.
-func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
+func buildXmlTmpl(s string, i int) (*core.XmlTmpl, int, error) {
 	n := len(s)
 	if i >= n || !isXmlNameStart(s[i]) {
 		return nil, i, fmt.Errorf("xml: expected a tag name after '<'")
@@ -138,7 +138,7 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 	for i < n && isXmlNameChar(s[i]) {
 		i++
 	}
-	t := &eng.XmlTmpl{Tag: s[nameStart:i]}
+	t := &core.XmlTmpl{Tag: s[nameStart:i]}
 	seenAttr := map[string]bool{}
 
 	// Opening-tag attributes, up to `>` or `/>`.
@@ -175,7 +175,7 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 			i++
 		}
 		// Default (valueless) attribute → empty string, like strict XML.
-		parts := []eng.InterpPart{{Lit: ""}}
+		parts := []core.InterpPart{{Lit: ""}}
 		if i < n && s[i] == '=' {
 			i++
 			for i < n && isXmlSpace(s[i]) {
@@ -187,7 +187,7 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 				if err != nil {
 					return nil, end, err
 				}
-				parts = []eng.InterpPart{{Expr: toks}}
+				parts = []core.InterpPart{{Expr: toks}}
 				i = end
 			} else if i < n && (s[i] == '"' || s[i] == '\'') {
 				vparts, end, err := scanAttrValue(s, i+1, s[i], aname, t.Tag)
@@ -200,14 +200,14 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 				return nil, i, fmt.Errorf("xml: attribute %q in <%s> must have a quoted value", aname, t.Tag)
 			}
 		}
-		t.Attr = append(t.Attr, eng.XmlAttrTmpl{Name: aname, Parts: parts})
+		t.Attr = append(t.Attr, core.XmlAttrTmpl{Name: aname, Parts: parts})
 	}
 
 	// Element content, up to the matching `</tag>`.
 	var text strings.Builder
 	flush := func() {
 		if text.Len() > 0 {
-			t.Cren = append(t.Cren, eng.XmlCren{Kind: eng.XmlCrenLit, Lit: unescapeXml(text.String())})
+			t.Cren = append(t.Cren, core.XmlCren{Kind: core.XmlCrenLit, Lit: unescapeXml(text.String())})
 			text.Reset()
 		}
 	}
@@ -222,7 +222,7 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 			if err != nil {
 				return nil, end, err
 			}
-			t.Cren = append(t.Cren, eng.XmlCren{Kind: eng.XmlCrenExpr, Expr: toks})
+			t.Cren = append(t.Cren, core.XmlCren{Kind: core.XmlCrenExpr, Expr: toks})
 			i = end
 			continue
 		}
@@ -276,7 +276,7 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 		if err != nil {
 			return nil, ni, err
 		}
-		t.Cren = append(t.Cren, eng.XmlCren{Kind: eng.XmlCrenChild, Child: child})
+		t.Cren = append(t.Cren, core.XmlCren{Kind: core.XmlCrenChild, Child: child})
 		i = ni
 	}
 }
@@ -284,13 +284,13 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 // scanAttrValue parses a quoted attribute value beginning at i (just past
 // the opening quote q) into InterpParts — literal segments plus `${expr}`
 // holes — returning the index just past the closing quote.
-func scanAttrValue(s string, i int, q byte, aname, tag string) ([]eng.InterpPart, int, error) {
+func scanAttrValue(s string, i int, q byte, aname, tag string) ([]core.InterpPart, int, error) {
 	n := len(s)
-	var parts []eng.InterpPart
+	var parts []core.InterpPart
 	var lit strings.Builder
 	flush := func() {
 		if lit.Len() > 0 {
-			parts = append(parts, eng.InterpPart{Lit: unescapeXml(lit.String())})
+			parts = append(parts, core.InterpPart{Lit: unescapeXml(lit.String())})
 			lit.Reset()
 		}
 	}
@@ -298,7 +298,7 @@ func scanAttrValue(s string, i int, q byte, aname, tag string) ([]eng.InterpPart
 		if s[i] == q {
 			flush()
 			if len(parts) == 0 {
-				parts = []eng.InterpPart{{Lit: ""}}
+				parts = []core.InterpPart{{Lit: ""}}
 			}
 			return parts, i + 1, nil
 		}
@@ -308,7 +308,7 @@ func scanAttrValue(s string, i int, q byte, aname, tag string) ([]eng.InterpPart
 			if err != nil {
 				return nil, end, err
 			}
-			parts = append(parts, eng.InterpPart{Expr: toks})
+			parts = append(parts, core.InterpPart{Expr: toks})
 			i = end
 			continue
 		}
@@ -323,7 +323,7 @@ func scanAttrValue(s string, i int, q byte, aname, tag string) ([]eng.InterpPart
 // just past the closing `}`, and any error. The matching brace is found by
 // depth counting that skips over quoted strings (', ", `), so a `}` inside
 // a string does not close the hole early.
-func scanInterp(s string, i int) ([]eng.Value, int, error) {
+func scanInterp(s string, i int) ([]core.Value, int, error) {
 	n := len(s)
 	j := i + 2
 	depth := 1
@@ -369,35 +369,35 @@ func scanInterp(s string, i int) ([]eng.Value, int, error) {
 // present — in which case the matcher emits the skeleton for runtime
 // evaluation. The frozen value is byte-identical to the Increment-1
 // constant build.
-func freezeXmlTmpl(t *eng.XmlTmpl) (eng.Value, bool) {
-	attr := eng.NewOrderedMap()
+func freezeXmlTmpl(t *core.XmlTmpl) (core.Value, bool) {
+	attr := core.NewOrderedMap()
 	for _, a := range t.Attr {
 		s, ok := staticParts(a.Parts)
 		if !ok {
-			return eng.Value{}, false
+			return core.Value{}, false
 		}
-		attr.Set(a.Name, eng.NewString(s))
+		attr.Set(a.Name, core.NewString(s))
 	}
-	var cren []eng.Value
+	var cren []core.Value
 	for _, c := range t.Cren {
 		switch c.Kind {
-		case eng.XmlCrenLit:
-			cren = append(cren, eng.NewString(c.Lit))
-		case eng.XmlCrenChild:
+		case core.XmlCrenLit:
+			cren = append(cren, core.NewString(c.Lit))
+		case core.XmlCrenChild:
 			cv, ok := freezeXmlTmpl(c.Child)
 			if !ok {
-				return eng.Value{}, false
+				return core.Value{}, false
 			}
 			cren = append(cren, cv)
-		case eng.XmlCrenExpr:
-			return eng.Value{}, false
+		case core.XmlCrenExpr:
+			return core.Value{}, false
 		}
 	}
-	return eng.NewXmlElement(t.Tag, attr, cren), true
+	return core.NewXmlElement(t.Tag, attr, cren), true
 }
 
 // staticParts concatenates InterpParts when none is an expression hole.
-func staticParts(parts []eng.InterpPart) (string, bool) {
+func staticParts(parts []core.InterpPart) (string, bool) {
 	var b strings.Builder
 	for _, p := range parts {
 		if p.Expr != nil {

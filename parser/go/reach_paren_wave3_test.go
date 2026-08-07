@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // --- `/` modifiers on dotted paths and paren groups ---
@@ -16,21 +16,21 @@ import (
 func TestReachWave3WordModifiers(t *testing.T) {
 	cases := []struct {
 		src  string
-		kind eng.SugarKind
+		kind core.SugarKind
 	}{
-		{"a.b/u", eng.SugarUsurp},
-		{"a.b/s", eng.SugarStackArgs},
-		{"a.b/f", eng.SugarForwardArgs},
+		{"a.b/u", core.SugarUsurp},
+		{"a.b/s", core.SugarStackArgs},
+		{"a.b/f", core.SugarForwardArgs},
 	}
 	for _, c := range cases {
 		vals := mustParseWave3(t, c.src)
 		if len(vals) != 2 {
 			t.Fatalf("%q: got %d values, want 2: %v", c.src, len(vals), vals)
 		}
-		if info, ok := eng.AsSugar(vals[0]); !ok || info.Kind != c.kind {
+		if info, ok := core.AsSugar(vals[0]); !ok || info.Kind != c.kind {
 			t.Errorf("%q: value 0 = %v, want sugar(%s)", c.src, vals[0], c.kind)
 		}
-		if !eng.IsReach(vals[1]) {
+		if !core.IsReach(vals[1]) {
 			t.Errorf("%q: last value is not a Reach: %v", c.src, vals[1])
 		}
 	}
@@ -42,10 +42,10 @@ func TestReachWave3ForceArityModifier(t *testing.T) {
 	if len(vals) != 2 {
 		t.Fatalf("a.b/2: got %d values, want 2: %v", len(vals), vals)
 	}
-	if info, ok := eng.AsSugar(vals[0]); !ok || info.Kind != eng.SugarForceArity || info.N != 2 {
+	if info, ok := core.AsSugar(vals[0]); !ok || info.Kind != core.SugarForceArity || info.N != 2 {
 		t.Errorf("a.b/2: first value %v, want sugar(force-arity 2)", vals[0])
 	}
-	if !eng.IsReach(vals[1]) {
+	if !core.IsReach(vals[1]) {
 		t.Errorf("a.b/2: second value is not a Reach: %v", vals[1])
 	}
 }
@@ -58,10 +58,10 @@ func TestReachWave3MarkerModifiers(t *testing.T) {
 		if len(vals) != 2 {
 			t.Fatalf("%q: got %d values, want 2: %v", src, len(vals), vals)
 		}
-		if !eng.IsReach(vals[0]) {
+		if !core.IsReach(vals[0]) {
 			t.Errorf("%q: first value is not a Reach: %v", src, vals[0])
 		}
-		if !eng.IsDispatchMod(vals[1]) {
+		if !core.IsDispatchMod(vals[1]) {
 			t.Errorf("%q: second value is not a Word/__DM marker: %v", src, vals[1])
 		}
 	}
@@ -72,7 +72,7 @@ func TestReachWave3MarkerModifiers(t *testing.T) {
 // `(Type of [b/q])` paren expression inside the reach.
 func TestReachWave3TypeBoundKey(t *testing.T) {
 	vals := mustParseWave3(t, "a.b/t")
-	if len(vals) != 1 || !eng.IsReach(vals[0]) {
+	if len(vals) != 1 || !core.IsReach(vals[0]) {
 		t.Fatalf("a.b/t: expected one Reach, got %v", vals)
 	}
 	if s := vals[0].String(); !strings.Contains(s, "sugar(type-bound") {
@@ -88,10 +88,10 @@ func TestParenWave3StandaloneModifier(t *testing.T) {
 	if len(vals) != 2 {
 		t.Fatalf("(1 add 2)/s: got %d values, want 2: %v", len(vals), vals)
 	}
-	if info, ok := eng.AsSugar(vals[0]); !ok || info.Kind != eng.SugarStackArgs {
+	if info, ok := core.AsSugar(vals[0]); !ok || info.Kind != core.SugarStackArgs {
 		t.Errorf("(1 add 2)/s: first value %v, want sugar(stack-args)", vals[0])
 	}
-	if !eng.IsParenExpr(vals[1]) {
+	if !core.IsParenExpr(vals[1]) {
 		t.Errorf("(1 add 2)/s: second value is not a ParenExpr: %v", vals[1])
 	}
 	// Marker modifier suffixes the group.
@@ -99,7 +99,7 @@ func TestParenWave3StandaloneModifier(t *testing.T) {
 	if len(vals) != 2 {
 		t.Fatalf("(f)/r: got %d values, want 2: %v", len(vals), vals)
 	}
-	if !eng.IsParenExpr(vals[0]) || !eng.IsDispatchMod(vals[1]) {
+	if !core.IsParenExpr(vals[0]) || !core.IsDispatchMod(vals[1]) {
 		t.Errorf("(f)/r: want [ParenExpr, Word/__DM], got %v", vals)
 	}
 }
@@ -108,10 +108,10 @@ func TestParenWave3StandaloneModifier(t *testing.T) {
 
 func TestReachWave3ComputedKey(t *testing.T) {
 	vals := mustParseWave3(t, "m.(x add 1)")
-	if len(vals) != 1 || !eng.IsReach(vals[0]) {
+	if len(vals) != 1 || !core.IsReach(vals[0]) {
 		t.Fatalf("m.(x add 1): expected one Reach, got %v", vals)
 	}
-	info, err := eng.AsReach(vals[0])
+	info, err := core.AsReach(vals[0])
 	if err != nil {
 		t.Fatalf("AsReach: %v", err)
 	}
@@ -125,14 +125,14 @@ func TestReachWave3ComputedKey(t *testing.T) {
 
 func TestReachWave3QuotedKey(t *testing.T) {
 	vals := mustParseWave3(t, "m.'k k'")
-	if len(vals) != 1 || !eng.IsReach(vals[0]) {
+	if len(vals) != 1 || !core.IsReach(vals[0]) {
 		t.Fatalf("m.'k k': expected one Reach, got %v", vals)
 	}
-	info, _ := eng.AsReach(vals[0])
+	info, _ := core.AsReach(vals[0])
 	if len(info.Segments) != 1 {
 		t.Fatalf("m.'k k': got %d segments, want 1", len(info.Segments))
 	}
-	if s, err := eng.AsString(info.Segments[0].KeyLit); err != nil || s != "k k" {
+	if s, err := core.AsString(info.Segments[0].KeyLit); err != nil || s != "k k" {
 		t.Errorf("m.'k k': key literal %v, want string \"k k\"", info.Segments[0].KeyLit)
 	}
 }
@@ -195,8 +195,8 @@ func TestMiniLitWave3Inline(t *testing.T) {
 		if len(vals) != 2 {
 			t.Fatalf("%q: got %d values, want 2: %v", c.src, len(vals), vals)
 		}
-		info, ok := eng.AsSugar(vals[1])
-		if !ok || info.Kind != eng.SugarMini {
+		info, ok := core.AsSugar(vals[1])
+		if !ok || info.Kind != core.SugarMini {
 			t.Fatalf("%q: expected a mini sugar marker, got %v", c.src, vals[1])
 		}
 		if info.Name != c.name || info.Src != c.mini {
@@ -214,15 +214,15 @@ func TestMiniLitWave3SpliceForms(t *testing.T) {
 			t.Fatalf("%q: got %d values, want 1", src, len(vals))
 		}
 		v := vals[0]
-		if m, err := eng.AsMap(v); err == nil {
+		if m, err := core.AsMap(v); err == nil {
 			got, ok := m.Get("a")
 			if !ok {
 				t.Fatalf("%q: map lacks key a", src)
 			}
 			v = got
 		}
-		info, ok := eng.AsSugar(v)
-		if !ok || info.Kind != eng.SugarMini {
+		info, ok := core.AsSugar(v)
+		if !ok || info.Kind != core.SugarMini {
 			t.Fatalf("%q: expected a mini sugar marker, got %s", src, v.String())
 		}
 		if info.Name != "re" || info.Src != "x" {
@@ -264,10 +264,10 @@ func TestMiniLitWave3OpenFormStopsAtWhitespace(t *testing.T) {
 	if len(vals) != 3 {
 		t.Fatalf("open-form mini: got %d values, want 3: %v", len(vals), vals)
 	}
-	if info, ok := eng.AsSugar(vals[1]); !ok || info.Kind != eng.SugarMini || info.Src != "alice@x.com" {
+	if info, ok := core.AsSugar(vals[1]); !ok || info.Kind != core.SugarMini || info.Src != "alice@x.com" {
 		t.Errorf("open-form mini: marker %v, want sugar(mini email 'alice@x.com')", vals[1])
 	}
-	if n, err := eng.AsInteger(vals[2]); err != nil || n != 2 {
+	if n, err := core.AsInteger(vals[2]); err != nil || n != 2 {
 		t.Errorf("open-form mini: trailing token %v, want Integer 2", vals[2])
 	}
 }
@@ -280,7 +280,7 @@ func TestArrowWave3Folds(t *testing.T) {
 	if len(vals) != 2 {
 		t.Fatalf("1 x => [x]: got %d values, want 2: %v", len(vals), vals)
 	}
-	if !eng.IsParenExpr(vals[1]) {
+	if !core.IsParenExpr(vals[1]) {
 		t.Fatalf("1 x => [x]: expected a folded ParenExpr, got %v", vals[1])
 	}
 	if s := vals[1].String(); !strings.Contains(s, "sugar(lambda)") {
@@ -292,7 +292,7 @@ func TestArrowWave3Folds(t *testing.T) {
 	if len(vals) != 3 {
 		t.Fatalf("def-lambda: got %d values, want 3: %v", len(vals), vals)
 	}
-	if !eng.IsParenExpr(vals[2]) {
+	if !core.IsParenExpr(vals[2]) {
 		t.Fatalf("def-lambda: expected the pair to fold into a ParenExpr, got %v", vals[2])
 	}
 	if s := vals[2].String(); !strings.Contains(s, "x:word(Integer)") || !strings.Contains(s, "sugar(lambda)") {
@@ -328,12 +328,12 @@ func TestArrowWave3DataContext(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("{a: =>}: got %d values, want 1: %v", len(vals), vals)
 	}
-	m, merr := eng.AsMap(vals[0])
+	m, merr := core.AsMap(vals[0])
 	if merr != nil || m == nil {
 		t.Fatalf("{a: =>}: want a map, got %v (%v)", vals[0], merr)
 	}
 	av, _ := m.Get("a")
-	if info, ok := eng.AsSugar(av); !ok || info.Kind != eng.SugarLambda {
+	if info, ok := core.AsSugar(av); !ok || info.Kind != core.SugarLambda {
 		t.Errorf("{a: =>}: value %v, want the lambda marker", av)
 	}
 }
@@ -345,7 +345,7 @@ func TestArrowWave3Degenerate(t *testing.T) {
 	if len(vals) != 2 {
 		t.Fatalf("x =>: got %d values, want 2: %v", len(vals), vals)
 	}
-	if info, ok := eng.AsSugar(vals[1]); !ok || info.Kind != eng.SugarLambda {
+	if info, ok := core.AsSugar(vals[1]); !ok || info.Kind != core.SugarLambda {
 		t.Errorf("x =>: second value %v, want the lambda marker", vals[1])
 	}
 	// A pair arrow with no body inside a list also parses (empty fold),

@@ -59,13 +59,18 @@ jobs:
       - name: Cover gate (ADR-008)
         run: make cover-gate
 
-      # The STANDALONE kernel gates: each of the four pieces covered by
-      # its OWN suite alone (no cross-suite merge). core is already at
-      # the 100% contract; check, compiler and eng carry ratchet floors
-      # that only ever rise. See design/ENG-FOUR-PIECE.0.md and
+      # The STANDALONE gates: each piece covered by its OWN suite alone
+      # (no cross-suite merge). core and parser are at the 100% contract;
+      # check, compiler and eng carry ratchet floors that only ever rise.
+      # parser starts AT 100 rather than on a ratchet because it is a leaf
+      # over core — nothing else's suite could have been covering it, so
+      # there was no incidental coverage to unwind. See design/ENG-FOUR-PIECE.0.md and
       # design/ENG-COVERAGE-PARITY.0.md.
       - name: Cover gate — core standalone (100%)
         run: make cover-gate-core
+
+      - name: Cover gate — parser standalone (100%)
+        run: make cover-gate-parser
 
       - name: Cover gate — check standalone (ratchet)
         run: make cover-gate-check

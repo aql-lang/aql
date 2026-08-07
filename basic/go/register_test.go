@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // TestRegisterStandalone drives Register the way an eng-only embedder

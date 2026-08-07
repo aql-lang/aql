@@ -24,10 +24,16 @@ type LexToken struct {
 //
 // This is the tabnas half of the "parse using a tabnas parser" seam: a
 // formatter front end maps this stream to its node tree. The bool result is
-// false when the lexer hit an error (an unterminated string / backtick, a bad
-// token) before end-of-input: on a malformed source the token stream is
+// false when the lexer hit an error (an unterminated string, a bad token)
+// before end-of-input: on a malformed source the token stream is
 // truncated and untrustworthy, so a formatter front end should fall back to a
 // best-effort path rather than emit a mangled (or empty) result.
+//
+// Note what this does NOT catch: an unterminated BACKTICK scans clean, because
+// the backtick is an ordinary operator token at the lex level and the template
+// literal is assembled by a grammar rule the bare Next loop never runs
+// (TestLexTokensUnterminatedBacktickIsNotALexError). A front end must not read
+// ok==true as "every construct is well formed".
 func LexTokens(src string) ([]LexToken, bool) {
 	j := SafeMake(jsonic.Options{})
 	t, _ := setupBaseTokens(j, loadDeclGrammar())

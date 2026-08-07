@@ -8,9 +8,9 @@ import (
 
 	jsonic "github.com/tabnas/jsonic/go"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/native/help"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // MetaContext provides context to meta command handlers.

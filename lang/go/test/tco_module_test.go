@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 const stage5Mod = `import module [def fact fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fact (n sub 1) (acc add n)]]] export "MU" {fact: fact/r}] `

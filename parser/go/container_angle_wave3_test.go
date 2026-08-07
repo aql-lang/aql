@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // --- typed lists ([:T]) with concrete elements ---
@@ -12,23 +12,23 @@ import (
 func TestTypedListWave3Elements(t *testing.T) {
 	for _, src := range []string{"[:Integer 1 2]", "[:Integer, 1, 2]", "[1, 2, :Integer]"} {
 		vals := mustParseWave3(t, src)
-		if len(vals) != 1 || !eng.IsTypedList(vals[0]) {
+		if len(vals) != 1 || !core.IsTypedList(vals[0]) {
 			t.Fatalf("%q: expected one typed list, got %v", src, vals)
 		}
-		ci, err := eng.AsChildType(vals[0])
+		ci, err := core.AsChildType(vals[0])
 		if err != nil {
 			t.Fatalf("%q: AsChildType: %v", src, err)
 		}
 		// The child constraint is the OPAQUE name Word (ADR-012 rule 4);
 		// the engine's canonical cascade resolves it at consumption.
-		if w, err := eng.AsWord(ci.Child); err != nil || w.Name != "Integer" {
+		if w, err := core.AsWord(ci.Child); err != nil || w.Name != "Integer" {
 			t.Errorf("%q: child constraint %v, want word(Integer)", src, ci.Child)
 		}
 		if len(ci.Elements) != 2 {
 			t.Fatalf("%q: got %d elements, want 2", src, len(ci.Elements))
 		}
 		for i, want := range []int64{1, 2} {
-			if n, err := eng.AsInteger(ci.Elements[i]); err != nil || n != want {
+			if n, err := core.AsInteger(ci.Elements[i]); err != nil || n != want {
 				t.Errorf("%q: element %d = %v, want %d", src, i, ci.Elements[i], want)
 			}
 		}
@@ -40,14 +40,14 @@ func TestTypedMapWave3Entries(t *testing.T) {
 	// order for the typed-map entries path (the `ko` order channel reaches
 	// convertTypedMap, not just plain maps). design/FLEX-ATTRS.1.md §3.
 	vals := mustParseWave3(t, "{:Integer b:2 a:1}")
-	if len(vals) != 1 || !eng.IsTypedMap(vals[0]) {
+	if len(vals) != 1 || !core.IsTypedMap(vals[0]) {
 		t.Fatalf("expected one typed map, got %v", vals)
 	}
-	ci, err := eng.AsChildType(vals[0])
+	ci, err := core.AsChildType(vals[0])
 	if err != nil {
 		t.Fatalf("AsChildType: %v", err)
 	}
-	if w, err := eng.AsWord(ci.Child); err != nil || w.Name != "Integer" {
+	if w, err := core.AsWord(ci.Child); err != nil || w.Name != "Integer" {
 		t.Errorf("child constraint %v, want word(Integer)", ci.Child)
 	}
 	if len(ci.Entries) != 2 {
@@ -62,7 +62,7 @@ func TestTypedMapWave3Entries(t *testing.T) {
 		if e.Key != want.key {
 			t.Errorf("entry %d key %q, want %q", i, e.Key, want.key)
 		}
-		if n, err := eng.AsInteger(e.Value); err != nil || n != want.n {
+		if n, err := core.AsInteger(e.Value); err != nil || n != want.n {
 			t.Errorf("entry %d value %v, want %d", i, e.Value, want.n)
 		}
 	}
@@ -87,11 +87,11 @@ func TestTypedContainerWave3Nested(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("[{:String}]: got %d values, want 1", len(vals))
 	}
-	lst, err := eng.AsList(vals[0])
+	lst, err := core.AsList(vals[0])
 	if err != nil || lst.Len() != 1 {
 		t.Fatalf("[{:String}]: expected a 1-element list, got %v (err %v)", vals[0], err)
 	}
-	if !eng.IsTypedMap(lst.Get(0)) {
+	if !core.IsTypedMap(lst.Get(0)) {
 		t.Errorf("[{:String}]: element is not a typed map: %s", lst.Get(0).String())
 	}
 }
@@ -149,11 +149,11 @@ func TestAngleWave3DefHead(t *testing.T) {
 	if w := wordNameWave3(t, vals[0], "def head"); w.Name != "def" {
 		t.Errorf("def Box<T> 1: value 0 word %q, want def", w.Name)
 	}
-	info, ok := eng.AsSugar(vals[1])
-	if !ok || info.Kind != eng.SugarAngle || info.Name != "Box" {
+	info, ok := core.AsSugar(vals[1])
+	if !ok || info.Kind != core.SugarAngle || info.Name != "Box" {
 		t.Fatalf("def Box<T> 1: expected an angle marker for Box, got %v", vals[1])
 	}
-	params, err := eng.AsList(info.Head)
+	params, err := core.AsList(info.Head)
 	if err != nil || params.Len() != 1 {
 		t.Fatalf("def Box<T> 1: head params %v (err %v), want a 1-element list", info.Head, err)
 	}
@@ -162,8 +162,8 @@ func TestAngleWave3DefHead(t *testing.T) {
 	}
 	// Multiple plain params.
 	vals = mustParseWave3(t, "def Box<T Q> 1")
-	info, _ = eng.AsSugar(vals[1])
-	params, err = eng.AsList(info.Head)
+	info, _ = core.AsSugar(vals[1])
+	params, err = core.AsList(info.Head)
 	if err != nil || params.Len() != 2 {
 		t.Fatalf("def Box<T Q> 1: head params %v (err %v), want 2 entries", info.Head, err)
 	}
@@ -179,16 +179,16 @@ func TestAngleWave3DefHeadConstraints(t *testing.T) {
 		if len(vals) != 3 {
 			t.Fatalf("%q: got %d values, want 3: %v", src, len(vals), vals)
 		}
-		info, ok := eng.AsSugar(vals[1])
-		if !ok || info.Kind != eng.SugarAngle {
+		info, ok := core.AsSugar(vals[1])
+		if !ok || info.Kind != core.SugarAngle {
 			t.Fatalf("%q: expected an angle marker, got %v", src, vals[1])
 		}
-		params, err := eng.AsList(info.Head)
+		params, err := core.AsList(info.Head)
 		if err != nil || params.Len() != 1 {
 			t.Fatalf("%q: head params %v (err %v), want 1 entry", src, info.Head, err)
 		}
 		entry := params.Get(0)
-		if !eng.IsParenExpr(entry) {
+		if !core.IsParenExpr(entry) {
 			t.Fatalf("%q: param entry is not a ParenExpr: %v", src, entry)
 		}
 		if s := entry.String(); !strings.Contains(s, kw) {
@@ -206,7 +206,7 @@ func TestAngleWave3DefHeadErrors(t *testing.T) {
 		"def Box<T extends> 1": "needs a value",
 	} {
 		vals := mustParseWave3(t, src)
-		info, ok := eng.AsSugar(vals[1])
+		info, ok := core.AsSugar(vals[1])
 		if !ok || info.HeadErr == "" || !strings.Contains(info.HeadErr, sub) {
 			t.Errorf("%q: expected HeadErr containing %q, got %+v", src, sub, info)
 		}
@@ -229,7 +229,7 @@ func TestAngleWave3UseSites(t *testing.T) {
 	}
 	// Empty group.
 	vals := mustParseWave3(t, "Box<>")
-	if len(vals) != 1 || !eng.IsSugar(vals[0]) {
+	if len(vals) != 1 || !core.IsSugar(vals[0]) {
 		t.Fatalf("Box<>: expected one angle marker, got %v", vals)
 	}
 	// An error inside the argument list surfaces.
@@ -264,7 +264,7 @@ func TestPairKeyWave3Edges(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("{1?:Integer}: got %d values, want 1", len(vals))
 	}
-	m, err := eng.AsMap(vals[0])
+	m, err := core.AsMap(vals[0])
 	if err != nil {
 		t.Fatalf("{1?:Integer}: AsMap: %v", err)
 	}

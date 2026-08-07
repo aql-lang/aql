@@ -5,38 +5,38 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
-// valuesEqual compares two eng.Value instances for equality.
-func valuesEqual(a, b eng.Value) bool {
+// valuesEqual compares two core.Value instances for equality.
+func valuesEqual(a, b core.Value) bool {
 	if !a.Parent.Equal(b.Parent) {
 		return false
 	}
 	switch {
-	case eng.IsWord(a):
-		aw, _ := eng.AsWord(a)
-		bw, _ := eng.AsWord(b)
+	case core.IsWord(a):
+		aw, _ := core.AsWord(a)
+		bw, _ := core.AsWord(b)
 		return aw.Name == bw.Name &&
 			aw.ArgCount == bw.ArgCount &&
 			aw.ForceStack == bw.ForceStack &&
 			aw.ForceForward == bw.ForceForward
-	case eng.IsOpenParen(a):
+	case core.IsOpenParen(a):
 		return true
-	case a.Parent.ConformsTo(eng.TString):
-		as, _ := eng.AsString(a)
-		bs, _ := eng.AsString(b)
+	case a.Parent.ConformsTo(core.TString):
+		as, _ := core.AsString(a)
+		bs, _ := core.AsString(b)
 		return as == bs
-	case a.Parent.ConformsTo(eng.TInteger):
-		an, _ := eng.AsInteger(a)
-		bn, _ := eng.AsInteger(b)
+	case a.Parent.ConformsTo(core.TInteger):
+		an, _ := core.AsInteger(a)
+		bn, _ := core.AsInteger(b)
 		return an == bn
 	default:
 		return a.String() == b.String()
 	}
 }
 
-func assertParse(t *testing.T, input string, want []eng.Value) {
+func assertParse(t *testing.T, input string, want []core.Value) {
 	t.Helper()
 	got, err := Parse(input)
 	if err != nil {
@@ -92,64 +92,64 @@ func TestParseEmpty(t *testing.T) {
 }
 
 func TestParseSingleInteger(t *testing.T) {
-	assertParse(t, "1", []eng.Value{eng.NewInteger(1)})
+	assertParse(t, "1", []core.Value{core.NewInteger(1)})
 }
 
 func TestParseZero(t *testing.T) {
-	assertParse(t, "0", []eng.Value{eng.NewInteger(0)})
+	assertParse(t, "0", []core.Value{core.NewInteger(0)})
 }
 
 func TestParseNegativeInteger(t *testing.T) {
-	assertParse(t, "-5", []eng.Value{eng.NewInteger(-5)})
+	assertParse(t, "-5", []core.Value{core.NewInteger(-5)})
 }
 
 func TestParseLargeInteger(t *testing.T) {
-	assertParse(t, "999", []eng.Value{eng.NewInteger(999)})
+	assertParse(t, "999", []core.Value{core.NewInteger(999)})
 }
 
 func TestParseMultipleIntegers(t *testing.T) {
-	assertParse(t, "1 2 3", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewInteger(2),
-		eng.NewInteger(3),
+	assertParse(t, "1 2 3", []core.Value{
+		core.NewInteger(1),
+		core.NewInteger(2),
+		core.NewInteger(3),
 	})
 }
 
 func TestParseQuotedStringDouble(t *testing.T) {
-	assertParse(t, `"hello"`, []eng.Value{eng.NewString("hello")})
+	assertParse(t, `"hello"`, []core.Value{core.NewString("hello")})
 }
 
 func TestParseQuotedStringSingle(t *testing.T) {
-	assertParse(t, `'world'`, []eng.Value{eng.NewString("world")})
+	assertParse(t, `'world'`, []core.Value{core.NewString("world")})
 }
 
 func TestParseEmptyQuotedString(t *testing.T) {
-	assertParse(t, `""`, []eng.Value{eng.NewString("")})
+	assertParse(t, `""`, []core.Value{core.NewString("")})
 }
 
 func TestParseQuotedStringWithSpaces(t *testing.T) {
-	assertParse(t, `"hello world"`, []eng.Value{eng.NewString("hello world")})
+	assertParse(t, `"hello world"`, []core.Value{core.NewString("hello world")})
 }
 
 // --- Word tests ---
 
 func TestParseSingleWord(t *testing.T) {
-	assertParse(t, "upper", []eng.Value{eng.NewWord("upper")})
+	assertParse(t, "upper", []core.Value{core.NewWord("upper")})
 }
 
 func TestParseUnknownWord(t *testing.T) {
-	assertParse(t, "foo", []eng.Value{eng.NewWord("foo")})
+	assertParse(t, "foo", []core.Value{core.NewWord("foo")})
 }
 
 func TestParseEndKeyword(t *testing.T) {
-	assertParse(t, "end", []eng.Value{eng.NewEnd()})
+	assertParse(t, "end", []core.Value{core.NewEnd()})
 }
 
 func TestParseMultipleWords(t *testing.T) {
-	assertParse(t, "a b c", []eng.Value{
-		eng.NewWord("a"),
-		eng.NewWord("b"),
-		eng.NewWord("c"),
+	assertParse(t, "a b c", []core.Value{
+		core.NewWord("a"),
+		core.NewWord("b"),
+		core.NewWord("c"),
 	})
 }
 
@@ -157,74 +157,74 @@ func TestParseMultipleWords(t *testing.T) {
 
 func TestParsePrefixExpression(t *testing.T) {
 	// a upper → two words: the engine resolves unknown "a" to a string
-	assertParse(t, "a upper", []eng.Value{
-		eng.NewWord("a"),
-		eng.NewWord("upper"),
+	assertParse(t, "a upper", []core.Value{
+		core.NewWord("a"),
+		core.NewWord("upper"),
 	})
 }
 
 func TestParseForwardExpression(t *testing.T) {
 	// lower B → two words
-	assertParse(t, "lower B", []eng.Value{
-		eng.NewWord("lower"),
-		eng.NewWord("B"),
+	assertParse(t, "lower B", []core.Value{
+		core.NewWord("lower"),
+		core.NewWord("B"),
 	})
 }
 
 func TestParsePrefixArithmetic(t *testing.T) {
 	// 1 2 add → two integers then word
-	assertParse(t, "1 2 add", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewInteger(2),
-		eng.NewWord("add"),
+	assertParse(t, "1 2 add", []core.Value{
+		core.NewInteger(1),
+		core.NewInteger(2),
+		core.NewWord("add"),
 	})
 }
 
 func TestParseInfixArithmetic(t *testing.T) {
 	// 1 add 2
-	assertParse(t, "1 add 2", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
+	assertParse(t, "1 add 2", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
 	})
 }
 
 func TestParseChainedArithmetic(t *testing.T) {
-	assertParse(t, "1 add 2 add 3", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
-		eng.NewWord("add"),
-		eng.NewInteger(3),
+	assertParse(t, "1 add 2 add 3", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
+		core.NewWord("add"),
+		core.NewInteger(3),
 	})
 }
 
 func TestParseMixedOperators(t *testing.T) {
 	// 2 add 3 mul 4
-	assertParse(t, "2 add 3 mul 4", []eng.Value{
-		eng.NewInteger(2),
-		eng.NewWord("add"),
-		eng.NewInteger(3),
-		eng.NewWord("mul"),
-		eng.NewInteger(4),
+	assertParse(t, "2 add 3 mul 4", []core.Value{
+		core.NewInteger(2),
+		core.NewWord("add"),
+		core.NewInteger(3),
+		core.NewWord("mul"),
+		core.NewInteger(4),
 	})
 }
 
 func TestParseStringThenWord(t *testing.T) {
 	// "hello" upper → string then word
-	assertParse(t, `"hello" upper`, []eng.Value{
-		eng.NewString("hello"),
-		eng.NewWord("upper"),
+	assertParse(t, `"hello" upper`, []core.Value{
+		core.NewString("hello"),
+		core.NewWord("upper"),
 	})
 }
 
 func TestParseSetWithEnd(t *testing.T) {
 	// set foo 99 end
-	assertParse(t, "set foo 99 end", []eng.Value{
-		eng.NewWord("set"),
-		eng.NewWord("foo"),
-		eng.NewInteger(99),
-		eng.NewEnd(),
+	assertParse(t, "set foo 99 end", []core.Value{
+		core.NewWord("set"),
+		core.NewWord("foo"),
+		core.NewInteger(99),
+		core.NewEnd(),
 	})
 }
 
@@ -232,25 +232,25 @@ func TestParseSetWithEnd(t *testing.T) {
 
 func TestParseSimpleParens(t *testing.T) {
 	// (1 add 2)
-	assertParse(t, "(1 add 2)", []eng.Value{
-		eng.NewParenExpr([]eng.Value{
-			eng.NewInteger(1),
-			eng.NewWord("add"),
-			eng.NewInteger(2),
+	assertParse(t, "(1 add 2)", []core.Value{
+		core.NewParenExpr([]core.Value{
+			core.NewInteger(1),
+			core.NewWord("add"),
+			core.NewInteger(2),
 		}),
 	})
 }
 
 func TestParseNestedParens(t *testing.T) {
 	// (1 add (2 mul 3))
-	assertParse(t, "(1 add (2 mul 3))", []eng.Value{
-		eng.NewParenExpr([]eng.Value{
-			eng.NewInteger(1),
-			eng.NewWord("add"),
-			eng.NewParenExpr([]eng.Value{
-				eng.NewInteger(2),
-				eng.NewWord("mul"),
-				eng.NewInteger(3),
+	assertParse(t, "(1 add (2 mul 3))", []core.Value{
+		core.NewParenExpr([]core.Value{
+			core.NewInteger(1),
+			core.NewWord("add"),
+			core.NewParenExpr([]core.Value{
+				core.NewInteger(2),
+				core.NewWord("mul"),
+				core.NewInteger(3),
 			}),
 		}),
 	})
@@ -258,16 +258,16 @@ func TestParseNestedParens(t *testing.T) {
 
 func TestParseAdjacentParens(t *testing.T) {
 	// (1)(2) — no space between groups
-	assertParse(t, "(1)(2)", []eng.Value{
-		eng.NewParenExpr([]eng.Value{eng.NewInteger(1)}),
-		eng.NewParenExpr([]eng.Value{eng.NewInteger(2)}),
+	assertParse(t, "(1)(2)", []core.Value{
+		core.NewParenExpr([]core.Value{core.NewInteger(1)}),
+		core.NewParenExpr([]core.Value{core.NewInteger(2)}),
 	})
 }
 
 func TestParseParenAroundWord(t *testing.T) {
 	// (add)
-	assertParse(t, "(add)", []eng.Value{
-		eng.NewParenExpr([]eng.Value{eng.NewWord("add")}),
+	assertParse(t, "(add)", []core.Value{
+		core.NewParenExpr([]core.Value{core.NewWord("add")}),
 	})
 }
 
@@ -275,58 +275,58 @@ func TestParseParenAroundWord(t *testing.T) {
 
 func TestParseArgCountModifier(t *testing.T) {
 	// lower/1
-	assertParse(t, "lower/1", []eng.Value{
-		eng.NewWordModified("lower", 1, false, false),
+	assertParse(t, "lower/1", []core.Value{
+		core.NewWordModified("lower", 1, false, false),
 	})
 }
 
 func TestParseForceForwardModifier(t *testing.T) {
 	// lower/f
-	assertParse(t, "lower/f", []eng.Value{
-		eng.NewWordModified("lower", -1, false, true),
+	assertParse(t, "lower/f", []core.Value{
+		core.NewWordModified("lower", -1, false, true),
 	})
 }
 
 func TestParseForceStackModifier(t *testing.T) {
 	// lower/s
-	assertParse(t, "lower/s", []eng.Value{
-		eng.NewWordModified("lower", -1, true, false),
+	assertParse(t, "lower/s", []core.Value{
+		core.NewWordModified("lower", -1, true, false),
 	})
 }
 
 func TestParseArgCountAndForwardModifier(t *testing.T) {
 	// lower/1f
-	assertParse(t, "lower/1f", []eng.Value{
-		eng.NewWordModified("lower", 1, false, true),
+	assertParse(t, "lower/1f", []core.Value{
+		core.NewWordModified("lower", 1, false, true),
 	})
 }
 
 func TestParseArgCountAndStackModifier(t *testing.T) {
 	// lower/1s
-	assertParse(t, "lower/1s", []eng.Value{
-		eng.NewWordModified("lower", 1, true, false),
+	assertParse(t, "lower/1s", []core.Value{
+		core.NewWordModified("lower", 1, true, false),
 	})
 }
 
 func TestParseArgCountZero(t *testing.T) {
 	// dup/0
-	assertParse(t, "dup/0", []eng.Value{
-		eng.NewWordModified("dup", 0, false, false),
+	assertParse(t, "dup/0", []core.Value{
+		core.NewWordModified("dup", 0, false, false),
 	})
 }
 
 func TestParseArgCountTwo(t *testing.T) {
 	// set/2
-	assertParse(t, "set/2", []eng.Value{
-		eng.NewWordModified("set", 2, false, false),
+	assertParse(t, "set/2", []core.Value{
+		core.NewWordModified("set", 2, false, false),
 	})
 }
 
 func TestParseModifierInExpression(t *testing.T) {
 	// B lower/f → word then modified word
-	assertParse(t, "B lower/f", []eng.Value{
-		eng.NewWord("B"),
-		eng.NewWordModified("lower", -1, false, true),
+	assertParse(t, "B lower/f", []core.Value{
+		core.NewWord("B"),
+		core.NewWordModified("lower", -1, false, true),
 	})
 }
 
@@ -334,32 +334,32 @@ func TestParseModifierInExpression(t *testing.T) {
 
 func TestParseQuoteSuffix(t *testing.T) {
 	// foo/q → Atom(foo), the canonical short form of (quote foo)
-	assertParse(t, "foo/q", []eng.Value{
-		eng.NewAtom("foo"),
+	assertParse(t, "foo/q", []core.Value{
+		core.NewAtom("foo"),
 	})
 }
 
 func TestParseQuoteSuffixOnRegisteredName(t *testing.T) {
 	// dup/q → Atom(dup) — /q produces an atom even when the bare name
 	// would dispatch as a function. Resolution happens at parse time.
-	assertParse(t, "dup/q", []eng.Value{
-		eng.NewAtom("dup"),
+	assertParse(t, "dup/q", []core.Value{
+		core.NewAtom("dup"),
 	})
 }
 
 func TestParseQuoteSuffixOnReservedLikeName(t *testing.T) {
 	// true/q → Atom(true) — /q applies to any word, including
 	// reserved-looking names; the suffix wins over the literal path.
-	assertParse(t, "true/q", []eng.Value{
-		eng.NewAtom("true"),
+	assertParse(t, "true/q", []core.Value{
+		core.NewAtom("true"),
 	})
 }
 
 func TestParseQuoteSuffixInExpression(t *testing.T) {
 	// foo/q bar/q → two atoms
-	assertParse(t, "foo/q bar/q", []eng.Value{
-		eng.NewAtom("foo"),
-		eng.NewAtom("bar"),
+	assertParse(t, "foo/q bar/q", []core.Value{
+		core.NewAtom("foo"),
+		core.NewAtom("bar"),
 	})
 }
 
@@ -367,37 +367,37 @@ func TestParseQuoteSuffixInExpression(t *testing.T) {
 
 func TestParseStackedQuoteAfterStack(t *testing.T) {
 	// foo/sq == foo/qs == foo/q — q dominates; result is an Atom.
-	assertParse(t, "foo/sq", []eng.Value{
-		eng.NewAtom("foo"),
+	assertParse(t, "foo/sq", []core.Value{
+		core.NewAtom("foo"),
 	})
 }
 
 func TestParseStackedQuoteBeforeStack(t *testing.T) {
-	assertParse(t, "foo/qs", []eng.Value{
-		eng.NewAtom("foo"),
+	assertParse(t, "foo/qs", []core.Value{
+		core.NewAtom("foo"),
 	})
 }
 
 func TestParseStackedQuoteAfterForward(t *testing.T) {
-	assertParse(t, "foo/fq", []eng.Value{
-		eng.NewAtom("foo"),
+	assertParse(t, "foo/fq", []core.Value{
+		core.NewAtom("foo"),
 	})
 }
 
 func TestParseStackedQuoteBeforeForward(t *testing.T) {
-	assertParse(t, "foo/qf", []eng.Value{
-		eng.NewAtom("foo"),
+	assertParse(t, "foo/qf", []core.Value{
+		core.NewAtom("foo"),
 	})
 }
 
 func TestParseStackedQuoteAndDigits(t *testing.T) {
 	// digits and q in any order produce an Atom — modifiers other than
 	// q are accepted syntactically but ignored for atoms.
-	assertParse(t, "foo/1q", []eng.Value{
-		eng.NewAtom("foo"),
+	assertParse(t, "foo/1q", []core.Value{
+		core.NewAtom("foo"),
 	})
-	assertParse(t, "foo/q1", []eng.Value{
-		eng.NewAtom("foo"),
+	assertParse(t, "foo/q1", []core.Value{
+		core.NewAtom("foo"),
 	})
 }
 
@@ -405,7 +405,7 @@ func TestParseStackedAllModifiers(t *testing.T) {
 	// All three modifier flavours (digits, s, q) in arbitrary orders
 	// produce the same atom — order independent including the barrier
 	// number.
-	want := []eng.Value{eng.NewAtom("foo")}
+	want := []core.Value{core.NewAtom("foo")}
 	for _, src := range []string{"foo/2qs", "foo/qs2", "foo/sq2", "foo/s2q", "foo/q2s", "foo/2sq"} {
 		assertParse(t, src, want)
 	}
@@ -413,14 +413,14 @@ func TestParseStackedAllModifiers(t *testing.T) {
 
 func TestParseForwardSuffixBeforeDigits(t *testing.T) {
 	// f and digits in either order produce the same word — /f1 == /1f.
-	assertParse(t, "lower/f1", []eng.Value{
-		eng.NewWordModified("lower", 1, false, true),
+	assertParse(t, "lower/f1", []core.Value{
+		core.NewWordModified("lower", 1, false, true),
 	})
 }
 
 func TestParseStackSuffixBeforeDigits(t *testing.T) {
-	assertParse(t, "lower/s2", []eng.Value{
-		eng.NewWordModified("lower", 2, true, false),
+	assertParse(t, "lower/s2", []core.Value{
+		core.NewWordModified("lower", 2, true, false),
 	})
 }
 
@@ -429,16 +429,16 @@ func TestParseStackSuffixBeforeDigits(t *testing.T) {
 func TestParseRefSuffix(t *testing.T) {
 	// foo/r → ref-word, short form of (ref foo). The kernel resolves
 	// the binding at execution time without invoking it.
-	assertParse(t, "foo/r", []eng.Value{
-		eng.NewWordRef("foo"),
+	assertParse(t, "foo/r", []core.Value{
+		core.NewWordRef("foo"),
 	})
 }
 
 func TestParseRefSuffixInExpression(t *testing.T) {
 	// Multiple ref-words on one line round-trip independently.
-	assertParse(t, "add/r mul/r", []eng.Value{
-		eng.NewWordRef("add"),
-		eng.NewWordRef("mul"),
+	assertParse(t, "add/r mul/r", []core.Value{
+		core.NewWordRef("add"),
+		core.NewWordRef("mul"),
 	})
 }
 
@@ -454,14 +454,14 @@ func TestParseRefAndQuoteMutuallyExclusive(t *testing.T) {
 func TestParseRefIgnoresShapeModifiers(t *testing.T) {
 	// /r short-circuits dispatch, so /s, /f, and digit modifiers are
 	// accepted syntactically but have no effect on the emitted value.
-	assertParse(t, "foo/rs", []eng.Value{
-		eng.NewWordRef("foo"),
+	assertParse(t, "foo/rs", []core.Value{
+		core.NewWordRef("foo"),
 	})
-	assertParse(t, "foo/rf", []eng.Value{
-		eng.NewWordRef("foo"),
+	assertParse(t, "foo/rf", []core.Value{
+		core.NewWordRef("foo"),
 	})
-	assertParse(t, "foo/2r", []eng.Value{
-		eng.NewWordRef("foo"),
+	assertParse(t, "foo/2r", []core.Value{
+		core.NewWordRef("foo"),
 	})
 }
 
@@ -492,21 +492,21 @@ func TestParseNonAlphabetSuffixStaysWord(t *testing.T) {
 	// as before — that is what keeps `add/x`-style names and the
 	// builtin type paths (Scalar/Number/Integer, capitalized segments)
 	// parsing. Only the all-alphabet botched combos error.
-	assertParse(t, "foo/bar", []eng.Value{
-		eng.NewWord("foo/bar"),
+	assertParse(t, "foo/bar", []core.Value{
+		core.NewWord("foo/bar"),
 	})
-	assertParse(t, "foo/x", []eng.Value{
-		eng.NewWord("foo/x"),
+	assertParse(t, "foo/x", []core.Value{
+		core.NewWord("foo/x"),
 	})
-	assertParse(t, "foo/qx", []eng.Value{
-		eng.NewWord("foo/qx"),
+	assertParse(t, "foo/qx", []core.Value{
+		core.NewWord("foo/qx"),
 	})
 }
 
 func TestParseMultiDigitArgCount(t *testing.T) {
 	// Multi-digit numbers form a single contiguous argCount.
-	assertParse(t, "foo/12", []eng.Value{
-		eng.NewWordModified("foo", 12, false, false),
+	assertParse(t, "foo/12", []core.Value{
+		core.NewWordModified("foo", 12, false, false),
 	})
 }
 
@@ -514,39 +514,39 @@ func TestParseMultiDigitArgCount(t *testing.T) {
 
 func TestParseQuotedFunctionName(t *testing.T) {
 	// "upper" → string, not a word; upper → word
-	assertParse(t, `"upper" upper`, []eng.Value{
-		eng.NewString("upper"),
-		eng.NewWord("upper"),
+	assertParse(t, `"upper" upper`, []core.Value{
+		core.NewString("upper"),
+		core.NewWord("upper"),
 	})
 }
 
 func TestParseQuotedEnd(t *testing.T) {
 	// "end" → string (not the end keyword)
-	assertParse(t, `"end"`, []eng.Value{eng.NewString("end")})
+	assertParse(t, `"end"`, []core.Value{core.NewString("end")})
 }
 
 func TestParseQuotedNumber(t *testing.T) {
 	// "1" → string, not an integer
-	assertParse(t, `"1"`, []eng.Value{eng.NewString("1")})
+	assertParse(t, `"1"`, []core.Value{core.NewString("1")})
 }
 
 // --- Whitespace handling ---
 
 func TestParseExtraSpaces(t *testing.T) {
-	assertParse(t, "1  2", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewInteger(2),
+	assertParse(t, "1  2", []core.Value{
+		core.NewInteger(1),
+		core.NewInteger(2),
 	})
 }
 
 func TestParseLeadingTrailingSpaces(t *testing.T) {
-	assertParse(t, "  1  ", []eng.Value{eng.NewInteger(1)})
+	assertParse(t, "  1  ", []core.Value{core.NewInteger(1)})
 }
 
 func TestParseTabs(t *testing.T) {
-	assertParse(t, "1\t2", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewInteger(2),
+	assertParse(t, "1\t2", []core.Value{
+		core.NewInteger(1),
+		core.NewInteger(2),
 	})
 }
 
@@ -558,15 +558,15 @@ func TestParseWhitespaceOnly(t *testing.T) {
 
 func TestParseHashComment(t *testing.T) {
 	// 1 # this is a comment
-	assertParse(t, "1 # this is a comment", []eng.Value{
-		eng.NewInteger(1),
+	assertParse(t, "1 # this is a comment", []core.Value{
+		core.NewInteger(1),
 	})
 }
 
 func TestParseSlashComment(t *testing.T) {
 	// 1 // inline comment
-	assertParse(t, "1 // inline comment", []eng.Value{
-		eng.NewInteger(1),
+	assertParse(t, "1 // inline comment", []core.Value{
+		core.NewInteger(1),
 	})
 }
 
@@ -577,69 +577,69 @@ func TestParseCommentOnly(t *testing.T) {
 // --- Value keywords disabled (treated as words) ---
 
 func TestParseTrueAsWord(t *testing.T) {
-	assertParse(t, "true", []eng.Value{eng.NewWord("true")})
+	assertParse(t, "true", []core.Value{core.NewWord("true")})
 }
 
 func TestParseFalseAsWord(t *testing.T) {
-	assertParse(t, "false", []eng.Value{eng.NewWord("false")})
+	assertParse(t, "false", []core.Value{core.NewWord("false")})
 }
 
 func TestParseNullAsWord(t *testing.T) {
-	assertParse(t, "null", []eng.Value{eng.NewWord("null")})
+	assertParse(t, "null", []core.Value{core.NewWord("null")})
 }
 
 // --- Full expression tests ---
 
 func TestParseFullPrefixExpression(t *testing.T) {
 	// "hello" upper → string then word (engine would call upper on the string)
-	assertParse(t, `"hello" upper`, []eng.Value{
-		eng.NewString("hello"),
-		eng.NewWord("upper"),
+	assertParse(t, `"hello" upper`, []core.Value{
+		core.NewString("hello"),
+		core.NewWord("upper"),
 	})
 }
 
 func TestParseFullInfixWithParens(t *testing.T) {
 	// 2 mul (3 add 4)
-	assertParse(t, "2 mul (3 add 4)", []eng.Value{
-		eng.NewInteger(2),
-		eng.NewWord("mul"),
-		eng.NewParenExpr([]eng.Value{
-			eng.NewInteger(3),
-			eng.NewWord("add"),
-			eng.NewInteger(4),
+	assertParse(t, "2 mul (3 add 4)", []core.Value{
+		core.NewInteger(2),
+		core.NewWord("mul"),
+		core.NewParenExpr([]core.Value{
+			core.NewInteger(3),
+			core.NewWord("add"),
+			core.NewInteger(4),
 		}),
 	})
 }
 
 func TestParseForthPrimitives(t *testing.T) {
 	// 1 dup swap drop
-	assertParse(t, "1 dup swap drop", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("dup"),
-		eng.NewWord("swap"),
-		eng.NewWord("drop"),
+	assertParse(t, "1 dup swap drop", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("dup"),
+		core.NewWord("swap"),
+		core.NewWord("drop"),
 	})
 }
 
 func TestParseStorageSetGet(t *testing.T) {
 	// set x 10 end get x
-	assertParse(t, "set x 10 end get x", []eng.Value{
-		eng.NewWord("set"),
-		eng.NewWord("x"),
-		eng.NewInteger(10),
-		eng.NewEnd(),
-		eng.NewWord("get"),
-		eng.NewWord("x"),
+	assertParse(t, "set x 10 end get x", []core.Value{
+		core.NewWord("set"),
+		core.NewWord("x"),
+		core.NewInteger(10),
+		core.NewEnd(),
+		core.NewWord("get"),
+		core.NewWord("x"),
 	})
 }
 
 func TestParseMixedLiteralsAndWords(t *testing.T) {
 	// 42 "hello" foo 7
-	assertParse(t, `42 "hello" foo 7`, []eng.Value{
-		eng.NewInteger(42),
-		eng.NewString("hello"),
-		eng.NewWord("foo"),
-		eng.NewInteger(7),
+	assertParse(t, `42 "hello" foo 7`, []core.Value{
+		core.NewInteger(42),
+		core.NewString("hello"),
+		core.NewWord("foo"),
+		core.NewInteger(7),
 	})
 }
 
@@ -656,43 +656,43 @@ func TestParseUnterminatedSingleQuote(t *testing.T) {
 // --- Multiline tests ---
 
 func TestParseNewlines(t *testing.T) {
-	assertParse(t, "1\nadd\n2", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
+	assertParse(t, "1\nadd\n2", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
 	})
 }
 
 func TestParseCRLF(t *testing.T) {
-	assertParse(t, "1\r\nadd\r\n2", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
+	assertParse(t, "1\r\nadd\r\n2", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
 	})
 }
 
 func TestParseBlankLines(t *testing.T) {
-	assertParse(t, "1\n\n\nadd\n\n2", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
+	assertParse(t, "1\n\n\nadd\n\n2", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
 	})
 }
 
 func TestParseMultilineWithTabs(t *testing.T) {
-	assertParse(t, "\t1\n\tadd\n\t2", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
+	assertParse(t, "\t1\n\tadd\n\t2", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
 	})
 }
 
 func TestParseMultilineWithComments(t *testing.T) {
 	src := "1 # first value\nadd # operator\n2 # second value"
-	assertParse(t, src, []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
+	assertParse(t, src, []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
 	})
 }
 
@@ -704,20 +704,20 @@ func TestParseMultilineScript(t *testing.T) {
 		add
 		get y
 	`
-	assertParse(t, src, []eng.Value{
-		eng.NewWord("set"),
-		eng.NewWord("x"),
-		eng.NewInteger(10),
-		eng.NewEnd(),
-		eng.NewWord("set"),
-		eng.NewWord("y"),
-		eng.NewInteger(20),
-		eng.NewEnd(),
-		eng.NewWord("get"),
-		eng.NewWord("x"),
-		eng.NewWord("add"),
-		eng.NewWord("get"),
-		eng.NewWord("y"),
+	assertParse(t, src, []core.Value{
+		core.NewWord("set"),
+		core.NewWord("x"),
+		core.NewInteger(10),
+		core.NewEnd(),
+		core.NewWord("set"),
+		core.NewWord("y"),
+		core.NewInteger(20),
+		core.NewEnd(),
+		core.NewWord("get"),
+		core.NewWord("x"),
+		core.NewWord("add"),
+		core.NewWord("get"),
+		core.NewWord("y"),
 	})
 }
 
@@ -725,27 +725,27 @@ func TestParseMultilineScript(t *testing.T) {
 
 func TestParseTypedListString(t *testing.T) {
 	// [:String] → typed list with child type string
-	assertParse(t, "[:String]", []eng.Value{
-		eng.NewTypedList(eng.NewWord("String")),
+	assertParse(t, "[:String]", []core.Value{
+		core.NewTypedList(core.NewWord("String")),
 	})
 }
 
 func TestParseTypedListNumber(t *testing.T) {
 	// [:Number] → typed list with child type number
-	assertParse(t, "[:Number]", []eng.Value{
-		eng.NewTypedList(eng.NewWord("Number")),
+	assertParse(t, "[:Number]", []core.Value{
+		core.NewTypedList(core.NewWord("Number")),
 	})
 }
 
 func TestParseTypedListBoolean(t *testing.T) {
-	assertParse(t, "[:Boolean]", []eng.Value{
-		eng.NewTypedList(eng.NewWord("Boolean")),
+	assertParse(t, "[:Boolean]", []core.Value{
+		core.NewTypedList(core.NewWord("Boolean")),
 	})
 }
 
 func TestParseTypedListAny(t *testing.T) {
-	assertParse(t, "[:Any]", []eng.Value{
-		eng.NewTypedList(eng.NewWord("Any")),
+	assertParse(t, "[:Any]", []core.Value{
+		core.NewTypedList(core.NewWord("Any")),
 	})
 }
 
@@ -758,43 +758,43 @@ func TestParseTypedListMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !eng.IsTypedList(got[0]) {
+	if !core.IsTypedList(got[0]) {
 		t.Fatalf("expected typed list, got %s", got[0])
 	}
-	ct0a, _ := eng.AsChildType(got[0])
+	ct0a, _ := core.AsChildType(got[0])
 	child := ct0a.Child
-	if !child.Parent.Equal(eng.TMap) {
+	if !child.Parent.Equal(core.TMap) {
 		t.Errorf("expected child type map, got %s", child.Parent)
 	}
-	m, _ := eng.AsMap(child)
+	m, _ := core.AsMap(child)
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if w, err := eng.AsWord(xVal); err != nil || w.Name != "Number" {
+	if w, err := core.AsWord(xVal); err != nil || w.Name != "Number" {
 		t.Errorf("expected x to be word(Number), got %s (TestParseTypedListMap)", xVal)
 	}
 }
 
 func TestParseTypedListNested(t *testing.T) {
 	// [:[:String]] → typed list of typed lists of strings
-	assertParse(t, "[:[:String]]", []eng.Value{
-		eng.NewTypedList(eng.NewTypedList(eng.NewWord("String"))),
+	assertParse(t, "[:[:String]]", []core.Value{
+		core.NewTypedList(core.NewTypedList(core.NewWord("String"))),
 	})
 }
 
 func TestParseTypedListDeepNested(t *testing.T) {
 	// [:[:[:Number]]] → three levels deep
-	assertParse(t, "[:[:[:Number]]]", []eng.Value{
-		eng.NewTypedList(eng.NewTypedList(eng.NewTypedList(eng.NewWord("Number")))),
+	assertParse(t, "[:[:[:Number]]]", []core.Value{
+		core.NewTypedList(core.NewTypedList(core.NewTypedList(core.NewWord("Number")))),
 	})
 }
 
 func TestParseTypedListInExpression(t *testing.T) {
 	// 1 [:String] → integer then typed list
-	assertParse(t, "1 [:String]", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewTypedList(eng.NewWord("String")),
+	assertParse(t, "1 [:String]", []core.Value{
+		core.NewInteger(1),
+		core.NewTypedList(core.NewWord("String")),
 	})
 }
 
@@ -804,12 +804,12 @@ func TestParseTypedListMapChild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 1 || !eng.IsTypedList(got[0]) {
+	if len(got) != 1 || !core.IsTypedList(got[0]) {
 		t.Fatalf("expected 1 typed list, got %v", got)
 	}
-	ct0b, _ := eng.AsChildType(got[0])
+	ct0b, _ := core.AsChildType(got[0])
 	child0b := ct0b.Child
-	m, _ := eng.AsMap(child0b)
+	m, _ := core.AsMap(child0b)
 	if m.Len() != 2 {
 		t.Errorf("expected 2 keys, got %d", m.Len())
 	}
@@ -819,56 +819,56 @@ func TestParseTypedListMapChild(t *testing.T) {
 
 func TestParseTypedMapString(t *testing.T) {
 	// {:String} → typed map with child type string
-	assertParse(t, "{:String}", []eng.Value{
-		eng.NewTypedMap(eng.NewWord("String")),
+	assertParse(t, "{:String}", []core.Value{
+		core.NewTypedMap(core.NewWord("String")),
 	})
 }
 
 func TestParseTypedMapNumber(t *testing.T) {
 	// {:Number} → typed map with child type number
-	assertParse(t, "{:Number}", []eng.Value{
-		eng.NewTypedMap(eng.NewWord("Number")),
+	assertParse(t, "{:Number}", []core.Value{
+		core.NewTypedMap(core.NewWord("Number")),
 	})
 }
 
 func TestParseTypedMapBoolean(t *testing.T) {
-	assertParse(t, "{:Boolean}", []eng.Value{
-		eng.NewTypedMap(eng.NewWord("Boolean")),
+	assertParse(t, "{:Boolean}", []core.Value{
+		core.NewTypedMap(core.NewWord("Boolean")),
 	})
 }
 
 func TestParseTypedMapAny(t *testing.T) {
-	assertParse(t, "{:Any}", []eng.Value{
-		eng.NewTypedMap(eng.NewWord("Any")),
+	assertParse(t, "{:Any}", []core.Value{
+		core.NewTypedMap(core.NewWord("Any")),
 	})
 }
 
 func TestParseTypedMapList(t *testing.T) {
 	// {:[:Number]} → typed map with child type [:Number]
-	assertParse(t, "{:[:Number]}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypedList(eng.NewWord("Number"))),
+	assertParse(t, "{:[:Number]}", []core.Value{
+		core.NewTypedMap(core.NewTypedList(core.NewWord("Number"))),
 	})
 }
 
 func TestParseTypedMapNested(t *testing.T) {
 	// {:{:String}} → typed map of typed maps of strings
-	assertParse(t, "{:{:String}}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypedMap(eng.NewWord("String"))),
+	assertParse(t, "{:{:String}}", []core.Value{
+		core.NewTypedMap(core.NewTypedMap(core.NewWord("String"))),
 	})
 }
 
 func TestParseTypedMapDeepNested(t *testing.T) {
 	// {:{:{:Number}}} → three levels deep
-	assertParse(t, "{:{:{:Number}}}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypedMap(eng.NewTypedMap(eng.NewWord("Number")))),
+	assertParse(t, "{:{:{:Number}}}", []core.Value{
+		core.NewTypedMap(core.NewTypedMap(core.NewTypedMap(core.NewWord("Number")))),
 	})
 }
 
 func TestParseTypedMapInExpression(t *testing.T) {
 	// 1 {:String} → integer then typed map
-	assertParse(t, "1 {:String}", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewTypedMap(eng.NewWord("String")),
+	assertParse(t, "1 {:String}", []core.Value{
+		core.NewInteger(1),
+		core.NewTypedMap(core.NewWord("String")),
 	})
 }
 
@@ -878,20 +878,20 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 1 || !eng.IsTypedMap(got[0]) {
+	if len(got) != 1 || !core.IsTypedMap(got[0]) {
 		t.Fatalf("expected 1 typed map, got %v", got)
 	}
-	ct0c, _ := eng.AsChildType(got[0])
+	ct0c, _ := core.AsChildType(got[0])
 	child0c := ct0c.Child
-	if !child0c.Parent.Equal(eng.TMap) {
+	if !child0c.Parent.Equal(core.TMap) {
 		t.Errorf("expected child type map, got %s", child0c.Parent)
 	}
-	m, _ := eng.AsMap(child0c)
+	m, _ := core.AsMap(child0c)
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if w, err := eng.AsWord(xVal); err != nil || w.Name != "Number" {
+	if w, err := core.AsWord(xVal); err != nil || w.Name != "Number" {
 		t.Errorf("expected x to be word(Number), got %s (TestParseTypedMapConcreteChild)", xVal)
 	}
 }
@@ -907,10 +907,10 @@ func TestParseExplicitList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].Parent.Equal(eng.TList) {
+	if !got[0].Parent.Equal(core.TList) {
 		t.Fatalf("expected list, got %s", got[0].Parent)
 	}
-	_lst, _ := eng.AsList(got[0])
+	_lst, _ := core.AsList(got[0])
 	elems := _lst.Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
@@ -926,7 +926,7 @@ func TestParseListWithStrings(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	_lst, _ := eng.AsList(got[0])
+	_lst, _ := core.AsList(got[0])
 	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Errorf("expected 2 elements, got %d", len(elems))
@@ -944,18 +944,18 @@ func TestParseMapWithList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].Parent.Equal(eng.TMap) {
+	if !got[0].Parent.Equal(core.TMap) {
 		t.Fatalf("expected map, got %s", got[0].Parent)
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x'")
 	}
-	if !xVal.Parent.Equal(eng.TList) {
+	if !xVal.Parent.Equal(core.TList) {
 		t.Errorf("expected list, got %s", xVal.Parent)
 	}
-	_lst, _ := eng.AsList(xVal)
+	_lst, _ := core.AsList(xVal)
 	elems := _lst.Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
@@ -971,15 +971,15 @@ func TestParseMapWithBooleans(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	aVal, _ := m.Get("a")
-	aw, _ := eng.AsWord(aVal)
-	if !eng.IsWord(aVal) || aw.Name != "true" {
+	aw, _ := core.AsWord(aVal)
+	if !core.IsWord(aVal) || aw.Name != "true" {
 		t.Errorf("expected word(true), got %s", aVal)
 	}
 	bVal, _ := m.Get("b")
-	bw, _ := eng.AsWord(bVal)
-	if !eng.IsWord(bVal) || bw.Name != "false" {
+	bw, _ := core.AsWord(bVal)
+	if !core.IsWord(bVal) || bw.Name != "false" {
 		t.Errorf("expected word(false), got %s", bVal)
 	}
 }
@@ -993,7 +993,7 @@ func TestParseMapWithNull(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	_, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x'")
@@ -1009,9 +1009,9 @@ func TestParseMapWithTypeName(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if w, err := eng.AsWord(xVal); err != nil || w.Name != "Number" {
+	if w, err := core.AsWord(xVal); err != nil || w.Name != "Number" {
 		t.Errorf("expected word(Number) — the parser is type-name-opaque, got %s", xVal)
 	}
 }
@@ -1025,9 +1025,9 @@ func TestParseMapWithNestedMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	aVal, _ := m.Get("a")
-	if !aVal.Parent.Equal(eng.TMap) {
+	if !aVal.Parent.Equal(core.TMap) {
 		t.Errorf("expected nested map, got %s", aVal.Parent)
 	}
 }
@@ -1036,15 +1036,15 @@ func TestParseMapWithNestedMap(t *testing.T) {
 
 func TestParseParensInString(t *testing.T) {
 	// "(hello)" → the parens are inside a string, not structural
-	assertParse(t, `"(hello)"`, []eng.Value{eng.NewString("(hello)")})
+	assertParse(t, `"(hello)"`, []core.Value{core.NewString("(hello)")})
 }
 
 func TestParseNoParens(t *testing.T) {
 	// No parens — preprocessParens should be a no-op
-	assertParse(t, "1 2 3", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewInteger(2),
-		eng.NewInteger(3),
+	assertParse(t, "1 2 3", []core.Value{
+		core.NewInteger(1),
+		core.NewInteger(2),
+		core.NewInteger(3),
 	})
 }
 
@@ -1065,27 +1065,27 @@ func TestParseEscapeInParenString(t *testing.T) {
 
 func TestParseSemicolonAsEnd(t *testing.T) {
 	// ";" should parse as the word "end"
-	assertParse(t, "1 add 2; 99", []eng.Value{
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
-		eng.NewEnd(),
-		eng.NewInteger(99),
+	assertParse(t, "1 add 2; 99", []core.Value{
+		core.NewInteger(1),
+		core.NewWord("add"),
+		core.NewInteger(2),
+		core.NewEnd(),
+		core.NewInteger(99),
 	})
 }
 
 func TestParseSemicolonStandalone(t *testing.T) {
-	assertParse(t, ";", []eng.Value{
-		eng.NewEnd(),
+	assertParse(t, ";", []core.Value{
+		core.NewEnd(),
 	})
 }
 
 func TestParseSemicolonAdjacentToWord(t *testing.T) {
 	// "foo;bar" — semicolon is a fixed token, so it splits the text
-	assertParse(t, "foo;bar", []eng.Value{
-		eng.NewWord("foo"),
-		eng.NewEnd(),
-		eng.NewWord("bar"),
+	assertParse(t, "foo;bar", []core.Value{
+		core.NewWord("foo"),
+		core.NewEnd(),
+		core.NewWord("bar"),
 	})
 }
 
@@ -1118,17 +1118,17 @@ func TestParseDataMapWithNil(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	// b should be word "true" (word context)
 	bVal, _ := m.Get("b")
-	bw2, _ := eng.AsWord(bVal)
-	if !eng.IsWord(bVal) || bw2.Name != "true" {
+	bw2, _ := core.AsWord(bVal)
+	if !core.IsWord(bVal) || bw2.Name != "true" {
 		t.Errorf("expected word(true), got %s", bVal)
 	}
 	// c should be word "false" (word context)
 	cVal, _ := m.Get("c")
-	cw2, _ := eng.AsWord(cVal)
-	if !eng.IsWord(cVal) || cw2.Name != "false" {
+	cw2, _ := core.AsWord(cVal)
+	if !core.IsWord(cVal) || cw2.Name != "false" {
 		t.Errorf("expected word(false), got %s", cVal)
 	}
 }
@@ -1144,14 +1144,14 @@ func TestParseDataMapWithNestedList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.Parent.Equal(eng.TMap) {
+	if !xVal.Parent.Equal(core.TMap) {
 		t.Fatalf("expected nested map, got %s", xVal.Parent)
 	}
-	inner, _ := eng.AsMap(xVal)
+	inner, _ := core.AsMap(xVal)
 	yVal, _ := inner.Get("y")
-	if !yVal.Parent.Equal(eng.TList) {
+	if !yVal.Parent.Equal(core.TList) {
 		t.Errorf("expected list, got %s", yVal.Parent)
 	}
 }
@@ -1180,25 +1180,25 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	_lst, _ := eng.AsList(xVal)
+	_lst, _ := core.AsList(xVal)
 	elems := _lst.Slice()
 	if len(elems) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(elems))
 	}
 	// With word context in lists, true/false become words (resolved at runtime),
 	// and null becomes a word (resolved to atom at runtime).
-	ew0, _ := eng.AsWord(elems[0])
-	ew1, _ := eng.AsWord(elems[1])
-	ew2, _ := eng.AsWord(elems[2])
-	if !eng.IsWord(elems[0]) || ew0.Name != "true" {
+	ew0, _ := core.AsWord(elems[0])
+	ew1, _ := core.AsWord(elems[1])
+	ew2, _ := core.AsWord(elems[2])
+	if !core.IsWord(elems[0]) || ew0.Name != "true" {
 		t.Errorf("expected word(true), got %s", elems[0])
 	}
-	if !eng.IsWord(elems[1]) || ew1.Name != "false" {
+	if !core.IsWord(elems[1]) || ew1.Name != "false" {
 		t.Errorf("expected word(false), got %s", elems[1])
 	}
-	if !eng.IsWord(elems[2]) || ew2.Name != "null" {
+	if !core.IsWord(elems[2]) || ew2.Name != "null" {
 		t.Errorf("expected word(null), got %s", elems[2])
 	}
 }
@@ -1214,7 +1214,7 @@ func TestParseFloatNumber(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].Parent.ConformsTo(eng.TFloat) {
+	if !got[0].Parent.ConformsTo(core.TFloat) {
 		t.Errorf("expected decimal type, got %s", got[0].Parent)
 	}
 }
@@ -1228,7 +1228,7 @@ func TestParseFloatInExpression(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("expected 3 values, got %d", len(got))
 	}
-	if !got[0].Parent.ConformsTo(eng.TFloat) {
+	if !got[0].Parent.ConformsTo(core.TFloat) {
 		t.Errorf("expected decimal, got %s", got[0].Parent)
 	}
 }
@@ -1242,9 +1242,9 @@ func TestParseMapWithFloat(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.Parent.ConformsTo(eng.TFloat) {
+	if !xVal.Parent.ConformsTo(core.TFloat) {
 		t.Errorf("expected decimal, got %s", xVal.Parent)
 	}
 }
@@ -1281,11 +1281,11 @@ func TestParseIntegerLiteralExact(t *testing.T) {
 			t.Errorf("Parse(%q): expected 1 value, got %d", c.src, len(got))
 			continue
 		}
-		if !got[0].Parent.ConformsTo(eng.TInteger) {
+		if !got[0].Parent.ConformsTo(core.TInteger) {
 			t.Errorf("Parse(%q): expected Integer, got %s", c.src, got[0].Parent)
 			continue
 		}
-		n, aerr := eng.AsInteger(got[0])
+		n, aerr := core.AsInteger(got[0])
 		if aerr != nil || n != c.want {
 			t.Errorf("Parse(%q): got value %d (err=%v), want %d", c.src, n, aerr, c.want)
 		}
@@ -1306,7 +1306,7 @@ func TestParseIntegerLiteralOverflow(t *testing.T) {
 			t.Errorf("Parse(%q): expected an integer_overflow error, got nil", src)
 			continue
 		}
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "integer_overflow" {
 			t.Errorf("Parse(%q): expected [boru/integer_overflow], got %v", src, err)
 			continue
@@ -1342,11 +1342,11 @@ func TestParseBasePrefixedExact(t *testing.T) {
 			t.Errorf("Parse(%q) error: %v", c.src, err)
 			continue
 		}
-		if !got[0].Parent.ConformsTo(eng.TInteger) {
+		if !got[0].Parent.ConformsTo(core.TInteger) {
 			t.Errorf("Parse(%q): expected Integer, got %s", c.src, got[0].Parent)
 			continue
 		}
-		if n, _ := eng.AsInteger(got[0]); n != c.want {
+		if n, _ := core.AsInteger(got[0]); n != c.want {
 			t.Errorf("Parse(%q): got %d, want %d", c.src, n, c.want)
 		}
 	}
@@ -1359,7 +1359,7 @@ func TestParsePlusPrefixInteger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse(+maxint) error: %v", err)
 	}
-	if n, _ := eng.AsInteger(got[0]); n != math.MaxInt64 {
+	if n, _ := core.AsInteger(got[0]); n != math.MaxInt64 {
 		t.Errorf("+maxint: got %d, want %d", n, int64(math.MaxInt64))
 	}
 	if _, err := Parse("+9223372036854775808"); err == nil {
@@ -1375,7 +1375,7 @@ func TestParseLeadingDotRejected(t *testing.T) {
 	// forms (which jsonic lexes as one number token) are all rejected.
 	for _, src := range []string{".5", ".0", ".name", "!.x", "-.5", "+.5"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "syntax_error" {
 			t.Errorf("Parse(%q): expected [boru/syntax_error], got %v", src, err)
 		}
@@ -1393,7 +1393,7 @@ func TestParseLeadingDotRejected(t *testing.T) {
 func TestParseUnderscoreSeparators(t *testing.T) {
 	for _, src := range []string{"1__0", "1_", "1_000__0", "0xFF__FF", "1__0.5"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "syntax_error" {
 			t.Errorf("Parse(%q): expected [boru/syntax_error] for misplaced _, got %v", src, err)
 		}
@@ -1414,12 +1414,12 @@ func TestParseBasePrefixOverflowAndMin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse(-0x8000000000000000) error: %v", err)
 	}
-	if n, _ := eng.AsInteger(got[0]); n != math.MinInt64 {
+	if n, _ := core.AsInteger(got[0]); n != math.MinInt64 {
 		t.Errorf("hex int64 min: got %d, want %d", n, int64(math.MinInt64))
 	}
 	for _, src := range []string{"0x8000000000000000", "0xFFFFFFFFFFFFFFFF"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "integer_overflow" {
 			t.Errorf("Parse(%q): expected [boru/integer_overflow], got %v", src, err)
 		}
@@ -1434,14 +1434,14 @@ func TestParseBasePrefixOverflowAndMin(t *testing.T) {
 func TestParseDigitLedTokens(t *testing.T) {
 	for _, src := range []string{"1e309", "1e400", "-1e400"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "float_overflow" {
 			t.Errorf("Parse(%q): expected [boru/float_overflow], got %v", src, err)
 		}
 	}
 	for _, src := range []string{"1e", "1foo", "5x", "2dup", "0x1p4"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.BoruError)
+		ae, ok := err.(*core.BoruError)
 		if !ok || ae.Code != "syntax_error" {
 			t.Errorf("Parse(%q): expected malformed-number [boru/syntax_error], got %v", src, err)
 		}
@@ -1458,9 +1458,9 @@ func TestParseDigitLedTokens(t *testing.T) {
 // is located at the offending literal, not at the start of the line.
 func TestParseIntegerLiteralOverflowPos(t *testing.T) {
 	_, err := Parse("add 1 9223372036854775808")
-	ae, ok := err.(*eng.BoruError)
+	ae, ok := err.(*core.BoruError)
 	if !ok {
-		t.Fatalf("expected *eng.BoruError, got %v", err)
+		t.Fatalf("expected *core.BoruError, got %v", err)
 	}
 	if ae.Row != 1 || ae.Col != 7 {
 		t.Errorf("expected position 1:7 (the literal), got %d:%d", ae.Row, ae.Col)
@@ -1484,11 +1484,11 @@ func TestParseNonDecimalLiteralsPreserved(t *testing.T) {
 			t.Errorf("Parse(%q) error: %v", src, err)
 			continue
 		}
-		if !got[0].Parent.ConformsTo(eng.TInteger) {
+		if !got[0].Parent.ConformsTo(core.TInteger) {
 			t.Errorf("Parse(%q): expected Integer, got %s", src, got[0].Parent)
 			continue
 		}
-		if n, _ := eng.AsInteger(got[0]); n != want {
+		if n, _ := core.AsInteger(got[0]); n != want {
 			t.Errorf("Parse(%q): got %d, want %d", src, n, want)
 		}
 	}
@@ -1498,7 +1498,7 @@ func TestParseNonDecimalLiteralsPreserved(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse(%q) error: %v", src, err)
 		}
-		if !got[0].Parent.ConformsTo(eng.TFloat) {
+		if !got[0].Parent.ConformsTo(core.TFloat) {
 			t.Errorf("Parse(%q): expected Float, got %s", src, got[0].Parent)
 		}
 	}
@@ -1511,12 +1511,12 @@ func TestParseIntegerLiteralExactInMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.Parent.ConformsTo(eng.TInteger) {
+	if !xVal.Parent.ConformsTo(core.TInteger) {
 		t.Fatalf("expected Integer, got %s", xVal.Parent)
 	}
-	if n, _ := eng.AsInteger(xVal); n != 9007199254740993 {
+	if n, _ := core.AsInteger(xVal); n != 9007199254740993 {
 		t.Errorf("map value: got %d, want 9007199254740993", n)
 	}
 }
@@ -1530,11 +1530,11 @@ func TestParseSpecialFloatLiterals(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse(%q) error: %v", src, err)
 		}
-		if !got[0].Parent.ConformsTo(eng.TFloat) {
+		if !got[0].Parent.ConformsTo(core.TFloat) {
 			t.Errorf("Parse(%q): expected Float, got %s", src, got[0].Parent)
 			return
 		}
-		f, _ := eng.AsNumber(got[0])
+		f, _ := core.AsNumber(got[0])
 		if !pred(f) {
 			t.Errorf("Parse(%q): float value %v failed predicate", src, f)
 		}
@@ -1547,9 +1547,9 @@ func TestParseSpecialFloatLiterals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xv, _ := m.Get("x")
-	if f, _ := eng.AsNumber(xv); !math.IsNaN(f) {
+	if f, _ := core.AsNumber(xv); !math.IsNaN(f) {
 		t.Errorf("map value: expected NaN, got %v", f)
 	}
 }
@@ -1565,12 +1565,12 @@ func TestParseListWithMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	_lst, _ := eng.AsList(got[0])
+	_lst, _ := core.AsList(got[0])
 	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(elems))
 	}
-	if !elems[0].Parent.Equal(eng.TMap) {
+	if !elems[0].Parent.Equal(core.TMap) {
 		t.Errorf("expected map element, got %s", elems[0].Parent)
 	}
 }
@@ -1584,9 +1584,9 @@ func TestParseNestedList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	_lst, _ := eng.AsList(xVal)
+	_lst, _ := core.AsList(xVal)
 	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
@@ -1605,15 +1605,15 @@ func TestParseListWithDottedWord(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	_lst, _ := eng.AsList(got[0])
+	_lst, _ := core.AsList(got[0])
 	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element (the dot-chain Reach), got %d", len(elems))
 	}
-	if !eng.IsReach(elems[0]) {
+	if !core.IsReach(elems[0]) {
 		t.Fatalf("expected element to be a Reach, got %s", elems[0])
 	}
-	info, _ := eng.AsReach(elems[0])
+	info, _ := core.AsReach(elems[0])
 	if len(info.Receiver) != 1 || len(info.Segments) != 1 {
 		t.Fatalf("expected receiver[foo] + 1 segment, got %+v", info)
 	}
@@ -1629,10 +1629,10 @@ func TestParseReceiverlessReach(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 1 || !eng.IsReach(got[0]) {
+	if len(got) != 1 || !core.IsReach(got[0]) {
 		t.Fatalf("expected a single Reach value, got %d: %v", len(got), got)
 	}
-	info, _ := eng.AsReach(got[0])
+	info, _ := core.AsReach(got[0])
 	if len(info.Receiver) != 0 {
 		t.Fatalf("receiverless reach must have empty Receiver, got %+v", info.Receiver)
 	}
@@ -1647,7 +1647,7 @@ func TestParseReceiverlessReach(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error ($!.x): %v", err)
 	}
-	info, _ = eng.AsReach(got[0])
+	info, _ = core.AsReach(got[0])
 	if len(info.Receiver) != 0 || info.Eval || len(info.Segments) != 1 || !info.Segments[0].Getr {
 		t.Fatalf("$!.x: want receiverless inert getr reach, got %+v", info)
 	}
@@ -1664,7 +1664,7 @@ func TestParseMapSingleKey(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	if m.Len() != 1 {
 		t.Errorf("expected 1 key, got %d", m.Len())
 	}
@@ -1674,31 +1674,31 @@ func TestParseMapSingleKey(t *testing.T) {
 
 func TestParseUnrecognizedModifier(t *testing.T) {
 	// foo/x → unrecognized modifier, treated as plain word "foo/x"
-	assertParse(t, "foo/x", []eng.Value{eng.NewWord("foo/x")})
+	assertParse(t, "foo/x", []core.Value{core.NewWord("foo/x")})
 }
 
 func TestParseSlashOnly(t *testing.T) {
 	// foo/ → trailing slash with no modifier text (idx == len(name)-1),
 	// so it's not matched by the modifier parsing
-	assertParse(t, "foo/", []eng.Value{eng.NewWord("foo/")})
+	assertParse(t, "foo/", []core.Value{core.NewWord("foo/")})
 }
 
 func TestParseEmptyDigitsEmptyRest(t *testing.T) {
 	// This covers the case where modifier is just "/" at end of string
 	// which doesn't trigger the modifier parsing (idx >= len(name)-1 check)
-	assertParse(t, "x/", []eng.Value{eng.NewWord("x/")})
+	assertParse(t, "x/", []core.Value{core.NewWord("x/")})
 }
 
 // --- Parens within different quote types ---
 
 func TestParseSingleQuoteWithParens(t *testing.T) {
 	// '(test)' → parens inside single-quoted string
-	assertParse(t, "'(test)'", []eng.Value{eng.NewString("(test)")})
+	assertParse(t, "'(test)'", []core.Value{core.NewString("(test)")})
 }
 
 func TestParseBacktickWithParens(t *testing.T) {
 	// `(test)` → parens inside backtick-quoted string
-	assertParse(t, "`(test)`", []eng.Value{eng.NewString("(test)")})
+	assertParse(t, "`(test)`", []core.Value{core.NewString("(test)")})
 }
 
 // --- Data context: typed list inside data value ---
@@ -1751,7 +1751,7 @@ func TestParseDottedWordInExpression(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 values (1 <Reach>), got %d: %v", len(got), got)
 	}
-	if !eng.IsReach(got[1]) {
+	if !core.IsReach(got[1]) {
 		t.Fatalf("expected got[1] to be the dot-chain Reach, got %s", got[1])
 	}
 }
@@ -1766,7 +1766,7 @@ func TestParseDottedMapValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 1 || !got[0].Parent.Equal(eng.TMap) {
+	if len(got) != 1 || !got[0].Parent.Equal(core.TMap) {
 		t.Fatalf("expected a single map value, got %d: %v", len(got), got)
 	}
 }
@@ -1794,7 +1794,7 @@ func TestParseDottedMapValueMultiPair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	m, mErr := eng.AsMap(got[0])
+	m, mErr := core.AsMap(got[0])
 	if mErr != nil || m == nil {
 		t.Fatalf("expected a concrete map, got %v (%v)", got[0], mErr)
 	}
@@ -1813,7 +1813,7 @@ func TestParseDottedWordStillWorksInWordContext(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 values, got %d: %v", len(got), got)
 	}
-	if !eng.IsReach(got[1]) {
+	if !core.IsReach(got[1]) {
 		t.Fatalf("expected got[1] to be the dot-chain Reach, got %s", got[1])
 	}
 }
@@ -1829,7 +1829,7 @@ func TestParseTopLevelMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].Parent.Equal(eng.TMap) {
+	if !got[0].Parent.Equal(core.TMap) {
 		t.Errorf("expected map, got %s", got[0].Parent)
 	}
 }
@@ -1870,10 +1870,10 @@ func TestParseMapWithStringValues(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	xValS, _ := eng.AsString(xVal)
-	if !xVal.Parent.ConformsTo(eng.TString) || xValS != "hello" {
+	xValS, _ := core.AsString(xVal)
+	if !xVal.Parent.ConformsTo(core.TString) || xValS != "hello" {
 		t.Errorf("expected string hello, got %s", xVal)
 	}
 }
@@ -1921,7 +1921,7 @@ func TestParseListWithBoolean(t *testing.T) {
 
 func TestParseNullValue(t *testing.T) {
 	// null at top level → word "null" (with Lex=false)
-	assertParse(t, "null", []eng.Value{eng.NewWord("null")})
+	assertParse(t, "null", []core.Value{core.NewWord("null")})
 }
 
 // --- Data context: map with nil value via jsonic ---
@@ -1935,14 +1935,14 @@ func TestParseDataMapNilValue(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	// Type names stay opaque Words in data context (ADR-012 rule 4).
 	eVal, _ := m.Get("e")
-	if w, err := eng.AsWord(eVal); err != nil || w.Name != "Number" {
+	if w, err := core.AsWord(eVal); err != nil || w.Name != "Number" {
 		t.Errorf("expected word(Number), got %s", eVal)
 	}
 	fVal, _ := m.Get("f")
-	if w, err := eng.AsWord(fVal); err != nil || w.Name != "Any" {
+	if w, err := core.AsWord(fVal); err != nil || w.Name != "Any" {
 		t.Errorf("expected word(Any), got %s", fVal)
 	}
 }
@@ -1982,7 +1982,7 @@ func TestParseMapManyKeys(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	if m.Len() != 3 {
 		t.Errorf("expected 3 keys, got %d", m.Len())
 	}
@@ -1998,9 +1998,9 @@ func TestParseDataListWithFloat(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m, _ := eng.AsMap(got[0])
+	m, _ := core.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	_lst, _ := eng.AsList(xVal)
+	_lst, _ := core.AsList(xVal)
 	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
@@ -2043,7 +2043,7 @@ func TestParseSlashFModifier(t *testing.T) {
 func TestFloatToValueWholeNumber(t *testing.T) {
 	// Whole number float → integer
 	v := floatToValue(42.0)
-	if !v.Parent.ConformsTo(eng.TInteger) {
+	if !v.Parent.ConformsTo(core.TInteger) {
 		t.Errorf("expected integer, got %s", v.Parent)
 	}
 }
@@ -2051,7 +2051,7 @@ func TestFloatToValueWholeNumber(t *testing.T) {
 func TestFloatToValueFractional(t *testing.T) {
 	// Fractional float → decimal
 	v := floatToValue(3.14)
-	if !v.Parent.ConformsTo(eng.TFloat) {
+	if !v.Parent.ConformsTo(core.TFloat) {
 		t.Errorf("expected decimal, got %s", v.Parent)
 	}
 }
@@ -2114,15 +2114,24 @@ func TestOrderedKeysDedupAndStale(t *testing.T) {
 func TestResolveTextValueTypes(t *testing.T) {
 	tests := []struct {
 		input string
-		check func(eng.Value) bool
+		check func(core.Value) bool
 	}{
-		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.ConformsTo(eng.TBoolean) && b }},
-		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.ConformsTo(eng.TBoolean) && !b }},
+		{"true", func(v core.Value) bool { b, _ := core.AsBoolean(v); return v.Parent.ConformsTo(core.TBoolean) && b }},
+		{"false", func(v core.Value) bool { b, _ := core.AsBoolean(v); return v.Parent.ConformsTo(core.TBoolean) && !b }},
 		// Type names are NOT resolved (ADR-012 rule 4) — they are data
 		// here, Atoms, like any other bare name.
-		{"Number", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.ConformsTo(eng.TAtom) && s == "Number" }},
-		{"String", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.ConformsTo(eng.TAtom) && s == "String" }},
-		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.ConformsTo(eng.TAtom) && s == "hello" }},
+		{"Number", func(v core.Value) bool {
+			s, _ := core.AsAtom(v)
+			return v.Parent.ConformsTo(core.TAtom) && s == "Number"
+		}},
+		{"String", func(v core.Value) bool {
+			s, _ := core.AsAtom(v)
+			return v.Parent.ConformsTo(core.TAtom) && s == "String"
+		}},
+		{"hello", func(v core.Value) bool {
+			s, _ := core.AsAtom(v)
+			return v.Parent.ConformsTo(core.TAtom) && s == "hello"
+		}},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)
@@ -2139,16 +2148,16 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b1, _ := eng.AsBoolean(v)
-	if !v.Parent.ConformsTo(eng.TBoolean) || !b1 {
+	b1, _ := core.AsBoolean(v)
+	if !v.Parent.ConformsTo(core.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
 	v, err = convertTopLevelValue(false, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b2, _ := eng.AsBoolean(v)
-	if !v.Parent.ConformsTo(eng.TBoolean) || b2 {
+	b2, _ := core.AsBoolean(v)
+	if !v.Parent.ConformsTo(core.TBoolean) || b2 {
 		t.Errorf("expected false, got %s", v)
 	}
 }
@@ -2178,8 +2187,8 @@ func TestConvertDataValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b3, _ := eng.AsBoolean(v)
-	if !v.Parent.ConformsTo(eng.TBoolean) || !b3 {
+	b3, _ := core.AsBoolean(v)
+	if !v.Parent.ConformsTo(core.TBoolean) || !b3 {
 		t.Errorf("expected true, got %s", v)
 	}
 }
@@ -2208,7 +2217,7 @@ func TestConvertDataValueRawMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.Parent.Equal(eng.TMap) {
+	if !v.Parent.Equal(core.TMap) {
 		t.Errorf("expected map, got %s", v.Parent)
 	}
 }
@@ -2219,7 +2228,7 @@ func TestConvertDataValueRawMapWithChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !eng.IsTypedMap(v) {
+	if !core.IsTypedMap(v) {
 		t.Errorf("expected typed map, got %s", v)
 	}
 }
@@ -2229,7 +2238,7 @@ func TestConvertTopLevelValueRawMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.Parent.Equal(eng.TMap) {
+	if !v.Parent.Equal(core.TMap) {
 		t.Errorf("expected map, got %s", v.Parent)
 	}
 }
@@ -2239,7 +2248,7 @@ func TestConvertTopLevelValueRawMapWithChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !eng.IsTypedMap(v) {
+	if !core.IsTypedMap(v) {
 		t.Errorf("expected typed map, got %s", v)
 	}
 }
@@ -2265,7 +2274,7 @@ func TestParseWordDirectCoverage(t *testing.T) {
 			t.Errorf("parseWord(%q) expected error", tt.input)
 		}
 		if tt.ok {
-			vw, _ := eng.AsWord(v)
+			vw, _ := core.AsWord(v)
 			if vw.Name != tt.name {
 				t.Errorf("parseWord(%q) name = %q, want %q", tt.input, vw.Name, tt.name)
 			}
@@ -2287,18 +2296,18 @@ func TestParseImplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	if !list.Parent.Equal(eng.TList) {
+	if !list.Parent.Equal(core.TList) {
 		t.Fatalf("expected list, got %s", list.Parent)
 	}
-	_lst, _ := eng.AsList(list)
+	_lst, _ := core.AsList(list)
 	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
-	if !elems[0].Parent.Equal(eng.TMap) {
+	if !elems[0].Parent.Equal(core.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].Parent)
 	}
-	m, _ := eng.AsMutableMap(elems[0])
+	m, _ := core.AsMutableMap(elems[0])
 	if !m.Implicit {
 		t.Error("expected Implicit=true for pair syntax [x:Integer]")
 	}
@@ -2318,15 +2327,15 @@ func TestParseExplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	_lst, _ := eng.AsList(list)
+	_lst, _ := core.AsList(list)
 	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
-	if !elems[0].Parent.Equal(eng.TMap) {
+	if !elems[0].Parent.Equal(core.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].Parent)
 	}
-	m, _ := eng.AsMutableMap(elems[0])
+	m, _ := core.AsMutableMap(elems[0])
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map [{x:Integer}]")
 	}
@@ -2341,10 +2350,10 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	if !vals[0].Parent.Equal(eng.TMap) {
+	if !vals[0].Parent.Equal(core.TMap) {
 		t.Fatalf("expected map, got %s", vals[0].Parent)
 	}
-	m, _ := eng.AsMutableMap(vals[0])
+	m, _ := core.AsMutableMap(vals[0])
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map {a:1}")
 	}
@@ -2359,19 +2368,19 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	m, _ := eng.AsMap(vals[0])
+	m, _ := core.AsMap(vals[0])
 	if m == nil {
-		t.Fatalf("eng.AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
+		t.Fatalf("core.AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
 	}
 	keys := m.Keys()
 	if len(keys) != 1 || keys[0] != "a" {
 		t.Errorf("expected key 'a', got %v", keys)
 	}
 	val, _ := m.Get("a")
-	if !eng.IsDisjunct(val) {
+	if !core.IsDisjunct(val) {
 		t.Fatalf("expected disjunct for optional field, got %s", val.String())
 	}
-	dj, _ := eng.AsDisjunct(val)
+	dj, _ := core.AsDisjunct(val)
 	alts := dj.Alternatives
 	// `?:T` desugars to `disjunct(T, None, Absent)` — Absent is the
 	// kernel type denoting "key not present", and the third
@@ -2387,9 +2396,9 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	// The engine's resolve prepass resolves the Word and re-simplifies
 	// at consumption.
 	seenWord := false
-	want := map[*eng.Type]bool{eng.TNone: false, eng.TAbsent: false}
+	want := map[*core.Type]bool{core.TNone: false, core.TAbsent: false}
 	for _, alt := range alts {
-		if w, err := eng.AsWord(alt); err == nil && w.Name == "Integer" {
+		if w, err := core.AsWord(alt); err == nil && w.Name == "Integer" {
 			seenWord = true
 		}
 		for ty := range want {
@@ -2480,7 +2489,7 @@ func TestParseMapLiteralSlashKeyAllowed(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse(%q) error: %v", src, err)
 		}
-		m, _ := eng.AsMap(vals[0])
+		m, _ := core.AsMap(vals[0])
 		if m == nil {
 			t.Fatalf("Parse(%q): not a map", src)
 		}
@@ -2496,16 +2505,16 @@ func TestParseOptionalFieldMixed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	m, _ := eng.AsMap(vals[0])
+	m, _ := core.AsMap(vals[0])
 	if m == nil {
-		t.Fatalf("eng.AsMap() returned nil")
+		t.Fatalf("core.AsMap() returned nil")
 	}
 	aVal, _ := m.Get("a")
-	if eng.IsDisjunct(aVal) {
+	if core.IsDisjunct(aVal) {
 		t.Errorf("expected 'a' to NOT be a disjunct, got %s", aVal.String())
 	}
 	bVal, _ := m.Get("b")
-	if !eng.IsDisjunct(bVal) {
+	if !core.IsDisjunct(bVal) {
 		t.Errorf("expected 'b' to be a disjunct, got %s", bVal.String())
 	}
 }
@@ -2520,12 +2529,12 @@ func TestParseOptionalFieldInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	_lst, _ := eng.AsList(list)
+	_lst, _ := core.AsList(list)
 	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
 	}
-	m, _ := eng.AsMutableMap(elems[0])
+	m, _ := core.AsMutableMap(elems[0])
 	if m == nil {
 		t.Fatalf("expected map element, got %s (data: %T)", elems[0].String(), elems[0].Data)
 	}
@@ -2534,7 +2543,7 @@ func TestParseOptionalFieldInList(t *testing.T) {
 		t.Errorf("expected key 'x', got %v", keys)
 	}
 	val, _ := m.Get("x")
-	if !eng.IsDisjunct(val) {
+	if !core.IsDisjunct(val) {
 		t.Errorf("expected disjunct for x, got %s", val.String())
 	}
 }
@@ -2548,9 +2557,9 @@ func TestParseComputedKey(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	m, _ := eng.AsMap(vals[0])
+	m, _ := core.AsMap(vals[0])
 	if m == nil {
-		t.Fatalf("eng.AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
+		t.Fatalf("core.AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
 	}
 	keys := m.Keys()
 	if len(keys) != 1 || keys[0] != "x" {
@@ -2564,9 +2573,9 @@ func TestParseComputedKeyMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	m, _ := eng.AsMap(vals[0])
+	m, _ := core.AsMap(vals[0])
 	if m == nil {
-		t.Fatalf("eng.AsMap() returned nil")
+		t.Fatalf("core.AsMap() returned nil")
 	}
 	keys := m.Keys()
 	if len(keys) != 2 {
@@ -2578,7 +2587,7 @@ func TestParseComputedKeyMultiple(t *testing.T) {
 
 func TestParseBacktickNoInterpolation(t *testing.T) {
 	// Backtick string without ${} is just a plain string.
-	assertParse(t, "`hello`", []eng.Value{eng.NewString("hello")})
+	assertParse(t, "`hello`", []core.Value{core.NewString("hello")})
 }
 
 func TestParseBacktickSimpleInterpolation(t *testing.T) {
@@ -2590,10 +2599,10 @@ func TestParseBacktickSimpleInterpolation(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !eng.IsInterpString(got[0]) {
+	if !core.IsInterpString(got[0]) {
 		t.Fatalf("expected InterpString, got %s", got[0].Parent)
 	}
-	parts, _ := eng.AsInterpString(got[0])
+	parts, _ := core.AsInterpString(got[0])
 	if len(parts) != 2 {
 		t.Fatalf("expected 2 parts, got %d", len(parts))
 	}
@@ -2602,7 +2611,7 @@ func TestParseBacktickSimpleInterpolation(t *testing.T) {
 		t.Errorf("part 0: expected literal 'hello ', got %+v", parts[0])
 	}
 	// Part 1: expression [Word(name)]
-	if parts[1].Expr == nil || len(parts[1].Expr) != 1 || !eng.IsWord(parts[1].Expr[0]) {
+	if parts[1].Expr == nil || len(parts[1].Expr) != 1 || !core.IsWord(parts[1].Expr[0]) {
 		t.Errorf("part 1: expected expression with Word(name), got %+v", parts[1])
 	}
 }
@@ -2613,10 +2622,10 @@ func TestParseBacktickMultipleInterpolations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 1 || !eng.IsInterpString(got[0]) {
+	if len(got) != 1 || !core.IsInterpString(got[0]) {
 		t.Fatalf("expected 1 InterpString value, got %d values", len(got))
 	}
-	parts, _ := eng.AsInterpString(got[0])
+	parts, _ := core.AsInterpString(got[0])
 	// Parts: expr(a), " and ", expr(b)
 	if len(parts) != 3 {
 		t.Fatalf("expected 3 parts, got %d", len(parts))
@@ -2629,10 +2638,10 @@ func TestParseBacktickExpressionInterpolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 1 || !eng.IsInterpString(got[0]) {
+	if len(got) != 1 || !core.IsInterpString(got[0]) {
 		t.Fatalf("expected 1 InterpString value")
 	}
-	parts, _ := eng.AsInterpString(got[0])
+	parts, _ := core.AsInterpString(got[0])
 	// Parts: "result: ", expr(1 add 2), empty trailing
 	if parts[0].Lit != "result: " {
 		t.Errorf("expected literal 'result: ', got %q", parts[0].Lit)
@@ -2648,7 +2657,7 @@ func TestParseBacktickNestedBraces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 1 || !eng.IsInterpString(got[0]) {
+	if len(got) != 1 || !core.IsInterpString(got[0]) {
 		t.Fatalf("expected 1 InterpString value")
 	}
 }
@@ -2663,7 +2672,7 @@ func TestParseBacktickUnclosedInterpolation(t *testing.T) {
 
 func TestParseBacktickOnlyLiteral(t *testing.T) {
 	// Backtick string with $ but no ${ is just a plain string.
-	assertParse(t, "`price: $100`", []eng.Value{eng.NewString("price: $100")})
+	assertParse(t, "`price: $100`", []core.Value{core.NewString("price: $100")})
 }
 
 // --- Words starting with '-' (CLI flag style) ---
@@ -2676,39 +2685,39 @@ func TestParseBacktickOnlyLiteral(t *testing.T) {
 // returns nil when the sign isn't followed by digits/`.`.
 
 func TestParseSingleDashWord(t *testing.T) {
-	assertParse(t, "-h", []eng.Value{eng.NewWord("-h")})
+	assertParse(t, "-h", []core.Value{core.NewWord("-h")})
 }
 
 func TestParseDoubleDashWord(t *testing.T) {
-	assertParse(t, "--help", []eng.Value{eng.NewWord("--help")})
+	assertParse(t, "--help", []core.Value{core.NewWord("--help")})
 }
 
 func TestParseDashWordWithBareword(t *testing.T) {
-	assertParse(t, "-h book", []eng.Value{
-		eng.NewWord("-h"),
-		eng.NewWord("book"),
+	assertParse(t, "-h book", []core.Value{
+		core.NewWord("-h"),
+		core.NewWord("book"),
 	})
 }
 
 func TestParseDashWordWithIntegerArg(t *testing.T) {
-	assertParse(t, "--limit 10", []eng.Value{
-		eng.NewWord("--limit"),
-		eng.NewInteger(10),
+	assertParse(t, "--limit 10", []core.Value{
+		core.NewWord("--limit"),
+		core.NewInteger(10),
 	})
 }
 
 func TestParseDashWordPreservesNegativeFloat(t *testing.T) {
 	// `-3.14` must still tokenise as Float, not Word("-3.14").
-	assertParse(t, "-3.14", []eng.Value{eng.NewFloat(-3.14)})
+	assertParse(t, "-3.14", []core.Value{core.NewFloat(-3.14)})
 }
 
 func TestParseDashWordPreservesNegativeInteger(t *testing.T) {
-	assertParse(t, "-42", []eng.Value{eng.NewInteger(-42)})
+	assertParse(t, "-42", []core.Value{core.NewInteger(-42)})
 }
 
 func TestParseDashLetterDigitMix(t *testing.T) {
 	// `-x5` is a Word (the leading `-` is followed by a non-digit).
-	assertParse(t, "-x5", []eng.Value{eng.NewWord("-x5")})
+	assertParse(t, "-x5", []core.Value{core.NewWord("-x5")})
 }
 
 // =====================================================================
@@ -2726,7 +2735,7 @@ func TestSourcePositionWordRowCol(t *testing.T) {
 		t.Fatalf("expected 3 values, got %d", len(vals))
 	}
 	// foo @ 1:1, bar @ 2:3, baz @ 2:7
-	want := []eng.SrcPos{{Row: 1, Col: 1}, {Row: 2, Col: 3}, {Row: 2, Col: 7}}
+	want := []core.SrcPos{{Row: 1, Col: 1}, {Row: 2, Col: 3}, {Row: 2, Col: 7}}
 	for i, w := range want {
 		if vals[i].Pos().Row != w.Row || vals[i].Pos().Col != w.Col {
 			t.Errorf("value %d: expected %d:%d, got %d:%d",
@@ -2738,7 +2747,7 @@ func TestSourcePositionWordRowCol(t *testing.T) {
 // TestNoSitedLeak parses a spread of surface forms and asserts none leaks a
 // parser-internal sited wrapper past a converter type-switch. A leak surfaces
 // as an "unsupported value type parser.sited" error from a convert*Inner
-// default arm (the sited wrapper is not a sealed eng.Payload, so it can only
+// default arm (the sited wrapper is not a sealed core.Payload, so it can only
 // manifest as such a parse error, never as a stored Value.Data).
 func TestNoSitedLeak(t *testing.T) {
 	forms := []string{

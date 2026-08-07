@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/tuikit"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // End-to-end test for the boru vault TUI (lang/go/modules/vault_tui.boru,

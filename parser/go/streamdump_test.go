@@ -28,7 +28,7 @@ func TestStreamDump(t *testing.T) {
 		// dump path stays covered.
 		outFile = filepath.Join(t.TempDir(), "streams.tsv")
 	}
-	specDir := filepath.Join("..", "..", "spec")
+	specDir := filepath.Join("..", "..", "eng", "spec")
 	entries, err := os.ReadDir(specDir)
 	if err != nil {
 		t.Fatalf("read spec dir: %v", err)

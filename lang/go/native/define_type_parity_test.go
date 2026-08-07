@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/parser/go"
 )
 
 // installBoruType runs `def Name <bodySrc>` and returns the minted *Type,
