@@ -290,7 +290,7 @@ test-ts:
 #
 # Current per-file, worst first: make 38, coretype 39, resolve 42, engine 42,
 # sugar 47, check-state 66, canon 70, value 72, registry 74, match 77.
-TS_CORE_GATE_LINES ?= 76
+TS_CORE_GATE_LINES ?= 85
 test-ts-core:
 	@echo "==> typecheck core/ts"
 	cd core/ts && npx tsc
