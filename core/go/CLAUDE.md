@@ -43,7 +43,8 @@ Two rules specific to this module:
   result is a core type, so the seam names no check symbol.
 
 - **The carrier lattice is core's, not the checker's** (ADR-013's
-  2026-08-08 amendment). `carrier_new.go`, `carrier_join.go`,
+  2026-08-08 amendment; reasoning in
+  [design/BASIC-CHECK-CUT.0.md](../../design/BASIC-CHECK-CUT.0.md)). `carrier_new.go`, `carrier_join.go`,
   `carrier_body.go`, `carrier_spread.go`, `guard_narrow.go`,
   `guard_predicate.go`, `deadsig.go` and `record_typed_def.go` hold
   what used to live in `check/go/carrier.go`. The test is ownership of

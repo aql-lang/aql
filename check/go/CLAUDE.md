@@ -30,7 +30,8 @@ Three rules specific to this module:
   unreachable and fails the merged ADR-008 gate.
 
 - **The carrier lattice is NOT here any more** (ADR-013's 2026-08-08
-  amendment). The join family, the body runners, guard narrowing, the
+  amendment; reasoning in
+  [design/BASIC-CHECK-CUT.0.md](../../design/BASIC-CHECK-CUT.0.md)). The join family, the body runners, guard narrowing, the
   carrier constructors, dead-overload detection and the deduping
   diagnostic emitters moved down to `core/go` — they were pure
   functions over core types, and `basic` needs them to carry its
