@@ -214,3 +214,13 @@ run boomq Decimal	ERROR:undefined_word
 run boomq nosuchword	ERROR:undefined_word
 run boomq zzz	ERROR:undefined_word
 run boomq zzz 1	ERROR:undefined_word
+
+# --- builtin type names: the LEAF form and the PATH form ----------------
+# Go's ResolveBuiltinTypeName tries the user-facing leaf table first and
+# then the full path (core/go/resolve.go:23); core/ts had only the leaf
+# half. The path arm admits only paths the builtin table declares, so an
+# invented one stays undefined rather than minting a type.
+run 1 Scalar/String	1 String
+run Cidron	Cidron
+run Scalar/String	String
+run Scalar/Nope	ERROR:undefined_word	an undeclared path does not mint a type

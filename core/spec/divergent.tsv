@@ -62,10 +62,7 @@ run 1 boomq end	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS resolves the WO
 # `Word` is worse than a miss: core/ts CRASHES with an uncoded error
 # (`AsWord: not a word value`), which is a non_boru failure escaping the
 # taxonomy entirely — the one row here that is a defect on any reading.
-run Scalar/String	String	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
-run Word/__ED	__ED	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
-run 1 Scalar/String	1 String	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
-run Cidron	Cidron	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run Word/__ED	__ED		DATA: TS now RESOLVES the path, but canons the End type LITERAL through the End marker arm and renders nothing; Go renders the leaf __ED. The same vType/payload conflation isWord() had, one arm over.
 run [ Module ]	[Module]	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 
 

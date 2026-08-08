@@ -60,6 +60,9 @@ const builtinDecls: BuiltinDecl[] = [
   { path: 'Scalar/Micron/Pathon' },
   { path: 'Scalar/Micron/Emailon' },
   { path: 'Scalar/Micron/Urlon' },
+  // Present in core/go's table (typetable.go:722) and absent here, so
+  // `Cidron` was undefined_word in TS and a type literal in Go.
+  { path: 'Scalar/Micron/Cidron' },
 
   // Node branch.
   { path: 'Node/List' },
@@ -300,6 +303,24 @@ export const TDecimal = TFloat
  * `eng.TypeNameTable()` — the user-facing leaf name → Type map the
  * parser and fn-param resolution consult for bare type-name words.
  */
+/**
+ * Resolve a bare type-name WORD, mirroring Go's ResolveBuiltinTypeName
+ * (core/go/resolve.go:23): the user-facing LEAF table first, then the
+ * full PATH form. core/ts had only the leaf half, so `Scalar/String` and
+ * `Word/__ED` were undefined_word here and resolved there.
+ *
+ * The path arm admits only paths the builtin table actually declares —
+ * Go's ResolveTypePath checks `Builtin.bypath[t.Path()] == t` — so an
+ * invented path stays undefined rather than minting a type.
+ */
+export function resolveBuiltinTypeName(name: string): BoruType | undefined {
+  const leaf = typeNameTable().get(name)
+  if (leaf !== undefined) return leaf
+  if (!name.includes('/')) return undefined
+  if (!BY_PATH.has(name)) return undefined
+  return newType(name)
+}
+
 export function typeNameTable(): Map<string, BoruType> {
   const m = new Map<string, BoruType>()
   for (const [name, path] of BY_NAME) {

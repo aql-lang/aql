@@ -29,7 +29,7 @@ import {
   TString,
   TXml,
   TWord,
-  typeNameTable,
+  resolveBuiltinTypeName,
 } from './type.ts'
 import {
   type FnDefInfo,
@@ -253,7 +253,7 @@ export class Engine {
       this.stack[this.pointer] = newAtom('null')
       return
     }
-    const tn = typeNameTable().get(name)
+    const tn = resolveBuiltinTypeName(name)
     if (tn !== undefined) {
       this.stack[this.pointer] = newTypeLiteral(tn)
       return
