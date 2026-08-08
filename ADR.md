@@ -247,3 +247,35 @@ kernel machinery. It depends on the pieces it uses and nothing else, and
 > zero symbols. `compiler` went too, a seam gap closed by widening
 > `core.EmitRecorder`. **`check` stays** — control words have an analysis
 > half with no correct inactive default.
+
+> **Amendment (2026-08-08).** **`check` goes too; the set is now `core` +
+> `parser`.** The previous amendment's premise did not survive inspection.
+> It read basic's 23 check symbols as the checker's vocabulary; 21 of them
+> were pure functions over CORE types — Values, Types, `r.Defs`, and
+> `CheckState`, all core-owned — that were merely filed in `check/go`. They
+> were **moved down**, not forwarded: the join lattice
+> (`core/go/carrier_join.go`), the body runners (`carrier_body.go`), guard
+> narrowing (`guard_narrow.go`, `guard_predicate.go`), dead-overload
+> detection (`deadsig.go`), the spread carrier (`carrier_spread.go`), the
+> typed-def make record (`record_typed_def.go`), and the deduping
+> diagnostic emitters (into `check_state.go`, beside the state they read).
+> `core.JoinCarriersHook` and the `AnalysisImpl.AddUnique` slot were
+> retired in the same move — with their subjects core-resident, there was
+> nothing left to indirect.
+>
+> The real remainder is two symbols, `AnalyseFnBody` and `AnalyseLoopBody`
+> — the analysis **pass** itself (memoised per call shape, recursion-
+> bailing, quota-capped, Kleene-iterated). They stay in `check` behind S1
+> slots reached as `core.RunFnBodyAnalysis` / `core.RunLoopBodyAnalysis`.
+> That is a seam rather than a mailbox because a check-less build runs no
+> analysis at all: `AnalysisImpl.ReturnsFn` returns nil, so no `ReturnsFunc`
+> executes and neither accessor is reached. The nil defaults are the same
+> no-analysis regime every other S1 slot defines, and nil is in-band
+> anyway — `AnalyseFnBody` already documents an empty result as "the
+> analyser aborted, treat as an Any carrier".
+>
+> The general rule this settles: **a word library defines language types
+> and words, and the interpreter's own primitives are enough for that.**
+> Where a word has an analysis half, that half belongs in core's carrier
+> vocabulary; only a driver of the pass itself justifies a slot. Neither
+> justifies a dependency edge.

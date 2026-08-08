@@ -67,7 +67,7 @@ type (
 	FnUndefInfo          = core.FnUndefInfo
 	ForCont              = core.ForCont
 	ForwardInfo          = core.ForwardInfo
-	GuardClause          = check.GuardClause
+	GuardClause          = core.GuardClause
 	Handler              = core.Handler
 	IfCont               = core.IfCont
 	InterpPart           = core.InterpPart
@@ -228,7 +228,7 @@ const (
 
 // Engine-level constants.
 const (
-	CarrierDisjunctCap     = check.CarrierDisjunctCap
+	CarrierDisjunctCap     = core.CarrierDisjunctCap
 	MaxArgs                = core.MaxArgs
 	DefaultCheckStepBudget = core.DefaultCheckStepBudget
 
@@ -271,8 +271,8 @@ const (
 
 // Function re-exports — every exported borueng function.
 var (
-	AnalyseFnBody             = check.AnalyseFnBody
-	AnalyseLoopBody           = check.AnalyseLoopBody
+	AnalyseFnBody             = core.RunFnBodyAnalysis
+	AnalyseLoopBody           = core.RunLoopBodyAnalysis
 	AsAtom                    = core.AsAtom
 	AsChildType               = core.AsChildType
 	AsDefCleanup              = core.AsDefCleanup
@@ -364,7 +364,7 @@ var (
 	BaseValueForConstraint    = core.BaseValueForConstraint
 	BoundToKind               = core.BoundToKind
 	CoerceBoolean             = core.CoerceBoolean
-	CommonAncestorType        = check.CommonAncestorType
+	CommonAncestorType        = core.CommonAncestorType
 	CompareValues             = core.CompareValues
 	CowSet                    = core.CowSet
 	CowDel                    = core.CowDel
@@ -457,9 +457,9 @@ var (
 	IsRecordShape            = core.IsRecordShape
 	IsTypeBody               = core.IsTypeBody
 	IsTypeLiteral            = core.IsTypeLiteral
-	JoinCarrierStacks        = check.JoinCarrierStacks
-	JoinCarriers             = check.JoinCarriers
-	FoldVariadicArms         = check.FoldVariadicArms
+	JoinCarrierStacks        = core.JoinCarrierStacks
+	JoinCarriers             = core.JoinCarriers
+	FoldVariadicArms         = core.FoldVariadicArms
 	MakeBoruError            = core.MakeBoruError
 	ExitCode                 = core.ExitCode
 	NewExitError             = core.NewExitError
@@ -471,13 +471,13 @@ var (
 	MatchSignature           = core.MatchSignature
 	NewValueRaw              = core.NewValueRaw
 	NewSplice                = core.NewSplice
-	LiteralCondValue         = check.LiteralCondValue
-	BoolWord                 = check.BoolWord
-	ApplyGuardNarrowing      = check.ApplyGuardNarrowing
-	ApplyComplementNarrowing = check.ApplyComplementNarrowing
-	RunCarrierBodyWithDefs   = check.RunCarrierBodyWithDefs
-	RunCarrierCondBody       = check.RunCarrierCondBody
-	InstallJoinedDefs        = check.InstallJoinedDefs
+	LiteralCondValue         = core.LiteralCondValue
+	BoolWord                 = core.BoolWord
+	ApplyGuardNarrowing      = core.ApplyGuardNarrowing
+	ApplyComplementNarrowing = core.ApplyComplementNarrowing
+	RunCarrierBodyWithDefs   = core.RunCarrierBodyWithDefs
+	RunCarrierCondBody       = core.RunCarrierCondBody
+	InstallJoinedDefs        = core.InstallJoinedDefs
 	New                      = core.New
 	RunPooled                = core.RunPooled
 	RunPooledTop             = core.RunPooledTop
@@ -512,10 +512,10 @@ var (
 	StampModuleCallGates     = core.StampModuleCallGates
 	NewElementCarrier        = check.NewElementCarrier
 	ElementCarrierFromValue  = check.ElementCarrierFromValue
-	NewCarrierTypedList      = check.NewCarrierTypedList
-	NewCarrierTypedListValue = check.NewCarrierTypedListValue
+	NewCarrierTypedList      = core.NewCarrierTypedList
+	NewCarrierTypedListValue = core.NewCarrierTypedListValue
 	NewDynamicCarrier        = core.NewDynamicCarrier
-	NewDynamicCarrierValue   = check.NewDynamicCarrierValue
+	NewDynamicCarrierValue   = core.NewDynamicCarrierValue
 	// NewClockDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
 	NewFloat       = core.NewFloat
@@ -603,7 +603,7 @@ var (
 	ResolveWordValue       = core.ResolveWordValue
 	ResolveWordsDeep       = core.ResolveWordsDeep
 	ReturnsFreshInstance   = check.ReturnsFreshInstance
-	ReturnsIdentity        = check.ReturnsIdentity
+	ReturnsIdentity        = core.ReturnsIdentity
 	ReturnsListElemAt      = check.ReturnsListElemAt
 	ReturnsNumericBinary   = check.ReturnsNumericBinary
 	ReturnsAddConcat       = check.ReturnsAddConcat
@@ -614,8 +614,8 @@ var (
 	CheckListIndex         = check.CheckListIndex
 	CheckAtIndices         = check.CheckAtIndices
 	NewCarrierTypedListLen = check.NewCarrierTypedListLen
-	RunCarrierBody         = check.RunCarrierBody
-	RunCarrierBodyKeepDefs = check.RunCarrierBodyKeepDefs
+	RunCarrierBody         = core.RunCarrierBody
+	RunCarrierBodyKeepDefs = core.RunCarrierBodyKeepDefs
 	AnalyseCodeEffect      = compiler.AnalyseCodeEffectCarrier
 	SetIDSeed              = core.SetIDSeed
 	SeverityFor            = core.SeverityFor

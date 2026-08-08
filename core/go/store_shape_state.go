@@ -17,7 +17,7 @@ func (s *StoreShapeInfo) RecordKey(key string, v Value) {
 		s.KeyTypes = map[string]Value{}
 	}
 	if existing, ok := s.KeyTypes[key]; ok {
-		s.KeyTypes[key] = JoinCarriersHook(existing, v)
+		s.KeyTypes[key] = JoinCarriers(existing, v)
 		return
 	}
 	s.KeyTypes[key] = v
@@ -52,7 +52,7 @@ func (s *StoreShapeInfo) RecordVal(v Value) {
 		s.Vals = v
 		return
 	}
-	s.Vals = JoinCarriersHook(s.Vals, v)
+	s.Vals = JoinCarriers(s.Vals, v)
 }
 
 // LookupVals returns the unkeyed value join, or ok=false when nothing

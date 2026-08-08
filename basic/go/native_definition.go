@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	check "github.com/boru-lang/boru/check/go"
-
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -303,7 +301,7 @@ func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// event is stored to a frame local rather than left on the simulated stack.
 	r.Check.Recorder().MarkValueDef(value)
 	// A rebind of a LOOP-CARRIED def (a pre-loop binding an armed for-body
-	// rebinds — check.AnalyseLoopBody registered it via NoteLoopCarried) stores
+	// rebinds — the checker's AnalyseLoopBody registered it via NoteLoopCarried) stores
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
 	r.Check.Recorder().RecordDefRebind(name, value, pos)
@@ -1034,7 +1032,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// instance has the same provenance an explicit make gives it (a
 			// downstream `b typeof` then compiles). Outside emit mode this is a
 			// no-op and the concrete instance is bound.
-			if carrier, ok := check.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
+			if carrier, ok := core.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
 				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
 			}
 			result, err := core.MakeObject(info, body, r)
@@ -1063,7 +1061,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// looks the schema up by name when the constraint carries no body.
 	if resInfo, isRes := ResolveResourceTypeInfo(r, constraint); isRes {
 		if body.Parent.Equal(TMap) {
-			if carrier, ok := check.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
+			if carrier, ok := core.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
 				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
 			}
 			provided, merr := AsMutableMap(body)
@@ -1524,7 +1522,7 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 					carrierArgs[j] = NewCarrier(t)
 				}
 			}
-			check.AnalyseFnBody(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns, fnDef.Anonymous)
+			core.RunFnBodyAnalysis(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns, fnDef.Anonymous)
 		}
 		PopGenBindings(r, genSpec)
 	}
@@ -1534,7 +1532,7 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 	// can never fire (the dead-clause analogue). A static property of the
 	// sig list, emitted once at fn construction.
 	if r.Check.IsActive() && len(fnDef.Signatures) > 1 {
-		for _, d := range check.DeadSignatures(fnDef.Signatures) {
+		for _, d := range core.DeadSignatures(fnDef.Signatures) {
 			r.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code:   "unreachable_signature",
 				Detail: "fn overload " + FnSigArgList(d.Sig) + " is unreachable — the earlier signature " + FnSigArgList(d.ShadowedBy) + " already accepts every call it would match",

@@ -60,6 +60,7 @@ and `make test-race` fan out over compiler/go with the rest of
 running it, so any change to recording or lowering also wants
 `make verify-bytecode` (the interpreter/compiler differential, the
 emitter and alloc pins, the -race concurrency gates) and
-`cd eng/go && go test ./...` for the VM side. Coverage: compiler/go
-has no standalone gate — it rides the repo-wide merged ADR-008
+`cd eng/go && go test ./...` for the VM side. Coverage: `make cover-gate-compiler`
+is compiler/go's standalone gate (its own suite alone, floor a ratchet
+toward 100), on top of the repo-wide merged ADR-008
 `make cover-gate`.

@@ -85,7 +85,7 @@ func AnalyseCodeEffectCarrier(r *core.Registry, body core.Value) (core.Value, bo
 
 	r.Check.CodeEffectDepth++
 	diagBase := len(r.Check.Diagnostics)
-	stk := check.RunCarrierBody(r, body)
+	stk := core.RunCarrierBody(r, body)
 	// Error- or warning-severity findings mean the analysis did not
 	// describe the body cleanly (a failing dispatch, a partial one) —
 	// decline. INFO advisories (a forward-strand note, an analysis-

@@ -696,7 +696,7 @@ func asReturns(args []Value, r *Registry) []Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			check.CheckAddUniqueDiagnostic(r, code, detail, "as", args[1].Pos())
+			core.CheckAddUniqueDiagnostic(r, code, detail, "as", args[1].Pos())
 		}
 		return []Value{core.NewDynamicCarrier(TAny)}
 	}
@@ -1322,11 +1322,11 @@ func convertScalarReturns(args []Value, r *Registry) []Value {
 		args[1].Parent != nil && args[1].Parent.ConformsTo(TFloat) && ValueType(args[0]) != nil {
 		switch {
 		case ValueType(args[0]).ConformsTo(TBigInteger):
-			check.CheckAddUniqueDiagnostic(r, "convert_error",
+			core.CheckAddUniqueDiagnostic(r, "convert_error",
 				"convert: cannot convert Float to BigInteger (a binary Float is inexact; convert to Integer first)",
 				"convert", args[1].Pos())
 		case ValueType(args[0]).ConformsTo(TBigDecimal):
-			check.CheckAddUniqueDiagnostic(r, "convert_error",
+			core.CheckAddUniqueDiagnostic(r, "convert_error",
 				"convert: cannot convert Float to BigDecimal (a binary Float is already rounded; build the BigDecimal from a String or the 0d literal)",
 				"convert", args[1].Pos())
 		}

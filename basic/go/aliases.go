@@ -1,19 +1,27 @@
 // Package basic is the boru base language layer: the fundamental
 // words (stack, definition, control, type-generics) and the predefined
 // global content types (the Scalar/Time family, Resource/Entity),
-// registered against the eng kernel. It depends on eng ONLY (ADR-013).
+// registered against the kernel.
 //
-// This file is the eng shim: it re-exports eng's types and functions
-// so the word files in this package can stay eng-agnostic, mirroring
+// It depends on CORE and (for tests) parser — and on nothing else
+// (ADR-013 rule 1, as amended 2026-08-08). The checker is no longer
+// among them: defining language types and words is expressible in the
+// interpreter's own primitives, so where a word here has an analysis
+// half it is written in core's vocabulary (carrier_join.go,
+// carrier_body.go, guard_narrow.go) and where it genuinely needs the
+// analysis PASS — the fn / loop body models — it goes through a
+// core-owned seam slot (core.RunFnBodyAnalysis, core.RunLoopBodyAnalysis).
+//
+// This file is the core shim: it re-exports core's types and functions
+// so the word files in this package can stay module-agnostic, mirroring
 // lang/go/native/aliases.go.
 package basic
 
 import (
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
-// *Type aliases — every exported type from borueng is re-exported here.
+// *Type aliases — every exported type from core is re-exported here.
 type (
 	BranchRecord       = core.BranchRecord
 	CodeEffectInfo     = core.CodeEffectInfo
@@ -265,7 +273,7 @@ const (
 
 // Function re-exports — every exported borueng function.
 var (
-	AnalyseLoopBody          = check.AnalyseLoopBody
+	AnalyseLoopBody          = core.RunLoopBodyAnalysis
 	AsAtom                   = core.AsAtom
 	AsChildType              = core.AsChildType
 	AsDefCleanup             = core.AsDefCleanup
@@ -357,7 +365,7 @@ var (
 	BaseValueForConstraint   = core.BaseValueForConstraint
 	BoundToKind              = core.BoundToKind
 	CoerceBoolean            = core.CoerceBoolean
-	CommonAncestorType       = check.CommonAncestorType
+	CommonAncestorType       = core.CommonAncestorType
 	CompareValues            = core.CompareValues
 	CowSet                   = core.CowSet
 	CowDel                   = core.CowDel
@@ -448,9 +456,9 @@ var (
 	IsRecordShape            = core.IsRecordShape
 	IsTypeBody               = core.IsTypeBody
 	IsTypeLiteral            = core.IsTypeLiteral
-	JoinCarrierStacks        = check.JoinCarrierStacks
-	JoinCarriers             = check.JoinCarriers
-	FoldVariadicArms         = check.FoldVariadicArms
+	JoinCarrierStacks        = core.JoinCarrierStacks
+	JoinCarriers             = core.JoinCarriers
+	FoldVariadicArms         = core.FoldVariadicArms
 	MakeBoruError            = core.MakeBoruError
 	ExitCode                 = core.ExitCode
 	NewExitError             = core.NewExitError
@@ -462,13 +470,13 @@ var (
 	MatchSignature           = core.MatchSignature
 	NewValueRaw              = core.NewValueRaw
 	NewSplice                = core.NewSplice
-	LiteralCondValue         = check.LiteralCondValue
-	BoolWord                 = check.BoolWord
-	ApplyGuardNarrowing      = check.ApplyGuardNarrowing
-	ApplyComplementNarrowing = check.ApplyComplementNarrowing
-	RunCarrierBodyWithDefs   = check.RunCarrierBodyWithDefs
-	RunCarrierCondBody       = check.RunCarrierCondBody
-	InstallJoinedDefs        = check.InstallJoinedDefs
+	LiteralCondValue         = core.LiteralCondValue
+	BoolWord                 = core.BoolWord
+	ApplyGuardNarrowing      = core.ApplyGuardNarrowing
+	ApplyComplementNarrowing = core.ApplyComplementNarrowing
+	RunCarrierBodyWithDefs   = core.RunCarrierBodyWithDefs
+	RunCarrierCondBody       = core.RunCarrierCondBody
+	InstallJoinedDefs        = core.InstallJoinedDefs
 	New                      = core.New
 	RunPooled                = core.RunPooled
 	RunPooledTop             = core.RunPooledTop
@@ -498,10 +506,10 @@ var (
 	// NewCalendarDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = core.NewCarrier
 	StampModuleCallGates     = core.StampModuleCallGates
-	NewCarrierTypedList      = check.NewCarrierTypedList
-	NewCarrierTypedListValue = check.NewCarrierTypedListValue
+	NewCarrierTypedList      = core.NewCarrierTypedList
+	NewCarrierTypedListValue = core.NewCarrierTypedListValue
 	NewDynamicCarrier        = core.NewDynamicCarrier
-	NewDynamicCarrierValue   = check.NewDynamicCarrierValue
+	NewDynamicCarrierValue   = core.NewDynamicCarrierValue
 	// NewClockDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
 	NewFloat       = core.NewFloat
@@ -526,7 +534,7 @@ var (
 	MakePathon               = core.MakePathon
 	CanonValue               = core.CanonValue
 	ErrNoComparer            = core.ErrNoComparer
-	CheckAddUniqueDiagnostic = check.CheckAddUniqueDiagnostic
+	CheckAddUniqueDiagnostic = core.CheckAddUniqueDiagnostic
 	AsMicronFields           = core.AsMicronFields
 	PathonContentEqual       = core.PathonContentEqual
 	NewBigInteger            = core.NewBigInteger
@@ -594,9 +602,9 @@ var (
 	ResolveTypePath        = core.ResolveTypePath
 	ResolveWordValue       = core.ResolveWordValue
 	ResolveWordsDeep       = core.ResolveWordsDeep
-	ReturnsIdentity        = check.ReturnsIdentity
-	RunCarrierBody         = check.RunCarrierBody
-	RunCarrierBodyKeepDefs = check.RunCarrierBodyKeepDefs
+	ReturnsIdentity        = core.ReturnsIdentity
+	RunCarrierBody         = core.RunCarrierBody
+	RunCarrierBodyKeepDefs = core.RunCarrierBodyKeepDefs
 	SetIDSeed              = core.SetIDSeed
 	SeverityFor            = core.SeverityFor
 	CompareSignatures      = core.CompareSignatures

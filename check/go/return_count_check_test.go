@@ -75,7 +75,7 @@ func TestReturnCountConformanceSkipsUnknowableCounts(t *testing.T) {
 	r := countCheckRegistry(t)
 
 	// A variadic spread models 0-or-more values — count unknown, skip.
-	stk := []core.Value{NewVariadicCarrier(core.NewTypeLiteral(core.TNever)), core.NewInteger(1)}
+	stk := []core.Value{core.NewVariadicCarrier(core.NewTypeLiteral(core.TNever)), core.NewInteger(1)}
 	checkBodyReturnConformance(r, "vr", []*core.Type{core.TInteger}, nil, 0, true, stk, core.SrcPos{}, core.SrcPos{})
 
 	// A Function value in the residual may be an unapplied fn-value call the

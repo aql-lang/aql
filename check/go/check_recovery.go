@@ -1215,7 +1215,8 @@ func installAnalysisImpl() {
 	core.AnalysisImpl.MixedConform = carrierMixedConform
 	core.AnalysisImpl.ValueCarriesCarrier = valueCarriesCarrier
 	core.AnalysisImpl.AtUncaughtTopLevel = CheckAtUncaughtTopLevel
-	core.AnalysisImpl.AddUnique = CheckAddUnique
+	core.AnalysisImpl.AnalyseFnBody = AnalyseFnBody
+	core.AnalysisImpl.AnalyseLoopBody = AnalyseLoopBody
 }
 
 func init() { installAnalysisImpl() }

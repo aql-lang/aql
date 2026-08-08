@@ -96,7 +96,7 @@ func typedContainerCarrier(p core.FnParam, a core.Value) (core.Value, bool) {
 		return v, true
 	}
 	if core.IsTypedList(pat) && (a.Parent.ConformsTo(core.TList) || a.Parent.Equal(core.TAny)) {
-		v := NewCarrierTypedListValue(ci.Child)
+		v := core.NewCarrierTypedListValue(ci.Child)
 		v.ID = core.GenerateID(core.IDPrefixForType(core.TList))
 		v.Dynamic = true
 		return v, true
@@ -123,7 +123,7 @@ func ParamBodyCarrier(p core.FnParam) core.Value {
 				return v
 			}
 			if core.IsTypedList(pat) {
-				v := NewCarrierTypedListValue(ci.Child)
+				v := core.NewCarrierTypedListValue(ci.Child)
 				v.ID = core.GenerateID(core.IDPrefixForType(core.TList))
 				v.Dynamic = true
 				return v

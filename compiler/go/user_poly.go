@@ -192,7 +192,7 @@ func tryCompileUserPolyArms(r *core.Registry, es core.EmitRecorder, word string,
 		}
 		bound := agg.Signatures[sigIdx[0]].Returns[pos]
 		for _, si := range sigIdx[1:] {
-			bound = check.CommonAncestorType(bound, agg.Signatures[si].Returns[pos])
+			bound = core.CommonAncestorType(bound, agg.Signatures[si].Returns[pos])
 		}
 		j := core.NewCarrier(bound)
 		// DYNAMIC at the join bound — "one of the arms' types, decided at run

@@ -132,10 +132,10 @@ func AdoptShapeValue(v core.Value, depth int) core.Value {
 // unrepresentable value keeps dynamic(Any).
 func ShapeFieldRead(v core.Value) core.Value {
 	if _, ok := StoreShapeOf(v); ok {
-		return NewDynamicCarrierValue(v)
+		return core.NewDynamicCarrierValue(v)
 	}
 	if core.IsDisjunct(v) {
-		return NewDynamicCarrierValue(v)
+		return core.NewDynamicCarrierValue(v)
 	}
 	ft := core.ValueType(v)
 	if ft == nil || ft.ConformsTo(core.TFunction) {

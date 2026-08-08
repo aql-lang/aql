@@ -199,8 +199,8 @@ func patrunFindReturns(args []Value, r *Registry) []Value {
 			// A typed table: surface the DECLARED element type ∪ None (an
 			// unmatched subject reads None, patrunFindHandler's miss path). No
 			// poisoning — the type is a declaration, not an inference.
-			bound := check.JoinCarriers(NewCarrier(ss.DeclaredVal), NewCarrier(core.TNone))
-			return []Value{check.NewDynamicCarrierValue(bound)}
+			bound := core.JoinCarriers(NewCarrier(ss.DeclaredVal), NewCarrier(core.TNone))
+			return []Value{core.NewDynamicCarrierValue(bound)}
 		}
 	}
 	return []Value{NewDynamicCarrier(TAny)} // unshaped fallback (recovery / no shape)

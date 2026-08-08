@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	check "github.com/boru-lang/boru/check/go"
-
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -117,7 +115,7 @@ func expandCaseAlt(r *Registry, a Value, depth int, out *[]Value) bool {
 			*out = append(*out, NewBoolean(true), NewBoolean(false))
 			return true
 		}
-		if dv, ok := check.UnionCarrierForType(t); ok { //covergate:allow defensive arm — kernel paths deliver union-typed domains as DISTRIBUTING disjunct carriers (ParamInputCarrier / UnionCarrierForType at param+return sites), never as a bare union NODE; the arm keeps a future carrier shape sound instead of silently uncovered
+		if dv, ok := core.UnionCarrierForType(t); ok { //covergate:allow defensive arm — kernel paths deliver union-typed domains as DISTRIBUTING disjunct carriers (ParamInputCarrier / UnionCarrierForType at param+return sites), never as a bare union NODE; the arm keeps a future carrier shape sound instead of silently uncovered
 			// A named union/enum type: its members are the alternatives.
 			if depth <= 0 { //covergate:allow a union node recurses exactly once into its (flattened) distributing disjunct, so the bound cannot exhaust here
 				return false
@@ -468,7 +466,7 @@ func caseMatchCovers(r *Registry, m, alt Value, depth int) bool {
 	}
 	if IsBareTypeNode(m) {
 		t := CanonicalType(r, &m)
-		if dv, ok := check.UnionCarrierForType(t); ok { //covergate:allow defensive arm — ResolveTypedName yields a union's BODY (a payload-carrying disjunct value, the IsDisjunct branch above), never its minted node; the arm keeps a future node-resolving path sound
+		if dv, ok := core.UnionCarrierForType(t); ok { //covergate:allow defensive arm — ResolveTypedName yields a union's BODY (a payload-carrying disjunct value, the IsDisjunct branch above), never its minted node; the arm keeps a future node-resolving path sound
 			// A named union/enum type as a match covers what its members cover.
 			return caseMatchCovers(r, dv, alt, depth-1)
 		}

@@ -155,13 +155,27 @@ VIRTUAL pieces inside eng/go … until their own cuts".
   read as "planned" at every check-side call site.
 - **The other cross-module registrations** stayed single vars rather
   than tables, one function each: `core.JoinCarriersHook`
-  (check/go/carrier.go), `core.DriftWindowRecorder` and
+  (check/go/carrier.go — since RETIRED, see the note below),
+  `core.DriftWindowRecorder` and
   `core.NewEmitStateHook`/`core.NewIsolatedEmitHook` (compiler), and
   `core.InstallCompiledRuntime` (eng, S4). Note one honest divergence
   from decision 4/S2, which put `EmitRecorder`'s home in check: the
   interface ended up in **core** (`core/go/emit_recorder.go`), because
   core's step loop is what consults the recorder. Interface at the
   bottom, implementation at the top — the S2 sketch had it upside down.
+
+  > **Later (2026-08-08, ADR-013's third amendment).** The same
+  > correction ran once more, and further. `JoinCarriersHook` existed
+  > only because the join lived above core; when the carrier LATTICE
+  > moved down (`core/go/carrier_join.go` and siblings, so `basic`
+  > could stop depending on `check`) the slot had nothing left to
+  > indirect and was deleted, along with `AnalysisImpl.AddUnique`. The
+  > general form of the lesson: a slot whose subject is expressible in
+  > core's own types is a sign the subject is filed too high, not that
+  > a seam is needed. Two slots were ADDED in the same change —
+  > `AnalyseFnBody` / `AnalyseLoopBody` — because those really are the
+  > pass, not the vocabulary.
+
 - **Two more generated facades.** eng gains `aliases_check.go` (233
   lines: 4 type aliases, 2 const re-exports, 65 wrapper funcs) and
   `aliases_compiler.go` (145 lines: 22 aliases, 52 consts, 11 wrappers)

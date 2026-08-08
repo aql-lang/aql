@@ -267,22 +267,22 @@ func TestS7EvalXmlInterpCheckModeDynamicRefuses(t *testing.T) {
 
 func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 	es := r.Check
-	if lit, ok := check.LiteralCondValue(args[0]); ok {
+	if lit, ok := core.LiteralCondValue(args[0]); ok {
 		// Statically-known condition: capture only the taken arm.
 		var stk []core.Value
 		var defs map[string]core.Value
 		if lit {
-			restore := check.ApplyGuardNarrowing(r, args[0])
+			restore := core.ApplyGuardNarrowing(r, args[0])
 			es.Recorder().ArmBranchCapture()
-			stk, defs = check.RunCarrierBodyWithDefs(r, args[1])
+			stk, defs = core.RunCarrierBodyWithDefs(r, args[1])
 			restore()
-			check.InstallJoinedDefs(r, defs, nil)
+			core.InstallJoinedDefs(r, defs, nil)
 		} else {
-			restore := check.ApplyComplementNarrowing(r, args[0])
+			restore := core.ApplyComplementNarrowing(r, args[0])
 			es.Recorder().ArmBranchCapture()
-			stk, defs = check.RunCarrierBodyWithDefs(r, args[2])
+			stk, defs = core.RunCarrierBodyWithDefs(r, args[2])
 			restore()
-			check.InstallJoinedDefs(r, nil, defs)
+			core.InstallJoinedDefs(r, nil, defs)
 		}
 		frag := testRecorderState(es).TakeFragment()
 		if len(stk) == 0 {
@@ -302,12 +302,12 @@ func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 		if core.IsConcrete(arg) && arg.Parent.ConformsTo(core.TList) {
 			var restore func()
 			if then {
-				restore = check.ApplyGuardNarrowing(r, args[0])
+				restore = core.ApplyGuardNarrowing(r, args[0])
 			} else {
-				restore = check.ApplyComplementNarrowing(r, args[0])
+				restore = core.ApplyComplementNarrowing(r, args[0])
 			}
 			es.Recorder().ArmBranchCapture()
-			stk, defs := check.RunCarrierBodyWithDefs(r, arg)
+			stk, defs := core.RunCarrierBodyWithDefs(r, arg)
 			frag := testRecorderState(es).TakeFragment()
 			restore()
 			return asFragment(frag), stk, defs, nil
@@ -317,8 +317,8 @@ func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 	}
 	thenFrag, thenStk, thenDefs, thenValue := armOf(args[1], true)
 	elseFrag, elseStk, elseDefs, elseValue := armOf(args[2], false)
-	check.InstallJoinedDefs(r, thenDefs, elseDefs)
-	joined := check.JoinCarrierStacks(thenStk, elseStk)
+	core.InstallJoinedDefs(r, thenDefs, elseDefs)
+	joined := core.JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
 		out := core.NewCarrier(core.TNone)
 		testRecorderState(es).RecordBranch(core.BranchRecord{
@@ -332,7 +332,7 @@ func cifReturns(args []core.Value, r *core.Registry) []core.Value {
 		return []core.Value{out}
 	}
 	if !es.Recorder().Active() {
-		if v, ok := check.FoldVariadicArms(thenStk, elseStk); ok {
+		if v, ok := core.FoldVariadicArms(thenStk, elseStk); ok {
 			return []core.Value{v}
 		}
 	}

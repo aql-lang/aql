@@ -61,7 +61,7 @@ func DryPassWrap(h func(args []core.Value, named map[string]core.Value, body []c
 				if errors.As(err, &ae) {
 					code, detail = ae.Code, ae.Detail
 				}
-				CheckAddUniqueDiagnostic(r, code, detail, "", pos)
+				core.CheckAddUniqueDiagnostic(r, code, detail, "", pos)
 			}
 		}
 		return base(args, r)

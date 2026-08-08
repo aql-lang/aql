@@ -290,14 +290,12 @@ func TestS5BStackMatchAnalysisWreckage(t *testing.T) {
 	t.Cleanup(func() { r.Check.Mode = false })
 
 	prevTop := AnalysisImpl.AtUncaughtTopLevel
-	prevAdd := AnalysisImpl.AddUnique
-	var diags []CheckDiagnostic
 	AnalysisImpl.AtUncaughtTopLevel = func(*Registry) bool { return true }
-	AnalysisImpl.AddUnique = func(_ *Registry, d CheckDiagnostic) { diags = append(diags, d) }
-	t.Cleanup(func() {
-		AnalysisImpl.AtUncaughtTopLevel = prevTop
-		AnalysisImpl.AddUnique = prevAdd
-	})
+	t.Cleanup(func() { AnalysisImpl.AtUncaughtTopLevel = prevTop })
+	// The unique-diagnostic dedupe is no longer a slot to stub — it moved
+	// into core with the carrier lattice (CheckAddUnique, check_state.go),
+	// so the finding lands in the registry's own diagnostic list.
+	diags := func() []CheckDiagnostic { return r.Check.Diagnostics }
 
 	fnDef := FnDefInfo{Name: "fw", Signatures: []Signature{{
 		Params:     []FnParam{{Name: "n", Type: TInteger}},
@@ -315,8 +313,8 @@ func TestS5BStackMatchAnalysisWreckage(t *testing.T) {
 	if !e.Tape.At(1).FailedDispatch {
 		t.Error("value must be marked FailedDispatch")
 	}
-	if len(diags) != 1 || diags[0].Code != "uncalled_function" || diags[0].Row != 5 {
-		t.Errorf("diagnostic = %+v", diags)
+	if got := diags(); len(got) != 1 || got[0].Code != "uncalled_function" || got[0].Row != 5 {
+		t.Errorf("diagnostic = %+v", got)
 	}
 }
 

@@ -141,8 +141,11 @@ func (r *Registry) analysisValueCarriesCarrier(v Value) bool {
 func (r *Registry) analysisAtUncaughtTopLevel() bool { return AnalysisImpl.AtUncaughtTopLevel(r) }
 
 // noteAnalysisUniqueDiagnostic forwards a diagnostic deduped against
-// the accumulated list (code+detail+word+position).
-func (r *Registry) noteAnalysisUniqueDiagnostic(d CheckDiagnostic) { AnalysisImpl.AddUnique(r, d) }
+// the accumulated list (code+detail+word+position). No longer a slot:
+// the dedupe itself moved down here with the carrier lattice
+// (check_state.go), so there is nothing left for the check piece to
+// install.
+func (r *Registry) noteAnalysisUniqueDiagnostic(d CheckDiagnostic) { CheckAddUnique(r, d) }
 
 // AnalysisImpl is the S1 implementation table: the check piece installs
 // the real analysis operations at init (installAnalysisImpl,
@@ -159,7 +162,8 @@ var AnalysisImpl = struct {
 	MixedConform        func(v Value, t *Type) bool
 	ValueCarriesCarrier func(v Value) bool
 	AtUncaughtTopLevel  func(r *Registry) bool
-	AddUnique           func(r *Registry, d CheckDiagnostic)
+	AnalyseFnBody       func(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type, anonymous bool) []Value
+	AnalyseLoopBody     func(r *Registry, body Value, bindNames []string, bindVals []Value, provenTrips bool) []Value
 }{
 	FnConstructionPass:  inactiveFnConstructionPass,
 	ReturnsFn:           inactiveReturnsFn,
@@ -169,7 +173,8 @@ var AnalysisImpl = struct {
 	MixedConform:        inactiveMixedConform,
 	ValueCarriesCarrier: inactiveValueCarriesCarrier,
 	AtUncaughtTopLevel:  inactiveAtUncaughtTopLevel,
-	AddUnique:           inactiveAddUnique,
+	AnalyseFnBody:       inactiveAnalyseFnBody,
+	AnalyseLoopBody:     inactiveAnalyseLoopBody,
 }
 
 // The inactive defaults are NAMED so the seam test pins them directly;
@@ -182,7 +187,37 @@ func inactiveZeroOutResiduals(_ *Registry, stk []Value) []Value         { return
 func inactiveCarrierResults(*Registry, string, *Signature, []Value, SrcPos, *Registry, bool) []Value {
 	return nil
 }
-func inactiveMixedConform(Value, *Type) bool       { return false }
-func inactiveValueCarriesCarrier(Value) bool       { return false }
-func inactiveAtUncaughtTopLevel(*Registry) bool    { return false }
-func inactiveAddUnique(*Registry, CheckDiagnostic) {}
+func inactiveMixedConform(Value, *Type) bool    { return false }
+func inactiveValueCarriesCarrier(Value) bool    { return false }
+func inactiveAtUncaughtTopLevel(*Registry) bool { return false }
+func inactiveAnalyseFnBody(*Registry, string, []string, []Value, []Value, []CapturedBinding, []*Type, bool) []Value {
+	return nil
+}
+func inactiveAnalyseLoopBody(*Registry, Value, []string, []Value, bool) []Value { return nil }
+
+// RunFnBodyAnalysis and RunLoopBodyAnalysis are the EXPORTED accessors
+// for the two body-model slots — the S1 twins of the EmitRecorder seam,
+// and for the same reason: the consumer is outside this module. A word
+// library implementing `fn` / `for` has an analysis half that must
+// re-enter the pass over the body, but the pass itself (memoisation,
+// recursion bailing, the per-call-shape quota, the Kleene fixed point)
+// is genuinely the checker's and stays there. Everything the two slots
+// take and return is a core type, so the seam names no check symbol.
+//
+// A nil return is IN-BAND, not a failure signal invented for the
+// check-less build: AnalyseFnBody already documents an empty result as
+// "the analyser aborted — treat as an Any carrier", and every caller
+// handles it. On a check-less build the whole carrier regime is
+// inert anyway (ReturnsFn returns nil, so no ReturnsFunc runs and
+// neither accessor is reached), which is what makes these defaults the
+// same no-analysis regime the other slots already define rather than
+// wrong analysis.
+func RunFnBodyAnalysis(r *Registry, name string, paramNames []string, body []Value,
+	args []Value, captures []CapturedBinding, declared []*Type, anonymous bool) []Value {
+	return AnalysisImpl.AnalyseFnBody(r, name, paramNames, body, args, captures, declared, anonymous)
+}
+
+func RunLoopBodyAnalysis(r *Registry, body Value, bindNames []string, bindVals []Value,
+	provenTrips bool) []Value {
+	return AnalysisImpl.AnalyseLoopBody(r, body, bindNames, bindVals, provenTrips)
+}

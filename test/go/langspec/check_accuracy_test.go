@@ -30,8 +30,6 @@ import (
 	"strings"
 	"testing"
 
-	check "github.com/boru-lang/boru/check/go"
-
 	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/lang/go/modules"
@@ -488,7 +486,7 @@ func stackTypeCovered(checked, actual []core.Value) bool {
 	// real typeCovered(elem, ·), so this adds COUNT flexibility only, never TYPE
 	// flexibility (a wrong-typed leak is still flagged).
 	if len(checked) > 0 {
-		if elem, ok := check.IsVariadicSpread(checked[0]); ok {
+		if elem, ok := core.IsVariadicSpread(checked[0]); ok {
 			fixed := checked[1:]
 			if len(actual) < len(fixed) {
 				return false

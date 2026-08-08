@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // unpackNatives covers the destructuring word `unpack`, which extracts
@@ -249,7 +250,7 @@ func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Va
 			// fn-body unpack is conditionally reached and stays lenient
 			// (the top-level gate).
 			if proven && check.CheckAtUncaughtTopLevel(r) {
-				check.CheckAddUniqueDiagnostic(r, "unpack_error",
+				core.CheckAddUniqueDiagnostic(r, "unpack_error",
 					"unpack: key "+srcKey+" not found in source", "unpack", pos)
 			}
 			// Lenient binding either way, but the interpreter errors at

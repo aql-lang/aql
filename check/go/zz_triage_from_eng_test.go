@@ -69,62 +69,6 @@ func TestDisjunctCombosTakeSig(t *testing.T) {
 	}
 }
 
-// A conjunction's else branch narrows nothing per-clause, and one exhaustive
-// clause must NOT mark the else dead: `(x is Integer) and (y is String)` can
-// still enter the else whenever y is not a String, even though x is always
-// Integer. ApplyComplementNarrowing therefore acts only on a single-clause
-// (pure `x is T`) condition and leaves a multi-clause conjunction's else
-// untouched — no suppression, no narrowing. (In practice a compound
-// condition's inner guards are captured as opaque ParenExpr values so
-// extractGuardClauses returns 0 clauses; this pins the guard directly with a
-// synthetic flat two-triple condition.)
-func TestApplyComplementNarrowingConjunctionUntouched(t *testing.T) {
-	r, err := core.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	r.Check.Mode = true
-	// x is a concrete-typed Integer carrier so its `x is Integer` complement is
-	// Never (the arm that, alone, must NOT kill the else); y is dynamic.
-	r.Defs.Push("x", core.NewCarrier(core.TInteger))
-	r.Defs.Push("y", core.NewDynamicCarrier(core.TAny))
-	toks := []core.Value{
-		core.NewWord("x"), core.NewWord("is"), core.NewTypeLiteral(core.TInteger),
-		core.NewWord("and"),
-		core.NewWord("y"), core.NewWord("is"), core.NewTypeLiteral(core.TString),
-	}
-	cond := core.NewCarrier(core.TBoolean)
-	cond.Data = core.GuardFactInfo{Toks: toks}
-	if n := len(extractGuardClauses(r, cond)); n != 2 {
-		t.Fatalf("synthetic conjunction should yield 2 clauses, got %d", n)
-	}
-	before := r.Check.SuppressBodyErrors
-	restore := ApplyComplementNarrowing(r, cond)
-	if r.Check.SuppressBodyErrors != before {
-		t.Error("a conjunction's else was marked dead from one exhaustive clause")
-	}
-	if xNow, _ := r.Defs.Top("x"); !xNow.Parent.Equal(core.TInteger) {
-		t.Error("x's else binding should be untouched for a conjunction")
-	}
-	restore()
-	if r.Check.SuppressBodyErrors != before {
-		t.Error("restore left SuppressBodyErrors unbalanced")
-	}
-
-	// SINGLE-clause control: a pure `x is Integer` guard DOES mark the else dead
-	// (the else is genuinely unreachable), proving the gate is single-guard only.
-	single := core.NewCarrier(core.TBoolean)
-	single.Data = core.GuardFactInfo{Toks: []core.Value{core.NewWord("x"), core.NewWord("is"), core.NewTypeLiteral(core.TInteger)}}
-	restore2 := ApplyComplementNarrowing(r, single)
-	if r.Check.SuppressBodyErrors != before+1 {
-		t.Error("a single exhaustive guard should mark the else dead")
-	}
-	restore2()
-	if r.Check.SuppressBodyErrors != before {
-		t.Error("restore2 left SuppressBodyErrors unbalanced")
-	}
-}
-
 // Per-fn analysis quota (design/checker-accuracy-review.10.md A9):
 // past FnAnalysisQuota distinct call shapes the analyser answers
 // without body re-analysis and emits exactly one analysis_truncated

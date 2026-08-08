@@ -41,7 +41,7 @@ func TestCheckListIndexBounds(t *testing.T) {
 
 func TestReturnsFuncBuilders(t *testing.T) {
 	// ReturnsIdentity: repeated sources get fresh IDs.
-	idfn := ReturnsIdentity(0, 0)
+	idfn := core.ReturnsIdentity(0, 0)
 	in := core.NewInteger(5)
 	in.ID = core.GenerateID("i_")
 	out := idfn([]core.Value{in}, nil)
@@ -52,7 +52,7 @@ func TestReturnsFuncBuilders(t *testing.T) {
 		t.Error("duplicated identity shares an ID")
 	}
 	// Out-of-range mapping degrades to Any.
-	out = ReturnsIdentity(3)([]core.Value{in}, nil)
+	out = core.ReturnsIdentity(3)([]core.Value{in}, nil)
 	if !out[0].Parent.Equal(core.TAny) {
 		t.Errorf("out-of-range identity = %v", out)
 	}
@@ -129,7 +129,7 @@ func TestParamBodyCarrier(t *testing.T) {
 	if v := ParamBodyCarrier(core.FnParam{Pattern: &mapPat, Type: core.TMap}); !core.IsTypedMap(v) || !v.Dynamic {
 		t.Errorf("{:Integer} param → %s (dynamic=%v), want a dynamic typed-map carrier", v.Parent.String(), v.Dynamic)
 	}
-	listPat := NewCarrierTypedListValue(core.NewTypeLiteral(core.TInteger))
+	listPat := core.NewCarrierTypedListValue(core.NewTypeLiteral(core.TInteger))
 	if v := ParamBodyCarrier(core.FnParam{Pattern: &listPat, Type: core.TList}); !core.IsTypedList(v) || !v.Dynamic {
 		t.Errorf("[:Integer] param → %s (dynamic=%v), want a dynamic typed-list carrier", v.Parent.String(), v.Dynamic)
 	}
