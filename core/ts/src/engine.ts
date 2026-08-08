@@ -1314,9 +1314,12 @@ export class Engine {
       const v = this.stack[i]!;
       if (isOpenParen(v)) return -1;
       if (v.isForward()) {
+        // A marker that FILLED is replaced by its results in the same
+        // step, so one below the pointer is always still collecting. It
+        // is a scope boundary either way — a second marker further back
+        // cannot be fed past this one.
         const m = v.asForward();
-        if (m.collected.length < m.expectedForward) return i;
-        return -1;
+        return m.collected.length < m.expectedForward ? i : -1;
       }
     }
     return -1;
@@ -1388,6 +1391,11 @@ export class Engine {
   private stepSugar(val: Value): void {
     const info = asSugar(val);
     if (info === undefined) {
+      // A sugar TYPE with no SugarInfo payload. core's own constructor
+      // cannot build one, but the type is exported and eng/ts builds the
+      // shape directly, so the token is stepped over rather than crashing
+      // the pass. (Asserting the payload here instead was tried and took
+      // an eng/ts row with it.)
       this.pointer++;
       return;
     }

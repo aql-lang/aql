@@ -67,9 +67,9 @@ import {
   newTypedMap,
   newWord,
   newXmlInterp,
+  Value,
   type FnDefInfo,
   type FnSig,
-  type Value,
 } from "./value.ts";
 
 /** A registry with a small word vocabulary — more than core/spec's one. */
@@ -804,6 +804,16 @@ describe("Engine.run — sugar markers", () => {
         e.code === "signature_error" &&
         /word\(idq\)/.test(e.message),
     );
+  });
+
+  it("steps over a sugar TYPE carrying no payload", () => {
+    // core's constructor cannot build one, but the type is exported and a
+    // downstream port builds the shape directly. The token is stepped
+    // over rather than crashing the pass.
+    const bare = new Value(newSugar({ kind: "lambda" }).vType, null);
+    // Stepped over, so it stays on the stack as an opaque residual and
+    // the value after it is untouched.
+    assert.equal(run([bare, newInteger(1n)]), "__SG 1");
   });
 
   it("refuses a marker whose role the registry does not bind", () => {

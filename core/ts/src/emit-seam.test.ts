@@ -69,6 +69,8 @@ function recordingEmit(
     islands?: ReadonlyMap<string, readonly Value[]>;
     /** stand-in const for EVERY operand — the fully-inert container case */
     constAll?: Value;
+    /** make recordFallback DECLINE, the not-recordable island arm */
+    fallbackFails?: boolean;
   } = {},
 ): {
   emit: EmitRecorder;
@@ -108,7 +110,7 @@ function recordingEmit(
     },
     recordFallback(word: string): boolean {
       log.fallbacks.push(word);
-      return true;
+      return bindings.fallbackFails !== true;
     },
     recordMakeList(elements: RecorderOperand[]): Value {
       log.lists++;
@@ -766,6 +768,34 @@ describe("EmitRecorder seam — the remaining compile arms", () => {
         // The map was ASSEMBLED, not baked, because one value carries a
         // function through a nested map.
         assert.deepEqual(log.maps, [["k", "m"]]);
+      },
+    );
+  });
+
+  it("refuses a fallback island the recorder cannot place", () => {
+    withCarrierAnalysis(
+      () => [newCarrier(TInteger)],
+      () => {
+        const r = reg();
+        r.registerNativeFunc({
+          name: "fbq",
+          signatures: [
+            {
+              args: [TAny],
+              returns: [TAny],
+              barrierPos: 1,
+              compileFallback: true,
+              handler: (a: Value[]): Value[] => [a[0]!],
+            },
+          ],
+        } as never);
+        const { emit, log } = recordingEmit(new Set(), { fallbackFails: true });
+        r.check.mode = true;
+        r.check.emit = emit;
+        new Engine(r).run([newWord("fbq"), newWord("nosuch")]);
+        assert.deepEqual(log.uncompilable, [
+          "fbq: fallback island not recordable",
+        ]);
       },
     );
   });
