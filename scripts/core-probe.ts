@@ -301,6 +301,21 @@ function fixtureRegistry(): Registry {
       },
     ],
   });
+  // bothq takes TWO gradual args from the forward side. One-arg words
+  // cannot reach the collection loop's middle: a marker that parks and
+  // then collects TWICE, and one that meets `end` with its slots still
+  // unfilled, both need an arity of two.
+  r.registerNativeFunc({
+    name: "bothq",
+    signatures: [
+      {
+        args: [TAny, TAny],
+        returns: [TAny],
+        barrierPos: 2,
+        handler: (a: Value[]): Value[] => [a[1]!],
+      },
+    ],
+  });
   // tyq's only slot is a TYPE-ARG slot: it admits a type (a bare literal
   // or a structural type body) and refuses every concrete value, which is
   // a different rule from "a slot whose declared type is Type". It returns

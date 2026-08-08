@@ -401,6 +401,18 @@ func coreSpecRegistry(t *testing.T) *Registry {
 		}),
 		BarrierPos: 1,
 	})
+	// bothq takes TWO gradual args from the forward side. One-arg words
+	// cannot reach the collection loop's middle: a marker that parks and
+	// then collects TWICE, and one that meets `end` with its slots still
+	// unfilled, both need an arity of two.
+	r.Register("bothq", Signature{
+		Params:  []FnParam{{Name: "a", Type: TAny}, {Name: "b", Type: TAny}},
+		Returns: []*Type{TAny},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{a[1]}, nil
+		}),
+		BarrierPos: 2,
+	})
 	// tyq's only slot is a TYPE-ARG slot: it admits a type (a bare literal
 	// or a structural type body) and refuses every concrete value, which is
 	// a different rule from "a slot whose declared type is Type". It

@@ -253,7 +253,34 @@ export class Engine {
     // contents and is replaced by the residual sub-stack as a list.
     this.autoEvalStack();
 
+    this.refuseUnfilledForward();
     return this.stack;
+  }
+
+  /**
+   * A forward marker that never filled is a FAILED dispatch, not a value.
+   * Go raises signature_error for it; core/ts used to hand the marker back
+   * as a residual, so `bothq __pa true` rendered `forward(bothq,1/2)` —
+   * an engine-internal token escaping as a program result.
+   *
+   * Reachable whenever a word between the marker and its operands
+   * produces NO residual (a frame-tail `__…` word, a handler returning
+   * nothing): the plan counted that token as an operand, and one fewer
+   * arrives than was promised.
+   */
+  private refuseUnfilledForward(): void {
+    for (const v of this.stack) {
+      if (!v.isForward()) continue;
+      const m = v.asForward();
+      if (m.collected.length >= m.expectedForward) continue;
+      const supplied = m.collected.length + m.stackArgs.length;
+      throw new BoruError(
+        "signature_error",
+        `cannot call \`${m.funcName}\` — no signature matches the arguments\n` +
+          `  = note: candidate \`${m.funcName}\` takes ${m.sig.args.length} arguments, but ${supplied} was supplied`,
+        m.funcName,
+      );
+    }
   }
 
   private stepWord(val: Value): void {
