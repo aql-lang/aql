@@ -94,6 +94,10 @@ func coreSpecTypeLit(name string) (Value, bool) {
 // coreSpecToken builds one `run` token: a decimal is an Integer, '…' is a
 // String, a known builtin type name is that type's literal, anything else is
 // a Word.
+// coreSpecFnScratch is the throwaway name fn( installs under before the
+// caller's def clause rebinds the value under its own name.
+const coreSpecFnScratch = "__corespec_fn"
+
 func coreSpecToken(tok string) Value {
 	if strings.HasPrefix(tok, "'") && strings.HasSuffix(tok, "'") && len(tok) >= 2 {
 		return NewString(tok[1 : len(tok)-1])
@@ -136,13 +140,13 @@ func coreSpecFields(s string) []string {
 // Deliberately NOT shared with core/ts/src/corespec.test.ts's copy: shared
 // scaffolding hides the same bug from both engines, which is the whole
 // reason this corpus has two runners.
-func coreSpecAssemble(t *testing.T, toks []string) []Value {
+func coreSpecAssemble(t *testing.T, r *Registry, toks []string) []Value {
 	t.Helper()
 	var out []Value
 	pos := 0
 	for pos < len(toks) {
 		var v Value
-		v, pos = coreSpecItem(t, toks, pos)
+		v, pos = coreSpecItem(t, r, toks, pos)
 		out = append(out, v)
 	}
 	return out
@@ -150,7 +154,7 @@ func coreSpecAssemble(t *testing.T, toks []string) []Value {
 
 // coreSpecItem reads ONE item starting at pos, returning it and the index
 // just past it. Recursive because the bracket forms nest.
-func coreSpecItem(t *testing.T, toks []string, pos int) (Value, int) {
+func coreSpecItem(t *testing.T, r *Registry, toks []string, pos int) (Value, int) {
 	t.Helper()
 	switch toks[pos] {
 	case "[", "[q":
@@ -159,7 +163,7 @@ func coreSpecItem(t *testing.T, toks []string, pos int) (Value, int) {
 		elems := []Value{}
 		for pos < len(toks) && toks[pos] != "]" {
 			var v Value
-			v, pos = coreSpecItem(t, toks, pos)
+			v, pos = coreSpecItem(t, r, toks, pos)
 			elems = append(elems, v)
 		}
 		if pos >= len(toks) {
@@ -170,12 +174,51 @@ func coreSpecItem(t *testing.T, toks []string, pos int) (Value, int) {
 			return NewEvalList(elems), pos
 		}
 		return NewList(elems), pos
+	case "fn(":
+		// fn( NAME PTYPE RTYPE [ body ] ) — one param, one return, a boru
+		// body: the smallest shape that DISPATCHES. INSTALLED through
+		// InstallFnDef, never assembled by hand — only installation builds
+		// each Signature's body-splicing Handler (buildFnBodyHandler), and
+		// the engine calls that handler unconditionally, so a hand-built
+		// FnDefInfo panics into internal_error.
+		pos++
+		pname := toks[pos]
+		ptype, ok := coreSpecTypeLit(toks[pos+1])
+		if !ok {
+			t.Fatalf("fn( %s: %q is not a corpus-known type name", pname, toks[pos+1])
+		}
+		rtype, ok2 := coreSpecTypeLit(toks[pos+2])
+		if !ok2 {
+			t.Fatalf("fn( %s: %q is not a corpus-known type name", pname, toks[pos+2])
+		}
+		pos += 3
+		var body Value
+		body, pos = coreSpecItem(t, r, toks, pos)
+		if pos >= len(toks) || toks[pos] != ")" {
+			t.Fatalf("unclosed fn( in %s", strings.Join(toks, " "))
+		}
+		pos++
+		bl, err := AsList(body)
+		if err != nil {
+			t.Fatalf("fn( body must be a list: %v", err)
+		}
+		// InstallFnDef pushes the binding itself, under a scratch name the
+		// caller's `def` clause then rebinds; the VALUE is what the clause
+		// wants, so read it back off the def stack.
+		InstallFnDef(r, coreSpecFnScratch, FnDefInfo{Signatures: []Signature{{
+			Params:     []FnParam{{Name: pname, Type: ptype.Parent}},
+			Returns:    []*Type{rtype.Parent},
+			Impl:       Boru(bl.Slice()),
+			BarrierPos: 1,
+		}}})
+		fnVal, _ := r.Defs.Top(coreSpecFnScratch)
+		return fnVal, pos
 	case "p(":
 		pos++
 		items := []Value{}
 		for pos < len(toks) && toks[pos] != ")" {
 			var v Value
-			v, pos = coreSpecItem(t, toks, pos)
+			v, pos = coreSpecItem(t, r, toks, pos)
 			items = append(items, v)
 		}
 		if pos >= len(toks) {
@@ -197,7 +240,7 @@ func coreSpecItem(t *testing.T, toks []string, pos int) (Value, int) {
 				t.Fatalf("map key %s has no value", key)
 			}
 			var v Value
-			v, pos = coreSpecItem(t, toks, pos)
+			v, pos = coreSpecItem(t, r, toks, pos)
 			m.Set(strings.TrimSuffix(key, ":"), v)
 		}
 		if pos >= len(toks) {
@@ -305,6 +348,35 @@ func coreSpecRegistry(t *testing.T) *Registry {
 		ReturnsFn:  ReturnsIdentity(0, 0),
 		BarrierPos: BarrierAllForward,
 	})
+	// __pa pops the per-call args frame. It is NOT a core word — basic/go
+	// registers it (native_definition.go) — but every boru fn body's frame
+	// tail emits it (AppendFrameTail, fn_frame.go:193), so a bare core
+	// registry cannot run a boru-bodied fn without it. That is the reason
+	// the engine's fn-dispatch surface was unreachable from this corpus,
+	// and it is a fixture rather than a port: the MECHANISM is core's
+	// (PopFrameArgs), only the word is basic's.
+	r.Register("__pa", Signature{
+		Returns: []*Type{},
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			return nil, PopFrameArgs(reg)
+		}),
+		BarrierPos: 0,
+	})
+	// undef removes a def binding. Like __pa it is a basic-layer word that
+	// the frame tail emits — one per named param, `/q`-marked so the NAME
+	// is captured rather than dispatched — over a mechanism core already
+	// owns (DefTable.Pop).
+	r.Register("undef", Signature{
+		Params:  []FnParam{{Name: "n", Type: TAny, Quote: true}},
+		Returns: []*Type{},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			if n, err := AsAtom(a[0]); err == nil {
+				reg.Defs.Pop(n)
+			}
+			return nil, nil
+		}),
+		BarrierPos: 1,
+	})
 	// depthq is the FULL-STACK fixture: the handler receives the whole
 	// resolved stack of the current paren scope and returns its complete
 	// replacement, rather than N args and their replacement. One word is
@@ -392,7 +464,7 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 		}
 		return CanonValue(tl)
 	case "list":
-		return CanonValue(NewList(coreSpecAssemble(t, coreSpecFields(arg))))
+		return CanonValue(NewList(coreSpecAssemble(t, r, coreSpecFields(arg))))
 	case "run":
 		// A leading `def NAME <item> ;` clause installs a def BINDING before
 		// the program runs, which is the only way the corpus can reach the
@@ -401,14 +473,14 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 		toks := coreSpecFields(arg)
 		for len(toks) > 0 && toks[0] == "def" {
 			var bound Value
-			bound, pos := coreSpecItem(t, toks, 2)
+			bound, pos := coreSpecItem(t, r, toks, 2)
 			if pos >= len(toks) || toks[pos] != ";" {
 				t.Fatalf("def clause for %q must end with ';'", toks[1])
 			}
 			r.Defs.Push(toks[1], bound)
 			toks = toks[pos+1:]
 		}
-		out, err := NewTop(r).Run(coreSpecAssemble(t, toks))
+		out, err := NewTop(r).Run(coreSpecAssemble(t, r, toks))
 		if err != nil {
 			var be *BoruError
 			if errors.As(err, &be) {

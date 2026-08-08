@@ -28,6 +28,7 @@ import {
   newBoolean,
   newDispatchMod,
   newEnd,
+  newFnDef,
   newTypedList,
   newTypedMap,
   newCloseParen,
@@ -146,6 +147,24 @@ function item(toks: string[], st: { i: number }): Value {
     assert.equal(toks[st.i], ']', `unclosed ${tok} in ${toks.join(' ')}`)
     st.i++
     return newList(elems, { eval: '[' === tok })
+  }
+  if ('fn(' === tok) {
+    // fn( NAME PTYPE RTYPE [ body ] ) — one param, one return, a boru
+    // body: the smallest shape that DISPATCHES. Written independently of
+    // the Go runner's copy, per the two-runner rule.
+    st.i++
+    const pname = toks[st.i]!
+    const ptype = TYPE_LITS[toks[st.i + 1]!]
+    const rtype = TYPE_LITS[toks[st.i + 2]!]
+    if (undefined === ptype || undefined === rtype) {
+      throw new Error(`fn( ${pname}: not corpus-known type names`)
+    }
+    st.i += 3
+    const body = item(toks, st)
+    st.i++ // past the ')'
+    return newFnDef({
+      sigs: [{ params: [{ name: pname, type: ptype }], returns: [rtype], body: body.asList() }],
+    })
   }
   if ('p(' === tok) {
     st.i++
@@ -277,6 +296,42 @@ function fixtureRegistry(): Registry {
         returnsFn: returnsIdentity(0, 0),
         barrierPos: 1,
         handler: (a: Value[]): Value[] => [a[0]!, a[0]!],
+      },
+    ],
+  })
+  // __pa pops the per-call args frame, and undef removes a def binding.
+  // NEITHER is a core word — basic/go registers both — but every boru fn
+  // body's frame tail emits them (AppendFrameTail), so a bare core
+  // registry cannot run a boru-bodied fn without them. That is why the
+  // engine's fn-dispatch surface was unreachable from this corpus. They
+  // are FIXTURES rather than a port: the mechanisms are core's own (the
+  // args stack, the def table); only the words are basic's.
+  r.registerNativeFunc({
+    name: '__pa',
+    signatures: [
+      {
+        args: [],
+        returns: [],
+        barrierPos: 0,
+        handler: (_a: Value[], _c: unknown, _s: Value[], reg: Registry): Value[] => {
+          reg.popArgs()
+          return []
+        },
+      },
+    ],
+  })
+  r.registerNativeFunc({
+    name: 'undef',
+    signatures: [
+      {
+        args: [TAny],
+        returns: [],
+        quoteArgs: new Set([0]),
+        barrierPos: 1,
+        handler: (a: Value[], _c: unknown, _s: Value[], reg: Registry): Value[] => {
+          reg.popDef(a[0]!.asAtom())
+          return []
+        },
       },
     ],
   })

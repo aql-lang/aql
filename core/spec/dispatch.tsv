@@ -281,3 +281,26 @@ run def x 7 ; dupq x	7 7	identity returns see the substituted value
 run def x 7 ; { a: x }	{a:7}	a map value resolves through the binding
 run def d [q 1 2 ] ; d	[1 2]	a QUOTED list binding is data, opaque
 run def b [ addq 1 2 ] ; addq b 1	ERROR:signature_error	and a list does not fit an Integer slot
+
+# --- user-defined FUNCTIONS ----------------------------------------------
+# `fn( NAME PTYPE RTYPE [ body ] )` builds a boru-bodied function value,
+# bound through the def clause. Two things had to exist before a row could
+# reach fn dispatch at all, and neither was a missing capability:
+#
+#   - the fn must be INSTALLED (InstallFnDef), never assembled by hand:
+#     only installation builds each Signature's body-splicing Handler, and
+#     the engine calls that handler unconditionally;
+#   - the fixture registry needs `__pa` and `undef`, which every fn body's
+#     frame tail emits (AppendFrameTail) and which basic — not core —
+#     registers. The MECHANISMS are core's own; only the words are basic's.
+#
+# That is why this surface sat uncovered: the corpus could not build a
+# function, not that either engine could not dispatch one.
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 5	6	the body runs with the param bound
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 5 inc 6	6 7	two calls, each with its own frame
+run def idq fn( n Integer Integer [ n ] ) ; idq 9	9	a body that is just the param
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc ( addq 2 3 )	6	a computed argument
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 'x'	ERROR:signature_error	the declared param type is enforced
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc	ERROR:signature_error	and so is arity
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; addq inc 5 1	ERROR:signature_error	a fn word is a barrier like any other
+run def bad fn( n Integer Integer [ nosuchword ] ) ; bad 1	ERROR:undefined_word	a fault in the BODY surfaces from the body

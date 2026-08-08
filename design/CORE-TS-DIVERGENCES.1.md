@@ -300,7 +300,36 @@ shared corpus existed, and neither was wrong to write; they were just never
 checked against the other engine. That is the whole argument for the
 corpus in one sentence.
 
-## The next step, and exactly where it stalls
+## User-defined functions: reached, and agreeing
+
+**Landed.** `fn( NAME PTYPE RTYPE [ body ] )` builds a boru-bodied
+function value, bound through the def clause, and all eight rows AGREE on
+both engines first time — arity and param-type enforcement, a computed
+argument, the forward barrier applying to an fn word, and a fault in the
+BODY surfacing from the body.
+
+Two prerequisites had to be found, and neither was a missing capability:
+
+1. The fn must be **installed** (`InstallFnDef`), never assembled by hand.
+   Only installation builds each Signature's body-splicing Handler
+   (`buildFnBodyHandler`), and the engine calls that handler
+   unconditionally — a hand-built `FnDefInfo` panics into
+   `internal_error`. Installation also resolves the `BarrierAllForward`
+   sentinel and derives `MaxForwardArgs`, so it subsumes the three
+   partial fixes that preceded it.
+2. The fixture registry needs **`__pa` and `undef`**, which every fn
+   body's frame tail emits (`AppendFrameTail`, `fn_frame.go:193`) and
+   which **basic** registers, not core. The MECHANISMS are core's own
+   (the args stack, the def table); only the words are basic's, so these
+   are fixtures rather than a port.
+
+Worth stating plainly: this closed a real parity gap — user-defined
+function semantics had NO rows at all before, on either engine — and moved
+`engine.ts` coverage by nothing. `core/ts` reaches fn dispatch by a
+different route than `dispatchFnDef`, which is now the interesting
+question and was invisible while nothing exercised functions.
+
+## An earlier stall, kept for the route it rules out
 
 The def clause proved the point it was built to test: `core/spec` could not
 BIND a name, so the whole def-substitution surface was unreachable, and the
