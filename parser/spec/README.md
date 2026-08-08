@@ -74,13 +74,14 @@ the difference is not simply a bug to fix.
 
 ## The current debt
 
-**Nine rows, in two classes, both properties of the ENGINES rather than of
+**Eleven rows, in three classes, all properties of the ENGINES rather than of
 either port.**
 
 | rows | what | why it is not a port bug |
 |---:|---|---|
 | 1 | nesting depth: Go guards at 10,000 levels, TS refuses at 500 | the tabnas TS rule engine recurses per level and blows the JS call stack near 900, before any converter counter can fire. Measured: 600 parses, 1,000 overflows. Closing it means making the TS parser iterative, not raising a constant. |
 | 8 | `[Map<]`, `[(1]`, `{a: (1}` and kin: Go names the offending token, TS cannot | the TS rule engine STOPS at its maximum-iteration bound and returns the partial root without erroring. `parse()` watches the step count and raises, so both sides now give **the same code** and differ only in TEXT. |
+| 2 | `1.2_`, `1_.2`: a digit-led run containing both `.` and `_` | the two jsonic lexers put the token BOUNDARIES in different places — one token to Go, three to TS — so the same refusal names different text. The converter already reproduces Go's decision for every token it is handed (`1_`, `1_+`, `1e400_`, `1e_4`, `0x1_`, `1e4_`, `12_`, `1_a`, `1__2` all measured AGREE); closing it means overriding the third-party number matcher, which puts all 535 `parse.tsv` rows at risk to change the TEXT of two refusals that already share their CODE. |
 
 The second class is worth reading as a success rather than a debt entry:
 before the step-cap guard, TS **accepted** all eight — `[Map<]` parsed to an

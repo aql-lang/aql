@@ -44,3 +44,19 @@
 Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
 Map<}	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
 [a: Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
+
+# --- token BOUNDARIES inside a malformed numeric literal --------------------
+# A digit-led run containing both `.` and `_` is ONE token to Go's jsonic
+# lexer and SEVERAL to the TS one, so the two engines name different text in
+# an otherwise identical refusal. Both give syntax_error; only the quoted
+# token differs, and in `1.2_` the TS split even changes which rule fires
+# (`1` `.` `2_` reads as member access on a number).
+#
+# Not a converter bug and not fixable there: the classifier already
+# reproduces Go's decisions for every token it is HANDED (`1_`, `1_+`,
+# `1e400_`, `1e_4`, `0x1_`, `1e4_`, `12_`, `1_a`, `1__2` all agree —
+# measured). Closing it means overriding the third-party lexer's number
+# matcher to admit `_` around `.`, which puts all 535 parse.tsv rows at
+# risk to fix the TEXT of two refusals that already share their CODE.
+1.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.2_	ERR [boru/syntax_error]: a number has no members to access with `.`	DATA: Go lexes one numeric token; TS lexes `1` `.` `2_` and the dot reads as member access. Same code.
+1_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	DATA: Go names the whole token, TS the `1_` fragment its lexer stopped at. Same code, same rule.
