@@ -106,3 +106,16 @@ run [ [ 1 ] [ 2 ] ]	[[1] [2]]
 # So a row can pin a nested value's RENDER without running it.
 list [ 1 2 ]	[[1 2]]
 list p( addq 1 2 )	[paren([word(addq) 1 2])]
+
+# --- a RUNTIME map handed to a word is data, at consumption too ----------
+# The Eval gate applies where a map is CONSUMED as an argument, not only at
+# the end-of-run residual sweep. core/ts gated the residual path and not the
+# consumption path, so a `{q …}` map passed to a word had its values
+# evaluated anyway — `boomq {q a: p( nosuchword ) }` raised undefined_word
+# from inside the map where Go hands the handler the map as given and lets
+# it raise its own error.
+run boomq {q a: [ nosuchword ] }	ERROR:fixture_boom
+run boomq {q a: p( addq 1 ) }	ERROR:fixture_boom
+run boomq {q a: p( nosuchword ) }	ERROR:fixture_boom
+run boomq {q a: { b: p( nosuchword ) } }	ERROR:fixture_boom
+run boomq {q a: {q b: p( nosuchword ) } }	ERROR:fixture_boom

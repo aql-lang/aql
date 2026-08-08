@@ -1394,7 +1394,13 @@ export class Engine {
       // (`{abs:true}` arrives with word(true) from the opaque parser)
       // and expression values (`{abs:( true )}`, eval-lists) run in a
       // sub-engine so the handler sees the computed value.
-      if (a.vType.matches(TMap) && a.data instanceof OrderedMap && !a.quoted) {
+      // Gated on `eval` exactly as the LIST arm below is, and as Go's
+      // autoEvalStack gates both. Only a container the PARSER built
+      // auto-evaluates; one a word handler returned is data. Without the
+      // gate core/ts evaluated a runtime map's values at consumption, so
+      // `boomq {q a: p( nosuchword ) }` raised undefined_word where Go
+      // fires the handler on the map as given.
+      if (a.vType.matches(TMap) && a.data instanceof OrderedMap && a.eval && !a.quoted) {
         args[i] = this.autoEvalMapValues(a)
         continue
       }

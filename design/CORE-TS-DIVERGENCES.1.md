@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** 135 MEASURED · 88 CLOSED · 47 PINNED (2026-08-08) · **Ledger:**
+**Status:** 135 MEASURED · 93 CLOSED · 42 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -200,21 +200,34 @@ significand short-circuited its exponent away; it now grows its trailing-zero
 run like any other value, because the scale is part of the identity rather
 than noise to normalise. Seven rows in `canon.tsv` pin both edges.
 
-### 10. Error ORDER inside containers
+### 10. Error ORDER inside containers — **5 CLOSED**
 
-Which of two failing map values surfaces first differs between the engines.
-Folded into the ledger's map sections rather than given its own; it is a
-consequence of class 2 rather than a separate rule.
+Which of two failing map values surfaces first, and whether a map argument
+is evaluated at all.
+
+**Closed for the runtime-map half.** The Eval gate applies where a map is
+CONSUMED as an argument, not only at the end-of-run residual sweep.
+`core/ts` gated the residual path (an earlier commit) and not the
+consumption path, so a `{q …}` map passed to a word still had its values
+evaluated — `boomq {q a: p( nosuchword ) }` raised `undefined_word` from
+inside the map where Go hands the handler the map as given and lets it
+raise its own error. Both arms of `autoEvalArgs` now carry the same gate
+the list arm always had.
+
+Still open: the EVAL-map ordering, where Go evaluates the argument before
+the handler runs and `core/ts` fires the handler first.
 
 ## What is closed, and what is deliberately not
 
-**88 of the 135 are closed** — the whole of classes 1 and 9, the crash in
-class 5, 9 of the 11 in class 4, and 38 of the 51 in class 2. Each was a small, local defect with an
+**93 of the 135 are closed** — the whole of classes 1 and 9, the crash in
+class 5, 9 of the 11 in class 4, 38 of the 51 in class 2, and 5 of class 10.
+A further 8 (class 7) are ADJUDICATED with `core/ts` unchanged, because Go
+is the one that is wrong there. Each was a small, local defect with an
 unambiguous Go twin to read against, and each moved its rows OUT of the
 ledger into the spec file they belong in, which is the mechanism working as
 designed.
 
-**The remaining 47 are not fixed.** Classes 1, 2 and 5 are real feature work in
+**The remaining 42 are not fixed.** Classes 1, 2 and 5 are real feature work in
 `core/ts` — the barrier is a whole rule with its own design note, the empty-
 paren handling is a rewrite of the forward window's operand planning, and the
 type-name table is a data gap plus a path resolver. Fixing them piecemeal
@@ -241,7 +254,7 @@ Pinning the 135 rows took `core/ts` from 88.20% to **90.71%**, and
 That is the rule restated from the other end: the uncovered surface and the
 divergent surface were the same surface.
 
-Closing 88 of them kept it there (90.38%): a row that moves from
+Closing 93 of them kept it there (90.34%): a row that moves from
 `divergent.tsv` to a spec file still runs, so the coverage it bought does
 not come back. The small dip from 90.73% is the barrier short-circuiting
 paths those rows used to walk — the rows still pass, they just reach the

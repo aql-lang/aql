@@ -47,12 +47,7 @@ run boomq { a: addq }	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits th
 run boomq { a: 1 b: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: nosuchword b: p( addq 1 ) }	ERROR:undefined_word	ERROR:signature_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: addq b: p( nosuchword ) }	ERROR:signature_error	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq {q a: p( nosuchword ) }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq {q a: p( addq 1 ) }	ERROR:fixture_boom	ERROR:signature_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq {q a: [ nosuchword ] }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: {q b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq {q a: { b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq {q a: {q b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 
 # --- a type-mismatched paren operand: which error ---------------------------
 # Both refuse; they disagree about the code. Go reports signature_error (the
