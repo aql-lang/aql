@@ -17,10 +17,11 @@ import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 
 import { canon, canonString, canonValue } from './canon.ts'
-import { TInteger, TString } from './type.ts'
+import { TAny, TEmailon, TError, TInteger, TPathon, TReach, TString, TUrlon } from './type.ts'
 import {
   ErrorInfo,
   OrderedMap,
+  Value,
   newAtom,
   newBoolean,
   newCloseParen,
@@ -152,6 +153,47 @@ describe('Value.toString — the marker arms', () => {
     for (const v of values) {
       assert.doesNotMatch(v.toString(), /\[object Object\]/, `${v.vType.toString()} has no arm`)
     }
+  })
+
+  it('terminates on a MALFORMED payload of a canon-delegated kind', () => {
+    // The arm above delegates six kinds to canonValue, and canonValue's own
+    // fallback is `v.toString()` — a cycle. What breaks it is that both ends
+    // agree on which payloads canonValue can render, and gating the delegation
+    // on the vType alone did not: canonValue's arms are guarded on payload
+    // SHAPE, so a Value whose type said Error but whose payload was a bare
+    // string fell through every arm, hit the fallback, and re-entered
+    // toString. Both of these overflowed the stack.
+    //
+    // The contract is termination, not a particular string: a malformed
+    // payload has no canonical form, so the render is whatever String() makes
+    // of it. Asserting only that these RETURN is the whole point.
+    const malformed = [
+      new Value(TError, 'bad'),
+      new Value(TPathon, {}),
+      new Value(TEmailon, {}),
+      new Value(TUrlon, {}),
+      new Value(TReach, 'x'),
+      new Value(TReach, {}),
+      new Value(TReach, { receiver: [], segments: 'no' }),
+      // An object payload of no recognised kind at all — the fallthrough
+      // below every guard, and the one case where '[object Object]' is the
+      // right answer rather than a missing arm.
+      new Value(TAny, { nope: 1 }),
+    ]
+    for (const v of malformed) {
+      assert.equal(typeof v.toString(), 'string', `${v.vType.toString()} did not terminate`)
+    }
+  })
+
+  it('still delegates when the payload IS well-formed', () => {
+    // The guard must not be so tight that it strands the arm it protects.
+    assert.equal(new Value(TError, new ErrorInfo('boom')).toString(), 'error(boom)')
+    assert.equal(newPath(['a', 'b'], true).toString(), '/a/b')
+    assert.equal(newOptions(new OrderedMap()).toString(), 'options{}')
+    assert.equal(
+      newReach({ receiver: [newWord('m')], segments: [], eval: true }).toString(),
+      'm',
+    )
   })
 })
 

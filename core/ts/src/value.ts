@@ -454,17 +454,46 @@ export class Value {
     // these printed the literal '[object Object]'. Delegating keeps the two
     // renders from drifting apart again, which is how the disjunction arm
     // above came to be missing in the first place.
-    if (
-      this.vType.equal(TPathon) ||
-      this.vType.equal(TEmailon) ||
-      this.vType.equal(TUrlon) ||
-      this.vType.equal(TError) ||
-      this.vType.equal(TReach) ||
-      this.data instanceof OptionsData
-    ) {
+    if (this.canonRenders()) {
       return canonValue(this)
     }
     return String(this.data)
+  }
+
+  /**
+   * True when canonValue has an arm that actually RECOGNISES this payload —
+   * not merely when the vType says it should.
+   *
+   * The delegation above and canonValue's fallback (`return v.toString()`)
+   * form a cycle, and the only thing that breaks it is agreement about which
+   * values canonValue can render. Gating on vType alone did not agree:
+   * canonValue's arms are guarded on payload SHAPE (`instanceof ErrorInfo`,
+   * `'segments' in`, …), so a value whose type said Error but whose payload
+   * was a bare string fell through every arm, hit the fallback, and came
+   * straight back here — `new Value(TError, 'bad').toString()` overflowed the
+   * stack rather than printing anything.
+   *
+   * So this predicate mirrors canon.ts's guards exactly. A payload that fails
+   * it is malformed, and falls to `String(this.data)` — an unhelpful render
+   * for an unrepresentable value, which is the correct outcome for a debug
+   * stringifier and is what every other kind already does.
+   */
+  private canonRenders(): boolean {
+    const d = this.data
+    // Shape-tagged payloads carry their own proof; canonValue keys on the
+    // class, not on the vType, and so does this.
+    if (d instanceof ErrorInfo || d instanceof OptionsData) return true
+    if (d === null || typeof d !== 'object') return false
+    if (this.vType.equal(TPathon)) return 'segments' in d
+    if (this.vType.equal(TEmailon)) return 'user' in d
+    if (this.vType.equal(TUrlon)) return 'scheme' in d
+    if (this.vType.equal(TReach)) {
+      // canonReach walks receiver and segments; asReach admits any object, so
+      // the arrays are what must exist before it is safe to enter.
+      const r = d as Partial<ReachInfo>
+      return Array.isArray(r.receiver) && Array.isArray(r.segments)
+    }
+    return false
   }
 }
 
