@@ -15,7 +15,7 @@ preceded this).
 
 | module | go | ts | shared corpus |
 |---|---|---|---|
-| core | 100% | 88.13% | `core/spec`, 84 rows |
+| core | 100% | 88.20% | `core/spec`, 158 rows |
 | parser | 100% | **100%** | `parser/spec`, 535 rows, ledger 9 rows (both engine limits) |
 | basic | 100% | 100% *of the 15 words ported* | `basic/spec`, 45 rows |
 
@@ -82,6 +82,8 @@ engines that both fail, or both render debug output.
 | `/q` marker: `word()({false true})` vs `word(undefined)` | both erroring-by-rendering |
 | stray `)` dropped to empty in Go | both "succeeded" |
 | `1_e5` → 100000 in Go, REJECTED in TS | a GAP, permitted |
+| a RUNTIME map had its values evaluated in TS, not in Go | no eng/spec source builds a non-eval map, so the row did not exist |
+| a map value with ZERO residuals kept its key in TS, dropped it in Go | same |
 | `<a b=${}/>` folded to `""` in Go, stayed a hole in TS | both rendered; neither was source |
 | `[Map<]`, `[(1]` ACCEPTED by TS, rejected by Go | TS produced an empty stream, so there was no value to disagree about |
 | a `${…}` conversion error rendered its halves in the opposite order | both errored, with the same code |
@@ -212,9 +214,40 @@ engines there. Coverage and parity are not two goals that happened to be
 pursued together — chasing the first is a search strategy for the
 second.
 
+## What `core/spec` grew to reach the engine
+
+`core/spec` was 84 rows of scalars and one-word dispatch, which is why
+`engine.ts` sat at 68%: the corpus could not express a CONTAINER. The
+notation now has three bracket forms (`core/spec/README.md`) — `[ … ]` /
+`{ … }` for the PARSER's containers, `[q … ]` / `{q … }` for the
+runtime's, and `p( … )` for a paren-EXPRESSION value as against the paren
+markers — plus `;` for the end marker.
+
+The bare-versus-`q` distinction is the whole subject, and it is where
+core/ts was wrong twice: `deepEvalData` descended into a map REGARDLESS
+of its Eval flag (Go gates both the list and the map arm on
+`Eval && !Quoted`), and a map value that evaluated to zero residuals kept
+its key as an empty list where Go drops it. `core/ts/src/engine.test.ts`
+had BASELINED the first — a per-engine unit test pinning one engine's
+behaviour as the contract, which is the failure mode the two-runner
+corpus exists to prevent.
+
+Worth recording as a caution: the `;` rows do NOT reach
+`completeForwardPartial`, because `findPendingMarker` returns nothing for
+the shapes the current fixture vocabulary can build. They earn their place
+by pinning the marker semantics on both engines, but they are not the
+coverage they look like — check what a row actually REACHES rather than
+what it appears to exercise.
+
 ## Open
 
-- core/ts to 100%: `engine.ts` (~68%) is the bulk.
+- core/ts to 100%: `engine.ts` (~69%) is the bulk, and what remains there
+  is whole CAPABILITIES rather than stray branches — fn definitions
+  (`dispatchFnDef`, `analyseFnBody`), check mode (`checkModeAssumeSig`,
+  `dispatchFnDefCheck`), and interp strings plus XML
+  (`evalInterpString`, `substituteInterp`, `resolveXmlTmpl`). Each needs
+  the capability reached before a row can exercise it, in the order the
+  table above forces.
 - basic/ts: everything past the stack vocabulary, in the order the table
   above forces.
 - NUR059: canon still renders sugar tags, `/r` and `/N` word modifiers,
