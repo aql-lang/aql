@@ -157,13 +157,21 @@ export function formatBigInteger(n: bigint): string {
  * mirroring Go's FormatBigDecimal — apd's plain 'f' form with the sign
  * before the marker.
  *
- * DEVIATION (recorded, not a bug to fix here): Go's payload is an
- * apd.Decimal and preserves SCALE, so `0d0.30` round-trips with its
- * trailing zero. TS has no arbitrary-precision decimal — the payload is a
- * binary64 (parser/ts convert.ts newBigDecimal) — so scale is lost and
- * `0d0.30` renders `0d0.3`. Reaching full parity means giving core/ts a
- * real decimal type; until then the two engines agree on VALUE and differ
- * on trailing-zero scale alone.
+ * DEVIATION (parser/spec/divergent.tsv, NOT merely cosmetic): Go's payload
+ * is an apd.Decimal; TS has no arbitrary-precision decimal, so the payload
+ * is a binary64 (parser/ts convert.ts newBigDecimal). Three consequences,
+ * in increasing order of seriousness:
+ *
+ *   0d0.30    scale is lost           -> 0d0.3        (cosmetic)
+ *   0d1e400   overflows to Infinity   -> 0dInfinity   (renders UNPARSEABLE)
+ *   0d1e-400  underflows to zero      -> 0d0          (a nonzero value
+ *                                                      silently becomes 0)
+ *
+ * Go preserves all three exactly. An earlier version of this comment
+ * claimed the engines "agree on VALUE and differ on trailing-zero scale
+ * alone", which is false — the last two are value divergences, and the
+ * underflow is a silent one. The fix is a real decimal type in core/ts;
+ * until then the divergent.tsv rows are the honest record.
  */
 export function formatBigDecimal(f: number): string {
   const neg = f < 0 || Object.is(f, -0)

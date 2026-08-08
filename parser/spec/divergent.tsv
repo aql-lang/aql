@@ -17,3 +17,16 @@
 # design/TS-PARITY-AUDIT.0.md, not adjudicated against REFERENCE.md. The `go`
 # column is the reference by convention, not by proof, and the rows marked
 # DATA are behavioural rather than cosmetic: one engine is wrong.
+# BigDecimal outside binary64. core/ts has no arbitrary-precision decimal —
+# the payload is a binary64 (parser/ts convert.ts newBigDecimal) — so a
+# literal Go represents exactly either overflows to Infinity (rendering the
+# UNPARSEABLE `0dInfinity`) or underflows to zero, silently turning a nonzero
+# value into 0. Justification for re-opening a SHRINK-ONLY file: these are
+# real value divergences that were previously unmeasured and undocumented,
+# and recording them is strictly better than the status quo of a comment
+# claiming the engines differ on scale alone. The fix is a decimal type in
+# core/ts, not a render change; until then each row fails loudly if either
+# engine moves.
+0d1e400	0d10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	0dInfinity	DATA: go is exact, ts overflows binary64 and renders an unparseable literal
+0d1e-400	0d0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001	0d0	DATA: go is exact, ts underflows to zero — a nonzero value silently becomes 0
+0d0.30	0d0.30	0d0.3	go preserves apd scale; ts binary64 cannot

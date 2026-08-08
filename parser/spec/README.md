@@ -74,19 +74,34 @@ the difference is not simply a bug to fix.
 
 ## The current debt
 
-15 rows, all **untriaged** — recorded, not yet adjudicated against
-`REFERENCE.md`. The `go` column is the reference by convention, not by proof;
-either engine may turn out to be the wrong one.
+**3 rows**, all one root cause: `core/ts` has no arbitrary-precision decimal.
+The BigDecimal payload is a binary64 (`parser/ts/src/convert.ts`
+`newBigDecimal`), so a literal Go represents exactly can overflow, underflow
+or lose scale.
 
-| class | rows | |
+| src | go | ts | |
+|---|---|---|---|
+| `0d1e400` | exact | `0dInfinity` | overflows, and renders an **unparseable** literal |
+| `0d1e-400` | exact | `0d0` | underflows — a nonzero value **silently becomes 0** |
+| `0d0.30` | `0d0.30` | `0d0.3` | apd preserves scale; binary64 cannot |
+
+The fix is a decimal type in `core/ts`, not a render change. Two of the three
+are DATA divergences, not cosmetic ones.
+
+## History
+
+The ledger held **15 of 254 rows** when it was first checked, and was driven
+to **zero** on 2026-08-08 before the three rows above were added by measuring
+what had never been measured. What the original fifteen turned out to be:
+
+| class | rows | resolution |
 |---|---:|---|
-| big-decimal canon | 8 | Go keeps the `0d` prefix, TS drops it |
-| typed-container canon | 3 | Go drops the tag, TS keeps it |
-| marker canon | 1 | `;` → Go renders empty, TS renders `end` |
-| error text | 1 | trailing `_` in a numeric literal |
-| **behavioural** | **2** | `1e400` → Go raises `float_overflow`, TS returns `inf` |
+| big-decimal canon | 8 | `core/ts` had `TBigInteger`/`TBigDecimal` as types with **no constructor and no render arm** — every big number lost its `0d` marker |
+| typed-container canon | 3 | **both** engines wrong: Go dropped the element-type tag, TS leaked `word(...)`. `REFERENCE.md:228`/`:1224` settle it as `[:Integer]` |
+| marker canon | 1 | **TS was right**: `REFERENCE.md:415` makes `end` the word and `;` its synonym; Go rendered it empty, so `1 ;` reparsed as a bare `1` |
+| error text | 1 | the two jsonic ports disagree about whether `1_` lexes as a number; TS's fallback now reproduces Go's classification |
+| behavioural | 2 | `1e400` → TS had the `float_overflow` refusal but only on a path `1e400` never took |
 
-The last row is the one that matters most: the engines disagree about whether
-a program is *valid*, not about how to print it. The first twelve are canon
-divergences and belong to `core`, not the parser — they are recorded here
-because this is where they were found.
+Worth keeping in view: the `go` column was **not** the reference in two of
+the five classes. The header's warning that it is "the reference by
+convention, not by proof" was load-bearing.

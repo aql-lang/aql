@@ -25,3 +25,10 @@ run nosuchword	ERROR:undefined_word	an unbound word is an error, not a value
 # --- parens group and evaluate first ---
 run ( addq 1 2 )	3	a paren group collapses to its result
 run addq ( addq 1 2 ) 4	7	a nested group supplies an argument
+run addq 1	ERROR:signature_error	arity: a forward word with one operand never fires
+run addq 1 'x'	ERROR:signature_error	type mismatch on the second slot
+run nosuchword	ERROR:undefined_word	an undefined word
+run addq (addq 1 2) 3	ERROR:signature_error	a nested paren group as the first operand
+run ( 1 2 addq )	3	stack form inside a group
+run addq 1 2 3	3 3	a trailing operand past the barrier stays residual
+run 1 nosuchword 2	ERROR:undefined_word	undefined word between literals

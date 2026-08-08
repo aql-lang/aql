@@ -553,10 +553,11 @@ export function newFloat(f: number): Value {
  * toString came to be missing (nothing in core ever produced one of these
  * values, so nothing in core ever rendered one).
  *
- * DEVIATION: the BigDecimal payload is a binary64. Go's is an apd.Decimal
- * and preserves SCALE, so `0d0.30` round-trips with its trailing zero
- * while TS renders `0d0.3`. Closing that needs a real decimal type in
- * core/ts; see formatBigDecimal in canon.ts.
+ * DEVIATION: the BigDecimal payload is a binary64 where Go's is an
+ * apd.Decimal, so values outside binary64's range do NOT survive —
+ * `0d1e400` becomes Infinity and `0d1e-400` becomes zero, not just a lost
+ * trailing-zero scale. Tracked in parser/spec/divergent.tsv; see
+ * formatBigDecimal in canon.ts for the full list.
  */
 export function newBigInteger(n: bigint): Value {
   return new Value(TBigInteger, n)

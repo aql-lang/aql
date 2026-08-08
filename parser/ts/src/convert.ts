@@ -1737,25 +1737,48 @@ function parseWord(text: string): Value {
   // overflows binary64 to infinity; anything else is malformed (e.g.
   // `1e`, `2dup` — the renamed-away stack words are now `dup2` etc.).
   if (isDigitLed(name)) {
-    // A misplaced digit-separator is classified BEFORE the generic
-    // malformed fallback, so the diagnostic does not depend on which
-    // route the token took. It has to be done here as well as in
-    // numberValToValue because the two jsonic ports disagree about `1_`:
-    // the Go port lexes it as a number token (so Go reaches its
-    // underscore check and says "misplaced `_`"), while the TS package
-    // declines it and drops the token through to this fallback — which
-    // said "invalid numeric literal" and made the two engines differ on
-    // the message for identical, equally-invalid source.
-    if (name.includes('_') && !validUnderscores(name)) {
-      throw new BoruError(
-        'syntax_error',
-        'misplaced `_` in numeric literal: ' + name,
-        name,
-      )
-    }
-    const f = Number(stripUnderscores(name))
+    // The two jsonic ports disagree about which underscore-bearing tokens
+    // are NUMBERS: the Go port lexes `1_` and `1_e5`, so Go classifies them
+    // in numberValToValue; the TS package declines both and drops them
+    // here. So this fallback has to reproduce what Go's lexer + classifier
+    // jointly decide, and the ORDER is what makes it agree:
+    //
+    //   1e400_  overflow first  — Go's fallback reports float_overflow,
+    //                             not a separator error, for a trailing `_`
+    //                             on an out-of-range literal
+    //   1_      misplaced `_`   — invalid placement, and the token is
+    //                             otherwise a number
+    //   1_+     malformed       — invalid placement, but stripping the `_`
+    //                             still leaves a non-number
+    //   1_e5    the VALUE       — `_` between two alnums is legal
+    //                             (validUnderscores is byte-identical on
+    //                             both sides), and Go returns 100000 here
+    //
+    // Only underscore-bearing tokens are valued: everything else that
+    // reaches this fallback is a token Go's lexer also declined.
+    const stripped = stripUnderscores(name)
+    const f = Number(stripped)
     if (f === Infinity || f === -Infinity) {
       throw floatLiteralOverflowError(name)
+    }
+    if (name.includes('_')) {
+      if (!validUnderscores(name)) {
+        if (Number.isNaN(f)) {
+          throw malformedNumberError(name)
+        }
+        throw new BoruError(
+          'syntax_error',
+          'misplaced `_` in numeric literal: ' + name,
+          name,
+        )
+      }
+      // Only a plain DECIMAL literal is valued. Number() also accepts the
+      // base prefixes (`0x1` -> 1), which Go's ParseFloat does not, so
+      // without this shape gate `0_x1` — invalid on both engines — came
+      // back as 1 here while Go reported a malformed literal.
+      if (!Number.isNaN(f) && /^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(stripped)) {
+        return floatToValue(f)
+      }
     }
     throw malformedNumberError(name)
   }
