@@ -8,6 +8,7 @@
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
 import { TAtom, TBoolean, TDispatchMod, TFloat, TInspect, TInteger, TList, TMap, TPathon, TString, TEmailon, TUrlon } from './type.ts'
+import { Decimal } from './decimal.ts'
 import { urlonHref, type UrlonInfo } from './value.ts'
 import type { DispatchModInfo, FnDefInfo, XmlElement } from './value.ts'
 import { ChildType, ErrorInfo, OptionsData, OrderedMap, Value, asReach, isReach } from './value.ts'
@@ -157,53 +158,13 @@ export function formatBigInteger(n: bigint): string {
  * mirroring Go's FormatBigDecimal — apd's plain 'f' form with the sign
  * before the marker.
  *
- * DEVIATION (parser/spec/divergent.tsv, NOT merely cosmetic): Go's payload
- * is an apd.Decimal; TS has no arbitrary-precision decimal, so the payload
- * is a binary64 (parser/ts convert.ts newBigDecimal). Three consequences,
- * in increasing order of seriousness:
- *
- *   0d0.30    scale is lost           -> 0d0.3        (cosmetic)
- *   0d1e400   overflows to Infinity   -> 0dInfinity   (renders UNPARSEABLE)
- *   0d1e-400  underflows to zero      -> 0d0          (a nonzero value
- *                                                      silently becomes 0)
- *
- * Go preserves all three exactly. An earlier version of this comment
- * claimed the engines "agree on VALUE and differ on trailing-zero scale
- * alone", which is false — the last two are value divergences, and the
- * underflow is a silent one. The fix is a real decimal type in core/ts;
- * until then the divergent.tsv rows are the honest record.
+ * Exact at every magnitude and scale since the payload became a Decimal
+ * (decimal.ts): `0d1e400`, `0d1e-400` and `0d0.30` all round-trip, where
+ * the previous binary64 payload rendered `0dInfinity`, `0d0` and `0d0.3`.
  */
-export function formatBigDecimal(f: number): string {
-  const neg = f < 0 || Object.is(f, -0)
-  return (neg ? '-0d' : '0d') + plainDecimal(Math.abs(f))
-}
-
-/**
- * plainDecimal renders a non-negative finite number in 'f' (never
- * scientific) form. JS String() switches to an exponent above 1e21 and
- * below 1e-6 in BOTH directions; expandExponential above handles only the
- * negative-exponent half, because formatFloat routes the large half to
- * formatExponential on purpose. A BigDecimal has no such escape — Go's
- * Text('f') is plain at every magnitude — so this expands either way.
- */
-function plainDecimal(a: number): string {
-  const s = String(a)
-  const m = /^(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(s)
-  if (!m) return s
-  const digits = m[1]! + (m[2] ?? '')
-  const pointPos = m[1]!.length + Number.parseInt(m[3]!, 10)
-  if (pointPos <= 0) {
-    const out = '0.' + '0'.repeat(-pointPos) + digits
-    return out.replace(/0+$/, '').replace(/\.$/, '')
-  }
-  // Only two cases, and the missing third is UNREACHABLE rather than
-  // unhandled: a decimal point landing *between* the digits would need
-  // 0 < pointPos < digits.length, but String() goes exponential only at
-  // |a| >= 1e21 or < 1e-6. The small half gives a negative exponent
-  // (pointPos <= 0, above); the large half gives exp >= 21, so
-  // pointPos >= 22 while a binary64 mantissa is at most 17 digits. So the
-  // point is always at or past the end here, and the zero-pad is exact.
-  return digits + '0'.repeat(pointPos - digits.length)
+export function formatBigDecimal(d: Decimal): string {
+  const s = d.toString()
+  return s.startsWith('-') ? '-0d' + s.slice(1) : '0d' + s
 }
 
 /** Canon renders a stack of values as canonical boru source. */

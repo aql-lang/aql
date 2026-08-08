@@ -37,6 +37,7 @@ import {
 } from '@boru-lang/core'
 import type { WordInfo, ReachSeg, ReachInfo, SugarInfo, InterpSegment } from '@boru-lang/core'
 import { TWord, TNone, TAbsent, TBigInteger, TBigDecimal } from '@boru-lang/core'
+import { Decimal, decimalFromString } from '@boru-lang/core'
 import { BoruError } from '@boru-lang/core'
 import {
   ParenGroup,
@@ -192,8 +193,8 @@ function newBigInteger(n: bigint): Value {
   return new Value(TBigInteger, n)
 }
 
-function newBigDecimal(f: number): Value {
-  return new Value(TBigDecimal, f)
+function newBigDecimal(d: Decimal): Value {
+  return new Value(TBigDecimal, d)
 }
 
 const INT64_MIN = -9223372036854775808n
@@ -2082,11 +2083,13 @@ function parseBigNumber(src: string): Value {
   }
   const text = sign + digits
   if (/[.eE]/.test(digits)) {
-    const f = Number(text)
-    if (Number.isNaN(f)) {
+    // Parsed from the exact source digits — never through binary64, which
+    // is what used to turn `0d1e400` into Infinity and `0d1e-400` into 0.
+    const d = decimalFromString(text)
+    if (undefined === d) {
       throw bigLiteralError(src)
     }
-    return newBigDecimal(f)
+    return newBigDecimal(d)
   }
   // Go's big.Int SetString(text, 10): sign plus decimal digits only.
   if (!/^[0-9]+$/.test(digits)) {

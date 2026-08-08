@@ -22,6 +22,7 @@ import {
   BoruError,
   canon,
   Engine,
+  decimalFromString,
   newBigDecimal,
   newBigInteger,
   newBoolean,
@@ -142,7 +143,7 @@ function evalExpr(expr: string): string {
     case 'bigint':
       return canon([newBigInteger(BigInt(arg))])
     case 'bigdec':
-      return canon([newBigDecimal(Number(arg))])
+      return canon([newBigDecimal(decimalFromString(arg)!)])
     case 'str':
       return canon([newString(arg)])
     case 'bool':

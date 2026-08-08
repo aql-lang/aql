@@ -74,25 +74,22 @@ the difference is not simply a bug to fix.
 
 ## The current debt
 
-**3 rows**, all one root cause: `core/ts` has no arbitrary-precision decimal.
-The BigDecimal payload is a binary64 (`parser/ts/src/convert.ts`
-`newBigDecimal`), so a literal Go represents exactly can overflow, underflow
-or lose scale.
+**Zero.** Both engines agree on every row of `parse.tsv`, and
+`divergent.tsv` is empty.
 
-| src | go | ts | |
-|---|---|---|---|
-| `0d1e400` | exact | `0dInfinity` | overflows, and renders an **unparseable** literal |
-| `0d1e-400` | exact | `0d0` | underflows — a nonzero value **silently becomes 0** |
-| `0d0.30` | `0d0.30` | `0d0.3` | apd preserves scale; binary64 cannot |
-
-The fix is a decimal type in `core/ts`, not a render change. Two of the three
-are DATA divergences, not cosmetic ones.
+That is the goal state, not a broken corpus: both runners assert it
+explicitly, so a NEW divergence has to be added here deliberately, with the
+justification the header demands, rather than quietly landing as a changed
+expectation somewhere else.
 
 ## History
 
 The ledger held **15 of 254 rows** when it was first checked, and was driven
-to **zero** on 2026-08-08 before the three rows above were added by measuring
-what had never been measured. What the original fifteen turned out to be:
+to zero on 2026-08-08. Measuring what had never been measured then added
+three BigDecimal rows, and those were closed too — by giving `core/ts` a
+real arbitrary-precision decimal (`core/ts/src/decimal.ts`, a scaled bigint
+on apd's model) in place of the binary64 payload that could not represent
+what Go represented. What the original fifteen turned out to be:
 
 | class | rows | resolution |
 |---|---:|---|
@@ -102,6 +99,12 @@ what had never been measured. What the original fifteen turned out to be:
 | error text | 1 | the two jsonic ports disagree about whether `1_` lexes as a number; TS's fallback now reproduces Go's classification |
 | behavioural | 2 | `1e400` → TS had the `float_overflow` refusal but only on a path `1e400` never took |
 
+| BigDecimal range/scale | 3 | found later by measurement; `core/ts` had a binary64 payload, so `0d1e400` overflowed to Infinity, `0d1e-400` underflowed to **zero**, and `0d0.30` lost its scale |
+
 Worth keeping in view: the `go` column was **not** the reference in two of
-the five classes. The header's warning that it is "the reference by
+the five original classes. The header's warning that it is "the reference by
 convention, not by proof" was load-bearing.
+
+Two of the eighteen were invisible to the 1765-row `parser-crossdiff`,
+because both engines were erroring-by-rendering rather than disagreeing on a
+value. `scripts/parity-probe.sh` is what found them.

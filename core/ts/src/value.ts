@@ -47,6 +47,7 @@ import {
   TXml,
   TXmlInterp,
 } from './type.ts'
+import { Decimal } from './decimal.ts'
 import {
   canonValue,
   canonXml,
@@ -435,7 +436,7 @@ export class Value {
       return formatBigInteger(this.data as bigint)
     }
     if (this.vType.matches(TBigDecimal)) {
-      return formatBigDecimal(this.data as number)
+      return formatBigDecimal(this.data as Decimal)
     }
     if (this.vType.matches(TFloat)) {
       return formatFloat(this.data as number)
@@ -553,18 +554,17 @@ export function newFloat(f: number): Value {
  * toString came to be missing (nothing in core ever produced one of these
  * values, so nothing in core ever rendered one).
  *
- * DEVIATION: the BigDecimal payload is a binary64 where Go's is an
- * apd.Decimal, so values outside binary64's range do NOT survive —
- * `0d1e400` becomes Infinity and `0d1e-400` becomes zero, not just a lost
- * trailing-zero scale. Tracked in parser/spec/divergent.tsv; see
- * formatBigDecimal in canon.ts for the full list.
+ * The BigDecimal payload is a Decimal (decimal.ts) — a scaled bigint, the
+ * same model as Go's apd.Decimal. It was a binary64 until 2026-08-08,
+ * which could not represent what Go represented: `0d1e400` overflowed to
+ * Infinity, `0d1e-400` underflowed to zero, and `0d0.30` lost its scale.
  */
 export function newBigInteger(n: bigint): Value {
   return new Value(TBigInteger, n)
 }
 
-export function newBigDecimal(f: number): Value {
-  return new Value(TBigDecimal, f)
+export function newBigDecimal(d: Decimal): Value {
+  return new Value(TBigDecimal, d)
 }
 
 /** Back-compat alias: the decimal scalar is named Float in the lattice. */
