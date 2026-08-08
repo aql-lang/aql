@@ -84,6 +84,6 @@ list [ ( ) ]	[[ )]]	[[( )]]	RENDER: ADJUDICATED — Go drops the token via the p
 list { a: ( }	[{a:}]	[{a:(}]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
 typedlist ( 1	[: 1]	[:( 1]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
 
-run ( boomq	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
+run ( boomq	ERROR:signature_error	ERROR:syntax_error	CODE: an unmatched `(` at the TOP of the stream. preEvalParens already applies Go’s rule INSIDE a forward window; only the run loop’s arm differs. NOT changed because eng/ts pins the refusal in "a programmatic unmatched open paren refuses in the scanner" — which behaviour is right is a question for that test and its Go twin.
 
 

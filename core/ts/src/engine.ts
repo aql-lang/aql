@@ -165,6 +165,18 @@ export class Engine {
         continue
       }
       if (isOpenParen(val)) {
+        // KNOWN DIVERGENCE, one row: an unmatched `(` at the TOP of the
+        // stream throws syntax_error here where Go walks past it and lets
+        // the pending dispatch fail — `( boomq` is a signature_error
+        // there. preEvalParens already applies Go's rule INSIDE a forward
+        // window (an unmatched `(` is a scan boundary), so only this arm
+        // differs.
+        //
+        // Not changed, because eng/ts has a test that explicitly pins the
+        // refusal ("a programmatic unmatched open paren refuses in the
+        // scanner"). Which behaviour is right is a question for that test
+        // and its Go twin, not a one-line change here. Pinned in
+        // core/spec/divergent.tsv.
         this.evalParenAt(this.pointer)
         continue
       }
