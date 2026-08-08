@@ -329,6 +329,60 @@ function checkSourceNesting(src: string): void {
   }
 }
 
+/**
+ * watchRuleSteps counts the rule iterations one parse performs, so parse()
+ * can tell "the engine finished" from "the engine gave up".
+ *
+ * WHY THIS EXISTS. The tabnas TS rule engine bounds its main loop at
+ * `2 * ruleCount * srcLength * 2 * maxmul` iterations and, on reaching
+ * that bound, simply STOPS — the trailing-token check then sees #ZZ, so
+ * nothing is thrown and the partial root is returned. For boru that turns
+ * a malformed program into a silent wrong answer: `[Map<]` parsed to an
+ * EMPTY value stream and `Map<]` to a bare `word(Map)`, where Go's engine
+ * reports "unexpected `]`". The shapes that reach it are groups a
+ * container terminator cannot close — `[Map<]`, `{a: (1}`, `[1 (2]` —
+ * because the TS val rule's implicit-null alternate matches the `]`,
+ * backtracks, and the enclosing elem re-pushes forever.
+ *
+ * The cap is what the two ENGINES do differently, not what the two boru
+ * ports do, so this cannot be fixed by porting a rule more faithfully. It
+ * is caught rather than papered over: an error whose text differs from
+ * Go's is a recorded divergence (parser/spec/divergent.tsv), while
+ * silently accepting a program Go rejects is a correctness bug.
+ *
+ * The test is EQUALITY against the library's own formula, not `>=`. The
+ * loop exits with kI === cap, so the last subscriber call saw cap - 1. If
+ * the library ever changes the formula this guard stops firing rather
+ * than firing early — the fail-open direction. A valid parse uses O(token
+ * count) steps (~11 for `[1 2]` against a cap of ~1000), so landing on
+ * exactly cap - 1 by accident is not a practical concern.
+ */
+function watchRuleSteps(j: any): { exhausted: (src: string) => boolean } {
+  let last = -1
+  j.sub({
+    rule: (_rule: unknown, ctx: any) => {
+      last = ctx.kI
+    },
+  })
+  return {
+    exhausted: (src: string): boolean => {
+      // An EMPTY source short-circuits before the loop runs, leaving the
+      // step count at -1 and the cap at 0 — which would satisfy the
+      // equality below by coincidence. It is the one input where "no
+      // steps" means success rather than exhaustion.
+      const cap = ruleStepCap(j, src)
+      return cap > 0 && last === cap - 1
+    },
+  }
+}
+
+/** ruleStepCap mirrors the tabnas parser's own maximum-iteration bound. */
+function ruleStepCap(j: any, src: string): number {
+  const internal = j.internal()
+  const ruleCount = Object.keys(internal.parser.rsm).length
+  return 2 * ruleCount * src.length * 2 * internal.config.rule.maxmul
+}
+
 export function parse(src: string): Value[] {
   // A linear nesting pre-check guards the recursive rule engine (see
   // checkSourceNesting) before any parsing work happens.
@@ -340,11 +394,20 @@ export function parse(src: string): Value[] {
   // Stage 3: Parse and convert to engine values. The library's own error
   // rendering is silenced at the source (grammar.ts options); failures
   // are translated into boru syntax_errors here.
+  const steps = watchRuleSteps(j)
   let result: unknown
   try {
     result = j.parse(src)
   } catch (e) {
     throw translateParseError(e, src)
+  }
+  // The TS rule engine gave up rather than parsed: see ruleStepCap.
+  if (steps.exhausted(src)) {
+    throw new BoruError(
+      'syntax_error',
+      'the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it',
+      '',
+    )
   }
 
   if (result === null || result === undefined) {

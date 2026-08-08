@@ -672,3 +672,57 @@ m.k => [1]	m.(k sugar(lambda) [1])
 [Map<Integer>]	[sugar(angle Map [word(Integer)])]
 {a: Map<Integer>}	{a:sugar(angle Map [word(Integer)])}
 Map<Integer><String>	ERR xml: unterminated element <String>
+
+# --- DATA context: the same value kinds one level in ---------------------
+# A value inside a list or a map value runs a SEPARATE converter from the
+# top-level one (Go's convertDataValueInner vs convertTopLevelValueInner),
+# so every kind needs pinning twice — the two have drifted before. `[1 2,]`
+# tolerates a trailing comma where `[,1]` and `[1,,2]` do not.
+[1.5]	[1.5]
+[+re/x/]	[sugar(mini re 'x')]
+[`x${1}`]	[interp('x' ${1})]
+[{:Integer a:1}]	[{:Integer a:1}]
+[[:Integer 1]]	[[:Integer 1]]
+[a => b]	[paren([word(a) sugar(lambda) word(b)])]
+['x']	['x']
+[<a/>]	[<a/>]
+[1 2,]	[1 2]
+{a: 1.5}	{a:1.5}
+{a: +re/x/}	{a:sugar(mini re 'x')}
+{a: {b: 1}}	{a:{b:1}}
+{a: {:Integer b:1}}	{a:{:Integer b:1}}
+{a: [:Integer 1]}	{a:[:Integer 1]}
+{a: <b/>}	{a:<b/>}
+[[1 2] [3 4]]	[[1 2] [3 4]]
+[{a:1} {b:2}]	[{a:1} {b:2}]
+[a.b]	[a.b]
+[0d1.5]	[0d1.5]
+[1e400]	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
+{a: 1e400}	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
+
+# --- base-prefixed integers, big literals, and the empty word ------------
+# `_` separators are allowed singly and rejected doubled; the value is
+# parsed from the EXACT digits (a float64 round-trip would corrupt
+# anything past 2^53), and an out-of-int64 magnitude is integer_overflow
+# rather than a wrapped value. A bare `/r` has no base name at all.
+0b1_0	2
+0o7_7	63
++0x10	16
+0d1_0	0d10
++0d10	0d10
+0i	ERR [boru/syntax_error]: invalid numeric literal: 0i
+0i1_0	ERR [boru/syntax_error]: invalid numeric literal: 0i1_0
+/r	ERR empty word
+/q	ERR empty word
+a/2f2	ERR [boru/syntax_error]: invalid word modifier /2f2 on "a"
+
+# --- duplicate map keys, and errors raised inside `${…}` -----------------
+# A repeated key keeps its FIRST slot in source order and its LAST value
+# (matching OrderedMap.Set). An error inside an interpolation surfaces with
+# the inner code intact.
+{a:1 a:2}	{a:2}
+{a:1 b:2 a:3}	{a:3 b:2}
+``	''
+`${1 ]}`	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here
+`${(}`	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here
+`${'x}`	ERR [boru/syntax_error]: this string is never closed: 'x}`
