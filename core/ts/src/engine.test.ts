@@ -60,6 +60,7 @@ import {
   newOpenParen,
   newParenExpr,
   newString,
+  newSugar,
   newTypeLiteral,
   newWord,
   newXmlInterp,
@@ -734,6 +735,89 @@ describe("Engine — check mode, behind a fake AnalysisImpl", () => {
         const out = new Engine(r).run([newWord("idq"), newWord("true")]);
         assert.equal(canon(out), "Integer");
       },
+    );
+  });
+});
+
+describe("Engine.run — sugar markers", () => {
+  // A sugar marker is the parser's structural stand-in for a surface
+  // form; the engine lowers it through the registry's role table when it
+  // is STEPPED, and again — separately — when preEvalParens meets one in
+  // a forward window. Both sites are here.
+
+  function sugarFixture(): Registry {
+    const r = fixture();
+    r.bindSugarWord("lambda", "idq");
+    return r;
+  }
+
+  it("lowers a marker stepped at the pointer", () => {
+    const r = sugarFixture();
+    const out = new Engine(r).run([
+      newSugar({ kind: "lambda" }),
+      newInteger(7n),
+    ]);
+    // The marker became `idq`, which then dispatched over the 7.
+    assert.equal(canon(out), "7");
+  });
+
+  it("lowers a marker met inside a forward window", () => {
+    const r = sugarFixture();
+    // The window scan expands the marker IN PLACE before matching, so
+    // what the matcher sees is the lowered word. The call still refuses —
+    // a bare function word is a collection barrier, which is the language
+    // rule and not the marker's doing — and the refusal is what shows the
+    // lowering ran: the stack it prints holds `word(idq)`, not a marker.
+    assert.throws(
+      () =>
+        new Engine(r).run([
+          newWord("addq"),
+          newSugar({ kind: "lambda" }),
+          newInteger(2n),
+          newInteger(3n),
+        ]),
+      (e: unknown) =>
+        e instanceof BoruError &&
+        e.code === "signature_error" &&
+        /word\(idq\)/.test(e.message),
+    );
+  });
+
+  it("refuses a marker whose role the registry does not bind", () => {
+    // A bare kernel supports no surface forms at all, and says so rather
+    // than silently dropping the marker.
+    assert.throws(
+      () => new Engine(fixture()).run([newSugar({ kind: "lambda" })]),
+      (e: unknown) =>
+        e instanceof BoruError &&
+        e.code === "sugar_unbound" &&
+        /lambda/.test(e.message),
+    );
+  });
+});
+
+describe("Engine.run — handler contract", () => {
+  it("refuses an async handler rather than leaking a promise", () => {
+    // The Go kernel has no async handlers; a port that let one through
+    // would put a Promise on the stack and render it as a value.
+    const r = new Registry();
+    r.registerNativeFunc({
+      name: "slowq",
+      signatures: [
+        {
+          args: [TInteger],
+          returns: [TInteger],
+          barrierPos: 1,
+          handler: (a: Value[]) => Promise.resolve([a[0]!]),
+        },
+      ],
+    } as never);
+    assert.throws(
+      () => new Engine(r).run([newWord("slowq"), newInteger(1n)]),
+      (e: unknown) =>
+        e instanceof BoruError &&
+        e.code === "unsupported" &&
+        /async handlers are not supported/.test(e.message),
     );
   });
 });
