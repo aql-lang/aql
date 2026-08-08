@@ -69,6 +69,7 @@ commit.
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in | 2026-08-02 NUR register review |
 | [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
+| [NUR059](#nur059) | A sugar-form type tag renders in debug spelling inside canon | 2026-08-08 Go/TS canon parity work (`design/BASIC-CHECK-CUT.0.md` sibling) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -1730,6 +1731,38 @@ that pins it … so the acceptance cannot silently rot"; this evidence
 had rotted by a factor of two.
 
 ---
+
+## NUR059 — A sugar-form type tag renders in debug spelling inside canon {#nur059}
+
+**Status:** Pending · **Recorded:** 2026-08-08 · **Surfaced by:** closing
+the Go/TS parser parity ledger (`parser/spec/divergent.tsv` to zero)
+
+**Rule:** `CanonValue` renders canonical boru **source** — the string it
+produces parses back as the same value. Every other container type tag now
+obeys it: `[:Integer]`, `[:Integer 1 2]`, `{:String}`, `{:Integer a:1}`.
+**Divergence:** a tag written with the **angle sugar** renders in the debug
+spelling instead:
+
+```
+[:Box<Integer>]   canon ->  [:sugar(angle Box [word(Integer)])]
+[:Integer]        canon ->  [:Integer]                            (correct)
+```
+
+The sugar marker has no source-form renderer, so `canonTypeTag` falls
+through to the generic value path, which yields `Value.String`'s debug
+form. `sugar(...)` and `word(...)` are not boru syntax, so this canon does
+not parse.
+
+**Evidence:** `parser/spec/parse.tsv` pins the current output for
+`[:Box<Integer>]`; `core/go/canon.go::canonTypeTag` and
+`core/ts/src/canon.ts::canonTypeTag` are the two sites.
+**Both engines AGREE**, so this is not a parity defect and correctly does
+not sit in `divergent.tsv` — it is a render-quality gap that the parity
+work made visible by fixing every neighbouring case.
+**Proposed verdict:** fix — give `SugarInfo` a source-form renderer
+(`Box<Integer>` for `SugarAngle`, and the corresponding spellings for the
+other kinds) and route `canonTypeTag` through it on both engines. Until
+then the corpus row is the pin: a fix to one engine alone fails loudly.
 
 ## NUR052 — Store enumeration reads the top COW layer; lookup walks the chain {#nur052}
 

@@ -38,7 +38,7 @@ a => [1]	word(a) sugar(lambda) [1]
 <t a='1' b='2'><u/>text</t>	<t a="1" b="2"><u/>text</t>
 `v ${1} w`	interp('v ' ${1} ' w')
 `${x}`	interp(${word(x)})
-{:String}	{:word(String)}
+{:String}	{:String}
 # comment\n1	1
 1 # trailing	1
 (quote a)	paren([word(quote) word(a)])
@@ -252,7 +252,7 @@ _1	word(_1)
 a.b	a.b
 a.'k'	a.'k'
 a.0	a.0
-{:Integer}	{:word(Integer)}
+{:Integer}	{:Integer}
 {}	{}
 []	[]
 `a\\`b`	'a`b'
@@ -291,3 +291,22 @@ Integer tor String	word(Integer) word(tor) word(String)
 _1	word(_1)	not digit-led, so an ordinary word — the separator rule is numeric-only
 1e308	1e+308	the largest exponent that still fits binary64
 1.7e308	1.7e+308	just under the Float ceiling — accepted, unlike 1e400
+
+# --- the element-type tag and the collection barrier survive canon -------
+# Both were being DROPPED by canon on one side or the other, so the render
+# did not parse back as the same value. REFERENCE.md:228 gives `[:Type]` as
+# the typed-list syntax and :1224 confirms the tag is on the value (deq is
+# specified to ignore it, which is only meaningful if it is there);
+# REFERENCE.md:415 makes `end` the word and `;` its synonym, so `1 ;` canons
+# as `1 end` rather than to a bare `1` with the barrier silently gone.
+1 ;	1 end
+[:Integer]	[:Integer]
+[:Integer 1 2]	[:Integer 1 2]
+[1 2]	[1 2]	the untagged twin — distinguishable again, as deq requires
+# The angle-sugar tag still renders in DEBUG spelling on both engines. They
+# AGREE, so it is not a parity defect and does not belong in divergent.tsv —
+# it is a render-quality gap: canon should emit `[:Box<Integer>]`. Recorded
+# as NUR059; pinned here so a fix to either engine alone fails loudly.
+[:Box<Integer>]	[:sugar(angle Box [word(Integer)])]
+{:Integer a:1}	{:Integer a:1}	a typed map with entries keeps BOTH the tag and the entries
+{a:1}	{a:1}	the untagged twin

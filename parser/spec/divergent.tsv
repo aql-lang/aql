@@ -17,7 +17,3 @@
 # design/TS-PARITY-AUDIT.0.md, not adjudicated against REFERENCE.md. The `go`
 # column is the reference by convention, not by proof, and the rows marked
 # DATA are behavioural rather than cosmetic: one engine is wrong.
-1 ;	1 	1 end	End marker canon: go renders empty, ts renders 'end'
-[:Integer]	[]	[:word(Integer)]	typed list canon: go drops the tag, ts keeps it
-[:Integer 1 2]	[1 2]	[:word(Integer) 1 2]	typed list canon: go drops the tag, ts keeps it
-[:Box<Integer>]	[]	[:sugar(angle Box [word(Integer)])]	typed list canon: go drops the tag, ts keeps the angle sugar

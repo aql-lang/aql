@@ -51,3 +51,18 @@ bigdec 100	0d100	whole-valued decimal keeps the marker
 bigdec 1e25	0d10000000000000000000000000	plain 'f' form at every magnitude — never scientific
 bigdec 0.0000001	0d0.0000001	below 1e-6, where JS String goes exponential — still plain here
 bigdec 1e21	0d1000000000000000000000	the exact magnitude at which JS String flips to an exponent
+
+# --- the collection barrier and typed containers survive canon ---
+# `end` is the word and `;` its synonym (REFERENCE.md:415), so canon of the
+# marker is `end` — rendering it empty loses the barrier and the source no
+# longer parses back the same. Typed containers keep their type tag
+# (REFERENCE.md:228); `deq` is specified to IGNORE that tag (:1224), which
+# is only meaningful because the tag is on the value.
+end	end	the collection barrier is a value with a source form
+typedlist Integer	[:Integer]	the tag survives an EMPTY typed list — [] would lose it
+typedlist Integer 1 2	[:Integer 1 2]	tag and elements together
+typedlist Foo 1	[:Foo 1]	an unresolved type name is still a bare Word here (ADR-012 rule 4)
+list 1 2	[1 2]	the untagged twin — distinguishable, as deq's carve-out requires
+typedmap String	{:String}	the tag survives an EMPTY typed map
+typedmap Integer a:1	{:Integer a:1}	tag and entries together
+typedmap Foo b:2	{:Foo b:2}	word-tagged twin of the typed-list row

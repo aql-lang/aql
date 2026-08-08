@@ -25,6 +25,9 @@ import {
   newBigDecimal,
   newBigInteger,
   newBoolean,
+  newEnd,
+  newTypedList,
+  newTypedMap,
   newCloseParen,
   newInteger,
   newList,
@@ -145,6 +148,20 @@ function evalExpr(expr: string): string {
       return canon([newBoolean(arg === 'true')])
     case 'none':
       return canon([newNone()])
+    case 'end':
+      return canon([newEnd()])
+    case 'typedlist': {
+      const toks = fields(arg)
+      return canon([newTypedList(token(toks[0]!), toks.slice(1).map(token))])
+    }
+    case 'typedmap': {
+      const toks = fields(arg)
+      const entries = toks.slice(1).map((t) => {
+        const i = t.indexOf(':')
+        return { key: t.slice(0, i), value: token(t.slice(i + 1)) }
+      })
+      return canon([newTypedMap(token(toks[0]!), entries)])
+    }
     case 'typelit': {
       const t = TYPE_LITS[arg]
       assert.ok(t !== undefined, `typelit ${arg}: not a corpus-known type name`)

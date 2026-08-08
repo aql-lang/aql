@@ -245,7 +245,15 @@ export function canonValue(v: Value): string {
     const ct = v.data
     const open = v.isTypedMap() ? '{' : '['
     const close = v.isTypedMap() ? '}' : ']'
-    const parts = [`:${canonValue(ct.child)}`, ...ct.elements.map(canonValue)]
+    // A typed MAP carries its concrete pairs in `entries`, not `elements`,
+    // and canon rendered only the latter — so `{:Integer a:1}` came out
+    // `{:Integer}` with the entries silently gone. Both are rendered here,
+    // mirroring Value.toString and core/go/canon.go's ChildTypeInfo arm.
+    const parts = [
+      `:${canonTypeTag(ct.child)}`,
+      ...ct.elements.map(canonValue),
+      ...ct.entries.map((e) => `${e.key}:${canonChild(e.value)}`),
+    ]
     return `${open}${parts.join(' ')}${close}`
   }
   if (v.vType.matches(TList) && Array.isArray(v.data)) {
@@ -315,6 +323,17 @@ export function canonValue(v: Value): string {
 // key. Mirrors eng/go/canon.go::canonChild.
 function canonChild(v: Value): string {
   return v.isDisjunct() ? `(${canonValue(v)})` : canonValue(v)
+}
+
+// canonTypeTag renders a container's element-type tag in SOURCE form. The
+// parser is type-name-opaque (ADR-012 rule 4), so the tag on an unevaluated
+// literal is still a bare Word — `[:Integer]` holds word(Integer), not the
+// Integer type node — and rendering it through the generic value path leaks
+// the debug spelling `word(Integer)` into what is meant to be source.
+// Mirrors core/go/canon.go canonTypeTag.
+function canonTypeTag(v: Value): string {
+  if (v.isWord()) return v.asWord().name
+  return canonChild(v)
 }
 
 // canonFnDef renders a function value's discriminating canonical form.

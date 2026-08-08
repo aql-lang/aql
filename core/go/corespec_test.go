@@ -183,6 +183,25 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 		return CanonValue(NewBoolean(arg == "true"))
 	case "none":
 		return CanonValue(NewNone())
+	case "end":
+		return CanonValue(NewEnd())
+	case "typedlist":
+		toks := coreSpecFields(arg)
+		child := coreSpecToken(toks[0])
+		var elems []Value
+		for _, tok := range toks[1:] {
+			elems = append(elems, coreSpecToken(tok))
+		}
+		return CanonValue(NewTypedListWithElements(child, elems))
+	case "typedmap":
+		toks := coreSpecFields(arg)
+		child := coreSpecToken(toks[0])
+		var entries []ChildEntry
+		for _, tok := range toks[1:] {
+			k, v, _ := strings.Cut(tok, ":")
+			entries = append(entries, ChildEntry{Key: k, Value: coreSpecToken(v)})
+		}
+		return CanonValue(NewTypedMapWithEntries(child, entries))
 	case "typelit":
 		tl, ok := coreSpecTypeLit(arg)
 		if !ok {
