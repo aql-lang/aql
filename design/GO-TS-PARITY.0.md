@@ -15,14 +15,14 @@ preceded this).
 
 | module | go | ts | shared corpus |
 |---|---|---|---|
-| core | 100% | 99.58% | `core/spec`, 373 rows + a 16-row ledger |
+| core | 100% | 99.57% | `core/spec`, 373 rows + a 16-row ledger |
 | parser | 100% | **100%** | `parser/spec`, 535 rows, ledger 9 rows (both engine limits) |
-| basic | 100% | 100% *of the 16 words ported* | `basic/spec`, 51 rows |
+| basic | 100% | 100% *of the 17 words ported* | `basic/spec`, 69 rows |
 
 Two numbers that look like progress and are not:
 
-- **`basic/ts` at 100%** is 100% of the 16 words ported (the stack
-  vocabulary plus `do` and `error`), not of basic's surface. The floor is
+- **`basic/ts` at 100%** is 100% of the 17 words ported (the stack
+  vocabulary plus `do`, `error` and `if`), not of basic's surface. The floor is
   a ratchet on the SURFACE, not on the percentage.
 - **Both crossdiffs agree on every row** — `parser-crossdiff` IDENTICAL
   over 1765, `crossdiff` 1808 agree / 0 divergences — and did so on day
@@ -284,12 +284,21 @@ type-literal pattern on a stack slot), `bothq` (two gradual forward slots
   collecting. These want a proof-carrying exemption of the kind ADR-008
   gives Go (`//covergate:allow`) and TypeScript has no equivalent for —
   that mechanism is the next thing to design, not more tests.
-- **basic/ts**: everything past the stack vocabulary and the escape
-  hatch. `if` is blocked on a specific missing primitive rather than on
-  the analysis lattice: its list-condition form lowers to a Move carrying
-  a CONTINUATION (`NewMoveIf` + `IfCont`), and core/ts's Move is the
-  one-shot replay variant. `break`/`continue` need the registry's loop
-  flow-control flag, which only `for` reads.
+- **basic/ts**: everything past the stack vocabulary, the escape hatch
+  and `if`. The next word is `case`, and it is blocked on a SUBSYSTEM
+  rather than a primitive: `CaseClauses` matches a clause by `UnifyR`,
+  and core/ts has `isValueOfType`/`unifiesValue` over a value subset
+  rather than the unifier. Porting unification is its own piece of work
+  and should be scoped as one. `for` needs the loop fixed point, and
+  `break`/`continue` do nothing but set the flow-control flag only `for`
+  reads.
+
+  What `if` demonstrated is worth carrying forward: it was blocked on a
+  named PRIMITIVE (the Move continuation), the primitive took an hour,
+  and porting it immediately exposed a core/ts gap the corpus had never
+  reached — `coerceBoolean` was missing Go's render-as-"false" tail, so
+  `if [ false [1] [2] ]` took the THEN branch. **Porting a word is
+  itself an instrument**, and a cheaper one than sweeping for coverage.
 - **The empty-body question**, now met twice: `do [ ]` and
   `do [ … ] error [ ]` are both absent from `basic/spec` because Go's
   `InvokeBody` and the TS sub-engine disagree about an empty body under
