@@ -318,6 +318,20 @@ export class Engine {
       throw new BoruError('undefined_word', `undefined word: ${name}`, name)
     }
 
+    // STATEMENT BOUNDARY. Every bare function word beginning its own
+    // dispatch is a forward-collection barrier — uniformly, regardless of
+    // arity (REFERENCE.md:364, design/STRICT-FORWARD-BARRIER.0.md). A
+    // parked forward that cannot commit with the args it already holds is
+    // STRANDED, not left to wait through: `boomq negq 5` is a
+    // signature_error, and the grouped `boomq ( negq 5 )` is what fires
+    // the outer word. Without this the inner dispatch ran, its result
+    // arrived at the marker, and the outer word fired — 51 rows of
+    // core/spec/divergent.tsv.
+    const stranded = this.strandedForwardError(name)
+    if (stranded !== undefined) {
+      throw stranded
+    }
+
     // Pre-evaluate any paren groups in the forward window so the
     // matcher sees concrete values. The window is bounded by the
     // function's largest forward-eligible arg count across all sigs.
@@ -724,7 +738,14 @@ export class Engine {
         scanIdx++
         continue
       }
-      const name = (tok.asWord() as WordInfo).name
+      // A marker or word with NO payload reaches here — an open-paren
+      // TYPE literal, say. Go's AsWord tolerates a nil payload and yields
+      // an empty name (`w, _ := AsWord(val)` in stepWord); this used to
+      // lean on isWord() being true for any value in the Word branch,
+      // payload or not, which is exactly the conflation that let a `Word`
+      // type literal loop the step loop into an uncoded crash.
+      const wi = tok.data as WordInfo | null
+      const name = wi?.name ?? ''
       if (name === '(') {
         const before = this.stack.length
         this.evalParenAt(scanIdx)
@@ -1039,11 +1060,22 @@ export class Engine {
     const nextIdx = m.collected.length
     if (nextIdx >= m.sig.args.length) return false
     const expected = m.sig.args[nextIdx]!
-    // Only an EXPLICIT TWord/TAtom slot suppresses dispatch. TAny
-    // also accepts Word values, but at TAny slots we still want the
-    // engine to dispatch the word and feed its result back. Mirrors
-    // borueng/go/engine.go's hasPendingForwardExpectingWord which
-    // checks `Equal(TWord)` and the /q flag, never TAny.matches(TWord).
+    // Only an EXPLICIT TWord/TAtom slot suppresses dispatch, or a slot
+    // marked `/q`. TAny also accepts Word values, but at TAny slots we
+    // still want the engine to dispatch the word and feed its result
+    // back. Mirrors borueng/go/engine.go's hasPendingForwardExpectingWord,
+    // which checks `Equal(TWord)` and the /q flag, never
+    // TAny.matches(TWord).
+    //
+    // The /q half was MISSING here, and the strict forward barrier is
+    // what exposed it: `def h fn […]` parks def with one arg and then
+    // meets `fn`, which Go captures into def's quote-marked slot before
+    // any barrier check runs. Without the /q test the word reached
+    // stepWord instead, and the barrier — correctly, for a word that
+    // really is beginning its own dispatch — stranded def. The keyword
+    // forms this protects are load-bearing under the strict rule
+    // (design/STRICT-FORWARD-BARRIER.0.md, "two sharp edges").
+    if (m.sig.quoteArgs?.has(nextIdx) === true) return true
     return expected.equal(TWord) || expected.equal(TAtom)
   }
 
@@ -1052,6 +1084,53 @@ export class Engine {
    * and return the index of the nearest unfilled ForwardMarker. -1
    * if none.
    */
+  /**
+   * The strict forward barrier's failure case, ported from Go's
+   * strandedForwardError (core/go/engine.go:6504). Called from stepWord
+   * when a function word is about to begin its own dispatch: the nearest
+   * pending forward in the CURRENT paren scope will never be fed by that
+   * word under the strict rule, so if it cannot fire with what it holds
+   * it is an error rather than a wait-through.
+   *
+   * The scope scan stops at an open paren, which is what makes
+   * `boomq ( negq 5 )` fire and `boomq negq 5` refuse — the distinction
+   * the rule exists to create.
+   *
+   * DELIBERATELY A SUBSET of Go's rule, and the boundary is exact. Go
+   * calls commitBarrierForward FIRST: a parked word that can already
+   * dispatch with the args it CLAIMS (collected forward + stack) is fired
+   * at the boundary instead of stranded, and only a failed commit strands.
+   * That half is not ported — it needs the tape rearrangement Go performs
+   * and a word with a shorter real overload than the parked plan assumed.
+   *
+   * So this fires only when the parked word has claimed NOTHING, which is
+   * precisely where Go's commitBarrierForward returns false on its first
+   * test ("Nothing collected yet — no smaller-arity dispatch to commit").
+   * Where it fires it matches Go exactly; where it stays silent the
+   * divergence is still in the ledger. Widening it without the commit half
+   * is wrong, and measurably so: doing that stranded `def h fn […]` at
+   * 1-of-2 args and turned 44 eng/ts rows red.
+   *
+   * Engine-internal frame-tail words (`__…`) are exempt on both sides:
+   * they are not source-level statement boundaries.
+   */
+  private strandedForwardError(boundary: string): BoruError | undefined {
+    if (boundary.startsWith('__')) return undefined
+    const fwdIdx = this.findPendingMarker()
+    if (fwdIdx < 0) return undefined
+    const m = this.stack[fwdIdx]!.asForward()
+    if (0 !== m.collected.length || 0 !== m.stackArgs.length) return undefined
+    const missing = m.expectedForward - m.collected.length
+    return new BoruError(
+      'signature_error',
+      `${m.funcName} is still waiting for ${missing} argument(s) when \`${boundary}\` ` +
+        'begins its own dispatch — a function word is a barrier and never feeds ' +
+        'forward collection (strict rule); group the call in parens so its RESULT ' +
+        `becomes the argument: ${m.funcName} (${boundary} …)`,
+      m.funcName,
+    )
+  }
+
   private findPendingMarker(): number {
     for (let i = this.pointer - 1; i >= 0; i--) {
       const v = this.stack[i]!

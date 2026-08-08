@@ -15,7 +15,7 @@ preceded this).
 
 | module | go | ts | shared corpus |
 |---|---|---|---|
-| core | 100% | 90.71% | `core/spec`, 158 rows + a 135-row ledger |
+| core | 100% | 90.26% | `core/spec`, 197 rows + a 90-row ledger (45 of 135 closed) |
 | parser | 100% | **100%** | `parser/spec`, 535 rows, ledger 9 rows (both engine limits) |
 | basic | 100% | 100% *of the 15 words ported* | `basic/spec`, 45 rows |
 

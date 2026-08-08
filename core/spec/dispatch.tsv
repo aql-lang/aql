@@ -105,3 +105,46 @@ run Word	Word
 run 1 Word 2	1 Word 2
 run [ Word ]	[Word]
 run boomq Word	ERROR:fixture_boom
+
+# --- the strict forward barrier -----------------------------------------
+# REFERENCE.md:364 lists "another function word" as a forward-collection
+# barrier, and design/STRICT-FORWARD-BARRIER.0.md makes it uniform: a
+# parked forward that cannot commit with the args it already holds is
+# STRANDED, a signature_error, not a wait-through. The rule does not ask
+# how many args the boundary word collects — a nullary `depthq` and a
+# binary `addq` both strand.
+#
+# The GROUPED spelling is what fires the outer word, and that contrast is
+# the whole point of the rule: `boomq ( negq 5 )` raises fixture_boom
+# while `boomq negq 5` refuses. core/ts had no such rule and waited
+# through — 30 rows of divergent.tsv until it did.
+run ( 1 2 ) boomq depthq	ERROR:signature_error
+run ( 1 boomq negq 2 )	ERROR:signature_error
+run ( boomq addq 1 2 )	ERROR:signature_error
+run ( boomq negq 5 )	ERROR:signature_error
+run 1 2 3 boomq depthq	ERROR:signature_error
+run 1 2 boomq depthq	ERROR:signature_error
+run 1 2 boomq negq 3	ERROR:signature_error
+run 1 boomq addq 2 3	ERROR:signature_error
+run 1 boomq boomq 2	ERROR:signature_error
+run 1 boomq depthq	ERROR:signature_error
+run 1 boomq negq 2	ERROR:signature_error
+run 1 boomq negq 5	ERROR:signature_error
+run 1 boomq negq 5 addq 2 3	ERROR:signature_error
+run [ boomq addq 1 2 ]	ERROR:signature_error
+run [ boomq negq 5 ]	ERROR:signature_error
+run boomq addq 1 ( )	ERROR:signature_error
+run boomq addq 1 2	ERROR:signature_error
+run boomq addq 1 2 3	ERROR:signature_error
+run boomq boomq 1	ERROR:signature_error
+run boomq boomq boomq 1	ERROR:signature_error
+run boomq depthq	ERROR:signature_error
+run boomq depthq addq 1 2	ERROR:signature_error
+run boomq negq ( )	ERROR:signature_error
+run boomq negq 1	ERROR:signature_error
+run boomq negq 5	ERROR:signature_error
+run boomq negq 5 ;	ERROR:signature_error
+run boomq pairq 3	ERROR:signature_error
+run boomq pairq 3 ;	ERROR:signature_error
+run boomq pairq 5	ERROR:signature_error
+run boomq pairq 7	ERROR:signature_error

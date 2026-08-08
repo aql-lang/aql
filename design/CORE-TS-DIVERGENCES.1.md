@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** 135 MEASURED · 15 CLOSED · 120 PINNED (2026-08-08) · **Ledger:**
+**Status:** 135 MEASURED · 45 CLOSED · 90 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -52,7 +52,7 @@ run addq ( ) ( 5 ) 6        go: no_value_error ts: 11
 Same source, different arithmetic. Everything else here is a taxonomy or
 render difference; this one is a wrong number.
 
-### 2. The strict forward barrier — 51 rows
+### 2. The strict forward barrier — 51 rows, **30 CLOSED**
 
 `REFERENCE.md:364` lists "another function word" as a forward-collection
 barrier, and `design/STRICT-FORWARD-BARRIER.0.md` makes it uniform: a parked
@@ -67,9 +67,21 @@ run boomq ( negq 5 )        both: fixture_boom          <- the grouped form AGRE
 ```
 
 That last line is the point: the rule exists precisely to make the grouped
-and ungrouped spellings behave differently, and in `core/ts` they do not.
-This is the largest class and the one with a written design note behind it,
-so it is the clearest "TS is wrong".
+and ungrouped spellings behave differently, and in `core/ts` they did not.
+
+**Closed for the 30 rows where the parked word has claimed NOTHING** — which
+is exactly where Go's `commitBarrierForward` returns false on its first test
+("Nothing collected yet — no smaller-arity dispatch to commit"), so the port
+matches Go where it fires. Go's commit half, which fires a parked word that
+CAN dispatch with its claimed args before declaring the barrier, is not
+ported: it needs the tape rearrangement Go performs and a word carrying a
+shorter real overload than the parked plan assumed.
+
+Widening it without that half is wrong, and MEASURABLY so — the first
+attempt stranded `def h fn […]` at 1-of-2 args and turned 44 `eng/ts` rows
+red. The 21 rows that remain here are a different root cause anyway: an
+UNDEFINED word in the forward window, where Go raises `undefined_word` and
+`core/ts` collects the bare Word as data at an `Any` slot.
 
 ### 3. A type-mismatched paren operand — 14 rows, error CODE
 
@@ -155,13 +167,13 @@ consequence of class 2 rather than a separate rule.
 
 ## What is closed, and what is deliberately not
 
-**15 of the 135 are closed** — the whole of class 9, the crash in class 5,
-and 9 of the 11 in class 4. Each was a small, local defect with an
+**45 of the 135 are closed** — the whole of class 9, the crash in class 5,
+9 of the 11 in class 4, and 30 of the 51 in class 2. Each was a small, local defect with an
 unambiguous Go twin to read against, and each moved its rows OUT of the
 ledger into the spec file they belong in, which is the mechanism working as
 designed.
 
-**The remaining 120 are not fixed.** Classes 1, 2 and 5 are real feature work in
+**The remaining 90 are not fixed.** Classes 1, 2 and 5 are real feature work in
 `core/ts` — the barrier is a whole rule with its own design note, the empty-
 paren handling is a rewrite of the forward window's operand planning, and the
 type-name table is a data gap plus a path resolver. Fixing them piecemeal
@@ -188,6 +200,29 @@ Pinning the 135 rows took `core/ts` from 88.20% to **90.71%**, and
 That is the rule restated from the other end: the uncovered surface and the
 divergent surface were the same surface.
 
-Closing the first 15 kept it there (90.73%), which is the expected shape: a
-row that moves from `divergent.tsv` to a spec file still runs, so the
-coverage it bought does not come back.
+Closing 45 of them kept it there (90.26%): a row that moves from
+`divergent.tsv` to a spec file still runs, so the coverage it bought does
+not come back. The small dip from 90.73% is the barrier short-circuiting
+paths those rows used to walk — the rows still pass, they just reach the
+refusal sooner.
+
+## What the closures cost, and the rule they taught
+
+Two of the four fixes broke a DOWNSTREAM module, and both for the same
+reason: `eng/ts` has hand-rolled fixtures that build values the parser never
+builds — a map with no `Eval` flag, words named `(` and `)`. Tightening
+`core/ts` to match Go exposed them.
+
+- The map eval-gate (previous commit) broke 3 `eng/ts` rows. **Correct fix:**
+  the fixture now builds an EVAL map, which is what the parser builds.
+- Dropping the word-shaped `(`/`)` fallback broke 39. **Correct fix: none
+  yet** — the fallback is restored for those two and kept dropped for `end`,
+  which had no such user. The asymmetry is ugly and is recorded as such,
+  because the alternative was either leaving a module red or reverting a
+  real parity fix.
+
+The generalisable part: **a fixture that constructs values by hand is a
+second, unversioned parser**, and every divergence it hides is invisible
+until the engine stops being lenient. `eng/ts`'s fixtures are the last
+users of the legacy tokenizer, and they are why `core/ts` still accepts two
+spellings of a paren marker.

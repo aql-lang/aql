@@ -1056,14 +1056,28 @@ export function newEnd(): Value {
 // parse.tsv's `def x 1 ;` row, which renders `end` — so nothing legitimate
 // depended on the fallback.
 
+function wordNamed(v: Value, name: string): boolean {
+  return v.vType.equal(TWord) && (v.data as WordInfo | null)?.name === name
+}
+
+// isOpenParen / isCloseParen KEEP the word-shaped fallback; isEnd does not.
+// The asymmetry is measured, not stylistic. eng/ts's hand-rolled check and
+// compiled fixtures still tokenise `(` and `)` into words, so dropping
+// those two turned 39 eng/ts rows red; the fixtures were moved onto real
+// markers and the check path still routes them differently, which is its
+// own port gap rather than this one. `end` had no such user, and dropping
+// it there is what closed 9 core/spec rows — `run end 1` was the value 1
+// here and undefined_word in Go, because core has no WORD called end.
 export function isOpenParen(v: Value): boolean {
-  return v.vType.equal(TOpenParen)
+  return v.vType.equal(TOpenParen) || wordNamed(v, '(')
 }
 
 export function isCloseParen(v: Value): boolean {
-  return v.vType.equal(TCloseParen)
+  return v.vType.equal(TCloseParen) || wordNamed(v, ')')
 }
 
+// Go's IsEnd (core/go/value.go:2744) tests the vType alone, and so does
+// this. See above for why its two siblings still do not.
 export function isEnd(v: Value): boolean {
   return v.vType.equal(TEnd)
 }
