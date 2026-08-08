@@ -123,6 +123,90 @@ func coreSpecFields(s string) []string {
 	return out
 }
 
+// coreSpecAssemble folds the flat token list into VALUES, building the
+// bracket forms the corpus README describes: `[ … ]` an eval list, `[q … ]`
+// a quoted one, `{ k: v … }` a map. So a row can hand the step loop the
+// containers a parser would have built, without a parser.
+//
+// Deliberately NOT shared with core/ts/src/corespec.test.ts's copy: shared
+// scaffolding hides the same bug from both engines, which is the whole
+// reason this corpus has two runners.
+func coreSpecAssemble(t *testing.T, toks []string) []Value {
+	t.Helper()
+	var out []Value
+	pos := 0
+	for pos < len(toks) {
+		var v Value
+		v, pos = coreSpecItem(t, toks, pos)
+		out = append(out, v)
+	}
+	return out
+}
+
+// coreSpecItem reads ONE item starting at pos, returning it and the index
+// just past it. Recursive because the bracket forms nest.
+func coreSpecItem(t *testing.T, toks []string, pos int) (Value, int) {
+	t.Helper()
+	switch toks[pos] {
+	case "[", "[q":
+		open := toks[pos]
+		pos++
+		elems := []Value{}
+		for pos < len(toks) && toks[pos] != "]" {
+			var v Value
+			v, pos = coreSpecItem(t, toks, pos)
+			elems = append(elems, v)
+		}
+		if pos >= len(toks) {
+			t.Fatalf("unclosed %s in %s", open, strings.Join(toks, " "))
+		}
+		pos++ // the "]"
+		if open == "[" {
+			return NewEvalList(elems), pos
+		}
+		return NewList(elems), pos
+	case "p(":
+		pos++
+		items := []Value{}
+		for pos < len(toks) && toks[pos] != ")" {
+			var v Value
+			v, pos = coreSpecItem(t, toks, pos)
+			items = append(items, v)
+		}
+		if pos >= len(toks) {
+			t.Fatalf("unclosed p( in %s", strings.Join(toks, " "))
+		}
+		pos++ // the ")"
+		return NewParenExpr(items), pos
+	case "{", "{q":
+		open := toks[pos]
+		pos++
+		m := NewOrderedMap()
+		for pos < len(toks) && toks[pos] != "}" {
+			key := toks[pos]
+			if !strings.HasSuffix(key, ":") {
+				t.Fatalf("map key %q must end with ':'", key)
+			}
+			pos++
+			if pos >= len(toks) {
+				t.Fatalf("map key %s has no value", key)
+			}
+			var v Value
+			v, pos = coreSpecItem(t, toks, pos)
+			m.Set(strings.TrimSuffix(key, ":"), v)
+		}
+		if pos >= len(toks) {
+			t.Fatalf("unclosed { in %s", strings.Join(toks, " "))
+		}
+		pos++ // the "}"
+		if open == "{" {
+			return NewEvalMap(m), pos
+		}
+		return NewMap(m), pos
+	}
+	return coreSpecToken(toks[pos]), pos + 1
+}
+
 // coreSpecRegistry is the fixture: a bare registry plus ONE word, so the
 // registry, signature matching, dispatch and the step loop are all exercised
 // without a word library.
@@ -268,17 +352,9 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 		}
 		return CanonValue(tl)
 	case "list":
-		var elems []Value
-		for _, tok := range coreSpecFields(arg) {
-			elems = append(elems, coreSpecToken(tok))
-		}
-		return CanonValue(NewList(elems))
+		return CanonValue(NewList(coreSpecAssemble(t, coreSpecFields(arg))))
 	case "run":
-		var prog []Value
-		for _, tok := range coreSpecFields(arg) {
-			prog = append(prog, coreSpecToken(tok))
-		}
-		out, err := NewTop(r).Run(prog)
+		out, err := NewTop(r).Run(coreSpecAssemble(t, coreSpecFields(arg)))
 		if err != nil {
 			var be *BoruError
 			if errors.As(err, &be) {
@@ -319,4 +395,35 @@ func TestCoreSpec(t *testing.T) {
 		t.Fatal("core/spec produced no rows — the corpus is not being read")
 	}
 	t.Logf("core/spec: %d rows", total)
+}
+
+// TestCoreProbe is the Go half of scripts/core-probe.sh — a developer probe,
+// not a gate. It renders each candidate expression exactly as evalCoreSpec
+// does, so a probe result can be pasted straight into a corpus file. Without
+// CORE_PROBE_IN set it is a no-op, so `go test ./...` is unaffected.
+//
+// Why a probe at all: a corpus row is only honest if BOTH engines were asked
+// before it was written down. The row's `expected` is still the CONTRACT —
+// this corpus is a spec, not a differential — but a row neither engine
+// produces should be a deliberate red row, not a surprise.
+func TestCoreProbe(t *testing.T) {
+	in, out := os.Getenv("CORE_PROBE_IN"), os.Getenv("CORE_PROBE_OUT")
+	if in == "" || out == "" {
+		t.Skip("CORE_PROBE_IN / CORE_PROBE_OUT unset — probe is opt-in")
+	}
+	src, err := os.ReadFile(in) //nolint:gosec // developer probe, path from env
+	if err != nil {
+		t.Fatalf("open %s: %v", in, err)
+	}
+	var b strings.Builder
+	for _, line := range strings.Split(strings.TrimRight(string(src), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		b.WriteString(evalCoreSpec(t, coreSpecRegistry(t), line))
+		b.WriteByte('\n')
+	}
+	if err := os.WriteFile(out, []byte(b.String()), 0o600); err != nil {
+		t.Fatalf("write %s: %v", out, err)
+	}
 }

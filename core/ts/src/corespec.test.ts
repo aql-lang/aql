@@ -33,11 +33,14 @@ import {
   newCloseParen,
   newInteger,
   newList,
+  newMap,
   newNone,
   newOpenParen,
+  newParenExpr,
   newString,
   newTypeLiteral,
   newWord,
+  OrderedMap,
   Registry,
   TAny,
   TBoolean,
@@ -107,6 +110,60 @@ function token(tok: string): Value {
 
 function fields(s: string): string[] {
   return s.split(' ').filter((f) => f !== '')
+}
+
+/**
+ * assemble turns the flat token list into VALUES, folding the bracket forms
+ * the README describes into containers: `[ … ]` an eval list, `[q … ]` a
+ * quoted one, `{ k: v … }` a map. Written independently of the Go runner's
+ * copy — an asymmetry between the two shows up as a false divergence, which
+ * is the failure mode this corpus exists to prevent.
+ *
+ * Recursive-descent over an index the callers share, because the forms nest
+ * and a scan-for-the-matching-bracket pass would have to re-count depth at
+ * every level.
+ */
+function assemble(toks: string[]): Value[] {
+  const st = { i: 0 }
+  const out: Value[] = []
+  while (st.i < toks.length) out.push(item(toks, st))
+  return out
+}
+
+/** One item: a container if it opens one, else a single token. */
+function item(toks: string[], st: { i: number }): Value {
+  const tok = toks[st.i]!
+  if ('[' === tok || '[q' === tok) {
+    st.i++
+    const elems: Value[] = []
+    while (st.i < toks.length && ']' !== toks[st.i]) elems.push(item(toks, st))
+    assert.equal(toks[st.i], ']', `unclosed ${tok} in ${toks.join(' ')}`)
+    st.i++
+    return newList(elems, { eval: '[' === tok })
+  }
+  if ('p(' === tok) {
+    st.i++
+    const items: Value[] = []
+    while (st.i < toks.length && ')' !== toks[st.i]) items.push(item(toks, st))
+    st.i++
+    return newParenExpr(items)
+  }
+  if ('{' === tok || '{q' === tok) {
+    st.i++
+    const m = new OrderedMap()
+    while (st.i < toks.length && '}' !== toks[st.i]) {
+      const key = toks[st.i]!
+      assert.ok(key.endsWith(':'), `map key ${JSON.stringify(key)} must end with ':'`)
+      st.i++
+      assert.ok(st.i < toks.length, `map key ${key} has no value`)
+      m.set(key.slice(0, -1), item(toks, st))
+    }
+    assert.equal(toks[st.i], '}', `unclosed { in ${toks.join(' ')}`)
+    st.i++
+    return newMap(m, { eval: '{' === tok })
+  }
+  st.i++
+  return token(tok)
 }
 
 /** The fixture: a bare registry plus ONE word, so the registry, signature
@@ -252,10 +309,10 @@ function evalExpr(expr: string): string {
       return canon([newTypeLiteral(t)])
     }
     case 'list':
-      return canon([newList(fields(arg).map(token))])
+      return canon([newList(assemble(fields(arg)))])
     case 'run': {
       try {
-        return render(new Engine(fixtureRegistry()).run(fields(arg).map(token)))
+        return render(new Engine(fixtureRegistry()).run(assemble(fields(arg))))
       } catch (e) {
         if (e instanceof BoruError) return `ERROR:${e.code}`
         return `ERROR:non_boru:${(e as Error).message}`

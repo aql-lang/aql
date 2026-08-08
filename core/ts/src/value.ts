@@ -778,8 +778,12 @@ export class OrderedMap {
 }
 
 /** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
-export function newMap(m: OrderedMap): Value {
-  return new Value(TMap, m)
+export function newMap(m: OrderedMap, opts?: { eval?: boolean; quoted?: boolean }): Value {
+  // The flags are optional for the same reason newList's are: Go has both
+  // NewMap and NewEvalMap, and the difference decides whether the step
+  // loop auto-evaluates the map's values at all. A caller that omits them
+  // gets the runtime form (no auto-eval), which is what NewMap builds.
+  return new Value(TMap, m, { eval: opts?.eval, quoted: opts?.quoted })
 }
 
 /**
