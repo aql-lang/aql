@@ -32,12 +32,23 @@ import { canon } from "./canon.ts";
 import { Engine } from "./engine.ts";
 import { BoruError } from "./error.ts";
 import { Registry } from "./registry.ts";
-import { TAny, TInteger, TList, TMap, TString } from "./type.ts";
+import {
+  TAny,
+  TAtom,
+  TBoolean,
+  TFloat,
+  TInteger,
+  TList,
+  TMap,
+  TNone,
+  TString,
+} from "./type.ts";
 import {
   OrderedMap,
   newAtom,
   newBoolean,
   newCloseParen,
+  newDynamicCarrier,
   newEnd,
   newFnDef,
   newInteger,
@@ -478,6 +489,252 @@ describe("Engine — check mode, behind a fake AnalysisImpl", () => {
         /nosuch/.test(e.message),
     );
     assert.equal(r.check.diagnostics.length, 0);
+  });
+
+  // ── The recovery arms ───────────────────────────────────────────────
+  //
+  // Check mode never stops at the first refusal: a dispatch that matches
+  // NO signature assumes a best-fit overload, reports one honest
+  // diagnostic and keeps going with modelled results, so a later error is
+  // still reported instead of being hidden behind the first. These tests
+  // pin both halves — the diagnostic AND the shape analysis continues
+  // with.
+
+  it("assumes a best-fit overload for a native word that matches none", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.check.begin();
+        // addq wants two Integers. Two Strings match nothing.
+        const out = new Engine(r).run([
+          newWord("addq"),
+          newString("x"),
+          newString("y"),
+        ]);
+        const diag = r.check.diagnostics.filter(
+          (d) => d.code === "no_signature",
+        );
+        assert.equal(diag.length, 1);
+        assert.equal(diag[0]!.word, "addq");
+        assert.match(diag[0]!.detail, /assuming best-fit candidate/);
+        // The assumed signature's modelled result replaced the word AND
+        // both operands, so nothing is left dangling for the next step.
+        assert.equal(canon(out), "Integer");
+      },
+    );
+  });
+
+  it("gathers the assumed call's operands from BOTH sides of the word", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.check.begin();
+        // One operand before the word, one after: the recovery walks
+        // forward to the arity and then fills the rest from the prefix.
+        const out = new Engine(r).run([
+          newString("x"),
+          newWord("addq"),
+          newString("y"),
+        ]);
+        assert.equal(canon(out), "Integer");
+      },
+    );
+  });
+
+  it("stops the operand gather at a word rather than reaching past it", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.check.begin();
+        // `idq` is a word, so it bounds the gather: addq assumes its
+        // overload over ONE operand, leaving idq to dispatch on its own.
+        const out = new Engine(r).run([
+          newWord("addq"),
+          newString("x"),
+          newWord("idq"),
+          newInteger(1n),
+        ]);
+        assert.equal(
+          r.check.diagnostics.filter((d) => d.code === "no_signature").length,
+          1,
+        );
+        assert.equal(canon(out), "Integer Integer");
+      },
+    );
+  });
+
+  it("assumes an overload for a user fn whose args do not fit", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.pushDef(
+          "inc",
+          newFnDef({
+            sigs: [
+              {
+                params: [{ name: "n", type: TInteger }],
+                returns: [TInteger],
+                body: [newWord("addq"), newWord("n"), newInteger(1n)],
+              },
+            ],
+          } as FnDefInfo),
+        );
+        r.check.begin();
+        const out = new Engine(r).run([newWord("inc"), newString("x")]);
+        const diag = r.check.diagnostics.filter(
+          (d) => d.code === "no_signature",
+        );
+        assert.equal(diag.length, 1);
+        assert.equal(diag[0]!.word, "inc");
+        // The declared return still models the call, so the caller's own
+        // analysis continues from a typed value.
+        assert.equal(canon(out), "Integer");
+      },
+    );
+  });
+
+  it("breaks a recursive fn with its declared returns", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        // A body that calls ITSELF: without the in-flight guard the
+        // analysis would descend forever.
+        r.pushDef(
+          "loop",
+          newFnDef({
+            sigs: [
+              {
+                params: [{ name: "n", type: TInteger }],
+                returns: [TInteger],
+                body: [newWord("loop"), newWord("n")],
+              },
+            ],
+          } as FnDefInfo),
+        );
+        r.check.begin();
+        const out = new Engine(r).run([newWord("loop"), newInteger(1n)]);
+        assert.equal(canon(out), "Integer");
+      },
+    );
+  });
+
+  it("breaks a recursive fn with NO declared returns via a dynamic Any", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.pushDef(
+          "loop",
+          fnDef(
+            [{ name: "n", type: TInteger }],
+            [newWord("loop"), newWord("n")],
+          ),
+        );
+        r.check.begin();
+        const out = new Engine(r).run([newWord("loop"), newInteger(1n)]);
+        // Nothing is declared, so the cycle is cut with a value of
+        // statically-unknown type rather than a guessed one.
+        assert.equal(out.length, 1);
+        assert.equal(out[0]!.dynamic, true);
+      },
+    );
+  });
+
+  it("returns the body residual when a fn declares no returns", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.pushDef("two", fnDef([], [newInteger(2n)]));
+        r.check.begin();
+        assert.equal(canon(new Engine(r).run([newWord("two")])), "2");
+      },
+    );
+  });
+
+  it("spreads dynamic contagion from an argument to the returns", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.pushDef(
+          "inc",
+          newFnDef({
+            sigs: [
+              {
+                params: [{ name: "n", type: TAny }],
+                returns: [TInteger],
+                body: [newInteger(1n)],
+              },
+            ],
+          } as FnDefInfo),
+        );
+        r.check.begin();
+        // A gradual argument makes the declared Integer return dynamic
+        // too: what came in unknown cannot make the result certain.
+        const out = new Engine(r).run([
+          newWord("inc"),
+          newDynamicCarrier(TAny),
+        ]);
+        assert.equal(out.length, 1);
+        assert.equal(out[0]!.dynamic, true);
+      },
+    );
+  });
+
+  it("binds an omitted optional param to its type's base value", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        // Each param type has a distinct zero; the body returns the bound
+        // value so the test reads back what the analysis chose.
+        const cases: Array<[import("./type.ts").BoruType, string]> = [
+          [TInteger, "0"],
+          [TFloat, "0.0"],
+          [TString, "''"],
+          [TBoolean, "false"],
+          [TList, "(quote [])"],
+          [TMap, "{}"],
+          [TAtom, "/q"],
+          [TNone, "none"],
+        ];
+        for (const [t, want] of cases) {
+          const r = fixture();
+          r.pushDef(
+            "z",
+            fnDef([{ name: "p", type: t, optional: true }], [newWord("p")]),
+          );
+          r.check.begin();
+          assert.equal(
+            canon(new Engine(r).run([newWord("z")])),
+            want,
+            t.toString(),
+          );
+        }
+      },
+    );
+  });
+
+  it("models a forward marker's dispatch rather than running its handler", () => {
+    withAnalysis(
+      () => [newTypeLiteral(TInteger)],
+      () => {
+        const r = fixture();
+        r.check.begin();
+        // `idq`'s Any slot DEFERS over a word, so the dispatch completes
+        // through the forward-MARKER path rather than immediately. In
+        // check mode the marker's handler must not run: the modelled
+        // carrier stands in for its result, exactly as for a direct
+        // dispatch.
+        const out = new Engine(r).run([newWord("idq"), newWord("true")]);
+        assert.equal(canon(out), "Integer");
+      },
+    );
   });
 });
 
