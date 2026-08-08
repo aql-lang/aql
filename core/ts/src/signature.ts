@@ -4,7 +4,8 @@
 // type-check propagation.
 
 import type { BoruType } from './type.ts'
-import type { Value } from './value.ts'
+import { TAny } from './type.ts'
+import { newCarrier, type Value } from './value.ts'
 
 /** A handler receives matched args and the registry, returns the values to push. */
 export type Handler = (
@@ -92,6 +93,28 @@ export interface Signature {
 
 /** Computes carrier return values for a signature in check mode. */
 export type ReturnsFunc = (args: Value[], registry: Registry) => Value[]
+
+/**
+ * returnsIdentity is the ReturnsFunc for words that PRESERVE their inputs —
+ * the stack vocabulary (dup, swap, over, rot, …), where the output types
+ * are expressible as a permutation of the input types. The twin of Go's
+ * ReturnsIdentity (core/go/carrier_new.go).
+ *
+ * The mapping is a permutation description: result[i] = args[mapping[i]].
+ * swap is returnsIdentity(0, 1); over is returnsIdentity(1, 0, 1). An
+ * index outside the args range yields an Any carrier rather than throwing,
+ * matching Go.
+ *
+ * PARITY NOTE: Go's version additionally mints a FRESH Value.ID for a
+ * DUPLICATED source index, so `dup`'s two outputs stay distinct for the
+ * bytecode emitter's per-value provenance. core/ts Values carry no ID —
+ * there is no compiler in the TS pieces to consume one — so that half has
+ * no analogue here and is deliberately absent rather than stubbed.
+ */
+export function returnsIdentity(...mapping: number[]): ReturnsFunc {
+  return (args: Value[]): Value[] =>
+    mapping.map((m) => (m < 0 || m >= args.length ? newCarrier(TAny) : args[m]!))
+}
 
 export interface NativeSig {
   args: BoruType[]

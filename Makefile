@@ -329,6 +329,34 @@ test-ts-parser:
 	  --test-coverage-include='src/**' \
 	  'src/**/*.test.ts'
 
+# ---- TypeScript base layer (basic/ts) ----------------------------------
+#
+# @boru-lang/basic is the TS twin of the basic/go module. It is the sixth
+# gate in the standalone set:
+#
+#   cover-gate-core    core/go by its own suite     floor 100
+#   test-ts-core       core/ts by its own suite     floor $(TS_CORE_GATE_LINES)
+#   cover-gate-parser  parser/go by its own suite   floor 100
+#   test-ts-parser     parser/ts by its own suite   floor $(TS_PARSER_GATE_LINES)
+#   cover-gate         basic/go via the merged gate floor 100
+#   test-ts-basic      basic/ts by its own suite    floor $(TS_BASIC_GATE_LINES)
+#
+# The floor starts at 100 rather than on a ratchet, and can: the module is
+# being built increment by increment against basic/spec, so every line that
+# exists is a line the shared corpus already reaches. It is a ratchet in
+# the other direction — the floor holds while the SURFACE grows, so a new
+# word cannot land without corpus rows that exercise it.
+TS_BASIC_GATE_LINES ?= 100
+test-ts-basic:
+	@echo "==> typecheck basic/ts"
+	cd basic/ts && npx tsc
+	@echo "==> test basic/ts (source line-coverage floor $(TS_BASIC_GATE_LINES)%)"
+	cd basic/ts && node --test --experimental-strip-types --no-warnings \
+	  --experimental-test-coverage --test-coverage-lines=$(TS_BASIC_GATE_LINES) \
+	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-include='src/**' \
+	  'src/**/*.test.ts'
+
 # ---- cross-engine differential -----------------------------------------
 #
 # Run the shared corpus (eng/spec value mode + eng/spec/check check mode)
