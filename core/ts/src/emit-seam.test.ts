@@ -24,8 +24,11 @@ import { Registry } from "./registry.ts";
 import {
   newCarrier,
   newInteger,
+  newInterpString,
+  newList,
   newString,
   newWord,
+  newXmlInterp,
   type Value,
 } from "./value.ts";
 import { TInteger, TString } from "./type.ts";
@@ -50,7 +53,15 @@ interface Recorded {
  * by the `declineOn` set, so both sides of each branch are exercised from
  * one stub.
  */
-function recordingEmit(declineOn: ReadonlySet<string> = new Set()): {
+function recordingEmit(
+  declineOn: ReadonlySet<string> = new Set(),
+  bindings: {
+    /** rendered def value -> the const the compiler would bake for it */
+    consts?: ReadonlyMap<string, Value>;
+    /** rendered def value -> the token span that reproduces it inline */
+    islands?: ReadonlyMap<string, readonly Value[]>;
+  } = {},
+): {
   emit: EmitRecorder;
   log: Recorded;
 } {
@@ -102,14 +113,17 @@ function recordingEmit(declineOn: ReadonlySet<string> = new Set()): {
     recordValueIsland(_token: Value, _out: Value, desc: string): void {
       log.islands.push(desc);
     },
-    islandTokensFor(): readonly Value[] | null {
-      return null;
+    islandTokensFor(v: Value): readonly Value[] | null {
+      return bindings.islands?.get(v.toString()) ?? null;
     },
     alias(): void {
       log.aliases++;
     },
-    constValueOf(): Value | null {
-      return null;
+    constValueOf(op: RecorderOperand | null): Value | null {
+      // The stub's operand carries the value's rendered form, so the
+      // per-test table is keyed the same way classify keys its log.
+      const of = (op as { of?: string } | null)?.of;
+      return of === undefined ? null : (bindings.consts?.get(of) ?? null);
     },
   };
   return { emit, log };
@@ -221,5 +235,187 @@ describe("EmitRecorder seam — the recording half", () => {
     // literal one is not, which is the branch pair being pinned.
     assert.doesNotThrow(() => new Engine(r).run([newString("plain")]));
     assert.deepEqual(log.islands, []);
+  });
+});
+
+// ── The ISLAND arms ───────────────────────────────────────────────────
+//
+// An interpolated string and an XML template are not calls: they are
+// TOKENS that re-run to a value. The compiler keeps them by recording the
+// token itself as an island, but only when the island would reproduce the
+// same value on its own — so each arm below is a question about what the
+// token CAPTURES from around it.
+
+/** `"a${…}"` with one literal head and one expression hole. */
+function interp(expr: Value[]): Value {
+  return newInterpString([{ lit: "n=" }, { expr }]);
+}
+
+describe("EmitRecorder seam — interpolated-string islands", () => {
+  function compiling(
+    consts?: ReadonlyMap<string, Value>,
+    islands?: ReadonlyMap<string, readonly Value[]>,
+  ): { r: Registry; log: ReturnType<typeof recordingEmit>["log"] } {
+    const r = reg();
+    const { emit, log } = recordingEmit(new Set(), { consts, islands });
+    r.check.mode = true;
+    r.check.emit = emit;
+    return { r, log };
+  }
+
+  it("islands a template whose hole calls a native word", () => {
+    const { r, log } = compiling();
+    // `addq` is not a binding, so it re-dispatches inside the island and
+    // the token reproduces its own value.
+    const out = new Engine(r).run([
+      interp([newWord("addq"), newInteger(1n), newInteger(2n)]),
+    ]);
+    assert.deepEqual(log.islands, ["interp"]);
+    assert.deepEqual(log.uncompilable, []);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.carrier, true);
+  });
+
+  it("bakes a const-bound capture into the island", () => {
+    const bound = newInteger(5n);
+    const { r, log } = compiling(new Map([[bound.toString(), bound]]));
+    r.pushDef("x", bound);
+    new Engine(r).run([interp([newWord("x")])]);
+    assert.deepEqual(log.islands, ["interp"]);
+  });
+
+  it("inlines an islanded capture's own producer tokens", () => {
+    const bound = newInteger(5n);
+    const { r, log } = compiling(
+      undefined,
+      new Map([[bound.toString(), [newInteger(5n)]]]),
+    );
+    r.pushDef("x", bound);
+    new Engine(r).run([interp([newWord("x")])]);
+    assert.deepEqual(log.islands, ["interp"]);
+  });
+
+  it("refuses a capture that is neither const nor islanded", () => {
+    // Nothing can stand in for the binding inside the island, so the
+    // template cannot be compiled — and says so rather than baking a
+    // value that would be wrong at run time.
+    const { r, log } = compiling();
+    r.pushDef("x", newInteger(5n));
+    new Engine(r).run([interp([newWord("x")])]);
+    assert.deepEqual(log.islands, []);
+    assert.deepEqual(log.uncompilable, [
+      "interpolated string: unsubstitutable capture",
+    ]);
+  });
+
+  it("substitutes through a NESTED template and through a list", () => {
+    const bound = newInteger(5n);
+    const { r, log } = compiling(new Map([[bound.toString(), bound]]));
+    r.pushDef("x", bound);
+    new Engine(r).run([
+      interp([newList([newWord("x"), interp([newWord("x")])], { eval: true })]),
+    ]);
+    assert.deepEqual(log.islands, ["interp"]);
+  });
+
+  it("refuses when a NESTED template cannot substitute", () => {
+    const { r, log } = compiling();
+    r.pushDef("x", newInteger(5n));
+    new Engine(r).run([interp([interp([newWord("x")])])]);
+    assert.deepEqual(log.islands, []);
+    // BOTH refuse: the inner template is evaluated on its own first and
+    // latches its own reason, then the outer one cannot substitute it.
+    assert.equal(log.uncompilable.length, 2);
+    assert.ok(log.uncompilable.every((u) => /unsubstitutable capture/.test(u)));
+  });
+
+  it("islands a nested xml token separately, and refuses to fold it in", () => {
+    // The nested XML token is capture-free, so it islands on its OWN
+    // terms while the string's hole is being evaluated. The enclosing
+    // template still refuses: substituteInterp has no span that would
+    // reproduce an xml token inside the string's island.
+    const { r, log } = compiling();
+    new Engine(r).run([
+      interp([newXmlInterp({ tag: "br", attrs: [], children: [] })]),
+    ]);
+    assert.deepEqual(log.islands, ["xml"]);
+    assert.deepEqual(log.uncompilable, [
+      "interpolated string: unsubstitutable capture",
+    ]);
+  });
+});
+
+describe("EmitRecorder seam — xml islands", () => {
+  function compiling(): {
+    r: Registry;
+    log: ReturnType<typeof recordingEmit>["log"];
+  } {
+    const r = reg();
+    const { emit, log } = recordingEmit();
+    r.check.mode = true;
+    r.check.emit = emit;
+    return { r, log };
+  }
+
+  /** `<p>n=${expr}</p>` */
+  function xml(expr: Value[]): Value {
+    return newXmlInterp({
+      tag: "p",
+      attrs: [],
+      children: [{ lit: "n=" }, { expr }],
+    });
+  }
+
+  it("islands a capture-free template", () => {
+    const { r, log } = compiling();
+    const out = new Engine(r).run([
+      xml([newWord("addq"), newInteger(1n), newInteger(2n)]),
+    ]);
+    assert.deepEqual(log.islands, ["xml"]);
+    assert.equal(out[0]!.carrier, true);
+  });
+
+  it("resolves a template that CAPTURES a binding instead of islanding it", () => {
+    // The binding is not live inside an island, so the template is
+    // resolved here and now — the compile path declines rather than
+    // recording something that would re-run against nothing.
+    const { r, log } = compiling();
+    r.pushDef("x", newInteger(5n));
+    const out = new Engine(r).run([xml([newWord("x")])]);
+    assert.deepEqual(log.islands, []);
+    assert.equal(out.length, 1);
+  });
+
+  it("sees a capture through an ATTRIBUTE hole", () => {
+    const { r, log } = compiling();
+    r.pushDef("x", newInteger(5n));
+    new Engine(r).run([
+      newXmlInterp({
+        tag: "a",
+        attrs: [{ name: "h", segs: [{ lit: "p/" }, { expr: [newWord("x")] }] }],
+        children: [],
+      }),
+    ]);
+    assert.deepEqual(log.islands, []);
+  });
+
+  it("sees a capture through a nested ELEMENT, a list and a string", () => {
+    for (const hole of [
+      [newList([newWord("x")], { eval: true })],
+      [newInterpString([{ expr: [newWord("x")] }])],
+    ]) {
+      const { r, log } = compiling();
+      r.pushDef("x", newInteger(5n));
+      new Engine(r).run([
+        newXmlInterp({
+          tag: "d",
+          attrs: [],
+          children: [
+            { elem: { tag: "p", attrs: [], children: [{ expr: hole }] } },
+          ],
+        }),
+      ]);
+      assert.deepEqual(log.islands, []);
+    }
   });
 });
