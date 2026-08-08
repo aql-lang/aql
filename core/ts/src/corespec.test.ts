@@ -126,6 +126,65 @@ function fixtureRegistry(): Registry {
       },
     ],
   })
+  // One word reaches only the one dispatch shape. These four add the shapes
+  // the step loop actually distinguishes — a STACK-form word, a MULTI-return
+  // word, a gradual (Any) slot, and a handler that RAISES — so a corpus row
+  // can exercise collection, residual layout, gradual matching and error
+  // propagation rather than just forward addition. core/go/corespec_test.go
+  // declares the same five independently; any asymmetry here shows up as a
+  // false divergence, which is the failure mode this corpus exists to
+  // prevent, so keep them in step.
+  r.registerNativeFunc({
+    name: 'negq',
+    signatures: [
+      {
+        args: [TInteger],
+        returns: [TInteger],
+        barrierPos: 1,
+        handler: (args: Value[]): Value[] => [newInteger(-args[0]!.asInteger())],
+      },
+    ],
+  })
+  r.registerNativeFunc({
+    name: 'pairq',
+    signatures: [
+      {
+        args: [TInteger],
+        returns: [TInteger, TInteger],
+        barrierPos: 1,
+        handler: (args: Value[]): Value[] => [
+          newInteger(args[0]!.asInteger()),
+          newInteger(args[0]!.asInteger()),
+        ],
+      },
+    ],
+  })
+  r.registerNativeFunc({
+    name: 'sumq',
+    signatures: [
+      {
+        args: [TInteger, TInteger],
+        returns: [TInteger],
+        barrierPos: 0, // STACK form: both operands come off the stack
+        handler: (args: Value[]): Value[] => [
+          newInteger(args[0]!.asInteger() + args[1]!.asInteger()),
+        ],
+      },
+    ],
+  })
+  r.registerNativeFunc({
+    name: 'boomq',
+    signatures: [
+      {
+        args: [TAny],
+        returns: [TAny],
+        barrierPos: 1,
+        handler: (): Value[] => {
+          throw new BoruError('fixture_boom', 'the fixture word always raises')
+        },
+      },
+    ],
+  })
   return r
 }
 

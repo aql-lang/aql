@@ -143,6 +143,50 @@ func coreSpecRegistry(t *testing.T) *Registry {
 		}),
 		BarrierPos: BarrierAllForward,
 	})
+	// One word reaches only the one dispatch shape. These four add the
+	// shapes the step loop actually distinguishes — a STACK-form word, a
+	// MULTI-return word, a gradual (Any) slot, and a handler that RAISES —
+	// so a corpus row can exercise collection, residual layout, gradual
+	// matching and error propagation rather than just forward addition.
+	// core/ts/src/corespec.test.ts declares the same five independently;
+	// any asymmetry here shows up as a false divergence, which is the
+	// failure mode this corpus exists to prevent, so keep them in step.
+	r.Register("negq", Signature{
+		Params:  []FnParam{{Name: "a", Type: TInteger}},
+		Returns: []*Type{TInteger},
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			a, _ := AsInteger(args[0])
+			return []Value{NewInteger(-a)}, nil
+		}),
+		BarrierPos: BarrierAllForward,
+	})
+	r.Register("pairq", Signature{
+		Params:  []FnParam{{Name: "a", Type: TInteger}},
+		Returns: []*Type{TInteger, TInteger},
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			a, _ := AsInteger(args[0])
+			return []Value{NewInteger(a), NewInteger(a)}, nil
+		}),
+		BarrierPos: BarrierAllForward,
+	})
+	r.Register("sumq", Signature{
+		Params:  []FnParam{{Name: "a", Type: TInteger}, {Name: "b", Type: TInteger}},
+		Returns: []*Type{TInteger},
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			a, _ := AsInteger(args[0])
+			b, _ := AsInteger(args[1])
+			return []Value{NewInteger(a + b)}, nil
+		}),
+		BarrierPos: 0, // STACK form: both operands come off the stack
+	})
+	r.Register("boomq", Signature{
+		Params:  []FnParam{{Name: "a", Type: TAny}},
+		Returns: []*Type{TAny},
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return nil, &BoruError{Code: "fixture_boom", Detail: "the fixture word always raises"}
+		}),
+		BarrierPos: BarrierAllForward,
+	})
 	return r
 }
 

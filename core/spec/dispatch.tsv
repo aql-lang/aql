@@ -32,3 +32,18 @@ run addq (addq 1 2) 3	ERROR:signature_error	a nested paren group as the first op
 run ( 1 2 addq )	3	stack form inside a group
 run addq 1 2 3	3 3	a trailing operand past the barrier stays residual
 run 1 nosuchword 2	ERROR:undefined_word	undefined word between literals
+
+# --- the dispatch shapes the step loop distinguishes ---
+run negq 5	-5	a one-slot forward word
+run negq negq 5	ERROR:signature_error	nested forward collection
+run pairq 7	7 7	a MULTI-return word lays both results in the residual
+run pairq 7 addq 1 2	7 7 3	multi-return residual followed by an unrelated call
+run 1 2 sumq	3	STACK form takes both operands off the stack
+run sumq	ERROR:signature_error	stack form with an empty stack
+run 1 sumq	ERROR:signature_error	stack form one operand short
+run boomq 1	ERROR:fixture_boom	a raising handler propagates its code
+run boomq 'x'	ERROR:fixture_boom	the Any slot accepts any concrete value, then raises
+run addq (negq 3) 4	ERROR:signature_error	a paren group as a forward operand
+run negq (addq 1 2)	ERROR:signature_error	a paren group as the only operand
+run 1 2 sumq 3 addq 4	3 7	stack form and forward form in one program
+run pairq (negq 2)	ERROR:signature_error	multi-return over a computed operand
