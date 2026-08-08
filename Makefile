@@ -626,7 +626,31 @@ cover-gate-core:
 # same change that raises coverage, never lower them. The merged
 # repo-wide ADR-008 gate (make cover-gate) stays the 100% contract; these
 # measure how much each piece proves on its own.
-CHECK_GATE_FLOOR ?= 56
+#
+# CHECK_GATE_FLOOR was RE-BASED at the 2026-08-08 carrier-lattice move
+# (ADR-013's third amendment), on exactly the precedent ENG_GATE_FLOOR
+# set at the Stage 4 cut: the measurement universe changed, so the
+# pre-move floor is not comparable to the post-move one.
+#
+# What happened is worth spelling out, because the number went DOWN and
+# that normally means a regression. It does not here. 492 statements left
+# check for core (the join lattice, the body runners, guard narrowing,
+# the carrier constructors, dead-overload detection), and their tests
+# went with them — a MOVE, not a copy, so the merged ADR-008 gate is
+# unaffected and not one covered statement was lost. But those 492 were
+# better covered by check's own suite than check's average (377/492 =
+# 77%, against 56% overall), so removing them lowered the RATIO:
+#
+#     before   1499/2672 = 56.1%
+#     after    1122/2180 = 51.5%     (= (1499-377)/(2672-492))
+#
+# Re-basing rather than buying the difference back with ~130 statements
+# of unrelated new check tests is the honest read: padding the gate to
+# preserve a number that is measuring a different set of statements would
+# make the ratchet a fiction. From 51 it ratchets UP as before — raise it
+# in the same change that raises coverage, and never lower it again
+# without a comparable structural reason recorded here.
+CHECK_GATE_FLOOR ?= 51
 COMPILER_GATE_FLOOR ?= 62
 
 # cover-gate-parser — the parser's own gate. The parser is a LEAF over core
