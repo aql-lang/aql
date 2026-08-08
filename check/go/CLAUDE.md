@@ -22,13 +22,27 @@ Three rules specific to this module:
   eng sees check only through its generated facade.
 - **Downward into core, only through slots.** check's analysis and
   check-mode behaviors are handed to core at init — `AnalysisImpl`
-  (S1, 9 slots) and `CheckBraid` (S9, 21 slots), both installed from
-  `check_recovery.go` (`installAnalysisImpl` / `installCheckBraid`),
-  plus `core.JoinCarriersHook` from `carrier.go`. Core-side tests pin
-  each NAMED inactive default (`TestInactiveAnalysisImpl`,
-  `TestInactiveCheckBraid`); a new slot follows the same pattern — an
-  anonymous default replaced at init is unreachable and fails the
-  merged ADR-008 gate.
+  (S1, 10 slots) and `CheckBraid` (S9), both installed from
+  `check_recovery.go` (`installAnalysisImpl` / `installCheckBraid`).
+  Core-side tests pin each NAMED inactive default
+  (`TestInactiveAnalysisImpl`, `TestInactiveCheckBraid`); a new slot
+  follows the same pattern — an anonymous default replaced at init is
+  unreachable and fails the merged ADR-008 gate.
+
+- **The carrier lattice is NOT here any more** (ADR-013's 2026-08-08
+  amendment; reasoning in
+  [design/BASIC-CHECK-CUT.0.md](../../design/BASIC-CHECK-CUT.0.md)). The join family, the body runners, guard narrowing, the
+  carrier constructors, dead-overload detection and the deduping
+  diagnostic emitters moved down to `core/go` — they were pure
+  functions over core types, and `basic` needs them to carry its
+  control words' analysis halves without importing this module. What
+  remains here is the analysis PASS: the fn / loop body models
+  (memoised per call shape, recursion-bailing, quota-capped, Kleene-
+  iterated), dispatch modelling and recovery, and the standalone
+  diagnostic passes. `AnalyseFnBody` and `AnalyseLoopBody` are
+  installed into the two newest S1 slots for exactly that reason.
+  Before adding a helper here, ask whether its operands are all core
+  types — if so it belongs below, not in this module.
 - **The eng facade mirrors this surface.** `eng/go/aliases_check.go`
   is GENERATED (`piecetool -facade`); after changing check's exported
   surface, regenerate it and keep `eng/go/piece_map.tsv` current.
@@ -61,5 +75,12 @@ and `make test-race` fan out over check/go with the rest of
 `MODULES` / `RACE_MODULES`. Because check's behavior is only observed
 end-to-end through the pipeline above it, a semantic change wants
 `cd eng/go && go test ./...` and the lang/test differentials too.
-Coverage: check/go has no standalone gate — it rides the repo-wide
-merged ADR-008 `make cover-gate`.
+Coverage: `make cover-gate-check` is check/go's standalone gate (its
+own suite alone, floor a ratchet toward 100), on top of the repo-wide
+merged ADR-008 `make cover-gate`. The floor was RE-BASED at the
+2026-08-08 carrier-lattice move: 492 statements left for core, and
+because they were better covered than check's average their departure
+lowered the ratio without losing a single covered statement — the
+measurement universe changed, so the pre-move floor is not comparable
+(same reasoning as `ENG_GATE_FLOOR` at the Stage 4 cut). It ratchets
+UP from the re-based value; never lower it again.

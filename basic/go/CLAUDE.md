@@ -6,58 +6,84 @@ the predefined global content types, registered against the kernel. It
 sits below `lang`:
 
 ```
-core/go  ←  check/go  ←  basic/go  ←  lang/go  ←  cmd/go
-          parser/go  ↗
+core/go  ←  basic/go  ←  lang/go  ←  cmd/go
+parser/go  ↗
 ```
 
-**The dependency rule is hard (ADR-013 as amended 2026-08-07): basic
+**The dependency rule is hard (ADR-013 as amended 2026-08-08): basic
 depends on the pieces it actually uses, and on nothing else.** Today
-that is `core`, `check` and `parser` — NOT `eng`, and no longer
-`compiler`. No other boru sibling, no host-capability dependency
+that is `core` and `parser` (the latter test-only) — NOT `eng`, `check`
+or `compiler`. No other boru sibling, no host-capability dependency
 (sqlite, file ops, formats — those are lang's). The gate is
 `depsgate_test.go`; if a change here seems to need more, the design is
 wrong, not the go.mod.
 
-### Why check, and why not compiler
+### Why nothing above core belongs here
 
-The two look alike from the outside — both are "the passes above the
-interpreter" — but only one of them was removable, and the difference
-is behavioural, not a matter of effort.
+basic defines language **types and words**. Nothing in that job needs
+special knowledge of the passes above the interpreter: core's own
+primitives are enough, and a word that seems to need more is a word
+whose analysis half is filed in the wrong module.
 
-- **compiler: removed.** basic's `if` / `case` / `for` handlers record
-  branch and loop fragments for the bytecode emitter. That already went
-  through a core-owned seam, `core.EmitRecorder` — except the interface
-  was one method group short (branches and loops), so `recorderState`
-  had to downcast to `*compiler.EmitState` to reach them. Widening the
-  interface (`TakeFragment`, `RecordBranch`, `RecordLoop`, with
-  `core.BranchRecord` and the opaque `core.EmitFragmentRef`) deleted the
-  downcast, and the module requirement went with it. The seam is honest
-  because an INACTIVE recorder is *correct* behaviour: with no compiler
-  linked, nothing is recorded and the program still runs, interpreted.
+- **compiler: removed (2026-08-07).** basic's `if` / `case` / `for`
+  handlers record branch and loop fragments for the bytecode emitter.
+  That already went through a core-owned seam, `core.EmitRecorder` —
+  except the interface was one method group short (branches and loops),
+  so `recorderState` had to downcast to `*compiler.EmitState` to reach
+  them. Widening the interface (`TakeFragment`, `RecordBranch`,
+  `RecordLoop`, with `core.BranchRecord` and the opaque
+  `core.EmitFragmentRef`) deleted the downcast, and the module
+  requirement went with it. The seam is honest because an INACTIVE
+  recorder is *correct* behaviour: with no compiler linked, nothing is
+  recorded and the program still runs, interpreted.
 
-- **check: kept, and structural.** basic uses 23 check symbols across 63
-  call sites — `RunCarrierBody*`, `ApplyGuardNarrowing` /
-  `ApplyComplementNarrowing`, `InstallJoinedDefs`, `JoinCarriers`,
-  `AnalyseFnBody`, `AnalyseLoopBody`, `RecordTypedDefMake`,
-  `DeadSignatures`. Every native control-flow word has an analysis half
-  as well as a runtime half, and the analysis half is *written in the
-  checker's vocabulary*: `if` cannot be type-checked without narrowing
-  the guard over the then-arm, re-entering the pass on each arm, and
-  joining the arms' carriers.
+- **check: removed (2026-08-08), by moving code, not by forwarding it.**
+  Full reasoning, the moved-symbol table and the gate arithmetic:
+  [design/BASIC-CHECK-CUT.0.md](../../design/BASIC-CHECK-CUT.0.md).
+  The 2026-08-07 amendment kept check on the grounds that basic's 23
+  check symbols were "written in the checker's vocabulary" and that
+  routing them through a table would be a mailbox rather than a seam.
+  The first half was wrong on inspection. **21 of the 23 were pure
+  functions over CORE types** — `core.Value`, `*core.Type`, `r.Defs`,
+  and `CheckState`, which core has owned since the four-piece cut. They
+  were not the checker's vocabulary; they were the interpreter's,
+  sitting in `check/go` for historical reasons. So they moved down, to
+  where their types already live:
 
-  These could be forwarded through a core-owned table the way
-  `AnalysisImpl` forwards its ten — every one of them takes and returns
-  core types, so it is mechanically possible. It would be a **mailbox,
-  not a seam**: basic would still be unusable without check installed,
-  and `go.mod` would simply stop saying so. Unlike the recorder there is
-  no meaningful inactive default — "don't narrow, don't join" is not a
-  feature switched off, it is wrong analysis. The dependency is real, so
-  the manifest should keep declaring it.
+  | What | Now in |
+  |---|---|
+  | `JoinCarriers`, `JoinCarriersInner`, `JoinCarrierStacks`, `InstallJoinedDefs`, `CommonAncestorType`, `FlattenAlternatives` | `core/go/carrier_join.go` |
+  | `RunCarrierBody`, `…KeepDefs`, `…WithDefs`, `RunCarrierCondBody` | `core/go/carrier_body.go` |
+  | `ApplyGuardNarrowing`, `ApplyComplementNarrowing`, `LiteralCondValue`, `BoolWord`, `GuardClause` | `core/go/guard_narrow.go` (+ `guard_predicate.go`) |
+  | `NewCarrierTypedList(Value)`, `NewDynamicCarrierValue`, `UnionCarrierForType`, `ReturnsIdentity` | `core/go/carrier_new.go` |
+  | `FoldVariadicArms`, `SpreadPayload` | `core/go/carrier_spread.go` |
+  | `DeadSignatures`, `DeadSig` | `core/go/deadsig.go` |
+  | `RecordTypedDefMake` | `core/go/record_typed_def.go` |
+  | `CheckAddUniqueDiagnostic`, `CheckAddUnique` | `core/go/check_state.go` |
 
-If you want basic to stop depending on check, the change is to move the
-carrier lattice itself (`JoinCarriersInner` and the narrowing machinery)
-down into core — moving code to where its types already live, not adding
-indirection. That is a checker refactor, not a dependency edit.
+  Two knock-on retirements: `core.JoinCarriersHook` and the
+  `AnalysisImpl.AddUnique` slot both existed only because their
+  subjects lived above core. With the subjects core-resident there was
+  nothing left to indirect, so both slots went.
+
+  **The genuine remainder is two symbols**, `AnalyseFnBody` and
+  `AnalyseLoopBody` — the analysis *pass* itself: memoised per call
+  shape, recursion-bailing, quota-capped, Kleene-iterated to a fixed
+  point. They stay in check and are reached through S1 slots as
+  `core.RunFnBodyAnalysis` / `core.RunLoopBodyAnalysis`. That is a seam
+  and not a mailbox, on the argument the earlier amendment did not have:
+  **with no check linked there is no analysis pass at all.**
+  `AnalysisImpl.ReturnsFn` returns nil, so no `ReturnsFunc` ever runs
+  and neither accessor is reached — the nil defaults are the same
+  no-analysis regime every other S1 slot already defines, not a
+  different, wrong one. And nil is in-band regardless: `AnalyseFnBody`
+  documents an empty result as "the analyser aborted — treat as an Any
+  carrier", which every caller here already handles.
+
+If a word you are adding here seems to need something above core, the
+question to answer first is which of those two cases it is: a primitive
+filed in the wrong module (move it down), or a driver of the pass
+itself (a slot). It is not a reason to add a dependency edge.
 
 ## What lives here
 
@@ -110,7 +136,7 @@ indirection. That is a checker refactor, not a dependency edit.
 
 ## Conventions
 
-- `aliases.go` re-exports core/check/parser exactly like
+- `aliases.go` re-exports core exactly like
   `lang/go/native/aliases.go` re-exports its own dependencies — word
   files here stay module-agnostic and name everything unqualified. Everything in
   `lang/go/CLAUDE.md` (argument ordering, registry bindings, helper

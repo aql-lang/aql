@@ -21,18 +21,42 @@ Two rules specific to this module:
   follows the same pattern — an anonymous default replaced at init is
   unreachable and fails the merged ADR-008 gate.
 
-  `EmitRecorder` (`emit_recorder.go`) is the widest of these and the
-  one with a consumer OUTSIDE this module: `basic`'s `if` / `case` /
-  `for` record control flow through it. That is why the interface
-  carries the branch/loop group (`TakeFragment`, `RecordBranch`,
-  `RecordLoop`) and why `BranchRecord`, `CodeEffectInfo` and the
-  deliberately opaque `EmitFragmentRef` (`any`) are declared here
-  rather than in compiler — a word library must be able to record a
-  fragment without naming `*compiler.EmitState`. core never inspects a
-  fragment; it hands the same reference back untouched. If a caller
-  outside compiler ever has to type-assert the recorder, the interface
-  is short a method: widen it rather than let the downcast stand
-  (ADR-013's 2026-08-07 second amendment).
+  `EmitRecorder` (`emit_recorder.go`) is the widest of these, and it
+  is one of two seams with a consumer OUTSIDE this module: `basic`'s
+  `if` / `case` / `for` record control flow through it. That is why
+  the interface carries the branch/loop group (`TakeFragment`,
+  `RecordBranch`, `RecordLoop`) and why `BranchRecord`,
+  `CodeEffectInfo` and the deliberately opaque `EmitFragmentRef`
+  (`any`) are declared here rather than in compiler — a word library
+  must be able to record a fragment without naming
+  `*compiler.EmitState`. core never inspects a fragment; it hands the
+  same reference back untouched. If a caller outside compiler ever has
+  to type-assert the recorder, the interface is short a method: widen
+  it rather than let the downcast stand (ADR-013's 2026-08-07 second
+  amendment).
+
+  The other outside-consumer seam is `AnalysisImpl.AnalyseFnBody` /
+  `.AnalyseLoopBody`, exported as `RunFnBodyAnalysis` /
+  `RunLoopBodyAnalysis` (`analysis_hooks.go`): `basic`'s `fn` and
+  `for` need to re-enter the analysis pass over a body, but the pass
+  itself is the checker's. Same discipline — every parameter and
+  result is a core type, so the seam names no check symbol.
+
+- **The carrier lattice is core's, not the checker's** (ADR-013's
+  2026-08-08 amendment; reasoning in
+  [design/BASIC-CHECK-CUT.0.md](../../design/BASIC-CHECK-CUT.0.md)). `carrier_new.go`, `carrier_join.go`,
+  `carrier_body.go`, `carrier_spread.go`, `guard_narrow.go`,
+  `guard_predicate.go`, `deadsig.go` and `record_typed_def.go` hold
+  what used to live in `check/go/carrier.go`. The test is ownership of
+  the *types*, not of the phase: a function over `Value`, `*Type`,
+  `r.Defs` and `CheckState` belongs here even though only an analysis
+  pass ever calls it, because that is what lets a word library carry
+  an analysis half without depending on the checker. What stays above
+  is the pass — memoisation, recursion bailing, the per-shape quota,
+  the Kleene fixed point. Two slots died to this move
+  (`JoinCarriersHook`, `AnalysisImpl.AddUnique`): with their subjects
+  core-resident there was nothing left to indirect. Prefer deleting a
+  slot that way over keeping it for symmetry.
 - **The eng facade mirrors this surface.** `eng/go/aliases_core.go`
   is GENERATED (`piecetool -facade`); after changing core's exported
   surface, regenerate it (generic functions go in the hand-written

@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -39,7 +38,7 @@ func TestNoDeadNativeOverloads(t *testing.T) {
 		if fn == nil || len(fn.Signatures) < 2 {
 			continue
 		}
-		for _, d := range check.DeadSignatures(fn.Signatures) {
+		for _, d := range core.DeadSignatures(fn.Signatures) {
 			t.Errorf("dead overload: word %q sig[%d] %s is unreachable — shadowed by earlier %s",
 				name, d.Index, sigArgsStr(d.Sig), sigArgsStr(d.ShadowedBy))
 		}

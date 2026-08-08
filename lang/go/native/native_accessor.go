@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -291,7 +290,7 @@ func getrXmlReturns(args []Value, r *Registry) []Value {
 		// A bare `Xml` type literal in the value slot would signature-
 		// error at runtime, not not_found — exclude it from the claim.
 		if r != nil && r.Check.IsActive() && !IsBareTypeNode(args[1]) {
-			check.CheckAddUniqueDiagnostic(r, "not_found",
+			core.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: Xml has no field %q (tag / attr / cren)", k), "getr", args[0].Pos())
 		}
 		return dyn
@@ -321,13 +320,13 @@ func getrNodeReturns(args []Value, r *Registry) []Value {
 	}
 	key, container := args[0], args[1]
 	if container.Parent.ConformsTo(TList) && !key.Parent.ConformsTo(TInteger) {
-		check.CheckAddUniqueDiagnostic(r, "getr_error",
+		core.CheckAddUniqueDiagnostic(r, "getr_error",
 			fmt.Sprintf("getr: expected a map, got %s", container.Parent.String()), "getr", key.Pos())
 		return out
 	}
 	if m, err := AsMap(container); err == nil && m != nil && container.Parent.ConformsTo(TMap) {
 		if _, ok := m.Get(getKey(key)); !ok {
-			check.CheckAddUniqueDiagnostic(r, "not_found",
+			core.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: key %q not found in map", getKey(key)), "getr", key.Pos())
 		}
 	}
@@ -356,7 +355,7 @@ func getrObjectReturns(args []Value, r *Registry) []Value {
 		return out
 	}
 	if _, ok := info.AllFields().Get(getKey(args[0])); !ok {
-		check.CheckAddUniqueDiagnostic(r, "not_found",
+		core.CheckAddUniqueDiagnostic(r, "not_found",
 			fmt.Sprintf("getr: field %q not found in object", getKey(args[0])), "getr", args[0].Pos())
 	}
 	return out
@@ -371,7 +370,7 @@ func getrObjectReturns(args []Value, r *Registry) []Value {
 func getrNoneReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 &&
 		core.IsNoneShape(args[1]) && !args[1].Dynamic {
-		check.CheckAddUniqueDiagnostic(r, "not_found",
+		core.CheckAddUniqueDiagnostic(r, "not_found",
 			"getr: parent is None — nothing to read a key from", "getr", args[0].Pos())
 	}
 	return []Value{}

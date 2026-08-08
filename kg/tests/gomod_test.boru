@@ -223,8 +223,8 @@ end
 [(deps-of "parser-go") ["core-go"] Assert.equal]
 "parser/go depends on core alone — it is a leaf over the kernel"
 Test.test end
-[(deps-of "basic-go") ["check-go" "core-go" "parser-go"] Assert.equal]
-"basic/go depends on core, check and parser — not compiler (ADR-013)"
+[(deps-of "basic-go") ["core-go" "parser-go"] Assert.equal]
+"basic/go depends on core and parser alone — not check, not compiler (ADR-013)"
 Test.test end
 
 # The question that started this: a package is not a module. eng/go/parser

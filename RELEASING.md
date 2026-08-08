@@ -13,7 +13,7 @@ This repo is a **multi-module** monorepo. Four modules are published:
 | Module | Path | Depends on |
 |---|---|---|
 | kernel | `github.com/boru-lang/boru/eng/go` | — |
-| base layer | `github.com/boru-lang/boru/basic/go` | eng/go |
+| base layer | `github.com/boru-lang/boru/basic/go` | core/go, parser/go |
 | language | `github.com/boru-lang/boru/lang/go` | eng/go, basic/go |
 | CLI | `github.com/boru-lang/boru/cmd/go` | eng/go, lang/go |
 

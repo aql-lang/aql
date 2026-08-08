@@ -7,7 +7,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 
 	"github.com/boru-lang/boru/lang/go/native"
@@ -455,7 +454,7 @@ func parseSpecReturns(args []native.Value, r *native.Registry) []native.Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			check.CheckAddUniqueDiagnostic(r, code, detail, "Parse.spec", args[1].Pos())
+			core.CheckAddUniqueDiagnostic(r, code, detail, "Parse.spec", args[1].Pos())
 		}
 	}
 	return []native.Value{}

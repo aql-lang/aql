@@ -626,7 +626,7 @@ var typeModuleNatives = []native.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				// check.CommonAncestorType uses pointer identity, but
+				// core.CommonAncestorType uses pointer identity, but
 				// latticeNode returns &v of a stack-local Value copy —
 				// pointers don't match canonical kernel nodes. Walk by
 				// ID instead.

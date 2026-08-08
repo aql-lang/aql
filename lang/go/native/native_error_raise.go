@@ -2,8 +2,7 @@ package native
 
 import (
 	"fmt"
-
-	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // This file holds the user-facing error words (design/ERRORS.8.md §2,
@@ -109,7 +108,7 @@ func raiseReturns(args []Value, r *Registry) []Value {
 			}
 			detail = fmt.Sprintf("raise: unconditionally raises [boru/%s]: %s", code, msg)
 		}
-		check.CheckAddUniqueDiagnostic(r, "unconditional_raise", detail, "raise", args[0].Pos())
+		core.CheckAddUniqueDiagnostic(r, "unconditional_raise", detail, "raise", args[0].Pos())
 	}
 	return []Value{}
 }

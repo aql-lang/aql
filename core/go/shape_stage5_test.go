@@ -5,21 +5,16 @@ package core
 // RecordVal has no production caller today; it is exercised here as part of
 // the shape-state model contract (join-only, poison-on-dispatch-bearing).
 //
-// JoinCarriersHook is a package global: each test that depends on join
-// behaviour pins a deterministic first-write-wins stub and restores the
-// previous hook with defer.
+// The join these methods apply is core's own JoinCarriers (ADR-013,
+// 2026-08-08 — it used to be reached through the JoinCarriersHook slot,
+// installed by the check piece). So the repeat-write assertions below
+// pin the REAL fold: two distinct Integer literals widen to a bare
+// Integer carrier, which is exactly what "join-only, never replace"
+// means for this state.
 
 import "testing"
 
 func TestStage5ShapeRecordKey(t *testing.T) {
-	old := JoinCarriersHook
-	joins := 0
-	JoinCarriersHook = func(existing, v Value) Value {
-		joins++
-		return existing // first write wins — distinguishable from the default
-	}
-	defer func() { JoinCarriersHook = old }()
-
 	var nilShape *StoreShapeInfo
 	nilShape.RecordKey("k", NewInteger(1)) // nil receiver: no-op, no panic
 
@@ -41,14 +36,19 @@ func TestStage5ShapeRecordKey(t *testing.T) {
 		t.Errorf("recorded carrier = %v (%v), want 1", got, err)
 	}
 
-	// A repeat write joins — never replaces.
+	// A repeat write JOINS — never replaces. Two distinct Integer
+	// literals share Integer as their immediate parent, so the fold
+	// widens to a bare Integer carrier rather than keeping either value.
 	s.RecordKey("k", NewInteger(2))
-	if joins != 1 {
-		t.Errorf("join invocations = %d, want 1", joins)
-	}
 	got, _ = s.LookupKey("k")
-	if n, err := AsInteger(got); err != nil || n != 1 {
-		t.Errorf("joined carrier = %v (%v), want the stubbed first-write 1", got, err)
+	if !got.Carrier {
+		t.Errorf("joined entry = %v, want a carrier", got)
+	}
+	if !ValueType(got).Equal(TInteger) {
+		t.Errorf("joined entry type = %v, want Integer", ValueType(got))
+	}
+	if _, err := AsInteger(got); err == nil {
+		t.Error("the join must widen away both concrete payloads")
 	}
 }
 
@@ -64,14 +64,6 @@ func TestStage5ShapeLookupKey(t *testing.T) {
 }
 
 func TestStage5ShapeRecordVal(t *testing.T) {
-	old := JoinCarriersHook
-	joins := 0
-	JoinCarriersHook = func(existing, v Value) Value {
-		joins++
-		return existing
-	}
-	defer func() { JoinCarriersHook = old }()
-
 	var nilShape *StoreShapeInfo
 	nilShape.RecordVal(NewInteger(1)) // nil receiver: no-op, no panic
 	if _, ok := nilShape.LookupVals(); ok {
@@ -93,10 +85,11 @@ func TestStage5ShapeRecordVal(t *testing.T) {
 		t.Errorf("vals = %v (%v), want 1", got, err)
 	}
 
-	// A second write joins.
+	// A second write joins, widening to a bare Integer carrier.
 	s.RecordVal(NewInteger(2))
-	if joins != 1 {
-		t.Errorf("join invocations = %d, want 1", joins)
+	got, _ = s.LookupVals()
+	if !got.Carrier || !ValueType(got).Equal(TInteger) {
+		t.Errorf("joined vals = %v, want an Integer carrier", got)
 	}
 
 	// A dispatch-bearing value poisons the join; readers decline from
@@ -109,8 +102,8 @@ func TestStage5ShapeRecordVal(t *testing.T) {
 		t.Error("poisoned LookupVals must decline")
 	}
 	s.RecordVal(NewInteger(3)) // ignored: already poisoned
-	if joins != 1 {
-		t.Error("a write after poisoning must not join")
+	if _, ok := s.LookupVals(); ok {
+		t.Error("a write after poisoning must not revive the join")
 	}
 
 	// A zero Value (Parent == nil) poisons a fresh shape too.

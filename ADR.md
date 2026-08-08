@@ -243,7 +243,10 @@ types, moved out of `lang`. It registers against the kernel, never being
 kernel machinery. It depends on the pieces it uses and nothing else, and
 `basic/go/depsgate_test.go` pins the set.
 
-> **Amendment (2026-08-07).** "`eng` only" was measured false: it carried
-> zero symbols. `compiler` went too, a seam gap closed by widening
-> `core.EmitRecorder`. **`check` stays** — control words have an analysis
-> half with no correct inactive default.
+> **Amendment (2026-08-07).** "`eng` only" was measured false: zero
+> symbols. `compiler` went too, its seam gap closed by widening
+> `core.EmitRecorder`. `check` kept.
+
+> **Amendment (2026-08-08).** `check` removed too; the set is `core` +
+> `parser`. Core-typed primitives moved down, two pass drivers became S1
+> slots. [BASIC-CHECK-CUT.0.md](design/BASIC-CHECK-CUT.0.md)

@@ -208,7 +208,7 @@ func returnsDivMod(detail string) ReturnsFunc {
 		if len(args) == 2 && isStaticZeroIntDivisor(args[0]) &&
 			!args[0].Parent.ConformsTo(TFloat) && !args[1].Parent.ConformsTo(TFloat) {
 			if atUncaughtTopLevel(r) {
-				check.CheckAddUniqueDiagnostic(r, "arith_error", detail, "", args[0].Pos())
+				core.CheckAddUniqueDiagnostic(r, "arith_error", detail, "", args[0].Pos())
 			}
 			return nil // divergence: no residual (raise-like)
 		}
@@ -235,7 +235,7 @@ func checkBigFloatMix(r *Registry, args []Value) {
 		(lb == leafFloat && (la == leafBigInteger || la == leafBigDecimal)) {
 		var ae *BoruError
 		if errors.As(bigFloatMixError(r, args[0], args[1]), &ae) {
-			check.CheckAddUniqueDiagnostic(r, ae.Code, ae.Detail, "", args[0].Pos())
+			core.CheckAddUniqueDiagnostic(r, ae.Code, ae.Detail, "", args[0].Pos())
 		}
 	}
 }

@@ -13,7 +13,7 @@ import (
 // contrast block proves the modality is what flips the behaviour — a
 // non-dynamic Carry<Any> still fails an Integer slot.
 func TestDynamicCarrierMatch(t *testing.T) {
-	dynDisjunct := NewDynamicCarrierValue(
+	dynDisjunct := core.NewDynamicCarrierValue(
 		core.NewDisjunct([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString)}),
 	)
 
@@ -130,7 +130,7 @@ func TestDynamicFirstMatchPartition(t *testing.T) {
 			{Args: []*core.Type{core.TString}, Returns: []*core.Type{core.TAtom}},
 		},
 	})
-	intStr := NewDynamicCarrierValue(core.NewDisjunct([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString)}))
+	intStr := core.NewDynamicCarrierValue(core.NewDisjunct([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString)}))
 
 	// dynamic(Integer|String) reaches BOTH overloads → union {Boolean, Atom}.
 	if rets := dynamicReachableReturns(r, "wdiv", []core.Value{intStr}); len(rets) != 2 {
@@ -165,7 +165,7 @@ func TestDynamicCarrierString(t *testing.T) {
 	}{
 		{core.NewDynamicCarrier(core.TInteger), "dynamic(Integer)"},
 		{core.NewDynamicCarrier(core.TAny), "dynamic(Any)"},
-		{NewDynamicCarrierValue(core.NewDisjunct([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString)})), "dynamic(Integer tor String)"},
+		{core.NewDynamicCarrierValue(core.NewDisjunct([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString)})), "dynamic(Integer tor String)"},
 		{core.NewCarrier(core.TInteger), "Integer"}, // strict carrier unchanged
 	}
 	for _, tc := range cases {
@@ -188,11 +188,11 @@ func TestDynamicCarrierConstructors(t *testing.T) {
 	}
 
 	// A disjunct promoted to dynamic keeps its alternatives.
-	disj := NewDynamicCarrierValue(
+	disj := core.NewDynamicCarrierValue(
 		core.NewDisjunct([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString)}),
 	)
 	if !disj.Dynamic || !core.IsDisjunct(disj) {
-		t.Errorf("NewDynamicCarrierValue: Dynamic=%v IsDisjunct=%v, want both true", disj.Dynamic, core.IsDisjunct(disj))
+		t.Errorf("core.NewDynamicCarrierValue: Dynamic=%v IsDisjunct=%v, want both true", disj.Dynamic, core.IsDisjunct(disj))
 	}
 
 	// toCarrier must return a dynamic carrier unchanged — same bound,

@@ -208,21 +208,21 @@ func TestOrderingReturnsFn(t *testing.T) {
 
 // TestRunCarrierBodyAndStacksEqual is restored from the pre-carve tree
 // (aa732c2:eng/go/zz_cut_residual_test.go). It lives in check because it
-// touches the unexported carrierStacksEqual, and RunCarrierBody is defined
+// touches the unexported carrierStacksEqual, and core.RunCarrierBody is defined
 // here too (eng only re-exports it through the generated facade).
 func TestRunCarrierBodyAndStacksEqual(t *testing.T) {
 	r := covRegistry(t, nil)
 	done := r.Check.Begin()
 	defer done()
 
-	stk := RunCarrierBody(r, core.NewList([]core.Value{
+	stk := core.RunCarrierBody(r, core.NewList([]core.Value{
 		core.NewWord("cadd"), core.NewInteger(1), core.NewInteger(2),
 	}))
 	if len(stk) != 1 || !stk[0].Parent.ConformsTo(core.TInteger) {
-		t.Errorf("RunCarrierBody residual = %v", stk)
+		t.Errorf("core.RunCarrierBody residual = %v", stk)
 	}
 	// A non-concrete body yields nil.
-	if stk := RunCarrierBody(r, core.NewTypeLiteral(core.TList)); stk != nil {
+	if stk := core.RunCarrierBody(r, core.NewTypeLiteral(core.TList)); stk != nil {
 		t.Errorf("type-literal body residual = %v", stk)
 	}
 

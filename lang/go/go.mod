@@ -5,6 +5,9 @@ go 1.24.7
 require (
 	github.com/antchfx/xpath v1.3.6
 	github.com/boru-lang/boru/basic/go v0.0.0
+	github.com/boru-lang/boru/check/go v0.0.0
+	github.com/boru-lang/boru/compiler/go v0.0.0
+	github.com/boru-lang/boru/core/go v0.0.0
 	github.com/boru-lang/boru/eng/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/fsnotify/fsnotify v1.10.1
@@ -34,9 +37,6 @@ require (
 )
 
 require (
-	github.com/boru-lang/boru/check/go v0.0.0 // indirect
-	github.com/boru-lang/boru/compiler/go v0.0.0 // indirect
-	github.com/boru-lang/boru/core/go v0.0.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/tabnas/directive/go v0.4.0 // indirect
 	github.com/tabnas/hoover/go v0.2.1 // indirect

@@ -1033,7 +1033,7 @@ func (c *CheckState) RecordContextSet(key string, carrier Value) {
 		c.ContextTypes = map[string]Value{}
 	}
 	if existing, ok := c.ContextTypes[key]; ok {
-		c.ContextTypes[key] = JoinCarriersHook(existing, carrier)
+		c.ContextTypes[key] = JoinCarriers(existing, carrier)
 		return
 	}
 	c.ContextTypes[key] = carrier
@@ -1253,14 +1253,45 @@ func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 	return cp
 }
 
-// JoinCarriersHook is the S1-style slot for the carrier join the
-// context-type recording needs: the fold's normalisations live with the
-// check piece's carrier machinery, which installs the real fold at
-// init. The fallback (last write wins) keeps a check-less core
-// linkable; RecordContextSet only runs under an active analysis.
-var JoinCarriersHook = inactiveJoinCarriers
+// The deduping diagnostic emitters (ADR-013, 2026-08-08 amendment).
+// Moved down with the carrier lattice: CheckState and CheckDiagnostic
+// are already core's, so a word library emitting a mirrored runtime
+// error should not have to name the checker to dedupe it.
 
-// inactiveJoinCarriers is the named check-less fallback (last write
-// wins); the seam test pins it, and carrier.go's init installs the real
-// fold while the check piece is linked.
-func inactiveJoinCarriers(existing, carrier Value) Value { return carrier }
+// CheckAddUniqueDiagnostic adds a check-mode diagnostic unless an
+// identical one (code+detail+position) is already recorded — ReturnsFns
+// run once per analysed call shape, and a body can be analysed under
+// several shapes. Every caller mirrors a GUARANTEED runtime error over
+// exactly-known operands, so the diagnostic is stamped RuntimeMirror
+// (the compile pipeline does not refuse on it — the recording model is
+// exact) and inside an error-catching `do` body AddDiagnostic
+// re-attributes it to a caught info finding. A caught (downgraded)
+// entry never blocks a later REAL emission of the same finding at
+// another site, so the dedupe skips it.
+func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos) {
+	CheckAddUnique(r, CheckDiagnostic{
+		Code:          code,
+		Detail:        detail,
+		Word:          word,
+		Row:           pos.Row,
+		Col:           pos.Col,
+		RuntimeMirror: true,
+	})
+}
+
+// CheckAddUnique is CheckAddUniqueDiagnostic's dedupe over a diagnostic the
+// caller shapes itself — for a finding that must NOT be stamped
+// RuntimeMirror because the compile pipeline should refuse on it. That is
+// the MODEL-UNDERMINING class (eng/go/CLAUDE.md): a mirror promises the
+// program compiles and then raises the identical error, which is false when
+// dispatch itself did not resolve (`no_signature`, `undefined_word`,
+// `uncalled_function` — there is no call to compile).
+func CheckAddUnique(r *Registry, d CheckDiagnostic) {
+	for _, prev := range r.Check.Diagnostics {
+		if prev.Code == d.Code && prev.Detail == d.Detail &&
+			prev.Row == d.Row && prev.Col == d.Col && !prev.CaughtAtRuntime {
+			return
+		}
+	}
+	r.Check.AddDiagnostic(d)
+}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -215,7 +214,7 @@ func d2DynamicTypedResidual(data Value) Value {
 		typed = core.NewTypedMap(elem)
 		typed.Carrier = true
 	} else {
-		typed = check.NewCarrierTypedListValue(elem)
+		typed = core.NewCarrierTypedListValue(elem)
 	}
 	typed.Dynamic = true
 	typed.SetElemConstraint(elem)
@@ -328,7 +327,7 @@ func reifyReturns(args []Value, r *Registry) []Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			check.CheckAddUniqueDiagnostic(r, code, detail, "reify", args[1].Pos())
+			core.CheckAddUniqueDiagnostic(r, code, detail, "reify", args[1].Pos())
 		}
 	}
 	if IsDisjunct(target) {
@@ -370,7 +369,7 @@ func parseTextReturns(args []Value, r *Registry) []Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			check.CheckAddUniqueDiagnostic(r, code, detail, "parse", args[0].Pos())
+			core.CheckAddUniqueDiagnostic(r, code, detail, "parse", args[0].Pos())
 		}
 		return dyn
 	}

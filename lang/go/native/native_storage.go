@@ -573,7 +573,7 @@ func d2ReTagContainer(r *Registry, typedSrc, result Value, word string) (Value, 
 	case result.Parent.ConformsTo(TMap):
 		constraint = core.NewTypedMap(elem)
 	case result.Parent.ConformsTo(TList):
-		constraint = check.NewCarrierTypedListValue(elem)
+		constraint = core.NewCarrierTypedListValue(elem)
 	default:
 		return result, nil
 	}
@@ -617,7 +617,7 @@ func d2TypedListResidual(src Value) Value {
 	if !ok {
 		return NewCarrier(TList)
 	}
-	v := check.NewCarrierTypedListValue(elem)
+	v := core.NewCarrierTypedListValue(elem)
 	v.SetElemConstraint(elem)
 	return v
 }
@@ -647,7 +647,7 @@ func d2CheckWrite(r *Registry, recv, v Value, word string, pos SrcPos) {
 	if !ok || d2WriteConforms(elem, v) {
 		return
 	}
-	check.CheckAddUniqueDiagnostic(r, "type_error",
+	core.CheckAddUniqueDiagnostic(r, "type_error",
 		fmt.Sprintf("%s: value %s does not conform to element type %s", word, v.String(), elem.String()),
 		word, pos)
 }
@@ -847,7 +847,7 @@ func delClassDetail(args []Value) string {
 // always-erroring handler.
 func delClassInstanceReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 {
-		check.CheckAddUniqueDiagnostic(r, "type_error", delClassDetail(args), "del", args[0].Pos())
+		core.CheckAddUniqueDiagnostic(r, "type_error", delClassDetail(args), "del", args[0].Pos())
 	}
 	return []Value{}
 }
@@ -875,7 +875,7 @@ func delListDetail(args []Value) string {
 // delListReturns is the guaranteed-error mirror of delListHandler.
 func delListReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 {
-		check.CheckAddUniqueDiagnostic(r, "type_error", delListDetail(args), "del", args[0].Pos())
+		core.CheckAddUniqueDiagnostic(r, "type_error", delListDetail(args), "del", args[0].Pos())
 	}
 	return []Value{}
 }
@@ -956,14 +956,14 @@ func setClassInstanceReturns(args []Value, r *Registry) []Value {
 		if name == "" {
 			name = args[2].Parent.Name()
 		}
-		check.CheckAddUniqueDiagnostic(r, "sealed_field",
+		core.CheckAddUniqueDiagnostic(r, "sealed_field",
 			fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
 			"set", args[0].Pos())
 		return []Value{}
 	}
 	if IsConcrete(args[1]) {
 		if _, err := MakeClassFieldValue(args[1], constraint, r); err != nil {
-			check.CheckAddUniqueDiagnostic(r, "type_error",
+			core.CheckAddUniqueDiagnostic(r, "type_error",
 				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set", args[0].Pos())
 		}
 	}
@@ -1073,7 +1073,7 @@ func weakValueMirror(r *Registry, v Value, word, container string) {
 		return
 	}
 	if refusal := core.ClassifyWeakRefusal(v); refusal != nil {
-		check.CheckAddUniqueDiagnostic(r, "weak_value_error",
+		core.CheckAddUniqueDiagnostic(r, "weak_value_error",
 			fmt.Sprintf("%s: cannot store %s in a %s", word, refusal.Kind, container),
 			word, v.Pos())
 	}

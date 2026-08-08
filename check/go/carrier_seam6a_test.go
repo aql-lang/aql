@@ -32,8 +32,8 @@ func TestS6aJoinedElementCarrierNilParentElem(t *testing.T) {
 // --- UnionCarrierForType ----------------------------------------------------
 
 func TestS6aUnionCarrierForTypeNil(t *testing.T) {
-	if _, ok := UnionCarrierForType(nil); ok {
-		t.Error("UnionCarrierForType(nil) must decline")
+	if _, ok := core.UnionCarrierForType(nil); ok {
+		t.Error("core.UnionCarrierForType(nil) must decline")
 	}
 }
 
@@ -281,46 +281,17 @@ func TestS6aReturnsFreshInstanceParameterlessSchemaNonConcreteData(t *testing.T)
 	}
 }
 
-// --- RecordTypedDefMake / objectMakeSig ---------------------------------------------
+// --- core.RecordTypedDefMake / core.objectMakeSig ---------------------------------------------
 
-func TestS6aObjectMakeSigNoMatchingOverload(t *testing.T) {
-	r := newTestRegistry(t)
-	if objectMakeSig(r) != nil {
-		t.Error("no make word registered: want nil")
-	}
-	r.RegisterNativeFunc(core.NativeFunc{
-		Name: "make",
-		Signatures: []core.Signature{{
-			Args: []*core.Type{core.TInteger},
-			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
-				return nil, nil
-			}),
-			Returns: []*core.Type{}, BarrierPos: -1,
-		}},
-	})
-	if err := r.Err(); err != nil {
-		t.Fatalf("registration: %v", err)
-	}
-	if objectMakeSig(r) != nil {
-		t.Error("make without an [Ideal Map] overload: want nil")
-	}
-}
-
-// --- CommonAncestorType / isNoneArm -------------------------------------------------
+// --- core.CommonAncestorType / core.isNoneArm -------------------------------------------------
 
 func TestS6aCommonAncestorTypeNil(t *testing.T) {
-	if got := CommonAncestorType(nil, core.TInteger); !got.Equal(core.TAny) {
+	if got := core.CommonAncestorType(nil, core.TInteger); !got.Equal(core.TAny) {
 		t.Errorf("nil operand: got %v, want Any", got)
 	}
 }
 
-func TestS6aIsNoneArmZeroValue(t *testing.T) {
-	if isNoneArm(core.Value{}) {
-		t.Error("the zero Value is not a None arm")
-	}
-}
-
-// --- JoinCarriersInner width cap -----------------------------------------------------
+// --- core.JoinCarriersInner width cap -----------------------------------------------------
 
 func TestS6aJoinCarriersWidthCapCollapses(t *testing.T) {
 	mk := func(lo, hi int64) core.Value {
@@ -332,18 +303,18 @@ func TestS6aJoinCarriersWidthCapCollapses(t *testing.T) {
 	}
 	a := mk(1, 5)
 	b := mk(6, 10)
-	got := JoinCarriersInner(a, b)
+	got := core.JoinCarriersInner(a, b)
 	if !got.Carrier || !got.Parent.Equal(core.TInteger) || core.IsDisjunct(got) {
 		t.Errorf("10 alternatives must collapse to a plain Integer carrier, got %+v", got)
 	}
 }
 
-// --- JoinCarriersInner None arms -----------------------------------------------------
+// --- core.JoinCarriersInner None arms -----------------------------------------------------
 
 func TestS6aRunCarrierBodyErrorPath(t *testing.T) {
 	r := newTestRegistry(t)
 	body := core.NewList([]core.Value{core.NewWord("s6a_undefined_word")})
-	stk, adds := RunCarrierBodyWithDefs(r, body)
+	stk, adds := core.RunCarrierBodyWithDefs(r, body)
 	if stk != nil {
 		t.Errorf("an erroring body yields a nil stack, got %v", stk)
 	}
@@ -361,30 +332,13 @@ func TestS6aRunCarrierBodyErrorPath(t *testing.T) {
 	}
 }
 
-// --- extractGuardClauses ---------------------------------------------------------------
+// --- core.extractGuardClauses ---------------------------------------------------------------
 
-func TestS6aExtractGuardClausesShortGuardFact(t *testing.T) {
-	r := newTestRegistry(t)
-	cond := core.NewValueRaw(core.TBoolean, core.GuardFactInfo{Toks: []core.Value{core.NewWord("x")}})
-	if got := extractGuardClauses(r, cond); got != nil {
-		t.Errorf("a 1-token guard fact has no clauses, got %v", got)
-	}
-}
-
-func TestS6aExtractGuardClausesBadWordPayload(t *testing.T) {
-	r := newTestRegistry(t)
-	badWord := core.NewValueRaw(core.TWord, nil) // Word-parented, no WordInfo payload
-	cond := core.NewList([]core.Value{badWord, core.NewWord("is"), core.NewTypeLiteral(core.TInteger)})
-	if got := extractGuardClauses(r, cond); got != nil {
-		t.Errorf("an AsWord failure skips the triplet, got %v", got)
-	}
-}
-
-// --- ApplyGuardNarrowing / ApplyComplementNarrowing -------------------------------------
+// --- core.ApplyGuardNarrowing / core.ApplyComplementNarrowing -------------------------------------
 
 func TestS6aApplyGuardNarrowingInactive(t *testing.T) {
 	r := newTestRegistry(t)
-	restore := ApplyGuardNarrowing(r, core.NewList([]core.Value{core.NewWord("x")}))
+	restore := core.ApplyGuardNarrowing(r, core.NewList([]core.Value{core.NewWord("x")}))
 	restore() // noop
 }
 
@@ -395,7 +349,7 @@ func TestS6aApplyGuardNarrowingRedundantGuardDedup(t *testing.T) {
 	r.Defs.Push("s6ax", core.NewCarrier(core.TInteger))
 	cond := core.NewList([]core.Value{core.NewWord("s6ax"), core.NewWord("is"), core.NewTypeLiteral(core.TInteger)})
 
-	restore := ApplyGuardNarrowing(r, cond)
+	restore := core.ApplyGuardNarrowing(r, cond)
 	restore()
 	n1 := 0
 	for _, d := range r.Check.Diagnostics {
@@ -407,7 +361,7 @@ func TestS6aApplyGuardNarrowingRedundantGuardDedup(t *testing.T) {
 		t.Fatalf("first narrowing: %d redundant_guard diags, want 1", n1)
 	}
 
-	restore = ApplyGuardNarrowing(r, cond) // second: dedup arm
+	restore = core.ApplyGuardNarrowing(r, cond) // second: dedup arm
 	restore()
 	n2 := 0
 	for _, d := range r.Check.Diagnostics {
@@ -423,14 +377,14 @@ func TestS6aApplyGuardNarrowingRedundantGuardDedup(t *testing.T) {
 func TestS6aApplyComplementNarrowingGuards(t *testing.T) {
 	// Inactive check state: noop.
 	r := newTestRegistry(t)
-	restore := ApplyComplementNarrowing(r, core.NewList([]core.Value{core.NewWord("x")}))
+	restore := core.ApplyComplementNarrowing(r, core.NewList([]core.Value{core.NewWord("x")}))
 	restore()
 
 	// Active, but the clause's name is unbound: skipped.
 	done := r.Check.Begin()
 	defer done()
 	cond := core.NewList([]core.Value{core.NewWord("s6a_nobind"), core.NewWord("is"), core.NewTypeLiteral(core.TInteger)})
-	restore = ApplyComplementNarrowing(r, cond)
+	restore = core.ApplyComplementNarrowing(r, cond)
 	restore()
 	if _, ok := r.Defs.Top("s6a_nobind"); ok {
 		t.Error("an unbound clause name must stay unbound")

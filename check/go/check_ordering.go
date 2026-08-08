@@ -29,7 +29,7 @@ func OrderingReturnsFn(handler core.Handler, result *core.Type) core.ReturnsFunc
 					// Routed through the unique-diagnostic helper for the
 					// caught-body gate: inside `do [...]` the runtime error
 					// is trapped, so the static mirror stays silent there.
-					CheckAddUniqueDiagnostic(r, "incomparable", ae.Detail, "", args[0].Pos())
+					core.CheckAddUniqueDiagnostic(r, "incomparable", ae.Detail, "", args[0].Pos())
 				}
 			}
 		}

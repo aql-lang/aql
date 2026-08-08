@@ -15,7 +15,7 @@ import (
 //
 // The seeded hypothesis is a 1-wide stack; round 1 re-analyses the body and
 // returns a 2-wide stack (the recursive fn turned out to yield a second value
-// once the in-flight Any bail was replaced by the seed). JoinCarrierStacks
+// once the in-flight Any bail was replaced by the seed). core.JoinCarrierStacks
 // pads to max(len(a), len(b)), so `joined` is 2 wide against a 1-wide
 // `result` — carrierStacksEqual's `len(a) != len(b)` guard fires, reports
 // "not stable", and the loop takes another round with the widened stack.

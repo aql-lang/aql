@@ -142,11 +142,11 @@ func TestS5bEReturnsFnUnboundReturnTypeParamDedupes(t *testing.T) {
 }
 
 func TestS7DeadSignaturesShort(t *testing.T) {
-	if got := DeadSignatures(nil); got != nil {
-		t.Errorf("DeadSignatures(nil) = %v, want nil", got)
+	if got := core.DeadSignatures(nil); got != nil {
+		t.Errorf("core.DeadSignatures(nil) = %v, want nil", got)
 	}
-	if got := DeadSignatures([]core.Signature{{Args: []*core.Type{core.TInteger}, BarrierPos: -1}}); got != nil {
-		t.Errorf("DeadSignatures(single) = %v, want nil", got)
+	if got := core.DeadSignatures([]core.Signature{{Args: []*core.Type{core.TInteger}, BarrierPos: -1}}); got != nil {
+		t.Errorf("core.DeadSignatures(single) = %v, want nil", got)
 	}
 }
 
@@ -155,7 +155,7 @@ func TestS7DeadSignaturesDuplicateAndFallback(t *testing.T) {
 	sigDup := core.Signature{Args: []*core.Type{core.TInteger}, BarrierPos: -1, Impl: core.Go(nil)}
 	// A trailing fallback sig must be skipped, and the duplicate detected.
 	fb := core.Signature{Fallback: true, BarrierPos: -1, Impl: core.Go(nil)}
-	dead := DeadSignatures([]core.Signature{sigA, sigDup, fb})
+	dead := core.DeadSignatures([]core.Signature{sigA, sigDup, fb})
 	if len(dead) == 0 {
 		t.Error("a duplicate signature should be flagged dead")
 	}
@@ -172,16 +172,8 @@ func TestS7DeadSignaturesFallbackFirst(t *testing.T) {
 	// fallback at an earlier index than a non-fallback and must skip it.
 	fb2 := core.Signature{Fallback: true, Args: []*core.Type{core.TInteger, core.TInteger}, BarrierPos: -1, Impl: core.Go(nil)}
 	norm := core.Signature{Args: []*core.Type{core.TInteger}, BarrierPos: -1, Impl: core.Go(nil)}
-	if got := DeadSignatures([]core.Signature{norm, fb2}); len(got) != 0 {
+	if got := core.DeadSignatures([]core.Signature{norm, fb2}); len(got) != 0 {
 		t.Errorf("no sig should be dead here, got %v", got)
-	}
-}
-
-func TestS7SigSubsumesNilType(t *testing.T) {
-	s1 := &core.Signature{Args: []*core.Type{nil}, BarrierPos: -1}
-	s2 := &core.Signature{Args: []*core.Type{nil}, BarrierPos: -1}
-	if sigSubsumes(s1, s2) {
-		t.Error("a nil arg type must make sigSubsumes decline")
 	}
 }
 
@@ -325,12 +317,12 @@ func TestMembershipBeyondNominal(t *testing.T) {
 
 func TestVariadicCarrierHelpers(t *testing.T) {
 	elem := core.NewTypeLiteral(core.TInteger)
-	vc := NewVariadicCarrier(elem)
-	got, ok := IsVariadicSpread(vc)
+	vc := core.NewVariadicCarrier(elem)
+	got, ok := core.IsVariadicSpread(vc)
 	if !ok || !got.Equal(core.TInteger) {
-		t.Errorf("IsVariadicSpread = %v, %v", got, ok)
+		t.Errorf("core.IsVariadicSpread = %v, %v", got, ok)
 	}
-	if _, ok := IsVariadicSpread(core.NewInteger(1)); ok {
+	if _, ok := core.IsVariadicSpread(core.NewInteger(1)); ok {
 		t.Error("integer read as variadic")
 	}
 	if !stackHasVariadic([]core.Value{core.NewInteger(1), vc}) {
@@ -342,14 +334,14 @@ func TestVariadicCarrierHelpers(t *testing.T) {
 
 	// FoldVariadicArms: one variadic arm plus a leaked concrete slot →
 	// one spread joining both element types.
-	folded, ok := FoldVariadicArms(
+	folded, ok := core.FoldVariadicArms(
 		[]core.Value{core.NewCarrier(core.TInteger), vc},
 		[]core.Value{core.NewNone()},
 	)
 	if !ok {
-		t.Fatal("FoldVariadicArms refused a variadic arm")
+		t.Fatal("core.FoldVariadicArms refused a variadic arm")
 	}
-	fe, ok := IsVariadicSpread(folded)
+	fe, ok := core.IsVariadicSpread(folded)
 	if !ok {
 		t.Fatalf("folded arm not variadic: %v", folded)
 	}
@@ -357,13 +349,13 @@ func TestVariadicCarrierHelpers(t *testing.T) {
 		t.Errorf("folded element = %v", fe)
 	}
 	// No variadic anywhere: refuses.
-	if _, ok := FoldVariadicArms([]core.Value{core.NewCarrier(core.TInteger)}, nil); ok {
-		t.Error("FoldVariadicArms accepted plain arms")
+	if _, ok := core.FoldVariadicArms([]core.Value{core.NewCarrier(core.TInteger)}, nil); ok {
+		t.Error("core.FoldVariadicArms accepted plain arms")
 	}
 }
 
 func TestTypedListCarrierHelpers(t *testing.T) {
-	tl := NewCarrierTypedListValue(core.NewCarrier(core.TString))
+	tl := core.NewCarrierTypedListValue(core.NewCarrier(core.TString))
 	if !tl.Carrier || !core.IsTypedList(tl) {
 		t.Errorf("typed-list carrier shape: %v", tl)
 	}
@@ -380,7 +372,7 @@ func TestTypedListCarrierHelpers(t *testing.T) {
 	}
 
 	pres := ReturnsPreserveListAt(0)
-	out := pres([]core.Value{NewCarrierTypedList(core.TInteger)}, nil)
+	out := pres([]core.Value{core.NewCarrierTypedList(core.TInteger)}, nil)
 	if len(out) != 1 || !core.IsTypedList(out[0]) {
 		t.Fatalf("ReturnsPreserveListAt = %v", out)
 	}
@@ -394,7 +386,7 @@ func TestTypedListCarrierHelpers(t *testing.T) {
 	}
 
 	elemFn := ReturnsListElemAt(0)
-	out = elemFn([]core.Value{NewCarrierTypedList(core.TString)}, nil)
+	out = elemFn([]core.Value{core.NewCarrierTypedList(core.TString)}, nil)
 	if len(out) != 1 || !out[0].Parent.Equal(core.TString) {
 		t.Errorf("ReturnsListElemAt = %v", out)
 	}
@@ -545,7 +537,7 @@ func TestW9ScalarFoldOperand(t *testing.T) {
 }
 
 func TestW9JoinCarriersInnerOverCap(t *testing.T) {
-	// More than CarrierDisjunctCap distinct alternatives collapse to a single
+	// More than core.CarrierDisjunctCap distinct alternatives collapse to a single
 	// common-ancestor carrier.
 	first := []core.Value{
 		core.NewTypeLiteral(core.TInteger), core.NewTypeLiteral(core.TString), core.NewTypeLiteral(core.TBoolean),
@@ -555,7 +547,7 @@ func TestW9JoinCarriersInnerOverCap(t *testing.T) {
 		core.NewTypeLiteral(core.TMap), core.NewTypeLiteral(core.TWord), core.NewTypeLiteral(core.TFunction),
 		core.NewTypeLiteral(core.TError), core.NewTypeLiteral(core.TType),
 	}
-	out := JoinCarriersInner(core.NewDisjunct(first), core.NewDisjunct(second))
+	out := core.JoinCarriersInner(core.NewDisjunct(first), core.NewDisjunct(second))
 	if !out.Carrier {
 		t.Errorf("an over-cap join should collapse to a carrier, got %v", out)
 	}
@@ -616,7 +608,7 @@ func TestToCarrierKeepsStepMarkers(t *testing.T) {
 // rejects that before genArgs) are pinned by direct call.
 func TestTypedContainerCarrier(t *testing.T) {
 	mapPat := core.NewTypedMap(core.NewTypeLiteral(core.TInteger))
-	listPat := NewCarrierTypedListValue(core.NewTypeLiteral(core.TInteger))
+	listPat := core.NewCarrierTypedListValue(core.NewTypeLiteral(core.TInteger))
 
 	// Typed-map pattern + a conforming Map arg → a typed carrier.
 	if v, ok := typedContainerCarrier(core.FnParam{Pattern: &mapPat}, core.NewCarrier(core.TMap)); !ok || !core.IsTypedMap(v) {

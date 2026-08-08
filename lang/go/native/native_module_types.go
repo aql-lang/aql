@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -252,7 +251,7 @@ func moduleNSGetrReturns(args []Value, r *Registry) ([]Value, bool) {
 		// keeps compiling (TestModuleExportGetrNotFoundTrapCompiles pins
 		// it).
 		if r.Check.IsActive() {
-			check.CheckAddUniqueDiagnostic(r, "not_found",
+			core.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos())
 		}
 		// Record the SAME rich error the runtime path raises (with the

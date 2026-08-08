@@ -62,6 +62,7 @@ type (
 	ConstBakeable        = core.ConstBakeable
 	ContentMembership    = core.ContentMembership
 	ContextStack         = core.ContextStack
+	DeadSig              = core.DeadSig
 	DebugTraceFrom       = core.DebugTraceFrom
 	DecimalPayload       = core.DecimalPayload
 	DeclSite             = core.DeclSite
@@ -113,6 +114,7 @@ type (
 	GenSpecInfo          = core.GenSpecInfo
 	GoImpl               = core.GoImpl
 	GoOpt                = core.GoOpt
+	GuardClause          = core.GuardClause
 	GuardFactInfo        = core.GuardFactInfo
 	Handler              = core.Handler
 	Hasher               = core.Hasher
@@ -180,6 +182,7 @@ type (
 	Signature            = core.Signature
 	Sizer                = core.Sizer
 	SpliceInfo           = core.SpliceInfo
+	SpreadPayload        = core.SpreadPayload
 	SrcPos               = core.SrcPos
 	StampEvent           = core.StampEvent
 	StoreInstanceInfo    = core.StoreInstanceInfo
@@ -230,6 +233,7 @@ const (
 	BarrierAllForward       = core.BarrierAllForward
 	BodyOutResidual         = core.BodyOutResidual
 	CapPolicy               = core.CapPolicy
+	CarrierDisjunctCap      = core.CarrierDisjunctCap
 	CompileDefault          = core.CompileDefault
 	CompileDiverges         = core.CompileDiverges
 	CompileDynBody          = core.CompileDynBody
@@ -502,6 +506,8 @@ var (
 	CanonValue                 = core.CanonValue
 	CanonicalType              = core.CanonicalType
 	CarrierOfLiteral           = core.CarrierOfLiteral
+	CheckAddUnique             = core.CheckAddUnique
+	CheckAddUniqueDiagnostic   = core.CheckAddUniqueDiagnostic
 	CheckFullStack             = core.CheckFullStack
 	CheckPassActive            = core.CheckPassActive
 	ClassFields                = core.ClassFields
@@ -512,6 +518,7 @@ var (
 	CloneWeakFlexXmlData       = core.CloneWeakFlexXmlData
 	CmpHandler                 = core.CmpHandler
 	CollectBodyLocalDefs       = core.CollectBodyLocalDefs
+	CommonAncestorType         = core.CommonAncestorType
 	ComparePathons             = core.ComparePathons
 	CompareSignatures          = core.CompareSignatures
 	CompareValues              = core.CompareValues
@@ -523,6 +530,7 @@ var (
 	ConvertIdealToMap          = core.ConvertIdealToMap
 	CowDel                     = core.CowDel
 	CowSet                     = core.CowSet
+	DeadSignatures             = core.DeadSignatures
 	DeepEqualerOwner           = core.DeepEqualerOwner
 	DenotedTypeNode            = core.DenotedTypeNode
 	DeqHandler                 = core.DeqHandler
@@ -540,6 +548,7 @@ var (
 	FillConcreteOptionDefaults = core.FillConcreteOptionDefaults
 	FlatInstanceFields         = core.FlatInstanceFields
 	FlatInstanceParts          = core.FlatInstanceParts
+	FlattenAlternatives        = core.FlattenAlternatives
 	FlattenDisjunctAlts        = core.FlattenDisjunctAlts
 	FlexDeepCopy               = core.FlexDeepCopy
 	FlexibleMatch              = core.FlexibleMatch
@@ -550,6 +559,7 @@ var (
 	FnUndefMatchesFnDef        = core.FnUndefMatchesFnDef
 	FnValueOnlyZeroArgSigs     = core.FnValueOnlyZeroArgSigs
 	FnValueZeroArg             = core.FnValueZeroArg
+	FoldVariadicArms           = core.FoldVariadicArms
 	ForceArityFunction         = core.ForceArityFunction
 	ForceForwardFunction       = core.ForceForwardFunction
 	ForceStackFunction         = core.ForceStackFunction
@@ -647,6 +657,7 @@ var (
 	IsTypeValue                = core.IsTypeValue
 	IsUnconstrainedTypeParam   = core.IsUnconstrainedTypeParam
 	IsValidXmlName             = core.IsValidXmlName
+	IsVariadicSpread           = core.IsVariadicSpread
 	IsWeakFlexList             = core.IsWeakFlexList
 	IsWeakFlexMap              = core.IsWeakFlexMap
 	IsWeakFlexNode             = core.IsWeakFlexNode
@@ -654,6 +665,8 @@ var (
 	IsWordExtension            = core.IsWordExtension
 	IsXmlInterp                = core.IsXmlInterp
 	IsXmlValue                 = core.IsXmlValue
+	JoinCarriers               = core.JoinCarriers
+	JoinCarriersInner          = core.JoinCarriersInner
 	LitVsConcreteOrder         = core.LitVsConcreteOrder
 	LitVsLitOrder              = core.LitVsLitOrder
 	LookupDefType              = core.LookupDefType
@@ -713,6 +726,7 @@ var (
 	NewDepScalar               = core.NewDepScalar
 	NewDisjunct                = core.NewDisjunct
 	NewDispatchMod             = core.NewDispatchMod
+	NewDynamicCarrierValue     = core.NewDynamicCarrierValue
 	NewDynamicTypeTable        = core.NewDynamicTypeTable
 	NewEnd                     = core.NewEnd
 	NewEvalList                = core.NewEvalList
@@ -765,6 +779,7 @@ var (
 	NewTypedListWithElements   = core.NewTypedListWithElements
 	NewTypedMap                = core.NewTypedMap
 	NewTypedMapWithEntries     = core.NewTypedMapWithEntries
+	NewVariadicCarrier         = core.NewVariadicCarrier
 	NewWeakFlexList            = core.NewWeakFlexList
 	NewWeakFlexMap             = core.NewWeakFlexMap
 	NewWeakFlexXml             = core.NewWeakFlexXml
@@ -802,6 +817,7 @@ var (
 	QuoteArgsFromParams        = core.QuoteArgsFromParams
 	RankSignatures             = core.RankSignatures
 	RebuildXmlFromTmpl         = core.RebuildXmlFromTmpl
+	RecordTypedDefMake         = core.RecordTypedDefMake
 	RegisterBytesBridge        = core.RegisterBytesBridge
 	RegisterErrorCodes         = core.RegisterErrorCodes
 	RegisterMicronRenderBridge = core.RegisterMicronRenderBridge
@@ -831,6 +847,8 @@ var (
 	RetagTypedContainerValue   = core.RetagTypedContainerValue
 	ReturnCountErrorText       = core.ReturnCountErrorText
 	ReturnTypeErrorText        = core.ReturnTypeErrorText
+	RunFnBodyAnalysis          = core.RunFnBodyAnalysis
+	RunLoopBodyAnalysis        = core.RunLoopBodyAnalysis
 	RunPooled                  = core.RunPooled
 	RunPooledSub               = core.RunPooledSub
 	RunPooledTop               = core.RunPooledTop
@@ -890,6 +908,7 @@ var (
 	UnifyExplainR              = core.UnifyExplainR
 	UnifyR                     = core.UnifyR
 	UninstallFnSigs            = core.UninstallFnSigs
+	UnionCarrierForType        = core.UnionCarrierForType
 	UnionType                  = core.UnionType
 	UsurpFunction              = core.UsurpFunction
 	ValToString                = core.ValToString
@@ -901,6 +920,14 @@ var (
 	WithPos                    = core.WithPos
 	XmlParts                   = core.XmlParts
 )
+
+func ApplyComplementNarrowing(a0 *core.Registry, a1 core.Value) func() {
+	return core.ApplyComplementNarrowing(a0, a1)
+}
+
+func ApplyGuardNarrowing(a0 *core.Registry, a1 core.Value) func() {
+	return core.ApplyGuardNarrowing(a0, a1)
+}
 
 func AsChildType(a0 core.Value) (core.ChildTypeInfo, error) { return core.AsChildType(a0) }
 
@@ -928,6 +955,8 @@ func AsTableType(a0 core.Value) (core.TableTypeInfo, error) { return core.AsTabl
 
 func AsWord(a0 core.Value) (core.WordInfo, error) { return core.AsWord(a0) }
 
+func BoolWord(a0 bool) string { return core.BoolWord(a0) }
+
 func BoundToKind(a0 *core.DepBound, a1 bool) core.DepKind { return core.BoundToKind(a0, a1) }
 
 func Canon(a0 []core.Value) string { return core.Canon(a0) }
@@ -948,6 +977,10 @@ func InstallDef(a0 *core.Registry, a1 string, a2 core.Value, a3 ...bool) {
 
 func InstallFnDef(a0 *core.Registry, a1 string, a2 core.FnDefInfo, a3 ...bool) {
 	core.InstallFnDef(a0, a1, a2, a3...)
+}
+
+func InstallJoinedDefs(a0 *core.Registry, a1 map[string]core.Value, a2 map[string]core.Value) {
+	core.InstallJoinedDefs(a0, a1, a2)
 }
 
 func InstallType(a0 *core.Registry, a1 string, a2 core.Value) error {
@@ -986,6 +1019,12 @@ func IsValueOfType(a0 core.Value, a1 core.Value) bool { return core.IsValueOfTyp
 
 func IsWord(a0 core.Value) bool { return core.IsWord(a0) }
 
+func JoinCarrierStacks(a0 []core.Value, a1 []core.Value) []core.Value {
+	return core.JoinCarrierStacks(a0, a1)
+}
+
+func LiteralCondValue(a0 core.Value) (bool, bool) { return core.LiteralCondValue(a0) }
+
 func New(a0 *core.Registry) *core.Engine { return core.New(a0) }
 
 func NewAtom(a0 string) core.Value { return core.NewAtom(a0) }
@@ -993,6 +1032,10 @@ func NewAtom(a0 string) core.Value { return core.NewAtom(a0) }
 func NewBoolean(a0 bool) core.Value { return core.NewBoolean(a0) }
 
 func NewCarrier(a0 *core.Type) core.Value { return core.NewCarrier(a0) }
+
+func NewCarrierTypedList(a0 *core.Type) core.Value { return core.NewCarrierTypedList(a0) }
+
+func NewCarrierTypedListValue(a0 core.Value) core.Value { return core.NewCarrierTypedListValue(a0) }
 
 func NewClassType(a0 *core.Type, a1 core.ClassTypeInfo) core.Value { return core.NewClassType(a0, a1) }
 
@@ -1066,6 +1109,24 @@ func ResolveBuiltinTypeName(a0 string) (*core.Type, bool) { return core.ResolveB
 
 func ResolveFieldType(a0 *core.Registry, a1 core.Value) core.Value {
 	return core.ResolveFieldType(a0, a1)
+}
+
+func ReturnsIdentity(a0 ...int) core.ReturnsFunc { return core.ReturnsIdentity(a0...) }
+
+func RunCarrierBody(a0 *core.Registry, a1 core.Value) []core.Value {
+	return core.RunCarrierBody(a0, a1)
+}
+
+func RunCarrierBodyKeepDefs(a0 *core.Registry, a1 core.Value) []core.Value {
+	return core.RunCarrierBodyKeepDefs(a0, a1)
+}
+
+func RunCarrierBodyWithDefs(a0 *core.Registry, a1 core.Value) ([]core.Value, map[string]core.Value) {
+	return core.RunCarrierBodyWithDefs(a0, a1)
+}
+
+func RunCarrierCondBody(a0 *core.Registry, a1 core.Value) ([]core.Value, map[string]core.Value) {
+	return core.RunCarrierCondBody(a0, a1)
 }
 
 func RunInCheck() core.GoOpt { return core.RunInCheck() }

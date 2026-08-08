@@ -31,15 +31,11 @@ var _ = check.DispatchBraid
 var _ compiler.EmitState
 
 type (
-	DeadSig       = check.DeadSig
-	GuardClause   = check.GuardClause
-	SpreadPayload = check.SpreadPayload
-	UserPolyPlan  = check.UserPolyPlan
+	UserPolyPlan = check.UserPolyPlan
 )
 
 const (
-	CarrierDisjunctCap = check.CarrierDisjunctCap
-	FnAnalysisQuota    = check.FnAnalysisQuota
+	FnAnalysisQuota = check.FnAnalysisQuota
 )
 
 // Cold func-value re-exports: exported core funcs no suite calls
@@ -60,33 +56,22 @@ var (
 	BodyRefsFnLocalFn             = check.BodyRefsFnLocalFn
 	BuildFnBodyReturnsFn          = check.BuildFnBodyReturnsFn
 	CarrierResults                = check.CarrierResults
-	CheckAddUnique                = check.CheckAddUnique
-	CheckAddUniqueDiagnostic      = check.CheckAddUniqueDiagnostic
 	CheckAtIndices                = check.CheckAtIndices
 	CheckAtUncaughtTopLevel       = check.CheckAtUncaughtTopLevel
 	CheckListIndex                = check.CheckListIndex
 	CheckMakeConstruction         = check.CheckMakeConstruction
-	CommonAncestorType            = check.CommonAncestorType
-	DeadSignatures                = check.DeadSignatures
 	DeferredParamListResidual     = check.DeferredParamListResidual
 	DryPassReturns                = check.DryPassReturns
 	DryPassWrap                   = check.DryPassWrap
 	DynamicReachableOverloadCount = check.DynamicReachableOverloadCount
 	FnAnalysisKey                 = check.FnAnalysisKey
 	FnPredicateOverloadHazard     = check.FnPredicateOverloadHazard
-	FoldVariadicArms              = check.FoldVariadicArms
 	IsDeferredWordList            = check.IsDeferredWordList
-	IsVariadicSpread              = check.IsVariadicSpread
-	JoinCarriers                  = check.JoinCarriers
-	JoinCarriersInner             = check.JoinCarriersInner
 	MintFlexShapeCarrier          = check.MintFlexShapeCarrier
 	NewCarrierTypedListLen        = check.NewCarrierTypedListLen
-	NewDynamicCarrierValue        = check.NewDynamicCarrierValue
-	NewVariadicCarrier            = check.NewVariadicCarrier
 	OrderingReturnsFn             = check.OrderingReturnsFn
 	ParamBodyCarrier              = check.ParamBodyCarrier
 	ParamInputCarrier             = check.ParamInputCarrier
-	RecordTypedDefMake            = check.RecordTypedDefMake
 	RefuseForwardStackDrift       = check.RefuseForwardStackDrift
 	ReturnsAddConcat              = check.ReturnsAddConcat
 	ReturnsListElemAt             = check.ReturnsListElemAt
@@ -102,59 +87,16 @@ var (
 	StripToCarriers               = check.StripToCarriers
 	TryRecordMethodApply          = check.TryRecordMethodApply
 	TryShapedMethodDispatch       = check.TryShapedMethodDispatch
-	UnionCarrierForType           = check.UnionCarrierForType
 )
 
 func AnalyseLoopBody(a0 *core.Registry, a1 core.Value, a2 []string, a3 []core.Value, a4 bool) []core.Value {
 	return check.AnalyseLoopBody(a0, a1, a2, a3, a4)
 }
 
-func ApplyComplementNarrowing(a0 *core.Registry, a1 core.Value) func() {
-	return check.ApplyComplementNarrowing(a0, a1)
-}
-
-func ApplyGuardNarrowing(a0 *core.Registry, a1 core.Value) func() {
-	return check.ApplyGuardNarrowing(a0, a1)
-}
-
-func BoolWord(a0 bool) string { return check.BoolWord(a0) }
-
 func DataListElemTypeFromValue(a0 core.Value) *core.Type { return check.DataListElemTypeFromValue(a0) }
 
 func ElementCarrierFromValue(a0 core.Value) core.Value { return check.ElementCarrierFromValue(a0) }
 
-func InstallJoinedDefs(a0 *core.Registry, a1 map[string]core.Value, a2 map[string]core.Value) {
-	check.InstallJoinedDefs(a0, a1, a2)
-}
-
-func JoinCarrierStacks(a0 []core.Value, a1 []core.Value) []core.Value {
-	return check.JoinCarrierStacks(a0, a1)
-}
-
-func LiteralCondValue(a0 core.Value) (bool, bool) { return check.LiteralCondValue(a0) }
-
-func NewCarrierTypedList(a0 *core.Type) core.Value { return check.NewCarrierTypedList(a0) }
-
-func NewCarrierTypedListValue(a0 core.Value) core.Value { return check.NewCarrierTypedListValue(a0) }
-
 func NewElementCarrier(a0 *core.Type) core.Value { return check.NewElementCarrier(a0) }
 
 func ReturnsFreshInstance(a0 ...int) core.ReturnsFunc { return check.ReturnsFreshInstance(a0...) }
-
-func ReturnsIdentity(a0 ...int) core.ReturnsFunc { return check.ReturnsIdentity(a0...) }
-
-func RunCarrierBody(a0 *core.Registry, a1 core.Value) []core.Value {
-	return check.RunCarrierBody(a0, a1)
-}
-
-func RunCarrierBodyKeepDefs(a0 *core.Registry, a1 core.Value) []core.Value {
-	return check.RunCarrierBodyKeepDefs(a0, a1)
-}
-
-func RunCarrierBodyWithDefs(a0 *core.Registry, a1 core.Value) ([]core.Value, map[string]core.Value) {
-	return check.RunCarrierBodyWithDefs(a0, a1)
-}
-
-func RunCarrierCondBody(a0 *core.Registry, a1 core.Value) ([]core.Value, map[string]core.Value) {
-	return check.RunCarrierCondBody(a0, a1)
-}

@@ -24,7 +24,7 @@ import (
 // mutableVars are written after init (slot tables); eng-side writers
 // use core.X directly, so the facade must not mirror them.
 var mutableVars = map[string]bool{
-	"AnalysisImpl": true, "CheckBraid": true, "JoinCarriersHook": true,
+	"AnalysisImpl": true, "CheckBraid": true,
 	"DriftWindowRecorder": true, "NewEmitStateHook": true, "NewIsolatedEmitHook": true,
 }
 

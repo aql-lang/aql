@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"time"
 
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 
 	"github.com/cockroachdb/apd/v3"
@@ -158,7 +157,7 @@ func returnsIntFaultOn(base ReturnsFunc, op string, faultFn func(a, b int64) err
 					if errors.As(err, &ae) {
 						code, detail = ae.Code, ae.Detail
 					}
-					check.CheckAddUniqueDiagnostic(r, code, detail, op, args[0].Pos())
+					core.CheckAddUniqueDiagnostic(r, code, detail, op, args[0].Pos())
 				}
 			}
 		}

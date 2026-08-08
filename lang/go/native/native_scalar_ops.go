@@ -43,7 +43,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -280,7 +279,7 @@ func booleanArithHandler(op string) Handler {
 func booleanArithReturns(op string) ReturnsFunc {
 	return func(args []Value, r *Registry) []Value {
 		if atUncaughtTopLevel(r) && len(args) == 2 && IsConcrete(args[0]) && IsConcrete(args[1]) {
-			check.CheckAddUniqueDiagnostic(r, "type_error", booleanArithDetail(op), op, args[0].Pos())
+			core.CheckAddUniqueDiagnostic(r, "type_error", booleanArithDetail(op), op, args[0].Pos())
 		}
 		return []Value{}
 	}
@@ -582,7 +581,7 @@ func mirrorOpError(r *Registry, op string, err error, pos core.SrcPos) {
 	if errors.As(err, &ae) {
 		code, detail = ae.Code, ae.Detail
 	}
-	check.CheckAddUniqueDiagnostic(r, code, detail, op, pos)
+	core.CheckAddUniqueDiagnostic(r, code, detail, op, pos)
 }
 
 // seqOpReturns is the check-mode ReturnsFn for the occurrence-package

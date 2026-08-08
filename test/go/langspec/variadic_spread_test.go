@@ -3,8 +3,6 @@ package langspec
 import (
 	"testing"
 
-	check "github.com/boru-lang/boru/check/go"
-
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -15,7 +13,7 @@ import (
 // leak is still flagged. Pairs the positive (Integer spread covers N Integers)
 // with the negatives (a String among the Integers, and a wrong fixed prefix).
 func TestVariadicSpreadOracle(t *testing.T) {
-	varInt := check.NewVariadicCarrier(core.NewTypeLiteral(core.TInteger))
+	varInt := core.NewVariadicCarrier(core.NewTypeLiteral(core.TInteger))
 	i := core.NewInteger(6)
 	s := core.NewString("x")
 	strCarrier := core.NewCarrier(core.TString)
