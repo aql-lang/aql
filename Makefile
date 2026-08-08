@@ -288,9 +288,10 @@ test-ts:
 # denominator got honest. From here the ratchet only rises, and the corpus is
 # the instrument: rows added to core/spec lift both engines at once.
 #
-# Current per-file, worst first: make 38, coretype 39, resolve 42, engine 42,
-# sugar 47, check-state 66, canon 70, value 72, registry 74, match 77.
-TS_CORE_GATE_LINES ?= 87
+# Current per-file, worst first: engine 68, match 85, resolve 96, value 96,
+# registry 97, coretype 94, canon 99 — the corpus is what moved them, and
+# rows added to core/spec lift both engines at once.
+TS_CORE_GATE_LINES ?= 88
 test-ts-core:
 	@echo "==> typecheck core/ts"
 	cd core/ts && npx tsc

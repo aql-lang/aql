@@ -19,9 +19,9 @@
 # Forth reference means inverting that — `over` is ( a b -- a b a ), which
 # is why the row below leaves 1 2 1 and not 2 1 2.
 #
-# `depth`, `pick` and `roll` are ABSENT: they are full-stack words and
-# core/ts has no FullStack knob yet. Adding rows for them before the
-# capability exists would encode a gap as a contract.
+# `depth`, `pick` and `roll` are FULL-STACK words: the handler receives the
+# whole resolved stack of the current paren scope and returns its complete
+# replacement. The scope matters — a paren bounds what they can see.
 
 # --- dup / drop -----------------------------------------------------------
 1 dup	1 1	the top is duplicated
@@ -58,3 +58,16 @@ dup	ERROR:signature_error	nothing to duplicate
 1 swap	ERROR:signature_error	swap needs two
 1 2 rot	ERROR:signature_error	rot needs three
 1 2 3 over2	ERROR:signature_error	over2 needs four
+
+# --- the full-stack words -------------------------------------------------
+depth	0	an empty stack has depth 0
+1 depth	1 1	depth pushes without consuming
+1 2 3 depth	1 2 3 3	three deep
+1 2 0 pick	1 2 2	pick 0 copies the top
+1 2 1 pick	1 2 1	pick 1 reaches one deeper
+1 2 3 2 pick	1 2 3 1	index counts DOWN from the top
+1 2 0 roll	1 2	roll 0 moves the top to the top — a no-op
+1 2 3 2 roll	2 3 1	roll MOVES rather than copies, unlike pick
+1 2 3 1 roll	1 3 2	roll 1 is swap
+1 5 pick	ERROR:non_boru:pick: index 5 out of range (stack depth 1)	refused, not silently none — and UNCODED, matching the Go handler's fmt.Errorf
+1 5 roll	ERROR:non_boru:roll: index 5 out of range (stack depth 1)	and so is roll

@@ -14,14 +14,19 @@
 // which in this convention is args[1]=a, args[0]=b and a return of
 // [a, b, a] = [args[1], args[0], args[1]].
 //
-// PARITY NOTE — three words are NOT here yet. `depth`, `pick` and `roll`
-// are FULL-STACK words: their Go handlers take the whole stack and return
-// a replacement for it, via the `FullStack()` dispatch knob. core/ts has
-// no such knob (signature.ts says so explicitly), so porting them means
-// adding the capability to core first. They are the next increment, and
-// basic/spec/stack.tsv carries no rows for them.
+// `depth`, `pick` and `roll` are FULL-STACK words: the handler receives
+// the whole resolved stack of the current paren scope and returns its
+// complete replacement, rather than N args and their replacement. core/ts
+// gained the `fullStack` signature flag for them.
 
-import { returnsIdentity, TAny, type NativeFunc, type Value } from '@boru-lang/core'
+import {
+  newInteger,
+  returnsIdentity,
+  TAny,
+  TInteger,
+  type NativeFunc,
+  type Value,
+} from '@boru-lang/core'
 
 /** dup ( a -- a a ) */
 function dupHandler(args: Value[]): Value[] {
@@ -76,6 +81,39 @@ function drop2Handler(): Value[] {
 /** over2 ( a b c d -- a b c d a b ) */
 function over2Handler(args: Value[]): Value[] {
   return [args[3]!, args[2]!, args[1]!, args[0]!, args[3]!, args[2]!]
+}
+
+/** depth ( … -- … n ) — pushes the current scope's depth. */
+function depthHandler(_args: Value[], _ctx: unknown, stack: Value[]): Value[] {
+  return [...stack, newInteger(BigInt(stack.length))]
+}
+
+/**
+ * pick ( … n -- … v ) — copies the n-th value (0 = top) to the top.
+ * Out of range is an error rather than a silent none, matching Go.
+ */
+function pickHandler(args: Value[], _ctx: unknown, stack: Value[]): Value[] {
+  const n = Number(args[0]!.asInteger())
+  if (n < 0 || n >= stack.length) {
+    // A PLAIN Error, not a BoruError: the Go handler raises fmt.Errorf
+    // here, so the error carries no boru code and surfaces as non_boru.
+    // Matching that exactly is the parity contract; "improving" one side
+    // to a coded error would be a divergence dressed up as a fix. Worth
+    // noting as a non-uniformity in its own right — most of the layer's
+    // failures are coded — but not one to resolve by changing one engine.
+    throw new Error(`pick: index ${n} out of range (stack depth ${stack.length})`)
+  }
+  return [...stack, stack[stack.length - 1 - n]!]
+}
+
+/** roll ( … n -- … v ) — MOVES the n-th value (0 = top) to the top. */
+function rollHandler(args: Value[], _ctx: unknown, stack: Value[]): Value[] {
+  const n = Number(args[0]!.asInteger())
+  if (n < 0 || n >= stack.length) {
+    throw new Error(`roll: index ${n} out of range (stack depth ${stack.length})`)
+  }
+  const idx = stack.length - 1 - n
+  return [...stack.slice(0, idx), ...stack.slice(idx + 1), stack[idx]!]
 }
 
 /**
@@ -175,5 +213,17 @@ export const stackNatives: NativeFunc[] = [
         barrierPos: 0,
       },
     ],
+  },
+  {
+    name: 'depth',
+    signatures: [{ args: [], handler: depthHandler, fullStack: true, barrierPos: 0 }],
+  },
+  {
+    name: 'pick',
+    signatures: [{ args: [TInteger], handler: pickHandler, fullStack: true, barrierPos: 0 }],
+  },
+  {
+    name: 'roll',
+    signatures: [{ args: [TInteger], handler: rollHandler, fullStack: true, barrierPos: 0 }],
   },
 ]

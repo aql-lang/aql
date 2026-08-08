@@ -44,6 +44,18 @@ export interface Signature {
   /** Fallback marker — true for the generic 0-arg fallback. */
   fallback?: boolean
   /**
+   * FULL-STACK words (`depth`, `pick`, `roll`): the handler receives the
+   * whole resolved stack of the current paren scope and returns its
+   * complete REPLACEMENT, rather than receiving N args and returning their
+   * replacement. Mirrors Go's FullStack() dispatch knob
+   * (core/go/sigimpl.go).
+   *
+   * Scoped to the nearest open paren so a full-stack word inside a group
+   * cannot reach values below it — `(1 2 depth)` sees two, not whatever
+   * the enclosing program left underneath.
+   */
+  fullStack?: boolean
+  /**
    * Positions that must be filled by a bare type literal (data === null),
    * not a concrete value — used by `make` to require a type argument.
    * Mirrors NativeSig.TypeArgs in the Go matcher.
@@ -118,6 +130,8 @@ export function returnsIdentity(...mapping: number[]): ReturnsFunc {
 
 export interface NativeSig {
   args: BoruType[]
+  /** See Signature.fullStack. */
+  fullStack?: boolean
   handler: Handler
   barrierPos?: number
   patterns?: Map<number, Value>

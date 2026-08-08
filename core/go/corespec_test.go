@@ -187,6 +187,17 @@ func coreSpecRegistry(t *testing.T) *Registry {
 		}),
 		BarrierPos: BarrierAllForward,
 	})
+	// depthq is the FULL-STACK fixture: the handler receives the whole
+	// resolved stack of the current paren scope and returns its complete
+	// replacement, rather than N args and their replacement. One word is
+	// enough to exercise the capability — the scope rule (a paren bounds
+	// what it can see) is what the corpus rows actually pin.
+	r.Register("depthq", Signature{
+		Impl: Go(func(_ []Value, _ map[string]Value, stack []Value, _ *Registry) ([]Value, error) {
+			return append(append([]Value(nil), stack...), NewInteger(int64(len(stack)))), nil
+		}, FullStack()),
+		BarrierPos: 0,
+	})
 	return r
 }
 

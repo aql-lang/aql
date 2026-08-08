@@ -407,6 +407,37 @@ export class Engine {
     name: string,
   ): void {
     this.autoEvalArgs(result.args, result.sig)
+
+    // FULL-STACK words (`depth`, `pick`, `roll`) take the whole resolved
+    // stack of the current paren scope and return its complete
+    // REPLACEMENT, rather than N args and their replacement. Mirrors the
+    // Go engine's FullStack path (core/go/engine.go).
+    //
+    // The scope is the nearest OPEN PAREN below the pointer, not the whole
+    // stack: `(1 2 depth)` must see two values, not whatever the enclosing
+    // program left underneath. The matched args are excluded — they sit
+    // between replaceFrom and the pointer and the handler receives them
+    // separately.
+    if (true === result.sig.fullStack) {
+      let base = 0
+      for (let i = this.pointer - 1; i >= 0; i--) {
+        if (isOpenParen(this.stack[i]!)) {
+          base = i + 1
+          break
+        }
+      }
+      const argStart = this.pointer - result.prefixCount
+      const scope = this.stack.slice(base, argStart)
+      const fsResult = result.sig.handler(result.args, null, scope, this.registry)
+      if (fsResult instanceof Promise) {
+        throw new BoruError('unsupported', `async handlers are not supported in the TS port`, name)
+      }
+      const fsOut = fsResult as Value[]
+      this.stack.splice(base, this.pointer + 1 + result.forwardCount - base, ...fsOut)
+      this.pointer = base
+      return
+    }
+
     const handlerResult = result.sig.handler(result.args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
       throw new BoruError(

@@ -185,6 +185,25 @@ function fixtureRegistry(): Registry {
       },
     ],
   })
+  // depthq is the FULL-STACK fixture: the handler receives the whole
+  // resolved stack of the current paren scope and returns its complete
+  // replacement, rather than N args and their replacement. Declared here
+  // independently of the Go runner's copy — any asymmetry shows up as a
+  // false divergence, which is the failure mode this corpus prevents.
+  r.registerNativeFunc({
+    name: 'depthq',
+    signatures: [
+      {
+        args: [],
+        fullStack: true,
+        barrierPos: 0,
+        handler: (_a: Value[], _c: Map<string, Value> | null, stack: Value[]): Value[] => [
+          ...stack,
+          newInteger(BigInt(stack.length)),
+        ],
+      },
+    ],
+  })
   return r
 }
 
