@@ -326,9 +326,13 @@ function evalExpr(expr: string): string {
   throw new Error(`unknown expression kind ${JSON.stringify(kind)}`)
 }
 
+// divergent.tsv is the parity DEBT and has a different column shape, so it
+// is read by its own block below rather than as a two-column spec file.
+const DIVERGENT = 'divergent.tsv'
+
 const files = fs
   .readdirSync(SPEC_DIR)
-  .filter((f) => f.endsWith('.tsv'))
+  .filter((f) => f.endsWith('.tsv') && DIVERGENT !== f)
   .sort()
 
 assert.ok(files.length > 0, 'core/spec has no .tsv files — the corpus is not being read')
@@ -341,6 +345,37 @@ describe('core/spec', () => {
           assert.equal(evalExpr(row.expr), row.expected, row.note)
         })
       }
+    })
+  }
+})
+
+// Pins the TS side of every recorded divergence, and fails a row that has
+// STOPPED diverging — a fixed divergence must move to the spec file it
+// belongs in, not sit here looking like debt. The Go runner asserts the other
+// column from the same file, so both suites stay green while the difference
+// stays visible. Same discipline as parser/spec/divergent.tsv.
+describe('core/spec — divergent.tsv (parity debt)', () => {
+  const rows = parseSpec(DIVERGENT)
+  if (0 === rows.length) {
+    // The debt is paid. Kept as a live assertion rather than deleted: the
+    // file is the ratchet, so a NEW divergence has to be added here
+    // deliberately instead of quietly landing as a changed expectation
+    // somewhere else.
+    it('is empty — core/go and core/ts agree on every corpus expression', () => {
+      assert.equal(rows.length, 0)
+    })
+  }
+  for (const row of rows) {
+    it(`L${row.line} ${row.expr}`, () => {
+      // parseSpec puts column 2 in `expected` and column 3 in `note`; for
+      // this file those are the go and ts columns.
+      const [wantGo, wantTs] = [row.expected, row.note]
+      assert.notEqual(
+        wantGo,
+        wantTs,
+        'go and ts columns are identical — move this row out of divergent.tsv',
+      )
+      assert.equal(evalExpr(row.expr), wantTs)
     })
   }
 })

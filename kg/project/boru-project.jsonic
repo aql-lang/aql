@@ -132,6 +132,16 @@
       metadata: { repository: "boru-lang/boru" }
     }
     {
+      id: "src:core-ts-divergences"
+      kind: "text"
+      locator: "design/CORE-TS-DIVERGENCES.1.md"
+      title: "135 measured core-level Go/TS divergences"
+      retrieved_at: null
+      content_hash: "core-ts-divergences-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
       id: "src:go-ts-parity"
       kind: "text"
       locator: "design/GO-TS-PARITY.0.md"
@@ -216,6 +226,8 @@
       attributes: { role: "the measured verdict on a shared module below core and parser: Value alone closes over 75.7% of core/go, so the cut as posed is a rename — includes the piecetool -closure method and the priced seam alternatives" } }
     { key: "basic-check-cut", type: "Document", label: "design/BASIC-CHECK-CUT.0.md"
       attributes: { role: "why basic no longer depends on check: the 23 symbols it used, which moved into core as pure primitives, which became a core-owned analysis seam, and the two gates that keep the edge from coming back" } }
+    { key: "core-ts-divergences", type: "Document", label: "design/CORE-TS-DIVERGENCES.1.md"
+      attributes: { role: "the ten classes of measured core/go-vs-core/ts divergence behind core/spec/divergent.tsv, why the 1808-row crossdiff was blind to all of them, and the hit rate that makes the uncovered surface the place to look" } }
     { key: "go-ts-parity", type: "Document", label: "design/GO-TS-PARITY.0.md"
       attributes: { role: "the Go/TS parity program for core, parser and basic: the three shared TSV corpora and their two-runner rule, the capability table that forces core/ts before basic/ts, the divergence ledger, and the finding that an uncovered branch in one port is where a divergence hides" } }
     { key: "ts-parity-audit", type: "Document", label: "design/TS-PARITY-AUDIT.0.md"
@@ -443,6 +455,16 @@
       object: { kind: "entity", entity: "basic-go" }
       evidence: [{ source: "src:basic-check-cut", locator: "Status",
         quote: "**Status:** COMPLETE (2026-08-08)" }]
+      confidence: 0.95 }
+    { subject: "core-ts-divergences", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:core-ts-divergences", locator: "title",
+        quote: "CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid" }]
+      confidence: 0.95 }
+    { subject: "core-ts-divergences", predicate: "supports"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:core-ts-divergences", locator: "Why none of these were visible",
+        quote: "An uncovered branch in one port is where a divergence hides" }]
       confidence: 0.95 }
     { subject: "go-ts-parity", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }

@@ -373,6 +373,10 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 	return ""
 }
 
+// coreSpecDivergentFile is the parity DEBT and has a different column shape,
+// so TestCoreSpec skips it and TestCoreSpecDivergent reads it instead.
+const coreSpecDivergentFile = "divergent.tsv"
+
 func TestCoreSpec(t *testing.T) {
 	entries, err := os.ReadDir(coreSpecDir)
 	if err != nil {
@@ -380,7 +384,7 @@ func TestCoreSpec(t *testing.T) {
 	}
 	total := 0
 	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".tsv") {
+		if !strings.HasSuffix(e.Name(), ".tsv") || e.Name() == coreSpecDivergentFile {
 			continue
 		}
 		path := filepath.Join(coreSpecDir, e.Name())
@@ -431,4 +435,39 @@ func TestCoreProbe(t *testing.T) {
 	if err := os.WriteFile(out, []byte(b.String()), 0o600); err != nil {
 		t.Fatalf("write %s: %v", out, err)
 	}
+}
+
+// TestCoreSpecDivergent pins the Go side of every recorded core-level
+// divergence, and fails a row that has STOPPED diverging — a fixed divergence
+// must move to the spec file it belongs in, not sit here looking like debt.
+// core/ts/src/corespec.test.ts asserts the other column from the same file,
+// so both suites stay green while the difference stays visible. Same
+// discipline as parser/spec/divergent.tsv.
+func TestCoreSpecDivergent(t *testing.T) {
+	path := filepath.Join(coreSpecDir, coreSpecDivergentFile)
+	rows := parseCoreSpec(t, path)
+	if len(rows) == 0 {
+		// The debt is paid. Kept as a live assertion rather than deleted:
+		// the file is the ratchet, so a NEW divergence has to be added here
+		// deliberately instead of quietly landing as a changed expectation
+		// somewhere else.
+		t.Log("divergent.tsv: empty — core/go and core/ts agree on every corpus expression")
+		return
+	}
+	r := coreSpecRegistry(t)
+	for _, row := range rows {
+		// parseCoreSpec puts column 2 in expected and column 3 in note; for
+		// this file those are the go and ts columns.
+		wantGo, wantTS := row.expected, row.note
+		if wantGo == wantTS {
+			t.Errorf("%s:%d: %q: go and ts columns are identical — move this row out of divergent.tsv",
+				row.file, row.line, row.expr)
+			continue
+		}
+		if got := evalCoreSpec(t, r, row.expr); got != wantGo {
+			t.Errorf("%s:%d: %q (go column)\n  want: %s\n  got : %s",
+				row.file, row.line, row.expr, wantGo, got)
+		}
+	}
+	t.Logf("core/spec divergent: %d rows", len(rows))
 }

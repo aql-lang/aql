@@ -1,0 +1,227 @@
+# core/spec/divergent.tsv — the core-level parity debt, one row per divergence.
+#
+# One row per expression, tab-separated:  expr <TAB> go <TAB> ts <TAB> note
+#
+# Same comment and escaping rules as the other core/spec files, and the same
+# two-runner discipline: core/go/corespec_test.go asserts the `go` column and
+# core/ts/src/corespec.test.ts asserts the `ts` column, so both suites stay
+# green while the difference stays PINNED. If either engine moves, its column
+# fails and the row is re-examined rather than silently re-baselined. Each
+# runner also FAILS a row whose go and ts columns are EQUAL — a fixed
+# divergence must MOVE to the spec file it belongs in, or this stops being an
+# honest debt list.
+#
+# SHRINK-ONLY, exactly as parser/spec/divergent.tsv is.
+#
+# WHERE THESE CAME FROM. The 1808-row engine crossdiff has been green
+# throughout, and so has every core/spec row. None of these were visible to
+# either, because a differential that hard-fails only when both engines
+# SUCCEED with different values cannot see two engines that both fail, and
+# because no source in eng/spec builds the shapes below. They were found by
+# sweeping core/ts's UNCOVERED regions — the parser half of this program
+# established that an uncovered branch in one port is where a divergence
+# hides, and this file is that finding applied to core.
+#
+# The `go` column is the reference by CONVENTION, not by proof. Two of the
+# five original parser-side divergence classes turned out to have Go wrong.
+# Read design/CORE-TS-DIVERGENCES.1.md before assuming which side moves.
+
+
+# --- SEVERITY 1: an empty paren group in the forward window -----------------
+# The only class here that produces a WRONG ANSWER rather than a wrong error.
+# Go treats `( )` as a no-value operand and raises no_value_error, or — where
+# a stack operand can supplement — consumes the stack. core/ts silently drops
+# the empty group and RE-ASSOCIATES the operands, so `7 8 addq ( ) ( 5 )` is
+# 15 5 in Go and 7 13 here: different arithmetic from the same source.
+run 7 8 addq ( ) ( 5 )	15 5	7 13	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run 7 8 addq ( ) ( negq 3 )	15 -3	7 5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run 7 8 9 addq ( ) ( 5 )	7 17 5	7 8 14	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run 7 negq ( ) ( 5 )	-7 5	7 -5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run 7 8 negq ( ) ( 5 )	7 -8 5	7 8 -5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( ) ( ) 1 2	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( ) ( 5 ) 6	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( ) ( negq 3 ) 4	ERROR:no_value_error	1	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run negq ( ) ( negq 3 )	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( 1 ) ( ) ( 2 )	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( ) p( 1 ) 2	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq p( ) p( ) 5 6	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( ( ) ) ( 5 ) 6	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run pairq ( ) ( 5 )	ERROR:no_value_error	5 5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( ) ( pairq 7 )	ERROR:no_value_error	14	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run ( addq ( ) ( 5 ) 6 )	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( negq ( ) ( 3 ) ) 4	ERROR:no_value_error	1	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq 1 ( ) ( 5 )	ERROR:no_value_error	6	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run 1 addq ( ) ( 2 )	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run addq ( ) ( boomq 1 )	ERROR:no_value_error	ERROR:fixture_boom	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run negq ( ) ( boomq 1 )	ERROR:no_value_error	ERROR:fixture_boom	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run boomq negq ( )	ERROR:signature_error	ERROR:no_value_error	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run boomq addq 1 ( )	ERROR:signature_error	ERROR:no_value_error	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run boomq { a: p( ) b: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+run [q ( ) ]	[ )]	[( )]	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+
+# --- SEVERITY 2: the strict forward barrier ---------------------------------
+# REFERENCE.md:364 lists "another function word" as a forward-collection
+# barrier, and design/STRICT-FORWARD-BARRIER.0.md makes it uniform: a parked
+# forward that cannot commit with the args it already holds is STRANDED, a
+# signature_error, not a wait-through. core/ts has no such rule, so at an Any
+# slot it waits through the inner dispatch and the outer word FIRES. The
+# paren-grouped spelling `boomq ( negq 5 )` agrees on both engines, which is
+# exactly the distinction the rule exists to make observable.
+run boomq addq 1 2	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq negq 5	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq pairq 7	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq depthq	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 boomq negq 2	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 boomq depthq	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 2 3 boomq depthq	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq addq 1 2 3	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 boomq addq 2 3	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run ( boomq addq 1 2 )	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run [ boomq addq 1 2 ]	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run ( 1 boomq negq 2 )	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 boomq boomq 2	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq boomq boomq 1	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 2 boomq negq 3	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq nosuchword	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 boomq nosuchword	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq pairq 5	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq boomq 1	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 boomq negq 5	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq depthq addq 1 2	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq zzz	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq zzz 1	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq (	ERROR:signature_error	ERROR:syntax_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq Decimal	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq pairq 3	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 2 boomq depthq	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run ( boomq negq 5 )	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run [ boomq negq 5 ]	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq negq 5 ;	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 1 boomq negq 5 addq 2 3	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run ( 1 2 ) boomq depthq	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq pairq 3 ;	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run 5 boomq zzz	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run ( boomq zzz )	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run [ boomq zzz ]	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: ) }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: { b: ) } }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq [ { a: ) } ]	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: addq }	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: 1 b: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: nosuchword b: p( addq 1 ) }	ERROR:undefined_word	ERROR:signature_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: addq b: p( nosuchword ) }	ERROR:signature_error	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq {q a: p( nosuchword ) }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq {q a: p( addq 1 ) }	ERROR:fixture_boom	ERROR:signature_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq {q a: [ nosuchword ] }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq { a: {q b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq {q a: { b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq {q a: {q b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+run boomq negq 1	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
+
+# --- a type-mismatched paren operand: which error ---------------------------
+# Both refuse; they disagree about the code. Go reports signature_error (the
+# operand does not fit the slot); core/ts reports no_value_error (it treats
+# the group as having produced nothing usable). Same refusal, different
+# taxonomy, so a caller matching on the code behaves differently.
+run addq ( 'a' ) 1	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run negq ( 'a' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run addq 1 ( 'a' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run addq ( 5 ) 'a'	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run negq ( [ 1 ] )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run addq ( [ addq 1 2 ] ) 5	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run negq ( 'x' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run negq ( 'x' ) 5	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run 1 addq ( 'x' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run addq ( 1 ) 'x'	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run addq 'x' ( 1 )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run 'x' addq ( 1 )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run addq ( 1 ) ( 'x' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+run 1 addq ( 'x' ) 2	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
+
+# --- the WORD `end` versus the end MARKER -----------------------------------
+# `;` is the marker and both engines handle it identically (pinned in
+# dispatch.tsv). The bare word `end` is a different thing: core has no word
+# by that name, so Go raises undefined_word, while core/ts resolves the word
+# to the marker and silently applies barrier semantics. `run end 1` is an
+# error in Go and the value 1 here.
+run end	ERROR:undefined_word		DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run end 1	ERROR:undefined_word	1	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 end 2	ERROR:undefined_word	1 2	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 2 end	ERROR:undefined_word	1 2	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 2 end sumq	ERROR:undefined_word	3	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 2 end depthq	ERROR:undefined_word	1 2 2	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run [ 1 end 2 ]	ERROR:undefined_word	[1 2]	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run boomq end	ERROR:undefined_word	ERROR:signature_error	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 boomq end	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 2 addq end	ERROR:undefined_word	3	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 negq end	ERROR:undefined_word	-1	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+
+# --- the builtin type-name table, and slash paths ---------------------------
+# core/ts's leaf name table is narrower than core/go's and has no path form.
+# `Word` is worse than a miss: core/ts CRASHES with an uncoded error
+# (`AsWord: not a word value`), which is a non_boru failure escaping the
+# taxonomy entirely — the one row here that is a defect on any reading.
+run Word	Word	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run 1 Word 2	1 Word 2	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run Scalar/String	String	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run Word/__ED	__ED	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run 1 Scalar/String	1 String	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run [ Word ]	[Word]	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run boomq Word	ERROR:fixture_boom	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run Cidron	Cidron	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+run [ Module ]	[Module]	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+
+# --- a bare marker as a map value -------------------------------------------
+# An END or paren marker written where a map value goes. Go drops the key
+# (the marker evaluates to nothing) or refuses the paren markers outright;
+# core/ts stores the marker as DATA and renders it. Reached only through the
+# corpus notation today, but it is what a word handler returning a marker
+# inside a map would do.
+run { a: ; }	{}	{a:end}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run { a: ; b: 1 }	{b:1}	{a:end b:1}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run { a: 1 b: ; }	{a:1}	{a:1 b:end}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run { a: ; b: ; }	{}	{a:end b:end}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run { a: { b: ; c: 1 } }	{a:{c:1}}	{a:{b:end c:1}}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run [ { a: ; } { b: 1 } ]	[{} {b:1}]	[{a:end} {b:1}]	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run { a: p( { b: ; } ) }	{a:{}}	{a:{b:end}}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run { a: ) }	ERROR:syntax_error	{a:)}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+run { a: ( }	ERROR:syntax_error	{a:(}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
+
+# --- canon of a bare paren marker -------------------------------------------
+# Go renders an OpenParen as the EMPTY string and a CloseParen as `)`, so a
+# list holding one renders with a gap; core/ts renders both literally. Render
+# quality on both sides — NUR059 territory — but they disagree, so it is debt
+# rather than a shared wart.
+list (	[]	[(]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+list ( )	[ )]	[( )]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+list 1 ( 2	[1  2]	[1 ( 2]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+list ( ( )	[  )]	[( ( )]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+list ( ; )	[ end )]	[( end )]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+list [ ( ) ]	[[ )]]	[[( )]]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+list { a: ( }	[{a:}]	[{a:(}]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+typedlist ( 1	[: 1]	[:( 1]	RENDER: Go canons an OpenParen as empty, TS as `(`.
+
+# --- an unclosed paren in the value stream ----------------------------------
+# Go completes the pending dispatch and reports signature_error; core/ts
+# reports syntax_error. The core engine receives VALUES, not text, so calling
+# this a syntax error is arguably the wrong layer — but it is recorded rather
+# than "fixed", because which code is right is a REFERENCE.md question.
+run ( boomq	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
+run addq ( 1 2	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
+run addq ( negq 3	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
+run addq ( ( 1 2	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
+
+# --- an unclosed paren after a partially collected forward ------------------
+# Same class as above, kept separate because the forward word has already
+# collected an operand when the stream ends.
+run negq (	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS.
+run 5 addq (	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS.
+
+# --- BigDecimal sign and scale ----------------------------------------------
+# core/ts/src/decimal.ts loses the sign of NEGATIVE ZERO and normalises away
+# a zero's exponent, where Go's apd payload keeps both. Small, and both are
+# the decimal type's whole reason for existing: an exact representation that
+# renders what it was given.
+bigdec -0.0	-0d0.0	0d0.0	DATA: TS decimal loses negative-zero sign and a zero coefficient exponent.
+bigdec 0e5	0d000000	0d0	DATA: TS decimal loses negative-zero sign and a zero coefficient exponent.

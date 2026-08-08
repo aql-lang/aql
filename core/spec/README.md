@@ -87,6 +87,35 @@ evaluated by whatever consumes the container.
 `expected` is the canonical rendering (`core.Canon` / `canon()`), or
 `ERROR:<code>` for a row that must raise that BoruError taxonomy code.
 
+### `divergent.tsv` — the parity debt
+
+```
+expr	go	ts	note
+```
+
+Expressions the two engines answer DIFFERENTLY. Each runner asserts its
+**own** column, so both suites stay green while the difference stays pinned:
+if either engine moves, its column fails and the row is re-examined rather
+than silently re-baselined. Each runner also **fails a row whose `go` and
+`ts` columns are equal** — a fixed divergence must move to the spec file it
+belongs in, or this stops being an honest debt list. Shrink-only, exactly as
+`parser/spec/divergent.tsv` is.
+
+It holds **135 rows** in ten classes, all measured on 2026-08-08 and none of
+them visible to the 1808-row engine crossdiff. `design/CORE-TS-DIVERGENCES.1.md`
+has the root causes; the headline is that one class produces a WRONG ANSWER
+rather than a wrong error (`7 8 addq ( ) ( 5 )` is `15 5` in Go and `7 13`
+here), and the largest class is the strict forward barrier that `core/ts`
+does not implement at all.
+
+How they were found is the reusable part. `core/ts` was at 88.2% coverage
+against `core/go`'s 100%, and the parser half of this programme had already
+established that **an uncovered branch in one port is where a divergence
+hides** — nothing has ever compared the two engines there. Sweeping each
+uncovered region produced 139 candidate expressions, of which **135 diverged**.
+Pinning them took `core/ts` from 88.20% to 90.71% without a line of new
+engine code.
+
 ## What is deliberately absent
 
 Rows for the 22 defects in design/CORE-GO-TS-DEFECTS.0.md are **not** here

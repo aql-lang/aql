@@ -291,7 +291,7 @@ test-ts:
 # Current per-file, worst first: engine 68, match 85, resolve 96, value 96,
 # registry 97, coretype 94, canon 99 — the corpus is what moved them, and
 # rows added to core/spec lift both engines at once.
-TS_CORE_GATE_LINES ?= 88
+TS_CORE_GATE_LINES ?= 90
 test-ts-core:
 	@echo "==> typecheck core/ts"
 	cd core/ts && npx tsc

@@ -15,7 +15,7 @@ preceded this).
 
 | module | go | ts | shared corpus |
 |---|---|---|---|
-| core | 100% | 88.20% | `core/spec`, 158 rows |
+| core | 100% | 90.71% | `core/spec`, 158 rows + a 135-row ledger |
 | parser | 100% | **100%** | `parser/spec`, 535 rows, ledger 9 rows (both engine limits) |
 | basic | 100% | 100% *of the 15 words ported* | `basic/spec`, 45 rows |
 
@@ -50,6 +50,13 @@ The independence is the point: shared scaffolding hides the same bug from
 both engines. Each runner re-implements the row notation and builds its
 own fixture registry, and any asymmetry between the two fixtures shows up
 as a false divergence — so the fixtures are kept in step deliberately.
+
+`core/spec` gained the same ledger on 2026-08-08 —
+`core/spec/divergent.tsv`, 135 rows, same two-runner semantics — after a
+sweep of core/ts's uncovered regions turned up 135 divergences in 138
+well-formed candidates. `design/CORE-TS-DIVERGENCES.1.md` has the ten
+classes. That hit rate is the rule at the top of this note restated as a
+number: the uncovered surface was not merely untested, it was WRONG.
 
 `parser/spec/divergent.tsv` is the parity DEBT ledger: one row per
 divergence, both columns recorded, each runner asserting its OWN column.
@@ -161,7 +168,7 @@ absence of those rows was itself the honest record.
 
 Both Go modules gate at 100% by their OWN suite (`cover-gate-core`,
 `cover-gate-parser`), on top of the merged ADR-008 gate. The TS gates
-ratchet: `TS_CORE_GATE_LINES` (88), `TS_PARSER_GATE_LINES` (**100**, both
+ratchet: `TS_CORE_GATE_LINES` (90), `TS_PARSER_GATE_LINES` (**100**, both
 halves of the module now gated identically), `TS_BASIC_GATE_LINES` (100, a
 surface ratchet).
 
@@ -241,7 +248,7 @@ what it appears to exercise.
 
 ## Open
 
-- core/ts to 100%: `engine.ts` (~69%) is the bulk, and what remains there
+- core/ts to 100%: `engine.ts` (~77%) is the bulk, and what remains there
   is whole CAPABILITIES rather than stray branches — fn definitions
   (`dispatchFnDef`, `analyseFnBody`), check mode (`checkModeAssumeSig`,
   `dispatchFnDefCheck`), and interp strings plus XML
