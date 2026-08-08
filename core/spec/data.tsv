@@ -137,3 +137,27 @@ run { a: ; b: ; }	{}
 run { a: ; }	{}
 run { a: p( { b: ; } ) }	{a:{}}
 run { a: { b: ; c: 1 } }	{a:{c:1}}
+
+# --- a map ARGUMENT is evaluated before the handler runs ----------------
+# So a failure inside the map is reported instead of the handler's own
+# error masking it. Two defects made core/ts fire first: a bare WORD map
+# value went through resolveWordsDeep, which leaves an unresolvable name
+# ALONE, where Go runs it in a sub-engine (a def resolves, an unbound name
+# raises); and the NESTED-map arm carried no Eval gate, so a runtime map
+# inside an eval one was evaluated anyway.
+#
+# The pairs below are the point: which error surfaces says which side ran
+# first, and the {q …} rows say the gate is respected all the way down.
+run 5 addq (	ERROR:signature_error
+run addq ( ( 1 2	ERROR:signature_error
+run addq ( 1 2	ERROR:signature_error
+run addq ( negq 3	ERROR:signature_error
+run boomq (	ERROR:signature_error
+run boomq { a: 1 b: nosuchword }	ERROR:undefined_word
+run boomq { a: addq b: p( nosuchword ) }	ERROR:signature_error
+run boomq { a: addq }	ERROR:signature_error
+run boomq { a: nosuchword b: p( addq 1 ) }	ERROR:undefined_word
+run boomq { a: nosuchword }	ERROR:undefined_word
+run boomq { a: p( ) b: nosuchword }	ERROR:undefined_word
+run boomq { a: {q b: p( nosuchword ) } }	ERROR:fixture_boom
+run negq (	ERROR:signature_error

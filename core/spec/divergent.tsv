@@ -27,7 +27,6 @@
 # Read design/CORE-TS-DIVERGENCES.1.md before assuming which side moves.
 
 
-run boomq { a: p( ) b: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
 run [q ( ) ]	[ )]	[( )]	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
 
 # --- SEVERITY 2: the strict forward barrier ---------------------------------
@@ -38,15 +37,8 @@ run [q ( ) ]	[ )]	[( )]	DATA: TS drops an empty paren group and re-associates op
 # slot it waits through the inner dispatch and the outer word FIRES. The
 # paren-grouped spelling `boomq ( negq 5 )` agrees on both engines, which is
 # exactly the distinction the rule exists to make observable.
-run boomq (	ERROR:signature_error	ERROR:syntax_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: ) }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: { b: ) } }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq { a: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq { a: addq }	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq { a: 1 b: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq { a: nosuchword b: p( addq 1 ) }	ERROR:undefined_word	ERROR:signature_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq { a: addq b: p( nosuchword ) }	ERROR:signature_error	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq { a: {q b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_word	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 
 # --- a type-mismatched paren operand: which error ---------------------------
 # Both refuse; they disagree about the code. Go reports signature_error (the
@@ -92,19 +84,6 @@ list [ ( ) ]	[[ )]]	[[( )]]	RENDER: ADJUDICATED — Go drops the token via the p
 list { a: ( }	[{a:}]	[{a:(}]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
 typedlist ( 1	[: 1]	[:( 1]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
 
-# --- an unclosed paren in the value stream ----------------------------------
-# Go completes the pending dispatch and reports signature_error; core/ts
-# reports syntax_error. The core engine receives VALUES, not text, so calling
-# this a syntax error is arguably the wrong layer — but it is recorded rather
-# than "fixed", because which code is right is a REFERENCE.md question.
 run ( boomq	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
-run addq ( 1 2	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
-run addq ( negq 3	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
-run addq ( ( 1 2	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS, for an unclosed paren in the value stream.
 
-# --- an unclosed paren after a partially collected forward ------------------
-# Same class as above, kept separate because the forward word has already
-# collected an operand when the stream ends.
-run negq (	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS.
-run 5 addq (	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS.
 

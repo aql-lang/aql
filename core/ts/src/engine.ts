@@ -768,6 +768,14 @@ export class Engine {
       const wi = tok.data as WordInfo | null
       const name = wi?.name ?? ''
       if (name === '(') {
+        // An UNMATCHED `(` is a scan boundary, not an error. Go's forward
+        // scan stops at an open paren it cannot resolve and lets the
+        // dispatch fail on its own terms — `addq ( 1 2` is a
+        // signature_error there. core/ts called evalParenAt, whose
+        // findMatchingClose miss throws syntax_error, so the engine
+        // reported a SYNTAX error for a stream of values that never had
+        // any syntax. Six rows of core/spec/divergent.tsv.
+        if (this.findMatchingClose(scanIdx) < 0) break
         const produced = this.evalParenAt(scanIdx)
         // After the splice the first result is at `scanIdx`. Each
         // produced value counts toward the resolved budget. If the
@@ -1432,8 +1440,28 @@ export class Engine {
         out.set(k, this.autoEvalList(v))
         continue
       }
-      if (v.vType.matches(TMap) && v.data instanceof OrderedMap && !v.quoted) {
+      // Gated on `eval` like every other container arm. Without it a
+      // NESTED runtime map had its values evaluated even though its
+      // parent's gate had already said no.
+      if (v.vType.matches(TMap) && v.data instanceof OrderedMap && v.eval && !v.quoted) {
         out.set(k, this.autoEvalMapValues(v))
+        continue
+      }
+      // A bare WORD map value is a PROGRAM: Go's AutoEvalMap runs it in a
+      // sub-engine (a def resolves, a 0-arg fn auto-fires, an unbound
+      // name raises undefined_word). core/ts only ran it through
+      // resolveWordsDeep, which leaves an unresolvable name ALONE — so
+      // `boomq { a: nosuchword }` fired boomq on a map still carrying an
+      // undefined name, where Go reports the name.
+      if (v.isWord()) {
+        const sub = new Engine(this.registry).run([v])
+        if (1 === sub.length) {
+          out.set(k, sub[0]!)
+          continue
+        }
+        // Zero residuals drops the key, as everywhere else.
+        if (0 === sub.length) continue
+        out.set(k, this.buildList(sub))
         continue
       }
       out.set(k, resolveWordsDeep(v, this.registry))

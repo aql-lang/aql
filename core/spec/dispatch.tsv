@@ -224,3 +224,16 @@ run 1 Scalar/String	1 String
 run Cidron	Cidron
 run Scalar/String	String
 run Scalar/Nope	ERROR:undefined_word	an undeclared path does not mint a type
+
+# --- an UNMATCHED `(` is a scan boundary, not a syntax error ------------
+# The core engine receives VALUES, not text, so it has no syntax to be
+# wrong about: an open paren with no matching close simply stops the
+# forward scan, and the dispatch fails on its own terms. core/ts called
+# evalParenAt, whose findMatchingClose miss throws syntax_error, so a
+# stream of values reported a SYNTAX error.
+run 5 addq (	ERROR:signature_error
+run addq ( ( 1 2	ERROR:signature_error
+run addq ( 1 2	ERROR:signature_error
+run addq ( negq 3	ERROR:signature_error
+run boomq (	ERROR:signature_error
+run negq (	ERROR:signature_error
