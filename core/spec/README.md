@@ -102,9 +102,14 @@ than silently re-baselined. Each runner also **fails a row whose `go` and
 belongs in, or this stops being an honest debt list. Shrink-only, exactly as
 `parser/spec/divergent.tsv` is.
 
-It holds **18 rows** in eleven classes — 135 were measured on 2026-08-08, none
-of them visible to the 1808-row engine crossdiff, and **119 have since been
-closed** and moved into the spec files where they belong. `design/CORE-TS-DIVERGENCES.1.md`
+It holds **16 rows** in ten classes — 135 were measured on 2026-08-08, none
+of them visible to the 1808-row engine crossdiff, and **121 have since been
+closed** and moved into the spec files where they belong. The last two went
+together: both `boomq { a: ) }` rows were filed under the strict forward
+barrier and were really a different defect — core/ts resolved a map
+argument's values through `resolveWordsDeep` where Go runs each one as a
+PROGRAM, so a value that could not run was carried into the consuming word
+instead of faulting from inside the map. `design/CORE-TS-DIVERGENCES.1.md`
 has the root causes; the headline is that one class produces a WRONG ANSWER
 rather than a wrong error (`7 8 addq ( ) ( 5 )` is `15 5` in Go and `7 13`
 here), and the largest class is the strict forward barrier that `core/ts`
@@ -116,7 +121,11 @@ established that **an uncovered branch in one port is where a divergence
 hides** — nothing has ever compared the two engines there. Sweeping each
 uncovered region produced 139 candidate expressions, of which **135 diverged**.
 Pinning them took `core/ts` from 88.20% to 90.71% without a line of new
-engine code.
+engine code, and the same sweep run to its end took it to **99.58%** —
+finding, among others, that `/q` word capture is conditional on the slot
+type, that an unfilled forward marker was escaping as a program result,
+and that check mode's undefined-word placeholder was being stepped past
+before anything could consume it.
 
 ## What is deliberately absent
 

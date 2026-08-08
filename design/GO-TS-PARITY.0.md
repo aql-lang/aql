@@ -15,15 +15,15 @@ preceded this).
 
 | module | go | ts | shared corpus |
 |---|---|---|---|
-| core | 100% | 90.66% | `core/spec`, 303 rows + an 18-row ledger (119 of 137 measured) |
+| core | 100% | 99.58% | `core/spec`, 373 rows + a 16-row ledger |
 | parser | 100% | **100%** | `parser/spec`, 535 rows, ledger 9 rows (both engine limits) |
-| basic | 100% | 100% *of the 15 words ported* | `basic/spec`, 45 rows |
+| basic | 100% | 100% *of the 16 words ported* | `basic/spec`, 51 rows |
 
 Two numbers that look like progress and are not:
 
-- **`basic/ts` at 100%** is 100% of the 15 words ported (the stack
-  vocabulary plus `do`), not of basic's surface. The floor is a ratchet on
-  the SURFACE, not on the percentage.
+- **`basic/ts` at 100%** is 100% of the 16 words ported (the stack
+  vocabulary plus `do` and `error`), not of basic's surface. The floor is
+  a ratchet on the SURFACE, not on the percentage.
 - **Both crossdiffs agree on every row** — `parser-crossdiff` IDENTICAL
   over 1765, `crossdiff` 1808 agree / 0 divergences — and did so on day
   one. That is not evidence of parity. It means the engines do not
@@ -246,17 +246,54 @@ by pinning the marker semantics on both engines, but they are not the
 coverage they look like — check what a row actually REACHES rather than
 what it appears to exercise.
 
+## What closed core/ts's engine gap
+
+`engine.ts` went 68% → 99% (file), core/ts 90.66% → 99.58%, in the order
+the capability table forces. Six defects surfaced on the way, each found
+by probing an uncovered region rather than by reading code:
+
+| defect | what was wrong |
+|---|---|
+| `/q` word capture | core/ts coerced a quoted forward Word to an Atom UNCONDITIONALLY. Go coerces only when the raw Word does not already fill the slot, so an `Any`-typed `/q` slot hands the handler a live Word — measured across the slot lattice: `Any` → the Word, `Atom`/`Scalar` → the Atom, `Word`/`String`/`Integer` → no match at all. |
+| map-argument values | core/ts resolved names EVERYWHERE via `resolveWordsDeep`; Go resolves them in exactly two INERT shapes and treats every other value as a program. `{a: [q x]}` rewrote a data list's words, and `{a: )}` was carried into the consuming word instead of faulting. |
+| unfilled forward marker | core/ts returned the marker itself as a program residual — `forward(bothq,1/2)` — where Go raises `signature_error`. Reachable whenever a word between the marker and its operands produces no residual, which every fn body's frame tail does. |
+| check-mode placeholder | the lenient undefined-word arm advanced the pointer past the placeholder it had just written, so nothing downstream saw it and a pending forward stranded under a pass whose whole job is to keep going. Go leaves its pointer alone and says so in as many words. |
+| `dataEqual`'s bigint arm | dead: bigint is a JS value type, so the identity test above it already held. Removed rather than covered. |
+| two `boomq { a: ) }` ledger rows | filed under the strict forward barrier; really the map-argument defect. Closed, ledger 18 → 16. |
+
+Two of the six were found only because a test that CLAIMED to exercise a
+path did not: `idq true` takes the direct dispatch, not the marker, because
+the matcher resolves a keyword before the slot test. Check what a row
+reaches, not what it looks like it exercises — the same caution the `;`
+rows earned above.
+
+The fixture vocabulary grew with the corpus, and each addition was forced
+by a specific unreachable region rather than added for symmetry: `qanyq`
+(an `Any`-typed `/q` slot), `tyq` (a type-ARG slot), `tpatq` (a
+type-literal pattern on a stack slot), `bothq` (two gradual forward slots
+— one-arg words cannot reach the collection loop's middle).
+
 ## Open
 
-- core/ts to 100%: `engine.ts` (~77%) is the bulk, and what remains there
-  is whole CAPABILITIES rather than stray branches — fn definitions
-  (`dispatchFnDef`, `analyseFnBody`), check mode (`checkModeAssumeSig`,
-  `dispatchFnDefCheck`), and interp strings plus XML
-  (`evalInterpString`, `substituteInterp`, `resolveXmlTmpl`). Each needs
-  the capability reached before a row can exercise it, in the order the
-  table above forces.
-- basic/ts: everything past the stack vocabulary, in the order the table
-  above forces.
+- **core/ts's last 0.4%**: nine line-ranges in `engine.ts`, all in the
+  same class — arms whose preconditions the current fixture vocabulary
+  cannot construct. The forward-collect type mismatch needs a marker
+  parked at a slot the resolved value then fails, which the deferral rule
+  makes unreachable; `completeForwardPartial`'s fire arm needs
+  `collected ≥ expectedForward` on a marker that is by definition still
+  collecting. These want a proof-carrying exemption of the kind ADR-008
+  gives Go (`//covergate:allow`) and TypeScript has no equivalent for —
+  that mechanism is the next thing to design, not more tests.
+- **basic/ts**: everything past the stack vocabulary and the escape
+  hatch. `if` is blocked on a specific missing primitive rather than on
+  the analysis lattice: its list-condition form lowers to a Move carrying
+  a CONTINUATION (`NewMoveIf` + `IfCont`), and core/ts's Move is the
+  one-shot replay variant. `break`/`continue` need the registry's loop
+  flow-control flag, which only `for` reads.
+- **The empty-body question**, now met twice: `do [ ]` and
+  `do [ … ] error [ ]` are both absent from `basic/spec` because Go's
+  `InvokeBody` and the TS sub-engine disagree about an empty body under
+  the fixture registry. One open question, two rows waiting on it.
 - NUR059: canon still renders sugar tags, `/r` and `/N` word modifiers,
   and paren groups in debug spelling. Both engines agree, so it is render
   quality rather than parity — pinned by corpus rows so a one-sided fix
