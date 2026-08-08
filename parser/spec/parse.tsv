@@ -310,3 +310,74 @@ _1	word(_1)	not digit-led, so an ordinary word — the separator rule is numeric
 [:Box<Integer>]	[:sugar(angle Box [word(Integer)])]
 {:Integer a:1}	{:Integer a:1}	a typed map with entries keeps BOTH the tag and the entries
 {a:1}	{a:1}	the untagged twin
+
+# --- XML edge cases: declines, interpolation errors, quoting -------------
+# The `<` decline (lexer reports the unexpected char rather than the XML
+# matcher swallowing it), both unterminated-interpolation paths (attribute
+# and text), and the attribute-quoting forms.
+<	ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here
+<a x="a\\"b">t</a>	ERR xml: invalid attribute name in <a>
+<a>${</a>	ERR xml: unterminated ${...} interpolation
+<a x="${">t</a>	ERR xml: unterminated ${...} interpolation
+<a x='v'>t</a>	<a x="v">t</a>	single-quoted attributes normalise to double
+<a></a>	<a/>	an empty element normalises to the self-closing form
+<a b="1" c="2"/>	<a b="1" c="2"/>	multiple attributes keep source order
+<a>text &amp; more</a>	<a>text &amp; more</a>	entities are decoded on parse and re-escaped on render
+<a><b/></a>	<a><b/></a>	nested elements
+
+# --- dispatch modifiers ---------------------------------------------------
+# `m.k/q` rendered two DIFFERENT debug spellings before canon grew an arm for
+# the marker: go word()({false true}), ts word(undefined). The /r and /2
+# rows below pin renders that are still WRONG (the modifier is dropped) but
+# on which both engines agree — NUR059, not a parity defect.
+foo/q	foo/q	the modifier survives on a plain word
+m.k/q	m.k /q	the marker after a dotted path renders in source form
+foo/r	word(foo)	NUR059: the /r is dropped by canon
+foo/2	word(foo)	NUR059: the /N arity modifier is dropped by canon
+(1 add 2)/q	paren([1 word(add) 2]) /q	NUR059: the paren group leaks its debug spelling
+
+# --- language-surface sweep (scripts/parity-probe.sh) --------------------
+# Verified on BOTH engines before being written down, which is the point of
+# the probe: an expected column authored from one engine's behaviour is how
+# a divergence gets baselined as a contract.
+'a\\nb'	'a\\nb'
+"double"	'double'
+'it\\'s'	"it's"
+`tmpl`	'tmpl'
+a.b	a.b
+a.b.c	a.b.c
+m.k/q	m.k /q
+(1 2 add)	paren([1 2 word(add)])
+[1 2 3]	[1 2 3]
+{a:1 b:2}	{a:1 b:2}
+{}	{}
+[]	[]
+:atom	ERR [boru/syntax_error]: unexpected `:` — nothing valid can appear here
+/abs/path	word(/abs/path)
+rel/path	word(rel/path)
+a@b.com	a@b.com
+https://x.io/p?q=1	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)
+1.5	1.5
+-1.5	-1.5
+0x10	16
+0o17	15
+0b101	5
+true	word(true)
+false	word(false)
+none	none
+inf	inf
+-inf	-inf
+nan	nan
+x => [x]	word(x) sugar(lambda) [word(x)]
+def f fn [[a:Integer] [Integer] [a]]	word(def) word(f) word(fn) [[{a:word(Integer)}] [word(Integer)] [word(a)]]
+1 tor 2	1 word(tor) 2
+Integer tor String	word(Integer) word(tor) word(String)
+$x	word($x)
+#comment	
+1 # trailing	1
+"a${1}b"	'a${1}b'
+<a>${1}</a>	interp-xml(<a>${1}</a>)
+1_000	1000
+-0	0
+0.0	0.0
+-0.0	-0.0

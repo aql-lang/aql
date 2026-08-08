@@ -185,6 +185,8 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 		return CanonValue(NewNone())
 	case "end":
 		return CanonValue(NewEnd())
+	case "dispatchmod":
+		return CanonValue(NewDispatchMod(DispatchModInfo{Ref: arg == "r", Quote: arg == "q"}))
 	case "typedlist":
 		toks := coreSpecFields(arg)
 		child := coreSpecToken(toks[0])

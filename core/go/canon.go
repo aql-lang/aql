@@ -101,6 +101,20 @@ func CanonValue(v Value) string {
 	switch {
 	case IsNone(v):
 		return "none"
+	case IsDispatchMod(v):
+		// The `/r` / `/q` group modifier the parser emits AFTER a paren or
+		// dotted-path group. Canon had no arm for it, so each engine fell
+		// through to a DIFFERENT debug spelling — Go to
+		// `word()({false true})` (the word arm reading a DispatchModInfo as
+		// a WordInfo) and TS to `word(undefined)`. Neither is source, and
+		// they disagreed, which is what the parity probe caught on `m.k/q`.
+		if info, ok := AsDispatchMod(v); ok {
+			if info.Ref {
+				return "/r"
+			}
+			return "/q"
+		}
+		return "/q" //covergate:allow IsDispatchMod is exactly `Parent == TDispatchMod`, and NewDispatchMod is the only constructor of that type — the payload is always a DispatchModInfo
 	case IsEnd(v):
 		// `end` is the WORD and `;` is its synonym (REFERENCE.md:415), so
 		// the canonical source for either is `end`. This arm was missing,

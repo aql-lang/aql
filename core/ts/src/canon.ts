@@ -7,9 +7,9 @@
 // through the current TS engine (none, type literals, scalars, atoms,
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
-import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TPathon, TString, TEmailon, TUrlon } from './type.ts'
+import { TAtom, TBoolean, TDispatchMod, TFloat, TInspect, TInteger, TList, TMap, TPathon, TString, TEmailon, TUrlon } from './type.ts'
 import { urlonHref, type UrlonInfo } from './value.ts'
-import type { FnDefInfo, XmlElement } from './value.ts'
+import type { DispatchModInfo, FnDefInfo, XmlElement } from './value.ts'
 import { ChildType, ErrorInfo, OptionsData, OrderedMap, Value, asReach, isReach } from './value.ts'
 
 // canonXml renders an XML element, normalising an empty element to the
@@ -210,6 +210,15 @@ export function canonValue(v: Value): string {
   if (v.isNone()) return 'none'
   if (v.data === null) {
     return v.vType.leaf()
+  }
+  // The `/r` / `/q` group modifier the parser emits AFTER a paren or
+  // dotted-path group. Canon had no arm for it, so each engine fell through
+  // to a DIFFERENT debug spelling — TS to `word(undefined)` (the word arm
+  // reading a DispatchModInfo as a WordInfo) and Go to
+  // `word()({false true})`. Neither is source, and they disagreed, which is
+  // what the parity probe caught on `m.k/q`.
+  if (v.vType.equal(TDispatchMod)) {
+    return (v.data as DispatchModInfo).ref ? '/r' : '/q'
   }
   // A caught-error VALUE (the do escape hatch) — mirrors Go's render.
   if (v.data instanceof ErrorInfo) {
