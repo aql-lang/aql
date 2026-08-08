@@ -159,12 +159,25 @@ evaluates to nothing) or refuses the paren markers outright; `core/ts` stores
 the marker as **data** and renders it. Reached through the corpus notation
 today, but it is what a word handler returning a marker inside a map would do.
 
-### 7. Canon of a bare paren marker — 8 rows, RENDER
+### 7. Canon of a bare paren marker — 8 rows, **ADJUDICATED: Go is wrong**
 
-Go canons an `OpenParen` as the **empty string** and a `CloseParen` as `)`,
-so a list holding one renders with a gap; `core/ts` renders both literally.
-Render quality on both sides — NUR059 territory — but they disagree, so it is
-debt rather than a shared wart.
+Go canons an `OpenParen` as the **empty string**, so a list holding one
+renders with a gap and the token vanishes; `core/ts` renders `(`.
+
+**The `go` column is not the reference here, and Go's own source says so.**
+`core/go/canon.go:104` fixed exactly this defect for the CLOSE paren —
+*"Canon had no arm, so the payload-less fallthrough rendered it as the empty
+string and `1 )` canon'd to `1 `, dropping the token silently"* — and the
+same change fixed the End marker. The OPEN paren was left alone because, as
+that comment says, *"an unmatched OPENING paren never reaches here, because
+that is a parse error rather than a value"*. The corpus notation can build
+one where the parser cannot, and the fallthrough is still there.
+
+So these 8 rows stay pinned with `core/ts` **unchanged**. Making TS reproduce
+the fallthrough would be applying a known defect to the port. This is the
+third time on this programme the "reference by convention, not by proof"
+warning has paid — after the typed-container tag and the `end` marker on the
+parser side.
 
 ### 8. An unclosed paren in the value stream — 6 rows, error CODE
 
@@ -216,10 +229,10 @@ So a fix cannot land silently, and a regression cannot either.
 ## The `go` column is not the reference by proof
 
 It is the reference by convention. On the parser side, two of the five
-original divergence classes turned out to have **Go** wrong. Class 7 here
-(Go rendering an `OpenParen` as the empty string) and class 8 (a *syntax*
-error from an engine that never sees syntax) both deserve adjudication
-against `REFERENCE.md` before anyone assumes which side moves.
+original divergence classes turned out to have **Go** wrong. Class 7 here has
+now been adjudicated the same way and Go lost — its own comment describes the
+defect. Class 8 (a *syntax* error from an engine that never sees syntax)
+still deserves the same treatment before anyone assumes which side moves.
 
 ## What this did to coverage
 
