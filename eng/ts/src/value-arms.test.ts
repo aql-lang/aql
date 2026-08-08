@@ -11,7 +11,7 @@ import {
   TMap,
   TNone,
   TString,
-} from '@voxgig/borucore'
+} from '@boru-lang/core'
 import {
   ChildType,
   ClassTypeInfo,
@@ -42,7 +42,7 @@ import {
   newTypedMap,
   newWord,
   renderSugar,
-} from '@voxgig/borucore'
+} from '@boru-lang/core'
 import { tokenize } from './spec-fixture.ts'
 
 describe('value predicate table', () => {
@@ -144,10 +144,15 @@ describe('marker and container renders', () => {
   })
 
   it('typed containers render child and inline content', () => {
+    // The child type literal renders by its LEAF name, matching Go:
+    // core.NewTypedListWithElements(core.NewTypeLiteral(core.TInteger), …)
+    // .String() is `[:Integer 1]`. These assertions previously pinned the
+    // full path, which is what let the divergence stand
+    // (design/TS-PARITY-AUDIT.0.md).
     const tl = newTypedList(newTypeLiteral(TInteger), [newInteger(1n)])
-    assert.equal(String(tl), '[:Scalar/Number/Integer 1]')
+    assert.equal(String(tl), '[:Integer 1]')
     const tm = newTypedMap(newTypeLiteral(TString), [{ key: 'k', value: newString('v') }])
-    assert.match(String(tm), /^\{:Scalar\/String k:/)
+    assert.match(String(tm), /^\{:String k:/)
   })
 
   it('sugar renders carry their operands', () => {

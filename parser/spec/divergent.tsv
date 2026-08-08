@@ -1,0 +1,34 @@
+# parser/spec/divergent.tsv — the parity debt, one row per divergence.
+#
+# One row per source, tab-separated:  src <TAB> go <TAB> ts <TAB> note
+#
+# Same comment and escaping rules as parse.tsv.
+#
+# Sources where parser/go and parser/ts render DIFFERENTLY. Each runner
+# asserts its OWN column, so both suites stay green while the difference stays
+# pinned: if either engine moves, its column fails and the row is re-examined
+# rather than silently re-baselined. Each runner also FAILS a row whose go and
+# ts columns are equal — a fixed divergence must MOVE to parse.tsv, or this
+# file stops being an honest debt list.
+#
+# SHRINK-ONLY. Adding a row needs the justification a //covergate:allow does
+# (design/COVERAGE-ALLOWLIST.10.md): a reviewed reason the difference is not
+# simply a bug. Every row below is UNTRIAGED — recorded by
+# design/TS-PARITY-AUDIT.0.md, not adjudicated against REFERENCE.md. The `go`
+# column is the reference by convention, not by proof, and the rows marked
+# DATA are behavioural rather than cosmetic: one engine is wrong.
+0d123	0d123	123	big-decimal canon: go keeps the 0d prefix, ts drops it
+0D45_6	0d456	456	big-decimal canon: go keeps the 0d prefix, ts drops it
+-0d789	-0d789	-789	big-decimal canon: go keeps the 0d prefix, ts drops it
+1 ;	1 	1 end	End marker canon: go renders empty, ts renders 'end'
+[:Integer]	[]	[:word(Integer)]	typed list canon: go drops the tag, ts keeps it
+[:Integer 1 2]	[1 2]	[:word(Integer) 1 2]	typed list canon: go drops the tag, ts keeps it
+[:Box<Integer>]	[]	[:sugar(angle Box [word(Integer)])]	typed list canon: go drops the tag, ts keeps the angle sugar
+0d1_2.3	0d12.3	12.3	big-decimal canon: go keeps the 0d prefix, ts drops it
+0d1e2	0d100	100	big-decimal canon: go keeps the 0d prefix, ts drops it
+0d1.5e2	0d150	150	big-decimal canon: go keeps the 0d prefix, ts drops it
+0d1_2e1_0	0d120000000000	120000000000	big-decimal canon: go keeps the 0d prefix, ts drops it
+1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	ERR [boru/syntax_error]: invalid numeric literal: 1_	error text differs for a trailing underscore
+0d99999999999999999999	0d99999999999999999999	99999999999999999999	big-decimal canon: go keeps the 0d prefix, ts drops it
+1e400	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity	inf	DATA: go raises float_overflow, ts returns inf - they disagree on validity
+-1e400	ERR [boru/float_overflow]: floating-point literal out of range: -1e400 overflows to infinity	-inf	DATA: go raises float_overflow, ts returns inf - they disagree on validity

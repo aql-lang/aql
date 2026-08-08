@@ -12,7 +12,7 @@ import type { EmitState } from './emit.ts'
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 
-import { canon } from '@voxgig/borucore'
+import { canon } from '@boru-lang/core'
 import {
   BoruError,
   Engine,

@@ -11,21 +11,21 @@
 // contagion, and the diagnostic store. Fn-body analysis, the step
 // budget's fixed-point machinery, disjunct partitioning, and the
 // bytecode recording pass land in later phases.
-import { BoruType, TAny } from '@voxgig/borucore'
-import type { Signature } from '@voxgig/borucore'
-import { isSugar, newCarrier, newDynamicCarrier, Value } from '@voxgig/borucore'
-import type { Registry } from '@voxgig/borucore'
+import { BoruType, TAny } from '@boru-lang/core'
+import type { Signature } from '@boru-lang/core'
+import { isSugar, newCarrier, newDynamicCarrier, Value } from '@boru-lang/core'
+import type { Registry } from '@boru-lang/core'
 
 // The analysis STATE lives in core (core/ts/src/check-state.ts, the twin of
 // core/go/check_state.go); this piece owns the analysis LOGIC. Re-exported
 // here so every existing consumer of `check.ts` keeps working unchanged.
-import { installAnalysisImpl } from '@voxgig/borucore'
+import { installAnalysisImpl } from '@boru-lang/core'
 export {
   CheckState,
   DEFAULT_CHECK_STEP_BUDGET,
   severityFor,
-} from '@voxgig/borucore'
-export type { CheckDiagnostic, CheckSeverity } from '@voxgig/borucore'
+} from '@boru-lang/core'
+export type { CheckDiagnostic, CheckSeverity } from '@boru-lang/core'
 
 
 /**

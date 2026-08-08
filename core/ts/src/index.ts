@@ -1,4 +1,4 @@
-// Public entry point for @voxgig/borucore — the TypeScript interpreter core.
+// Public entry point for @boru-lang/core — the TypeScript interpreter core.
 //
 // The TS twin of the core/go module (design/ENG-FOUR-PIECE.0.md): values,
 // types, signatures, matching, the registry, and the step loop. What is NOT
@@ -10,7 +10,7 @@
 // AnalysisImpl (analysis-hooks.ts) and EmitRecorder (emit-recorder.ts) — each
 // with a NAMED inactive default that a core-only build runs and a core-side
 // test pins. Here that rule is enforced structurally rather than by
-// convention: this package declares no dependency on @voxgig/borueng, so a
+// convention: this package declares no dependency on @boru-lang/eng, so a
 // core file reaching upward simply fails to resolve.
 
 // The core surface is exported WHOLE, deliberately. The curated list this

@@ -8,8 +8,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { Value, XmlTmpl, XmlElement, InterpSegment, XmlChildTmpl } from '@voxgig/borucore'
-import { newXml, newXmlInterp } from '@voxgig/borucore'
+import type { Value, XmlTmpl, XmlElement, InterpSegment, XmlChildTmpl } from '@boru-lang/core'
+import { newXml, newXmlInterp } from '@boru-lang/core'
 import { XmlElemVal } from './nodes.ts'
 import type { ParserTokens } from './grammar.ts'
 import { parse } from './convert.ts'

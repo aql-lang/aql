@@ -45,7 +45,7 @@ import {
   TXml,
   TXmlInterp,
 } from './type.ts'
-import { canonXml, formatFloat } from './canon.ts'
+import { canonValue, canonXml, formatFloat } from './canon.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
 export interface WordInfo {
@@ -349,8 +349,17 @@ export class Value {
   toString(): string {
     if (this.isNone()) return 'none'
     if (this.data === null) {
-      if (this.vType.equal(TNone)) return 'none'
-      return this.vType.toString()
+      // A bare TYPE LITERAL renders by its LEAF name — `Integer`, not
+      // `Scalar/Number/Integer`. Go is the reference here
+      // (core.NewTypeLiteral(core.TInteger).String() is `Integer`) and
+      // canonValue already drew the same line with vType.leaf(); only this
+      // render used the full path.
+      //
+      // None is included deliberately, with no special case: only the none
+      // VALUE renders lowercase, and isNone() above (data === NONE_SENTINEL)
+      // has already taken it. A TNone arm here rendered the None ALTERNATIVE
+      // of a union as `none` instead of `None`.
+      return this.vType.leaf()
     }
     if (this.vType.equal(TSugar)) {
       return renderSugar(this.data as SugarInfo)
@@ -428,7 +437,63 @@ export class Value {
       const parts = m.keys().map((k) => `${k}:${m.get(k)!.toString()}`)
       return `{${parts.join(' ')}}`
     }
+    // A disjunction renders as its alternatives joined by ` tor `, matching
+    // Go's kernelFormatDefault (core/go/value.go:3660). Without this arm the
+    // fallthrough below reached String(DisjunctInfo) and produced the literal
+    // '[object Object]' — the defect the parser stream oracle was built to
+    // catch and never ran to find (design/TS-PARITY-AUDIT.0.md).
+    if (this.isDisjunct()) {
+      return this.asDisjunct()
+        .alternatives.map((alt) => alt.toString())
+        .join(' tor ')
+    }
+    // Payload kinds whose debug render IS the canonical one. Go's
+    // kernelFormatDefault and CanonValue agree on every one of these —
+    // `a/b`, `/a/b`, `error(msg)`, `m.k/q` — and canonValue already
+    // implemented them all while toString had no arm at all, so each of
+    // these printed the literal '[object Object]'. Delegating keeps the two
+    // renders from drifting apart again, which is how the disjunction arm
+    // above came to be missing in the first place.
+    if (this.canonRenders()) {
+      return canonValue(this)
+    }
     return String(this.data)
+  }
+
+  /**
+   * True when canonValue has an arm that actually RECOGNISES this payload —
+   * not merely when the vType says it should.
+   *
+   * The delegation above and canonValue's fallback (`return v.toString()`)
+   * form a cycle, and the only thing that breaks it is agreement about which
+   * values canonValue can render. Gating on vType alone did not agree:
+   * canonValue's arms are guarded on payload SHAPE (`instanceof ErrorInfo`,
+   * `'segments' in`, …), so a value whose type said Error but whose payload
+   * was a bare string fell through every arm, hit the fallback, and came
+   * straight back here — `new Value(TError, 'bad').toString()` overflowed the
+   * stack rather than printing anything.
+   *
+   * So this predicate mirrors canon.ts's guards exactly. A payload that fails
+   * it is malformed, and falls to `String(this.data)` — an unhelpful render
+   * for an unrepresentable value, which is the correct outcome for a debug
+   * stringifier and is what every other kind already does.
+   */
+  private canonRenders(): boolean {
+    const d = this.data
+    // Shape-tagged payloads carry their own proof; canonValue keys on the
+    // class, not on the vType, and so does this.
+    if (d instanceof ErrorInfo || d instanceof OptionsData) return true
+    if (d === null || typeof d !== 'object') return false
+    if (this.vType.equal(TPathon)) return 'segments' in d
+    if (this.vType.equal(TEmailon)) return 'user' in d
+    if (this.vType.equal(TUrlon)) return 'scheme' in d
+    if (this.vType.equal(TReach)) {
+      // canonReach walks receiver and segments; asReach admits any object, so
+      // the arrays are what must exist before it is safe to enter.
+      const r = d as Partial<ReachInfo>
+      return Array.isArray(r.receiver) && Array.isArray(r.segments)
+    }
+    return false
   }
 }
 

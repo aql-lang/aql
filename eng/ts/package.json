@@ -1,5 +1,5 @@
 {
-  "name": "@voxgig/borueng",
+  "name": "@boru-lang/eng",
   "version": "0.1.0",
   "description": "TypeScript port of the boru execution engine. Pure engine \u2014 no parser, no built-in word library.",
   "type": "module",
@@ -24,7 +24,8 @@
     "@tabnas/json": "^0.4.1",
     "@tabnas/jsonic": "^0.4.1",
     "@tabnas/parser": "^0.4.1",
-    "@voxgig/borucore": "file:../../core/ts"
+    "@boru-lang/core": "file:../../core/ts",
+    "@boru-lang/parser": "file:../../parser/ts"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

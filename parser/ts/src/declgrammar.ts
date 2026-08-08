@@ -11,12 +11,22 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// Four levels up from eng/ts/src/parser is the repository root: the
-// artifact lives in the top-level parser MODULE now, not in a package
-// inside the kernel. It was eng/go/parser/grammar.json — i.e. three
-// levels up then go/parser — until the parser was cut out, and this
-// path is the reason that cut is not purely a Go-side concern.
-const GRAMMAR_PATH = path.resolve(__dirname, '..', '..', '..', '..', 'parser', 'go', 'grammar.json')
+// The twins are siblings under parser/, so the artifact is two levels up
+// then into go/: parser/ts/src -> parser/ -> parser/go/grammar.json. The
+// Go side embeds this same file with go:embed, which is what makes the
+// grammar ONE artifact rather than two that drift (DECLARATIVE-GRAMMAR.0).
+// It was eng/ts/src/parser reaching four levels up to the repo root until
+// the TS parser was cut out of the kernel into its own module.
+//
+// PUBLISHING CAVEAT: this path leaves the package, so it only resolves in a
+// checkout or through a `file:` dependency — which is every consumer today.
+// From a packed tarball it would land on `node_modules/@boru-lang/go/` and
+// throw ENOENT at parser construction. The property is inherited, not new:
+// the eng/ts path reached even further out, and `files` there is the same
+// ['dist','src']. Closing it means a prepack step copying the artifact in,
+// which is work for a publish pipeline that does not exist yet — recorded
+// here rather than solved speculatively.
+const GRAMMAR_PATH = path.resolve(__dirname, '..', '..', 'go', 'grammar.json')
 
 export interface DeclToken {
   name: string

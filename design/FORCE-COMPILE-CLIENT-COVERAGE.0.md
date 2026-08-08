@@ -398,7 +398,7 @@ closure-probe seam and deserves a dedicated session.
 ## Session-2 cont. — TS parity check + smaller-unit recon
 
 **TS parity: VERIFIED GREEN.** Ran the TypeScript engine port (`eng/ts`,
-@voxgig/borueng) against my Go changes: `npx tsc` clean, full `node --test`
+@boru-lang/eng) against my Go changes: `npx tsc` clean, full `node --test`
 suite **3622 pass / 0 fail**, and the cross-engine differential (Go kernel vs
 TS engine over the shared `eng/spec` value+check corpus) reports **0
 divergences**. My changes are parity-safe by construction: L1a/L1b-ii are

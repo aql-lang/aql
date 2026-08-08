@@ -8,8 +8,8 @@
 // no GC walk, and no megamorphic property access in the dispatch loop.
 // Opcodes are a `const enum` with CONTIGUOUS values from 1 so the VM's
 // `switch (op)` lowers to a jump table; never leave a hole.
-import type { Signature } from '@voxgig/borucore'
-import type { Value } from '@voxgig/borucore'
+import type { Signature } from '@boru-lang/core'
+import type { Value } from '@boru-lang/core'
 
 // VM opcodes. Module-level `const` numbers (not a `const enum`, which
 // Node's type-stripping rejects): V8 const-folds these into the dispatch

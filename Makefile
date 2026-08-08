@@ -1,5 +1,5 @@
-.PHONY: all build install test test-race test-ts test-ts-core vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
+.PHONY: all build install test test-race test-ts test-ts-core test-ts-parser vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
+        spec-gen spec-test crossdiff parser-crossdiff cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -208,7 +208,7 @@ bench:
 
 # ---- TypeScript engine port (eng/ts) -----------------------------------
 #
-# @voxgig/borueng mirrors the Go kernel and must stay row-for-row green on
+# @boru-lang/eng mirrors the Go kernel and must stay row-for-row green on
 # the SAME eng/spec/*.tsv corpus as the Go engspec runner. Runs the
 # typechecker then the node:test suite (Node >= 24, type-stripping).
 # The line-coverage threshold is the TS half of the standalone-parity
@@ -228,7 +228,19 @@ bench:
 # commit: 97.06% with test files counted (which is what let the 97 floor pass),
 # 96.80% source-only. The floor tracks the source-only figure from here and
 # ratchets up as before — never down.
-TS_GATE_LINES ?= 96
+# RE-BASED 96 -> 97 when --test-coverage-include landed, and this one was a
+# CORRECTNESS fix, not just a denominator change. @boru-lang/core (and now
+# @boru-lang/parser) are `file:` dependencies, which npm installs as symlinks;
+# node resolves through the symlink to the real path, so node:test was
+# instrumenting core/ts's and parser/ts's sources and folding them into eng's
+# figure. That is precisely the cross-suite coverage the standalone gates exist
+# to forbid — the TS analogue of measuring core/go's statements from eng/go's
+# suite. --test-coverage-include='src/**' scopes the gate to eng/ts's OWN
+# source, the same universe `go test -coverpkg` gives the Go half.
+#
+# Measured both ways on the same commit: 90.00% with the symlinked deps folded
+# in, 97.25% eng-only. The floor tracks the eng-only figure from here.
+TS_GATE_LINES ?= 97
 test-ts:
 	@echo "==> typecheck eng/ts"
 	cd eng/ts && npx tsc
@@ -236,11 +248,12 @@ test-ts:
 	cd eng/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_GATE_LINES) \
 	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-include='src/**' \
 	  'src/**/*.test.ts'
 
 # ---- TypeScript interpreter core (core/ts) -----------------------------
 #
-# @voxgig/borucore is the TS twin of the core/go module — values, types,
+# @boru-lang/core is the TS twin of the core/go module — values, types,
 # signatures, matching, the registry, and the step loop, with NO check pass,
 # NO compiler, NO parser and no dependencies at all (core/go at least needs
 # apd; the TS core needs nothing). It is the fourth gate in the standalone
@@ -254,7 +267,7 @@ test-ts:
 #
 # The no-upward-imports rule (core/go/CLAUDE.md) is what makes this gate
 # meaningful, and it is STRUCTURALLY enforced here rather than by convention:
-# core/ts has no dependency on @voxgig/borueng, so a core file that reached
+# core/ts has no dependency on @boru-lang/eng, so a core file that reached
 # for the check pass or the compiler would fail to resolve. The check piece
 # reaches core only through the seam tables core owns — AnalysisImpl
 # (analysis-hooks.ts) and EmitRecorder (emit-recorder.ts) — each with NAMED
@@ -277,7 +290,7 @@ test-ts:
 #
 # Current per-file, worst first: make 38, coretype 39, resolve 42, engine 42,
 # sugar 47, check-state 66, canon 70, value 72, registry 74, match 77.
-TS_CORE_GATE_LINES ?= 62
+TS_CORE_GATE_LINES ?= 87
 test-ts-core:
 	@echo "==> typecheck core/ts"
 	cd core/ts && npx tsc
@@ -285,6 +298,35 @@ test-ts-core:
 	cd core/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_CORE_GATE_LINES) \
 	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-include='src/**' \
+	  'src/**/*.test.ts'
+
+# ---- TypeScript parser (parser/ts) -------------------------------------
+#
+# @boru-lang/parser is the TS twin of the parser/go module — source text to
+# Value[], the front end and nothing else. Cut out of eng/ts/src/parser so the
+# TS side mirrors the Go module graph: a leaf over @boru-lang/core that the
+# engine depends on, rather than a directory inside the engine.
+#
+# It is the fifth gate in the standalone set:
+#
+#   cover-gate-parser  parser/go by its own suite   floor 100
+#   test-ts-parser     parser/ts by its own suite   floor $(TS_PARSER_GATE_LINES)
+#
+# Same source-only, own-module denominator as the other two, and the same
+# ratchet discipline: raise the floor in the change that raises coverage,
+# never lower it. parser/go's gate has sat at 100 since the module was cut
+# (parser/go/CLAUDE.md: a leaf over core has no other suite that could be
+# covering it), so this floor is the honest measure of the parity gap.
+TS_PARSER_GATE_LINES ?= 92
+test-ts-parser:
+	@echo "==> typecheck parser/ts"
+	cd parser/ts && npx tsc
+	@echo "==> test parser/ts (source line-coverage floor $(TS_PARSER_GATE_LINES)%)"
+	cd parser/ts && node --test --experimental-strip-types --no-warnings \
+	  --experimental-test-coverage --test-coverage-lines=$(TS_PARSER_GATE_LINES) \
+	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-include='src/**' \
 	  'src/**/*.test.ts'
 
 # ---- cross-engine differential -----------------------------------------
@@ -299,6 +341,36 @@ test-ts-core:
 crossdiff:
 	@echo "==> cross-engine differential (Go kernel vs TS engine; value + check)"
 	cd test/go && go test ./engspec/ -run TestCrossEngineDifferential -v
+
+# ---- parser-level cross-engine differential -----------------------------
+#
+# The PARSER twins, diffed row-for-row over eng/spec. Both dumpers have
+# existed since the TS port — parser/go/streamdump_test.go and
+# parser/ts/src/streamdump.ts, each emitting `<file>:<line> OK|ERR <render>`
+# — and NOTHING ever ran the comparison. With STREAMDUMP_FILE unset the Go
+# side dumps to a temp dir and discards it, so the corpus only proved every
+# row parses.
+#
+# That gap is not covered by `crossdiff` above: it compares the two ENGINES
+# and hard-fails only when both produce a value and the values differ, so a
+# parser-level render difference that still evaluates alike is invisible to
+# it. Three real defects were living in that blind spot — a disjunction
+# rendering as the literal '[object Object]', the None type literal
+# rendering as the none value, and every type literal rendering by full path
+# instead of leaf name (design/TS-PARITY-AUDIT.0.md).
+#
+# parser/spec is the curated contract; this is the breadth sweep over the
+# 1765 rows of eng/spec that the contract does not enumerate.
+parser-crossdiff:
+	@echo "==> parser differential (parser/go vs parser/ts over eng/spec)"
+	@mkdir -p "$(abspath $(COVER_DIR))"
+	@cd parser/go && STREAMDUMP_FILE="$(abspath $(COVER_DIR))/go-streams.tsv" \
+	  go test -run TestStreamDump >/dev/null
+	@cd parser/ts && node --experimental-strip-types --no-warnings src/streamdump.ts \
+	  > "$(abspath $(COVER_DIR))/ts-streams.tsv"
+	@diff -u "$(abspath $(COVER_DIR))/go-streams.tsv" "$(abspath $(COVER_DIR))/ts-streams.tsv" \
+	  && echo "==> parser-crossdiff: IDENTICAL ($$(wc -l < "$(abspath $(COVER_DIR))/go-streams.tsv") rows)" \
+	  || { echo "==> parser-crossdiff FAILED: the parser twins disagree (see the diff above)"; exit 1; }
 
 # ---- compiled-coverage status surface ----------------------------------
 #

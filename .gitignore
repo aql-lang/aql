@@ -185,8 +185,12 @@ cmd/go/borubin
 __pycache__/
 *.pyc
 
-# piecetool builds to coverage/ via `make facades`; never commit the binary
-piecetool
+# piecetool builds to coverage/ via `make facades`; never commit the binary.
+# Match the binary by PATH, never as a bare name: a bare `piecetool` pattern
+# matches the tools/piecetool DIRECTORY too, so every new source file added
+# there is silently ignored (tracked files are exempt, which is why that
+# stayed invisible). coverage/ is already ignored above, so the make-facades
+# build needs no entry of its own.
 tools/piecetool/piecetool
 
 # solardemo is a test HTTP fixture built from its own source next to it

@@ -1,5 +1,5 @@
 {
-  "name": "@voxgig/borucore",
+  "name": "@boru-lang/core",
   "version": "0.1.0",
   "description": "TypeScript port of the boru interpreter core \u2014 values, types, signatures, matching, the registry, and the step loop. The TS twin of the core/go module: no check pass, no compiler, no parser, no dependencies.",
   "type": "module",

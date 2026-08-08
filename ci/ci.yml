@@ -86,19 +86,29 @@ jobs:
       # measured source-only). core/ts runs FIRST and on its own — it is the
       # twin of `make cover-gate-core`, and running it before eng/ts is what
       # proves the core package really does stand alone: it has no dependency
-      # on @voxgig/borueng, so a core file that reached upward would fail to
+      # on @boru-lang/eng, so a core file that reached upward would fail to
       # resolve here, before the engine is ever installed. Node >= 24 per the
       # packages' engines; npm ci restores the pinned toolchains.
       - name: Test eng/ts (typecheck + coverage ratchet)
         uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Run TS gates (core standalone, then the engine)
+      - name: Run TS gates (bottom-up: core, parser, then the engine)
         run: |
           ( cd core/ts && npm ci )
           make test-ts-core
+          ( cd parser/ts && npm ci )
+          make test-ts-parser
           ( cd eng/ts && npm ci )
           make test-ts
+
+      # The parser twins, diffed row-for-row over eng/spec. Both dumpers
+      # shipped with the TS port and nothing ever ran the comparison, which
+      # is how three render defects lived in the gap between them — the
+      # engine-level `crossdiff` cannot see a parser difference that still
+      # evaluates alike (design/TS-PARITY-AUDIT.0.md).
+      - name: Parser differential (parser/go vs parser/ts)
+        run: make parser-crossdiff
 
       # The project knowledge graph (kg/) must stay in sync with the
       # sources that generate it: type-check the boru pipeline, run its

@@ -40,7 +40,11 @@ const usage = `usage:
   piecetool -facade <dir> <out> [qualifier]    generate a facade over <dir>
   piecetool -exports <dir>                     list the exported symbols
   piecetool -qualify <dir> <piece>             qualify cross-piece uses
-  piecetool -qualify-tests <dir> <piece> <files>`
+  piecetool -qualify-tests <dir> <piece> <files>
+  piecetool -closure <dir> <seed>[,<seed>...] [cut[,cut...]]
+                                               how much of <dir> comes with <seed>
+                                               (a seed is a name, or Recv.Method
+                                               where the bare name is ambiguous)`
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -98,6 +102,15 @@ func run(args []string) error {
 			return err
 		}
 		return qualifyTests(args[1], args[2], args[3])
+	case "-closure":
+		if err := need(2); err != nil {
+			return err
+		}
+		var cuts []string
+		if len(args) > 3 {
+			cuts = strings.Split(args[3], ",")
+		}
+		return closureMode(args[1], strings.Split(args[2], ","), cuts)
 	}
 	if strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("unknown mode %q\n%s", args[0], usage)

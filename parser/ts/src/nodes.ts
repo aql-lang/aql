@@ -11,8 +11,8 @@
 // info marker, array, plain object, number, boolean, null), or a
 // primitive produced by a custom matcher.
 
-import type { Value } from '@voxgig/borucore'
-import type { XmlTmpl } from '@voxgig/borucore'
+import type { Value } from '@boru-lang/core'
+import type { XmlTmpl } from '@boru-lang/core'
 
 /** 1-based source position; 0 row = unknown. Mirrors eng.SrcPos. */
 export interface SrcPos {

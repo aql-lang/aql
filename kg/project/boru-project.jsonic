@@ -101,6 +101,36 @@
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
+    {
+      id: "src:core-ts-coverage"
+      kind: "text"
+      locator: "design/CORE-TS-COVERAGE.0.md"
+      title: "core/ts coverage program"
+      retrieved_at: null
+      content_hash: "core-ts-coverage-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
+      id: "src:root-module"
+      kind: "text"
+      locator: "design/ROOT-MODULE-FEASIBILITY.0.md"
+      title: "root module below core and parser, measured"
+      retrieved_at: null
+      content_hash: "root-module-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
+      id: "src:ts-parity-audit"
+      kind: "text"
+      locator: "design/TS-PARITY-AUDIT.0.md"
+      title: "parser twin parity audit"
+      retrieved_at: null
+      content_hash: "ts-parity-audit-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
   ]
   entities: [
     { key: "boru", type: "Concept", label: "boru language"
@@ -160,6 +190,12 @@
       attributes: { role: "the shared declarative tabnas grammar artifact (parser/go/grammar.json): contract, loader pair, and the batch-migration state" } }
     { key: "coverage-parity", type: "Document", label: "design/ENG-COVERAGE-PARITY.0.md"
       attributes: { role: "the standalone 100%/100% coverage program for eng/go and eng/ts: the ratcheting gate floors (make cover-gate-eng, make test-ts), the gap inventories, and the staged plans" } }
+    { key: "core-ts-coverage", type: "Document", label: "design/CORE-TS-COVERAGE.0.md"
+      attributes: { role: "the coverage program for core/ts (the sibling of ENG-COVERAGE-PARITY, one layer down): the staged work list, the ratcheting TS_CORE_GATE_LINES floor, and the measurement that core/spec is a cross-engine SPEC and not a coverage instrument" } }
+    { key: "root-module", type: "Document", label: "design/ROOT-MODULE-FEASIBILITY.0.md"
+      attributes: { role: "the measured verdict on a shared module below core and parser: Value alone closes over 75.7% of core/go, so the cut as posed is a rename — includes the piecetool -closure method and the priced seam alternatives" } }
+    { key: "ts-parity-audit", type: "Document", label: "design/TS-PARITY-AUDIT.0.md"
+      attributes: { role: "the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [
@@ -353,6 +389,36 @@
       object: { kind: "entity", entity: "eng-go" }
       evidence: [{ source: "src:coverage-parity", locator: "The contract",
         quote: "eng proves itself with its OWN suite, on both implementations." }]
+      confidence: 0.95 }
+    { subject: "core-ts-coverage", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:core-ts-coverage", locator: "title",
+        quote: "CORE-TS-COVERAGE.0 — taking core/ts from 62% to 100%" }]
+      confidence: 0.95 }
+    { subject: "core-ts-coverage", predicate: "supports"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:core-ts-coverage", locator: "The corpus is not the instrument",
+        quote: "keep growing `core/spec` as a cross-engine spec, and stop treating it" }]
+      confidence: 0.95 }
+    { subject: "root-module", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:root-module", locator: "title",
+        quote: "ROOT-MODULE-FEASIBILITY.0 — measuring a shared module below core and parser" }]
+      confidence: 0.95 }
+    { subject: "root-module", predicate: "supports"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:root-module", locator: "The finding",
+        quote: "**The finding: `Value` alone closes over 75.7% of `core/go`.**" }]
+      confidence: 0.95 }
+    { subject: "ts-parity-audit", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:ts-parity-audit", locator: "title",
+        quote: "TS-PARITY-AUDIT.0 — the parser battery does not agree with parser/go" }]
+      confidence: 0.95 }
+    { subject: "ts-parity-audit", predicate: "supports"
+      object: { kind: "entity", entity: "parser-go" }
+      evidence: [{ source: "src:ts-parity-audit", locator: "the differential",
+        quote: "After the fixes the differential is **0 divergences across 1,765 rows**." }]
       confidence: 0.95 }
   ]
 }

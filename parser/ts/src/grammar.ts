@@ -21,7 +21,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { Jsonic } from '@tabnas/jsonic'
-import { BoruError } from '@voxgig/borucore'
+import { BoruError } from '@boru-lang/core'
 
 import {
   type DeclGrammar,
