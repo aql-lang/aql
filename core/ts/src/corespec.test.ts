@@ -105,6 +105,10 @@ function token(tok: string): Value {
   if (t !== undefined) return newTypeLiteral(t)
   if (tok === '(') return newOpenParen()
   if (tok === ')') return newCloseParen()
+  // The END marker. `end` is its word spelling and `;` its synonym
+  // (REFERENCE.md:415); the corpus uses the punctuation so a row can still
+  // name a WORD called end.
+  if (tok === ';') return newEnd()
   return newWord(tok)
 }
 

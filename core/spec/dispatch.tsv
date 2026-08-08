@@ -56,3 +56,24 @@ run depthq	0	an empty scope has depth 0
 run 1 depthq	1 1	the stack is not consumed, only extended
 run 1 2 3 depthq	1 2 3 3	three deep
 run 1 ( 2 depthq )	1 2 1	a paren BOUNDS the scope — the inner sees one, not two
+
+# --- the END marker cuts a forward collection short ----------------------
+# `;` is the punctuation spelling of `end` (REFERENCE.md:415); the corpus
+# uses the punctuation so a row can still name a WORD called end. A pending
+# forward word fires with whatever it has collected, which for these
+# fixtures is never enough — the value of the rows is that the marker
+# REACHES the word rather than being dropped, and that a bare `;` with no
+# pending marker is silently dropped instead of erroring.
+run ;	
+run 1 ;	1
+run addq 1 ;	ERROR:signature_error
+run addq ;	ERROR:signature_error
+run addq 1 2 ;	3
+run 1 ; 2	1 2
+run negq ;	ERROR:signature_error
+run pairq ;	ERROR:signature_error
+run ( addq 1 ; )	ERROR:signature_error
+run [ addq 1 ; ]	ERROR:signature_error
+run boomq ;	ERROR:signature_error
+run 1 2 sumq ;	3
+run depthq ;	0

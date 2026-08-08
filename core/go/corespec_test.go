@@ -109,6 +109,11 @@ func coreSpecToken(tok string) Value {
 		return NewOpenParen()
 	case ")":
 		return NewCloseParen()
+	case ";":
+		// The END marker. `end` is its word spelling and `;` its synonym
+		// (REFERENCE.md:415); the corpus uses the punctuation so a row can
+		// still name a WORD called end.
+		return NewEnd()
 	}
 	return NewWord(tok)
 }
