@@ -8,14 +8,14 @@
 // context-store push/pop, interpolated strings, parser-eval lists,
 // and module sub-engines. The TS port here is the interpreter slice
 // that the current TSV specs reach.
-import { AnalysisImpl } from './analysis-hooks.ts'
-import type { RecorderOperand } from './emit-recorder.ts'
-import { BoruError } from './error.ts'
-import { valToString } from './make.ts'
-import { matchEntry } from './match.ts'
-import type { Registry } from './registry.ts'
-import { resolveWordsDeep } from './resolve.ts'
-import { sugarExpansion } from './sugar.ts'
+import { AnalysisImpl } from "./analysis-hooks.ts";
+import type { RecorderOperand } from "./emit-recorder.ts";
+import { BoruError } from "./error.ts";
+import { valToString } from "./make.ts";
+import { matchEntry } from "./match.ts";
+import type { Registry } from "./registry.ts";
+import { resolveWordsDeep } from "./resolve.ts";
+import { sugarExpansion } from "./sugar.ts";
 import {
   TAny,
   TAtom,
@@ -30,7 +30,7 @@ import {
   TXml,
   TWord,
   resolveBuiltinTypeName,
-} from './type.ts'
+} from "./type.ts";
 import {
   type FnDefInfo,
   type ForwardMarker,
@@ -55,12 +55,14 @@ import {
   newOpenParen,
   newString,
   newTypeLiteral,
+  newTypedList,
+  newTypedMap,
   newXml,
   OrderedMap,
   Value,
   type WordInfo,
-} from './value.ts'
-import type { BoruType } from './type.ts'
+} from "./value.ts";
+import type { BoruType } from "./type.ts";
 
 /**
  * Quote a list param at frame binding so the body treats it as a data
@@ -70,13 +72,13 @@ import type { BoruType } from './type.ts'
  * `(quote [1 2])` on both engines.
  */
 function quoteListArg(v: Value): Value {
-  if (!v.vType.equal(TList) || v.quoted || v.data === null) return v
+  if (!v.vType.equal(TList) || v.quoted || v.data === null) return v;
   return new Value(v.vType, v.data, {
     eval: v.eval,
     quoted: true,
     carrier: v.carrier,
     dynamic: v.dynamic,
-  })
+  });
 }
 
 /**
@@ -87,31 +89,31 @@ function quoteListArg(v: Value): Value {
 function baseValue(t: BoruType): Value {
   // Float is checked before the Integer/Number branch: a Float param
   // matches TNumber too, so the order matters for its base value.
-  if (t.matches(TFloat)) return newFloat(0)
-  if (t.matches(TInteger) || t.matches(TNumber)) return newInteger(0n)
-  if (t.matches(TString)) return newString('')
-  if (t.matches(TBoolean)) return newBoolean(false)
-  if (t.matches(TList)) return newList([])
-  if (t.matches(TMap)) return newMap(new OrderedMap())
-  if (t.matches(TAtom)) return newAtom('')
-  return newNone()
+  if (t.matches(TFloat)) return newFloat(0);
+  if (t.matches(TInteger) || t.matches(TNumber)) return newInteger(0n);
+  if (t.matches(TString)) return newString("");
+  if (t.matches(TBoolean)) return newBoolean(false);
+  if (t.matches(TList)) return newList([]);
+  if (t.matches(TMap)) return newMap(new OrderedMap());
+  if (t.matches(TAtom)) return newAtom("");
+  return newNone();
 }
-import type { FunctionEntry } from './registry.ts'
-import type { Signature } from './signature.ts'
+import type { FunctionEntry } from "./registry.ts";
+import type { Signature } from "./signature.ts";
 
-const STEP_LIMIT = 22222
+const STEP_LIMIT = 22222;
 
 export class Engine {
-  readonly registry: Registry
-  private stack: Value[] = []
-  private pointer = 0
+  readonly registry: Registry;
+  private stack: Value[] = [];
+  private pointer = 0;
   /**
    * Set of currently-active mark IDs. A Move only fires its replay
    * if its target ID is here — orphaned Moves (whose Mark was
    * removed by some controller) are silently dropped. Mirrors the
    * `marks map[string]bool` field on borueng/go/engine.go's Engine.
    */
-  private markIds: Set<string> = new Set()
+  private markIds: Set<string> = new Set();
   /**
    * Set by preEvalParens when a paren in the just-scanned forward
    * window resolved to zero values — a void argument expression. A
@@ -119,10 +121,10 @@ export class Engine {
    * reporting a generic mismatch. Mirrors borueng/go/engine.go's
    * voidGroups tracking.
    */
-  private lastPreEvalHadVoid = false
+  private lastPreEvalHadVoid = false;
 
   constructor(registry: Registry) {
-    this.registry = registry
+    this.registry = registry;
   }
 
   /**
@@ -134,35 +136,45 @@ export class Engine {
     // execution. The same dispatch/matching machinery then runs over
     // carriers; stepWord short-circuits handlers to carrier returns.
     if (this.registry.check.isActive()) {
-      const stripped = AnalysisImpl.stripToCarriers(input)
+      const stripped = AnalysisImpl.stripToCarriers(input);
       // When recording bytecode, remember each stripped literal's
       // concrete original so the compiler can materialise it as a const.
-      const emit = this.registry.check.emit
+      const emit = this.registry.check.emit;
       if (emit) {
         for (let i = 0; i < input.length; i++) {
-          const s = stripped[i]!
-          if (s !== input[i] && s.carrier) emit.rememberStripped(s, input[i]!)
+          const s = stripped[i]!;
+          if (s !== input[i] && s.carrier) emit.rememberStripped(s, input[i]!);
         }
       }
-      this.stack = stripped
+      this.stack = stripped;
     } else {
-      this.stack = [...input]
+      this.stack = [...input];
     }
-    this.pointer = 0
+    this.pointer = 0;
 
     for (let step = 0; step < STEP_LIMIT; step++) {
-      if (this.pointer >= this.stack.length) break
+      if (this.pointer >= this.stack.length) break;
 
-      const val = this.stack[this.pointer]!
+      const val = this.stack[this.pointer]!;
       // A paren-expression VALUE (the parser's nested `( … )` node)
       // expands back to its OpenParen … CloseParen marker span in
       // place, then re-processes — the IsOpenParen branch below
       // collapses it. Mirrors Go stepLiteral's ParenExpr expansion
       // (design/PAREN-REPRESENTATION.9.md Step 3). Quoted paren-exprs
       // stay data.
-      if (val.vType.equal(TParenExpr) && !val.quoted && Array.isArray(val.data)) {
-        this.stack.splice(this.pointer, 1, newOpenParen(), ...(val.data as Value[]), newCloseParen())
-        continue
+      if (
+        val.vType.equal(TParenExpr) &&
+        !val.quoted &&
+        Array.isArray(val.data)
+      ) {
+        this.stack.splice(
+          this.pointer,
+          1,
+          newOpenParen(),
+          ...(val.data as Value[]),
+          newCloseParen(),
+        );
+        continue;
       }
       if (isOpenParen(val)) {
         // KNOWN DIVERGENCE, one row: an unmatched `(` at the TOP of the
@@ -177,15 +189,15 @@ export class Engine {
         // scanner"). Which behaviour is right is a question for that test
         // and its Go twin, not a one-line change here. Pinned in
         // core/spec/divergent.tsv.
-        this.evalParenAt(this.pointer)
-        continue
+        this.evalParenAt(this.pointer);
+        continue;
       }
       if (isCloseParen(val)) {
-        throw new BoruError('syntax_error', `unmatched ')'`, ')')
+        throw new BoruError("syntax_error", `unmatched ')'`, ")");
       }
       if (isEnd(val)) {
-        this.stepEnd()
-        continue
+        this.stepEnd();
+        continue;
       }
       if (val.isWord()) {
         // If a pending forward marker is waiting for a Word-typed
@@ -194,34 +206,36 @@ export class Engine {
         // check at the top of stepWord — without this the engine would
         // dispatch the word and prematurely consume its forward args.
         if (this.pendingExpectsWord()) {
-          this.stepLiteral()
-          continue
+          this.stepLiteral();
+          continue;
         }
-        this.stepWord(val)
+        this.stepWord(val);
       } else if (val.isForward()) {
         // Forward markers are passive — the pointer just walks past
         // them. They consume incoming literals via stepLiteral.
-        this.pointer++
+        this.pointer++;
       } else if (val.isMark()) {
         // Marks are passive too — record the id (so a subsequent
         // matching Move can find the body), advance.
-        this.markIds.add(val.asMark().id)
-        this.pointer++
+        this.markIds.add(val.asMark().id);
+        this.pointer++;
       } else if (val.isMove()) {
-        this.stepMove(val)
+        this.stepMove(val);
       } else if (val.isInterpString()) {
-        this.stack[this.pointer] = this.evalInterpString(val)
+        this.stack[this.pointer] = this.evalInterpString(val);
         // Don't advance: re-process the resulting string as a literal
         // so a pending forward marker can collect it.
       } else if (val.isXmlInterp()) {
-        const emit = this.registry.check.emit
+        const emit = this.registry.check.emit;
         if (emit !== undefined && this.xmlCaptureFree(val.asXmlTmpl())) {
           // Self-contained xml template: island it (re-runs to the element).
-          const out = newCarrier(TXml)
-          emit.recordValueIsland(val, out, 'xml')
-          this.stack[this.pointer] = out
+          const out = newCarrier(TXml);
+          emit.recordValueIsland(val, out, "xml");
+          this.stack[this.pointer] = out;
         } else {
-          this.stack[this.pointer] = newXml(this.resolveXmlTmpl(val.asXmlTmpl()))
+          this.stack[this.pointer] = newXml(
+            this.resolveXmlTmpl(val.asXmlTmpl()),
+          );
         }
       } else if (isSugar(val) && !val.quoted) {
         // A sugar marker fires at the pointer: splice its role-resolved
@@ -229,46 +243,46 @@ export class Engine {
         // The Angle marker picks its head form when a parked forward is
         // waiting to capture a name (the binder's /q name slot).
         // Mirrors Go stepSugar (eng/go/sugar.go).
-        this.stepSugar(val)
+        this.stepSugar(val);
       } else {
-        this.stepLiteral()
+        this.stepLiteral();
       }
     }
 
     // End-of-run drain: any residual eval-list on the stack runs its
     // contents and is replaced by the residual sub-stack as a list.
-    this.autoEvalStack()
+    this.autoEvalStack();
 
-    return this.stack
+    return this.stack;
   }
 
   private stepWord(val: Value): void {
-    const w = val.asWord() as WordInfo
-    const name = w.name
+    const w = val.asWord() as WordInfo;
+    const name = w.name;
 
     // Built-in keywords. The opaque parser leaves none/null as Words
     // (the legacy fixture tokenizer resolved them at lex time) — the
     // engine resolves them at consumption, mirroring Go stepWord.
-    if (name === 'true') {
-      this.stack[this.pointer] = newBoolean(true)
-      return
+    if (name === "true") {
+      this.stack[this.pointer] = newBoolean(true);
+      return;
     }
-    if (name === 'false') {
-      this.stack[this.pointer] = newBoolean(false)
-      return
+    if (name === "false") {
+      this.stack[this.pointer] = newBoolean(false);
+      return;
     }
-    if (name === 'none') {
-      this.stack[this.pointer] = newNone()
-      return
+    if (name === "none") {
+      this.stack[this.pointer] = newNone();
+      return;
     }
-    if (name === 'null') {
-      this.stack[this.pointer] = newAtom('null')
-      return
+    if (name === "null") {
+      this.stack[this.pointer] = newAtom("null");
+      return;
     }
-    const tn = resolveBuiltinTypeName(name)
+    const tn = resolveBuiltinTypeName(name);
     if (tn !== undefined) {
-      this.stack[this.pointer] = newTypeLiteral(tn)
-      return
+      this.stack[this.pointer] = newTypeLiteral(tn);
+      return;
     }
 
     // Def-stack substitution. Three paths:
@@ -280,54 +294,59 @@ export class Engine {
     //      execute inline against the current stack.
     //   3. Anything else (simple value): replace the word with the
     //      value and let the next iteration pick it up as a literal.
-    const top = this.registry.topOfDefStack(name)
+    const top = this.registry.topOfDefStack(name);
     if (top !== undefined) {
       // Resolving a def is a "use" for check-mode unused-def tracking.
-      this.registry.check.recordUse(name)
+      this.registry.check.recordUse(name);
       if (top.isFnDef()) {
         if (this.registry.check.isActive()) {
-          this.dispatchFnDefCheck(name, top.asFnDef())
+          this.dispatchFnDefCheck(name, top.asFnDef());
         } else {
-          this.dispatchFnDef(name, top.asFnDef())
+          this.dispatchFnDef(name, top.asFnDef());
         }
-        return
+        return;
       }
-      if (top.vType.matches(TList) && Array.isArray(top.data) && !top.quoted && top.eval) {
+      if (
+        top.vType.matches(TList) &&
+        Array.isArray(top.data) &&
+        !top.quoted &&
+        top.eval
+      ) {
         // Unquoted, evaluable list → code body: splice its elements at
         // the pointer so they execute inline. A quoted list (set via
         // `quote`) or an inert list bound via a typed-name constraint
         // (`def xs:[:T] […]`) is data and falls through to the literal-
         // substitute branch below. Mirrors borueng/go/engine.go's def-sub
         // `!top.Quoted` check.
-        const elems = top.asList()
-        this.stack.splice(this.pointer, 1, ...elems)
+        const elems = top.asList();
+        this.stack.splice(this.pointer, 1, ...elems);
         // pointer stays — first body token executes next iteration.
-        return
+        return;
       }
-      this.stack[this.pointer] = top
+      this.stack[this.pointer] = top;
       // Don't advance: let the value go through literal-handling on
       // the next loop iteration so a pending forward can pick it up.
-      return
+      return;
     }
 
-    const fn = this.registry.lookup(name)
+    const fn = this.registry.lookup(name);
     if (!fn) {
       // Check mode is lenient: an undefined word becomes an Any carrier
       // (a placeholder so analysis continues) and emits a diagnostic,
       // rather than a hard error. Mirrors stepWord's check-mode path.
       if (this.registry.check.isActive()) {
         this.registry.check.addDiagnostic({
-          code: 'undefined_word',
+          code: "undefined_word",
           detail: `undefined word: ${name}`,
           word: name,
-        })
-        const placeholder = newCarrier(TAny)
-        placeholder.undefined = true
-        this.stack[this.pointer] = placeholder
-        this.pointer++
-        return
+        });
+        const placeholder = newCarrier(TAny);
+        placeholder.undefined = true;
+        this.stack[this.pointer] = placeholder;
+        this.pointer++;
+        return;
       }
-      throw new BoruError('undefined_word', `undefined word: ${name}`, name)
+      throw new BoruError("undefined_word", `undefined word: ${name}`, name);
     }
 
     // STATEMENT BOUNDARY. Every bare function word beginning its own
@@ -339,37 +358,37 @@ export class Engine {
     // the outer word. Without this the inner dispatch ran, its result
     // arrived at the marker, and the outer word fired — 51 rows of
     // core/spec/divergent.tsv.
-    const stranded = this.strandedForwardError(name)
+    const stranded = this.strandedForwardError(name);
     if (stranded !== undefined) {
-      throw stranded
+      throw stranded;
     }
 
     // Pre-evaluate any paren groups in the forward window so the
     // matcher sees concrete values. The window is bounded by the
     // function's largest forward-eligible arg count across all sigs.
-    this.preEvalParens(fn.maxForwardArgs, fn.signatures)
+    this.preEvalParens(fn.maxForwardArgs, fn.signatures);
 
-    const result = matchEntry(fn, this.stack, this.pointer, this.registry)
+    const result = matchEntry(fn, this.stack, this.pointer, this.registry);
     if (!result) {
       // Check mode: a missing signature is a soft diagnostic, not a hard
       // error. Assume a best-fit candidate, synthesise its carrier
       // returns, and splice them over the word + adjacent operands.
       if (this.registry.check.isActive() && fn.signatures.length > 0) {
-        this.checkModeAssumeSig(name, fn)
-        return
+        this.checkModeAssumeSig(name, fn);
+        return;
       }
       if (this.lastPreEvalHadVoid) {
         throw new BoruError(
-          'no_value_error',
+          "no_value_error",
           `argument expression produced no value for ${name}`,
           name,
-        )
+        );
       }
       throw new BoruError(
-        'signature_error',
+        "signature_error",
         `cannot call \`${name}\` — no signature matches the arguments\n  = expected: ${name} (${describeExpected(fn)})\n  = stack: ${this.describeStack()}`,
         name,
-      )
+      );
     }
 
     // Defer FIRST (in both modes): a forward arg that is still a function
@@ -377,9 +396,11 @@ export class Engine {
     // raw word — fills the slot. Doing this before the check-mode short-circuit
     // lets `typeof fnsig […]` / nested `typeof` record their operand's
     // provenance (the marker fires via fireMarker, which records in check mode).
-    if (this.shouldDeferDispatch(result.args, result.forwardCount, result.sig)) {
-      this.beginForward(name, result, fn)
-      return
+    if (
+      this.shouldDeferDispatch(result.args, result.forwardCount, result.sig)
+    ) {
+      this.beginForward(name, result, fn);
+      return;
     }
 
     // Check mode: short-circuit the handler. A matched signature whose
@@ -390,36 +411,50 @@ export class Engine {
       // so they reach the recorder as values with provenance, mirroring the
       // value-mode autoEvalArgs the short-circuit otherwise skips. Gated on
       // emit so plain type-checking is unchanged.
-      if (this.registry.check.emit !== undefined) this.autoEvalArgs(result.args, result.sig)
-      const out = AnalysisImpl.carrierResults(this.registry, name, result.sig, result.args)
+      if (this.registry.check.emit !== undefined)
+        this.autoEvalArgs(result.args, result.sig);
+      const out = AnalysisImpl.carrierResults(
+        this.registry,
+        name,
+        result.sig,
+        result.args,
+      );
       // Bytecode recording: a clean native match is a candidate call
       // event. Passive — does not affect `out`. A sig that records its
       // own event (e.g. `if` records a branch from its returnsFn) is
       // skipped here to avoid double-recording. A compileFallback sig is
       // recorded as an interpreter island instead of a native call; if the
       // island isn't recordable, the whole program falls back.
-      const emit = this.registry.check.emit
+      const emit = this.registry.check.emit;
       if (emit !== undefined && !result.sig.recordsOwnEvent) {
         if (result.sig.compileFallback) {
-          if (!emit.recordFallback(name, result.args, out, this.registry, result.sig.noEvalArgs)) {
-            emit.markUncompilable(`${name}: fallback island not recordable`)
+          if (
+            !emit.recordFallback(
+              name,
+              result.args,
+              out,
+              this.registry,
+              result.sig.noEvalArgs,
+            )
+          ) {
+            emit.markUncompilable(`${name}: fallback island not recordable`);
           }
         } else {
-          emit.recordCall(name, result.sig, result.args, out)
+          emit.recordCall(name, result.sig, result.args, out);
         }
       }
-      const replaceFrom = this.pointer - result.prefixCount
-      const replaceCount = result.prefixCount + 1 + result.forwardCount
-      this.stack.splice(replaceFrom, replaceCount, ...out)
+      const replaceFrom = this.pointer - result.prefixCount;
+      const replaceCount = result.prefixCount + 1 + result.forwardCount;
+      this.stack.splice(replaceFrom, replaceCount, ...out);
       // Position at the first result (like value-mode dispatch), not past it,
       // so a pending outer forward marker collects this carrier via
       // stepLiteral — otherwise a deferred word (def whose value is a forward
       // sub-expression, `def n make Integer 42`) never receives it.
-      this.pointer = replaceFrom
-      return
+      this.pointer = replaceFrom;
+      return;
     }
 
-    this.dispatch(result, name)
+    this.dispatch(result, name);
   }
 
   /**
@@ -429,10 +464,10 @@ export class Engine {
    * range.
    */
   private dispatch(
-    result: import('./match.ts').MatchResult,
+    result: import("./match.ts").MatchResult,
     name: string,
   ): void {
-    this.autoEvalArgs(result.args, result.sig)
+    this.autoEvalArgs(result.args, result.sig);
 
     // FULL-STACK words (`depth`, `pick`, `roll`) take the whole resolved
     // stack of the current paren scope and return its complete
@@ -445,44 +480,62 @@ export class Engine {
     // between replaceFrom and the pointer and the handler receives them
     // separately.
     if (true === result.sig.fullStack) {
-      let base = 0
+      let base = 0;
       for (let i = this.pointer - 1; i >= 0; i--) {
         if (isOpenParen(this.stack[i]!)) {
-          base = i + 1
-          break
+          base = i + 1;
+          break;
         }
       }
-      const argStart = this.pointer - result.prefixCount
-      const scope = this.stack.slice(base, argStart)
-      const fsResult = result.sig.handler(result.args, null, scope, this.registry)
+      const argStart = this.pointer - result.prefixCount;
+      const scope = this.stack.slice(base, argStart);
+      const fsResult = result.sig.handler(
+        result.args,
+        null,
+        scope,
+        this.registry,
+      );
       if (fsResult instanceof Promise) {
-        throw new BoruError('unsupported', `async handlers are not supported in the TS port`, name)
+        throw new BoruError(
+          "unsupported",
+          `async handlers are not supported in the TS port`,
+          name,
+        );
       }
-      const fsOut = fsResult as Value[]
-      this.stack.splice(base, this.pointer + 1 + result.forwardCount - base, ...fsOut)
-      this.pointer = base
-      return
+      const fsOut = fsResult as Value[];
+      this.stack.splice(
+        base,
+        this.pointer + 1 + result.forwardCount - base,
+        ...fsOut,
+      );
+      this.pointer = base;
+      return;
     }
 
-    const handlerResult = result.sig.handler(result.args, null, [], this.registry)
+    const handlerResult = result.sig.handler(
+      result.args,
+      null,
+      [],
+      this.registry,
+    );
     if (handlerResult instanceof Promise) {
       throw new BoruError(
-        'unsupported',
+        "unsupported",
         `async handlers are not supported in the TS port`,
         name,
-      )
+      );
     }
-    const out = handlerResult as Value[]
+    const out = handlerResult as Value[];
 
-    const replaceFrom = this.pointer - result.prefixCount
-    const replaceCount = result.prefixCount + 1 + result.forwardCount
-    this.stack.splice(replaceFrom, replaceCount, ...out)
+    const replaceFrom = this.pointer - result.prefixCount;
+    const replaceCount = result.prefixCount + 1 + result.forwardCount;
+    this.stack.splice(replaceFrom, replaceCount, ...out);
     // Position the pointer at the first result (or, for empty
     // outputs, whatever the splice left at this index). The next
     // iteration re-processes that slot — letting a pending outer
     // forward marker collect a Value-typed result via stepLiteral,
     // or just advancing past an immediate-dispatch result.
-    this.pointer = replaceFrom
+    this.pointer = replaceFrom;
   }
 
   /**
@@ -495,36 +548,36 @@ export class Engine {
    * partition / poly recovery).
    */
   private checkModeAssumeSig(name: string, fn: FunctionEntry): void {
-    const sig = fn.signatures[0]!
-    const n = sig.args.length
+    const sig = fn.signatures[0]!;
+    const n = sig.args.length;
     const isBoundary = (v: Value): boolean =>
-      v.isWord() || v.isForward() || v.isMark() || v.isMove()
+      v.isWord() || v.isForward() || v.isMark() || v.isMove();
     // Gather forward operands (after the pointer) up to the arity, then
     // fill the rest from the stack prefix (before the pointer).
-    let fwd = 0
+    let fwd = 0;
     while (fwd < n && this.pointer + 1 + fwd < this.stack.length) {
-      if (isBoundary(this.stack[this.pointer + 1 + fwd]!)) break
-      fwd++
+      if (isBoundary(this.stack[this.pointer + 1 + fwd]!)) break;
+      fwd++;
     }
-    let stk = 0
+    let stk = 0;
     while (fwd + stk < n && this.pointer - 1 - stk >= 0) {
-      if (isBoundary(this.stack[this.pointer - 1 - stk]!)) break
-      stk++
+      if (isBoundary(this.stack[this.pointer - 1 - stk]!)) break;
+      stk++;
     }
-    const args: Value[] = []
-    for (let i = 0; i < fwd; i++) args.push(this.stack[this.pointer + 1 + i]!)
-    for (let i = 0; i < stk; i++) args.push(this.stack[this.pointer - 1 - i]!)
+    const args: Value[] = [];
+    for (let i = 0; i < fwd; i++) args.push(this.stack[this.pointer + 1 + i]!);
+    for (let i = 0; i < stk; i++) args.push(this.stack[this.pointer - 1 - i]!);
 
     this.registry.check.addDiagnostic({
-      code: 'no_signature',
+      code: "no_signature",
       detail: `cannot call \`${name}\` — no signature matches the arguments; assuming best-fit candidate for analysis`,
       word: name,
-    })
-    const out = AnalysisImpl.carrierResults(this.registry, name, sig, args)
-    const replaceFrom = this.pointer - stk
-    const replaceCount = stk + 1 + fwd
-    this.stack.splice(replaceFrom, replaceCount, ...out)
-    this.pointer = replaceFrom + out.length
+    });
+    const out = AnalysisImpl.carrierResults(this.registry, name, sig, args);
+    const replaceFrom = this.pointer - stk;
+    const replaceCount = stk + 1 + fwd;
+    this.stack.splice(replaceFrom, replaceCount, ...out);
+    this.pointer = replaceFrom + out.length;
   }
 
   /**
@@ -542,13 +595,13 @@ export class Engine {
     sig: Signature,
   ): boolean {
     for (let i = 0; i < forwardCount; i++) {
-      const a = args[i]!
-      if (!a.isWord()) continue
-      const expected = sig.args[i]!
+      const a = args[i]!;
+      if (!a.isWord()) continue;
+      const expected = sig.args[i]!;
       // TWord/TAtom slots: the matcher kept the Word as data on
       // purpose; never defer here even if the name happens to match
       // a registered function (e.g. `quote dup`).
-      if (expected.equal(TWord) || expected.equal(TAtom)) continue
+      if (expected.equal(TWord) || expected.equal(TAtom)) continue;
       // ANY Word that survived resolveForwardToken defers, registered or
       // not. A registered one dispatches and its RESULT arrives — that
       // was already the rule. An UNREGISTERED one is an undefined name,
@@ -565,9 +618,9 @@ export class Engine {
       // an earlier attempt broke forward collection at such a word and
       // took 7 eng/ts rows with it, because `def inc fn […]` needs the
       // keyword to reach its slot.
-      return true
+      return true;
     }
-    return false
+    return false;
   }
 
   /**
@@ -579,29 +632,29 @@ export class Engine {
    */
   private beginForward(
     name: string,
-    result: import('./match.ts').MatchResult,
+    result: import("./match.ts").MatchResult,
     _fn: FunctionEntry,
   ): void {
     // Stack args (sig positions [forwardCount..N-1]) stay where they
     // are below the pointer; we capture them in sig order for the
     // final dispatch.
-    const stackArgs = result.args.slice(result.forwardCount)
+    const stackArgs = result.args.slice(result.forwardCount);
     const marker: ForwardMarker = {
       funcName: name,
       sig: result.sig,
       expectedForward: result.forwardCount,
       collected: [],
       stackArgs,
-    }
+    };
     // Replace the function word with the marker. Pointer stays —
     // the main loop's "isForward" branch will advance past it.
-    this.stack[this.pointer] = newForwardMarker(marker)
+    this.stack[this.pointer] = newForwardMarker(marker);
     // Stack args (resolved before the pointer) need to be removed
     // here so they're not double-counted at completion time. Mirror
     // Go's insertForward which records prefix args separately.
-    const replaceFrom = this.pointer - result.prefixCount
-    this.stack.splice(replaceFrom, result.prefixCount)
-    this.pointer = replaceFrom
+    const replaceFrom = this.pointer - result.prefixCount;
+    this.stack.splice(replaceFrom, result.prefixCount);
+    this.pointer = replaceFrom;
   }
 
   /**
@@ -612,14 +665,14 @@ export class Engine {
    * outer interpreter can pick it up on the next iteration.
    */
   private evalParenAt(idx: number): number {
-    const closeIdx = this.findMatchingClose(idx)
+    const closeIdx = this.findMatchingClose(idx);
     if (closeIdx < 0) {
-      throw new BoruError('syntax_error', `unmatched '('`, '(')
+      throw new BoruError("syntax_error", `unmatched '('`, "(");
     }
-    const inner = this.stack.slice(idx + 1, closeIdx)
-    const sub = new Engine(this.registry)
-    const results = sub.run(inner)
-    this.stack.splice(idx, closeIdx - idx + 1, ...results)
+    const inner = this.stack.slice(idx + 1, closeIdx);
+    const sub = new Engine(this.registry);
+    const results = sub.run(inner);
+    this.stack.splice(idx, closeIdx - idx + 1, ...results);
     // Don't advance the pointer; the next iteration will process the
     // first spliced result. The COUNT is returned because the caller
     // cannot recover it from the stack length: preEvalParens used to
@@ -627,7 +680,7 @@ export class Engine {
     // for a two-token `( )` group and went negative for every longer
     // one. Harmless while the void branch merely continued, and a
     // 22-row regression the moment it began to break.
-    return results.length
+    return results.length;
   }
 
   /**
@@ -636,16 +689,16 @@ export class Engine {
    * nested groups don't break out prematurely.
    */
   private findMatchingClose(openIdx: number): number {
-    let depth = 1
+    let depth = 1;
     for (let i = openIdx + 1; i < this.stack.length; i++) {
-      const v = this.stack[i]!
-      if (isOpenParen(v)) depth++
+      const v = this.stack[i]!;
+      if (isOpenParen(v)) depth++;
       else if (isCloseParen(v)) {
-        depth--
-        if (depth === 0) return i
+        depth--;
+        if (depth === 0) return i;
       }
     }
-    return -1
+    return -1;
   }
 
   /**
@@ -659,8 +712,8 @@ export class Engine {
    * need to resolve — taken from FunctionEntry.maxForwardArgs.
    */
   private preEvalParens(maxFwd: number, sigs?: readonly Signature[]): void {
-    this.lastPreEvalHadVoid = false
-    if (maxFwd <= 0) return
+    this.lastPreEvalHadVoid = false;
+    if (maxFwd <= 0) return;
     // Keyword slots are decided by the RAW token at their position —
     // prune keyword overloads before any evaluation below, so a keyword
     // overload's larger arity never widens the scan past the dispatch
@@ -668,44 +721,55 @@ export class Engine {
     // must not pre-evaluate the template before def binds x, and
     // `def g (fn […]) (g 3)` must not pre-evaluate `(g 3)` before the
     // 2-arg def binds g. Mirrors Go's pruneKeywordViable.
-    let viable = sigs !== undefined ? [...sigs] : undefined
+    let viable = sigs !== undefined ? [...sigs] : undefined;
     const windowOf = (ss: readonly Signature[]): number => {
-      let max = 0
+      let max = 0;
       for (const s of ss) {
-        const limit = s.barrierPos ?? 0
-        if (limit > max) max = limit
+        const limit = s.barrierPos ?? 0;
+        if (limit > max) max = limit;
       }
-      return max
-    }
-    let resolved = 0
-    let scanIdx = this.pointer + 1
-    let guard = 0
+      return max;
+    };
+    let resolved = 0;
+    let scanIdx = this.pointer + 1;
+    let guard = 0;
     while (resolved < maxFwd && scanIdx < this.stack.length && guard < 2222) {
-      guard++
-      const tok = this.stack[scanIdx]!
+      guard++;
+      const tok = this.stack[scanIdx]!;
       if (viable !== undefined) {
-        const pos = resolved
+        const pos = resolved;
         viable = viable.filter((s) => {
-          const pat = s.patterns?.get(pos)
-          if (pat === undefined || !pat.vType.equal(TAtom) || pat.data === null) return true
-          if (pos >= (s.barrierPos ?? 0)) return true
+          const pat = s.patterns?.get(pos);
+          if (pat === undefined || !pat.vType.equal(TAtom) || pat.data === null)
+            return true;
+          if (pos >= (s.barrierPos ?? 0)) return true;
           const nm = tok.isWord()
             ? (tok.asWord() as WordInfo).name
-            : tok.vType.equal(TAtom) && typeof tok.data === 'string'
+            : tok.vType.equal(TAtom) && typeof tok.data === "string"
               ? tok.data
-              : undefined
-          return nm === (pat.data as string)
-        })
-        const bound = windowOf(viable)
-        if (resolved >= bound) break
-        if (bound < maxFwd) maxFwd = bound
+              : undefined;
+          return nm === (pat.data as string);
+        });
+        const bound = windowOf(viable);
+        if (resolved >= bound) break;
+        if (bound < maxFwd) maxFwd = bound;
       }
       // A paren-expression VALUE in the window expands to its marker
       // span in place and reprocesses — the '(' arm below evaluates
       // it. Mirrors Go resolveForwardArgs' IsParenExpr branch.
-      if (tok.vType.equal(TParenExpr) && !tok.quoted && Array.isArray(tok.data)) {
-        this.stack.splice(scanIdx, 1, newOpenParen(), ...(tok.data as Value[]), newCloseParen())
-        continue
+      if (
+        tok.vType.equal(TParenExpr) &&
+        !tok.quoted &&
+        Array.isArray(tok.data)
+      ) {
+        this.stack.splice(
+          scanIdx,
+          1,
+          newOpenParen(),
+          ...(tok.data as Value[]),
+          newCloseParen(),
+        );
+        continue;
       }
       // A sugar marker in the window expands once per dispatch, BEFORE
       // signature matching (which treats markers as boundaries) —
@@ -716,28 +780,31 @@ export class Engine {
       // boundary (it errors at step time).
       if (isSugar(tok) && !tok.quoted) {
         const consumes =
-          viable === undefined || viable.some((s) => resolved < (s.barrierPos ?? 0))
-        if (!consumes) break
-        const sinfo = asSugar(tok)
-        if (sinfo === undefined) break
-        let headForm = false
-        if (sinfo.kind === 'angle' && viable !== undefined) {
+          viable === undefined ||
+          viable.some((s) => resolved < (s.barrierPos ?? 0));
+        if (!consumes) break;
+        const sinfo = asSugar(tok);
+        if (sinfo === undefined) break;
+        let headForm = false;
+        if (sinfo.kind === "angle" && viable !== undefined) {
           headForm = viable.some(
-            (s) => (s.quoteArgs?.has(resolved) ?? false) && resolved < (s.barrierPos ?? 0),
-          )
+            (s) =>
+              (s.quoteArgs?.has(resolved) ?? false) &&
+              resolved < (s.barrierPos ?? 0),
+          );
         }
         try {
-          const exp = sugarExpansion(this.registry, sinfo, headForm)
-          this.stack.splice(scanIdx, 1, ...exp)
-          continue
+          const exp = sugarExpansion(this.registry, sinfo, headForm);
+          this.stack.splice(scanIdx, 1, ...exp);
+          continue;
         } catch (e) {
-          if (headForm) throw e
-          break
+          if (headForm) throw e;
+          break;
         }
       }
       // Internal control markers stop the forward scan — they're
       // boundaries, not data.
-      if (tok.isForward() || tok.isMark() || tok.isMove()) break
+      if (tok.isForward() || tok.isMark() || tok.isMove()) break;
       // Interpolated literals in the forward window resolve to their
       // concrete value before the matcher sees them, so a consumer like
       // `typeof <p>${…}</p>` types the resulting Node/Xml, not the
@@ -747,29 +814,29 @@ export class Engine {
         // (re-runs to its element at run time) so a consumer like
         // `typeof <p>${…}</p>` compiles — mirroring the main loop's
         // XmlInterp branch, which preEvalParens would otherwise pre-empt.
-        const emit = this.registry.check.emit
+        const emit = this.registry.check.emit;
         if (emit !== undefined && this.xmlCaptureFree(tok.asXmlTmpl())) {
-          const out = newCarrier(TXml)
-          emit.recordValueIsland(tok, out, 'xml')
-          this.stack[scanIdx] = out
+          const out = newCarrier(TXml);
+          emit.recordValueIsland(tok, out, "xml");
+          this.stack[scanIdx] = out;
         } else {
-          this.stack[scanIdx] = newXml(this.resolveXmlTmpl(tok.asXmlTmpl()))
+          this.stack[scanIdx] = newXml(this.resolveXmlTmpl(tok.asXmlTmpl()));
         }
-        resolved++
-        scanIdx++
-        continue
+        resolved++;
+        scanIdx++;
+        continue;
       }
       if (tok.isInterpString()) {
-        this.stack[scanIdx] = this.evalInterpString(tok)
-        resolved++
-        scanIdx++
-        continue
+        this.stack[scanIdx] = this.evalInterpString(tok);
+        resolved++;
+        scanIdx++;
+        continue;
       }
-      if (isCloseParen(tok) || isEnd(tok)) break
+      if (isCloseParen(tok) || isEnd(tok)) break;
       if (!tok.isWord() && !isOpenParen(tok)) {
-        resolved++
-        scanIdx++
-        continue
+        resolved++;
+        scanIdx++;
+        continue;
       }
       // A marker or word with NO payload reaches here — an open-paren
       // TYPE literal, say. Go's AsWord tolerates a nil payload and yields
@@ -777,9 +844,9 @@ export class Engine {
       // lean on isWord() being true for any value in the Word branch,
       // payload or not, which is exactly the conflation that let a `Word`
       // type literal loop the step loop into an uncoded crash.
-      const wi = tok.data as WordInfo | null
-      const name = wi?.name ?? ''
-      if (name === '(') {
+      const wi = tok.data as WordInfo | null;
+      const name = wi?.name ?? "";
+      if (name === "(") {
         // An UNMATCHED `(` is a scan boundary, not an error. Go's forward
         // scan stops at an open paren it cannot resolve and lets the
         // dispatch fail on its own terms — `addq ( 1 2` is a
@@ -787,8 +854,8 @@ export class Engine {
         // findMatchingClose miss throws syntax_error, so the engine
         // reported a SYNTAX error for a stream of values that never had
         // any syntax. Six rows of core/spec/divergent.tsv.
-        if (this.findMatchingClose(scanIdx) < 0) break
-        const produced = this.evalParenAt(scanIdx)
+        if (this.findMatchingClose(scanIdx) < 0) break;
+        const produced = this.evalParenAt(scanIdx);
         // After the splice the first result is at `scanIdx`. Each
         // produced value counts toward the resolved budget. If the
         // paren produced zero values, advance scanIdx to skip the
@@ -800,7 +867,7 @@ export class Engine {
           // is a void argument expression. Record it so a subsequent
           // signature-match failure can blame the void rather than
           // reporting a generic mismatch. Mirrors voidArgErrorFor.
-          this.lastPreEvalHadVoid = true
+          this.lastPreEvalHadVoid = true;
           // And STOP the scan. The slot cannot be filled, so the matcher
           // falls back to stack form or fails on the void — which is what
           // Go does. Continuing past it let the NEXT group slide into the
@@ -808,11 +875,11 @@ export class Engine {
           // was `7 13` here against Go's `15 5`, the only divergence in the
           // whole ledger that produced a wrong NUMBER rather than a wrong
           // error.
-          break
+          break;
         }
-        resolved += produced
-        scanIdx += produced
-        continue
+        resolved += produced;
+        scanIdx += produced;
+        continue;
       }
       // A registered function word in the forward window is a
       // boundary — leave it for the outer matcher to either consume
@@ -825,10 +892,14 @@ export class Engine {
       // one resolved value.
       const capturedByViable =
         viable !== undefined &&
-        viable.some((s) => (s.quoteArgs?.has(resolved) ?? false) && resolved < (s.barrierPos ?? 0))
-      if (this.registry.lookup(name) && !capturedByViable) break
-      resolved++
-      scanIdx++
+        viable.some(
+          (s) =>
+            (s.quoteArgs?.has(resolved) ?? false) &&
+            resolved < (s.barrierPos ?? 0),
+        );
+      if (this.registry.lookup(name) && !capturedByViable) break;
+      resolved++;
+      scanIdx++;
     }
   }
 
@@ -845,79 +916,88 @@ export class Engine {
    * → execFnDefSig" arc) compressed into a single function.
    */
   private dispatchFnDef(name: string, info: FnDefInfo): void {
-    const maxParams = Math.max(0, ...info.sigs.map((s) => s.params.length))
+    const maxParams = Math.max(0, ...info.sigs.map((s) => s.params.length));
     // Pre-evaluate forward parens so the matcher sees concrete values.
-    this.preEvalParens(maxParams)
+    this.preEvalParens(maxParams);
 
     // Try each overload, and within it each arity from total down to
     // the required count (optional trailing params may be omitted).
     // Take the first that matches the available args.
-    let result: import('./match.ts').MatchResult | null = null
-    let chosen: import('./value.ts').FnSig | null = null
-    let usedK = 0
-    const ordered = [...info.sigs].sort((a, b) => b.params.length - a.params.length)
+    let result: import("./match.ts").MatchResult | null = null;
+    let chosen: import("./value.ts").FnSig | null = null;
+    let usedK = 0;
+    const ordered = [...info.sigs].sort(
+      (a, b) => b.params.length - a.params.length,
+    );
     outer: for (const fsig of ordered) {
-      const total = fsig.params.length
-      const required = fsig.params.filter((p) => !p.optional).length
+      const total = fsig.params.length;
+      const required = fsig.params.filter((p) => !p.optional).length;
       for (let k = total; k >= required; k--) {
         const sig: Signature = {
           args: fsig.params.slice(0, k).map((p) => p.type),
           barrierPos: k,
           handler: () => [],
-        }
+        };
         const fakeEntry: FunctionEntry = {
           name,
           signatures: [sig],
           declOrder: [sig],
           forwardPrecedence: true,
           maxForwardArgs: k,
-        }
-        const r = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
+        };
+        const r = matchEntry(
+          fakeEntry,
+          this.stack,
+          this.pointer,
+          this.registry,
+        );
         if (r) {
-          result = r
-          chosen = fsig
-          usedK = k
-          break outer
+          result = r;
+          chosen = fsig;
+          usedK = k;
+          break outer;
         }
       }
     }
     if (!result || !chosen) {
       throw new BoruError(
-        'signature_error',
+        "signature_error",
         `cannot call \`${name}\` — no signature matches the arguments\n  = stack: ${this.describeStack()}`,
         name,
-      )
+      );
     }
 
-    const total = chosen.params.length
+    const total = chosen.params.length;
     // Bind each param on the def stack so the body can reference it.
     // Provided args bind directly; omitted optional params default to
     // their type's base value. Push the args list for the `args` word.
-    const boundArgs: Value[] = []
+    const boundArgs: Value[] = [];
     for (let i = 0; i < total; i++) {
-      const val = quoteListArg(i < usedK ? result.args[i]! : baseValue(chosen.params[i]!.type))
-      this.registry.pushDef(chosen.params[i]!.name, val)
-      boundArgs.push(val)
+      const val = quoteListArg(
+        i < usedK ? result.args[i]! : baseValue(chosen.params[i]!.type),
+      );
+      this.registry.pushDef(chosen.params[i]!.name, val);
+      boundArgs.push(val);
     }
-    this.registry.pushArgs(boundArgs)
+    this.registry.pushArgs(boundArgs);
 
-    let bodyResult: Value[]
+    let bodyResult: Value[];
     try {
-      const sub = new Engine(this.registry)
-      bodyResult = sub.run([...chosen.body])
+      const sub = new Engine(this.registry);
+      bodyResult = sub.run([...chosen.body]);
     } finally {
-      this.registry.popArgs()
+      this.registry.popArgs();
       for (let i = total - 1; i >= 0; i--) {
-        this.registry.popDef(chosen.params[i]!.name)
+        this.registry.popDef(chosen.params[i]!.name);
       }
     }
 
     // Splice the result over the consumed range (prefix + word +
     // forward args), exactly like a native handler.
-    const replaceFrom = this.pointer - result.prefixCount
-    const replaceCount = result.prefixCount + 1 + result.forwardCount
-    this.stack.splice(replaceFrom, replaceCount, ...bodyResult)
-    this.pointer = replaceFrom + bodyResult.length
+    const replaceFrom = this.pointer - result.prefixCount;
+    const replaceCount = result.prefixCount + 1 + result.forwardCount;
+    this.stack.splice(replaceFrom, replaceCount, ...bodyResult);
+    this.pointer = replaceFrom + bodyResult.length;
   }
 
   /**
@@ -932,36 +1012,43 @@ export class Engine {
    * fixed-point refinement).
    */
   private dispatchFnDefCheck(name: string, info: FnDefInfo): void {
-    const maxParams = Math.max(0, ...info.sigs.map((s) => s.params.length))
-    this.preEvalParens(maxParams)
+    const maxParams = Math.max(0, ...info.sigs.map((s) => s.params.length));
+    this.preEvalParens(maxParams);
 
     // Try to match an overload (largest arity first, optional-trailing).
-    let result: import('./match.ts').MatchResult | null = null
-    let chosen: import('./value.ts').FnSig | null = null
-    let usedK = 0
-    const ordered = [...info.sigs].sort((a, b) => b.params.length - a.params.length)
+    let result: import("./match.ts").MatchResult | null = null;
+    let chosen: import("./value.ts").FnSig | null = null;
+    let usedK = 0;
+    const ordered = [...info.sigs].sort(
+      (a, b) => b.params.length - a.params.length,
+    );
     outer: for (const fsig of ordered) {
-      const total = fsig.params.length
-      const required = fsig.params.filter((p) => !p.optional).length
+      const total = fsig.params.length;
+      const required = fsig.params.filter((p) => !p.optional).length;
       for (let k = total; k >= required; k--) {
         const sig: Signature = {
           args: fsig.params.slice(0, k).map((p) => p.type),
           barrierPos: k,
           handler: () => [],
-        }
+        };
         const fakeEntry: FunctionEntry = {
           name,
           signatures: [sig],
           declOrder: [sig],
           forwardPrecedence: true,
           maxForwardArgs: k,
-        }
-        const r = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
+        };
+        const r = matchEntry(
+          fakeEntry,
+          this.stack,
+          this.pointer,
+          this.registry,
+        );
         if (r) {
-          result = r
-          chosen = fsig
-          usedK = k
-          break outer
+          result = r;
+          chosen = fsig;
+          usedK = k;
+          break outer;
         }
       }
     }
@@ -969,57 +1056,59 @@ export class Engine {
     // Gather the consumed span + args. A clean match uses the matcher's
     // positions; a no-match assumes the first overload, gathers adjacent
     // operands, and emits no_signature (the param types are violated).
-    let replaceFrom: number
-    let replaceCount: number
-    let args: Value[]
+    let replaceFrom: number;
+    let replaceCount: number;
+    let args: Value[];
     if (result && chosen) {
-      args = result.args.slice(0, usedK)
-      replaceFrom = this.pointer - result.prefixCount
-      replaceCount = result.prefixCount + 1 + result.forwardCount
+      args = result.args.slice(0, usedK);
+      replaceFrom = this.pointer - result.prefixCount;
+      replaceCount = result.prefixCount + 1 + result.forwardCount;
     } else {
-      chosen = ordered[0]!
-      const n = chosen.params.length
+      chosen = ordered[0]!;
+      const n = chosen.params.length;
       const isBoundary = (v: Value): boolean =>
-        v.isWord() || v.isForward() || v.isMark() || v.isMove()
-      let fwd = 0
+        v.isWord() || v.isForward() || v.isMark() || v.isMove();
+      let fwd = 0;
       while (fwd < n && this.pointer + 1 + fwd < this.stack.length) {
-        if (isBoundary(this.stack[this.pointer + 1 + fwd]!)) break
-        fwd++
+        if (isBoundary(this.stack[this.pointer + 1 + fwd]!)) break;
+        fwd++;
       }
-      let stk = 0
+      let stk = 0;
       while (fwd + stk < n && this.pointer - 1 - stk >= 0) {
-        if (isBoundary(this.stack[this.pointer - 1 - stk]!)) break
-        stk++
+        if (isBoundary(this.stack[this.pointer - 1 - stk]!)) break;
+        stk++;
       }
-      args = []
-      for (let i = 0; i < fwd; i++) args.push(this.stack[this.pointer + 1 + i]!)
-      for (let i = 0; i < stk; i++) args.push(this.stack[this.pointer - 1 - i]!)
-      replaceFrom = this.pointer - stk
-      replaceCount = stk + 1 + fwd
+      args = [];
+      for (let i = 0; i < fwd; i++)
+        args.push(this.stack[this.pointer + 1 + i]!);
+      for (let i = 0; i < stk; i++)
+        args.push(this.stack[this.pointer - 1 - i]!);
+      replaceFrom = this.pointer - stk;
+      replaceCount = stk + 1 + fwd;
       this.registry.check.addDiagnostic({
-        code: 'no_signature',
+        code: "no_signature",
         detail: `cannot call \`${name}\` — no signature matches the arguments; assuming best-fit candidate for analysis`,
         word: name,
-      })
+      });
       // The assumed dispatch analyses the body under args the real match
       // REJECTED — its dispatch failures are cascade noise (mirrors the Go
       // checkModeAssumeSig suppression); the no_signature above is the one
       // honest diagnostic.
-      this.registry.check.suppressBodyErrors++
+      this.registry.check.suppressBodyErrors++;
       try {
-        const out = this.analyseFnBody(name, chosen, args)
-        this.stack.splice(replaceFrom, replaceCount, ...out)
-        this.pointer = replaceFrom + out.length
-        return
+        const out = this.analyseFnBody(name, chosen, args);
+        this.stack.splice(replaceFrom, replaceCount, ...out);
+        this.pointer = replaceFrom + out.length;
+        return;
       } finally {
-        this.registry.check.suppressBodyErrors--
+        this.registry.check.suppressBodyErrors--;
       }
     }
 
-    const sig = chosen
-    const out = this.analyseFnBody(name, sig, args)
-    this.stack.splice(replaceFrom, replaceCount, ...out)
-    this.pointer = replaceFrom + out.length
+    const sig = chosen;
+    const out = this.analyseFnBody(name, sig, args);
+    this.stack.splice(replaceFrom, replaceCount, ...out);
+    this.pointer = replaceFrom + out.length;
   }
 
   /**
@@ -1032,64 +1121,72 @@ export class Engine {
    */
   private analyseFnBody(
     name: string,
-    sig: import('./value.ts').FnSig,
+    sig: import("./value.ts").FnSig,
     args: Value[],
   ): Value[] {
-    const declared = sig.returns
-    const contagious = args.some((a) => a.carrier && a.dynamic)
+    const declared = sig.returns;
+    const contagious = args.some((a) => a.carrier && a.dynamic);
     const declaredOut = (): Value[] =>
-      declared.map((t) => (contagious || t.equal(TAny) ? newDynamicCarrier(t) : newCarrier(t)))
+      declared.map((t) =>
+        contagious || t.equal(TAny) ? newDynamicCarrier(t) : newCarrier(t),
+      );
 
-    const key = `${name}#${sig.params.length}`
+    const key = `${name}#${sig.params.length}`;
     if (this.registry.check.fnInflight.has(key)) {
       // Recursion: declared returns are the induction hypothesis; an
       // unchecked fn breaks the cycle with a dynamic Any.
-      return declared.length > 0 ? declaredOut() : [newDynamicCarrier(TAny)]
+      return declared.length > 0 ? declaredOut() : [newDynamicCarrier(TAny)];
     }
-    this.registry.check.fnInflight.add(key)
-    this.registry.check.fnBodyDepth++
-    let bodyResult: Value[]
-    const bound: string[] = []
-    const frame: Value[] = []
+    this.registry.check.fnInflight.add(key);
+    this.registry.check.fnBodyDepth++;
+    let bodyResult: Value[];
+    const bound: string[] = [];
+    const frame: Value[] = [];
     try {
       for (let i = 0; i < sig.params.length; i++) {
-        const p = sig.params[i]!
+        const p = sig.params[i]!;
         // A missing optional param defaults to its type's base value (a
         // concrete, bakeable default — exactly what dispatchFnDef binds at
         // run time), so an inlined body using it still compiles.
-        const v = quoteListArg(args[i] ?? (p.optional ? baseValue(p.type) : newDynamicCarrier(TAny)))
-        if (p.name !== '') {
-          this.registry.pushDef(p.name, v)
-          bound.push(p.name)
+        const v = quoteListArg(
+          args[i] ?? (p.optional ? baseValue(p.type) : newDynamicCarrier(TAny)),
+        );
+        if (p.name !== "") {
+          this.registry.pushDef(p.name, v);
+          bound.push(p.name);
         }
-        frame.push(v)
+        frame.push(v);
       }
       // Push the args frame so `args` inside the inlined body resolves to the
       // param carriers (recorded as a makeList), matching the interpreter.
-      this.registry.pushArgs(frame)
-      bodyResult = new Engine(this.registry).run([...sig.body])
+      this.registry.pushArgs(frame);
+      bodyResult = new Engine(this.registry).run([...sig.body]);
     } finally {
-      this.registry.popArgs()
-      for (let i = bound.length - 1; i >= 0; i--) this.registry.popDef(bound[i]!)
-      this.registry.check.fnBodyDepth--
-      this.registry.check.fnInflight.delete(key)
+      this.registry.popArgs();
+      for (let i = bound.length - 1; i >= 0; i--)
+        this.registry.popDef(bound[i]!);
+      this.registry.check.fnBodyDepth--;
+      this.registry.check.fnInflight.delete(key);
     }
-    if (declared.length === 0) return bodyResult
-    const out = declaredOut()
+    if (declared.length === 0) return bodyResult;
+    const out = declaredOut();
     // Compile path: INLINE the fn. The body already recorded its events
     // into the trace (run above, in check mode with emit active); alias
     // each declared-return carrier to the corresponding body residual so
     // the fn's result threads to those events. Mismatched counts can't be
     // inlined cleanly → refuse (fall back).
-    const emit = this.registry.check.emit
+    const emit = this.registry.check.emit;
     if (emit !== undefined) {
       if (out.length === bodyResult.length) {
-        for (let i = 0; i < out.length; i++) emit.alias(out[i]!, bodyResult[i]!)
+        for (let i = 0; i < out.length; i++)
+          emit.alias(out[i]!, bodyResult[i]!);
       } else {
-        emit.markUncompilable(`fn ${name}: declared/body result count mismatch`)
+        emit.markUncompilable(
+          `fn ${name}: declared/body result count mismatch`,
+        );
       }
     }
-    return out
+    return out;
   }
 
   /**
@@ -1100,12 +1197,12 @@ export class Engine {
    * capture NAME as data even when it would otherwise dispatch.
    */
   private pendingExpectsWord(): boolean {
-    const idx = this.findPendingMarker()
-    if (idx < 0) return false
-    const m = this.stack[idx]!.asForward()
-    const nextIdx = m.collected.length
-    if (nextIdx >= m.sig.args.length) return false
-    const expected = m.sig.args[nextIdx]!
+    const idx = this.findPendingMarker();
+    if (idx < 0) return false;
+    const m = this.stack[idx]!.asForward();
+    const nextIdx = m.collected.length;
+    if (nextIdx >= m.sig.args.length) return false;
+    const expected = m.sig.args[nextIdx]!;
     // Only an EXPLICIT TWord/TAtom slot suppresses dispatch, or a slot
     // marked `/q`. TAny also accepts Word values, but at TAny slots we
     // still want the engine to dispatch the word and feed its result
@@ -1121,8 +1218,8 @@ export class Engine {
     // really is beginning its own dispatch — stranded def. The keyword
     // forms this protects are load-bearing under the strict rule
     // (design/STRICT-FORWARD-BARRIER.0.md, "two sharp edges").
-    if (m.sig.quoteArgs?.has(nextIdx) === true) return true
-    return expected.equal(TWord) || expected.equal(TAtom)
+    if (m.sig.quoteArgs?.has(nextIdx) === true) return true;
+    return expected.equal(TWord) || expected.equal(TAtom);
   }
 
   /**
@@ -1161,33 +1258,33 @@ export class Engine {
    * they are not source-level statement boundaries.
    */
   private strandedForwardError(boundary: string): BoruError | undefined {
-    if (boundary.startsWith('__')) return undefined
-    const fwdIdx = this.findPendingMarker()
-    if (fwdIdx < 0) return undefined
-    const m = this.stack[fwdIdx]!.asForward()
-    if (0 !== m.collected.length || 0 !== m.stackArgs.length) return undefined
-    const missing = m.expectedForward - m.collected.length
+    if (boundary.startsWith("__")) return undefined;
+    const fwdIdx = this.findPendingMarker();
+    if (fwdIdx < 0) return undefined;
+    const m = this.stack[fwdIdx]!.asForward();
+    if (0 !== m.collected.length || 0 !== m.stackArgs.length) return undefined;
+    const missing = m.expectedForward - m.collected.length;
     return new BoruError(
-      'signature_error',
+      "signature_error",
       `${m.funcName} is still waiting for ${missing} argument(s) when \`${boundary}\` ` +
-        'begins its own dispatch — a function word is a barrier and never feeds ' +
-        'forward collection (strict rule); group the call in parens so its RESULT ' +
+        "begins its own dispatch — a function word is a barrier and never feeds " +
+        "forward collection (strict rule); group the call in parens so its RESULT " +
         `becomes the argument: ${m.funcName} (${boundary} …)`,
       m.funcName,
-    )
+    );
   }
 
   private findPendingMarker(): number {
     for (let i = this.pointer - 1; i >= 0; i--) {
-      const v = this.stack[i]!
-      if (isOpenParen(v)) return -1
+      const v = this.stack[i]!;
+      if (isOpenParen(v)) return -1;
       if (v.isForward()) {
-        const m = v.asForward()
-        if (m.collected.length < m.expectedForward) return i
-        return -1
+        const m = v.asForward();
+        if (m.collected.length < m.expectedForward) return i;
+        return -1;
       }
     }
-    return -1
+    return -1;
   }
 
   /**
@@ -1195,45 +1292,46 @@ export class Engine {
    * If a pending marker can absorb it, collect; otherwise advance.
    */
   private stepLiteral(): void {
-    const fwdIdx = this.findPendingMarker()
+    const fwdIdx = this.findPendingMarker();
     if (fwdIdx < 0) {
-      this.pointer++
-      return
+      this.pointer++;
+      return;
     }
-    const m = this.stack[fwdIdx]!.asForward()
-    const nextIdx = m.collected.length
-    const expected = m.sig.args[nextIdx]!
-    const val = this.stack[this.pointer]!
+    const m = this.stack[fwdIdx]!.asForward();
+    const nextIdx = m.collected.length;
+    const expected = m.sig.args[nextIdx]!;
+    const val = this.stack[this.pointer]!;
 
     // Type-check. Words at TWord/TAtom slots match directly; other
     // values check via sigTypeMatches.
-    let matches: boolean
+    let matches: boolean;
     if (val.isWord()) {
       // A Word can fill a TWord/TAtom slot, or a TAny slot (data).
       // For other slot types it must resolve via def-sub first; that
       // happens at stepWord, so reaching here with a Word means
       // either we want it as data (TWord/TAtom/TAny) or it's a
       // mismatch.
-      matches = expected.equal(TWord) || expected.equal(TAtom) || expected.equal(TAny)
+      matches =
+        expected.equal(TWord) || expected.equal(TAtom) || expected.equal(TAny);
     } else {
-      matches = val.vType.matches(expected)
+      matches = val.vType.matches(expected);
     }
     if (!matches) {
       // Implicit end of forward collection — fail the dispatch.
       throw new BoruError(
-        'signature_error',
+        "signature_error",
         `forward arg ${nextIdx} type mismatch for ${m.funcName}: expected ${expected.toString()}, got ${val.toString()}`,
         m.funcName,
-      )
+      );
     }
 
     // Collect: remove value from current position, append to marker.
-    this.stack.splice(this.pointer, 1)
-    m.collected.push(val)
+    this.stack.splice(this.pointer, 1);
+    m.collected.push(val);
     // pointer stays — it now points at what came after the value.
 
     if (m.collected.length === m.expectedForward) {
-      this.completeForward(fwdIdx)
+      this.completeForward(fwdIdx);
     }
   }
 
@@ -1253,27 +1351,27 @@ export class Engine {
    * otherwise. Mirrors Go stepSugar / SugarExpansion.
    */
   private stepSugar(val: Value): void {
-    const info = asSugar(val)
+    const info = asSugar(val);
     if (info === undefined) {
-      this.pointer++
-      return
+      this.pointer++;
+      return;
     }
-    const headForm = info.kind === 'angle' && this.pendingExpectsWord()
-    const exp = sugarExpansion(this.registry, info, headForm)
-    this.stack.splice(this.pointer, 1, ...exp)
+    const headForm = info.kind === "angle" && this.pendingExpectsWord();
+    const exp = sugarExpansion(this.registry, info, headForm);
+    this.stack.splice(this.pointer, 1, ...exp);
   }
 
   private stepEnd(): void {
-    const fwdIdx = this.findPendingMarker()
+    const fwdIdx = this.findPendingMarker();
     if (fwdIdx < 0) {
       // No pending forward — just drop the end token.
-      this.stack.splice(this.pointer, 1)
-      return
+      this.stack.splice(this.pointer, 1);
+      return;
     }
     // Drop the end token first so the marker is no longer "pending"
     // when completeForward runs.
-    this.stack.splice(this.pointer, 1)
-    this.completeForwardPartial(fwdIdx)
+    this.stack.splice(this.pointer, 1);
+    this.completeForwardPartial(fwdIdx);
   }
 
   /**
@@ -1285,16 +1383,16 @@ export class Engine {
    * keeps shape parity with Go's stepEnd → implicitEnd flow.
    */
   private completeForwardPartial(fwdIdx: number): void {
-    const m = this.stack[fwdIdx]!.asForward()
-    const args = [...m.collected, ...m.stackArgs]
+    const m = this.stack[fwdIdx]!.asForward();
+    const args = [...m.collected, ...m.stackArgs];
     if (args.length < m.sig.args.length) {
       throw new BoruError(
-        'signature_error',
+        "signature_error",
         `${m.funcName}: 'end' before all forward args collected (have ${args.length}, need ${m.sig.args.length})`,
         m.funcName,
-      )
+      );
     }
-    this.fireMarker(fwdIdx, m, args)
+    this.fireMarker(fwdIdx, m, args);
   }
 
   /**
@@ -1302,45 +1400,60 @@ export class Engine {
    * dispatch the marker's sig. The marker is replaced by the result.
    */
   private completeForward(fwdIdx: number): void {
-    const m = this.stack[fwdIdx]!.asForward()
-    const args = [...m.collected, ...m.stackArgs]
-    this.fireMarker(fwdIdx, m, args)
+    const m = this.stack[fwdIdx]!.asForward();
+    const args = [...m.collected, ...m.stackArgs];
+    this.fireMarker(fwdIdx, m, args);
   }
 
   /** Run the marker's handler with `args` and replace it with the result. */
   private fireMarker(fwdIdx: number, m: ForwardMarker, args: Value[]): void {
-    this.autoEvalArgs(args, m.sig)
+    this.autoEvalArgs(args, m.sig);
     // Check mode: a DEFERRED dispatch must record like the immediate
     // short-circuit (carrierResults + recordCall/recordFallback) — else a
     // forward-deferred word (typeof fnsig […], nested typeof) produces a
     // result with no provenance and the program refuses.
     if (this.registry.check.isActive() && !m.sig.runInCheckMode) {
-      const out = AnalysisImpl.carrierResults(this.registry, m.funcName, m.sig, args)
-      const emit = this.registry.check.emit
+      const out = AnalysisImpl.carrierResults(
+        this.registry,
+        m.funcName,
+        m.sig,
+        args,
+      );
+      const emit = this.registry.check.emit;
       if (emit !== undefined && !m.sig.recordsOwnEvent) {
         if (m.sig.compileFallback) {
-          if (!emit.recordFallback(m.funcName, args, out, this.registry, m.sig.noEvalArgs)) {
-            emit.markUncompilable(`${m.funcName}: fallback island not recordable`)
+          if (
+            !emit.recordFallback(
+              m.funcName,
+              args,
+              out,
+              this.registry,
+              m.sig.noEvalArgs,
+            )
+          ) {
+            emit.markUncompilable(
+              `${m.funcName}: fallback island not recordable`,
+            );
           }
         } else {
-          emit.recordCall(m.funcName, m.sig, args, out)
+          emit.recordCall(m.funcName, m.sig, args, out);
         }
       }
-      this.stack.splice(fwdIdx, 1, ...out)
-      this.pointer = fwdIdx
-      return
+      this.stack.splice(fwdIdx, 1, ...out);
+      this.pointer = fwdIdx;
+      return;
     }
-    const handlerResult = m.sig.handler(args, null, [], this.registry)
+    const handlerResult = m.sig.handler(args, null, [], this.registry);
     if (handlerResult instanceof Promise) {
       throw new BoruError(
-        'unsupported',
+        "unsupported",
         `async handlers are not supported in the TS port`,
         m.funcName,
-      )
+      );
     }
-    const out = handlerResult as Value[]
-    this.stack.splice(fwdIdx, 1, ...out)
-    this.pointer = fwdIdx
+    const out = handlerResult as Value[];
+    this.stack.splice(fwdIdx, 1, ...out);
+    this.pointer = fwdIdx;
   }
 
   /**
@@ -1352,35 +1465,35 @@ export class Engine {
    * aren't ported here).
    */
   private stepMove(val: Value): void {
-    const info: MoveInfo = val.asMove()
-    const moveIdx = this.pointer
+    const info: MoveInfo = val.asMove();
+    const moveIdx = this.pointer;
 
     if (!this.markIds.has(info.to)) {
       // Mark was removed (or never seen). Drop the orphan.
-      this.stack.splice(moveIdx, 1)
-      return
+      this.stack.splice(moveIdx, 1);
+      return;
     }
 
-    let markIdx = -1
+    let markIdx = -1;
     for (let i = 0; i < this.stack.length; i++) {
-      const v = this.stack[i]!
+      const v = this.stack[i]!;
       if (v.isMark() && v.asMark().id === info.to) {
-        markIdx = i
-        break
+        markIdx = i;
+        break;
       }
     }
     if (markIdx < 0) {
-      this.markIds.delete(info.to)
-      this.stack.splice(moveIdx, 1)
-      return
+      this.markIds.delete(info.to);
+      this.stack.splice(moveIdx, 1);
+      return;
     }
 
-    const markInfo = this.stack[markIdx]!.asMark()
-    this.markIds.delete(info.to)
-    const body = [...markInfo.body]
+    const markInfo = this.stack[markIdx]!.asMark();
+    this.markIds.delete(info.to);
+    const body = [...markInfo.body];
     // Replace [Mark .. body .. Move] with the body copy.
-    this.stack.splice(markIdx, moveIdx - markIdx + 1, ...body)
-    this.pointer = markIdx
+    this.stack.splice(markIdx, moveIdx - markIdx + 1, ...body);
+    this.pointer = markIdx;
   }
 
   /**
@@ -1391,8 +1504,8 @@ export class Engine {
    */
   private autoEvalArgs(args: Value[], sig: Signature): void {
     for (let i = 0; i < args.length; i++) {
-      const a = args[i]!
-      if (sig.noEvalArgs?.has(i)) continue
+      const a = args[i]!;
+      if (sig.noEvalArgs?.has(i)) continue;
       // In compile mode, deep-evaluate a map arg through deepEvalData so it
       // records a makeMap and carries provenance (typeof/is over a computed
       // map). Gated on emit; value mode and plain checking are unchanged.
@@ -1406,8 +1519,8 @@ export class Engine {
         // locals, so a baked constraint carrying word(M) could never
         // resolve at run time — the compiled `is` then rejected what
         // the interpreter admitted ({x?:M} with a def'd union M).
-        args[i] = this.deepEvalData(resolveWordsDeep(a, this.registry))
-        continue
+        args[i] = this.deepEvalData(resolveWordsDeep(a, this.registry));
+        continue;
       }
       // A map arg evaluates its VALUES at consumption — the Go
       // autoEvalMap mirror: words resolve through the cascade
@@ -1420,67 +1533,117 @@ export class Engine {
       // gate core/ts evaluated a runtime map's values at consumption, so
       // `boomq {q a: p( nosuchword ) }` raised undefined_word where Go
       // fires the handler on the map as given.
-      if (a.vType.matches(TMap) && a.data instanceof OrderedMap && a.eval && !a.quoted) {
-        args[i] = this.autoEvalMapValues(a)
-        continue
+      if (
+        a.vType.matches(TMap) &&
+        a.data instanceof OrderedMap &&
+        a.eval &&
+        !a.quoted
+      ) {
+        args[i] = this.autoEvalMapValues(a);
+        continue;
       }
-      if (!a.vType.matches(TList)) continue
-      if (!a.eval || a.quoted) continue
-      if (!a.isConcrete()) continue
-      args[i] = this.autoEvalList(a)
+      if (!a.vType.matches(TList)) continue;
+      if (!a.eval || a.quoted) continue;
+      if (!a.isConcrete()) continue;
+      args[i] = this.autoEvalList(a);
     }
+  }
+
+  /**
+   * The two INERT shapes whose names resolve without running anything:
+   * a typed container (its child constraint) and a disjunct (its
+   * alternatives). Returns undefined for every other value, which is
+   * then a program. Mirrors Go's resolveInertTypeShape.
+   *
+   * Go additionally reports whether resolution CHANGED the value, and
+   * falls through to the sub-engine when it did not. The two paths agree
+   * for these shapes — a typed container and a disjunct are both
+   * literals to the step loop, so an unchanged one comes back from the
+   * sub-engine identical — so the flag has no analogue here.
+   */
+  private resolveInertTypeShape(v: Value): Value | undefined {
+    if (v.isTypedList() || v.isTypedMap()) {
+      const ct = v.asChildType();
+      const child = resolveWordsDeep(ct.child, this.registry);
+      return v.isTypedMap()
+        ? newTypedMap(child, ct.entries)
+        : newTypedList(child, ct.elements);
+    }
+    if (v.isDisjunct()) return resolveWordsDeep(v, this.registry);
+    return undefined;
   }
 
   /**
    * Evaluate a consumed map argument's values — the Go autoEvalMap
    * mirror: a ParenExpr value runs in a sub-engine to its single
-   * result, an unquoted eval-list auto-evaluates, words resolve
-   * through the canonical cascade, nested maps recurse.
+   * result, an unquoted eval-list auto-evaluates, nested maps recurse,
+   * an inert type shape resolves its names, and anything else is a
+   * program that runs in a sub-engine.
    */
   private autoEvalMapValues(m: Value): Value {
-    const src = m.asMap()
-    const out = new OrderedMap()
+    const src = m.asMap();
+    const out = new OrderedMap();
     for (const k of src.keys()) {
-      const v = src.get(k)!
+      const v = src.get(k)!;
       if (v.vType.equal(TParenExpr) && !v.quoted && Array.isArray(v.data)) {
-        const sub = new Engine(this.registry)
-        const res = sub.run([...(v.data as Value[])])
-        out.set(k, res.length === 1 ? res[0]! : v)
-        continue
+        const sub = new Engine(this.registry);
+        const res = sub.run([...(v.data as Value[])]);
+        out.set(k, res.length === 1 ? res[0]! : v);
+        continue;
       }
-      if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted && v.isConcrete()) {
-        out.set(k, this.autoEvalList(v))
-        continue
+      if (
+        v.vType.matches(TList) &&
+        Array.isArray(v.data) &&
+        v.eval &&
+        !v.quoted &&
+        v.isConcrete()
+      ) {
+        out.set(k, this.autoEvalList(v));
+        continue;
       }
       // Gated on `eval` like every other container arm. Without it a
       // NESTED runtime map had its values evaluated even though its
       // parent's gate had already said no.
-      if (v.vType.matches(TMap) && v.data instanceof OrderedMap && v.eval && !v.quoted) {
-        out.set(k, this.autoEvalMapValues(v))
-        continue
+      if (
+        v.vType.matches(TMap) &&
+        v.data instanceof OrderedMap &&
+        v.eval &&
+        !v.quoted
+      ) {
+        out.set(k, this.autoEvalMapValues(v));
+        continue;
       }
-      // A bare WORD map value is a PROGRAM: Go's AutoEvalMap runs it in a
-      // sub-engine (a def resolves, a 0-arg fn auto-fires, an unbound
-      // name raises undefined_word). core/ts only ran it through
-      // resolveWordsDeep, which leaves an unresolvable name ALONE — so
-      // `boomq { a: nosuchword }` fired boomq on a map still carrying an
-      // undefined name, where Go reports the name.
-      if (v.isWord()) {
-        const sub = new Engine(this.registry).run([v])
-        if (1 === sub.length) {
-          out.set(k, sub[0]!)
-          continue
-        }
-        // Zero residuals drops the key, as everywhere else.
-        if (0 === sub.length) continue
-        out.set(k, this.buildList(sub))
-        continue
+      // An INERT TYPE SHAPE — a typed container's child constraint, a
+      // disjunct's alternatives — resolves its names and nothing else.
+      // Go's resolveInertTypeShape is this exact pair of cases, and it is
+      // the ONLY place a map value's names resolve.
+      const inert = this.resolveInertTypeShape(v);
+      if (inert !== undefined) {
+        out.set(k, inert);
+        continue;
       }
-      out.set(k, resolveWordsDeep(v, this.registry))
+      // Everything else is a PROGRAM and runs in a sub-engine: a bare
+      // word resolves through a def, a 0-arg fn auto-fires, an unbound
+      // name raises undefined_word, and a DATA list comes back untouched
+      // because a list is a literal there.
+      //
+      // This was resolveWordsDeep, which resolves names EVERYWHERE rather
+      // than only in the two inert shapes. Two defects came out of that:
+      // `{a: nosuchword}` degraded an undefined name to an Atom and fired
+      // the consuming word where Go reports the name, and `{a: [q x]}`
+      // rewrote a data list's words — `[word(x)]` on Go, `[5]` here.
+      const sub = new Engine(this.registry).run([v]);
+      if (1 === sub.length) {
+        out.set(k, sub[0]!);
+        continue;
+      }
+      // Zero residuals drops the key, as everywhere else.
+      if (0 === sub.length) continue;
+      out.set(k, this.buildList(sub));
     }
     // Preserve the map's lattice subtype (an Inspect map must stay
     // Inspect, not demote to plain Map) and flags.
-    return new Value(m.vType, out, { eval: m.eval, quoted: m.quoted })
+    return new Value(m.vType, out, { eval: m.eval, quoted: m.quoted });
   }
 
   /**
@@ -1493,11 +1656,11 @@ export class Engine {
     // In compile mode, evaluate through deepEvalData so a computed list arg
     // records a makeList event and carries provenance (lengthq [1 addq 2]) —
     // otherwise the evaluated list is an opaque value the recorder refuses.
-    if (this.registry.check.emit !== undefined) return this.deepEvalData(list)
-    const elems = list.asList()
-    const sub = new Engine(this.registry)
-    const result = sub.run([...elems])
-    return new Value(list.vType, result, { eval: false, quoted: false })
+    if (this.registry.check.emit !== undefined) return this.deepEvalData(list);
+    const elems = list.asList();
+    const sub = new Engine(this.registry);
+    const result = sub.run([...elems]);
+    return new Value(list.vType, result, { eval: false, quoted: false });
   }
 
   /**
@@ -1511,37 +1674,37 @@ export class Engine {
    * eng/go's evalInterpString.
    */
   private evalInterpString(v: Value): Value {
-    const segs = v.asInterpSegments()
+    const segs = v.asInterpSegments();
     // Bytecode recording: an interpolated EXPRESSION assembles a string from
     // runtime values (valToString), which the recorder does not model and
     // which in check mode would stringify embedded carriers to type names.
     // A SELF-CONTAINED template (no embedded reference to a binding) compiles
     // as a single-value island — re-evaluate the token verbatim at run time;
     // one capturing a binding refuses (the binding isn't live in the island).
-    const emit = this.registry.check.emit
-    if (emit !== undefined && segs.some((s) => !('lit' in s))) {
+    const emit = this.registry.check.emit;
+    if (emit !== undefined && segs.some((s) => !("lit" in s))) {
       // Substitute each const-bound capture inline (def x 5 -> the 5), keep
       // natives/keywords as-is, then island the SELF-CONTAINED result so it
       // re-runs faithfully. A computed (non-const) capture can't be baked in,
       // so it refuses.
-      const subbed = this.substituteInterp(segs)
+      const subbed = this.substituteInterp(segs);
       if (subbed !== null) {
-        const out = newCarrier(TString)
-        emit.recordValueIsland(newInterpString(subbed), out, 'interp')
-        return out
+        const out = newCarrier(TString);
+        emit.recordValueIsland(newInterpString(subbed), out, "interp");
+        return out;
       }
-      emit.markUncompilable('interpolated string: unsubstitutable capture')
+      emit.markUncompilable("interpolated string: unsubstitutable capture");
     }
-    let out = ''
+    let out = "";
     for (const seg of segs) {
-      if ('lit' in seg) {
-        out += seg.lit
+      if ("lit" in seg) {
+        out += seg.lit;
       } else {
-        const residual = new Engine(this.registry).run([...seg.expr])
-        out += residual.map((r) => valToString(r)).join('')
+        const residual = new Engine(this.registry).run([...seg.expr]);
+        out += residual.map((r) => valToString(r)).join("");
       }
     }
-    return newString(out)
+    return newString(out);
   }
 
   /**
@@ -1556,79 +1719,82 @@ export class Engine {
    * re-runs faithfully as an island). Walks attribute segments and child
    * expressions; a bare word resolving to a def-stack binding is a capture.
    */
-  private xmlCaptureFree(t: import('./value.ts').XmlTmpl): boolean {
+  private xmlCaptureFree(t: import("./value.ts").XmlTmpl): boolean {
     const walk = (toks: readonly unknown[]): boolean => {
       for (const x of toks) {
-        if (!(x instanceof Value)) continue
+        if (!(x instanceof Value)) continue;
         if (x.isWord()) {
-          if (this.registry.topOfDefStack(x.asWord().name) !== undefined) return false
+          if (this.registry.topOfDefStack(x.asWord().name) !== undefined)
+            return false;
         } else if (x.isInterpString()) {
-          for (const s of x.asInterpSegments()) if (!('lit' in s) && !walk(s.expr)) return false
+          for (const s of x.asInterpSegments())
+            if (!("lit" in s) && !walk(s.expr)) return false;
         } else if (x.isXmlInterp()) {
-          if (!this.xmlCaptureFree(x.asXmlTmpl())) return false
+          if (!this.xmlCaptureFree(x.asXmlTmpl())) return false;
         } else if (Array.isArray(x.data)) {
-          if (!walk(x.data)) return false
+          if (!walk(x.data)) return false;
         }
       }
-      return true
-    }
-    for (const a of t.attrs) for (const s of a.segs) if (!('lit' in s) && !walk(s.expr)) return false
+      return true;
+    };
+    for (const a of t.attrs)
+      for (const s of a.segs) if (!("lit" in s) && !walk(s.expr)) return false;
     for (const c of t.children) {
-      if ('expr' in c && !walk(c.expr)) return false
-      if ('elem' in c && !this.xmlCaptureFree(c.elem)) return false
+      if ("expr" in c && !walk(c.expr)) return false;
+      if ("elem" in c && !this.xmlCaptureFree(c.elem)) return false;
     }
-    return true
+    return true;
   }
 
   private substituteInterp(
-    segs: readonly import('./value.ts').InterpSegment[],
-  ): import('./value.ts').InterpSegment[] | null {
-    const emit = this.registry.check.emit!
+    segs: readonly import("./value.ts").InterpSegment[],
+  ): import("./value.ts").InterpSegment[] | null {
+    const emit = this.registry.check.emit!;
     // subTok rewrites one token to the span that reproduces it inside the
     // island (usually length 1). A captured binding becomes its const value,
     // or — when it was produced by a 0-input token island (`def x quote [..]`)
     // — the producer's own token span, re-run inline. null = unbakeable.
     const subTok = (t: unknown): Value[] | null => {
-      if (!(t instanceof Value)) return null
+      if (!(t instanceof Value)) return null;
       if (t.isWord()) {
-        const top = this.registry.topOfDefStack(t.asWord().name)
-        if (top === undefined) return [t] // native / keyword — re-dispatches in the island
-        const constVal = emit.constValueOf(emit.classify(top))
-        if (constVal !== null) return [constVal] // const-bound → bake
-        const isl = emit.islandTokensFor(top) // islanded binding → inline its producer
-        return isl !== null ? [...isl] : null
+        const top = this.registry.topOfDefStack(t.asWord().name);
+        if (top === undefined) return [t]; // native / keyword — re-dispatches in the island
+        const constVal = emit.constValueOf(emit.classify(top));
+        if (constVal !== null) return [constVal]; // const-bound → bake
+        const isl = emit.islandTokensFor(top); // islanded binding → inline its producer
+        return isl !== null ? [...isl] : null;
       }
       if (t.isInterpString()) {
-        const sub = this.substituteInterp(t.asInterpSegments())
-        return sub === null ? null : [newInterpString(sub)]
+        const sub = this.substituteInterp(t.asInterpSegments());
+        return sub === null ? null : [newInterpString(sub)];
       }
-      if (t.isXmlInterp()) return null // nested xml not islanded here
+      if (t.isXmlInterp()) return null; // nested xml not islanded here
       if (Array.isArray(t.data)) {
-        const elems: Value[] = []
+        const elems: Value[] = [];
         for (const e of t.data as unknown[]) {
-          const s = subTok(e)
-          if (s === null || s.length !== 1) return null // list element must map 1:1
-          elems.push(s[0]!)
+          const s = subTok(e);
+          if (s === null || s.length !== 1) return null; // list element must map 1:1
+          elems.push(s[0]!);
         }
-        return [new Value(t.vType, elems, { eval: t.eval, quoted: t.quoted })]
+        return [new Value(t.vType, elems, { eval: t.eval, quoted: t.quoted })];
       }
-      return [t]
-    }
-    const out: import('./value.ts').InterpSegment[] = []
+      return [t];
+    };
+    const out: import("./value.ts").InterpSegment[] = [];
     for (const s of segs) {
-      if ('lit' in s) {
-        out.push(s)
-        continue
+      if ("lit" in s) {
+        out.push(s);
+        continue;
       }
-      const expr: Value[] = []
+      const expr: Value[] = [];
       for (const t of s.expr) {
-        const st = subTok(t)
-        if (st === null) return null
-        expr.push(...st)
+        const st = subTok(t);
+        if (st === null) return null;
+        expr.push(...st);
       }
-      out.push({ expr })
+      out.push({ expr });
     }
-    return out
+    return out;
   }
 
   /**
@@ -1636,36 +1802,40 @@ export class Engine {
    * concatenate to strings; a child hole evaluates and contributes a
    * string (scalar), a child element (Xml), or spliced children (list).
    */
-  private resolveXmlTmpl(t: import('./value.ts').XmlTmpl): import('./value.ts').XmlElement {
+  private resolveXmlTmpl(
+    t: import("./value.ts").XmlTmpl,
+  ): import("./value.ts").XmlElement {
     // The recorder does not model runtime XML assembly — refuse so a program
     // containing an XML template falls back to the interpreter.
-    this.registry.check.emit?.markUncompilable('xml template not compilable')
-    const evalSegs = (segs: import('./value.ts').InterpSegment[]): string =>
+    this.registry.check.emit?.markUncompilable("xml template not compilable");
+    const evalSegs = (segs: import("./value.ts").InterpSegment[]): string =>
       segs
         .map((seg) =>
-          'lit' in seg
+          "lit" in seg
             ? seg.lit
             : new Engine(this.registry)
                 .run([...seg.expr])
                 .map((r) => valToString(r))
-                .join(''),
+                .join(""),
         )
-        .join('')
-    const children: (string | import('./value.ts').XmlElement)[] = []
+        .join("");
+    const children: (string | import("./value.ts").XmlElement)[] = [];
     for (const c of t.children) {
-      if ('lit' in c) {
-        children.push(c.lit)
-      } else if ('elem' in c) {
-        children.push(this.resolveXmlTmpl(c.elem))
+      if ("lit" in c) {
+        children.push(c.lit);
+      } else if ("elem" in c) {
+        children.push(this.resolveXmlTmpl(c.elem));
       } else {
         for (const r of new Engine(this.registry).run([...c.expr])) {
-          if (r.isXml()) children.push(r.data as import('./value.ts').XmlElement)
+          if (r.isXml())
+            children.push(r.data as import("./value.ts").XmlElement);
           else if (Array.isArray(r.data)) {
             for (const e of r.asList()) {
-              if (e.isXml()) children.push(e.data as import('./value.ts').XmlElement)
-              else children.push(valToString(e))
+              if (e.isXml())
+                children.push(e.data as import("./value.ts").XmlElement);
+              else children.push(valToString(e));
             }
-          } else children.push(valToString(r))
+          } else children.push(valToString(r));
         }
       }
     }
@@ -1673,12 +1843,12 @@ export class Engine {
       tag: t.tag,
       attrs: t.attrs.map((a) => ({ name: a.name, value: evalSegs(a.segs) })),
       children,
-    }
+    };
   }
 
   private autoEvalStack(): void {
     for (let i = 0; i < this.stack.length; i++) {
-      this.stack[i] = this.deepEvalData(this.stack[i]!)
+      this.stack[i] = this.deepEvalData(this.stack[i]!);
     }
   }
 
@@ -1699,25 +1869,37 @@ export class Engine {
     // as a non-eval map rendered `{a:[3]}` against Go's
     // `{a:[word(addq) 1 2]}`, and `{ a: [ boomq 1 ] }` RAISED in TS where
     // Go returned the map untouched. Pinned by core/spec/data.tsv.
-    if (v.data instanceof OrderedMap && v.vType.equal(TMap) && v.eval && !v.quoted) {
+    if (
+      v.data instanceof OrderedMap &&
+      v.vType.equal(TMap) &&
+      v.eval &&
+      !v.quoted
+    ) {
       // A value that evaluated to NOTHING drops its key — see
       // evalMapValue. Keys and values are filtered together so buildMap
       // still sees two aligned arrays.
-      const keys: string[] = []
-      const vals: Value[] = []
+      const keys: string[] = [];
+      const vals: Value[] = [];
       for (const k of v.asMap().keys()) {
-        const ev = this.evalMapValue(v.asMap().get(k)!)
-        if (undefined === ev) continue
-        keys.push(k)
-        vals.push(ev)
+        const ev = this.evalMapValue(v.asMap().get(k)!);
+        if (undefined === ev) continue;
+        keys.push(k);
+        vals.push(ev);
       }
-      return this.buildMap(keys, vals)
+      return this.buildMap(keys, vals);
     }
-    if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
-      const sub = new Engine(this.registry).run([...v.asList()]).map((e) => this.deepEvalData(e))
-      return this.buildList(sub)
+    if (
+      v.vType.matches(TList) &&
+      Array.isArray(v.data) &&
+      v.eval &&
+      !v.quoted
+    ) {
+      const sub = new Engine(this.registry)
+        .run([...v.asList()])
+        .map((e) => this.deepEvalData(e));
+      return this.buildList(sub);
     }
-    return v
+    return v;
   }
 
   /**
@@ -1728,16 +1910,16 @@ export class Engine {
    * back (markUncompilable) if an element has no operand provenance.
    */
   private buildList(elems: Value[]): Value {
-    const emit = this.registry.check.emit
+    const emit = this.registry.check.emit;
     if (emit !== undefined) {
-      const ops: RecorderOperand[] = []
+      const ops: RecorderOperand[] = [];
       for (const e of elems) {
-        const o = emit.classify(e)
+        const o = emit.classify(e);
         if (o === null) {
-          emit.markUncompilable('makeList: element of unknown provenance')
-          return newList(elems, { eval: false })
+          emit.markUncompilable("makeList: element of unknown provenance");
+          return newList(elems, { eval: false });
         }
-        ops.push(o)
+        ops.push(o);
       }
       // Const-fold a fully-inert DATA/TYPE list: bake the concrete value as one
       // const rather than assembling it via OpMakeList. This keeps the value's
@@ -1746,58 +1928,65 @@ export class Engine {
       // const-folded computed containers. A list bearing a fn-value member keeps
       // the makeList path (a baked fn-value member dispatches dynamically when
       // the container is later consumed).
-      const listConsts = ops.map((o) => emit.constValueOf(o))
-      if (listConsts.every((c) => c !== null) && !elems.some((e) => this.containsFnDef(e))) {
-        return newList(listConsts as Value[], { eval: false })
+      const listConsts = ops.map((o) => emit.constValueOf(o));
+      if (
+        listConsts.every((c) => c !== null) &&
+        !elems.some((e) => this.containsFnDef(e))
+      ) {
+        return newList(listConsts as Value[], { eval: false });
       }
-      return emit.recordMakeList(ops)
+      return emit.recordMakeList(ops);
     }
-    return newList(elems, { eval: false })
+    return newList(elems, { eval: false });
   }
 
   /** Build a computed map; records a makeMap event in compile mode (see buildList). */
   private buildMap(keys: string[], vals: Value[]): Value {
-    const emit = this.registry.check.emit
+    const emit = this.registry.check.emit;
     if (emit !== undefined) {
-      const ops: RecorderOperand[] = []
+      const ops: RecorderOperand[] = [];
       for (const e of vals) {
-        const o = emit.classify(e)
+        const o = emit.classify(e);
         if (o === null) {
-          emit.markUncompilable('makeMap: value of unknown provenance')
-          return this.rawMap(keys, vals)
+          emit.markUncompilable("makeMap: value of unknown provenance");
+          return this.rawMap(keys, vals);
         }
-        ops.push(o)
+        ops.push(o);
       }
       // Const-fold a fully-inert DATA/TYPE map (see buildList): bake the
       // concrete map so a consumer that reads its structure (`inspect` of a
       // def-bound record type) keeps a live value rather than a carrier. A map
       // bearing a fn-value keeps the makeMap path.
-      const mapConsts = ops.map((o) => emit.constValueOf(o))
-      if (mapConsts.every((c) => c !== null) && !vals.some((v) => this.containsFnDef(v))) {
-        return this.rawMap(keys, mapConsts as Value[])
+      const mapConsts = ops.map((o) => emit.constValueOf(o));
+      if (
+        mapConsts.every((c) => c !== null) &&
+        !vals.some((v) => this.containsFnDef(v))
+      ) {
+        return this.rawMap(keys, mapConsts as Value[]);
       }
-      return emit.recordMakeMap([...keys], ops)
+      return emit.recordMakeMap([...keys], ops);
     }
-    return this.rawMap(keys, vals)
+    return this.rawMap(keys, vals);
   }
 
   /** Whether `v` is, or (recursively) contains, a fn-value member. Such a
    *  container must not be const-folded: a baked fn-value dispatches
    *  dynamically when the container is later consumed (typeof/is/length). */
   private containsFnDef(v: Value): boolean {
-    if (v.isFnDef()) return true
-    if (Array.isArray(v.data)) return (v.data as Value[]).some((e) => this.containsFnDef(e))
+    if (v.isFnDef()) return true;
+    if (Array.isArray(v.data))
+      return (v.data as Value[]).some((e) => this.containsFnDef(e));
     if (v.isMap() && v.data instanceof OrderedMap) {
-      const m = v.asMap()
-      return m.keys().some((k) => this.containsFnDef(m.get(k)!))
+      const m = v.asMap();
+      return m.keys().some((k) => this.containsFnDef(m.get(k)!));
     }
-    return false
+    return false;
   }
 
   private rawMap(keys: string[], vals: Value[]): Value {
-    const out = new OrderedMap()
-    keys.forEach((k, i) => out.set(k, vals[i]!))
-    return newMap(out)
+    const out = new OrderedMap();
+    keys.forEach((k, i) => out.set(k, vals[i]!));
+    return newMap(out);
   }
 
   /**
@@ -1807,48 +1996,61 @@ export class Engine {
    * else passes through.
    */
   private evalMapValue(v: Value): Value | undefined {
-    if (v.data instanceof OrderedMap && v.vType.equal(TMap)) return this.deepEvalData(v)
+    if (v.data instanceof OrderedMap && v.vType.equal(TMap))
+      return this.deepEvalData(v);
     // An eval-list value evaluates to a LIST of its residuals (no
     // collapse). A paren-expr or a bare word collapses to a single
     // residual (a def resolves; an fn auto-calls).
-    if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
-      const sub = new Engine(this.registry).run([...v.asList()]).map((e) => this.deepEvalData(e))
-      return this.buildList(sub)
+    if (
+      v.vType.matches(TList) &&
+      Array.isArray(v.data) &&
+      v.eval &&
+      !v.quoted
+    ) {
+      const sub = new Engine(this.registry)
+        .run([...v.asList()])
+        .map((e) => this.deepEvalData(e));
+      return this.buildList(sub);
     }
-    let program: Value[] | null = null
-    if (v.isParenExpr()) program = v.data as Value[]
+    let program: Value[] | null = null;
+    if (v.isParenExpr()) program = v.data as Value[];
     // A bare MARKER is a program too, and running it is what drops the
     // key: an End alone leaves no residual, so `{ a: ; }` is `{}`. Go
     // reaches this through AutoEvalMap's general sub-engine tail; core/ts
     // enumerated only paren-exprs and words, so the marker fell through
     // and was stored as DATA, rendering `{a:end}`.
-    else if (v.isWord() || isEnd(v) || isOpenParen(v) || isCloseParen(v)) program = [v]
-    if (program === null) return v
-    const sub = new Engine(this.registry).run([...program]).map((e) => this.deepEvalData(e))
-    if (sub.length === 1) return sub[0]!
+    else if (v.isWord() || isEnd(v) || isOpenParen(v) || isCloseParen(v))
+      program = [v];
+    if (program === null) return v;
+    const sub = new Engine(this.registry)
+      .run([...program])
+      .map((e) => this.deepEvalData(e));
+    if (sub.length === 1) return sub[0]!;
     // ZERO residuals DROPS the key. Go's AutoEvalMap sets the key only in
     // its `len == 1` and `len > 1` arms, so `{a: ()}` yields `{}` there;
     // this port built an empty list and kept the key, giving `{a:[]}`.
     // Pinned by core/spec/data.tsv.
-    if (0 === sub.length) return undefined
-    return this.buildList(sub)
+    if (0 === sub.length) return undefined;
+    return this.buildList(sub);
   }
 
   private describeStack(): string {
     return this.stack
-      .map((v, i) => (i === this.pointer ? `>>>${v.toString()}<<<` : v.toString()))
-      .join(' ')
+      .map((v, i) =>
+        i === this.pointer ? `>>>${v.toString()}<<<` : v.toString(),
+      )
+      .join(" ");
   }
 }
 
-function describeExpected(fn: import('./registry.js').FunctionEntry): string {
+function describeExpected(fn: import("./registry.js").FunctionEntry): string {
   // Pick the first non-fallback signature for the error message.
-  const sig = fn.signatures.find((s) => !s.fallback)
-  if (!sig) return ''
-  return sig.args.map((t) => t.toString()).join(', ')
+  const sig = fn.signatures.find((s) => !s.fallback);
+  if (!sig) return "";
+  return sig.args.map((t) => t.toString()).join(", ");
 }
 
 // Suppress "imported but unused" in stricter setups where these are
 // referenced only in match.ts. They're re-exported here for users
 // that want a single import point.
-export { TBoolean, TInteger, TString, TWord, Value }
+export { TBoolean, TInteger, TString, TWord, Value };

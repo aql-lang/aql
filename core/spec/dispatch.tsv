@@ -362,3 +362,19 @@ run 5 tpatq	5	the stack operand matches the pattern's type
 run 'x' tpatq	ERROR:signature_error	one of another type does not
 run tpatq	ERROR:signature_error	and an empty stack has nothing to match
 run def x 5 ; x tpatq	5	a def-bound operand is matched by its value's type
+
+# A map ARGUMENT's values are evaluated at consumption, and each value is
+# a PROGRAM unless it is one of the two inert type shapes. So a map value
+# that cannot run faults from inside the map, before the consuming word
+# ever sees an argument.
+run boomq { a: ) }	ERROR:syntax_error	the value faults, so boomq never fires
+run boomq { a: { b: ) } }	ERROR:syntax_error	and a nested map's value the same way
+run dupq { a: [ addq 1 2 ] }	{a:[3]} {a:[3]}	an eval list runs to its residuals
+run dupq { a: { b: [ addq 1 2 ] } }	{a:{b:[3]}} {a:{b:[3]}}	nested maps recurse
+run dupq { a: true }	{a:true} {a:true}	a keyword resolves
+run def x 5 ; dupq { a: x }	{a:5} {a:5}	and so does a def-bound name
+run dupq { a: nosuchword }	ERROR:undefined_word	while an unbound one is reported, not degraded
+run dupq { a: __pa }	{} {}	a value with no residual drops its key
+run dupq { a: [q addq 1 2 ] }	{a:[word(addq) 1 2]} {a:[word(addq) 1 2]}	a DATA list is a literal — its words are left alone
+run def x 5 ; dupq { a: [q x ] }	{a:[word(x)]} {a:[word(x)]}	even when the name is bound
+run dupq { a: [q nosuchword ] }	{a:[word(nosuchword)]} {a:[word(nosuchword)]}	and when it is not

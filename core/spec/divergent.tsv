@@ -29,17 +29,6 @@
 
 run [q ( ) ]	[ )]	[( )]	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
 
-# --- SEVERITY 2: the strict forward barrier ---------------------------------
-# REFERENCE.md:364 lists "another function word" as a forward-collection
-# barrier, and design/STRICT-FORWARD-BARRIER.0.md makes it uniform: a parked
-# forward that cannot commit with the args it already holds is STRANDED, a
-# signature_error, not a wait-through. core/ts has no such rule, so at an Any
-# slot it waits through the inner dispatch and the outer word FIRES. The
-# paren-grouped spelling `boomq ( negq 5 )` agrees on both engines, which is
-# exactly the distinction the rule exists to make observable.
-run boomq { a: ) }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq { a: { b: ) } }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-
 # --- a type-mismatched paren operand: which error ---------------------------
 # Both refuse; they disagree about the code. Go reports signature_error (the
 # operand does not fit the slot); core/ts reports no_value_error (it treats
