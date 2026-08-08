@@ -304,3 +304,44 @@ run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 'x'	ERROR:signature_error
 run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc	ERROR:signature_error	and so is arity
 run def inc fn( n Integer Integer [ addq n 1 ] ) ; addq inc 5 1	ERROR:signature_error	a fn word is a barrier like any other
 run def bad fn( n Integer Integer [ nosuchword ] ) ; bad 1	ERROR:undefined_word	a fault in the BODY surfaces from the body
+# The word LITERALS the engine resolves before any registry lookup:
+# `true`/`false`/`none`/`null` are spelled as words in the value stream,
+# not as literal values, so a bare word is what reaches the step loop.
+run true	true	the word resolves to the Boolean
+run false	false	and so does its negation
+run none	none	`none` is the absent value, not an error
+run null	null/q	and `null` is the atom, which canon renders quoted
+
+# A word at a gradual (Any) slot DEFERS: the engine parks a forward
+# marker over the pending word rather than passing the word itself,
+# so the slot is filled by what the word RESOLVES to. Every row here
+# is a word that resolves without dispatching — a literal keyword, a
+# type name, or a def-bound value — which is the only shape the strict
+# forward barrier lets follow a parked marker.
+run dupq true	true true	a keyword resolves, then the marker collects it
+run dupq none	none none	the same for the absent value
+run dupq null	null/q null/q	and for the atom
+run dupq Integer	Integer Integer	a type name resolves to a type literal
+run def x 5 ; dupq x	5 5	a def-bound value resolves to the value
+run boomq true	ERROR:fixture_boom	the deferred slot still reaches the handler
+run def x 5 ; addq x 1	6	a def-bound operand fills a concrete slot too
+run def x 5 ; sumq x 1	ERROR:signature_error	but the stack form still needs its operand below
+run addq 1 2 ;	3	a trailing `end` after a complete call is dropped
+run addq 1 ;	ERROR:signature_error	and before a complete one it fails the dispatch
+
+# `/q` (QuoteArgs) word capture is CONDITIONAL on the slot type, not
+# unconditional. The coercion fires only when the raw Word does NOT
+# already fill the slot: an Atom-typed slot takes the Word→Atom
+# conversion (`undef`, and every shipped word that captures a name),
+# while an Any-typed one is already filled by the Word itself, so the
+# handler receives a live Word that re-enters the tape and dispatches.
+# `undef` (Atom) and `qanyq` (Any) are the two halves.
+run def x 5 ; undef x		the Atom name is captured, so the binding pops
+run def x 5 ; undef x x	ERROR:undefined_word	and the name really is gone afterwards
+run def x 5 ; undef y		unbinding a name that was never bound is a no-op
+run undef x		with nothing bound at all, likewise
+run def x 5 ; qanyq x	5	an Any slot captures the WORD, which then resolves
+run qanyq x	ERROR:undefined_word	so an unbound name still faults on re-entry
+run def x 5 ; qanyq y	ERROR:undefined_word	the captured name is the one written
+run def x 'a' ; qanyq x	'a'	whatever it is bound to
+run qanyq 7	7	a non-word operand is passed through unchanged

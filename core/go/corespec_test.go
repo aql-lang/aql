@@ -366,14 +366,38 @@ func coreSpecRegistry(t *testing.T) *Registry {
 	// the frame tail emits — one per named param, `/q`-marked so the NAME
 	// is captured rather than dispatched — over a mechanism core already
 	// owns (DefTable.Pop).
+	//
+	// The name slot is TAtom, as basic/go's own `undef` declares it
+	// (native_definition.go). That is not decoration: /q capture is
+	// CONDITIONAL on the slot, and an Any-typed one collects the raw Word
+	// instead of an Atom (measured — see core/spec/dispatch.tsv's /q
+	// block). A fixture that took Any would be testing a shape no shipped
+	// word has, and its handler would need a name-or-word polymorphism the
+	// real one does not.
 	r.Register("undef", Signature{
-		Params:  []FnParam{{Name: "n", Type: TAny, Quote: true}},
+		Params:  []FnParam{{Name: "n", Type: TAtom, Quote: true}},
 		Returns: []*Type{},
 		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-			if n, err := AsAtom(a[0]); err == nil {
-				reg.Defs.Pop(n)
+			n, err := AsAtom(a[0])
+			if err != nil {
+				return nil, err
 			}
+			reg.Defs.Pop(n)
 			return nil, nil
+		}),
+		BarrierPos: 1,
+	})
+	// qanyq is the /q fixture whose name slot is ANY rather than Atom, and
+	// it RETURNS what it captured, so a row can read the capture back. The
+	// pair (undef's Atom slot, this Any one) is what pins /q's conditional
+	// coercion: an Atom slot takes the Word→Atom conversion and an Any slot
+	// — which the raw Word already fills — does not, so the handler is
+	// handed a live Word that re-enters the tape and dispatches.
+	r.Register("qanyq", Signature{
+		Params:  []FnParam{{Name: "n", Type: TAny, Quote: true}},
+		Returns: []*Type{TAny},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{a[0]}, nil
 		}),
 		BarrierPos: 1,
 	})

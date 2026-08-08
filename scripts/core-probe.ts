@@ -35,6 +35,7 @@ import {
   OrderedMap,
   Registry,
   returnsIdentity,
+  TAtom,
   TAny,
   TBoolean,
   TInteger,
@@ -246,11 +247,16 @@ function fixtureRegistry(): Registry {
       },
     ],
   })
+  // undef's name slot is TAtom, as basic/go's own `undef` declares it:
+  // /q capture is CONDITIONAL on the slot type, so an Any-typed one would
+  // collect the raw Word rather than the Atom name (see the /q block in
+  // core/spec/dispatch.tsv). Declared independently of the Go runner's
+  // copy, per the two-runner rule.
   r.registerNativeFunc({
     name: 'undef',
     signatures: [
       {
-        args: [TAny],
+        args: [TAtom],
         returns: [],
         quoteArgs: new Set([0]),
         barrierPos: 1,
@@ -258,6 +264,21 @@ function fixtureRegistry(): Registry {
           reg.popDef(a[0]!.asAtom())
           return []
         },
+      },
+    ],
+  })
+  // qanyq is the /q fixture whose name slot is ANY rather than Atom, and it
+  // RETURNS what it captured so a row can read the capture back. Paired
+  // with undef's Atom slot it pins /q's CONDITIONAL coercion.
+  r.registerNativeFunc({
+    name: 'qanyq',
+    signatures: [
+      {
+        args: [TAny],
+        returns: [TAny],
+        quoteArgs: new Set([0]),
+        barrierPos: 1,
+        handler: (a: Value[]): Value[] => [a[0]!],
       },
     ],
   })

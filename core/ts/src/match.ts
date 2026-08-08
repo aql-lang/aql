@@ -25,7 +25,7 @@
 
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { TNode, TScalar, TType, TWord , typeNameTable } from './type.ts'
+import { TAtom, TNode, TScalar, TType, TWord , typeNameTable } from './type.ts'
 import { isSugar, newAtom, newBoolean, newNone, newTypeLiteral, type Value, type WordInfo } from './value.ts'
 
 /**
@@ -217,8 +217,26 @@ function tryMatch(
     // A quoteArgs slot captures the raw forward Word as an Atom name.
     // A word carrying a container type constraint (`def NAME:[…]`) is
     // kept intact so the constraint survives to the handler.
+    //
+    // The coercion is CONDITIONAL, exactly as Go's is. Go decides it at
+    // collection time (core/go/engine.go's `!matches && QuoteArgs[…] &&
+    // val.Parent.Equal(TWord) && TAtom.ConformsTo(SigArgType(…))`), so a
+    // slot the raw Word ALREADY fills — a gradual `Any` one — receives
+    // the Word itself and never an Atom; and a slot Atom cannot fill at
+    // all (`String`, `Integer`, even `Word`) is not a /q capture site,
+    // so the scan stops rather than matching. Measured against core/go:
+    // `Any` → the Word (which then re-executes, resolving a def-bound
+    // name), `Atom`/`Scalar` → the Atom, `Word`/`String`/`Integer` →
+    // signature_error. Coercing unconditionally — what this port did —
+    // turned the `Any` case into an inert Atom and silently changed what
+    // a /q handler receives.
     if (sig.quoteArgs?.has(fwd) && rawTok.isWord()) {
-      args[fwd] = rawTok.asWord().constraint !== undefined ? rawTok : newAtom(rawTok.asWord().name)
+      const expected = sig.args[fwd]!
+      if (!TAtom.matches(expected)) break
+      args[fwd] =
+        rawTok.asWord().constraint !== undefined || argMatches(sig, fwd, rawTok, expected)
+          ? rawTok
+          : newAtom(rawTok.asWord().name)
       fwd++
       scanIdx++
       continue
