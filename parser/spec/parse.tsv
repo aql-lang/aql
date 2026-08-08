@@ -610,3 +610,65 @@ Map<Integer	ERR [boru/syntax_error]: unclosed angle bracket: Map<… has no matc
 <a b=${ { } }/>	interp-xml(<a b="${{}}"/>)
 `${}`	ERR [boru/syntax_error]: unexpected ``` — nothing valid can appear here
 `${1}`	interp(${1})
+
+# --- pair keys that are not plain unquoted words --------------------------
+# A quoted member key keeps its string-ness through the dotchain; an EMPTY
+# key (`{'': 1}`) makes every key-recording BC bail before touching the
+# map's Meta; a numeric or computed key reaches the pair-open token by Src
+# rather than Val. `{[a]?: 1}` is REJECTED — computed and optional do not
+# compose.
+a.'b c'	a.'b c'
+a."b c"	a.'b c'
+{1?: 2}	{1:(None tor Absent tor 2)}
+{'': 1}	{:1}
+{''?: 1}	{:1}
+{[a]: 1}	{a:1}
+{[a]?: 1}	ERR [boru/syntax_error]: unexpected `?` — nothing valid can appear here
+{[1]: 2}	{1:2}
+[a?: 1 b: 2]	[{a:(1 tor None tor Absent)} {b:2}]
+[1?: 2]	[{1:(2 tor None tor Absent)}]
+{1: 2 3: 4}	{1:2 3:4}
+{a: 1 'b': 2}	{a:1 b:2}
+
+# --- the arrow fold, and the three positions that decline it --------------
+# `SIG => BODY` folds to `(SIG afn BODY)` in paren contents, plain list
+# elems, and fold bodies. It must NOT fold after a flat dot-chain — the
+# fold would capture only the final key as the sig — nor in a MAP-pair
+# value, where the sig is the whole pair; a list PAIR folds at the elem
+# level instead, which is why `[a: b => [b]]` groups the pair and
+# `{a: b => [b]}` is a syntax error.
+(m.k => [1])	paren([m.(k sugar(lambda) [1])])
+m.k => [1]	m.(k sugar(lambda) [1])
+(a k => [k])	paren([word(a) paren([word(k) sugar(lambda) [word(k)]])])
+[a b => [b]]	[word(a) paren([word(b) sugar(lambda) [word(b)]])]
+[a: b => [b]]	[paren([{a:word(b)} sugar(lambda) [word(b)]])]
+{a: b => [b]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here
+`${a => [1]}`	interp(${word(a) sugar(lambda) [1]})
+
+# --- dot chains in MAP-VALUE position ------------------------------------
+# Only this position runs the `dotchain` rule: everywhere else a flat
+# `a.b` is folded by convertTopLevelItems instead, so these rows are the
+# only ones that reach the rule's segment actions, its `!` strict marker,
+# and its quoted-key branch. `{n: bf.}` and `{n: bf!}` pin that a chain
+# must not end on a marker.
+{n: bf.a.b}	{n:paren([(bf.a).b])}
+{n: bf.'a b'}	{n:paren([bf.'a b'])}
+{n: bf."a b"}	{n:paren([bf.'a b'])}
+{n: bf!.a}	{n:paren([(bf !).a])}
+{n: bf!.'a b'}	{n:paren([(bf !).'a b'])}
+{n: bf.a!.b}	{n:paren([((bf.a) !).b])}
+{n: bf.}	ERR [boru/syntax_error]: unexpected `.` — nothing valid can appear here
+{n: bf!}	ERR [boru/syntax_error]: unexpected `!` — nothing valid can appear here
+
+# --- list-elem folds and angle groups in nested positions ----------------
+# `(Map)<Integer>` and `Map<Integer><String>` pin that the angle gate reads
+# the immediately preceding BARE name only — a parenthesised or already
+# angled receiver leaves the `<` to the XML rule.
+[a: 1 b: 2]	[{a:1} {b:2}]
+[a: b => [b] c: 2]	[paren([{a:word(b)} sugar(lambda) [word(b)]]) {c:2}]
+`${}${1}`	ERR [boru/syntax_error]: unexpected `${` — nothing valid can appear here
+`x${1}${2}y`	interp('x' ${1} ${2} 'y')
+(Map)<Integer>	ERR xml: unterminated element <Integer>
+[Map<Integer>]	[sugar(angle Map [word(Integer)])]
+{a: Map<Integer>}	{a:sugar(angle Map [word(Integer)])}
+Map<Integer><String>	ERR xml: unterminated element <String>

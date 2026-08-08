@@ -1430,7 +1430,7 @@ interface WordMod {
 // the argCount digits form a single number. When the token has no `/` or a
 // malformed modifier suffix, valid is false, base is the whole text, and
 // every flag is at its zero value (argCount -1).
-function scanWordModifier(text: string): WordMod {
+export function scanWordModifier(text: string): WordMod {
   const invalid = (): WordMod => ({
     base: text,
     argCount: -1,
