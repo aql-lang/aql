@@ -261,3 +261,33 @@ a.0	a.0
 (	ERR [boru/syntax_error]: unmatched opening parenthesis
 1 tor 2	1 word(tor) 2
 Integer tor String	word(Integer) word(tor) word(String)
+
+# --- arbitrary-precision `0d…` literals (REFERENCE.md) -------------------
+# Rendered by the PARSEABLE form, sign before the marker: -0d789, never
+# 0d-789. These eight were divergent.tsv rows until core/ts grew the
+# BigInteger / BigDecimal render arms it was missing entirely (both fell
+# through to String(data), so a BigInteger was indistinguishable from an
+# Integer and the render no longer parsed back as the same value).
+0d123	0d123
+0D45_6	0d456
+-0d789	-0d789
+0d1_2.3	0d12.3
+0d1e2	0d100
+0d1.5e2	0d150
+0d1_2e1_0	0d120000000000
+0d99999999999999999999	0d99999999999999999999
+0d1e25	0d10000000000000000000000000	plain form at every magnitude — never scientific, unlike a Float
+
+# --- numeric-literal REFUSALS (behavioural, not cosmetic) -----------------
+# A literal that overflows binary64 is rejected rather than folded to inf:
+# `1e400` evaluating to inf in one engine and refusing in the other is a
+# disagreement about what the language ACCEPTS. Likewise the misplaced-
+# separator message, which differed only because the two jsonic ports
+# disagree about whether `1_` lexes as a number token at all.
+1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_
+1e400	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
+-1e400	ERR [boru/float_overflow]: floating-point literal out of range: -1e400 overflows to infinity
+1__0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0	a repeated separator is misplaced too
+_1	word(_1)	not digit-led, so an ordinary word — the separator rule is numeric-only
+1e308	1e+308	the largest exponent that still fits binary64
+1.7e308	1.7e+308	just under the Float ceiling — accepted, unlike 1e400

@@ -141,6 +141,63 @@ function expandExponential(s: string): string {
   return (neg ? '-' : '') + out
 }
 
+/**
+ * formatBigInteger renders a BigInteger as the parseable literal `0d…`,
+ * sign BEFORE the marker — Go's FormatBigInteger (core/go/value.go).
+ * `-0d789`, not `0d-789`: the marker introduces the digits, so the sign
+ * has to lead or the literal does not parse back.
+ */
+export function formatBigInteger(n: bigint): string {
+  if (n < 0n) return '-0d' + (-n).toString()
+  return '0d' + n.toString()
+}
+
+/**
+ * formatBigDecimal renders a BigDecimal as the parseable literal `0d…`,
+ * mirroring Go's FormatBigDecimal — apd's plain 'f' form with the sign
+ * before the marker.
+ *
+ * DEVIATION (recorded, not a bug to fix here): Go's payload is an
+ * apd.Decimal and preserves SCALE, so `0d0.30` round-trips with its
+ * trailing zero. TS has no arbitrary-precision decimal — the payload is a
+ * binary64 (parser/ts convert.ts newBigDecimal) — so scale is lost and
+ * `0d0.30` renders `0d0.3`. Reaching full parity means giving core/ts a
+ * real decimal type; until then the two engines agree on VALUE and differ
+ * on trailing-zero scale alone.
+ */
+export function formatBigDecimal(f: number): string {
+  const neg = f < 0 || Object.is(f, -0)
+  return (neg ? '-0d' : '0d') + plainDecimal(Math.abs(f))
+}
+
+/**
+ * plainDecimal renders a non-negative finite number in 'f' (never
+ * scientific) form. JS String() switches to an exponent above 1e21 and
+ * below 1e-6 in BOTH directions; expandExponential above handles only the
+ * negative-exponent half, because formatFloat routes the large half to
+ * formatExponential on purpose. A BigDecimal has no such escape — Go's
+ * Text('f') is plain at every magnitude — so this expands either way.
+ */
+function plainDecimal(a: number): string {
+  const s = String(a)
+  const m = /^(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(s)
+  if (!m) return s
+  const digits = m[1]! + (m[2] ?? '')
+  const pointPos = m[1]!.length + Number.parseInt(m[3]!, 10)
+  if (pointPos <= 0) {
+    const out = '0.' + '0'.repeat(-pointPos) + digits
+    return out.replace(/0+$/, '').replace(/\.$/, '')
+  }
+  // Only two cases, and the missing third is UNREACHABLE rather than
+  // unhandled: a decimal point landing *between* the digits would need
+  // 0 < pointPos < digits.length, but String() goes exponential only at
+  // |a| >= 1e21 or < 1e-6. The small half gives a negative exponent
+  // (pointPos <= 0, above); the large half gives exp >= 21, so
+  // pointPos >= 22 while a binary64 mantissa is at most 17 digits. So the
+  // point is always at or past the end here, and the zero-pad is exact.
+  return digits + '0'.repeat(pointPos - digits.length)
+}
+
 /** Canon renders a stack of values as canonical boru source. */
 export function canon(stack: Value[]): string {
   return stack.map(canonValue).join(' ')

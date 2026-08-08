@@ -1737,6 +1737,22 @@ function parseWord(text: string): Value {
   // overflows binary64 to infinity; anything else is malformed (e.g.
   // `1e`, `2dup` — the renamed-away stack words are now `dup2` etc.).
   if (isDigitLed(name)) {
+    // A misplaced digit-separator is classified BEFORE the generic
+    // malformed fallback, so the diagnostic does not depend on which
+    // route the token took. It has to be done here as well as in
+    // numberValToValue because the two jsonic ports disagree about `1_`:
+    // the Go port lexes it as a number token (so Go reaches its
+    // underscore check and says "misplaced `_`"), while the TS package
+    // declines it and drops the token through to this fallback — which
+    // said "invalid numeric literal" and made the two engines differ on
+    // the message for identical, equally-invalid source.
+    if (name.includes('_') && !validUnderscores(name)) {
+      throw new BoruError(
+        'syntax_error',
+        'misplaced `_` in numeric literal: ' + name,
+        name,
+      )
+    }
     const f = Number(stripUnderscores(name))
     if (f === Infinity || f === -Infinity) {
       throw floatLiteralOverflowError(name)
@@ -1928,6 +1944,17 @@ function numberValToValue(nv: NumberVal): Value {
     // Number() is IEEE-correct; fall back to jsonic's value
     // only if the (jsonic-validated) token somehow fails to reparse.
     const f = Number(stripUnderscores(nv.src))
+    // A literal whose magnitude overflows binary64 is REJECTED, not
+    // silently folded to ±inf — Go raises float_overflow here via
+    // strconv's ErrRange (parse.go floatLiteralOverflowError), and
+    // `1e400` evaluating to `inf` in one engine and refusing in the other
+    // is a disagreement about what the language accepts, not a rendering
+    // difference. The digit-led fallback below already had this check;
+    // this path never reached it because jsonic lexes `1e400` as a
+    // perfectly good number whose value happens to be Infinity.
+    if (f === Infinity || f === -Infinity) {
+      throw floatLiteralOverflowError(nv.src)
+    }
     if (!Number.isNaN(f)) {
       return newFloat(f)
     }
@@ -1950,6 +1977,15 @@ function numberValToValue(nv: NumberVal): Value {
       throw integerLiteralOverflowError(nv.src, nv.row, nv.col)
     }
     return newInteger(n)
+  }
+  // The scientific-notation tail (`1e3`, `1e400`). Same overflow refusal as
+  // the fractional branch above, and it has to live HERE rather than at the
+  // top of this function: an oversized PLAIN INTEGER (`999…`, 300 digits)
+  // also reads as Infinity through Number(), but Go raises integer_overflow
+  // for it, not float_overflow, and the integer branches above already
+  // classify it correctly.
+  if (nv.val === Infinity || nv.val === -Infinity) {
+    throw floatLiteralOverflowError(nv.src)
   }
   return floatToValue(nv.val)
 }

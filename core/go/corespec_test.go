@@ -16,11 +16,14 @@ package core
 import (
 	"bufio"
 	"errors"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	apd "github.com/cockroachdb/apd/v3"
 )
 
 const coreSpecDir = "../spec"
@@ -162,6 +165,18 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 			t.Fatalf("int %q: %v", arg, err)
 		}
 		return CanonValue(NewInteger(n))
+	case "bigint":
+		n, ok := new(big.Int).SetString(arg, 10)
+		if !ok {
+			t.Fatalf("bigint %q: not a base-10 integer", arg)
+		}
+		return CanonValue(NewBigInteger(n))
+	case "bigdec":
+		d, _, err := apd.NewFromString(arg)
+		if err != nil {
+			t.Fatalf("bigdec %q: %v", arg, err)
+		}
+		return CanonValue(NewBigDecimal(d))
 	case "str":
 		return CanonValue(NewString(arg))
 	case "bool":

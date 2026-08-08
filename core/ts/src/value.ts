@@ -10,6 +10,8 @@ import {
   BoruType,
   TAny,
   TAtom,
+  TBigDecimal,
+  TBigInteger,
   TBoolean,
   TDisjunct,
   TEnum,
@@ -45,7 +47,13 @@ import {
   TXml,
   TXmlInterp,
 } from './type.ts'
-import { canonValue, canonXml, formatFloat } from './canon.ts'
+import {
+  canonValue,
+  canonXml,
+  formatBigDecimal,
+  formatBigInteger,
+  formatFloat,
+} from './canon.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
 export interface WordInfo {
@@ -416,6 +424,19 @@ export class Value {
     if (this.vType.matches(TInteger)) {
       return String(this.data)
     }
+    // Arbitrary-precision literals render as the PARSEABLE `0d…` form, sign
+    // before the marker — Go's FormatBigInteger / FormatBigDecimal
+    // (core/go/value.go). Without these arms both fell through to
+    // String(data) and dropped the prefix, so `0d123` rendered `123` — a
+    // BigInteger became indistinguishable from an Integer, and the round
+    // trip through the render was no longer parseable as the same value.
+    // Eight rows of parser/spec/divergent.tsv were this one omission.
+    if (this.vType.matches(TBigInteger)) {
+      return formatBigInteger(this.data as bigint)
+    }
+    if (this.vType.matches(TBigDecimal)) {
+      return formatBigDecimal(this.data as number)
+    }
     if (this.vType.matches(TFloat)) {
       return formatFloat(this.data as number)
     }
@@ -521,6 +542,28 @@ export function newInteger(n: bigint | number): Value {
 
 export function newFloat(f: number): Value {
   return new Value(TFloat, f)
+}
+
+/**
+ * newBigInteger / newBigDecimal are the arbitrary-precision constructors,
+ * the twins of Go's NewBigInteger / NewBigDecimal. core/ts declared both
+ * TYPES from the start but neither constructor, so the only way to build
+ * one was `new Value(TBigInteger, …)` at the use site — which is how
+ * parser/ts came to have its own private pair, and how the render arms in
+ * toString came to be missing (nothing in core ever produced one of these
+ * values, so nothing in core ever rendered one).
+ *
+ * DEVIATION: the BigDecimal payload is a binary64. Go's is an apd.Decimal
+ * and preserves SCALE, so `0d0.30` round-trips with its trailing zero
+ * while TS renders `0d0.3`. Closing that needs a real decimal type in
+ * core/ts; see formatBigDecimal in canon.ts.
+ */
+export function newBigInteger(n: bigint): Value {
+  return new Value(TBigInteger, n)
+}
+
+export function newBigDecimal(f: number): Value {
+  return new Value(TBigDecimal, f)
 }
 
 /** Back-compat alias: the decimal scalar is named Float in the lattice. */

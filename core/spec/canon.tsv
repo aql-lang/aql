@@ -35,3 +35,19 @@ typelit None	None	the unit type
 list 	[]	the empty list
 list 1	[1]	one element
 list 1 2 3	[1 2 3]	elements are space-separated, no commas
+
+# --- arbitrary-precision literals (REFERENCE.md) ---
+# Rendered as the PARSEABLE `0d…` form with the sign BEFORE the marker, so
+# the render round-trips as the same value and a BigInteger is never
+# mistaken for an Integer. core/ts had both TYPES and neither constructor
+# nor render arm, so every one of these printed as a bare number.
+bigint 0	0d0	zero keeps the marker
+bigint 123	0d123	positive
+bigint -789	-0d789	sign leads the marker, never 0d-789
+bigint 99999999999999999999	0d99999999999999999999	beyond int64 — exact, no float rounding
+bigdec 12.3	0d12.3	fractional
+bigdec -0.5	-0d0.5	negative fractional, sign still leads
+bigdec 100	0d100	whole-valued decimal keeps the marker
+bigdec 1e25	0d10000000000000000000000000	plain 'f' form at every magnitude — never scientific
+bigdec 0.0000001	0d0.0000001	below 1e-6, where JS String goes exponential — still plain here
+bigdec 1e21	0d1000000000000000000000	the exact magnitude at which JS String flips to an exponent

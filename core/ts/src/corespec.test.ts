@@ -22,6 +22,8 @@ import {
   BoruError,
   canon,
   Engine,
+  newBigDecimal,
+  newBigInteger,
   newBoolean,
   newCloseParen,
   newInteger,
@@ -133,6 +135,10 @@ function evalExpr(expr: string): string {
   switch (kind) {
     case 'int':
       return canon([newInteger(BigInt(arg))])
+    case 'bigint':
+      return canon([newBigInteger(BigInt(arg))])
+    case 'bigdec':
+      return canon([newBigDecimal(Number(arg))])
     case 'str':
       return canon([newString(arg)])
     case 'bool':
