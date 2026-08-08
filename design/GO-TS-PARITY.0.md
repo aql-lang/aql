@@ -16,13 +16,14 @@ preceded this).
 | module | go | ts | shared corpus |
 |---|---|---|---|
 | core | 100% | 88.13% | `core/spec`, 84 rows |
-| parser | 100% | 93.85% | `parser/spec`, 369 rows, ledger EMPTY |
-| basic | 100% | 100% *of the stack vocabulary* | `basic/spec`, 35 rows |
+| parser | 100% | 93.85% | `parser/spec`, 370 rows, ledger 1 row (a runtime limit) |
+| basic | 100% | 100% *of the 15 words ported* | `basic/spec`, 45 rows |
 
 Two numbers that look like progress and are not:
 
-- **`basic/ts` at 100%** is 100% of the 14 words ported, not of basic's
-  surface. The floor is a ratchet on the SURFACE, not on the percentage.
+- **`basic/ts` at 100%** is 100% of the 15 words ported (the stack
+  vocabulary plus `do`), not of basic's surface. The floor is a ratchet on
+  the SURFACE, not on the percentage.
 - **Both crossdiffs agree on every row** — `parser-crossdiff` IDENTICAL
   over 1765, `crossdiff` 1808 agree / 0 divergences — and did so on day
   one. That is not evidence of parity. It means the engines do not
@@ -54,7 +55,9 @@ as a false divergence — so the fixtures are kept in step deliberately.
 divergence, both columns recorded, each runner asserting its OWN column.
 Shrink-only. A fixed divergence MOVES to `parse.tsv` rather than being
 deleted, and a row whose two columns are equal FAILS — otherwise the file
-stops being an honest debt list. It reached zero on 2026-08-08.
+stops being an honest debt list. It reached zero on 2026-08-08, then took
+one row back when the nesting-depth divergence was measured — a limit the
+JS runtime imposes rather than a defect either port can fix.
 
 `scripts/parity-probe.sh` is how a row gets written: it runs a candidate
 through both engines and prints AGREE with the shared render, or DIFFER
@@ -91,6 +94,7 @@ guessed:
 | basic word group | needs from core/ts | present? |
 |---|---|---|
 | stack (14 words) | value constructors, `returnsIdentity`, `fullStack` | **DONE** |
+| `do` (runtime half) | a sub-engine run, `newErrorValue` | **DONE** |
 | `const` | member types (`MintMemberType`), the type table, `reparentValue`, `canonicalType`, `BoruErrorHint` | no |
 | `do` / `if` / `case` / `for` | the CARRIER LATTICE — `joinCarriers`, `runCarrierBody*`, `applyGuardNarrowing` — for their analysis halves | no |
 | `def` / `undef` / `var` / `fn` / `afn` / `fnsig` | `installType`, `installFnDef`, the def store's type bindings | no |
@@ -123,6 +127,15 @@ absence of those rows was itself the honest record.
   a duplicated source index so `dup`'s outputs stay distinct for the
   bytecode emitter. core/ts Values carry no ID and there is no TS
   compiler to consume one, so that half is absent rather than stubbed.
+- **Nesting depth.** Go guards at 10,000 levels; TS refuses at 500,
+  because the tabnas rule engine recurses per level and blows the JS call
+  stack near 900 — before any converter counter can fire. The TS bound
+  converts an uncontrolled `RangeError` into the promised
+  `evaluation_limit`. Measured while recording it: 600 parses, 1,000
+  overflows. This is the one divergence that is a property of the RUNTIME
+  rather than of either port, and the only remaining row in
+  `parser/spec/divergent.tsv`. Closing it means making the TS parser
+  iterative, not raising a constant.
 
 ## Coverage, and where it must come from
 
