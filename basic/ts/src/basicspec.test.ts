@@ -21,12 +21,17 @@ import {
   canon,
   Engine,
   newInteger,
+  newList,
+  newTypeLiteral,
+  TInteger,
+  TList,
   newString,
   newWord,
   Registry,
   type Value,
 } from '@boru-lang/core'
 import { stackNatives } from './native-stack.ts'
+import { controlNatives } from './native-control.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SPEC_DIR = path.resolve(__dirname, '..', '..', 'spec')
@@ -70,19 +75,53 @@ function token(tok: string): Value {
   if (tok.startsWith("'") && tok.endsWith("'") && tok.length >= 2) {
     return newString(tok.slice(1, -1))
   }
+  // A capitalised builtin name is that type's LITERAL, so a row can pass a
+  // bare type where a word expects a concrete value — the refusal path is
+  // otherwise unreachable from the corpus.
+  if ('List' === tok) return newTypeLiteral(TList)
+  if ('Integer' === tok) return newTypeLiteral(TInteger)
   if (/^-?\d+$/.test(tok)) return newInteger(BigInt(tok))
   return newWord(tok)
 }
 
-/** Registers ONLY the stack vocabulary, so a row depends on nothing else. */
+/**
+ * program turns a row's token list into values, assembling bracketed runs
+ * into LIST values. The corpus notation has no parser behind it, so
+ * `do [ 1 2 ]` needs the brackets to become one list Value rather than
+ * three tokens. Eval=true mirrors what the parser produces for a `[…]`
+ * literal. Written independently of the Go runner's copy, per the
+ * two-runner rule.
+ */
+function program(toks: string[]): Value[] {
+  const out: Value[] = []
+  for (let i = 0; i < toks.length; i++) {
+    if ('[' !== toks[i]) {
+      out.push(token(toks[i]!))
+      continue
+    }
+    let depth = 1
+    let j = i + 1
+    for (; j < toks.length && depth > 0; j++) {
+      if ('[' === toks[j]) depth++
+      if (']' === toks[j]) depth--
+    }
+    assert.equal(depth, 0, `unbalanced [ in program ${toks.join(' ')}`)
+    out.push(newList(program(toks.slice(i + 1, j - 1)), { eval: true }))
+    i = j - 1
+  }
+  return out
+}
+
+/** Registers the ported vocabulary, and nothing else. */
 function specRegistry(): Registry {
   const r = new Registry()
   for (const nf of stackNatives) r.registerNativeFunc(nf)
+  for (const nf of controlNatives) r.registerNativeFunc(nf)
   return r
 }
 
 function runProgram(prog: string): string {
-  const toks = prog.split(/\s+/).filter((s) => '' !== s).map(token)
+  const toks = program(prog.split(/\s+/).filter((s) => '' !== s))
   try {
     return canon(new Engine(specRegistry()).run(toks))
   } catch (e) {
@@ -91,12 +130,17 @@ function runProgram(prog: string): string {
   }
 }
 
-describe('basic spec — stack.tsv', () => {
-  const rows = readSpec('stack.tsv')
-  assert.ok(rows.length > 0, 'basic/spec produced no rows — the corpus is not being read')
-  for (const r of rows) {
-    it(`${r.line}: ${r.prog}`, () => {
-      assert.equal(runProgram(r.prog), r.expected, r.note)
-    })
-  }
-})
+// Every .tsv in basic/spec, discovered rather than listed — a new corpus
+// file must not need a runner edit to be read, which is how a file gets
+// silently skipped on one engine.
+for (const file of fs.readdirSync(SPEC_DIR).filter((f) => f.endsWith('.tsv')).sort()) {
+  describe(`basic spec — ${file}`, () => {
+    const rows = readSpec(file)
+    assert.ok(rows.length > 0, `${file}: no rows — the corpus is not being read`)
+    for (const r of rows) {
+      it(`${r.line}: ${r.prog}`, () => {
+        assert.equal(runProgram(r.prog), r.expected, r.note)
+      })
+    }
+  })
+}

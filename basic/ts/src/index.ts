@@ -13,3 +13,4 @@
 // content types) is not ported yet.
 
 export { stackNatives } from './native-stack.ts'
+export { controlNatives } from './native-control.ts'

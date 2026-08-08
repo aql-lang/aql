@@ -80,6 +80,15 @@ func basicSpecToken(tok string) core.Value {
 	if strings.HasPrefix(tok, "'") && strings.HasSuffix(tok, "'") && len(tok) >= 2 {
 		return core.NewString(tok[1 : len(tok)-1])
 	}
+	// A capitalised builtin name is that type's LITERAL, so a row can pass
+	// a bare type where a word expects a concrete value — the refusal path
+	// is otherwise unreachable from the corpus.
+	switch tok {
+	case "List":
+		return core.NewTypeLiteral(core.TList)
+	case "Integer":
+		return core.NewTypeLiteral(core.TInteger)
+	}
 	if n, err := strconv.ParseInt(tok, 10, 64); err == nil {
 		return core.NewInteger(n)
 	}
@@ -98,10 +107,45 @@ func basicSpecRegistry(t *testing.T) *core.Registry {
 	for _, nf := range basic.StackNatives {
 		r.RegisterNativeFunc(nf)
 	}
+	r.RegisterNativeFunc(basic.ControlNatives[0]) // `do`
 	if err := r.Err(); err != nil {
 		t.Fatalf("registration: %v", err)
 	}
 	return r
+}
+
+// basicSpecProgram turns a row's token list into values, assembling
+// bracketed runs into LIST values. The corpus notation has no parser
+// behind it, so `do [ 1 2 ]` needs the brackets to become one list Value
+// rather than three tokens — the same assembly the TS runner does
+// independently.
+func basicSpecProgram(t *testing.T, toks []string) []core.Value {
+	t.Helper()
+	var out []core.Value
+	for i := 0; i < len(toks); i++ {
+		if toks[i] != "[" {
+			out = append(out, basicSpecToken(toks[i]))
+			continue
+		}
+		depth := 1
+		j := i + 1
+		for ; j < len(toks) && depth > 0; j++ {
+			if toks[j] == "[" {
+				depth++
+			}
+			if toks[j] == "]" {
+				depth--
+			}
+		}
+		if depth != 0 {
+			t.Fatalf("unbalanced [ in program %v", toks)
+		}
+		// Eval=true mirrors what the PARSER produces for a `[…]` literal;
+		// a raw NewList differs in a way `do` notices on an empty body.
+		out = append(out, core.NewEvalList(basicSpecProgram(t, toks[i+1:j-1])))
+		i = j - 1
+	}
+	return out
 }
 
 func TestBasicSpec(t *testing.T) {
@@ -119,10 +163,7 @@ func TestBasicSpec(t *testing.T) {
 		t.Run(strings.TrimSuffix(e.Name(), ".tsv"), func(t *testing.T) {
 			for _, row := range rows {
 				total++
-				var prog []core.Value
-				for _, tok := range strings.Fields(row.prog) {
-					prog = append(prog, basicSpecToken(tok))
-				}
+				prog := basicSpecProgram(t, strings.Fields(row.prog))
 				got := ""
 				out, rerr := core.NewTop(basicSpecRegistry(t)).Run(prog)
 				if rerr != nil {
