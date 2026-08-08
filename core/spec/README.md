@@ -102,7 +102,7 @@ than silently re-baselined. Each runner also **fails a row whose `go` and
 belongs in, or this stops being an honest debt list. Shrink-only, exactly as
 `parser/spec/divergent.tsv` is.
 
-It holds **16 rows** in ten classes — 135 were measured on 2026-08-08, none
+It holds **18 rows** in eleven classes — 135 were measured on 2026-08-08, none
 of them visible to the 1808-row engine crossdiff, and **119 have since been
 closed** and moved into the spec files where they belong. `design/CORE-TS-DIVERGENCES.1.md`
 has the root causes; the headline is that one class produces a WRONG ANSWER

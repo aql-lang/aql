@@ -394,7 +394,21 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 	case "list":
 		return CanonValue(NewList(coreSpecAssemble(t, coreSpecFields(arg))))
 	case "run":
-		out, err := NewTop(r).Run(coreSpecAssemble(t, coreSpecFields(arg)))
+		// A leading `def NAME <item> ;` clause installs a def BINDING before
+		// the program runs, which is the only way the corpus can reach the
+		// engine's def-substitution paths — nothing in the fixture
+		// vocabulary binds a name. `;` ends the clause; several may stack.
+		toks := coreSpecFields(arg)
+		for len(toks) > 0 && toks[0] == "def" {
+			var bound Value
+			bound, pos := coreSpecItem(t, toks, 2)
+			if pos >= len(toks) || toks[pos] != ";" {
+				t.Fatalf("def clause for %q must end with ';'", toks[1])
+			}
+			r.Defs.Push(toks[1], bound)
+			toks = toks[pos+1:]
+		}
+		out, err := NewTop(r).Run(coreSpecAssemble(t, toks))
 		if err != nil {
 			var be *BoruError
 			if errors.As(err, &be) {

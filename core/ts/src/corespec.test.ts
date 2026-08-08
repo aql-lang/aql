@@ -352,7 +352,20 @@ function evalExpr(expr: string): string {
       return canon([newList(assemble(fields(arg)))])
     case 'run': {
       try {
-        return render(new Engine(fixtureRegistry()).run(assemble(fields(arg))))
+      // A leading `def NAME <item> ;` clause installs a def BINDING before
+      // the program runs, which is the only way the corpus can reach the
+      // engine's def-substitution paths — nothing in the fixture
+      // vocabulary binds a name. `;` ends the clause; several may stack.
+      let toks = fields(arg)
+      const reg = fixtureRegistry()
+      while (toks.length > 0 && 'def' === toks[0]) {
+        const st = { i: 2 }
+        const bound = item(toks, st)
+        if (';' !== toks[st.i]) throw new Error(`def clause for ${toks[1]} must end with ';'`)
+        reg.pushDef(toks[1]!, bound)
+        toks = toks.slice(st.i + 1)
+      }
+        return render(new Engine(reg).run(assemble(toks)))
       } catch (e) {
         if (e instanceof BoruError) return `ERROR:${e.code}`
         return `ERROR:non_boru:${(e as Error).message}`

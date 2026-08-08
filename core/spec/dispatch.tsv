@@ -267,3 +267,17 @@ run 1 dupq 2	1 2 2	an unrelated residual is untouched
 run dupq ( addq 1 2 )	3 3	a computed operand duplicates its RESULT
 run dupq dupq 5	ERROR:signature_error	a function word is a barrier, even a duplicating one
 run addq dupq 3	ERROR:signature_error	and strands a typed forward too
+
+# --- def BINDINGS ---------------------------------------------------------
+# A leading `def NAME <item> ;` clause installs a binding before the
+# program runs. Nothing in the fixture vocabulary binds a name, so without
+# it the engine's whole def-substitution surface was unreachable from the
+# corpus — the reason those paths sat uncovered was the NOTATION, not a
+# missing capability.
+run def x 7 ; x	7	a bound name substitutes its value
+run def x 7 ; addq x 1	8	and feeds a forward slot
+run def x 7 ; def y 8 ; addq x y	15	bindings stack
+run def x 7 ; dupq x	7 7	identity returns see the substituted value
+run def x 7 ; { a: x }	{a:7}	a map value resolves through the binding
+run def d [q 1 2 ] ; d	[1 2]	a QUOTED list binding is data, opaque
+run def b [ addq 1 2 ] ; addq b 1	ERROR:signature_error	and a list does not fit an Integer slot

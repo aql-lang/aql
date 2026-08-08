@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** 135 MEASURED · 119 CLOSED · 16 PINNED (2026-08-08) · **Ledger:**
+**Status:** 137 MEASURED · 119 CLOSED · 18 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -273,6 +273,32 @@ What IS done is the thing that makes them impossible to lose: every one is a
 row in `core/spec/divergent.tsv`, both columns recorded, **each runner
 asserting its own column**, and a row whose two columns become EQUAL fails.
 So a fix cannot land silently, and a regression cannot either.
+
+## An eleventh class, found the moment the corpus could reach it
+
+`core/spec` had no way to install a def BINDING, so the engine's entire
+def-substitution surface was unreachable from it — the reason those paths
+sat uncovered was the NOTATION, not a missing capability. A leading
+`def NAME <item> ;` clause fixes that, and the first two rows written
+against it diverged:
+
+```
+run def b [ addq 1 2 ] ; b      go: [3]      ts: 3
+run def b [ 1 2 ] ; b           go: [1 2]    ts: 1 2
+```
+
+Go SUBSTITUTES an unquoted eval-list binding as a value, which then
+auto-evaluates. `core/ts` SPLICES it as a code body and runs it in place.
+The quoted spelling agrees on both, so the disagreement is exactly about
+what an UNQUOTED list binding means.
+
+`core/ts/src/engine.test.ts` **baselines** the TS answer, in a test called
+"splices an unquoted eval list as a code body" — the second time on this
+branch a per-engine unit test has pinned one engine's behaviour as the
+contract, after the map-evaluation one. Both were written before the
+shared corpus existed, and neither was wrong to write; they were just never
+checked against the other engine. That is the whole argument for the
+corpus in one sentence.
 
 ## The `go` column is not the reference by proof
 
