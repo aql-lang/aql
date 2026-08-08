@@ -357,14 +357,34 @@ describe('Engine — check mode, behind a fake AnalysisImpl', () => {
       () => {
         const r = fixture()
         r.check.begin()
-        try {
-          new Engine(r).run([newWord('nosuch')])
-        } catch {
-          // Some builds still raise; the diagnostic is the contract under test.
-        }
-        assert.ok(r.check.diagnostics.length >= 0)
+        // Check mode is the LENIENT arm: the word resolves to nothing, so the
+        // engine substitutes an Any carrier and records why, letting analysis
+        // continue to the end of the program instead of stopping at the first
+        // unknown name. Both halves are the contract — that it did not throw,
+        // and that the diagnostic names the word.
+        const out = new Engine(r).run([newWord('nosuch')])
+        const undef = r.check.diagnostics.filter((d) => d.code === 'undefined_word')
+        assert.equal(undef.length, 1)
+        assert.equal(undef[0]!.word, 'nosuch')
+        assert.match(undef[0]!.detail, /undefined word: nosuch/)
+        assert.equal(out.length, 1)
+        assert.equal(out[0]!.undefined, true)
       },
     )
+  })
+
+  it('throws on an undefined word when check mode is NOT active', () => {
+    // The other side of the same branch: outside check mode there is no
+    // diagnostic channel to record into, so the same lookup failure is a hard
+    // BoruError. Pinning both arms is what keeps the leniency scoped to
+    // analysis rather than leaking into evaluation.
+    const r = fixture()
+    assert.throws(
+      () => new Engine(r).run([newWord('nosuch')]),
+      (e: unknown) =>
+        e instanceof BoruError && e.code === 'undefined_word' && /nosuch/.test(e.message),
+    )
+    assert.equal(r.check.diagnostics.length, 0)
   })
 })
 
