@@ -107,7 +107,15 @@ func basicSpecRegistry(t *testing.T) *core.Registry {
 	for _, nf := range basic.StackNatives {
 		r.RegisterNativeFunc(nf)
 	}
-	r.RegisterNativeFunc(basic.ControlNatives[0]) // `do`
+	// The control words the TS twin has, BY NAME rather than by index: the
+	// two runners must offer the same vocabulary, and an index silently
+	// registers a different word the moment basic/go gains one.
+	ported := map[string]bool{"do": true, "error": true}
+	for _, nf := range basic.ControlNatives {
+		if ported[nf.Name] {
+			r.RegisterNativeFunc(nf)
+		}
+	}
 	if err := r.Err(); err != nil {
 		t.Fatalf("registration: %v", err)
 	}

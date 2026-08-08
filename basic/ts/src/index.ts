@@ -6,11 +6,11 @@
 // belongs in core's carrier vocabulary, not in a dependency on the
 // checker.
 //
-// PORT STATUS: this is the first increment — the stack vocabulary, minus
-// the three full-stack words (depth / pick / roll) that need a FullStack
-// knob core/ts does not yet have. The rest of basic/go's surface (the
-// definition, control-flow and type-generics words, and the predefined
-// content types) is not ported yet.
+// PORT STATUS: the stack vocabulary (all of it, full-stack words
+// included) plus the escape hatch — `do` and `error`. The rest of
+// basic/go's surface (the definition, conditional, loop and type-generics
+// words, and the predefined content types) is not ported yet;
+// native-control.ts records what each remaining word is waiting on.
 
-export { stackNatives } from './native-stack.ts'
-export { controlNatives } from './native-control.ts'
+export { stackNatives } from "./native-stack.ts";
+export { controlNatives } from "./native-control.ts";

@@ -26,66 +26,66 @@ import {
   TInteger,
   type NativeFunc,
   type Value,
-} from '@boru-lang/core'
+} from "@boru-lang/core";
 
 /** dup ( a -- a a ) */
 function dupHandler(args: Value[]): Value[] {
-  return [args[0]!, args[0]!]
+  return [args[0]!, args[0]!];
 }
 
 /** swap ( a b -- b a ) */
 function swapHandler(args: Value[]): Value[] {
-  return [args[0]!, args[1]!]
+  return [args[0]!, args[1]!];
 }
 
 /** drop ( a -- ) */
 function dropHandler(): Value[] {
-  return []
+  return [];
 }
 
 /** over ( a b -- a b a ) */
 function overHandler(args: Value[]): Value[] {
-  return [args[1]!, args[0]!, args[1]!]
+  return [args[1]!, args[0]!, args[1]!];
 }
 
 /** rot ( a b c -- b c a ) */
 function rotHandler(args: Value[]): Value[] {
-  return [args[1]!, args[0]!, args[2]!]
+  return [args[1]!, args[0]!, args[2]!];
 }
 
 /** nip ( a b -- b ) */
 function nipHandler(args: Value[]): Value[] {
-  return [args[0]!]
+  return [args[0]!];
 }
 
 /** tuck ( a b -- b a b ) */
 function tuckHandler(args: Value[]): Value[] {
-  return [args[0]!, args[1]!, args[0]!]
+  return [args[0]!, args[1]!, args[0]!];
 }
 
 /** dup2 ( a b -- a b a b ) */
 function dup2Handler(args: Value[]): Value[] {
-  return [args[1]!, args[0]!, args[1]!, args[0]!]
+  return [args[1]!, args[0]!, args[1]!, args[0]!];
 }
 
 /** swap2 ( a b c d -- c d a b ) */
 function swap2Handler(args: Value[]): Value[] {
-  return [args[1]!, args[0]!, args[3]!, args[2]!]
+  return [args[1]!, args[0]!, args[3]!, args[2]!];
 }
 
 /** drop2 ( a b -- ) */
 function drop2Handler(): Value[] {
-  return []
+  return [];
 }
 
 /** over2 ( a b c d -- a b c d a b ) */
 function over2Handler(args: Value[]): Value[] {
-  return [args[3]!, args[2]!, args[1]!, args[0]!, args[3]!, args[2]!]
+  return [args[3]!, args[2]!, args[1]!, args[0]!, args[3]!, args[2]!];
 }
 
 /** depth ( … -- … n ) — pushes the current scope's depth. */
 function depthHandler(_args: Value[], _ctx: unknown, stack: Value[]): Value[] {
-  return [...stack, newInteger(BigInt(stack.length))]
+  return [...stack, newInteger(BigInt(stack.length))];
 }
 
 /**
@@ -93,7 +93,7 @@ function depthHandler(_args: Value[], _ctx: unknown, stack: Value[]): Value[] {
  * Out of range is an error rather than a silent none, matching Go.
  */
 function pickHandler(args: Value[], _ctx: unknown, stack: Value[]): Value[] {
-  const n = Number(args[0]!.asInteger())
+  const n = Number(args[0]!.asInteger());
   if (n < 0 || n >= stack.length) {
     // A PLAIN Error, not a BoruError: the Go handler raises fmt.Errorf
     // here, so the error carries no boru code and surfaces as non_boru.
@@ -101,19 +101,23 @@ function pickHandler(args: Value[], _ctx: unknown, stack: Value[]): Value[] {
     // to a coded error would be a divergence dressed up as a fix. Worth
     // noting as a non-uniformity in its own right — most of the layer's
     // failures are coded — but not one to resolve by changing one engine.
-    throw new Error(`pick: index ${n} out of range (stack depth ${stack.length})`)
+    throw new Error(
+      `pick: index ${n} out of range (stack depth ${stack.length})`,
+    );
   }
-  return [...stack, stack[stack.length - 1 - n]!]
+  return [...stack, stack[stack.length - 1 - n]!];
 }
 
 /** roll ( … n -- … v ) — MOVES the n-th value (0 = top) to the top. */
 function rollHandler(args: Value[], _ctx: unknown, stack: Value[]): Value[] {
-  const n = Number(args[0]!.asInteger())
+  const n = Number(args[0]!.asInteger());
   if (n < 0 || n >= stack.length) {
-    throw new Error(`roll: index ${n} out of range (stack depth ${stack.length})`)
+    throw new Error(
+      `roll: index ${n} out of range (stack depth ${stack.length})`,
+    );
   }
-  const idx = stack.length - 1 - n
-  return [...stack.slice(0, idx), ...stack.slice(idx + 1), stack[idx]!]
+  const idx = stack.length - 1 - n;
+  return [...stack.slice(0, idx), ...stack.slice(idx + 1), stack[idx]!];
 }
 
 /**
@@ -123,23 +127,35 @@ function rollHandler(args: Value[], _ctx: unknown, stack: Value[]): Value[] {
  */
 export const stackNatives: NativeFunc[] = [
   {
-    name: 'dup',
+    name: "dup",
     signatures: [
-      { args: [TAny], handler: dupHandler, returnsFn: returnsIdentity(0, 0), barrierPos: 0 },
+      {
+        args: [TAny],
+        handler: dupHandler,
+        returnsFn: returnsIdentity(0, 0),
+        barrierPos: 0,
+      },
     ],
   },
   {
-    name: 'swap',
+    name: "swap",
     signatures: [
-      { args: [TAny, TAny], handler: swapHandler, returnsFn: returnsIdentity(0, 1), barrierPos: 0 },
+      {
+        args: [TAny, TAny],
+        handler: swapHandler,
+        returnsFn: returnsIdentity(0, 1),
+        barrierPos: 0,
+      },
     ],
   },
   {
-    name: 'drop',
-    signatures: [{ args: [TAny], handler: dropHandler, returns: [], barrierPos: 0 }],
+    name: "drop",
+    signatures: [
+      { args: [TAny], handler: dropHandler, returns: [], barrierPos: 0 },
+    ],
   },
   {
-    name: 'over',
+    name: "over",
     signatures: [
       {
         args: [TAny, TAny],
@@ -150,7 +166,7 @@ export const stackNatives: NativeFunc[] = [
     ],
   },
   {
-    name: 'rot',
+    name: "rot",
     signatures: [
       {
         args: [TAny, TAny, TAny],
@@ -161,13 +177,18 @@ export const stackNatives: NativeFunc[] = [
     ],
   },
   {
-    name: 'nip',
+    name: "nip",
     signatures: [
-      { args: [TAny, TAny], handler: nipHandler, returnsFn: returnsIdentity(0), barrierPos: 0 },
+      {
+        args: [TAny, TAny],
+        handler: nipHandler,
+        returnsFn: returnsIdentity(0),
+        barrierPos: 0,
+      },
     ],
   },
   {
-    name: 'tuck',
+    name: "tuck",
     signatures: [
       {
         args: [TAny, TAny],
@@ -178,7 +199,7 @@ export const stackNatives: NativeFunc[] = [
     ],
   },
   {
-    name: 'dup2',
+    name: "dup2",
     signatures: [
       {
         args: [TAny, TAny],
@@ -189,7 +210,7 @@ export const stackNatives: NativeFunc[] = [
     ],
   },
   {
-    name: 'swap2',
+    name: "swap2",
     signatures: [
       {
         args: [TAny, TAny, TAny, TAny],
@@ -200,11 +221,13 @@ export const stackNatives: NativeFunc[] = [
     ],
   },
   {
-    name: 'drop2',
-    signatures: [{ args: [TAny, TAny], handler: drop2Handler, returns: [], barrierPos: 0 }],
+    name: "drop2",
+    signatures: [
+      { args: [TAny, TAny], handler: drop2Handler, returns: [], barrierPos: 0 },
+    ],
   },
   {
-    name: 'over2',
+    name: "over2",
     signatures: [
       {
         args: [TAny, TAny, TAny, TAny],
@@ -215,15 +238,31 @@ export const stackNatives: NativeFunc[] = [
     ],
   },
   {
-    name: 'depth',
-    signatures: [{ args: [], handler: depthHandler, fullStack: true, barrierPos: 0 }],
+    name: "depth",
+    signatures: [
+      { args: [], handler: depthHandler, fullStack: true, barrierPos: 0 },
+    ],
   },
   {
-    name: 'pick',
-    signatures: [{ args: [TInteger], handler: pickHandler, fullStack: true, barrierPos: 0 }],
+    name: "pick",
+    signatures: [
+      {
+        args: [TInteger],
+        handler: pickHandler,
+        fullStack: true,
+        barrierPos: 0,
+      },
+    ],
   },
   {
-    name: 'roll',
-    signatures: [{ args: [TInteger], handler: rollHandler, fullStack: true, barrierPos: 0 }],
+    name: "roll",
+    signatures: [
+      {
+        args: [TInteger],
+        handler: rollHandler,
+        fullStack: true,
+        barrierPos: 0,
+      },
+    ],
   },
-]
+];
