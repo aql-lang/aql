@@ -19,19 +19,23 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 
+import { AnalysisImpl, installAnalysisImpl } from "./analysis-hooks.ts";
 import { Engine } from "./engine.ts";
 import { Registry } from "./registry.ts";
 import {
+  OrderedMap,
   newCarrier,
   newInteger,
   newInterpString,
   newList,
+  newMap,
+  newParenExpr,
   newString,
   newWord,
   newXmlInterp,
   type Value,
 } from "./value.ts";
-import { TInteger, TString } from "./type.ts";
+import { TAny, TInteger, TString } from "./type.ts";
 import type { EmitRecorder, RecorderOperand } from "./emit-recorder.ts";
 import type { Signature } from "./signature.ts";
 
@@ -60,6 +64,8 @@ function recordingEmit(
     consts?: ReadonlyMap<string, Value>;
     /** rendered def value -> the token span that reproduces it inline */
     islands?: ReadonlyMap<string, readonly Value[]>;
+    /** stand-in const for EVERY operand — the fully-inert container case */
+    constAll?: Value;
   } = {},
 ): {
   emit: EmitRecorder;
@@ -122,6 +128,7 @@ function recordingEmit(
     constValueOf(op: RecorderOperand | null): Value | null {
       // The stub's operand carries the value's rendered form, so the
       // per-test table is keyed the same way classify keys its log.
+      if (bindings.constAll !== undefined) return bindings.constAll;
       const of = (op as { of?: string } | null)?.of;
       return of === undefined ? null : (bindings.consts?.get(of) ?? null);
     },
@@ -345,6 +352,90 @@ describe("EmitRecorder seam — interpolated-string islands", () => {
   });
 });
 
+describe("EmitRecorder seam — a token in the FORWARD WINDOW", () => {
+  // preEvalParens resolves the window before matching, so a token that
+  // would island has to be offered THERE too. Without it the window's own
+  // resolution pre-empts the island and a consumer like
+  // `typeof <p>${…}</p>` cannot compile.
+
+  function windowReg(): Registry {
+    const r = reg();
+    r.registerNativeFunc({
+      name: "idq",
+      signatures: [
+        {
+          args: [TAny],
+          returns: [TAny],
+          barrierPos: 1,
+          handler: (a: Value[]): Value[] => [a[0]!],
+        },
+      ],
+    });
+    return r;
+  }
+
+  it("islands a capture-free xml template inside the window", () => {
+    const r = windowReg();
+    const { emit, log } = recordingEmit();
+    r.check.mode = true;
+    r.check.emit = emit;
+    new Engine(r).run([
+      newWord("idq"),
+      newXmlInterp({
+        tag: "p",
+        attrs: [],
+        children: [
+          { lit: "n=" },
+          { expr: [newWord("addq"), newInteger(1n), newInteger(1n)] },
+        ],
+      }),
+    ]);
+    assert.deepEqual(log.islands, ["xml"]);
+  });
+
+  it("resolves the template in the window when it captures a binding", () => {
+    const r = windowReg();
+    const { emit, log } = recordingEmit();
+    r.pushDef("x", newInteger(5n));
+    r.check.mode = true;
+    r.check.emit = emit;
+    new Engine(r).run([
+      newWord("idq"),
+      newXmlInterp({
+        tag: "p",
+        attrs: [],
+        children: [{ expr: [newWord("x")] }],
+      }),
+    ]);
+    assert.deepEqual(log.islands, []);
+  });
+
+  it("resolves an xml template in the window with no recorder at all", () => {
+    // The value path: no compile pass, so the template resolves to its
+    // element right there and the consumer receives an Xml value.
+    const r = windowReg();
+    const out = new Engine(r).run([
+      newWord("idq"),
+      newXmlInterp({ tag: "br", attrs: [], children: [] }),
+    ]);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.toString(), "<br/>");
+  });
+
+  it("evaluates an interpolated string in the window", () => {
+    const r = windowReg();
+    const out = new Engine(r).run([
+      newWord("idq"),
+      newInterpString([
+        { lit: "n=" },
+        { expr: [newWord("addq"), newInteger(2n), newInteger(3n)] },
+      ]),
+    ]);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.asString(), "n=5");
+  });
+});
+
 describe("EmitRecorder seam — xml islands", () => {
   function compiling(): {
     r: Registry;
@@ -417,5 +508,127 @@ describe("EmitRecorder seam — xml islands", () => {
       ]);
       assert.deepEqual(log.islands, []);
     }
+  });
+});
+
+describe("EmitRecorder seam — computed containers", () => {
+  // buildList / buildMap are the container half of the seam: a container
+  // whose contents had to RUN is an assembled value, and the compiler
+  // needs an event for the assembly — unless every part is a const, in
+  // which case baking the whole thing keeps its structure live for a
+  // consumer that introspects it.
+  //
+  // These need check mode AND an analysis impl as well as a recorder: with
+  // the inactive analysis a dispatch models NO result, so there is nothing
+  // to assemble and the container arms are never reached.
+
+  function withCarrierAnalysis<T>(body: () => T): T {
+    const saved = {
+      strip: AnalysisImpl.stripToCarriers,
+      carrier: AnalysisImpl.carrierResults,
+    };
+    installAnalysisImpl({
+      stripToCarriers: (input: Value[]) => input,
+      carrierResults: (() => [newCarrier(TInteger)]) as never,
+    });
+    try {
+      return body();
+    } finally {
+      installAnalysisImpl({
+        stripToCarriers: saved.strip,
+        carrierResults: saved.carrier,
+      });
+    }
+  }
+
+  function compiling(opts: {
+    declineOn?: ReadonlySet<string>;
+    constAll?: Value;
+  }): { r: Registry; log: ReturnType<typeof recordingEmit>["log"] } {
+    const r = reg();
+    const { emit, log } = recordingEmit(opts.declineOn ?? new Set(), {
+      constAll: opts.constAll,
+    });
+    r.check.mode = true;
+    r.check.emit = emit;
+    return { r, log };
+  }
+
+  /** An eval list whose contents must RUN, so the engine assembles the
+   *  result rather than passing the written list through. */
+  function computedList(): Value {
+    return newList([newWord("addq"), newInteger(1n), newInteger(2n)], {
+      eval: true,
+    });
+  }
+
+  /** A map whose one value must run, for the same reason. */
+  function computedMap(): Value {
+    const m = new OrderedMap();
+    m.set("k", newParenExpr([newWord("addq"), newInteger(1n), newInteger(2n)]));
+    return newMap(m, { eval: true });
+  }
+
+  it("records an assembled list as a makeList event", () => {
+    withCarrierAnalysis(() => {
+      const { r, log } = compiling({});
+      new Engine(r).run([computedList()]);
+      assert.equal(log.lists, 1);
+      assert.deepEqual(log.uncompilable, []);
+    });
+  });
+
+  it("bakes a list whose every element is a const instead of assembling it", () => {
+    withCarrierAnalysis(() => {
+      const { r, log } = compiling({ constAll: newInteger(9n) });
+      const out = new Engine(r).run([computedList()]);
+      assert.equal(log.lists, 0);
+      // The baked list is a live value, not a carrier: a consumer can
+      // still read its elements.
+      assert.deepEqual(
+        out[0]!.asList().map((v) => v.asInteger()),
+        [9n],
+      );
+    });
+  });
+
+  it("refuses a list element the recorder cannot place", () => {
+    withCarrierAnalysis(() => {
+      const { r, log } = compiling({ declineOn: new Set(["Integer"]) });
+      new Engine(r).run([computedList()]);
+      assert.deepEqual(log.uncompilable, [
+        "makeList: element of unknown provenance",
+      ]);
+      assert.equal(log.lists, 0);
+    });
+  });
+
+  it("records an assembled map as a makeMap event", () => {
+    withCarrierAnalysis(() => {
+      const { r, log } = compiling({});
+      new Engine(r).run([computedMap()]);
+      assert.deepEqual(log.maps, [["k"]]);
+      assert.deepEqual(log.uncompilable, []);
+    });
+  });
+
+  it("bakes a map whose every value is a const", () => {
+    withCarrierAnalysis(() => {
+      const { r, log } = compiling({ constAll: newInteger(9n) });
+      const out = new Engine(r).run([computedMap()]);
+      assert.deepEqual(log.maps, []);
+      assert.equal(out[0]!.asMap().get("k")!.asInteger(), 9n);
+    });
+  });
+
+  it("refuses a map value the recorder cannot place", () => {
+    withCarrierAnalysis(() => {
+      const { r, log } = compiling({ declineOn: new Set(["Integer"]) });
+      new Engine(r).run([computedMap()]);
+      assert.deepEqual(log.uncompilable, [
+        "makeMap: value of unknown provenance",
+      ]);
+      assert.deepEqual(log.maps, []);
+    });
   });
 });
