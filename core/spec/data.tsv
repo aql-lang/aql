@@ -119,3 +119,21 @@ run boomq {q a: p( addq 1 ) }	ERROR:fixture_boom
 run boomq {q a: p( nosuchword ) }	ERROR:fixture_boom
 run boomq {q a: { b: p( nosuchword ) } }	ERROR:fixture_boom
 run boomq {q a: {q b: p( nosuchword ) } }	ERROR:fixture_boom
+
+# --- a bare MARKER as a map value ---------------------------------------
+# An END or paren marker written where a map value goes is a PROGRAM, not
+# data: running it is what drops the key, because an End alone leaves no
+# residual. core/ts enumerated only paren-exprs and words as programs, so
+# the marker fell through and was stored — `{ a: ; }` rendered `{a:end}`
+# against Go's `{}`, and a stray `)` became map data instead of the syntax
+# error it is.
+run [ { a: ; } { b: 1 } ]	[{} {b:1}]
+run boomq [ { a: ) } ]	ERROR:syntax_error
+run { a: ( }	ERROR:syntax_error
+run { a: ) }	ERROR:syntax_error
+run { a: 1 b: ; }	{a:1}
+run { a: ; b: 1 }	{b:1}
+run { a: ; b: ; }	{}
+run { a: ; }	{}
+run { a: p( { b: ; } ) }	{a:{}}
+run { a: { b: ; c: 1 } }	{a:{c:1}}

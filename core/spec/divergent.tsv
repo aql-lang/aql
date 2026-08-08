@@ -41,7 +41,6 @@ run [q ( ) ]	[ )]	[( )]	DATA: TS drops an empty paren group and re-associates op
 run boomq (	ERROR:signature_error	ERROR:syntax_error	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: ) }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: { b: ) } }	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
-run boomq [ { a: ) } ]	ERROR:syntax_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: addq }	ERROR:signature_error	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
 run boomq { a: 1 b: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS waits through a function word in the forward window; Go strands it (STRICT-FORWARD-BARRIER.0).
@@ -69,21 +68,6 @@ run 1 Scalar/String	1 String	ERROR:undefined_word	DATA: core/ts type-name table 
 run Cidron	Cidron	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 run [ Module ]	[Module]	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 
-# --- a bare marker as a map value -------------------------------------------
-# An END or paren marker written where a map value goes. Go drops the key
-# (the marker evaluates to nothing) or refuses the paren markers outright;
-# core/ts stores the marker as DATA and renders it. Reached only through the
-# corpus notation today, but it is what a word handler returning a marker
-# inside a map would do.
-run { a: ; }	{}	{a:end}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run { a: ; b: 1 }	{b:1}	{a:end b:1}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run { a: 1 b: ; }	{a:1}	{a:1 b:end}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run { a: ; b: ; }	{}	{a:end b:end}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run { a: { b: ; c: 1 } }	{a:{c:1}}	{a:{b:end c:1}}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run [ { a: ; } { b: 1 } ]	[{} {b:1}]	[{a:end} {b:1}]	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run { a: p( { b: ; } ) }	{a:{}}	{a:{b:end}}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run { a: ) }	ERROR:syntax_error	{a:)}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
-run { a: ( }	ERROR:syntax_error	{a:(}	DATA: TS stores a bare marker as map data; Go drops the key or refuses.
 
 # --- canon of a bare paren marker: ADJUDICATED, and TS is right -------------
 # Go renders an OpenParen as the EMPTY string, so a list holding one renders

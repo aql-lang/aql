@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** 135 MEASURED · 93 CLOSED · 42 PINNED (2026-08-08) · **Ledger:**
+**Status:** 135 MEASURED · 103 CLOSED · 32 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -152,12 +152,17 @@ is WRONG. It made `core/ts` resolve `__ED`, and `run __ED` is
 `undefined_word` on both engines. So the lookup `stepWord` consults is a
 filtered one, and the `!internal` guard in `indexDecl` belongs there.
 
-### 6. A bare marker as a map value — 9 rows
+### 6. A bare marker as a map value — 9 rows, **ALL CLOSED**
 
-An END or paren marker where a map value goes. Go drops the key (the marker
-evaluates to nothing) or refuses the paren markers outright; `core/ts` stores
-the marker as **data** and renders it. Reached through the corpus notation
-today, but it is what a word handler returning a marker inside a map would do.
+An END or paren marker where a map value goes. Go drops the key or refuses
+the paren markers outright; `core/ts` stored the marker as **data** and
+rendered it — `{ a: ; }` was `{a:end}` against Go's `{}`.
+
+**Closed.** A bare marker is a PROGRAM, not data, and running it is what
+drops the key: an End alone leaves no residual. `evalMapValue` enumerated
+only paren-exprs and words as programs, so the marker fell through its
+`return v` tail. Go reaches the same place through `AutoEvalMap`'s general
+sub-engine tail, which has no such enumeration to fall out of.
 
 ### 7. Canon of a bare paren marker — 8 rows, **ADJUDICATED: Go is wrong**
 
@@ -219,15 +224,16 @@ the handler runs and `core/ts` fires the handler first.
 
 ## What is closed, and what is deliberately not
 
-**93 of the 135 are closed** — the whole of classes 1 and 9, the crash in
-class 5, 9 of the 11 in class 4, 38 of the 51 in class 2, and 5 of class 10.
+**103 of the 135 are closed** — the whole of classes 1, 6 and 9, the crash
+in class 5, 9 of the 11 in class 4, 38 of the 51 in class 2, and 5 of class
+10.
 A further 8 (class 7) are ADJUDICATED with `core/ts` unchanged, because Go
 is the one that is wrong there. Each was a small, local defect with an
 unambiguous Go twin to read against, and each moved its rows OUT of the
 ledger into the spec file they belong in, which is the mechanism working as
 designed.
 
-**The remaining 42 are not fixed.** Classes 1, 2 and 5 are real feature work in
+**The remaining 32 are not fixed.** Classes 1, 2 and 5 are real feature work in
 `core/ts` — the barrier is a whole rule with its own design note, the empty-
 paren handling is a rewrite of the forward window's operand planning, and the
 type-name table is a data gap plus a path resolver. Fixing them piecemeal
@@ -254,7 +260,7 @@ Pinning the 135 rows took `core/ts` from 88.20% to **90.71%**, and
 That is the rule restated from the other end: the uncovered surface and the
 divergent surface were the same surface.
 
-Closing 93 of them kept it there (90.34%): a row that moves from
+Closing 103 of them kept it there (90.35%): a row that moves from
 `divergent.tsv` to a spec file still runs, so the coverage it bought does
 not come back. The small dip from 90.73% is the barrier short-circuiting
 paths those rows used to walk — the rows still pass, they just reach the

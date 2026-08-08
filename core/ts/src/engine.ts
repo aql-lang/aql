@@ -1777,7 +1777,12 @@ export class Engine {
     }
     let program: Value[] | null = null
     if (v.isParenExpr()) program = v.data as Value[]
-    else if (v.isWord()) program = [v]
+    // A bare MARKER is a program too, and running it is what drops the
+    // key: an End alone leaves no residual, so `{ a: ; }` is `{}`. Go
+    // reaches this through AutoEvalMap's general sub-engine tail; core/ts
+    // enumerated only paren-exprs and words, so the marker fell through
+    // and was stored as DATA, rendering `{a:end}`.
+    else if (v.isWord() || isEnd(v) || isOpenParen(v) || isCloseParen(v)) program = [v]
     if (program === null) return v
     const sub = new Engine(this.registry).run([...program]).map((e) => this.deepEvalData(e))
     if (sub.length === 1) return sub[0]!
