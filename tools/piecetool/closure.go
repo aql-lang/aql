@@ -71,24 +71,9 @@ func closureMode(dir string, seedNames, cutNames []string) error {
 		}
 	}
 
-	want := map[string]bool{}
-	for _, n := range seedNames {
-		want[n] = true
-	}
-	var seeds []types.Object
-	for o := range decls {
-		if want[o.Name()] {
-			seeds = append(seeds, o)
-			delete(want, o.Name())
-		}
-	}
-	if len(want) > 0 {
-		missing := make([]string, 0, len(want))
-		for n := range want {
-			missing = append(missing, n)
-		}
-		sort.Strings(missing)
-		return fmt.Errorf("seed(s) not declared in %s: %s", dir, strings.Join(missing, ", "))
+	seeds, err := resolveSeeds(seedNames, decls)
+	if err != nil {
+		return fmt.Errorf("%s: %w", dir, err)
 	}
 
 	in := closureOf(seeds, decls, methodsOf, cut)
@@ -245,6 +230,77 @@ func indexDecls(pkg *packages.Package, fileOf func(token.Pos) string) (map[types
 		}
 	}
 	return decls, byFile
+}
+
+// qualifiedName is the unambiguous spelling of a declaration: `Recv.Method`
+// for a method, the bare name for everything else. It is the same spelling the
+// SPLIT report already uses for a method stranded from its receiver's file.
+func qualifiedName(d *closureDecl) string {
+	if d.recv != nil {
+		return d.recv.Name() + "." + d.obj.Name()
+	}
+	return d.obj.Name()
+}
+
+// resolveSeeds turns command-line seed names into the objects they denote.
+//
+// A bare name is NOT always unique in a package: a method name is scoped to
+// its receiver, so `core` alone declares String on five types and Match on
+// twenty-two. Resolving such a name by scanning the decl map and taking the
+// first hit picks a different one run to run — Go randomises map iteration —
+// so the same command would price a different cut each time it ran, silently.
+//
+// So an ambiguous seed is an ERROR naming its candidates, and `Recv.Method`
+// is accepted as the disambiguated form. Measurement that quietly changes its
+// mind is worse than measurement that refuses.
+func resolveSeeds(seedNames []string, decls map[types.Object]*closureDecl) ([]types.Object, error) {
+	matches := map[string][]*closureDecl{}
+	for _, d := range decls {
+		matches[d.obj.Name()] = append(matches[d.obj.Name()], d)
+		if q := qualifiedName(d); q != d.obj.Name() {
+			matches[q] = append(matches[q], d)
+		}
+	}
+
+	var seeds []types.Object
+	var missing, ambiguous []string
+	seen := map[types.Object]bool{}
+	for _, n := range seedNames {
+		if n == "" {
+			continue
+		}
+		switch ds := matches[n]; {
+		case len(ds) == 0:
+			missing = append(missing, n)
+		case len(ds) > 1:
+			cands := make([]string, 0, len(ds))
+			for _, d := range ds {
+				cands = append(cands, qualifiedName(d)+" ("+d.file+")")
+			}
+			sort.Strings(cands)
+			ambiguous = append(ambiguous,
+				fmt.Sprintf("%s matches %d declarations: %s",
+					n, len(ds), strings.Join(cands, ", ")))
+		default:
+			if !seen[ds[0].obj] {
+				seen[ds[0].obj] = true
+				seeds = append(seeds, ds[0].obj)
+			}
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, fmt.Errorf("seed(s) not declared: %s", strings.Join(missing, ", "))
+	}
+	if len(ambiguous) > 0 {
+		sort.Strings(ambiguous)
+		return nil, fmt.Errorf("ambiguous seed(s), qualify as Recv.Method:\n  %s",
+			strings.Join(ambiguous, "\n  "))
+	}
+	// Map iteration gave no order; the closure is a fixpoint either way, but a
+	// stable seed list keeps any future order-sensitive reporting honest.
+	sort.Slice(seeds, func(i, j int) bool { return seeds[i].Name() < seeds[j].Name() })
+	return seeds, nil
 }
 
 // closureOf walks uses from the seeds, dragging each named type's whole

@@ -42,7 +42,9 @@ const usage = `usage:
   piecetool -qualify <dir> <piece>             qualify cross-piece uses
   piecetool -qualify-tests <dir> <piece> <files>
   piecetool -closure <dir> <seed>[,<seed>...] [cut[,cut...]]
-                                               how much of <dir> comes with <seed>`
+                                               how much of <dir> comes with <seed>
+                                               (a seed is a name, or Recv.Method
+                                               where the bare name is ambiguous)`
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
