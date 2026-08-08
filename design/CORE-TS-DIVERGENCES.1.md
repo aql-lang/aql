@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** 135 MEASURED · 45 CLOSED · 90 PINNED (2026-08-08) · **Ledger:**
+**Status:** 135 MEASURED · 80 CLOSED · 55 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -36,7 +36,7 @@ finding: the uncovered surface was not merely untested, it was *wrong*.
 
 Ordered by severity — what a user would actually suffer.
 
-### 1. An empty paren group in the forward window — 25 rows, WRONG ANSWER
+### 1. An empty paren group in the forward window — 25 rows, **ALL CLOSED**
 
 The only class that produces a different **value** rather than a different
 error. Go treats `( )` as a no-value operand: `no_value_error`, or a stack
@@ -50,7 +50,20 @@ run addq ( ) ( 5 ) 6        go: no_value_error ts: 11
 ```
 
 Same source, different arithmetic. Everything else here is a taxonomy or
-render difference; this one is a wrong number.
+render difference; this one was a wrong number.
+
+**Closed.** A void group cannot fill the slot it sits in, so it STOPS
+forward collection: the word falls back to stack form where a stack operand
+can supply the arg, and raises `no_value_error` where none can. `core/ts`
+scanned PAST it, letting the next group slide into the empty slot.
+
+The stop then exposed a second defect it had been hiding for as long as it
+existed: `preEvalParens` derived a group's result count as
+`length - (before - 1)`, arithmetic that only holds for a two-token `( )`
+and goes NEGATIVE for every longer group. While the void branch merely
+`continue`d that was invisible; the moment it began to `break`, 22 rows in
+`core/ts` and 11 in `eng/ts` went red at once. `evalParenAt` now returns the
+count instead of the caller re-deriving it.
 
 ### 2. The strict forward barrier — 51 rows, **30 CLOSED**
 
@@ -167,13 +180,13 @@ consequence of class 2 rather than a separate rule.
 
 ## What is closed, and what is deliberately not
 
-**45 of the 135 are closed** — the whole of class 9, the crash in class 5,
-9 of the 11 in class 4, and 30 of the 51 in class 2. Each was a small, local defect with an
+**80 of the 135 are closed** — the whole of classes 1 and 9, the crash in
+class 5, 9 of the 11 in class 4, and 30 of the 51 in class 2. Each was a small, local defect with an
 unambiguous Go twin to read against, and each moved its rows OUT of the
 ledger into the spec file they belong in, which is the mechanism working as
 designed.
 
-**The remaining 90 are not fixed.** Classes 1, 2 and 5 are real feature work in
+**The remaining 55 are not fixed.** Classes 1, 2 and 5 are real feature work in
 `core/ts` — the barrier is a whole rule with its own design note, the empty-
 paren handling is a rewrite of the forward window's operand planning, and the
 type-name table is a data gap plus a path resolver. Fixing them piecemeal
@@ -200,7 +213,7 @@ Pinning the 135 rows took `core/ts` from 88.20% to **90.71%**, and
 That is the rule restated from the other end: the uncovered surface and the
 divergent surface were the same surface.
 
-Closing 45 of them kept it there (90.26%): a row that moves from
+Closing 80 of them kept it there (90.35%): a row that moves from
 `divergent.tsv` to a spec file still runs, so the coverage it bought does
 not come back. The small dip from 90.73% is the barrier short-circuiting
 paths those rows used to walk — the rows still pass, they just reach the

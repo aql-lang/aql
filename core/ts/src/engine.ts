@@ -584,7 +584,7 @@ export class Engine {
    * `(...)`. The pointer is positioned at the first result so the
    * outer interpreter can pick it up on the next iteration.
    */
-  private evalParenAt(idx: number): void {
+  private evalParenAt(idx: number): number {
     const closeIdx = this.findMatchingClose(idx)
     if (closeIdx < 0) {
       throw new BoruError('syntax_error', `unmatched '('`, '(')
@@ -594,7 +594,13 @@ export class Engine {
     const results = sub.run(inner)
     this.stack.splice(idx, closeIdx - idx + 1, ...results)
     // Don't advance the pointer; the next iteration will process the
-    // first spliced result.
+    // first spliced result. The COUNT is returned because the caller
+    // cannot recover it from the stack length: preEvalParens used to
+    // derive it as `length - (before - 1)`, arithmetic that only holds
+    // for a two-token `( )` group and went negative for every longer
+    // one. Harmless while the void branch merely continued, and a
+    // 22-row regression the moment it began to break.
+    return results.length
   }
 
   /**
@@ -747,9 +753,7 @@ export class Engine {
       const wi = tok.data as WordInfo | null
       const name = wi?.name ?? ''
       if (name === '(') {
-        const before = this.stack.length
-        this.evalParenAt(scanIdx)
-        const produced = this.stack.length - (before - 1) // closeIdx - openIdx + 1 was removed; results were inserted
+        const produced = this.evalParenAt(scanIdx)
         // After the splice the first result is at `scanIdx`. Each
         // produced value counts toward the resolved budget. If the
         // paren produced zero values, advance scanIdx to skip the
@@ -762,7 +766,14 @@ export class Engine {
           // signature-match failure can blame the void rather than
           // reporting a generic mismatch. Mirrors voidArgErrorFor.
           this.lastPreEvalHadVoid = true
-          continue
+          // And STOP the scan. The slot cannot be filled, so the matcher
+          // falls back to stack form or fails on the void — which is what
+          // Go does. Continuing past it let the NEXT group slide into the
+          // empty slot and RE-ASSOCIATED the operands: `7 8 addq ( ) ( 5 )`
+          // was `7 13` here against Go's `15 5`, the only divergence in the
+          // whole ledger that produced a wrong NUMBER rather than a wrong
+          // error.
+          break
         }
         resolved += produced
         scanIdx += produced

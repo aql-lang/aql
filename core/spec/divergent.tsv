@@ -27,33 +27,6 @@
 # Read design/CORE-TS-DIVERGENCES.1.md before assuming which side moves.
 
 
-# --- SEVERITY 1: an empty paren group in the forward window -----------------
-# The only class here that produces a WRONG ANSWER rather than a wrong error.
-# Go treats `( )` as a no-value operand and raises no_value_error, or — where
-# a stack operand can supplement — consumes the stack. core/ts silently drops
-# the empty group and RE-ASSOCIATES the operands, so `7 8 addq ( ) ( 5 )` is
-# 15 5 in Go and 7 13 here: different arithmetic from the same source.
-run 7 8 addq ( ) ( 5 )	15 5	7 13	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run 7 8 addq ( ) ( negq 3 )	15 -3	7 5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run 7 8 9 addq ( ) ( 5 )	7 17 5	7 8 14	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run 7 negq ( ) ( 5 )	-7 5	7 -5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run 7 8 negq ( ) ( 5 )	7 -8 5	7 8 -5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( ) ( ) 1 2	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( ) ( 5 ) 6	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( ) ( negq 3 ) 4	ERROR:no_value_error	1	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run negq ( ) ( negq 3 )	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( 1 ) ( ) ( 2 )	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( ) p( 1 ) 2	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq p( ) p( ) 5 6	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( ( ) ) ( 5 ) 6	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run pairq ( ) ( 5 )	ERROR:no_value_error	5 5	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( ) ( pairq 7 )	ERROR:no_value_error	14	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run ( addq ( ) ( 5 ) 6 )	ERROR:no_value_error	11	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( negq ( ) ( 3 ) ) 4	ERROR:no_value_error	1	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq 1 ( ) ( 5 )	ERROR:no_value_error	6	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run 1 addq ( ) ( 2 )	ERROR:no_value_error	3	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run addq ( ) ( boomq 1 )	ERROR:no_value_error	ERROR:fixture_boom	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
-run negq ( ) ( boomq 1 )	ERROR:no_value_error	ERROR:fixture_boom	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
 run boomq { a: p( ) b: nosuchword }	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
 run [q ( ) ]	[ )]	[( )]	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
 
@@ -94,20 +67,6 @@ run boomq {q a: {q b: p( nosuchword ) } }	ERROR:fixture_boom	ERROR:undefined_wor
 # operand does not fit the slot); core/ts reports no_value_error (it treats
 # the group as having produced nothing usable). Same refusal, different
 # taxonomy, so a caller matching on the code behaves differently.
-run addq ( 'a' ) 1	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run negq ( 'a' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run addq 1 ( 'a' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run addq ( 5 ) 'a'	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run negq ( [ 1 ] )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run addq ( [ addq 1 2 ] ) 5	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run negq ( 'x' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run negq ( 'x' ) 5	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run 1 addq ( 'x' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run addq ( 1 ) 'x'	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run addq 'x' ( 1 )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run 'x' addq ( 1 )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run addq ( 1 ) ( 'x' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
-run 1 addq ( 'x' ) 2	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
 
 run boomq end	ERROR:undefined_word	ERROR:signature_error	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
 run 1 boomq end	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.

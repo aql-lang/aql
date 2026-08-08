@@ -148,3 +148,52 @@ run boomq pairq 3	ERROR:signature_error
 run boomq pairq 3 ;	ERROR:signature_error
 run boomq pairq 5	ERROR:signature_error
 run boomq pairq 7	ERROR:signature_error
+
+# --- a VOID paren group in the forward window ---------------------------
+# A `( )` that resolves to nothing cannot fill the slot it sits in, so it
+# STOPS forward collection: the word falls back to stack form where a
+# stack operand can supply the arg, and raises no_value_error where none
+# can. core/ts scanned PAST the void instead, letting the next group slide
+# into the empty slot — `7 8 addq ( ) ( 5 )` was `7 13` here against Go's
+# `15 5`, the one divergence in the whole ledger that produced a wrong
+# NUMBER rather than a wrong error.
+#
+# The stop exposed a second defect it had been hiding: preEvalParens
+# derived the group's result count as `length - (before - 1)`, arithmetic
+# that only holds for a two-token group and goes negative for every longer
+# one. evalParenAt now returns the count.
+run 'x' addq ( 1 )	ERROR:signature_error
+run ( addq ( ) ( 5 ) 6 )	ERROR:no_value_error
+run 1 addq ( 'x' )	ERROR:signature_error
+run 1 addq ( 'x' ) 2	ERROR:signature_error
+run 1 addq ( ) ( 2 )	ERROR:no_value_error
+run 7 8 9 addq ( ) ( 5 )	7 17 5
+run 7 8 addq ( ) ( 5 )	15 5
+run 7 8 addq ( ) ( negq 3 )	15 -3
+run 7 8 negq ( ) ( 5 )	7 -8 5
+run 7 negq ( ) ( 5 )	-7 5
+run addq 'x' ( 1 )	ERROR:signature_error
+run addq ( 'a' ) 1	ERROR:signature_error
+run addq ( ( ) ) ( 5 ) 6	ERROR:no_value_error
+run addq ( ) ( ) 1 2	ERROR:no_value_error
+run addq ( ) ( 5 ) 6	ERROR:no_value_error
+run addq ( ) ( boomq 1 )	ERROR:no_value_error
+run addq ( ) ( negq 3 ) 4	ERROR:no_value_error
+run addq ( ) ( pairq 7 )	ERROR:no_value_error
+run addq ( ) p( 1 ) 2	ERROR:no_value_error
+run addq ( 1 ) 'x'	ERROR:signature_error
+run addq ( 1 ) ( 'x' )	ERROR:signature_error
+run addq ( 1 ) ( ) ( 2 )	ERROR:no_value_error
+run addq ( 5 ) 'a'	ERROR:signature_error
+run addq ( [ addq 1 2 ] ) 5	ERROR:signature_error
+run addq ( negq ( ) ( 3 ) ) 4	ERROR:no_value_error
+run addq 1 ( 'a' )	ERROR:signature_error
+run addq 1 ( ) ( 5 )	ERROR:no_value_error
+run addq p( ) p( ) 5 6	ERROR:no_value_error
+run negq ( 'a' )	ERROR:signature_error
+run negq ( 'x' )	ERROR:signature_error
+run negq ( 'x' ) 5	ERROR:signature_error
+run negq ( ) ( boomq 1 )	ERROR:no_value_error
+run negq ( ) ( negq 3 )	ERROR:no_value_error
+run negq ( [ 1 ] )	ERROR:signature_error
+run pairq ( ) ( 5 )	ERROR:no_value_error
