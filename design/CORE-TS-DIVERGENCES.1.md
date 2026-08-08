@@ -333,11 +333,21 @@ the measurements are worth keeping because they are most of the work:
   and pushed: `InstallFnDef` is what resolves the barrier sentinel,
   derives `MaxForwardArgs`, and builds the handler, which makes fixes 1–3
   above redundant rather than merely insufficient.
-- A second attempt built on `InstallFnDef` and stalled on two NEW
-  fixture bugs, one per engine (the Go side lost the binding between the
-  scratch install and the `def` clause; the TS side mis-tracked the index
-  past the closing `)`). Reverted again: each round was producing a fresh
-  false-divergence surface rather than converging.
+- **The real blocker, found on the third pass: `__pa`.** With the fn
+  installed through `InstallFnDef`, `inc 5` reaches dispatch and then
+  fails with `undefined word: __pa`. `AppendFrameTail`
+  (`core/go/fn_frame.go:193`) emits that word into every boru fn body's
+  frame tail, and it is registered in **`basic/go/native_definition.go`** —
+  the BASIC layer, not core. A bare core registry cannot run a
+  boru-bodied fn at all.
+
+So the earlier framings were both wrong, in opposite directions. It is not
+an unported capability: `dispatchFnDef` exists in both engines. It is not
+purely a notation limit either: the corpus needs a `__pa` FIXTURE WORD
+alongside the `fn(` form, and `__pa` pops the per-call args frame, so
+writing it means porting a small piece of basic-layer semantics into both
+runners and keeping them in step. That is a real, bounded piece of work
+with a name — which is what two rounds of reverts bought.
 
 It was reverted rather than shipped because the Go half CRASHING while the
 TS half works would have written six rows recording my fixture bug as an
