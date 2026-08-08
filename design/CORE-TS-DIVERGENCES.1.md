@@ -96,6 +96,16 @@ red. The 21 rows that remain here are a different root cause anyway: an
 UNDEFINED word in the forward window, where Go raises `undefined_word` and
 `core/ts` collects the bare Word as data at an `Any` slot.
 
+**That one was attempted and REVERTED**, and the attempt is worth recording
+because the obvious rule is wrong. Refusing any surviving Word at a
+non-Word/Atom slot closes 17 rows and breaks 7 `eng/ts` ones: `def inc
+fn […]` needs the keyword word to reach its slot, and `null` has no arm in
+`resolveForwardToken` (Go plans it as an Atom, `engine.go:8177-8184`, while
+`match.ts` has arms for `true`/`false`/`none` and none for `null`) so it
+survives as a Word and gets refused. The missing `null` arm is itself a
+divergence the sweep found. Closing this class means porting Go's
+forward-plan word handling properly, not adding a guard.
+
 ### 3. A type-mismatched paren operand — 14 rows, error CODE
 
 Both refuse; they disagree about the code. Go: `signature_error` (the operand
