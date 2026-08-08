@@ -324,8 +324,20 @@ the measurements are worth keeping because they are most of the work:
   2. `NormalizeSig` must be called by hand, for the same reason.
   3. `FnDefInfo.Registry` must be set — a boru-bodied fn runs its body
      against the registry it was defined in.
-- After all three, `Run` still fails with an `internal_error` wrapping a
-  nil-pointer dereference, so at least one more field or step is required.
+- After all three, `Run` still failed with an `internal_error` wrapping a
+  nil-pointer dereference. **Found: the crash is at
+  `engine.go:3480`, calling `match.Sig.DispatchHandler()` — which is
+  `nil`.** `Boru(body)` sets only `BoruImpl.Body`; the body-splicing
+  `dispatch` Handler is built by `buildFnBodyHandler`, and only
+  **`InstallFnDef`** calls it. So the fn must be INSTALLED, not assembled
+  and pushed: `InstallFnDef` is what resolves the barrier sentinel,
+  derives `MaxForwardArgs`, and builds the handler, which makes fixes 1–3
+  above redundant rather than merely insufficient.
+- A second attempt built on `InstallFnDef` and stalled on two NEW
+  fixture bugs, one per engine (the Go side lost the binding between the
+  scratch install and the `def` clause; the TS side mis-tracked the index
+  past the closing `)`). Reverted again: each round was producing a fresh
+  false-divergence surface rather than converging.
 
 It was reverted rather than shipped because the Go half CRASHING while the
 TS half works would have written six rows recording my fixture bug as an
