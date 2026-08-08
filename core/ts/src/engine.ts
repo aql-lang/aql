@@ -537,8 +537,23 @@ export class Engine {
       // purpose; never defer here even if the name happens to match
       // a registered function (e.g. `quote dup`).
       if (expected.equal(TWord) || expected.equal(TAtom)) continue
-      const w = a.asWord() as WordInfo
-      if (this.registry.lookup(w.name)) return true
+      // ANY Word that survived resolveForwardToken defers, registered or
+      // not. A registered one dispatches and its RESULT arrives — that
+      // was already the rule. An UNREGISTERED one is an undefined name,
+      // and deferring is what lets stepWord reach it and say so: Go's
+      // forward PLAN resolves an unknown word to an Atom
+      // (engine.go:8177 "Undefined word: always resolves to Atom") but
+      // the plan is speculative, so the token is still stepped and
+      // raises. core/ts consumed it as data at an `Any` slot instead, so
+      // `boomq zzz` fired boomq where Go reports undefined_word — 21
+      // rows of core/spec/divergent.tsv, and the reason an undefined
+      // name could vanish into a call rather than being reported.
+      //
+      // Deferring rather than REFUSING is the distinction that matters:
+      // an earlier attempt broke forward collection at such a word and
+      // took 7 eng/ts rows with it, because `def inc fn […]` needs the
+      // keyword to reach its slot.
+      return true
     }
     return false
   }

@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** 135 MEASURED · 80 CLOSED · 55 PINNED (2026-08-08) · **Ledger:**
+**Status:** 135 MEASURED · 88 CLOSED · 47 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -96,15 +96,20 @@ red. The 21 rows that remain here are a different root cause anyway: an
 UNDEFINED word in the forward window, where Go raises `undefined_word` and
 `core/ts` collects the bare Word as data at an `Any` slot.
 
-**That one was attempted and REVERTED**, and the attempt is worth recording
-because the obvious rule is wrong. Refusing any surviving Word at a
-non-Word/Atom slot closes 17 rows and breaks 7 `eng/ts` ones: `def inc
-fn […]` needs the keyword word to reach its slot, and `null` has no arm in
-`resolveForwardToken` (Go plans it as an Atom, `engine.go:8177-8184`, while
-`match.ts` has arms for `true`/`false`/`none` and none for `null`) so it
-survives as a Word and gets refused. The missing `null` arm is itself a
-divergence the sweep found. Closing this class means porting Go's
-forward-plan word handling properly, not adding a guard.
+**8 of those are now closed too, and the route matters.** The obvious rule —
+REFUSE any surviving Word at a non-Word/Atom slot — closes 17 and breaks 7
+`eng/ts` rows, because `def inc fn […]` needs the keyword to reach its slot.
+The right lever is DEFERRAL, not refusal: any Word that survives resolution
+now defers the dispatch, so the engine steps it. A registered one dispatches
+and its result arrives (already the rule); an unregistered one raises
+`undefined_word`, which is what Go does — its forward plan resolves an
+unknown word to an Atom (`engine.go:8177`), but the plan is SPECULATIVE and
+the token is still stepped.
+
+The 13 that remain are container-evaluation ORDER (which of two failing map
+values surfaces first), a different question. And `null` still has no arm in
+`resolveForwardToken` where Go plans it as an Atom — a divergence the sweep
+found that no ledger row currently reaches.
 
 ### 3. A type-mismatched paren operand — 14 rows, error CODE
 
@@ -190,13 +195,13 @@ consequence of class 2 rather than a separate rule.
 
 ## What is closed, and what is deliberately not
 
-**80 of the 135 are closed** — the whole of classes 1 and 9, the crash in
-class 5, 9 of the 11 in class 4, and 30 of the 51 in class 2. Each was a small, local defect with an
+**88 of the 135 are closed** — the whole of classes 1 and 9, the crash in
+class 5, 9 of the 11 in class 4, and 38 of the 51 in class 2. Each was a small, local defect with an
 unambiguous Go twin to read against, and each moved its rows OUT of the
 ledger into the spec file they belong in, which is the mechanism working as
 designed.
 
-**The remaining 55 are not fixed.** Classes 1, 2 and 5 are real feature work in
+**The remaining 47 are not fixed.** Classes 1, 2 and 5 are real feature work in
 `core/ts` — the barrier is a whole rule with its own design note, the empty-
 paren handling is a rewrite of the forward window's operand planning, and the
 type-name table is a data gap plus a path resolver. Fixing them piecemeal
@@ -223,7 +228,7 @@ Pinning the 135 rows took `core/ts` from 88.20% to **90.71%**, and
 That is the rule restated from the other end: the uncovered surface and the
 divergent surface were the same surface.
 
-Closing 80 of them kept it there (90.35%): a row that moves from
+Closing 88 of them kept it there (90.38%): a row that moves from
 `divergent.tsv` to a spec file still runs, so the coverage it bought does
 not come back. The small dip from 90.73% is the barrier short-circuiting
 paths those rows used to walk — the rows still pass, they just reach the

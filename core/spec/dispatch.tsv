@@ -197,3 +197,20 @@ run negq ( ) ( boomq 1 )	ERROR:no_value_error
 run negq ( ) ( negq 3 )	ERROR:no_value_error
 run negq ( [ 1 ] )	ERROR:signature_error
 run pairq ( ) ( 5 )	ERROR:no_value_error
+
+# --- an UNDEFINED word in the forward window ----------------------------
+# A name nothing binds is reported, not swallowed. Go's forward PLAN
+# resolves an unknown word to an Atom, but the plan is SPECULATIVE — the
+# token is still stepped, and stepping it raises. core/ts consumed it as
+# data at an `Any` slot instead, so `boomq zzz` fired boomq. Any Word that
+# survives resolution now DEFERS the dispatch, which is what lets the
+# engine reach it: refusing outright looks equivalent and is not, because
+# `def inc fn […]` needs its keyword to reach its slot.
+run ( boomq zzz )	ERROR:undefined_word
+run 1 boomq nosuchword	ERROR:undefined_word
+run 5 boomq zzz	ERROR:undefined_word
+run [ boomq zzz ]	ERROR:undefined_word
+run boomq Decimal	ERROR:undefined_word
+run boomq nosuchword	ERROR:undefined_word
+run boomq zzz	ERROR:undefined_word
+run boomq zzz 1	ERROR:undefined_word

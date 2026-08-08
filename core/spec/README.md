@@ -101,8 +101,8 @@ than silently re-baselined. Each runner also **fails a row whose `go` and
 belongs in, or this stops being an honest debt list. Shrink-only, exactly as
 `parser/spec/divergent.tsv` is.
 
-It holds **55 rows** in ten classes — 135 were measured on 2026-08-08, none
-of them visible to the 1808-row engine crossdiff, and **80 have since been
+It holds **47 rows** in ten classes — 135 were measured on 2026-08-08, none
+of them visible to the 1808-row engine crossdiff, and **88 have since been
 closed** and moved into the spec files where they belong. `design/CORE-TS-DIVERGENCES.1.md`
 has the root causes; the headline is that one class produces a WRONG ANSWER
 rather than a wrong error (`7 8 addq ( ) ( 5 )` is `15 5` in Go and `7 13`
