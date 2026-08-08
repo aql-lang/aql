@@ -87,3 +87,13 @@ bigdec 0e5	0d000000	a zero coefficient grows its exponent's zeros
 bigdec 1e2	0d100	the non-zero case it had always matched
 bigdec -1e2	-0d100	
 bigdec 0.00	0d0.00	trailing zeros are identity, not noise
+
+# --- floats: the trailing `.0` that keeps them distinct from Integers ----
+# A whole-valued Float renders `100.0`, not `100`, because the render has
+# to round-trip as the same TYPE — an Integer 100 and a Float 100 are
+# different values and canon is the contract that says so.
+float 1.5	1.5	fractional
+float -0.25	-0.25	negative fractional
+float 0	0.0	zero keeps the point
+float 100	100.0	and so does a whole value
+float 1e10	10000000000.0	exponents expand; canon is never scientific

@@ -292,6 +292,19 @@ func coreSpecRegistry(t *testing.T) *Registry {
 		}),
 		BarrierPos: BarrierAllForward,
 	})
+	// dupq returns its operand TWICE through the identity-returns
+	// mechanism (ReturnsIdentity / returnsIdentity): the returns are the
+	// ARGS themselves rather than fresh values, which is what lets a
+	// duplicating word keep its operand's identity.
+	r.Register("dupq", Signature{
+		Params:  []FnParam{{Name: "a", Type: TAny}},
+		Returns: []*Type{TAny, TAny},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{a[0], a[0]}, nil
+		}),
+		ReturnsFn:  ReturnsIdentity(0, 0),
+		BarrierPos: BarrierAllForward,
+	})
 	// depthq is the FULL-STACK fixture: the handler receives the whole
 	// resolved stack of the current paren scope and returns its complete
 	// replacement, rather than N args and their replacement. One word is
@@ -337,6 +350,12 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 			t.Fatalf("bigdec %q: %v", arg, err)
 		}
 		return CanonValue(NewBigDecimal(d))
+	case "float":
+		f, err := strconv.ParseFloat(arg, 64)
+		if err != nil {
+			t.Fatalf("float %q: %v", arg, err)
+		}
+		return CanonValue(NewFloat(f))
 	case "str":
 		return CanonValue(NewString(arg))
 	case "bool":

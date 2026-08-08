@@ -255,3 +255,15 @@ run patq 'x'	ERROR:signature_error	nor a differently-typed one
 run patq ( addq 3 4 )	1	a computed operand is patterned on its result
 run 7 patq	1	the pattern applies in stack form too
 run patq 7 patq 7	1 1	two independent patterned dispatches
+
+# --- identity returns -----------------------------------------------------
+# dupq's returns are the ARGS THEMSELVES (ReturnsIdentity / returnsIdentity)
+# rather than fresh values, which is what lets a duplicating word keep its
+# operand's identity. The forward-barrier rows are here too: dupq is a
+# function word, so it strands a parked one exactly as any other does.
+run dupq 5	5 5	the operand comes back twice
+run dupq 'x'	'x' 'x'	whatever its type
+run 1 dupq 2	1 2 2	an unrelated residual is untouched
+run dupq ( addq 1 2 )	3 3	a computed operand duplicates its RESULT
+run dupq dupq 5	ERROR:signature_error	a function word is a barrier, even a duplicating one
+run addq dupq 3	ERROR:signature_error	and strands a typed forward too

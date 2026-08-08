@@ -19,6 +19,7 @@ import {
   newCloseParen,
   newDispatchMod,
   newEnd,
+  newFloat,
   newInteger,
   newList,
   newMap,
@@ -32,6 +33,7 @@ import {
   newWord,
   OrderedMap,
   Registry,
+  returnsIdentity,
   TAny,
   TBoolean,
   TInteger,
@@ -187,6 +189,23 @@ function fixtureRegistry(): Registry {
       },
     ],
   })
+  // dupq returns its operand TWICE through the identity-returns
+  // mechanism (returnsIdentity): the returns are the ARGS themselves
+  // rather than fresh values, which is what lets a duplicating word keep
+  // its operand's identity. Declared independently of the Go runner's
+  // copy, per the two-runner rule.
+  r.registerNativeFunc({
+    name: 'dupq',
+    signatures: [
+      {
+        args: [TAny],
+        returns: [TAny, TAny],
+        returnsFn: returnsIdentity(0, 0),
+        barrierPos: 1,
+        handler: (a: Value[]): Value[] => [a[0]!, a[0]!],
+      },
+    ],
+  })
   r.registerNativeFunc({
     name: 'depthq',
     signatures: [
@@ -215,6 +234,8 @@ function evalExpr(expr: string): string {
       return canon([newBigInteger(BigInt(arg))])
     case 'bigdec':
       return canon([newBigDecimal(decimalFromString(arg)!)])
+    case 'float':
+      return canon([newFloat(Number(arg))])
     case 'str':
       return canon([newString(arg)])
     case 'bool':

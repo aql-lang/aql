@@ -36,6 +36,7 @@ expr	expected	note
 | kind | argument | builds |
 |---|---|---|
 | `int` | a decimal integer | an Integer value |
+| `float` | a decimal number | a Float value |
 | `str` | the rest of the line, raw | a String value |
 | `bool` | `true` / `false` | a Boolean value |
 | `none` | — | the None value |
