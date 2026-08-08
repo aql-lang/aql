@@ -172,6 +172,21 @@ function fixtureRegistry(): Registry {
       },
     ],
   })
+  // patq carries a concrete-scalar PATTERN on its only slot: it matches
+  // the Integer 7 and nothing else, so a row can pin that a pattern
+  // NARROWS the overload rather than merely typing it.
+  r.registerNativeFunc({
+    name: 'patq',
+    signatures: [
+      {
+        args: [TInteger],
+        returns: [TInteger],
+        patterns: new Map([[0, newInteger(7n)]]),
+        barrierPos: 1,
+        handler: (): Value[] => [newInteger(1n)],
+      },
+    ],
+  })
   r.registerNativeFunc({
     name: 'depthq',
     signatures: [

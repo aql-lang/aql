@@ -276,6 +276,22 @@ func coreSpecRegistry(t *testing.T) *Registry {
 		}),
 		BarrierPos: BarrierAllForward,
 	})
+	// patq carries a concrete-scalar PATTERN on its only slot: it matches
+	// the Integer 7 and nothing else, so a row can pin that a pattern
+	// narrows the overload rather than merely typing it.
+	r.Register("patq", Signature{
+		// The pattern goes on the PARAM, not the Patterns mirror:
+		// NormalizeSig rebuilds Patterns from Params, so a directly-set
+		// mirror is discarded. (Found by the probe — the two fixtures
+		// disagreed, which is precisely the false divergence the
+		// two-runner rule warns a fixture asymmetry produces.)
+		Params:  []FnParam{{Name: "n", Type: TInteger, Pattern: patqPattern()}},
+		Returns: []*Type{TInteger},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{NewInteger(1)}, nil
+		}),
+		BarrierPos: BarrierAllForward,
+	})
 	// depthq is the FULL-STACK fixture: the handler receives the whole
 	// resolved stack of the current paren scope and returns its complete
 	// replacement, rather than N args and their replacement. One word is
@@ -376,6 +392,13 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 // coreSpecDivergentFile is the parity DEBT and has a different column shape,
 // so TestCoreSpec skips it and TestCoreSpecDivergent reads it instead.
 const coreSpecDivergentFile = "divergent.tsv"
+
+// patqPattern is the concrete-scalar pattern on patq's only slot.
+// FnParam.Pattern is a *Value, so it needs an addressable one.
+func patqPattern() *Value {
+	v := NewInteger(7)
+	return &v
+}
 
 func TestCoreSpec(t *testing.T) {
 	entries, err := os.ReadDir(coreSpecDir)

@@ -237,3 +237,21 @@ run addq ( 1 2	ERROR:signature_error
 run addq ( negq 3	ERROR:signature_error
 run boomq (	ERROR:signature_error
 run negq (	ERROR:signature_error
+
+# --- a concrete-scalar PATTERN narrows the overload ----------------------
+# patq's only slot is typed Integer AND patterned on the value 7, so it
+# matches 7 and refuses 8 — the pattern is part of the match, not a
+# post-hoc check on an already-selected overload. A computed operand is
+# patterned on its RESULT, which is what makes `patq ( addq 3 4 )` fire.
+#
+# The fixture found a trap worth recording: NormalizeSig REBUILDS
+# Signature.Patterns from Params, so a directly-set Patterns mirror is
+# silently discarded. The two fixtures then disagreed, which is exactly
+# the false divergence the two-runner rule warns a fixture asymmetry
+# produces — and the probe caught it before a row was written.
+run patq 7	1	the patterned value matches
+run patq 8	ERROR:signature_error	a same-TYPED value that is not the pattern does not
+run patq 'x'	ERROR:signature_error	nor a differently-typed one
+run patq ( addq 3 4 )	1	a computed operand is patterned on its result
+run 7 patq	1	the pattern applies in stack form too
+run patq 7 patq 7	1 1	two independent patterned dispatches
