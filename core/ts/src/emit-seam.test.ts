@@ -29,10 +29,13 @@ import {
   newInterpString,
   newList,
   newMap,
+  newFnDef,
   newParenExpr,
   newString,
   newWord,
+  newTypeLiteral,
   newXmlInterp,
+  type FnDefInfo,
   type Value,
 } from "./value.ts";
 import { TAny, TInteger, TString } from "./type.ts";
@@ -630,5 +633,174 @@ describe("EmitRecorder seam — computed containers", () => {
       ]);
       assert.deepEqual(log.maps, []);
     });
+  });
+});
+
+describe("EmitRecorder seam — the remaining compile arms", () => {
+  function withCarrierAnalysis<T>(returns: () => Value[], body: () => T): T {
+    const saved = {
+      strip: AnalysisImpl.stripToCarriers,
+      carrier: AnalysisImpl.carrierResults,
+    };
+    installAnalysisImpl({
+      stripToCarriers: (input: Value[]) => input,
+      carrierResults: returns as never,
+    });
+    try {
+      return body();
+    } finally {
+      installAnalysisImpl({
+        stripToCarriers: saved.strip,
+        carrierResults: saved.carrier,
+      });
+    }
+  }
+
+  function idqReg(): Registry {
+    const r = reg();
+    r.registerNativeFunc({
+      name: "idq",
+      signatures: [
+        {
+          args: [TAny],
+          returns: [TAny],
+          barrierPos: 1,
+          handler: (a: Value[]): Value[] => [a[0]!],
+        },
+      ],
+    });
+    return r;
+  }
+
+  it("models a MARKER dispatch and records it, like a direct one", () => {
+    // `idq`'s gradual slot defers over a word, so the dispatch completes
+    // through the marker. The compile arms live on that path too — an
+    // earlier version recorded only direct dispatches, so a deferred call
+    // vanished from the trace.
+    withCarrierAnalysis(
+      () => [newCarrier(TInteger)],
+      () => {
+        const r = idqReg();
+        const { emit, log } = recordingEmit();
+        r.check.mode = true;
+        r.check.emit = emit;
+        new Engine(r).run([newWord("idq"), newWord("nosuch")]);
+        assert.deepEqual(log.calls, ["idq"]);
+      },
+    );
+  });
+
+  it("records a marker dispatch as a FALLBACK island when the sig asks", () => {
+    withCarrierAnalysis(
+      () => [newCarrier(TInteger)],
+      () => {
+        const r = reg();
+        r.registerNativeFunc({
+          name: "fbq",
+          signatures: [
+            {
+              args: [TAny],
+              returns: [TAny],
+              barrierPos: 1,
+              compileFallback: true,
+              handler: (a: Value[]): Value[] => [a[0]!],
+            },
+          ],
+        } as never);
+        const { emit, log } = recordingEmit();
+        r.check.mode = true;
+        r.check.emit = emit;
+        new Engine(r).run([newWord("fbq"), newWord("nosuch")]);
+        assert.deepEqual(log.fallbacks, ["fbq"]);
+        assert.deepEqual(log.calls, []);
+      },
+    );
+  });
+
+  it("deep-evaluates a MAP argument so it records its own assembly", () => {
+    // A map arg reaching a handler in compile mode must carry provenance,
+    // or a consumer like `is` compiles against a map the trace never
+    // built. The names in it resolve at RECORD time, while the registry
+    // is still live — the VM has no def stack to resolve them later.
+    withCarrierAnalysis(
+      () => [newCarrier(TInteger)],
+      () => {
+        const r = idqReg();
+        const { emit, log } = recordingEmit();
+        r.pushDef("M", newTypeLiteral(TInteger));
+        r.check.mode = true;
+        r.check.emit = emit;
+        const m = new OrderedMap();
+        m.set("k", newWord("M"));
+        new Engine(r).run([newWord("idq"), newMap(m, { eval: true })]);
+        assert.deepEqual(log.calls, ["idq"]);
+      },
+    );
+  });
+
+  it("keeps the assembly path for a container holding a fn value", () => {
+    // A baked fn-value member dispatches DYNAMICALLY when the container
+    // is later consumed, so it must not be const-folded even when every
+    // operand looks const.
+    withCarrierAnalysis(
+      () => [newCarrier(TInteger)],
+      () => {
+        const r = reg();
+        const { emit, log } = recordingEmit(new Set(), {
+          constAll: newInteger(9n),
+        });
+        r.check.mode = true;
+        r.check.emit = emit;
+        const fn = newFnDef({
+          sigs: [{ params: [], returns: [], body: [newInteger(1n)] }],
+        } as FnDefInfo);
+        const inner = new OrderedMap();
+        inner.set("f", fn);
+        const outer = new OrderedMap();
+        outer.set(
+          "k",
+          newParenExpr([newWord("addq"), newInteger(1n), newInteger(2n)]),
+        );
+        outer.set("m", newMap(inner));
+        new Engine(r).run([newMap(outer, { eval: true })]);
+        // The map was ASSEMBLED, not baked, because one value carries a
+        // function through a nested map.
+        assert.deepEqual(log.maps, [["k", "m"]]);
+      },
+    );
+  });
+
+  it("aliases a fn's declared returns to its body residuals", () => {
+    // Inlining a fn threads its result to the events its body recorded;
+    // the alias is that thread. A count mismatch cannot be threaded, so
+    // it refuses instead.
+    for (const [body, wantAliases, wantRefusals] of [
+      [[newInteger(1n)], 1, 0],
+      [[newInteger(1n), newInteger(2n)], 0, 1],
+    ] as Array<[Value[], number, number]>) {
+      withCarrierAnalysis(
+        () => [newCarrier(TInteger)],
+        () => {
+          const r = reg();
+          const { emit, log } = recordingEmit();
+          r.pushDef(
+            "f",
+            newFnDef({
+              sigs: [{ params: [], returns: [TInteger], body }],
+            } as FnDefInfo),
+          );
+          r.check.mode = true;
+          r.check.emit = emit;
+          new Engine(r).run([newWord("f")]);
+          assert.equal(log.aliases, wantAliases);
+          assert.equal(
+            log.uncompilable.filter((u) =>
+              /declared\/body result count/.test(u),
+            ).length,
+            wantRefusals,
+          );
+        },
+      );
+    }
   });
 });

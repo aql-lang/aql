@@ -61,7 +61,10 @@ import {
   newParenExpr,
   newString,
   newSugar,
+  newDisjunct,
   newTypeLiteral,
+  newTypedList,
+  newTypedMap,
   newWord,
   newXmlInterp,
   type FnDefInfo,
@@ -100,6 +103,20 @@ function fixture(): Registry {
     name: "dropq",
     signatures: [
       { args: [TAny], returns: [], barrierPos: 1, handler: (): Value[] => [] },
+    ],
+  } as never);
+  // Two returns from one operand: the shape a single-return word cannot
+  // reach — a map value that yields more than one residual, which the
+  // engine has to gather into a list rather than storing straight.
+  r.registerNativeFunc({
+    name: "pairq",
+    signatures: [
+      {
+        args: [TAny],
+        returns: [TAny, TAny],
+        barrierPos: 1,
+        handler: (a: Value[]): Value[] => [a[0]!, a[0]!],
+      },
     ],
   } as never);
   return r;
@@ -727,13 +744,19 @@ describe("Engine — check mode, behind a fake AnalysisImpl", () => {
       () => {
         const r = fixture();
         r.check.begin();
-        // `idq`'s Any slot DEFERS over a word, so the dispatch completes
-        // through the forward-MARKER path rather than immediately. In
-        // check mode the marker's handler must not run: the modelled
-        // carrier stands in for its result, exactly as for a direct
-        // dispatch.
-        const out = new Engine(r).run([newWord("idq"), newWord("true")]);
+        // `idq`'s Any slot DEFERS over a word that does not resolve, so
+        // the dispatch completes through the forward-MARKER path rather
+        // than immediately. In check mode the marker's handler must not
+        // run: the modelled carrier stands in for its result, exactly as
+        // for a direct dispatch. `true` would NOT reach here — the
+        // matcher resolves a keyword before the slot test, so nothing
+        // defers.
+        const out = new Engine(r).run([newWord("idq"), newWord("nosuch")]);
         assert.equal(canon(out), "Integer");
+        assert.deepEqual(
+          r.check.diagnostics.map((d) => d.code),
+          ["undefined_word"],
+        );
       },
     );
   });
@@ -1046,5 +1069,90 @@ describe("Engine.run — nested containers", () => {
   it("leaves an empty container empty", () => {
     assert.equal(run([newList([], { eval: true })]), "[]");
     assert.equal(run([newMap(new OrderedMap())]), "{}");
+  });
+});
+
+describe("Engine.run — a map argument's values", () => {
+  // The values of a consumed map are evaluated at consumption. Each one is
+  // a PROGRAM unless it is one of the two INERT type shapes, whose names
+  // resolve without anything running.
+
+  function mapOf(entries: Array<[string, Value]>): Value {
+    const m = new OrderedMap();
+    for (const [k, v] of entries) m.set(k, v);
+    return newMap(m, { eval: true });
+  }
+
+  it("gathers a value with SEVERAL residuals into a list", () => {
+    const out = run([
+      newWord("idq"),
+      mapOf([["k", newParenExpr([newWord("pairq"), newInteger(3n)])]]),
+    ]);
+    assert.equal(out, "{k:[3 3]}");
+  });
+
+  it("resolves a typed container's child constraint without running it", () => {
+    // `[:Integer]` is inert: there is nothing to dispatch, and its child
+    // is a NAME that must become a type. Running it in a sub-engine would
+    // leave the name unresolved.
+    const r = fixture();
+    const typed = newTypedList(newWord("Integer"), []);
+    const out = canon(
+      new Engine(r).run([newWord("idq"), mapOf([["k", typed]])]),
+    );
+    assert.equal(out, "{k:[:Integer]}");
+  });
+
+  it("resolves a typed MAP's child constraint the same way", () => {
+    const r = fixture();
+    const typed = newTypedMap(newWord("Integer"), []);
+    const out = canon(
+      new Engine(r).run([newWord("idq"), mapOf([["k", typed]])]),
+    );
+    assert.equal(out, "{k:{:Integer}}");
+  });
+
+  it("resolves a disjunct's alternatives", () => {
+    const r = fixture();
+    const d = newDisjunct([newWord("Integer"), newWord("String")]);
+    const out = canon(new Engine(r).run([newWord("idq"), mapOf([["k", d]])]));
+    assert.match(out, /Integer/);
+    assert.match(out, /String/);
+  });
+});
+
+describe("Engine.run — XML holes that yield containers", () => {
+  it("splices a list-valued hole's elements as children", () => {
+    // A hole is not restricted to one value: a list of them flattens into
+    // the element's children, each rendered where it stands.
+    const v = newXmlInterp({
+      tag: "p",
+      attrs: [],
+      children: [
+        {
+          expr: [newList([newInteger(1n), newString("s")], { eval: false })],
+        },
+      ],
+    });
+    assert.equal(run([v]), "<p>1s</p>");
+  });
+
+  it("sees a capture through an xml template nested in a HOLE", () => {
+    // xmlCaptureFree walks into a hole's tokens, and an xml token there is
+    // walked as a template rather than as opaque data — otherwise a
+    // binding it captures would be missed and the outer template islanded
+    // wrongly. With no recorder installed the walk is not consulted, so
+    // this pins the resolved value instead.
+    const inner = newXmlInterp({
+      tag: "b",
+      attrs: [],
+      children: [{ lit: "x" }],
+    });
+    const outer = newXmlInterp({
+      tag: "p",
+      attrs: [],
+      children: [{ expr: [inner] }],
+    });
+    assert.equal(run([outer]), "<p><b>x</b></p>");
   });
 });

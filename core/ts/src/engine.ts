@@ -370,7 +370,15 @@ export class Engine {
         const placeholder = newCarrier(TAny);
         placeholder.undefined = true;
         this.stack[this.pointer] = placeholder;
-        this.pointer++;
+        // Do NOT advance: the placeholder must go through the literal
+        // path on the next iteration so a pending forward can consume it,
+        // which is what lets analysis continue past an unknown name
+        // inside a call. Go says the same thing in as many words
+        // (core/go/engine.go, "the placeholder atom can be consumed by a
+        // downstream operation and never reach the result stack") and
+        // likewise leaves its pointer alone. Advancing here stranded the
+        // marker instead: `idq nosuchword` left `forward(idq,0/1)` on the
+        // stack under a lenient pass.
         return;
       }
       throw new BoruError("undefined_word", `undefined word: ${name}`, name);
