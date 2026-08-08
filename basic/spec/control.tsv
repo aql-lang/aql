@@ -50,3 +50,31 @@ do [ nosuchword ] error [ drop 9 ]	9	the caught error is PUSHED, so the handler 
 # answer here would settle it by accident.
 do [ nosuchword ] error [ dup ]	error(undefined word: nosuchword)	duplicating it leaves the bottom copy unconsumed, so the strip removes it
 error [ 9 ] 3	ERROR:signature_error	the do-result comes off the STACK, never from a trailing token
+
+# --- if: the three call shapes --------------------------------------------
+# A PLAIN condition is coerced where it stands. A LIST condition is a code
+# body and cannot be: running it early would run it in the wrong place on
+# the tape, so the word emits mark/condition/move and the engine reads the
+# condition's result where it lands.
+if true [ 1 ] [ 2 ]	1	a plain true takes the then-branch
+if false [ 1 ] [ 2 ]	2	and a plain false the else
+if [ true ] [ 1 ] [ 2 ]	1	a LIST condition runs, then selects
+if [ false ] [ 1 ] [ 2 ]	2	the same the other way
+if true [ 1 ]	1	the two-arg form is a statement guard
+if false [ 1 ]		with no else, a false condition produces NOTHING
+if [ false ] [ 1 ]		including through a list condition
+if 0 [ 1 ] [ 2 ]	2	zero is falsy
+if 1 [ 1 ] [ 2 ]	1	and any other integer is not
+if [ ] [ 1 ] [ 2 ]	ERROR:runtime_error	a condition that produces NO value is an error, not a silent false
+if [ 1 2 ] [ 9 ] [ 8 ]	9	a multi-value condition is decided by its LAST value
+
+# --- if: the clause-list form ---------------------------------------------
+# `if [c1 b1 c2 b2 … else]` — conditions left to right, first truthy body
+# wins, a trailing odd element is the else.
+if [ true [ 1 ] ]	1	one clause, taken
+if [ false [ 1 ] ]		one clause, not taken, and no else
+if [ false [ 1 ] [ 2 ] ]	2	a trailing element is the else
+if [ false [ 1 ] true [ 2 ] [ 3 ] ]	2	the FIRST truthy clause wins
+if [ false [ 1 ] false [ 2 ] [ 3 ] ]	3	falling past every clause reaches the else
+if [ ]		an empty clause list produces nothing
+if List	ERROR:signature_error	a bare type literal fails to MATCH — dispatch refuses before the handler

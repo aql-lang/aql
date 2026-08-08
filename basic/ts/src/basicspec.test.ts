@@ -32,6 +32,7 @@ import {
 } from "@boru-lang/core";
 import { stackNatives } from "./native-stack.ts";
 import { controlNatives } from "./native-control.ts";
+import { conditionalNatives } from "./conditional.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SPEC_DIR = path.resolve(__dirname, "..", "..", "spec");
@@ -121,6 +122,7 @@ function specRegistry(): Registry {
   const r = new Registry();
   for (const nf of stackNatives) r.registerNativeFunc(nf);
   for (const nf of controlNatives) r.registerNativeFunc(nf);
+  for (const nf of conditionalNatives) r.registerNativeFunc(nf);
   return r;
 }
 

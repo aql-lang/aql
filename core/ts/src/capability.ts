@@ -10,7 +10,7 @@
 // unchecked: it trusts the host to install a value of the expected
 // shape under the agreed-upon name.
 
-import type { Registry } from './registry.ts'
+import type { Registry } from "./registry.ts";
 
 /**
  * Typed convenience accessor. Mirrors `borueng.Cap[T]` from Go.
@@ -18,8 +18,11 @@ import type { Registry } from './registry.ts'
  * header) along with `true`, or `undefined` and `false` when the
  * capability is missing.
  */
-export function cap<T>(r: Registry, name: string): [T, true] | [undefined, false] {
-  const [v, ok] = r.capability(name)
-  if (!ok) return [undefined, false]
-  return [v as T, true]
+export function cap<T>(
+  r: Registry,
+  name: string,
+): [T, true] | [undefined, false] {
+  const [v, ok] = r.capability(name);
+  if (!ok) return [undefined, false];
+  return [v as T, true];
 }

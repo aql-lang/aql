@@ -26,8 +26,8 @@ import {
   makeScalarHandler,
   makeScalarOptsHandler,
   makeUrlon,
-  valToString,
 } from "./make.ts";
+import { valToString } from "./canon.ts";
 import {
   TAtom,
   TBoolean,

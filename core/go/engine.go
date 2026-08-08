@@ -1498,7 +1498,13 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	}
 
 	// Implicit end-of-input: resolve any pending forwards from the stack.
-	if err := e.resolveOrphanedForwards(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+	// No longer an unreachable arm: core/spec now reaches it. `bothq __pa
+	// true` parks a forward whose operands never all arrive — a word
+	// between the marker and its operands produced no residual — and the
+	// program ends with the forward still pending, which is exactly what
+	// this resolves and refuses. The pragma that stood here is gone with
+	// the unreachability it claimed.
+	if err := e.resolveOrphanedForwards(); err != nil {
 		return nil, e.faultReturn(err)
 	}
 

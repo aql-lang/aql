@@ -10,8 +10,9 @@
 // that the current TSV specs reach.
 import { AnalysisImpl } from "./analysis-hooks.ts";
 import type { RecorderOperand } from "./emit-recorder.ts";
+import { coerceBoolean } from "./coretype.ts";
 import { BoruError } from "./error.ts";
-import { valToString } from "./make.ts";
+import { valToString } from "./canon.ts";
 import { matchEntry } from "./match.ts";
 import type { Registry } from "./registry.ts";
 import { resolveWordsDeep } from "./resolve.ts";
@@ -1531,11 +1532,49 @@ export class Engine {
       return;
     }
 
+    // A CONDITIONAL move reads the condition's result instead of
+    // replaying the body.
+    if (info.ifCont !== undefined) {
+      this.stepMoveIf(markIdx, moveIdx, info.ifCont, info.to);
+      return;
+    }
+
     const markInfo = this.stack[markIdx]!.asMark();
     this.markIds.delete(info.to);
     const body = [...markInfo.body];
     // Replace [Mark .. body .. Move] with the body copy.
     this.stack.splice(markIdx, moveIdx - markIdx + 1, ...body);
+    this.pointer = markIdx;
+  }
+
+  /**
+   * Fire an if-continuation move: the values between the mark and the
+   * move ARE the condition's result, so the LAST of them decides the
+   * branch, and the chosen branch replaces the whole span. A condition
+   * that produced nothing is an error rather than a silent false — an
+   * `if` whose condition vanished has no answer, and quietly taking the
+   * else arm would hide the mistake. Mirrors Go stepMoveIf.
+   */
+  private stepMoveIf(
+    markIdx: number,
+    moveIdx: number,
+    cont: import("./value.ts").IfCont,
+    id: string,
+  ): void {
+    let condResult: Value | undefined;
+    for (let j = markIdx + 1; j < moveIdx; j++) condResult = this.stack[j];
+    this.markIds.delete(id);
+    if (condResult === undefined) {
+      this.stack.splice(markIdx, moveIdx - markIdx + 1);
+      this.pointer = markIdx;
+      throw new BoruError(
+        "runtime_error",
+        "if: condition produced no value",
+        "if",
+      );
+    }
+    const branch = coerceBoolean(condResult) ? cont.then : (cont.else ?? []);
+    this.stack.splice(markIdx, moveIdx - markIdx + 1, ...branch);
     this.pointer = markIdx;
   }
 

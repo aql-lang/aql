@@ -110,7 +110,7 @@ func basicSpecRegistry(t *testing.T) *core.Registry {
 	// The control words the TS twin has, BY NAME rather than by index: the
 	// two runners must offer the same vocabulary, and an index silently
 	// registers a different word the moment basic/go gains one.
-	ported := map[string]bool{"do": true, "error": true}
+	ported := map[string]bool{"do": true, "error": true, "if": true}
 	for _, nf := range basic.ControlNatives {
 		if ported[nf.Name] {
 			r.RegisterNativeFunc(nf)

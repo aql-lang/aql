@@ -7,7 +7,8 @@
 // checker.
 //
 // PORT STATUS: the stack vocabulary (all of it, full-stack words
-// included) plus the escape hatch — `do` and `error`. The rest of
+// included), the escape hatch (`do` and `error`) and `if` in all three
+// of its call shapes. The rest of
 // basic/go's surface (the definition, conditional, loop and type-generics
 // words, and the predefined content types) is not ported yet;
 // native-control.ts records what each remaining word is waiting on.

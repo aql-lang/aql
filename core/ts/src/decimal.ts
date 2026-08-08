@@ -22,14 +22,14 @@
 
 export class Decimal {
   /** The significand, sign included. */
-  readonly unscaled: bigint
+  readonly unscaled: bigint;
   /**
    * Digits after the decimal point. NEGATIVE means trailing zeros before
    * it — `1e2` is unscaled 1, scale -2. Preserved exactly as written, so
    * `0.30` (scale 2) does not collapse to `0.3` (scale 1); apd keeps the
    * same distinction and `Text('f')` shows it.
    */
-  readonly scale: number
+  readonly scale: number;
   /**
    * NEGATIVE ZERO. A bigint has no -0, so the sign of `-0.0` would be lost
    * the moment the significand is built — and it was: `-0.0` rendered
@@ -38,12 +38,12 @@ export class Decimal {
    * Meaningful ONLY when `unscaled` is zero; a non-zero significand
    * carries its own sign.
    */
-  readonly negZero: boolean
+  readonly negZero: boolean;
 
   constructor(unscaled: bigint, scale: number, negZero = false) {
-    this.unscaled = unscaled
-    this.scale = scale
-    this.negZero = negZero && 0n === unscaled
+    this.unscaled = unscaled;
+    this.scale = scale;
+    this.negZero = negZero && 0n === unscaled;
   }
 
   /**
@@ -52,22 +52,24 @@ export class Decimal {
    * of the value's identity here, not noise to normalise away.
    */
   toString(): string {
-    const neg = this.unscaled < 0n || this.negZero
-    const digits = (this.unscaled < 0n ? -this.unscaled : this.unscaled).toString()
-    const sign = neg ? '-' : ''
+    const neg = this.unscaled < 0n || this.negZero;
+    const digits = (
+      this.unscaled < 0n ? -this.unscaled : this.unscaled
+    ).toString();
+    const sign = neg ? "-" : "";
     if (this.scale <= 0) {
       // Whole, with -scale trailing zeros. A ZERO significand grows the
       // run too: `0e5` is `000000` in apd's Text('f'), and short-circuiting
       // it to a bare `0` was a divergence — the exponent is part of the
       // value's identity here exactly as the scale is.
-      return sign + digits + '0'.repeat(-this.scale)
+      return sign + digits + "0".repeat(-this.scale);
     }
     if (digits.length > this.scale) {
-      const cut = digits.length - this.scale
-      return sign + digits.slice(0, cut) + '.' + digits.slice(cut)
+      const cut = digits.length - this.scale;
+      return sign + digits.slice(0, cut) + "." + digits.slice(cut);
     }
     // The point falls at or left of the leading digit: pad to reach it.
-    return sign + '0.' + '0'.repeat(this.scale - digits.length) + digits
+    return sign + "0." + "0".repeat(this.scale - digits.length) + digits;
   }
 }
 
@@ -81,16 +83,20 @@ export class Decimal {
  * big literal, and this function is about the number.
  */
 export function decimalFromString(src: string): Decimal | undefined {
-  const m = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(src)
-  if (null === m) return undefined
-  const sign = '-' === m[1] ? -1n : 1n
-  const intPart = m[2] ?? ''
-  const fracPart = m[3] ?? ''
+  const m = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(src);
+  if (null === m) return undefined;
+  const sign = "-" === m[1] ? -1n : 1n;
+  const intPart = m[2] ?? "";
+  const fracPart = m[3] ?? "";
   // A lone sign, a bare `.`, or an exponent with no significand is not a
   // number — the regex above admits those shapes, so reject them here.
-  if ('' === intPart && '' === fracPart) return undefined
-  const exp = undefined === m[4] ? 0 : Number.parseInt(m[4], 10)
-  const digits = intPart + fracPart
-  const unscaled = BigInt(digits)
-  return new Decimal(sign * unscaled, fracPart.length - exp, -1n === sign && 0n === unscaled)
+  if ("" === intPart && "" === fracPart) return undefined;
+  const exp = undefined === m[4] ? 0 : Number.parseInt(m[4], 10);
+  const digits = intPart + fracPart;
+  const unscaled = BigInt(digits);
+  return new Decimal(
+    sign * unscaled,
+    fracPart.length - exp,
+    -1n === sign && 0n === unscaled,
+  );
 }

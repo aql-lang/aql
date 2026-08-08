@@ -3,9 +3,9 @@
 // no checker mode, no Patterns, no FullStack, no Returns lists for
 // type-check propagation.
 
-import type { BoruType } from './type.ts'
-import { TAny } from './type.ts'
-import { newCarrier, type Value } from './value.ts'
+import type { BoruType } from "./type.ts";
+import { TAny } from "./type.ts";
+import { newCarrier, type Value } from "./value.ts";
 
 /** A handler receives matched args and the registry, returns the values to push. */
 export type Handler = (
@@ -13,12 +13,12 @@ export type Handler = (
   ctx: Map<string, Value> | null,
   stack: Value[],
   registry: Registry,
-) => Value[] | Promise<Value[]>
+) => Value[] | Promise<Value[]>;
 
 export interface Signature {
   /** Argument types in sig order (sig[0] is the first arg the handler sees). */
-  args: BoruType[]
-  handler: Handler
+  args: BoruType[];
+  handler: Handler;
   /**
    * Position of the boundary marker `|` in the sig (post-§1.4).
    * Args before the boundary may be collected from forward tokens or
@@ -28,21 +28,21 @@ export interface Signature {
    * Set automatically by Registry.registerNativeFunc when the
    * NativeSig leaves it unset.
    */
-  barrierPos?: number
+  barrierPos?: number;
   /**
    * Optional value-patterns indexed by arg position. A concrete-scalar
    * pattern fires the §1.1 literal-dispatch path: the matched arg
    * must have the same Data as the pattern. See match.ts for the
    * forward-vs-stack rules.
    */
-  patterns?: Map<number, Value>
+  patterns?: Map<number, Value>;
   /**
    * NoEvalArgs marks positions where list auto-evaluation is suppressed.
    * Unused in the spec subset; included for shape parity.
    */
-  noEvalArgs?: Set<number>
+  noEvalArgs?: Set<number>;
   /** Fallback marker — true for the generic 0-arg fallback. */
-  fallback?: boolean
+  fallback?: boolean;
   /**
    * FULL-STACK words (`depth`, `pick`, `roll`): the handler receives the
    * whole resolved stack of the current paren scope and returns its
@@ -54,43 +54,43 @@ export interface Signature {
    * cannot reach values below it — `(1 2 depth)` sees two, not whatever
    * the enclosing program left underneath.
    */
-  fullStack?: boolean
+  fullStack?: boolean;
   /**
    * Positions that must be filled by a bare type literal (data === null),
    * not a concrete value — used by `make` to require a type argument.
    * Mirrors NativeSig.TypeArgs in the Go matcher.
    */
-  typeArgs?: Set<number>
+  typeArgs?: Set<number>;
   /**
    * Positions that capture the next forward Word as an Atom (the name),
    * suppressing evaluation. Used by quote / inspect. Mirrors
    * NativeSig.QuoteArgs.
    */
-  quoteArgs?: Set<number>
+  quoteArgs?: Set<number>;
   /**
    * Declared return types, used by the static checker to synthesise
    * carrier return values when the handler is short-circuited in check
    * mode. Mirrors NativeSig.Returns.
    */
-  returns?: BoruType[]
+  returns?: BoruType[];
   /**
    * Computes the carrier return values for this signature in check
    * mode, given the (carrier-typed) args. Takes precedence over
    * `returns`. Mirrors NativeSig.ReturnsFn / ReturnsFunc.
    */
-  returnsFn?: ReturnsFunc
+  returnsFn?: ReturnsFunc;
   /**
    * When true, the handler runs even in check mode (its side effects —
    * bindings, type registration — are prerequisites for later
    * analysis). Mirrors NativeSig.RunInCheckMode.
    */
-  runInCheckMode?: boolean
+  runInCheckMode?: boolean;
   /**
    * When true, this signature's returnsFn records its own bytecode event
    * (e.g. `if` records a branch), so the engine's generic per-dispatch
    * recordCall is skipped to avoid double-recording.
    */
-  recordsOwnEvent?: boolean
+  recordsOwnEvent?: boolean;
   /**
    * When true, the bytecode recorder compiles this dispatch as an
    * interpreter ISLAND (OpFallback) rather than a native call: the word +
@@ -100,11 +100,11 @@ export interface Signature {
    * (a dynamic dispatch, a code-body higher-order word). Mirrors the
    * CompileFallbackBody / CompileIslandPure CompileEffect flags in eng/go.
    */
-  compileFallback?: boolean
+  compileFallback?: boolean;
 }
 
 /** Computes carrier return values for a signature in check mode. */
-export type ReturnsFunc = (args: Value[], registry: Registry) => Value[]
+export type ReturnsFunc = (args: Value[], registry: Registry) => Value[];
 
 /**
  * returnsIdentity is the ReturnsFunc for words that PRESERVE their inputs —
@@ -125,31 +125,33 @@ export type ReturnsFunc = (args: Value[], registry: Registry) => Value[]
  */
 export function returnsIdentity(...mapping: number[]): ReturnsFunc {
   return (args: Value[]): Value[] =>
-    mapping.map((m) => (m < 0 || m >= args.length ? newCarrier(TAny) : args[m]!))
+    mapping.map((m) =>
+      m < 0 || m >= args.length ? newCarrier(TAny) : args[m]!,
+    );
 }
 
 export interface NativeSig {
-  args: BoruType[]
+  args: BoruType[];
   /** See Signature.fullStack. */
-  fullStack?: boolean
-  handler: Handler
-  barrierPos?: number
-  patterns?: Map<number, Value>
-  noEvalArgs?: Set<number>
-  fallback?: boolean
-  typeArgs?: Set<number>
-  quoteArgs?: Set<number>
-  returns?: BoruType[]
-  returnsFn?: ReturnsFunc
-  runInCheckMode?: boolean
-  recordsOwnEvent?: boolean
-  compileFallback?: boolean
+  fullStack?: boolean;
+  handler: Handler;
+  barrierPos?: number;
+  patterns?: Map<number, Value>;
+  noEvalArgs?: Set<number>;
+  fallback?: boolean;
+  typeArgs?: Set<number>;
+  quoteArgs?: Set<number>;
+  returns?: BoruType[];
+  returnsFn?: ReturnsFunc;
+  runInCheckMode?: boolean;
+  recordsOwnEvent?: boolean;
+  compileFallback?: boolean;
 }
 
 export interface NativeFunc {
-  name: string
-  forwardPrecedence?: boolean
-  signatures: NativeSig[]
+  name: string;
+  forwardPrecedence?: boolean;
+  signatures: NativeSig[];
 }
 
 /**
@@ -159,17 +161,17 @@ export interface NativeFunc {
  * higher than `[Any, Any]`.
  */
 export function signatureScore(sig: Signature): number {
-  let s = 0
-  for (const t of sig.args) s += t.specificity()
+  let s = 0;
+  for (const t of sig.args) s += t.specificity();
   // Concrete-value patterns make the sig more specific than one
   // with the same arg types but no pattern (parity with Go's
   // post-§1.1 score boost).
   if (sig.patterns) {
     for (const v of sig.patterns.values()) {
-      if (v.data !== null) s += 10
+      if (v.data !== null) s += 10;
     }
   }
-  return s
+  return s;
 }
 
 /**
@@ -177,8 +179,8 @@ export function signatureScore(sig: Signature): number {
  * wins, so more-specific overloads must be tried first.
  */
 export function sortSignatures(sigs: Signature[]): void {
-  sigs.sort((a, b) => signatureScore(b) - signatureScore(a))
+  sigs.sort((a, b) => signatureScore(b) - signatureScore(a));
 }
 
 // Forward-declared type — the actual class lives in registry.ts.
-import type { Registry } from './registry.ts'
+import type { Registry } from "./registry.ts";

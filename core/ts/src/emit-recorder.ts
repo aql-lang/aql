@@ -15,14 +15,14 @@
 // violation), core keeps the operand OPAQUE: it is minted by the recorder and
 // handed back unread. `unknown` is the type that says exactly that.
 
-import type { Value } from './value.ts'
-import type { Signature } from './signature.ts'
+import type { Value } from "./value.ts";
+import type { Signature } from "./signature.ts";
 
 /**
  * An operand token minted by the recorder's own classify() and handed back to
  * it unchanged. Opaque by construction — core never inspects one.
  */
-export type RecorderOperand = unknown
+export type RecorderOperand = unknown;
 
 /**
  * The recording contract the core step loop offers events through. Every
@@ -31,16 +31,21 @@ export type RecorderOperand = unknown
  */
 export interface EmitRecorder {
   /** Latch a refusal reason; the program is no longer compilable. */
-  markUncompilable(reason: string): void
+  markUncompilable(reason: string): void;
 
   /** Map a stripped-literal carrier back to its concrete source value. */
-  rememberStripped(carrier: Value, original: Value): void
+  rememberStripped(carrier: Value, original: Value): void;
 
   /** Classify a value as an operand, or null when it cannot be one. */
-  classify(v: Value): RecorderOperand | null
+  classify(v: Value): RecorderOperand | null;
 
   /** Record a matched native dispatch. */
-  recordCall(word: string, sig: Signature, args: readonly Value[], out: readonly Value[]): void
+  recordCall(
+    word: string,
+    sig: Signature,
+    args: readonly Value[],
+    out: readonly Value[],
+  ): void;
 
   /** Record a dispatch that fell back to the interpreter. */
   recordFallback(
@@ -49,22 +54,22 @@ export interface EmitRecorder {
     out: readonly Value[],
     registry?: unknown,
     noEvalArgs?: ReadonlySet<number>,
-  ): boolean
+  ): boolean;
 
   /** Record a list construction from already-classified operands. */
-  recordMakeList(elements: RecorderOperand[]): Value
+  recordMakeList(elements: RecorderOperand[]): Value;
 
   /** Record a map construction from already-classified operands. */
-  recordMakeMap(keys: string[], values: RecorderOperand[]): Value
+  recordMakeMap(keys: string[], values: RecorderOperand[]): Value;
 
   /** Record a single-token runtime island threading to `out`. */
-  recordValueIsland(token: Value, out: Value, desc: string): void
+  recordValueIsland(token: Value, out: Value, desc: string): void;
 
   /** The island token span recorded for a value, or null. */
-  islandTokensFor(v: Value): readonly Value[] | null
+  islandTokensFor(v: Value): readonly Value[] | null;
 
   /** Alias `target` onto whatever slot produced `source`. */
-  alias(target: Value, source: Value): void
+  alias(target: Value, source: Value): void;
 
   /**
    * The baked constant a `const` operand carries, or null for any other
@@ -78,7 +83,7 @@ export interface EmitRecorder {
    * operand opaque and leaves the knowledge in the compiler, which is where
    * core/go has it (its EmitRecorder methods take only core types).
    */
-  constValueOf(op: RecorderOperand | null): Value | null
+  constValueOf(op: RecorderOperand | null): Value | null;
 }
 
 /**
@@ -92,7 +97,7 @@ export const inactiveEmitRecorder: EmitRecorder = {
   markUncompilable(_reason: string): void {},
   rememberStripped(_carrier: Value, _original: Value): void {},
   classify(_v: Value): RecorderOperand | null {
-    return null
+    return null;
   },
   recordCall(
     _word: string,
@@ -107,20 +112,24 @@ export const inactiveEmitRecorder: EmitRecorder = {
     _registry?: unknown,
     _noEvalArgs?: ReadonlySet<number>,
   ): boolean {
-    return false
+    return false;
   },
   recordMakeList(_elements: RecorderOperand[]): Value {
-    throw new Error('inactiveEmitRecorder.recordMakeList: no recorder installed')
+    throw new Error(
+      "inactiveEmitRecorder.recordMakeList: no recorder installed",
+    );
   },
   recordMakeMap(_keys: string[], _values: RecorderOperand[]): Value {
-    throw new Error('inactiveEmitRecorder.recordMakeMap: no recorder installed')
+    throw new Error(
+      "inactiveEmitRecorder.recordMakeMap: no recorder installed",
+    );
   },
   recordValueIsland(_token: Value, _out: Value, _desc: string): void {},
   islandTokensFor(_v: Value): readonly Value[] | null {
-    return null
+    return null;
   },
   alias(_target: Value, _source: Value): void {},
   constValueOf(_op: RecorderOperand | null): Value | null {
-    return null
+    return null;
   },
-}
+};

@@ -17,13 +17,12 @@
 // `error` is here too — it is `do`'s partner and has the same shape: a
 // runtime branch over the caught value, no analysis half.
 //
-// `if`, `case` and `for` are NOT here. Two separate reasons, both real:
-// their runtime halves are entangled with their analysis halves (branch
-// joins, loop fixed points), and `if`'s list-condition form is built on
-// a Move carrying a CONTINUATION (Go's `NewMoveIf` + `IfCont`) that
-// core/ts's one-shot replay Move does not have. Porting only the scalar
-// condition would invent a language where `if [c] […]` means something
-// different, so neither half ships until the continuation does.
+// `if` lives in conditional.ts, its own file, as its Go twin does.
+//
+// `case` and `for` are NOT here: their runtime halves are entangled with
+// their analysis halves (clause exhaustiveness, loop fixed points), so
+// porting a runtime-only version would mean inventing semantics rather
+// than mirroring them.
 //
 // `break` and `continue` are likewise absent: both do nothing but set the
 // registry's loop flow-control flag, which only `for` reads.

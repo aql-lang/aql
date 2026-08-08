@@ -21,9 +21,9 @@
 // adding empty slots for them would be inventing a surface neither side uses.
 // They join this table when their behaviour lands.
 
-import type { Value } from './value.ts'
-import type { Signature } from './signature.ts'
-import type { Registry } from './registry.ts'
+import type { Value } from "./value.ts";
+import type { Signature } from "./signature.ts";
+import type { Registry } from "./registry.ts";
 
 /** The check-piece behaviours the core step loop offers work through. */
 export interface AnalysisHooks {
@@ -31,19 +31,24 @@ export interface AnalysisHooks {
    * Strip a program's input values to type-only carriers. The identity when
    * no check piece is linked.
    */
-  stripToCarriers(input: Value[]): Value[]
+  stripToCarriers(input: Value[]): Value[];
 
   /**
    * Model a matched dispatch's results under check mode. Returns the carrier
    * values that stand in for the handler's real output. Empty when no check
    * piece is linked — a core-only build cannot meaningfully run analysis.
    */
-  carrierResults(registry: Registry, word: string, sig: Signature, args: Value[]): Value[]
+  carrierResults(
+    registry: Registry,
+    word: string,
+    sig: Signature,
+    args: Value[],
+  ): Value[];
 }
 
 /** The NAMED inactive strip: analysis-less builds pass values through. */
 export function inactiveStripToCarriers(input: Value[]): Value[] {
-  return input
+  return input;
 }
 
 /** The NAMED inactive model: analysis-less builds produce no carriers. */
@@ -53,7 +58,7 @@ export function inactiveCarrierResults(
   _sig: Signature,
   _args: Value[],
 ): Value[] {
-  return []
+  return [];
 }
 
 /**
@@ -63,13 +68,15 @@ export function inactiveCarrierResults(
 export const AnalysisImpl: AnalysisHooks = {
   stripToCarriers: inactiveStripToCarriers,
   carrierResults: inactiveCarrierResults,
-}
+};
 
 /**
  * installAnalysisImpl replaces the inactive defaults with the check piece's
  * real implementations. Called once, at check.ts import time.
  */
 export function installAnalysisImpl(hooks: Partial<AnalysisHooks>): void {
-  if (hooks.stripToCarriers !== undefined) AnalysisImpl.stripToCarriers = hooks.stripToCarriers
-  if (hooks.carrierResults !== undefined) AnalysisImpl.carrierResults = hooks.carrierResults
+  if (hooks.stripToCarriers !== undefined)
+    AnalysisImpl.stripToCarriers = hooks.stripToCarriers;
+  if (hooks.carrierResults !== undefined)
+    AnalysisImpl.carrierResults = hooks.carrierResults;
 }

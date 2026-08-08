@@ -57,6 +57,8 @@ import {
   newMap,
   newMark,
   newMove,
+  newMoveIf,
+  nextMarkId,
   newOpenParen,
   newParenExpr,
   newString,
@@ -925,6 +927,89 @@ describe("Engine.run — marks and moves", () => {
     // engine reorders a stack without the caller respelling the program.
     const out = run([newMark("m", []), newInteger(1n), newMove("m")]);
     assert.doesNotMatch(out, /\[object Object\]/);
+  });
+});
+
+describe("Engine.run — a CONDITIONAL move", () => {
+  // The if-continuation. A condition that is a code body cannot be
+  // evaluated before its branches are chosen — running it early would run
+  // it in the wrong place on the tape — so the emitting word hands back
+  // `Mark · condition · MoveIf`, the engine runs the condition where it
+  // stands, and the move reads its RESULT to splice in one branch.
+
+  function condMove(cond: Value[], then: Value[], els?: Value[]): Value[] {
+    const id = nextMarkId();
+    return [
+      newMark(id, [...cond]),
+      ...cond,
+      newMoveIf(id, "if", els === undefined ? { then } : { then, else: els }),
+    ];
+  }
+
+  it("splices the THEN branch for a truthy condition", () => {
+    assert.equal(
+      run(condMove([newBoolean(true)], [newInteger(1n)], [newInteger(2n)])),
+      "1",
+    );
+  });
+
+  it("splices the ELSE branch for a falsy one", () => {
+    assert.equal(
+      run(condMove([newBoolean(false)], [newInteger(1n)], [newInteger(2n)])),
+      "2",
+    );
+  });
+
+  it("produces NOTHING when a falsy condition has no else", () => {
+    assert.equal(run(condMove([newBoolean(false)], [newInteger(1n)])), "");
+  });
+
+  it("decides on the condition's LAST value", () => {
+    assert.equal(
+      run(
+        condMove(
+          [newInteger(1n), newBoolean(false)],
+          [newInteger(1n)],
+          [newInteger(2n)],
+        ),
+      ),
+      "2",
+    );
+  });
+
+  it("runs the condition rather than reading it as data", () => {
+    assert.equal(
+      run(
+        condMove(
+          [newWord("addq"), newInteger(1n), newInteger(1n)],
+          [newInteger(7n)],
+          [newInteger(8n)],
+        ),
+      ),
+      "7",
+    );
+  });
+
+  it("refuses a condition that produced NO value", () => {
+    // Quietly taking the else arm would hide the mistake: an `if` whose
+    // condition vanished has no answer.
+    assert.throws(
+      () => run(condMove([], [newInteger(1n)], [newInteger(2n)])),
+      (e: unknown) =>
+        e instanceof BoruError &&
+        e.code === "runtime_error" &&
+        /condition produced no value/.test(e.message),
+    );
+  });
+
+  it("drops a conditional move whose mark was never seen", () => {
+    assert.equal(
+      run([
+        newInteger(5n),
+        newMoveIf("absent", "if", { then: [newInteger(1n)] }),
+      ]),
+      "5",
+    );
   });
 });
 

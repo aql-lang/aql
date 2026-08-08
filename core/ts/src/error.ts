@@ -4,15 +4,15 @@
 // runner only matches on the code/detail substring.
 
 export class BoruError extends Error {
-  readonly code: string
-  readonly detail: string
-  readonly word: string
+  readonly code: string;
+  readonly detail: string;
+  readonly word: string;
 
-  constructor(code: string, detail: string, word = '') {
-    super(`[boru/${code}]: ${detail}`)
-    this.name = 'BoruError'
-    this.code = code
-    this.detail = detail
-    this.word = word
+  constructor(code: string, detail: string, word = "") {
+    super(`[boru/${code}]: ${detail}`);
+    this.name = "BoruError";
+    this.code = code;
+    this.detail = detail;
+    this.word = word;
   }
 }

@@ -20,20 +20,20 @@
 // narrower list would only push callers back to deep imports, which is the
 // coupling the package boundary exists to prevent.
 
-export * from './error.ts'
-export * from './type.ts'
-export * from './decimal.ts'
-export * from './value.ts'
-export * from './canon.ts'
-export * from './coretype.ts'
-export * from './signature.ts'
-export * from './match.ts'
-export * from './registry.ts'
-export * from './resolve.ts'
-export * from './sugar.ts'
-export * from './make.ts'
-export * from './capability.ts'
-export * from './engine.ts'
-export * from './check-state.ts'
-export * from './analysis-hooks.ts'
-export * from './emit-recorder.ts'
+export * from "./error.ts";
+export * from "./type.ts";
+export * from "./decimal.ts";
+export * from "./value.ts";
+export * from "./canon.ts";
+export * from "./coretype.ts";
+export * from "./signature.ts";
+export * from "./match.ts";
+export * from "./registry.ts";
+export * from "./resolve.ts";
+export * from "./sugar.ts";
+export * from "./make.ts";
+export * from "./capability.ts";
+export * from "./engine.ts";
+export * from "./check-state.ts";
+export * from "./analysis-hooks.ts";
+export * from "./emit-recorder.ts";
