@@ -74,13 +74,23 @@ the difference is not simply a bug to fix.
 
 ## The current debt
 
-**Zero.** Both engines agree on every row of `parse.tsv`, and
-`divergent.tsv` is empty.
+**Nine rows, in two classes, both properties of the ENGINES rather than of
+either port.**
 
-That is the goal state, not a broken corpus: both runners assert it
-explicitly, so a NEW divergence has to be added here deliberately, with the
-justification the header demands, rather than quietly landing as a changed
-expectation somewhere else.
+| rows | what | why it is not a port bug |
+|---:|---|---|
+| 1 | nesting depth: Go guards at 10,000 levels, TS refuses at 500 | the tabnas TS rule engine recurses per level and blows the JS call stack near 900, before any converter counter can fire. Measured: 600 parses, 1,000 overflows. Closing it means making the TS parser iterative, not raising a constant. |
+| 8 | `[Map<]`, `[(1]`, `{a: (1}` and kin: Go names the offending token, TS cannot | the TS rule engine STOPS at its maximum-iteration bound and returns the partial root without erroring. `parse()` watches the step count and raises, so both sides now give **the same code** and differ only in TEXT. |
+
+The second class is worth reading as a success rather than a debt entry:
+before the step-cap guard, TS **accepted** all eight — `[Map<]` parsed to an
+empty value stream and `Map<]` to a bare `word(Map)`. A silent wrong answer
+became a wrong message.
+
+Zero is still the goal state, and both runners assert the invariant that
+keeps it honest: a row whose two columns are EQUAL fails, so a fixed
+divergence has to move to `parse.tsv` rather than sit here looking like
+debt.
 
 ## History
 
@@ -108,3 +118,20 @@ convention, not by proof" was load-bearing.
 Two of the eighteen were invisible to the 1765-row `parser-crossdiff`,
 because both engines were erroring-by-rendering rather than disagreeing on a
 value. `scripts/parity-probe.sh` is what found them.
+
+The corpus grew from 370 rows to 535 while driving `parser/ts` from 93.97%
+to 100% line coverage, and the growth found three more defects the crossdiff
+could not:
+
+- an EMPTY `${}` interpolation in an XML **attribute** folded to `""` in Go
+  and stayed a runtime hole in TS — Go's nil/empty conflation, mirrored
+  anyway because parity with the shipped language is the contract;
+- the eight rule-step-cap shapes above, where TS silently accepted programs
+  Go rejects;
+- an error raised while CONVERTING `${…}` rendered its two halves in the
+  opposite order (`interpolation expression error:` before or after
+  `[boru/float_overflow]:`).
+
+Each was found by sweeping the regions the coverage report called
+uncovered, which is the general lesson: **an uncovered branch in one port is
+where a divergence hides**, because nothing has ever compared the two there.

@@ -126,7 +126,7 @@ function hasOwn(m: Record<string, unknown>, key: string): boolean {
 // metaStrSet normalises a Meta channel that Go types as map[string]bool
 // (qm / ck / qk) into a Set of member keys, accepting whichever shape the
 // TS grammar recorded (Set, array, Map, or plain object).
-function metaStrSet(meta: Record<string, unknown> | undefined, key: string): Set<string> {
+export function metaStrSet(meta: Record<string, unknown> | undefined, key: string): Set<string> {
   const v = meta?.[key]
   if (!v) return new Set()
   if (v instanceof Set) return new Set([...v].map(String))
@@ -208,7 +208,7 @@ function errMessage(e: unknown): string {
 
 // typeName renders a node's type for the "unsupported value type"
 // diagnostics (Go's %T; unreachable in practice).
-function typeName(v: unknown): string {
+export function typeName(v: unknown): string {
   if (v === null) return 'null'
   if (typeof v === 'object') return v.constructor?.name ?? 'object'
   return typeof v
@@ -732,7 +732,7 @@ function isChainReceiver(item: unknown): boolean {
 // `usurp (a get b)` and `a.b/2` as `force-arity 2 (a get b)`. null for
 // a plain word (no modifier). Prefix/suffix keep Go's nil-vs-present
 // distinction (null = the Go nil slice).
-function groupModifier(
+export function groupModifier(
   item: unknown,
 ): { base: string; prefix: Value[] | null; suffix: Value[] | null } | null {
   const [node] = deSite(item)
@@ -805,7 +805,7 @@ function convertTopLevelValue(v: unknown, d: ParseDepth): Value {
   return withPos(convertTopLevelValueInner(node, d), pos)
 }
 
-function convertTopLevelValueInner(v: unknown, d: ParseDepth): Value {
+export function convertTopLevelValueInner(v: unknown, d: ParseDepth): Value {
   if (v instanceof ArrowTag) {
     // `=>` — the lambda sugar marker; the engine lowers it to the
     // role-bound constructor word (ADR-012 rule 3 amendment).
@@ -1119,7 +1119,7 @@ function convertDataValue(v: unknown, d: ParseDepth): Value {
   return withPos(convertDataValueInner(node, d), pos)
 }
 
-function convertDataValueInner(v: unknown, d: ParseDepth): Value {
+export function convertDataValueInner(v: unknown, d: ParseDepth): Value {
   if (v instanceof ArrowTag) {
     // `=>` in data context — the same lambda sugar marker.
     return newSugar({ kind: 'lambda' })
@@ -1654,7 +1654,7 @@ function wordBaseName(text: string): string {
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
-function parseWord(text: string): Value {
+export function parseWord(text: string): Value {
   const m = scanWordModifier(text)
   const name = m.base
 
@@ -1886,7 +1886,7 @@ function malformedNumberError(src: string): BoruError {
 // convertInterpGroup converts an InterpGroup (produced by the interp/ielem/iexpr
 // jsonic rules) into an engine InterpString value, or a plain string if there
 // are no expression parts.
-function convertInterpGroup(grp: InterpGroup, d: ParseDepth): Value {
+export function convertInterpGroup(grp: InterpGroup, d: ParseDepth): Value {
   if (grp.parts.length === 0) {
     return newString('')
   }
@@ -1906,14 +1906,24 @@ function convertInterpGroup(grp: InterpGroup, d: ParseDepth): Value {
       try {
         exprVals = convertTopLevelItems(item.items, d)
       } catch (err) {
-        // Preserve the BoruError taxonomy through the wrap — Go's
-        // `%w` keeps errors.As-unwrap to the inner code, so the TS
-        // twin re-raises the same code with the wrap prefix on the
-        // detail (the crossdiff compares by code).
-        if (err instanceof BoruError) {
-          throw new BoruError(err.code, `interpolation expression error: ${err.detail}`, err.word)
-        }
-        throw new Error(`interpolation expression error: ${errMessage(err)}`)
+        // Go wraps with `fmt.Errorf("…: %w", err)`, which renders the
+        // INNER error's own text — `[boru/float_overflow]: …` — after
+        // the prefix, and leaves the top-level error an ordinary wrapped
+        // one. An earlier version re-raised a BoruError carrying the
+        // inner CODE with the prefix moved onto the detail, which
+        // rendered the two halves in the opposite order:
+        //
+        //   go: interpolation expression error: [boru/float_overflow]: …
+        //   ts: [boru/float_overflow]: interpolation expression error: …
+        //
+        // Matching Go means the thrown error must render like Go's, so
+        // it is a plain Error over the inner error's rendered text. The
+        // taxonomy survives on `cause`, which is what errors.As unwraps
+        // to on the Go side — a caller that needs the code still has it,
+        // and the rendered text is identical.
+        throw Object.assign(new Error(`interpolation expression error: ${errMessage(err)}`), {
+          cause: err,
+        })
       }
       parts.push({ expr: exprVals })
       continue
@@ -1984,7 +1994,7 @@ export function processTemplateEscapes(s: string): string {
 
 // floatToValue converts a jsonic number to the appropriate boru numeric value.
 // Whole numbers become integers; fractional values become decimals.
-function floatToValue(f: number): Value {
+export function floatToValue(f: number): Value {
   // Mirrors Go `f == float64(int64(f))`: integral and inside the int64
   // range (both bounds exactly representable in binary64).
   if (Number.isFinite(f) && f === Math.trunc(f) && f >= -9223372036854775808 && f < 9223372036854775808) {
@@ -2010,7 +2020,7 @@ function floatToValue(f: number): Value {
 //     which already matches jsonic's own base interpretation.
 //
 // See design/INTEGER-OVERFLOW-STRATEGY.5.md.
-function numberValToValue(nv: NumberVal): Value {
+export function numberValToValue(nv: NumberVal): Value {
   // `_` is a single digit-separator only: it must sit between two
   // digits (no leading, trailing, or repeated underscores). `1__0` and
   // `1_` are rejected.
@@ -2081,7 +2091,7 @@ function numberValToValue(nv: NumberVal): Value {
 // an optional 0x / 0o / 0b base prefix (Go's strconv.ParseInt base-0
 // contract, minus the bit-size bound — callers range-check). undefined
 // for invalid digits.
-function tryParseBigIntBase0(s: string): bigint | undefined {
+export function tryParseBigIntBase0(s: string): bigint | undefined {
   let sign = 1n
   let body = s
   if (body.startsWith('-')) {
@@ -2130,7 +2140,7 @@ function isBigNumberLiteral(src: string): boolean {
 // unbounded). Sign and `_` separators are handled like the int/float
 // paths. Errors carry no source position (parseWord has none — mirrors
 // the other parseWord numeric errors).
-function parseBigNumber(src: string): Value {
+export function parseBigNumber(src: string): Value {
   if (src.includes('_') && !validUnderscores(src)) {
     throw bigLiteralError(src)
   }
@@ -2204,7 +2214,7 @@ function isLeadingDotFloat(src: string): boolean {
 // rejects base prefixes (0x/0o/0b — handled by isBasePrefixedInteger) and
 // exponents (1e3). Leading zeros stay decimal (jsonic treats 010 as 10,
 // not octal), which the base-10 parse also does.
-function isPlainDecimalInteger(src: string): boolean {
+export function isPlainDecimalInteger(src: string): boolean {
   if (src === '') {
     return false
   }

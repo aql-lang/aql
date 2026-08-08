@@ -16,7 +16,7 @@ preceded this).
 | module | go | ts | shared corpus |
 |---|---|---|---|
 | core | 100% | 88.13% | `core/spec`, 84 rows |
-| parser | 100% | 93.85% | `parser/spec`, 370 rows, ledger 1 row (a runtime limit) |
+| parser | 100% | **100%** | `parser/spec`, 535 rows, ledger 9 rows (both engine limits) |
 | basic | 100% | 100% *of the 15 words ported* | `basic/spec`, 45 rows |
 
 Two numbers that look like progress and are not:
@@ -55,9 +55,11 @@ as a false divergence — so the fixtures are kept in step deliberately.
 divergence, both columns recorded, each runner asserting its OWN column.
 Shrink-only. A fixed divergence MOVES to `parse.tsv` rather than being
 deleted, and a row whose two columns are equal FAILS — otherwise the file
-stops being an honest debt list. It reached zero on 2026-08-08, then took
-one row back when the nesting-depth divergence was measured — a limit the
-JS runtime imposes rather than a defect either port can fix.
+stops being an honest debt list. It reached zero on 2026-08-08 and then
+took nine rows back, every one a property of the two ENGINES rather than
+of either port: one nesting-depth limit, and eight shapes where the TS
+rule engine gives up at its iteration bound and cannot name the token it
+gave up on.
 
 `scripts/parity-probe.sh` is how a row gets written: it runs a candidate
 through both engines and prints AGREE with the shared render, or DIFFER
@@ -80,6 +82,9 @@ engines that both fail, or both render debug output.
 | `/q` marker: `word()({false true})` vs `word(undefined)` | both erroring-by-rendering |
 | stray `)` dropped to empty in Go | both "succeeded" |
 | `1_e5` → 100000 in Go, REJECTED in TS | a GAP, permitted |
+| `<a b=${}/>` folded to `""` in Go, stayed a hole in TS | both rendered; neither was source |
+| `[Map<]`, `[(1]` ACCEPTED by TS, rejected by Go | TS produced an empty stream, so there was no value to disagree about |
+| a `${…}` conversion error rendered its halves in the opposite order | both errored, with the same code |
 
 In two of five original divergence classes the **`go` column was not the
 reference**. The ledger header warned that it was "the reference by
@@ -127,6 +132,19 @@ absence of those rows was itself the honest record.
   a duplicated source index so `dup`'s outputs stay distinct for the
   bytecode emitter. core/ts Values carry no ID and there is no TS
   compiler to consume one, so that half is absent rather than stubbed.
+- **The rule-step cap.** The tabnas TS rule engine bounds its main loop
+  and, on reaching the bound, STOPS: the trailing-token check then sees
+  `#ZZ`, so nothing is thrown and the partial root is returned. Shapes
+  that leave a group open with a terminator that cannot close it —
+  `[Map<]`, `{a: (1}`, `[1 (2]` — hit it, because the TS val rule's
+  implicit-null alternate matches the `]`, backtracks, and the enclosing
+  elem re-pushes forever. TS was ACCEPTING these: `[Map<]` parsed to an
+  empty value stream, `Map<]` to a bare `word(Map)`. `parse()` now
+  watches the step count through a `sub.rule` subscriber and raises when
+  the parse ended exactly at the library's own bound — EQUALITY, not
+  `>=`, so a library change stops the guard firing rather than starts it
+  firing early. Both engines now give the same CODE and differ only in
+  text, recorded as eight ledger rows.
 - **Nesting depth.** Go guards at 10,000 levels; TS refuses at 500,
   because the tabnas rule engine recurses per level and blows the JS call
   stack near 900 — before any converter counter can fire. The TS bound
@@ -141,8 +159,9 @@ absence of those rows was itself the honest record.
 
 Both Go modules gate at 100% by their OWN suite (`cover-gate-core`,
 `cover-gate-parser`), on top of the merged ADR-008 gate. The TS gates
-ratchet: `TS_CORE_GATE_LINES` (88), `TS_PARSER_GATE_LINES` (92),
-`TS_BASIC_GATE_LINES` (100, a surface ratchet).
+ratchet: `TS_CORE_GATE_LINES` (88), `TS_PARSER_GATE_LINES` (**100**, both
+halves of the module now gated identically), `TS_BASIC_GATE_LINES` (100, a
+surface ratchet).
 
 The discipline that matters: **coverage comes from corpus rows, not from
 per-engine unit tests.** When core/go's canon grew arms for typed
@@ -157,10 +176,45 @@ engines. `core/spec` and `basic/spec` are SPECS, not differentials — the
 expected column is the documented contract — which is exactly the defect
 class an agreement-only corpus is structurally blind to.
 
+### The narrow exception, and why it is narrow
+
+`parser/ts` reached 100% with 165 new corpus rows and TWO unit-test files:
+`guards.test.ts` and `convert-guards.test.ts`. They exist because Go
+carved the same exception first, in `parser/go/grammar_seam5b_test.go`,
+and gave the reason: the jsonic grammar actions and lex matchers are
+ordinary closures, and a guard that no source can provoke — a rule with
+no parent, a matcher invoked with no rule, a converter arm for a node the
+grammar never builds — has to be called directly with a synthetic rule.
+Go gets that in-package; TS arranges it by exporting from `convert.ts`,
+which is module-internal rather than package-public (`index.ts` exports
+`parse` and `SrcPos` and nothing else).
+
+The rule is: an arm belongs in a guard file only if no source text can
+reach it. Several arms started in `guards.test.ts` and MOVED OUT to
+`parse.tsv` once the probe found a shape that reached them — the
+map-value dot chains most notably, where the top-level rows that looked
+like they exercised the `dotchain` rule did not, because everywhere but a
+map value a flat `a.b` is folded by `convertTopLevelItems` instead.
+
+Two structural facts put arms in the unreachable class, and both are
+worth knowing before adding to a guard file: the grammar wraps every
+number token in a `NumberVal`, so the RAW number and boolean arms of the
+value converters are for nodes that never exist; and `parseWord` carries
+its own numeric classification that jsonic's number lexing always
+shadows.
+
+### The general lesson from the sweep
+
+**An uncovered branch in one port is where a divergence hides.** Every
+defect above was found by probing the regions the coverage report called
+uncovered, and the reason is structural: nothing has ever compared the two
+engines there. Coverage and parity are not two goals that happened to be
+pursued together — chasing the first is a search strategy for the
+second.
+
 ## Open
 
 - core/ts to 100%: `engine.ts` (~68%) is the bulk.
-- parser/ts to 100%: the residue is in `convert.ts` and `grammar.ts`.
 - basic/ts: everything past the stack vocabulary, in the order the table
   above forces.
 - NUR059: canon still renders sugar tags, `/r` and `/N` word modifiers,

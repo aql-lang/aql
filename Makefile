@@ -318,8 +318,9 @@ test-ts-core:
 # ratchet discipline: raise the floor in the change that raises coverage,
 # never lower it. parser/go's gate has sat at 100 since the module was cut
 # (parser/go/CLAUDE.md: a leaf over core has no other suite that could be
-# covering it), so this floor is the honest measure of the parity gap.
-TS_PARSER_GATE_LINES ?= 97
+# covering it), and on 2026-08-08 parser/ts reached it too — the two halves
+# of the module are now gated identically.
+TS_PARSER_GATE_LINES ?= 100
 test-ts-parser:
 	@echo "==> typecheck parser/ts"
 	cd parser/ts && npx tsc

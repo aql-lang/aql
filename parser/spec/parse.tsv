@@ -726,3 +726,17 @@ a/2f2	ERR [boru/syntax_error]: invalid word modifier /2f2 on "a"
 `${1 ]}`	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here
 `${(}`	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here
 `${'x}`	ERR [boru/syntax_error]: this string is never closed: 'x}`
+
+# --- errors raised while CONVERTING an interpolation, and key dedup -------
+# Go wraps a conversion failure inside `${…}` with `fmt.Errorf("…: %w")`,
+# which renders the inner error's own text after the prefix — so the
+# rendered halves are `interpolation expression error:` THEN
+# `[boru/float_overflow]:`. The TS port used to re-raise a BoruError
+# carrying the code with the prefix on the detail, which put them the
+# other way round; it now throws to match and keeps the taxonomy on
+# `cause`. A repeated key keeps its FIRST slot and LAST value however many
+# times it repeats.
+`${1e400}`	ERR interpolation expression error: [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
+{a:1 a:2 a:3}	{a:3}
+{b:0 a:1 a:2}	{b:0 a:2}
+{a: `x${1}`}	{a:interp('x' ${1})}
