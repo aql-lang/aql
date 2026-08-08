@@ -211,6 +211,8 @@ function evalExpr(expr: string): string {
       return canon([newNone()])
     case 'end':
       return canon([newEnd()])
+    case 'closeparen':
+      return canon([newCloseParen()])
     case 'dispatchmod':
       return canon([newDispatchMod({ ref: 'r' === arg, quote: 'q' === arg })])
     case 'typedlist': {

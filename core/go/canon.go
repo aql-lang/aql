@@ -101,6 +101,15 @@ func CanonValue(v Value) string {
 	switch {
 	case IsNone(v):
 		return "none"
+	case IsCloseParen(v):
+		// A STRAY `)` — one the parser could not pair, so it survives as a
+		// value rather than closing a group. Canon had no arm, so the
+		// payload-less fallthrough rendered it as the empty string and
+		// `1 )` canon'd to `1 `, dropping the token silently. Value.String
+		// has always rendered it `)`. Same defect the End marker had; an
+		// unmatched OPENING paren never reaches here, because that is a
+		// parse error rather than a value.
+		return ")"
 	case IsDispatchMod(v):
 		// The `/r` / `/q` group modifier the parser emits AFTER a paren or
 		// dotted-path group. Canon had no arm for it, so each engine fell

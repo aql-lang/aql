@@ -396,3 +396,63 @@ $x	word($x)
 0d.	ERR [boru/syntax_error]: invalid numeric literal: 0d	a 0d marker with no digits
 0de	ERR [boru/syntax_error]: invalid 0d numeric literal: 0de	a 0d body that is not a number — decimalFromString declines, the caller raises
 0d	ERR [boru/syntax_error]: invalid numeric literal: 0d	the bare marker
+
+# --- word modifier suffixes, pathon escapes, shorthand keys --------------
+# Swept with scripts/parity-probe.sh; all verified on both engines. The
+# /f /s /u /t suffixes and their invalid combinations were entirely
+# unexercised by the corpus.
+#
+# PINNED, NOT BLESSED: the `word(foo)` and `sugar(...)` renders below are
+# NUR059 — canon falling through to the debug spelling, and for /f /s /u
+# /3 /0 the modifier is DROPPED, so the canon says something the source
+# did not. They are recorded because both engines agree on them, which
+# makes them a render-quality gap rather than a parity defect; a fix to
+# either engine alone will fail these rows loudly, which is the point.
+foo/f	word(foo)
+foo/s	word(foo)
+foo/u	word(foo)
+foo/t	sugar(type-bound [[foo]])
+foo/fs	ERR [boru/syntax_error]: invalid word modifier /fs on "foo"
+foo/sf	ERR [boru/syntax_error]: invalid word modifier /sf on "foo"
+foo/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "foo"
+foo/qu	ERR [boru/syntax_error]: invalid word modifier /qu on "foo"
+foo/tq	ERR [boru/syntax_error]: invalid word modifier /tq on "foo"
+foo/3	word(foo)
+foo/0	word(foo)
+/a\ b	word(/a\\) word(b)
+/a\\b	word(/a\\b)
+'a\\ b'	'a b'
+{a}	{a:word(a)}
+{a b}	{a:word(a) b:word(b)}
+{$x}	{$x:word($x)}
+m.a.b.c	m.a.b.c
+m.0	m.0
+a!	word(a) word(!)
+a.	ERR [boru/syntax_error]: `.` member access has no receiver
+1 )	1 )	a stray close paren survives as a value and keeps its source form
+
+# --- string escapes, unterminated forms, delimiter edges ------------------
+# Swept with the probe. The unterminated-container and stray-delimiter
+# rows pin ERROR TEXT, which is where two engines drift most easily.
+"a\\tb"	'a\\tb'
+"a\\rb"	'a\\rb'
+'a\\\\b'	'a\\\\b'
+`a${1}b`	interp('a' ${1} 'b')
+`plain`	'plain'
+"unterminated	ERR [boru/syntax_error]: this string is never closed: "unterminated
+'unterminated	ERR [boru/syntax_error]: this string is never closed: 'unterminated
+[1 2	[1 2]
+{a:1	{a:1}
+(1 2	ERR [boru/syntax_error]: unmatched opening parenthesis
+1 ]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here
+1 }	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here
+def x 1 ;	word(def) word(x) 1 end
+[a: 1]	[{a:1}]
+{1: 2}	{1:2}
+{'k': 1}	{k:1}
+{"k": 1}	{k:1}
+$	word($)
+$$	word($$)
+..	ERR [boru/syntax_error]: `.` member access has no receiver
+...	ERR [boru/syntax_error]: `.` member access has no receiver
+a..b	a.. word(b)
