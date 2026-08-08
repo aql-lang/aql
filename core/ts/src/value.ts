@@ -1077,7 +1077,17 @@ export function isCloseParen(v: Value): boolean {
 }
 
 // Go's IsEnd (core/go/value.go:2744) tests the vType alone, and so does
-// this. See above for why its two siblings still do not.
+// this. See above for why its two siblings still carry a word fallback.
+//
+// KNOWN DIVERGENCE, one row, deliberately left: `Word/__ED` resolves to
+// the End type LITERAL, whose vType is TEnd and whose payload is null, so
+// the step loop calls stepEnd on it and DROPS the value — `run Word/__ED`
+// produces nothing where Go renders the leaf `__ED`. It is exactly the
+// conflation isWord() had (a type literal of a marker type is not the
+// marker), and the obvious fix — also requiring a payload here — takes 11
+// eng/ts rows with it, because that module builds a payload-less End
+// somewhere. Measured, not assumed. Pinned in core/spec/divergent.tsv
+// rather than traded for a red module.
 export function isEnd(v: Value): boolean {
   return v.vType.equal(TEnd)
 }

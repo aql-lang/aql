@@ -151,10 +151,18 @@ the builtin table declares, so `Scalar/Nope` still does not mint a type.
 `Cidron` was simply absent from the TS table and is now declared.
 
 **Still open:** `Module` (another table entry) and `Word/__ED`, which now
-RESOLVES but canons the End type LITERAL through the End marker arm and
-renders nothing where Go renders the leaf. That is the same vType/payload
-conflation `isWord()` had, one arm over — the type literal of a marker type
-is not the marker. A measurement worth keeping: registering every type by its
+RESOLVES and still diverges — for a reason worth writing down, because the
+canon is not at fault. `canon` renders the End type literal `__ED`
+correctly; the STEP LOOP never lets it get there. `isEnd` tests the vType
+alone, so the payload-less literal is taken for the marker and `stepEnd`
+DROPS it.
+
+That is exactly the conflation `isWord()` had, one arm over: a type literal
+of a marker type is not the marker. And the obvious fix — requiring a
+payload in `isEnd` too — takes **11 `eng/ts` rows** with it, because that
+module builds a payload-less End somewhere. Measured, then reverted. One
+ledger row is not worth a red module, and the row now carries the diagnosis
+so the next attempt starts from the answer. A measurement worth keeping: registering every type by its
 leaf name — which is literally what Go's `TypeTable.RegisterType` does —
 is WRONG. It made `core/ts` resolve `__ED`, and `run __ED` is
 `undefined_word` on both engines. So the lookup `stepWord` consults is a
