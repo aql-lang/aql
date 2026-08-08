@@ -319,7 +319,7 @@ test-ts-core:
 # never lower it. parser/go's gate has sat at 100 since the module was cut
 # (parser/go/CLAUDE.md: a leaf over core has no other suite that could be
 # covering it), so this floor is the honest measure of the parity gap.
-TS_PARSER_GATE_LINES ?= 92
+TS_PARSER_GATE_LINES ?= 97
 test-ts-parser:
 	@echo "==> typecheck parser/ts"
 	cd parser/ts && npx tsc
