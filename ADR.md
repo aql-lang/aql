@@ -217,19 +217,19 @@ takes the reference and is no collection barrier; a bare fn name before a
 
 **Status:** Accepted · **Date:** 2026-08-03
 
-`eng/` holds language mechanics only: no word registrations, no domain
-types, no compiled-in names.
+`eng/` holds mechanics only: no registrations, no domain types.
 
-Type residence is three-way: mechanism types in eng, other global types in
-a middle component, module-scoped ones in `boru:*`. Algorithms are
-mechanism even when serving one word.
-
-The kernel is **name-blind**: word facts come from structural markers,
-declared properties and role bindings, never string literals. The parser
-is type-name-opaque.
-
-> **Amendment (2026-08-04).** The parser emits no names — only markers,
-> which the engine lowers through the sugar-role table.
+1. **Type residence is three-way:** mechanism types in eng, global types
+   in a middle component, module-scoped in `boru:*`.
+2. **Algorithms are mechanism,** even serving one word.
+3. **The kernel is name-blind:** word facts come from structural markers,
+   declared properties, role bindings, never string literals.
+   > **Amendment (2026-08-04).** The parser emits no names, only markers
+   > lowered by the sugar-role table.
+4. **The parser is type-name-opaque:** capitalised names are ordinary
+   Words; the engine resolves them.
+5. **Capability over enumeration:** facilities are granted by property,
+   never name lists.
 
 ---
 
