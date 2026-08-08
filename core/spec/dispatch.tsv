@@ -345,3 +345,20 @@ run qanyq x	ERROR:undefined_word	so an unbound name still faults on re-entry
 run def x 5 ; qanyq y	ERROR:undefined_word	the captured name is the one written
 run def x 'a' ; qanyq x	'a'	whatever it is bound to
 run qanyq 7	7	a non-word operand is passed through unchanged
+
+# A TYPE-ARG slot admits a type and refuses every value. It is not the
+# same rule as "a slot declared Type": the slot's declared type here is
+# Any, and it still takes only types.
+run tyq Integer	Integer	a bare type literal fills a type-arg slot
+run tyq List	List	container types included
+run tyq 5	ERROR:signature_error	a concrete value never does
+run tyq 'x'	ERROR:signature_error	whatever its type
+run tyq none	ERROR:signature_error	and `none` is a value, not the None type
+
+# A TYPE-LITERAL pattern narrows a slot by type rather than by payload,
+# and — unlike a concrete pattern — is enforced only where the operand
+# comes off the STACK.
+run 5 tpatq	5	the stack operand matches the pattern's type
+run 'x' tpatq	ERROR:signature_error	one of another type does not
+run tpatq	ERROR:signature_error	and an empty stack has nothing to match
+run def x 5 ; x tpatq	5	a def-bound operand is matched by its value's type

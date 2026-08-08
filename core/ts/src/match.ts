@@ -328,8 +328,12 @@ function patternsOk(sig: Signature, args: Value[], forwardCount: number): boolea
   return true
 }
 
+// Pattern payloads are compared by IDENTITY, which for the scalar payloads
+// a pattern can carry (bigint, number, string, boolean) is value equality —
+// bigint is a JS value type, so `1n === 1n` holds and no separate numeric
+// arm is needed. Object payloads (lists, maps) never reach here: patternsOk
+// enforces non-scalar patterns only at stack positions via the type test
+// above, and a bare type-literal pattern is handled before this call.
 function dataEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (typeof a === 'bigint' && typeof b === 'bigint') return a === b
-  return false
+  return a === b
 }

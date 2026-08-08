@@ -401,6 +401,31 @@ func coreSpecRegistry(t *testing.T) *Registry {
 		}),
 		BarrierPos: 1,
 	})
+	// tyq's only slot is a TYPE-ARG slot: it admits a type (a bare literal
+	// or a structural type body) and refuses every concrete value, which is
+	// a different rule from "a slot whose declared type is Type". It
+	// returns what it was given so a row can read the match back.
+	r.Register("tyq", Signature{
+		Params:   []FnParam{{Name: "t", Type: TAny}},
+		TypeArgs: map[int]bool{0: true},
+		Returns:  []*Type{TAny},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{a[0]}, nil
+		}),
+		BarrierPos: 1,
+	})
+	// tpatq carries a TYPE-LITERAL pattern (rather than patq's concrete
+	// scalar one) on a STACK slot. The distinction is load-bearing: a
+	// type pattern is enforced only at stack positions, so this is the
+	// shape that reaches the pattern matcher's type arm.
+	r.Register("tpatq", Signature{
+		Params:  []FnParam{{Name: "v", Type: TAny, Pattern: ptrTypeLit(TInteger)}},
+		Returns: []*Type{TInteger},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{a[0]}, nil
+		}),
+		BarrierPos: 0,
+	})
 	// depthq is the FULL-STACK fixture: the handler receives the whole
 	// resolved stack of the current paren scope and returns its complete
 	// replacement, rather than N args and their replacement. One word is
@@ -622,4 +647,10 @@ func TestCoreSpecDivergent(t *testing.T) {
 		}
 	}
 	t.Logf("core/spec divergent: %d rows", len(rows))
+}
+
+// ptrTypeLit is the addressable type literal FnParam.Pattern wants.
+func ptrTypeLit(t *Type) *Value {
+	v := NewTypeLiteral(t)
+	return &v
 }

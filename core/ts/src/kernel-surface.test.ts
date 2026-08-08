@@ -12,6 +12,7 @@ import {
   BoruError,
   Registry,
   makeConvert,
+  matchValues,
   makeUrlon,
   newAtom,
   newInteger,
@@ -159,5 +160,67 @@ describe("type name indexing", () => {
   it("an internal type is reachable by path but never by bare name", () => {
     assert.equal(resolveBuiltinTypeName("__ED"), undefined);
     assert.equal(newAtom("__ED").vType.toString(), "Scalar/Atom");
+  });
+});
+
+describe("matchValues — the all-stack poly path", () => {
+  // eng/ts's VM calls this for OpCallNativePoly; core/ts's own engine never
+  // does, so it is another eng-only export that reads as uncovered here.
+  const entry = () => {
+    const r = new Registry();
+    r.registerNativeFunc({
+      name: "w",
+      signatures: [
+        {
+          args: [TInteger],
+          returns: [TInteger],
+          barrierPos: 0,
+          handler: (a) => [a[0]!],
+        },
+        {
+          args: [TAny, TAny],
+          returns: [TAny],
+          barrierPos: 0,
+          handler: (a) => [a[0]!],
+        },
+      ],
+    });
+    return r.lookup("w")!;
+  };
+
+  it("binds the overload whose ARITY and types both fit", () => {
+    const m = matchValues(entry(), [newInteger(1n)]);
+    assert.equal(m?.sig.args.length, 1);
+    assert.equal(m?.forwardCount, 0);
+    assert.equal(m?.prefixCount, 1);
+  });
+
+  it("skips an overload of the wrong arity rather than truncating", () => {
+    const m = matchValues(entry(), [newString("x"), newString("y")]);
+    assert.equal(m?.sig.args.length, 2);
+  });
+
+  it("returns null when no overload matches", () => {
+    assert.equal(matchValues(entry(), [newString("x")]), null);
+    assert.equal(matchValues(entry(), []), null);
+  });
+
+  it("enforces patterns on the all-stack window", () => {
+    const r = new Registry();
+    r.registerNativeFunc({
+      name: "p",
+      signatures: [
+        {
+          args: [TInteger],
+          returns: [TInteger],
+          patterns: new Map([[0, newInteger(7n)]]),
+          barrierPos: 0,
+          handler: (a) => [a[0]!],
+        },
+      ],
+    });
+    const fn = r.lookup("p")!;
+    assert.notEqual(matchValues(fn, [newInteger(7n)]), null);
+    assert.equal(matchValues(fn, [newInteger(8n)]), null);
   });
 });
