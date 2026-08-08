@@ -300,6 +300,39 @@ shared corpus existed, and neither was wrong to write; they were just never
 checked against the other engine. That is the whole argument for the
 corpus in one sentence.
 
+## The next step, and exactly where it stalls
+
+The def clause proved the point it was built to test: `core/spec` could not
+BIND a name, so the whole def-substitution surface was unreachable, and the
+fix was notation rather than engine. The same question applies to the
+largest uncovered block left — fn dispatch (`dispatchFnDef`,
+`analyseFnBody`, ~120 lines of `engine.ts`) — and the answer is the same
+shape: the corpus cannot build a FUNCTION VALUE.
+
+An `fn( NAME PTYPE RTYPE [ body ] )` form was built and **reverted**, and
+the measurements are worth keeping because they are most of the work:
+
+- The TS half works. `def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 5`
+  dispatches to `6`, and the refusal rows (`inc 'x'`, bare `inc`) already
+  agree with Go.
+- The Go half does not. Three fixes took it from "matches nothing" to
+  "matches and crashes":
+  1. `BarrierPos: BarrierAllForward` is a SENTINEL resolved to `len(Args)`
+     at REGISTRATION (`upsertFnDef`). A value pushed straight onto the def
+     stack never registers, so it stays `-1` and matches nothing. Spell the
+     position out.
+  2. `NormalizeSig` must be called by hand, for the same reason.
+  3. `FnDefInfo.Registry` must be set — a boru-bodied fn runs its body
+     against the registry it was defined in.
+- After all three, `Run` still fails with an `internal_error` wrapping a
+  nil-pointer dereference, so at least one more field or step is required.
+
+It was reverted rather than shipped because the Go half CRASHING while the
+TS half works would have written six rows recording my fixture bug as an
+engine divergence — the same trap `quoteq` and `patq` set earlier on this
+branch, and the reason the probe exists. Whoever picks this up starts from
+"find the missing FnDefInfo setup", not from zero.
+
 ## The `go` column is not the reference by proof
 
 It is the reference by convention. On the parser side, two of the five
