@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** 135 MEASURED · 107 CLOSED · 28 PINNED (2026-08-08) · **Ledger:**
+**Status:** 135 MEASURED · 119 CLOSED · 16 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -200,12 +200,14 @@ third time on this programme the "reference by convention, not by proof"
 warning has paid — after the typed-container tag and the `end` marker on the
 parser side.
 
-### 8. An unclosed paren in the value stream — 6 rows, error CODE
+### 8. An unclosed paren in the value stream — 6 rows, **ALL CLOSED**
 
-Go completes the pending dispatch and reports `signature_error`; `core/ts`
-reports `syntax_error`. The core engine receives **values, not text**, so
-calling this a syntax error is arguably the wrong layer — but which code is
-right is a `REFERENCE.md` question, so it is recorded rather than "fixed".
+Go completed the pending dispatch and reported `signature_error`; `core/ts`
+reported `syntax_error`. The core engine receives **values, not text**, so it
+has no syntax to be wrong about — the question resolved itself once the
+mechanism was found. An unmatched `(` is a scan BOUNDARY: Go's forward scan
+stops at one it cannot resolve and lets the dispatch fail on its own terms.
+`core/ts` called `evalParenAt`, whose `findMatchingClose` miss throws.
 
 ### 9. BigDecimal sign and scale — 2 rows, **BOTH CLOSED**
 
@@ -235,13 +237,24 @@ inside the map where Go hands the handler the map as given and lets it
 raise its own error. Both arms of `autoEvalArgs` now carry the same gate
 the list arm always had.
 
-Still open: the EVAL-map ordering, where Go evaluates the argument before
-the handler runs and `core/ts` fires the handler first.
+**And the eval-map ordering, 7 more rows.** Go evaluates a map ARGUMENT
+before the handler runs, so a failure inside the map is reported instead of
+being masked by the handler's own error. Two defects made `core/ts` fire
+first: a bare WORD map value went through `resolveWordsDeep`, which leaves
+an unresolvable name ALONE, where Go runs it in a sub-engine; and the
+NESTED-map arm carried no `Eval` gate, so a runtime map inside an eval one
+was evaluated anyway.
+
+`autoEvalMapValues` and `evalMapValue` are two parallel implementations of
+the same idea, and every defect in this class was in the one that had been
+kept simpler — the `Eval` gate has now been added to it in three separate
+commits, each time in a different arm. That is what a duplicated rule costs.
+Merging them is the right follow-up and is not done here.
 
 ## What is closed, and what is deliberately not
 
-**107 of the 135 are closed** — the whole of classes 1, 6 and 9, most of
-class 5, 9 of the 11 in class 4, 38 of the 51 in class 2, and 5 of class
+**119 of the 135 are closed** — the whole of classes 1, 3, 6, 8 and 9, most
+of class 5, 9 of the 11 in class 4, 38 of the 51 in class 2, and 12 of class
 10.
 A further 8 (class 7) are ADJUDICATED with `core/ts` unchanged, because Go
 is the one that is wrong there. Each was a small, local defect with an
@@ -249,7 +262,7 @@ unambiguous Go twin to read against, and each moved its rows OUT of the
 ledger into the spec file they belong in, which is the mechanism working as
 designed.
 
-**The remaining 28 are not fixed.** Classes 1, 2 and 5 are real feature work in
+**The remaining 16 are not fixed.** Classes 1, 2 and 5 are real feature work in
 `core/ts` — the barrier is a whole rule with its own design note, the empty-
 paren handling is a rewrite of the forward window's operand planning, and the
 type-name table is a data gap plus a path resolver. Fixing them piecemeal
@@ -276,7 +289,7 @@ Pinning the 135 rows took `core/ts` from 88.20% to **90.71%**, and
 That is the rule restated from the other end: the uncovered surface and the
 divergent surface were the same surface.
 
-Closing 107 of them kept it there (90.38%): a row that moves from
+Closing 119 of them kept it there (90.31%): a row that moves from
 `divergent.tsv` to a spec file still runs, so the coverage it bought does
 not come back. The small dip from 90.73% is the barrier short-circuiting
 paths those rows used to walk — the rows still pass, they just reach the
