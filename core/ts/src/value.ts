@@ -179,7 +179,15 @@ export class Value {
   }
 
   isWord(): boolean {
-    return this.vType.equal(TWord)
+    // A word VALUE, not merely a value in the Word branch of the lattice.
+    // The `data !== null` half is what separates it from the TYPE LITERAL
+    // `Word`, which shares the vType and carries no payload. Without it,
+    // stepWord resolved the name `Word` to its literal, wrote the literal
+    // back to the same slot, and the step loop re-entered stepWord on it —
+    // ending in an UNCODED `AsWord: not a word value` that escaped the
+    // BoruError taxonomy entirely. Go never reaches that state because its
+    // AsWord tolerates a nil payload and yields an empty name.
+    return this.vType.equal(TWord) && this.data !== null
   }
 
   asInteger(): bigint {
@@ -1035,20 +1043,29 @@ export function newEnd(): Value {
   return new Value(TEnd, { name: 'end' } satisfies WordInfo)
 }
 
-function wordNamed(v: Value, name: string): boolean {
-  return v.vType.equal(TWord) && (v.data as WordInfo | null)?.name === name
-}
+// The three marker predicates test the VTYPE and nothing else, exactly as
+// Go's IsOpenParen / IsCloseParen / IsEnd do (core/go/value.go:2734-2746).
+//
+// Each carried an extra `|| the value is a Word named "(" / ")" / "end"`
+// fallback, left over from the legacy fixture tokenizer that produced bare
+// words where the parser produces markers. It made core/ts answer three
+// things Go does not: `run end 1` was the value 1 here and undefined_word
+// there (core has no WORD called end); a `)` written as a map value was
+// stored as data; and a word-shaped marker reached the barrier logic. The
+// parser emits real marker values for `;` and the parens — pinned by
+// parse.tsv's `def x 1 ;` row, which renders `end` — so nothing legitimate
+// depended on the fallback.
 
 export function isOpenParen(v: Value): boolean {
-  return v.vType.equal(TOpenParen) || wordNamed(v, '(')
+  return v.vType.equal(TOpenParen)
 }
 
 export function isCloseParen(v: Value): boolean {
-  return v.vType.equal(TCloseParen) || wordNamed(v, ')')
+  return v.vType.equal(TCloseParen)
 }
 
 export function isEnd(v: Value): boolean {
-  return v.vType.equal(TEnd) || wordNamed(v, 'end')
+  return v.vType.equal(TEnd)
 }
 
 /**

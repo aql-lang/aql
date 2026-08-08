@@ -1,6 +1,6 @@
 # CORE-TS-DIVERGENCES.1 — 135 measured core-level divergences, and where they hid
 
-**Status:** MEASURED and PINNED, not fixed (2026-08-08) · **Ledger:**
+**Status:** 135 MEASURED · 15 CLOSED · 120 PINNED (2026-08-08) · **Ledger:**
 [core/spec/divergent.tsv](../core/spec/divergent.tsv) · **Programme:**
 [GO-TS-PARITY.0.md](GO-TS-PARITY.0.md)
 
@@ -78,24 +78,39 @@ does not fit the slot). `core/ts`: `no_value_error` (it treats the group as
 having produced nothing usable). A caller matching on the code behaves
 differently.
 
-### 4. The WORD `end` versus the end MARKER — 11 rows
+### 4. The WORD `end` versus the end MARKER — 11 rows, **9 CLOSED**
 
 `;` is the marker and both engines handle it identically (pinned in
 `dispatch.tsv`). The bare word `end` is a different thing: `core` has no word
-by that name, so Go raises `undefined_word` while `core/ts` resolves the word
-to the marker and silently applies barrier semantics.
+by that name, so Go raised `undefined_word` while `core/ts` resolved the word
+to the marker and silently applied barrier semantics — `run end 1` was the
+value `1` here.
 
-```
-run end 1                   go: undefined_word    ts: 1
-```
+**Closed.** `core/ts`'s `isOpenParen` / `isCloseParen` / `isEnd` each carried
+an extra "…or a Word named `(` / `)` / `end`" fallback that Go's predicates
+never had — a leftover from the legacy fixture tokenizer, which produced bare
+words where the parser produces markers. All three now test the vType alone.
+The 9 rows moved to `dispatch.tsv`; the 2 that remain are class 2 in
+disguise.
 
-### 5. The builtin type-name table — 9 rows
+### 5. The builtin type-name table — 9 rows, **4 CLOSED**
 
-`core/ts`'s leaf name table is narrower than `core/go`'s (`Cidron`, `Module`
-resolve there and not here) and it has no slash-path form (`Scalar/String`,
-`Word/__ED`). **`Word` is worse than a miss**: `core/ts` throws an uncoded
-`AsWord: not a word value`, a `non_boru` failure escaping the error taxonomy
-entirely. That is the one row here that is a defect on any reading.
+**The crash is closed.** `Word` names a lattice branch, and its type literal
+shares that branch's vType. `core/ts`'s `isWord()` tested the vType *alone*,
+so `stepWord` resolved the name, wrote the literal back to the same slot, and
+the step loop re-entered `stepWord` on it — ending in an uncoded
+`AsWord: not a word value` that escaped the BoruError taxonomy entirely.
+`isWord()` now also requires word DATA, which is exactly what separates a
+word from its type.
+
+**Still open:** `core/ts`'s type table genuinely lacks `Cidron` and `Module`
+(it is a subset port of `core/go/typetable.go`), and it has no slash-PATH
+form, so `Scalar/String` and `Word/__ED` are `undefined_word` here and
+resolve there. A measurement worth keeping: registering every type by its
+leaf name — which is literally what Go's `TypeTable.RegisterType` does —
+is WRONG. It made `core/ts` resolve `__ED`, and `run __ED` is
+`undefined_word` on both engines. So the lookup `stepWord` consults is a
+filtered one, and the `!internal` guard in `indexDecl` belongs there.
 
 ### 6. A bare marker as a map value — 9 rows
 
@@ -118,17 +133,19 @@ reports `syntax_error`. The core engine receives **values, not text**, so
 calling this a syntax error is arguably the wrong layer — but which code is
 right is a `REFERENCE.md` question, so it is recorded rather than "fixed".
 
-### 9. BigDecimal sign and scale — 2 rows
+### 9. BigDecimal sign and scale — 2 rows, **BOTH CLOSED**
 
 ```
-bigdec -0.0                 go: -0d0.0     ts: 0d0.0
-bigdec 0e5                  go: 0d000000   ts: 0d0
+bigdec -0.0                 go: -0d0.0     ts: 0d0.0    (was)
+bigdec 0e5                  go: 0d000000   ts: 0d0      (was)
 ```
 
-`core/ts/src/decimal.ts` loses the sign of negative zero and normalises away
-a zero's exponent, where Go's `apd` payload keeps both. Small, and both are
-the decimal type's whole reason for existing: an exact representation that
-renders what it was given.
+A bigint has no `-0`, so the sign of `-0.0` was lost the moment the
+significand was built. `Decimal` now carries an explicit `negZero` flag
+beside the coefficient, exactly as `apd` carries `Negative`. And a zero
+significand short-circuited its exponent away; it now grows its trailing-zero
+run like any other value, because the scale is part of the identity rather
+than noise to normalise. Seven rows in `canon.tsv` pin both edges.
 
 ### 10. Error ORDER inside containers
 
@@ -136,9 +153,15 @@ Which of two failing map values surfaces first differs between the engines.
 Folded into the ledger's map sections rather than given its own; it is a
 consequence of class 2 rather than a separate rule.
 
-## What is deliberately NOT done here
+## What is closed, and what is deliberately not
 
-**None of these are fixed.** Classes 1, 2 and 5 are real feature work in
+**15 of the 135 are closed** — the whole of class 9, the crash in class 5,
+and 9 of the 11 in class 4. Each was a small, local defect with an
+unambiguous Go twin to read against, and each moved its rows OUT of the
+ledger into the spec file they belong in, which is the mechanism working as
+designed.
+
+**The remaining 120 are not fixed.** Classes 1, 2 and 5 are real feature work in
 `core/ts` — the barrier is a whole rule with its own design note, the empty-
 paren handling is a rewrite of the forward window's operand planning, and the
 type-name table is a data gap plus a path resolver. Fixing them piecemeal
@@ -164,3 +187,7 @@ Pinning the 135 rows took `core/ts` from 88.20% to **90.71%**, and
 `engine.ts` from 69.08% to **76.80%** — without a line of new engine code.
 That is the rule restated from the other end: the uncovered surface and the
 divergent surface were the same surface.
+
+Closing the first 15 kept it there (90.73%), which is the expected shape: a
+row that moves from `divergent.tsv` to a spec file still runs, so the
+coverage it bought does not come back.

@@ -138,6 +138,11 @@ export function indexDecl(d: { path: string; alias?: string; internal?: boolean 
   const name = parts[parts.length - 1]!
   BY_PATH.add(d.path)
   if (parts.length === 1) ROOTS.add(d.path)
+  // Internal types stay OUT of the user-facing name table. Go's
+  // TypeTable.byName is unfiltered, but the lookup stepWord consults is
+  // not: `__ED` is undefined_word on both engines, which is what
+  // establishes that the filter belongs here. (Measured — removing it
+  // made core/ts resolve `__ED` to the End marker and render nothing.)
   if (!d.internal) BY_NAME.set(name, d.path)
 
   if (LEAF_INDEX.has(name)) {

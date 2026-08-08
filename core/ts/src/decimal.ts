@@ -30,10 +30,20 @@ export class Decimal {
    * same distinction and `Text('f')` shows it.
    */
   readonly scale: number
+  /**
+   * NEGATIVE ZERO. A bigint has no -0, so the sign of `-0.0` would be lost
+   * the moment the significand is built — and it was: `-0.0` rendered
+   * `0d0.0` here against Go's `-0d0.0`. apd carries an explicit `Negative`
+   * flag beside its coefficient for exactly this reason, and so does this.
+   * Meaningful ONLY when `unscaled` is zero; a non-zero significand
+   * carries its own sign.
+   */
+  readonly negZero: boolean
 
-  constructor(unscaled: bigint, scale: number) {
+  constructor(unscaled: bigint, scale: number, negZero = false) {
     this.unscaled = unscaled
     this.scale = scale
+    this.negZero = negZero && 0n === unscaled
   }
 
   /**
@@ -42,13 +52,14 @@ export class Decimal {
    * of the value's identity here, not noise to normalise away.
    */
   toString(): string {
-    const neg = this.unscaled < 0n
-    const digits = (neg ? -this.unscaled : this.unscaled).toString()
+    const neg = this.unscaled < 0n || this.negZero
+    const digits = (this.unscaled < 0n ? -this.unscaled : this.unscaled).toString()
     const sign = neg ? '-' : ''
     if (this.scale <= 0) {
-      // Whole, with -scale trailing zeros. A zero significand stays "0"
-      // rather than growing a run of zeros after it.
-      if (0n === this.unscaled) return sign + '0'
+      // Whole, with -scale trailing zeros. A ZERO significand grows the
+      // run too: `0e5` is `000000` in apd's Text('f'), and short-circuiting
+      // it to a bare `0` was a divergence — the exponent is part of the
+      // value's identity here exactly as the scale is.
       return sign + digits + '0'.repeat(-this.scale)
     }
     if (digits.length > this.scale) {
@@ -80,5 +91,6 @@ export function decimalFromString(src: string): Decimal | undefined {
   if ('' === intPart && '' === fracPart) return undefined
   const exp = undefined === m[4] ? 0 : Number.parseInt(m[4], 10)
   const digits = intPart + fracPart
-  return new Decimal(sign * BigInt(digits), fracPart.length - exp)
+  const unscaled = BigInt(digits)
+  return new Decimal(sign * unscaled, fracPart.length - exp, -1n === sign && 0n === unscaled)
 }

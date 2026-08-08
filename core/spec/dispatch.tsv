@@ -77,3 +77,31 @@ run [ addq 1 ; ]	ERROR:signature_error
 run boomq ;	ERROR:signature_error
 run 1 2 sumq ;	3
 run depthq ;	0
+
+# --- the WORD `end` is not the end MARKER -------------------------------
+# `;` is the marker (above); the bare word `end` is an ordinary name, and
+# core defines no word by it. These rows were 9 rows of divergent.tsv until
+# core/ts's isEnd stopped treating a Word named "end" as the marker — a
+# fallback left over from the legacy fixture tokenizer that Go's IsEnd never
+# had, and that made `run end 1` the value 1 here against Go's error.
+run end	ERROR:undefined_word
+run end 1	ERROR:undefined_word
+run 1 end 2	ERROR:undefined_word
+run 1 2 end	ERROR:undefined_word
+run 1 2 end sumq	ERROR:undefined_word
+run 1 2 end depthq	ERROR:undefined_word
+run [ 1 end 2 ]	ERROR:undefined_word
+run 1 2 addq end	ERROR:undefined_word
+run 1 negq end	ERROR:undefined_word
+
+# --- a type literal is not a word ---------------------------------------
+# `Word` names the lattice branch, and its literal shares that branch's
+# vType. core/ts's isWord() tested the vType ALONE, so stepWord resolved
+# the name, wrote the literal back to the same slot, and the step loop
+# re-entered stepWord on it — ending in an UNCODED `AsWord: not a word
+# value` that escaped the BoruError taxonomy entirely. isWord() now
+# requires word DATA, which is what separates a word from its type.
+run Word	Word
+run 1 Word 2	1 Word 2
+run [ Word ]	[Word]
+run boomq Word	ERROR:fixture_boom

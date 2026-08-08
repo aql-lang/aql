@@ -139,36 +139,17 @@ run 'x' addq ( 1 )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_er
 run addq ( 1 ) ( 'x' )	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
 run 1 addq ( 'x' ) 2	ERROR:signature_error	ERROR:no_value_error	CODE: signature_error in Go, no_value_error in TS, for the same refusal.
 
-# --- the WORD `end` versus the end MARKER -----------------------------------
-# `;` is the marker and both engines handle it identically (pinned in
-# dispatch.tsv). The bare word `end` is a different thing: core has no word
-# by that name, so Go raises undefined_word, while core/ts resolves the word
-# to the marker and silently applies barrier semantics. `run end 1` is an
-# error in Go and the value 1 here.
-run end	ERROR:undefined_word		DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run end 1	ERROR:undefined_word	1	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run 1 end 2	ERROR:undefined_word	1 2	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run 1 2 end	ERROR:undefined_word	1 2	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run 1 2 end sumq	ERROR:undefined_word	3	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run 1 2 end depthq	ERROR:undefined_word	1 2 2	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run [ 1 end 2 ]	ERROR:undefined_word	[1 2]	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
 run boomq end	ERROR:undefined_word	ERROR:signature_error	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
 run 1 boomq end	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run 1 2 addq end	ERROR:undefined_word	3	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
-run 1 negq end	ERROR:undefined_word	-1	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
 
 # --- the builtin type-name table, and slash paths ---------------------------
 # core/ts's leaf name table is narrower than core/go's and has no path form.
 # `Word` is worse than a miss: core/ts CRASHES with an uncoded error
 # (`AsWord: not a word value`), which is a non_boru failure escaping the
 # taxonomy entirely — the one row here that is a defect on any reading.
-run Word	Word	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
-run 1 Word 2	1 Word 2	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 run Scalar/String	String	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 run Word/__ED	__ED	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 run 1 Scalar/String	1 String	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
-run [ Word ]	[Word]	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
-run boomq Word	ERROR:fixture_boom	ERROR:non_boru:AsWord: not a word value	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 run Cidron	Cidron	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 run [ Module ]	[Module]	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
 
@@ -218,10 +199,3 @@ run addq ( ( 1 2	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error 
 run negq (	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS.
 run 5 addq (	ERROR:signature_error	ERROR:syntax_error	CODE: signature_error in Go, syntax_error in TS.
 
-# --- BigDecimal sign and scale ----------------------------------------------
-# core/ts/src/decimal.ts loses the sign of NEGATIVE ZERO and normalises away
-# a zero's exponent, where Go's apd payload keeps both. Small, and both are
-# the decimal type's whole reason for existing: an exact representation that
-# renders what it was given.
-bigdec -0.0	-0d0.0	0d0.0	DATA: TS decimal loses negative-zero sign and a zero coefficient exponent.
-bigdec 0e5	0d000000	0d0	DATA: TS decimal loses negative-zero sign and a zero coefficient exponent.
