@@ -1,10 +1,15 @@
-# parser/spec/divergent.tsv — the parser parity-debt ledger.
+# parser/spec/divergent.tsv — the LIVE parser parity-debt ledger (NUR060).
 #
 # One row per divergence: src <TAB> go <TAB> ts <TAB> justification.
-# Same escaping and comment rules as parse.tsv. The file is intentionally
-# empty of data rows: parser/go and parser/ts currently agree on every pinned
-# parser contract. New rows require the reviewed shrink-only justification
-# described in parser/spec/README.md.
+# Same escaping and comment rules as parse.tsv. Every row is a real,
+# currently-measured divergence: the Go spec runner must reproduce the
+# `go` column and the TS runner the `ts` column on every run, the row
+# count is machine-pinned in both runners, and the ratchet direction is
+# shrink-toward-zero — a row leaves by being FIXED and moving to
+# parse.tsv, never by deletion. The rows below are one representative per
+# divergence class from the 2026-08-09 probe sweep (55 divergences across
+# 2,587 sources); see parser/spec/README.md §"The current debt" and
+# NUR.md §NUR060, which blocks until this ledger is empty again.
 [1 =>	[paren([1 sugar(lambda) 1])]	[1]	trailing `=>` with no body: the Go arrowfold still folds (the input doubles as the body); the TS fold drops the paren group from the value stream entirely. A DATA-class divergence — Go matches the fold-always arrowfold grammar.
 if . `${x}` =>	if.(interp(${word(x)}) sugar(lambda) interp(${word(x)}))	if.interp(${word(x)})	the same trailing-arrow fold loss, inside a dotchain segment: Go folds the interp into a lambda group, TS keeps only the bare interp.
 ? ? :	word(?) word(?)	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	a trailing bare colon: Go accepts and drops the empty implicit pair, TS refuses the whole source — an accept/reject split.

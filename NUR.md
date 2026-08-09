@@ -70,6 +70,7 @@ commit.
 | [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
+| [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2126,3 +2127,36 @@ the remaining direct `AddDiagnostic` callers in lang
 `native_module_module.go:80`) for mirror-vs-model-undermining
 classification, and consider extending a gate over lang emitters.
 
+
+---
+
+## NUR060 — The parser twins disagree on open-input sources beyond the corpus {#nur060}
+
+**Status:** Pending · **Recorded:** 2026-08-09 · **Surfaced by:** PR #337
+parity-probe sweep; flagged for this register by the PR #337 review
+(Codex P1)
+
+**Rule:** one language contract, two implementations: `parser/go` and
+`parser/ts` must render every source identically — the uniformity the
+`parser/spec` corpus exists to enforce.
+**Divergence:** a 2,587-source probe sweep measured 55 sources (~2.1%)
+where the twins disagree, in eight classes: trailing-`=>` fold loss (TS
+drops the paren group Go folds — also inside dotchains), two
+accept/reject splits (trailing bare `:` — Go accepts, TS refuses;
+`=> ,` — Go refuses, TS accepts and silently drops tokens), post-`]`
+recovery-token detail (TS reports an empty token where Go names the
+offender), two error-precedence splits (receiverless-`.` vs
+unmatched-`(`, and bare-`/s` vs unmatched-`(`), and an internal
+type-name leak in one message on both sides.
+**Evidence:** `parser/spec/divergent.tsv` — the live ledger, one measured
+row per class; both spec runners re-render every row against their own
+column on every run, so a row can neither rot nor survive its fix.
+`scripts/parity-probe.sh` reproduces the sweep.
+**Documentation status:** parser/spec/README.md §"The current debt" and
+design/GO-TS-PARITY.0.md carry the honest scope: corpus parity exact,
+open-input parity not.
+**Proposed verdict:** resolve by fix, class by class — each fix moves its
+ledger row to `parse.tsv` (the runners force the move: a fixed divergence
+fails the ledger loudly). The behavioral classes (fold loss, the two
+accept/reject splits) should go first; the diagnostic-detail classes
+follow. The record discharges when the ledger is empty again.
