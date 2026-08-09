@@ -27,7 +27,14 @@ trap 'rm -rf "$tmp"' EXIT
 # parser/ts and this probe deliberately share core's package-exported dist
 # module so Value identity checks cannot split across source/dist copies.
 # Build that artifact here as well: the probe is documented as standalone and
-# must work immediately after a clean checkout + parser npm install.
+# must work immediately after a clean checkout. The core build's tsc run
+# resolves @types/node from core/ts's OWN node_modules, so install both
+# workspaces' dependencies when they are missing rather than failing with a
+# bare TS2688.
+[ -d "$repo/core/ts/node_modules" ] || ( cd "$repo/core/ts" && npm ci --no-audit --no-fund >/dev/null ) || {
+  echo "core/ts npm ci failed" >&2; exit 1; }
+[ -d "$repo/parser/ts/node_modules" ] || ( cd "$repo/parser/ts" && npm ci --no-audit --no-fund >/dev/null ) || {
+  echo "parser/ts npm ci failed" >&2; exit 1; }
 ( cd "$repo/parser/ts" && npm run --silent build:core-dev >/dev/null ) || {
   echo "core/ts development build failed" >&2; exit 1; }
 

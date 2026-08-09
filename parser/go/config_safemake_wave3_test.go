@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	jsonic "github.com/tabnas/jsonic/go"
@@ -162,6 +163,39 @@ func TestSafeParseDataWave3(t *testing.T) {
 	// A non-number input declines (ok=false, no error).
 	if _, ok, cerr := ConvertParsedNumber("not-a-number"); ok || cerr != nil {
 		t.Errorf("ConvertParsedNumber(string): want ok=false err=nil, got ok=%v err=%v", ok, cerr)
+	}
+}
+
+// TestSafeParseDataLenientText pins the jsonic-superset side of the data
+// seam: a digit-led run that is not a complete Boru numeric spelling stays
+// lenient text, exactly as the stock data grammar decodes it. The data-mode
+// matcher must never split a run — `1.x` is one string, never [1, '.x'].
+func TestSafeParseDataLenientText(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want any
+	}{
+		{src: "{v: 1.2.3}", want: map[string]any{"v": "1.2.3"}},
+		{src: "1.x", want: "1.x"},
+		{src: "{p: 1.2-beta}", want: map[string]any{"p": "1.2-beta"}},
+		{src: "1..2", want: "1..2"},
+		{src: "{a: 1.5suffix}", want: map[string]any{"a": "1.5suffix"}},
+		// An empty exponent after a dot declines rather than splitting.
+		{src: "{a: 1.e}", want: map[string]any{"a": "1.e"}},
+		// A signed leading-dot run followed by text declines whole.
+		{src: "+.5x", want: "+.5x"},
+		// Language operators (`=`, `;`) are plain text in a data grammar.
+		{src: "{a: 1=2}", want: map[string]any{"a": "1=2"}},
+		{src: "1;2", want: "1;2"},
+	} {
+		v, err := SafeParseData(tc.src)
+		if err != nil {
+			t.Errorf("SafeParseData(%q): %v", tc.src, err)
+			continue
+		}
+		if got := jsonic.Plainify(v); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("SafeParseData(%q) = %#v, want %#v", tc.src, got, tc.want)
+		}
 	}
 }
 

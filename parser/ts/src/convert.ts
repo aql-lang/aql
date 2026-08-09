@@ -250,7 +250,10 @@ function withPos(v: Value, pos: SrcPos): Value {
 // node with one of these already-converted cells. The ordinary converters
 // then retain all of their source-order and context logic without recursively
 // descending through host call frames.
-class ConvertedNode {
+// Source-module export only (like the direct converter seams): the guard
+// tests assert the preparation walk actually installs these cells. It is
+// not part of the package entry point.
+export class ConvertedNode {
   value: Value
   parenItems: Value[] | undefined
 
@@ -315,20 +318,6 @@ function interpolationExpressionError(err: unknown): Error {
   return Object.assign(new Error(`interpolation expression error: ${errMessage(err)}`), {
     cause: err,
   })
-}
-
-// The explicit conversion stack has no JavaScript call frames through which
-// convertInterpGroup can catch a descendant failure. Rebuild the same wrapper
-// chain Go's recursive converter would have added at every enclosing `${...}`.
-// Source-module export only so the zero-frame identity arm can be pinned
-// directly; normal parser failures only reach this helper through the work
-// stack. It is not part of the package entry point.
-export function wrapInterpolationExpressionErrors(err: unknown, levels: number): unknown {
-  let wrapped = err
-  for (let i = 0; i < levels; i++) {
-    wrapped = interpolationExpressionError(wrapped)
-  }
-  return wrapped
 }
 
 function nestingLimitError(src: string): BoruError {
@@ -423,15 +412,22 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
       continue
     }
 
-    work.push({ ...task, node, replace, exit: true })
-
     let childLevel = task.level
     if (Array.isArray(node) || isMapNode(node) || node instanceof ParenGroup) {
       childLevel++
       if (childLevel > MAX_PARSE_NESTING_DEPTH) {
-        throw wrapInterpolationExpressionErrors(nestingLimitError(d.src), task.interpLevels)
+        // Defer the breach exactly like a failed descendant conversion: Go
+        // raises the limit when its source-ordered recursive walk ENTERS
+        // this container, so a source-earlier error elsewhere must still
+        // win. The ordinary walk adds interpolation wrappers when it
+        // crosses each enclosing InterpGroup; wrapping here would either
+        // report this breach too early or double-wrap the stored failure.
+        replace!(new FailedConvertedNode(nestingLimitError(d.src)))
+        continue
       }
     }
+
+    work.push({ ...task, node, replace, exit: true })
 
     if (Array.isArray(node)) {
       const arr = node as Record<string, unknown> & unknown[]
@@ -476,16 +472,26 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     // frame. Literal parts have no descendants.
     const interp = node as InterpGroup
     for (let p = interp.parts.length - 1; p >= 0; p--) {
-      const [part] = deSite(interp.parts[p])
+      const raw = interp.parts[p]
+      const [part] = deSite(raw)
       if (!(part instanceof IexprGroup)) {
         continue
       }
       const exprLevel = childLevel + 1
       if (exprLevel > MAX_PARSE_NESTING_DEPTH) {
-        throw wrapInterpolationExpressionErrors(
-          nestingLimitError(d.src),
-          task.interpLevels + 1,
-        )
+        // Defer the breach exactly like a failed descendant conversion:
+        // Go raises the limit when its source-ordered walk enters this
+        // expression frame, so a source-earlier error elsewhere must
+        // still win. convertInterpGroup adds this expression's own
+        // wrapper when it reaches the cell; the enclosing `${...}`
+        // frames wrap naturally after that.
+        const cell = new FailedConvertedNode(nestingLimitError(d.src))
+        if (raw instanceof Sited) {
+          raw.node = cell
+        } else {
+          interp.parts[p] = cell
+        }
+        continue
       }
       for (let i = part.items.length - 1; i >= 0; i--) {
         const index = i
@@ -2101,6 +2107,13 @@ export function convertInterpGroup(grp: InterpGroup, d: ParseDepth): Value {
   let hasExpr = false
   for (const raw of grp.parts) {
     const [item] = deSite(raw) // interp parts are not normally sited; guard anyway
+    if (item instanceof FailedConvertedNode) {
+      // A `${...}` expression frame the pre-pass could not convert (e.g.
+      // a deferred nesting-limit breach). Rethrow with this expression's
+      // own wrapper, exactly as the catch below adds it for a failure
+      // raised during live conversion.
+      throw interpolationExpressionError(item.error)
+    }
     const t = asText(item)
     if (t !== undefined) {
       // Template literal segment (quote "tl").

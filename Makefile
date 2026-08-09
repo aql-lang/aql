@@ -417,8 +417,16 @@ test-ts-parser-package:
 
 # One named gate for the complete parser twin contract. CI installs the TS
 # dependencies first, then runs both standalone 100% coverage gates plus the
-# independent broad differential over eng/spec.
-parser-parity: cover-gate-parser test-ts-parser test-ts-parser-package parser-crossdiff
+# independent broad differential over eng/spec. The legs run as recipe
+# lines, not prerequisites, so they stay SEQUENTIAL under `make -j`: three
+# of them delete and rebuild core/ts/dist while the others import it, and
+# running them concurrently races the rmSync/tsc rebuild against a test
+# process mid-import.
+parser-parity:
+	$(MAKE) cover-gate-parser
+	$(MAKE) test-ts-parser
+	$(MAKE) test-ts-parser-package
+	$(MAKE) parser-crossdiff
 
 # ---- compiled-coverage status surface ----------------------------------
 #

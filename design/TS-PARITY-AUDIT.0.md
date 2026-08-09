@@ -1,6 +1,9 @@
 # TS-PARITY-AUDIT.0 — parser battery parity audit
 
-**Status:** COMPLETE; all measured parser divergences fixed, zero-row debt ledger · **Started:** 2026-08-07
+**Status:** COMPLETE; every corpus row agrees in both ports. Open-input
+probing (2026-08-09) found divergences beyond the corpus; the live ledger
+`parser/spec/divergent.tsv` carries one measured row per class — see
+parser/spec/README.md §"The current debt" · **Started:** 2026-08-07
 (maintainer instruction: "Bring ts up to 100% and carve out the ts parser
 module. Report on parity and coverage when done")
 

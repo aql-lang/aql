@@ -55,11 +55,14 @@ func SafeParseData(src string) (any, error) {
 	jsonicMakeMu.Lock()
 	j := jsonic.Make()
 	jsonicMakeMu.Unlock()
-	// Keep every numeric spelling that Boru classifies itself on one #NR
-	// token. The stock Go jsonic matcher drops trailing-dot exponents,
-	// binary64 overflow, and base-prefix overflow to plain values/text,
-	// which would make ConvertParsedNumber silently decline them.
-	setupDecimalUnderscoreMatcher(j, parserTokens{})
+	// Keep every COMPLETE numeric spelling that Boru classifies itself on
+	// one #NR token. The stock Go jsonic matcher drops trailing-dot
+	// exponents, binary64 overflow, and base-prefix overflow to plain
+	// values/text, which would make ConvertParsedNumber silently decline
+	// them. The data-mode matcher claims only complete tokens and never
+	// splits: digit-led prose (`1.x`, `1.2.3`, `1.2-beta`) stays on the
+	// stock lenient text path, preserving the jsonic-superset contract.
+	setupDataDecimalMatcher(j)
 	setupNumberSub(j)
 	return j.Parse(src)
 }

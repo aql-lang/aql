@@ -14,6 +14,7 @@ import { loadDeclGrammar } from './declgrammar.ts'
 import {
   setupBaseTokens,
   setupBigNumberMatcher,
+  setupDataDecimalMatcher,
   setupDecimalUnderscoreMatcher,
   setupMiniLitMatcher,
   setupNumberSub,
@@ -143,7 +144,10 @@ function configValueCategory(value: unknown): 'list' | 'string' | 'scalar' {
  */
 export function safeParseData(src: string): unknown {
   const jsonic = safeMake()
-  setupDecimalUnderscoreMatcher(jsonic)
+  // The data-mode matcher claims only complete numeric tokens and never
+  // splits: digit-led prose (`1.x`, `1.2.3`, `1.2-beta`) stays on the stock
+  // lenient text path, preserving the jsonic-superset contract.
+  setupDataDecimalMatcher(jsonic)
   setupNumberSub(jsonic, src)
   return parsePlain(jsonic, src)
 }

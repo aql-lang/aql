@@ -8,14 +8,22 @@
 // parser corpus with a shared reader would hide precisely the class of defect
 // design/TS-PARITY-AUDIT.0.md found.
 //
-// Five files, five contracts (lex.tsv has its own strict runner in
-// lexspec.test.ts because it renders tokens rather than parsed values):
+// Six files, six contracts (lex.tsv and data.tsv have their own strict
+// runners in lexspec.test.ts and dataspec.test.ts because they render
+// tokens and decoded data rather than parsed values):
 //
 //   parse.tsv      src -> expected. Both engines must produce `expected`.
-//   divergent.tsv  src -> go, ts.   Must stay empty: full parser parity is a
-//                                   hard invariant, not accepted debt.
+//   divergent.tsv  src -> go, ts.   The LIVE parity-debt ledger: each row is a
+//                                   real measured divergence. This runner
+//                                   re-renders every row and must reproduce
+//                                   the `ts` column exactly, so a fixed
+//                                   divergence fails loudly and the row moves
+//                                   to parse.tsv. The row count is pinned in
+//                                   both runners.
 //   lex.tsv        src, EOF status -> exact trivia-preserving token stream,
 //                                   including UTF-8 byte offsets.
+//   data.tsv       src -> decode.  The safe DATA-decode seam
+//                                   (safeParseData + convertParsedNumber).
 //   nesting.tsv    kind, depth -> outcome. Each runner independently builds
 //                                   the source, checks OK/error code, and walks
 //                                   every successful spine iteratively.
@@ -46,8 +54,8 @@ import { parse } from './index.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SPEC_DIR = path.resolve(__dirname, '..', '..', 'spec')
-const PARSE_SPEC_ROW_COUNT = 648
-const DIVERGENT_SPEC_ROW_COUNT = 0
+const PARSE_SPEC_ROW_COUNT = 698
+const DIVERGENT_SPEC_ROW_COUNT = 8
 const NESTING_SPEC_ROW_COUNT = 18
 const SHAPE_SPEC_ROW_COUNT = 26
 
@@ -542,14 +550,23 @@ describe('parser spec — parse.tsv', () => {
   }
 })
 
-// Zero parser debt is executable. readSpec validates the four-column/provenance
-// form first, then its exact-count ratchet rejects every data row until the
-// measured difference is fixed and moved to parse.tsv.
-describe('parser spec — divergent.tsv (hard parity invariant)', () => {
-  const divergentRows = readSpec('divergent.tsv')
-  it('is empty — parser/go and parser/ts parity is exact', () => {
-    assert.equal(divergentRows.length, DIVERGENT_SPEC_ROW_COUNT)
-  })
+// The parity-debt ledger is LIVE rather than merely counted: this side
+// re-renders every row's source and must reproduce the `ts` column exactly
+// (the Go runner does the same against its `go` column). A divergence that
+// gets fixed therefore fails here loudly — the row must then move to
+// parse.tsv — and a row can never drift into recording behavior neither
+// port has. readSpec validates the four-column/provenance form and the
+// exact-count ratchet first, so debt cannot grow silently.
+describe('parser spec — divergent.tsv (the live parity-debt ledger)', () => {
+  for (const r of readSpec('divergent.tsv')) {
+    it(`${r.line}: ${JSON.stringify(r.src)} still diverges as recorded`, () => {
+      assert.equal(
+        renderSpec(r.src),
+        r.cols[1],
+        'if the ports now agree here, move the row to parse.tsv',
+      )
+    })
+  }
 })
 
 describe('parser spec — nesting.tsv', () => {

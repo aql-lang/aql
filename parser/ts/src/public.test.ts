@@ -165,6 +165,27 @@ describe('public parser helpers', () => {
       )
     }
 
+    // The jsonic-superset side of the data seam: a digit-led run that is
+    // not a complete Boru numeric spelling stays lenient text, exactly as
+    // the stock data grammar decodes it. The data-mode matcher must never
+    // split a run — `1.x` is one string, never [1, '.x'].
+    for (const [src, want] of [
+      ['{v: 1.2.3}', { v: '1.2.3' }],
+      ['1.x', '1.x'],
+      ['{p: 1.2-beta}', { p: '1.2-beta' }],
+      ['1..2', '1..2'],
+      ['{a: 1.5suffix}', { a: '1.5suffix' }],
+      // An empty exponent after a dot declines rather than splitting.
+      ['{a: 1.e}', { a: '1.e' }],
+      // A signed leading-dot run followed by text declines whole.
+      ['+.5x', '+.5x'],
+      // Language operators (`=`, `;`) are plain text in a data grammar.
+      ['{a: 1=2}', { a: '1=2' }],
+      ['1;2', '1;2'],
+    ] as const) {
+      assert.deepEqual(plainify(safeParseData(src)), want)
+    }
+
     const unicodeList = safeParseData('[🙂,1_]') as unknown[]
     assert.throws(
       () => convertParsedNumber(unicodeList[1]),

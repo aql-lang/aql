@@ -227,6 +227,24 @@ func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
 // deliberately loose here: numberValToValue owns the language rule and
 // reports a misplaced `_` using the complete literal source.
 func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
+	setupDecimalBoundaryMatcher(j, false)
+}
+
+// setupDataDecimalMatcher is the DATA-mode variant of the decimal boundary
+// shim, for plain-jsonic decode seams (SafeParseData). Data grammars have no
+// `.` member-access token and promise jsonic's lenient superset, so this
+// mode claims a run only when it is a complete numeric token at a data
+// boundary and otherwise DECLINES — it never splits. Digit-led prose such as
+// `1.x`, `1.2.3` or `1.2-beta` falls back whole to the stock lenient text
+// scanner instead of erroring or shedding a stray second value.
+func setupDataDecimalMatcher(j *jsonic.Jsonic) {
+	setupDecimalBoundaryMatcher(j, true)
+}
+
+// setupDecimalBoundaryMatcher registers the shared matcher body. dataMode
+// selects the boundary alphabet and the no-split rule described on the two
+// wrappers above; the language mode is bit-for-bit the historical behavior.
+func setupDecimalBoundaryMatcher(j *jsonic.Jsonic, dataMode bool) {
 	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
 	isDigitOrSep := func(c byte) bool { return isDigit(c) || c == '_' }
 	isBaseDigit := func(c, prefix byte) bool {
@@ -244,9 +262,16 @@ func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
 			return false
 		}
 		switch s[i] {
-		case ' ', '\t', '\n', '\r', '\'', '"', '#', ',', ':', ';', '(', ')', '[', ']', '{', '}', '?', '.', '!', '|', '`', '<', '>':
+		case ' ', '\t', '\n', '\r', '\'', '"', '#', ',', ':', '[', ']', '{', '}', '`':
 			return false
+		case ';', '(', ')', '?', '.', '!', '|', '<', '>':
+			// Language operators end a token only in language mode; a plain
+			// data grammar lexes them as ordinary text continuation.
+			return dataMode
 		case '=':
+			if dataMode {
+				return true
+			}
 			return i+1 >= len(s) || s[i+1] != '>'
 		default:
 			return true
@@ -338,6 +363,9 @@ func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
 			}
 			if si == exponentStart {
 				if integerEnd >= 0 && hasDot {
+					if dataMode {
+						return nil
+					}
 					return emitDecimalPrefix(lex, s, start, integerEnd)
 				}
 				if leadingDot {
@@ -349,6 +377,12 @@ func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
 		}
 
 		if isFollowingText(s, si) {
+			// Data mode never splits a run: declining hands the whole span
+			// to the stock lenient text scanner, so digit-led prose stays
+			// one string instead of shedding a stray second value.
+			if dataMode {
+				return nil
+			}
 			if integerEnd >= 0 && hasDot {
 				return emitDecimalPrefix(lex, s, start, integerEnd)
 			}

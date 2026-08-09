@@ -364,6 +364,24 @@ export function setupBigNumberMatcher(j: any, _t: ParserTokens): void {
 // deliberately loose here: numberValToValue owns the language rule and
 // reports a misplaced `_` using the complete literal source.
 export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
+  setupDecimalBoundaryMatcher(j, false)
+}
+
+// setupDataDecimalMatcher is the DATA-mode variant of the decimal boundary
+// shim, for plain-jsonic decode seams (safeParseData). Data grammars have no
+// `.` member-access token and promise jsonic's lenient superset, so this
+// mode claims a run only when it is a complete numeric token at a data
+// boundary and otherwise DECLINES — it never splits. Digit-led prose such as
+// `1.x`, `1.2.3` or `1.2-beta` falls back whole to the stock lenient text
+// scanner instead of erroring or shedding a stray second value.
+export function setupDataDecimalMatcher(j: any): void {
+  setupDecimalBoundaryMatcher(j, true)
+}
+
+// setupDecimalBoundaryMatcher registers the shared matcher body. dataMode
+// selects the boundary alphabet and the no-split rule described on the two
+// wrappers above; the language mode is bit-for-bit the historical behavior.
+function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
   const isDigit = (c: string | undefined): boolean =>
     undefined !== c && c >= '0' && c <= '9'
   const isDigitOrSep = (c: string | undefined): boolean => isDigit(c) || '_' === c
@@ -389,8 +407,11 @@ export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
     const c = s[i]!
     if (' ' === c || '\t' === c || '\n' === c || '\r' === c) return false
     if ('\'' === c || '"' === c || '#' === c) return false
-    if (',:;()[]{}?.!|`<>'.includes(c)) return false
-    if ('=' === c && '>' === s[i + 1]) return false
+    if (',:[]{}`'.includes(c)) return false
+    // Language operators end a token only in language mode; a plain data
+    // grammar lexes them as ordinary text continuation.
+    if (';()?.!|<>'.includes(c)) return dataMode
+    if ('=' === c) return dataMode ? true : '>' !== s[i + 1]
     return true
   }
 
@@ -468,6 +489,7 @@ export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
       while (isDigitOrSep(s[si])) si++
       if (si === exponentStart) {
         if (integerEnd >= 0 && hasDot) {
+          if (dataMode) return undefined
           return emitPrefix(lex, s, start, integerEnd)
         }
         if (leadingDot) {
@@ -479,6 +501,10 @@ export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
     }
 
     if (isFollowingText(s, si)) {
+      // Data mode never splits a run: declining hands the whole span to
+      // the stock lenient text scanner, so digit-led prose stays one
+      // string instead of shedding a stray second value.
+      if (dataMode) return undefined
       if (integerEnd >= 0 && hasDot) {
         return emitPrefix(lex, s, start, integerEnd)
       }

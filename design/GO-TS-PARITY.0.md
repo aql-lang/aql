@@ -63,11 +63,21 @@ divergence, both columns recorded, each runner asserting its OWN column.
 Shrink-only. A fixed divergence MOVES to `parse.tsv` rather than being
 deleted, and a row whose two columns are equal FAILS — otherwise the file
 stops being an honest debt list. It reached zero on 2026-08-08, briefly
-took eleven measured rows back, and is empty again. Eight rule-step-limit
-shapes now preserve the offending token from the TS rule subscriber, two
-decimal/underscore lexer boundaries are claimed by matching boundary shims,
-and the former depth-501 gap is covered more honestly by the generated
-`nesting.tsv` boundary matrix than by a multi-kilobyte literal.
+took eleven measured rows back, and was empty again by 2026-08-09. Eight
+rule-step-limit shapes now preserve the offending token from the TS rule
+subscriber, two decimal/underscore lexer boundaries are claimed by matching
+boundary shims, and the former depth-501 gap is covered more honestly by
+the generated `nesting.tsv` boundary matrix than by a multi-kilobyte
+literal.
+
+Corpus-zero did not mean language-zero: a 2,587-source probe sweep the
+same day measured 55 divergences (~2.1%) on inputs OUTSIDE the corpus —
+trailing-`=>` fold loss, two accept/reject splits, recovery-token detail,
+error precedence, and an internal type-name leak. The ledger now carries
+one representative row per class (8 rows), both runners re-measure every
+row on every run, and 50 probe-AGREED neighbors were promoted into
+`parse.tsv`. See parser/spec/README.md §"The current debt" for the class
+table.
 
 `scripts/parity-probe.sh` is how a row gets written: it runs a candidate
 through both engines and prints AGREE with the shared render, or DIFFER
