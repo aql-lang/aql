@@ -184,7 +184,21 @@ export function unifiesValue(a: Value, b: Value): boolean {
     );
   }
   if (ae !== null || be !== null) return false;
-  if (a.isMap() && b.isMap()) {
+  // `isMap()` tests the lattice node only; a TYPED map carries a ChildType
+  // payload, not an OrderedMap, so `asMap()` on one threw a raw
+  // `AsMap: not a map value` — an uncoded host exception escaping
+  // `Engine.run` with no `boru/` code at all. Worse than a wrong answer,
+  // and the class the crossdiff treats most leniently: a GAP is logged and
+  // permitted, so nine such rows would have gone by unreported. Two
+  // independent sweeps found it — `unifyq { a: 1 } {: Integer }` in the
+  // core corpus and nine `is` shapes at the engine level.
+  //
+  // Gating on the PAYLOAD rather than the type keeps the arm honest: a
+  // typed map falls through to the leaf comparison below rather than
+  // pretending to be a plain one. Unifying a typed map properly needs the
+  // child-constraint arm core/ts does not have yet, which is tracked as
+  // debt rather than faked here.
+  if (a.data instanceof OrderedMap && b.data instanceof OrderedMap) {
     const am = a.asMap();
     const bm = b.asMap();
     const ak = am.sortedKeys();

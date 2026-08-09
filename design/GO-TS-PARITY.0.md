@@ -273,6 +273,46 @@ by a specific unreachable region rather than added for symmetry: `qanyq`
 type-literal pattern on a stack slot), `bothq` (two gradual forward slots
 — one-arg words cannot reach the collection loop's middle).
 
+## The blind spot, named and measured
+
+The corpora were built to compare what both ports could already do, and
+that is exactly their limit. Asked why the shared specs never revealed
+that core/ts's unifier is a 40-line predicate against core/go's ~2,000-line
+per-family dispatcher, the answer was structural: **no corpus row reached
+unification at all.** core/spec could name seven builtin type literals and
+no type CONSTRUCTOR; basic/spec covers 17 words and the main unify client
+(`case`) is unported *because* unify is; eng/spec exercises `is` in 607
+rows that all agree, because the corpus was written from what the engines
+already did.
+
+Two instruments closed the hole. `unifyq` plus `d( )` / `[: ]` / `{: }`
+opened the CORE unifier to core/spec — 70 of 70 agreed over the shared
+subset (the port is faithful where it is implemented) and 23 of 35 differed
+the moment a constructor appeared. Then a 980-source sweep opened the
+ENGINE surface: **136 verified divergences, 131 distinct sources, not one
+covered by an eng/spec row** — 102 wrong answers, 26 gaps, 3 code diffs.
+[ENGINE-BLIND-SPOT.0.md](ENGINE-BLIND-SPOT.0.md) is the account.
+
+Three things from it are worth carrying even if the tables are never read:
+
+- **The crossdiff is blind in exactly the direction a missing capability
+  fails.** It hard-fails only when both engines succeed and the values
+  differ. A capability that is ABSENT does not return a wrong value — it
+  refuses, and a refusal against a success is a GAP, which is logged and
+  PERMITTED. 26 of 131 divergences are gaps; nine of those were uncoded
+  host crashes, the class the instrument treats most leniently.
+- **Double-blind AGREE is worse than either.** `case` is absent from
+  BOTH fixtures, so both answer `undefined_word` and the differential
+  reports agreement over a word neither engine ran. The comparison words
+  (`gt`/`lt`/`eq`) are likewise absent from both, which makes core/go's
+  entire dependent-scalar unifier untestable by construction.
+- **A measurement is only as good as its harness.** `boru run -e` is the
+  full lang layer with a DIFFERENT `is` from the one the crossdiff
+  compares. One of the two divergences that seeded the sweep —
+  `5 is ( refine Integer )` — is `true`/`true` on the path the crossdiff
+  actually uses, and was withdrawn. Rebuild the harness, do not reach for
+  the CLI.
+
 ## Open
 
 - **core/ts's last 0.4%**: nine line-ranges in `engine.ts`, all in the

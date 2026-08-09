@@ -115,3 +115,8 @@ run unifyq [: Integer ] List	true
 run unifyq {: Integer } Map	true
 run unifyq [: Integer ] Any	true
 run unifyq d( Integer String ) Any	true
+
+# Closed by the payload gate in unifiesValue: a typed map is no longer
+# handed to asMap(), so these answer cleanly instead of throwing.
+run unifyq { a: 'x' } {: Integer }	false
+run unifyq {: Integer } {: String }	false

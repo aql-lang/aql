@@ -131,10 +131,9 @@ run unifyq [: Integer ] [q 1 2 ]	true	false	DATA: core/ts unifiesValue has no ty
 run unifyq [: Integer ] [: String ]	false	true	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
 run unifyq [: Integer 1 2 ] [: Integer 1 3 ]	true	false	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
 run unifyq [: Any ] [q 1 'a' ]	true	false	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
-run unifyq { a: 1 } {: Integer }	true	ERROR:non_boru:AsMap: not a map value	DATA: core/ts unifiesValue crashes on a typed MAP — asMap() over a ChildType payload throws a raw JS error, escaping as a non-boru failure.
-run unifyq {: Integer } { a: 1 }	true	ERROR:non_boru:AsMap: not a map value	DATA: core/ts unifiesValue crashes on a typed MAP — asMap() over a ChildType payload throws a raw JS error, escaping as a non-boru failure.
-run unifyq { a: 'x' } {: Integer }	false	ERROR:non_boru:AsMap: not a map value	DATA: core/ts unifiesValue crashes on a typed MAP — asMap() over a ChildType payload throws a raw JS error, escaping as a non-boru failure.
-run unifyq {: Integer } {: Integer }	true	ERROR:non_boru:AsMap: not a map value	DATA: core/ts unifiesValue crashes on a typed MAP — asMap() over a ChildType payload throws a raw JS error, escaping as a non-boru failure.
-run unifyq {: Integer } {: String }	false	ERROR:non_boru:AsMap: not a map value	DATA: core/ts unifiesValue crashes on a typed MAP — asMap() over a ChildType payload throws a raw JS error, escaping as a non-boru failure.
-run unifyq {: Integer a: 1 } {: Integer a: 1 }	true	ERROR:non_boru:AsMap: not a map value	DATA: core/ts unifiesValue crashes on a typed MAP — asMap() over a ChildType payload throws a raw JS error, escaping as a non-boru failure.
+run unifyq { a: 1 } {: Integer }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
+run unifyq {: Integer } { a: 1 }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
+run unifyq {: Integer } {: Integer }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
+run unifyq {: Integer a: 1 } {: Integer a: 1 }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
 run unifyq [: d( Integer String ) ] [q 1 'a' ]	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+
