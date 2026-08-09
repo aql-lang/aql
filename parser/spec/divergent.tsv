@@ -1,62 +1,7 @@
-# parser/spec/divergent.tsv — the parity debt, one row per divergence.
+# parser/spec/divergent.tsv — the parser parity-debt ledger.
 #
-# One row per source, tab-separated:  src <TAB> go <TAB> ts <TAB> note
-#
-# Same comment and escaping rules as parse.tsv.
-#
-# Sources where parser/go and parser/ts render DIFFERENTLY. Each runner
-# asserts its OWN column, so both suites stay green while the difference stays
-# pinned: if either engine moves, its column fails and the row is re-examined
-# rather than silently re-baselined. Each runner also FAILS a row whose go and
-# ts columns are equal — a fixed divergence must MOVE to parse.tsv, or this
-# file stops being an honest debt list.
-#
-# SHRINK-ONLY. Adding a row needs the justification a //covergate:allow does
-# (design/COVERAGE-ALLOWLIST.10.md): a reviewed reason the difference is not
-# simply a bug. Every row below is UNTRIAGED — recorded by
-# design/TS-PARITY-AUDIT.0.md, not adjudicated against REFERENCE.md. The `go`
-# column is the reference by convention, not by proof, and the rows marked
-# DATA are behavioural rather than cosmetic: one engine is wrong.
-[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]	[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]	ERR [boru/evaluation_limit]: source nesting exceeds the depth limit of 500 — lists, maps, and parentheses are nested too deeply	DATA: TS refuses at 501 where Go accepts to 10000 — the tabnas rule engine recurses per level and blows the JS call stack near 900, so the TS bound turns an uncontrolled RangeError into the promised evaluation_limit. Irreducible: raising it to Go(apos)s 10000 crashes (measured: 600 parses, 1000 overflows).
-
-# --- the TS rule-step cap: an error Go names and TS cannot ----------------
-# The tabnas TS rule engine bounds its main loop and, on reaching the
-# bound, simply STOPS: the trailing-token check then sees #ZZ, so nothing
-# is thrown and the partial root is returned. The Go engine instead names
-# the offending token. Every shape below leaves a group open with a
-# terminator that cannot close it, so the TS val rule's implicit-null
-# alternate matches the `]`, backtracks, and the enclosing elem re-pushes
-# until the bound.
-#
-# Until the step-cap guard in parse(), TS ACCEPTED all of these: `[Map<]`
-# parsed to an EMPTY value stream and `Map<]` to a bare `word(Map)`. The
-# guard turns that silent wrong answer into the right CODE (syntax_error
-# on both sides), so what is left here is error TEXT alone.
-#
-# Irreducible in this port: it is what the two ENGINES do, not what the
-# two boru ports do. Closing it means the TS engine reporting the token
-# it gave up on.
-[Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-{a: Map<}	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-[(1]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-{a: (1}	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-[1 (2]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-Map<}	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-[a: Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	ERR [boru/syntax_error]: the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it	DATA: TS hits the rule-step cap and cannot name the token; same code, different text.
-
-# --- token BOUNDARIES inside a malformed numeric literal --------------------
-# A digit-led run containing both `.` and `_` is ONE token to Go's jsonic
-# lexer and SEVERAL to the TS one, so the two engines name different text in
-# an otherwise identical refusal. Both give syntax_error; only the quoted
-# token differs, and in `1.2_` the TS split even changes which rule fires
-# (`1` `.` `2_` reads as member access on a number).
-#
-# Not a converter bug and not fixable there: the classifier already
-# reproduces Go's decisions for every token it is HANDED (`1_`, `1_+`,
-# `1e400_`, `1e_4`, `0x1_`, `1e4_`, `12_`, `1_a`, `1__2` all agree —
-# measured). Closing it means overriding the third-party lexer's number
-# matcher to admit `_` around `.`, which puts all 535 parse.tsv rows at
-# risk to fix the TEXT of two refusals that already share their CODE.
-1.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.2_	ERR [boru/syntax_error]: a number has no members to access with `.`	DATA: Go lexes one numeric token; TS lexes `1` `.` `2_` and the dot reads as member access. Same code.
-1_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	DATA: Go names the whole token, TS the `1_` fragment its lexer stopped at. Same code, same rule.
+# One row per divergence: src <TAB> go <TAB> ts <TAB> justification.
+# Same escaping and comment rules as parse.tsv. The file is intentionally
+# empty of data rows: parser/go and parser/ts currently agree on every pinned
+# parser contract. New rows require the reviewed shrink-only justification
+# described in parser/spec/README.md.

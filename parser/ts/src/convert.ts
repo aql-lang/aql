@@ -3,8 +3,8 @@
 // configured jsonic instance (grammar.ts makeBoruJsonic) over src and
 // converts the jsonic output into engine Values, throwing BoruError on
 // syntax errors (jsonic failures are translated by errors.ts
-// translateParseError). The Go file is the REFERENCE: every function
-// below ports its same-named Go twin, keeping structure and comments.
+// translateParseError). The functions below keep the Go twin's structure;
+// the independent shared specs adjudicate behavior when either port drifts.
 //
 // Where Go type-switches on jsonic node types, this file discriminates
 // on the shared intermediate classes in nodes.ts plus the TS jsonic
@@ -55,6 +55,7 @@ import {
   ParseDepth,
   MAX_PARSE_NESTING_DEPTH,
   UNKNOWN_POS,
+  normalizeSrcPos,
 } from './nodes.ts'
 import type { SrcPos } from './nodes.ts'
 import { makeBoruJsonic } from './grammar.ts'
@@ -159,16 +160,14 @@ function markEval(v: Value): Value {
 // newWordUsurp mirrors eng.NewWordUsurp: a word value marked with the /u
 // modifier — resolve the name to its bound Function and wrap it with
 // reversed signature arg order; combine with /r to leave it as data. The
-// forceUsurp / forceRef flags ride as extra structural properties on
-// WordInfo (the TS interface does not declare them yet — see deviations).
 function newWordUsurp(name: string, ref: boolean): Value {
-  return new Value(TWord, { name, forceUsurp: true, forceRef: ref } as WordInfo)
+  return new Value(TWord, { name, forceUsurp: true, forceRef: ref } satisfies WordInfo)
 }
 
 // newWordRef mirrors eng.NewWordRef: a word value marked with the /r
 // modifier — resolve the name to its bound Function without invoking.
 function newWordRef(name: string): Value {
-  return new Value(TWord, { name, forceRef: true } as WordInfo)
+  return new Value(TWord, { name, forceRef: true } satisfies WordInfo)
 }
 
 // newWordModified mirrors eng.NewWordModified: a word with explicit
@@ -186,9 +185,8 @@ function newWordModified(
 }
 
 // newBigInteger / newBigDecimal mirror eng.NewBigInteger/NewBigDecimal.
-// TS has no apd — the BigDecimal payload is a binary64 number (closest
-// available; recorded in deviations). BigInteger keeps full precision
-// via bigint.
+// Both payloads preserve arbitrary precision: bigint for integers and the
+// core Decimal scaled-bigint model for decimals.
 function newBigInteger(n: bigint): Value {
   return new Value(TBigInteger, n)
 }
@@ -202,7 +200,7 @@ const INT64_MAX = 9223372036854775807n
 
 // errMessage extracts the message of an unknown thrown value (the TS
 // spelling of Go's err.Error()).
-function errMessage(e: unknown): string {
+export function errMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
@@ -222,35 +220,60 @@ function goQuote(s: string): string {
 
 // ── depth guard ─────────────────────────────────────────────────────────────
 
-// enterDepth descends one container level, failing with a clean
-// evaluation_limit error (never a stack overflow) once nesting passes
-// MAX_PARSE_NESTING_DEPTH. Pair every enterDepth with a finally'd
-// leaveDepth. Mirrors Go parseDepth.enter/leave (the constant and the
-// per-parse tracker live in nodes.ts).
+// enterDepth/leaveDepth retain Go's balanced conversion accounting. The
+// explicit prepareNestedConversions walk is the single depth-limit authority:
+// it validates the complete graph before any direct converter can recurse, so
+// a second limit branch here would be dead on every parser path.
 function enterDepth(d: ParseDepth): void {
   d.cur++
-  // Provably unreachable backstop: checkSourceNesting refuses at the
-  // TS-safe 500 bound before any converter can recurse this deep (the
-  // Go twin's 10,000 guard is live because Go has no prescan).
-  /* node:coverage ignore next 6 */
-  if (d.cur > MAX_PARSE_NESTING_DEPTH) {
-    throw new BoruError(
-      'evaluation_limit',
-      `source nesting exceeds the depth limit of ${MAX_PARSE_NESTING_DEPTH} — lists, maps, and parentheses are nested too deeply`,
-    )
-  }
 }
 
 function leaveDepth(d: ParseDepth): void {
   d.cur--
 }
 
-// withPos stamps a source position onto v. TS Values carry no pos field
-// yet — position stamping lands later, so this is a no-op that returns
-// the value unchanged (recorded in deviations). Kept so every stamping
-// site mirrors the Go source line-for-line.
-function withPos(v: Value, _pos: SrcPos): Value {
+// withPos stamps a parser source position onto the fresh Value. This mirrors
+// core.Value.SetPos on the Go side; synthesized runtime values retain the
+// core default {row:0,col:0} location.
+function withPos(v: Value, pos: SrcPos): Value {
+  if (pos.row !== 0) {
+    v.pos = { row: pos.row, col: pos.col, src: pos.src ?? '' }
+  }
   return v
+}
+
+// A convertedNode is an internal trampoline cell. The tabnas rule engine is
+// iterative, but the direct Go-shaped conversion port used to recurse once
+// per list/map/paren level and could overflow V8's host stack well below the
+// language's 10,000-level limit. prepareNestedConversions walks the parsed
+// node graph with an explicit work stack and replaces each nested structural
+// node with one of these already-converted cells. The ordinary converters
+// then retain all of their source-order and context logic without recursively
+// descending through host call frames.
+class ConvertedNode {
+  value: Value
+  parenItems: Value[] | undefined
+
+  constructor(value: Value, parenItems?: Value[]) {
+    this.value = value
+    this.parenItems = parenItems
+  }
+}
+
+// prepareNestedConversions must not THROW a descendant conversion error as
+// soon as its bottom-up work stack reaches that descendant. Go converts in
+// source/context order: an outer numeric receiver can therefore reject
+// `1.e:` before the trailing `e:` map's empty value is inspected, while a
+// typed-map child is inspected before its concrete entries. Retain failures
+// as cells, just like successful ConvertedNodes, and rethrow only when the
+// ordinary converter reaches that cell. This keeps the stack-safe traversal
+// without changing Go's observable error precedence.
+class FailedConvertedNode {
+  error: unknown
+
+  constructor(error: unknown) {
+    this.error = error
+  }
 }
 
 // ── Parse ───────────────────────────────────────────────────────────────────
@@ -275,56 +298,201 @@ function withPos(v: Value, _pos: SrcPos): Value {
  * Mirrors Go Parse. (Go's BeginIDMintScope has no TS counterpart — the
  * TS value layer mints no IDs; recorded in deviations.)
  */
-/**
- * TS-specific nesting bound, enforced by a LINEAR pre-parse scan.
- * The Go parser's 10,000-level guard lives in the conversion walk,
- * but in TS the tabnas rule engine itself recurses per nesting level
- * and overflows the JS call stack near ~900 levels — before any
- * converter-side counter could fire — surfacing an uncontrolled
- * RangeError instead of the promised evaluation_limit. The scan
- * refuses well under the measured overflow point; the converters'
- * ParseDepth guard stays as the backstop.
- */
-const TS_MAX_PARSE_NESTING = 500
+type ConversionContext = 'top' | 'data'
 
-/**
- * checkSourceNesting scans src once, tracking bracket/paren nesting
- * outside string/template literals and comments, and raises the same
- * evaluation_limit error the Go depth guard produces when the source
- * nests past the TS-safe bound.
- */
-function checkSourceNesting(src: string): void {
-  let depth = 0
-  let quote: string | null = null
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i]!
-    if (quote !== null) {
-      if (c === '\\') {
-        i++
-      } else if (c === quote) {
-        quote = null
+interface ConversionTask {
+  node: unknown
+  context: ConversionContext
+  level: number
+  /** Number of `${...}` expression frames enclosing this conversion. */
+  interpLevels: number
+  replace?: (next: unknown) => void
+  exit?: boolean
+  root?: boolean
+}
+
+function interpolationExpressionError(err: unknown): Error {
+  return Object.assign(new Error(`interpolation expression error: ${errMessage(err)}`), {
+    cause: err,
+  })
+}
+
+// The explicit conversion stack has no JavaScript call frames through which
+// convertInterpGroup can catch a descendant failure. Rebuild the same wrapper
+// chain Go's recursive converter would have added at every enclosing `${...}`.
+// Source-module export only so the zero-frame identity arm can be pinned
+// directly; normal parser failures only reach this helper through the work
+// stack. It is not part of the package entry point.
+export function wrapInterpolationExpressionErrors(err: unknown, levels: number): unknown {
+  let wrapped = err
+  for (let i = 0; i < levels; i++) {
+    wrapped = interpolationExpressionError(wrapped)
+  }
+  return wrapped
+}
+
+function nestingLimitError(src: string): BoruError {
+  return new BoruError(
+    'evaluation_limit',
+    `source nesting exceeds the depth limit of ${MAX_PARSE_NESTING_DEPTH} — lists, maps, and parentheses are nested too deeply`,
+    '',
+    {
+      fullSource: src,
+      hint: 'flatten the structure or split it across definitions; nesting this deep is almost always generated, not intended',
+    },
+  )
+}
+
+// prepareNestedConversions is the stack-safe counterpart of Go's recursive
+// conversion walk. Besides trampolining nested structures bottom-up, it
+// tracks the SAME logical enterDepth calls the direct converters make. That
+// matters at the boundary: a root paren has the implicit top-level item frame
+// plus its own paren frame, while a root list/map has just its container
+// frame. The limit therefore stays behaviorally identical to parser/go rather
+// than becoming a merely lexical bracket count (which would also miscount
+// bracket characters inside XML text).
+export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
+  const rootLevel = root instanceof ParenGroup ? 1 : 0
+  const work: ConversionTask[] = [{
+    node: root,
+    context: 'top',
+    level: rootLevel,
+    interpLevels: 0,
+    root: true,
+  }]
+
+  const pushValue = (
+    node: unknown,
+    context: ConversionContext,
+    level: number,
+    interpLevels: number,
+    replace: (next: unknown) => void,
+  ): void => {
+    work.push({ node, context, level, interpLevels, replace })
+  }
+
+  while (work.length > 0) {
+    const task = work.pop()!
+    let node = task.node
+    let replace = task.replace
+    while (node instanceof Sited) {
+      const site = node
+      site.pos = d.normalizePos(site.pos)
+      node = site.node
+      if (node instanceof NumberVal && site.pos.row !== 0) {
+        node.row = site.pos.row
+        node.col = site.pos.col
+      }
+      replace = (next: unknown): void => {
+        site.node = next
+      }
+    }
+
+    const structural =
+      Array.isArray(node) ||
+      isMapNode(node) ||
+      node instanceof ParenGroup ||
+      node instanceof AngleGroup ||
+      node instanceof InterpGroup
+    if (!structural) {
+      continue
+    }
+
+    if (task.exit) {
+      if (!task.root) {
+        try {
+          let parenItems: Value[] | undefined
+          let value: Value
+          if (node instanceof ParenGroup) {
+            parenItems = convertTopLevelItems(node.items, d)
+            value = newParenExpr(parenItems)
+          } else if (task.context === 'data') {
+            value = convertDataValueInner(node, d)
+          } else {
+            value = convertTopLevelValueInner(node, d)
+          }
+          replace!(new ConvertedNode(value, parenItems))
+        } catch (err) {
+          // Defer the failure to the ordinary source/context-ordered walk.
+          // Interpolation wrappers are added naturally when that walk crosses
+          // each enclosing InterpGroup; wrapping here would either report a
+          // later child too early or double-wrap a stored failure.
+          replace!(new FailedConvertedNode(err))
+        }
       }
       continue
     }
-    if (c === "'" || c === '"' || c === '`') {
-      quote = c
+
+    work.push({ ...task, node, replace, exit: true })
+
+    let childLevel = task.level
+    if (Array.isArray(node) || isMapNode(node) || node instanceof ParenGroup) {
+      childLevel++
+      if (childLevel > MAX_PARSE_NESTING_DEPTH) {
+        throw wrapInterpolationExpressionErrors(nestingLimitError(d.src), task.interpLevels)
+      }
+    }
+
+    if (Array.isArray(node)) {
+      const arr = node as Record<string, unknown> & unknown[]
+      const typed = arr['child$'] !== undefined
+      for (let i = node.length - 1; i >= 0; i--) {
+        const index = i
+        pushValue(node[index], typed ? 'data' : 'top', childLevel, task.interpLevels, (next) => {
+          node[index] = next
+        })
+      }
+      if (typed) {
+        pushValue(arr['child$'], 'data', childLevel, task.interpLevels, (next) => {
+          arr['child$'] = next
+        })
+      }
       continue
     }
-    if (c === '#') {
-      while (i < src.length && src[i] !== '\n') i++
+
+    if (isMapNode(node)) {
+      const keys = mapKeys(node)
+      for (let i = keys.length - 1; i >= 0; i--) {
+        const key = keys[i]!
+        pushValue(node[key], 'data', childLevel, task.interpLevels, (next) => {
+          node[key] = next
+        })
+      }
       continue
     }
-    if (c === '[' || c === '{' || c === '(') {
-      depth++
-      if (depth > TS_MAX_PARSE_NESTING) {
-        throw new BoruError(
-          'evaluation_limit',
-          `source nesting exceeds the depth limit of ${TS_MAX_PARSE_NESTING} — lists, maps, and parentheses are nested too deeply`,
-          '',
+
+    if (node instanceof ParenGroup || node instanceof AngleGroup) {
+      for (let i = node.items.length - 1; i >= 0; i--) {
+        const index = i
+        pushValue(node.items[index], 'top', childLevel, task.interpLevels, (next) => {
+          node.items[index] = next
+        })
+      }
+      continue
+    }
+
+    // Interpolation itself adds no depth, but each ${...} expression is
+    // converted through convertTopLevelItems and therefore adds one logical
+    // frame. Literal parts have no descendants.
+    const interp = node as InterpGroup
+    for (let p = interp.parts.length - 1; p >= 0; p--) {
+      const [part] = deSite(interp.parts[p])
+      if (!(part instanceof IexprGroup)) {
+        continue
+      }
+      const exprLevel = childLevel + 1
+      if (exprLevel > MAX_PARSE_NESTING_DEPTH) {
+        throw wrapInterpolationExpressionErrors(
+          nestingLimitError(d.src),
+          task.interpLevels + 1,
         )
       }
-    } else if (c === ']' || c === '}' || c === ')') {
-      if (depth > 0) depth--
+      for (let i = part.items.length - 1; i >= 0; i--) {
+        const index = i
+        pushValue(part.items[index], 'top', exprLevel, task.interpLevels + 1, (next) => {
+          part.items[index] = next
+        })
+      }
     }
   }
 }
@@ -344,11 +512,10 @@ function checkSourceNesting(src: string): void {
  * because the TS val rule's implicit-null alternate matches the `]`,
  * backtracks, and the enclosing elem re-pushes forever.
  *
- * The cap is what the two ENGINES do differently, not what the two boru
- * ports do, so this cannot be fixed by porting a rule more faithfully. It
- * is caught rather than papered over: an error whose text differs from
- * Go's is a recorded divergence (parser/spec/divergent.tsv), while
- * silently accepting a program Go rejects is a correctness bug.
+ * The final subscriber context retains ctx.t0, the token on which the rule
+ * loop stalled. Keeping that token lets this port report the same diagnostic
+ * as Go instead of silently accepting the partial root or using a generic
+ * progress message.
  *
  * The test is EQUALITY against the library's own formula, not `>=`. The
  * loop exits with kI === cap, so the last subscriber call saw cap - 1. If
@@ -357,11 +524,16 @@ function checkSourceNesting(src: string): void {
  * count) steps (~11 for `[1 2]` against a cap of ~1000), so landing on
  * exactly cap - 1 by accident is not a practical concern.
  */
-function watchRuleSteps(j: any): { exhausted: (src: string) => boolean } {
+function watchRuleSteps(j: any): {
+  exhausted: (src: string) => boolean
+  token: () => SrcPos
+} {
   let last = -1
+  let token: SrcPos = { src: '', row: 0, col: 0 }
   j.sub({
     rule: (_rule: unknown, ctx: any) => {
       last = ctx.kI
+      token = { src: ctx.t0.src, row: ctx.t0.rI, col: ctx.t0.cI, si: ctx.t0.sI }
     },
   })
   return {
@@ -373,6 +545,7 @@ function watchRuleSteps(j: any): { exhausted: (src: string) => boolean } {
       const cap = ruleStepCap(j, src)
       return cap > 0 && last === cap - 1
     },
+    token: () => token,
   }
 }
 
@@ -384,9 +557,6 @@ function ruleStepCap(j: any, src: string): number {
 }
 
 export function parse(src: string): Value[] {
-  // A linear nesting pre-check guards the recursive rule engine (see
-  // checkSourceNesting) before any parsing work happens.
-  checkSourceNesting(src)
   // Stages 1-2 (lex + grammar setup) live in grammar.ts; the instance is
   // built per parse, exactly as Go Parse constructs a fresh jsonic.
   const { j } = makeBoruJsonic()
@@ -403,10 +573,19 @@ export function parse(src: string): Value[] {
   }
   // The TS rule engine gave up rather than parsed: see ruleStepCap.
   if (steps.exhausted(src)) {
+    const token = normalizeSrcPos(src, steps.token())
     throw new BoruError(
       'syntax_error',
-      'the parser could not make progress here — a group is left open by a `]`, `}` or end of input that cannot close it',
-      '',
+      `unexpected \`${token.src}\` — nothing valid can appear here`,
+      token.src,
+      {
+        row: token.row,
+        col: token.col,
+        src: token.src,
+        fullSource: src,
+        notes: [`boru's grammar allows no continuation with \`${token.src}\` at this position`],
+        suggestions: [{ message: 'check for a missing bracket, quote, or value just before it' }],
+      },
     )
   }
 
@@ -419,13 +598,22 @@ export function parse(src: string): Value[] {
   // keep its position to stamp the single produced value. (Root containers
   // come from the list/map rule and are not sited; their elements carry
   // positions individually.)
-  const [res, rootPos] = deSite(result)
-
-  // One depth tracker for this parse, threaded through the recursive
-  // converters so pathologically deep nesting fails with a clean
-  // evaluation_limit error instead of overflowing the stack — enforced
-  // inside the single conversion walk, not as a separate pre-pass.
+  // One depth tracker for this parse. Besides logical nesting, it owns a
+  // linear UTF-16-index → code-point-column table so normalizing every
+  // sited node below remains O(n), even for a 10,000-node single line.
   const d = new ParseDepth(src)
+  const [res, rawRootPos] = deSite(result)
+  const rootPos = d.normalizePos(rawRootPos)
+  if (res instanceof NumberVal && rootPos.row !== 0) {
+    res.row = rootPos.row
+    res.col = rootPos.col
+  }
+
+  // The rule engine is iterative, but the direct Go-shaped converter used
+  // to recurse once per structural level and overflow V8's call stack well
+  // before Go's 10,000-level contract. Prepare nested nodes bottom-up on an
+  // explicit work stack, enforcing the same logical conversion depth.
+  prepareNestedConversions(res, d)
 
   // With info.list and info.map enabled, jsonic returns list/map carriers
   // for all lists and maps (array / object with a hidden __info__).
@@ -442,10 +630,11 @@ export function parse(src: string): Value[] {
     return convertTopLevel(res, d)
   }
   if (isMapNode(res)) {
-    const info = getInfo(res)
-    // A map node without an info marker is Go's raw map[string]any case
-    // (pair syntax): implicit, no meta.
-    const implicit = info ? !!info.implicit : true
+    // The configured parser always enables info.map, so every root map has
+    // this marker. Raw-map compatibility lives in the public value converter;
+    // retaining a second fallback here would be an unreachable parse branch.
+    const info = getInfo(res)!
+    const implicit = !!info.implicit
     const meta = info?.meta
     if (hasMapChild(res)) {
       return [convertTypedMap(res, d, meta)]
@@ -459,7 +648,9 @@ export function parse(src: string): Value[] {
     return [mv]
   }
   if (res instanceof UnclosedParen) {
-    throw new BoruError('syntax_error', 'unmatched opening parenthesis', '(')
+    throw new BoruError('syntax_error', 'unmatched opening parenthesis', '(', {
+      fullSource: src,
+    })
   }
   if (res instanceof ParenGroup) {
     // Single paren group at top level: expand to paren markers.
@@ -501,7 +692,7 @@ function isToken(item: unknown, tok: string): boolean {
 // A lone "." / "!." with no receiver still emits the bare word (and errors
 // at runtime, as before). All other items convert to engine values
 // directly.
-function convertTopLevelItems(items: unknown[], d: ParseDepth): Value[] {
+export function convertTopLevelItems(items: unknown[], d: ParseDepth): Value[] {
   enterDepth(d)
   try {
     // Strip sited wrappers once into a bare-node slice plus a parallel
@@ -589,10 +780,15 @@ function convertTopLevelItems(items: unknown[], d: ParseDepth): Value[] {
             sfx = gm.suffix
           }
           const seg: ReachSeg = { getr, computed: false }
-          if (keyItem instanceof ParenGroup) {
+          if (
+            keyItem instanceof ParenGroup ||
+            (keyItem instanceof ConvertedNode && keyItem.parenItems !== undefined)
+          ) {
             // Computed key: m.(expr) — store the paren's tokens.
             seg.computed = true
-            seg.keyExpr = convertTopLevelItems(keyItem.items, d)
+            seg.keyExpr = keyItem instanceof ConvertedNode
+              ? keyItem.parenItems
+              : convertTopLevelItems(keyItem.items, d)
           } else {
             // Literal key (word → atom-via-get/q, string, number).
             const tmp: Value[] = []
@@ -806,6 +1002,12 @@ function convertTopLevelValue(v: unknown, d: ParseDepth): Value {
 }
 
 export function convertTopLevelValueInner(v: unknown, d: ParseDepth): Value {
+  if (v instanceof FailedConvertedNode) {
+    throw v.error
+  }
+  if (v instanceof ConvertedNode) {
+    return v.value
+  }
   if (v instanceof ArrowTag) {
     // `=>` — the lambda sugar marker; the engine lowers it to the
     // role-bound constructor word (ADR-012 rule 3 amendment).
@@ -934,7 +1136,12 @@ function isNumberLiteral(item: unknown): boolean {
 // reach. Caught at parse time instead of surfacing the runtime
 // "no matching signature for get".
 function numberReceiverError(pos: SrcPos): BoruError {
-  return new BoruError('syntax_error', 'a number has no members to access with `.`', pos.src ?? '')
+  return new BoruError('syntax_error', 'a number has no members to access with `.`', pos.src ?? '', {
+    row: pos.row,
+    col: pos.col,
+    src: pos.src ?? '',
+    hint: 'this looks like a malformed numeric literal (e.g. `1.2.3`) or `.`-access on a number — numbers have no fields or keys',
+  })
 }
 
 // danglingDotError rejects a leading / receiverless `.` or `!.` — the
@@ -943,7 +1150,12 @@ function numberReceiverError(pos: SrcPos): BoruError {
 // not a fraction — write `0.5`. The receiverless reach `$.name` is the
 // supported way to write a detached accessor.
 function danglingDotError(pos: SrcPos): BoruError {
-  return new BoruError('syntax_error', '`.` member access has no receiver', pos.src ?? '')
+  return new BoruError('syntax_error', '`.` member access has no receiver', pos.src ?? '', {
+    row: pos.row,
+    col: pos.col,
+    src: pos.src ?? '',
+    hint: 'a `.`/`!.` access must follow a value (e.g. `m.key`); a leading `.` is not valid — write `0.5` for a fraction, or `$.key` for a detached accessor',
+  })
 }
 
 // convertWordList converts a list in word context (top-level list).
@@ -970,9 +1182,7 @@ function convertMapData(
   try {
     const om = new OrderedMap()
     if (implicit) {
-      // The TS OrderedMap declares no Implicit field — the flag rides as
-      // an expando property (recorded in deviations).
-      ;(om as unknown as Record<string, unknown>)['implicit'] = true
+      om.implicit = true
     }
     // Extract metadata from the map node's Meta.
     const qmSet = metaStrSet(meta, 'qm') // optional keys (? syntax)
@@ -1078,7 +1288,7 @@ function convertMapData(
     // OrderedMap declares no Meta field — an expando carries it; the ck
     // channel is a Set here where Go stores map[string]bool.)
     if (ckSet.size > 0) {
-      ;(om as unknown as Record<string, unknown>)['meta'] = { ck: ckSet }
+      om.meta = { ck: ckSet }
     }
     // Explicit maps (from {...} syntax) are marked for auto-evaluation.
     // Implicit maps (from pair syntax [x:Integer]) are structural and not evaluated.
@@ -1120,6 +1330,12 @@ function convertDataValue(v: unknown, d: ParseDepth): Value {
 }
 
 export function convertDataValueInner(v: unknown, d: ParseDepth): Value {
+  if (v instanceof FailedConvertedNode) {
+    throw v.error
+  }
+  if (v instanceof ConvertedNode) {
+    return v.value
+  }
   if (v instanceof ArrowTag) {
     // `=>` in data context — the same lambda sugar marker.
     return newSugar({ kind: 'lambda' })
@@ -1262,10 +1478,8 @@ function hasMapChild(m: Record<string, unknown>): boolean {
 //
 // When the source carries concrete entries alongside the child
 // constraint (`{k:v :T}`), each entry is converted in data context
-// and retained on the resulting Value's ChildType (as an `entries`
-// expando — the TS ChildType declares no entries field; see
-// deviations); the runtime `is` validates each entry's value against
-// child on demand.
+// and retained on the resulting Value's ChildType.entries; the runtime
+// `is` validates each entry's value against child on demand.
 function convertTypedMap(
   m: Record<string, unknown>,
   d: ParseDepth,
@@ -1314,7 +1528,14 @@ function angleUseSite(ag: AngleGroup, d: ParseDepth): Value {
   try {
     info.head = angleGenList(ag.items, UNKNOWN_POS, d)
   } catch (herr) {
-    info.headErr = errMessage(herr)
+    // Go stores BoruError.Error(), not just its first line, in HeadErr.
+    // angleGenList's two refusals are structured BoruErrors with either a
+    // located hint (bad parameter name) or just a location (missing value).
+    const error = herr as BoruError
+    let rendered = error.message + '\n  --> '
+    rendered += error.row > 0 ? `${error.row}:${Math.max(error.col, 1)}` : 'source position unknown'
+    if (error.hint !== '') rendered += `\n  = ${error.hint}`
+    info.headErr = rendered
   }
   return newSugar(info)
 }
@@ -1350,6 +1571,12 @@ function angleGenList(items: unknown[], pos: SrcPos, d: ParseDepth): Value {
         'syntax_error',
         'generic parameter must be a capitalised name',
         epos.src ?? '',
+        {
+          row: epos.row,
+          col: epos.col,
+          src: epos.src ?? '',
+          hint: 'write def Name<T> / def Name<T extends Bound> / def Name<T = Default>',
+        },
       )
     }
     const name = txt.str
@@ -1369,6 +1596,7 @@ function angleGenList(items: unknown[], pos: SrcPos, d: ParseDepth): Value {
               'syntax_error',
               `generic parameter ${name}: ${opTxt.str} needs a value`,
               epos.src ?? '',
+              { row: epos.row, col: epos.col, src: epos.src ?? '' },
             )
           }
           // (In Go this conversion carries a covergate note: angleUseSite's
@@ -1443,7 +1671,9 @@ export function resolveTextValue(text: string): Value {
 // port keeps the same rule so both parsers emit identical key orders.
 // When `ko` covers every key (the common literal case) the tail is empty
 // and output is pure source order.
-function orderedKeys(union: Set<string>, ko: string[]): string[] {
+// Source-module export only: a well-formed grammar order channel is already
+// de-duplicated, while direct tests still pin this defensive converter seam.
+export function orderedKeys(union: Set<string>, ko: string[]): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   for (const k of ko) {
@@ -1675,6 +1905,9 @@ export function parseWord(text: string): Value {
         'syntax_error',
         `invalid word modifier /${text.slice(idx + 1)} on ${goQuote(text.slice(0, idx))}`,
         text,
+        {
+          hint: 'modifier letters stack in any order, each at most once; f|s are exclusive; q excludes r and u; t combines with nothing; digits form one contiguous run within int range',
+        },
       )
     }
   }
@@ -1778,7 +2011,9 @@ export function parseWord(text: string): Value {
   // literals never reach this path — jsonic lexes them as numbers.)
   if (isBasePrefixedInteger(name)) {
     if (name.includes('_') && !validUnderscores(name)) {
-      throw new BoruError('syntax_error', 'misplaced `_` in numeric literal: ' + name, name)
+      throw new BoruError('syntax_error', 'misplaced `_` in numeric literal: ' + name, name, {
+        hint: '`_` is a single digit-separator — use one between digits',
+      })
     }
     const n = tryParseBigIntBase0(stripUnderscores(name))
     if (n !== undefined) {
@@ -1801,48 +2036,15 @@ export function parseWord(text: string): Value {
   // overflows binary64 to infinity; anything else is malformed (e.g.
   // `1e`, `2dup` — the renamed-away stack words are now `dup2` etc.).
   if (isDigitLed(name)) {
-    // The two jsonic ports disagree about which underscore-bearing tokens
-    // are NUMBERS: the Go port lexes `1_` and `1_e5`, so Go classifies them
-    // in numberValToValue; the TS package declines both and drops them
-    // here. So this fallback has to reproduce what Go's lexer + classifier
-    // jointly decide, and the ORDER is what makes it agree:
-    //
-    //   1e400_  overflow first  — Go's fallback reports float_overflow,
-    //                             not a separator error, for a trailing `_`
-    //                             on an out-of-range literal
-    //   1_      misplaced `_`   — invalid placement, and the token is
-    //                             otherwise a number
-    //   1_+     malformed       — invalid placement, but stripping the `_`
-    //                             still leaves a non-number
-    //   1_e5    the VALUE       — `_` between two alnums is legal
-    //                             (validUnderscores is byte-identical on
-    //                             both sides), and Go returns 100000 here
-    //
-    // Only underscore-bearing tokens are valued: everything else that
-    // reaches this fallback is a token Go's lexer also declined.
+    // setupDecimalUnderscoreMatcher gives this port Go's number/text token
+    // boundaries for underscore-bearing decimal runs. Thus this fallback
+    // can mirror Go directly: a text token can report overflow, but it is
+    // never converted into a value here; actual numeric tokens flow through
+    // numberValToValue.
     const stripped = stripUnderscores(name)
     const f = Number(stripped)
     if (f === Infinity || f === -Infinity) {
       throw floatLiteralOverflowError(name)
-    }
-    if (name.includes('_')) {
-      if (!validUnderscores(name)) {
-        if (Number.isNaN(f)) {
-          throw malformedNumberError(name)
-        }
-        throw new BoruError(
-          'syntax_error',
-          'misplaced `_` in numeric literal: ' + name,
-          name,
-        )
-      }
-      // Only a plain DECIMAL literal is valued. Number() also accepts the
-      // base prefixes (`0x1` -> 1), which Go's ParseFloat does not, so
-      // without this shape gate `0_x1` — invalid on both engines — came
-      // back as 1 here while Go reported a malformed literal.
-      if (!Number.isNaN(f) && /^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(stripped)) {
-        return floatToValue(f)
-      }
     }
     throw malformedNumberError(name)
   }
@@ -1872,6 +2074,9 @@ function floatLiteralOverflowError(src: string): BoruError {
     'float_overflow',
     'floating-point literal out of range: ' + src + ' overflows to infinity',
     src,
+    {
+      hint: 'the Float range is about ±1.8e308; write the `inf` literal for infinity',
+    },
   )
 }
 
@@ -1880,7 +2085,9 @@ function floatLiteralOverflowError(src: string): BoruError {
 // a botched numeric literal (`1e`, `0x1p4`) or a digit-first name (`2dup`
 // — the stack words are now `dup2`/`swap2`/`drop2`/`over2`).
 function malformedNumberError(src: string): BoruError {
-  return new BoruError('syntax_error', 'invalid numeric literal: ' + src, src)
+  return new BoruError('syntax_error', 'invalid numeric literal: ' + src, src, {
+    hint: 'a number is digits with an optional sign, base prefix (0x/0o/0b), `.`, exponent (`e`), and single `_` separators — and a name cannot start with a digit',
+  })
 }
 
 // convertInterpGroup converts an InterpGroup (produced by the interp/ielem/iexpr
@@ -1921,9 +2128,7 @@ export function convertInterpGroup(grp: InterpGroup, d: ParseDepth): Value {
         // taxonomy survives on `cause`, which is what errors.As unwraps
         // to on the Go side — a caller that needs the code still has it,
         // and the rendered text is identical.
-        throw Object.assign(new Error(`interpolation expression error: ${errMessage(err)}`), {
-          cause: err,
-        })
+        throw interpolationExpressionError(err)
       }
       parts.push({ expr: exprVals })
       continue
@@ -2135,11 +2340,10 @@ function isBigNumberLiteral(src: string): boolean {
 }
 
 // parseBigNumber converts a `0d…` literal string to a BigInteger or
-// BigDecimal. A `.` or exponent makes it a BigDecimal (binary64-parsed
-// here — TS has no apd; see deviations); otherwise a BigInteger (bigint,
-// unbounded). Sign and `_` separators are handled like the int/float
-// paths. Errors carry no source position (parseWord has none — mirrors
-// the other parseWord numeric errors).
+// BigDecimal. A `.` or exponent makes it an exact scaled-bigint Decimal;
+// otherwise it is a BigInteger (bigint, unbounded). Sign and `_` separators
+// are handled like the int/float paths. Errors carry no source position
+// (parseWord has none — mirrors the other parseWord numeric errors).
 export function parseBigNumber(src: string): Value {
   if (src.includes('_') && !validUnderscores(src)) {
     throw bigLiteralError(src)
@@ -2173,25 +2377,54 @@ export function parseBigNumber(src: string): Value {
 }
 
 function bigLiteralError(src: string): BoruError {
-  return new BoruError('syntax_error', 'invalid 0d numeric literal: ' + src, src)
+  return new BoruError('syntax_error', 'invalid 0d numeric literal: ' + src, src, {
+    hint: 'a 0d literal is `0d` then digits, with an optional `.fraction`, exponent, and `_` separators',
+  })
 }
 
-// isAlnum reports whether c is an ASCII letter or digit (the chars that
-// may flank a `_` digit-separator: decimal/hex digits and the x/o/b/e of
-// a prefix or exponent).
-function isAlnum(c: string): boolean {
-  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+// isLiteralDigit reports whether c is an actual digit in base. Separators
+// beside a prefix/exponent marker or a digit the literal's base cannot spell
+// are not digit separators (`0x_1`, `1e_4`, `0b1_2`).
+function isLiteralDigit(c: string, base: number): boolean {
+  if (c >= '0' && c <= '9') {
+    return c.charCodeAt(0) - 48 < base
+  }
+  return base === 16 && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
 }
 
 // validUnderscores reports whether every `_` in src is a single separator
-// flanked by alphanumeric characters — no leading, trailing, or repeated
-// underscores. `1_000` and `0xFF_FF` pass; `1__0`, `1_`, `_1` fail.
+// flanked by actual digits for the literal's base. Decimal fractions and
+// exponents use decimal digits; 0x/0o/0b bodies use their named base.
+// `1_000` and `0xFF_FF` pass; `1e_4`, `0x_1`, `1__0`, and `1_` fail.
 function validUnderscores(src: string): boolean {
+  let s = src
+  if (s.length > 0 && (s[0] === '-' || s[0] === '+')) {
+    s = s.slice(1)
+  }
+  let base = 10
+  if (s.length >= 2 && s[0] === '0') {
+    switch (s[1]) {
+      case 'x': case 'X':
+        base = 16
+        break
+      case 'o': case 'O':
+        base = 8
+        break
+      case 'b': case 'B':
+        base = 2
+        break
+    }
+  }
   for (let i = 0; i < src.length; i++) {
     if (src[i] !== '_') {
       continue
     }
-    if (i === 0 || i === src.length - 1 || !isAlnum(src[i - 1]!) || !isAlnum(src[i + 1]!)) {
+    if (
+      i === 0 ||
+      i === src.length - 1 ||
+      !isLiteralDigit(src[i - 1]!, base) ||
+      !isLiteralDigit(src[i + 1]!, base)
+    ) {
       return false
     }
   }
@@ -2266,22 +2499,32 @@ function stripUnderscores(src: string): string {
 
 // integerLiteralOverflowError reports an integer literal (decimal or
 // base-prefixed) that does not fit in int64, located at the literal's
-// source position when known (row/col 0 = unknown; the TS BoruError
-// carries no position fields yet — the detail line is the parity unit).
-function integerLiteralOverflowError(src: string, _row: number, _col: number): BoruError {
+// source position when known (row/col 0 = unknown).
+function integerLiteralOverflowError(src: string, row: number, col: number): BoruError {
   return new BoruError(
     'integer_overflow',
     'integer literal out of range: ' +
       src +
       ' exceeds the Integer range (-9223372036854775808..9223372036854775807)',
     src,
+    {
+      row,
+      col,
+      src,
+      hint: 'this value exceeds the 64-bit signed Integer range; use a Float (e.g. add a decimal point) for an approximate magnitude',
+    },
   )
 }
 
 // underscoreError reports a misused `_` digit-separator (leading, trailing,
 // or repeated) in a numeric literal.
 function underscoreError(nv: NumberVal): BoruError {
-  return new BoruError('syntax_error', 'misplaced `_` in numeric literal: ' + nv.src, nv.src)
+  return new BoruError('syntax_error', 'misplaced `_` in numeric literal: ' + nv.src, nv.src, {
+    row: nv.row,
+    col: nv.col,
+    src: nv.src,
+    hint: '`_` is a single digit-separator — use one between digits, e.g. `1_000` (not `1__0` or `1_`)',
+  })
 }
 
 // leadingDotNumberError reports a `.`-leading numeric literal (`-.5`,
@@ -2291,5 +2534,11 @@ function leadingDotNumberError(nv: NumberVal): BoruError {
     'syntax_error',
     'numeric literal has no digit before `.`: ' + nv.src,
     nv.src,
+    {
+      row: nv.row,
+      col: nv.col,
+      src: nv.src,
+      hint: 'write a leading zero, e.g. `-0.5` instead of `-.5`',
+    },
   )
 }

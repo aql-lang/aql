@@ -1,7 +1,7 @@
 // The declarative grammar loader — the TS twin of parser/go/
 // declgrammar.go. Both engines load the SAME committed artifact
-// (parser/go/grammar.json; the Go side embeds it, this side reads
-// it relatively, the SPEC_DIR precedent) so the grammar's structure —
+// (parser/go/grammar.json; the Go side embeds it and a byte-identical copy
+// ships beside this loader) so the grammar's structure —
 // the token table and the rule-spec amendments — has one source of
 // truth. Behavior that data cannot express binds by NAME from the
 // host hook tables; an unknown name throws at parser construction.
@@ -11,22 +11,10 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// The twins are siblings under parser/, so the artifact is two levels up
-// then into go/: parser/ts/src -> parser/ -> parser/go/grammar.json. The
-// Go side embeds this same file with go:embed, which is what makes the
-// grammar ONE artifact rather than two that drift (DECLARATIVE-GRAMMAR.0).
-// It was eng/ts/src/parser reaching four levels up to the repo root until
-// the TS parser was cut out of the kernel into its own module.
-//
-// PUBLISHING CAVEAT: this path leaves the package, so it only resolves in a
-// checkout or through a `file:` dependency — which is every consumer today.
-// From a packed tarball it would land on `node_modules/@boru-lang/go/` and
-// throw ENOENT at parser construction. The property is inherited, not new:
-// the eng/ts path reached even further out, and `files` there is the same
-// ['dist','src']. Closing it means a prepack step copying the artifact in,
-// which is work for a publish pipeline that does not exist yet — recorded
-// here rather than solved speculatively.
-const GRAMMAR_PATH = path.resolve(__dirname, '..', '..', 'go', 'grammar.json')
+// Keep the runtime path inside the npm package. declgrammar.test.ts enforces
+// byte equality with parser/go/grammar.json, the canonical artifact, so the
+// package is self-contained without permitting the twins to drift.
+const GRAMMAR_PATH = path.resolve(__dirname, 'grammar.json')
 
 export interface DeclToken {
   name: string

@@ -12,7 +12,7 @@ import type { Value, XmlTmpl, XmlElement, InterpSegment, XmlChildTmpl } from '@b
 import { newXml, newXmlInterp } from '@boru-lang/core'
 import { XmlElemVal } from './nodes.ts'
 import type { ParserTokens } from './grammar.ts'
-import { parse } from './convert.ts'
+import { errMessage, parse } from './convert.ts'
 
 // --- local grammar helpers -------------------------------------------
 //
@@ -134,8 +134,8 @@ export function setupXmlMatcher(j: any, _t: ParserTokens): void {
     }
     const raw = s.slice(la, end)
     const tkn = lex.token('#XML', new XmlElemVal(v, err, holes), raw, cursor)
-    for (let k = afterLA; k < end; k++) {
-      if ('\n' === s[k]) {
+    for (const ch of s.slice(afterLA, end)) {
+      if ('\n' === ch) {
         cursor.rI++
         cursor.cI = 1
       } else {
@@ -408,7 +408,7 @@ function scanInterp(s: string, i: number): [Value[] | undefined, number, string 
             return [
               undefined,
               j + 1,
-              'xml: in ${...}: ' + (e instanceof Error ? e.message : String(e)),
+              'xml: in ${...}: ' + errMessage(e),
             ]
           }
           return [toks, j + 1, undefined]

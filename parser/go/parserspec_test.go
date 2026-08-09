@@ -10,23 +10,40 @@ package parser_test
 // a parser corpus with a shared reader would hide precisely the class of
 // defect design/TS-PARITY-AUDIT.0.md found.
 //
-// Two files, two contracts:
+// Five files, five contracts (lex.tsv has its own strict runner in
+// lexspec_test.go because it renders tokens rather than parsed values):
 //
 //   parse.tsv      src -> expected. Both engines must produce `expected`.
-//   divergent.tsv  src -> go, ts.   The parity debt. Each runner asserts its
-//                                   OWN column, so a divergence stays pinned
-//                                   instead of drifting, and fixing one means
-//                                   deleting the row.
+//   divergent.tsv  src -> go, ts.   Must stay empty: full parser parity is a
+//                                   hard invariant, not accepted debt.
+//   lex.tsv        src, EOF status -> exact trivia-preserving token stream,
+//                                   including UTF-8 byte offsets.
+//   nesting.tsv    kind, depth -> outcome. Each runner independently builds
+//                                   the source, checks OK/error code, and walks
+//                                   every successful spine iteratively.
+//   shape.tsv      case, src -> semantic shape. Positions, flags, modifier
+//                                   payloads, nested values, and diagnostics
+//                                   omitted by the canonical render.
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/parser/go"
+)
+
+const (
+	parseSpecRowCount     = 648
+	divergentSpecRowCount = 0
+	nestingSpecRowCount   = 18
+	shapeSpecRowCount     = 26
 )
 
 // specRow is one decoded corpus line: the source plus its columns.
@@ -36,10 +53,34 @@ type specRow struct {
 	cols []string
 }
 
+// nestingSpecRow is deliberately separate from specRow: nesting.tsv is not a
+// source/render corpus. Each runner must generate its own source from the
+// compact kind/depth contract, and every data row must have exactly 3 columns.
+type nestingSpecRow struct {
+	line     int
+	kind     string
+	depth    int
+	expected string
+}
+
+// shapeSpecRow has its own strict schema: shape.tsv is not an extension of
+// parse.tsv, and accepting optional/trailing columns here would let a malformed
+// structural oracle silently pass in one implementation.
+type shapeSpecRow struct {
+	line     int
+	name     string
+	src      string
+	expected string
+}
+
 // readSpec decodes one corpus file. A row is tab-separated; '#' at the start
 // of a line is a comment and blank lines are skipped.
 func readSpec(t *testing.T, name string) []specRow {
 	t.Helper()
+	wantColumns := 4 // divergent.tsv: src, go, ts, justification
+	if name == "parse.tsv" {
+		wantColumns = 3 // src, expected, optional note (column always present)
+	}
 	path := filepath.Join("..", "spec", name)
 	f, err := os.Open(path)
 	if err != nil {
@@ -47,6 +88,7 @@ func readSpec(t *testing.T, name string) []specRow {
 	}
 	defer f.Close()
 
+	seen := make(map[string]int)
 	var rows []specRow
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
@@ -60,8 +102,8 @@ func readSpec(t *testing.T, name string) []specRow {
 			continue
 		}
 		parts := strings.Split(line, "\t")
-		if len(parts) < 2 {
-			t.Fatalf("%s:%d: need at least 2 tab-separated columns, got %d", name, n, len(parts))
+		if len(parts) != wantColumns {
+			t.Fatalf("%s:%d: need exactly %d tab-separated columns, got %d", name, n, wantColumns, len(parts))
 		}
 		// EVERY column is escaped, not just the source: a render can itself
 		// contain a newline (XML text spanning lines), which would otherwise
@@ -70,18 +112,267 @@ func readSpec(t *testing.T, name string) []specRow {
 		for _, c := range parts[1:] {
 			cols = append(cols, decodeSpecEscapes(c))
 		}
-		rows = append(rows, specRow{line: n, src: decodeSpecEscapes(parts[0]), cols: cols})
+		if name == "divergent.tsv" && strings.TrimSpace(cols[2]) == "" {
+			t.Fatalf("%s:%d: divergence justification must not be blank", name, n)
+		}
+		if name == "divergent.tsv" && cols[0] == cols[1] {
+			t.Fatalf("%s:%d: go and ts renders are equal; move the row to parse.tsv", name, n)
+		}
+		src := decodeSpecEscapes(parts[0])
+		if first, exists := seen[src]; exists {
+			t.Fatalf("%s:%d: duplicate source (first at line %d): %q", name, n, first, src)
+		}
+		seen[src] = n
+		rows = append(rows, specRow{line: n, src: src, cols: cols})
 	}
 	if err := sc.Err(); err != nil {
 		t.Fatalf("scan %s: %v", path, err)
 	}
-	// divergent.tsv is the parity DEBT, so empty is the goal state, not a
-	// broken corpus. Every other file must have rows — an empty one there
-	// means the corpus is not being read.
-	if len(rows) == 0 && filepath.Base(path) != "divergent.tsv" {
-		t.Fatalf("%s: no rows", path)
+	wantRows := divergentSpecRowCount
+	if name == "parse.tsv" {
+		wantRows = parseSpecRowCount
+	}
+	if len(rows) != wantRows {
+		t.Fatalf("%s: got %d data rows, want exact ratchet %d", path, len(rows), wantRows)
 	}
 	return rows
+}
+
+// readNestingSpec reads the compact nesting contract without sharing any
+// reader or source-generation code with the TypeScript runner.
+func readNestingSpec(t *testing.T) []nestingSpecRow {
+	t.Helper()
+	const name = "nesting.tsv"
+	path := filepath.Join("..", "spec", name)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer f.Close()
+
+	seen := make(map[string]int)
+	var rows []nestingSpecRow
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		line := sc.Text()
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
+			t.Fatalf("%s:%d: need exactly 3 tab-separated columns (kind, depth, expected outcome), got %d", name, n, len(parts))
+		}
+		depth, err := strconv.Atoi(parts[1])
+		if err != nil || depth < 1 {
+			t.Fatalf("%s:%d: depth %q is not a positive integer", name, n, parts[1])
+		}
+		if parts[2] != "OK" && parts[2] != "ERR evaluation_limit" {
+			t.Fatalf("%s:%d: expected outcome %q is not OK or ERR evaluation_limit", name, n, parts[2])
+		}
+		key := parts[0] + "\x00" + strconv.Itoa(depth)
+		if first, exists := seen[key]; exists {
+			t.Fatalf("%s:%d: duplicate kind/depth %q/%d (first at line %d)", name, n, parts[0], depth, first)
+		}
+		seen[key] = n
+		rows = append(rows, nestingSpecRow{line: n, kind: parts[0], depth: depth, expected: parts[2]})
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
+	}
+	if len(rows) != nestingSpecRowCount {
+		t.Fatalf("%s: got %d data rows, want exact ratchet %d", path, len(rows), nestingSpecRowCount)
+	}
+	return rows
+}
+
+// readShapeSpec independently reads the Go half of the semantic-shape oracle.
+// Every data row is exactly: unique case name, escaped source, escaped shape.
+func readShapeSpec(t *testing.T) []shapeSpecRow {
+	t.Helper()
+	const name = "shape.tsv"
+	path := filepath.Join("..", "spec", name)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer f.Close()
+
+	seen := make(map[string]bool)
+	var rows []shapeSpecRow
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		line := sc.Text()
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 3 {
+			t.Fatalf("%s:%d: need exactly 3 tab-separated columns (case, source, expected shape), got %d", name, n, len(parts))
+		}
+		caseName := parts[0]
+		if caseName == "" || strings.TrimSpace(caseName) != caseName {
+			t.Fatalf("%s:%d: case name %q must be non-empty with no surrounding whitespace", name, n, caseName)
+		}
+		if seen[caseName] {
+			t.Fatalf("%s:%d: duplicate case name %q", name, n, caseName)
+		}
+		seen[caseName] = true
+		expected := decodeSpecEscapes(parts[2])
+		if expected == "" {
+			t.Fatalf("%s:%d: expected shape must not be empty", name, n)
+		}
+		rows = append(rows, shapeSpecRow{
+			line:     n,
+			name:     caseName,
+			src:      decodeSpecEscapes(parts[1]),
+			expected: expected,
+		})
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
+	}
+	if len(rows) != shapeSpecRowCount {
+		t.Fatalf("%s: got %d data rows, want exact ratchet %d", path, len(rows), shapeSpecRowCount)
+	}
+	return rows
+}
+
+// nestingSource independently expands one compact row into boru source.
+// mixed is one spine whose outermost node is always a list and whose levels
+// cycle through list, map, and paren; this makes depth count conversion frames
+// exactly, including at 10,000.
+func nestingSource(t *testing.T, kind string, depth int) string {
+	t.Helper()
+	switch kind {
+	case "list":
+		return strings.Repeat("[", depth) + "1" + strings.Repeat("]", depth)
+	case "map":
+		return strings.Repeat("{a:", depth) + "1" + strings.Repeat("}", depth)
+	case "paren":
+		return strings.Repeat("(", depth) + "1" + strings.Repeat(")", depth)
+	case "typed-list":
+		return strings.Repeat("[:", depth) + "Integer" + strings.Repeat("]", depth)
+	case "typed-map":
+		return strings.Repeat("{:", depth) + "Integer" + strings.Repeat("}", depth)
+	case "mixed":
+		var opens, closes strings.Builder
+		opens.Grow(depth * 2)
+		closes.Grow(depth)
+		close := make([]byte, depth)
+		for i := 0; i < depth; i++ {
+			switch i % 3 {
+			case 0:
+				opens.WriteByte('[')
+				close[i] = ']'
+			case 1:
+				opens.WriteString("{a:")
+				close[i] = '}'
+			case 2:
+				opens.WriteByte('(')
+				close[i] = ')'
+			}
+		}
+		for i := len(close) - 1; i >= 0; i-- {
+			closes.WriteByte(close[i])
+		}
+		return opens.String() + "1" + closes.String()
+	default:
+		t.Fatalf("nesting.tsv: unknown kind %q", kind)
+		return ""
+	}
+}
+
+// nestingOutcome intentionally does not call core.CanonValue: recursively
+// rendering a 10,000-deep success would test the renderer's host stack rather
+// than the parser's nesting contract. Successful values are returned for the
+// independent iterative spine check below.
+func nestingOutcome(src string) ([]core.Value, string) {
+	values, err := parser.Parse(src)
+	if err == nil {
+		return values, "OK"
+	}
+	var ae *core.BoruError
+	if errors.As(err, &ae) {
+		return nil, "ERR " + ae.Code
+	}
+	return nil, "ERR unstructured"
+}
+
+// assertNestingSpine verifies every successful generated container without
+// recursion. Merely accepting a 10,000-deep source is not enough: truncating,
+// flattening, or changing one container kind must fail the shared contract too.
+func assertNestingSpine(t *testing.T, values []core.Value, kind string, depth int) {
+	t.Helper()
+	if len(values) != 1 {
+		t.Fatalf("%s depth %d: parsed %d root values, want exactly 1", kind, depth, len(values))
+	}
+	cur := values[0]
+	for level := 0; level < depth; level++ {
+		wantKind := kind
+		if kind == "mixed" {
+			wantKind = []string{"list", "map", "paren"}[level%3]
+		}
+		switch wantKind {
+		case "list":
+			if core.IsTypedList(cur) || cur.Parent == nil || !cur.Parent.Equal(core.TList) {
+				t.Fatalf("%s depth %d: level %d is not an untyped List", kind, depth, level+1)
+			}
+			items, err := core.AsList(cur)
+			if err != nil || items.Len() != 1 {
+				t.Fatalf("%s depth %d: level %d List does not contain exactly one item", kind, depth, level+1)
+			}
+			cur = items.Get(0)
+		case "map":
+			if core.IsTypedMap(cur) || cur.Parent == nil || !cur.Parent.Equal(core.TMap) {
+				t.Fatalf("%s depth %d: level %d is not an untyped Map", kind, depth, level+1)
+			}
+			entries, err := core.AsMap(cur)
+			if err != nil || entries.Len() != 1 || len(entries.Keys()) != 1 || entries.Keys()[0] != "a" {
+				t.Fatalf("%s depth %d: level %d Map is not the single entry a:<child>", kind, depth, level+1)
+			}
+			next, ok := entries.Get("a")
+			if !ok {
+				t.Fatalf("%s depth %d: level %d Map child is missing", kind, depth, level+1)
+			}
+			cur = next
+		case "paren":
+			if !core.IsParenExpr(cur) {
+				t.Fatalf("%s depth %d: level %d is not a ParenExpr", kind, depth, level+1)
+			}
+			items, err := core.AsParenExpr(cur)
+			if err != nil || len(items) != 1 {
+				t.Fatalf("%s depth %d: level %d ParenExpr does not contain exactly one item", kind, depth, level+1)
+			}
+			cur = items[0]
+		case "typed-list", "typed-map":
+			isRightKind := core.IsTypedList(cur)
+			if wantKind == "typed-map" {
+				isRightKind = core.IsTypedMap(cur)
+			}
+			if !isRightKind {
+				t.Fatalf("%s depth %d: level %d has the wrong typed-container kind", kind, depth, level+1)
+			}
+			child, err := core.AsChildType(cur)
+			if err != nil || len(child.Elements) != 0 || len(child.Entries) != 0 {
+				t.Fatalf("%s depth %d: level %d typed container has unexpected concrete children", kind, depth, level+1)
+			}
+			cur = child.Child
+		default:
+			t.Fatalf("nesting.tsv: unknown kind %q", wantKind)
+		}
+	}
+
+	if kind == "typed-list" || kind == "typed-map" {
+		word, err := core.AsWord(cur)
+		if err != nil || word.Name != "Integer" {
+			t.Fatalf("%s depth %d: terminal is not the word Integer", kind, depth)
+		}
+		return
+	}
+	n, err := core.AsInteger(cur)
+	if err != nil || n != 1 {
+		t.Fatalf("%s depth %d: terminal is not the Integer value 1", kind, depth)
+	}
 }
 
 // decodeSpecEscapes turns the corpus's \n, \t and \\ back into the bytes
@@ -124,6 +415,211 @@ func renderSpec(src string) string {
 	return strings.Join(parts, " ")
 }
 
+func shapeBit(v bool) byte {
+	if v {
+		return '1'
+	}
+	return '0'
+}
+
+func renderShapeStrings(items []string) string {
+	parts := make([]string, len(items))
+	for i, item := range items {
+		parts[i] = strconv.Quote(item)
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
+func renderShapeValues(items []core.Value) string {
+	parts := make([]string, len(items))
+	for i, item := range items {
+		parts[i] = renderShapeValue(item)
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
+func renderShapeMapEntries(entries core.ReadMap) string {
+	keys := entries.Keys()
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if item, ok := entries.Get(key); ok {
+			parts = append(parts, strconv.Quote(key)+"=>"+renderShapeValue(item))
+		}
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
+func renderShapeChildEntries(entries []core.ChildEntry) string {
+	parts := make([]string, len(entries))
+	for i, entry := range entries {
+		parts[i] = strconv.Quote(entry.Key) + "=>" + renderShapeValue(entry.Value)
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
+func renderShapeOptionalValue(v core.Value) string {
+	if v.Parent == nil {
+		return "none"
+	}
+	return renderShapeValue(v)
+}
+
+// renderShapeValue is deliberately local to the Go runner. Unlike CanonValue,
+// it includes every parser-observable field selected by shape.tsv and descends
+// into the structural payloads used by the corpus. The TS runner implements the
+// same text contract independently rather than sharing a serializer.
+func renderShapeValue(v core.Value) string {
+	pos := v.Pos()
+	var b strings.Builder
+	b.WriteString("v(c=")
+	b.WriteString(strconv.Quote(core.CanonValue(v)))
+	b.WriteString(",p=")
+	b.WriteString(strconv.Itoa(pos.Row))
+	b.WriteByte(':')
+	b.WriteString(strconv.Itoa(pos.Col))
+	b.WriteByte(':')
+	b.WriteString(strconv.Quote(pos.Src))
+	b.WriteString(",e=")
+	b.WriteByte(shapeBit(v.Eval))
+	b.WriteString(",q=")
+	b.WriteByte(shapeBit(v.Quoted))
+
+	if core.IsWord(v) {
+		w, err := core.AsWord(v)
+		if err == nil {
+			b.WriteString(",w={name=")
+			b.WriteString(strconv.Quote(w.Name))
+			b.WriteString(",argc=")
+			b.WriteString(strconv.Itoa(w.ArgCount))
+			b.WriteString(",stack=")
+			b.WriteByte(shapeBit(w.ForceStack))
+			b.WriteString(",forward=")
+			b.WriteByte(shapeBit(w.ForceForward))
+			b.WriteString(",ref=")
+			b.WriteByte(shapeBit(w.ForceRef))
+			b.WriteString(",usurp=")
+			b.WriteByte(shapeBit(w.ForceUsurp))
+			b.WriteByte('}')
+		}
+	} else if core.IsAtom(v) {
+		if atom, err := core.AsAtom(v); err == nil {
+			b.WriteString(",atom=")
+			b.WriteString(strconv.Quote(atom))
+		}
+	}
+	if sugar, ok := core.AsSugar(v); ok {
+		b.WriteString(",sugar={kind=")
+		b.WriteString(strconv.Quote(string(sugar.Kind)))
+		b.WriteString(",n=")
+		b.WriteString(strconv.FormatInt(sugar.N, 10))
+		b.WriteString(",name=")
+		b.WriteString(strconv.Quote(sugar.Name))
+		b.WriteString(",src=")
+		b.WriteString(strconv.Quote(sugar.Src))
+		b.WriteString(",head=")
+		b.WriteString(renderShapeOptionalValue(sugar.Head))
+		b.WriteString(",headErr=")
+		b.WriteString(strconv.Quote(sugar.HeadErr))
+		b.WriteString(",items=")
+		b.WriteString(renderShapeValues(sugar.Items))
+		b.WriteByte('}')
+	}
+
+	if core.IsTypedList(v) || core.IsTypedMap(v) {
+		if child, err := core.AsChildType(v); err == nil {
+			kind := "list"
+			if core.IsTypedMap(v) {
+				kind = "map"
+			}
+			b.WriteString(",typed={kind=")
+			b.WriteString(strconv.Quote(kind))
+			b.WriteString(",child=")
+			b.WriteString(renderShapeValue(child.Child))
+			b.WriteString(",elements=")
+			b.WriteString(renderShapeValues(child.Elements))
+			b.WriteString(",entries=")
+			b.WriteString(renderShapeChildEntries(child.Entries))
+			b.WriteByte('}')
+		}
+	} else if core.IsParenExpr(v) {
+		if items, err := core.AsParenExpr(v); err == nil {
+			b.WriteString(",paren=")
+			b.WriteString(renderShapeValues(items))
+		}
+	} else if core.IsReach(v) {
+		if reach, err := core.AsReach(v); err == nil {
+			b.WriteString(",reach={eval=")
+			b.WriteByte(shapeBit(reach.Eval))
+			b.WriteString(",recv=")
+			b.WriteString(renderShapeValues(reach.Receiver))
+			b.WriteString(",segs=[")
+			segs := make([]string, len(reach.Segments))
+			for i, seg := range reach.Segments {
+				op := "dot"
+				if seg.Getr {
+					op = "getr"
+				}
+				if seg.Computed {
+					segs[i] = op + "(expr=" + renderShapeValues(seg.KeyExpr) + ")"
+				} else {
+					segs[i] = op + "(lit=" + renderShapeValue(seg.KeyLit) + ")"
+				}
+			}
+			b.WriteString(strings.Join(segs, ","))
+			b.WriteString("]}")
+		}
+	} else if items, err := core.AsList(v); err == nil {
+		b.WriteString(",list=")
+		b.WriteString(renderShapeValues(items.Slice()))
+	} else if entries, err := core.AsMap(v); err == nil {
+		implicit := false
+		var computed []string
+		if om, ok := entries.(*core.OrderedMap); ok {
+			implicit = om.Implicit
+			if ck, ok := om.Meta["ck"].(map[string]bool); ok {
+				for key, yes := range ck {
+					if yes {
+						computed = append(computed, key)
+					}
+				}
+				sort.Strings(computed)
+			}
+		}
+		b.WriteString(",map={implicit=")
+		b.WriteByte(shapeBit(implicit))
+		b.WriteString(",computed=")
+		b.WriteString(renderShapeStrings(computed))
+		b.WriteString(",entries=")
+		b.WriteString(renderShapeMapEntries(entries))
+		b.WriteByte('}')
+	}
+
+	b.WriteByte(')')
+	return b.String()
+}
+
+func renderShape(src string) string {
+	values, err := parser.Parse(src)
+	if err == nil {
+		return "values=" + renderShapeValues(values)
+	}
+	var ae *core.BoruError
+	if !errors.As(err, &ae) {
+		return "error(unstructured=" + strconv.Quote(err.Error()) + ")"
+	}
+	help := make([]string, len(ae.Suggestions))
+	for i, suggestion := range ae.Suggestions {
+		help[i] = suggestion.Message
+	}
+	return "error(code=" + strconv.Quote(ae.Code) +
+		",detail=" + strconv.Quote(ae.Detail) +
+		",p=" + strconv.Itoa(ae.Row) + ":" + strconv.Itoa(ae.Col) + ":" + strconv.Quote(ae.Src) +
+		",full=" + strconv.Quote(ae.FullSource) +
+		",hint=" + strconv.Quote(ae.Hint) +
+		",notes=" + renderShapeStrings(ae.Notes) +
+		",help=" + renderShapeStrings(help) + ")"
+}
+
 func TestParserSpecParse(t *testing.T) {
 	for _, r := range readSpec(t, "parse.tsv") {
 		got := renderSpec(r.src)
@@ -133,31 +629,41 @@ func TestParserSpecParse(t *testing.T) {
 	}
 }
 
-// TestParserSpecDivergent pins the Go side of every recorded divergence, and
-// fails if a row has stopped diverging — a fixed divergence must be MOVED to
-// parse.tsv, not left here, or the file stops being an honest debt list.
+// TestParserSpecDivergent makes zero parser debt executable: readSpec validates
+// the four-column/provenance form first, then its exact-count ratchet rejects
+// every data row until the measured difference is fixed and moved to parse.tsv.
 func TestParserSpecDivergent(t *testing.T) {
 	rows := readSpec(t, "divergent.tsv")
-	if len(rows) == 0 {
-		// The debt is paid. Kept as a live assertion rather than deleted:
-		// the file is the ratchet, and a NEW divergence has to be added
-		// here deliberately (with the justification the header demands)
-		// instead of quietly landing as a changed expectation elsewhere.
-		t.Log("divergent.tsv: empty — parser/go and parser/ts agree on every corpus row")
-		return
+	if len(rows) != divergentSpecRowCount {
+		t.Fatalf("divergent.tsv: got %d rows, want none", len(rows))
 	}
-	for _, r := range rows {
-		if len(r.cols) < 2 {
-			t.Errorf("divergent.tsv:%d: need src, go, ts columns", r.line)
-			continue
-		}
-		wantGo, wantTS := r.cols[0], r.cols[1]
-		if wantGo == wantTS {
-			t.Errorf("divergent.tsv:%d: %q: go and ts columns are identical — move this row to parse.tsv", r.line, r.src)
-			continue
-		}
-		if got := renderSpec(r.src); got != wantGo {
-			t.Errorf("divergent.tsv:%d: %q (go column)\n  want: %s\n  got : %s", r.line, r.src, wantGo, got)
-		}
+	t.Log("divergent.tsv: empty — parser/go and parser/ts parity is exact")
+}
+
+func TestParserSpecNesting(t *testing.T) {
+	for _, r := range readNestingSpec(t) {
+		r := r
+		t.Run(r.kind+"/"+strconv.Itoa(r.depth), func(t *testing.T) {
+			src := nestingSource(t, r.kind, r.depth)
+			values, got := nestingOutcome(src)
+			if got != r.expected {
+				t.Errorf("nesting.tsv:%d: %s depth %d: want %s, got %s", r.line, r.kind, r.depth, r.expected, got)
+				return
+			}
+			if got == "OK" {
+				assertNestingSpine(t, values, r.kind, r.depth)
+			}
+		})
+	}
+}
+
+func TestParserSpecShape(t *testing.T) {
+	for _, r := range readShapeSpec(t) {
+		r := r
+		t.Run(r.name, func(t *testing.T) {
+			if got := renderShape(r.src); got != r.expected {
+				t.Errorf("shape.tsv:%d (%s): %q\n  want: %s\n  got : %s", r.line, r.name, r.src, r.expected, got)
+			}
+		})
 	}
 }

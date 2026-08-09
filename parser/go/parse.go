@@ -174,6 +174,7 @@ func Parse(src string) ([]core.Value, error) {
 	t, tins := setupBaseTokens(j, g)
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
+	setupDecimalUnderscoreMatcher(j, t)
 	setupMiniLitMatcher(j, t)
 	setupXmlMatcher(j, t)
 
@@ -682,6 +683,17 @@ func convertTopLevelValueInner(v any, d *parseDepth) (core.Value, error) {
 		}
 		return convertWordList(val.Val, d)
 
+	case parenGroup:
+		// Parentheses remain an expression when they appear directly inside
+		// angle arguments (for example, Box<(Integer)>).  Angle conversion
+		// feeds each argument through this word-context path, so handle the
+		// same intermediate value that is already supported in data context.
+		items, err := convertTopLevelItems([]any(val), d)
+		if err != nil {
+			return core.Value{}, err
+		}
+		return core.NewParenExpr(items), nil
+
 	case angleGroup:
 		// Use-site sugar: `Box<Integer>` → the canonical paren span
 		// `( Box of [Integer] )` (a ParenExpr, exactly what the
@@ -819,9 +831,12 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 			continue
 		}
 		if _, _, _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
-			return core.Value{}, fmt.Errorf(
-				"[boru/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
-				key, key)
+			return core.Value{}, &core.BoruError{
+				Code: "illegal_key",
+				Detail: fmt.Sprintf(
+					"word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
+					key, key),
+			}
 		}
 	}
 
@@ -1777,6 +1792,8 @@ func numberValToValue(nv numberVal) (core.Value, error) {
 		// only if the (jsonic-validated) token somehow fails to reparse.
 		if f, err := strconv.ParseFloat(stripUnderscores(nv.Src), 64); err == nil {
 			return core.NewFloat(f), nil
+		} else if isRangeError(err) || math.IsInf(f, 0) {
+			return core.Value{}, floatLiteralOverflowError(nv.Src)
 		}
 		return core.NewFloat(nv.Val), nil
 	}
@@ -1796,6 +1813,13 @@ func numberValToValue(nv numberVal) (core.Value, error) {
 			return core.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
 		}
 		return core.NewInteger(n), nil
+	}
+	// Scientific notation without a dot (`1e400`) reaches this tail. Keep
+	// an overflowing literal an error rather than silently manufacturing
+	// the special `inf` value; oversized plain integers were classified by
+	// the exact ParseInt branch above and remain integer_overflow.
+	if math.IsInf(nv.Val, 0) {
+		return core.Value{}, floatLiteralOverflowError(nv.Src)
 	}
 	return floatToValue(nv.Val), nil
 }
@@ -1868,22 +1892,41 @@ func bigLiteralError(src string) error {
 	}
 }
 
-// isAlnum reports whether c is an ASCII letter or digit (the chars that
-// may flank a `_` digit-separator: decimal/hex digits and the x/o/b/e of
-// a prefix or exponent).
-func isAlnum(c byte) bool {
-	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+// isLiteralDigit reports whether c is an actual digit in base. Separators
+// beside a prefix/exponent marker or a digit the literal's base cannot spell
+// are not digit separators (`0x_1`, `1e_4`, `0b1_2`).
+func isLiteralDigit(c byte, base int) bool {
+	if c >= '0' && c <= '9' {
+		return int(c-'0') < base
+	}
+	return base == 16 && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
 }
 
 // validUnderscores reports whether every `_` in src is a single separator
-// flanked by alphanumeric characters — no leading, trailing, or repeated
-// underscores. `1_000` and `0xFF_FF` pass; `1__0`, `1_`, `_1` fail.
+// flanked by actual digits for the literal's base. Decimal fractions and
+// exponents use decimal digits; 0x/0o/0b bodies use their named base.
+// `1_000` and `0xFF_FF` pass; `1e_4`, `0x_1`, `1__0`, and `1_` fail.
 func validUnderscores(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	base := 10
+	if len(s) >= 2 && s[0] == '0' {
+		switch s[1] {
+		case 'x', 'X':
+			base = 16
+		case 'o', 'O':
+			base = 8
+		case 'b', 'B':
+			base = 2
+		}
+	}
 	for i := 0; i < len(src); i++ {
 		if src[i] != '_' {
 			continue
 		}
-		if i == 0 || i == len(src)-1 || !isAlnum(src[i-1]) || !isAlnum(src[i+1]) {
+		if i == 0 || i == len(src)-1 || !isLiteralDigit(src[i-1], base) || !isLiteralDigit(src[i+1], base) {
 			return false
 		}
 	}

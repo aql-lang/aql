@@ -1,0 +1,36 @@
+# parser/spec/lex.tsv — the trivia-preserving lexer parity corpus.
+#
+# Exactly three tab-separated columns: escaped source, OK/ERR clean-EOF
+# status, and the exact token stream as canonical JSON. Token `si` values are
+# UTF-8 byte offsets. Every column uses the parser/spec escape notation.
+# Both ports own independent strict readers and renderers; keep the exact
+# row-count ratchets in those runners and parser/spec/README.md in sync.
+	OK	[]
+'unterminated	ERR	[]
+`unterminated	OK	[{"name":"#BT","src":"`","si":0},{"name":"#TX","src":"unterminated","si":1}]
+é🙂 add 2	OK	[{"name":"#TX","src":"é🙂","si":0},{"name":"#SP","src":" ","si":6},{"name":"#TX","src":"add","si":7},{"name":"#SP","src":" ","si":10},{"name":"#NR","src":"2","si":11}]
+1 # note\n2	OK	[{"name":"#NR","src":"1","si":0},{"name":"#SP","src":" ","si":1},{"name":"#CM","src":"# note","si":2},{"name":"#LN","src":"\\n","si":8},{"name":"#NR","src":"2","si":9}]
+1.0e400	OK	[{"name":"#NR","src":"1.0e400","si":0}]
+1.e400	OK	[{"name":"#NR","src":"1.e400","si":0}]
+1.e2	OK	[{"name":"#NR","src":"1.e2","si":0}]
+1.x	OK	[{"name":"#NR","src":"1","si":0},{"name":"#DT","src":".","si":1},{"name":"#TX","src":"x","si":2}]
+1e400.foo	OK	[{"name":"#NR","src":"1e400","si":0},{"name":"#DT","src":".","si":5},{"name":"#TX","src":"foo","si":6}]
+1.0e	OK	[{"name":"#NR","src":"1","si":0},{"name":"#DT","src":".","si":1},{"name":"#TX","src":"0e","si":2}]
+1_.2	OK	[{"name":"#NR","src":"1_.2","si":0}]
+1.2_e3	OK	[{"name":"#NR","src":"1.2_e3","si":0}]
++.1e400	OK	[{"name":"#NR","src":"+.1e400","si":0}]
++.1e_4	OK	[{"name":"#NR","src":"+.1e_4","si":0}]
+0x_1	OK	[{"name":"#NR","src":"0x_1","si":0}]
+0x10000000000000000	OK	[{"name":"#NR","src":"0x10000000000000000","si":0}]
+0o2000000000000000000000	OK	[{"name":"#NR","src":"0o2000000000000000000000","si":0}]
+0b10000000000000000000000000000000000000000000000000000000000000000	OK	[{"name":"#NR","src":"0b10000000000000000000000000000000000000000000000000000000000000000","si":0}]
+1.e:	OK	[{"name":"#NR","src":"1","si":0},{"name":"#DT","src":".","si":1},{"name":"#TX","src":"e","si":2},{"name":"#CL","src":":","si":3}]
+-5.25e:	OK	[{"name":"#NR","src":"-5","si":0},{"name":"#DT","src":".","si":2},{"name":"#TX","src":"25e","si":3},{"name":"#CL","src":":","si":6}]
+1.0e=>	OK	[{"name":"#NR","src":"1","si":0},{"name":"#DT","src":".","si":1},{"name":"#TX","src":"0e","si":2},{"name":"#AR","src":"=>","si":4}]
+1..1:	OK	[{"name":"#NR","src":"1.","si":0},{"name":"#DT","src":".","si":2},{"name":"#NR","src":"1","si":3},{"name":"#CL","src":":","si":4}]
+# Adjacent string quotes are unconditional #TX boundaries, including after
+# the slash that follows a completed receiver.
+a's'	OK	[{"name":"#TX","src":"a","si":0},{"name":"#ST","src":"'s'","si":1}]
+a"s"	OK	[{"name":"#TX","src":"a","si":0},{"name":"#ST","src":"\"s\"","si":1}]
+(a)/'s'	OK	[{"name":"#OP","src":"(","si":0},{"name":"#TX","src":"a","si":1},{"name":"#CP","src":")","si":2},{"name":"#TX","src":"/","si":3},{"name":"#ST","src":"'s'","si":4}]
+(a)/"s"	OK	[{"name":"#OP","src":"(","si":0},{"name":"#TX","src":"a","si":1},{"name":"#CP","src":")","si":2},{"name":"#TX","src":"/","si":3},{"name":"#ST","src":"\"s\"","si":4}]

@@ -63,12 +63,23 @@ export interface WordInfo {
   argCount?: number;
   forceStack?: boolean;
   forceForward?: boolean;
+  /** Resolve the binding without invoking it (`/r`). */
+  forceRef?: boolean;
+  /** Wrap the bound function with reversed signature argument order (`/u`). */
+  forceUsurp?: boolean;
   /**
    * Optional type constraint on a `def NAME:CONTAINER` binding, where the
    * constraint is a container shape (`[:T]` typed list or `{k:T …}` record
    * shape) that the tokenizer attaches to the binding name token.
    */
   constraint?: Value;
+}
+
+/** Source location carried by parser-produced values (1-based; row 0 unknown). */
+export interface ValuePos {
+  row: number;
+  col: number;
+  src: string;
 }
 
 /** A typed parameter on a function definition. */
@@ -142,6 +153,8 @@ export class Value {
    * Mirrors Go Value.Dynamic.
    */
   readonly dynamic: boolean;
+  /** Parser source location. Synthesized runtime values keep row/col zero. */
+  pos: ValuePos;
   /**
    * Check-mode marker: an undefined word kept as a lenient placeholder
    * so analysis can continue past a typo. Drained to an Any carrier at
@@ -166,6 +179,7 @@ export class Value {
     this.carrier = opts?.carrier ?? false;
     this.dynamic = opts?.dynamic ?? false;
     this.undefined = false;
+    this.pos = { row: 0, col: 0, src: "" };
   }
 
   /** True iff this Value is the unique `none` value (None's sole inhabitant). */
@@ -774,6 +788,10 @@ export function newList(
 export class OrderedMap {
   private readonly _keys: string[] = [];
   private readonly vals = new Map<string, Value>();
+  /** True when pair syntax (for example `[x:Integer]`) synthesized the map. */
+  implicit = false;
+  /** Optional parser/engine communication metadata, matching Go OrderedMap.Meta. */
+  meta?: Record<string, unknown>;
 
   set(key: string, val: Value): void {
     if (!this.vals.has(key)) this._keys.push(key);

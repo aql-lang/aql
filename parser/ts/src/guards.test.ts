@@ -22,7 +22,7 @@ import { strict as assert } from 'node:assert'
 
 import { makeLex } from '@tabnas/jsonic'
 import { makeBoruJsonic } from './grammar.ts'
-import { ParenGroup, Sited, UnclosedAngle, InterpGroup, ArrowTag } from './nodes.ts'
+import { AngleGroup, ParenGroup, Sited, UnclosedAngle, InterpGroup, ArrowTag } from './nodes.ts'
 
 /**
  * The NORULE sentinel. tabnas mints a real one per parse
@@ -113,6 +113,27 @@ describe('lex matcher guards', () => {
     const { cfg } = grammar()
     const m = matcher(cfg, 'template_literal')
     assert.equal(m(lexOf(cfg, 'ab`'), { k: {} }), undefined, 'unarmed must decline')
+  })
+
+  it('the decimal matcher covers source-unreachable guard shapes', () => {
+    const { cfg } = grammar()
+    const m = matcher(cfg, 'decimal_underscore')
+
+    for (const src of ['', '+']) {
+      assert.equal(m(lexOf(cfg, src), undefined), undefined, `${JSON.stringify(src)} must decline`)
+    }
+
+    // A signed leading-dot token with an incomplete exponent keeps its
+    // numeric prefix; conversion will reject the leading dot itself.
+    const leading = m(lexOf(cfg, '+.1e'), undefined)
+    assert.notEqual(leading, undefined)
+    assert.equal(leading.src, '+.1')
+
+    // Separator validation owns this malformed exponent. The matcher still
+    // emits #NR (with a placeholder value) so the complete source reaches it.
+    const separator = m(lexOf(cfg, '1e_'), undefined)
+    assert.notEqual(separator, undefined)
+    assert.equal(separator.src, '1e_')
   })
 
   it('the xml matcher declines with no rule and on no progress', () => {
@@ -292,6 +313,27 @@ describe('arrow fold guards', () => {
 // --- pair / elem / interp / angle --------------------------------------------
 
 describe('map-node and propagation guards', () => {
+  it('normalises malformed synthetic pair keys to an empty key', () => {
+    const { j, cfg } = grammar()
+    const ctx = makeCtx(cfg)
+
+    // #ST/#TX carry strings in a real parse. A direct grammar-action caller
+    // can violate that contract; pairkey must decline the payload cleanly.
+    const pairkeyAlt = alts(j, 'pair', 'open').find(
+      (alt) => String(alt.a).includes('pairkey(r)'),
+    )
+    assert.ok(pairkeyAlt?.a, 'the optional-key pair action must be registered')
+    const opened: any = { o0: { tin: cfg.t.ST, val: 7 }, u: {}, k: {} }
+    pairkeyAlt.a(opened, ctx)
+    assert.equal(opened.u.key, '')
+
+    // Both optional-key metadata and source-order metadata independently
+    // normalise a malformed carried key before refusing it.
+    for (const bc of actions(j, 'pair', 'bc')) {
+      bc({ k: { boru_qm: true }, u: { key: 7 }, node: {}, o0: { tin: -1 } }, ctx)
+    }
+  })
+
   it('the key-recording BCs bail when the node is not a map', () => {
     const { j, cfg } = grammar()
     const ctx = makeCtx(cfg)
@@ -337,6 +379,11 @@ describe('map-node and propagation guards', () => {
 
     bc({}, ctx)
     bc({ parent: NORULE }, ctx)
+    const bcParent: any = {}
+    const bcRule: any = { parent: bcParent, node: 'not-an-array' }
+    bc(bcRule, ctx)
+    assert.ok(bcRule.node instanceof Sited)
+    assert.deepEqual((bcRule.node.node as AngleGroup).items, [])
     ac({ u: {} }, ctx)
     ac({ u: {}, parent: NORULE }, ctx)
 

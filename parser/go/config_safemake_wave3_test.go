@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"strings"
+	"errors"
 	"testing"
 
 	jsonic "github.com/tabnas/jsonic/go"
@@ -29,10 +29,16 @@ func TestParseConfigWave3Valid(t *testing.T) {
 }
 
 func TestParseConfigWave3NonMapTopLevel(t *testing.T) {
-	for _, src := range []string{"[1,2,3]", "just-a-string"} {
-		_, err := ParseConfig(src)
-		if err == nil || !strings.Contains(err.Error(), "must be a map") {
-			t.Errorf("ParseConfig(%q): expected the non-map error, got %v", src, err)
+	for _, tc := range []struct {
+		src, want string
+	}{
+		{src: "[1,2,3]", want: "options must be a map of key:value pairs, got list"},
+		{src: "just-a-string", want: "options must be a map of key:value pairs, got string"},
+		{src: "null", want: "options must be a map of key:value pairs, got scalar"},
+	} {
+		_, err := ParseConfig(tc.src)
+		if err == nil || err.Error() != tc.want {
+			t.Errorf("ParseConfig(%q): want %q, got %v", tc.src, tc.want, err)
 		}
 	}
 }
@@ -40,8 +46,12 @@ func TestParseConfigWave3NonMapTopLevel(t *testing.T) {
 func TestParseConfigWave3InvalidSyntax(t *testing.T) {
 	for _, src := range []string{`"`, "a:'unclosed", ":::"} {
 		_, err := ParseConfig(src)
-		if err == nil || !strings.Contains(err.Error(), "invalid options syntax") {
-			t.Errorf("ParseConfig(%q): expected an invalid-syntax error, got %v", src, err)
+		if err == nil || err.Error() != configSyntaxMessage {
+			t.Errorf("ParseConfig(%q): want exact outer message %q, got %v", src, configSyntaxMessage, err)
+			continue
+		}
+		if errors.Unwrap(err) == nil {
+			t.Errorf("ParseConfig(%q): stable outer error lost the jsonic cause", src)
 		}
 	}
 }
@@ -88,6 +98,44 @@ func TestSafeParseDataWave3(t *testing.T) {
 	if n, nerr := core.AsInteger(ev); nerr != nil || n != 42 {
 		t.Errorf("ConvertParsedNumber(42) = %v, want Integer 42", ev)
 	}
+	// The public data seam must retain the same complete numeric token
+	// boundaries as Parse and LexTokens. These are exactly the stock-Go-jsonic
+	// fallback classes that otherwise arrive as an unwrapped float or text and
+	// make ConvertParsedNumber silently decline them.
+	for _, tc := range []struct {
+		src, wantCanon, wantCode string
+		wantRow, wantCol         int
+	}{
+		{src: "1.e2", wantCanon: "100.0"},
+		{src: "1e400", wantCode: "float_overflow"},
+		{src: "1.0e400", wantCode: "float_overflow"},
+		{src: "0x8000000000000000", wantCode: "integer_overflow", wantRow: 1, wantCol: 1},
+		{src: "+.1e400", wantCode: "syntax_error", wantRow: 1, wantCol: 1},
+		{src: "1_.2", wantCode: "syntax_error", wantRow: 1, wantCol: 1},
+		{src: "1.2_", wantCode: "syntax_error", wantRow: 1, wantCol: 1},
+		{src: "1e_2", wantCode: "syntax_error", wantRow: 1, wantCol: 1},
+	} {
+		v, parseErr := SafeParseData(tc.src)
+		if parseErr != nil {
+			t.Errorf("SafeParseData(%q): %v", tc.src, parseErr)
+			continue
+		}
+		got, claimed, convertErr := ConvertParsedNumber(v)
+		if !claimed {
+			t.Errorf("ConvertParsedNumber(SafeParseData(%q)): declined wrapped number", tc.src)
+			continue
+		}
+		if tc.wantCode == "" {
+			if convertErr != nil || core.CanonValue(got) != tc.wantCanon {
+				t.Errorf("ConvertParsedNumber(SafeParseData(%q)) = %q, %v; want %q", tc.src, core.CanonValue(got), convertErr, tc.wantCanon)
+			}
+			continue
+		}
+		var be *core.BoruError
+		if !errors.As(convertErr, &be) || be.Code != tc.wantCode || be.Src != tc.src || be.Row != tc.wantRow || be.Col != tc.wantCol {
+			t.Errorf("ConvertParsedNumber(SafeParseData(%q)) error = %#v; want %s at %d:%d over full token", tc.src, convertErr, tc.wantCode, tc.wantRow, tc.wantCol)
+		}
+	}
 	// A malformed separator errors through the same seam.
 	v, err = SafeParseData("1__0")
 	if err != nil {
@@ -95,6 +143,21 @@ func TestSafeParseDataWave3(t *testing.T) {
 	}
 	if _, ok, cerr := ConvertParsedNumber(v); ok && cerr == nil {
 		t.Errorf("ConvertParsedNumber(1__0): expected an error, got none")
+	}
+	// Jsonic's Go lexer counts source columns in Unicode code points. The
+	// public data seam must retain that location on NumberVal diagnostics.
+	v, err = SafeParseData("[🙂,1_]")
+	if err != nil {
+		t.Fatalf("SafeParseData(unicode list): %v", err)
+	}
+	items, ok := v.([]any)
+	if !ok || len(items) != 2 {
+		t.Fatalf("SafeParseData(unicode list) = %#v, want two items", v)
+	}
+	_, ok, cerr := ConvertParsedNumber(items[1])
+	be, isBoru := cerr.(*core.BoruError)
+	if !ok || !isBoru || be.Row != 1 || be.Col != 4 {
+		t.Errorf("unicode numeric diagnostic = %#v (ok=%v), want 1:4", cerr, ok)
 	}
 	// A non-number input declines (ok=false, no error).
 	if _, ok, cerr := ConvertParsedNumber("not-a-number"); ok || cerr != nil {

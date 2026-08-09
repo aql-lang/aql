@@ -94,8 +94,8 @@ func setupXmlMatcher(j *jsonic.Jsonic, t parserTokens) {
 		}
 		raw := s[la:end]
 		tkn := lex.Token("#XML", t.XML, xmlElemVal{V: v, Err: err}, raw)
-		for k := afterLA; k < end; k++ {
-			if s[k] == '\n' {
+		for _, ch := range s[afterLA:end] {
+			if ch == '\n' {
 				cursor.RI++
 				cursor.CI = 1
 			} else {

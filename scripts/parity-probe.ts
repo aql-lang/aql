@@ -5,7 +5,11 @@
 // line of the error) rather than inventing a second one, so a probe result
 // can be pasted straight into parse.tsv.
 import * as fs from 'node:fs'
-import { canon } from '../core/ts/src/index.ts'
+// parser/ts consumes core through its package export (core/ts/dist). Import
+// canon from that SAME built module: mixing the source and dist copies breaks
+// Value's identity-sensitive classification and can manufacture false parser
+// differences (notably a typed-container Word constraint rendered as word()).
+import { canon } from '../core/ts/dist/index.js'
 import { parse } from '../parser/ts/src/index.ts'
 
 function decodeSpecEscapes(s: string): string {

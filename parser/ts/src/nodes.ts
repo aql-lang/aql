@@ -20,9 +20,62 @@ export interface SrcPos {
   col: number
   /** Source text of the token (used in error rendering). */
   src?: string
+  /** Internal UTF-16 source index supplied by the TypeScript lexer. */
+  si?: number
 }
 
 export const UNKNOWN_POS: SrcPos = { row: 0, col: 0 }
+
+/** Convert an absolute JavaScript UTF-16 index to a 1-based code-point column. */
+export function codePointColumnAt(src: string, si: number): number {
+  const bounded = Math.max(0, Math.min(si, src.length))
+  const lineStart = src.lastIndexOf('\n', bounded - 1) + 1
+  return Array.from(src.slice(lineStart, bounded)).length + 1
+}
+
+/** Normalize a lexer position when its exact absolute source index is known. */
+export function normalizeSrcPos(src: string, pos: SrcPos): SrcPos {
+  if (pos.row === 0 || pos.si === undefined) return pos
+  return { ...pos, col: codePointColumnAt(src, pos.si) }
+}
+
+/**
+ * Normalize a Jsonic error position, whose public error surface exposes only
+ * row/column. Stock matchers count UTF-16 code units while Boru's custom
+ * matchers count code points, so the offending token text is the stable
+ * anchor: choose the occurrence closest to either interpretation and return
+ * its actual code-point column.
+ */
+export function normalizeReportedPos(src: string, pos: SrcPos): SrcPos {
+  if (pos.row <= 0 || pos.col <= 0) return pos
+  const line = src.split('\n')[pos.row - 1]
+  if (line === undefined) return pos
+  const tokenSrc = pos.src ?? ''
+  if (tokenSrc !== '') {
+    let bestColumn: number | undefined
+    let bestDistance = Number.POSITIVE_INFINITY
+    let from = 0
+    for (;;) {
+      const index = line.indexOf(tokenSrc, from)
+      if (index < 0) break
+      const codePointColumn = Array.from(line.slice(0, index)).length + 1
+      const utf16Column = index + 1
+      const distance = Math.min(
+        Math.abs(pos.col - codePointColumn),
+        Math.abs(pos.col - utf16Column),
+      )
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestColumn = codePointColumn
+      }
+      from = index + Math.max(1, tokenSrc.length)
+    }
+    if (bestColumn !== undefined) return { ...pos, col: bestColumn }
+  }
+  const codePointEnd = Array.from(line).length + 1
+  if (pos.col <= codePointEnd) return pos
+  return { ...pos, col: codePointColumnAt(line, pos.col - 1) }
+}
 
 /**
  * A paren group's collected items (word context: `( … )`). Mirrors Go
@@ -110,11 +163,13 @@ export class NumberVal {
   src: string
   row: number
   col: number
-  constructor(val: number, src: string, row: number, col: number) {
+  si: number | undefined
+  constructor(val: number, src: string, row: number, col: number, si?: number) {
     this.val = val
     this.src = src
     this.row = row
     this.col = col
+    this.si = si
   }
 }
 
@@ -162,17 +217,39 @@ export function deSite(v: unknown): [unknown, SrcPos] {
 }
 
 /**
- * Container-nesting depth guard, threaded through the recursive
- * converters. Mirrors Go parseDepth/maxParseNestingDepth: turns a
- * pathological deep nesting into a clean evaluation_limit error
- * instead of a stack overflow.
+ * Container-nesting depth guard. The explicit conversion work stack checks
+ * the same logical frames as Go's recursive parseDepth walk, turning
+ * pathological nesting into a clean evaluation_limit error without relying
+ * on the JavaScript host stack.
  */
 export const MAX_PARSE_NESTING_DEPTH = 10000
 
 export class ParseDepth {
   cur = 0
   src: string
+  private readonly columns: Uint32Array
   constructor(src: string) {
     this.src = src
+    this.columns = new Uint32Array(src.length + 1)
+    let col = 1
+    let i = 0
+    while (i < src.length) {
+      this.columns[i] = col
+      const codePoint = src.codePointAt(i)!
+      const width = codePoint > 0xffff ? 2 : 1
+      for (let inner = 1; inner < width; inner++) {
+        this.columns[i + inner] = col
+      }
+      col = codePoint === 0x0a ? 1 : col + 1
+      i += width
+    }
+    this.columns[src.length] = col
+  }
+
+  /** O(1) outward position normalization during the explicit tree walk. */
+  normalizePos(pos: SrcPos): SrcPos {
+    if (pos.row === 0 || pos.si === undefined) return pos
+    const si = Math.max(0, Math.min(pos.si, this.src.length))
+    return { ...pos, col: this.columns[si]! }
   }
 }

@@ -1,8 +1,10 @@
 # parser/spec — the parser-level parity corpus
 
 The declarative contract `parser/go` and `parser/ts` are both held to. One set
-of files, two runners (`parser/go/parserspec_test.go`,
-`parser/ts/src/parserspec.test.ts`), no shared code between them.
+of files, two independent runner pairs (`parser/go/parserspec_test.go` and
+`parser/ts/src/parserspec.test.ts` for parsed values;
+`parser/go/lexspec_test.go` and `parser/ts/src/lexspec.test.ts` for raw
+tokens), no shared reader or renderer code between ports.
 
 ## Why it exists
 
@@ -45,15 +47,37 @@ unescaped one splits the row and truncates it silently. Both failure modes
 above were live bugs during this corpus's construction, which is why both are
 called out here.
 
+### `lex.tsv` — the formatter-facing token contract
+
+```
+src	OK|ERR	canonical token JSON
+```
+
+Exactly three columns are required. `OK` means the lexer reached clean EOF;
+`ERR` means it stopped at a lexical error and its returned prefix is
+untrustworthy. Each token records its kind, raw source, and `si` as a UTF-8
+byte offset. The canonical JSON field order is `name`, `src`, `si`.
+
+This deliberately has separate Go and TypeScript readers and renderers rather
+than extending the parsed-value harness: raw tokens retain whitespace,
+comments, newlines, and boundaries which `parse.tsv` necessarily discards.
+Its 27-row exact ratchet covers empty and bad EOF, an unterminated backtick's
+clean lexical EOF, trivia, astral-character byte offsets, decimal and dotted
+exponents, number/member and colon/arrow suffix boundaries, malformed
+separators, hexadecimal/octal/binary overflow boundaries, and adjacent quote
+boundaries after plain words and completed receivers.
+
 ### `parse.tsv` — the contract
 
 ```
-src	expected
+src	expected	optional note
 ```
 
-`expected` is the canon of the parsed value stream (each value rendered,
-space-joined), or `ERR ` and the first line of the error text. **Both engines
-must produce it.**
+Exactly three columns are required; the note column is always present and `-`
+means no note. This makes an unescaped tab an extra field that fails loudly
+instead of silently truncating `expected`. `expected` is the canon of the parsed value
+stream (each value rendered, space-joined), or `ERR ` and the first line of
+the error text. **Both engines must produce it.**
 
 ### `divergent.tsv` — the parity debt
 
@@ -61,37 +85,94 @@ must produce it.**
 src	go	ts	note
 ```
 
-Sources the two engines render differently. Each runner asserts its **own**
-column, so both suites stay green while the difference stays pinned: if either
-engine moves, its column fails and the row must be re-examined rather than
-silently re-baselined. Each runner also **fails a row whose `go` and `ts`
-columns are equal** — a fixed divergence must move to `parse.tsv`, or this
-file stops being an honest debt list.
+Sources the two engines render differently. The four-column reader remains so
+a probe result records both sides and a nonblank justification before review,
+but **the committed row-count ratchet is zero**: either runner fails if any
+data row exists. Full parser parity is a hard invariant, so a measured
+difference must be fixed and moved to `parse.tsv`, not accepted as green debt.
 
-The file is **shrink-only**. Adding a row needs the justification a
-`//covergate:allow` does (design/COVERAGE-ALLOWLIST.10.md): a reviewed reason
-the difference is not simply a bug to fix.
+The file is therefore **zero-only** in a passing tree. The justification field
+is still mandatory when inspecting a probe-produced row, so even a deliberately
+red diagnostic change cannot lose the reason it exists.
+
+### `nesting.tsv` — the generated-depth contract
+
+```
+kind	depth	expected outcome
+```
+
+Exactly three columns are required. Rather than committing enormous source
+and render strings, each runner independently expands `kind` (`list`, `map`,
+`paren`, `typed-list`, `typed-map`, or a mixed list/map/paren spine) to the
+requested source-container `depth`. `expected outcome` is `OK` or
+`ERR evaluation_limit`.
+
+Successful deep values are deliberately not canonically rendered: recursive
+rendering has its own host-stack limit and is outside this parser contract.
+Instead, each runner iteratively walks all 501 or 10,000 containers, checking
+the exact list/map/paren/typed-container kind, singleton edge, map key, and
+terminal value. A parser that accepts the source but truncates or flattens the
+result therefore fails. The rows pin both the depth-501 acceptance that the old
+TypeScript-only guard violated and the exact shared 10,000-frame boundary.
+Root parentheses accept only 9,999 source groups because their implicit
+top-level item conversion is also a frame.
+
+This contract replaces the former nesting row in `divergent.tsv`: the
+TypeScript converter now walks nested parser nodes on an explicit work stack,
+so it reaches the same boundary as Go without depending on the JavaScript host
+call stack.
+
+### `shape.tsv` — the semantic-shape contract
+
+```
+case	src	expected semantic shape
+```
+
+Exactly three columns are required, case names are unique, and `src` and the
+expected shape use the same escape notation as `parse.tsv`. Each runner owns a
+separate strict reader and recursive renderer.
+
+This is the deliberately non-canonical half of the parser oracle. Canonical
+source is retained as a compact payload label, but every rendered value also
+records its source position, `Eval` and `Quoted` flags, and word payload
+(`ArgCount`, `/s`, `/f`, `/r`, and `/u`). Lists, maps, parentheses, and reach
+nodes are traversed so nested and operator-generated positions cannot hide
+inside an equal outer canon. Map rendering also records the implicit-pair bit
+and computed-key set; typed containers expose their child constraint plus
+concrete elements/entries; sugar exposes every `SugarInfo` field, including
+the angle head and deferred head error. The modifier rows cover `/N`, `/f`,
+`/s`, `/r`, `/u`, `/ur`, and `/q`; the last is represented by the Atom payload
+it is specified to emit. Parser-authored values do not set `Quoted` — quoted
+source becomes a String or Atom — so the corpus pins that flag false while
+pinning both false and true states of `Eval`. Unicode rows pin columns after a
+plain value and after the minilang, template, and XML custom matchers. Columns
+are 1-based Unicode code points, never UTF-8 bytes or JavaScript UTF-16 units.
+
+Error shapes record the structured `BoruError` fields rather than its rendered
+first line: code, detail, row, column, offending source, full source, hint,
+notes, and help suggestions. This catches diagnostic parity drift even when
+the two user-facing first lines still compare equal in `parse.tsv`.
 
 ## The current debt
 
-**Eleven rows, in three classes, all properties of the ENGINES rather than of
-either port.**
+**None.** `divergent.tsv` is header-only, and both runners keep the empty
+ledger as a hard zero-row ratchet. The eleven rows found after the ledger first
+reached zero were closed rather than accepted:
 
-| rows | what | why it is not a port bug |
-|---:|---|---|
-| 1 | nesting depth: Go guards at 10,000 levels, TS refuses at 500 | the tabnas TS rule engine recurses per level and blows the JS call stack near 900, before any converter counter can fire. Measured: 600 parses, 1,000 overflows. Closing it means making the TS parser iterative, not raising a constant. |
-| 8 | `[Map<]`, `[(1]`, `{a: (1}` and kin: Go names the offending token, TS cannot | the TS rule engine STOPS at its maximum-iteration bound and returns the partial root without erroring. `parse()` watches the step count and raises, so both sides now give **the same code** and differ only in TEXT. |
-| 2 | `1.2_`, `1_.2`: a digit-led run containing both `.` and `_` | the two jsonic lexers put the token BOUNDARIES in different places — one token to Go, three to TS — so the same refusal names different text. The converter already reproduces Go's decision for every token it is handed (`1_`, `1_+`, `1e400_`, `1e_4`, `0x1_`, `1e4_`, `12_`, `1_a`, `1__2` all measured AGREE); closing it means overriding the third-party number matcher, which puts all 535 `parse.tsv` rows at risk to change the TEXT of two refusals that already share their CODE. |
+- Eight rule-step-limit shapes now retain the exact offending `]`/`}` token
+  and its position from the TS rule subscriber; before the guard, TS silently
+  accepted several of them.
+- Two decimal/underscore lexer-boundary rows (`1.2_`, `1_.2`) now reach one
+  whole numeric token in both ports through matching, narrowly scoped
+  boundary matchers.
+- The depth-501 row became the stronger generated `nesting.tsv` matrix after
+  TypeScript conversion was made stack-safe through the shared 10,000 limit.
 
-The second class is worth reading as a success rather than a debt entry:
-before the step-cap guard, TS **accepted** all eight — `[Map<]` parsed to an
-empty value stream and `Map<]` to a bare `word(Map)`. A silent wrong answer
-became a wrong message.
-
-Zero is still the goal state, and both runners assert the invariant that
-keeps it honest: a row whose two columns are EQUAL fails, so a fixed
-divergence has to move to `parse.tsv` rather than sit here looking like
-debt.
+The independent numeric sweep also exposed a shared language-contract bug:
+both ports admitted `_` next to a prefix/exponent marker even though
+REFERENCE.md permits it only between digits. Both validators now check actual
+digits in the literal's base, and the final 66-case matrix lives in
+`parse.tsv`.
 
 ## History
 
@@ -120,9 +201,13 @@ Two of the eighteen were invisible to the 1765-row `parser-crossdiff`,
 because both engines were erroring-by-rendering rather than disagreeing on a
 value. `scripts/parity-probe.sh` is what found them.
 
-The corpus grew from 370 rows to 535 while driving `parser/ts` from 93.97%
-to 100% line coverage, and the growth found three more defects the crossdiff
-could not:
+The main corpus grew from 370 rows to 648 unique sources while driving
+`parser/ts` from 93.97% to 100% line coverage; the final gate also requires
+100% branches and functions. Both runners machine-pin the current corpus sizes:
+648 parse rows, 27 raw-lexer rows, 18 generated-depth rows, 26 semantic-shape
+rows, and zero divergence rows. An intentional corpus change updates both
+independent constants and this prose together. The growth found further defects the
+crossdiff could not:
 
 - an EMPTY `${}` interpolation in an XML **attribute** folded to `""` in Go
   and stayed a runtime hole in TS — Go's nil/empty conflation, mirrored

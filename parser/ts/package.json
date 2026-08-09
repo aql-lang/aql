@@ -3,33 +3,44 @@
   "version": "0.1.0",
   "description": "TypeScript port of the boru parser — source text to Value[]. The TS twin of the parser/go module: the front end and nothing else, a leaf over @boru-lang/core with no engine, no check pass and no compiler.",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build:core-dev": "node -e \"require('node:fs').rmSync('../../core/ts/dist', { recursive: true, force: true })\" && tsc -p ../../core/ts/tsconfig.build.json",
+    "prebuild": "npm run build:core-dev",
+    "build": "npm run clean && tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/grammar.json', 'dist/grammar.json')\"",
+    "prepack": "npm run build",
+    "pretypecheck": "npm run build:core-dev",
     "typecheck": "tsc",
+    "pretest": "npm run build:core-dev",
     "test": "node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'",
+    "prestreamdump": "npm run build:core-dev",
     "streamdump": "node --experimental-strip-types --no-warnings src/streamdump.ts"
   },
   "dependencies": {
     "@tabnas/jsonic": "^0.4.1",
-    "@tabnas/parser": "^0.4.1",
-    "@boru-lang/core": "file:../../core/ts"
+    "@tabnas/parser": "^0.4.1"
+  },
+  "peerDependencies": {
+    "@boru-lang/core": "0.1.0"
   },
   "devDependencies": {
+    "@boru-lang/core": "file:../../core/ts",
     "typescript": "^6.0.3",
     "@types/node": "^24.7.0"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ]
 }

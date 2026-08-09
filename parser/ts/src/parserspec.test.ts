@@ -8,13 +8,20 @@
 // parser corpus with a shared reader would hide precisely the class of defect
 // design/TS-PARITY-AUDIT.0.md found.
 //
-// Two files, two contracts:
+// Five files, five contracts (lex.tsv has its own strict runner in
+// lexspec.test.ts because it renders tokens rather than parsed values):
 //
 //   parse.tsv      src -> expected. Both engines must produce `expected`.
-//   divergent.tsv  src -> go, ts.   The parity debt. Each runner asserts its
-//                                   OWN column, so a divergence stays pinned
-//                                   instead of drifting, and fixing one means
-//                                   deleting the row.
+//   divergent.tsv  src -> go, ts.   Must stay empty: full parser parity is a
+//                                   hard invariant, not accepted debt.
+//   lex.tsv        src, EOF status -> exact trivia-preserving token stream,
+//                                   including UTF-8 byte offsets.
+//   nesting.tsv    kind, depth -> outcome. Each runner independently builds
+//                                   the source, checks OK/error code, and walks
+//                                   every successful spine iteratively.
+//   shape.tsv      case, src -> semantic shape. Positions, flags, modifier
+//                                   payloads, nested values, and diagnostics
+//                                   omitted by the canonical render.
 
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
@@ -22,16 +29,46 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { canon } from '@boru-lang/core'
+import {
+  BoruError,
+  TAtom,
+  TInteger,
+  TList,
+  TMap,
+  Value,
+  asReach,
+  asSugar,
+  canon,
+  canonValue,
+  type WordInfo,
+} from '@boru-lang/core'
 import { parse } from './index.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SPEC_DIR = path.resolve(__dirname, '..', '..', 'spec')
+const PARSE_SPEC_ROW_COUNT = 648
+const DIVERGENT_SPEC_ROW_COUNT = 0
+const NESTING_SPEC_ROW_COUNT = 18
+const SHAPE_SPEC_ROW_COUNT = 26
 
 interface SpecRow {
   line: number
   src: string
   cols: string[]
+}
+
+interface NestingSpecRow {
+  line: number
+  kind: string
+  depth: number
+  expected: string
+}
+
+interface ShapeSpecRow {
+  line: number
+  name: string
+  src: string
+  expected: string
 }
 
 /**
@@ -70,7 +107,9 @@ function decodeSpecEscapes(s: string): string {
  */
 function readSpec(name: string): SpecRow[] {
   const text = fs.readFileSync(path.join(SPEC_DIR, name), 'utf8')
+  const wantColumns = name === 'parse.tsv' ? 3 : 4
   const rows: SpecRow[] = []
+  const seen = new Map<string, number>()
   const lines = text.split('\n')
   for (let n = 0; n < lines.length; n++) {
     const line = lines[n]!
@@ -80,21 +119,231 @@ function readSpec(name: string): SpecRow[] {
     // failure this corpus exists to make impossible.
     if ('' === line || (line.startsWith('#') && !line.includes('\t'))) continue
     const parts = line.split('\t')
-    assert.ok(parts.length >= 2, `${name}:${n + 1}: need at least 2 tab-separated columns`)
+    assert.equal(
+      parts.length,
+      wantColumns,
+      `${name}:${n + 1}: need exactly ${wantColumns} tab-separated columns`,
+    )
     // EVERY column is escaped, not just the source: a render can itself
     // contain a newline (XML text spanning lines), which would otherwise split
     // one row across two lines and silently truncate it.
+    const src = decodeSpecEscapes(parts[0]!)
+    assert.equal(
+      seen.has(src),
+      false,
+      `${name}:${n + 1}: duplicate source (first at line ${seen.get(src)}): ${JSON.stringify(src)}`,
+    )
+    seen.set(src, n + 1)
+    const cols = parts.slice(1).map(decodeSpecEscapes)
+    if (name === 'divergent.tsv') {
+      assert.notEqual(cols[2]!.trim(), '', `${name}:${n + 1}: divergence justification must not be blank`)
+      assert.notEqual(cols[0], cols[1], `${name}:${n + 1}: equal renders belong in parse.tsv`)
+    }
     rows.push({
       line: n + 1,
-      src: decodeSpecEscapes(parts[0]!),
-      cols: parts.slice(1).map(decodeSpecEscapes),
+      src,
+      cols,
     })
   }
-  // divergent.tsv is the parity DEBT, so empty is the goal state, not a
-  // broken corpus. Every other file must have rows — an empty one there
-  // means the corpus is not being read.
-  assert.ok(rows.length > 0 || name === 'divergent.tsv', `${name}: no rows`)
+  const wantRows = name === 'parse.tsv' ? PARSE_SPEC_ROW_COUNT : DIVERGENT_SPEC_ROW_COUNT
+  assert.equal(rows.length, wantRows, `${name}: exact row-count ratchet`)
   return rows
+}
+
+/**
+ * Read the compact nesting contract. This is deliberately separate from
+ * readSpec: nesting.tsv has exactly three columns and describes generated
+ * sources, rather than storing source/render pairs.
+ */
+function readNestingSpec(): NestingSpecRow[] {
+  const name = 'nesting.tsv'
+  const text = fs.readFileSync(path.join(SPEC_DIR, name), 'utf8')
+  const rows: NestingSpecRow[] = []
+  const seen = new Map<string, number>()
+  const lines = text.split('\n')
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n]!
+    if (line === '' || line.startsWith('#')) continue
+    const parts = line.split('\t')
+    assert.equal(
+      parts.length,
+      3,
+      `${name}:${n + 1}: need exactly 3 tab-separated columns (kind, depth, expected outcome)`,
+    )
+    const depth = Number(parts[1])
+    assert.ok(Number.isSafeInteger(depth) && depth > 0, `${name}:${n + 1}: depth must be a positive integer`)
+    const expected = parts[2]!
+    assert.ok(
+      expected === 'OK' || expected === 'ERR evaluation_limit',
+      `${name}:${n + 1}: expected outcome must be OK or ERR evaluation_limit`,
+    )
+    const kind = parts[0]!
+    const key = `${kind}\u0000${depth}`
+    assert.equal(
+      seen.has(key),
+      false,
+      `${name}:${n + 1}: duplicate kind/depth ${JSON.stringify(kind)}/${depth} (first at line ${seen.get(key)})`,
+    )
+    seen.set(key, n + 1)
+    rows.push({ line: n + 1, kind, depth, expected })
+  }
+  assert.equal(rows.length, NESTING_SPEC_ROW_COUNT, `${name}: exact row-count ratchet`)
+  return rows
+}
+
+/**
+ * Independently read the TS half of the semantic-shape oracle. It has a strict
+ * three-column schema and unique case names; optional trailing columns would
+ * make a malformed oracle too easy for one implementation to ignore.
+ */
+function readShapeSpec(): ShapeSpecRow[] {
+  const name = 'shape.tsv'
+  const text = fs.readFileSync(path.join(SPEC_DIR, name), 'utf8')
+  const rows: ShapeSpecRow[] = []
+  const seen = new Set<string>()
+  const lines = text.split('\n')
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n]!
+    if (line === '' || line.startsWith('#')) continue
+    const parts = line.split('\t')
+    assert.equal(
+      parts.length,
+      3,
+      `${name}:${n + 1}: need exactly 3 tab-separated columns (case, source, expected shape)`,
+    )
+    const caseName = parts[0]!
+    assert.ok(
+      caseName !== '' && caseName.trim() === caseName,
+      `${name}:${n + 1}: case name must be non-empty with no surrounding whitespace`,
+    )
+    assert.ok(!seen.has(caseName), `${name}:${n + 1}: duplicate case name ${JSON.stringify(caseName)}`)
+    seen.add(caseName)
+    const expected = decodeSpecEscapes(parts[2]!)
+    assert.notEqual(expected, '', `${name}:${n + 1}: expected shape must not be empty`)
+    rows.push({
+      line: n + 1,
+      name: caseName,
+      src: decodeSpecEscapes(parts[1]!),
+      expected,
+    })
+  }
+  assert.equal(rows.length, SHAPE_SPEC_ROW_COUNT, `${name}: exact row-count ratchet`)
+  return rows
+}
+
+/** Independently expand one compact row into boru source. */
+function nestingSource(kind: string, depth: number): string {
+  switch (kind) {
+    case 'list':
+      return '['.repeat(depth) + '1' + ']'.repeat(depth)
+    case 'map':
+      return '{a:'.repeat(depth) + '1' + '}'.repeat(depth)
+    case 'paren':
+      return '('.repeat(depth) + '1' + ')'.repeat(depth)
+    case 'typed-list':
+      return '[:'.repeat(depth) + 'Integer' + ']'.repeat(depth)
+    case 'typed-map':
+      return '{:'.repeat(depth) + 'Integer' + '}'.repeat(depth)
+    case 'mixed': {
+      const opens: string[] = []
+      const closes: string[] = []
+      for (let i = 0; i < depth; i++) {
+        switch (i % 3) {
+          case 0:
+            opens.push('[')
+            closes.push(']')
+            break
+          case 1:
+            opens.push('{a:')
+            closes.push('}')
+            break
+          case 2:
+            opens.push('(')
+            closes.push(')')
+            break
+        }
+      }
+      closes.reverse()
+      return opens.join('') + '1' + closes.join('')
+    }
+    default:
+      throw new Error(`nesting.tsv: unknown kind ${JSON.stringify(kind)}`)
+  }
+}
+
+/** Parse without canonically rendering the recursively deep result. */
+function nestingOutcome(src: string): { values: Value[]; outcome: string } {
+  try {
+    return { values: parse(src), outcome: 'OK' }
+  } catch (e) {
+    return {
+      values: [],
+      outcome: e instanceof BoruError ? `ERR ${e.code}` : 'ERR unstructured',
+    }
+  }
+}
+
+/**
+ * Iteratively validate every generated container. A parse that silently
+ * truncates, flattens, or changes one node still returns OK, so acceptance
+ * alone is not the deep-value contract.
+ */
+function assertNestingSpine(values: Value[], kind: string, depth: number): void {
+  assert.equal(values.length, 1, `${kind} depth ${depth}: exactly one root value`)
+  let current = values[0]!
+  for (let level = 0; level < depth; level++) {
+    const wantKind = kind === 'mixed' ? ['list', 'map', 'paren'][level % 3]! : kind
+    switch (wantKind) {
+      case 'list': {
+        assert.ok(
+          current.vType.equal(TList) && !current.isTypedList() && Array.isArray(current.data),
+          `${kind} depth ${depth}: level ${level + 1} is not an untyped List`,
+        )
+        const items = current.asList()
+        assert.equal(items.length, 1, `${kind} depth ${depth}: level ${level + 1} List arity`)
+        current = items[0]!
+        break
+      }
+      case 'map': {
+        assert.ok(
+          current.vType.equal(TMap) && !current.isTypedMap(),
+          `${kind} depth ${depth}: level ${level + 1} is not an untyped Map`,
+        )
+        const entries = current.asMap()
+        assert.deepEqual(entries.keys(), ['a'], `${kind} depth ${depth}: level ${level + 1} Map keys`)
+        current = entries.get('a')!
+        assert.ok(current !== undefined, `${kind} depth ${depth}: level ${level + 1} Map child`)
+        break
+      }
+      case 'paren': {
+        assert.ok(current.isParenExpr(), `${kind} depth ${depth}: level ${level + 1} is not a ParenExpr`)
+        const items = current.asList()
+        assert.equal(items.length, 1, `${kind} depth ${depth}: level ${level + 1} ParenExpr arity`)
+        current = items[0]!
+        break
+      }
+      case 'typed-list':
+      case 'typed-map': {
+        const rightKind = wantKind === 'typed-list' ? current.isTypedList() : current.isTypedMap()
+        assert.ok(rightKind, `${kind} depth ${depth}: level ${level + 1} typed-container kind`)
+        const child = current.asChildType()
+        assert.equal(child.elements.length, 0, `${kind} depth ${depth}: level ${level + 1} typed elements`)
+        assert.equal(child.entries.length, 0, `${kind} depth ${depth}: level ${level + 1} typed entries`)
+        current = child.child
+        break
+      }
+      default:
+        assert.fail(`nesting.tsv: unknown kind ${JSON.stringify(wantKind)}`)
+    }
+  }
+
+  if (kind === 'typed-list' || kind === 'typed-map') {
+    assert.ok(current.isWord(), `${kind} depth ${depth}: terminal is not a Word`)
+    assert.equal(current.asWord().name, 'Integer', `${kind} depth ${depth}: terminal word`)
+    return
+  }
+  assert.ok(current.vType.equal(TInteger), `${kind} depth ${depth}: terminal is not an Integer`)
+  assert.equal(current.asInteger(), 1n, `${kind} depth ${depth}: terminal integer`)
 }
 
 /**
@@ -110,6 +359,181 @@ function renderSpec(src: string): string {
   }
 }
 
+function shapeBit(value: boolean | undefined): string {
+  return value === true ? '1' : '0'
+}
+
+function shapeQuote(value: string): string {
+  return JSON.stringify(value) as string
+}
+
+function renderShapeStrings(items: string[]): string {
+  return '[' + items.map(shapeQuote).join(',') + ']'
+}
+
+function renderShapeValues(items: Value[]): string {
+  return '[' + items.map(renderShapeValue).join(',') + ']'
+}
+
+function renderShapeChildEntries(entries: { key: string; value: Value }[]): string {
+  return (
+    '[' + entries.map((entry) => shapeQuote(entry.key) + '=>' + renderShapeValue(entry.value)).join(',') + ']'
+  )
+}
+
+function renderShapeOptionalValue(value: Value | undefined): string {
+  return value === undefined ? 'none' : renderShapeValue(value)
+}
+
+/**
+ * The TS-local semantic shape renderer. Canon remains the payload label, while
+ * this layer exposes parser metadata canon intentionally omits and recursively
+ * walks the structural payloads used by shape.tsv.
+ */
+function renderShapeValue(v: Value): string {
+  const p = v.pos
+  let out =
+    'v(c=' +
+    shapeQuote(canonValue(v)) +
+    ',p=' +
+    p.row +
+    ':' +
+    p.col +
+    ':' +
+    shapeQuote(p.src) +
+    ',e=' +
+    shapeBit(v.eval) +
+    ',q=' +
+    shapeBit(v.quoted)
+
+  if (v.isWord()) {
+    const word = v.asWord() as WordInfo & { forceRef?: boolean; forceUsurp?: boolean }
+    out +=
+      ',w={name=' +
+      shapeQuote(word.name) +
+      ',argc=' +
+      (word.argCount ?? -1) +
+      ',stack=' +
+      shapeBit(word.forceStack) +
+      ',forward=' +
+      shapeBit(word.forceForward) +
+      ',ref=' +
+      shapeBit(word.forceRef) +
+      ',usurp=' +
+      shapeBit(word.forceUsurp) +
+      '}'
+  } else if (v.vType.equal(TAtom)) {
+    out += ',atom=' + shapeQuote(v.asAtom())
+  }
+  const sugar = asSugar(v)
+  if (sugar !== undefined) {
+    out +=
+      ',sugar={kind=' +
+      shapeQuote(sugar.kind) +
+      ',n=' +
+      (sugar.n ?? 0n).toString() +
+      ',name=' +
+      shapeQuote(sugar.name ?? '') +
+      ',src=' +
+      shapeQuote(sugar.src ?? '') +
+      ',head=' +
+      renderShapeOptionalValue(sugar.head) +
+      ',headErr=' +
+      shapeQuote(sugar.headErr ?? '') +
+      ',items=' +
+      renderShapeValues(sugar.items ?? []) +
+      '}'
+  }
+
+  if (v.isTypedList() || v.isTypedMap()) {
+    const child = v.asChildType()
+    out +=
+      ',typed={kind=' +
+      shapeQuote(v.isTypedMap() ? 'map' : 'list') +
+      ',child=' +
+      renderShapeValue(child.child) +
+      ',elements=' +
+      renderShapeValues(child.elements) +
+      ',entries=' +
+      renderShapeChildEntries(child.entries) +
+      '}'
+  } else if (v.isParenExpr()) {
+    out += ',paren=' + renderShapeValues(v.asList())
+  } else {
+    const reach = asReach(v)
+    if (reach !== undefined) {
+      const segments = reach.segments.map((segment) => {
+        const op = segment.getr ? 'getr' : 'dot'
+        return segment.computed
+          ? op + '(expr=' + renderShapeValues(segment.keyExpr ?? []) + ')'
+          : op + '(lit=' + renderShapeValue(segment.keyLit!) + ')'
+      })
+      out +=
+        ',reach={eval=' +
+        shapeBit(reach.eval) +
+        ',recv=' +
+        renderShapeValues(reach.receiver) +
+        ',segs=[' +
+        segments.join(',') +
+        ']}'
+    } else if (v.vType.equal(TList) && Array.isArray(v.data)) {
+      out += ',list=' + renderShapeValues(v.asList())
+    } else if (v.isMap()) {
+      const entries = v.asMap()
+      const rawComputed = entries.meta?.['ck']
+      if (rawComputed !== undefined && !(rawComputed instanceof Set)) {
+        throw new Error('shape renderer: map meta.ck is not a Set')
+      }
+      const computed = rawComputed instanceof Set ? [...rawComputed].map(String).sort() : []
+      out +=
+        ',map={implicit=' +
+        shapeBit(entries.implicit) +
+        ',computed=' +
+        renderShapeStrings(computed) +
+        ',entries=[' +
+        entries
+          .keys()
+          .map((key) => shapeQuote(key) + '=>' + renderShapeValue(entries.get(key)!))
+          .join(',') +
+        ']}'
+    }
+  }
+
+  return out + ')'
+}
+
+function renderShape(src: string): string {
+  try {
+    return 'values=' + renderShapeValues(parse(src))
+  } catch (e) {
+    if (!(e instanceof BoruError)) {
+      const message = e instanceof Error ? e.message : String(e)
+      return 'error(unstructured=' + shapeQuote(message) + ')'
+    }
+    return (
+      'error(code=' +
+      shapeQuote(e.code) +
+      ',detail=' +
+      shapeQuote(e.detail) +
+      ',p=' +
+      e.row +
+      ':' +
+      e.col +
+      ':' +
+      shapeQuote(e.src) +
+      ',full=' +
+      shapeQuote(e.fullSource) +
+      ',hint=' +
+      shapeQuote(e.hint) +
+      ',notes=' +
+      renderShapeStrings(e.notes) +
+      ',help=' +
+      renderShapeStrings(e.suggestions.map((suggestion) => suggestion.message)) +
+      ')'
+    )
+  }
+}
+
 describe('parser spec — parse.tsv', () => {
   for (const r of readSpec('parse.tsv')) {
     it(`${r.line}: ${JSON.stringify(r.src)}`, () => {
@@ -118,26 +542,31 @@ describe('parser spec — parse.tsv', () => {
   }
 })
 
-// Pins the TS side of every recorded divergence, and fails if a row has
-// stopped diverging — a fixed divergence must be MOVED to parse.tsv, not left
-// here, or the file stops being an honest debt list.
-describe('parser spec — divergent.tsv (parity debt)', () => {
+// Zero parser debt is executable. readSpec validates the four-column/provenance
+// form first, then its exact-count ratchet rejects every data row until the
+// measured difference is fixed and moved to parse.tsv.
+describe('parser spec — divergent.tsv (hard parity invariant)', () => {
   const divergentRows = readSpec('divergent.tsv')
-  if (divergentRows.length === 0) {
-    // The debt is paid. Kept as a live assertion rather than deleted: the
-    // file is the ratchet, and a NEW divergence has to be added here
-    // deliberately (with the justification the header demands) instead of
-    // quietly landing as a changed expectation elsewhere.
-    it('is empty — parser/go and parser/ts agree on every corpus row', () => {
-      assert.equal(divergentRows.length, 0)
+  it('is empty — parser/go and parser/ts parity is exact', () => {
+    assert.equal(divergentRows.length, DIVERGENT_SPEC_ROW_COUNT)
+  })
+})
+
+describe('parser spec — nesting.tsv', () => {
+  for (const r of readNestingSpec()) {
+    it(`${r.line}: ${r.kind} depth ${r.depth}`, () => {
+      const src = nestingSource(r.kind, r.depth)
+      const result = nestingOutcome(src)
+      assert.equal(result.outcome, r.expected)
+      if (result.outcome === 'OK') assertNestingSpine(result.values, r.kind, r.depth)
     })
   }
-  for (const r of divergentRows) {
-    it(`${r.line}: ${JSON.stringify(r.src)}`, () => {
-      assert.ok(r.cols.length >= 2, 'need src, go, ts columns')
-      const [wantGo, wantTs] = [r.cols[0]!, r.cols[1]!]
-      assert.notEqual(wantGo, wantTs, 'go and ts columns are identical — move this row to parse.tsv')
-      assert.equal(renderSpec(r.src), wantTs)
+})
+
+describe('parser spec — shape.tsv', () => {
+  for (const r of readShapeSpec()) {
+    it(`${r.line}: ${r.name}`, () => {
+      assert.equal(renderShape(r.src), r.expected, JSON.stringify(r.src))
     })
   }
 })

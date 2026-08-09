@@ -60,7 +60,7 @@ None dotr x	ERROR:undefined word	dotr on None does not quote the bare key either
 {a:{b:1}}!.a!.b	1	all-strict chains work
 {a:[1]}.a!.k	ERROR:expected a map	a strict string segment against a LIST value
 {a:[{b:7}]} get 'a' get 0 get 'b'	7	mixed key kinds chain across map/list/map
-{a:[{b:7}]}.a.0.b	ERROR:invalid numeric literal	`.0.b` lexes as a malformed float — dot chains cannot take bare integer segments
+{a:[{b:7}]}.a.0.b	7	dot chains accept bare integer segments, matching `get 0` and the parser's `a.0` reach contract
 def i 1 [[1 2] [3 4]] get i get 0	3	evaluated index into a nested list
 [5 6] dot 1	6	dot accepts a literal integer index
 def k 'a' {a:1} get (k)	1	computed string key

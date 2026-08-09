@@ -16,7 +16,7 @@ preceded this).
 | module | go | ts | shared corpus |
 |---|---|---|---|
 | core | 100% | 99.57% | `core/spec`, 373 rows + a 16-row ledger |
-| parser | 100% | **100%** | `parser/spec`, 535 rows, ledger 9 rows (both engine limits) |
+| parser | 100% | **100% lines / branches / functions** | `parser/spec`: 648 parse, 27 raw-lexer, 18 generated-depth, and 26 structural-shape rows; empty ledger |
 | basic | 100% | 100% *of the 17 words ported* | `basic/spec`, 69 rows |
 
 Two numbers that look like progress and are not:
@@ -62,11 +62,12 @@ number: the uncovered surface was not merely untested, it was WRONG.
 divergence, both columns recorded, each runner asserting its OWN column.
 Shrink-only. A fixed divergence MOVES to `parse.tsv` rather than being
 deleted, and a row whose two columns are equal FAILS — otherwise the file
-stops being an honest debt list. It reached zero on 2026-08-08 and then
-took nine rows back, every one a property of the two ENGINES rather than
-of either port: one nesting-depth limit, and eight shapes where the TS
-rule engine gives up at its iteration bound and cannot name the token it
-gave up on.
+stops being an honest debt list. It reached zero on 2026-08-08, briefly
+took eleven measured rows back, and is empty again. Eight rule-step-limit
+shapes now preserve the offending token from the TS rule subscriber, two
+decimal/underscore lexer boundaries are claimed by matching boundary shims,
+and the former depth-501 gap is covered more honestly by the generated
+`nesting.tsv` boundary matrix than by a multi-kilobyte literal.
 
 `scripts/parity-probe.sh` is how a row gets written: it runs a candidate
 through both engines and prints AGREE with the shared render, or DIFFER
@@ -141,7 +142,7 @@ absence of those rows was itself the honest record.
   a duplicated source index so `dup`'s outputs stay distinct for the
   bytecode emitter. core/ts Values carry no ID and there is no TS
   compiler to consume one, so that half is absent rather than stubbed.
-- **The rule-step cap.** The tabnas TS rule engine bounds its main loop
+- **The resolved rule-step cap (NUR061).** The tabnas TS rule engine bounds its main loop
   and, on reaching the bound, STOPS: the trailing-token check then sees
   `#ZZ`, so nothing is thrown and the partial root is returned. Shapes
   that leave a group open with a terminator that cannot close it —
@@ -152,25 +153,36 @@ absence of those rows was itself the honest record.
   watches the step count through a `sub.rule` subscriber and raises when
   the parse ended exactly at the library's own bound — EQUALITY, not
   `>=`, so a library change stops the guard firing rather than starts it
-  firing early. Both engines now give the same CODE and differ only in
-  text, recorded as eight ledger rows.
-- **Nesting depth.** Go guards at 10,000 levels; TS refuses at 500,
-  because the tabnas rule engine recurses per level and blows the JS call
-  stack near 900 — before any converter counter can fire. The TS bound
-  converts an uncontrolled `RangeError` into the promised
-  `evaluation_limit`. Measured while recording it: 600 parses, 1,000
-  overflows. This is the one divergence that is a property of the RUNTIME
-  rather than of either port, and the only remaining row in
-  `parser/spec/divergent.tsv`. Closing it means making the TS parser
-  iterative, not raising a constant.
+  firing early. The subscriber's `ctx.t0` retains the exact closer and
+  location, so the guard now raises the byte-identical Go detail and rich
+  metadata; all eight rows moved into `parse.tsv`.
+- **The resolved nesting gap (NUR061).** The first diagnosis blamed the
+  tabnas rule engine and capped TS at 500. Directly parsing 10,000 levels
+  proved the engine is iterative; the overflow was the boru conversion
+  walk around 900. TypeScript conversion now uses an explicit bottom-up
+  work stack while retaining Go's logical depth accounting. Both accept
+  lists/maps through 10,000, reject 10,001 cleanly, and root parentheses
+  accept 9,999 because the implicit item frame also counts. Independent
+  generators in both runners pin list, map, paren, typed, and mixed shapes
+  in `parser/spec/nesting.tsv` without recursively rendering deep values.
+- **The resolved numeric-separator gap (NUR061).** Both ports had treated
+  `_` beside `x`/`e` as if it were between digits, despite REFERENCE.md's
+  rule. Both ports now validate actual digits in the literal's base and use
+  matching high-priority shims for the dependency-specific decimal token
+  boundaries.
+  A 66-case shared TSV sweep pins fraction, exponent, base, sign, and
+  malformed-name boundaries.
 
 ## Coverage, and where it must come from
 
 Both Go modules gate at 100% by their OWN suite (`cover-gate-core`,
-`cover-gate-parser`), on top of the merged ADR-008 gate. The TS gates
-ratchet: `TS_CORE_GATE_LINES` (90), `TS_PARSER_GATE_LINES` (**100**, both
-halves of the module now gated identically), `TS_BASIC_GATE_LINES` (100, a
-surface ratchet).
+`cover-gate-parser`), on top of the merged ADR-008 gate. The parser TS gate
+now requires **100% lines, branches, and functions**, with an import manifest
+that prevents an unimported production file from escaping Node's coverage
+universe. CI installs Node dependencies and runs the combined
+`parser-parity` target (both standalone gates plus `parser-crossdiff`). The
+other TS gates remain line ratchets: `TS_CORE_GATE_LINES` and
+`TS_BASIC_GATE_LINES`.
 
 The discipline that matters: **coverage comes from corpus rows, not from
 per-engine unit tests.** When core/go's canon grew arms for typed
@@ -195,8 +207,10 @@ ordinary closures, and a guard that no source can provoke — a rule with
 no parent, a matcher invoked with no rule, a converter arm for a node the
 grammar never builds — has to be called directly with a synthetic rule.
 Go gets that in-package; TS arranges it by exporting from `convert.ts`,
-which is module-internal rather than package-public (`index.ts` exports
-`parse` and `SrcPos` and nothing else).
+which is module-internal rather than package-public. The package surface now
+also carries the Go host seams (`LexTokens`, config/data safe parsing,
+Plainify, GuardMake, and ConvertParsedNumber); converter test hooks remain
+unexported from `index.ts`.
 
 The rule is: an arm belongs in a guard file only if no source text can
 reach it. Several arms started in `guards.test.ts` and MOVED OUT to

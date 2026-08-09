@@ -27,6 +27,7 @@ func s5beGrammar() (*jsonic.Jsonic, parserTokens) {
 	t, _ := setupBaseTokens(j, loadDeclGrammar())
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
+	setupDecimalUnderscoreMatcher(j, t)
 	setupMiniLitMatcher(j, t)
 	setupXmlMatcher(j, t)
 	setupValRule(j, t)
@@ -74,6 +75,26 @@ func TestS5bETemplateMatcherGuards(t *testing.T) {
 	// Sanity: armed mid-text it produces a #TL token.
 	if tok := m(jsonic.NewLex("ab`", &jsonic.LexConfig{}), armed); tok == nil {
 		t.Error("expected a template-literal token for plain text")
+	}
+}
+
+func TestS5bEDecimalMatcherGuards(t *testing.T) {
+	j, _ := s5beGrammar()
+	m := s5beMatcher(t, j, "decimal_underscore")
+	for _, src := range []string{"", "+"} {
+		if tok := m(jsonic.NewLex(src, &jsonic.LexConfig{}), nil); tok != nil {
+			t.Errorf("%q: expected decline, got %v", src, tok)
+		}
+	}
+	// A signed leading-dot token with an incomplete exponent keeps its
+	// numeric prefix; conversion will reject the leading dot itself.
+	if tok := m(jsonic.NewLex("+.1e", &jsonic.LexConfig{}), nil); tok == nil || tok.Src != "+.1" {
+		t.Errorf("signed leading-dot prefix: got %v", tok)
+	}
+	// Separator validation owns this malformed exponent. The matcher still
+	// emits #NR (with a placeholder value) so the complete source reaches it.
+	if tok := m(jsonic.NewLex("1e_", &jsonic.LexConfig{}), nil); tok == nil || tok.Src != "1e_" {
+		t.Errorf("loose exponent separator: got %v", tok)
 	}
 }
 

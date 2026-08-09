@@ -2,6 +2,7 @@ package parser
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -206,6 +207,187 @@ func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
 		cursor.CI += si - start // a 0d literal never spans newlines
 		return tkn
 	})
+}
+
+// setupDecimalUnderscoreMatcher is the decimal-number boundary shim shared
+// conceptually with the TS port. The historical name comes from its original
+// narrow job (keeping underscore-bearing runs whole), but it also closes the
+// three places where the Go and TS jsonic number matchers otherwise disagree:
+//
+//   - a dot followed by a word starts member access (`1.x` is #NR `1` + `.`),
+//     so conversion can reject a numeric receiver with boru's own diagnostic;
+//   - a trailing-dot exponent is one Float (`1.e2`), as required by the
+//     trailing-dot and scientific-notation rules;
+//   - binary64 overflow remains a #NR token (`1e400`, `1.0e400`) instead of
+//     falling back to text merely because strconv reports ErrRange.
+//
+// It also claims 0x/0o/0b runs that Go's stock lexer drops to text on
+// overflow, preserving the same raw #NR boundary TS exposes. Boru's 0d
+// literals remain on their dedicated matcher. Separator placement is
+// deliberately loose here: numberValToValue owns the language rule and
+// reports a misplaced `_` using the complete literal source.
+func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
+	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
+	isDigitOrSep := func(c byte) bool { return isDigit(c) || c == '_' }
+	isBaseDigit := func(c, prefix byte) bool {
+		switch prefix {
+		case 'x', 'X':
+			return isDigit(c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+		case 'o', 'O':
+			return c >= '0' && c <= '7'
+		default: // b / B
+			return c == '0' || c == '1'
+		}
+	}
+	isFollowingText := func(s string, i int) bool {
+		if i >= len(s) {
+			return false
+		}
+		switch s[i] {
+		case ' ', '\t', '\n', '\r', '\'', '"', '#', ',', ':', ';', '(', ')', '[', ']', '{', '}', '?', '.', '!', '|', '`', '<', '>':
+			return false
+		case '=':
+			return i+1 >= len(s) || s[i+1] != '>'
+		default:
+			return true
+		}
+	}
+
+	addMatcher(j, "decimal_underscore", 1000004, func(lex *jsonic.Lex, _ *jsonic.Rule) *jsonic.Token {
+		cursor := lex.Cursor()
+		s := lex.Src
+		start := cursor.SI
+		si := start
+		if si >= len(s) {
+			return nil
+		}
+
+		hasSign := s[si] == '+' || s[si] == '-'
+		if hasSign {
+			si++
+			if si >= len(s) {
+				return nil
+			}
+		}
+
+		leadingDot := s[si] == '.'
+		integerEnd := -1
+		if leadingDot {
+			// Keep the bare `.5` path on the fixed-dot matcher so it retains
+			// the receiverless-dot diagnostic. Signed forms are one numeric
+			// token and are rejected later with their complete source.
+			if !hasSign || si+1 >= len(s) || !isDigit(s[si+1]) {
+				return nil
+			}
+			si++
+			for si < len(s) && isDigitOrSep(s[si]) {
+				si++
+			}
+		} else {
+			if !isDigit(s[si]) {
+				return nil
+			}
+			// Big numbers keep their dedicated matcher (which has higher
+			// priority); decline here as well so this matcher is safe alone.
+			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("dD", rune(s[si+1])) {
+				return nil
+			}
+			// Claim base-prefixed integers even when their magnitude exceeds
+			// int64. Go's stock lexer otherwise drops them to #TX while TS
+			// keeps #NR, making the public LexTokens streams disagree. The
+			// converter reads the exact source, so the placeholder value is
+			// intentionally irrelevant.
+			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("xXoObB", rune(s[si+1])) {
+				prefix := s[si+1]
+				end := si + 2
+				bodyStart := end
+				for end < len(s) && (isBaseDigit(s[end], prefix) || s[end] == '_') {
+					end++
+				}
+				if end == bodyStart || isFollowingText(s, end) {
+					return nil
+				}
+				src := s[start:end]
+				tkn := lex.Token("#NR", jsonic.TinNR, float64(0), src)
+				cursor.SI = end
+				cursor.CI += end - start
+				return tkn
+			}
+			for si < len(s) && isDigitOrSep(s[si]) {
+				si++
+			}
+			integerEnd = si
+			if si < len(s) && s[si] == '.' {
+				si++
+				for si < len(s) && isDigitOrSep(s[si]) {
+					si++
+				}
+			}
+		}
+
+		hasDot := leadingDot || integerEnd >= 0 && integerEnd < si && s[integerEnd] == '.'
+		if si < len(s) && (s[si] == 'e' || s[si] == 'E') {
+			exponentMark := si
+			si++
+			if si < len(s) && (s[si] == '+' || s[si] == '-') {
+				si++
+			}
+			exponentStart := si
+			for si < len(s) && isDigitOrSep(s[si]) {
+				si++
+			}
+			if si == exponentStart {
+				if integerEnd >= 0 && hasDot {
+					return emitDecimalPrefix(lex, s, start, integerEnd)
+				}
+				if leadingDot {
+					si = exponentMark
+				} else {
+					return nil
+				}
+			}
+		}
+
+		if isFollowingText(s, si) {
+			if integerEnd >= 0 && hasDot {
+				return emitDecimalPrefix(lex, s, start, integerEnd)
+			}
+			if !leadingDot {
+				return nil
+			}
+		}
+
+		src := s[start:si]
+		val, err := strconv.ParseFloat(stripUnderscores(src), 64)
+		if err != nil && !isRangeError(err) {
+			// A loose separator run such as `1e_` strips to an invalid
+			// float, but the converter will reject `_` before reading Val.
+			val = 0
+		}
+		tkn := lex.Token("#NR", jsonic.TinNR, val, src)
+		cursor.SI = si
+		cursor.CI += si - start
+		return tkn
+	})
+}
+
+// emitDecimalPrefix emits the integer before a member-access dot. A valid
+// prefix is numeric, allowing convertTopLevelItems to diagnose a numeric
+// receiver. An already-malformed separator prefix stays text so its numeric
+// spelling error is not hidden by the later dot (`1_.x`).
+func emitDecimalPrefix(lex *jsonic.Lex, s string, start, end int) *jsonic.Token {
+	src := s[start:end]
+	cursor := lex.Cursor()
+	var tkn *jsonic.Token
+	if validUnderscores(src) {
+		val, _ := strconv.ParseFloat(stripUnderscores(src), 64)
+		tkn = lex.Token("#NR", jsonic.TinNR, val, src)
+	} else {
+		tkn = lex.Token("#TX", jsonic.TinTX, src, src)
+	}
+	cursor.SI = end
+	cursor.CI += end - start
+	return tkn
 }
 
 // miniLitVal carries a minilang-literal match (`+name<delim>src<delim>`) from

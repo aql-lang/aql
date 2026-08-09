@@ -39,6 +39,7 @@ func LexTokens(src string) ([]LexToken, bool) {
 	t, _ := setupBaseTokens(j, loadDeclGrammar())
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
+	setupDecimalUnderscoreMatcher(j, t)
 	setupMiniLitMatcher(j, t)
 	setupXmlMatcher(j, t)
 

@@ -1,0 +1,29 @@
+# parser/spec/nesting.tsv — implementation-independent parser nesting contract.
+#
+# Exactly three tab-separated columns: kind, depth, expected outcome.
+# `depth` counts generated source containers. `expected outcome` is only OK or
+# ERR evaluation_limit. Deep successes are not recursively rendered; both
+# runners iteratively verify every generated container and the terminal value.
+#
+# Every shape must clear the former TypeScript-only ceiling at depth 501.
+list	501	OK
+map	501	OK
+paren	501	OK
+typed-list	501	OK
+typed-map	501	OK
+mixed	501	OK
+#
+# The shared conversion limit is 10,000 live frames. A root paren also uses an
+# implicit top-level item frame, so its source-level boundary is one lower.
+list	10000	OK
+list	10001	ERR evaluation_limit
+map	10000	OK
+map	10001	ERR evaluation_limit
+paren	9999	OK
+paren	10000	ERR evaluation_limit
+typed-list	10000	OK
+typed-list	10001	ERR evaluation_limit
+typed-map	10000	OK
+typed-map	10001	ERR evaluation_limit
+mixed	10000	OK
+mixed	10001	ERR evaluation_limit

@@ -24,6 +24,13 @@ trap 'rm -rf "$tmp"' EXIT
     go test -run TestParityProbe -count=1 >/dev/null 2>&1 ) || {
   echo "go probe failed (is TestParityProbe present?)" >&2; exit 1; }
 
+# parser/ts and this probe deliberately share core's package-exported dist
+# module so Value identity checks cannot split across source/dist copies.
+# Build that artifact here as well: the probe is documented as standalone and
+# must work immediately after a clean checkout + parser npm install.
+( cd "$repo/parser/ts" && npm run --silent build:core-dev >/dev/null ) || {
+  echo "core/ts development build failed" >&2; exit 1; }
+
 ( cd "$repo/parser/ts" && node --experimental-strip-types --no-warnings \
     "$repo/scripts/parity-probe.ts" "$src_file" > "$tmp/ts.txt" ) || {
   echo "ts probe failed" >&2; exit 1; }

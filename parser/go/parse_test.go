@@ -2280,6 +2280,30 @@ func TestParseWordDirectCoverage(t *testing.T) {
 			}
 		}
 	}
+
+	// The decimal matcher normally classifies these before parseWord sees
+	// them. Keep the defensive text fallback itself pinned as well: it must
+	// preserve exact base integers and structured overflow diagnostics.
+	min, err := parseWord("-0x8000000000000000")
+	if err != nil {
+		t.Fatalf("parseWord(int64 min): %v", err)
+	}
+	if n, err := core.AsInteger(min); err != nil || n != math.MinInt64 {
+		t.Errorf("parseWord(int64 min) = %v (err %v), want %d", min, err, int64(math.MinInt64))
+	}
+	for _, tc := range []struct {
+		src  string
+		code string
+	}{
+		{"0x8000000000000000", "integer_overflow"},
+		{"1e400", "float_overflow"},
+	} {
+		_, err := parseWord(tc.src)
+		ae, ok := err.(*core.BoruError)
+		if !ok || ae.Code != tc.code {
+			t.Errorf("parseWord(%q) = %v, want [boru/%s]", tc.src, err, tc.code)
+		}
+	}
 }
 
 // =============================================================================

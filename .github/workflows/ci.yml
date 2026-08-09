@@ -31,6 +31,19 @@ jobs:
         with:
           go-version-file: lang/go/go.mod
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            core/ts/package-lock.json
+            parser/ts/package-lock.json
+
+      - name: Install TypeScript core/parser dependencies
+        run: |
+          npm ci --prefix core/ts
+          npm ci --prefix parser/ts
+
       - name: Install golangci-lint
         # Use `go install` (Go is already on PATH from setup-go) rather
         # than the official action: `make lint` invokes the binary
@@ -60,6 +73,9 @@ jobs:
 
       - name: Test (all modules)
         run: make test
+
+      - name: Parser Go/TypeScript parity and 100% coverage
+        run: make parser-parity
 
       # The bytecode compiler's correctness gates (differential,
       # whole-corpus parity, combination matrix, alloc ceilings) run as

@@ -33,7 +33,9 @@ func SafeMake(opts ...jsonic.Options) *jsonic.Jsonic {
 // parsing stays concurrent. (jsonic.Parse memoizes a singleton via
 // sync.Once whose first call still bumps the shared counter, so it cannot
 // be left to race with SafeMake — building our own instance keeps every
-// counter access under the lock.)
+// counter access under the lock.) Its errors deliberately remain native
+// jsonic errors; ParseConfig owns the stable host-facing wrapper for its
+// narrower configuration contract.
 func SafeParse(src string) (any, error) {
 	return SafeMake().Parse(src)
 }
@@ -53,6 +55,11 @@ func SafeParseData(src string) (any, error) {
 	jsonicMakeMu.Lock()
 	j := jsonic.Make()
 	jsonicMakeMu.Unlock()
+	// Keep every numeric spelling that Boru classifies itself on one #NR
+	// token. The stock Go jsonic matcher drops trailing-dot exponents,
+	// binary64 overflow, and base-prefix overflow to plain values/text,
+	// which would make ConvertParsedNumber silently decline them.
+	setupDecimalUnderscoreMatcher(j, parserTokens{})
 	setupNumberSub(j)
 	return j.Parse(src)
 }

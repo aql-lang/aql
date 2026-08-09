@@ -32,24 +32,37 @@ import {
   convertDataValueInner,
   convertInterpGroup,
   convertParsedNumber,
+  convertTopLevelItems,
   convertTopLevelValueInner,
+  errMessage,
   floatToValue,
   groupModifier,
   isPlainDecimalInteger,
   metaStrSet,
   numberValToValue,
+  orderedKeys,
+  parse,
   parseBigNumber,
   parseWord,
+  prepareNestedConversions,
   tryParseBigIntBase0,
   typeName,
+  wrapInterpolationExpressionErrors,
 } from './convert.ts'
 import {
   ArrowTag,
+  AngleGroup,
   InterpGroup,
+  IexprGroup,
   NumberVal,
+  ParenGroup,
   ParseDepth,
+  Sited,
   UnclosedAngle,
   UnclosedParen,
+  codePointColumnAt,
+  normalizeReportedPos,
+  normalizeSrcPos,
 } from './nodes.ts'
 
 const d = (): ParseDepth => new ParseDepth('')
@@ -123,6 +136,15 @@ describe('value-converter arms the grammar never produces', () => {
     )
   })
 
+  it('the DATA converter preserves its direct ParenGroup seam', () => {
+    // parse() trampolines nested parens before DATA conversion, but this
+    // converter is also deliberately callable with Go's raw intermediate.
+    assert.equal(
+      String(convertDataValueInner(new ParenGroup([new String('x')]), d())),
+      'paren([word(x)])',
+    )
+  })
+
   it('a top-level implicit map is auto-evaluated', () => {
     // The `info.implicit && !mv.eval` arm. parse() applies the same rule to
     // the ROOT itself, which is the path a source takes, so this one is
@@ -130,6 +152,62 @@ describe('value-converter arms the grammar never produces', () => {
     const node: any = { a: 1 }
     const v: any = convertTopLevelValueInner(withInfo(node, { implicit: true, meta: {} }), d())
     assert.ok(v.eval, 'an implicit map must be marked eval')
+  })
+
+  it('de-duplicates a defensive source-order channel', () => {
+    assert.deepEqual(orderedKeys(new Set(['a', 'b', 'c']), ['b', 'b', 'a']), [
+      'b',
+      'a',
+      'c',
+    ])
+  })
+})
+
+describe('Unicode source-position normalization', () => {
+  it('converts exact UTF-16 indices and preserves unknown positions', () => {
+    assert.equal(codePointColumnAt('🙂 x', -1), 1)
+    assert.equal(codePointColumnAt('🙂 x', 99), 4)
+    assert.equal(codePointColumnAt('🙂 x', 3), 3)
+    assert.equal(codePointColumnAt('a\n🙂 x', 5), 3)
+    assert.deepEqual(
+      normalizeSrcPos('🙂 x', { row: 1, col: 4, src: 'x', si: 3 }),
+      { row: 1, col: 3, src: 'x', si: 3 },
+    )
+    const unknown = { row: 0, col: 0, si: 0 }
+    assert.equal(normalizeSrcPos('x', unknown), unknown)
+    const withoutIndex = { row: 1, col: 2 }
+    assert.equal(normalizeSrcPos('x', withoutIndex), withoutIndex)
+
+    const depth = new ParseDepth('a\n🙂 x')
+    assert.equal(depth.normalizePos({ row: 2, col: 4, si: 5 }).col, 3)
+    assert.equal(depth.normalizePos(unknown), unknown)
+    assert.equal(depth.normalizePos(withoutIndex), withoutIndex)
+
+    // Grammar sites always carry token text; a direct Go-shaped site may not.
+    // Pin withPos's honest empty-source fallback on that public converter seam.
+    const [positioned]: any[] = convertTopLevelItems([
+      new Sited(new String('x'), { row: 1, col: 1 }),
+    ], d())
+    assert.deepEqual(positioned.pos, { row: 1, col: 1, src: '' })
+  })
+
+  it('anchors reported columns to tokens across stock and custom matchers', () => {
+    assert.equal(normalizeReportedPos('🙂 ]', { row: 1, col: 4, src: ']' }).col, 3)
+    assert.equal(normalizeReportedPos('+re/🙂/ ]', { row: 1, col: 8, src: ']' }).col, 8)
+    assert.equal(normalizeReportedPos('x 🙂 x', { row: 1, col: 1, src: 'x' }).col, 1)
+    assert.equal(normalizeReportedPos('abc', { row: 1, col: 2, src: 'z' }).col, 2)
+  })
+
+  it('handles unknown rows and tokenless end positions honestly', () => {
+    const unknown = { row: 0, col: 0, src: '' }
+    assert.equal(normalizeReportedPos('x', unknown), unknown)
+    const missingRow = { row: 3, col: 1, src: 'x' }
+    assert.equal(normalizeReportedPos('x', missingRow), missingRow)
+    const unknownColumn = { row: 1, col: 0, src: '' }
+    assert.equal(normalizeReportedPos('x', unknownColumn), unknownColumn)
+    assert.equal(normalizeReportedPos('x', { row: 1, col: 1 }).col, 1)
+    assert.equal(normalizeReportedPos('🙂', { row: 1, col: 2, src: '' }).col, 2)
+    assert.equal(normalizeReportedPos('🙂', { row: 1, col: 3, src: '' }).col, 2)
   })
 })
 
@@ -219,6 +297,129 @@ describe('number conversion fallbacks', () => {
 })
 
 describe('remaining converter guards', () => {
+  it('the stack-safe preparation walk replaces every unsited container slot', () => {
+    // Real grammar children are normally Sited, in which case replacement
+    // happens inside the wrapper. These raw carriers are the Go-compatible
+    // direct seam and exercise each outer slot writer explicitly.
+    const typed: any[] = []
+    ;(typed as any)['child$'] = new AngleGroup('Box', [new String('Integer')])
+    prepareNestedConversions(typed, d())
+
+    const map = { x: new ParenGroup([new String('x')]) }
+    prepareNestedConversions(map, d())
+
+    const interp = new InterpGroup([
+      new IexprGroup([new ParenGroup([new String('x')])]),
+    ])
+    prepareNestedConversions(interp, d())
+  })
+
+  it('counts an interpolation expression as a logical depth frame', () => {
+    let nested: unknown = new InterpGroup([new IexprGroup([new String('x')])])
+    for (let i = 0; i < 10000; i++) {
+      nested = [nested]
+    }
+    assert.throws(
+      () => prepareNestedConversions(nested, d()),
+      (e: any) =>
+        e instanceof Error &&
+        e.message.startsWith('interpolation expression error: [boru/evaluation_limit]:') &&
+        e.cause instanceof BoruError &&
+        e.cause.code === 'evaluation_limit',
+    )
+  })
+
+  it('restores interpolation error wrappers around preconverted structures', () => {
+    const sentinel = new Error('sentinel')
+    assert.equal(wrapInterpolationExpressionErrors(sentinel, 0), sentinel)
+    const twice: any = wrapInterpolationExpressionErrors(sentinel, 2)
+    assert.equal(twice.cause.cause, sentinel)
+    assert.equal(
+      twice.message,
+      'interpolation expression error: interpolation expression error: sentinel',
+    )
+
+    for (const src of ['`${[1,,2]}`', '`${{a/ss}}`', '`${(1,,2)}`']) {
+      assert.throws(
+        () => parse(src),
+        (error: any) =>
+          error instanceof Error &&
+          !(error instanceof BoruError) &&
+          error.message.startsWith('interpolation expression error: [boru/syntax_error]:') &&
+          error.cause instanceof BoruError,
+        src,
+      )
+    }
+
+    // Each nested interpolation is a separate Go fmt.Errorf("...: %w")
+    // frame. The explicit work stack must rebuild both frames and causes.
+    assert.throws(
+      () => parse('`${`${[1,,2]}`}`'),
+      (error: any) =>
+        error instanceof Error &&
+        error.message.startsWith(
+          'interpolation expression error: interpolation expression error: [boru/syntax_error]:',
+        ) &&
+        error.cause instanceof Error &&
+        error.cause.cause instanceof BoruError,
+    )
+  })
+
+  it('normalises unknown thrown values and unknown source positions', () => {
+    assert.equal(errMessage(new Error('boom')), 'boom')
+    assert.equal(errMessage('boom'), 'boom')
+
+    assert.throws(
+      () => convertTopLevelItems([
+        new NumberVal(1, '1', 0, 0),
+        new String('.'),
+        new String('x'),
+      ], d()),
+      (e: any) => '' === e.src && '' === e.word,
+    )
+    assert.throws(
+      () => convertTopLevelItems([new String('.')], d()),
+      (e: any) => '' === e.src && '' === e.word,
+    )
+  })
+
+  it('handles raw strings and positionless invalid generic heads', () => {
+    assert.equal(String(convertDataValueInner('x', d())), 'word(x)')
+    const quoted = new String('x') as String & Record<string, unknown>
+    Object.defineProperty(quoted, '__info__', {
+      value: { quote: "'" },
+      writable: true,
+    })
+    assert.equal(convertDataValueInner(quoted, d()).data, 'x')
+
+    // angleUseSite precomputes and stores generic-head errors. Raw direct
+    // nodes carry UNKNOWN_POS, so diagnostic source defaults are empty.
+    const lower: any = convertTopLevelValueInner(
+      new AngleGroup('Box', [new String('lower')]),
+      d(),
+    )
+    assert.match(lower.data.headErr, /capitalised name/)
+
+    const missing: any = convertTopLevelValueInner(
+      new AngleGroup('Box', [new String('T'), new String('extends')]),
+      d(),
+    )
+    assert.match(missing.data.headErr, /needs a value/)
+  })
+
+  it('applies a standalone prefix modifier to a completed raw reach', () => {
+    // Source modifiers are folded into the final key token by the grammar
+    // (the shared `a.b /s` row owns that behavior). This direct intermediate
+    // is the compatible seam for a caller that supplies `/s` separately.
+    const values = convertTopLevelItems([
+      new String('a'),
+      new String('.'),
+      new String('b'),
+      new String('/s'),
+    ], d())
+    assert.deepEqual(values.map(String), ['sugar(stack-args)', 'a.b'])
+  })
+
   it('an interp group with an unknown part type is refused', () => {
     // Go: TestS5bEConvertInterpGroupUnknownPart.
     assert.throws(() => convertInterpGroup(new InterpGroup([42]), d()), /unexpected interp part type/)

@@ -1,6 +1,6 @@
 // This file translates tabnas/jsonic lexer-and-grammar failures into
 // boru-voice BoruErrors (design/DIAGNOSTICS.0.md, phase 2) — the TS twin
-// of parser/go/parse_error.go (the REFERENCE). The library's own
+// of parser/go/parse_error.go. The library's own
 // rendering is disabled at the source (errMsgOptions / colorOff below
 // kill the always-on ANSI palette, the `--internal:` suffix block, and
 // the library docs link), and every JsonicError is rebuilt as an
@@ -12,6 +12,7 @@
 import { JsonicError } from '@tabnas/jsonic'
 
 import { BoruError } from '@boru-lang/core'
+import { normalizeReportedPos } from './nodes.ts'
 
 // colorOff pins the library renderer's color off; the translated
 // BoruError owns presentation (color is caller-resolved there).
@@ -26,11 +27,8 @@ export const errMsgOptions = { name: 'boru', suffix: false }
 
 // translateParseError rebuilds a jsonic parse failure as a boru
 // syntax_error at the same source position. Errors of any other type
-// keep the historical `parse error: %w` wrap. (The TS BoruError carries
-// no Notes/Suggestions/position channels — the spec runner matches on
-// the code/detail first line — so the note and help strings parseErrText
-// computes are dropped here; see error.ts.)
-export function translateParseError(e: unknown, _src: string): BoruError {
+// keep the historical `parse error: %w`-style wrapping.
+export function translateParseError(e: unknown, src: string): BoruError {
   if (e instanceof BoruError) {
     return e
   }
@@ -41,8 +39,21 @@ export function translateParseError(e: unknown, _src: string): BoruError {
   // The library assigns code/lineNumber/… dynamically (errdesc), so the
   // declared TabnasError type carries none of them — go via unknown.
   const te = e as unknown as JsonicErrorFields
-  const [detail] = parseErrText(te)
-  return new BoruError('syntax_error', detail, jsonicErrSrc(te))
+  const tokenSrc = jsonicErrSrc(te)
+  const [detail, note, help] = parseErrText(te)
+  const pos = normalizeReportedPos(src, {
+    row: te.lineNumber,
+    col: te.columnNumber,
+    src: tokenSrc,
+  })
+  return new BoruError('syntax_error', detail, tokenSrc, {
+    row: pos.row,
+    col: pos.col,
+    src: tokenSrc,
+    fullSource: src,
+    notes: '' === note ? [] : [note],
+    suggestions: '' === help ? [] : [{ message: help }],
+  })
 }
 
 // The JsonicError fields the translation reads (assigned onto the
@@ -68,7 +79,9 @@ function jsonicErrDetail(te: JsonicErrorFields): string {
     return msg
   }
   // Fallback: strip the `[boru/<code>]: ` prefix off the first line.
-  const first = te.message.split('\n')[0] ?? ''
+  // split() always returns at least one element, including for an empty
+  // string; the assertion avoids inventing an unreachable fallback branch.
+  const first = te.message.split('\n')[0]!
   return first.replace(/^\[[^\]]*\]:\s*/, '')
 }
 

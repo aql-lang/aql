@@ -141,3 +141,16 @@ func TestLexTokensDrivesTheConfiguredMatchers(t *testing.T) {
 		})
 	}
 }
+
+func TestLexTokensNumericBoundaries(t *testing.T) {
+	for _, src := range []string{"1.0e400", "1.e2", "0x10000000000000000"} {
+		toks, ok := LexTokens(src)
+		if !ok || len(toks) != 1 || toks[0].Name != "#NR" || toks[0].Src != src {
+			t.Errorf("LexTokens(%q) = %v, ok=%v; want one #NR token", src, toks, ok)
+		}
+	}
+	toks, ok := LexTokens("1.x")
+	if !ok || len(toks) != 3 || strings.Join(tokenNames(toks), " ") != "#NR #DT #TX" {
+		t.Errorf("LexTokens(1.x) = %v, ok=%v; want #NR #DT #TX", toks, ok)
+	}
+}

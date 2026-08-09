@@ -1,10 +1,29 @@
 package parser
 
 import (
-	"fmt"
-
 	jsonic "github.com/tabnas/jsonic/go"
 )
+
+const configSyntaxMessage = "invalid options syntax"
+
+// configSyntaxError keeps ParseConfig's public message independent of the
+// host jsonic port while preserving the dependency error for errors.Is/As.
+// SafeParse intentionally remains the low-level dependency-native seam.
+type configSyntaxError struct{ cause error }
+
+func (e *configSyntaxError) Error() string { return configSyntaxMessage }
+func (e *configSyntaxError) Unwrap() error { return e.cause }
+
+func configValueCategory(v any) string {
+	switch v.(type) {
+	case []any:
+		return "list"
+	case string:
+		return "string"
+	default:
+		return "scalar"
+	}
+}
 
 // ParseConfig parses a jsonic configuration string into a nested map —
 // the backing parser for the CLI's `--options` flag and any other
@@ -31,14 +50,22 @@ func ParseConfig(s string) (map[string]any, error) {
 	j := SafeMake(jsonic.Options{})
 	v, err := j.Parse(s)
 	if err != nil {
-		return nil, fmt.Errorf("invalid options syntax: %w", err)
+		return nil, &configSyntaxError{cause: err}
 	}
 	// Options are order-agnostic config; flatten the parser's ordered node
 	// (and any nested ones) to plain maps so callers keep the simple
 	// map[string]any contract.
 	m, ok := Plainify(v).(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("options must be a map of key:value pairs, got %T", v)
+		return nil, &configShapeError{category: configValueCategory(v)}
 	}
 	return m, nil
+}
+
+// configShapeError uses Boru's own data categories instead of leaking Go's
+// []interface{} spelling (whose JavaScript twin would be [object Array]).
+type configShapeError struct{ category string }
+
+func (e *configShapeError) Error() string {
+	return "options must be a map of key:value pairs, got " + e.category
 }

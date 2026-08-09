@@ -1,6 +1,8 @@
 # parser/spec/parse.tsv — the parser-level parity corpus.
 #
-# One row per source, tab-separated:  src <TAB> expected
+# One row per source: src <TAB> expected <TAB> optional note. The note column
+# is always present (`-` means no note), so an unescaped tab cannot be ignored
+# as an accidental extra field.
 #
 # A line is a COMMENT only when it starts with '#' AND contains no tab, so a
 # source may itself begin with '#' (boru's comment marker) without vanishing.
@@ -22,245 +24,248 @@
 #
 # Seeded from parser/go. parse-battery.test.ts named it the reference while
 # nothing checked that claim (design/TS-PARITY-AUDIT.0.md).
-'a\\nb'	'a\\nb'
-'t\\tt'	't\\tt'
-'r\\rr'	'r\\rr'
-'bs\\\\'	'bs\\\\'
-'q\\'q'	"q'q"
-"dq\\""	'dq"'
-0d_	ERR [boru/syntax_error]: invalid 0d numeric literal: 0d_
-0d12_	ERR [boru/syntax_error]: invalid 0d numeric literal: 0d12_
-1.2.3	ERR [boru/syntax_error]: a number has no members to access with `.`
-5 . foo	ERR [boru/syntax_error]: a number has no members to access with `.`
-a => [1]	word(a) sugar(lambda) [1]
-<br/>	<br/>
-<a href='u'>t</a>	<a href="u">t</a>
-<t a='1' b='2'><u/>text</t>	<t a="1" b="2"><u/>text</t>
-`v ${1} w`	interp('v ' ${1} ' w')
-`${x}`	interp(${word(x)})
-{:String}	{:String}
-# comment\n1	1
-1 # trailing	1
-(quote a)	paren([word(quote) word(a)])
-{a:{b:[1 2]}}	{a:{b:[1 2]}}
-[{x:1}]	[{x:1}]
--2.5e3	-2500.0
-1e-7	0.0000001
-a:b	{a:word(b)}
-'s':1	{s:1}
-12:30:00	{12:{30:0}}
-a/b/c	word(a/b/c)
-f/q	f/q
-Box<Integer>	sugar(angle Box [word(Integer)])
-{x: Box<Integer>}	{x:sugar(angle Box [word(Integer)])}
-Box<Integer String>	sugar(angle Box [word(Integer) word(String)])
-Box<>	sugar(angle Box [])
-(Box of [Integer])	paren([word(Box) word(of) [word(Integer)]])
-1_000	1000
-1_0.5	10.5
-1__0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0
-'u\\u0041'	'uA'
-'x\\x41'	'xA'
-'q\\z'	'qz'
-{a: true}	{a:word(true)}
-[true false]	[word(true) word(false)]
-{b: none}	{b:none}
-{x}	{x:word(x)}
-{x/r}	{x:word(x)}
-{x/2}	{x:word(x)}
-{x/s}	{x:word(x)}
-{x/q}	{x:x/q}
-{x/zz}	{x/zz:word(x/zz)}
-{a x/r}	{a:word(a) x:word(x)}
-<a>&amp;&lt;&gt;</a>	<a>&amp;&lt;&gt;</a>
-<a b='&amp;'/>	<a b="&amp;"/>
-<a>&#65;</a>	<a>&amp;#65;</a>
-<a>&quot;</a>	<a>"</a>
-<a	ERR xml: unterminated opening tag <a>
-<a></b>	ERR xml: mismatched closing tag </b> for <a>
-<	ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here
-<a>\nx</a>	<a>\nx</a>
-<a x='1' x='2'/>	ERR xml: duplicate attribute "x" in <a>
-<a x='1/>	ERR xml: unterminated value for attribute "x" in <a>
-<a x=''/>	<a x=""/>
-<a>x</ a >	<a>x</a>
-<a>x</	ERR xml: malformed closing tag for <a>
-<a>x</a!	ERR xml: malformed closing tag for <a>
-<a><b y='1></b></a>	ERR xml: unterminated value for attribute "y" in <b>
-<a>${'s'}</a>	interp-xml(<a>${'s'}</a>)
-<a>${{k:1}}</a>	interp-xml(<a>${{k:1}}</a>)
-<a>${(}</a>	ERR xml: in ${...}: [boru/syntax_error]: unmatched opening parenthesis
-`a\\nb`	'a\\nb'
-`t\\ta\\r\\\\q\\`e\\$s\\zx`	't\\ta\\r\\\\q`e$s\\\\zx'
-[inf -inf nan]	[inf -inf nan]
-0x10	16
-0o17	15
-0b101	5
-0x1_0	16
-0x_1	1
-0x1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0x1_
-0x1__0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0x1__0
-0_x1	ERR [boru/syntax_error]: invalid numeric literal: 0_x1
-0xFFFFFFFFFFFFFFFFFF	ERR [boru/integer_overflow]: integer literal out of range: 0xFFFFFFFFFFFFFFFFFF exceeds the Integer range (-9223372036854775808..9223372036854775807)
-[1,,2]	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)
-[,1]	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)
-{a:<b/>}	{a:<b/>}
-{a:<b x=1/>}	ERR xml: attribute "x" in <b> must have a quoted value
-   	
-# only a comment	
-. x	ERR [boru/syntax_error]: `.` member access has no receiver
-! . x	ERR [boru/syntax_error]: `.` member access has no receiver
-[x:Integer]	[{x:word(Integer)}]
-+m'src'	sugar(mini m 'src')
-(1,,2)	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)
-(,1)	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)
-(1,)	ERR [boru/syntax_error]: unmatched opening parenthesis
-(,)	ERR [boru/syntax_error]: unmatched opening parenthesis
-(1, 2)	paren([1 2])
-[1,]	[1]
-{a:,}	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)
-Box<Integer	ERR [boru/syntax_error]: unclosed angle bracket: Box<… has no matching `>`
-+.5	ERR [boru/syntax_error]: numeric literal has no digit before `.`: +.5
-0d	ERR [boru/syntax_error]: invalid numeric literal: 0d
-0dx	ERR [boru/syntax_error]: invalid 0d numeric literal: 0dx
--0x10	-16
-[0x10]	[16]
-{a?:5}	{a:(None tor Absent tor 5)}
-{a?:Integer}	{a:(word(Integer) tor None tor Absent)}
-a.b.c	a.b.c
-a!.b	a!.b
-$.name	$.name
-m.'k'	m.'k'
-a.(k)	a.(k)
-(m n).k	(m n).k
-[[x] => [x]]	[paren([[word(x)] sugar(lambda) [word(x)]])]
-[1 => [2]]	[paren([1 sugar(lambda) [2]])]
-{f:[x] => [x]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here
-a.b => [1]	a.(b sugar(lambda) [1])
-{[k]:1}	{k:1}
-{[k]:1 aa:2}	{k:1 aa:2}
-{[k]:1 [j]:2}	{k:1 j:2}
-{1.5:2}	{1.5:2}
-{'sk':1}	{sk:1}
-{a?:1 b:2}	{a:(None tor Absent tor 1) b:(None tor Absent tor 2)}
-<a href=>x</a>	ERR xml: attribute "href" in <a> must have a quoted value
-<a 'x'/>	ERR xml: invalid attribute name in <a>
-<a>${1}</a>	interp-xml(<a>${1}</a>)
-<a b='${2}'/>	interp-xml(<a b="${2}"/>)
-<a><b>${3}</b></a>	interp-xml(<a><b>${3}</b></a>)
-<a><!-- c --></a>	<a/>
-<a><!-- unclosed	ERR xml: unterminated comment in <a>
-<a  b = '1' />	<a b="1"/>
-<a b='x&lt;y'/>	<a b="x&lt;y"/>
-<a b='x&gt;y&amp;z'/>	<a b="x&gt;y&amp;z"/>
-<a>t1<b/>t2</a>	<a>t1<b/>t2</a>
-<a><b/><c/></a>	<a><b/><c/></a>
-<a>pre${1}mid${2}post</a>	interp-xml(<a>pre${1}mid${2}post</a>)
-<a b='p${1}q'/>	interp-xml(<a b="p${1}q"/>)
-<a-b c-d='1'/>	<a-b c-d="1"/>
-<a_b/>	<a_b/>
-<A/>	<A/>
-</a>	ERR xml: expected a tag name after '<'
-<a/ >	ERR xml: expected '/>' to close <a>
-< a/>	ERR xml: expected a tag name after '<'
-w/t	sugar(type-bound [[w]])
-w/u	word(w)
-f/s	word(f)
-f/12	word(f)
-x/tt	ERR [boru/syntax_error]: invalid word modifier /tt on "x"
-x/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "x"
-x => [1]	word(x) sugar(lambda) [1]
-[a => [1]]	[paren([word(a) sugar(lambda) [1]])]
-(x => [x 1])	paren([paren([word(x) sugar(lambda) [word(x) 1]])])
-a b => [1]	word(a) paren([word(b) sugar(lambda) [1]])
-{f: x => [x]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here
-Box<Integer> of [1]	sugar(angle Box [word(Integer)]) word(of) [1]
-{p: Pair<A B>}	{p:sugar(angle Pair [word(A) word(B)])}
-` plain `	' plain '
-`${1}${2}`	interp(${1} ${2})
-`a${'s'}b`	interp('a' ${'s'} 'b')
-(1	ERR [boru/syntax_error]: unmatched opening parenthesis
-1 (2 3	ERR [boru/syntax_error]: unmatched opening parenthesis
-[1	[1]
-{a:1	{a:1}
-'unterm	ERR [boru/syntax_error]: this string is never closed: 'unterm
-9223372036854775808	ERR [boru/integer_overflow]: integer literal out of range: 9223372036854775808 exceeds the Integer range (-9223372036854775808..9223372036854775807)
--9223372036854775809	ERR [boru/integer_overflow]: integer literal out of range: -9223372036854775809 exceeds the Integer range (-9223372036854775808..9223372036854775807)
-0.1_2	0.12
-'a' : 1	{a:1}
-{'q k':2}	{q k:2}
-{5:1}	{5:1}
-true:1	{true:1}
-{none:1}	{none:1}
-(A tor None)	paren([word(A) word(tor) word(None)])
-(None tor A)	paren([word(None) word(tor) word(A)])
-x => y => [x]	word(x) sugar(lambda) paren([word(y) sugar(lambda) [word(x)]])
-[x y => [x]]	[word(x) paren([word(y) sugar(lambda) [word(x)]])]
-[{k:1} => [1]]	[paren([{k:1} sugar(lambda) [1]])]
-[a:1 => [2]]	[paren([{a:1} sugar(lambda) [2]])]
-[1 2 => [3] 4]	[1 paren([2 sugar(lambda) [3]]) 4]
-(=> [1])	paren([sugar(lambda) [1]])
-n => [n] 5	word(n) sugar(lambda) [word(n)] 5
-1 x => [x 2] 3	1 paren([word(x) sugar(lambda) [word(x) 2]]) 3
-{m: [x] => [x]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here
-{x.y:1}	ERR [boru/syntax_error]: unexpected `.` — nothing valid can appear here
-{n: bf.n addq 1}	ERR [boru/syntax_error]: unexpected `1` — nothing valid can appear here
-Box<T extends Integer>	sugar(angle Box [word(T) word(extends) word(Integer)])
-Box<T = Integer>	sugar(angle Box [word(T) word(=) word(Integer)])
-Box<T extends Integer U = String>	sugar(angle Box [word(T) word(extends) word(Integer) word(U) word(=) word(String)])
-Box<T extends>	sugar(angle Box [word(T) word(extends)])
-Box<lower>	sugar(angle Box [word(lower)])
-Box<T extends Integer,U>	sugar(angle Box [word(T) word(extends) word(Integer) word(U)])
-def Box<T> (refine List)	word(def) sugar(angle Box [word(T)]) paren([word(refine) word(List)])
-true	word(true)
-false	word(false)
-inf	inf
--inf	-inf
-nan	nan
-Foo	word(Foo)
-a/u	word(a)
-a/s	word(a)
-a/f	word(a)
-a/2	word(a)
-a/q	a/q
-a/r	word(a)
-a/t	sugar(type-bound [[a]])
-a/qq	ERR [boru/syntax_error]: invalid word modifier /qq on "a"
-a/fs	ERR [boru/syntax_error]: invalid word modifier /fs on "a"
-a/ur	word(a)
-a/uq	ERR [boru/syntax_error]: invalid word modifier /uq on "a"
-a/rq	ERR [boru/syntax_error]: invalid word modifier /rq on "a"
-a/tt	ERR [boru/syntax_error]: invalid word modifier /tt on "a"
-a/0	word(a)
-a/1f	word(a)
-a/su	word(a)
-0x1f	31
-0b1011	11
-0xFFFFFFFFFFFFFFFFF	ERR [boru/integer_overflow]: integer literal out of range: 0xFFFFFFFFFFFFFFFFF exceeds the Integer range (-9223372036854775808..9223372036854775807)
-1_0	10
-_1	word(_1)
-0b	ERR [boru/syntax_error]: invalid numeric literal: 0b
-0x	ERR [boru/syntax_error]: invalid numeric literal: 0x
-<a n=${1}/>	interp-xml(<a n="${1}"/>)
-<a n=${x}/>	interp-xml(<a n="${word(x)}"/>)
-<a>t${1}u</a>	interp-xml(<a>t${1}u</a>)
-<a n='a\\'b'/>	ERR xml: invalid attribute name in <a>
-<a n="a\\"b"/>	ERR xml: invalid attribute name in <a>
-<a>	ERR xml: unterminated element <a>
-<a n/>	<a n=""/>
-<>	ERR xml: expected a tag name after '<'
-a.b	a.b
-a.'k'	a.'k'
-a.0	a.0
-{:Integer}	{:Integer}
-{}	{}
-[]	[]
-`a\\`b`	'a`b'
-`a\\$b`	'a$b'
-( 1 )	paren([1])
-(	ERR [boru/syntax_error]: unmatched opening parenthesis
-1 tor 2	1 word(tor) 2
-Integer tor String	word(Integer) word(tor) word(String)
+'a\\nb'	'a\\nb'	-
+'t\\tt'	't\\tt'	-
+'r\\rr'	'r\\rr'	-
+'bs\\\\'	'bs\\\\'	-
+'q\\'q'	"q'q"	-
+"dq\\""	'dq"'	-
+0d_	ERR [boru/syntax_error]: invalid 0d numeric literal: 0d_	-
+0d12_	ERR [boru/syntax_error]: invalid 0d numeric literal: 0d12_	-
+1.2.3	ERR [boru/syntax_error]: a number has no members to access with `.`	-
+5 . foo	ERR [boru/syntax_error]: a number has no members to access with `.`	-
+a => [1]	word(a) sugar(lambda) [1]	-
+<br/>	<br/>	-
+<a href='u'>t</a>	<a href="u">t</a>	-
+<t a='1' b='2'><u/>text</t>	<t a="1" b="2"><u/>text</t>	-
+`v ${1} w`	interp('v ' ${1} ' w')	-
+`${x}`	interp(${word(x)})	-
+{:String}	{:String}	-
+# comment\n1	1	-
+1 # trailing	1	-
+(quote a)	paren([word(quote) word(a)])	-
+{a:{b:[1 2]}}	{a:{b:[1 2]}}	-
+[{x:1}]	[{x:1}]	-
+-2.5e3	-2500.0	-
+1e-7	0.0000001	-
+a:b	{a:word(b)}	-
+'s':1	{s:1}	-
+12:30:00	{12:{30:0}}	-
+a/b/c	word(a/b/c)	-
+f/q	f/q	-
+Box<Integer>	sugar(angle Box [word(Integer)])	-
+Box<(Integer)>	sugar(angle Box [paren([word(Integer)])])	-
+Box<(1e400)>	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity	parenthesized angle arguments propagate conversion errors
+Box<T = (Integer)>	sugar(angle Box [word(T) word(=) paren([word(Integer)])])	-
+Box<Pair<(Integer)>>	sugar(angle Box [sugar(angle Pair [paren([word(Integer)])])])	-
+{x: Box<Integer>}	{x:sugar(angle Box [word(Integer)])}	-
+Box<Integer String>	sugar(angle Box [word(Integer) word(String)])	-
+Box<>	sugar(angle Box [])	-
+(Box of [Integer])	paren([word(Box) word(of) [word(Integer)]])	-
+1_000	1000	-
+1_0.5	10.5	-
+'u\\u0041'	'uA'	-
+'x\\x41'	'xA'	-
+'q\\z'	'qz'	-
+{a: true}	{a:word(true)}	-
+[true false]	[word(true) word(false)]	-
+{b: none}	{b:none}	-
+{x}	{x:word(x)}	-
+{x/r}	{x:word(x)}	-
+{x/2}	{x:word(x)}	-
+{x/s}	{x:word(x)}	-
+{x/q}	{x:x/q}	-
+{x/zz}	{x/zz:word(x/zz)}	-
+{a x/r}	{a:word(a) x:word(x)}	-
+<a>&amp;&lt;&gt;</a>	<a>&amp;&lt;&gt;</a>	-
+<a b='&amp;'/>	<a b="&amp;"/>	-
+<a>&#65;</a>	<a>&amp;#65;</a>	-
+<a>&quot;</a>	<a>"</a>	-
+<a	ERR xml: unterminated opening tag <a>	-
+<a></b>	ERR xml: mismatched closing tag </b> for <a>	-
+<	ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here	-
+<a>\nx</a>	<a>\nx</a>	-
+<a x='1' x='2'/>	ERR xml: duplicate attribute "x" in <a>	-
+<a x='1/>	ERR xml: unterminated value for attribute "x" in <a>	-
+<a x=''/>	<a x=""/>	-
+<a>x</ a >	<a>x</a>	-
+<a>x</	ERR xml: malformed closing tag for <a>	-
+<a>x</a!	ERR xml: malformed closing tag for <a>	-
+<a><b y='1></b></a>	ERR xml: unterminated value for attribute "y" in <b>	-
+<a>${'s'}</a>	interp-xml(<a>${'s'}</a>)	-
+<a>${{k:1}}</a>	interp-xml(<a>${{k:1}}</a>)	-
+<a>${(}</a>	ERR xml: in ${...}: [boru/syntax_error]: unmatched opening parenthesis	-
+`a\\nb`	'a\\nb'	-
+`t\\ta\\r\\\\q\\`e\\$s\\zx`	't\\ta\\r\\\\q`e$s\\\\zx'	-
+[inf -inf nan]	[inf -inf nan]	-
+0x10	16	-
+0o17	15	-
+0b101	5	-
+0x1_0	16	-
+0x_1	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0x_1	-
+0x1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0x1_	-
+0x1__0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0x1__0	-
+0_x1	ERR [boru/syntax_error]: invalid numeric literal: 0_x1	-
+0xFFFFFFFFFFFFFFFFFF	ERR [boru/integer_overflow]: integer literal out of range: 0xFFFFFFFFFFFFFFFFFF exceeds the Integer range (-9223372036854775808..9223372036854775807)	-
+[1,,2]	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+[,1]	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+{a:<b/>}	{a:<b/>}	-
+{a:<b x=1/>}	ERR xml: attribute "x" in <b> must have a quoted value	-
+\t		-
+# only a comment		-
+. x	ERR [boru/syntax_error]: `.` member access has no receiver	-
+! . x	ERR [boru/syntax_error]: `.` member access has no receiver	-
+[x:Integer]	[{x:word(Integer)}]	-
++m'src'	sugar(mini m 'src')	-
+(1,,2)	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+(,1)	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+(1,)	ERR [boru/syntax_error]: unmatched opening parenthesis	-
+(,)	ERR [boru/syntax_error]: unmatched opening parenthesis	-
+(1, 2)	paren([1 2])	-
+[1,]	[1]	-
+{a:,}	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+Box<Integer	ERR [boru/syntax_error]: unclosed angle bracket: Box<… has no matching `>`	-
++.5	ERR [boru/syntax_error]: numeric literal has no digit before `.`: +.5	-
+0dx	ERR [boru/syntax_error]: invalid 0d numeric literal: 0dx	-
+-0x10	-16	-
+[0x10]	[16]	-
+{a?:5}	{a:(None tor Absent tor 5)}	-
+{a?:Integer}	{a:(word(Integer) tor None tor Absent)}	-
+{a?: none}	{a:(None tor none tor Absent)}	TNone optional-key payload rank
+a.b.c	a.b.c	-
+a!.b	a!.b	-
+$.name	$.name	-
+m.'k'	m.'k'	-
+a.(k)	a.(k)	-
+(m n).k	(m n).k	-
+[[x] => [x]]	[paren([[word(x)] sugar(lambda) [word(x)]])]	-
+[1 => [2]]	[paren([1 sugar(lambda) [2]])]	-
+{f:[x] => [x]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here	-
+a.b => [1]	a.(b sugar(lambda) [1])	-
+{[k]:1}	{k:1}	-
+{[k]:1 aa:2}	{k:1 aa:2}	-
+{[k]:1 [j]:2}	{k:1 j:2}	-
+{1.5:2}	{1.5:2}	-
+{'sk':1}	{sk:1}	-
+{a?:1 b:2}	{a:(None tor Absent tor 1) b:(None tor Absent tor 2)}	-
+<a href=>x</a>	ERR xml: attribute "href" in <a> must have a quoted value	-
+<a 'x'/>	ERR xml: invalid attribute name in <a>	-
+<a>${1}</a>	interp-xml(<a>${1}</a>)	-
+<a b='${2}'/>	interp-xml(<a b="${2}"/>)	-
+<a><b>${3}</b></a>	interp-xml(<a><b>${3}</b></a>)	-
+<a><!-- c --></a>	<a/>	-
+<a><!-- unclosed	ERR xml: unterminated comment in <a>	-
+<a  b = '1' />	<a b="1"/>	-
+<a b='x&lt;y'/>	<a b="x&lt;y"/>	-
+<a b='x&gt;y&amp;z'/>	<a b="x&gt;y&amp;z"/>	-
+<a>t1<b/>t2</a>	<a>t1<b/>t2</a>	-
+<a><b/><c/></a>	<a><b/><c/></a>	-
+<a>pre${1}mid${2}post</a>	interp-xml(<a>pre${1}mid${2}post</a>)	-
+<a b='p${1}q'/>	interp-xml(<a b="p${1}q"/>)	-
+<a-b c-d='1'/>	<a-b c-d="1"/>	-
+<a_b/>	<a_b/>	-
+<A/>	<A/>	-
+</a>	ERR xml: expected a tag name after '<'	-
+<a/ >	ERR xml: expected '/>' to close <a>	-
+< a/>	ERR xml: expected a tag name after '<'	-
+w/t	sugar(type-bound [[w]])	-
+w/u	word(w)	-
+f/s	word(f)	-
+f/12	word(f)	-
+x/tt	ERR [boru/syntax_error]: invalid word modifier /tt on "x"	-
+x/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "x"	-
+x => [1]	word(x) sugar(lambda) [1]	-
+[a => [1]]	[paren([word(a) sugar(lambda) [1]])]	-
+(x => [x 1])	paren([paren([word(x) sugar(lambda) [word(x) 1]])])	-
+a b => [1]	word(a) paren([word(b) sugar(lambda) [1]])	-
+{f: x => [x]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here	-
+Box<Integer> of [1]	sugar(angle Box [word(Integer)]) word(of) [1]	-
+{p: Pair<A B>}	{p:sugar(angle Pair [word(A) word(B)])}	-
+` plain `	' plain '	-
+`${1}${2}`	interp(${1} ${2})	-
+`a${'s'}b`	interp('a' ${'s'} 'b')	-
+(1	ERR [boru/syntax_error]: unmatched opening parenthesis	-
+1 (2 3	ERR [boru/syntax_error]: unmatched opening parenthesis	-
+[1	[1]	-
+{a:1	{a:1}	-
+'unterm	ERR [boru/syntax_error]: this string is never closed: 'unterm	-
+9223372036854775808	ERR [boru/integer_overflow]: integer literal out of range: 9223372036854775808 exceeds the Integer range (-9223372036854775808..9223372036854775807)	-
+-9223372036854775809	ERR [boru/integer_overflow]: integer literal out of range: -9223372036854775809 exceeds the Integer range (-9223372036854775808..9223372036854775807)	-
+0.1_2	0.12	-
+'a' : 1	{a:1}	-
+{'q k':2}	{q k:2}	-
+{5:1}	{5:1}	-
+true:1	{true:1}	-
+{none:1}	{none:1}	-
+(A tor None)	paren([word(A) word(tor) word(None)])	-
+(None tor A)	paren([word(None) word(tor) word(A)])	-
+x => y => [x]	word(x) sugar(lambda) paren([word(y) sugar(lambda) [word(x)]])	-
+[x y => [x]]	[word(x) paren([word(y) sugar(lambda) [word(x)]])]	-
+[{k:1} => [1]]	[paren([{k:1} sugar(lambda) [1]])]	-
+[a:1 => [2]]	[paren([{a:1} sugar(lambda) [2]])]	-
+[1 2 => [3] 4]	[1 paren([2 sugar(lambda) [3]]) 4]	-
+(=> [1])	paren([sugar(lambda) [1]])	-
+n => [n] 5	word(n) sugar(lambda) [word(n)] 5	-
+1 x => [x 2] 3	1 paren([word(x) sugar(lambda) [word(x) 2]]) 3	-
+{m: [x] => [x]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here	-
+{x.y:1}	ERR [boru/syntax_error]: unexpected `.` — nothing valid can appear here	-
+{n: bf.n addq 1}	ERR [boru/syntax_error]: unexpected `1` — nothing valid can appear here	-
+Box<T extends Integer>	sugar(angle Box [word(T) word(extends) word(Integer)])	-
+Box<T = Integer>	sugar(angle Box [word(T) word(=) word(Integer)])	-
+Box<T extends Integer U = String>	sugar(angle Box [word(T) word(extends) word(Integer) word(U) word(=) word(String)])	-
+Box<T extends>	sugar(angle Box [word(T) word(extends)])	-
+Box<lower>	sugar(angle Box [word(lower)])	-
+Box<T extends Integer,U>	sugar(angle Box [word(T) word(extends) word(Integer) word(U)])	-
+def Box<T> (refine List)	word(def) sugar(angle Box [word(T)]) paren([word(refine) word(List)])	-
+true	word(true)	-
+false	word(false)	-
+inf	inf	-
+-inf	-inf	-
+nan	nan	-
+Foo	word(Foo)	-
+a/u	word(a)	-
+a/s	word(a)	-
+a/f	word(a)	-
+a/2	word(a)	-
+a/q	a/q	-
+a/r	word(a)	-
+a/t	sugar(type-bound [[a]])	-
+a/qq	ERR [boru/syntax_error]: invalid word modifier /qq on "a"	-
+a/fs	ERR [boru/syntax_error]: invalid word modifier /fs on "a"	-
+a/ur	word(a)	-
+a/uq	ERR [boru/syntax_error]: invalid word modifier /uq on "a"	-
+a/rq	ERR [boru/syntax_error]: invalid word modifier /rq on "a"	-
+a/tt	ERR [boru/syntax_error]: invalid word modifier /tt on "a"	-
+a/0	word(a)	-
+a/1f	word(a)	-
+a/su	word(a)	-
+0x1f	31	-
+0b1011	11	-
+0xFFFFFFFFFFFFFFFFF	ERR [boru/integer_overflow]: integer literal out of range: 0xFFFFFFFFFFFFFFFFF exceeds the Integer range (-9223372036854775808..9223372036854775807)	-
+1_0	10	-
+0b	ERR [boru/syntax_error]: invalid numeric literal: 0b	-
+0x	ERR [boru/syntax_error]: invalid numeric literal: 0x	-
+<a n=${1}/>	interp-xml(<a n="${1}"/>)	-
+<a n=${x}/>	interp-xml(<a n="${word(x)}"/>)	-
+<a>t${1}u</a>	interp-xml(<a>t${1}u</a>)	-
+<a n='a\\'b'/>	ERR xml: invalid attribute name in <a>	-
+<a n="a\\"b"/>	ERR xml: invalid attribute name in <a>	-
+<a>	ERR xml: unterminated element <a>	-
+<a n/>	<a n=""/>	-
+<>	ERR xml: expected a tag name after '<'	-
+a.b	a.b	-
+a.b /s	sugar(stack-args) a.b	reach receiver followed by standalone stack modifier
+a.'k'	a.'k'	-
+a.0	a.0	-
+{:Integer}	{:Integer}	-
+{}	{}	-
+[]	[]	-
+`a\\`b`	'a`b'	-
+`a\\$b`	'a$b'	-
+( 1 )	paren([1])	-
+(	ERR [boru/syntax_error]: unmatched opening parenthesis	-
+1 tor 2	1 word(tor) 2	-
+Integer tor String	word(Integer) word(tor) word(String)	-
 
 # --- arbitrary-precision `0d…` literals (REFERENCE.md) -------------------
 # Rendered by the PARSEABLE form, sign before the marker: -0d789, never
@@ -268,14 +273,14 @@ Integer tor String	word(Integer) word(tor) word(String)
 # BigInteger / BigDecimal render arms it was missing entirely (both fell
 # through to String(data), so a BigInteger was indistinguishable from an
 # Integer and the render no longer parsed back as the same value).
-0d123	0d123
-0D45_6	0d456
--0d789	-0d789
-0d1_2.3	0d12.3
-0d1e2	0d100
-0d1.5e2	0d150
-0d1_2e1_0	0d120000000000
-0d99999999999999999999	0d99999999999999999999
+0d123	0d123	-
+0D45_6	0d456	-
+-0d789	-0d789	-
+0d1_2.3	0d12.3	-
+0d1e2	0d100	-
+0d1.5e2	0d150	-
+0d1_2e1_0	0d120000000000	-
+0d99999999999999999999	0d99999999999999999999	-
 0d1e25	0d10000000000000000000000000	plain form at every magnitude — never scientific, unlike a Float
 
 # --- numeric-literal REFUSALS (behavioural, not cosmetic) -----------------
@@ -284,13 +289,147 @@ Integer tor String	word(Integer) word(tor) word(String)
 # disagreement about what the language ACCEPTS. Likewise the misplaced-
 # separator message, which differed only because the two jsonic ports
 # disagree about whether `1_` lexes as a number token at all.
-1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_
-1e400	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
--1e400	ERR [boru/float_overflow]: floating-point literal out of range: -1e400 overflows to infinity
+1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	-
+1e400	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity	-
+-1e400	ERR [boru/float_overflow]: floating-point literal out of range: -1e400 overflows to infinity	-
 1__0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0	a repeated separator is misplaced too
 _1	word(_1)	not digit-led, so an ordinary word — the separator rule is numeric-only
 1e308	1e+308	the largest exponent that still fits binary64
 1.7e308	1.7e+308	just under the Float ceiling — accepted, unlike 1e400
+
+# Separator placement is checked against actual digits in each component:
+# decimal digits in integer/fraction/exponent runs, and digits of the named
+# base in 0x/0o/0b runs. These rows are the independent 66-case lexer sweep;
+# the four base rows near the top (0x_1, 0x1_, 0x1__0, 0_x1) complete it.
+1.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.2_	-
+1_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.2	-
+1._2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1._2	-
+1_._2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_._2	-
+12_.34	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 12_.34	-
+12.3__4	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 12.3__4	-
+1__0.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0.2	-
+1__0.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0.2_	-
+1__0._2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0._2	-
+1_0._2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_0._2	-
+1_0.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_0.2_	-
+1_0_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_0_.2	-
+1_0.2__3	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_0.2__3	-
+1_.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.2_	-
+1._2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1._2_	-
+1___.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1___.2	-
+1.2___	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.2___	-
+0_.0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0_.0	-
+0._0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0._0	-
+0_._0	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0_._0	-
++1_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: +1_.2	-
+-1_.2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: -1_.2	-
++1.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: +1.2_	-
+-1.2_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: -1.2_	-
+1e_4	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1e_4	-
+1_e4	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_e4	-
+1e4_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1e4_	-
+1_e4_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_e4_	-
+1__e4	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__e4	-
+1e__4	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1e__4	-
+1e4__	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1e4__	-
+1_e_4	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_e_4	-
+1_.2e3	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.2e3	-
+1.2_e3	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.2_e3	-
+1.2e_3	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.2e_3	-
+1.2e3_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.2e3_	-
+1_.2_e_3_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.2_e_3_	-
+0x_1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0x_1_	-
+0x__1	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0x__1	-
+0b_1_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0b_1_	-
+0o_7_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0o_7_	-
+12_a	ERR [boru/syntax_error]: invalid numeric literal: 12_a	-
+12a_	ERR [boru/syntax_error]: invalid numeric literal: 12a_	-
+12__a	ERR [boru/syntax_error]: invalid numeric literal: 12__a	-
+12._a	ERR [boru/syntax_error]: a number has no members to access with `.`	-
+12_.a	ERR [boru/syntax_error]: invalid numeric literal: 12_	-
+
+# Positive separator cases and base-specific negative twins prove that the
+# stricter check is about actual digits, not merely surrounding alphanumerics.
+1e2_3	1e+23	-
+1_0e2_3	1e+24	-
+1.2_3e4_5	1.23e+45	-
+0xA_F	175	-
+0xA_G	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0xA_G	-
+0o7_0	56	-
+0o7_8	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0o7_8	-
+0b1_0	2	-
+0b1_2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 0b1_2	-
+0d1_0	0d10	-
+0d1_e2	ERR [boru/syntax_error]: invalid 0d numeric literal: 0d1_e2	-
+0d1e_2	ERR [boru/syntax_error]: invalid 0d numeric literal: 0d1e_2	-
+0d1.2_3	0d1.23	-
+
+# Matcher boundary arms: malformed separator runs stay whole for the precise
+# separator diagnostic, while a dot followed by a word remains member access.
+1_.	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.	-
+1_..	ERR [boru/syntax_error]: a number has no members to access with `.`	-
+1_.2ea	ERR [boru/syntax_error]: invalid numeric literal: 1_	-
+1_ea	ERR [boru/syntax_error]: invalid numeric literal: 1_ea	-
+1_e	ERR [boru/syntax_error]: invalid numeric literal: 1_e	-
+1_.2a	ERR [boru/syntax_error]: invalid numeric literal: 1_	-
+1.2_a	ERR [boru/syntax_error]: a number has no members to access with `.`	-
+1_.2e400	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_.2e400	-
+1e400_	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1e400_	-
+1_=>	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	-
+1_ 2	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	-
+1_'x'	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	-
+1_#comment	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	-
+[1_]	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	-
+1_=>[x]	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1_	-
+1_.2e	ERR [boru/syntax_error]: invalid numeric literal: 1_	-
+1_e+	ERR [boru/syntax_error]: invalid numeric literal: 1_e+	-
+
+# Decimal-dot boundary policy. A trailing-dot exponent is one Float, overflow
+# retains the complete literal, and a numeric value before member access is
+# rejected before either overflow conversion or key evaluation. These rows
+# independently cover signs, finite/underflow/overflow values, malformed
+# exponent/separator runs, and word/data/interpolation contexts.
+1.e2	100.0	trailing-dot scientific literal
+-1.E2	-100.0	uppercase exponent and negative sign
++1.e-2	0.01	positive sign and negative exponent
+1.e-400	0.0	underflow rounds to zero
+1.0e400	ERR [boru/float_overflow]: floating-point literal out of range: 1.0e400 overflows to infinity	fractional scientific overflow
+1.e400	ERR [boru/float_overflow]: floating-point literal out of range: 1.e400 overflows to infinity	trailing-dot scientific overflow
+-1.0e400	ERR [boru/float_overflow]: floating-point literal out of range: -1.0e400 overflows to infinity	negative overflow keeps its sign
++1.e400	ERR [boru/float_overflow]: floating-point literal out of range: +1.e400 overflows to infinity	positive overflow keeps its sign
+1.x	ERR [boru/syntax_error]: a number has no members to access with `.`	word member after an integer
+-5.foo	ERR [boru/syntax_error]: a number has no members to access with `.`	signed numeric receiver
++5.foo	ERR [boru/syntax_error]: a number has no members to access with `.`	positive signed numeric receiver
+1e400.foo	ERR [boru/syntax_error]: a number has no members to access with `.`	receiver error precedes overflow conversion
+1.0e	ERR [boru/syntax_error]: a number has no members to access with `.`	incomplete dotted exponent follows the member-access boundary
++1.0e+	ERR [boru/syntax_error]: a number has no members to access with `.`	signed incomplete exponent
++.1e400	ERR [boru/syntax_error]: numeric literal has no digit before `.`: +.1e400	leading-dot rejection precedes overflow
+-.1e_4	ERR [boru/syntax_error]: misplaced `_` in numeric literal: -.1e_4	misplaced separator retains signed leading-dot source
+1_0.e3_0	1e+31	separators in integer and exponent components
+1.0e_400	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.0e_400	separator after exponent marker
+1.e_400	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.e_400	trailing-dot exponent separator
+1.0_e400	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1.0_e400	separator before exponent marker
+1._0e400	ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1._0e400	separator after decimal point
+[1.e2]	[100.0]	list data context
+{a: 1.0e400}	ERR [boru/float_overflow]: floating-point literal out of range: 1.0e400 overflows to infinity	map data context
+`x${1.e400}`	ERR interpolation expression error: [boru/float_overflow]: floating-point literal out of range: 1.e400 overflows to infinity	interpolation context
+[+.1e400]	ERR [boru/syntax_error]: numeric literal has no digit before `.`: +.1e400	signed leading-dot form in data context
+`x${1e400.foo}`	ERR interpolation expression error: [boru/syntax_error]: a number has no members to access with `.`	numeric receiver in interpolation
+
+# Suffix-boundary error precedence. The TS stack-safe conversion preparation
+# must defer a descendant failure until the ordinary source/context walk
+# reaches it: an outer numeric receiver wins before a trailing `key:` hole or
+# arrow body, while a typed-map child still wins before its concrete entry.
+1.e:	ERR [boru/syntax_error]: a number has no members to access with `.`	incomplete trailing-dot exponent before a colon
+-5.25e:	ERR [boru/syntax_error]: a number has no members to access with `.`	signed multi-digit fraction keeps the same receiver precedence
++12.30e=>	ERR [boru/syntax_error]: a number has no members to access with `.`	the outer receiver wins before the malformed arrow body
+1..1:	ERR [boru/syntax_error]: a number has no members to access with `.`	consecutive-dot receiver before a numeric pair key
+1.e2:	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	a complete exponent remains one number, so the colon's empty value wins
+[1.e:]	ERR [boru/syntax_error]: a number has no members to access with `.`	explicit-list source order
+{a:1.e:}	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	typed-map child conversion precedes the concrete a entry
+{a:1.0e=>}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here	map grammar refusal precedes nested numeric conversion
+`x${1..1:}`	ERR interpolation expression error: [boru/syntax_error]: a number has no members to access with `.`	interpolation adds exactly one error wrapper after deferred conversion
+{a:[1,,2]}	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	a deferred data-context failure rethrows when its map entry is reached
 
 # --- the element-type tag and the collection barrier survive canon -------
 # Both were being DROPPED by canon on one side or the other, so the render
@@ -299,15 +438,15 @@ _1	word(_1)	not digit-led, so an ordinary word — the separator rule is numeric
 # specified to ignore it, which is only meaningful if it is there);
 # REFERENCE.md:415 makes `end` the word and `;` its synonym, so `1 ;` canons
 # as `1 end` rather than to a bare `1` with the barrier silently gone.
-1 ;	1 end
-[:Integer]	[:Integer]
-[:Integer 1 2]	[:Integer 1 2]
+1 ;	1 end	-
+[:Integer]	[:Integer]	-
+[:Integer 1 2]	[:Integer 1 2]	-
 [1 2]	[1 2]	the untagged twin — distinguishable again, as deq requires
 # The angle-sugar tag still renders in DEBUG spelling on both engines. They
 # AGREE, so it is not a parity defect and does not belong in divergent.tsv —
 # it is a render-quality gap: canon should emit `[:Box<Integer>]`. Recorded
 # as NUR059; pinned here so a fix to either engine alone fails loudly.
-[:Box<Integer>]	[:sugar(angle Box [word(Integer)])]
+[:Box<Integer>]	[:sugar(angle Box [word(Integer)])]	-
 {:Integer a:1}	{:Integer a:1}	a typed map with entries keeps BOTH the tag and the entries
 {a:1}	{a:1}	the untagged twin
 
@@ -315,10 +454,9 @@ _1	word(_1)	not digit-led, so an ordinary word — the separator rule is numeric
 # The `<` decline (lexer reports the unexpected char rather than the XML
 # matcher swallowing it), both unterminated-interpolation paths (attribute
 # and text), and the attribute-quoting forms.
-<	ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here
-<a x="a\\"b">t</a>	ERR xml: invalid attribute name in <a>
-<a>${</a>	ERR xml: unterminated ${...} interpolation
-<a x="${">t</a>	ERR xml: unterminated ${...} interpolation
+<a x="a\\"b">t</a>	ERR xml: invalid attribute name in <a>	-
+<a>${</a>	ERR xml: unterminated ${...} interpolation	-
+<a x="${">t</a>	ERR xml: unterminated ${...} interpolation	-
 <a x='v'>t</a>	<a x="v">t</a>	single-quoted attributes normalise to double
 <a></a>	<a/>	an empty element normalises to the self-closing form
 <a b="1" c="2"/>	<a b="1" c="2"/>	multiple attributes keep source order
@@ -340,47 +478,28 @@ foo/2	word(foo)	NUR059: the /N arity modifier is dropped by canon
 # Verified on BOTH engines before being written down, which is the point of
 # the probe: an expected column authored from one engine's behaviour is how
 # a divergence gets baselined as a contract.
-'a\\nb'	'a\\nb'
-"double"	'double'
-'it\\'s'	"it's"
-`tmpl`	'tmpl'
-a.b	a.b
-a.b.c	a.b.c
-m.k/q	m.k /q
-(1 2 add)	paren([1 2 word(add)])
-[1 2 3]	[1 2 3]
-{a:1 b:2}	{a:1 b:2}
-{}	{}
-[]	[]
-:atom	ERR [boru/syntax_error]: unexpected `:` — nothing valid can appear here
-/abs/path	word(/abs/path)
-rel/path	word(rel/path)
-a@b.com	a@b.com
-https://x.io/p?q=1	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)
-1.5	1.5
--1.5	-1.5
-0x10	16
-0o17	15
-0b101	5
-true	word(true)
-false	word(false)
-none	none
-inf	inf
--inf	-inf
-nan	nan
-x => [x]	word(x) sugar(lambda) [word(x)]
-def f fn [[a:Integer] [Integer] [a]]	word(def) word(f) word(fn) [[{a:word(Integer)}] [word(Integer)] [word(a)]]
-1 tor 2	1 word(tor) 2
-Integer tor String	word(Integer) word(tor) word(String)
-$x	word($x)
-#comment	
-1 # trailing	1
-"a${1}b"	'a${1}b'
-<a>${1}</a>	interp-xml(<a>${1}</a>)
-1_000	1000
--0	0
-0.0	0.0
--0.0	-0.0
+"double"	'double'	-
+'it\\'s'	"it's"	-
+`tmpl`	'tmpl'	-
+(1 2 add)	paren([1 2 word(add)])	-
+[1 2 3]	[1 2 3]	-
+{a:1 b:2}	{a:1 b:2}	-
+:atom	ERR [boru/syntax_error]: unexpected `:` — nothing valid can appear here	-
+/abs/path	word(/abs/path)	-
+rel/path	word(rel/path)	-
+a@b.com	a@b.com	-
+https://x.io/p?q=1	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+1.5	1.5	-
+-1.5	-1.5	-
+none	none	-
+x => [x]	word(x) sugar(lambda) [word(x)]	-
+def f fn [[a:Integer] [Integer] [a]]	word(def) word(f) word(fn) [[{a:word(Integer)}] [word(Integer)] [word(a)]]	-
+$x	word($x)	-
+#comment		-
+"a${1}b"	'a${1}b'	-
+-0	0	-
+0.0	0.0	-
+-0.0	-0.0	-
 
 # --- BigDecimal is EXACT at every magnitude and scale ---------------------
 # These were the last three divergent.tsv rows. core/ts had a binary64
@@ -388,8 +507,8 @@ $x	word($x)
 # 0dInfinity), 0d1e-400 underflowed to zero (a nonzero value silently
 # becoming 0), and 0d0.30 lost its scale. The payload is now a Decimal —
 # a scaled bigint, the same model as apd — so all three round-trip.
-0d1e400	0d10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0d1e-400	0d0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+0d1e400	0d10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	-
+0d1e-400	0d0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001	-
 0d0.30	0d0.30	scale is part of the value — the trailing zero survives, as apd keeps it
 -0d0.50	-0d0.50	sign leads the marker, scale preserved
 0d0.0	0d0.0	a zero significand still carries its scale
@@ -408,54 +527,53 @@ $x	word($x)
 # did not. They are recorded because both engines agree on them, which
 # makes them a render-quality gap rather than a parity defect; a fix to
 # either engine alone will fail these rows loudly, which is the point.
-foo/f	word(foo)
-foo/s	word(foo)
-foo/u	word(foo)
-foo/t	sugar(type-bound [[foo]])
-foo/fs	ERR [boru/syntax_error]: invalid word modifier /fs on "foo"
-foo/sf	ERR [boru/syntax_error]: invalid word modifier /sf on "foo"
-foo/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "foo"
-foo/qu	ERR [boru/syntax_error]: invalid word modifier /qu on "foo"
-foo/tq	ERR [boru/syntax_error]: invalid word modifier /tq on "foo"
-foo/3	word(foo)
-foo/0	word(foo)
-/a\ b	word(/a\\) word(b)
-/a\\b	word(/a\\b)
-'a\\ b'	'a b'
-{a}	{a:word(a)}
-{a b}	{a:word(a) b:word(b)}
-{$x}	{$x:word($x)}
-m.a.b.c	m.a.b.c
-m.0	m.0
-a!	word(a) word(!)
-a.	ERR [boru/syntax_error]: `.` member access has no receiver
+foo/f	word(foo)	-
+foo/s	word(foo)	-
+foo/u	word(foo)	-
+foo/t	sugar(type-bound [[foo]])	-
+foo/fs	ERR [boru/syntax_error]: invalid word modifier /fs on "foo"	-
+foo/sf	ERR [boru/syntax_error]: invalid word modifier /sf on "foo"	-
+foo/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "foo"	-
+foo/qu	ERR [boru/syntax_error]: invalid word modifier /qu on "foo"	-
+foo/tq	ERR [boru/syntax_error]: invalid word modifier /tq on "foo"	-
+foo/3	word(foo)	-
+foo/0	word(foo)	-
+/a\ b	word(/a\\) word(b)	-
+/a\\b	word(/a\\b)	-
+'a\\ b'	'a b'	-
+{a}	{a:word(a)}	-
+{a b}	{a:word(a) b:word(b)}	-
+{$x}	{$x:word($x)}	-
+m.a.b.c	m.a.b.c	-
+m.0	m.0	-
+a!	word(a) word(!)	-
+a.	ERR [boru/syntax_error]: `.` member access has no receiver	-
 1 )	1 )	a stray close paren survives as a value and keeps its source form
 
 # --- string escapes, unterminated forms, delimiter edges ------------------
 # Swept with the probe. The unterminated-container and stray-delimiter
 # rows pin ERROR TEXT, which is where two engines drift most easily.
-"a\\tb"	'a\\tb'
-"a\\rb"	'a\\rb'
-'a\\\\b'	'a\\\\b'
-`a${1}b`	interp('a' ${1} 'b')
-`plain`	'plain'
-"unterminated	ERR [boru/syntax_error]: this string is never closed: "unterminated
-'unterminated	ERR [boru/syntax_error]: this string is never closed: 'unterminated
-[1 2	[1 2]
-{a:1	{a:1}
-(1 2	ERR [boru/syntax_error]: unmatched opening parenthesis
-1 ]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here
-1 }	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here
-def x 1 ;	word(def) word(x) 1 end
-[a: 1]	[{a:1}]
-{1: 2}	{1:2}
-{'k': 1}	{k:1}
-{"k": 1}	{k:1}
-$	word($)
-$$	word($$)
-..	ERR [boru/syntax_error]: `.` member access has no receiver
-...	ERR [boru/syntax_error]: `.` member access has no receiver
-a..b	a.. word(b)
+"a\\tb"	'a\\tb'	-
+"a\\rb"	'a\\rb'	-
+'a\\\\b'	'a\\\\b'	-
+`a${1}b`	interp('a' ${1} 'b')	-
+`plain`	'plain'	-
+"unterminated	ERR [boru/syntax_error]: this string is never closed: "unterminated	-
+'unterminated	ERR [boru/syntax_error]: this string is never closed: 'unterminated	-
+[1 2	[1 2]	-
+(1 2	ERR [boru/syntax_error]: unmatched opening parenthesis	-
+1 ]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	-
+1 }	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	-
+def x 1 ;	word(def) word(x) 1 end	-
+[a: 1]	[{a:1}]	-
+{1: 2}	{1:2}	-
+{'k': 1}	{k:1}	-
+{"k": 1}	{k:1}	-
+$	word($)	-
+$$	word($$)	-
+..	ERR [boru/syntax_error]: `.` member access has no receiver	-
+...	ERR [boru/syntax_error]: `.` member access has no receiver	-
+a..b	a.. word(b)	-
 
 # --- empty `${}` interpolations -------------------------------------------
 # `${}` and `${   }` are NOT holes in an XML ATTRIBUTE: Go tests `p.Expr !=
@@ -466,14 +584,14 @@ a..b	a.. word(b)
 # `'expr' in p`, which is true for an empty array; mirrored deliberately.
 # The probe found it; the crossdiff could not, because both engines
 # rendered something.
-<a b=${}/>	<a b=""/>
-<a b=${  }/>	<a b=""/>
-<a b="x${}y"/>	<a b="xy"/>
-<a>${}</a>	interp-xml(<a>${}</a>)
-<a b=${1}/>	interp-xml(<a b="${1}"/>)
-"x${}y"	'x${}y'
-"${}"	'${}'
-`x${}y`	ERR [boru/syntax_error]: unexpected `y` — nothing valid can appear here
+<a b=${}/>	<a b=""/>	-
+<a b=${  }/>	<a b=""/>	-
+<a b="x${}y"/>	<a b="xy"/>	-
+<a>${}</a>	interp-xml(<a>${}</a>)	-
+<a b=${1}/>	interp-xml(<a b="${1}"/>)	-
+"x${}y"	'x${}y'	-
+"${}"	'${}'	-
+`x${}y`	ERR [boru/syntax_error]: unexpected `y` — nothing valid can appear here	-
 
 # --- minilang literals: delimiters, escapes, and the open form ------------
 # `+name<delim>src<delim>`. An unescaped delimiter closes it; unescaped
@@ -481,17 +599,18 @@ a..b	a.. word(b)
 # escaped char; every other backslash is preserved raw, so `\d` survives
 # into a regex. `+re/` before whitespace has an empty body and is not a
 # literal at all — it stays an ordinary word.
-+re/x/	sugar(mini re 'x')
-+re/a\/b/	sugar(mini re 'a/b')
-+re/a\\b/	sugar(mini re 'a\\b')
-+re/a\db/	sugar(mini re 'a\\db')
-+re/a\ b/	sugar(mini re 'a b')
-+re x	word(+re) word(x)
-+re/x	sugar(mini re 'x')
-+re/x/ 1	sugar(mini re 'x') 1
-+re/ x	word(+re/) word(x)
-+re/	word(+re/)
-+re/x/ +re/y/	sugar(mini re 'x') sugar(mini re 'y')
++re/x/	sugar(mini re 'x')	-
++re2/x/	sugar(mini re2 'x')	minilang names may contain digits
++re/a\/b/	sugar(mini re 'a/b')	-
++re/a\\b/	sugar(mini re 'a\\b')	-
++re/a\db/	sugar(mini re 'a\\db')	-
++re/a\ b/	sugar(mini re 'a b')	-
++re x	word(+re) word(x)	-
++re/x	sugar(mini re 'x')	-
++re/x/ 1	sugar(mini re 'x') 1	-
++re/ x	word(+re/) word(x)	-
++re/	word(+re/)	-
++re/x/ +re/y/	sugar(mini re 'x') sugar(mini re 'y')	-
 
 # --- template literals and dotted access ---------------------------------
 # A raw template spanning a real newline (the row's `\n` is decoded before
@@ -499,16 +618,25 @@ a..b	a.. word(b)
 # exercises its decline-at-end-of-source path. The dotchain rows cover each
 # receiver kind, including a paren group — the arm that returns early
 # because the parent is already a ParenGroup.
-`a\nb`	'a\\nb'
-`a${1}b\nc`	interp('a' ${1} 'b\nc')
-`	ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here
-(1).fst	(1).fst
-({a:1}).a	({a:1}).a
-(`x`).len	('x').len
-1 . 2	ERR [boru/syntax_error]: a number has no members to access with `.`
-a!b	word(a) word(!) word(b)
-[1 2].fst	[1 2].fst
-{a:1}.a	{a:1}.a
+`a\nb`	'a\\nb'	-
+`a${1}b\nc`	interp('a' ${1} 'b\nc')	-
+`	ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here	-
+(1).fst	(1).fst	-
+({a:1}).a	({a:1}).a	-
+(`x`).len	('x').len	-
+1 . 2	ERR [boru/syntax_error]: a number has no members to access with `.`	-
+# Former rule-step-cap debt: both ports now preserve the offending closer.
+[Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	-
+{a: Map<}	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	-
+[(1]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	-
+{a: (1}	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	-
+[1 (2]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	-
+Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	-
+Map<}	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	-
+[a: Map<]	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	-
+a!b	word(a) word(!) word(b)	-
+[1 2].fst	[1 2].fst	-
+{a:1}.a	{a:1}.a	-
 
 # --- word and group modifiers --------------------------------------------
 # `/f` `/s` `/N` `/q` `/r` `/u` `/t` stack in any order, with f/s mutually
@@ -519,18 +647,18 @@ a!b	word(a) word(!) word(b)
 # sugar value instead. NUR059: canon spells `a/u` and `a/2` as a bare
 # `word(a)`, dropping the modifier — both engines agree, so these rows pin
 # the shared render and a one-sided fix fails loudly.
-a/qs	a/q
-a/f2	word(a)
-Map/t	sugar(type-bound [[Map]])
-a/9223372036854775808	ERR [boru/syntax_error]: invalid word modifier /9223372036854775808 on "a"
-a/1x	word(a/1x)
-a/ff	ERR [boru/syntax_error]: invalid word modifier /ff on "a"
-a/qr	ERR [boru/syntax_error]: invalid word modifier /qr on "a"
-a/	word(a/)
-(1 2)/2	sugar(force-arity 2) paren([1 2])
-(1 2)/s	sugar(stack-args) paren([1 2])
-(1 2)/f	sugar(forward-args) paren([1 2])
-(1 2)/u	sugar(usurp) paren([1 2])
+a/qs	a/q	-
+a/f2	word(a)	-
+Map/t	sugar(type-bound [[Map]])	-
+a/9223372036854775808	ERR [boru/syntax_error]: invalid word modifier /9223372036854775808 on "a"	-
+a/1x	word(a/1x)	-
+a/ff	ERR [boru/syntax_error]: invalid word modifier /ff on "a"	-
+a/qr	ERR [boru/syntax_error]: invalid word modifier /qr on "a"	-
+a/	word(a/)	-
+(1 2)/2	sugar(force-arity 2) paren([1 2])	-
+(1 2)/s	sugar(stack-args) paren([1 2])	-
+(1 2)/f	sugar(forward-args) paren([1 2])	-
+(1 2)/u	sugar(usurp) paren([1 2])	-
 
 # --- optional keys, shorthand entries, and modifiers on keys --------------
 # `a?:` desugars to a disjunct with None and Absent. The shorthand forms
@@ -538,28 +666,28 @@ a/	word(a/)
 # as the value, so the modifier qualifies the value; spelling one on the
 # key itself (`{a/r: 1}`) is illegal_key. `{a/}` has no valid modifier at
 # all, so the slash stays part of both key and value.
-{a?: 1}	{a:(None tor Absent tor 1)}
-{'a'?: 1}	{a:(None tor Absent tor 1)}
-[a?: 1]	[{a:(1 tor None tor Absent)}]
-{a? }	{a:(word(a) tor None tor Absent)}
-{a/r}	{a:word(a)}
-{a/q}	{a:a/q}
-{a/}	{a/:word(a/)}
-{a/r: 1}	ERR [boru/illegal_key]: word modifier not allowed on map key "a/r" (modifiers qualify values, not keys; quote the key as 'a/r' for a literal slash)
-{a/s}	{a:word(a)}
-{a/u}	{a:word(a)}
-{a/t}	{a:sugar(type-bound [[a]])}
-{a/1x}	{a/1x:word(a/1x)}
-{'a b': 1}	{a b:1}
-{a: 1 a?: 2}	{a:(None tor Absent tor 2)}
-{a?: 1 a: 2}	{a:(None tor Absent tor 2)}
+{a?: 1}	{a:(None tor Absent tor 1)}	-
+{'a'?: 1}	{a:(None tor Absent tor 1)}	-
+[a?: 1]	[{a:(1 tor None tor Absent)}]	-
+{a? }	{a:(word(a) tor None tor Absent)}	-
+{a/r}	{a:word(a)}	-
+{a/q}	{a:a/q}	-
+{a/}	{a/:word(a/)}	-
+{a/r: 1}	ERR [boru/illegal_key]: word modifier not allowed on map key "a/r" (modifiers qualify values, not keys; quote the key as 'a/r' for a literal slash)	-
+{a/s}	{a:word(a)}	-
+{a/u}	{a:word(a)}	-
+{a/t}	{a:sugar(type-bound [[a]])}	-
+{a/1x}	{a/1x:word(a/1x)}	-
+{'a b': 1}	{a b:1}	-
+{a: 1 a?: 2}	{a:(None tor Absent tor 2)}	-
+{a?: 1 a: 2}	{a:(None tor Absent tor 2)}	-
 
 # --- typed containers, floats, and bare true/false ------------------------
 # `true`/`false` are ordinary WORDS at parse time (ADR-012 rule 4: the
 # parser is name-opaque), so these rows pin that the front end does NOT
 # resolve them.
-{a: 1.5 b: true}	{a:1.5 b:word(true)}
-[1.5 true false]	[1.5 word(true) word(false)]
+{a: 1.5 b: true}	{a:1.5 b:word(true)}	-
+[1.5 true false]	[1.5 word(true) word(false)]	-
 
 # --- every rejecting arm of the modifier scan ----------------------------
 # One row per mutually-exclusive pair and per repeated letter, in both the
@@ -568,48 +696,48 @@ a/	word(a/)
 # divergence between them would otherwise show only as a coverage hole.
 # `/22` and `/2f` are VALID (one contiguous digit run); `/1x` is not a
 # modifier at all, so the whole text stays the word.
-a/ss	ERR [boru/syntax_error]: invalid word modifier /ss on "a"
-a/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "a"
-a/rr	ERR [boru/syntax_error]: invalid word modifier /rr on "a"
-a/tq	ERR [boru/syntax_error]: invalid word modifier /tq on "a"
-a/22	word(a)
-a/ru	word(a)
-a/2f	word(a)
-{a/ss}	ERR [boru/syntax_error]: invalid word modifier /ss on "a"
-{a/qq}	ERR [boru/syntax_error]: invalid word modifier /qq on "a"
-{a/rr}	ERR [boru/syntax_error]: invalid word modifier /rr on "a"
-{a/uu}	ERR [boru/syntax_error]: invalid word modifier /uu on "a"
-{a/tt}	ERR [boru/syntax_error]: invalid word modifier /tt on "a"
-{a/tq}	ERR [boru/syntax_error]: invalid word modifier /tq on "a"
-{a/22}	{a:word(a)}
-{a/2f}	{a:word(a)}
-{a/ff}	ERR [boru/syntax_error]: invalid word modifier /ff on "a"
+a/ss	ERR [boru/syntax_error]: invalid word modifier /ss on "a"	-
+a/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "a"	-
+a/rr	ERR [boru/syntax_error]: invalid word modifier /rr on "a"	-
+a/tq	ERR [boru/syntax_error]: invalid word modifier /tq on "a"	-
+a/22	word(a)	-
+a/ru	word(a)	-
+a/2f	word(a)	-
+{a/ss}	ERR [boru/syntax_error]: invalid word modifier /ss on "a"	-
+{a/qq}	ERR [boru/syntax_error]: invalid word modifier /qq on "a"	-
+{a/rr}	ERR [boru/syntax_error]: invalid word modifier /rr on "a"	-
+{a/uu}	ERR [boru/syntax_error]: invalid word modifier /uu on "a"	-
+{a/tt}	ERR [boru/syntax_error]: invalid word modifier /tt on "a"	-
+{a/tq}	ERR [boru/syntax_error]: invalid word modifier /tq on "a"	-
+{a/22}	{a:word(a)}	-
+{a/2f}	{a:word(a)}	-
+{a/ff}	ERR [boru/syntax_error]: invalid word modifier /ff on "a"	-
 
 # --- angle generics, and where `<` is XML instead ------------------------
 # The angle gate needs a CAPITALISED bare name immediately before `<`; a
 # lowercase or quoted receiver leaves the `<` to the XML literal rule,
 # which is why `map<Integer>` reports an XML error rather than a generics
 # one. That the two never compete for `<` is the whole design.
-Map<Integer>	sugar(angle Map [word(Integer)])
-Map<Integer String>	sugar(angle Map [word(Integer) word(String)])
-Map<	ERR [boru/syntax_error]: unclosed angle bracket: Map<… has no matching `>`
-Map<>	sugar(angle Map [])
-map<Integer>	ERR xml: unterminated element <Integer>
-Map<Integer	ERR [boru/syntax_error]: unclosed angle bracket: Map<… has no matching `>`
-'Map'<Integer>	ERR xml: unterminated element <Integer>
+Map<Integer>	sugar(angle Map [word(Integer)])	-
+Map<Integer String>	sugar(angle Map [word(Integer) word(String)])	-
+Map<	ERR [boru/syntax_error]: unclosed angle bracket: Map<… has no matching `>`	-
+Map<>	sugar(angle Map [])	-
+map<Integer>	ERR xml: unterminated element <Integer>	-
+Map<Integer	ERR [boru/syntax_error]: unclosed angle bracket: Map<… has no matching `>`	-
+'Map'<Integer>	ERR xml: unterminated element <Integer>	-
 
 # --- `${…}` brace scanning: quotes, nesting, and unterminated forms -------
 # The hole's closing `}` is found by depth counting that skips quoted
 # spans, so an escaped quote inside one (`\'`, `\"`, `\``) must not end
 # the span and a `}` inside one must not close the hole early.
-<a b=${"x\"y"}/>	interp-xml(<a b="${'x"y'}"/>)
-<a b=${'x\'y'}/>	interp-xml(<a b="${'x'y'}"/>)
-<a b=${`x\`y`}/>	interp-xml(<a b="${'x`y'}"/>)
-<a b=${x	ERR xml: unterminated ${...} interpolation
-<a b="${x"/>	ERR xml: unterminated ${...} interpolation
-<a b=${ { } }/>	interp-xml(<a b="${{}}"/>)
-`${}`	ERR [boru/syntax_error]: unexpected ``` — nothing valid can appear here
-`${1}`	interp(${1})
+<a b=${"x\"y"}/>	interp-xml(<a b="${'x"y'}"/>)	-
+<a b=${'x\'y'}/>	interp-xml(<a b="${'x'y'}"/>)	-
+<a b=${`x\`y`}/>	interp-xml(<a b="${'x`y'}"/>)	-
+<a b=${x	ERR xml: unterminated ${...} interpolation	-
+<a b="${x"/>	ERR xml: unterminated ${...} interpolation	-
+<a b=${ { } }/>	interp-xml(<a b="${{}}"/>)	-
+`${}`	ERR [boru/syntax_error]: unexpected ``` — nothing valid can appear here	-
+`${1}`	interp(${1})	-
 
 # --- pair keys that are not plain unquoted words --------------------------
 # A quoted member key keeps its string-ness through the dotchain; an EMPTY
@@ -617,18 +745,18 @@ Map<Integer	ERR [boru/syntax_error]: unclosed angle bracket: Map<… has no matc
 # map's Meta; a numeric or computed key reaches the pair-open token by Src
 # rather than Val. `{[a]?: 1}` is REJECTED — computed and optional do not
 # compose.
-a.'b c'	a.'b c'
-a."b c"	a.'b c'
-{1?: 2}	{1:(None tor Absent tor 2)}
-{'': 1}	{:1}
-{''?: 1}	{:1}
-{[a]: 1}	{a:1}
-{[a]?: 1}	ERR [boru/syntax_error]: unexpected `?` — nothing valid can appear here
-{[1]: 2}	{1:2}
-[a?: 1 b: 2]	[{a:(1 tor None tor Absent)} {b:2}]
-[1?: 2]	[{1:(2 tor None tor Absent)}]
-{1: 2 3: 4}	{1:2 3:4}
-{a: 1 'b': 2}	{a:1 b:2}
+a.'b c'	a.'b c'	-
+a."b c"	a.'b c'	-
+{1?: 2}	{1:(None tor Absent tor 2)}	-
+{'': 1}	{:1}	-
+{''?: 1}	{:1}	-
+{[a]: 1}	{a:1}	-
+{[a]?: 1}	ERR [boru/syntax_error]: unexpected `?` — nothing valid can appear here	-
+{[1]: 2}	{1:2}	-
+[a?: 1 b: 2]	[{a:(1 tor None tor Absent)} {b:2}]	-
+[1?: 2]	[{1:(2 tor None tor Absent)}]	-
+{1: 2 3: 4}	{1:2 3:4}	-
+{a: 1 'b': 2}	{a:1 b:2}	-
 
 # --- the arrow fold, and the three positions that decline it --------------
 # `SIG => BODY` folds to `(SIG afn BODY)` in paren contents, plain list
@@ -637,13 +765,13 @@ a."b c"	a.'b c'
 # value, where the sig is the whole pair; a list PAIR folds at the elem
 # level instead, which is why `[a: b => [b]]` groups the pair and
 # `{a: b => [b]}` is a syntax error.
-(m.k => [1])	paren([m.(k sugar(lambda) [1])])
-m.k => [1]	m.(k sugar(lambda) [1])
-(a k => [k])	paren([word(a) paren([word(k) sugar(lambda) [word(k)]])])
-[a b => [b]]	[word(a) paren([word(b) sugar(lambda) [word(b)]])]
-[a: b => [b]]	[paren([{a:word(b)} sugar(lambda) [word(b)]])]
-{a: b => [b]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here
-`${a => [1]}`	interp(${word(a) sugar(lambda) [1]})
+(m.k => [1])	paren([m.(k sugar(lambda) [1])])	-
+m.k => [1]	m.(k sugar(lambda) [1])	-
+(a k => [k])	paren([word(a) paren([word(k) sugar(lambda) [word(k)]])])	-
+[a b => [b]]	[word(a) paren([word(b) sugar(lambda) [word(b)]])]	-
+[a: b => [b]]	[paren([{a:word(b)} sugar(lambda) [word(b)]])]	-
+{a: b => [b]}	ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here	-
+`${a => [1]}`	interp(${word(a) sugar(lambda) [1]})	-
 
 # --- dot chains in MAP-VALUE position ------------------------------------
 # Only this position runs the `dotchain` rule: everywhere else a flat
@@ -651,81 +779,79 @@ m.k => [1]	m.(k sugar(lambda) [1])
 # only ones that reach the rule's segment actions, its `!` strict marker,
 # and its quoted-key branch. `{n: bf.}` and `{n: bf!}` pin that a chain
 # must not end on a marker.
-{n: bf.a.b}	{n:paren([(bf.a).b])}
-{n: bf.'a b'}	{n:paren([bf.'a b'])}
-{n: bf."a b"}	{n:paren([bf.'a b'])}
-{n: bf!.a}	{n:paren([(bf !).a])}
-{n: bf!.'a b'}	{n:paren([(bf !).'a b'])}
-{n: bf.a!.b}	{n:paren([((bf.a) !).b])}
-{n: bf.}	ERR [boru/syntax_error]: unexpected `.` — nothing valid can appear here
-{n: bf!}	ERR [boru/syntax_error]: unexpected `!` — nothing valid can appear here
+{n: bf.a.b}	{n:paren([(bf.a).b])}	-
+{n: bf.'a b'}	{n:paren([bf.'a b'])}	-
+{n: bf."a b"}	{n:paren([bf.'a b'])}	-
+{n: bf!.a}	{n:paren([(bf !).a])}	-
+{n: bf!.'a b'}	{n:paren([(bf !).'a b'])}	-
+{n: bf.a!.b}	{n:paren([((bf.a) !).b])}	-
+{n: bf.}	ERR [boru/syntax_error]: unexpected `.` — nothing valid can appear here	-
+{n: bf!}	ERR [boru/syntax_error]: unexpected `!` — nothing valid can appear here	-
 
 # --- list-elem folds and angle groups in nested positions ----------------
 # `(Map)<Integer>` and `Map<Integer><String>` pin that the angle gate reads
 # the immediately preceding BARE name only — a parenthesised or already
 # angled receiver leaves the `<` to the XML rule.
-[a: 1 b: 2]	[{a:1} {b:2}]
-[a: b => [b] c: 2]	[paren([{a:word(b)} sugar(lambda) [word(b)]]) {c:2}]
-`${}${1}`	ERR [boru/syntax_error]: unexpected `${` — nothing valid can appear here
-`x${1}${2}y`	interp('x' ${1} ${2} 'y')
-(Map)<Integer>	ERR xml: unterminated element <Integer>
-[Map<Integer>]	[sugar(angle Map [word(Integer)])]
-{a: Map<Integer>}	{a:sugar(angle Map [word(Integer)])}
-Map<Integer><String>	ERR xml: unterminated element <String>
+[a: 1 b: 2]	[{a:1} {b:2}]	-
+[a: b => [b] c: 2]	[paren([{a:word(b)} sugar(lambda) [word(b)]]) {c:2}]	-
+`${}${1}`	ERR [boru/syntax_error]: unexpected `${` — nothing valid can appear here	-
+`x${1}${2}y`	interp('x' ${1} ${2} 'y')	-
+(Map)<Integer>	ERR xml: unterminated element <Integer>	-
+[Map<Integer>]	[sugar(angle Map [word(Integer)])]	-
+{a: Map<Integer>}	{a:sugar(angle Map [word(Integer)])}	-
+Map<Integer><String>	ERR xml: unterminated element <String>	-
 
 # --- DATA context: the same value kinds one level in ---------------------
 # A value inside a list or a map value runs a SEPARATE converter from the
 # top-level one (Go's convertDataValueInner vs convertTopLevelValueInner),
 # so every kind needs pinning twice — the two have drifted before. `[1 2,]`
 # tolerates a trailing comma where `[,1]` and `[1,,2]` do not.
-[1.5]	[1.5]
-[+re/x/]	[sugar(mini re 'x')]
-[`x${1}`]	[interp('x' ${1})]
-[{:Integer a:1}]	[{:Integer a:1}]
-[[:Integer 1]]	[[:Integer 1]]
-[a => b]	[paren([word(a) sugar(lambda) word(b)])]
-['x']	['x']
-[<a/>]	[<a/>]
-[1 2,]	[1 2]
-{a: 1.5}	{a:1.5}
-{a: +re/x/}	{a:sugar(mini re 'x')}
-{a: {b: 1}}	{a:{b:1}}
-{a: {:Integer b:1}}	{a:{:Integer b:1}}
-{a: [:Integer 1]}	{a:[:Integer 1]}
-{a: <b/>}	{a:<b/>}
-[[1 2] [3 4]]	[[1 2] [3 4]]
-[{a:1} {b:2}]	[{a:1} {b:2}]
-[a.b]	[a.b]
-[0d1.5]	[0d1.5]
-[1e400]	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
-{a: 1e400}	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
+[1.5]	[1.5]	-
+[+re/x/]	[sugar(mini re 'x')]	-
+[`x${1}`]	[interp('x' ${1})]	-
+[{:Integer a:1}]	[{:Integer a:1}]	-
+[[:Integer 1]]	[[:Integer 1]]	-
+[a => b]	[paren([word(a) sugar(lambda) word(b)])]	-
+['x']	['x']	-
+[<a/>]	[<a/>]	-
+[1 2,]	[1 2]	-
+{a: 1.5}	{a:1.5}	-
+{a: +re/x/}	{a:sugar(mini re 'x')}	-
+{a: {b: 1}}	{a:{b:1}}	-
+{a: {:Integer b:1}}	{a:{:Integer b:1}}	-
+{a: [:Integer 1]}	{a:[:Integer 1]}	-
+{a: <b/>}	{a:<b/>}	-
+[[1 2] [3 4]]	[[1 2] [3 4]]	-
+[{a:1} {b:2}]	[{a:1} {b:2}]	-
+[a.b]	[a.b]	-
+[0d1.5]	[0d1.5]	-
+[1e400]	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity	-
+{a: 1e400}	ERR [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity	-
 
 # --- base-prefixed integers, big literals, and the empty word ------------
 # `_` separators are allowed singly and rejected doubled; the value is
 # parsed from the EXACT digits (a float64 round-trip would corrupt
 # anything past 2^53), and an out-of-int64 magnitude is integer_overflow
 # rather than a wrapped value. A bare `/r` has no base name at all.
-0b1_0	2
-0o7_7	63
-+0x10	16
-0d1_0	0d10
-+0d10	0d10
-0i	ERR [boru/syntax_error]: invalid numeric literal: 0i
-0i1_0	ERR [boru/syntax_error]: invalid numeric literal: 0i1_0
-/r	ERR empty word
-/q	ERR empty word
-a/2f2	ERR [boru/syntax_error]: invalid word modifier /2f2 on "a"
+0o7_7	63	-
++0x10	16	-
++0d10	0d10	-
+0i	ERR [boru/syntax_error]: invalid numeric literal: 0i	-
+0i1_0	ERR [boru/syntax_error]: invalid numeric literal: 0i1_0	-
+/r	ERR empty word	-
+/q	ERR empty word	-
+a/2f2	ERR [boru/syntax_error]: invalid word modifier /2f2 on "a"	-
 
 # --- duplicate map keys, and errors raised inside `${…}` -----------------
 # A repeated key keeps its FIRST slot in source order and its LAST value
 # (matching OrderedMap.Set). An error inside an interpolation surfaces with
 # the inner code intact.
-{a:1 a:2}	{a:2}
-{a:1 b:2 a:3}	{a:3 b:2}
-``	''
-`${1 ]}`	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here
-`${(}`	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here
-`${'x}`	ERR [boru/syntax_error]: this string is never closed: 'x}`
+{a:1 a:2}	{a:2}	-
+{a:1 b:2 a:3}	{a:3 b:2}	-
+``	''	-
+`${1 ]}`	ERR [boru/syntax_error]: unexpected `]` — nothing valid can appear here	-
+`${(}`	ERR [boru/syntax_error]: unexpected `}` — nothing valid can appear here	-
+`${'x}`	ERR [boru/syntax_error]: this string is never closed: 'x}`	-
 
 # --- errors raised while CONVERTING an interpolation, and key dedup -------
 # Go wraps a conversion failure inside `${…}` with `fmt.Errorf("…: %w")`,
@@ -734,9 +860,30 @@ a/2f2	ERR [boru/syntax_error]: invalid word modifier /2f2 on "a"
 # `[boru/float_overflow]:`. The TS port used to re-raise a BoruError
 # carrying the code with the prefix on the detail, which put them the
 # other way round; it now throws to match and keeps the taxonomy on
-# `cause`. A repeated key keeps its FIRST slot and LAST value however many
-# times it repeats.
-`${1e400}`	ERR interpolation expression error: [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity
-{a:1 a:2 a:3}	{a:3}
-{b:0 a:1 a:2}	{b:0 a:2}
-{a: `x${1}`}	{a:interp('x' ${1})}
+# `cause`. The explicit TS conversion stack must retain that wrapper around
+# failures reached through structural list/map/paren descendants too. A
+# repeated key keeps its FIRST slot and LAST value however many times it
+# repeats.
+`${1e400}`	ERR interpolation expression error: [boru/float_overflow]: floating-point literal out of range: 1e400 overflows to infinity	-
+`${[1,,2]}`	ERR interpolation expression error: [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+`${{a/ss}}`	ERR interpolation expression error: [boru/syntax_error]: invalid word modifier /ss on "a"	-
+`${(1,,2)}`	ERR interpolation expression error: [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	-
+{a:1 a:2 a:3}	{a:3}	-
+{b:0 a:1 a:2}	{b:0 a:2}	-
+{a: `x${1}`}	{a:interp('x' ${1})}	-
+
+# --- quote boundaries and postfix container constraints -----------------
+# A configured quote ends an unquoted token even without whitespace. This is
+# observable after an ordinary word and after a slash following a receiver.
+# Postfix constraints use the same opaque Word payload as their prefix forms;
+# canon intentionally renders that Word as the constraint atom in `[:…]`.
+a's'	word(a) 's'	-
+a"s"	word(a) 's'	-
+(a)/'s'	paren([word(a)]) word(/) 's'	-
+(a)/"s"	paren([word(a)]) word(/) 's'	-
+[a]:a	[:a [word(a)]]	-
+{a:1}:A	[:A {a:1}]	-
+[:a a]	[:a word(a)]	-
+{:A a:1}	{:A a:1}	-
+(a):A	[:A paren([word(a)])]	-
+<a/>:A	[:A <a/>]	-

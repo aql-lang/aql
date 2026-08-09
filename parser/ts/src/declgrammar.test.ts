@@ -8,6 +8,7 @@ import { strict as assert } from 'node:assert'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import {
   type DeclGrammar,
@@ -36,6 +37,13 @@ function grammarWith(edit: DeclGrammar['edits'][number]): DeclGrammar {
 }
 
 describe('declarative grammar loader', () => {
+  it('ships a byte-identical copy of the Go grammar artifact', () => {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const local = fs.readFileSync(path.join(here, 'grammar.json'))
+    const canonical = fs.readFileSync(path.resolve(here, '..', '..', 'go', 'grammar.json'))
+    assert.deepEqual(local, canonical)
+  })
+
   it('loads the committed artifact', () => {
     const g = loadDeclGrammar()
     assert.equal(g.schema, 1)
@@ -80,14 +88,14 @@ describe('declarative grammar loader', () => {
           },
         }),
     }
-    const tins = { OP: 1 }
+    const tins = { OP: 1, CP: 2 }
     applyDeclEdits(
       j,
       {
         schema: 1,
         tokens: [],
         edits: [
-          { rule: 'val', op: 'appendOpen', alts: [{ s: [['OP']], text: 'x' }] },
+          { rule: 'val', op: 'appendOpen', alts: [{ s: [['OP', 'CP']], r: 'pair', text: 'x' }] },
           { rule: 'val', op: 'appendClose', alts: [{ s: [['OP']], b: 1 }] },
         ],
       },

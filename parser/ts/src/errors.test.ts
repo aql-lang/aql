@@ -40,6 +40,46 @@ describe('parse-error translation', () => {
     assert.equal(translateParseError(be, 'src'), be)
   })
 
+  it('keeps the first-line message stable while exposing diagnostic metadata', () => {
+    const out = new BoruError('type_error', 'bad value', 'bad', {
+      row: 4,
+      col: 7,
+      src: 'value',
+      hint: 'legacy hint',
+      fullSource: 'let value',
+      notes: ['why it failed'],
+      suggestions: [{ message: 'replace it', replacement: 'good' }],
+    })
+    assert.equal(out.message, '[boru/type_error]: bad value')
+    assert.deepEqual(
+      {
+        row: out.row,
+        col: out.col,
+        src: out.src,
+        hint: out.hint,
+        fullSource: out.fullSource,
+        notes: out.notes,
+        suggestions: out.suggestions,
+      },
+      {
+        row: 4,
+        col: 7,
+        src: 'value',
+        hint: 'legacy hint',
+        fullSource: 'let value',
+        notes: ['why it failed'],
+        suggestions: [{ message: 'replace it', replacement: 'good' }],
+      },
+    )
+    const defaults = new BoruError('type_error', 'plain')
+    assert.deepEqual(
+      [defaults.word, defaults.row, defaults.col, defaults.src, defaults.hint, defaults.fullSource],
+      ['', 0, 0, '', '', ''],
+    )
+    assert.deepEqual(defaults.notes, [])
+    assert.deepEqual(defaults.suggestions, [])
+  })
+
   it('wraps a plain Error as a syntax_error', () => {
     const out = translateParseError(new Error('boom'), 'src')
     assert.equal(out.code, 'syntax_error')
@@ -61,9 +101,15 @@ describe('parse-error translation', () => {
       details: {},
       txts: () => ({ msg: 'unexpected character(s): %' }),
     })
-    const out = translateParseError(e, '%')
+    const out = translateParseError(e, ' %')
     assert.equal(out.code, 'syntax_error')
     assert.match(out.detail, /unexpected `%`/)
+    assert.equal(out.row, 1)
+    assert.equal(out.col, 2)
+    assert.equal(out.src, '%')
+    assert.equal(out.fullSource, ' %')
+    assert.match(out.notes[0] ?? '', /no continuation/)
+    assert.match(out.suggestions[0]?.message ?? '', /missing bracket/)
   })
 
   it('recovers the detail from the message when txts is absent', () => {
@@ -90,6 +136,9 @@ describe('parse-error translation', () => {
     const [detail, note] = parseErrText(e as unknown as Parameters<typeof parseErrText>[0])
     assert.match(detail, /source ends in the middle/)
     assert.match(note, /unclosed/)
+    const out = translateParseError(e, '[1')
+    assert.deepEqual(out.suggestions, [])
+    assert.match(out.notes[0] ?? '', /unclosed/)
   })
 
   it('yields an empty src when the detail does not match the template', () => {

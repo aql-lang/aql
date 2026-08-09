@@ -1,6 +1,6 @@
-# TS-PARITY-AUDIT.0 — the parser battery does not agree with parser/go
+# TS-PARITY-AUDIT.0 — parser battery parity audit
 
-**Status:** Audited; 3 render defects FIXED, 15 corpus divergences open · **Started:** 2026-08-07
+**Status:** COMPLETE; all measured parser divergences fixed, zero-row debt ledger · **Started:** 2026-08-07
 (maintainer instruction: "Bring ts up to 100% and carve out the ts parser
 module. Report on parity and coverage when done")
 
@@ -36,7 +36,7 @@ Drive it with the battery's own sources (extract them by `eval`-ing the
 apparent diffs are extraction artifacts — rows whose source contains a real
 newline — and are excluded from the 15 below.
 
-## The 15 divergences
+## The original 15 divergences
 
 **Big-decimal canon keeps its `0d` prefix in Go, drops it in TS.** Six rows:
 
@@ -99,8 +99,9 @@ the 240 this audit confirms agree.
 
 ## Update — the stream oracle, finally run
 
-`make parser-crossdiff` now runs both dumpers over `eng/spec` and diffs them,
-and CI runs it. Wiring up the oracle that had shipped unused immediately found
+`make parser-crossdiff` now runs both dumpers over `eng/spec` and diffs them.
+The later `parser-parity` CI gate runs it alongside both standalone 100%
+coverage suites. Wiring up the oracle that had shipped unused immediately found
 **three real defects in `core/ts`'s `Value.toString()`**, none of them visible
 to any existing gate:
 
@@ -123,6 +124,9 @@ render difference that still evaluates alike is invisible to it; `parser/spec`
 is a curated contract and did not enumerate these shapes; and defect 3 was
 actively protected by a test asserting it.
 
-The 15 `divergent.tsv` rows are untouched and still untriaged. Note they are
-`canon` divergences while these three were `toString` ones — the two renders
-had drifted apart independently.
+The original 15 `divergent.tsv` rows were subsequently adjudicated and the
+ledger is now empty. Later measurement found and closed depth, rule-step, and
+numeric-token-boundary gaps too. `parse.tsv`, generated `nesting.tsv`, and the
+structural `shape.tsv` now exercise distinct parser contracts with independent
+Go and TypeScript readers/renderers; `parser-crossdiff` remains the broad
+1,765-row sweep.

@@ -1,5 +1,5 @@
 // The boru grammar on @tabnas/jsonic — the TS twin of
-// parser/go/grammar.go (the REFERENCE; port function-by-function).
+// parser/go/grammar.go, ported function-by-function.
 // makeBoruJsonic() builds the configured jsonic instance with every boru
 // token, matcher, and rule extension installed (stages 1-2 of Go Parse),
 // returning the instance plus the registered token ids.
@@ -42,6 +42,7 @@ import {
   Sited,
   UnclosedAngle,
   UnclosedParen,
+  normalizeSrcPos,
   type SrcPos,
 } from './nodes.ts'
 import { setupXmlMatcher, setupXmlGrammar } from './xml.ts'
@@ -187,6 +188,11 @@ export function makeBoruJsonic(): { j: any; t: ParserTokens } {
     list: { property: true, pair: true, child: true },
     map: { child: true },
     value: { lex: false },
+    // The Go text scanner always stops before a configured string quote.
+    // Tabnas/TS needs those quote characters in the explicit text-ender set;
+    // otherwise an adjacent run such as `a's'` is swallowed as one #TX token
+    // before the higher-priority string matcher gets another turn.
+    ender: ["'", '"'],
     // parseErrMsgOptions: brand and quiet the library error format for
     // the rare failure that escapes translation untyped.
     errmsg: { name: 'boru', suffix: false },
@@ -201,6 +207,7 @@ export function makeBoruJsonic(): { j: any; t: ParserTokens } {
   const { t, tins } = setupBaseTokens(j, g)
   setupTemplateLiteralMatcher(j, t)
   setupBigNumberMatcher(j, t)
+  setupDecimalUnderscoreMatcher(j, t)
   setupMiniLitMatcher(j, t)
   setupXmlMatcher(j, t)
 
@@ -334,6 +341,158 @@ export function setupBigNumberMatcher(j: any, _t: ParserTokens): void {
     const tkn = lex.token('#TX', src, src, cursor)
     cursor.sI = si
     cursor.cI += si - start // a 0d literal never spans newlines
+    return tkn
+  })
+}
+
+// setupDecimalUnderscoreMatcher is the decimal-number boundary shim shared
+// conceptually with the Go port. The historical name comes from its original
+// narrow job (keeping underscore-bearing runs whole), but it also closes the
+// other seams where the two jsonic number matchers otherwise disagree:
+//
+//   - a dot followed by a word starts member access (`1.x` is #NR `1` + `.`),
+//     so conversion can reject a numeric receiver with boru's own diagnostic;
+//   - a trailing-dot exponent is one Float (`1.e2`), as required by the
+//     trailing-dot and scientific-notation rules;
+//   - binary64 overflow remains a #NR token (`1e400`, `1.0e400`) instead of
+//     falling back to text in the Go dependency merely because ParseFloat
+//     reports ErrRange.
+//
+// It also claims 0x/0o/0b runs that Go's stock lexer drops to text on
+// overflow, preserving one raw #NR boundary in both ports. Boru's 0d
+// literals remain on their dedicated matcher. Separator placement is
+// deliberately loose here: numberValToValue owns the language rule and
+// reports a misplaced `_` using the complete literal source.
+export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
+  const isDigit = (c: string | undefined): boolean =>
+    undefined !== c && c >= '0' && c <= '9'
+  const isDigitOrSep = (c: string | undefined): boolean => isDigit(c) || '_' === c
+  const isBaseDigit = (c: string | undefined, prefix: string): boolean => {
+    if (undefined === c) return false
+    if ('x' === prefix || 'X' === prefix) {
+      return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+    }
+    if ('o' === prefix || 'O' === prefix) return c >= '0' && c <= '7'
+    return '0' === c || '1' === c
+  }
+  const validDecimalSeparators = (src: string): boolean => {
+    for (let i = 0; i < src.length; i++) {
+      if ('_' === src[i] &&
+        (0 === i || i === src.length - 1 || !isDigit(src[i - 1]) || !isDigit(src[i + 1]))) {
+        return false
+      }
+    }
+    return true
+  }
+  const isFollowingText = (s: string, i: number): boolean => {
+    if (i >= s.length) return false
+    const c = s[i]!
+    if (' ' === c || '\t' === c || '\n' === c || '\r' === c) return false
+    if ('\'' === c || '"' === c || '#' === c) return false
+    if (',:;()[]{}?.!|`<>'.includes(c)) return false
+    if ('=' === c && '>' === s[i + 1]) return false
+    return true
+  }
+
+  const emitPrefix = (lex: any, s: string, start: number, end: number): any => {
+    const cursor = lex.pnt
+    const src = s.slice(start, end)
+    const tkn = validDecimalSeparators(src)
+      ? lex.token('#NR', Number(src.replaceAll('_', '')), src, cursor)
+      : lex.token('#TX', src, src, cursor)
+    cursor.sI = end
+    cursor.cI += end - start
+    return tkn
+  }
+
+  addMatcher(j, 'decimal_underscore', 1000004, (lex: any, _rule: any) => {
+    const cursor = lex.pnt
+    const s: string = lex.src
+    const start: number = cursor.sI
+    let si = start
+    if (si >= s.length) return undefined
+
+    const hasSign = '+' === s[si] || '-' === s[si]
+    if (hasSign) {
+      si++
+      if (si >= s.length) return undefined
+    }
+
+    const leadingDot = '.' === s[si]
+    let integerEnd = -1
+    if (leadingDot) {
+      // Keep the bare `.5` path on the fixed-dot matcher so it retains
+      // the receiverless-dot diagnostic. Signed forms are one numeric
+      // token and are rejected later with their complete source.
+      if (!hasSign || !isDigit(s[si + 1])) return undefined
+      si++
+      while (isDigitOrSep(s[si])) si++
+    } else {
+      if (!isDigit(s[si])) return undefined
+      // Big numbers keep their dedicated matcher (which has higher
+      // priority); decline here as well so this matcher is safe alone.
+      if ('0' === s[si] && undefined !== s[si + 1] && 'dD'.includes(s[si + 1]!)) {
+        return undefined
+      }
+      // Claim base-prefixed integers even when their magnitude exceeds
+      // int64. Go's stock lexer otherwise drops them to #TX while TS keeps
+      // #NR, making the public lexTokens streams disagree. The converter
+      // reads the exact source, so the placeholder value is irrelevant.
+      if ('0' === s[si] && undefined !== s[si + 1] && 'xXoObB'.includes(s[si + 1]!)) {
+        const prefix = s[si + 1]!
+        let end = si + 2
+        const bodyStart = end
+        while (isBaseDigit(s[end], prefix) || '_' === s[end]) end++
+        if (end === bodyStart || isFollowingText(s, end)) return undefined
+        const src = s.slice(start, end)
+        const tkn = lex.token('#NR', 0, src, cursor)
+        cursor.sI = end
+        cursor.cI += end - start
+        return tkn
+      }
+      while (isDigitOrSep(s[si])) si++
+      integerEnd = si
+      if ('.' === s[si]) {
+        si++
+        while (isDigitOrSep(s[si])) si++
+      }
+    }
+
+    const hasDot = leadingDot || (integerEnd >= 0 && integerEnd < si && '.' === s[integerEnd])
+
+    if ('e' === s[si] || 'E' === s[si]) {
+      const exponentMark = si
+      si++
+      if ('+' === s[si] || '-' === s[si]) si++
+      const exponentStart = si
+      while (isDigitOrSep(s[si])) si++
+      if (si === exponentStart) {
+        if (integerEnd >= 0 && hasDot) {
+          return emitPrefix(lex, s, start, integerEnd)
+        }
+        if (leadingDot) {
+          si = exponentMark
+        } else {
+          return undefined
+        }
+      }
+    }
+
+    if (isFollowingText(s, si)) {
+      if (integerEnd >= 0 && hasDot) {
+        return emitPrefix(lex, s, start, integerEnd)
+      }
+      if (!leadingDot) return undefined
+    }
+
+    const src = s.slice(start, si)
+    const parsed = Number(src.replaceAll('_', ''))
+    // Loose separator syntax such as `1e_` can strip to NaN. The converter
+    // rejects `_` before consulting this placeholder numeric value.
+    const num = Number.isNaN(parsed) ? 0 : parsed
+    const tkn = lex.token('#NR', num, src, cursor)
+    cursor.sI = si
+    cursor.cI += si - start
     return tkn
   })
 }
@@ -864,7 +1023,7 @@ export function setupValRule(j: any, t: ParserTokens): void {
       let pos: SrcPos = { row: 0, col: 0 }
       const o0 = r.o0
       if (o0 && -1 !== o0.tin) {
-        pos = { row: o0.rI, col: o0.cI, src: o0.src }
+        pos = { row: o0.rI, col: o0.cI, src: o0.src, si: o0.sI }
       }
       r.node = new Sited(r.node, pos)
     })
@@ -1649,12 +1808,14 @@ export function setupAngleGrammar(j: any, t: ParserTokens): void {
 // already produced — a float64 silently corrupts any integer above 2^53,
 // so the source string is the only exact record.
 // See numberValToValue and design/INTEGER-OVERFLOW-STRATEGY.5.md.
-export function setupNumberSub(j: any): void {
+export function setupNumberSub(j: any, source?: string): void {
   const NR = j.token('#NR')
   j.sub({
     lex: (tkn: any) => {
       if (tkn.tin === NR && 'number' === typeof tkn.val) {
-        tkn.val = new NumberVal(tkn.val, tkn.src, tkn.rI, tkn.cI)
+        const raw = { row: tkn.rI, col: tkn.cI, src: tkn.src, si: tkn.sI }
+        const pos = undefined === source ? raw : normalizeSrcPos(source, raw)
+        tkn.val = new NumberVal(tkn.val, tkn.src, pos.row, pos.col, pos.si)
       }
     },
   })

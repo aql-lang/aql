@@ -3,18 +3,22 @@
   "version": "0.1.0",
   "description": "TypeScript port of the boru interpreter core \u2014 values, types, signatures, matching, the registry, and the step loop. The TS twin of the core/go module: no check pass, no compiler, no parser, no dependencies.",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "typecheck": "tsc",
     "test": "node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'"
   },
@@ -23,7 +27,6 @@
     "@types/node": "^24.7.0"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ]
 }

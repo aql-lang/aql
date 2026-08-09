@@ -1,5 +1,5 @@
-.PHONY: all build install test test-race test-ts test-ts-core test-ts-parser vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test crossdiff parser-crossdiff cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
+.PHONY: all build install test test-race test-ts test-ts-core test-ts-parser test-ts-parser-package vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
+        spec-gen spec-test crossdiff parser-crossdiff parser-parity cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -321,13 +321,18 @@ test-ts-core:
 # covering it), and on 2026-08-08 parser/ts reached it too — the two halves
 # of the module are now gated identically.
 TS_PARSER_GATE_LINES ?= 100
+TS_PARSER_GATE_BRANCHES ?= 100
+TS_PARSER_GATE_FUNCTIONS ?= 100
 test-ts-parser:
 	@echo "==> typecheck parser/ts"
-	cd parser/ts && npx tsc
-	@echo "==> test parser/ts (source line-coverage floor $(TS_PARSER_GATE_LINES)%)"
+	cd parser/ts && npm run typecheck
+	@echo "==> test parser/ts (source coverage: lines $(TS_PARSER_GATE_LINES)%, branches $(TS_PARSER_GATE_BRANCHES)%, functions $(TS_PARSER_GATE_FUNCTIONS)%)"
 	cd parser/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_PARSER_GATE_LINES) \
+	  --test-coverage-branches=$(TS_PARSER_GATE_BRANCHES) \
+	  --test-coverage-functions=$(TS_PARSER_GATE_FUNCTIONS) \
 	  --test-coverage-exclude='**/*.test.ts' \
+	  --test-coverage-exclude='src/streamdump.ts' \
 	  --test-coverage-include='src/**' \
 	  'src/**/*.test.ts'
 
@@ -396,11 +401,24 @@ parser-crossdiff:
 	@mkdir -p "$(abspath $(COVER_DIR))"
 	@cd parser/go && STREAMDUMP_FILE="$(abspath $(COVER_DIR))/go-streams.tsv" \
 	  go test -run TestStreamDump >/dev/null
-	@cd parser/ts && node --experimental-strip-types --no-warnings src/streamdump.ts \
+	@cd parser/ts && npm run --silent streamdump \
 	  > "$(abspath $(COVER_DIR))/ts-streams.tsv"
 	@diff -u "$(abspath $(COVER_DIR))/go-streams.tsv" "$(abspath $(COVER_DIR))/ts-streams.tsv" \
 	  && echo "==> parser-crossdiff: IDENTICAL ($$(wc -l < "$(abspath $(COVER_DIR))/go-streams.tsv") rows)" \
 	  || { echo "==> parser-crossdiff FAILED: the parser twins disagree (see the diff above)"; exit 1; }
+
+# A tarball-level check, not another source-tree test: package both TS leaves,
+# install them in a clean temporary consumer, and import with plain Node. Node
+# refuses to strip TypeScript inside node_modules, so this proves the shipped
+# entry points are built JavaScript and the parser's grammar asset is present.
+test-ts-parser-package:
+	@echo "==> clean-install parser/ts package smoke"
+	node scripts/parser-package-smoke.mjs
+
+# One named gate for the complete parser twin contract. CI installs the TS
+# dependencies first, then runs both standalone 100% coverage gates plus the
+# independent broad differential over eng/spec.
+parser-parity: cover-gate-parser test-ts-parser test-ts-parser-package parser-crossdiff
 
 # ---- compiled-coverage status surface ----------------------------------
 #
