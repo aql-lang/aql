@@ -36,6 +36,7 @@ expr	expected	note
 | kind | argument | builds |
 |---|---|---|
 | `int` | a decimal integer | an Integer value |
+| `float` | a decimal number | a Float value |
 | `str` | the rest of the line, raw | a String value |
 | `bool` | `true` / `false` | a Boolean value |
 | `none` | — | the None value |
@@ -49,8 +50,82 @@ register one fixture word, `addq` (`Integer Integer -> Integer`), so the step
 loop, the registry, signature matching and dispatch are all exercised without
 pulling in a word library.
 
+### Structure tokens
+
+Three bracket forms assemble a nested VALUE out of the flat token stream, so
+a row can hand the step loop the containers a parser would have built. They
+nest, and they work in `run` and `list` alike.
+
+| form | builds |
+|---|---|
+| `[ … ]` | an **eval** list — what the parser emits for a `[…]` literal |
+| `[q … ]` | a **quoted** list — the same elements with evaluation off |
+| `{ … }` | an **eval** map — what the parser emits for a `{…}` literal |
+| `{q … }` | a plain map, as a word handler would return one |
+| `p( … )` | a paren-EXPRESSION value — the deferred form a map value takes |
+
+The bare bracket is always the PARSER's form and the `q` variant the
+runtime's, because that distinction is load-bearing: the step loop
+auto-evaluates a container only when the parser marked it `Eval`, so
+`{ a: [ addq 1 2 ] }` resolves to `{a:[3]}` and `{q a: [ addq 1 2 ] }`
+stays `{a:[word(addq) 1 2]}`. A row that could not say which it meant
+could not pin that rule.
+
+Inside a map the items alternate: a token ending in `:` is a KEY and the
+item after it is that key's value, so `{ a: 1 b: [ addq 1 2 ] }` is a
+two-entry map whose second value is an eval list. Every bracket is its own
+whitespace-separated token — `[1 2]` is not a list, `[ 1 2 ]` is — because
+the notation has no lexer and is not meant to grow one.
+
+`(` and `)` stay what they were: the paren MARKER values the step loop
+consumes inline, not a container. `p( … )` is the other thing a paren can
+be — one VALUE holding a deferred expression, which is what a map value
+like `{a: (1 add 2)}` actually is. The two need separate spellings because
+the notation has no context to tell them apart, and the distinction is
+real: markers are consumed by the step loop, a paren-expr value is
+evaluated by whatever consumes the container.
+
 `expected` is the canonical rendering (`core.Canon` / `canon()`), or
 `ERROR:<code>` for a row that must raise that BoruError taxonomy code.
+
+### `divergent.tsv` — the parity debt
+
+```
+expr	go	ts	note
+```
+
+Expressions the two engines answer DIFFERENTLY. Each runner asserts its
+**own** column, so both suites stay green while the difference stays pinned:
+if either engine moves, its column fails and the row is re-examined rather
+than silently re-baselined. Each runner also **fails a row whose `go` and
+`ts` columns are equal** — a fixed divergence must move to the spec file it
+belongs in, or this stops being an honest debt list. Shrink-only, exactly as
+`parser/spec/divergent.tsv` is.
+
+It holds **16 rows** in ten classes — 135 were measured on 2026-08-08, none
+of them visible to the 1808-row engine crossdiff, and **121 have since been
+closed** and moved into the spec files where they belong. The last two went
+together: both `boomq { a: ) }` rows were filed under the strict forward
+barrier and were really a different defect — core/ts resolved a map
+argument's values through `resolveWordsDeep` where Go runs each one as a
+PROGRAM, so a value that could not run was carried into the consuming word
+instead of faulting from inside the map. `design/CORE-TS-DIVERGENCES.1.md`
+has the root causes; the headline is that one class produces a WRONG ANSWER
+rather than a wrong error (`7 8 addq ( ) ( 5 )` is `15 5` in Go and `7 13`
+here), and the largest class is the strict forward barrier that `core/ts`
+does not implement at all.
+
+How they were found is the reusable part. `core/ts` was at 88.2% coverage
+against `core/go`'s 100%, and the parser half of this programme had already
+established that **an uncovered branch in one port is where a divergence
+hides** — nothing has ever compared the two engines there. Sweeping each
+uncovered region produced 139 candidate expressions, of which **135 diverged**.
+Pinning them took `core/ts` from 88.20% to 90.71% without a line of new
+engine code, and the same sweep run to its end took it to **99.58%** —
+finding, among others, that `/q` word capture is conditional on the slot
+type, that an unfilled forward marker was escaping as a program result,
+and that check mode's undefined-word placeholder was being stepped past
+before anything could consume it.
 
 ## What is deliberately absent
 

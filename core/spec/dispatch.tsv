@@ -25,3 +25,374 @@ run nosuchword	ERROR:undefined_word	an unbound word is an error, not a value
 # --- parens group and evaluate first ---
 run ( addq 1 2 )	3	a paren group collapses to its result
 run addq ( addq 1 2 ) 4	7	a nested group supplies an argument
+run addq 1	ERROR:signature_error	arity: a forward word with one operand never fires
+run addq 1 'x'	ERROR:signature_error	type mismatch on the second slot
+run nosuchword	ERROR:undefined_word	an undefined word
+run addq (addq 1 2) 3	ERROR:signature_error	a nested paren group as the first operand
+run ( 1 2 addq )	3	stack form inside a group
+run addq 1 2 3	3 3	a trailing operand past the barrier stays residual
+run 1 nosuchword 2	ERROR:undefined_word	undefined word between literals
+
+# --- the dispatch shapes the step loop distinguishes ---
+run negq 5	-5	a one-slot forward word
+run negq negq 5	ERROR:signature_error	nested forward collection
+run pairq 7	7 7	a MULTI-return word lays both results in the residual
+run pairq 7 addq 1 2	7 7 3	multi-return residual followed by an unrelated call
+run 1 2 sumq	3	STACK form takes both operands off the stack
+run sumq	ERROR:signature_error	stack form with an empty stack
+run 1 sumq	ERROR:signature_error	stack form one operand short
+run boomq 1	ERROR:fixture_boom	a raising handler propagates its code
+run boomq 'x'	ERROR:fixture_boom	the Any slot accepts any concrete value, then raises
+run addq (negq 3) 4	ERROR:signature_error	a paren group as a forward operand
+run negq (addq 1 2)	ERROR:signature_error	a paren group as the only operand
+run 1 2 sumq 3 addq 4	3 7	stack form and forward form in one program
+run pairq (negq 2)	ERROR:signature_error	multi-return over a computed operand
+
+# --- full-stack dispatch ---
+# depthq is the fixture full-stack word: it receives the whole resolved
+# stack of the current PAREN SCOPE and returns its replacement. The scope
+# rule is the part worth pinning — a paren bounds what it can see.
+run depthq	0	an empty scope has depth 0
+run 1 depthq	1 1	the stack is not consumed, only extended
+run 1 2 3 depthq	1 2 3 3	three deep
+run 1 ( 2 depthq )	1 2 1	a paren BOUNDS the scope — the inner sees one, not two
+
+# --- the END marker cuts a forward collection short ----------------------
+# `;` is the punctuation spelling of `end` (REFERENCE.md:415); the corpus
+# uses the punctuation so a row can still name a WORD called end. A pending
+# forward word fires with whatever it has collected, which for these
+# fixtures is never enough — the value of the rows is that the marker
+# REACHES the word rather than being dropped, and that a bare `;` with no
+# pending marker is silently dropped instead of erroring.
+run ;	
+run 1 ;	1
+run addq 1 ;	ERROR:signature_error
+run addq ;	ERROR:signature_error
+run addq 1 2 ;	3
+run 1 ; 2	1 2
+run negq ;	ERROR:signature_error
+run pairq ;	ERROR:signature_error
+run ( addq 1 ; )	ERROR:signature_error
+run [ addq 1 ; ]	ERROR:signature_error
+run boomq ;	ERROR:signature_error
+run 1 2 sumq ;	3
+run depthq ;	0
+
+# --- the WORD `end` is not the end MARKER -------------------------------
+# `;` is the marker (above); the bare word `end` is an ordinary name, and
+# core defines no word by it. These rows were 9 rows of divergent.tsv until
+# core/ts's isEnd stopped treating a Word named "end" as the marker — a
+# fallback left over from the legacy fixture tokenizer that Go's IsEnd never
+# had, and that made `run end 1` the value 1 here against Go's error.
+run end	ERROR:undefined_word
+run end 1	ERROR:undefined_word
+run 1 end 2	ERROR:undefined_word
+run 1 2 end	ERROR:undefined_word
+run 1 2 end sumq	ERROR:undefined_word
+run 1 2 end depthq	ERROR:undefined_word
+run [ 1 end 2 ]	ERROR:undefined_word
+run 1 2 addq end	ERROR:undefined_word
+run 1 negq end	ERROR:undefined_word
+
+# --- a type literal is not a word ---------------------------------------
+# `Word` names the lattice branch, and its literal shares that branch's
+# vType. core/ts's isWord() tested the vType ALONE, so stepWord resolved
+# the name, wrote the literal back to the same slot, and the step loop
+# re-entered stepWord on it — ending in an UNCODED `AsWord: not a word
+# value` that escaped the BoruError taxonomy entirely. isWord() now
+# requires word DATA, which is what separates a word from its type.
+run Word	Word
+run 1 Word 2	1 Word 2
+run [ Word ]	[Word]
+run boomq Word	ERROR:fixture_boom
+
+# --- the strict forward barrier -----------------------------------------
+# REFERENCE.md:364 lists "another function word" as a forward-collection
+# barrier, and design/STRICT-FORWARD-BARRIER.0.md makes it uniform: a
+# parked forward that cannot commit with the args it already holds is
+# STRANDED, a signature_error, not a wait-through. The rule does not ask
+# how many args the boundary word collects — a nullary `depthq` and a
+# binary `addq` both strand.
+#
+# The GROUPED spelling is what fires the outer word, and that contrast is
+# the whole point of the rule: `boomq ( negq 5 )` raises fixture_boom
+# while `boomq negq 5` refuses. core/ts had no such rule and waited
+# through — 30 rows of divergent.tsv until it did.
+run ( 1 2 ) boomq depthq	ERROR:signature_error
+run ( 1 boomq negq 2 )	ERROR:signature_error
+run ( boomq addq 1 2 )	ERROR:signature_error
+run ( boomq negq 5 )	ERROR:signature_error
+run 1 2 3 boomq depthq	ERROR:signature_error
+run 1 2 boomq depthq	ERROR:signature_error
+run 1 2 boomq negq 3	ERROR:signature_error
+run 1 boomq addq 2 3	ERROR:signature_error
+run 1 boomq boomq 2	ERROR:signature_error
+run 1 boomq depthq	ERROR:signature_error
+run 1 boomq negq 2	ERROR:signature_error
+run 1 boomq negq 5	ERROR:signature_error
+run 1 boomq negq 5 addq 2 3	ERROR:signature_error
+run [ boomq addq 1 2 ]	ERROR:signature_error
+run [ boomq negq 5 ]	ERROR:signature_error
+run boomq addq 1 ( )	ERROR:signature_error
+run boomq addq 1 2	ERROR:signature_error
+run boomq addq 1 2 3	ERROR:signature_error
+run boomq boomq 1	ERROR:signature_error
+run boomq boomq boomq 1	ERROR:signature_error
+run boomq depthq	ERROR:signature_error
+run boomq depthq addq 1 2	ERROR:signature_error
+run boomq negq ( )	ERROR:signature_error
+run boomq negq 1	ERROR:signature_error
+run boomq negq 5	ERROR:signature_error
+run boomq negq 5 ;	ERROR:signature_error
+run boomq pairq 3	ERROR:signature_error
+run boomq pairq 3 ;	ERROR:signature_error
+run boomq pairq 5	ERROR:signature_error
+run boomq pairq 7	ERROR:signature_error
+
+# --- a VOID paren group in the forward window ---------------------------
+# A `( )` that resolves to nothing cannot fill the slot it sits in, so it
+# STOPS forward collection: the word falls back to stack form where a
+# stack operand can supply the arg, and raises no_value_error where none
+# can. core/ts scanned PAST the void instead, letting the next group slide
+# into the empty slot — `7 8 addq ( ) ( 5 )` was `7 13` here against Go's
+# `15 5`, the one divergence in the whole ledger that produced a wrong
+# NUMBER rather than a wrong error.
+#
+# The stop exposed a second defect it had been hiding: preEvalParens
+# derived the group's result count as `length - (before - 1)`, arithmetic
+# that only holds for a two-token group and goes negative for every longer
+# one. evalParenAt now returns the count.
+run 'x' addq ( 1 )	ERROR:signature_error
+run ( addq ( ) ( 5 ) 6 )	ERROR:no_value_error
+run 1 addq ( 'x' )	ERROR:signature_error
+run 1 addq ( 'x' ) 2	ERROR:signature_error
+run 1 addq ( ) ( 2 )	ERROR:no_value_error
+run 7 8 9 addq ( ) ( 5 )	7 17 5
+run 7 8 addq ( ) ( 5 )	15 5
+run 7 8 addq ( ) ( negq 3 )	15 -3
+run 7 8 negq ( ) ( 5 )	7 -8 5
+run 7 negq ( ) ( 5 )	-7 5
+run addq 'x' ( 1 )	ERROR:signature_error
+run addq ( 'a' ) 1	ERROR:signature_error
+run addq ( ( ) ) ( 5 ) 6	ERROR:no_value_error
+run addq ( ) ( ) 1 2	ERROR:no_value_error
+run addq ( ) ( 5 ) 6	ERROR:no_value_error
+run addq ( ) ( boomq 1 )	ERROR:no_value_error
+run addq ( ) ( negq 3 ) 4	ERROR:no_value_error
+run addq ( ) ( pairq 7 )	ERROR:no_value_error
+run addq ( ) p( 1 ) 2	ERROR:no_value_error
+run addq ( 1 ) 'x'	ERROR:signature_error
+run addq ( 1 ) ( 'x' )	ERROR:signature_error
+run addq ( 1 ) ( ) ( 2 )	ERROR:no_value_error
+run addq ( 5 ) 'a'	ERROR:signature_error
+run addq ( [ addq 1 2 ] ) 5	ERROR:signature_error
+run addq ( negq ( ) ( 3 ) ) 4	ERROR:no_value_error
+run addq 1 ( 'a' )	ERROR:signature_error
+run addq 1 ( ) ( 5 )	ERROR:no_value_error
+run addq p( ) p( ) 5 6	ERROR:no_value_error
+run negq ( 'a' )	ERROR:signature_error
+run negq ( 'x' )	ERROR:signature_error
+run negq ( 'x' ) 5	ERROR:signature_error
+run negq ( ) ( boomq 1 )	ERROR:no_value_error
+run negq ( ) ( negq 3 )	ERROR:no_value_error
+run negq ( [ 1 ] )	ERROR:signature_error
+run pairq ( ) ( 5 )	ERROR:no_value_error
+
+# --- an UNDEFINED word in the forward window ----------------------------
+# A name nothing binds is reported, not swallowed. Go's forward PLAN
+# resolves an unknown word to an Atom, but the plan is SPECULATIVE — the
+# token is still stepped, and stepping it raises. core/ts consumed it as
+# data at an `Any` slot instead, so `boomq zzz` fired boomq. Any Word that
+# survives resolution now DEFERS the dispatch, which is what lets the
+# engine reach it: refusing outright looks equivalent and is not, because
+# `def inc fn […]` needs its keyword to reach its slot.
+run ( boomq zzz )	ERROR:undefined_word
+run 1 boomq nosuchword	ERROR:undefined_word
+run 5 boomq zzz	ERROR:undefined_word
+run [ boomq zzz ]	ERROR:undefined_word
+run boomq Decimal	ERROR:undefined_word
+run boomq nosuchword	ERROR:undefined_word
+run boomq zzz	ERROR:undefined_word
+run boomq zzz 1	ERROR:undefined_word
+
+# --- builtin type names: the LEAF form and the PATH form ----------------
+# Go's ResolveBuiltinTypeName tries the user-facing leaf table first and
+# then the full path (core/go/resolve.go:23); core/ts had only the leaf
+# half. The path arm admits only paths the builtin table declares, so an
+# invented one stays undefined rather than minting a type.
+run 1 Scalar/String	1 String
+run Cidron	Cidron
+run Scalar/String	String
+run Scalar/Nope	ERROR:undefined_word	an undeclared path does not mint a type
+
+# --- an UNMATCHED `(` is a scan boundary, not a syntax error ------------
+# The core engine receives VALUES, not text, so it has no syntax to be
+# wrong about: an open paren with no matching close simply stops the
+# forward scan, and the dispatch fails on its own terms. core/ts called
+# evalParenAt, whose findMatchingClose miss throws syntax_error, so a
+# stream of values reported a SYNTAX error.
+run 5 addq (	ERROR:signature_error
+run addq ( ( 1 2	ERROR:signature_error
+run addq ( 1 2	ERROR:signature_error
+run addq ( negq 3	ERROR:signature_error
+run boomq (	ERROR:signature_error
+run negq (	ERROR:signature_error
+
+# --- a concrete-scalar PATTERN narrows the overload ----------------------
+# patq's only slot is typed Integer AND patterned on the value 7, so it
+# matches 7 and refuses 8 — the pattern is part of the match, not a
+# post-hoc check on an already-selected overload. A computed operand is
+# patterned on its RESULT, which is what makes `patq ( addq 3 4 )` fire.
+#
+# The fixture found a trap worth recording: NormalizeSig REBUILDS
+# Signature.Patterns from Params, so a directly-set Patterns mirror is
+# silently discarded. The two fixtures then disagreed, which is exactly
+# the false divergence the two-runner rule warns a fixture asymmetry
+# produces — and the probe caught it before a row was written.
+run patq 7	1	the patterned value matches
+run patq 8	ERROR:signature_error	a same-TYPED value that is not the pattern does not
+run patq 'x'	ERROR:signature_error	nor a differently-typed one
+run patq ( addq 3 4 )	1	a computed operand is patterned on its result
+run 7 patq	1	the pattern applies in stack form too
+run patq 7 patq 7	1 1	two independent patterned dispatches
+
+# --- identity returns -----------------------------------------------------
+# dupq's returns are the ARGS THEMSELVES (ReturnsIdentity / returnsIdentity)
+# rather than fresh values, which is what lets a duplicating word keep its
+# operand's identity. The forward-barrier rows are here too: dupq is a
+# function word, so it strands a parked one exactly as any other does.
+run dupq 5	5 5	the operand comes back twice
+run dupq 'x'	'x' 'x'	whatever its type
+run 1 dupq 2	1 2 2	an unrelated residual is untouched
+run dupq ( addq 1 2 )	3 3	a computed operand duplicates its RESULT
+run dupq dupq 5	ERROR:signature_error	a function word is a barrier, even a duplicating one
+run addq dupq 3	ERROR:signature_error	and strands a typed forward too
+
+# --- def BINDINGS ---------------------------------------------------------
+# A leading `def NAME <item> ;` clause installs a binding before the
+# program runs. Nothing in the fixture vocabulary binds a name, so without
+# it the engine's whole def-substitution surface was unreachable from the
+# corpus — the reason those paths sat uncovered was the NOTATION, not a
+# missing capability.
+run def x 7 ; x	7	a bound name substitutes its value
+run def x 7 ; addq x 1	8	and feeds a forward slot
+run def x 7 ; def y 8 ; addq x y	15	bindings stack
+run def x 7 ; dupq x	7 7	identity returns see the substituted value
+run def x 7 ; { a: x }	{a:7}	a map value resolves through the binding
+run def d [q 1 2 ] ; d	[1 2]	a QUOTED list binding is data, opaque
+run def b [ addq 1 2 ] ; addq b 1	ERROR:signature_error	and a list does not fit an Integer slot
+
+# --- user-defined FUNCTIONS ----------------------------------------------
+# `fn( NAME PTYPE RTYPE [ body ] )` builds a boru-bodied function value,
+# bound through the def clause. Two things had to exist before a row could
+# reach fn dispatch at all, and neither was a missing capability:
+#
+#   - the fn must be INSTALLED (InstallFnDef), never assembled by hand:
+#     only installation builds each Signature's body-splicing Handler, and
+#     the engine calls that handler unconditionally;
+#   - the fixture registry needs `__pa` and `undef`, which every fn body's
+#     frame tail emits (AppendFrameTail) and which basic — not core —
+#     registers. The MECHANISMS are core's own; only the words are basic's.
+#
+# That is why this surface sat uncovered: the corpus could not build a
+# function, not that either engine could not dispatch one.
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 5	6	the body runs with the param bound
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 5 inc 6	6 7	two calls, each with its own frame
+run def idq fn( n Integer Integer [ n ] ) ; idq 9	9	a body that is just the param
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc ( addq 2 3 )	6	a computed argument
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc 'x'	ERROR:signature_error	the declared param type is enforced
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; inc	ERROR:signature_error	and so is arity
+run def inc fn( n Integer Integer [ addq n 1 ] ) ; addq inc 5 1	ERROR:signature_error	a fn word is a barrier like any other
+run def bad fn( n Integer Integer [ nosuchword ] ) ; bad 1	ERROR:undefined_word	a fault in the BODY surfaces from the body
+# The word LITERALS the engine resolves before any registry lookup:
+# `true`/`false`/`none`/`null` are spelled as words in the value stream,
+# not as literal values, so a bare word is what reaches the step loop.
+run true	true	the word resolves to the Boolean
+run false	false	and so does its negation
+run none	none	`none` is the absent value, not an error
+run null	null/q	and `null` is the atom, which canon renders quoted
+
+# A word at a gradual (Any) slot DEFERS: the engine parks a forward
+# marker over the pending word rather than passing the word itself,
+# so the slot is filled by what the word RESOLVES to. Every row here
+# is a word that resolves without dispatching — a literal keyword, a
+# type name, or a def-bound value — which is the only shape the strict
+# forward barrier lets follow a parked marker.
+run dupq true	true true	a keyword resolves, then the marker collects it
+run dupq none	none none	the same for the absent value
+run dupq null	null/q null/q	and for the atom
+run dupq Integer	Integer Integer	a type name resolves to a type literal
+run def x 5 ; dupq x	5 5	a def-bound value resolves to the value
+run boomq true	ERROR:fixture_boom	the deferred slot still reaches the handler
+run def x 5 ; addq x 1	6	a def-bound operand fills a concrete slot too
+run def x 5 ; sumq x 1	ERROR:signature_error	but the stack form still needs its operand below
+run addq 1 2 ;	3	a trailing `end` after a complete call is dropped
+run addq 1 ;	ERROR:signature_error	and before a complete one it fails the dispatch
+
+# `/q` (QuoteArgs) word capture is CONDITIONAL on the slot type, not
+# unconditional. The coercion fires only when the raw Word does NOT
+# already fill the slot: an Atom-typed slot takes the Word→Atom
+# conversion (`undef`, and every shipped word that captures a name),
+# while an Any-typed one is already filled by the Word itself, so the
+# handler receives a live Word that re-enters the tape and dispatches.
+# `undef` (Atom) and `qanyq` (Any) are the two halves.
+run def x 5 ; undef x		the Atom name is captured, so the binding pops
+run def x 5 ; undef x x	ERROR:undefined_word	and the name really is gone afterwards
+run def x 5 ; undef y		unbinding a name that was never bound is a no-op
+run undef x		with nothing bound at all, likewise
+run def x 5 ; qanyq x	5	an Any slot captures the WORD, which then resolves
+run qanyq x	ERROR:undefined_word	so an unbound name still faults on re-entry
+run def x 5 ; qanyq y	ERROR:undefined_word	the captured name is the one written
+run def x 'a' ; qanyq x	'a'	whatever it is bound to
+run qanyq 7	7	a non-word operand is passed through unchanged
+
+# A TYPE-ARG slot admits a type and refuses every value. It is not the
+# same rule as "a slot declared Type": the slot's declared type here is
+# Any, and it still takes only types.
+run tyq Integer	Integer	a bare type literal fills a type-arg slot
+run tyq List	List	container types included
+run tyq 5	ERROR:signature_error	a concrete value never does
+run tyq 'x'	ERROR:signature_error	whatever its type
+run tyq none	ERROR:signature_error	and `none` is a value, not the None type
+
+# A TYPE-LITERAL pattern narrows a slot by type rather than by payload,
+# and — unlike a concrete pattern — is enforced only where the operand
+# comes off the STACK.
+run 5 tpatq	5	the stack operand matches the pattern's type
+run 'x' tpatq	ERROR:signature_error	one of another type does not
+run tpatq	ERROR:signature_error	and an empty stack has nothing to match
+run def x 5 ; x tpatq	5	a def-bound operand is matched by its value's type
+
+# A map ARGUMENT's values are evaluated at consumption, and each value is
+# a PROGRAM unless it is one of the two inert type shapes. So a map value
+# that cannot run faults from inside the map, before the consuming word
+# ever sees an argument.
+run boomq { a: ) }	ERROR:syntax_error	the value faults, so boomq never fires
+run boomq { a: { b: ) } }	ERROR:syntax_error	and a nested map's value the same way
+run dupq { a: [ addq 1 2 ] }	{a:[3]} {a:[3]}	an eval list runs to its residuals
+run dupq { a: { b: [ addq 1 2 ] } }	{a:{b:[3]}} {a:{b:[3]}}	nested maps recurse
+run dupq { a: true }	{a:true} {a:true}	a keyword resolves
+run def x 5 ; dupq { a: x }	{a:5} {a:5}	and so does a def-bound name
+run dupq { a: nosuchword }	ERROR:undefined_word	while an unbound one is reported, not degraded
+run dupq { a: __pa }	{} {}	a value with no residual drops its key
+run dupq { a: [q addq 1 2 ] }	{a:[word(addq) 1 2]} {a:[word(addq) 1 2]}	a DATA list is a literal — its words are left alone
+run def x 5 ; dupq { a: [q x ] }	{a:[word(x)]} {a:[word(x)]}	even when the name is bound
+run dupq { a: [q nosuchword ] }	{a:[word(nosuchword)]} {a:[word(nosuchword)]}	and when it is not
+
+# Two gradual slots: the marker parks over the first word, collects
+# TWICE, and only then fires. `end` arriving mid-collection is not a
+# quiet stop — the dispatch fails, naming what it still needed.
+run bothq true false	false	two keywords resolve and are collected in order
+run bothq 1 2	2	two literals need no deferral at all
+run bothq true 5	5	and the forms mix
+run bothq true	ERROR:signature_error	one operand short is a refusal
+run bothq true ;	ERROR:signature_error	and so is `end` before the slots are filled
+run bothq ;	ERROR:signature_error	including with nothing collected yet
+
+# A word between the marker and its operands that produces NO residual
+# (`__pa` is the frame-tail one) leaves the plan one operand short. That
+# is a FAILED dispatch, not a value: the marker must never reach the
+# result stack.
+run bothq __pa true false	false	the empty word is skipped and both operands still arrive
+run bothq __pa true ;	ERROR:signature_error	`end` mid-collection fails the dispatch
+run bothq __pa true	ERROR:signature_error	and so does running out of program

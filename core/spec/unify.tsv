@@ -1,0 +1,122 @@
+# core/spec/unify.tsv — the UNIFIER's parity corpus.
+#
+# Unification is the most fundamental thing core does after dispatch, and
+# until this file existed no corpus row touched it. The reason was
+# structural rather than an oversight: unify's clients — `is`, `case`,
+# typed defs, record shapes — are all basic/lang-layer words, so a bare
+# core registry called the unifier from nowhere, and core/spec's notation
+# could name seven builtin type literals and no type CONSTRUCTOR at all.
+#
+# Two additions open it, and both are in the established idiom:
+#
+#   unifyq a b   the fixture word, over core's own UnifyR / unifiesValue.
+#                The PREDICATE half only — did the two values unify — not
+#                the unified value: Go's UnifyR returns a meet and core/ts
+#                has a predicate, so asking for the value would pin a port
+#                gap as a language contract.
+#
+#   d( … )       a disjunct of the listed items
+#   [: T … ]     a typed list — child constraint, then retained elements
+#   {: T k: v … }  a typed map, likewise
+#
+# The type-constructor forms are what make this corpus reach the surface
+# the two ports actually differ on. Without them every candidate agreed:
+# 70 of 70 over scalars, lattice roots, plain lists and plain maps. That
+# negative result is worth as much as the divergences — it says the value
+# subset core/ts implements is FAITHFUL, and the gap is entirely in the
+# constructors it has no arm for.
+
+# --- the shared subset: scalars, roots, plain containers -------------------
+# Every one of these agreed on first measurement.
+
+run unifyq 5 5	true
+run unifyq 5 6	false
+run unifyq -1 -1	true
+run unifyq 'a' 'a'	true
+run unifyq 'a' 'b'	false
+run unifyq 'a' 5	false
+run unifyq true true	true
+run unifyq true false	false
+run unifyq true 1	false
+run unifyq none none	true
+run unifyq none 5	false
+run unifyq Integer Integer	true
+run unifyq Integer String	false
+run unifyq Integer Any	true
+run unifyq Any Integer	true
+run unifyq Any Any	true
+run unifyq None None	true
+run unifyq Integer None	false
+run unifyq Any 5	true
+run unifyq 5 Any	true
+run unifyq None 5	false
+run unifyq List List	true
+run unifyq Map Map	true
+run unifyq List Map	false
+run unifyq Boolean true	true
+run unifyq String 'a'	true
+run unifyq String 5	false
+run unifyq List [q 1 2 ]	true
+run unifyq Map { a: 1 }	true
+run unifyq List { a: 1 }	false
+run unifyq Map [q 1 2 ]	false
+run unifyq [q 1 2 ] [q 1 2 ]	true
+run unifyq [q 1 2 ] [q 1 3 ]	false
+run unifyq [q 1 2 ] [q 1 ]	false
+run unifyq [q ] [q ]	true
+run unifyq [q ] [q 1 ]	false
+run unifyq [q 1 ] [q Integer ]	true
+run unifyq [q Integer ] [q 1 ]	true
+run unifyq [q 'a' ] [q String ]	true
+run unifyq [q 1 ] [q String ]	false
+run unifyq [q [q 1 ] ] [q [q 1 ] ]	true
+run unifyq [q [q 1 ] ] [q [q 2 ] ]	false
+run unifyq { a: 1 } { a: 1 }	true
+run unifyq { a: 1 } { a: 2 }	false
+run unifyq { a: 1 } { b: 1 }	false
+run unifyq { a: 1 } { a: 1 b: 2 }	false
+run unifyq { a: 1 b: 2 } { a: 1 }	false
+run unifyq { a: 1 b: 2 } { b: 2 a: 1 }	true
+run unifyq { } { }	true
+run unifyq { } { a: 1 }	false
+run unifyq { a: 1 } { a: Integer }	true
+run unifyq { a: Integer } { a: 1 }	true
+run unifyq { a: 1 } { a: String }	false
+run unifyq { a: { b: 1 } } { a: { b: 1 } }	true
+run unifyq { a: { b: 1 } } { a: { b: 2 } }	false
+run unifyq { a: [q 1 ] } { a: [q 1 ] }	true
+run unifyq [q { a: 1 } ] [q { a: 1 } ]	true
+run unifyq [q { a: 1 } ] [q { a: 1 b: 2 } ]	false
+run unifyq 5 [q 5 ]	false
+run unifyq [q 5 ] 5	false
+run unifyq { a: 1 } [q 1 ]	false
+run unifyq Integer [q 1 ]	false
+run unifyq Any [q 1 ]	true
+run unifyq Any { a: 1 }	true
+run unifyq None [q ]	false
+run unifyq [ addq 1 2 ] [q 3 ]	true
+run unifyq 0 0	true
+run unifyq 0 false	false
+run unifyq '' ''	true
+run unifyq '' String	true
+
+# --- type constructors: what the two ports DO agree on ---------------------
+# The rest of this surface is in divergent.tsv; these are the rows that hold.
+
+run unifyq true d( Integer String )	false
+run unifyq 7 d( 5 6 )	false
+run unifyq d( ) 5	false
+run unifyq [q 1 'a' ] [: Integer ]	false
+run unifyq [q ] [: Integer ]	true
+run unifyq [: Integer ] [: Integer ]	true
+run unifyq [: Integer 1 2 ] [: Integer 1 2 ]	true
+run unifyq [: Integer 1 ] [q 1 ]	true
+run unifyq [: Integer ] List	true
+run unifyq {: Integer } Map	true
+run unifyq [: Integer ] Any	true
+run unifyq d( Integer String ) Any	true
+
+# Closed by the payload gate in unifiesValue: a typed map is no longer
+# handed to asMap(), so these answer cleanly instead of throwing.
+run unifyq { a: 'x' } {: Integer }	false
+run unifyq {: Integer } {: String }	false

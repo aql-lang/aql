@@ -1,0 +1,139 @@
+# core/spec/divergent.tsv — the core-level parity debt, one row per divergence.
+#
+# One row per expression, tab-separated:  expr <TAB> go <TAB> ts <TAB> note
+#
+# Same comment and escaping rules as the other core/spec files, and the same
+# two-runner discipline: core/go/corespec_test.go asserts the `go` column and
+# core/ts/src/corespec.test.ts asserts the `ts` column, so both suites stay
+# green while the difference stays PINNED. If either engine moves, its column
+# fails and the row is re-examined rather than silently re-baselined. Each
+# runner also FAILS a row whose go and ts columns are EQUAL — a fixed
+# divergence must MOVE to the spec file it belongs in, or this stops being an
+# honest debt list.
+#
+# SHRINK-ONLY, exactly as parser/spec/divergent.tsv is.
+#
+# WHERE THESE CAME FROM. The 1808-row engine crossdiff has been green
+# throughout, and so has every core/spec row. None of these were visible to
+# either, because a differential that hard-fails only when both engines
+# SUCCEED with different values cannot see two engines that both fail, and
+# because no source in eng/spec builds the shapes below. They were found by
+# sweeping core/ts's UNCOVERED regions — the parser half of this program
+# established that an uncovered branch in one port is where a divergence
+# hides, and this file is that finding applied to core.
+#
+# The `go` column is the reference by CONVENTION, not by proof. Two of the
+# five original parser-side divergence classes turned out to have Go wrong.
+# Read design/CORE-TS-DIVERGENCES.1.md before assuming which side moves.
+
+
+run [q ( ) ]	[ )]	[( )]	DATA: TS drops an empty paren group and re-associates operands; Go raises no_value_error.
+
+# --- a type-mismatched paren operand: which error ---------------------------
+# Both refuse; they disagree about the code. Go reports signature_error (the
+# operand does not fit the slot); core/ts reports no_value_error (it treats
+# the group as having produced nothing usable). Same refusal, different
+# taxonomy, so a caller matching on the code behaves differently.
+
+run boomq end	ERROR:undefined_word	ERROR:signature_error	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+run 1 boomq end	ERROR:undefined_word	ERROR:fixture_boom	DATA: TS resolves the WORD `end` to the end marker; core/go has no such word and raises undefined_word.
+
+# --- the builtin type-name table, and slash paths ---------------------------
+# core/ts's leaf name table is narrower than core/go's and has no path form.
+# `Word` is worse than a miss: core/ts CRASHES with an uncoded error
+# (`AsWord: not a word value`), which is a non_boru failure escaping the
+# taxonomy entirely — the one row here that is a defect on any reading.
+run Word/__ED	__ED		DATA: TS now RESOLVES the path, but canons the End type LITERAL through the End marker arm and renders nothing; Go renders the leaf __ED. The same vType/payload conflation isWord() had, one arm over.
+run [ Module ]	[Module]	ERROR:undefined_word	DATA: core/ts type-name table is narrower; `Word` escapes the error taxonomy entirely.
+
+
+# --- canon of a bare paren marker: ADJUDICATED, and TS is right -------------
+# Go renders an OpenParen as the EMPTY string, so a list holding one renders
+# with a gap and the token vanishes; core/ts renders `(`.
+#
+# The `go` column is NOT the reference here, and Go's own source says so.
+# core/go/canon.go:104 fixed exactly this defect for the CLOSE paren — "Canon
+# had no arm, so the payload-less fallthrough rendered it as the empty string
+# and `1 )` canon'd to `1 `, dropping the token silently" — and the same
+# commit fixed it for the End marker. The OPEN paren was left because, as the
+# comment says, "an unmatched OPENING paren never reaches here, because that
+# is a parse error rather than a value". The corpus notation can construct one
+# where the parser cannot, and the fallthrough is still there.
+#
+# So these rows stay pinned with core/ts UNCHANGED. Making TS reproduce Go's
+# fallthrough would be applying a known defect to the port. The ledger header
+# warns that the go column is the reference "by convention, not by proof";
+# this is the third time on this programme that the warning has paid.
+list (	[]	[(]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+list ( )	[ )]	[( )]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+list 1 ( 2	[1  2]	[1 ( 2]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+list ( ( )	[  )]	[( ( )]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+list ( ; )	[ end )]	[( end )]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+list [ ( ) ]	[[ )]]	[[( )]]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+list { a: ( }	[{a:}]	[{a:(}]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+typedlist ( 1	[: 1]	[:( 1]	RENDER: ADJUDICATED — Go drops the token via the payload-less fallthrough it fixed for `)` and `end`; core/ts is right and stays.
+
+run ( boomq	ERROR:signature_error	ERROR:syntax_error	CODE: an unmatched `(` at the TOP of the stream. preEvalParens already applies Go’s rule INSIDE a forward window; only the run loop’s arm differs. NOT changed because eng/ts pins the refusal in "a programmatic unmatched open paren refuses in the scanner" — which behaviour is right is a question for that test and its Go twin.
+
+
+
+# --- an unquoted EVAL-LIST def binding: data or code? --------------------
+# Go SUBSTITUTES the list as a value, which then auto-evaluates — `[3]`.
+# core/ts SPLICES it as a code body and runs it in place — `3`. The quoted
+# spelling agrees on both (`[q …]` is opaque data), so the disagreement is
+# exactly about what an UNQUOTED list binding means.
+#
+# Found the moment the corpus could install a def at all, which is the
+# point: this surface had no rows, so nothing had ever compared the two
+# engines on it. core/ts/src/engine.test.ts BASELINES the TS answer in
+# "splices an unquoted eval list as a code body" — the second time on this
+# branch that a per-engine unit test has pinned one engine's behaviour as
+# the contract.
+run def b [ addq 1 2 ] ; b	[3]	3	DATA: Go substitutes the list as a value; TS splices it as a code body.
+run def b [ 1 2 ] ; b	[1 2]	1 2	DATA: same rule with no words in the body — the residual is the list, not its elements.
+
+# --- the UNIFIER's type-constructor surface ---------------------------------
+# Opened on 2026-08-09 by `unifyq` plus the d( ) / [: ] / {: } notation
+# (core/spec/unify.tsv explains both). Until then no corpus row reached
+# unification at all, so this whole class was invisible to an instrument
+# built to compare the two ports — the sharpest instance yet of the rule
+# that an uncovered surface is where a divergence hides.
+#
+# ONE cause under most of it: core/go's `Unify` dispatches on Shape() into
+# per-family handlers (unify_disjunct.go, unify_list.go, unify_map.go, …),
+# while core/ts's `unifiesValue` is a flat 40-line function with arms for
+# lists, maps and scalars and NOTHING for a disjunct or a typed container.
+# What disjunct logic core/ts has lives in isValueOfType, which the
+# symmetric unifier never calls.
+#
+# The typed-MAP rows are worse than a wrong answer: core/ts throws a raw
+# `AsMap: not a map value`, an uncoded JS error escaping as a non-boru
+# failure. That one is a defect to fix, not debt to hold, and it is first
+# in the queue.
+#
+# NOT ledgered as permanent: this is a PORT gap with a known shape, and
+# the rows are here to make the fix visible when it lands. The 82 rows in
+# unify.tsv are the part that already holds.
+
+run unifyq 5 d( Integer String )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq 'a' d( Integer String )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq d( Integer String ) 5	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq 5 d( 5 6 )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq d( 5 6 ) d( 5 6 )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq d( Integer ) 5	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq Integer d( Integer String )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq d( Integer String ) d( String Integer )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq 5 d( d( Integer ) String )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq { a: 1 } d( Map List )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq [q 1 ] d( Map List )	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+run unifyq [q 1 2 ] [: Integer ]	true	false	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
+run unifyq [: Integer ] [q 1 2 ]	true	false	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
+run unifyq [: Integer ] [: String ]	false	true	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
+run unifyq [: Integer 1 2 ] [: Integer 1 3 ]	true	false	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
+run unifyq [: Any ] [q 1 'a' ]	true	false	DATA: core/ts unifiesValue has no typed-LIST arm — a child constraint neither narrows nor compares.
+run unifyq { a: 1 } {: Integer }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
+run unifyq {: Integer } { a: 1 }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
+run unifyq {: Integer } {: Integer }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
+run unifyq {: Integer a: 1 } {: Integer a: 1 }	true	false	DATA: core/ts unifiesValue has no typed-MAP arm: the child constraint neither narrows nor compares. Was an UNCODED CRASH until the payload gate landed.
+run unifyq [: d( Integer String ) ] [q 1 'a' ]	true	false	DATA: core/ts unifiesValue has NO disjunct arm — the disjunct logic lives only in isValueOfType, not in the symmetric unifier.
+

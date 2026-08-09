@@ -1,0 +1,80 @@
+# basic/spec/control.tsv — the control-flow words' parity corpus.
+#
+# Same notation as stack.tsv, plus BRACKETS: a `[ … ]` run in the program
+# column assembles into a LIST value. The corpus has no parser behind it,
+# so the brackets are the only way to write a code body.
+#
+# Only `do` is covered. `if`, `case` and `for` are not ported to basic/ts
+# yet — their runtime halves are entangled with their analysis halves, and
+# core/ts has no carrier lattice (design/GO-TS-PARITY.0.md). Rows for them
+# would encode a gap as a contract.
+
+# --- do: runs the body, returns its ENTIRE residual ------------------------
+do [ 1 ]	1	a single-value body
+do [ 1 2 3 ]	1 2 3	the WHOLE residual, not just the last value
+# `do [ ]` is DELIBERATELY ABSENT. Under this corpus's minimal fixture
+# registry it yields the empty list itself (`[]`), while the full `boru`
+# binary yields nothing at all — `print (do [])` raises no_value_error.
+# That difference is between two REGISTRIES, not between the two engines,
+# so it is not a parity row, and encoding either answer here would pin a
+# fixture artifact as a language contract. Open question, worth chasing
+# before `do`'s analysis half lands.
+do [ 1 2 swap ]	2 1	the body sees the word vocabulary
+do [ 1 dup ]	1 1	and its own stack
+
+# --- do: nesting ----------------------------------------------------------
+do [ do [ 1 ] ]	1	a nested body's residual flows out
+do [ 1 do [ 2 ] ]	1 2	both residuals survive, in order
+
+# --- do: the escape hatch -------------------------------------------------
+# A body error becomes an Error VALUE rather than propagating — that is the
+# word's whole point, and why the handler returns instead of re-raising.
+do [ nosuchword ]	error(undefined word: nosuchword)	an error in the body is caught and returned as a value
+do [ 1 nosuchword ]	error(undefined word: nosuchword)	the caught error REPLACES the residual, it does not join it
+do [ 1 5 pick ]	error(pick: index 5 out of range (stack depth 1))	the escape hatch catches UNCODED errors too, not just boru ones
+do List	ERROR:signature_error	a bare type literal fails to MATCH — dispatch refuses before the handler
+
+# --- error: the FAILURE half of the escape hatch ---------------------------
+# `do [body] error [handler]` — the handler runs only when the body raised,
+# with the caught Error pushed as its one input. A body that SUCCEEDS
+# passes its result straight through, which is what lets the pair compose.
+do [ 1 ] error [ 9 ]	1	a successful body skips the handler entirely
+do [ 1 2 ] error [ 9 ]	1 2	including a multi-value residual
+do [ nosuchword ] error [ 9 ]	9	a failed body runs the handler
+do [ nosuchword ] error [ drop 9 ]	9	the caught error is PUSHED, so the handler can consume it
+# `do [ … ] error [ ]` is DELIBERATELY ABSENT, for the same reason `do [ ]`
+# is: an EMPTY body is the one shape the two runtimes still disagree on
+# under this registry — Go's InvokeBody yields the empty list `[]`, the TS
+# sub-engine yields the pushed error. That is the open empty-body question
+# already flagged above, not a fact about `error`, and pinning either
+# answer here would settle it by accident.
+do [ nosuchword ] error [ dup ]	error(undefined word: nosuchword)	duplicating it leaves the bottom copy unconsumed, so the strip removes it
+error [ 9 ] 3	ERROR:signature_error	the do-result comes off the STACK, never from a trailing token
+
+# --- if: the three call shapes --------------------------------------------
+# A PLAIN condition is coerced where it stands. A LIST condition is a code
+# body and cannot be: running it early would run it in the wrong place on
+# the tape, so the word emits mark/condition/move and the engine reads the
+# condition's result where it lands.
+if true [ 1 ] [ 2 ]	1	a plain true takes the then-branch
+if false [ 1 ] [ 2 ]	2	and a plain false the else
+if [ true ] [ 1 ] [ 2 ]	1	a LIST condition runs, then selects
+if [ false ] [ 1 ] [ 2 ]	2	the same the other way
+if true [ 1 ]	1	the two-arg form is a statement guard
+if false [ 1 ]		with no else, a false condition produces NOTHING
+if [ false ] [ 1 ]		including through a list condition
+if 0 [ 1 ] [ 2 ]	2	zero is falsy
+if 1 [ 1 ] [ 2 ]	1	and any other integer is not
+if [ ] [ 1 ] [ 2 ]	ERROR:runtime_error	a condition that produces NO value is an error, not a silent false
+if [ 1 2 ] [ 9 ] [ 8 ]	9	a multi-value condition is decided by its LAST value
+
+# --- if: the clause-list form ---------------------------------------------
+# `if [c1 b1 c2 b2 … else]` — conditions left to right, first truthy body
+# wins, a trailing odd element is the else.
+if [ true [ 1 ] ]	1	one clause, taken
+if [ false [ 1 ] ]		one clause, not taken, and no else
+if [ false [ 1 ] [ 2 ] ]	2	a trailing element is the else
+if [ false [ 1 ] true [ 2 ] [ 3 ] ]	2	the FIRST truthy clause wins
+if [ false [ 1 ] false [ 2 ] [ 3 ] ]	3	falling past every clause reaches the else
+if [ ]		an empty clause list produces nothing
+if List	ERROR:signature_error	a bare type literal fails to MATCH — dispatch refuses before the handler

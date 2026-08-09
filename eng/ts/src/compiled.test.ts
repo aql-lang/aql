@@ -461,7 +461,12 @@ function tokenize(src: string): Value[] {
       while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++
       om.set(key, src[i] === '(' ? readParenExpr() : readOne())
     }
-    return newMap(om)
+    // An EVAL map, which is what the parser builds for a `{…}` literal.
+    // core/ts's autoEvalStack now gates on that flag exactly as Go's does —
+    // only a container the PARSER built auto-evaluates — so a flagless map
+    // from this hand-rolled tokenizer stopped resolving its computed
+    // values, which is the whole job the flag has.
+    return newMap(om, { eval: true })
   }
   const readOne = (): Value => {
     while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++
