@@ -16,6 +16,8 @@ import {
   newBigDecimal,
   newBigInteger,
   newBoolean,
+  newDisjunct,
+  unifiesValue,
   newCloseParen,
   newDispatchMod,
   newEnd,
@@ -105,6 +107,43 @@ function item(toks: string[], st: { i: number }): Value {
         },
       ],
     });
+  }
+  if ("d(" === tok) {
+    // `d( … )` — a DISJUNCT of the listed items. The corpus could name
+    // seven builtin type literals and nothing else, so the whole
+    // type-CONSTRUCTOR surface — the part of unification that actually
+    // differs between the ports — had no expression. Three forms open
+    // it: this one and the two typed containers below. Written
+    // independently of the Go runner's copy, per the two-runner rule.
+    st.i++;
+    const alts: Value[] = [];
+    while (st.i < toks.length && ")" !== toks[st.i]) alts.push(item(toks, st));
+    st.i++;
+    return newDisjunct(alts);
+  }
+  if ("[:" === tok) {
+    // `[: T e1 e2 … ]` — a typed list: child constraint, then any
+    // retained elements. `[: T ]` alone is the bare carrier.
+    st.i++;
+    const child = item(toks, st);
+    const elems: Value[] = [];
+    while (st.i < toks.length && "]" !== toks[st.i]) elems.push(item(toks, st));
+    st.i++;
+    return newTypedList(child, elems);
+  }
+  if ("{:" === tok) {
+    // `{: T k: v … }` — a typed map: child constraint, then any retained
+    // entries.
+    st.i++;
+    const child = item(toks, st);
+    const entries: Array<{ key: string; value: Value }> = [];
+    while (st.i < toks.length && "}" !== toks[st.i]) {
+      const key = toks[st.i]!;
+      st.i++;
+      entries.push({ key: key.slice(0, -1), value: item(toks, st) });
+    }
+    st.i++;
+    return newTypedMap(child, entries);
   }
   if ("p(" === tok) {
     st.i++;
@@ -345,6 +384,27 @@ function fixtureRegistry(): Registry {
         patterns: new Map([[0, newTypeLiteral(TInteger)]]),
         barrierPos: 0,
         handler: (a: Value[]): Value[] => [a[0]!],
+      },
+    ],
+  });
+  // unifyq is the door onto UNIFICATION — the one core mechanism this
+  // corpus could not reach at all, because unify's clients (`is`, `case`,
+  // typed defs, record shapes) are basic-layer words and a bare core
+  // registry called it from nowhere.
+  //
+  // The PREDICATE half only: did the two values unify. Go's UnifyR also
+  // returns the unified VALUE, and core/ts has no meet to return, so
+  // asking for it would pin a port gap as a language contract.
+  r.registerNativeFunc({
+    name: "unifyq",
+    signatures: [
+      {
+        args: [TAny, TAny],
+        returns: [TBoolean],
+        barrierPos: 2,
+        handler: (a: Value[]): Value[] => [
+          newBoolean(unifiesValue(a[0]!, a[1]!)),
+        ],
       },
     ],
   });

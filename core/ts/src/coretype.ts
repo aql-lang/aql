@@ -145,6 +145,23 @@ export function isTypeBody(v: Value): boolean {
  *   - otherwise: structural identity on the carried types (best effort).
  */
 /**
+ * The symmetric unifier's PREDICATE half: do these two values unify?
+ *
+ * EXPORTED so core/spec can reach it. The corpus had no expression that
+ * touched unification at all — its fixture registry calls it from nowhere,
+ * and unify's real clients (`is`, `case`, typed defs, record shapes) are
+ * all basic/lang-layer words — so the most fundamental thing core does
+ * after dispatch was invisible to the very instrument built to compare the
+ * two ports. `unifyq` in the three corpus runners is the door; this is
+ * what it opens.
+ *
+ * Go's twin is `UnifyR(a, b, r) (Value, bool)` and returns the unified
+ * VALUE as well. This one cannot: core/ts has a predicate, not a meet, so
+ * there is no intersection to hand back. That asymmetry is deliberate and
+ * recorded rather than papered over with a fake meet — the corpus asks
+ * only the question both engines can currently answer, and the value half
+ * lands with the real port.
+ *
  * unifiesValue mirrors Go's symmetric Unify over the fixture's value
  * subset — the path IsValueOfType falls to for a concrete RHS and for
  * disjunct alternatives (unify.go::unifyInner). A bare type literal on
@@ -155,7 +172,7 @@ export function isTypeBody(v: Value): boolean {
  * alternative, never to nested maps); scalar leaves need compatible
  * types and equal payloads.
  */
-function unifiesValue(a: Value, b: Value): boolean {
+export function unifiesValue(a: Value, b: Value): boolean {
   if (a.data === null || b.data === null) {
     return a.vType.matches(b.vType) || b.vType.matches(a.vType);
   }

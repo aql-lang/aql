@@ -213,6 +213,69 @@ func coreSpecItem(t *testing.T, r *Registry, toks []string, pos int) (Value, int
 		}}})
 		fnVal, _ := r.Defs.Top(coreSpecFnScratch)
 		return fnVal, pos
+	case "d(":
+		// `d( … )` — a DISJUNCT of the listed items. The corpus could
+		// name seven builtin type literals and nothing else, so the
+		// whole type-CONSTRUCTOR surface — the part of unification that
+		// actually differs between the ports — had no expression. Three
+		// forms open it: this one, and the two typed containers below.
+		pos++
+		alts := []Value{}
+		for pos < len(toks) && toks[pos] != ")" {
+			var v Value
+			v, pos = coreSpecItem(t, r, toks, pos)
+			alts = append(alts, v)
+		}
+		if pos >= len(toks) {
+			t.Fatalf("unclosed d( in %s", strings.Join(toks, " "))
+		}
+		pos++
+		return NewDisjunct(alts), pos
+	case "[:":
+		// `[: T e1 e2 … ]` — a typed list: the child constraint, then any
+		// retained elements. `[: T ]` alone is the bare carrier.
+		pos++
+		var child Value
+		child, pos = coreSpecItem(t, r, toks, pos)
+		elems := []Value{}
+		for pos < len(toks) && toks[pos] != "]" {
+			var v Value
+			v, pos = coreSpecItem(t, r, toks, pos)
+			elems = append(elems, v)
+		}
+		if pos >= len(toks) {
+			t.Fatalf("unclosed [: in %s", strings.Join(toks, " "))
+		}
+		pos++
+		if len(elems) == 0 {
+			return NewTypedList(child), pos
+		}
+		return NewTypedListWithElements(child, elems), pos
+	case "{:":
+		// `{: T k: v … }` — a typed map: the child constraint, then any
+		// retained entries.
+		pos++
+		var child Value
+		child, pos = coreSpecItem(t, r, toks, pos)
+		entries := []ChildEntry{}
+		for pos < len(toks) && toks[pos] != "}" {
+			key := toks[pos]
+			if !strings.HasSuffix(key, ":") {
+				t.Fatalf("typed-map key %q must end with ':'", key)
+			}
+			pos++
+			var v Value
+			v, pos = coreSpecItem(t, r, toks, pos)
+			entries = append(entries, ChildEntry{Key: strings.TrimSuffix(key, ":"), Value: v})
+		}
+		if pos >= len(toks) {
+			t.Fatalf("unclosed {: in %s", strings.Join(toks, " "))
+		}
+		pos++
+		if len(entries) == 0 {
+			return NewTypedMap(child), pos
+		}
+		return NewTypedMapWithEntries(child, entries), pos
 	case "p(":
 		pos++
 		items := []Value{}
@@ -437,6 +500,28 @@ func coreSpecRegistry(t *testing.T) *Registry {
 			return []Value{a[0]}, nil
 		}),
 		BarrierPos: 0,
+	})
+	// unifyq is the door onto UNIFICATION — the one core mechanism this
+	// corpus could not reach at all. Its clients (`is`, `case`, typed defs,
+	// record shapes) are basic-layer words, so nothing in a bare core
+	// registry called the unifier, and the most fundamental thing core does
+	// after dispatch went uncompared between the two ports. The word is a
+	// FIXTURE over a mechanism core owns, exactly like __pa over the args
+	// stack.
+	//
+	// It returns the PREDICATE half only — did the two values unify — and
+	// not the unified value, because core/ts has a predicate and no meet.
+	// Asking a question one engine cannot answer would produce rows that
+	// pin a port gap as a language contract; the value half lands with the
+	// real port.
+	r.Register("unifyq", Signature{
+		Params:  []FnParam{{Name: "a", Type: TAny}, {Name: "b", Type: TAny}},
+		Returns: []*Type{TBoolean},
+		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			_, ok := UnifyR(a[0], a[1], reg)
+			return []Value{NewBoolean(ok)}, nil
+		}),
+		BarrierPos: 2,
 	})
 	// depthq is the FULL-STACK fixture: the handler receives the whole
 	// resolved stack of the current paren scope and returns its complete
