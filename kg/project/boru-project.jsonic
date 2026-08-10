@@ -232,6 +232,8 @@
       attributes: { role: "the Go/TS parity program for core, parser and basic: the three shared TSV corpora and their two-runner rule, the capability table that forces core/ts before basic/ts, the divergence ledger, and the finding that an uncovered branch in one port is where a divergence hides" } }
     { key: "ts-parity-audit", type: "Document", label: "design/TS-PARITY-AUDIT.0.md"
       attributes: { role: "the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences" } }
+    { key: "tabnas-upstream-first", type: "Document", label: "design/TABNAS-UPSTREAM-FIRST.0.md"
+      attributes: { role: "ADR-014's case study: why a tabnas parser defect is fixed upstream and never behind a boru shim — the five shims the 2026-08-10 upgrade retired, the two-workarounds-deep episode that earned the rule, and the boundary against boru's own grammar-layer divergences" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [

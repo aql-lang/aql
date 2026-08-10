@@ -137,10 +137,11 @@ type JsonicFormat struct {
 func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 	var j *jsonic.Jsonic
 	if f.Resolver != nil {
-		j = parser.GuardMake(func() *jsonic.Jsonic {
-			return multisource.MakeJsonic(multisource.MultiSourceOptions{
-				Resolver: f.Resolver,
-			})
+		// Constructed directly: tabnas/parser v0.8.0's instance counter is
+		// atomic and Make is documented concurrent-safe, so this no longer
+		// needs to be funnelled through a locking wrapper (ADR-014).
+		j = multisource.MakeJsonic(multisource.MultiSourceOptions{
+			Resolver: f.Resolver,
 		})
 	} else {
 		j = parser.SafeMake()

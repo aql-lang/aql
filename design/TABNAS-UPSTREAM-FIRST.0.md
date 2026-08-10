@@ -53,9 +53,25 @@ upstream. Four issues, all resolved in `jsonic v0.6.0` / `parser v0.8.0`:
 | 3 | Go read `+_1` as the number 1, silently swallowing `+_` | both ports treat it as lenient text |
 | 4 | `Make` bumped a package-global id counter unsynchronized (a data race) | `atomic.Int64`, documented concurrent-safe |
 
-Every one of those had a boru-side cost that now goes away: two matcher
-arms, a process-wide construction mutex, and two documented seam
-asymmetries that no shared spec row could express.
+Every one of those had a boru-side cost that now goes away: a matcher arm,
+a process-wide construction mutex, the `GuardMake` wrapper whose whole
+signature existed to hold that mutex, and two documented seam asymmetries
+that no shared spec row could express — the ordered-map fix turned the
+second into ten `data.tsv` rows.
+
+A FIFTH shim fell out of the same upgrade without being reported: the TS
+rule engine used to bound its main loop and, on reaching the bound, simply
+STOP — no throw, partial root returned — so `[Map<]` parsed to an empty
+value stream where Go reported `unexpected \`]\``. boru carried
+`watchRuleSteps`/`ruleStepCap` to detect that by counting rule iterations
+and re-deriving the library's own cap formula. v0.8.0 throws instead, and
+`errors.ts` translates it to the byte-identical diagnostic — notes and
+position included, which is why 928 tests pass with the guard deleted. The
+shim's own doc had predicted its death: *"If the library ever changes the
+formula this guard stops firing rather than firing early — the fail-open
+direction."* It stopped firing, silently, and only the 100%-coverage gate
+noticed. A shim that reads the dependency's internals (`j.internal()`,
+`config.rule.maxmul`) cannot help but rot like this.
 
 ## The rule, and its boundary
 

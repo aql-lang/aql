@@ -25,9 +25,10 @@ import { fileURLToPath } from 'node:url'
 import { BoruError, canonValue } from '@boru-lang/core'
 
 import { convertParsedNumber, safeParseData } from './index.ts'
+import { dataKeyOrder } from './public.ts'
 
 const SPEC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'spec')
-const DATA_SPEC_ROW_COUNT = 46
+const DATA_SPEC_ROW_COUNT = 56
 
 interface DataSpecRow {
   line: number
@@ -110,10 +111,16 @@ function renderDataNode(v: unknown): string {
     return '[' + v.map(renderDataNode).join(' ') + ']'
   }
   if (isPlainDataRecord(v)) {
+    // Insertion order, NOT Object.keys order: a plain JS object enumerates
+    // integer-like keys ascending regardless of what the source wrote, so
+    // `{2:9, 1:8}` would render `{1:8 2:9}` here and silently disagree with
+    // the Go runner's *jsonic.OrderedMap walk. dataKeyOrder reads the order
+    // the seam recorded. (Still no shared code with the Go runner — each
+    // consumes its own dependency's ordering API.)
     return (
       '{' +
-      Object.entries(v)
-        .map(([key, child]) => key + ':' + renderDataNode(child))
+      dataKeyOrder(v)
+        .map((key) => key + ':' + renderDataNode(v[key]))
         .join(' ') +
       '}'
     )

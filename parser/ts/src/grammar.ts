@@ -464,25 +464,14 @@ function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
         let end = si + 2
         const bodyStart = end
         while (isBaseDigit(s[end], prefix) || '_' === s[end]) end++
-        if (end === bodyStart || isFollowingText(s, end)) {
-          // Data mode cannot decline a dot-adjacent base-prefixed run to
-          // the stock scanners: they DISAGREE there (Go keeps `0xFF.5`
-          // one lenient text, TS lexes the prefix as a number and splits
-          // the rest into stray values). Claim the whole prose run to the
-          // data boundary as one text token instead — the same string
-          // Go's stock scanner produces, now guaranteed in both ports.
-          // An empty body (`0x.5`, `0xzz`) still declines: the stock
-          // scanners agree on those.
-          if (dataMode && end > bodyStart) {
-            while (end < s.length && isFollowingText(s, end)) end++
-            const src = s.slice(start, end)
-            const tkn = lex.token('#TX', src, src, cursor)
-            cursor.sI = end
-            cursor.cI += end - start
-            return tkn
-          }
-          return undefined
-        }
+        // A run that is not a COMPLETE base-prefixed token — a trailing
+        // `.`, a `.digits` tail, an empty or invalid body — declines to
+        // the stock scanners, which agree on it: both ports keep
+        // `0xFF.5` as one lenient text token. (Until tabnas 0.6.0/0.8.0
+        // they did not — this port's stock scanner split such a run into
+        // stray values — and the matcher claimed the whole prose run in
+        // data mode to hide it. Fixed upstream, shim retired: ADR-014.)
+        if (end === bodyStart || isFollowingText(s, end)) return undefined
         const src = s.slice(start, end)
         const tkn = lex.token('#NR', 0, src, cursor)
         cursor.sI = end

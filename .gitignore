@@ -204,7 +204,7 @@ test/solardemo/solardemo
 # committed: a stray probe breaks `dupl`, the TS source manifest, and the
 # coverage gates. NOTE the modules' own `zz_*_test.go` files (check/go,
 # compiler/go) are REAL tests and deliberately not matched here.
-zzprobe*
+**/zz*probe*
 zz-*
 **/zz_tmp_*
 probe.tmp.*

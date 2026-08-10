@@ -259,17 +259,17 @@ func isBasePrefixDigit(c, prefix byte) bool {
 // (Go's stock lexer otherwise drops them to #TX while TS keeps #NR, making
 // the public LexTokens streams disagree; the converter reads the exact
 // source, so the placeholder value is intentionally irrelevant). The token
-// starts at start (which may include a sign) with the `0` at si. A nil
-// return declines to the stock scanners.
+// starts at start (which may include a sign) with the `0` at si.
 //
-// Data mode cannot decline a dot-adjacent base-prefixed run to the stock
-// scanners: they DISAGREE there (Go keeps `0xFF.5` one lenient text, TS
-// lexes the prefix as a number and splits the rest into stray values).
-// Claim the whole prose run to the data boundary as one text token
-// instead — the same string Go's stock scanner produces, now guaranteed
-// in both ports. An empty body (`0x.5`, `0xzz`) still declines: the stock
-// scanners agree on those.
-func matchBasePrefixRun(lex *jsonic.Lex, s string, start, si int, dataMode bool,
+// A run that is not a complete base-prefixed token — a trailing `.`, a
+// `.digits` tail, an empty or invalid body — DECLINES to the stock
+// scanners, which agree on it: both ports keep `0xFF.5` as one lenient
+// text token. (Until tabnas v0.6.0/v0.8.0 they did not — the TS scanner
+// split such a run into stray values — and this matcher claimed the whole
+// prose run in data mode to hide that. The defect was fixed upstream and
+// the shim retired with it, per ADR-014. parser/spec/data.tsv's
+// base-prefixed-prose rows are the pin either way.)
+func matchBasePrefixRun(lex *jsonic.Lex, s string, start, si int,
 	isFollowingText func(string, int) bool) *jsonic.Token {
 	cursor := lex.Cursor()
 	prefix := s[si+1]
@@ -279,16 +279,6 @@ func matchBasePrefixRun(lex *jsonic.Lex, s string, start, si int, dataMode bool,
 		end++
 	}
 	if end == bodyStart || isFollowingText(s, end) {
-		if dataMode && end > bodyStart {
-			for end < len(s) && isFollowingText(s, end) {
-				end++
-			}
-			src := s[start:end]
-			tkn := lex.Token("#TX", jsonic.TinTX, src, src)
-			cursor.SI = end
-			cursor.CI += utf8.RuneCountInString(src)
-			return tkn
-		}
 		return nil
 	}
 	src := s[start:end]
@@ -365,7 +355,7 @@ func setupDecimalBoundaryMatcher(j *jsonic.Jsonic, dataMode bool) {
 				return nil
 			}
 			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("xXoObB", rune(s[si+1])) {
-				return matchBasePrefixRun(lex, s, start, si, dataMode, isFollowingText)
+				return matchBasePrefixRun(lex, s, start, si, isFollowingText)
 			}
 			for si < len(s) && isDigitOrSep(s[si]) {
 				si++

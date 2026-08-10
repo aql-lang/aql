@@ -224,8 +224,11 @@ grammar never builds — has to be called directly with a synthetic rule.
 Go gets that in-package; TS arranges it by exporting from `convert.ts`,
 which is module-internal rather than package-public. The package surface now
 also carries the Go host seams (`LexTokens`, config/data safe parsing,
-Plainify, GuardMake, and ConvertParsedNumber); converter test hooks remain
-unexported from `index.ts`.
+Plainify, and ConvertParsedNumber); converter test hooks remain
+unexported from `index.ts`. (`GuardMake` was in that list until the
+2026-08-10 tabnas upgrade retired it: its whole signature existed to run a
+caller's constructor under the construction mutex, and the mutex went when
+upstream made the instance counter atomic — ADR-014.)
 
 The rule is: an arm belongs in a guard file only if no source text can
 reach it. Several arms started in `guards.test.ts` and MOVED OUT to

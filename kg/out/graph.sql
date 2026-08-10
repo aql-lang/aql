@@ -14,14 +14,14 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '5910123570053425844');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '3512895080256278762');
 INSERT INTO input_files VALUES ('../AGENTS.md', '7741724709148957368', 9601);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
-INSERT INTO input_files VALUES ('../basic/go/go.mod', '1012607248799602107', 457);
-INSERT INTO input_files VALUES ('../calc/go/go.mod', '8123838604180080966', 605);
+INSERT INTO input_files VALUES ('../basic/go/go.mod', '1127303125940251092', 457);
+INSERT INTO input_files VALUES ('../calc/go/go.mod', '934689429033157325', 605);
 INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221);
-INSERT INTO input_files VALUES ('../cmd/go/go.mod', '1168351960312314743', 4184);
+INSERT INTO input_files VALUES ('../cmd/go/go.mod', '1001648953894478216', 4184);
 INSERT INTO input_files VALUES ('../compiler/go/go.mod', '142593282390199928', 331);
 INSERT INTO input_files VALUES ('../core/go/go.mod', '2316996521694161686', 98);
 INSERT INTO input_files VALUES ('../design/BASIC-CHECK-CUT.0.md', '1575227922863509534', 8195);
@@ -29,22 +29,22 @@ INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '760548540237
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
-INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '725243206136279231', 22895);
+INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '2001213570293925635', 23128);
 INSERT INTO input_files VALUES ('../design/LANG-ENG-CONTENT-AUDIT.0.md', '4534620810048850672', 42667);
 INSERT INTO input_files VALUES ('../design/ROOT-MODULE-FEASIBILITY.0.md', '6235317352461048001', 6313);
 INSERT INTO input_files VALUES ('../design/TS-PARITY-AUDIT.0.md', '2607459948929922084', 6455);
 INSERT INTO input_files VALUES ('../design/checker-compiler-completeness-review.0.md', '5862232790816677050', 39943);
 INSERT INTO input_files VALUES ('../editors/tree-sitter/bindings/go/go.mod', '8359550297204300245', 134);
-INSERT INTO input_files VALUES ('../eng/go/go.mod', '957440270513375970', 683);
+INSERT INTO input_files VALUES ('../eng/go/go.mod', '2881472803927672271', 683);
 INSERT INTO input_files VALUES ('../go.work', '4924620830580584237', 530);
-INSERT INTO input_files VALUES ('../lang/go/go.mod', '9060255802713308676', 2387);
-INSERT INTO input_files VALUES ('../parser/go/go.mod', '3554763054779601734', 350);
-INSERT INTO input_files VALUES ('../test/go/go.mod', '7400423513495145622', 2503);
+INSERT INTO input_files VALUES ('../lang/go/go.mod', '5482529340336174675', 2387);
+INSERT INTO input_files VALUES ('../parser/go/go.mod', '4002424767723266621', 350);
+INSERT INTO input_files VALUES ('../test/go/go.mod', '5094074845776696925', 2503);
 INSERT INTO input_files VALUES ('../test/solardemo/go.mod', '8784937342672483810', 59);
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
-INSERT INTO input_files VALUES ('../wpg/go.mod', '1909195114285173430', 2582);
+INSERT INTO input_files VALUES ('../wpg/go.mod', '4866132793929805533', 2582);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '4995374428202383702', 501);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '8466286386291724', 26738);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '8804565029262272080', 27129);
 INSERT INTO sources VALUES ('src:agents', 'text', 'AGENTS.md', 'AGENTS.md agent guide', NULL, 'agents-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -184,6 +184,8 @@ INSERT INTO entities VALUES ('ent:Document:520435226487613788', 'Document', 'des
 INSERT INTO entities VALUES ('ent:Document:5292060467150439417', 'Document', 'NUR.md', 'nur.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:6176355086953937469', 'Document', 'TUTORIAL.md', 'tutorial.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:6369673620858945660', 'Document', 'eng/go/CLAUDE.md', 'eng/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:7583878321315113890', 'Document', 'design/TABNAS-UPSTREAM-FIRST.0.md', 'design/tabnas-upstream-first.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:7583878321315113890', 'role', 'ADR-014''s case study: why a tabnas parser defect is fixed upstream and never behind a boru shim — the five shims the 2026-08-10 upgrade retired, the two-workarounds-deep episode that earned the rule, and the boundary against boru''s own grammar-layer divergences');
 INSERT INTO entities VALUES ('ent:Document:7770110494347118706', 'Document', 'lang/go/CLAUDE.md', 'lang/go/claude.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:8799605016341004740', 'Document', 'design/TS-PARITY-AUDIT.0.md', 'design/ts-parity-audit.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:8799605016341004740', 'role', 'the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences');

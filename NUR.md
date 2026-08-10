@@ -2149,13 +2149,7 @@ reports an empty token where Go names the offender), two error-precedence
 splits (receiverless-`.` vs unmatched-`(`, and bare-`/s` vs
 unmatched-`(`), an internal type-name leak in one message on both sides,
 and an empty-`${}` fold split in an unterminated template (Go folds to
-`interp('')`, TS keeps the hole). The safe DATA-decode seam
-(`SafeParseData`/`safeParseData`) adds two asymmetries no shared spec row
-can express: the TS seam returns plain JS objects, whose integer-like map
-keys enumerate ascending regardless of insertion order (`{2:9, 1:8}`
-decodes key-ordered in TS, insertion-ordered in Go), and a
-sign+separator run such as `+_1` is wrapped as a numeric token by Go's
-stock scanner (loud converter refusal) but stays lenient text in TS.
+`interp('')`, TS keeps the hole).
 **Evidence:** `parser/spec/divergent.tsv` — the live ledger, one measured
 row per class; both spec runners re-render every row against their own
 column on every run, so a row can neither rot nor survive its fix.
@@ -2168,3 +2162,14 @@ ledger row to `parse.tsv` (the runners force the move: a fixed divergence
 fails the ledger loudly). The behavioral classes (fold loss, the two
 accept/reject splits) should go first; the diagnostic-detail classes
 follow. The record discharges when the ledger is empty again.
+
+> **Update (2026-08-10).** Two DATA-seam asymmetries this record also
+> carried — the TS seam's inability to express map insertion order for
+> integer-like keys, and Go alone reading `+_1` as a number — were
+> dependency defects, not boru's. Both are fixed upstream in
+> `tabnas/jsonic v0.6.0` / `tabnas/parser v0.8.0` (ADR-014) and are now
+> pinned by ten `data.tsv` rows rather than described in prose. The nine
+> GRAMMAR-level classes above are untouched by the upgrade: a fresh
+> 2,587-source sweep on the new dependency measures the byte-identical 55
+> divergences, which is what distinguishes the two categories. This record
+> stays Pending on those nine.

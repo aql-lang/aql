@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 
 	jsonic "github.com/tabnas/jsonic/go"
@@ -57,7 +58,7 @@ func TestParseConfigWave3InvalidSyntax(t *testing.T) {
 	}
 }
 
-// --- SafeParse / SafeParseData / GuardMake ---
+// --- SafeParse / SafeParseData ---
 
 func TestSafeParseWave3(t *testing.T) {
 	v, err := SafeParse("a:1")
@@ -204,9 +205,20 @@ func TestSafeParseDataLenientText(t *testing.T) {
 	}
 }
 
-func TestGuardMakeWave3(t *testing.T) {
-	got := GuardMake(func() int { return 7 })
-	if got != 7 {
-		t.Errorf("GuardMake: got %d, want 7", got)
+// TestSafeMakeConcurrent pins what retired the construction mutex: the
+// dependency's instance counter is atomic as of tabnas/parser v0.8.0, so
+// concurrent construction is race-free. Run under -race this fails loudly if
+// a future dependency bump reintroduces the unsynchronized counter.
+func TestSafeMakeConcurrent(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 64; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := SafeMake().Parse(`{a:1}`); err != nil {
+				t.Errorf("concurrent SafeMake parse: %v", err)
+			}
+		}()
 	}
+	wg.Wait()
 }

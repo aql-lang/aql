@@ -1,41 +1,31 @@
 package parser
 
 import (
-	"sync"
-
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
-// jsonicMakeMu serializes every jsonic parser construction in the process.
+// SafeMake constructs a jsonic parser.
 //
-// tabnas/parser's Make bumps a package-global instance-id counter
-// (options.go: idCounter++) with no synchronization, so two goroutines
-// constructing parsers at once are a data race — caught by `go test -race`
-// in TestSpecCompiledConcurrentRowsRaceFree once boru migrated from
-// jsonicjs to tabnas/jsonic. Construction is cheap and a constructed
-// instance parses independently, so serializing only the Make call removes
-// the race while leaving the (expensive) Parse step fully concurrent.
+// It is the single construction seam for the whole repo — the Go twin of
+// parser/ts's safeMake, which additionally normalizes string enders — so
+// construction policy has one place to live and both ports stay symmetric.
 //
-// Every production jsonic construction routes through SafeMake / SafeParse /
-// GuardMake so they all share this one lock. Do NOT call jsonic.Make /
-// jsonic.Parse / multisource.MakeJsonic directly in non-test code.
-var jsonicMakeMu sync.Mutex
-
-// SafeMake constructs a jsonic parser under the shared construction lock.
+// HISTORY. Until tabnas/parser v0.8.0 this function (and SafeParse,
+// SafeParseData and a GuardMake wrapper) serialized every construction
+// behind a process-wide mutex, because Make bumped a package-global
+// instance-id counter with no synchronization — a data race `go test -race`
+// caught in TestSpecCompiledConcurrentRowsRaceFree. v0.8.0 made that
+// counter atomic and documents Make as safe for concurrent use, so the lock
+// is gone (ADR-014: the fix belongs upstream, and the shim goes when it
+// lands). GuardMake went with it: its whole signature existed to run a
+// caller's constructor under that lock.
 func SafeMake(opts ...jsonic.Options) *jsonic.Jsonic {
-	jsonicMakeMu.Lock()
-	defer jsonicMakeMu.Unlock()
 	return jsonic.Make(opts...)
 }
 
-// SafeParse parses src with a freshly-constructed default parser under the
-// shared construction lock, then releases it before the parse runs so
-// parsing stays concurrent. (jsonic.Parse memoizes a singleton via
-// sync.Once whose first call still bumps the shared counter, so it cannot
-// be left to race with SafeMake — building our own instance keeps every
-// counter access under the lock.) Its errors deliberately remain native
-// jsonic errors; ParseConfig owns the stable host-facing wrapper for its
-// narrower configuration contract.
+// SafeParse parses src with a freshly-constructed default parser. Its errors
+// deliberately remain native jsonic errors; ParseConfig owns the stable
+// host-facing wrapper for its narrower configuration contract.
 func SafeParse(src string) (any, error) {
 	return SafeMake().Parse(src)
 }
@@ -49,12 +39,9 @@ func SafeParse(src string) (any, error) {
 // float64 collapse a default parser produces (where "42.0" silently becomes
 // Integer 42). Use this for data-decode paths that must round-trip numeric
 // types faithfully, notably StructUtil.parse. Callers convert the wrapped
-// numbers via ConvertParsedNumber. Construction is serialized under the
-// shared lock; the parse itself runs concurrently, as in SafeParse.
+// numbers via ConvertParsedNumber.
 func SafeParseData(src string) (any, error) {
-	jsonicMakeMu.Lock()
 	j := jsonic.Make()
-	jsonicMakeMu.Unlock()
 	// Keep every COMPLETE numeric spelling that Boru classifies itself on
 	// one #NR token. The stock Go jsonic matcher drops trailing-dot
 	// exponents, binary64 overflow, and base-prefix overflow to plain
@@ -65,13 +52,4 @@ func SafeParseData(src string) (any, error) {
 	setupDataDecimalMatcher(j)
 	setupNumberSub(j)
 	return j.Parse(src)
-}
-
-// GuardMake runs an arbitrary jsonic-parser constructor (e.g.
-// multisource.MakeJsonic, which the parser package cannot import directly)
-// under the shared construction lock and returns its result.
-func GuardMake[T any](construct func() T) T {
-	jsonicMakeMu.Lock()
-	defer jsonicMakeMu.Unlock()
-	return construct()
 }

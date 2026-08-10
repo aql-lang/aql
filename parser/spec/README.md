@@ -125,15 +125,21 @@ the source — those messages are deliberately dependency-native and
 unpinned. Both runners implement the reader and renderer independently, as
 everywhere else in this corpus.
 
-Two measured seam asymmetries are documented here because no shared row
-can express them (NUR.md §NUR060 records both): the TS seam returns plain
-JS objects, whose **integer-like keys enumerate in ascending order
-regardless of insertion order** (`{2:9, 1:8}` decodes key-ordered `1, 2`
-in TS, insertion-ordered `2, 1` in Go) — so rows must not use
-integer-like map keys until the TS seam grows an order-preserving
-carrier; and a **sign+separator run** such as `+_1` is wrapped as a
-numeric token by Go's stock scanner (so the converter refuses it loudly)
-but stays lenient text in TS.
+Two seam asymmetries used to be documented here as inexpressible; the
+`tabnas` upgrade of 2026-08-10 (jsonic v0.6.0 / parser v0.8.0, ADR-014)
+closed both, and each is now pinned by rows instead of prose:
+
+- **Map insertion order, integer-like keys included.** A plain JS object
+  enumerates `{2:9, 1:8}` as keys `1, 2` whatever the source wrote, so the
+  TS seam could not express what Go's `OrderedMap` preserves. TS now parses
+  data with `map.ordered`, and its runner reads the recorded order
+  (`dataKeyOrder`) rather than `Object.keys` — the Go runner still walks
+  `OrderedMap.Keys`, so the two remain independent implementations of one
+  contract.
+- **Sign+separator runs.** `+_1` is lenient text in both ports. Go's stock
+  scanner used to read it as the number `1`, silently swallowing the `+_`;
+  a separator is legal only between digits, so a digit-led `1_` is still
+  claimed and refused loudly.
 
 ### `nesting.tsv` — the generated-depth contract
 
@@ -277,7 +283,7 @@ The main corpus grew from 370 rows to 648 unique sources while driving
 `parser/ts` from 93.97% to 100% line coverage; the final gate also requires
 100% branches and functions. The 2026-08-09 probe sweep then grew it to 698.
 Both runners machine-pin the current corpus sizes: 698 parse rows, 27
-raw-lexer rows, 46 data-decode rows, 18 generated-depth rows, 26
+raw-lexer rows, 56 data-decode rows, 18 generated-depth rows, 26
 semantic-shape rows, and 9 live divergence rows. An intentional corpus change updates both independent
 constants and this prose together. The growth found further defects the
 crossdiff could not:

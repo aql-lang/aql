@@ -63,3 +63,19 @@ true	true	booleans are booleans
 {a: 0xFFx}	{a:'0xFFx'}	word characters after the body
 {a: 0x.5}	{a:'0x.5'}	an EMPTY body declines to stock text (the scanners agree there)
 [0xzz]	['0xzz']	…as does an invalid body
+# § insertion-ordered maps — integer-like keys included. A plain JS object
+# enumerates these ascending whatever the source wrote, so the TS seam
+# records the true order for its runner to read (Go reads OrderedMap.Keys).
+{2:9, 1:8}	{2:9 1:8}	source order survives, not numeric order
+{10:a, 2:b, x:c}	{10:'a' 2:'b' x:'c'}	…with a wider integer key ahead of a narrower one
+{b:2, 1:9}	{b:2 1:9}	…and a string key ahead of an integer-like one
+# § sign+separator runs — a separator is legal only BETWEEN digits, so these
+# are lenient text in both ports rather than numbers (the stock Go scanner
+# used to read `+_1` as 1, silently swallowing the `+_`).
++_1	'+_1'	a separator after the sign is text, never the number 1
+[+_1]	['+_1']	…nested too
++_	'+_'	sign and separator alone
+_1	'_1'	a leading separator
+-_1	'-_1'	…and the negative form
++_1.5	'+_1.5'	…and a dot-bearing spelling
+1_	ERR syntax_error	but a DIGIT-led run is still claimed and refused loudly

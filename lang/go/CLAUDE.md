@@ -231,10 +231,13 @@ normally using the cached modules.
 
 ## Jsonic Token Usage
 
-boru uses `github.com/tabnas/jsonic/go` (v0.2.0) for all tokenization and
+boru uses `github.com/tabnas/jsonic/go` (v0.6.0, over
+`github.com/tabnas/parser/go` v0.8.0) for all tokenization and
 structural parsing. (This replaced the legacy `github.com/jsonicjs/jsonic/go`
 v0.1.6 — the tabnas family is an API-compatible superset port; the swap
-removed the jsonicjs dependency entirely.) There is exactly one parser — it
+removed the jsonicjs dependency entirely.) Defects in it are fixed
+UPSTREAM, never behind a boru shim — **ADR-014**, with the case study in
+`design/TABNAS-UPSTREAM-FIRST.0.md`. There is exactly one parser — it
 lives in the standalone **eng** module at `eng/go/parser/parse.go`
 (`github.com/boru-lang/boru/eng/go/parser`); `lang.Parse` re-exports
 it. (The old hand-rolled lexer / token / AST / tree-walking evaluator
