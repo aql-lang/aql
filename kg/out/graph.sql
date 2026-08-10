@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '1897278799009342646');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '3424792904165509029');
 INSERT INTO input_files VALUES ('../AGENTS.md', '7741724709148957368', 9601);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
@@ -43,7 +43,7 @@ INSERT INTO input_files VALUES ('../test/go/go.mod', '7400423513495145622', 2503
 INSERT INTO input_files VALUES ('../test/solardemo/go.mod', '8784937342672483810', 59);
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '1909195114285173430', 2582);
-INSERT INTO input_files VALUES ('<go tree: modules + packages>', '4995374428202383702', 501);
+INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5142361997092098750', 520);
 INSERT INTO input_files VALUES ('project/boru-project.jsonic', '8466286386291724', 26738);
 INSERT INTO sources VALUES ('src:agents', 'text', 'AGENTS.md', 'AGENTS.md agent guide', NULL, 'agents-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
@@ -349,6 +349,11 @@ INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7327774866203707838', 
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7327774866203707838', 'path', 'tools/piecetool');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7327774866203707838', 'unit', 'go-module');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:7327774866203707838', 'workspace_member', 'true');
+INSERT INTO entities VALUES ('ent:SoftwareModule:8052442499624497476', 'SoftwareModule', 'parser/go/tmpprobe package', 'parser/go/tmpprobe package', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8052442499624497476', 'go_module', 'github.com/boru-lang/boru/parser/go');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8052442499624497476', 'parent_module', 'parser/go');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8052442499624497476', 'path', 'parser/go/tmpprobe');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8052442499624497476', 'unit', 'go-package');
 INSERT INTO entities VALUES ('ent:SoftwareModule:8275629451197117420', 'SoftwareModule', 'lang/go module', 'lang/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8275629451197117420', 'go_module', 'github.com/boru-lang/boru/lang/go');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8275629451197117420', 'path', 'lang/go');
@@ -545,6 +550,8 @@ INSERT INTO assertions VALUES ('ast:6658327612052881629', 'ent:SoftwareModule:82
 INSERT INTO assertion_evidence VALUES ('ast:6658327612052881629', 'src:gomod:lang-go', 'require block', 'github.com/boru-lang/boru/core/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:6799788586482649785', 'ent:Document:4790579719562719716', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:6799788586482649785', 'src:core-ts-coverage', 'title', 'CORE-TS-COVERAGE.0 — taking core/ts from 62% to 100%', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:6857695039802924342', 'ent:SoftwareModule:8052442499624497476', 'part_of', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:6857695039802924342', 'src:go-tree', 'parser/go/tmpprobe', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:6971877089875160938', 'ent:SoftwareModule:559301050642427014', 'depends_on', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:6971877089875160938', 'src:gomod:check-go', 'require block', 'github.com/boru-lang/boru/core/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:7011485005147552963', 'ent:SoftwareModule:4192460694199531608', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
