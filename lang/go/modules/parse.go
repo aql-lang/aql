@@ -339,7 +339,7 @@ func parseAltSpecType() native.Value {
 	f.Set("a", native.NewTypeLiteral(native.TAny))    // action: a Function, a "@ref" String, or a list of either
 	f.Set("g", native.NewTypeLiteral(native.TString)) // group tags
 	f.Set("n", native.NewTypeLiteral(native.TMap))    // counter increments
-	f.Set("c", native.NewTypeLiteral(native.TMap))    // declarative condition ({'counter':n} → $eq)
+	f.Set("c", native.NewTypeLiteral(native.TMap))    // declarative condition ({'n.counter':n} → $eq)
 	f.Set("u", native.NewTypeLiteral(native.TMap))    // custom props
 	f.Set("k", native.NewTypeLiteral(native.TMap))    // propagated custom props
 	return native.NewOptionsType(f)
@@ -1109,10 +1109,17 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 			alt.A = refs
 		}
 	}
-	// c — a DECLARATIVE condition map ({'counter':n} / {'counter.sub':n}
-	// entries, matched by $eq). The FuncRef condition form takes
-	// parser-internal types (tabnas.AltCond) and is not expressible from
-	// boru; the declarative map is.
+	// c — a DECLARATIVE condition map, matched by $eq. Each KEY is a dotted
+	// path onto a rule property, ROOTED at one tabnas exposes: the counters
+	// `n` (`{'n.dlist':0}`), user data `u`, kept data `k`, `d`/`i`/`name`/
+	// `state`, the token slots (`o`/`c`/`o0`/`o1`/`c0`/`c1`/`oN`/`cN`),
+	// `node`, `spec`, or the rule-graph links `parent`/`child`/`prev`/`next`.
+	// A BARE counter name (`{'dlist':0}`) is NOT that path and never was:
+	// it cannot resolve, so the guard fails open — silently doing nothing.
+	// tabnas/parser v0.8.0 rejects it while the grammar is built, which is
+	// how two such dead conditions in this repo were found. The FuncRef
+	// condition form takes parser-internal types (tabnas.AltCond) and is not
+	// expressible from boru; the declarative map is.
 	if cv, ok := m.Get("c"); ok {
 		cm, ok := specDataMap(cv)
 		if !ok {
