@@ -95,25 +95,36 @@ dependency's bug in order to justify boru code, stop: that comment belongs
 in an upstream issue. A shim that survives the fix becomes dead weight
 nobody dares delete, because its comment no longer describes reality.
 
-## Still open upstream
+## Still open upstream — and the lesson in how it was nearly missed
 
-One divergence in this family is **not** fixed, and the shim covering it
-stays until it is: the two stock scanners still classify an
-int64-overflowing base-prefixed run differently — Go drops
-`0x8000000000000000` to `#TX` (text), TS keeps `#NR` (number) — so the
-public trivia-preserving token streams would disagree. `parser/go@v0.8.0`
-routes `0x`/`0o`/`0b` through `strconv.ParseInt(…, 64)` and returns NaN on
-**any** error including `ErrRange` (parser.go:507-524), which the lexer's
-base arms decline on; the DECIMAL path immediately below deliberately
-tolerates `ErrRange` — *"TS coerces with unary +, which saturates rather
-than failing"* (parser.go:535-546). The tolerance was simply never
-extended to the base arms, which is why `1e400` now agrees across ports
-and `0x8000000000000000` still splits.
+The base-prefix **overflow** divergence reported after v0.8.0 is FIXED in
+jsonic v0.6.1 / parser v0.8.1: both ports now round the true value, so
+`0xFFFFFFFFFFFFFFFF` is 1.8446744073709552e19 in both — including the
+trap the report flagged, where naively keeping `ParseInt`'s clamped value
+would have agreed on `0x8000000000000000` by coincidence and been off by
+2× one literal later.
 
-So `matchBasePrefixRun`'s overflow claim is LIVE, and both matchers say so
-in their comments with the upstream line numbers, precisely so a future
-retirement sweep does not delete a working parity fix. Report it, then
-retire the arm when the fix lands.
+`matchBasePrefixRun` still could not be retired, for a **different**
+divergence at the dot boundary. With `.` registered as a token — as boru's
+grammar does and the bare dependency does not — the stock scanners
+disagree on the run BEFORE the dot: Go calls `0xFF` in `0xFF.5` a number,
+TS calls it text. Deleting the arm splits three shapes that agree today:
+`0xFF.5` renders Go's *"a number has no members to access with `.`"*
+against TS's `255.5`, and `[0xFF.5]` against `[255.5]`.
+
+**How that was nearly missed is the point.** The arm was deleted in both
+ports, and both suites passed — 928 TS tests and the whole Go suite, clean
+— because no corpus row covered the shape. Go's token stream was
+byte-identical before and after, which made the retirement look proven; the
+divergence only surfaced on comparing the TWO ports' token streams, and
+then loudly under `scripts/parity-probe.sh`. A shim's own passing suite is
+not evidence that the shim is dead. Three `lex.tsv` rows now pin the
+classification, so the next sweep fails instead of looking safe.
+
+Held open by `NUR.md` §NUR061 — the auditable owner ADR-014 asks for. The
+upstream report is prepared but **not yet filed**, so no issue URL exists to
+link; when one does, it belongs in NUR061 and in both matcher comments. The
+arm goes when the boundary is fixed upstream.
 
 ## Cost, honestly
 

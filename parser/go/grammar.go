@@ -255,21 +255,34 @@ func isBasePrefixDigit(c, prefix byte) bool {
 }
 
 // matchBasePrefixRun is the 0x/0o/0b arm of the decimal boundary matcher:
-// claim base-prefixed integers even when their magnitude exceeds int64.
-// This arm is LIVE and must not be retired — the divergence it covers is
-// still open upstream as of jsonic v0.6.0 / parser v0.8.0. Go's stock
-// lexer drops an int64-overflowing base run to #TX while TS keeps #NR,
-// so the public LexTokens streams would disagree on `0x8000000000000000`.
-// Root cause: parser/go@v0.8.0 parser.go:507-524 routes base prefixes
-// through strconv.ParseInt(..., 64) and returns NaN on ANY error including
-// ErrRange, which the lexer's base arms decline on — while the DECIMAL
-// path at parser.go:535-546 deliberately tolerates ErrRange ("TS coerces
-// with unary +, which saturates rather than failing"). That tolerance was
-// never extended to the base arms, so `1e400` agrees across ports and
-// `0x8000000000000000` does not. Reported; the arm goes when the fix
-// lands (ADR-014). The converter reads the exact source, so the
-// placeholder value is intentionally irrelevant. The token starts at
-// start (which may include a sign) with the `0` at si.
+// claim base-prefixed integers, including magnitudes past int64.
+//
+// This arm is LIVE and must not be retired. Its ORIGINAL reason is gone —
+// int64-overflowing base runs classified #TX in Go and #NR in TS until
+// jsonic v0.6.1 / parser v0.8.1, which made both ports round the true
+// value (`0xFFFFFFFFFFFFFFFF` -> 1.8446744073709552e19 in both). What
+// keeps it alive is a DIFFERENT, still-open divergence at the dot
+// boundary: with `.` registered as a token (as boru's grammar does, and
+// the bare dependency does not), the stock scanners disagree on the run
+// BEFORE the dot — Go calls `0xFF` in `0xFF.5` a number, TS calls it
+// text. Retiring the arm therefore splits three shapes that currently
+// agree: `0xFF.5` renders Go's "a number has no members to access with
+// `.`" against TS's 255.5, and `[0xFF.5]` against [255.5].
+//
+// That was measured by deleting this arm and running
+// scripts/parity-probe.sh — NOT by the suites, which passed clean with it
+// gone because no corpus row covered the shape. parser/spec/lex.tsv's
+// §base-prefixed-boundaries rows now pin the token classification, so the
+// next retirement sweep fails loudly instead of looking safe.
+//
+// Held open by NUR.md §NUR061, which is the auditable owner ADR-014 asks
+// for. The upstream report is prepared but not yet filed, so there is no
+// issue URL to link here yet; put it in this comment and in the record
+// when there is one. The arm goes when the boundary is fixed upstream.
+//
+// The converter reads the exact source, so the placeholder value is
+// intentionally irrelevant. The token starts at start (which may include
+// a sign) with the `0` at si.
 //
 // A run that is not a complete base-prefixed token — a trailing `.`, a
 // `.digits` tail, an empty or invalid body — DECLINES to the stock

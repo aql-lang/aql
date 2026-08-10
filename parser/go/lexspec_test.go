@@ -18,7 +18,7 @@ import (
 	"github.com/boru-lang/boru/parser/go"
 )
 
-const lexSpecRowCount = 27
+const lexSpecRowCount = 30
 
 type lexSpecRow struct {
 	line     int

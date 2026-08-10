@@ -65,6 +65,8 @@ github.com/tabnas/jsonic/go v0.4.0 h1:y5k/P21C3q3jWaA+VxEhXxzZ8xJgpgAehMBEseDN31
 github.com/tabnas/jsonic/go v0.4.0/go.mod h1:eDpkddhkuTFuIXMkSqTZl7cU7M23swbMpkXR1W5bApQ=
 github.com/tabnas/jsonic/go v0.6.0 h1:FT0qJvh3NmqFYb/rRcsTC2rh2zGt8lt2vc2gITgCQ4U=
 github.com/tabnas/jsonic/go v0.6.0/go.mod h1:D/jvwtI1DWkZZQSiZu1dX8ENa6hfTVlGbv2vsZVji14=
+github.com/tabnas/jsonic/go v0.6.1 h1:Xqq9zWoC5qBBkH63Sjh59a7M3lhnNUURetZ0uPoGeiw=
+github.com/tabnas/jsonic/go v0.6.1/go.mod h1:x5G7Aas9QfnjR24776Rs1DxZmFkn0hAuNEZ8iGsJeTE=
 github.com/tabnas/markdown/go v0.4.0 h1:IaUdqV3ELZCrcmZj4mLkAKIS+COEL8IUYMfQm0N/kBA=
 github.com/tabnas/markdown/go v0.4.0/go.mod h1:EF15z5Cy8Ew8WUPebakY3qq66oCn7RfsOBxNlnhCKjg=
 github.com/tabnas/markdown/go v0.6.1/go.mod h1:GeYnKmg8YibjtPDSAw32NCYaURVxx6JOsjYHAy6o74E=
@@ -75,6 +77,8 @@ github.com/tabnas/parser/go v0.4.0 h1:M8+qRT4KaCtr4OCpg9NDNUXJIdbbweqeqbpEpVGNEq
 github.com/tabnas/parser/go v0.4.0/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
 github.com/tabnas/parser/go v0.8.0 h1:ej1Ei6yLFQp/bJ7dF+cUUTPZgEJ6ZnSBd2WEgot2J8k=
 github.com/tabnas/parser/go v0.8.0/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
+github.com/tabnas/parser/go v0.8.1 h1:cceJrsDycMX+HfmxuleCGi/rKIA+dH+/7rkAz8LN70A=
+github.com/tabnas/parser/go v0.8.1/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
 github.com/tabnas/path/go v0.2.1 h1:KKarfyAS930cUoN3rpkp7zgNYzeRzp2pDzalUm312qw=
 github.com/tabnas/path/go v0.2.1/go.mod h1:yA/69xogyv2auyRHORM2z4pm5Krg0anSsXxOirSzV5s=
 github.com/tabnas/path/go v0.3.1/go.mod h1:ZdFV2jFfjZFii4kzSrzGSc60wkeOmJtkhU9bUUG66DA=

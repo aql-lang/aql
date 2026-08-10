@@ -22,8 +22,8 @@
   },
   "dependencies": {
     "@tabnas/json": "^0.5.1",
-    "@tabnas/jsonic": "^0.6.0",
-    "@tabnas/parser": "^0.8.0",
+    "@tabnas/jsonic": "^0.6.1",
+    "@tabnas/parser": "^0.8.1",
     "@boru-lang/core": "file:../../core/ts",
     "@boru-lang/parser": "file:../../parser/ts"
   },

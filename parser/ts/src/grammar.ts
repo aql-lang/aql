@@ -455,15 +455,19 @@ function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
       if ('0' === s[si] && undefined !== s[si + 1] && 'dD'.includes(s[si + 1]!)) {
         return undefined
       }
-      // Claim base-prefixed integers even when their magnitude exceeds
-      // int64. LIVE — do not retire: still open upstream as of jsonic
-      // 0.6.0 / parser 0.8.0. Go's stock lexer drops an overflowing base
-      // run to #TX while this port keeps #NR, so the public lexTokens
-      // streams would disagree on `0x8000000000000000`. Upstream tolerates
-      // ErrRange on the DECIMAL path but not the base arms, so `1e400`
-      // agrees and this class does not; see the Go twin's comment for the
-      // exact source lines. The converter reads the exact source, so the
-      // placeholder value is irrelevant.
+      // Claim base-prefixed integers, including magnitudes past int64.
+      // LIVE — do not retire. The OVERFLOW reason is fixed as of jsonic
+      // 0.6.1 / parser 0.8.1 (both ports now round the true value), but a
+      // different divergence keeps this arm alive: with `.` registered as
+      // a token, the stock scanners disagree on the run BEFORE the dot —
+      // Go calls `0xFF` in `0xFF.5` a number, this port calls it text —
+      // so deleting the arm splits `0xFF.5` and `[0xFF.5]` across ports.
+      // Measured with scripts/parity-probe.sh, not by the suites, which
+      // passed clean without it; lex.tsv's base-prefixed-boundaries rows
+      // now pin it. Held open by NUR.md §NUR061 (ADR-014 wants a linked
+      // upstream issue too — the report is prepared but unfiled, so there
+      // is no URL yet). See the Go twin's comment. The converter reads the
+      // exact source, so the placeholder value is irrelevant.
       if ('0' === s[si] && undefined !== s[si + 1] && 'xXoObB'.includes(s[si + 1]!)) {
         const prefix = s[si + 1]!
         let end = si + 2

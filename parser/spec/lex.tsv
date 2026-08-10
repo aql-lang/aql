@@ -34,3 +34,13 @@ a's'	OK	[{"name":"#TX","src":"a","si":0},{"name":"#ST","src":"'s'","si":1}]
 a"s"	OK	[{"name":"#TX","src":"a","si":0},{"name":"#ST","src":"\"s\"","si":1}]
 (a)/'s'	OK	[{"name":"#OP","src":"(","si":0},{"name":"#TX","src":"a","si":1},{"name":"#CP","src":")","si":2},{"name":"#TX","src":"/","si":3},{"name":"#ST","src":"'s'","si":4}]
 (a)/"s"	OK	[{"name":"#OP","src":"(","si":0},{"name":"#TX","src":"a","si":1},{"name":"#CP","src":")","si":2},{"name":"#TX","src":"/","si":3},{"name":"#ST","src":"\"s\"","si":4}]
+#
+# § base-prefixed boundaries — the class the decimal-boundary matcher's
+#   base-prefix arm exists for. WITHOUT that arm the two stock scanners
+#   disagree here (this is the gap that let the arm look retirable once):
+#   before a `.`, Go's stock scanner calls `0xFF` a number and this port's
+#   calls it text. These rows pin the token classification so a retirement
+#   sweep must measure it instead of trusting the suites' silence.
+0xFF.5	OK	[{"name":"#NR","src":"0xFF","si":0},{"name":"#DT","src":".","si":4},{"name":"#NR","src":"5","si":5}]
+0x8000000000000000	OK	[{"name":"#NR","src":"0x8000000000000000","si":0}]
+0xFFFFFFFFFFFFFFFF	OK	[{"name":"#NR","src":"0xFFFFFFFFFFFFFFFF","si":0}]
