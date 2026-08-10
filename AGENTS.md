@@ -149,8 +149,10 @@ A few rules from those guides that bite hardest when missed:
   design discussion is captured in `design/*.md`, not the ADR.
 - **Record every non-uniformity in [NUR.md](NUR.md)** the moment one
   surfaces — in code review, in a design, or while coding and debugging.
-  It is a PR blocker until the record is resolved or marked allowed
-  (the *allowed* verdict needs a maintainer, the record itself does not).
+  Recording is mandatory and needs no maintainer instruction; the
+  *allowed* verdict does. A **Pending** record does NOT block the PR —
+  it may stay open across many merges. The register's job is that a
+  divergence is never lost or silently baselined.
 - **Pair every positive test with a negative one** — assert what must be
   *rejected*, not just what passes.
 - **Panics are forbidden** outside annotated init-time type registration;

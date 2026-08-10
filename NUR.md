@@ -18,16 +18,18 @@ number is retired, never reassigned. A gap in the sequence is itself
 the record that something was found and fixed, and any external
 reference to a deleted `NURnnn` stays unambiguous forever.
 
-> **A newly-encountered non-uniformity is a PR blocker.** When a
-> non-uniformity surfaces — in code review, in a design note, or during
-> coding and debugging — it is recorded here immediately with status
-> **Pending**, and the PR that surfaced it must not merge until the
-> entry is either **Resolved** (the divergence is removed) or marked
-> **Allowed** (an explicit, argued acceptance). Unlike ADRs, *recording*
-> is mandatory on discovery, not on maintainer instruction; what
+> **Recording a non-uniformity is mandatory; a Pending record does NOT
+> block the PR.** When a non-uniformity surfaces — in code review, in a
+> design note, or during coding and debugging — it is recorded here
+> immediately with status **Pending**. That recording is not optional and
+> not subject to maintainer instruction (unlike an ADR entry); what
 > requires the maintainer is the **Allowed** verdict — the same reviewed
 > discipline as a `//covergate:allow` entry
-> (`design/COVERAGE-ALLOWLIST.10.md`).
+> (`design/COVERAGE-ALLOWLIST.10.md`). A record is discharged by becoming
+> **Resolved** (the divergence is removed) or **Allowed** (an explicit,
+> argued acceptance), and it may stay Pending across many merges: the
+> register's job is that a divergence is never lost or silently
+> baselined, not that work stops until it is settled.
 
 **Statuses:**
 
@@ -35,8 +37,8 @@ reference to a deleted `NURnnn` stays unambiguous forever.
   at all, or argued to a **verdict of "resolve by fix"** whose fix has
   not landed: a record directed at a fix stays Pending until the
   divergence is actually gone, because only Resolved and Allowed
-  discharge the block. Blocks the PR that surfaced it. Every Pending
-  record must also appear in the pending list below.
+  discharge it. Does not hold up a merge. Every Pending record must also
+  appear in the open list below.
 - **Allowed** — a deliberate divergence, kept. The record states the
   uniform rule, the divergence, the rationale, and the evidence that
   pins it (docs and tests), so the acceptance cannot silently rot.
@@ -47,13 +49,12 @@ reference to a deleted `NURnnn` stays unambiguous forever.
 
 ---
 
-## Pending non-uniformities (the blocking list)
+## Pending non-uniformities (the open list)
 
-The live list of records whose status is **Pending**. A PR that
-surfaced (or contains) one of these must not merge while it is listed
-here. An entry leaves this list only by becoming **Resolved** or
-**Allowed** in its record below — keep the two in sync in the same
-commit.
+The live list of records whose status is **Pending** — the standing
+inventory of known, argued-or-unargued divergences. An entry leaves this
+list only by becoming **Resolved** or **Allowed** in its record below —
+keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
