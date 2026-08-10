@@ -30,8 +30,8 @@
   },
   "dependencies": {
     "@tabnas/json": "^0.5.1",
-    "@tabnas/jsonic": "^0.6.0",
-    "@tabnas/parser": "^0.8.0"
+    "@tabnas/jsonic": "^0.6.1",
+    "@tabnas/parser": "^0.8.1"
   },
   "peerDependencies": {
     "@boru-lang/core": "0.1.0"
