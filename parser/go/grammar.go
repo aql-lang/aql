@@ -255,11 +255,21 @@ func isBasePrefixDigit(c, prefix byte) bool {
 }
 
 // matchBasePrefixRun is the 0x/0o/0b arm of the decimal boundary matcher:
-// claim base-prefixed integers even when their magnitude exceeds int64
-// (Go's stock lexer otherwise drops them to #TX while TS keeps #NR, making
-// the public LexTokens streams disagree; the converter reads the exact
-// source, so the placeholder value is intentionally irrelevant). The token
-// starts at start (which may include a sign) with the `0` at si.
+// claim base-prefixed integers even when their magnitude exceeds int64.
+// This arm is LIVE and must not be retired — the divergence it covers is
+// still open upstream as of jsonic v0.6.0 / parser v0.8.0. Go's stock
+// lexer drops an int64-overflowing base run to #TX while TS keeps #NR,
+// so the public LexTokens streams would disagree on `0x8000000000000000`.
+// Root cause: parser/go@v0.8.0 parser.go:507-524 routes base prefixes
+// through strconv.ParseInt(..., 64) and returns NaN on ANY error including
+// ErrRange, which the lexer's base arms decline on — while the DECIMAL
+// path at parser.go:535-546 deliberately tolerates ErrRange ("TS coerces
+// with unary +, which saturates rather than failing"). That tolerance was
+// never extended to the base arms, so `1e400` agrees across ports and
+// `0x8000000000000000` does not. Reported; the arm goes when the fix
+// lands (ADR-014). The converter reads the exact source, so the
+// placeholder value is intentionally irrelevant. The token starts at
+// start (which may include a sign) with the `0` at si.
 //
 // A run that is not a complete base-prefixed token — a trailing `.`, a
 // `.digits` tail, an empty or invalid body — DECLINES to the stock

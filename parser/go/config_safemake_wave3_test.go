@@ -188,9 +188,10 @@ func TestSafeParseDataLenientText(t *testing.T) {
 		// Language operators (`=`, `;`) are plain text in a data grammar.
 		{src: "{a: 1=2}", want: map[string]any{"a": "1=2"}},
 		{src: "1;2", want: "1;2"},
-		// Base-prefixed prose is CLAIMED whole rather than declined: the
-		// stock scanners disagree on dot-adjacent base runs (TS splits),
-		// so the fallback path is not parity-safe there.
+		// Base-prefixed prose declines to the stock scanner like any other
+		// incomplete run. (The TS stock lexer used to split such a run into
+		// stray values, so a matcher arm claimed it whole; fixed upstream in
+		// jsonic v0.6.0 / parser v0.8.0, arm retired — ADR-014.)
 		{src: "{a:0xFF.5}", want: map[string]any{"a": "0xFF.5"}},
 		{src: "[-0xFF.5]", want: []any{"-0xFF.5"}},
 	} {

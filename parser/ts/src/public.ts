@@ -145,7 +145,7 @@ function configValueCategory(value: unknown): 'list' | 'string' | 'scalar' {
  */
 export function safeParseData(src: string): unknown {
   // `map.ordered` records each map's true insertion order on the decoded
-  // node, recoverable with `keyOrder` (re-exported below). A plain JS object
+  // node, recoverable with `dataKeyOrder` below. A plain JS object
   // enumerates integer-like keys ascending whatever the source said, so
   // without this the seam cannot express what Go's OrderedMap preserves:
   // `{2:9, 1:8}` is keys 2,1. Object.keys() order is untouched, so nothing
@@ -166,14 +166,6 @@ export function safeParseData(src: string): unknown {
  */
 export function dataKeyOrder(node: unknown): string[] {
   return keyOrder(node)
-}
-
-/**
- * Run a parser constructor through the shared construction seam. JavaScript
- * is single-threaded here, so unlike Go no mutex is required.
- */
-export function guardMake<T>(construct: () => T): T {
-  return construct()
 }
 
 /** Parse a host options blob, requiring a map at the top level. */

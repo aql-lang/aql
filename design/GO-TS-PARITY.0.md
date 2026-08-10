@@ -16,7 +16,7 @@ preceded this).
 | module | go | ts | shared corpus |
 |---|---|---|---|
 | core | 100% | 99.57% | `core/spec`, 373 rows + a 16-row ledger |
-| parser | 100% | **100% lines / branches / functions** | `parser/spec`: 648 parse, 27 raw-lexer, 18 generated-depth, and 26 structural-shape rows; empty ledger |
+| parser | 100% | **100% lines / branches / functions** | `parser/spec`: 698 parse, 27 raw-lexer, 56 data-decode, 18 generated-depth, and 26 structural-shape rows; a live 9-row ledger |
 | basic | 100% | 100% *of the 17 words ported* | `basic/spec`, 69 rows |
 
 Two numbers that look like progress and are not:
@@ -78,11 +78,12 @@ found an empty-`${}` template-fold class the sweep's seed missed. The
 ledger now carries one representative row per class found so far (9
 rows; measured, not proven exhaustive), both runners re-measure every
 row on every run, and 50 probe-AGREED neighbors were promoted into
-`parse.tsv`. The safe DATA-decode seam additionally has two asymmetries
-no shared row can express — TS reorders integer-like map keys, and Go
-alone wraps sign+separator runs like `+_1` as numbers — recorded in
-NUR.md §NUR060. See parser/spec/README.md §"The current debt" for the
-class table.
+`parse.tsv`. The safe DATA-decode seam had two asymmetries no shared row
+could express — TS reordering integer-like map keys, and Go alone wrapping
+sign+separator runs like `+_1` as numbers — and both were DEPENDENCY
+defects, fixed upstream in jsonic v0.6.0 / parser v0.8.0 (ADR-014) and now
+pinned by rows in `data.tsv` rather than described in prose. See
+parser/spec/README.md §"The current debt" for the class table.
 
 `scripts/parity-probe.sh` is how a row gets written: it runs a candidate
 through both engines and prints AGREE with the shared render, or DIFFER
@@ -225,10 +226,13 @@ Go gets that in-package; TS arranges it by exporting from `convert.ts`,
 which is module-internal rather than package-public. The package surface now
 also carries the Go host seams (`LexTokens`, config/data safe parsing,
 Plainify, and ConvertParsedNumber); converter test hooks remain
-unexported from `index.ts`. (`GuardMake` was in that list until the
-2026-08-10 tabnas upgrade retired it: its whole signature existed to run a
-caller's constructor under the construction mutex, and the mutex went when
-upstream made the instance counter atomic — ADR-014.)
+unexported from `index.ts`. (`GuardMake`/`guardMake` was in that list
+until the 2026-08-10 tabnas upgrade retired it **in both ports**: its
+whole signature existed to run a caller's constructor under the Go
+construction mutex, and the mutex went when upstream made the instance
+counter atomic. The TS twin was a pass-through mirroring it with no
+production caller, so deleting only Go's would have left a no-op propped
+up for symmetry's sake — ADR-014.)
 
 The rule is: an arm belongs in a guard file only if no source text can
 reach it. Several arms started in `guards.test.ts` and MOVED OUT to

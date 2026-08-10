@@ -51,8 +51,11 @@ null	none	top-level null decodes to the concrete none
 true	true	booleans are booleans
 [1,	[1]	jsonic's lenient trailing comma is part of the superset
 {a:1]	ERR	malformed structure is refused by jsonic itself
-# § base-prefixed prose — the class where the stock scanners disagree, so
-# the data-mode matcher must claim the run itself (never decline it)
+# § base-prefixed prose — a run that is not a COMPLETE base-prefixed token
+# declines to the stock scanners, which agree on it in both ports. (They
+# did not until jsonic v0.6.0 / parser v0.8.0: the TS scanner split such a
+# run into stray values, and a boru matcher arm claimed the whole run to
+# hide it. Fixed upstream, arm retired — ADR-014. These rows are the pin.)
 {a:0xFF.5}	{a:'0xFF.5'}	a dot-adjacent hex run stays ONE lenient string in both ports
 [0xFF.5, 2]	['0xFF.5' 2]	…and never sheds stray values into a list
 [-0xFF.5, 9]	['-0xFF.5' 9]	…signed forms included

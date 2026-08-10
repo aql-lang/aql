@@ -456,9 +456,14 @@ function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
         return undefined
       }
       // Claim base-prefixed integers even when their magnitude exceeds
-      // int64. Go's stock lexer otherwise drops them to #TX while TS keeps
-      // #NR, making the public lexTokens streams disagree. The converter
-      // reads the exact source, so the placeholder value is irrelevant.
+      // int64. LIVE — do not retire: still open upstream as of jsonic
+      // 0.6.0 / parser 0.8.0. Go's stock lexer drops an overflowing base
+      // run to #TX while this port keeps #NR, so the public lexTokens
+      // streams would disagree on `0x8000000000000000`. Upstream tolerates
+      // ErrRange on the DECIMAL path but not the base arms, so `1e400`
+      // agrees and this class does not; see the Go twin's comment for the
+      // exact source lines. The converter reads the exact source, so the
+      // placeholder value is irrelevant.
       if ('0' === s[si] && undefined !== s[si + 1] && 'xXoObB'.includes(s[si + 1]!)) {
         const prefix = s[si + 1]!
         let end = si + 2

@@ -95,6 +95,26 @@ dependency's bug in order to justify boru code, stop: that comment belongs
 in an upstream issue. A shim that survives the fix becomes dead weight
 nobody dares delete, because its comment no longer describes reality.
 
+## Still open upstream
+
+One divergence in this family is **not** fixed, and the shim covering it
+stays until it is: the two stock scanners still classify an
+int64-overflowing base-prefixed run differently — Go drops
+`0x8000000000000000` to `#TX` (text), TS keeps `#NR` (number) — so the
+public trivia-preserving token streams would disagree. `parser/go@v0.8.0`
+routes `0x`/`0o`/`0b` through `strconv.ParseInt(…, 64)` and returns NaN on
+**any** error including `ErrRange` (parser.go:507-524), which the lexer's
+base arms decline on; the DECIMAL path immediately below deliberately
+tolerates `ErrRange` — *"TS coerces with unary +, which saturates rather
+than failing"* (parser.go:535-546). The tolerance was simply never
+extended to the base arms, which is why `1e400` now agrees across ports
+and `0x8000000000000000` still splits.
+
+So `matchBasePrefixRun`'s overflow claim is LIVE, and both matchers say so
+in their comments with the upstream line numbers, precisely so a future
+retirement sweep does not delete a working parity fix. Report it, then
+retire the arm when the fix lands.
+
 ## Cost, honestly
 
 Upstream-first is slower when you need the fix now, and it does not work

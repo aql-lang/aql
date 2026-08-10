@@ -41,8 +41,8 @@ go 1.24
 require github.com/boru-lang/boru/eng/go v0.0.0
 
 require (
-	github.com/tabnas/jsonic/go v0.2.0 // indirect
-	github.com/tabnas/parser/go v0.2.1 // indirect
+	github.com/tabnas/jsonic/go v0.6.0 // indirect
+	github.com/tabnas/parser/go v0.8.0 // indirect
 )
 
 replace github.com/boru-lang/boru/eng/go => ../eng/go
