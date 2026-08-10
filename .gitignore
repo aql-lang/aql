@@ -197,3 +197,15 @@ tools/piecetool/piecetool
 # (test/solardemo/{main.go,Makefile,go.mod}); the 8.6MB binary was tracked
 # for a long time before this. Build it, don't commit it.
 test/solardemo/solardemo
+
+# Scratch probe files. Agent/manual investigation of a parser or dependency
+# behaviour writes throwaway probes next to the code it is measuring (the TS
+# ones must live inside the package for imports to resolve). They are never
+# committed: a stray probe breaks `dupl`, the TS source manifest, and the
+# coverage gates. NOTE the modules' own `zz_*_test.go` files (check/go,
+# compiler/go) are REAL tests and deliberately not matched here.
+zzprobe*
+zz-*
+**/zz_tmp_*
+probe.tmp.*
+tmpprobe/
