@@ -273,8 +273,12 @@ func isBasePrefixDigit(c, prefix byte) bool {
 // scripts/parity-probe.sh — NOT by the suites, which passed clean with it
 // gone because no corpus row covered the shape. parser/spec/lex.tsv's
 // §base-prefixed-boundaries rows now pin the token classification, so the
-// next retirement sweep fails loudly instead of looking safe. Reported;
-// the arm goes when the boundary is fixed upstream (ADR-014).
+// next retirement sweep fails loudly instead of looking safe.
+//
+// Held open by NUR.md §NUR061, which is the auditable owner ADR-014 asks
+// for. The upstream report is prepared but not yet filed, so there is no
+// issue URL to link here yet; put it in this comment and in the record
+// when there is one. The arm goes when the boundary is fixed upstream.
 //
 // The converter reads the exact source, so the placeholder value is
 // intentionally irrelevant. The token starts at start (which may include

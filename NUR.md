@@ -72,6 +72,7 @@ keep the two in sync in the same commit.
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
+| [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary, so one dependency shim is retained | PR #338 retirement attempt (flagged for NUR by Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2174,3 +2175,56 @@ follow. The record discharges when the ledger is empty again.
 > 2,587-source sweep on the new dependency measures the byte-identical 55
 > divergences, which is what distinguishes the two categories. This record
 > stays Pending on those nine.
+
+---
+
+## NUR061 — The stock scanners split a base-prefixed run at the `.` boundary, so one dependency shim is retained {#nur061}
+
+**Status:** Pending · **Recorded:** 2026-08-10 · **Surfaced by:** PR #338's
+attempt to retire `matchBasePrefixRun` after the upstream overflow fix;
+flagged for this register by the PR #338 review (Codex P1)
+
+**Rule:** ADR-014 — a tabnas defect is fixed upstream and consumed as a
+version bump, never carried as a boru-side shim. Where a shim must be held
+temporarily, it needs its upstream issue linked in the comment and a record
+here holding it open. This is that record.
+
+**Divergence:** with `.` registered as a fixed token — which boru's grammar
+does and the bare dependency does not — the two stock scanners classify the
+run BEFORE the dot differently: Go calls `0xFF` in `0xFF.5` a number (#NR),
+TS calls it text (#TX). boru therefore still carries the 0x/0o/0b arm of its
+decimal-boundary matcher (`matchBasePrefixRun` in parser/go/grammar.go and
+the mirrored block in parser/ts/src/grammar.ts) so both ports agree. With
+the arm deleted, three shapes split:
+
+```
+0xFF.5      Go: ERR "a number has no members to access with `.`"   TS: 255.5
+[0xFF.5]    Go: same ERR                                           TS: [255.5]
+{a:0xFF.5}  Go: same ERR                                           TS: ERR "invalid numeric literal: 5"
+```
+
+Note this is NOT the overflow divergence reported after v0.8.0 — that one is
+FIXED in jsonic v0.6.1 / parser v0.8.1, where both ports now round the true
+value of `0xFFFFFFFFFFFFFFFF` to 1.8446744073709552e19.
+
+**Evidence:** `parser/spec/lex.tsv` §base-prefixed boundaries pins the token
+classification (three rows, both independent runners); `scripts/parity-probe.sh`
+reproduces the value-level split when the arm is removed. Both matcher
+comments carry the reason and point here.
+
+**How it was nearly missed — the reason this record exists.** The arm was
+deleted in both ports and BOTH SUITES PASSED (928 TS tests, the full Go
+suite), because no corpus row covered the shape and Go's token stream was
+byte-identical before and after. The split appeared only on comparing the
+TWO ports. A shim's own green suite is not evidence the shim is dead; that
+is what the new lex.tsv rows now prevent.
+
+**Upstream status:** report prepared (the measured reproduction, the root
+cause, and the acceptance criteria) and handed to the maintainer for filing;
+**no upstream issue URL exists yet**. When one is filed, put its URL in this
+record and in both matcher comments — ADR-014 asks for the link, and until it
+exists this record is the only auditable owner.
+
+**Proposed verdict:** resolve by fix — retire the arm when the boundary is
+fixed upstream, at which point the three lex.tsv rows either keep passing
+(the stock scanners agreeing) or fail loudly and say so.

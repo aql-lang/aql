@@ -121,7 +121,10 @@ then loudly under `scripts/parity-probe.sh`. A shim's own passing suite is
 not evidence that the shim is dead. Three `lex.tsv` rows now pin the
 classification, so the next sweep fails instead of looking safe.
 
-Reported; the arm goes when the boundary is fixed upstream.
+Held open by `NUR.md` §NUR061 — the auditable owner ADR-014 asks for. The
+upstream report is prepared but **not yet filed**, so no issue URL exists to
+link; when one does, it belongs in NUR061 and in both matcher comments. The
+arm goes when the boundary is fixed upstream.
 
 ## Cost, honestly
 

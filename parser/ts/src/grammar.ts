@@ -464,7 +464,9 @@ function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
       // so deleting the arm splits `0xFF.5` and `[0xFF.5]` across ports.
       // Measured with scripts/parity-probe.sh, not by the suites, which
       // passed clean without it; lex.tsv's base-prefixed-boundaries rows
-      // now pin it. See the Go twin's comment. The converter reads the
+      // now pin it. Held open by NUR.md §NUR061 (ADR-014 wants a linked
+      // upstream issue too — the report is prepared but unfiled, so there
+      // is no URL yet). See the Go twin's comment. The converter reads the
       // exact source, so the placeholder value is irrelevant.
       if ('0' === s[si] && undefined !== s[si + 1] && 'xXoObB'.includes(s[si + 1]!)) {
         const prefix = s[si + 1]!
