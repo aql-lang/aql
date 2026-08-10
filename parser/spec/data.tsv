@@ -51,3 +51,15 @@ null	none	top-level null decodes to the concrete none
 true	true	booleans are booleans
 [1,	[1]	jsonic's lenient trailing comma is part of the superset
 {a:1]	ERR	malformed structure is refused by jsonic itself
+# § base-prefixed prose — the class where the stock scanners disagree, so
+# the data-mode matcher must claim the run itself (never decline it)
+{a:0xFF.5}	{a:'0xFF.5'}	a dot-adjacent hex run stays ONE lenient string in both ports
+[0xFF.5, 2]	['0xFF.5' 2]	…and never sheds stray values into a list
+[-0xFF.5, 9]	['-0xFF.5' 9]	…signed forms included
+{a: 0b101.1}	{a:'0b101.1'}	binary
+[0o17.e2]	['0o17.e2']	octal with a dotted exponent tail
+{a: 0x1_.5}	{a:'0x1_.5'}	separator inside the claimed prose run
+{a: 0xFF.}	{a:'0xFF.'}	trailing dot alone
+{a: 0xFFx}	{a:'0xFFx'}	word characters after the body
+{a: 0x.5}	{a:'0x.5'}	an EMPTY body declines to stock text (the scanners agree there)
+[0xzz]	['0xzz']	…as does an invalid body

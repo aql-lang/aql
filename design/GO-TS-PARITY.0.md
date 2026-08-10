@@ -73,11 +73,16 @@ literal.
 Corpus-zero did not mean language-zero: a 2,587-source probe sweep the
 same day measured 55 divergences (~2.1%) on inputs OUTSIDE the corpus —
 trailing-`=>` fold loss, two accept/reject splits, recovery-token detail,
-error precedence, and an internal type-name leak. The ledger now carries
-one representative row per class (8 rows), both runners re-measure every
+error precedence, and an internal type-name leak — and follow-up probing
+found an empty-`${}` template-fold class the sweep's seed missed. The
+ledger now carries one representative row per class found so far (9
+rows; measured, not proven exhaustive), both runners re-measure every
 row on every run, and 50 probe-AGREED neighbors were promoted into
-`parse.tsv`. See parser/spec/README.md §"The current debt" for the class
-table.
+`parse.tsv`. The safe DATA-decode seam additionally has two asymmetries
+no shared row can express — TS reorders integer-like map keys, and Go
+alone wraps sign+separator runs like `+_1` as numbers — recorded in
+NUR.md §NUR060. See parser/spec/README.md §"The current debt" for the
+class table.
 
 `scripts/parity-probe.sh` is how a row gets written: it runs a candidate
 through both engines and prints AGREE with the shared render, or DIFFER

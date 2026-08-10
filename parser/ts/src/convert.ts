@@ -307,8 +307,6 @@ interface ConversionTask {
   node: unknown
   context: ConversionContext
   level: number
-  /** Number of `${...}` expression frames enclosing this conversion. */
-  interpLevels: number
   replace?: (next: unknown) => void
   exit?: boolean
   root?: boolean
@@ -346,7 +344,6 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     node: root,
     context: 'top',
     level: rootLevel,
-    interpLevels: 0,
     root: true,
   }]
 
@@ -354,10 +351,9 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     node: unknown,
     context: ConversionContext,
     level: number,
-    interpLevels: number,
     replace: (next: unknown) => void,
   ): void => {
-    work.push({ node, context, level, interpLevels, replace })
+    work.push({ node, context, level, replace })
   }
 
   while (work.length > 0) {
@@ -434,12 +430,12 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
       const typed = arr['child$'] !== undefined
       for (let i = node.length - 1; i >= 0; i--) {
         const index = i
-        pushValue(node[index], typed ? 'data' : 'top', childLevel, task.interpLevels, (next) => {
+        pushValue(node[index], typed ? 'data' : 'top', childLevel, (next) => {
           node[index] = next
         })
       }
       if (typed) {
-        pushValue(arr['child$'], 'data', childLevel, task.interpLevels, (next) => {
+        pushValue(arr['child$'], 'data', childLevel, (next) => {
           arr['child$'] = next
         })
       }
@@ -450,7 +446,7 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
       const keys = mapKeys(node)
       for (let i = keys.length - 1; i >= 0; i--) {
         const key = keys[i]!
-        pushValue(node[key], 'data', childLevel, task.interpLevels, (next) => {
+        pushValue(node[key], 'data', childLevel, (next) => {
           node[key] = next
         })
       }
@@ -460,7 +456,7 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     if (node instanceof ParenGroup || node instanceof AngleGroup) {
       for (let i = node.items.length - 1; i >= 0; i--) {
         const index = i
-        pushValue(node.items[index], 'top', childLevel, task.interpLevels, (next) => {
+        pushValue(node.items[index], 'top', childLevel, (next) => {
           node.items[index] = next
         })
       }
@@ -495,7 +491,7 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
       }
       for (let i = part.items.length - 1; i >= 0; i--) {
         const index = i
-        pushValue(part.items[index], 'top', exprLevel, task.interpLevels + 1, (next) => {
+        pushValue(part.items[index], 'top', exprLevel, (next) => {
           part.items[index] = next
         })
       }

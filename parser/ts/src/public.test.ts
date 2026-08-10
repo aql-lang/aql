@@ -182,9 +182,16 @@ describe('public parser helpers', () => {
       // Language operators (`=`, `;`) are plain text in a data grammar.
       ['{a: 1=2}', { a: '1=2' }],
       ['1;2', '1;2'],
+      // Base-prefixed prose is CLAIMED whole rather than declined: the
+      // stock scanners disagree on dot-adjacent base runs (this port's
+      // stock lexer splits them into stray values), so the fallback path
+      // is not parity-safe there.
+      ['{a:0xFF.5}', { a: '0xFF.5' }],
     ] as const) {
       assert.deepEqual(plainify(safeParseData(src)), want)
     }
+    const signedBase = safeParseData('[-0xFF.5, 9]') as unknown[]
+    assert.equal(plainify(signedBase[0]), '-0xFF.5')
 
     const unicodeList = safeParseData('[🙂,1_]') as unknown[]
     assert.throws(

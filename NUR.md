@@ -2140,14 +2140,22 @@ parity-probe sweep; flagged for this register by the PR #337 review
 `parser/ts` must render every source identically — the uniformity the
 `parser/spec` corpus exists to enforce.
 **Divergence:** a 2,587-source probe sweep measured 55 sources (~2.1%)
-where the twins disagree, in eight classes: trailing-`=>` fold loss (TS
-drops the paren group Go folds — also inside dotchains), two
-accept/reject splits (trailing bare `:` — Go accepts, TS refuses;
-`=> ,` — Go refuses, TS accepts and silently drops tokens), post-`]`
-recovery-token detail (TS reports an empty token where Go names the
-offender), two error-precedence splits (receiverless-`.` vs
-unmatched-`(`, and bare-`/s` vs unmatched-`(`), and an internal
-type-name leak in one message on both sides.
+where the twins disagree, and follow-up probing added a class the sweep's
+seed missed — nine classes so far: trailing-`=>` fold loss (TS drops the
+paren group Go folds — also inside dotchains), two accept/reject splits
+(trailing bare `:` — Go accepts, TS refuses; `=> ,` — Go refuses, TS
+accepts and silently drops tokens), post-`]` recovery-token detail (TS
+reports an empty token where Go names the offender), two error-precedence
+splits (receiverless-`.` vs unmatched-`(`, and bare-`/s` vs
+unmatched-`(`), an internal type-name leak in one message on both sides,
+and an empty-`${}` fold split in an unterminated template (Go folds to
+`interp('')`, TS keeps the hole). The safe DATA-decode seam
+(`SafeParseData`/`safeParseData`) adds two asymmetries no shared spec row
+can express: the TS seam returns plain JS objects, whose integer-like map
+keys enumerate ascending regardless of insertion order (`{2:9, 1:8}`
+decodes key-ordered in TS, insertion-ordered in Go), and a
+sign+separator run such as `+_1` is wrapped as a numeric token by Go's
+stock scanner (loud converter refusal) but stays lenient text in TS.
 **Evidence:** `parser/spec/divergent.tsv` — the live ledger, one measured
 row per class; both spec runners re-render every row against their own
 column on every run, so a row can neither rot nor survive its fix.

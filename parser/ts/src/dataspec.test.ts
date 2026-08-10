@@ -27,7 +27,7 @@ import { BoruError, canonValue } from '@boru-lang/core'
 import { convertParsedNumber, safeParseData } from './index.ts'
 
 const SPEC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'spec')
-const DATA_SPEC_ROW_COUNT = 36
+const DATA_SPEC_ROW_COUNT = 46
 
 interface DataSpecRow {
   line: number

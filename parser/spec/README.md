@@ -125,6 +125,16 @@ the source — those messages are deliberately dependency-native and
 unpinned. Both runners implement the reader and renderer independently, as
 everywhere else in this corpus.
 
+Two measured seam asymmetries are documented here because no shared row
+can express them (NUR.md §NUR060 records both): the TS seam returns plain
+JS objects, whose **integer-like keys enumerate in ascending order
+regardless of insertion order** (`{2:9, 1:8}` decodes key-ordered `1, 2`
+in TS, insertion-ordered `2, 1` in Go) — so rows must not use
+integer-like map keys until the TS seam grows an order-preserving
+carrier; and a **sign+separator run** such as `+_1` is wrapped as a
+numeric token by Go's stock scanner (so the converter refuses it loudly)
+but stays lenient text in TS.
+
 ### `nesting.tsv` — the generated-depth contract
 
 ```
@@ -190,8 +200,11 @@ the two user-facing first lines still compare equal in `parse.tsv`.
 in both ports. But the corpus is not the language: a 2,587-source
 parity-probe sweep (token soup over the surface alphabet plus truncation
 mutants of `parse.tsv` rows, `scripts/parity-probe.sh`) measured **55
-divergences (~2.1%)** on inputs outside the corpus. They triage into eight
-classes, one representative row each in `divergent.tsv`:
+divergences (~2.1%)** on inputs outside the corpus, and follow-up probing
+found one further class the sweep's seed missed. The ledger carries one
+representative row per class found so far — the class list is what
+probing has MEASURED, not a proof of exhaustion; new probe-found classes
+get new rows:
 
 - **trailing `=>` fold loss** (2 rows): Go's arrowfold folds a bodyless
   trailing arrow (the input doubles as the body); TS drops the group from
@@ -207,6 +220,9 @@ classes, one representative row each in `divergent.tsv`:
   different order.
 - **internal type-name leak** (1 row): `unsupported value type
   parser.unclosedParen` vs `UnclosedParen` — neither render is stable.
+- **empty-`${}` fold in an unterminated template** (1 row): both ports
+  accept `` `${} `` but Go folds the empty interpolation to `interp('')`
+  while TS keeps the `interp(${})` hole — a value-level fold divergence.
 
 Fifty probe-agreed sources from the same sweep were promoted into
 `parse.tsv` (the `§probe-2026-08-09` section) so the corpus covers the
@@ -261,8 +277,8 @@ The main corpus grew from 370 rows to 648 unique sources while driving
 `parser/ts` from 93.97% to 100% line coverage; the final gate also requires
 100% branches and functions. The 2026-08-09 probe sweep then grew it to 698.
 Both runners machine-pin the current corpus sizes: 698 parse rows, 27
-raw-lexer rows, 36 data-decode rows, 18 generated-depth rows, 26
-semantic-shape rows, and 8 live divergence rows. An intentional corpus change updates both independent
+raw-lexer rows, 46 data-decode rows, 18 generated-depth rows, 26
+semantic-shape rows, and 9 live divergence rows. An intentional corpus change updates both independent
 constants and this prose together. The growth found further defects the
 crossdiff could not:
 

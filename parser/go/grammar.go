@@ -241,22 +241,69 @@ func setupDataDecimalMatcher(j *jsonic.Jsonic) {
 	setupDecimalBoundaryMatcher(j, true)
 }
 
+// isBasePrefixDigit reports whether c is a digit of the 0x/0o/0b base
+// selected by prefix.
+func isBasePrefixDigit(c, prefix byte) bool {
+	switch prefix {
+	case 'x', 'X':
+		return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+	case 'o', 'O':
+		return c >= '0' && c <= '7'
+	default: // b / B
+		return c == '0' || c == '1'
+	}
+}
+
+// matchBasePrefixRun is the 0x/0o/0b arm of the decimal boundary matcher:
+// claim base-prefixed integers even when their magnitude exceeds int64
+// (Go's stock lexer otherwise drops them to #TX while TS keeps #NR, making
+// the public LexTokens streams disagree; the converter reads the exact
+// source, so the placeholder value is intentionally irrelevant). The token
+// starts at start (which may include a sign) with the `0` at si. A nil
+// return declines to the stock scanners.
+//
+// Data mode cannot decline a dot-adjacent base-prefixed run to the stock
+// scanners: they DISAGREE there (Go keeps `0xFF.5` one lenient text, TS
+// lexes the prefix as a number and splits the rest into stray values).
+// Claim the whole prose run to the data boundary as one text token
+// instead — the same string Go's stock scanner produces, now guaranteed
+// in both ports. An empty body (`0x.5`, `0xzz`) still declines: the stock
+// scanners agree on those.
+func matchBasePrefixRun(lex *jsonic.Lex, s string, start, si int, dataMode bool,
+	isFollowingText func(string, int) bool) *jsonic.Token {
+	cursor := lex.Cursor()
+	prefix := s[si+1]
+	end := si + 2
+	bodyStart := end
+	for end < len(s) && (isBasePrefixDigit(s[end], prefix) || s[end] == '_') {
+		end++
+	}
+	if end == bodyStart || isFollowingText(s, end) {
+		if dataMode && end > bodyStart {
+			for end < len(s) && isFollowingText(s, end) {
+				end++
+			}
+			src := s[start:end]
+			tkn := lex.Token("#TX", jsonic.TinTX, src, src)
+			cursor.SI = end
+			cursor.CI += utf8.RuneCountInString(src)
+			return tkn
+		}
+		return nil
+	}
+	src := s[start:end]
+	tkn := lex.Token("#NR", jsonic.TinNR, float64(0), src)
+	cursor.SI = end
+	cursor.CI += end - start
+	return tkn
+}
+
 // setupDecimalBoundaryMatcher registers the shared matcher body. dataMode
 // selects the boundary alphabet and the no-split rule described on the two
 // wrappers above; the language mode is bit-for-bit the historical behavior.
 func setupDecimalBoundaryMatcher(j *jsonic.Jsonic, dataMode bool) {
 	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
 	isDigitOrSep := func(c byte) bool { return isDigit(c) || c == '_' }
-	isBaseDigit := func(c, prefix byte) bool {
-		switch prefix {
-		case 'x', 'X':
-			return isDigit(c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
-		case 'o', 'O':
-			return c >= '0' && c <= '7'
-		default: // b / B
-			return c == '0' || c == '1'
-		}
-	}
 	isFollowingText := func(s string, i int) bool {
 		if i >= len(s) {
 			return false
@@ -317,26 +364,8 @@ func setupDecimalBoundaryMatcher(j *jsonic.Jsonic, dataMode bool) {
 			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("dD", rune(s[si+1])) {
 				return nil
 			}
-			// Claim base-prefixed integers even when their magnitude exceeds
-			// int64. Go's stock lexer otherwise drops them to #TX while TS
-			// keeps #NR, making the public LexTokens streams disagree. The
-			// converter reads the exact source, so the placeholder value is
-			// intentionally irrelevant.
 			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("xXoObB", rune(s[si+1])) {
-				prefix := s[si+1]
-				end := si + 2
-				bodyStart := end
-				for end < len(s) && (isBaseDigit(s[end], prefix) || s[end] == '_') {
-					end++
-				}
-				if end == bodyStart || isFollowingText(s, end) {
-					return nil
-				}
-				src := s[start:end]
-				tkn := lex.Token("#NR", jsonic.TinNR, float64(0), src)
-				cursor.SI = end
-				cursor.CI += end - start
-				return tkn
+				return matchBasePrefixRun(lex, s, start, si, dataMode, isFollowingText)
 			}
 			for si < len(s) && isDigitOrSep(s[si]) {
 				si++

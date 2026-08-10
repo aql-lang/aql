@@ -187,6 +187,11 @@ func TestSafeParseDataLenientText(t *testing.T) {
 		// Language operators (`=`, `;`) are plain text in a data grammar.
 		{src: "{a: 1=2}", want: map[string]any{"a": "1=2"}},
 		{src: "1;2", want: "1;2"},
+		// Base-prefixed prose is CLAIMED whole rather than declined: the
+		// stock scanners disagree on dot-adjacent base runs (TS splits),
+		// so the fallback path is not parity-safe there.
+		{src: "{a:0xFF.5}", want: map[string]any{"a": "0xFF.5"}},
+		{src: "[-0xFF.5]", want: []any{"-0xFF.5"}},
 	} {
 		v, err := SafeParseData(tc.src)
 		if err != nil {
