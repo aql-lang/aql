@@ -9,11 +9,13 @@ import {
   type Jsonic as JsonicParser,
   type Options,
 } from '@tabnas/jsonic'
+import { keyOrder } from '@tabnas/parser'
 
 import { loadDeclGrammar } from './declgrammar.ts'
 import {
   setupBaseTokens,
   setupBigNumberMatcher,
+  setupDataDecimalMatcher,
   setupDecimalUnderscoreMatcher,
   setupMiniLitMatcher,
   setupNumberSub,
@@ -142,18 +144,28 @@ function configValueCategory(value: unknown): 'list' | 'string' | 'scalar' {
  * convertParsedNumber can preserve integer/float kind and full precision.
  */
 export function safeParseData(src: string): unknown {
-  const jsonic = safeMake()
-  setupDecimalUnderscoreMatcher(jsonic)
+  // `map.ordered` records each map's true insertion order on the decoded
+  // node, recoverable with `dataKeyOrder` below. A plain JS object
+  // enumerates integer-like keys ascending whatever the source said, so
+  // without this the seam cannot express what Go's OrderedMap preserves:
+  // `{2:9, 1:8}` is keys 2,1. Object.keys() order is untouched, so nothing
+  // that ignores the side-channel changes behaviour.
+  const jsonic = safeMake({ map: { ordered: true } })
+  // The data-mode matcher claims only complete numeric tokens and never
+  // splits: digit-led prose (`1.x`, `1.2.3`, `1.2-beta`) stays on the stock
+  // lenient text path, preserving the jsonic-superset contract.
+  setupDataDecimalMatcher(jsonic)
   setupNumberSub(jsonic, src)
   return parsePlain(jsonic, src)
 }
 
 /**
- * Run a parser constructor through the shared construction seam. JavaScript
- * is single-threaded here, so unlike Go no mutex is required.
+ * The insertion order of a decoded map's keys, in source order — the TS
+ * twin of reading `*jsonic.OrderedMap.Keys` on the Go side. Falls back to
+ * `Object.keys` order for a node parsed without `map.ordered`.
  */
-export function guardMake<T>(construct: () => T): T {
-  return construct()
+export function dataKeyOrder(node: unknown): string[] {
+  return keyOrder(node)
 }
 
 /** Parse a host options blob, requiring a map at the top level. */

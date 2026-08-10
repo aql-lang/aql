@@ -5,7 +5,6 @@ import { BoruError, TFloat, TInteger, canonValue } from '@boru-lang/core'
 
 import {
   convertParsedNumber,
-  guardMake,
   lexTokens,
   parseConfig,
   plainify,
@@ -62,7 +61,6 @@ describe('public parser helpers', () => {
     const disabledStrings = safeMake({ string: { lex: false }, ender: [';'] }).options().ender
     assert.deepEqual(disabledStrings, [';'])
     assert.equal(typeof safeMake('jsonic'), 'function')
-    assert.equal(guardMake(() => 7), 7)
   })
 
   it('normalizes plain-parser errors to Unicode code-point columns', () => {
@@ -164,6 +162,34 @@ describe('public parser helpers', () => {
         /misplaced `_` in numeric literal/,
       )
     }
+
+    // The jsonic-superset side of the data seam: a digit-led run that is
+    // not a complete Boru numeric spelling stays lenient text, exactly as
+    // the stock data grammar decodes it. The data-mode matcher must never
+    // split a run — `1.x` is one string, never [1, '.x'].
+    for (const [src, want] of [
+      ['{v: 1.2.3}', { v: '1.2.3' }],
+      ['1.x', '1.x'],
+      ['{p: 1.2-beta}', { p: '1.2-beta' }],
+      ['1..2', '1..2'],
+      ['{a: 1.5suffix}', { a: '1.5suffix' }],
+      // An empty exponent after a dot declines rather than splitting.
+      ['{a: 1.e}', { a: '1.e' }],
+      // A signed leading-dot run followed by text declines whole.
+      ['+.5x', '+.5x'],
+      // Language operators (`=`, `;`) are plain text in a data grammar.
+      ['{a: 1=2}', { a: '1=2' }],
+      ['1;2', '1;2'],
+      // Base-prefixed prose declines to the stock scanner like any other
+      // incomplete run. (This port's stock lexer used to split such a run
+      // into stray values, so a matcher arm claimed it whole; fixed
+      // upstream in jsonic 0.6.0 / parser 0.8.0, arm retired — ADR-014.)
+      ['{a:0xFF.5}', { a: '0xFF.5' }],
+    ] as const) {
+      assert.deepEqual(plainify(safeParseData(src)), want)
+    }
+    const signedBase = safeParseData('[-0xFF.5, 9]') as unknown[]
+    assert.equal(plainify(signedBase[0]), '-0xFF.5')
 
     const unicodeList = safeParseData('[🙂,1_]') as unknown[]
     assert.throws(

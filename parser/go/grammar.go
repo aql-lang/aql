@@ -227,26 +227,98 @@ func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
 // deliberately loose here: numberValToValue owns the language rule and
 // reports a misplaced `_` using the complete literal source.
 func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
+	setupDecimalBoundaryMatcher(j, false)
+}
+
+// setupDataDecimalMatcher is the DATA-mode variant of the decimal boundary
+// shim, for plain-jsonic decode seams (SafeParseData). Data grammars have no
+// `.` member-access token and promise jsonic's lenient superset, so this
+// mode claims a run only when it is a complete numeric token at a data
+// boundary and otherwise DECLINES — it never splits. Digit-led prose such as
+// `1.x`, `1.2.3` or `1.2-beta` falls back whole to the stock lenient text
+// scanner instead of erroring or shedding a stray second value.
+func setupDataDecimalMatcher(j *jsonic.Jsonic) {
+	setupDecimalBoundaryMatcher(j, true)
+}
+
+// isBasePrefixDigit reports whether c is a digit of the 0x/0o/0b base
+// selected by prefix.
+func isBasePrefixDigit(c, prefix byte) bool {
+	switch prefix {
+	case 'x', 'X':
+		return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+	case 'o', 'O':
+		return c >= '0' && c <= '7'
+	default: // b / B
+		return c == '0' || c == '1'
+	}
+}
+
+// matchBasePrefixRun is the 0x/0o/0b arm of the decimal boundary matcher:
+// claim base-prefixed integers even when their magnitude exceeds int64.
+// This arm is LIVE and must not be retired — the divergence it covers is
+// still open upstream as of jsonic v0.6.0 / parser v0.8.0. Go's stock
+// lexer drops an int64-overflowing base run to #TX while TS keeps #NR,
+// so the public LexTokens streams would disagree on `0x8000000000000000`.
+// Root cause: parser/go@v0.8.0 parser.go:507-524 routes base prefixes
+// through strconv.ParseInt(..., 64) and returns NaN on ANY error including
+// ErrRange, which the lexer's base arms decline on — while the DECIMAL
+// path at parser.go:535-546 deliberately tolerates ErrRange ("TS coerces
+// with unary +, which saturates rather than failing"). That tolerance was
+// never extended to the base arms, so `1e400` agrees across ports and
+// `0x8000000000000000` does not. Reported; the arm goes when the fix
+// lands (ADR-014). The converter reads the exact source, so the
+// placeholder value is intentionally irrelevant. The token starts at
+// start (which may include a sign) with the `0` at si.
+//
+// A run that is not a complete base-prefixed token — a trailing `.`, a
+// `.digits` tail, an empty or invalid body — DECLINES to the stock
+// scanners, which agree on it: both ports keep `0xFF.5` as one lenient
+// text token. (Until tabnas v0.6.0/v0.8.0 they did not — the TS scanner
+// split such a run into stray values — and this matcher claimed the whole
+// prose run in data mode to hide that. The defect was fixed upstream and
+// the shim retired with it, per ADR-014. parser/spec/data.tsv's
+// base-prefixed-prose rows are the pin either way.)
+func matchBasePrefixRun(lex *jsonic.Lex, s string, start, si int,
+	isFollowingText func(string, int) bool) *jsonic.Token {
+	cursor := lex.Cursor()
+	prefix := s[si+1]
+	end := si + 2
+	bodyStart := end
+	for end < len(s) && (isBasePrefixDigit(s[end], prefix) || s[end] == '_') {
+		end++
+	}
+	if end == bodyStart || isFollowingText(s, end) {
+		return nil
+	}
+	src := s[start:end]
+	tkn := lex.Token("#NR", jsonic.TinNR, float64(0), src)
+	cursor.SI = end
+	cursor.CI += end - start
+	return tkn
+}
+
+// setupDecimalBoundaryMatcher registers the shared matcher body. dataMode
+// selects the boundary alphabet and the no-split rule described on the two
+// wrappers above; the language mode is bit-for-bit the historical behavior.
+func setupDecimalBoundaryMatcher(j *jsonic.Jsonic, dataMode bool) {
 	isDigit := func(c byte) bool { return c >= '0' && c <= '9' }
 	isDigitOrSep := func(c byte) bool { return isDigit(c) || c == '_' }
-	isBaseDigit := func(c, prefix byte) bool {
-		switch prefix {
-		case 'x', 'X':
-			return isDigit(c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
-		case 'o', 'O':
-			return c >= '0' && c <= '7'
-		default: // b / B
-			return c == '0' || c == '1'
-		}
-	}
 	isFollowingText := func(s string, i int) bool {
 		if i >= len(s) {
 			return false
 		}
 		switch s[i] {
-		case ' ', '\t', '\n', '\r', '\'', '"', '#', ',', ':', ';', '(', ')', '[', ']', '{', '}', '?', '.', '!', '|', '`', '<', '>':
+		case ' ', '\t', '\n', '\r', '\'', '"', '#', ',', ':', '[', ']', '{', '}', '`':
 			return false
+		case ';', '(', ')', '?', '.', '!', '|', '<', '>':
+			// Language operators end a token only in language mode; a plain
+			// data grammar lexes them as ordinary text continuation.
+			return dataMode
 		case '=':
+			if dataMode {
+				return true
+			}
 			return i+1 >= len(s) || s[i+1] != '>'
 		default:
 			return true
@@ -292,26 +364,8 @@ func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
 			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("dD", rune(s[si+1])) {
 				return nil
 			}
-			// Claim base-prefixed integers even when their magnitude exceeds
-			// int64. Go's stock lexer otherwise drops them to #TX while TS
-			// keeps #NR, making the public LexTokens streams disagree. The
-			// converter reads the exact source, so the placeholder value is
-			// intentionally irrelevant.
 			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("xXoObB", rune(s[si+1])) {
-				prefix := s[si+1]
-				end := si + 2
-				bodyStart := end
-				for end < len(s) && (isBaseDigit(s[end], prefix) || s[end] == '_') {
-					end++
-				}
-				if end == bodyStart || isFollowingText(s, end) {
-					return nil
-				}
-				src := s[start:end]
-				tkn := lex.Token("#NR", jsonic.TinNR, float64(0), src)
-				cursor.SI = end
-				cursor.CI += end - start
-				return tkn
+				return matchBasePrefixRun(lex, s, start, si, isFollowingText)
 			}
 			for si < len(s) && isDigitOrSep(s[si]) {
 				si++
@@ -338,6 +392,9 @@ func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
 			}
 			if si == exponentStart {
 				if integerEnd >= 0 && hasDot {
+					if dataMode {
+						return nil
+					}
 					return emitDecimalPrefix(lex, s, start, integerEnd)
 				}
 				if leadingDot {
@@ -349,6 +406,12 @@ func setupDecimalUnderscoreMatcher(j *jsonic.Jsonic, _ parserTokens) {
 		}
 
 		if isFollowingText(s, si) {
+			// Data mode never splits a run: declining hands the whole span
+			// to the stock lenient text scanner, so digit-led prose stays
+			// one string instead of shedding a stray second value.
+			if dataMode {
+				return nil
+			}
 			if integerEnd >= 0 && hasDot {
 				return emitDecimalPrefix(lex, s, start, integerEnd)
 			}

@@ -250,3 +250,20 @@ kernel machinery. It depends on the pieces it uses and nothing else, and
 > **Amendment (2026-08-08).** `check` removed too; the set is `core` +
 > `parser`. Core-typed primitives moved down, two pass drivers became S1
 > slots. [BASIC-CHECK-CUT.0.md](design/BASIC-CHECK-CUT.0.md)
+
+---
+
+## ADR-014 — Tabnas parser defects are fixed upstream, never worked around {#adr-014}
+
+**Status:** Accepted · **Date:** 2026-08-10
+
+A defect in the `tabnas/parser` + `tabnas/jsonic` twins — lexing, token
+boundaries, values, concurrency — is reproduced against the BARE
+dependency, reported, fixed upstream, consumed as a version bump. Never a
+boru-side shim: a shim doubles the code paths, hides the bug from the other
+port and every other consumer, and rots into dead weight the moment
+upstream moves. `scripts/parity-probe.sh` is the instrument. Divergences
+from boru's OWN grammar layer stay boru's, recorded in `NUR.md`. A
+temporary shim needs its upstream issue linked in the comment and a NUR
+record holding it open.
+[TABNAS-UPSTREAM-FIRST.0.md](design/TABNAS-UPSTREAM-FIRST.0.md)

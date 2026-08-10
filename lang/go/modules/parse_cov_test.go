@@ -166,13 +166,19 @@ func TestParseCovSpecNegatives(t *testing.T) {
 // TestParseCovRuleAltFields drives altMapToSpec's field arms: b (Integer),
 // g, n counters, c/u/k data maps with nested values, plus the
 // list-of-actions form (an inline /r-parked fn followed by a '@ref').
+//
+// The `c` condition key is a DOTTED PATH onto a rule property, so a counter
+// condition is `c:{'n.k1':0}`, not `c:{k1:0}`. The bare-name form parsed
+// here until tabnas/parser v0.8.0 and did nothing at all: an unrooted path
+// can never resolve, so the guard failed open forever. v0.8.0 rejects it
+// while the grammar is built, which is what exposed this row as vacuous.
 func TestParseCovRuleAltFields(t *testing.T) {
 	r := pcovReg(t)
 	out := pcovRun(t, r, pcovImports+`
 def g Parse.grammar
 Parse.action g '@hit' ([nd:Any] => [nd])
 Parse.rule g val {open:[
-  {s:'#NR' b:1 g:'gg' n:{k1:1} c:{k1:0} u:{ux:1 deep:{d:2} lx:[1 'a' 2.5]} k:{kx:'s'}}
+  {s:'#NR' b:1 g:'gg' n:{k1:1} c:{'n.k1':0} u:{ux:1 deep:{d:2} lx:[1 'a' 2.5]} k:{kx:'s'}}
   {s:'#TX' a:[([nd:Any] => [5])/r '@hit']}
 ]}
 def ralt (Parse.parser g)

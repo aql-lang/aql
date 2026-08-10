@@ -27,9 +27,22 @@ trap 'rm -rf "$tmp"' EXIT
 # parser/ts and this probe deliberately share core's package-exported dist
 # module so Value identity checks cannot split across source/dist copies.
 # Build that artifact here as well: the probe is documented as standalone and
-# must work immediately after a clean checkout + parser npm install.
-( cd "$repo/parser/ts" && npm run --silent build:core-dev >/dev/null ) || {
-  echo "core/ts development build failed" >&2; exit 1; }
+# must work immediately after a clean checkout. The core build's tsc run
+# resolves @types/node from core/ts's OWN node_modules, so install both
+# workspaces' dependencies when they are missing rather than failing with a
+# bare TS2688.
+[ -d "$repo/core/ts/node_modules" ] || ( cd "$repo/core/ts" && npm ci --no-audit --no-fund >/dev/null ) || {
+  echo "core/ts npm ci failed" >&2; exit 1; }
+[ -d "$repo/parser/ts/node_modules" ] || ( cd "$repo/parser/ts" && npm ci --no-audit --no-fund >/dev/null ) || {
+  echo "parser/ts npm ci failed" >&2; exit 1; }
+build_log="$tmp/core-build.log"
+( cd "$repo/parser/ts" && npm run --silent build:core-dev >"$build_log" 2>&1 ) || {
+  echo "core/ts development build failed:" >&2
+  cat "$build_log" >&2
+  echo "hint: a stale or partial node_modules can cause this — remove" >&2
+  echo "core/ts/node_modules and parser/ts/node_modules and rerun to" >&2
+  echo "trigger the automatic npm ci." >&2
+  exit 1; }
 
 ( cd "$repo/parser/ts" && node --experimental-strip-types --no-warnings \
     "$repo/scripts/parity-probe.ts" "$src_file" > "$tmp/ts.txt" ) || {

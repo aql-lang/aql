@@ -55,7 +55,6 @@ import {
   ParseDepth,
   MAX_PARSE_NESTING_DEPTH,
   UNKNOWN_POS,
-  normalizeSrcPos,
 } from './nodes.ts'
 import type { SrcPos } from './nodes.ts'
 import { makeBoruJsonic } from './grammar.ts'
@@ -250,7 +249,10 @@ function withPos(v: Value, pos: SrcPos): Value {
 // node with one of these already-converted cells. The ordinary converters
 // then retain all of their source-order and context logic without recursively
 // descending through host call frames.
-class ConvertedNode {
+// Source-module export only (like the direct converter seams): the guard
+// tests assert the preparation walk actually installs these cells. It is
+// not part of the package entry point.
+export class ConvertedNode {
   value: Value
   parenItems: Value[] | undefined
 
@@ -304,8 +306,6 @@ interface ConversionTask {
   node: unknown
   context: ConversionContext
   level: number
-  /** Number of `${...}` expression frames enclosing this conversion. */
-  interpLevels: number
   replace?: (next: unknown) => void
   exit?: boolean
   root?: boolean
@@ -315,20 +315,6 @@ function interpolationExpressionError(err: unknown): Error {
   return Object.assign(new Error(`interpolation expression error: ${errMessage(err)}`), {
     cause: err,
   })
-}
-
-// The explicit conversion stack has no JavaScript call frames through which
-// convertInterpGroup can catch a descendant failure. Rebuild the same wrapper
-// chain Go's recursive converter would have added at every enclosing `${...}`.
-// Source-module export only so the zero-frame identity arm can be pinned
-// directly; normal parser failures only reach this helper through the work
-// stack. It is not part of the package entry point.
-export function wrapInterpolationExpressionErrors(err: unknown, levels: number): unknown {
-  let wrapped = err
-  for (let i = 0; i < levels; i++) {
-    wrapped = interpolationExpressionError(wrapped)
-  }
-  return wrapped
 }
 
 function nestingLimitError(src: string): BoruError {
@@ -357,7 +343,6 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     node: root,
     context: 'top',
     level: rootLevel,
-    interpLevels: 0,
     root: true,
   }]
 
@@ -365,10 +350,9 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     node: unknown,
     context: ConversionContext,
     level: number,
-    interpLevels: number,
     replace: (next: unknown) => void,
   ): void => {
-    work.push({ node, context, level, interpLevels, replace })
+    work.push({ node, context, level, replace })
   }
 
   while (work.length > 0) {
@@ -423,27 +407,34 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
       continue
     }
 
-    work.push({ ...task, node, replace, exit: true })
-
     let childLevel = task.level
     if (Array.isArray(node) || isMapNode(node) || node instanceof ParenGroup) {
       childLevel++
       if (childLevel > MAX_PARSE_NESTING_DEPTH) {
-        throw wrapInterpolationExpressionErrors(nestingLimitError(d.src), task.interpLevels)
+        // Defer the breach exactly like a failed descendant conversion: Go
+        // raises the limit when its source-ordered recursive walk ENTERS
+        // this container, so a source-earlier error elsewhere must still
+        // win. The ordinary walk adds interpolation wrappers when it
+        // crosses each enclosing InterpGroup; wrapping here would either
+        // report this breach too early or double-wrap the stored failure.
+        replace!(new FailedConvertedNode(nestingLimitError(d.src)))
+        continue
       }
     }
+
+    work.push({ ...task, node, replace, exit: true })
 
     if (Array.isArray(node)) {
       const arr = node as Record<string, unknown> & unknown[]
       const typed = arr['child$'] !== undefined
       for (let i = node.length - 1; i >= 0; i--) {
         const index = i
-        pushValue(node[index], typed ? 'data' : 'top', childLevel, task.interpLevels, (next) => {
+        pushValue(node[index], typed ? 'data' : 'top', childLevel, (next) => {
           node[index] = next
         })
       }
       if (typed) {
-        pushValue(arr['child$'], 'data', childLevel, task.interpLevels, (next) => {
+        pushValue(arr['child$'], 'data', childLevel, (next) => {
           arr['child$'] = next
         })
       }
@@ -454,7 +445,7 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
       const keys = mapKeys(node)
       for (let i = keys.length - 1; i >= 0; i--) {
         const key = keys[i]!
-        pushValue(node[key], 'data', childLevel, task.interpLevels, (next) => {
+        pushValue(node[key], 'data', childLevel, (next) => {
           node[key] = next
         })
       }
@@ -464,7 +455,7 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     if (node instanceof ParenGroup || node instanceof AngleGroup) {
       for (let i = node.items.length - 1; i >= 0; i--) {
         const index = i
-        pushValue(node.items[index], 'top', childLevel, task.interpLevels, (next) => {
+        pushValue(node.items[index], 'top', childLevel, (next) => {
           node.items[index] = next
         })
       }
@@ -476,20 +467,30 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
     // frame. Literal parts have no descendants.
     const interp = node as InterpGroup
     for (let p = interp.parts.length - 1; p >= 0; p--) {
-      const [part] = deSite(interp.parts[p])
+      const raw = interp.parts[p]
+      const [part] = deSite(raw)
       if (!(part instanceof IexprGroup)) {
         continue
       }
       const exprLevel = childLevel + 1
       if (exprLevel > MAX_PARSE_NESTING_DEPTH) {
-        throw wrapInterpolationExpressionErrors(
-          nestingLimitError(d.src),
-          task.interpLevels + 1,
-        )
+        // Defer the breach exactly like a failed descendant conversion:
+        // Go raises the limit when its source-ordered walk enters this
+        // expression frame, so a source-earlier error elsewhere must
+        // still win. convertInterpGroup adds this expression's own
+        // wrapper when it reaches the cell; the enclosing `${...}`
+        // frames wrap naturally after that.
+        const cell = new FailedConvertedNode(nestingLimitError(d.src))
+        if (raw instanceof Sited) {
+          raw.node = cell
+        } else {
+          interp.parts[p] = cell
+        }
+        continue
       }
       for (let i = part.items.length - 1; i >= 0; i--) {
         const index = i
-        pushValue(part.items[index], 'top', exprLevel, task.interpLevels + 1, (next) => {
+        pushValue(part.items[index], 'top', exprLevel, (next) => {
           part.items[index] = next
         })
       }
@@ -497,64 +498,6 @@ export function prepareNestedConversions(root: unknown, d: ParseDepth): void {
   }
 }
 
-/**
- * watchRuleSteps counts the rule iterations one parse performs, so parse()
- * can tell "the engine finished" from "the engine gave up".
- *
- * WHY THIS EXISTS. The tabnas TS rule engine bounds its main loop at
- * `2 * ruleCount * srcLength * 2 * maxmul` iterations and, on reaching
- * that bound, simply STOPS — the trailing-token check then sees #ZZ, so
- * nothing is thrown and the partial root is returned. For boru that turns
- * a malformed program into a silent wrong answer: `[Map<]` parsed to an
- * EMPTY value stream and `Map<]` to a bare `word(Map)`, where Go's engine
- * reports "unexpected `]`". The shapes that reach it are groups a
- * container terminator cannot close — `[Map<]`, `{a: (1}`, `[1 (2]` —
- * because the TS val rule's implicit-null alternate matches the `]`,
- * backtracks, and the enclosing elem re-pushes forever.
- *
- * The final subscriber context retains ctx.t0, the token on which the rule
- * loop stalled. Keeping that token lets this port report the same diagnostic
- * as Go instead of silently accepting the partial root or using a generic
- * progress message.
- *
- * The test is EQUALITY against the library's own formula, not `>=`. The
- * loop exits with kI === cap, so the last subscriber call saw cap - 1. If
- * the library ever changes the formula this guard stops firing rather
- * than firing early — the fail-open direction. A valid parse uses O(token
- * count) steps (~11 for `[1 2]` against a cap of ~1000), so landing on
- * exactly cap - 1 by accident is not a practical concern.
- */
-function watchRuleSteps(j: any): {
-  exhausted: (src: string) => boolean
-  token: () => SrcPos
-} {
-  let last = -1
-  let token: SrcPos = { src: '', row: 0, col: 0 }
-  j.sub({
-    rule: (_rule: unknown, ctx: any) => {
-      last = ctx.kI
-      token = { src: ctx.t0.src, row: ctx.t0.rI, col: ctx.t0.cI, si: ctx.t0.sI }
-    },
-  })
-  return {
-    exhausted: (src: string): boolean => {
-      // An EMPTY source short-circuits before the loop runs, leaving the
-      // step count at -1 and the cap at 0 — which would satisfy the
-      // equality below by coincidence. It is the one input where "no
-      // steps" means success rather than exhaustion.
-      const cap = ruleStepCap(j, src)
-      return cap > 0 && last === cap - 1
-    },
-    token: () => token,
-  }
-}
-
-/** ruleStepCap mirrors the tabnas parser's own maximum-iteration bound. */
-function ruleStepCap(j: any, src: string): number {
-  const internal = j.internal()
-  const ruleCount = Object.keys(internal.parser.rsm).length
-  return 2 * ruleCount * src.length * 2 * internal.config.rule.maxmul
-}
 
 export function parse(src: string): Value[] {
   // Stages 1-2 (lex + grammar setup) live in grammar.ts; the instance is
@@ -564,29 +507,11 @@ export function parse(src: string): Value[] {
   // Stage 3: Parse and convert to engine values. The library's own error
   // rendering is silenced at the source (grammar.ts options); failures
   // are translated into boru syntax_errors here.
-  const steps = watchRuleSteps(j)
   let result: unknown
   try {
     result = j.parse(src)
   } catch (e) {
     throw translateParseError(e, src)
-  }
-  // The TS rule engine gave up rather than parsed: see ruleStepCap.
-  if (steps.exhausted(src)) {
-    const token = normalizeSrcPos(src, steps.token())
-    throw new BoruError(
-      'syntax_error',
-      `unexpected \`${token.src}\` — nothing valid can appear here`,
-      token.src,
-      {
-        row: token.row,
-        col: token.col,
-        src: token.src,
-        fullSource: src,
-        notes: [`boru's grammar allows no continuation with \`${token.src}\` at this position`],
-        suggestions: [{ message: 'check for a missing bracket, quote, or value just before it' }],
-      },
-    )
   }
 
   if (result === null || result === undefined) {
@@ -2101,6 +2026,13 @@ export function convertInterpGroup(grp: InterpGroup, d: ParseDepth): Value {
   let hasExpr = false
   for (const raw of grp.parts) {
     const [item] = deSite(raw) // interp parts are not normally sited; guard anyway
+    if (item instanceof FailedConvertedNode) {
+      // A `${...}` expression frame the pre-pass could not convert (e.g.
+      // a deferred nesting-limit breach). Rethrow with this expression's
+      // own wrapper, exactly as the catch below adds it for a failure
+      // raised during live conversion.
+      throw interpolationExpressionError(item.error)
+    }
     const t = asText(item)
     if (t !== undefined) {
       // Template literal segment (quote "tl").

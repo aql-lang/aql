@@ -2,6 +2,8 @@ package parser
 
 import (
 	"errors"
+	"reflect"
+	"sync"
 	"testing"
 
 	jsonic "github.com/tabnas/jsonic/go"
@@ -56,7 +58,7 @@ func TestParseConfigWave3InvalidSyntax(t *testing.T) {
 	}
 }
 
-// --- SafeParse / SafeParseData / GuardMake ---
+// --- SafeParse / SafeParseData ---
 
 func TestSafeParseWave3(t *testing.T) {
 	v, err := SafeParse("a:1")
@@ -165,9 +167,59 @@ func TestSafeParseDataWave3(t *testing.T) {
 	}
 }
 
-func TestGuardMakeWave3(t *testing.T) {
-	got := GuardMake(func() int { return 7 })
-	if got != 7 {
-		t.Errorf("GuardMake: got %d, want 7", got)
+// TestSafeParseDataLenientText pins the jsonic-superset side of the data
+// seam: a digit-led run that is not a complete Boru numeric spelling stays
+// lenient text, exactly as the stock data grammar decodes it. The data-mode
+// matcher must never split a run — `1.x` is one string, never [1, '.x'].
+func TestSafeParseDataLenientText(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want any
+	}{
+		{src: "{v: 1.2.3}", want: map[string]any{"v": "1.2.3"}},
+		{src: "1.x", want: "1.x"},
+		{src: "{p: 1.2-beta}", want: map[string]any{"p": "1.2-beta"}},
+		{src: "1..2", want: "1..2"},
+		{src: "{a: 1.5suffix}", want: map[string]any{"a": "1.5suffix"}},
+		// An empty exponent after a dot declines rather than splitting.
+		{src: "{a: 1.e}", want: map[string]any{"a": "1.e"}},
+		// A signed leading-dot run followed by text declines whole.
+		{src: "+.5x", want: "+.5x"},
+		// Language operators (`=`, `;`) are plain text in a data grammar.
+		{src: "{a: 1=2}", want: map[string]any{"a": "1=2"}},
+		{src: "1;2", want: "1;2"},
+		// Base-prefixed prose declines to the stock scanner like any other
+		// incomplete run. (The TS stock lexer used to split such a run into
+		// stray values, so a matcher arm claimed it whole; fixed upstream in
+		// jsonic v0.6.0 / parser v0.8.0, arm retired — ADR-014.)
+		{src: "{a:0xFF.5}", want: map[string]any{"a": "0xFF.5"}},
+		{src: "[-0xFF.5]", want: []any{"-0xFF.5"}},
+	} {
+		v, err := SafeParseData(tc.src)
+		if err != nil {
+			t.Errorf("SafeParseData(%q): %v", tc.src, err)
+			continue
+		}
+		if got := jsonic.Plainify(v); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("SafeParseData(%q) = %#v, want %#v", tc.src, got, tc.want)
+		}
 	}
+}
+
+// TestSafeMakeConcurrent pins what retired the construction mutex: the
+// dependency's instance counter is atomic as of tabnas/parser v0.8.0, so
+// concurrent construction is race-free. Run under -race this fails loudly if
+// a future dependency bump reintroduces the unsynchronized counter.
+func TestSafeMakeConcurrent(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 64; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := SafeMake().Parse(`{a:1}`); err != nil {
+				t.Errorf("concurrent SafeMake parse: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
 }

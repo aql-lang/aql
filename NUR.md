@@ -18,16 +18,18 @@ number is retired, never reassigned. A gap in the sequence is itself
 the record that something was found and fixed, and any external
 reference to a deleted `NURnnn` stays unambiguous forever.
 
-> **A newly-encountered non-uniformity is a PR blocker.** When a
-> non-uniformity surfaces — in code review, in a design note, or during
-> coding and debugging — it is recorded here immediately with status
-> **Pending**, and the PR that surfaced it must not merge until the
-> entry is either **Resolved** (the divergence is removed) or marked
-> **Allowed** (an explicit, argued acceptance). Unlike ADRs, *recording*
-> is mandatory on discovery, not on maintainer instruction; what
+> **Recording a non-uniformity is mandatory; a Pending record does NOT
+> block the PR.** When a non-uniformity surfaces — in code review, in a
+> design note, or during coding and debugging — it is recorded here
+> immediately with status **Pending**. That recording is not optional and
+> not subject to maintainer instruction (unlike an ADR entry); what
 > requires the maintainer is the **Allowed** verdict — the same reviewed
 > discipline as a `//covergate:allow` entry
-> (`design/COVERAGE-ALLOWLIST.10.md`).
+> (`design/COVERAGE-ALLOWLIST.10.md`). A record is discharged by becoming
+> **Resolved** (the divergence is removed) or **Allowed** (an explicit,
+> argued acceptance), and it may stay Pending across many merges: the
+> register's job is that a divergence is never lost or silently
+> baselined, not that work stops until it is settled.
 
 **Statuses:**
 
@@ -35,8 +37,8 @@ reference to a deleted `NURnnn` stays unambiguous forever.
   at all, or argued to a **verdict of "resolve by fix"** whose fix has
   not landed: a record directed at a fix stays Pending until the
   divergence is actually gone, because only Resolved and Allowed
-  discharge the block. Blocks the PR that surfaced it. Every Pending
-  record must also appear in the pending list below.
+  discharge it. Does not hold up a merge. Every Pending record must also
+  appear in the open list below.
 - **Allowed** — a deliberate divergence, kept. The record states the
   uniform rule, the divergence, the rationale, and the evidence that
   pins it (docs and tests), so the acceptance cannot silently rot.
@@ -47,13 +49,12 @@ reference to a deleted `NURnnn` stays unambiguous forever.
 
 ---
 
-## Pending non-uniformities (the blocking list)
+## Pending non-uniformities (the open list)
 
-The live list of records whose status is **Pending**. A PR that
-surfaced (or contains) one of these must not merge while it is listed
-here. An entry leaves this list only by becoming **Resolved** or
-**Allowed** in its record below — keep the two in sync in the same
-commit.
+The live list of records whose status is **Pending** — the standing
+inventory of known, argued-or-unargued divergences. An entry leaves this
+list only by becoming **Resolved** or **Allowed** in its record below —
+keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
@@ -70,6 +71,7 @@ commit.
 | [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
+| [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2126,3 +2128,49 @@ the remaining direct `AddDiagnostic` callers in lang
 `native_module_module.go:80`) for mirror-vs-model-undermining
 classification, and consider extending a gate over lang emitters.
 
+
+---
+
+## NUR060 — The parser twins disagree on open-input sources beyond the corpus {#nur060}
+
+**Status:** Pending · **Recorded:** 2026-08-09 · **Surfaced by:** PR #337
+parity-probe sweep; flagged for this register by the PR #337 review
+(Codex P1)
+
+**Rule:** one language contract, two implementations: `parser/go` and
+`parser/ts` must render every source identically — the uniformity the
+`parser/spec` corpus exists to enforce.
+**Divergence:** a 2,587-source probe sweep measured 55 sources (~2.1%)
+where the twins disagree, and follow-up probing added a class the sweep's
+seed missed — nine classes so far: trailing-`=>` fold loss (TS drops the
+paren group Go folds — also inside dotchains), two accept/reject splits
+(trailing bare `:` — Go accepts, TS refuses; `=> ,` — Go refuses, TS
+accepts and silently drops tokens), post-`]` recovery-token detail (TS
+reports an empty token where Go names the offender), two error-precedence
+splits (receiverless-`.` vs unmatched-`(`, and bare-`/s` vs
+unmatched-`(`), an internal type-name leak in one message on both sides,
+and an empty-`${}` fold split in an unterminated template (Go folds to
+`interp('')`, TS keeps the hole).
+**Evidence:** `parser/spec/divergent.tsv` — the live ledger, one measured
+row per class; both spec runners re-render every row against their own
+column on every run, so a row can neither rot nor survive its fix.
+`scripts/parity-probe.sh` reproduces the sweep.
+**Documentation status:** parser/spec/README.md §"The current debt" and
+design/GO-TS-PARITY.0.md carry the honest scope: corpus parity exact,
+open-input parity not.
+**Proposed verdict:** resolve by fix, class by class — each fix moves its
+ledger row to `parse.tsv` (the runners force the move: a fixed divergence
+fails the ledger loudly). The behavioral classes (fold loss, the two
+accept/reject splits) should go first; the diagnostic-detail classes
+follow. The record discharges when the ledger is empty again.
+
+> **Update (2026-08-10).** Two DATA-seam asymmetries this record also
+> carried — the TS seam's inability to express map insertion order for
+> integer-like keys, and Go alone reading `+_1` as a number — were
+> dependency defects, not boru's. Both are fixed upstream in
+> `tabnas/jsonic v0.6.0` / `tabnas/parser v0.8.0` (ADR-014) and are now
+> pinned by ten `data.tsv` rows rather than described in prose. The nine
+> GRAMMAR-level classes above are untouched by the upgrade: a fresh
+> 2,587-source sweep on the new dependency measures the byte-identical 55
+> divergences, which is what distinguishes the two categories. This record
+> stays Pending on those nine.

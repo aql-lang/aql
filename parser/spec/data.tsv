@@ -1,0 +1,84 @@
+# parser/spec/data.tsv — the safe DATA-decode seam contract.
+#
+# src <TAB> expected <TAB> note. Same comment/escape rules as parse.tsv.
+# The seam is SafeParseData/safeParseData + ConvertParsedNumber (the
+# parsers behind StructUtil.parse): jsonic's lenient data superset, with
+# every numeric token's exact spelling retained so the converter preserves
+# int/float kind, precision, and the loud refusals.
+#
+# expected forms: canonical decode render (README §data.tsv), or
+# `ERR <code>` (the number converter refuses a claimed spelling), or bare
+# `ERR` (jsonic itself rejects; its message is dependency-native and
+# deliberately unpinned).
+#
+# § numeric kind and precision
+42	42	an integer stays Integer
+42.0	42.0	a dot keeps Float (the collapse StructUtil.parse regressed on once)
+1.e2	100.0	trailing-dot exponent is ONE Float token
+1e2	100	exponent without a dot stays Integer
+-3	-3	signed integer
+1_000	1000	separators are read, not text
+0xFF	255	hexadecimal
+0b101	5	binary
+0o17	15	octal
+# § loud numeric refusals — the converter, not the jsonic parse
+.5	ERR syntax_error	data decode refuses a receiverless leading dot
+1e400	ERR float_overflow	binary64 overflow stays loud, never Inf
+1.0e400	ERR float_overflow	…also with a fraction
+0x8000000000000000	ERR integer_overflow	int64 overflow stays loud
++.1e400	ERR syntax_error	signed leading-dot spelling is refused whole
+1_.2	ERR syntax_error	misplaced separator before the dot
+1.2_	ERR syntax_error	misplaced trailing separator
+1e_2	ERR syntax_error	misplaced separator in the exponent
+1__0	ERR syntax_error	doubled separator
+[🙂,1_]	ERR syntax_error	…and a nested refusal surfaces from inside a list
+# § the lenient jsonic superset — digit-led prose stays ONE string
+{v: 1.2.3}	{v:'1.2.3'}	never an error, never a split
+1.x	'1.x'	a top-level run never splits into a stray list
+{p: 1.2-beta}	{p:'1.2-beta'}	dashed version-like suffixes
+1..2	'1..2'	doubled dot is prose
+{a: 1.5suffix}	{a:'1.5suffix'}	trailing word characters
+{a: 1.e}	{a:'1.e'}	empty exponent after a dot declines to text
++.5x	'+.5x'	signed leading-dot run with following text declines whole
+{a: 1=2}	{a:'1=2'}	language operators are plain text in a data grammar
+1;2	'1;2'	…semicolon too
+# § structure, order, and the non-numeric scalars
+{a:1, b:[2,3]}	{a:1 b:[2 3]}	insertion-ordered map over a list
+[1.0, 2]	[1.0 2]	per-element numeric fidelity
+{x:2.0, n:3}	{x:2.0 n:3}	Float and Integer side by side
+{val:'if'}	{val:'if'}	data context: quoted text stays a string, never a word
+null	none	top-level null decodes to the concrete none
+true	true	booleans are booleans
+[1,	[1]	jsonic's lenient trailing comma is part of the superset
+{a:1]	ERR	malformed structure is refused by jsonic itself
+# § base-prefixed prose — a run that is not a COMPLETE base-prefixed token
+# declines to the stock scanners, which agree on it in both ports. (They
+# did not until jsonic v0.6.0 / parser v0.8.0: the TS scanner split such a
+# run into stray values, and a boru matcher arm claimed the whole run to
+# hide it. Fixed upstream, arm retired — ADR-014. These rows are the pin.)
+{a:0xFF.5}	{a:'0xFF.5'}	a dot-adjacent hex run stays ONE lenient string in both ports
+[0xFF.5, 2]	['0xFF.5' 2]	…and never sheds stray values into a list
+[-0xFF.5, 9]	['-0xFF.5' 9]	…signed forms included
+{a: 0b101.1}	{a:'0b101.1'}	binary
+[0o17.e2]	['0o17.e2']	octal with a dotted exponent tail
+{a: 0x1_.5}	{a:'0x1_.5'}	separator inside the claimed prose run
+{a: 0xFF.}	{a:'0xFF.'}	trailing dot alone
+{a: 0xFFx}	{a:'0xFFx'}	word characters after the body
+{a: 0x.5}	{a:'0x.5'}	an EMPTY body declines to stock text (the scanners agree there)
+[0xzz]	['0xzz']	…as does an invalid body
+# § insertion-ordered maps — integer-like keys included. A plain JS object
+# enumerates these ascending whatever the source wrote, so the TS seam
+# records the true order for its runner to read (Go reads OrderedMap.Keys).
+{2:9, 1:8}	{2:9 1:8}	source order survives, not numeric order
+{10:a, 2:b, x:c}	{10:'a' 2:'b' x:'c'}	…with a wider integer key ahead of a narrower one
+{b:2, 1:9}	{b:2 1:9}	…and a string key ahead of an integer-like one
+# § sign+separator runs — a separator is legal only BETWEEN digits, so these
+# are lenient text in both ports rather than numbers (the stock Go scanner
+# used to read `+_1` as 1, silently swallowing the `+_`).
++_1	'+_1'	a separator after the sign is text, never the number 1
+[+_1]	['+_1']	…nested too
++_	'+_'	sign and separator alone
+_1	'_1'	a leading separator
+-_1	'-_1'	…and the negative form
++_1.5	'+_1.5'	…and a dot-bearing spelling
+1_	ERR syntax_error	but a DIGIT-led run is still claimed and refused loudly

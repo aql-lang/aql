@@ -16,7 +16,7 @@ preceded this).
 | module | go | ts | shared corpus |
 |---|---|---|---|
 | core | 100% | 99.57% | `core/spec`, 373 rows + a 16-row ledger |
-| parser | 100% | **100% lines / branches / functions** | `parser/spec`: 648 parse, 27 raw-lexer, 18 generated-depth, and 26 structural-shape rows; empty ledger |
+| parser | 100% | **100% lines / branches / functions** | `parser/spec`: 698 parse, 27 raw-lexer, 56 data-decode, 18 generated-depth, and 26 structural-shape rows; a live 9-row ledger |
 | basic | 100% | 100% *of the 17 words ported* | `basic/spec`, 69 rows |
 
 Two numbers that look like progress and are not:
@@ -63,11 +63,27 @@ divergence, both columns recorded, each runner asserting its OWN column.
 Shrink-only. A fixed divergence MOVES to `parse.tsv` rather than being
 deleted, and a row whose two columns are equal FAILS — otherwise the file
 stops being an honest debt list. It reached zero on 2026-08-08, briefly
-took eleven measured rows back, and is empty again. Eight rule-step-limit
-shapes now preserve the offending token from the TS rule subscriber, two
-decimal/underscore lexer boundaries are claimed by matching boundary shims,
-and the former depth-501 gap is covered more honestly by the generated
-`nesting.tsv` boundary matrix than by a multi-kilobyte literal.
+took eleven measured rows back, and was empty again by 2026-08-09. Eight
+rule-step-limit shapes now preserve the offending token from the TS rule
+subscriber, two decimal/underscore lexer boundaries are claimed by matching
+boundary shims, and the former depth-501 gap is covered more honestly by
+the generated `nesting.tsv` boundary matrix than by a multi-kilobyte
+literal.
+
+Corpus-zero did not mean language-zero: a 2,587-source probe sweep the
+same day measured 55 divergences (~2.1%) on inputs OUTSIDE the corpus —
+trailing-`=>` fold loss, two accept/reject splits, recovery-token detail,
+error precedence, and an internal type-name leak — and follow-up probing
+found an empty-`${}` template-fold class the sweep's seed missed. The
+ledger now carries one representative row per class found so far (9
+rows; measured, not proven exhaustive), both runners re-measure every
+row on every run, and 50 probe-AGREED neighbors were promoted into
+`parse.tsv`. The safe DATA-decode seam had two asymmetries no shared row
+could express — TS reordering integer-like map keys, and Go alone wrapping
+sign+separator runs like `+_1` as numbers — and both were DEPENDENCY
+defects, fixed upstream in jsonic v0.6.0 / parser v0.8.0 (ADR-014) and now
+pinned by rows in `data.tsv` rather than described in prose. See
+parser/spec/README.md §"The current debt" for the class table.
 
 `scripts/parity-probe.sh` is how a row gets written: it runs a candidate
 through both engines and prints AGREE with the shared render, or DIFFER
@@ -209,8 +225,14 @@ grammar never builds — has to be called directly with a synthetic rule.
 Go gets that in-package; TS arranges it by exporting from `convert.ts`,
 which is module-internal rather than package-public. The package surface now
 also carries the Go host seams (`LexTokens`, config/data safe parsing,
-Plainify, GuardMake, and ConvertParsedNumber); converter test hooks remain
-unexported from `index.ts`.
+Plainify, and ConvertParsedNumber); converter test hooks remain
+unexported from `index.ts`. (`GuardMake`/`guardMake` was in that list
+until the 2026-08-10 tabnas upgrade retired it **in both ports**: its
+whole signature existed to run a caller's constructor under the Go
+construction mutex, and the mutex went when upstream made the instance
+counter atomic. The TS twin was a pass-through mirroring it with no
+production caller, so deleting only Go's would have left a no-op propped
+up for symmetry's sake — ADR-014.)
 
 The rule is: an arm belongs in a guard file only if no source text can
 reach it. Several arms started in `guards.test.ts` and MOVED OUT to

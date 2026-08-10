@@ -12,7 +12,6 @@
 // markers — it never invents a word name.
 export { convertParsedNumber, parse } from './convert.ts'
 export {
-  guardMake,
   lexTokens,
   parseConfig,
   plainify,

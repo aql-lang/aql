@@ -1,10 +1,11 @@
 # parser/spec — the parser-level parity corpus
 
 The declarative contract `parser/go` and `parser/ts` are both held to. One set
-of files, two independent runner pairs (`parser/go/parserspec_test.go` and
+of files, three independent runner pairs (`parser/go/parserspec_test.go` and
 `parser/ts/src/parserspec.test.ts` for parsed values;
 `parser/go/lexspec_test.go` and `parser/ts/src/lexspec.test.ts` for raw
-tokens), no shared reader or renderer code between ports.
+tokens; `parser/go/dataspec_test.go` and `parser/ts/src/dataspec.test.ts` for
+the safe data-decode seam), no shared reader or renderer code between ports.
 
 ## Why it exists
 
@@ -85,15 +86,60 @@ the error text. **Both engines must produce it.**
 src	go	ts	note
 ```
 
-Sources the two engines render differently. The four-column reader remains so
-a probe result records both sides and a nonblank justification before review,
-but **the committed row-count ratchet is zero**: either runner fails if any
-data row exists. Full parser parity is a hard invariant, so a measured
-difference must be fixed and moved to `parse.tsv`, not accepted as green debt.
+Sources the two engines render differently — the **live parity-debt
+ledger**. Every row must be a real, currently-measured divergence: the Go
+runner re-renders each row's source and must reproduce the `go` column
+exactly, the TS runner must reproduce the `ts` column, and the reader
+refuses equal `go`/`ts` renders and blank justifications. A divergence
+that gets fixed therefore fails one runner loudly and the row must move to
+`parse.tsv`; a row can never drift into recording behavior neither port
+has.
 
-The file is therefore **zero-only** in a passing tree. The justification field
-is still mandatory when inspecting a probe-produced row, so even a deliberately
-red diagnostic change cannot lose the reason it exists.
+The row count is machine-pinned in both runners (like every other corpus
+size), so debt cannot grow silently: adding a row is a deliberate,
+two-sided, justified act, and the ratchet direction is shrink-toward-zero —
+a row leaves the ledger by being fixed, never by being deleted. Zero rows
+remains the goal state; a non-empty ledger is measured, triaged truth, not
+accepted-and-forgotten green debt.
+
+### `data.tsv` — the safe data-decode seam
+
+```
+src	expected	note
+```
+
+Exactly three columns are required. The seam is `SafeParseData` /
+`safeParseData` plus `ConvertParsedNumber` / `convertParsedNumber` — the
+parsers behind `StructUtil.parse` — which the language-level corpus can
+only reach through Go's lang layer, so a twin regression here is invisible
+to every other table. (Exactly that happened once: both ports briefly lost
+the lenient jsonic superset together, and no gate noticed.)
+
+`expected` is either a canonical decode render or an error form. The
+render: insertion-ordered `{k:v ...}` maps, `[v ...]` lists, `'...'`
+strings, `true`/`false`, `none` for null, and every numeric token converted
+through the public number converter so int/float kind, precision, and exact
+spelling participate. `ERR <code>` pins the converter's loud refusal of a
+claimed numeric spelling; bare `ERR` pins only that jsonic itself rejects
+the source — those messages are deliberately dependency-native and
+unpinned. Both runners implement the reader and renderer independently, as
+everywhere else in this corpus.
+
+Two seam asymmetries used to be documented here as inexpressible; the
+`tabnas` upgrade of 2026-08-10 (jsonic v0.6.0 / parser v0.8.0, ADR-014)
+closed both, and each is now pinned by rows instead of prose:
+
+- **Map insertion order, integer-like keys included.** A plain JS object
+  enumerates `{2:9, 1:8}` as keys `1, 2` whatever the source wrote, so the
+  TS seam could not express what Go's `OrderedMap` preserves. TS now parses
+  data with `map.ordered`, and its runner reads the recorded order
+  (`dataKeyOrder`) rather than `Object.keys` — the Go runner still walks
+  `OrderedMap.Keys`, so the two remain independent implementations of one
+  contract.
+- **Sign+separator runs.** `+_1` is lenient text in both ports. Go's stock
+  scanner used to read it as the number `1`, silently swallowing the `+_`;
+  a separator is legal only between digits, so a digit-led `1_` is still
+  claimed and refused loudly.
 
 ### `nesting.tsv` — the generated-depth contract
 
@@ -155,9 +201,41 @@ the two user-facing first lines still compare equal in `parse.tsv`.
 
 ## The current debt
 
-**None.** `divergent.tsv` is header-only, and both runners keep the empty
-ledger as a hard zero-row ratchet. The eleven rows found after the ledger first
-reached zero were closed rather than accepted:
+**Corpus parity is exact; open-input parity is not.** Every row of
+`parse.tsv`, `lex.tsv`, `nesting.tsv`, and `shape.tsv` renders identically
+in both ports. But the corpus is not the language: a 2,587-source
+parity-probe sweep (token soup over the surface alphabet plus truncation
+mutants of `parse.tsv` rows, `scripts/parity-probe.sh`) measured **55
+divergences (~2.1%)** on inputs outside the corpus, and follow-up probing
+found one further class the sweep's seed missed. The ledger carries one
+representative row per class found so far — the class list is what
+probing has MEASURED, not a proof of exhaustion; new probe-found classes
+get new rows:
+
+- **trailing `=>` fold loss** (2 rows): Go's arrowfold folds a bodyless
+  trailing arrow (the input doubles as the body); TS drops the group from
+  the value stream — a DATA-class divergence, also visible inside a
+  dotchain segment.
+- **accept/reject splits** (2 rows): a trailing bare `:` (Go accepts,
+  TS refuses) and `=> ,` (Go refuses, TS accepts and silently drops
+  tokens).
+- **post-`]` recovery detail** (1 row): Go names the offending token after
+  an unmatched `]`; TS reports an empty token.
+- **error precedence** (2 rows): receiverless-`.` vs unmatched-`(`, and
+  bare-`/s` vs unmatched-`(` — the two walks meet the faults in a
+  different order.
+- **internal type-name leak** (1 row): `unsupported value type
+  parser.unclosedParen` vs `UnclosedParen` — neither render is stable.
+- **empty-`${}` fold in an unterminated template** (1 row): both ports
+  accept `` `${} `` but Go folds the empty interpolation to `interp('')`
+  while TS keeps the `interp(${})` hole — a value-level fold divergence.
+
+Fifty probe-agreed sources from the same sweep were promoted into
+`parse.tsv` (the `§probe-2026-08-09` section) so the corpus covers the
+divergent classes' immediate neighborhoods where the ports DO agree.
+
+The eleven rows found after the ledger first reached zero were closed
+rather than accepted:
 
 - Eight rule-step-limit shapes now retain the exact offending `]`/`}` token
   and its position from the TS rule subscriber; before the guard, TS silently
@@ -203,10 +281,11 @@ value. `scripts/parity-probe.sh` is what found them.
 
 The main corpus grew from 370 rows to 648 unique sources while driving
 `parser/ts` from 93.97% to 100% line coverage; the final gate also requires
-100% branches and functions. Both runners machine-pin the current corpus sizes:
-648 parse rows, 27 raw-lexer rows, 18 generated-depth rows, 26 semantic-shape
-rows, and zero divergence rows. An intentional corpus change updates both
-independent constants and this prose together. The growth found further defects the
+100% branches and functions. The 2026-08-09 probe sweep then grew it to 698.
+Both runners machine-pin the current corpus sizes: 698 parse rows, 27
+raw-lexer rows, 56 data-decode rows, 18 generated-depth rows, 26
+semantic-shape rows, and 9 live divergence rows. An intentional corpus change updates both independent
+constants and this prose together. The growth found further defects the
 crossdiff could not:
 
 - an EMPTY `${}` interpolation in an XML **attribute** folded to `""` in Go

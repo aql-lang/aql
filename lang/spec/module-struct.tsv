@@ -113,6 +113,11 @@ import "boru:struct-util" StructUtil.parse "{x:2.0, n:3}"	{x:2.0 n:3}	Float map 
 import "boru:struct-util" StructUtil.parse "null"	None	a top-level JSON null hydrates to the concrete none (not an empty-input error)
 import "boru:struct-util" StructUtil.parse "{a:1]"	ERROR:parse_error	malformed input raises loudly
 import "boru:struct-util" StructUtil.parse ""	ERROR:parse_error	empty input raises (never a silent none)
+import "boru:struct-util" StructUtil.parse "{v: 1.2.3}"	{v:'1.2.3'}	digit-led prose stays ONE lenient string — the jsonic superset, never an error
+import "boru:struct-util" StructUtil.parse "1.x"	'1.x'	…and a top-level run never splits into a stray list
+import "boru:struct-util" StructUtil.parse "{p: 1.2-beta}"	{p:'1.2-beta'}	…including dashed version-like suffixes
+import "boru:struct-util" StructUtil.parse "1.e2"	100.0	a COMPLETE trailing-dot exponent is one Float through the data seam
+import "boru:struct-util" StructUtil.parse "1e400"	ERROR:parse_error	binary64 overflow stays loud (never silent text or Inf)
 #
 # §X  Floats serialize as JSON numbers, not strings (bloom report:
 #     jsonify emitted "x": "1.5"), and reify keeps the fraction —

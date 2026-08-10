@@ -19,9 +19,12 @@
 //     shadowed by numberValToValue.
 //
 // The functions are reached by exporting them from convert.ts. That is
-// module-internal, not package-public: parser/ts/src/index.ts exports
-// `parse` and `SrcPos` and nothing else, so this is the same access Go
-// gets from an in-package test.
+// module-internal, not package-public: parser/ts/src/index.ts re-exports
+// only the deliberate host-facing surface (`parse`, `convertParsedNumber`,
+// the config/safe-construction/lexer seams from public.ts, and the
+// `SrcPos`/`LexToken` types); the converter internals exercised here are
+// NOT part of it, so this is the same access Go gets from an in-package
+// test.
 
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
@@ -29,6 +32,7 @@ import { strict as assert } from 'node:assert'
 import { BoruError, TMap, TList } from '@boru-lang/core'
 
 import {
+  ConvertedNode,
   convertDataValueInner,
   convertInterpGroup,
   convertParsedNumber,
@@ -47,7 +51,6 @@ import {
   prepareNestedConversions,
   tryParseBigIntBase0,
   typeName,
-  wrapInterpolationExpressionErrors,
 } from './convert.ts'
 import {
   ArrowTag,
@@ -300,18 +303,23 @@ describe('remaining converter guards', () => {
   it('the stack-safe preparation walk replaces every unsited container slot', () => {
     // Real grammar children are normally Sited, in which case replacement
     // happens inside the wrapper. These raw carriers are the Go-compatible
-    // direct seam and exercise each outer slot writer explicitly.
+    // direct seam and exercise each outer slot writer explicitly — and the
+    // walk must actually INSTALL the converted cell in each slot, not just
+    // survive the traversal.
     const typed: any[] = []
     ;(typed as any)['child$'] = new AngleGroup('Box', [new String('Integer')])
     prepareNestedConversions(typed, d())
+    assert.ok((typed as any)['child$'] instanceof ConvertedNode)
 
     const map = { x: new ParenGroup([new String('x')]) }
     prepareNestedConversions(map, d())
+    assert.ok(map.x instanceof ConvertedNode)
+    assert.notEqual((map.x as unknown as ConvertedNode).parenItems, undefined)
 
-    const interp = new InterpGroup([
-      new IexprGroup([new ParenGroup([new String('x')])]),
-    ])
+    const iexpr = new IexprGroup([new ParenGroup([new String('x')])])
+    const interp = new InterpGroup([iexpr])
     prepareNestedConversions(interp, d())
+    assert.ok(iexpr.items[0] instanceof ConvertedNode)
   })
 
   it('counts an interpolation expression as a logical depth frame', () => {
@@ -319,8 +327,14 @@ describe('remaining converter guards', () => {
     for (let i = 0; i < 10000; i++) {
       nested = [nested]
     }
+    // The pre-pass DEFERS the breach as a failure cell (Go raises the
+    // limit when its source-ordered walk enters the frame, so an earlier
+    // error elsewhere must be able to win); the ordinary converter then
+    // rethrows it with the expression's own interpolation wrapper.
+    const depth = d()
+    prepareNestedConversions(nested, depth)
     assert.throws(
-      () => prepareNestedConversions(nested, d()),
+      () => convertTopLevelValueInner(nested, depth),
       (e: any) =>
         e instanceof Error &&
         e.message.startsWith('interpolation expression error: [boru/evaluation_limit]:') &&
@@ -329,16 +343,29 @@ describe('remaining converter guards', () => {
     )
   })
 
-  it('restores interpolation error wrappers around preconverted structures', () => {
-    const sentinel = new Error('sentinel')
-    assert.equal(wrapInterpolationExpressionErrors(sentinel, 0), sentinel)
-    const twice: any = wrapInterpolationExpressionErrors(sentinel, 2)
-    assert.equal(twice.cause.cause, sentinel)
-    assert.equal(
-      twice.message,
-      'interpolation expression error: interpolation expression error: sentinel',
+  it('a source-earlier conversion error beats a later depth-limit breach', () => {
+    // Go converts in source order and reports the `1_` literal before it
+    // ever enters the too-deep bracket run; the TS pre-pass must not let
+    // its eager depth accounting preempt that. Pinned against parser/go,
+    // which raises [boru/syntax_error] for this exact source.
+    const src = '[1_ ' + '['.repeat(10001) + ']'.repeat(10001) + ']'
+    assert.throws(
+      () => parse(src),
+      (e: any) =>
+        e instanceof BoruError &&
+        e.code === 'syntax_error' &&
+        e.message.includes('misplaced `_`'),
     )
+    // The breach itself still raises once it IS the first error in
+    // source order.
+    const deep = '['.repeat(10001) + ']'.repeat(10001)
+    assert.throws(
+      () => parse(deep),
+      (e: any) => e instanceof BoruError && e.code === 'evaluation_limit',
+    )
+  })
 
+  it('restores interpolation error wrappers around preconverted structures', () => {
     for (const src of ['`${[1,,2]}`', '`${{a/ss}}`', '`${(1,,2)}`']) {
       assert.throws(
         () => parse(src),

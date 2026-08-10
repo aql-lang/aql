@@ -364,6 +364,24 @@ export function setupBigNumberMatcher(j: any, _t: ParserTokens): void {
 // deliberately loose here: numberValToValue owns the language rule and
 // reports a misplaced `_` using the complete literal source.
 export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
+  setupDecimalBoundaryMatcher(j, false)
+}
+
+// setupDataDecimalMatcher is the DATA-mode variant of the decimal boundary
+// shim, for plain-jsonic decode seams (safeParseData). Data grammars have no
+// `.` member-access token and promise jsonic's lenient superset, so this
+// mode claims a run only when it is a complete numeric token at a data
+// boundary and otherwise DECLINES — it never splits. Digit-led prose such as
+// `1.x`, `1.2.3` or `1.2-beta` falls back whole to the stock lenient text
+// scanner instead of erroring or shedding a stray second value.
+export function setupDataDecimalMatcher(j: any): void {
+  setupDecimalBoundaryMatcher(j, true)
+}
+
+// setupDecimalBoundaryMatcher registers the shared matcher body. dataMode
+// selects the boundary alphabet and the no-split rule described on the two
+// wrappers above; the language mode is bit-for-bit the historical behavior.
+function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
   const isDigit = (c: string | undefined): boolean =>
     undefined !== c && c >= '0' && c <= '9'
   const isDigitOrSep = (c: string | undefined): boolean => isDigit(c) || '_' === c
@@ -389,8 +407,11 @@ export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
     const c = s[i]!
     if (' ' === c || '\t' === c || '\n' === c || '\r' === c) return false
     if ('\'' === c || '"' === c || '#' === c) return false
-    if (',:;()[]{}?.!|`<>'.includes(c)) return false
-    if ('=' === c && '>' === s[i + 1]) return false
+    if (',:[]{}`'.includes(c)) return false
+    // Language operators end a token only in language mode; a plain data
+    // grammar lexes them as ordinary text continuation.
+    if (';()?.!|<>'.includes(c)) return dataMode
+    if ('=' === c) return dataMode ? true : '>' !== s[i + 1]
     return true
   }
 
@@ -435,14 +456,26 @@ export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
         return undefined
       }
       // Claim base-prefixed integers even when their magnitude exceeds
-      // int64. Go's stock lexer otherwise drops them to #TX while TS keeps
-      // #NR, making the public lexTokens streams disagree. The converter
-      // reads the exact source, so the placeholder value is irrelevant.
+      // int64. LIVE — do not retire: still open upstream as of jsonic
+      // 0.6.0 / parser 0.8.0. Go's stock lexer drops an overflowing base
+      // run to #TX while this port keeps #NR, so the public lexTokens
+      // streams would disagree on `0x8000000000000000`. Upstream tolerates
+      // ErrRange on the DECIMAL path but not the base arms, so `1e400`
+      // agrees and this class does not; see the Go twin's comment for the
+      // exact source lines. The converter reads the exact source, so the
+      // placeholder value is irrelevant.
       if ('0' === s[si] && undefined !== s[si + 1] && 'xXoObB'.includes(s[si + 1]!)) {
         const prefix = s[si + 1]!
         let end = si + 2
         const bodyStart = end
         while (isBaseDigit(s[end], prefix) || '_' === s[end]) end++
+        // A run that is not a COMPLETE base-prefixed token — a trailing
+        // `.`, a `.digits` tail, an empty or invalid body — declines to
+        // the stock scanners, which agree on it: both ports keep
+        // `0xFF.5` as one lenient text token. (Until tabnas 0.6.0/0.8.0
+        // they did not — this port's stock scanner split such a run into
+        // stray values — and the matcher claimed the whole prose run in
+        // data mode to hide it. Fixed upstream, shim retired: ADR-014.)
         if (end === bodyStart || isFollowingText(s, end)) return undefined
         const src = s.slice(start, end)
         const tkn = lex.token('#NR', 0, src, cursor)
@@ -468,6 +501,7 @@ export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
       while (isDigitOrSep(s[si])) si++
       if (si === exponentStart) {
         if (integerEnd >= 0 && hasDot) {
+          if (dataMode) return undefined
           return emitPrefix(lex, s, start, integerEnd)
         }
         if (leadingDot) {
@@ -479,6 +513,10 @@ export function setupDecimalUnderscoreMatcher(j: any, _t?: ParserTokens): void {
     }
 
     if (isFollowingText(s, si)) {
+      // Data mode never splits a run: declining hands the whole span to
+      // the stock lenient text scanner, so digit-led prose stays one
+      // string instead of shedding a stray second value.
+      if (dataMode) return undefined
       if (integerEnd >= 0 && hasDot) {
         return emitPrefix(lex, s, start, integerEnd)
       }

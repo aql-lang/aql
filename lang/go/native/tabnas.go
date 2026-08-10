@@ -58,9 +58,9 @@ type TabnasKind struct {
 // the end rather than insert mid-list.
 //
 // Shapes: the JSON family (json / jsonic / json5 / jsonc) plus yaml / zon
-// yield whatever their top level denotes (Map, List or scalar); csv and
-// markdown yield a List of rows / blocks; ini / toml / xml / feed yield a
-// Map (xml a dedicated Node/Xml value).
+// yield whatever their top level denotes (Map, List or scalar); csv yields
+// a List of rows; ini / toml / xml / feed / markdown yield a Map (xml a
+// dedicated Node/Xml value, markdown an mdast-adjacent AST document).
 //
 // Opts: the middle `parse <kind> <opts> <source>` map (and read's
 // non-reserved options) is forwarded to the jsonic-plugin kinds (json5 /
@@ -105,12 +105,15 @@ func TabnasKinds() []TabnasKind {
 		// source literal are interchangeable. See design/XML-LITERAL.0.md §5.6.
 		{"xml", TXml, jsonicPlugin(nil, tabnasxml.Xml)},
 		{"zon", TAny, ignoreOpts(func(s string) (any, error) { return tabnaszon.Parse(s) })},
-		// Markdown: a List of blocks. object:false keeps rows as plain Lists
-		// (the default ordered-map record shape has no exported accessors).
-		{"markdown", TList, func(s string, opts map[string]any) (any, error) {
+		// Markdown: the mdast-adjacent AST the plugin documents — a
+		// `{type:'document' children:[…]}` Map whose nodes carry `type` plus
+		// their own fields (`depth` on a heading, `value` on text, GFM
+		// `table`/`tableRow`/`tableCell` with an `align` list). Walk it by
+		// key, not by row index.
+		{"markdown", TMap, func(s string, opts map[string]any) (any, error) {
 			j := parser.SafeMake()
 			if err := j.UseDefaults(tabnasmarkdown.Markdown, tabnasmarkdown.Defaults,
-				mergeOpts(map[string]any{"object": false}, opts)); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
+				mergeOpts(nil, opts)); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return nil, err
 			}
 			return j.Parse(s)
