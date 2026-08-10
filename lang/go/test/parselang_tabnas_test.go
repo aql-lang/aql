@@ -32,7 +32,9 @@ func TestParseLangTabnasFamily(t *testing.T) {
 		// renders back to well-formed XML — the same value a literal yields.
 		{"xml", `parse xml '<r><a>1</a></r>'`, "<r><a>1</a></r>"},
 		{"zon", `(parse zon '.{ .a = 1, .b = "hi" }') get 'b'`, "hi"},
-		{"markdown", `((parse markdown '# T\n\nhello world') get 0) get 0`, "hello world"},
+		// Markdown decodes to the mdast-adjacent AST document, so the path
+		// walks node keys: document children -> the paragraph -> its text.
+		{"markdown", `(((((parse markdown '# T\n\nhello world') get 'children') get 1) get 'children') get 0) get 'value'`, "hello world"},
 		{"feed", `(parse feed '<rss version="2.0"><channel><title>T</title></channel></rss>') get 'format'`, "atom"},
 	}
 	imp := `import "boru:parselang"  `

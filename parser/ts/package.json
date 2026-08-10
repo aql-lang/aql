@@ -29,16 +29,17 @@
     "streamdump": "node --experimental-strip-types --no-warnings src/streamdump.ts"
   },
   "dependencies": {
-    "@tabnas/jsonic": "^0.4.1",
-    "@tabnas/parser": "^0.4.1"
+    "@tabnas/json": "^0.5.1",
+    "@tabnas/jsonic": "^0.6.0",
+    "@tabnas/parser": "^0.8.0"
   },
   "peerDependencies": {
     "@boru-lang/core": "0.1.0"
   },
   "devDependencies": {
     "@boru-lang/core": "file:../../core/ts",
-    "typescript": "^6.0.3",
-    "@types/node": "^24.7.0"
+    "@types/node": "^24.7.0",
+    "typescript": "^6.0.3"
   },
   "files": [
     "dist"

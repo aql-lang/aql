@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/chzyer/readline v1.5.1
-	github.com/tabnas/jsonic/go v0.4.0
+	github.com/tabnas/jsonic/go v0.6.0
 	github.com/voxgig/model/go v0.1.3-0.20260622172642-ee04212555c1
 	golang.org/x/crypto v0.32.0
 	golang.org/x/sys v0.38.0
@@ -65,12 +65,12 @@ require (
 	github.com/tabnas/feed/go v0.4.0 // indirect
 	github.com/tabnas/hoover/go v0.2.1 // indirect
 	github.com/tabnas/ini/go v0.4.0 // indirect
-	github.com/tabnas/json/go v0.4.0 // indirect
+	github.com/tabnas/json/go v0.5.0 // indirect
 	github.com/tabnas/json5/go v0.4.0 // indirect
 	github.com/tabnas/jsonc/go v0.4.0 // indirect
 	github.com/tabnas/markdown/go v0.4.0 // indirect
 	github.com/tabnas/multisource/go v0.4.1 // indirect
-	github.com/tabnas/parser/go v0.4.0 // indirect
+	github.com/tabnas/parser/go v0.8.0 // indirect
 	github.com/tabnas/path/go v0.2.1 // indirect
 	github.com/tabnas/toml/go v0.4.0 // indirect
 	github.com/tabnas/xml/go v0.4.0 // indirect
