@@ -97,3 +97,12 @@ _1	'_1'	a leading separator
 0d12	'0d12'	lowercase 0d is text in a data decode
 0D12	'0D12'	…and so is uppercase, case-symmetrically
 {a:0D12}	{a:'0D12'}	…nested too
+#
+# § a bare map KEY is a name in a data decode, not a numeric — in either
+#   case. The lowercase spelling is no more 255 than the uppercase one, so
+#   the lowercase-only rule has nothing to refuse in this position either.
+#   Pinned because a key is decoded by the map rule, not by the number
+#   matcher, so a dependency bump could move it without any numeric row
+#   noticing.
+{0xFF:a}	{0xFF:'a'}	a bare key is a name, not 255
+{0XFF:a}	{0XFF:'a'}	…case-symmetrically, so nothing to refuse
