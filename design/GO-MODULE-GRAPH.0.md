@@ -300,7 +300,45 @@ args-aliasing gates, `make -C kg verify` and an advisory `make vuln`, but
 nothing that invokes the coverage gate. `make parser-parity` is the one
 coverage-bearing check CI does run, and it covers `parser/go` only.
 
-<!--COVERAGE-MEASURED-->
+### 4.4 Merged coverage — the ADR-008 contract
+
+`make cover-gate` at `22a567b`, go1.24.7 linux/amd64. **PASS**: every module
+at 100.0%, 69,970 reachable statements, 334 statements allowlisted across
+301 `//covergate:allow` blocks.
+
+| Module | Statements | Covered | Coverage |
+|---|--:|--:|--:|
+| `core/go` | 14,510 | 14,510 | 100.0% |
+| `lang/go` | 27,351 | 27,351 | 100.0% |
+| `cmd/go` | 12,604 | 12,604 | 100.0% |
+| `compiler/go` | 4,586 | 4,586 | 100.0% |
+| `basic/go` | 3,277 | 3,277 | 100.0% |
+| `eng/go` | 2,325 | 2,325 | 100.0% |
+| `check/go` | 2,182 | 2,182 | 100.0% |
+| `parser/go` | 1,679 | 1,679 | 100.0% |
+| `test/go` | 1,102 | 1,102 | 100.0% |
+| `calc/go` | 199 | 199 | 100.0% |
+| `test/solardemo` | 108 | 108 | 100.0% |
+| `wpg/serve` | 47 | 47 | 100.0% |
+| **TOTAL** | **69,970** | **69,970** | **100.0%** |
+
+Two things to read carefully in that table.
+
+`wpg` appears as **`wpg/serve`**, not `wpg`. covergate buckets an
+instrumented file by its first two path segments after the module prefix
+(`moduleOf` in `test/go/covergate/main.go`), which is exactly right for
+`<name>/go` modules and splits the two flat ones by package instead.
+`wpg/wasm` is absent entirely — it is `//go:build js && wasm`, so no
+host-platform `go test` ever reaches it, in this column or any other.
+
+`tools/piecetool` is absent because it is not in `MODULES`. Its seven source
+files and zero test files are outside the ADR-008 universe by design.
+
+Statement weight is concentrated: `lang/go` alone is 39% of the repo's
+reachable statements, `core/go` 21%, `cmd/go` 18% — three modules carry 78%
+of the total.
+
+<!--COVERAGE-STANDALONE-->
 
 ## 5. Reproducing this
 
