@@ -78,7 +78,6 @@ var unflaggedPins = map[string]int{
 	// as handler's runtime validation raises as_error over the concrete
 	// Integer.
 	"as.tsv":                2,
-	"bignum.tsv":            8,
 	"case.tsv":              2,
 	"class.tsv":             1,
 	"compare-restrict.tsv":  2,

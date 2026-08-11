@@ -232,3 +232,25 @@ func TestAdoptShapeValueXml(t *testing.T) {
 		t.Errorf("a concrete xml adopts to a FlexXml carrier, got %s", got.Parent.Leaf())
 	}
 }
+
+func TestAllConcreteArgsBareTypeNode(t *testing.T) {
+	// A bare type node is evaluation-fixed — the checked literal IS the
+	// runtime operand — so it does not block the dry pass.
+	if !allConcreteArgs([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewInteger(3)}) {
+		t.Error("a type-literal arg must not block the dry pass")
+	}
+	// A carrier still does.
+	if allConcreteArgs([]core.Value{core.NewTypeLiteral(core.TInteger), core.NewCarrier(core.TInteger)}) {
+		t.Error("a carrier arg must still block the dry pass")
+	}
+	// A strict None CARRIER still passes (the singleton rule): a concrete
+	// none takes the IsConcrete arm, so the carrier shape is what
+	// exercises the singleton exception.
+	if !allConcreteArgs([]core.Value{core.NewCarrier(core.TNone)}) {
+		t.Error("a strict None carrier must not block the dry pass")
+	}
+	dynNone := core.NewDynamicCarrier(core.TNone)
+	if allConcreteArgs([]core.Value{dynNone}) {
+		t.Error("a DYNAMIC none must still block the dry pass")
+	}
+}

@@ -71,12 +71,20 @@ func DryPassWrap(h func(args []core.Value, named map[string]core.Value, body []c
 // allConcreteArgs gates the dry pass on arguments whose runtime value the
 // analysis provably holds: concrete payloads, plus a strict (non-dynamic)
 // none — None is a singleton, so the checked literal IS the runtime value
-// (the orderingDeterminate rule).
+// (the orderingDeterminate rule) — plus a bare type node, for the same
+// reason: a type literal is inert and self-evaluating, so the checked
+// node IS the runtime operand (the TypeArgs slot of `convert` and its
+// kin; without this the dry pass never fires for any word whose
+// signature carries a type-literal slot).
 func allConcreteArgs(args []core.Value) bool {
 	for _, a := range args {
-		if !core.IsConcrete(a) && !(core.IsNoneShape(a) && !a.Dynamic) {
-			return false
+		if core.IsConcrete(a) || core.IsBareTypeNode(a) {
+			continue
 		}
+		if core.IsNoneShape(a) && !a.Dynamic {
+			continue
+		}
+		return false
 	}
 	return true
 }
