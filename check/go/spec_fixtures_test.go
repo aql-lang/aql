@@ -76,6 +76,20 @@ func registerCheckFixtures(r *core.Registry) {
 		}},
 	})
 
+	// anyq — Integer -> Any. The point of this word is its RETURN: Any is
+	// not a concrete leaf, so its result is a non-concrete operand. Feeding
+	// that into an overloaded word is what drives the dynamic-reachable
+	// overload counting and the "is any operand non-concrete" family in
+	// carrier.go, none of which a fully concrete row can reach.
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "anyq",
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TAny},
+			BarrierPos: 1,
+			Impl:       goImpl(func(args []core.Value) []core.Value { return []core.Value{args[0]} }),
+		}},
+	})
+
 	// predq — Integer -> Boolean, the predicate shape guard narrowing and
 	// the fn-predicate overload hazard analysis look for.
 	r.RegisterNativeFunc(core.NativeFunc{
