@@ -90,6 +90,46 @@ func registerCheckFixtures(r *core.Registry) {
 		}},
 	})
 
+	// defq — `defq name [triples]` installs a user fn: the list is walked
+	// by core.ParseFnDef in [input-sig, output-sig, body] triples and
+	// installed with core.InstallFnDef, mirroring the shape of specfix's
+	// `def name fn [...]` fixture (test/specfix/words.go) minus the keyword
+	// slot. This is the word that opens the fn-body analysis surface:
+	// installing a boru-bodied fn is what drives check_fnbody.go's
+	// construction pass and the AnalyseFnBody family in carrier.go, none of
+	// which a native-only vocabulary can reach. RunInCheck makes the
+	// definition fire during the check pass itself.
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "defq",
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TAtom, core.TList},
+			QuoteArgs:  map[int]bool{0: true},
+			NoEvalArgs: map[int]bool{1: true},
+			Returns:    []*core.Type{}, BarrierPos: -1,
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
+				name, _ := args[0].AsConcreteAtom()
+				if err := core.ValidateWordName(name); err != nil {
+					return nil, err
+				}
+				if !core.IsConcrete(args[1]) {
+					return nil, &core.BoruError{Code: "type_error", Detail: "defq: body must be a concrete list"}
+				}
+				lst, _ := core.AsList(args[1])
+				elems := lst.Slice()
+				if len(elems) == 0 || len(elems)%3 != 0 {
+					return nil, &core.BoruError{Code: "fn_invalid_spec", Detail: "defq: list length must be a non-zero multiple of 3"}
+				}
+				fnDef, err := core.ParseFnDef(reg, elems)
+				if err != nil {
+					return nil, err
+				}
+				reg.Check.RecordDef(name, core.SrcPos{})
+				core.InstallFnDef(reg, name, fnDef)
+				return nil, nil
+			}, core.RunInCheck()),
+		}},
+	})
+
 	// predq — Integer -> Boolean, the predicate shape guard narrowing and
 	// the fn-predicate overload hazard analysis look for.
 	r.RegisterNativeFunc(core.NativeFunc{

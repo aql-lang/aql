@@ -1,0 +1,52 @@
+# check/spec/fnbody — user fn definitions and the body analysis pass.
+#
+# defq installs a fn from [input-sig, output-sig, body] triples
+# (core.ParseFnDef / core.InstallFnDef, firing during the check pass via
+# RunInCheck). Installing a boru-bodied fn is what drives the
+# construction-time static body pass in check_fnbody.go and the
+# AnalyseFnBody model in carrier.go: the body is analysed over carriers,
+# its residual is conformance-checked against the declared output sig,
+# and the result of a call site is the DECLARED return, not the body's
+# residual.
+
+# --- the body is analysed and the declared return commits at the call ---
+defq incq [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] 5 incq	Integer	declared Integer wins over the body's Number residual
+defq okq [ [ n:Integer ] [ Number ] [ n 1 addq ] ] 3 okq	Number
+defq add2q [ [ a:Integer b:Integer ] [ Integer ] [ a b addq ] ] 1 2 add2q	Integer
+defq pfq [ [ n:Integer ] [ Boolean ] [ n predq ] ] 4 pfq	Boolean
+defq zeroq [ [ ] [ Integer ] [ 42 ] ] zeroq	Integer	a 0-arg overload
+defq tworq [ [ n:Integer ] [ Integer Integer ] [ n n ] ] 5 tworq	Integer Integer	two declared returns, both delivered
+
+# --- an installed fn that is never called is diagnosed once ---
+defq unusedq [ [ n:Integer ] [ Integer ] [ n ] ]	:: ~unused_def
+
+# --- the body must CONFORM to the declaration ---
+defq badq [ [ n:Integer ] [ String ] [ n 1 addq ] ] 1 badq	String :: !type_error	body yields Number, declares String
+defq extraq [ [ n:Integer ] [ Integer ] [ n n ] ] 5 extraq	Integer :: !type_error	body leaves two values, declares one
+
+# --- a body word that resolves nowhere is caught inside the analysis ---
+defq oopsq [ [ n:Integer ] [ Integer ] [ n missingq ] ] 1 oopsq	Integer :: !undefined_word
+
+# --- user-fn dispatch behaves like native dispatch at the call site ---
+defq incq [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] "x" incq	Integer :: !no_signature	wrong operand type
+defq polyq [ [ n:Integer ] [ Integer ] [ n ] [ s:String ] [ String ] [ s ] ] 1 polyq	Integer	overload selection
+defq polyq [ [ n:Integer ] [ Integer ] [ n ] [ s:String ] [ String ] [ s ] ] "a" polyq	String
+
+# --- a literal in the input sig is a MATCH PATTERN, not a param name ---
+defq patq [ [ 1 ] [ Integer ] [ 9 ] ] 1 patq	Integer
+defq patq [ [ 1 ] [ Integer ] [ 9 ] ] 2 patq	Integer :: !no_signature	2 does not match the literal pattern 1
+
+# --- a dynamic operand rides user-fn dispatch dynamically ---
+defq incq [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] 1 anyq incq	dynamic(Integer)
+
+# --- recursion is modelled without diverging (the analysis bails) ---
+defq recq [ [ n:Integer ] [ Integer ] [ n recq ] ] 1 recq	Integer
+defq mutq [ [ n:Integer ] [ Integer ] [ n mut2q ] ] defq mut2q [ [ n:Integer ] [ Integer ] [ n mutq ] ] 1 mutq	Integer :: ~unused_def	mut2q's only caller is mutq's body; the pass still counts it unused
+
+# --- fns compose, redefine, and can be defined after other statements ---
+defq aq [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] defq bq [ [ n:Integer ] [ Integer ] [ n aq ] ] 2 bq	Integer
+defq rdq [ [ n:Integer ] [ Integer ] [ n ] ] defq rdq [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] 1 rdq	Integer	redefinition: the later def wins
+5 defq lateq [ [ n:Integer ] [ Integer ] [ n ] ] lateq	Integer	operand may precede the definition
+
+# --- malformed specs refuse loudly ---
+defq badlenq [ [ n:Integer ] [ Integer ] ]	ERROR:multiple of 3

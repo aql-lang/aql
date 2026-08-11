@@ -42,8 +42,11 @@ nosuchq	Any :: !undefined_word
 1 2 nosuchq	Integer Integer Any :: !undefined_word
 1 negq	Integer Any :: !undefined_word	negq is specfix vocabulary, absent here
 
-# --- a quote's body is checked, and its result is the quote's result ---
-[ 1 2 addq ]	Number
+# --- a quote is DATA until something invokes it: its leaf is List and
+#     nothing inside it is dispatched (the first cut of this corpus read
+#     Number here, because the tokeniser was wrongly building grouping
+#     parens instead of a quote literal) ---
+[ 1 2 addq ]	List
 
 # --- statement sequencing keeps each statement's residual ---
 1 2 addq 3 4 addq	Integer Number

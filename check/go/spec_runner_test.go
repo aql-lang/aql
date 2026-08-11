@@ -47,18 +47,51 @@ import (
 )
 
 // tokenise turns a corpus row's input into []core.Value. It covers the
-// row subset only: decimal integers (with an optional leading -),
-// double-quoted strings with no escapes, bracketed quotes, and bare
-// words. Anything else is a row-authoring error and is reported as one
-// rather than silently becoming a word.
+// row subset only: decimal integers, double-quoted strings with no
+// escapes, bracketed QUOTE LITERALS, and bare words (including the
+// n:Type param-spec form defq's triples use). Anything else is a
+// row-authoring error and is reported as one rather than silently
+// becoming a word.
+//
+// `[ … ]` builds a nested core list VALUE, matching what the real parser
+// produces for a boru quote: a deferred literal whose elements are data
+// until something invokes them. It must NOT become OpenParen/CloseParen
+// tokens — those are the GROUPING construct, whose contents the engine
+// (and the check pass) evaluate in place, which is a different program.
+// The first cut of this tokeniser made exactly that mistake, and the
+// fn-def triples handed to defq were carrier-checked as loose code.
 func tokenise(src string) ([]core.Value, error) {
+	vals, rest, err := tokeniseSeq(strings.Fields(src), false)
+	if err != nil {
+		return nil, err
+	}
+	if len(rest) != 0 {
+		return nil, fmt.Errorf("unbalanced ]: %d token(s) left after the outermost list closed", len(rest))
+	}
+	return vals, nil
+}
+
+// tokeniseSeq consumes tokens until end-of-input (nested=false) or a
+// closing bracket (nested=true), returning the values and the unconsumed
+// remainder.
+func tokeniseSeq(toks []string, nested bool) ([]core.Value, []string, error) {
 	var out []core.Value
-	for _, tok := range strings.Fields(src) {
+	for len(toks) > 0 {
+		tok := toks[0]
+		toks = toks[1:]
 		switch {
 		case tok == "[":
-			out = append(out, core.NewOpenParen())
+			inner, rest, err := tokeniseSeq(toks, true)
+			if err != nil {
+				return nil, nil, err
+			}
+			toks = rest
+			out = append(out, core.NewList(inner))
 		case tok == "]":
-			out = append(out, core.NewCloseParen())
+			if !nested {
+				return nil, nil, fmt.Errorf("unbalanced ] with no open list")
+			}
+			return out, toks, nil
 		case strings.HasPrefix(tok, `"`) && strings.HasSuffix(tok, `"`) && len(tok) >= 2:
 			out = append(out, core.NewString(tok[1:len(tok)-1]))
 		default:
@@ -67,17 +100,20 @@ func tokenise(src string) ([]core.Value, error) {
 				continue
 			}
 			if !wordRe.MatchString(tok) {
-				return nil, fmt.Errorf("token %q is neither an integer, a string, a bracket nor a word", tok)
+				return nil, nil, fmt.Errorf("token %q is neither an integer, a string, a bracket nor a word", tok)
 			}
 			out = append(out, core.NewWord(tok))
 		}
 	}
-	return out, nil
+	if nested {
+		return nil, nil, fmt.Errorf("unclosed [ at end of input")
+	}
+	return out, toks, nil
 }
 
 // wordRe is deliberately strict: a corpus row that fat-fingers a literal
 // should fail loudly, not dispatch an accidental word.
-var wordRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]*$`)
+var wordRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.:-]*$`)
 
 // renderCheck renders a check result — the residual carrier stack plus the
 // collected diagnostics — to one comparable string, in the format
@@ -177,6 +213,17 @@ func TestCheckSpec(t *testing.T) {
 			input, want := cols[0], cols[1]
 			rows++
 			got, err := checkRow(input)
+			if sub, ok := strings.CutPrefix(want, "ERROR:"); ok {
+				// Expected-error row, the corpus format's ERROR:<substring>
+				// form: the run must fail and the message must carry the
+				// substring.
+				if err == nil {
+					t.Errorf("%s:%d: %q: want an error containing %q, ran clean with %q", f, i+1, input, sub, got)
+				} else if !strings.Contains(err.Error(), sub) {
+					t.Errorf("%s:%d: %q: error %q does not contain %q", f, i+1, input, err, sub)
+				}
+				continue
+			}
 			if err != nil {
 				t.Errorf("%s:%d: %q: run error: %v", f, i+1, input, err)
 				continue

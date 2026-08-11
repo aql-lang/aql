@@ -32,5 +32,5 @@
 1 anyq 2 addq	dynamic(Number)
 1 anyq 2 anyq addq	dynamic(Number)	both operands dynamic
 
-# --- a dynamic residual survives a following quote ---
-1 anyq [ 1 2 addq ]	dynamic(Any) Number
+# --- a dynamic residual survives a following quote literal ---
+1 anyq [ 1 2 addq ]	dynamic(Any) List
