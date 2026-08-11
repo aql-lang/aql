@@ -62,6 +62,21 @@ jobs:
       - name: Build CLI
         run: make -C cmd/go build
 
+      # The committed knowledge graph must match the working tree. Its input
+      # digest covers go.work, EVERY go.mod, kg/project/boru-project.jsonic
+      # and each document it cites — so a dependency bump moves it just as a
+      # documentation change does, and the bundle has to be rebuilt with
+      # `make -C kg graph`.
+      #
+      # This ran only as a local pre-commit gate until now, which is exactly
+      # how a stale bundle reached a green PR (#342): nothing in CI or `make
+      # test` invoked it, so the rule in CLAUDE.md was enforced solely by
+      # remembering to. It needs the CLI (verify.boru runs on boru itself),
+      # so it sits after Build CLI — and at ~1.5s it fails fast, well before
+      # the long vet/lint/test legs.
+      - name: Knowledge graph is current
+        run: make -C kg verify
+
       - name: Vet (all modules)
         run: make vet
 

@@ -72,7 +72,7 @@ keep the two in sync in the same commit.
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
-| [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary, so one dependency shim is retained | PR #338 retirement attempt (flagged for NUR by Codex P1) |
+| [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary — RESOLVED BY FIX in tabnas parser v0.8.3, shim deleted | PR #338 retirement attempt (flagged for NUR by Codex P1) |
 | [NUR062](#nur062) | Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible | PR #339 maintainer decision (flagged for NUR by Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
@@ -2179,11 +2179,35 @@ follow. The record discharges when the ledger is empty again.
 
 ---
 
-## NUR061 — The stock scanners split a base-prefixed run at the `.` boundary, so one dependency shim is retained {#nur061}
+## NUR061 — The stock scanners split a base-prefixed run at the `.` boundary, so one dependency shim was retained {#nur061}
 
-**Status:** Pending · **Recorded:** 2026-08-10 · **Surfaced by:** PR #338's
-attempt to retire `matchBasePrefixRun` after the upstream overflow fix;
-flagged for this register by the PR #338 review (Codex P1)
+**Status:** RESOLVED BY FIX · **Recorded:** 2026-08-10 · **Resolved:**
+2026-08-11 · **Surfaced by:** PR #338's attempt to retire
+`matchBasePrefixRun` after the upstream overflow fix; flagged for this
+register by the PR #338 review (Codex P1)
+
+**Resolution:** tabnas parser **v0.8.3** fixes BOTH divergences in the TS
+number matcher, and the shim is deleted from both ports. `0xFF.5` is
+`#NR("0xFF") #DT(".") #NR("5")` in each, as are `0xFF.0`, `0xFF.`,
+`0xFF.e5`, `0o17.5` and `0b101.5`; the uppercase markers `0XFF`, `0O17`,
+`0B101`, `0X1_F` and `-0XFF` are `#NR` in each. Measured against the BARE
+dependency in both ports before the bump, so the fix is upstream's rather
+than an artifact of boru's own matchers.
+
+Retirement was proven the way the record below says it must be — by
+comparing the TWO ports, not by either suite:
+
+- `scripts/parity-probe.sh` over the 25 shapes the arm covered: every one
+  AGREE, including the overflow and separator rows.
+- `make parser-crossdiff`: IDENTICAL over 1765 rows.
+- `parser/spec/lex.tsv` §base-prefixed boundaries rows still pass. They pin
+  the PREVIOUS behaviour, so passing means the renders did not move — and
+  because those rows now cover the shapes that actually diverged, their
+  silence is evidence instead of the absence of it. That is precisely what
+  was missing when the earlier attempt looked safe.
+
+The rows stay. They are now the regression pin that would catch an upstream
+slip, and they are the reason this retirement could be trusted at all.
 
 **Rule:** ADR-014 — a tabnas defect is fixed upstream and consumed as a
 version bump, never carried as a boru-side shim. Where a shim must be held
@@ -2231,19 +2255,27 @@ byte-identical before and after. The split appeared only on comparing the
 TWO ports. A shim's own green suite is not evidence the shim is dead; that
 is what the new lex.tsv rows now prevent.
 
-**Upstream status:** the report is written and measured in
-`design/TABNAS-DOT-BOUNDARY-REPORT.0.md` — the reproduction (both ports,
-runnable against the bare dependency), the full follow-character table, a
-root-cause hypothesis, and the acceptance criterion that a regression test
-must cover both a diverging and an agreeing follow character. It is ready to
-file verbatim but **not yet submitted, so no upstream issue URL exists**.
-When one is filed, put its URL in this record and in both matcher comments —
-ADR-014 asks for the link, and until it exists this record is the only
-auditable owner.
+**Upstream status:** FIXED in tabnas parser v0.8.3, consumed as a version
+bump. The report in `design/TABNAS-DOT-BOUNDARY-REPORT.0.md` is retained as
+the record of what was measured and how — the reproduction runnable against
+the bare dependency in both ports, the follow-character table, the
+root-cause reading of the TS number matcher, and the acceptance criterion
+that a regression test must cover a diverging AND an agreeing follow
+character. No upstream issue URL was ever minted: the fix landed before the
+report was filed, so the record here and that document are the audit trail
+ADR-014 asks for.
 
-**Proposed verdict:** resolve by fix — retire the arm when the boundary is
-fixed upstream, at which point the three lex.tsv rows either keep passing
-(the stock scanners agreeing) or fail loudly and say so.
+Note the fix covers a SECOND divergence found while writing the report and
+not part of the original finding: the TS regex accepted only lowercase
+marker letters where Go accepted either case, so `0XFF` was `#NR(255)` in Go
+and `#TX` in TS. One shim was masking both. (This is distinct from NUR062,
+which is boru's own deliberate rule that an uppercase prefix is a
+`syntax_error` — that refusal happens in the converter and needs the run
+CLAIMED as numeric by both ports, which is exactly what v0.8.3 restores.)
+
+**Verdict: resolved by fix.** The arm is deleted from
+`parser/go/grammar.go` and `parser/ts/src/grammar.ts`; the lex.tsv rows
+that made the retirement provable stay as the regression pin.
 
 ---
 

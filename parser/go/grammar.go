@@ -241,85 +241,6 @@ func setupDataDecimalMatcher(j *jsonic.Jsonic) {
 	setupDecimalBoundaryMatcher(j, true)
 }
 
-// isBasePrefixDigit reports whether c is a digit of the 0x/0o/0b base
-// selected by prefix.
-func isBasePrefixDigit(c, prefix byte) bool {
-	switch prefix {
-	case 'x', 'X':
-		return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
-	case 'o', 'O':
-		return c >= '0' && c <= '7'
-	default: // b / B
-		return c == '0' || c == '1'
-	}
-}
-
-// matchBasePrefixRun is the 0x/0o/0b arm of the decimal boundary matcher:
-// claim base-prefixed integers, including magnitudes past int64.
-//
-// This arm is LIVE and must not be retired. Its ORIGINAL reason is gone —
-// int64-overflowing base runs classified #TX in Go and #NR in TS until
-// jsonic v0.6.1 / parser v0.8.1, which made both ports round the true
-// value (`0xFFFFFFFFFFFFFFFF` -> 1.8446744073709552e19 in both). What
-// keeps it alive is a DIFFERENT, still-open divergence at the dot
-// boundary: with `.` registered as a token (as boru's grammar does, and
-// the bare dependency does not), the stock scanners disagree on the run
-// BEFORE the dot — Go calls `0xFF` in `0xFF.5` a number, TS calls it
-// text. Retiring the arm therefore splits three shapes that currently
-// agree: `0xFF.5` renders Go's "a number has no members to access with
-// `.`" against TS's 255.5, and `[0xFF.5]` against [255.5].
-//
-// The disagreement is CONDITIONAL on the follow character: TS decides the
-// run before the dot by looking past the dot, so `0xFF.5`/`0xFF.0`/
-// `0xFF.`/`0xFF.e5` (and `0o17.5`, `0b101.5`) diverge with no arm, while
-// `0xFF.a`/`0xFF.F`/`0xFF.x`/`0xFF.z`/`0xFF.5x` agree without it. Probe an
-// agreeing shape and this arm looks dead when it is not.
-//
-// That was measured by deleting this arm and running
-// scripts/parity-probe.sh — NOT by the suites, which passed clean with it
-// gone because no corpus row covered the shape. parser/spec/lex.tsv's
-// §base-prefixed-boundaries rows now pin the token classification —
-// including one agreeing shape, labelled — so the next retirement sweep
-// fails loudly instead of looking safe.
-//
-// Held open by NUR.md §NUR061, which is the auditable owner ADR-014 asks
-// for. The report is written and measured in
-// design/TABNAS-DOT-BOUNDARY-REPORT.0.md but not yet submitted, so there
-// is no issue URL to link here yet; put it in this comment and in the
-// record when there is one. The arm goes when the boundary is fixed
-// upstream.
-//
-// The converter reads the exact source, so the placeholder value is
-// intentionally irrelevant. The token starts at start (which may include
-// a sign) with the `0` at si.
-//
-// A run that is not a complete base-prefixed token — a trailing `.`, a
-// `.digits` tail, an empty or invalid body — DECLINES to the stock
-// scanners, which agree on it: both ports keep `0xFF.5` as one lenient
-// text token. (Until tabnas v0.6.0/v0.8.0 they did not — the TS scanner
-// split such a run into stray values — and this matcher claimed the whole
-// prose run in data mode to hide that. The defect was fixed upstream and
-// the shim retired with it, per ADR-014. parser/spec/data.tsv's
-// base-prefixed-prose rows are the pin either way.)
-func matchBasePrefixRun(lex *jsonic.Lex, s string, start, si int,
-	isFollowingText func(string, int) bool) *jsonic.Token {
-	cursor := lex.Cursor()
-	prefix := s[si+1]
-	end := si + 2
-	bodyStart := end
-	for end < len(s) && (isBasePrefixDigit(s[end], prefix) || s[end] == '_') {
-		end++
-	}
-	if end == bodyStart || isFollowingText(s, end) {
-		return nil
-	}
-	src := s[start:end]
-	tkn := lex.Token("#NR", jsonic.TinNR, float64(0), src)
-	cursor.SI = end
-	cursor.CI += end - start
-	return tkn
-}
-
 // setupDecimalBoundaryMatcher registers the shared matcher body. dataMode
 // selects the boundary alphabet and the no-split rule described on the two
 // wrappers above; the language mode is bit-for-bit the historical behavior.
@@ -386,9 +307,24 @@ func setupDecimalBoundaryMatcher(j *jsonic.Jsonic, dataMode bool) {
 			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("dD", rune(s[si+1])) {
 				return nil
 			}
-			if s[si] == '0' && si+1 < len(s) && strings.ContainsRune("xXoObB", rune(s[si+1])) {
-				return matchBasePrefixRun(lex, s, start, si, isFollowingText)
-			}
+			// NO base-prefix arm here, deliberately. `0x`/`0o`/`0b` runs go
+			// to the stock scanners, which as of tabnas parser v0.8.3 agree
+			// across the ports on every shape boru cares about — including
+			// the dot boundary (`0xFF.5`, `0xFF.e5`, a trailing `0xFF.`) and
+			// uppercase markers (`0XFF`), the two divergences that kept an
+			// arm here until then. Both were reported upstream and fixed
+			// there rather than shimmed, per ADR-014; NUR.md §NUR061 records
+			// the close.
+			//
+			// Retirement was proven by the CROSS-PORT probe, not by these
+			// suites: 25 shapes AGREE under scripts/parity-probe.sh,
+			// parser-crossdiff is IDENTICAL over 1765 rows, and — the part
+			// that was missing when an earlier retirement attempt looked
+			// safe and was not — parser/spec/lex.tsv's §base-prefixed
+			// boundaries rows now COVER the diverging shapes, so their
+			// passing is evidence instead of silence. Keep those rows: they
+			// are what would catch a regression if the upstream fix ever
+			// slipped.
 			for si < len(s) && isDigitOrSep(s[si]) {
 				si++
 			}

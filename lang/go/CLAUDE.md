@@ -231,8 +231,8 @@ normally using the cached modules.
 
 ## Jsonic Token Usage
 
-boru uses `github.com/tabnas/jsonic/go` (v0.6.1, over
-`github.com/tabnas/parser/go` v0.8.1) for all tokenization and
+boru uses `github.com/tabnas/jsonic/go` (v0.6.2, over
+`github.com/tabnas/parser/go` v0.8.3) for all tokenization and
 structural parsing. (This replaced the legacy `github.com/jsonicjs/jsonic/go`
 v0.1.6 — the tabnas family is an API-compatible superset port; the swap
 removed the jsonicjs dependency entirely.) Defects in it are fixed

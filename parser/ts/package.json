@@ -29,9 +29,9 @@
     "streamdump": "node --experimental-strip-types --no-warnings src/streamdump.ts"
   },
   "dependencies": {
-    "@tabnas/json": "^0.5.1",
-    "@tabnas/jsonic": "^0.6.1",
-    "@tabnas/parser": "^0.8.1"
+    "@tabnas/json": "^0.5.2",
+    "@tabnas/jsonic": "^0.6.2",
+    "@tabnas/parser": "^0.8.3"
   },
   "peerDependencies": {
     "@boru-lang/core": "0.1.0"
