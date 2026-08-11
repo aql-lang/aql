@@ -2,6 +2,8 @@ package eng
 
 import (
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestW8DispatchRematchNoneLiteralWindow — a `none` word in the failed
@@ -11,22 +13,22 @@ import (
 // and the stack prefix is bare) — no render bound exists for it.
 func TestW8DispatchRematchNoneLiteralWindow(t *testing.T) {
 	r := covRegistry(t, nil)
-	r.RegisterNativeFunc(NativeFunc{Name: "w8rn", Signatures: []Signature{{
-		Args: []*Type{TInteger, TNone}, BarrierPos: -1,
-		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	r.RegisterNativeFunc(core.NativeFunc{Name: "w8rn", Signatures: []core.Signature{{
+		Args: []*core.Type{core.TInteger, core.TNone}, BarrierPos: -1,
+		Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 			return nil, nil
 		}),
 	}}})
 	done := w8ArmCompile(t, r)
 	defer done()
-	e := NewTop(r)
-	e.Tape = NewTape([]Value{NewWord("w8rn"), NewWord("none"), NewCarrier(TInteger)}, StackHeadroom)
+	e := core.NewTop(r)
+	e.Tape = core.NewTape([]core.Value{core.NewWord("w8rn"), core.NewWord("none"), core.NewCarrier(core.TInteger)}, core.StackHeadroom)
 	e.Pointer = 0
 	fn := r.Lookup("w8rn")
 	if fn == nil {
 		t.Fatal("w8rn not registered")
 	}
-	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rn", ArgCount: -1}, fn, SrcPos{}) {
+	if e.TryRecordUnmatchedDispatchTrap(core.WordInfo{Name: "w8rn", ArgCount: -1}, fn, core.SrcPos{}) {
 		t.Error("the word-narrowed written tuple must decline the rematch record")
 	}
 }
@@ -40,23 +42,23 @@ func TestW8DispatchRematchNoneLiteralWindow(t *testing.T) {
 // declines — see TestUnmatchedDispatchTrapSpliceGraduated in lang/go.)
 func TestW8DispatchTrapDeferredTokenDeclines(t *testing.T) {
 	r := covRegistry(t, nil)
-	r.RegisterNativeFunc(NativeFunc{Name: "w8dt", Signatures: []Signature{{
-		Args: []*Type{TList}, BarrierPos: -1,
-		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	r.RegisterNativeFunc(core.NativeFunc{Name: "w8dt", Signatures: []core.Signature{{
+		Args: []*core.Type{core.TList}, BarrierPos: -1,
+		Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 			return nil, nil
 		}),
 	}}})
 	done := w8ArmCompile(t, r)
 	defer done()
-	e := NewTop(r)
-	reach := NewReachFromKeys(NewWord("m"), []Value{NewString("a")})
-	e.Tape = NewTape([]Value{NewWord("w8dt"), reach}, StackHeadroom)
+	e := core.NewTop(r)
+	reach := core.NewReachFromKeys(core.NewWord("m"), []core.Value{core.NewString("a")})
+	e.Tape = core.NewTape([]core.Value{core.NewWord("w8dt"), reach}, core.StackHeadroom)
 	e.Pointer = 0
 	fn := r.Lookup("w8dt")
 	if fn == nil {
 		t.Fatal("w8dt not registered")
 	}
-	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8dt", ArgCount: -1}, fn, SrcPos{}) {
+	if e.TryRecordUnmatchedDispatchTrap(core.WordInfo{Name: "w8dt", ArgCount: -1}, fn, core.SrcPos{}) {
 		t.Error("a raw Reach window token must decline the trap/rematch record")
 	}
 }
@@ -67,35 +69,35 @@ func TestW8DispatchTrapDeferredTokenDeclines(t *testing.T) {
 // record so the interpreter's suggestion-bearing error stays canonical.
 func TestW8DispatchRematchFnShapeDeclines(t *testing.T) {
 	r := covRegistry(t, nil)
-	r.Defs.Push("MyShape", NewCarrier(TFnUndef))
-	r.RegisterNativeFunc(NativeFunc{Name: "w8rf", Signatures: []Signature{{
-		Args: []*Type{TString}, BarrierPos: -1,
-		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	r.Defs.Push("MyShape", core.NewCarrier(core.TFnUndef))
+	r.RegisterNativeFunc(core.NativeFunc{Name: "w8rf", Signatures: []core.Signature{{
+		Args: []*core.Type{core.TString}, BarrierPos: -1,
+		Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 			return nil, nil
 		}),
 	}}})
-	sig := &Signature{Params: []FnParam{{Type: TMap}, {Type: TAny}}, BarrierPos: -1}
-	m := NewOrderedMap()
-	m.Set("f", NewWord("MyShape"))
+	sig := &core.Signature{Params: []core.FnParam{{Type: core.TMap}, {Type: core.TAny}}, BarrierPos: -1}
+	m := core.NewOrderedMap()
+	m.Set("f", core.NewWord("MyShape"))
 	done := w8ArmCompile(t, r)
 	defer done()
-	e := NewTop(r)
+	e := core.NewTop(r)
 	// The def Forward sits below the failing word (both back-walks skip it);
 	// its typed-name map rides at FuncIndex-CollectedArgs — above the
 	// pointer, so the stack window stays empty and the carrier forms the
 	// forward window; the trailing word bounds the written walk.
-	e.Tape = NewTape([]Value{
-		NewForward(ForwardInfo{FuncName: "def", Sig: sig, CollectedArgs: 1, FuncIndex: 5}),
-		NewWord("w8rf"),
-		NewCarrier(TInteger),
-		NewWord("zz-stop"),
-		NewMap(m),
-	}, StackHeadroom)
+	e.Tape = core.NewTape([]core.Value{
+		core.NewForward(core.ForwardInfo{FuncName: "def", Sig: sig, CollectedArgs: 1, FuncIndex: 5}),
+		core.NewWord("w8rf"),
+		core.NewCarrier(core.TInteger),
+		core.NewWord("zz-stop"),
+		core.NewMap(m),
+	}, core.StackHeadroom)
 	e.Pointer = 1
 	if !e.IsFnShapeTypedBindingContext() {
 		t.Fatal("setup: expected the fn-shape typed-binding context")
 	}
-	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rf", ArgCount: -1}, r.Lookup("w8rf"), SrcPos{}) {
+	if e.TryRecordUnmatchedDispatchTrap(core.WordInfo{Name: "w8rf", ArgCount: -1}, r.Lookup("w8rf"), core.SrcPos{}) {
 		t.Error("the fn-shape context must decline the rematch record")
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"math"
 	"strconv"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // FormatFloat keeps the everyday range in plain decimal and only switches
@@ -41,7 +43,7 @@ func TestFormatFloat(t *testing.T) {
 		{math.MaxFloat64, "1.7976931348623157e+308"},
 	}
 	for _, c := range cases {
-		if got := FormatFloat(c.in); got != c.want {
+		if got := core.FormatFloat(c.in); got != c.want {
 			t.Errorf("FormatFloat(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
@@ -54,7 +56,7 @@ func TestFormatFloatRoundTrips(t *testing.T) {
 	for _, f := range []float64{
 		0.1, 2.5, 0.00001, 1e20, 1e-10, 1e21, 1.5e30, 1e-11, 5e-324, math.MaxFloat64,
 	} {
-		s := FormatFloat(f)
+		s := core.FormatFloat(f)
 		g, err := strconv.ParseFloat(s, 64)
 		if err != nil {
 			t.Errorf("FormatFloat(%v)=%q does not re-parse: %v", f, s, err)

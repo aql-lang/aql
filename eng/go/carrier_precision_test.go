@@ -1,6 +1,11 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // LiteralCondValue reads a decided Boolean through a GuardFactInfo wrapper: a
 // pre-evaluated paren cond arrives as a Boolean carrier whose Prev payload is
@@ -8,18 +13,18 @@ import "testing"
 // sees the literal truth value.
 func TestLiteralCondValueGuardFactPrev(t *testing.T) {
 	for _, want := range []bool{true, false} {
-		elem := NewCarrier(TBoolean)
-		elem.Data = GuardFactInfo{Prev: BoolPayload{B: want}}
-		got, ok := LiteralCondValue(NewList([]Value{elem}))
+		elem := core.NewCarrier(core.TBoolean)
+		elem.Data = core.GuardFactInfo{Prev: core.BoolPayload{B: want}}
+		got, ok := core.LiteralCondValue(core.NewList([]core.Value{elem}))
 		if !ok || got != want {
 			t.Errorf("LiteralCondValue(Prev=%v) = %v/%v, want %v/true", want, got, ok, want)
 		}
 	}
 	// NEGATIVE: a GuardFactInfo whose Prev is NOT a BoolPayload does not decide
 	// the cond (falls through the wrapper read).
-	elem := NewCarrier(TBoolean)
-	elem.Data = GuardFactInfo{Prev: IntPayload{N: 1}}
-	if _, ok := LiteralCondValue(NewList([]Value{elem})); ok {
+	elem := core.NewCarrier(core.TBoolean)
+	elem.Data = core.GuardFactInfo{Prev: core.IntPayload{N: 1}}
+	if _, ok := core.LiteralCondValue(core.NewList([]core.Value{elem})); ok {
 		t.Error("a non-Boolean Prev must not decide the cond")
 	}
 }
@@ -29,19 +34,19 @@ func TestLiteralCondValueGuardFactPrev(t *testing.T) {
 // analysis boundary, instead of driving dispatch/memo keying with the phantom
 // concrete Atom.
 func TestAnalyseFnBodyGradualizesUndefinedArg(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Check.Mode = true
 
-	und := NewAtom("phantom")
+	und := core.NewAtom("phantom")
 	und.Undefined = true
-	body := []Value{NewWord("x")} // trivial body returning the param
+	body := []core.Value{core.NewWord("x")} // trivial body returning the param
 
 	// The call must not panic and must produce a residual (the gradualized
 	// carrier flows through the body).
-	got := AnalyseFnBody(r, "f", []string{"x"}, body, []Value{und}, nil, nil, false)
+	got := check.AnalyseFnBody(r, "f", []string{"x"}, body, []core.Value{und}, nil, nil, false)
 	if len(got) == 0 {
 		t.Fatal("AnalyseFnBody over an undefined arg produced no residual")
 	}
@@ -51,7 +56,7 @@ func TestAnalyseFnBodyGradualizesUndefinedArg(t *testing.T) {
 
 	// A NON-undefined arg leaves the sanitization loop a no-op (the continue
 	// path) — a different fn name so the memo does not short-circuit.
-	got2 := AnalyseFnBody(r, "g", []string{"x"}, body, []Value{NewInteger(3)}, nil, nil, false)
+	got2 := check.AnalyseFnBody(r, "g", []string{"x"}, body, []core.Value{core.NewInteger(3)}, nil, nil, false)
 	if len(got2) == 0 {
 		t.Fatal("AnalyseFnBody over a concrete arg produced no residual")
 	}

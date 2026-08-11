@@ -4,20 +4,24 @@ package eng
 // guards on ModuleRegistry (modules.go). All arms are reached by direct
 // calls on zero-value and nil receivers. Per design/TEST-SEAMS.10.md.
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 func TestW8ModuleRegistryNilGuards(t *testing.T) {
-	var nilM *ModuleRegistry
+	var nilM *core.ModuleRegistry
 
 	// InheritConfig: nil receiver / nil parent → no-op, no panic.
-	nilM.InheritConfig(NewModuleRegistry())
-	NewModuleRegistry().InheritConfig(nil)
+	nilM.InheritConfig(core.NewModuleRegistry())
+	core.NewModuleRegistry().InheritConfig(nil)
 
 	// IsLoaded on a nil receiver and a zero (loaded==nil) receiver.
 	if nilM.IsLoaded("x") {
 		t.Fatal("nil registry reports nothing loaded")
 	}
-	if (&ModuleRegistry{}).IsLoaded("x") {
+	if (&core.ModuleRegistry{}).IsLoaded("x") {
 		t.Fatal("zero registry reports nothing loaded")
 	}
 
@@ -25,12 +29,12 @@ func TestW8ModuleRegistryNilGuards(t *testing.T) {
 	if _, ok := nilM.LoadedDesc("x"); ok {
 		t.Fatal("nil registry has no cached desc")
 	}
-	if _, ok := (&ModuleRegistry{}).LoadedDesc("x"); ok {
+	if _, ok := (&core.ModuleRegistry{}).LoadedDesc("x"); ok {
 		t.Fatal("zero registry has no cached desc")
 	}
 
 	// MarkLoaded on nil receiver → no-op.
-	nilM.MarkLoaded("x", ModuleDesc{})
+	nilM.MarkLoaded("x", core.ModuleDesc{})
 
 	// NextID on nil receiver → the sentinel "mod_0".
 	if got := nilM.NextID(); got != "mod_0" {
@@ -40,8 +44,8 @@ func TestW8ModuleRegistryNilGuards(t *testing.T) {
 
 func TestW8ModuleRegistryLoadLifecycle(t *testing.T) {
 	// MarkLoaded on a zero registry lazily allocates the loaded map.
-	m := &ModuleRegistry{}
-	m.MarkLoaded("boru:foo", ModuleDesc{ID: "mod_x"})
+	m := &core.ModuleRegistry{}
+	m.MarkLoaded("boru:foo", core.ModuleDesc{ID: "mod_x"})
 	if !m.IsLoaded("boru:foo") {
 		t.Fatal("module must report as loaded after MarkLoaded")
 	}
@@ -49,7 +53,7 @@ func TestW8ModuleRegistryLoadLifecycle(t *testing.T) {
 		t.Fatalf("cached desc mismatch: %+v ok=%v", d, ok)
 	}
 	// NextID increments from a fresh registry.
-	m2 := NewModuleRegistry()
+	m2 := core.NewModuleRegistry()
 	if got := m2.NextID(); got != "mod_1" {
 		t.Fatalf("first NextID = %q, want mod_1", got)
 	}

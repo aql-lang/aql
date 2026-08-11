@@ -70,13 +70,13 @@ import (
 	"time"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/test/specfix"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/parser/go"
 	"github.com/boru-lang/boru/test/go/vary"
+	"github.com/boru-lang/boru/test/specfix"
 )
 
 // Test seams (design/TEST-SEAMS.10.md): tests swap these to observe

@@ -1,8 +1,8 @@
 package modules
 
 import (
-	"github.com/boru-lang/boru/lang/go/stackform"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/stackform"
 )
 
 // Test seams for wave-9 coverage (design/TEST-SEAMS.10.md). Each var defaults

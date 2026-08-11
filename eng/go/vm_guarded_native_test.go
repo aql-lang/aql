@@ -3,6 +3,9 @@ package eng
 import (
 	"errors"
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestGuardedNativeCallContract pins the VM-level guarded CALL_NATIVE — the sound
@@ -16,21 +19,21 @@ import (
 // sibling the interpreter rejects); the guard never re-matches, so for a
 // single-overload word it mirrors the interpreter exactly.
 func TestGuardedNativeCallContract(t *testing.T) {
-	newReg := func() *Registry {
-		r, err := NewRegistry()
+	newReg := func() *core.Registry {
+		r, err := core.NewRegistry()
 		if err != nil {
 			t.Fatalf("NewRegistry: %v", err)
 		}
 		// A single-overload native: dbl [[Integer][Integer]] → n*2.
-		r.RegisterNativeFunc(NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: "dbl",
-			Signatures: []Signature{{
-				Args: []*Type{TInteger},
-				Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					n, _ := AsInteger(a[0])
-					return []Value{NewInteger(n * 2)}, nil
+			Signatures: []core.Signature{{
+				Args: []*core.Type{core.TInteger},
+				Impl: core.Go(func(a []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+					n, _ := core.AsInteger(a[0])
+					return []core.Value{core.NewInteger(n * 2)}, nil
 				}),
-				Returns: []*Type{TInteger}, BarrierPos: -1,
+				Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
 			}},
 		})
 		if err := r.Err(); err != nil {
@@ -40,7 +43,7 @@ func TestGuardedNativeCallContract(t *testing.T) {
 		return r
 	}
 
-	sig := func(r *Registry) *Signature {
+	sig := func(r *core.Registry) *core.Signature {
 		fn := r.Lookup("dbl")
 		if fn == nil || len(fn.Signatures) == 0 {
 			t.Fatal("dbl not registered")
@@ -51,11 +54,11 @@ func TestGuardedNativeCallContract(t *testing.T) {
 	// MATCH: a guarded call over a concrete Integer dispatches the handler.
 	t.Run("match dispatches", func(t *testing.T) {
 		r := newReg()
-		p := &Program{
-			Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallNative, Arg: 0}},
-			Debug:  []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
-			Consts: []Value{NewInteger(21)},
-			Sigs:   []SigRef{{Word: "dbl", Sig: sig(r), Guard: true}},
+		p := &compiler.Program{
+			Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallNative, Arg: 0}},
+			Debug:  []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
+			Consts: []core.Value{core.NewInteger(21)},
+			Sigs:   []compiler.SigRef{{Word: "dbl", Sig: sig(r), Guard: true}},
 		}
 		out, err := RunProgram(p, r)
 		if err != nil {
@@ -64,7 +67,7 @@ func TestGuardedNativeCallContract(t *testing.T) {
 		if len(out) != 1 {
 			t.Fatalf("want 1 result, got %d", len(out))
 		}
-		if n, _ := AsInteger(out[0]); n != 42 {
+		if n, _ := core.AsInteger(out[0]); n != 42 {
 			t.Errorf("guarded dbl 21 = %d, want 42", n)
 		}
 	})
@@ -73,17 +76,17 @@ func TestGuardedNativeCallContract(t *testing.T) {
 	// the byte-identical error the interpreter raises (no overload matches).
 	t.Run("mismatch raises signature_error", func(t *testing.T) {
 		r := newReg()
-		p := &Program{
-			Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallNative, Arg: 0}},
-			Debug:  []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
-			Consts: []Value{NewString("nope")},
-			Sigs:   []SigRef{{Word: "dbl", Sig: sig(r), Guard: true}},
+		p := &compiler.Program{
+			Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallNative, Arg: 0}},
+			Debug:  []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
+			Consts: []core.Value{core.NewString("nope")},
+			Sigs:   []compiler.SigRef{{Word: "dbl", Sig: sig(r), Guard: true}},
 		}
 		_, err := RunProgram(p, r)
 		if err == nil {
 			t.Fatal("guarded mismatch dispatched instead of raising")
 		}
-		var ae *BoruError
+		var ae *core.BoruError
 		if !errors.As(err, &ae) || ae.Code != "signature_error" {
 			t.Fatalf("guarded mismatch = %v (%T), want code signature_error", err, err)
 		}
@@ -94,11 +97,11 @@ func TestGuardedNativeCallContract(t *testing.T) {
 	// guard is what supplies the runtime soundness check.
 	t.Run("unguarded mismatch does NOT raise (control)", func(t *testing.T) {
 		r := newReg()
-		p := &Program{
-			Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallNative, Arg: 0}},
-			Debug:  []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
-			Consts: []Value{NewInteger(5)},
-			Sigs:   []SigRef{{Word: "dbl", Sig: sig(r), Guard: false}},
+		p := &compiler.Program{
+			Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallNative, Arg: 0}},
+			Debug:  []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
+			Consts: []core.Value{core.NewInteger(5)},
+			Sigs:   []compiler.SigRef{{Word: "dbl", Sig: sig(r), Guard: false}},
 		}
 		if _, err := RunProgram(p, r); err != nil {
 			t.Fatalf("unguarded match raised: %v", err)

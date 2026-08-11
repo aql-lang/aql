@@ -1,10 +1,13 @@
 # Go module graph and per-module coverage
 
-> **Status: measured snapshot.** Nothing here proposes a change. It is the
-> Go side of the repository as it stands at commit `22a567b` (2026-08-11):
-> which modules exist, what each one requires, and how well each one is
-> covered by tests — both under the repo-wide ADR-008 gate and by its own
-> suite alone.
+> **Status: measured snapshot, plus the one change it argued for.** §§1–4 are
+> the Go side of the repository as it stands (2026-08-11): which modules
+> exist, what each one requires, and how well each one is covered by tests —
+> both under the repo-wide ADR-008 gate and by its own suite alone. §5 is
+> different: it records a change this measurement made the case for and that
+> landed with it — the retirement of eng's generated facade, and the two
+> packages that moved out of eng with it. Everything above §5 already
+> reflects that new shape.
 >
 > The **module edges are not hand-drawn.** They are read from `go.work` and
 > every `go.mod`, the same ground truth `kg/gomod.boru` reads to build the
@@ -21,7 +24,7 @@
 
 ## 1. Inventory
 
-Fourteen Go modules exist in the tree. Twelve are workspace members that
+Fifteen Go modules exist in the tree. Thirteen are workspace members that
 also form the `MODULES` list the root `Makefile` builds, tests and gates;
 two sit outside that list deliberately.
 
@@ -32,24 +35,25 @@ two sit outside that list deliberately.
 | `check/go` | `github.com/boru-lang/boru/check/go` | ✓ | ✓ | 1 | 11 | 17 |
 | `compiler/go` | `github.com/boru-lang/boru/compiler/go` | ✓ | ✓ | 1 | 11 | 26 |
 | `basic/go` | `github.com/boru-lang/boru/basic/go` | ✓ | ✓ | 1 | 21 | 11 |
-| `eng/go` | `github.com/boru-lang/boru/eng/go` | ✓ | ✓ | 3 | 24 | 121 |
-| `lang/go` | `github.com/boru-lang/boru/lang/go` | ✓ | ✓ | 12 | 296 | 701 |
+| `test/specfix` | `github.com/boru-lang/boru/test/specfix` | ✓ | ✓ | 1 | 5 | 2 |
+| `eng/go` | `github.com/boru-lang/boru/eng/go` | ✓ | ✓ | 1 | 9 | 115 |
+| `lang/go` | `github.com/boru-lang/boru/lang/go` | ✓ | ✓ | 13 | 302 | 703 |
 | `cmd/go` | `github.com/boru-lang/boru/cmd/go` | ✓ | ✓ | 39 | 128 | 218 |
 | `calc/go` | `github.com/boru-lang/boru/calc/go` | ✓ | ✓ | 2 | 4 | 5 |
 | `wpg` | `github.com/boru-lang/boru/wpg` | ✓ | ✓ | 1 (+`wasm`) | 3 | 3 |
 | `test/go` | `github.com/boru-lang/boru/test/go` | ✓ | ✓ | 7 | 5 | 45 |
 | `test/solardemo` | `github.com/boru-lang/boru/test/solardemo` | ✓ | ✓ | 1 | 1 | 1 |
-| `tools/piecetool` | `github.com/boru-lang/boru/tools/piecetool` | ✓ | ✗ | 1 | 7 | 0 |
+| `tools/piecetool` | `github.com/boru-lang/boru/tools/piecetool` | ✓ | ✗ | 1 | 6 | 0 |
 | `editors/tree-sitter/bindings/go` | `github.com/tree-sitter/tree-sitter-boru` | ✗ | ✗ | 1 | 1 | 1 |
 
 Two modules are outside the gated set on purpose:
 
 - **`tools/piecetool`** is a developer tool (the four-piece split's
-  inventory/rename/facade generator, `design/ENG-FOUR-PIECE.0.md`). Its own
-  `go.mod` says why it is absent from `MODULES`: its statements stay out of
-  the repo-wide ADR-008 coverage universe that every *shipped* module must
-  satisfy. It has no tests, and under the current arrangement that is the
-  intended state, not a gap.
+  inventory/rename/qualifier generator, `design/ENG-FOUR-PIECE.0.md`). Its
+  own `go.mod` says why it is absent from `MODULES`: its statements stay out
+  of the repo-wide ADR-008 coverage universe that every *shipped* module
+  must satisfy. It has no tests, and under the current arrangement that is
+  the intended state, not a gap.
 - **`editors/tree-sitter/bindings/go`** is not a workspace member at all and
   does not even carry a `boru-lang` module path — it is the Go binding
   published under `github.com/tree-sitter/tree-sitter-boru`, on `go 1.22`
@@ -59,12 +63,16 @@ Two modules are outside the gated set on purpose:
 host-platform `go test` run and contributes nothing to either coverage
 column below. It is built separately by `make -C wpg wasm` (and in CI).
 
+`eng/go` is nine production files, all of them the bytecode VM, exporting
+exactly two functions — see §5. Its 115 test files are the kernel's external
+suite, left behind when the kernel moved out.
+
 ## 2. The dependency spine
 
 **Read this diagram with its caveat, or it will mislead you.** It is the
-*transitive reduction*: twelve of the twenty-five direct `require` edges,
-chosen because the other thirteen are already reachable by following the
-twelve. An edge missing here is **not** an edge the module lacks — §3 has
+*transitive reduction*: thirteen of the thirty-one direct `require` edges,
+chosen because the other eighteen are already reachable by following the
+thirteen. An edge missing here is **not** an edge the module lacks — §3 has
 the complete set, and every edge there is both declared in a `go.mod` and,
 in almost every case, a package the module's source genuinely imports.
 
@@ -84,7 +92,8 @@ flowchart TD
     wpg["<b>wpg</b><br/>web playground"]
     tst["<b>test/go</b><br/>spec + corpus runners"]
     lang["<b>lang/go</b><br/>native words · modules · registry"]
-    eng["<b>eng/go</b><br/>engine kernel + generated facades"]
+    eng["<b>eng/go</b><br/>bytecode VM"]
+    sfx["<b>test/specfix</b><br/>shared spec/check corpus harness"]
     basic["<b>basic/go</b><br/>base language layer"]
     comp["<b>compiler/go</b><br/>recorder · lowering · bytecode"]
     chk["<b>check/go</b><br/>type checker"]
@@ -97,43 +106,52 @@ flowchart TD
     tst --> lang
     lang --> basic
     lang --> eng
-    eng --> comp
-    eng --> par
+    eng --> sfx
+    sfx --> comp
+    sfx --> par
     basic --> par
+    calc --> par
     comp --> chk
     chk --> core
     par --> core
-    calc --> par
 
     classDef l0 fill:#08306b,color:#ffffff,stroke:#052a4e,stroke-width:1px
     classDef l1 fill:#08519c,color:#ffffff,stroke:#063d75,stroke-width:1px
     classDef l2 fill:#2171b5,color:#ffffff,stroke:#18558a,stroke-width:1px
     classDef l3 fill:#4292c6,color:#ffffff,stroke:#316f97,stroke-width:1px
     classDef l4 fill:#6baed6,color:#0b2540,stroke:#4a89ab,stroke-width:1px
-    classDef l5 fill:#c6dbef,color:#0b2540,stroke:#95b6d4,stroke-width:1px
+    classDef l5 fill:#9ecae1,color:#0b2540,stroke:#6f9fc4,stroke-width:1px
+    classDef l6 fill:#c6dbef,color:#0b2540,stroke:#95b6d4,stroke-width:1px
 
     class core l0
     class par,chk l1
     class basic,comp,calc l2
-    class eng l3
-    class lang l4
-    class cmd,tst,wpg l5
+    class sfx l3
+    class eng l4
+    class lang l5
+    class cmd,tst,wpg l6
 ```
 
-Depth from `core/go` gives six layers:
+Depth from `core/go` now gives seven layers:
 
 | Layer | Modules |
 |---|---|
 | L0 | `core/go` · (`test/solardemo`, `tools/piecetool` — no in-repo deps) |
 | L1 | `check/go` · `parser/go` |
 | L2 | `basic/go` · `calc/go` · `compiler/go` |
-| L3 | `eng/go` |
-| L4 | `lang/go` |
-| L5 | `cmd/go` · `test/go` · `wpg` |
+| L3 | `test/specfix` |
+| L4 | `eng/go` |
+| L5 | `lang/go` |
+| L6 | `cmd/go` · `test/go` · `wpg` |
+
+`eng/go → test/specfix` is the one edge that reads oddly, and it is honest:
+`eng`'s standalone corpus lanes import the harness, and a `go.mod` require
+cannot say "for tests only". §5 explains why the harness is a module rather
+than a package in either `eng` or `test/go`.
 
 ## 3. Every declared edge
 
-The full picture, with the thirteen transitively-implied requires drawn
+The full picture, with the eighteen transitively-implied requires drawn
 dotted. A dotted edge is not redundant clutter in the `go.mod` — pinning a
 module you import directly is correct even when a sibling already pulls it
 in — but it is not structure, and reading the graph without that distinction
@@ -147,6 +165,7 @@ flowchart TD
     tst["<b>test/go</b>"]
     lang["<b>lang/go</b>"]
     eng["<b>eng/go</b>"]
+    sfx["<b>test/specfix</b>"]
     basic["<b>basic/go</b>"]
     comp["<b>compiler/go</b>"]
     chk["<b>check/go</b>"]
@@ -161,24 +180,30 @@ flowchart TD
     tst --> lang
     lang --> basic
     lang --> eng
-    eng --> comp
-    eng --> par
+    eng --> sfx
+    sfx --> comp
+    sfx --> par
     basic --> par
+    calc --> par
     comp --> chk
     chk --> core
     par --> core
-    calc --> par
 
     cmd -.-> par
     tst -.-> basic
-    tst -.-> eng
+    tst -.-> core
     tst -.-> par
+    tst -.-> sfx
     lang -.-> chk
     lang -.-> comp
     lang -.-> core
     lang -.-> par
     eng -.-> chk
+    eng -.-> comp
     eng -.-> core
+    eng -.-> par
+    sfx -.-> chk
+    sfx -.-> core
     basic -.-> core
     comp -.-> core
     calc -.-> core
@@ -188,15 +213,17 @@ flowchart TD
     classDef l2 fill:#2171b5,color:#ffffff,stroke:#18558a,stroke-width:1px
     classDef l3 fill:#4292c6,color:#ffffff,stroke:#316f97,stroke-width:1px
     classDef l4 fill:#6baed6,color:#0b2540,stroke:#4a89ab,stroke-width:1px
-    classDef l5 fill:#c6dbef,color:#0b2540,stroke:#95b6d4,stroke-width:1px
+    classDef l5 fill:#9ecae1,color:#0b2540,stroke:#6f9fc4,stroke-width:1px
+    classDef l6 fill:#c6dbef,color:#0b2540,stroke:#95b6d4,stroke-width:1px
     classDef aux fill:#eceff1,color:#263238,stroke:#b0bec5,stroke-dasharray:3 3
 
     class core l0
     class par,chk l1
     class basic,comp,calc l2
-    class eng l3
-    class lang l4
-    class cmd,tst,wpg l5
+    class sfx l3
+    class eng l4
+    class lang l5
+    class cmd,tst,wpg l6
     class sol,pt aux
 ```
 
@@ -205,25 +232,30 @@ implied.
 
 ### Edge table
 
-`cmd/go` and `wpg` are the two modules whose `go.mod` marks in-repo requires
-`// indirect`; those are listed separately because they are *not* edges by
-the rule above.
+`cmd/go` and `test/go` are the two modules whose `go.mod` marks in-repo
+requires `// indirect`; those are listed separately because they are *not*
+edges by the rule above.
 
 | Module | Direct in-repo requires | Marked `// indirect` | Required by (direct) |
 |---|---|---|---|
-| `core/go` | — | — | `basic/go`, `calc/go`, `check/go`, `compiler/go`, `eng/go`, `lang/go`, `parser/go` |
-| `parser/go` | `core/go` | — | `basic/go`, `calc/go`, `cmd/go`, `eng/go`, `lang/go`, `test/go` |
-| `check/go` | `core/go` | — | `compiler/go`, `eng/go`, `lang/go` |
-| `compiler/go` | `check/go`, `core/go` | — | `eng/go`, `lang/go` |
+| `core/go` | — | — | `basic/go`, `calc/go`, `check/go`, `compiler/go`, `eng/go`, `lang/go`, `parser/go`, `test/go`, `test/specfix` |
+| `parser/go` | `core/go` | — | `basic/go`, `calc/go`, `cmd/go`, `eng/go`, `lang/go`, `test/go`, `test/specfix` |
+| `check/go` | `core/go` | — | `compiler/go`, `eng/go`, `lang/go`, `test/specfix` |
+| `compiler/go` | `check/go`, `core/go` | — | `eng/go`, `lang/go`, `test/specfix` |
 | `basic/go` | `core/go`, `parser/go` | — | `lang/go`, `test/go` |
-| `eng/go` | `check/go`, `compiler/go`, `core/go`, `parser/go` | — | `lang/go`, `test/go` |
+| `test/specfix` | `check/go`, `compiler/go`, `core/go`, `parser/go` | — | `eng/go`, `test/go` |
+| `eng/go` | `check/go`, `compiler/go`, `core/go`, `parser/go`, `test/specfix` | — | `lang/go` |
 | `lang/go` | `basic/go`, `check/go`, `compiler/go`, `core/go`, `eng/go`, `parser/go` | — | `cmd/go`, `test/go`, `wpg` |
 | `cmd/go` | `lang/go`, `parser/go` | `basic/go`, `check/go`, `compiler/go`, `core/go` | — |
 | `calc/go` | `core/go`, `parser/go` | — | — |
 | `wpg` | `lang/go` | `basic/go`, `eng/go` | — |
-| `test/go` | `basic/go`, `eng/go`, `lang/go`, `parser/go` | — | — |
+| `test/go` | `basic/go`, `core/go`, `lang/go`, `parser/go`, `test/specfix` | `check/go`, `compiler/go`, `eng/go` | — |
 | `test/solardemo` | — | — | — |
 | `tools/piecetool` | — | — | — |
+
+`eng/go` is now required by **`lang/go` alone**. `test/go` used to require it
+directly; it did so only to reach `eng/go/specfix`, and once the harness
+became its own module that edge dropped to indirect.
 
 ### Third-party surface
 
@@ -238,6 +270,7 @@ is nearly dependency-free; the weight lands in `lang/go` and `cmd/go`.
 | `parser/go` | 2 | `apd`, `tabnas/jsonic/go` |
 | `basic/go` | 2 | `apd`, `tabnas/parser/go` |
 | `eng/go` | 1 | `apd` |
+| `test/specfix` | 0 | everything via core/check/compiler/parser |
 | `calc/go` | 0 | — |
 | `wpg` | 0 | everything via `lang/go` |
 | `test/go` | 0 | everything via the modules under test |
@@ -427,61 +460,76 @@ module is at 100% merged; the standalone column is strictly a measure of
 self-sufficiency, and a low number there is a statement about where the
 covering tests live, not about untested code.
 
-## 5. The eng facade, after the re-point
+## 5. What eng is, and the facade that is no longer between it and core
 
-`eng/go` carries three generated files — `aliases_core.go`,
-`aliases_check.go`, `aliases_compiler.go` — that re-export the exported
-surface of the three modules below it (`piecetool -facade`, regenerated by
-`make facades`). They exist because of Stage 4 of the four-piece split,
-where their job was explicit: the physical package cut had to leave
+`eng/go` used to carry three generated files — `aliases_core.go`,
+`aliases_check.go`, `aliases_compiler.go` — re-exporting the exported
+surface of the three modules below it. Stage 4 of the four-piece split
+states their job plainly: the physical package cut had to leave
 "**external tests untouched via the facade**".
 
-**That job is finished, and the measurement says so.** Scanning every `.go`
-file in the repository for a facade name — bare inside package `eng`,
-`eng.X` everywhere else — gives:
+That job finished some time ago, and the measurement is what showed it.
+Scanning every `.go` file for a facade name — bare inside package `eng`,
+`eng.X` everywhere else — found **not one reference from any module outside
+eng**. Every consumer had re-pointed at the owning module during and after
+the cut: `lang/go` imports `core/go` in 11 packages, `parser/go` in 9,
+`compiler/go` in 6, `check/go` in 2.
 
-| Who references a facade symbol | Distinct symbols |
-|---|--:|
-| Modules **outside** `eng` (`lang`, `cmd`, `test`, `basic`, `calc`, `wpg`) | **0** |
-| `eng`'s own sub-packages (`stackform`, `specfix`) | 164 |
-| `eng`'s own black-box `eng_test` package | 22 |
-| Unqualified inside package `eng` itself | 454 |
+Two further facts decided how to remove it, and both contradict the
+"eng is a big module wearing a shim" reading:
 
-Zero. Every consumer re-pointed at the owning module during and after the
-cut — `lang/go` imports `core/go` in 11 packages, `parser/go` in 9,
-`compiler/go` in 6, `check/go` in 2, and reaches `eng` for exactly ten
-genuine engine symbols (`Run`, `RunProgram`, `SetSource`, `RunUnit`,
-`ForkConcurrent`, …), none of which are facade re-exports. The facade is no
-longer a compatibility surface for anyone; what remains is `eng` using the
-modules below it through its own import shorthand.
+- **`eng`'s own production files never used the facade either.** `vm.go`
+  already imports `core` and `compiler` directly (329 `core.X` uses, 92
+  `compiler.X`). Resolved with `go/types` rather than by grep, the VM's uses
+  of facade-declared symbols numbered **zero**.
+- **The two packages that did lean on it were not VM code.**
+  `eng/go/stackform` used 16 facade symbols, all core re-exports;
+  `eng/go/specfix` used 158, of which 152 were core, 5 check, 1 compiler and
+  **none** were eng's own.
 
-So **599 of the 1,113 re-exported symbols (53%) were referenced by nothing at
-all** — not by another module, not by `eng`, not by a test. That is the
-part removed here.
+So the facade's last real consumers were `eng`'s own test files — the
+kernel's *external* tests, which stayed put when the kernel left.
 
-The fix belongs in the generator, not its output: hand-editing a
-`DO NOT EDIT` file is undone by the next `make facades`. `piecetool` already
-ran a usage scan — `coldSet`, which asks "is this func *called* from
-production code" to decide whether a symbol gets a wrapper body or a
-func-value re-export. Emission needed a wider question, "is this name
-*mentioned* at all", differing in three ways that each cost a build if got
-wrong: tests count (a type named only in a `_test.go` signature must still
-exist), every syntactic position counts (a type alias is never in call
-position), and every symbol *kind* counts, not just funcs. `refSet` answers
-it and `facadeGen` filters on it, with the empty set meaning **emit
-everything** — an unreadable tree makes the question unknown, and the safe
-answer to unknown is to keep the symbol.
+### What was done
 
-Result: 1,394 generated lines down to 794. No call site changed, because by
-construction nothing called them.
+1. **`stackform` → `lang/go/stackform`.** Its only consumer is lang's PBT
+   shrinker, all production code. Its `eng.X` uses became `core.X`.
+2. **`specfix` → `test/specfix`, a new module.** It could not go back into
+   `test/go` (which requires `eng`, so `eng`'s standalone corpus lanes
+   importing it from there would close a cycle), and it had no business in
+   `eng`. As a sibling above `compiler` it depends on core/check/compiler/
+   parser only, and both `eng` and `test/go` reach it with no cycle.
+3. **The facade deleted outright.** `piecetool -qualify` rewrote eng's
+   production files (a no-op — they were already clean) and
+   `-qualify-tests` rewrote its 117 test files: 4,258 uses qualified to
+   `core.`, 456 to `compiler.`, 34 to `check.`. The black-box `eng_test`
+   package needed a second pass for its `eng.X` spellings — 294 to `core.`,
+   6 to `compiler.` — after which the only `eng.X` left anywhere was
+   `eng.RunProgram`.
+4. **The generator retired with its output**: `make facades` and
+   `piecetool -facade` are gone, and `piece_map.tsv` now tracks only the
+   eng piece.
 
-**What is deliberately NOT done here.** The remaining 514 symbols are all
-genuinely referenced *inside the eng module*. Retiring the facade completely
-means qualifying roughly 5,500 reference sites across 141 files with
-`core.` / `check.` / `compiler.`, deleting all four alias files, and
-dropping `make facades` and piecetool's facade mode — after which `eng`'s
-public API would be its ten real symbols. That is a defensible next step and
-a much larger mechanical change; it is not folded into a measurement note.
+### What eng is now
+
+Nine production files, all of them the bytecode VM, and an exported API of
+exactly two functions:
+
+```go
+func RunProgram(p *compiler.Program, r *core.Registry) ([]core.Value, error)
+func RunUnit(ref *compiler.CompiledFnRef, r *core.Registry, args []core.Value) ([]core.Value, error)
+```
+
+That is the whole surface any other module can see. `basic/go`'s dependency
+gate already said where this was heading — *"eng is the facade, not a piece
+— import the module that owns the symbol"*. There is no facade left to be.
+
+**Still outstanding.** `eng` retains 117 test files against 9 VM production
+files, and much of that suite exercises core/check/compiler statements
+rather than the VM — which is why `cover-gate-eng` measures a small
+denominator against a large suite. Those tests belong with the code they
+test. Moving them is a separate change: it needs per-file symbol resolution
+to classify, not the keyword heuristic that first flagged the imbalance.
 
 ## 6. Reproducing this
 

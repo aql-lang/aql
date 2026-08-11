@@ -3,6 +3,8 @@ package eng
 import (
 	"errors"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // errTestW9 is a plain Go error (no BoruError Code / Data).
@@ -14,14 +16,14 @@ var errTestW9 = errors.New("plain boom")
 // / Meta arms of cloneSlice and cloneOrderedMap.
 
 func TestW9CloneTableData(t *testing.T) {
-	rows := []Value{NewInteger(1), NewInteger(2)}
-	tv := NewValueRaw(TTable, TableData{
-		Record:    RecordTypeInfo{},
+	rows := []core.Value{core.NewInteger(1), core.NewInteger(2)}
+	tv := core.NewValueRaw(core.TTable, core.TableData{
+		Record:    core.RecordTypeInfo{},
 		Rows:      rows,
 		TableName: "t",
 	})
-	cl := CloneValue(tv)
-	td, ok := cl.Data.(TableData)
+	cl := core.CloneValue(tv)
+	td, ok := cl.Data.(core.TableData)
 	if !ok {
 		t.Fatalf("clone Data = %T, want TableData", cl.Data)
 	}
@@ -32,19 +34,19 @@ func TestW9CloneTableData(t *testing.T) {
 		t.Fatalf("clone rows = %d, want 2", len(td.Rows))
 	}
 	// Rows must be duplicated, not aliased.
-	td.Rows[0] = NewInteger(99)
-	if n, _ := AsInteger(rows[0]); n != 1 {
+	td.Rows[0] = core.NewInteger(99)
+	if n, _ := core.AsInteger(rows[0]); n != 1 {
 		t.Error("clone leaked: mutating the clone's rows changed the original")
 	}
 }
 
 func TestW9CloneErrorWithData(t *testing.T) {
-	data := NewOrderedMap()
-	data.Set("k", NewInteger(7))
-	ae := &BoruError{Code: "user_error", Detail: "boom", Data: data}
-	ev := NewError(ae)
-	cl := CloneValue(ev)
-	ci, ok := cl.Data.(ErrorInfo)
+	data := core.NewOrderedMap()
+	data.Set("k", core.NewInteger(7))
+	ae := &core.BoruError{Code: "user_error", Detail: "boom", Data: data}
+	ev := core.NewError(ae)
+	cl := core.CloneValue(ev)
+	ci, ok := cl.Data.(core.ErrorInfo)
 	if !ok {
 		t.Fatalf("clone Data = %T, want ErrorInfo", cl.Data)
 	}
@@ -55,17 +57,17 @@ func TestW9CloneErrorWithData(t *testing.T) {
 		t.Error("cloneError must duplicate the Data map, not share it")
 	}
 	// Mutating the clone's Data must not touch the original.
-	ci.Data.Set("k", NewInteger(0))
-	if got, _ := data.Get("k"); func() int64 { n, _ := AsInteger(got); return n }() != 7 {
+	ci.Data.Set("k", core.NewInteger(0))
+	if got, _ := data.Get("k"); func() int64 { n, _ := core.AsInteger(got); return n }() != 7 {
 		t.Error("clone leaked: mutating the clone's Data changed the original")
 	}
 }
 
 func TestW9CloneErrorNilData(t *testing.T) {
 	// A plain Go error has nil Data: the clone keeps Data nil.
-	ev := NewError(errTestW9)
-	cl := CloneValue(ev)
-	ci, ok := cl.Data.(ErrorInfo)
+	ev := core.NewError(errTestW9)
+	cl := core.CloneValue(ev)
+	ci, ok := cl.Data.(core.ErrorInfo)
 	if !ok {
 		t.Fatalf("clone Data = %T, want ErrorInfo", cl.Data)
 	}
@@ -79,9 +81,9 @@ type extNoCloneW9 struct{ n int }
 
 func TestW9CloneExtensionNoDeepCloner(t *testing.T) {
 	body := &extNoCloneW9{n: 5}
-	ev := NewExtension(TAny, body)
-	cl := CloneValue(ev)
-	ep, ok := cl.Data.(ExtensionPayload)
+	ev := core.NewExtension(core.TAny, body)
+	cl := core.CloneValue(ev)
+	ep, ok := cl.Data.(core.ExtensionPayload)
 	if !ok {
 		t.Fatalf("clone Data = %T, want ExtensionPayload", cl.Data)
 	}
@@ -92,9 +94,9 @@ func TestW9CloneExtensionNoDeepCloner(t *testing.T) {
 
 func TestW9CloneNilSliceAndMap(t *testing.T) {
 	// ListPayload with a nil slice: cloneSlice(nil) returns nil.
-	lv := NewList(nil)
-	cl := CloneValue(lv)
-	lp, ok := cl.Data.(ListPayload)
+	lv := core.NewList(nil)
+	cl := core.CloneValue(lv)
+	lp, ok := cl.Data.(core.ListPayload)
 	if !ok {
 		t.Fatalf("clone Data = %T, want ListPayload", cl.Data)
 	}
@@ -102,9 +104,9 @@ func TestW9CloneNilSliceAndMap(t *testing.T) {
 		t.Error("cloneSlice(nil) should stay nil")
 	}
 	// MapPayload with a nil map: cloneOrderedMap(nil) returns nil.
-	mv := NewMap(nil)
-	clm := CloneValue(mv)
-	mp, ok := clm.Data.(MapPayload)
+	mv := core.NewMap(nil)
+	clm := core.CloneValue(mv)
+	mp, ok := clm.Data.(core.MapPayload)
 	if !ok {
 		t.Fatalf("clone Data = %T, want MapPayload", clm.Data)
 	}
@@ -117,15 +119,15 @@ func TestW9CloneSharedMapDedup(t *testing.T) {
 	// A single *OrderedMap referenced by two list elements: cloneOrderedMap
 	// clones it once (the second call hits the seen map) so the clone keeps
 	// the sharing.
-	shared := NewOrderedMap()
-	shared.Set("x", NewInteger(1))
-	m1 := NewMap(shared)
-	m2 := NewMap(shared)
-	lv := NewList([]Value{m1, m2})
-	cl := CloneValue(lv)
-	lp := cl.Data.(ListPayload)
-	c1 := lp.Elems[0].Data.(MapPayload).M
-	c2 := lp.Elems[1].Data.(MapPayload).M
+	shared := core.NewOrderedMap()
+	shared.Set("x", core.NewInteger(1))
+	m1 := core.NewMap(shared)
+	m2 := core.NewMap(shared)
+	lv := core.NewList([]core.Value{m1, m2})
+	cl := core.CloneValue(lv)
+	lp := cl.Data.(core.ListPayload)
+	c1 := lp.Elems[0].Data.(core.MapPayload).M
+	c2 := lp.Elems[1].Data.(core.MapPayload).M
 	if c1 != c2 {
 		t.Error("shared map should clone once and stay shared in the clone")
 	}
@@ -135,11 +137,11 @@ func TestW9CloneSharedMapDedup(t *testing.T) {
 }
 
 func TestW9CloneMapMeta(t *testing.T) {
-	m := NewOrderedMap()
-	m.Set("x", NewInteger(1))
+	m := core.NewOrderedMap()
+	m.Set("x", core.NewInteger(1))
 	m.Meta = map[string]any{"src": "test"}
-	cl := CloneValue(NewMap(m))
-	cm := cl.Data.(MapPayload).M
+	cl := core.CloneValue(core.NewMap(m))
+	cm := cl.Data.(core.MapPayload).M
 	if cm.Meta == nil || cm.Meta["src"] != "test" {
 		t.Errorf("clone lost Meta: %+v", cm.Meta)
 	}

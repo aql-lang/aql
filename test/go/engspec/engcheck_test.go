@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/test/specfix"
 	"github.com/boru-lang/boru/parser/go"
+	"github.com/boru-lang/boru/test/specfix"
 )
 
 // runCheckRow parses input, runs it through the engine in check mode

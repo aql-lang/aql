@@ -1,41 +1,45 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 func TestCanonValue(t *testing.T) {
-	m := NewOrderedMap()
-	m.Set("a", NewInteger(1))
-	m.Set("b", NewAtom("foo"))
+	m := core.NewOrderedMap()
+	m.Set("a", core.NewInteger(1))
+	m.Set("b", core.NewAtom("foo"))
 
-	quotedList := NewList([]Value{NewInteger(1), NewInteger(2)})
+	quotedList := core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2)})
 	quotedList.Quoted = true
 
 	cases := []struct {
 		name string
-		v    Value
+		v    core.Value
 		want string
 	}{
-		{"none", NewNone(), "none"},
-		{"integer", NewInteger(42), "42"},
-		{"negative integer", NewInteger(-7), "-7"},
-		{"decimal", NewFloat(3.14), "3.14"},
-		{"whole decimal", NewFloat(7), "7.0"},
-		{"string", NewString("hello"), "'hello'"},
-		{"true", NewBoolean(true), "true"},
-		{"false", NewBoolean(false), "false"},
-		{"atom", NewAtom("foo"), "foo/q"},
-		{"empty list", NewList(nil), "[]"},
-		{"list of ints", NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}), "[1 2 3]"},
-		{"list with atom", NewList([]Value{NewInteger(1), NewAtom("foo")}), "[1 foo/q]"},
-		{"nested list", NewList([]Value{NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(2)})}), "[[1] [2]]"},
+		{"none", core.NewNone(), "none"},
+		{"integer", core.NewInteger(42), "42"},
+		{"negative integer", core.NewInteger(-7), "-7"},
+		{"decimal", core.NewFloat(3.14), "3.14"},
+		{"whole decimal", core.NewFloat(7), "7.0"},
+		{"string", core.NewString("hello"), "'hello'"},
+		{"true", core.NewBoolean(true), "true"},
+		{"false", core.NewBoolean(false), "false"},
+		{"atom", core.NewAtom("foo"), "foo/q"},
+		{"empty list", core.NewList(nil), "[]"},
+		{"list of ints", core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)}), "[1 2 3]"},
+		{"list with atom", core.NewList([]core.Value{core.NewInteger(1), core.NewAtom("foo")}), "[1 foo/q]"},
+		{"nested list", core.NewList([]core.Value{core.NewList([]core.Value{core.NewInteger(1)}), core.NewList([]core.Value{core.NewInteger(2)})}), "[[1] [2]]"},
 		{"quoted list", quotedList, "(quote [1 2])"},
-		{"map", NewMap(m), "{a:1 b:foo/q}"},
-		{"type literal", NewTypeLiteral(TInteger), "Integer"},
+		{"map", core.NewMap(m), "{a:1 b:foo/q}"},
+		{"type literal", core.NewTypeLiteral(core.TInteger), "Integer"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := CanonValue(tc.v)
+			got := core.CanonValue(tc.v)
 			if got != tc.want {
 				t.Errorf("CanonValue(%s) = %q, want %q", tc.name, got, tc.want)
 			}
@@ -44,13 +48,13 @@ func TestCanonValue(t *testing.T) {
 }
 
 func TestCanonStack(t *testing.T) {
-	stack := []Value{
-		NewInteger(1),
-		NewAtom("foo"),
-		NewString("bar"),
-		NewBoolean(true),
+	stack := []core.Value{
+		core.NewInteger(1),
+		core.NewAtom("foo"),
+		core.NewString("bar"),
+		core.NewBoolean(true),
 	}
-	got := Canon(stack)
+	got := core.Canon(stack)
 	want := "1 foo/q 'bar' true"
 	if got != want {
 		t.Errorf("Canon = %q, want %q", got, want)
@@ -58,7 +62,7 @@ func TestCanonStack(t *testing.T) {
 }
 
 func TestCanonEmptyStack(t *testing.T) {
-	got := Canon(nil)
+	got := core.Canon(nil)
 	if got != "" {
 		t.Errorf("Canon(nil) = %q, want empty string", got)
 	}

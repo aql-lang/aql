@@ -110,7 +110,7 @@ func TestStackFormCost(t *testing.T) {
 	form := &StackForm{Ops: []Op{
 		PushLit{V: core.NewInteger(1)}, // 1
 		PushLit{V: core.NewInteger(2)}, // 1
-		Call{Name: "add", Arity: 2},   // 2
+		Call{Name: "add", Arity: 2},    // 2
 	}}
 	if got := Cost(form); got != 4 {
 		t.Errorf("Cost = %d, want 4 (1+1+2)", got)

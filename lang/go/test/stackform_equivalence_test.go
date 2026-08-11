@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/lang/go/stackform"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/stackform"
 	parser "github.com/boru-lang/boru/parser/go"
 )
 
