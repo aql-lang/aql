@@ -529,12 +529,52 @@ That is the whole surface any other module can see. `basic/go`'s dependency
 gate already said where this was heading — *"eng is the facade, not a piece
 — import the module that owns the symbol"*. There is no facade left to be.
 
-**Still outstanding.** `eng` retains 117 test files against 9 VM production
-files, and much of that suite exercises core/check/compiler statements
-rather than the VM — which is why `cover-gate-eng` measures a small
-denominator against a large suite. Those tests belong with the code they
-test. Moving them is a separate change: it needs per-file symbol resolution
-to classify, not the keyword heuristic that first flagged the imbalance.
+### The test suite: measured, and why it did not move with the code
+
+`eng` keeps **115 test files against 9 VM production files**. That imbalance
+is real, and the first pass at explaining it here was a keyword scan that
+guessed 82 files "never mention VM". Resolved properly with `go/types` —
+every identifier in every test file mapped to its declaring package, and eng
+references split by whether the declaration sits in a production file or
+another `_test.go` — the true figures are:
+
+| | Files |
+|---|--:|
+| Touch **no** eng production (VM) symbol | **76** |
+| Touch eng production symbols | 39 |
+| …of the 76, core-only (do not even import `parser`) | **73** |
+
+So two thirds of eng's suite does not test the VM, and nearly all of that
+would land in `core/go` — which is where the code it exercises now lives.
+
+The route is also cheaper than it looks. Those files sit in `package eng`
+today, so they can only see core's **exported** surface, and after the facade
+removal they already spell it `core.X`. Moving them into `core/go` as
+`package core_test` keeps every reference valid verbatim: the edit is the
+package clause, not the body. No un-qualifying pass is needed, and none
+exists in `piecetool`.
+
+**What blocks it is the shared test helpers, and the blocker is specific.**
+Eleven test files provide helpers to other test files. Seven are VM-free and
+could travel with the movers. Two cannot, and they are the two that matter
+most:
+
+| Helper provider | Used by | VM refs |
+|---|--:|--:|
+| `compile_pipeline_cov_test.go` | 95 references | 3 |
+| `vm_seam7_test.go` | 71 references | 91 |
+
+`vm_seam7_test.go` is a genuine VM test file that also happens to be a
+helper library for 71 uses; `compile_pipeline_cov_test.go` is nearly clean at
+3 VM references. Both would have to be split — helpers out, VM tests kept —
+before the 73 could move without either breaking the files left behind or
+duplicating the helpers into two modules.
+
+That split is a judgement-heavy change with no mechanical check to lean on,
+and it is not folded in here: this note's remit was to measure, and the three
+moves it did make (§5 above) each had a mechanical proof that they were safe.
+The measurement is recorded so the split can be scoped from evidence rather
+than from a keyword scan.
 
 ## 6. Reproducing this
 
