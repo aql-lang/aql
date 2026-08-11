@@ -187,7 +187,11 @@ var StringModuleNatives = []NativeFunc{
 		Name: "replace",
 
 		Signatures: []Signature{
-			{Args: []*Type{TString, TString, TString, TMap}, Impl: Go(replaceOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			// The dry pass surfaces validateStrOpts' rejections (an unknown
+			// option key, an out-of-domain enum value) at check time when the
+			// option map is a top-level literal — the handler is a pure
+			// string transform.
+			{Args: []*Type{TString, TString, TString, TMap}, Impl: Go(replaceOptsHandler), Returns: []*Type{TString}, ReturnsFn: DryPassReturns(replaceOptsHandler, TString), BarrierPos: -1},
 			{Args: []*Type{TString, TString, TString}, Impl: Go(replaceHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
@@ -195,9 +199,11 @@ var StringModuleNatives = []NativeFunc{
 		Name: "changecase",
 
 		Signatures: []Signature{
-			{Args: []*Type{TString, TMap}, Impl: Go(changeCaseOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			// Same dry pass as replace: the option validation is decidable
+			// over a literal option map.
+			{Args: []*Type{TString, TMap}, Impl: Go(changeCaseOptsHandler), Returns: []*Type{TString}, ReturnsFn: DryPassReturns(changeCaseOptsHandler, TString), BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(changeCaseHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TAtom, TMap}, Impl: Go(changeCaseOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TMap}, Impl: Go(changeCaseOptsHandler), Returns: []*Type{TString}, ReturnsFn: DryPassReturns(changeCaseOptsHandler, TString), BarrierPos: -1},
 			{Args: []*Type{TAtom}, Impl: Go(changeCaseHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
