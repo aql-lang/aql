@@ -274,7 +274,7 @@ Integer tor String	word(Integer) word(tor) word(String)	-
 # through to String(data), so a BigInteger was indistinguishable from an
 # Integer and the render no longer parsed back as the same value).
 0d123	0d123	-
-0D45_6	0d456	-
+0D45_6	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0D45_6	uppercase `0D` was accepted until the lowercase-only rule; the row now pins the refusal
 -0d789	-0d789	-
 0d1_2.3	0d12.3	-
 0d1e2	0d100	-
@@ -943,3 +943,18 @@ b=${x	ERR [boru/syntax_error]: unexpected `${` — nothing valid can appear here
 ! 1	word(!) 1	pipe-bang (probe-agreed)
 ! <	ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here	pipe-bang (probe-agreed)
 ! =	word(!) word(=)	pipe-bang (probe-agreed)
+#
+# § numeric syntax prefixes are LOWERCASE ONLY. An uppercase `0X`/`0O`/`0B`/
+#   `0D` run is refused loudly in every context — it is a typo for the
+#   lowercase form far more often than it is text, so a silent string (which
+#   is what this port's stock scanner would produce, while Go's stock scanner
+#   would read 255) is exactly the wrong answer. Both lexers still CLAIM the
+#   run so the ports cannot split; the converter owns the refusal.
+0XFF	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0XFF	hexadecimal
+0O17	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0O17	octal
+0B101	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0B101	binary
+0D12	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0D12	…and the 0d big-number prefix follows the same rule
+0X1_F	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0X1_F	…with a separator in the body
+-0XFF	ERR [boru/syntax_error]: numeric prefix must be lowercase: -0XFF	…signed
+[0XFF]	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0XFF	…nested in a list
+0X8000000000000000	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0X8000000000000000	…and case is checked BEFORE magnitude, so this is not integer_overflow

@@ -82,3 +82,10 @@ _1	'_1'	a leading separator
 -_1	'-_1'	…and the negative form
 +_1.5	'+_1.5'	…and a dot-bearing spelling
 1_	ERR syntax_error	but a DIGIT-led run is still claimed and refused loudly
+#
+# § lowercase-only prefixes, at the data seam too — loud, not a lenient
+#   string, which is the one place the jsonic superset gives way.
+0XFF	ERR syntax_error	uppercase hex is refused in a data decode as well
+0O17	ERR syntax_error	octal
+0B101	ERR syntax_error	binary
+{a: 0XFF}	ERR syntax_error	…and nested in a map

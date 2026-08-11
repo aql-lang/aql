@@ -86,8 +86,12 @@ every named type you define with `def`.
 - Decimal (`42`, `-5`, `+7`). An optional leading sign (`-`/`+`) is part
   of the literal; `+` is a no-op. Leading zeros are decimal, **not**
   octal (`010` is 10).
-- Hex `0x…`, octal `0o…`, binary `0b…` (case-insensitive prefix), with an
-  optional sign (`0xFF`, `-0o17`).
+- Hex `0x…`, octal `0o…`, binary `0b…`, with an optional sign (`0xFF`,
+  `-0o17`). The **prefix letter is lowercase only** — `0XFF` is a
+  `[boru/syntax_error]`, not a number and not text, because it is a typo
+  for `0xFF` far more often than it is anything else. The same holds for
+  the `0d` big-number prefix. (Digits keep their own case freedom: `0xff`
+  and `0xFF` are the same value.)
 - `_` may be used as a **single** digit-separator **between** digits
   (`1_000_000`, `0xFF_FF`). Leading, trailing, or repeated underscores
   (`_1`, `1_`, `1__0`) are a syntax error.

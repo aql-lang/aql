@@ -34,7 +34,7 @@ import (
 	"github.com/boru-lang/boru/parser/go"
 )
 
-const dataSpecRowCount = 56
+const dataSpecRowCount = 60
 
 type dataSpecRow struct {
 	line     int

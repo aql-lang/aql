@@ -1505,6 +1505,9 @@ func parseWord(text string) (core.Value, error) {
 	// `.` isn't split off); here we build the value. Checked early — these
 	// never take modifiers and must not fall through to word/number paths.
 	if isBigNumberLiteral(name) {
+		if hasUppercaseNumericPrefix(name) {
+			return core.Value{}, uppercaseNumericPrefixError(name, 0, 0)
+		}
 		return parseBigNumber(name)
 	}
 
@@ -1585,6 +1588,9 @@ func parseWord(text string) (core.Value, error) {
 	// instead of an opaque undefined_word. (In-range base-prefixed
 	// literals never reach this path — jsonic lexes them as numbers.)
 	if isBasePrefixedInteger(name) {
+		// No uppercase check here: both lexers CLAIM a base-prefixed run as
+		// #NR whatever its magnitude, so an uppercase one is refused in
+		// numberValToValue and can never reach this text path.
 		if strings.IndexByte(name, '_') >= 0 && !validUnderscores(name) {
 			return core.Value{}, &core.BoruError{Code: "syntax_error", Src: name,
 				Detail: "misplaced `_` in numeric literal: " + name,
@@ -1804,6 +1810,9 @@ func numberValToValue(nv numberVal) (core.Value, error) {
 		}
 		return core.NewInteger(n), nil
 	}
+	if hasUppercaseNumericPrefix(nv.Src) {
+		return core.Value{}, uppercaseNumericPrefixError(nv.Src, nv.Row, nv.Col)
+	}
 	if isBasePrefixedInteger(nv.Src) {
 		// base 0 auto-detects the 0x / 0o / 0b prefix; parsing the exact
 		// digits keeps full precision above 2^53 and range-checks like
@@ -1973,6 +1982,49 @@ func isPlainDecimalInteger(src string) bool {
 		}
 	}
 	return sawDigit
+}
+
+// hasUppercaseNumericPrefix reports whether src carries an UPPERCASE base or
+// big-number prefix — `0X`, `0O`, `0B`, `0D` — after an optional sign.
+//
+// Boru's numeric syntax prefixes are lowercase only. Both lexers still CLAIM
+// an uppercase run as a numeric token (declining would split the ports: Go's
+// stock scanner reads `0XFF` as 255 while the TS one reads it as text), so the
+// refusal belongs here in the converter, where one diagnostic serves both
+// ports and every context.
+func hasUppercaseNumericPrefix(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	if len(s) < 3 || s[0] != '0' {
+		return false
+	}
+	switch s[1] {
+	case 'X', 'O', 'B', 'D':
+		return true
+	}
+	return false
+}
+
+// uppercaseNumericPrefixError refuses an uppercase-prefixed numeric literal.
+// Loud in EVERY context, data decode included: `0XFF` is a typo for `0xFF`
+// far more often than it is text, and a silent string would be the kind of
+// wrong answer this parser exists to refuse.
+func uppercaseNumericPrefixError(src string, row, col int) *core.BoruError {
+	// Callers reach here only via hasUppercaseNumericPrefix, so the prefix
+	// letter is always present — index it directly rather than carrying an
+	// arm no input can take.
+	i := strings.IndexAny(src, "XOBD")
+	lower := src[:i] + strings.ToLower(src[i:i+1]) + src[i+1:]
+	return &core.BoruError{
+		Code:   "syntax_error",
+		Detail: "numeric prefix must be lowercase: " + src,
+		Row:    row,
+		Col:    col,
+		Src:    src,
+		Hint:   "write `" + lower + "` — boru's numeric prefixes are lowercase (`0x`, `0o`, `0b`, `0d`)",
+	}
 }
 
 // isBasePrefixedInteger reports whether src is a hex / octal / binary
