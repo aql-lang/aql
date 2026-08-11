@@ -263,3 +263,33 @@ func registerControlFixtures(r *core.Registry) {
 		}},
 	})
 }
+
+// registerDryFixtures installs dryq, the corpus's door into the
+// check-mode dry pass (drypass.go): a PURE word over concrete arguments
+// runs its real handler once during analysis on the top-level straight
+// line, so a guaranteed runtime error surfaces as a check diagnostic.
+// The handler errors on a negative operand, which is what lets a row
+// show the difference between a fault that is unconditionally reached
+// (top level: diagnosed) and one whose reachability is conditional (a
+// fn or loop body: silent).
+func registerDryFixtures(r *core.Registry) {
+	dryHandler := func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+		n, err := core.AsInteger(args[0])
+		if err != nil {
+			return nil, err
+		}
+		if n < 0 {
+			return nil, &core.BoruError{Code: "domain_error", Detail: "dryq: negative operand"}
+		}
+		return []core.Value{core.NewInteger(n)}, nil
+	}
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "dryq",
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TInteger},
+			BarrierPos: 1,
+			Impl:       core.Go(dryHandler),
+			ReturnsFn:  check.DryPassReturns(dryHandler, core.TInteger),
+		}},
+	})
+}

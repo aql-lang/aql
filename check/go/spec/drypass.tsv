@@ -1,0 +1,24 @@
+# check/spec/drypass — the check-mode dry pass for pure words.
+#
+# dryq (Integer -> Integer) is registered with
+# check.DryPassReturns(handler, TInteger): a PURE handler that errors on
+# a negative operand. On the top-level straight line with all-concrete
+# arguments the analysis runs the real handler once, so a guaranteed
+# runtime error surfaces as a check diagnostic; anywhere reachability is
+# conditional — a fn body, a loop body, a branch arm — the dry pass
+# stays silent and only the declared result carrier is modelled.
+
+# --- a clean concrete run models the declared return, no diagnostic ---
+5 dryq	Integer
+0 dryq	Integer
+
+# --- a guaranteed runtime fault at top level is surfaced ---
+-5 dryq	Integer :: ?domain_error	the handler's own code, info severity: the residual is unchanged
+
+# --- a non-concrete operand cannot be dry-run ---
+1 anyq dryq	dynamic(Integer)
+
+# --- conditional reachability is NOT the top-level straight line ---
+defq dq [ [ n:Integer ] [ Integer ] [ -5 dryq ] ] 1 dq	Integer	fn body: silent
+forq 3 [ -5 dryq ]	Integer	loop body: silent
+ifq [ 1 predq ] [ -5 dryq ] [ 2 ]	Integer	branch arm: silent

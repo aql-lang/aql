@@ -684,7 +684,7 @@ cover-gate-core:
 # make the ratchet a fiction. From 51 it ratchets UP as before — raise it
 # in the same change that raises coverage, and never lower it again
 # without a comparable structural reason recorded here.
-CHECK_GATE_FLOOR ?= 61
+CHECK_GATE_FLOOR ?= 62
 COMPILER_GATE_FLOOR ?= 62
 
 # cover-gate-parser — the parser's own gate. The parser is a LEAF over core
