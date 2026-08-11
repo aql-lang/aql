@@ -17,19 +17,19 @@ require (
 	github.com/tabnas/abnf/go v0.4.2
 	github.com/tabnas/csv/go v0.5.2
 	github.com/tabnas/expr/go v0.5.2
-	github.com/tabnas/feed/go v0.6.1
-	github.com/tabnas/ini/go v0.5.1
+	github.com/tabnas/feed/go v0.6.2
+	github.com/tabnas/ini/go v0.5.2
 	github.com/tabnas/json/go v0.5.2
 	github.com/tabnas/json5/go v0.5.2
-	github.com/tabnas/jsonc/go v0.5.1
+	github.com/tabnas/jsonc/go v0.5.2
 	github.com/tabnas/jsonic/go v0.6.2
-	github.com/tabnas/markdown/go v0.6.1
-	github.com/tabnas/multisource/go v0.5.1
+	github.com/tabnas/markdown/go v0.6.2
+	github.com/tabnas/multisource/go v0.5.2
 	github.com/tabnas/parser/go v0.8.2
-	github.com/tabnas/toml/go v0.5.1
-	github.com/tabnas/xml/go v0.7.1
-	github.com/tabnas/yaml/go v0.5.1
-	github.com/tabnas/zon/go v0.5.1
+	github.com/tabnas/toml/go v0.5.2
+	github.com/tabnas/xml/go v0.7.2
+	github.com/tabnas/yaml/go v0.5.2
+	github.com/tabnas/zon/go v0.5.2
 	github.com/voxgig/model/go v0.1.3-0.20260622172642-ee04212555c1
 	golang.org/x/term v0.36.0
 	golang.org/x/text v0.21.0
