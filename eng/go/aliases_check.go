@@ -30,9 +30,7 @@ var _ = core.TheInactiveEmit
 var _ = check.DispatchBraid
 var _ compiler.EmitState
 
-type (
-	UserPolyPlan = check.UserPolyPlan
-)
+type ()
 
 const (
 	FnAnalysisQuota = check.FnAnalysisQuota
@@ -45,48 +43,16 @@ const (
 // to leave uncovered; a name moves back up to a wrapper func when a
 // hot path starts calling it.
 var (
-	AdoptShapeValue               = check.AdoptShapeValue
-	AnalyseFnBody                 = check.AnalyseFnBody
-	AnyAnyCarrier                 = check.AnyAnyCarrier
-	AnyDynamicCarrier             = check.AnyDynamicCarrier
-	AnyNonConcreteOperand         = check.AnyNonConcreteOperand
-	BodyFreeForFallback           = check.BodyFreeForFallback
-	BodyHasSentinel               = check.BodyHasSentinel
-	BodyHasSentinelDeep           = check.BodyHasSentinelDeep
-	BodyRefsFnLocalFn             = check.BodyRefsFnLocalFn
-	BuildFnBodyReturnsFn          = check.BuildFnBodyReturnsFn
-	CarrierResults                = check.CarrierResults
-	CheckAtIndices                = check.CheckAtIndices
-	CheckAtUncaughtTopLevel       = check.CheckAtUncaughtTopLevel
-	CheckListIndex                = check.CheckListIndex
-	CheckMakeConstruction         = check.CheckMakeConstruction
-	DeferredParamListResidual     = check.DeferredParamListResidual
-	DryPassReturns                = check.DryPassReturns
-	DryPassWrap                   = check.DryPassWrap
-	DynamicReachableOverloadCount = check.DynamicReachableOverloadCount
-	FnAnalysisKey                 = check.FnAnalysisKey
-	FnPredicateOverloadHazard     = check.FnPredicateOverloadHazard
-	IsDeferredWordList            = check.IsDeferredWordList
-	MintFlexShapeCarrier          = check.MintFlexShapeCarrier
-	NewCarrierTypedListLen        = check.NewCarrierTypedListLen
-	OrderingReturnsFn             = check.OrderingReturnsFn
-	ParamBodyCarrier              = check.ParamBodyCarrier
-	ParamInputCarrier             = check.ParamInputCarrier
-	RefuseForwardStackDrift       = check.RefuseForwardStackDrift
-	ReturnsAddConcat              = check.ReturnsAddConcat
-	ReturnsListElemAt             = check.ReturnsListElemAt
-	ReturnsNumericBinary          = check.ReturnsNumericBinary
-	ReturnsPreserveListAt         = check.ReturnsPreserveListAt
-	ReturnsStatic                 = check.ReturnsStatic
-	RunFnBodyOnce                 = check.RunFnBodyOnce
-	ScalarFoldOperand             = check.ScalarFoldOperand
-	ShapeFieldRead                = check.ShapeFieldRead
-	SpliceFnValueCheckResult      = check.SpliceFnValueCheckResult
-	StaticListLen                 = check.StaticListLen
-	StoreShapeOf                  = check.StoreShapeOf
-	StripToCarriers               = check.StripToCarriers
-	TryRecordMethodApply          = check.TryRecordMethodApply
-	TryShapedMethodDispatch       = check.TryShapedMethodDispatch
+	AdoptShapeValue        = check.AdoptShapeValue
+	AnalyseFnBody          = check.AnalyseFnBody
+	BodyFreeForFallback    = check.BodyFreeForFallback
+	BodyHasSentinel        = check.BodyHasSentinel
+	BodyHasSentinelDeep    = check.BodyHasSentinelDeep
+	CheckListIndex         = check.CheckListIndex
+	FnAnalysisKey          = check.FnAnalysisKey
+	NewCarrierTypedListLen = check.NewCarrierTypedListLen
+	ShapeFieldRead         = check.ShapeFieldRead
+	StaticListLen          = check.StaticListLen
 )
 
 func AnalyseLoopBody(a0 *core.Registry, a1 core.Value, a2 []string, a3 []core.Value, a4 bool) []core.Value {

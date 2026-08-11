@@ -46,7 +46,91 @@ func facadeFor(dir, out, qual string) error {
 	if err != nil {
 		return err
 	}
-	return facadeGen(dir, out, qual, mutable, cold)
+	refs, err := refSet(dir, out, qual)
+	if err != nil {
+		return err
+	}
+	return facadeGen(dir, out, qual, mutable, cold, refs)
+}
+
+// refSet derives every facade name the repository actually REFERENCES.
+// facadeGen emits only these, so the facade re-exports what is used rather
+// than the whole exported surface of the source module.
+//
+// This is a deliberately WIDER question than coldSet's. coldSet asks "is
+// this func CALLED from production code", because that is what justifies a
+// wrapper BODY over a func-value re-export. Emission has to ask "is this
+// name MENTIONED at all", and the two differ in three ways that each cost
+// a build if got wrong: tests count (a type named only in a _test.go
+// signature must still exist), every syntactic position counts (a type
+// alias is never in call position), and every symbol KIND counts, not just
+// funcs.
+//
+// Scope resolution is coldSet's rule, and for coldSet's reason: a BARE
+// identifier reaches the facade only from inside the facade's own package;
+// everywhere else the name must be spelled `eng.X`.
+//
+// The empty set means EMIT EVERYTHING, never emit nothing — an unreadable
+// tree makes "is it referenced?" unknown, and the safe answer to unknown is
+// to keep the symbol. Callers must treat len(refs)==0 as "no filter".
+func refSet(dir, out, qual string) (map[string]bool, error) {
+	repo := filepath.Dir(filepath.Dir(filepath.Clean(dir)))
+	facade := filepath.Base(out)
+	facadePkg := packageNameOf(filepath.Dir(out))
+	refs := map[string]bool{}
+
+	// The whole repository, not coldSet's consumer list: a reference from
+	// any module keeps a symbol alive, and the facade's own sibling
+	// sub-packages (eng/go/stackform, eng/go/specfix) are consumers too.
+	walkErr := filepath.WalkDir(repo, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "node_modules", "coverage", "bin", "out", "testdata":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") || filepath.Base(p) == facade {
+			return nil
+		}
+		fset := token.NewFileSet()
+		f, perr := parser.ParseFile(fset, p, nil, 0)
+		if perr != nil {
+			return nil
+		}
+		inFacadePkg := f.Name.Name == facadePkg
+		engName := ""
+		if !inFacadePkg {
+			engName = engImportName(f, facadePkg)
+			if engName == "" {
+				return nil
+			}
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch e := n.(type) {
+			case *ast.Ident:
+				if inFacadePkg {
+					refs[e.Name] = true
+				}
+			case *ast.SelectorExpr:
+				if inFacadePkg {
+					return true
+				}
+				if x, ok := e.X.(*ast.Ident); ok && x.Name == engName {
+					refs[e.Sel.Name] = true
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if walkErr != nil {
+		return map[string]bool{}, nil
+	}
+	return refs, nil
 }
 
 // coldSet derives the facade funcs NO caller in the repository reaches.
@@ -184,7 +268,7 @@ func coldSet(dir, out, qual string) (map[string]bool, error) {
 	return cold, nil
 }
 
-func facadeGen(coreDir, out, qual string, mutable, cold map[string]bool) error {
+func facadeGen(coreDir, out, qual string, mutable, cold, refs map[string]bool) error {
 	cfg := &packages.Config{
 		Mode: packages.NeedTypes | packages.NeedName,
 		Dir:  coreDir,
@@ -212,6 +296,13 @@ func facadeGen(coreDir, out, qual string, mutable, cold map[string]bool) error {
 	for _, name := range names {
 		obj := scope.Lookup(name)
 		if !obj.Exported() {
+			continue
+		}
+		// Emit only what the tree references. An empty refs map is the
+		// conservative "unknown" answer from refSet and disables the filter
+		// entirely — it must never be read as "nothing is referenced".
+		if len(refs) > 0 && !refs[name] {
+			skipped = append(skipped, "unreferenced "+name)
 			continue
 		}
 		switch o := obj.(type) {

@@ -37,11 +37,7 @@ type (
 	DepSnapEntry   = compiler.DepSnapEntry
 	DispatchSpec   = compiler.DispatchSpec
 	DynMethodSpec  = compiler.DynMethodSpec
-	EmitEvent      = compiler.EmitEvent
-	EmitFragment   = compiler.EmitFragment
-	EmitOperand    = compiler.EmitOperand
 	EmitState      = compiler.EmitState
-	EmitTrap       = compiler.EmitTrap
 	GlobalBindSpec = compiler.GlobalBindSpec
 	Instr          = compiler.Instr
 	InterpSeg      = compiler.InterpSeg
@@ -50,7 +46,6 @@ type (
 	Opcode         = compiler.Opcode
 	PolyRef        = compiler.PolyRef
 	Program        = compiler.Program
-	RestampBox     = compiler.RestampBox
 	SigRef         = compiler.SigRef
 	TrapSpec       = compiler.TrapSpec
 	TypeRef        = compiler.TypeRef
@@ -59,8 +54,6 @@ type (
 )
 
 const (
-	ClosureInKeyVal        = compiler.ClosureInKeyVal
-	ClosureInValue         = compiler.ClosureInValue
 	OpBindDynScope         = compiler.OpBindDynScope
 	OpBindGlobal           = compiler.OpBindGlobal
 	OpBindTyped            = compiler.OpBindTyped
@@ -108,10 +101,6 @@ const (
 	OpTailCallUser         = compiler.OpTailCallUser
 	OpTrap                 = compiler.OpTrap
 	RestampMaxTries        = compiler.RestampMaxTries
-	SiteDynamic            = compiler.SiteDynamic
-	SiteMeta               = compiler.SiteMeta
-	SiteMono               = compiler.SiteMono
-	SitePoly               = compiler.SitePoly
 )
 
 // Cold func-value re-exports: exported core funcs no suite calls
@@ -121,21 +110,10 @@ const (
 // to leave uncovered; a name moves back up to a wrapper func when a
 // hot path starts calling it.
 var (
-	AnalyseCodeEffectCarrier = compiler.AnalyseCodeEffectCarrier
-	ClosureWantsKeyVal       = compiler.ClosureWantsKeyVal
-	CompiledRef              = compiler.CompiledRef
-	ConstOperand             = compiler.ConstOperand
-	EventOperand             = compiler.EventOperand
-	InterpBodyInert          = compiler.InterpBodyInert
-	InterpMemberInert        = compiler.InterpMemberInert
-	IsCompiledClosure        = compiler.IsCompiledClosure
-	NewClosure               = compiler.NewClosure
-	NewEmitState             = compiler.NewEmitState
-	RewritePromotedRefs      = compiler.RewritePromotedRefs
-	StampCompiledRef         = compiler.StampCompiledRef
-	StampDetachedFn          = compiler.StampDetachedFn
-	StampDetachedSig         = compiler.StampDetachedSig
-	StampFnValue             = compiler.StampFnValue
-	StampFnValueInPlace      = compiler.StampFnValueInPlace
-	TryRecordFallback        = compiler.TryRecordFallback
+	CompiledRef       = compiler.CompiledRef
+	NewClosure        = compiler.NewClosure
+	NewEmitState      = compiler.NewEmitState
+	StampCompiledRef  = compiler.StampCompiledRef
+	StampDetachedFn   = compiler.StampDetachedFn
+	TryRecordFallback = compiler.TryRecordFallback
 )
