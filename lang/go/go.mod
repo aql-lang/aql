@@ -14,15 +14,15 @@ require (
 	github.com/itchyny/gojq v0.12.19
 	github.com/ohler55/ojg v1.28.1
 	github.com/rjrodger/aontu/go v0.1.6
-	github.com/tabnas/abnf/go v0.4.1
-	github.com/tabnas/csv/go v0.5.1
-	github.com/tabnas/expr/go v0.5.1
+	github.com/tabnas/abnf/go v0.4.2
+	github.com/tabnas/csv/go v0.5.2
+	github.com/tabnas/expr/go v0.5.2
 	github.com/tabnas/feed/go v0.6.1
 	github.com/tabnas/ini/go v0.5.1
-	github.com/tabnas/json/go v0.5.1
-	github.com/tabnas/json5/go v0.5.1
+	github.com/tabnas/json/go v0.5.2
+	github.com/tabnas/json5/go v0.5.2
 	github.com/tabnas/jsonc/go v0.5.1
-	github.com/tabnas/jsonic/go v0.6.1
+	github.com/tabnas/jsonic/go v0.6.2
 	github.com/tabnas/markdown/go v0.6.1
 	github.com/tabnas/multisource/go v0.5.1
 	github.com/tabnas/parser/go v0.8.2
@@ -38,9 +38,10 @@ require (
 
 require (
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
-	github.com/tabnas/directive/go v0.5.1 // indirect
-	github.com/tabnas/hoover/go v0.3.1 // indirect
-	github.com/tabnas/path/go v0.3.1 // indirect
+	github.com/tabnas/bnf/go v0.1.2 // indirect
+	github.com/tabnas/directive/go v0.5.2 // indirect
+	github.com/tabnas/hoover/go v0.3.2 // indirect
+	github.com/tabnas/path/go v0.3.2 // indirect
 )
 
 require (

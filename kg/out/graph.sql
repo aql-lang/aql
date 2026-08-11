@@ -14,14 +14,14 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '577427556173344976');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '6012541295548859160');
 INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
-INSERT INTO input_files VALUES ('../basic/go/go.mod', '7510397508350810050', 457);
-INSERT INTO input_files VALUES ('../calc/go/go.mod', '5533808612557337751', 605);
+INSERT INTO input_files VALUES ('../basic/go/go.mod', '2041692132240872646', 457);
+INSERT INTO input_files VALUES ('../calc/go/go.mod', '960294296482910315', 605);
 INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221);
-INSERT INTO input_files VALUES ('../cmd/go/go.mod', '8800704333500109315', 4184);
+INSERT INTO input_files VALUES ('../cmd/go/go.mod', '4004227636585860036', 4229);
 INSERT INTO input_files VALUES ('../compiler/go/go.mod', '142593282390199928', 331);
 INSERT INTO input_files VALUES ('../core/go/go.mod', '2316996521694161686', 98);
 INSERT INTO input_files VALUES ('../design/BASIC-CHECK-CUT.0.md', '1575227922863509534', 8195);
@@ -35,14 +35,14 @@ INSERT INTO input_files VALUES ('../design/ROOT-MODULE-FEASIBILITY.0.md', '62353
 INSERT INTO input_files VALUES ('../design/TS-PARITY-AUDIT.0.md', '2607459948929922084', 6455);
 INSERT INTO input_files VALUES ('../design/checker-compiler-completeness-review.0.md', '5862232790816677050', 39943);
 INSERT INTO input_files VALUES ('../editors/tree-sitter/bindings/go/go.mod', '8359550297204300245', 134);
-INSERT INTO input_files VALUES ('../eng/go/go.mod', '6662954041651165179', 683);
+INSERT INTO input_files VALUES ('../eng/go/go.mod', '1290409568624062873', 683);
 INSERT INTO input_files VALUES ('../go.work', '4924620830580584237', 530);
-INSERT INTO input_files VALUES ('../lang/go/go.mod', '7036181492168178750', 2387);
-INSERT INTO input_files VALUES ('../parser/go/go.mod', '4769394385773843485', 350);
-INSERT INTO input_files VALUES ('../test/go/go.mod', '1896473320572081032', 2503);
+INSERT INTO input_files VALUES ('../lang/go/go.mod', '6585134951231123841', 2432);
+INSERT INTO input_files VALUES ('../parser/go/go.mod', '6943594013417922711', 350);
+INSERT INTO input_files VALUES ('../test/go/go.mod', '5636351930197720275', 2556);
 INSERT INTO input_files VALUES ('../test/solardemo/go.mod', '8784937342672483810', 59);
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
-INSERT INTO input_files VALUES ('../wpg/go.mod', '2057299464845094888', 2582);
+INSERT INTO input_files VALUES ('../wpg/go.mod', '6623790041354947075', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '4995374428202383702', 501);
 INSERT INTO input_files VALUES ('project/boru-project.jsonic', '4990859187688720442', 27566);
 INSERT INTO sources VALUES ('src:agents', 'text', 'AGENTS.md', 'AGENTS.md agent guide', NULL, 'agents-2026-07', 'primary', '{

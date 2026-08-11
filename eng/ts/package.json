@@ -21,8 +21,8 @@
     "crossdump": "node --experimental-strip-types --no-warnings src/crossdump.ts"
   },
   "dependencies": {
-    "@tabnas/json": "^0.5.1",
-    "@tabnas/jsonic": "^0.6.1",
+    "@tabnas/json": "^0.5.2",
+    "@tabnas/jsonic": "^0.6.2",
     "@tabnas/parser": "^0.8.2",
     "@boru-lang/core": "file:../../core/ts",
     "@boru-lang/parser": "file:../../parser/ts"

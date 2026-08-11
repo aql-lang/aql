@@ -10,8 +10,8 @@ require (
 )
 
 require (
-	github.com/tabnas/json/go v0.5.1 // indirect
-	github.com/tabnas/jsonic/go v0.6.1 // indirect
+	github.com/tabnas/json/go v0.5.2 // indirect
+	github.com/tabnas/jsonic/go v0.6.2 // indirect
 )
 
 replace github.com/boru-lang/boru/core/go => ../../core/go
