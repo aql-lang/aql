@@ -232,6 +232,7 @@ is nearly dependency-free; the weight lands in `lang/go` and `cmd/go`.
 | `lang/go` | 29 | the content-type/format layer (tabnas codecs, `gojq`, `ojg`, `xpath`, `sqlite`, …) |
 | `cmd/go` | 12 | the terminal layer (`charmbracelet/*`, `readline`, `x/crypto`, `x/term`) |
 | `tools/piecetool` | 1 | `golang.org/x/tools` |
+| `editors/tree-sitter/bindings/go` | 1 | `smacker/go-tree-sitter` — outside `go.work`, so outside the layering above |
 
 ## 4. Coverage
 
@@ -416,9 +417,13 @@ covering tests live, not about untested code.
 ## 5. Reproducing this
 
 ```bash
-# Module edges (the same ground truth kg/gomod.boru reads)
+# Module edges (the same ground truth kg/gomod.boru reads).
+# Walk EVERY go.mod: a `*/go */` glob reaches only eleven of the fourteen,
+# missing test/solardemo, tools/piecetool and the tree-sitter binding.
 cat go.work
-for m in */go */; do (cd "$m" 2>/dev/null && go mod edit -json); done
+find . -name go.mod -not -path '*/node_modules/*' | sort | while read -r f; do
+  (cd "$(dirname "$f")" && go mod edit -json)
+done
 
 # The authoritative repo-wide gate (ADR-008): re-profile + check
 make cover-gate
