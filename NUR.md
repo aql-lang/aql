@@ -2208,8 +2208,19 @@ Note this is NOT the overflow divergence reported after v0.8.0 — that one is
 FIXED in jsonic v0.6.1 / parser v0.8.1, where both ports now round the true
 value of `0xFFFFFFFFFFFFFFFF` to 1.8446744073709552e19.
 
+**The split is conditional on the follow character.** TS decides the run
+before the dot by looking PAST the dot, so `0xFF.5`, `0xFF.0`, `0xFF.` and
+`0xFF.e5` diverge with the arm removed (as do `0o17.5` and `0b101.5`), while
+`0xFF.a`, `0xFF.F`, `0xFF.x`, `0xFF.z` and `0xFF.5x` agree in both ports
+without it. General text/fixed-token boundaries agree throughout (`abc.def`,
+`x0.5`, `0z.5`, `00.5`, `0x.5`), so this is narrow rather than a general
+text-matcher defect — and a retirement sweep that probes an agreeing shape
+concludes the arm is dead when it is not.
+
 **Evidence:** `parser/spec/lex.tsv` §base-prefixed boundaries pins the token
-classification (three rows, both independent runners); `scripts/parity-probe.sh`
+classification (five rows, both independent runners) — including `0xFF.x`,
+kept deliberately as a labelled AGREEING shape so the conditional nature is
+visible in the corpus rather than only in prose; `scripts/parity-probe.sh`
 reproduces the value-level split when the arm is removed. Both matcher
 comments carry the reason and point here.
 
@@ -2220,11 +2231,15 @@ byte-identical before and after. The split appeared only on comparing the
 TWO ports. A shim's own green suite is not evidence the shim is dead; that
 is what the new lex.tsv rows now prevent.
 
-**Upstream status:** report prepared (the measured reproduction, the root
-cause, and the acceptance criteria) and handed to the maintainer for filing;
-**no upstream issue URL exists yet**. When one is filed, put its URL in this
-record and in both matcher comments — ADR-014 asks for the link, and until it
-exists this record is the only auditable owner.
+**Upstream status:** the report is written and measured in
+`design/TABNAS-DOT-BOUNDARY-REPORT.0.md` — the reproduction (both ports,
+runnable against the bare dependency), the full follow-character table, a
+root-cause hypothesis, and the acceptance criterion that a regression test
+must cover both a diverging and an agreeing follow character. It is ready to
+file verbatim but **not yet submitted, so no upstream issue URL exists**.
+When one is filed, put its URL in this record and in both matcher comments —
+ADR-014 asks for the link, and until it exists this record is the only
+auditable owner.
 
 **Proposed verdict:** resolve by fix — retire the arm when the boundary is
 fixed upstream, at which point the three lex.tsv rows either keep passing

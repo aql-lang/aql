@@ -269,16 +269,25 @@ func isBasePrefixDigit(c, prefix byte) bool {
 // agree: `0xFF.5` renders Go's "a number has no members to access with
 // `.`" against TS's 255.5, and `[0xFF.5]` against [255.5].
 //
+// The disagreement is CONDITIONAL on the follow character: TS decides the
+// run before the dot by looking past the dot, so `0xFF.5`/`0xFF.0`/
+// `0xFF.`/`0xFF.e5` (and `0o17.5`, `0b101.5`) diverge with no arm, while
+// `0xFF.a`/`0xFF.F`/`0xFF.x`/`0xFF.z`/`0xFF.5x` agree without it. Probe an
+// agreeing shape and this arm looks dead when it is not.
+//
 // That was measured by deleting this arm and running
 // scripts/parity-probe.sh — NOT by the suites, which passed clean with it
 // gone because no corpus row covered the shape. parser/spec/lex.tsv's
-// §base-prefixed-boundaries rows now pin the token classification, so the
-// next retirement sweep fails loudly instead of looking safe.
+// §base-prefixed-boundaries rows now pin the token classification —
+// including one agreeing shape, labelled — so the next retirement sweep
+// fails loudly instead of looking safe.
 //
 // Held open by NUR.md §NUR061, which is the auditable owner ADR-014 asks
-// for. The upstream report is prepared but not yet filed, so there is no
-// issue URL to link here yet; put it in this comment and in the record
-// when there is one. The arm goes when the boundary is fixed upstream.
+// for. The report is written and measured in
+// design/TABNAS-DOT-BOUNDARY-REPORT.0.md but not yet submitted, so there
+// is no issue URL to link here yet; put it in this comment and in the
+// record when there is one. The arm goes when the boundary is fixed
+// upstream.
 //
 // The converter reads the exact source, so the placeholder value is
 // intentionally irrelevant. The token starts at start (which may include

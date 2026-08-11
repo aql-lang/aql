@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { lexTokens, type LexToken } from './index.ts'
 
 const SPEC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'spec')
-const LEX_SPEC_ROW_COUNT = 32
+const LEX_SPEC_ROW_COUNT = 34
 
 interface LexSpecRow {
   line: number

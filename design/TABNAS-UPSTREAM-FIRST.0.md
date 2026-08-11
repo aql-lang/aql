@@ -112,19 +112,34 @@ TS calls it text. Deleting the arm splits three shapes that agree today:
 `0xFF.5` renders Go's *"a number has no members to access with `.`"*
 against TS's `255.5`, and `[0xFF.5]` against `[255.5]`.
 
+**The disagreement is conditional, and that matters more than it looks.**
+TS classifies the run before the dot by looking PAST the dot, so only some
+follow characters diverge: `0xFF.5`, `0xFF.0`, `0xFF.` and `0xFF.e5` split
+(as do `0o17.5` and `0b101.5`), while `0xFF.a`, `0xFF.F`, `0xFF.x`,
+`0xFF.z` and `0xFF.5x` agree in both ports with no arm at all. A sweep
+that probes an agreeing shape and concludes the arm is dead repeats the
+mistake below by another route — which is why `lex.tsv` now pins one of
+each, labelled. General text/fixed-token boundaries agree throughout
+(`abc.def`, `x0.5`, `0z.5`, `00.5`, `0x.5`), so the divergence is narrow
+rather than a general text-matcher defect.
+
 **How that was nearly missed is the point.** The arm was deleted in both
 ports, and both suites passed — 928 TS tests and the whole Go suite, clean
 — because no corpus row covered the shape. Go's token stream was
 byte-identical before and after, which made the retirement look proven; the
 divergence only surfaced on comparing the TWO ports' token streams, and
 then loudly under `scripts/parity-probe.sh`. A shim's own passing suite is
-not evidence that the shim is dead. Three `lex.tsv` rows now pin the
-classification, so the next sweep fails instead of looking safe.
+not evidence that the shim is dead. `lex.tsv`'s §base-prefixed boundaries
+rows now pin the classification — including one deliberately AGREEING
+shape, labelled as such — so the next sweep fails instead of looking safe,
+and cannot mistake an agreeing probe for proof.
 
 Held open by `NUR.md` §NUR061 — the auditable owner ADR-014 asks for. The
-upstream report is prepared but **not yet filed**, so no issue URL exists to
-link; when one does, it belongs in NUR061 and in both matcher comments. The
-arm goes when the boundary is fixed upstream.
+report is written and measured in
+[TABNAS-DOT-BOUNDARY-REPORT.0.md](TABNAS-DOT-BOUNDARY-REPORT.0.md), ready
+to file verbatim; it is **not yet submitted**, so no issue URL exists to
+link. When one does, it belongs in NUR061 and in both matcher comments.
+The arm goes when the boundary is fixed upstream.
 
 ## Cost, honestly
 
