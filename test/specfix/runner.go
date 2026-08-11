@@ -1,4 +1,4 @@
-// Package specrunner is the shared scaffolding for the .tsv spec-suite
+// Package specfix is the shared scaffolding for the .tsv spec-suite
 // test runners — `eng/go/spec_test.go` (kernel) and
 // `lang/go/test/spec_runner_test.go` (production language). Both walk a
 // directory of `.tsv` files and, for each non-blank/non-comment row,
