@@ -28,7 +28,7 @@ import { convertParsedNumber, safeParseData } from './index.ts'
 import { dataKeyOrder } from './public.ts'
 
 const SPEC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'spec')
-const DATA_SPEC_ROW_COUNT = 60
+const DATA_SPEC_ROW_COUNT = 63
 
 interface DataSpecRow {
   line: number

@@ -958,3 +958,12 @@ b=${x	ERR [boru/syntax_error]: unexpected `${` — nothing valid can appear here
 -0XFF	ERR [boru/syntax_error]: numeric prefix must be lowercase: -0XFF	…signed
 [0XFF]	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0XFF	…nested in a list
 0X8000000000000000	ERR [boru/syntax_error]: numeric prefix must be lowercase: 0X8000000000000000	…and case is checked BEFORE magnitude, so this is not integer_overflow
+#
+# § the lowercase-only rule governs numeric LITERALS. A run in a NAME
+#   position is not a literal and behaves identically in both cases — these
+#   rows pin that boundary, so neither side of it can move silently.
+0XFF/q	0XFF/q	a quoted atom is a name: case-symmetric with 0xFF/q
+0XFF/r	word(0XFF)	…as is a /r word reference
+0XFF/t	sugar(type-bound [[0XFF]])	…and a type-bound
+{0XFF:a}	{0XFF:word(a)}	…and a bare map key (the lowercase {0xFF:a} is likewise a key, not 255)
+[0XFF:Integer]	[{0XFF:word(Integer)}]	…including the implicit parameter-map form

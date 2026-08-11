@@ -89,3 +89,11 @@ _1	'_1'	a leading separator
 0O17	ERR syntax_error	octal
 0B101	ERR syntax_error	binary
 {a: 0XFF}	ERR syntax_error	…and nested in a map
+#
+# § the 0d big-number prefix is not a DATA numeric at all, in either case:
+#   both spellings decode as lenient text, so the lowercase-only rule has
+#   nothing to refuse here. Pinned so the asymmetry with 0x (which IS a data
+#   numeric, and whose uppercase form IS refused above) stays deliberate.
+0d12	'0d12'	lowercase 0d is text in a data decode
+0D12	'0D12'	…and so is uppercase, case-symmetrically
+{a:0D12}	{a:'0D12'}	…nested too
