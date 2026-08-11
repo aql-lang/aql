@@ -119,3 +119,116 @@ func TestCheckAtIndicesUnknownLength(t *testing.T) {
 		t.Fatalf("non-concrete indices must stay silent, got %+v", r.Check.Diagnostics)
 	}
 }
+
+// zcmSig builds a two-slot signature (stack Integer + forward Any) for
+// the strand-advisory scans.
+func zcmSig(slot0 *core.Type) *core.Signature {
+	return &core.Signature{Args: []*core.Type{slot0, core.TAny}, Returns: []*core.Type{core.TInteger}, BarrierPos: 1}
+}
+
+func TestCheckForwardStrandsOperandArms(t *testing.T) {
+	r := newTestRegistry(t)
+	done := r.Check.Begin()
+	defer done()
+	w := core.WordInfo{Name: "sw"}
+	pos := core.SrcPos{Row: 1, Col: 1}
+
+	mk := func(tokens []core.Value, ptr int) *core.Engine {
+		e := core.NewTop(r)
+		e.Tape = core.NewTape(tokens, core.StackHeadroom)
+		e.Pointer = ptr
+		return e
+	}
+
+	// An Any-typed consumed slot is too weak a signal: no advisory.
+	e := mk([]core.Value{core.NewInteger(7), core.NewInteger(8)}, 2)
+	checkForwardStrandsOperand(e, w, zcmSig(core.TAny), []int{1, 3}, pos)
+	if len(r.Check.Diagnostics) != 0 {
+		t.Fatalf("Any slot must stay quiet, got %+v", r.Check.Diagnostics)
+	}
+
+	// A scope boundary below the consumed args ends the scan: no advisory.
+	e = mk([]core.Value{core.NewOpenParen(), core.NewInteger(8)}, 2)
+	checkForwardStrandsOperand(e, w, zcmSig(core.TInteger), []int{1, 3}, pos)
+	if len(r.Check.Diagnostics) != 0 {
+		t.Fatalf("scope boundary must stay quiet, got %+v", r.Check.Diagnostics)
+	}
+
+	// Structural residue is scanned past; a same-typed operand below it
+	// is the stranded sibling and flags.
+	e = mk([]core.Value{core.NewInteger(6), core.NewCarrier(core.TInteger), core.NewInteger(8)}, 3)
+	checkForwardStrandsOperand(e, w, zcmSig(core.TInteger), []int{2, 4}, pos)
+	if len(r.Check.Diagnostics) != 1 {
+		t.Fatalf("stranded sibling under residue must flag once, got %+v", r.Check.Diagnostics)
+	}
+}
+
+func TestExprRefsCarrierParenAndReach(t *testing.T) {
+	r := newTestRegistry(t)
+	e := core.NewTop(r)
+	done := r.Check.Begin()
+	defer done()
+	r.Defs.Push("pcw", core.NewCarrier(core.TInteger))
+
+	// A paren expression's tokens are walked.
+	pe := core.NewParenExpr([]core.Value{core.NewWord("pcw")})
+	if !exprRefsCarrier(e, []core.Value{pe}) {
+		t.Error("a carrier word inside a paren expr refs a carrier")
+	}
+	// A Reach hides carriers in its receiver and computed keys.
+	reach := core.NewReach(core.ReachInfo{
+		Receiver: []core.Value{core.NewWord("pcw")},
+	})
+	if !exprRefsCarrier(e, []core.Value{reach}) {
+		t.Error("a carrier in a Reach receiver refs a carrier")
+	}
+	reachKey := core.NewReach(core.ReachInfo{
+		Receiver: []core.Value{core.NewInteger(1)},
+		Segments: []core.ReachSeg{{Computed: true, KeyExpr: []core.Value{core.NewWord("pcw")}}},
+	})
+	if !exprRefsCarrier(e, []core.Value{reachKey}) {
+		t.Error("a carrier in a computed Reach key refs a carrier")
+	}
+	// A hit latches across recursion: a carrier found inside a NESTED
+	// list returns from the inner walk, and the outer loop's next element
+	// sees the latch and stops instead of rescanning.
+	nested := core.NewList([]core.Value{core.NewWord("pcw")})
+	if !exprRefsCarrier(e, []core.Value{nested, core.NewInteger(2)}) {
+		t.Error("the latched walk still reports the carrier")
+	}
+	reachClean := core.NewReach(core.ReachInfo{
+		Receiver: []core.Value{core.NewInteger(1)},
+		Segments: []core.ReachSeg{{Computed: false}},
+	})
+	if exprRefsCarrier(e, []core.Value{reachClean}) {
+		t.Error("a carrier-free Reach does not ref a carrier")
+	}
+}
+
+func TestTagCheckModeDefReadFlexArm(t *testing.T) {
+	r := newTestRegistry(t)
+	e := core.NewTop(r)
+	done := r.Check.Begin()
+	defer done()
+
+	// A module-scope flex-map binding read back is tagged dynamic-from:
+	// the container's runtime state is not check-visible.
+	m := core.NewOrderedMap()
+	m.Set("k", core.NewInteger(1))
+	flex := core.NewValueRaw(core.TFlexMap, core.MapPayload{M: m})
+	if !core.IsFlexMap(flex) {
+		t.Fatal("construction must satisfy IsFlexMap")
+	}
+	tagCheckModeDefRead(e, &flex, "fm")
+	if flex.DynFrom() != "fm" {
+		t.Errorf("a module-scope flex read must tag its def, got %q", flex.DynFrom())
+	}
+}
+
+func TestAdoptShapeValueXml(t *testing.T) {
+	x := core.NewXmlElement("div", core.NewOrderedMap(), nil)
+	got := AdoptShapeValue(x, 0)
+	if !got.Carrier || !got.Parent.ConformsTo(core.TFlexXml) {
+		t.Errorf("a concrete xml adopts to a FlexXml carrier, got %s", got.Parent.Leaf())
+	}
+}
