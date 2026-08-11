@@ -86,8 +86,18 @@ every named type you define with `def`.
 - Decimal (`42`, `-5`, `+7`). An optional leading sign (`-`/`+`) is part
   of the literal; `+` is a no-op. Leading zeros are decimal, **not**
   octal (`010` is 10).
-- Hex `0x…`, octal `0o…`, binary `0b…` (case-insensitive prefix), with an
-  optional sign (`0xFF`, `-0o17`).
+- Hex `0x…`, octal `0o…`, binary `0b…`, with an optional sign (`0xFF`,
+  `-0o17`). The **prefix letter is lowercase only**: where a numeric
+  literal is expected, `0XFF` raises `[boru/syntax_error]` rather than
+  decoding as 255 or degrading to text, because it is a typo for `0xFF`
+  far more often than it is anything else. The same holds for the `0d`
+  big-number prefix. Digits keep their own case freedom — `0xff` and
+  `0xFF` are the same value, and an `e`/`E` exponent takes either case.
+  The rule governs numeric *literals*, so a run in a NAME position is
+  unaffected and behaves identically in both cases: a quoted atom
+  (`0xFF/q`), a `/r` word reference (`0XFF/r` → `word(0XFF)`), a
+  type-bound (`0XFF/t`), and a bare map key (`{0XFF: 1}`) are all names,
+  never numbers — exactly as their lowercase spellings are.
 - `_` may be used as a **single** digit-separator **between** digits
   (`1_000_000`, `0xFF_FF`). Leading, trailing, or repeated underscores
   (`_1`, `1_`, `1__0`) are a syntax error.
@@ -134,7 +144,8 @@ every named type you define with `def`.
 
 #### Arbitrary-precision numbers: `BigInteger` and `BigDecimal`
 
-The `0d` (or `0D`) prefix opts a literal into one of two **exact**,
+The `0d` prefix (lowercase, like every numeric prefix) opts a literal
+into one of two **exact**,
 arbitrary-precision numeric leaves under `Number` — siblings of `Integer`
 and `Float`. They exist for the cases where the fixed-width leaves lose
 information: integers beyond the int64 range, and decimals (money,

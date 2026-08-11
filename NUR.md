@@ -73,6 +73,7 @@ keep the two in sync in the same commit.
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary, so one dependency shim is retained | PR #338 retirement attempt (flagged for NUR by Codex P1) |
+| [NUR062](#nur062) | Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible | PR #339 maintainer decision (flagged for NUR by Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2228,3 +2229,56 @@ exists this record is the only auditable owner.
 **Proposed verdict:** resolve by fix — retire the arm when the boundary is
 fixed upstream, at which point the three lex.tsv rows either keep passing
 (the stock scanners agreeing) or fail loudly and say so.
+
+---
+
+## NUR062 — Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible {#nur062}
+
+**Status:** Pending · **Recorded:** 2026-08-11 · **Surfaced by:** the
+maintainer's decision on PR #339 ("only lowercase should be valid for numeric
+syntax prefixes"); flagged for this register by the PR #339 review (Codex P1)
+
+**Rule:** one lexical convention per kind of thing. Letters inside a numeric
+literal are either case-significant or they are not.
+
+**Divergence:** they are now both. The four MARKER letters are lowercase-only
+— `0x`, `0o`, `0b` and the big-number `0d`, so `0XFF` raises
+`[boru/syntax_error]: numeric prefix must be lowercase: 0XFF` — while every
+other letter a numeric literal can contain stays case-flexible:
+
+```
+0xff  ==  0xFF        hex DIGITS take either case
+1e3   ==  1E3         the exponent marker takes either case
+0XFF  ->  syntax_error    but the base marker does not
+```
+
+So `0XFF` is refused and `0xFF` accepted, yet `1E3` and `1e3` are equally
+valid, and `0xAB` and `0xab` are the same value. A reader cannot derive one
+from the other; each has to be learned.
+
+**Scope, measured.** The rule governs numeric LITERALS only. A run in a NAME
+position is not a literal and behaves identically in both cases — a quoted
+atom (`0XFF/q`), a `/r` word reference (`0XFF/r` -> `word(0XFF)`), a
+type-bound (`0XFF/t`), and a bare map key (`{0XFF: 1}`) are all names, never
+numbers, exactly as their lowercase spellings are. The `0d` family is not a
+DATA numeric in either case, so `0d12` and `0D12` both decode as lenient text
+through `StructUtil.parse`. Both boundaries are pinned by rows rather than
+left to prose: `parser/spec/parse.tsv` §"the lowercase-only rule governs
+numeric LITERALS" and `parser/spec/data.tsv` §"the 0d big-number prefix is not
+a DATA numeric".
+
+**Evidence:** `parser/spec/parse.tsv` (8 refusal rows + 5 name-position rows),
+`parser/spec/data.tsv` (4 refusal rows + 3 `0d` rows), `parser/spec/lex.tsv`
+(2 token rows), each re-rendered independently by both port runners.
+`REFERENCE.md` §"Numeric literals" states the rule and its scope.
+
+**Documentation status:** stated in REFERENCE.md; both editor grammars
+(tree-sitter, pygments) reject uppercase markers so highlighting cannot
+advertise a literal the language refuses.
+
+**Proposed verdict:** **Allowed** — the asymmetry is deliberate and the
+argument is that a marker is a *spelling of syntax* while digits and
+exponents are *content*: `0XFF` is a typo for `0xFF` far more often than it
+is anything a user meant, whereas `0xAB` vs `0xab` and `1E3` vs `1e3` carry
+no such signal. Recording it Pending rather than Allowed because the
+**Allowed** verdict is the maintainer's to give, not this record's to assume.

@@ -1855,6 +1855,9 @@ export function parseWord(text: string): Value {
   // `.` isn't split off); here we build the value. Checked early — these
   // never take modifiers and must not fall through to word/number paths.
   if (isBigNumberLiteral(name)) {
+    if (hasUppercaseNumericPrefix(name)) {
+      throw uppercaseNumericPrefixError(name)
+    }
     return parseBigNumber(name)
   }
 
@@ -1935,6 +1938,9 @@ export function parseWord(text: string): Value {
   // instead of an opaque undefined_word. (In-range base-prefixed
   // literals never reach this path — jsonic lexes them as numbers.)
   if (isBasePrefixedInteger(name)) {
+    // No uppercase check here: both lexers CLAIM a base-prefixed run as #NR
+    // whatever its magnitude, so an uppercase one is refused in
+    // numberValToValue and can never reach this text path.
     if (name.includes('_') && !validUnderscores(name)) {
       throw new BoruError('syntax_error', 'misplaced `_` in numeric literal: ' + name, name, {
         hint: '`_` is a single digit-separator — use one between digits',
@@ -2201,6 +2207,9 @@ export function numberValToValue(nv: NumberVal): Value {
     }
     return newInteger(n)
   }
+  if (hasUppercaseNumericPrefix(nv.src)) {
+    throw uppercaseNumericPrefixError(nv.src, nv.row, nv.col)
+  }
   if (isBasePrefixedInteger(nv.src)) {
     // The 0x / 0o / 0b prefix is auto-detected (Go's ParseInt base 0);
     // parsing the exact digits keeps full precision above 2^53 and
@@ -2402,6 +2411,42 @@ export function isPlainDecimalInteger(src: string): boolean {
     }
   }
   return sawDigit
+}
+
+// hasUppercaseNumericPrefix reports whether src carries an UPPERCASE base or
+// big-number prefix — `0X`, `0O`, `0B`, `0D` — after an optional sign.
+//
+// Boru's numeric syntax prefixes are lowercase only. Both lexers still CLAIM
+// an uppercase run as a numeric token (declining would split the ports: Go's
+// stock scanner reads `0XFF` as 255 while this port's reads it as text), so
+// the refusal belongs here in the converter, where one diagnostic serves both
+// ports and every context.
+function hasUppercaseNumericPrefix(src: string): boolean {
+  let s = src
+  if (s.length > 0 && (s[0] === '-' || s[0] === '+')) {
+    s = s.slice(1)
+  }
+  if (s.length < 3 || s[0] !== '0') {
+    return false
+  }
+  const c = s[1]!
+  return c === 'X' || c === 'O' || c === 'B' || c === 'D'
+}
+
+// uppercaseNumericPrefixError refuses an uppercase-prefixed numeric literal.
+// Loud in EVERY context, data decode included: `0XFF` is a typo for `0xFF`
+// far more often than it is text, and a silent string would be the kind of
+// wrong answer this parser exists to refuse.
+function uppercaseNumericPrefixError(src: string, row = 0, col = 0): BoruError {
+  // Callers reach here only via hasUppercaseNumericPrefix, so the prefix
+  // letter is always present — replace it unconditionally rather than
+  // carrying an arm no input can take.
+  const lower = src.replace(/[XOBD]/, (c) => c.toLowerCase())
+  return new BoruError('syntax_error', 'numeric prefix must be lowercase: ' + src, src, {
+    row,
+    col,
+    hint: 'write `' + lower + '` — boru\'s numeric prefixes are lowercase (`0x`, `0o`, `0b`, `0d`)',
+  })
 }
 
 // isBasePrefixedInteger reports whether src is a hex / octal / binary

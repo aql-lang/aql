@@ -135,12 +135,15 @@ class BoruLexer(RegexLexer):
             (r"`", String.Backtick, "template"),
 
             # -- numbers (leading '-' allowed) -----------------------------
+            # Prefix letters are LOWERCASE ONLY, matching the parser: `0XFF`
+            # is a syntax error, so highlighting it as a number would
+            # advertise a literal the language refuses.
             # Big integer: 0d[0-9]+ (arbitrary precision).
-            (r"-?0[dD][0-9]+" + _WORD_BOUND, Number),
+            (r"-?0d[0-9]+" + _WORD_BOUND, Number),
             # Hexadecimal.
-            (r"-?0[xX][0-9a-fA-F_]+" + _WORD_BOUND, Number.Hex),
+            (r"-?0x[0-9a-fA-F_]+" + _WORD_BOUND, Number.Hex),
             # Binary.
-            (r"-?0[bB][01_]+" + _WORD_BOUND, Number.Bin),
+            (r"-?0b[01_]+" + _WORD_BOUND, Number.Bin),
             # Float: mantissa with a fractional part, optional exponent ...
             (r"-?[0-9][0-9_]*\.[0-9_]+(?:[eE][+-]?[0-9]+)?" + _WORD_BOUND,
              Number.Float),
