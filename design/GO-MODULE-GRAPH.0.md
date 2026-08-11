@@ -349,25 +349,26 @@ coverage-bearing check CI does run, and it covers `parser/go` only.
 
 ### 4.4 Merged coverage — the ADR-008 contract
 
-`make cover-gate` at `22a567b`, go1.24.7 linux/amd64. **PASS**: every module
-at 100.0%, 69,970 reachable statements, 334 statements allowlisted across
-301 `//covergate:allow` blocks.
+`make cover-gate`, go1.24.7 linux/amd64. **PASS**: every module at 100.0%,
+69,868 reachable statements, 334 statements allowlisted across 301
+`//covergate:allow` blocks.
 
 | Module | Statements | Covered | Coverage |
 |---|--:|--:|--:|
+| `lang/go` | 27,450 | 27,450 | 100.0% |
 | `core/go` | 14,510 | 14,510 | 100.0% |
-| `lang/go` | 27,351 | 27,351 | 100.0% |
 | `cmd/go` | 12,604 | 12,604 | 100.0% |
 | `compiler/go` | 4,586 | 4,586 | 100.0% |
 | `basic/go` | 3,277 | 3,277 | 100.0% |
-| `eng/go` | 2,325 | 2,325 | 100.0% |
 | `check/go` | 2,182 | 2,182 | 100.0% |
 | `parser/go` | 1,679 | 1,679 | 100.0% |
 | `test/go` | 1,102 | 1,102 | 100.0% |
+| `test/specfix` | 1,096 | 1,096 | 100.0% |
+| `eng/go` | 1,028 | 1,028 | 100.0% |
 | `calc/go` | 199 | 199 | 100.0% |
 | `test/solardemo` | 108 | 108 | 100.0% |
 | `wpg/serve` | 47 | 47 | 100.0% |
-| **TOTAL** | **69,970** | **69,970** | **100.0%** |
+| **TOTAL** | **69,868** | **69,868** | **100.0%** |
 
 Two things to read carefully in that table.
 
@@ -378,20 +379,27 @@ instrumented file by its first two path segments after the module prefix
 `wpg/wasm` is absent entirely — it is `//go:build js && wasm`, so no
 host-platform `go test` ever reaches it, in this column or any other.
 
-`tools/piecetool` is absent because it is not in `MODULES`. Its seven source
+`tools/piecetool` is absent because it is not in `MODULES`. Its six source
 files and zero test files are outside the ADR-008 universe by design.
 
-Statement weight is concentrated: `lang/go` alone is 39% of the repo's
+**The eng cut is visible here, and it conserves statements.** Against the
+pre-cut measurement, `eng/go` fell 2,325 → 1,028, `lang/go` rose 27,351 →
+27,450 (stackform arriving) and `test/specfix` appeared with 1,096. The
+total moved 69,970 → 69,868: −1,297 + 99 + 1,096 = **−102 exactly**. Nothing
+was lost in the moves; the 102 statements that genuinely disappeared are the
+facade's wrapper bodies.
+
+Statement weight remains concentrated: `lang/go` is 39% of the repo's
 reachable statements, `core/go` 21%, `cmd/go` 18% — three modules carry 78%
-of the total.
+of the total. `eng/go`, once the fourth largest, is now 1.5%.
 
 ### 4.5 Standalone coverage — what each module proves alone
 
 Each module profiled by its own suite only, `-coverpkg` scoped to its own
 package tree, analysed by `test/go/covergate` so the `//covergate:allow`
-exclusions apply exactly as the repo's gates apply them. The five modules
-that have a standalone gate were cross-checked by running the gate target
-itself; the figures agree exactly.
+exclusions apply exactly as the repo's gates apply them. The modules that
+have a standalone gate were cross-checked by running the gate target itself;
+the figures agree exactly.
 
 | Module | Standalone | Covered / total | Merged | Floor | Headroom |
 |---|--:|--:|--:|--:|--:|
@@ -402,63 +410,60 @@ itself; the figures agree exactly.
 | `calc/go` | **100.0%** | 199 / 199 | 100.0% | — | — |
 | `test/solardemo` | **100.0%** | 108 / 108 | 100.0% | — | — |
 | `wpg/serve` | **100.0%** | 47 / 47 | 100.0% | — | — |
-| `lang/go` | 98.9% | 27,054 / 27,351 | 100.0% | — | — |
-| `eng/go` | 93.6% | 2,173 / 2,321 | 100.0% | 84 (ratchet) | **+9.6** |
+| `lang/go` | 98.9% | 27,153 / 27,450 | 100.0% | — | — |
+| `eng/go` | 87.9% | 900 / 1,024 | 100.0% | 84 (ratchet) | +3.9 |
 | `compiler/go` | 63.0% | 2,885 / 4,581 | 100.0% | 62 (ratchet) | +1.0 |
 | `check/go` | 51.5% | 1,122 / 2,180 | 100.0% | 51 (ratchet) | +0.5 |
-| `basic/go` | **44.9%** | 1,470 / 3,274 | 100.0% | — | — |
+| `basic/go` | 44.9% | 1,470 / 3,274 | 100.0% | — | — |
+| `test/specfix` | **30.6%** | 335 / 1,093 | 100.0% | — | — |
 
-**Seven of the twelve modules are fully self-sufficient** — they prove
-themselves without help from any other suite. That includes both modules
-whose gates are hard 100s (`core/go`, `parser/go`) and five that reach it
-with no standalone gate at all.
+Seven of the thirteen modules are fully self-sufficient — they prove
+themselves without help from any other suite.
 
-Note the denominators drift by a few statements between the two columns for
-the modules that are not at 100%: `basic/go` 3,274 standalone against 3,277
-merged, `compiler/go` 4,581 against 4,586, `eng/go` 2,321 against 2,325,
-`check/go` 2,180 against 2,182. That is the allowlist interacting with the
-two views, not an inconsistency. A `//covergate:allow` block is excluded from
-both numerator and denominator *only if it is uncovered*; a guard that some
-other module's suite happens to reach is covered in the merged view and so
+Denominators drift by a few statements between the two columns for the
+modules that are not at 100%. That is the allowlist interacting with the two
+views, not an inconsistency: a `//covergate:allow` block is excluded from
+both numerator and denominator *only if it is uncovered*, so a guard some
+other module's suite happens to reach is covered in the merged view and
 counted normally, while the module's own suite leaves it uncovered and it
 drops out.
 
 ### 4.6 What the numbers say
 
-**`eng/go` has 9.6 points of unbanked ratchet headroom.** Its floor is 84,
-set to the value measured at the four-piece Stage 4 cut (84.6%); it now
-measures 93.6%. The ratchet discipline is to raise the floor in the same
-change that raises the coverage, and that has not happened — nine points of
-real, already-earned coverage are unprotected, so a regression of up to that
-size would pass the gate silently. `ENG_GATE_FLOOR` could be moved to 93
-today with no new tests. (Not changed here: this note measures, it does not
-re-tune the gates.)
+**`eng/go` standalone went DOWN, and that is the honest direction.** It read
+93.6% of 2,321 statements before the cut and reads 87.9% of 1,024 now. No
+test was removed and no coverage lost — the denominator got harder. What
+left was the facade: ~1,300 statements of type aliases, re-export vars and
+thin wrapper bodies, all of them trivially covered or excluded, which were
+inflating the ratio. What remains is the bytecode VM measured by its own
+suite. The floor stays 84, and the headroom that reads as +3.9 is now
+against a denominator that is entirely VM.
 
-**`check/go` and `compiler/go` sit right on their floors** at +0.5 and +1.0.
-Both were re-based recently and there is nothing to bank. The `check/go`
-figure is worth a second look precisely because it is *unchanged*: the
-Makefile's own comment predicts 1122/2180 = 51.5% for the state after the
-2026-08-08 carrier-lattice move, and that is exactly what it still measures —
-confirmation the re-base was arithmetic, not a regression, and that nothing
-has moved since.
+**`test/specfix` at 30.6% is the repo's lowest standalone figure**, and it is
+the expected shape for a harness rather than a defect: its own two test files
+exercise a fraction of it, while the code is driven hard by its consumers —
+`test/go`'s spec runners and `eng`'s standalone corpus lanes — which is why
+it is at 100% merged. It has no standalone gate, and setting one would be
+measuring the wrong thing.
 
-**`basic/go` at 44.9% is the lowest standalone figure in the repo, and it is
-the only one that low without a gate.** 1,804 of its 3,274 statements are
-reached solely by other modules' suites — `lang/go`'s tests and the shared
+**`basic/go` at 44.9% is the lowest figure that is not a harness.** 1,804 of
+its 3,274 statements are reached solely by `lang/go`'s tests and the shared
 spec corpus. It sits below both ratcheted modules while carrying no
 standalone floor of its own, so unlike `check/go` and `compiler/go` there is
-nothing stopping that number from drifting downward. `basic/ts`, its
-TypeScript twin, is gated at 100 line coverage by `make test-ts-basic`; the
-Go half has no equivalent.
+nothing stopping that number drifting downward. Its TypeScript twin
+`basic/ts` is gated at 100 line coverage by `make test-ts-basic`; the Go half
+has no equivalent.
 
-**`lang/go` is 297 statements short** of standing alone — 98.9% of the
-largest module in the repo, which is a stronger position than the raw figure
-suggests given it is 39% of all reachable statements.
+**`check/go` and `compiler/go` sit right on their floors** at +0.5 and +1.0,
+both re-based recently with nothing to bank. The `check/go` figure is worth a
+second look precisely because it is *unchanged*: the Makefile's own comment
+predicts 1122/2180 = 51.5% for the state after the 2026-08-08 carrier-lattice
+move, and that is exactly what it still measures.
 
 **Nothing in the standalone column contradicts the merged column.** Every
-module is at 100% merged; the standalone column is strictly a measure of
-self-sufficiency, and a low number there is a statement about where the
-covering tests live, not about untested code.
+module is at 100% merged; the standalone column measures self-sufficiency,
+and a low number there says where the covering tests live, not that code is
+untested.
 
 ## 5. What eng is, and the facade that is no longer between it and core
 
