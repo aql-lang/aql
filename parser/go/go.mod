@@ -10,7 +10,7 @@ require (
 
 require (
 	github.com/tabnas/json/go v0.5.1 // indirect
-	github.com/tabnas/parser/go v0.8.1 // indirect
+	github.com/tabnas/parser/go v0.8.2 // indirect
 )
 
 replace github.com/boru-lang/boru/core/go => ../../core/go

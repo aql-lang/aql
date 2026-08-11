@@ -6,7 +6,7 @@ require (
 	github.com/boru-lang/boru/core/go v0.0.0
 	github.com/boru-lang/boru/parser/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
-	github.com/tabnas/parser/go v0.8.1
+	github.com/tabnas/parser/go v0.8.2
 )
 
 require (

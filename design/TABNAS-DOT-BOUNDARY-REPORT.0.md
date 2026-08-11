@@ -33,7 +33,10 @@ already caught one retirement attempt, wearing a different hat.
 ## Go and TS lexers disagree on a base-prefixed run before a registered `.` token
 
 **Affects:** `github.com/tabnas/jsonic/go v0.6.1` vs `@tabnas/jsonic ^0.6.1`
-(over `github.com/tabnas/parser/go v0.8.1` / `@tabnas/parser ^0.8.1`)
+(over `github.com/tabnas/parser/go v0.8.2` / `@tabnas/parser ^0.8.2`)
+
+Re-measured at parser **v0.8.2** in both ports: the table below is
+unchanged from v0.8.1, so 0.8.2 does not affect this.
 
 **Summary.** When `.` is registered as a fixed token, the two ports
 classify the base-prefixed run *before* the dot differently: Go emits
