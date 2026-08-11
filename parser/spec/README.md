@@ -62,11 +62,20 @@ byte offset. The canonical JSON field order is `name`, `src`, `si`.
 This deliberately has separate Go and TypeScript readers and renderers rather
 than extending the parsed-value harness: raw tokens retain whitespace,
 comments, newlines, and boundaries which `parse.tsv` necessarily discards.
-Its 27-row exact ratchet covers empty and bad EOF, an unterminated backtick's
+Its 34-row exact ratchet covers empty and bad EOF, an unterminated backtick's
 clean lexical EOF, trivia, astral-character byte offsets, decimal and dotted
 exponents, number/member and colon/arrow suffix boundaries, malformed
 separators, hexadecimal/octal/binary overflow boundaries, and adjacent quote
 boundaries after plain words and completed receivers.
+
+The §base-prefixed boundaries rows are the ones to read before touching the
+decimal-boundary matcher's base-prefix arm. They pin a class where the two
+stock scanners disagree — but only for SOME follow characters, since the TS
+scanner classifies the run before a `.` by looking past it. One agreeing
+shape (`0xFF.x`) is therefore pinned alongside the diverging ones and
+labelled as such: it cannot fail on its own, and that is the point. Probing
+an agreeing shape and concluding the arm is retirable is the specific
+mistake those rows exist to stop.
 
 ### `parse.tsv` — the contract
 
@@ -282,10 +291,14 @@ value. `scripts/parity-probe.sh` is what found them.
 The main corpus grew from 370 rows to 648 unique sources while driving
 `parser/ts` from 93.97% to 100% line coverage; the final gate also requires
 100% branches and functions. The 2026-08-09 probe sweep then grew it to 698.
-Both runners machine-pin the current corpus sizes: 698 parse rows, 27
-raw-lexer rows, 56 data-decode rows, 18 generated-depth rows, 26
+Both runners machine-pin the current corpus sizes: 711 parse rows, 34
+raw-lexer rows, 65 data-decode rows, 18 generated-depth rows, 26
 semantic-shape rows, and 9 live divergence rows. An intentional corpus change updates both independent
-constants and this prose together. The growth found further defects the
+constants and this prose together — a rule this file has now drifted from
+three times in three PRs, because the constants are machine-pinned and the
+prose is not. Nothing fails when only the constants move, so re-read this
+paragraph against `parser/go`'s and `parser/ts`'s row-count constants
+whenever you add rows. The growth found further defects the
 crossdiff could not:
 
 - an EMPTY `${}` interpolation in an XML **attribute** folded to `""` in Go
