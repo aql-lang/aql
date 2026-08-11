@@ -338,7 +338,80 @@ Statement weight is concentrated: `lang/go` alone is 39% of the repo's
 reachable statements, `core/go` 21%, `cmd/go` 18% — three modules carry 78%
 of the total.
 
-<!--COVERAGE-STANDALONE-->
+### 4.5 Standalone coverage — what each module proves alone
+
+Each module profiled by its own suite only, `-coverpkg` scoped to its own
+package tree, analysed by `test/go/covergate` so the `//covergate:allow`
+exclusions apply exactly as the repo's gates apply them. The five modules
+that have a standalone gate were cross-checked by running the gate target
+itself; the figures agree exactly.
+
+| Module | Standalone | Covered / total | Merged | Floor | Headroom |
+|---|--:|--:|--:|--:|--:|
+| `core/go` | **100.0%** | 14,510 / 14,510 | 100.0% | 100 (hard) | 0.0 |
+| `parser/go` | **100.0%** | 1,679 / 1,679 | 100.0% | 100 (hard) | 0.0 |
+| `cmd/go` | **100.0%** | 12,604 / 12,604 | 100.0% | — | — |
+| `test/go` | **100.0%** | 1,102 / 1,102 | 100.0% | — | — |
+| `calc/go` | **100.0%** | 199 / 199 | 100.0% | — | — |
+| `test/solardemo` | **100.0%** | 108 / 108 | 100.0% | — | — |
+| `wpg/serve` | **100.0%** | 47 / 47 | 100.0% | — | — |
+| `lang/go` | 98.9% | 27,054 / 27,351 | 100.0% | — | — |
+| `eng/go` | 93.6% | 2,173 / 2,321 | 100.0% | 84 (ratchet) | **+9.6** |
+| `compiler/go` | 63.0% | 2,885 / 4,581 | 100.0% | 62 (ratchet) | +1.0 |
+| `check/go` | 51.5% | 1,122 / 2,180 | 100.0% | 51 (ratchet) | +0.5 |
+| `basic/go` | **44.9%** | 1,470 / 3,274 | 100.0% | — | — |
+
+**Seven of the twelve modules are fully self-sufficient** — they prove
+themselves without help from any other suite. That includes both modules
+whose gates are hard 100s (`core/go`, `parser/go`) and five that reach it
+with no standalone gate at all.
+
+Note the denominators drift by a few statements between the two columns for
+the modules that are not at 100%: `basic/go` 3,274 standalone against 3,277
+merged, `compiler/go` 4,581 against 4,586, `eng/go` 2,321 against 2,325,
+`check/go` 2,180 against 2,182. That is the allowlist interacting with the
+two views, not an inconsistency. A `//covergate:allow` block is excluded from
+both numerator and denominator *only if it is uncovered*; a guard that some
+other module's suite happens to reach is covered in the merged view and so
+counted normally, while the module's own suite leaves it uncovered and it
+drops out.
+
+### 4.6 What the numbers say
+
+**`eng/go` has 9.6 points of unbanked ratchet headroom.** Its floor is 84,
+set to the value measured at the four-piece Stage 4 cut (84.6%); it now
+measures 93.6%. The ratchet discipline is to raise the floor in the same
+change that raises the coverage, and that has not happened — nine points of
+real, already-earned coverage are unprotected, so a regression of up to that
+size would pass the gate silently. `ENG_GATE_FLOOR` could be moved to 93
+today with no new tests. (Not changed here: this note measures, it does not
+re-tune the gates.)
+
+**`check/go` and `compiler/go` sit right on their floors** at +0.5 and +1.0.
+Both were re-based recently and there is nothing to bank. The `check/go`
+figure is worth a second look precisely because it is *unchanged*: the
+Makefile's own comment predicts 1122/2180 = 51.5% for the state after the
+2026-08-08 carrier-lattice move, and that is exactly what it still measures —
+confirmation the re-base was arithmetic, not a regression, and that nothing
+has moved since.
+
+**`basic/go` at 44.9% is the lowest standalone figure in the repo, and it is
+the only one that low without a gate.** 1,804 of its 3,274 statements are
+reached solely by other modules' suites — `lang/go`'s tests and the shared
+spec corpus. It sits below both ratcheted modules while carrying no
+standalone floor of its own, so unlike `check/go` and `compiler/go` there is
+nothing stopping that number from drifting downward. `basic/ts`, its
+TypeScript twin, is gated at 100 line coverage by `make test-ts-basic`; the
+Go half has no equivalent.
+
+**`lang/go` is 297 statements short** of standing alone — 98.9% of the
+largest module in the repo, which is a stronger position than the raw figure
+suggests given it is 39% of all reachable statements.
+
+**Nothing in the standalone column contradicts the merged column.** Every
+module is at 100% merged; the standalone column is strictly a measure of
+self-sufficiency, and a low number there is a statement about where the
+covering tests live, not about untested code.
 
 ## 5. Reproducing this
 
