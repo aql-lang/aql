@@ -47,7 +47,7 @@ import (
 )
 
 // tokenise turns a corpus row's input into []core.Value. It covers the
-// row subset only: decimal integers, double-quoted strings with no
+// row subset only: decimal integers, booleans, double-quoted strings with no
 // escapes, bracketed QUOTE LITERALS, and bare words (including the
 // n:Type param-spec form defq's triples use). Anything else is a
 // row-authoring error and is reported as one rather than silently
@@ -92,6 +92,8 @@ func tokeniseSeq(toks []string, nested bool) ([]core.Value, []string, error) {
 				return nil, nil, fmt.Errorf("unbalanced ] with no open list")
 			}
 			return out, toks, nil
+		case tok == "true", tok == "false":
+			out = append(out, core.NewBoolean(tok == "true"))
 		case strings.HasPrefix(tok, `"`) && strings.HasSuffix(tok, `"`) && len(tok) >= 2:
 			out = append(out, core.NewString(tok[1:len(tok)-1]))
 		default:
@@ -164,6 +166,7 @@ func checkRow(input string) (string, error) {
 		return "", err
 	}
 	registerCheckFixtures(r)
+	registerControlFixtures(r)
 	r.InitRootContext()
 	r.Source = input
 

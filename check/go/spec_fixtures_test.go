@@ -16,6 +16,7 @@ package check_test
 // convention marking a spec fixture rather than a production word.
 
 import (
+	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -141,6 +142,124 @@ func registerCheckFixtures(r *core.Registry) {
 				n, _ := core.AsInteger(args[0])
 				return []core.Value{core.NewBoolean(n > 0)}
 			}),
+		}},
+	})
+}
+
+// registerControlFixtures installs a minimal if and for, the corpus's
+// door into the branch/loop analysis. They orchestrate the SAME core
+// seam functions basic's production control words do — guard narrowing,
+// carrier body runs, the def join, and check.AnalyseLoopBody — but
+// deliberately none of the recording protocol: check's own suite runs
+// with the DispatchBraid inactive, so there is no fragment to capture and
+// no branch record to emit, and the check semantics (narrowing, joins,
+// diagnostics, the loop body model) are exactly what this corpus is here
+// to pin.
+//
+// Shapes (forward form): `ifq [cond] [then] [else]`, `forq N [body]`.
+func registerControlFixtures(r *core.Registry) {
+	runBody := func(reg *core.Registry, body core.Value) ([]core.Value, error) {
+		lst, err := core.AsList(body)
+		if err != nil {
+			return nil, &core.BoruError{Code: "type_error", Detail: "control fixture: body must be a list"}
+		}
+		return core.NewTop(reg).Run(lst.Slice())
+	}
+
+	ifqHandler := func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
+		condOut, err := runBody(reg, args[0])
+		if err != nil {
+			return nil, err
+		}
+		takeThen := len(condOut) > 0 && core.CoerceBoolean(condOut[len(condOut)-1])
+		if takeThen {
+			return runBody(reg, args[1])
+		}
+		return runBody(reg, args[2])
+	}
+	// The check model: the literal-condition reduction with its
+	// unreachable-branch diagnostic, per-arm body capture under guard /
+	// complement narrowing, the def join, and the carrier-stack join.
+	ifqReturnsFn := func(args []core.Value, reg *core.Registry) []core.Value {
+		if lit, ok := core.LiteralCondValue(args[0]); ok {
+			branch := "else"
+			if !lit {
+				branch = "then"
+			}
+			reg.Check.AddDiagnostic(core.CheckDiagnostic{
+				Code:   "unreachable_branch",
+				Detail: "ifq condition is a constant " + core.BoolWord(lit) + "; " + branch + "-branch is unreachable",
+				Word:   "ifq",
+				Row:    reg.Check.CurCallPos.Row,
+				Col:    reg.Check.CurCallPos.Col,
+			})
+			var stk []core.Value
+			var defs map[string]core.Value
+			if lit {
+				restore := core.ApplyGuardNarrowing(reg, args[0])
+				stk, defs = core.RunCarrierBodyWithDefs(reg, args[1])
+				restore()
+				core.InstallJoinedDefs(reg, defs, nil)
+			} else {
+				restore := core.ApplyComplementNarrowing(reg, args[0])
+				stk, defs = core.RunCarrierBodyWithDefs(reg, args[2])
+				restore()
+				core.InstallJoinedDefs(reg, nil, defs)
+			}
+			return stk
+		}
+		condStk, _ := core.RunCarrierBodyWithDefs(reg, args[0])
+		_ = condStk
+		restore := core.ApplyGuardNarrowing(reg, args[0])
+		thenStk, thenDefs := core.RunCarrierBodyWithDefs(reg, args[1])
+		restore()
+		restore = core.ApplyComplementNarrowing(reg, args[0])
+		elseStk, elseDefs := core.RunCarrierBodyWithDefs(reg, args[2])
+		restore()
+		core.InstallJoinedDefs(reg, thenDefs, elseDefs)
+		return core.JoinCarrierStacks(thenStk, elseStk)
+	}
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "ifq",
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TList, core.TList, core.TList},
+			NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+			Impl:       core.Go(ifqHandler),
+			ReturnsFn:  ifqReturnsFn, BarrierPos: -1,
+		}},
+	})
+
+	forqHandler := func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
+		n, _ := core.AsInteger(args[0])
+		var out []core.Value
+		for i := int64(0); i < n; i++ {
+			res, err := runBody(reg, args[1])
+			if err != nil {
+				return nil, err
+			}
+			out = res
+		}
+		return out, nil
+	}
+	// The check model: the loop body analysed with the iterator bound as a
+	// typed carrier. A LITERAL count > 0 proves at least one trip; a
+	// computed count must not (a runtime count of 0 runs the body never).
+	forqReturnsFn := func(args []core.Value, reg *core.Registry) []core.Value {
+		proven := false
+		if core.IsConcrete(args[0]) {
+			if n, err := core.AsInteger(args[0]); err == nil && n > 0 {
+				proven = true
+			}
+		}
+		return check.AnalyseLoopBody(reg, args[1], []string{"iq"}, []core.Value{core.NewCarrier(core.TInteger)}, proven)
+	}
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "forq",
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TInteger, core.TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Impl:       core.Go(forqHandler),
+			ReturnsFn:  forqReturnsFn, BarrierPos: -1,
 		}},
 	})
 }
