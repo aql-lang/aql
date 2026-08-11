@@ -1,0 +1,4 @@
+# check/spec — the check module's own corpus.
+# Format: <input><TAB><expected>[<TAB><note>]
+# expected is renderCheck output: "<stack> :: <diag> <diag>".
+1 2 addq	Number
