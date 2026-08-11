@@ -81,8 +81,8 @@ WORD canon
 WORD case
   [Any Any] barrier=2 noeval={0,1} returns=[Any] +returnsfn
 WORD changecase
-  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
-  [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String] +returnsfn
+  [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String] +returnsfn
   [Scalar/String] barrier=1 returns=[Scalar/String]
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
 WORD class
@@ -673,7 +673,7 @@ WORD repeat
   [Scalar/Number/Integer Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
 WORD replace
-  [Scalar/String Scalar/String Scalar/String Node/Map] barrier=4 returns=[Scalar/String]
+  [Scalar/String Scalar/String Scalar/String Node/Map] barrier=4 returns=[Scalar/String] +returnsfn
   [Scalar/String Scalar/String Scalar/String] barrier=3 returns=[Scalar/String]
 WORD reverse
   [Node/List] barrier=1 +returnsfn
