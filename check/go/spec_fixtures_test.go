@@ -293,3 +293,46 @@ func registerDryFixtures(r *core.Registry) {
 		}},
 	})
 }
+
+// registerIndexFixtures installs atq, the corpus's door into the static
+// index bounds check (indexcheck.go): `[indices] [data] atq` selects the
+// indexed elements, and its check model runs check.CheckAtIndices so a
+// provably out-of-range index over a statically-known list length is
+// flagged during analysis. Unknown lengths and unknown indices are
+// deliberately silent — the checker only speaks when it can prove the
+// fault.
+func registerIndexFixtures(r *core.Registry) {
+	// Dispatch hands operands TOS-first: for `[indices] [data] atq` the
+	// data list (pushed last) is args[0] and the index list args[1].
+	atqHandler := func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+		data, err := core.AsList(args[0])
+		if err != nil {
+			return nil, err
+		}
+		idxs, err := core.AsList(args[1])
+		if err != nil {
+			return nil, err
+		}
+		var out []core.Value
+		for i := 0; i < idxs.Len(); i++ {
+			n, err := idxs.Get(i).AsConcreteInteger()
+			if err != nil || n < 0 || int(n) >= data.Len() {
+				return nil, &core.BoruError{Code: "index_error", Detail: "atq: index out of range"}
+			}
+			out = append(out, data.Get(int(n)))
+		}
+		return []core.Value{core.NewList(out)}, nil
+	}
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "atq",
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TList, core.TList}, Returns: []*core.Type{core.TList},
+			BarrierPos: -1,
+			Impl:       core.Go(atqHandler),
+			ReturnsFn: func(args []core.Value, reg *core.Registry) []core.Value {
+				check.CheckAtIndices(reg, args[1], args[0], "atq")
+				return []core.Value{core.NewCarrier(core.TList)}
+			},
+		}},
+	})
+}
