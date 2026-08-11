@@ -385,14 +385,7 @@ function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
   const isDigit = (c: string | undefined): boolean =>
     undefined !== c && c >= '0' && c <= '9'
   const isDigitOrSep = (c: string | undefined): boolean => isDigit(c) || '_' === c
-  const isBaseDigit = (c: string | undefined, prefix: string): boolean => {
-    if (undefined === c) return false
-    if ('x' === prefix || 'X' === prefix) {
-      return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
-    }
-    if ('o' === prefix || 'O' === prefix) return c >= '0' && c <= '7'
-    return '0' === c || '1' === c
-  }
+
   const validDecimalSeparators = (src: string): boolean => {
     for (let i = 0; i < src.length; i++) {
       if ('_' === src[i] &&
@@ -455,45 +448,19 @@ function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
       if ('0' === s[si] && undefined !== s[si + 1] && 'dD'.includes(s[si + 1]!)) {
         return undefined
       }
-      // Claim base-prefixed integers, including magnitudes past int64.
-      // LIVE — do not retire. The OVERFLOW reason is fixed as of jsonic
-      // 0.6.1 / parser 0.8.1 (both ports now round the true value), but a
-      // different divergence keeps this arm alive: with `.` registered as
-      // a token, the stock scanners disagree on the run BEFORE the dot —
-      // Go calls `0xFF` in `0xFF.5` a number, this port calls it text —
-      // so deleting the arm splits `0xFF.5` and `[0xFF.5]` across ports.
-      // The disagreement is CONDITIONAL on the follow character: this port
-      // decides the run before the dot by looking past the dot, so
-      // `0xFF.5`/`0xFF.0`/`0xFF.`/`0xFF.e5` diverge with no arm while
-      // `0xFF.a`/`0xFF.x`/`0xFF.5x` agree without it — probe an agreeing
-      // shape and this arm looks dead when it is not.
-      // Measured with scripts/parity-probe.sh, not by the suites, which
-      // passed clean without it; lex.tsv's base-prefixed-boundaries rows
-      // now pin it, including one agreeing shape labelled as such. Held
-      // open by NUR.md §NUR061 (ADR-014 wants a linked upstream issue too
-      // — the report is written in design/TABNAS-DOT-BOUNDARY-REPORT.0.md
-      // but unsubmitted, so there is no URL yet). See the Go twin's
-      // comment. The converter reads the exact source, so the placeholder
-      // value is irrelevant.
-      if ('0' === s[si] && undefined !== s[si + 1] && 'xXoObB'.includes(s[si + 1]!)) {
-        const prefix = s[si + 1]!
-        let end = si + 2
-        const bodyStart = end
-        while (isBaseDigit(s[end], prefix) || '_' === s[end]) end++
-        // A run that is not a COMPLETE base-prefixed token — a trailing
-        // `.`, a `.digits` tail, an empty or invalid body — declines to
-        // the stock scanners, which agree on it: both ports keep
-        // `0xFF.5` as one lenient text token. (Until tabnas 0.6.0/0.8.0
-        // they did not — this port's stock scanner split such a run into
-        // stray values — and the matcher claimed the whole prose run in
-        // data mode to hide it. Fixed upstream, shim retired: ADR-014.)
-        if (end === bodyStart || isFollowingText(s, end)) return undefined
-        const src = s.slice(start, end)
-        const tkn = lex.token('#NR', 0, src, cursor)
-        cursor.sI = end
-        cursor.cI += end - start
-        return tkn
-      }
+      // NO base-prefix arm here, deliberately — mirroring the Go twin.
+      // `0x`/`0o`/`0b` runs go to the stock scanners, which as of tabnas
+      // parser v0.8.3 agree across the ports on every shape boru cares
+      // about: the dot boundary (`0xFF.5`, `0xFF.e5`, a trailing `0xFF.`)
+      // and uppercase markers (`0XFF`). Those were the two divergences
+      // that kept an arm here; both were fixed upstream rather than
+      // shimmed (ADR-014), and NUR.md §NUR061 records the close.
+      //
+      // Proven by the cross-port probe, not by this suite — see the Go
+      // twin's comment for the evidence, and keep lex.tsv's
+      // §base-prefixed boundaries rows: they cover the shapes that
+      // actually diverged, which is what makes a green suite meaningful
+      // here at all.
       while (isDigitOrSep(s[si])) si++
       integerEnd = si
       if ('.' === s[si]) {

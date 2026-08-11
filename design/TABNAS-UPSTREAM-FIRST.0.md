@@ -95,7 +95,27 @@ dependency's bug in order to justify boru code, stop: that comment belongs
 in an upstream issue. A shim that survives the fix becomes dead weight
 nobody dares delete, because its comment no longer describes reality.
 
-## Still open upstream — and the lesson in how it was nearly missed
+## Closed upstream — and the lesson in how it was nearly missed
+
+**Resolved 2026-08-11 in tabnas parser v0.8.3.** Everything below described
+a live divergence until then; it is kept because the *method* is the point,
+and because the retirement it enabled is the ADR's full lifecycle running
+once end to end: shim → report → upstream fix → version bump → shim
+deleted → NUR closed. `matchBasePrefixRun` is gone from both ports.
+
+v0.8.3 fixed two divergences, not one. The dot boundary described below,
+and a second found while writing the report up: the TS regex accepted only
+lowercase marker letters where Go accepted either case, so `0XFF` was
+`#NR(255)` in Go and `#TX` in TS. **One shim was masking both** — which is
+its own argument for reporting rather than shimming, since a shim hides
+whatever else shares its shape.
+
+Retirement was proven by comparing the TWO ports: 25 shapes AGREE under
+`scripts/parity-probe.sh`, `parser-crossdiff` IDENTICAL over 1765 rows, and
+the `lex.tsv` §base-prefixed boundaries rows still passing — those rows pin
+the previous behaviour, so passing means the renders did not move, and
+because they cover the shapes that actually diverged their silence is
+evidence rather than the absence of it. See `NUR.md` §NUR061.
 
 The base-prefix **overflow** divergence reported after v0.8.0 is FIXED in
 jsonic v0.6.1 / parser v0.8.1: both ports now round the true value, so

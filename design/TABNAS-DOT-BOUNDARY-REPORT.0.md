@@ -1,8 +1,20 @@
 # Upstream report — base-prefixed run before a registered `.` token
 
-**Status:** ready to file. Not yet submitted upstream, so no issue URL
-exists; when one is filed, put it in `NUR.md` §NUR061 and in both
-`matchBasePrefixRun` comments (ADR-014 asks for the link).
+**Status: FIXED upstream in tabnas parser v0.8.3 — never filed.** The fix
+landed before the report was submitted, so no issue URL was ever minted;
+this document and `NUR.md` §NUR061 are the audit trail ADR-014 asks for.
+`matchBasePrefixRun` is deleted from both ports.
+
+Both defects below are closed. Re-measured against the bare dependency in
+both ports at v0.8.3: `0xFF.5`, `0xFF.0`, `0xFF.`, `0xFF.e5`, `0o17.5` and
+`0b101.5` all classify the leading run as `#NR` in each port (Defect 1), and
+`0XFF`, `0O17`, `0B101`, `0X1_F`, `-0XFF` are `#NR` in each (Defect 2). The
+controls are unchanged.
+
+Kept as written, in the past tense it was drafted in, because the *method*
+outlives the bug: measure both ports, distrust a single port's green suite,
+and pin an agreeing shape alongside a diverging one so a future probe cannot
+mistake agreement for absence.
 
 This is the defect report itself, kept in-tree so the measurements are
 reviewable and re-runnable rather than living in a chat log. Everything
