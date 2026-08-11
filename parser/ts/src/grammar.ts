@@ -462,12 +462,19 @@ function setupDecimalBoundaryMatcher(j: any, dataMode: boolean): void {
       // a token, the stock scanners disagree on the run BEFORE the dot —
       // Go calls `0xFF` in `0xFF.5` a number, this port calls it text —
       // so deleting the arm splits `0xFF.5` and `[0xFF.5]` across ports.
+      // The disagreement is CONDITIONAL on the follow character: this port
+      // decides the run before the dot by looking past the dot, so
+      // `0xFF.5`/`0xFF.0`/`0xFF.`/`0xFF.e5` diverge with no arm while
+      // `0xFF.a`/`0xFF.x`/`0xFF.5x` agree without it — probe an agreeing
+      // shape and this arm looks dead when it is not.
       // Measured with scripts/parity-probe.sh, not by the suites, which
       // passed clean without it; lex.tsv's base-prefixed-boundaries rows
-      // now pin it. Held open by NUR.md §NUR061 (ADR-014 wants a linked
-      // upstream issue too — the report is prepared but unfiled, so there
-      // is no URL yet). See the Go twin's comment. The converter reads the
-      // exact source, so the placeholder value is irrelevant.
+      // now pin it, including one agreeing shape labelled as such. Held
+      // open by NUR.md §NUR061 (ADR-014 wants a linked upstream issue too
+      // — the report is written in design/TABNAS-DOT-BOUNDARY-REPORT.0.md
+      // but unsubmitted, so there is no URL yet). See the Go twin's
+      // comment. The converter reads the exact source, so the placeholder
+      // value is irrelevant.
       if ('0' === s[si] && undefined !== s[si + 1] && 'xXoObB'.includes(s[si + 1]!)) {
         const prefix = s[si + 1]!
         let end = si + 2

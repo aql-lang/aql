@@ -41,7 +41,16 @@ a"s"	OK	[{"name":"#TX","src":"a","si":0},{"name":"#ST","src":"\"s\"","si":1}]
 #   before a `.`, Go's stock scanner calls `0xFF` a number and this port's
 #   calls it text. These rows pin the token classification so a retirement
 #   sweep must measure it instead of trusting the suites' silence.
+#
+#   READ THIS BEFORE USING THESE ROWS AS EVIDENCE. The stock scanners only
+#   disagree for SOME follow characters: TS decides the run before the dot
+#   by looking PAST the dot, so `0xFF.5` and `0xFF.e5` diverge without the
+#   arm while `0xFF.x` agrees. Probing an agreeing shape and concluding the
+#   arm is dead is precisely the mistake this section exists to prevent, so
+#   one of each is pinned and labelled.
 0xFF.5	OK	[{"name":"#NR","src":"0xFF","si":0},{"name":"#DT","src":".","si":4},{"name":"#NR","src":"5","si":5}]
+0xFF.e5	OK	[{"name":"#NR","src":"0xFF","si":0},{"name":"#DT","src":".","si":4},{"name":"#TX","src":"e5","si":5}]
+0xFF.x	OK	[{"name":"#NR","src":"0xFF","si":0},{"name":"#DT","src":".","si":4},{"name":"#TX","src":"x","si":5}]
 0x8000000000000000	OK	[{"name":"#NR","src":"0x8000000000000000","si":0}]
 0xFFFFFFFFFFFFFFFF	OK	[{"name":"#NR","src":"0xFFFFFFFFFFFFFFFF","si":0}]
 0XFF	OK	[{"name":"#NR","src":"0XFF","si":0}]

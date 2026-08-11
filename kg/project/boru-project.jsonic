@@ -234,6 +234,8 @@
       attributes: { role: "the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences" } }
     { key: "tabnas-upstream-first", type: "Document", label: "design/TABNAS-UPSTREAM-FIRST.0.md"
       attributes: { role: "ADR-014's case study: why a tabnas parser defect is fixed upstream and never behind a boru shim — the five shims the 2026-08-10 upgrade retired, the two-workarounds-deep episode that earned the rule, and the boundary against boru's own grammar-layer divergences" } }
+    { key: "tabnas-dot-boundary-report", type: "Document", label: "design/TABNAS-DOT-BOUNDARY-REPORT.0.md"
+      attributes: { role: "the file-ready upstream defect report for the last live tabnas shim: both ports' runnable reproduction against the bare dependency, the follow-character table showing the divergence is conditional (0xFF.5 differs, 0xFF.x agrees), and the acceptance criterion that a regression test must cover both" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [
