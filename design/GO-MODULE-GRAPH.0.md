@@ -411,13 +411,13 @@ the figures agree exactly.
 | `test/solardemo` | **100.0%** | 108 / 108 | 100.0% | — | — |
 | `wpg/serve` | **100.0%** | 47 / 47 | 100.0% | — | — |
 | `lang/go` | 98.9% | 27,153 / 27,450 | 100.0% | — | — |
+| `check/go` | **100.0%** | 2,192 / 2,192 | 100.0% | 100 (hard) | 0.0 |
 | `eng/go` | 87.9% | 900 / 1,024 | 100.0% | 84 (ratchet) | +3.9 |
 | `compiler/go` | 63.0% | 2,885 / 4,581 | 100.0% | 62 (ratchet) | +1.0 |
-| `check/go` | 51.5% | 1,122 / 2,180 | 100.0% | 51 (ratchet) | +0.5 |
 | `basic/go` | 44.9% | 1,470 / 3,274 | 100.0% | — | — |
 | `test/specfix` | **30.6%** | 335 / 1,093 | 100.0% | — | — |
 
-Seven of the thirteen modules are fully self-sufficient — they prove
+Eight of the thirteen modules are fully self-sufficient — they prove
 themselves without help from any other suite.
 
 Denominators drift by a few statements between the two columns for the
@@ -454,11 +454,23 @@ nothing stopping that number drifting downward. Its TypeScript twin
 `basic/ts` is gated at 100 line coverage by `make test-ts-basic`; the Go half
 has no equivalent.
 
-**`check/go` and `compiler/go` sit right on their floors** at +0.5 and +1.0,
-both re-based recently with nothing to bank. The `check/go` figure is worth a
-second look precisely because it is *unchanged*: the Makefile's own comment
-predicts 1122/2180 = 51.5% for the state after the 2026-08-08 carrier-lattice
-move, and that is exactly what it still measures.
+**`check/go` closed its gap entirely.** It sat at 51.5% when this note was
+first measured — right on a re-based floor, with the whole deficit being
+WHERE the driving tests lived. The campaign that followed gave check its own
+.tsv corpus (a runner, a fixture vocabulary, and seven spec files whose
+expectations were discovered from the checker before being recorded), a
+braid-armed unit layer (EmitRecorder stubs and DispatchBraid doubles — the
+same shape the compiler installs, which is exactly what the S3 seam
+permits), and engine-stepping tests for the shaped-method model. Nine
+covergate:allow pragmas graduated along the way — guards whose
+"unreachable" claims held only while nothing armed the seams from check's
+own suite; the gate itself flagged each one the moment it became covered.
+CHECK_GATE_FLOOR now reads 100 and is a hard contract, not a ratchet: 2,192
+of 2,192 reachable statements, 7 allowlisted across 6 blocks, each carrying
+its proof.
+
+**`compiler/go` sits right on its floor** at +1.0, re-based recently with
+nothing to bank.
 
 **Nothing in the standalone column contradicts the merged column.** Every
 module is at 100% merged; the standalone column measures self-sufficiency,
