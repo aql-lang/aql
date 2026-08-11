@@ -50,3 +50,7 @@ defq rdq [ [ n:Integer ] [ Integer ] [ n ] ] defq rdq [ [ n:Integer ] [ Integer 
 
 # --- malformed specs refuse loudly ---
 defq badlenq [ [ n:Integer ] [ Integer ] ]	ERROR:multiple of 3
+
+# --- a body that nets NOTHING for a declared return always errors ---
+defq noretq [ [ n:Integer ] [ Integer ] [ ] ] 5 noretq	Integer :: !type_error	empty body, declared Integer: the call is a guaranteed program error
+defq nr2q [ [ n:Integer ] [ Integer ] [ ] ] defq callq [ [ n:Integer ] [ Integer ] [ n nr2q ] ] 5 callq	Integer	the same fault inside another fn's body is conditional, so silent
