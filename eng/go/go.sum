@@ -22,3 +22,5 @@ github.com/tabnas/parser/go v0.8.1 h1:cceJrsDycMX+HfmxuleCGi/rKIA+dH+/7rkAz8LN70
 github.com/tabnas/parser/go v0.8.1/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
 github.com/tabnas/parser/go v0.8.2 h1:WuM0U7HO/6zhezaF+6anmbIlb6YCPM3CLldsWA8lezQ=
 github.com/tabnas/parser/go v0.8.2/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
+github.com/tabnas/parser/go v0.8.3 h1:GnxbTs2D+lIxO8XN6FHSs+tnqgA/m+MpjIbRKVCQjT8=
+github.com/tabnas/parser/go v0.8.3/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
