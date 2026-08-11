@@ -81,7 +81,7 @@ func refSet(dir, out, qual string) (map[string]bool, error) {
 
 	// The whole repository, not coldSet's consumer list: a reference from
 	// any module keeps a symbol alive, and the facade's own sibling
-	// sub-packages (eng/go/stackform, eng/go/specfix) are consumers too.
+	// sub-packages (eng/go/specfix) are consumers too.
 	walkErr := filepath.WalkDir(repo, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil

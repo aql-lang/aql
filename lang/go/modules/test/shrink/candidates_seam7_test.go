@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/stackform"
 )
 
 // TestDropOpCandidates_NilForm covers the nil-guard early return.

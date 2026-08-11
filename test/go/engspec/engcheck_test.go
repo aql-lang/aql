@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/eng/go/specfix"
+	"github.com/boru-lang/boru/test/specfix"
 	"github.com/boru-lang/boru/parser/go"
 )
 

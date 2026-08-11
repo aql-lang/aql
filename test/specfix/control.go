@@ -14,57 +14,59 @@ package specfix
 // and only the integer-count `for`.
 
 import (
-	eng "github.com/boru-lang/boru/eng/go"
+	check "github.com/boru-lang/boru/check/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // fixSpliceArg mirrors basic's spliceArg: a plain concrete list is a
 // code body — wrap it in parens so the engine evaluates it inline —
 // and anything else is a value used as-is.
-func fixSpliceArg(v eng.Value) []eng.Value {
+func fixSpliceArg(v core.Value) []core.Value {
 	if fixIsCodeBody(v) {
-		elems, _ := eng.AsList(v)
-		result := make([]eng.Value, 0, elems.Len()+2)
-		result = append(result, eng.NewOpenParen())
+		elems, _ := core.AsList(v)
+		result := make([]core.Value, 0, elems.Len()+2)
+		result = append(result, core.NewOpenParen())
 		for i := 0; i < elems.Len(); i++ {
 			result = append(result, elems.Get(i))
 		}
-		result = append(result, eng.NewCloseParen())
+		result = append(result, core.NewCloseParen())
 		return result
 	}
-	return []eng.Value{v}
+	return []core.Value{v}
 }
 
-func fixIsCodeBody(v eng.Value) bool {
-	return v.Parent.Equal(eng.TList) && v.Data != nil && !eng.IsTypedList(v) && !eng.IsTableType(v)
+func fixIsCodeBody(v core.Value) bool {
+	return v.Parent.Equal(core.TList) && v.Data != nil && !core.IsTypedList(v) && !core.IsTableType(v)
 }
 
 // fixIfMarkMoveTokens builds the lazy-condition token stream: mark +
 // condition body + move-if carrying the two branch continuations.
-func fixIfMarkMoveTokens(cond eng.Value, thenBranch, elseBranch []eng.Value) ([]eng.Value, bool) {
+func fixIfMarkMoveTokens(cond core.Value, thenBranch, elseBranch []core.Value) ([]core.Value, bool) {
 	if !fixIsCodeBody(cond) {
 		return nil, false
 	}
-	lst, _ := eng.AsList(cond)
+	lst, _ := core.AsList(cond)
 	condSlice := lst.Slice()
-	id := eng.NextMarkID()
-	tokens := make([]eng.Value, 0, len(condSlice)+2)
-	tokens = append(tokens, eng.NewMark(id, condSlice...))
+	id := core.NextMarkID()
+	tokens := make([]core.Value, 0, len(condSlice)+2)
+	tokens = append(tokens, core.NewMark(id, condSlice...))
 	tokens = append(tokens, condSlice...)
-	tokens = append(tokens, eng.NewMoveIf(id, "if", &eng.IfCont{
+	tokens = append(tokens, core.NewMoveIf(id, "if", &core.IfCont{
 		Then: thenBranch,
 		Else: elseBranch,
 	}))
 	return tokens, true
 }
 
-func fixIf3Handler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+func fixIf3Handler(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 	cond := args[0]
 	thenBranch := fixSpliceArg(args[1])
 	elseBranch := fixSpliceArg(args[2])
 	if tokens, ok := fixIfMarkMoveTokens(cond, thenBranch, elseBranch); ok {
 		return tokens, nil
 	}
-	if eng.CoerceBoolean(cond) {
+	if core.CoerceBoolean(cond) {
 		return thenBranch, nil
 	}
 	return elseBranch, nil
@@ -72,13 +74,13 @@ func fixIf3Handler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *e
 
 // fixCondFragment captures the condition body as its own fragment when
 // emitting, so the lowering runs it inline before JMP_IF_FALSE.
-func fixCondFragment(r *eng.Registry, cond eng.Value) (eng.EmitFragmentRef, []eng.Value) {
-	es, _ := r.Check.Recorder().(*eng.EmitState)
-	if !es.Armed() || !eng.IsConcrete(cond) || !cond.Parent.ConformsTo(eng.TList) {
+func fixCondFragment(r *core.Registry, cond core.Value) (core.EmitFragmentRef, []core.Value) {
+	es, _ := r.Check.Recorder().(*compiler.EmitState)
+	if !es.Armed() || !core.IsConcrete(cond) || !cond.Parent.ConformsTo(core.TList) {
 		return nil, nil
 	}
 	es.ArmBranchCapture()
-	stk, _ := eng.RunCarrierCondBody(r, cond)
+	stk, _ := core.RunCarrierCondBody(r, cond)
 	return es.TakeFragment(), stk
 }
 
@@ -86,34 +88,34 @@ func fixCondFragment(r *eng.Registry, cond eng.Value) (eng.EmitFragmentRef, []en
 // reduction, per-arm body capture under guard narrowing, the carrier
 // join, and the BranchRecord — the core of basic's if3ReturnsFn with
 // the plain-check-only optimisations left out.
-func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+func fixIf3ReturnsFn(args []core.Value, r *core.Registry) []core.Value {
 	es := r.Check
-	if lit, ok := eng.LiteralCondValue(args[0]); ok {
+	if lit, ok := core.LiteralCondValue(args[0]); ok {
 		branch := "else"
 		if !lit {
 			branch = "then"
 		}
-		r.Check.AddDiagnostic(eng.CheckDiagnostic{
+		r.Check.AddDiagnostic(core.CheckDiagnostic{
 			Code:   "unreachable_branch",
-			Detail: "if condition is a constant " + eng.BoolWord(lit) + "; " + branch + "-branch is unreachable",
+			Detail: "if condition is a constant " + core.BoolWord(lit) + "; " + branch + "-branch is unreachable",
 			Word:   "if",
 			Row:    r.Check.CurCallPos.Row,
 			Col:    r.Check.CurCallPos.Col,
 		})
-		var stk []eng.Value
-		var defs map[string]eng.Value
+		var stk []core.Value
+		var defs map[string]core.Value
 		if lit {
-			restore := eng.ApplyGuardNarrowing(r, args[0])
+			restore := core.ApplyGuardNarrowing(r, args[0])
 			es.Recorder().ArmBranchCapture()
-			stk, defs = eng.RunCarrierBodyWithDefs(r, args[1])
+			stk, defs = core.RunCarrierBodyWithDefs(r, args[1])
 			restore()
-			eng.InstallJoinedDefs(r, defs, nil)
+			core.InstallJoinedDefs(r, defs, nil)
 		} else {
-			restore := eng.ApplyComplementNarrowing(r, args[0])
+			restore := core.ApplyComplementNarrowing(r, args[0])
 			es.Recorder().ArmBranchCapture()
-			stk, defs = eng.RunCarrierBodyWithDefs(r, args[2])
+			stk, defs = core.RunCarrierBodyWithDefs(r, args[2])
 			restore()
-			eng.InstallJoinedDefs(r, nil, defs)
+			core.InstallJoinedDefs(r, nil, defs)
 		}
 		frag := recorderState(es).TakeFragment()
 		if len(stk) == 0 {
@@ -122,40 +124,40 @@ func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 		}
 		out := stk[len(stk)-1]
 		taken := lit
-		recorderState(es).RecordBranch(eng.BranchRecord{
+		recorderState(es).RecordBranch(core.BranchRecord{
 			ConstCond: &taken, HasElse: true,
 			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos(),
 		})
-		return []eng.Value{out}
+		return []core.Value{out}
 	}
 
 	condFrag, condStk := fixCondFragment(r, args[0])
 
-	arm := func(v eng.Value, narrow func() func()) (frag eng.EmitFragmentRef, stk []eng.Value, defs map[string]eng.Value, value *eng.Value) {
+	arm := func(v core.Value, narrow func() func()) (frag core.EmitFragmentRef, stk []core.Value, defs map[string]core.Value, value *core.Value) {
 		if fixIsCodeBody(v) {
 			restore := narrow()
 			es.Recorder().ArmBranchCapture()
-			stk, defs = eng.RunCarrierBodyWithDefs(r, v)
+			stk, defs = core.RunCarrierBodyWithDefs(r, v)
 			frag = recorderState(es).TakeFragment()
 			restore()
 			return frag, stk, defs, nil
 		}
-		if es.Recorder().Active() && !eng.IsConcrete(v) && v.Parent != nil && v.Parent.ConformsTo(eng.TList) {
+		if es.Recorder().Active() && !core.IsConcrete(v) && v.Parent != nil && v.Parent.ConformsTo(core.TList) {
 			// A COMPUTED list arm is the interpreter's spliced code body;
 			// the fixture does not model it — refuse the compile.
 			es.Recorder().MarkUncompilable("fixture if: computed list arm")
 		}
 		vv := v
-		return nil, []eng.Value{v}, nil, &vv
+		return nil, []core.Value{v}, nil, &vv
 	}
-	thenFrag, thenStk, thenDefs, thenValue := arm(args[1], func() func() { return eng.ApplyGuardNarrowing(r, args[0]) })
-	elseFrag, elseStk, elseDefs, elseValue := arm(args[2], func() func() { return eng.ApplyComplementNarrowing(r, args[0]) })
+	thenFrag, thenStk, thenDefs, thenValue := arm(args[1], func() func() { return core.ApplyGuardNarrowing(r, args[0]) })
+	elseFrag, elseStk, elseDefs, elseValue := arm(args[2], func() func() { return core.ApplyComplementNarrowing(r, args[0]) })
 
-	eng.InstallJoinedDefs(r, thenDefs, elseDefs)
-	joined := eng.JoinCarrierStacks(thenStk, elseStk)
+	core.InstallJoinedDefs(r, thenDefs, elseDefs)
+	joined := core.JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
-		out := eng.NewCarrier(eng.TNone)
-		recorderState(es).RecordBranch(eng.BranchRecord{
+		out := core.NewCarrier(core.TNone)
+		recorderState(es).RecordBranch(core.BranchRecord{
 			Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -163,35 +165,35 @@ func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 		if !es.Recorder().Active() {
 			return nil
 		}
-		return []eng.Value{out}
+		return []core.Value{out}
 	}
 	out := joined[len(joined)-1]
-	recorderState(es).RecordBranch(eng.BranchRecord{
+	recorderState(es).RecordBranch(core.BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
 	})
-	return []eng.Value{out}
+	return []core.Value{out}
 }
 
 // fixRunForLoop mirrors basic's RunForLoop for the count form: install
 // the iterator, build mark + body + move-cont tokens; the engine's
 // stepMoveCont drives the remaining iterations through the ForCont.
-func fixRunForLoop(r *eng.Registry, start, end, step int64, iterName string, body eng.Value) ([]eng.Value, error) {
+func fixRunForLoop(r *core.Registry, start, end, step int64, iterName string, body core.Value) ([]core.Value, error) {
 	if step > 0 && start >= end {
 		return nil, nil
 	}
-	if !eng.IsConcrete(body) { //covergate:allow both callers pass a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
-		return nil, &eng.BoruError{Code: "for_error", Detail: "for: body must be a concrete list, got type literal"}
+	if !core.IsConcrete(body) { //covergate:allow both callers pass a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
+		return nil, &core.BoruError{Code: "for_error", Detail: "for: body must be a concrete list, got type literal"}
 	}
-	lst, _ := eng.AsList(body)
+	lst, _ := core.AsList(body)
 	bodySlice := lst.Slice()
 
-	eng.InstallDef(r, iterName, eng.NewInteger(start))
+	core.InstallDef(r, iterName, core.NewInteger(start))
 
-	bodyCopy := make([]eng.Value, len(bodySlice))
+	bodyCopy := make([]core.Value, len(bodySlice))
 	copy(bodyCopy, bodySlice)
-	cont := &eng.ForCont{
+	cont := &core.ForCont{
 		Registry: r,
 		IterName: iterName,
 		Current:  start,
@@ -200,20 +202,20 @@ func fixRunForLoop(r *eng.Registry, start, end, step int64, iterName string, bod
 		Body:     bodyCopy,
 	}
 
-	id := eng.NextMarkID()
-	tokens := make([]eng.Value, 0, len(bodySlice)+2)
-	tokens = append(tokens, eng.NewMark(id, bodySlice...))
-	bodyTokens := make([]eng.Value, len(bodySlice))
+	id := core.NextMarkID()
+	tokens := make([]core.Value, 0, len(bodySlice)+2)
+	tokens = append(tokens, core.NewMark(id, bodySlice...))
+	bodyTokens := make([]core.Value, len(bodySlice))
 	copy(bodyTokens, bodySlice)
 	tokens = append(tokens, bodyTokens...)
-	tokens = append(tokens, eng.NewMoveCont(id, "for loop", cont))
+	tokens = append(tokens, core.NewMoveCont(id, "for loop", cont))
 	return tokens, nil
 }
 
-func fixForCountHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+func fixForCountHandler(args []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
 	n, err := args[0].AsConcreteInteger()
 	if err != nil { //covergate:allow the count is a dispatch-matched Integer argument and handlers never run on carriers; a bare Integer literal cannot bind the sig slot
-		return nil, &eng.BoruError{Code: "for_error", Detail: "for: count must be a concrete Integer"}
+		return nil, &core.BoruError{Code: "for_error", Detail: "for: count must be a concrete Integer"}
 	}
 	return fixRunForLoop(r, 0, n, 1, "i", args[1])
 }
@@ -221,36 +223,36 @@ func fixForCountHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value,
 // fixForReturnsFn is the count-form loop model: fixed-point body
 // analysis with the iterator as a typed carrier, the statically-zero
 // prune, and the RecordLoop event with its static region size.
-func fixForReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+func fixForReturnsFn(args []core.Value, r *core.Registry) []core.Value {
 	body := args[1]
-	iter := eng.NewCarrier(eng.TInteger)
-	es, _ := r.Check.Recorder().(*eng.EmitState)
+	iter := core.NewCarrier(core.TInteger)
+	es, _ := r.Check.Recorder().(*compiler.EmitState)
 
 	cv := args[0]
 	staticCount := int64(-1)
-	if eng.IsConcrete(cv) && cv.Parent.ConformsTo(eng.TInteger) {
-		if n, err := eng.AsInteger(cv); err == nil {
+	if core.IsConcrete(cv) && cv.Parent.ConformsTo(core.TInteger) {
+		if n, err := core.AsInteger(cv); err == nil {
 			staticCount = n
 			if n <= 0 {
-				return []eng.Value{}
+				return []core.Value{}
 			}
 		}
 	}
 
-	startV, endV, stepV := eng.NewInteger(0), cv, eng.NewInteger(1)
-	lowerable := cv.Parent.ConformsTo(eng.TInteger)
+	startV, endV, stepV := core.NewInteger(0), cv, core.NewInteger(1)
+	lowerable := cv.Parent.ConformsTo(core.TInteger)
 	if lowerable {
 		es.ArmLoopCapture()
 	}
 	provenTrips := staticCount >= 1
-	stk := eng.AnalyseLoopBody(r, body, []string{"i"}, []eng.Value{iter}, provenTrips)
-	out := eng.NewCarrier(eng.TList)
+	stk := check.AnalyseLoopBody(r, body, []string{"i"}, []core.Value{iter}, provenTrips)
+	out := core.NewCarrier(core.TList)
 	if len(stk) > 0 {
 		top := stk[len(stk)-1]
-		if eng.IsDisjunct(top) {
-			out = eng.NewCarrierTypedListValue(top)
+		if core.IsDisjunct(top) {
+			out = core.NewCarrierTypedListValue(top)
 		} else {
-			out = eng.NewCarrierTypedList(top.Parent)
+			out = core.NewCarrierTypedList(top.Parent)
 		}
 	}
 	if lowerable {
@@ -262,45 +264,45 @@ func fixForReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, regionN, args[0].Pos())
 	}
 	if len(stk) == 0 && (!es.Active() || !lowerable) {
-		return []eng.Value{}
+		return []core.Value{}
 	}
 	// Plain check: a statically-counted loop leaves the SPREAD of its
 	// per-iteration residual, exactly like the runtime.
 	const spreadCap = 256
 	if !es.Active() && staticCount >= 0 && len(stk) > 0 && staticCount*int64(len(stk)) <= spreadCap {
-		spread := make([]eng.Value, 0, int(staticCount)*len(stk))
+		spread := make([]core.Value, 0, int(staticCount)*len(stk))
 		for i := int64(0); i < staticCount; i++ {
 			spread = append(spread, stk...)
 		}
 		return spread
 	}
-	return []eng.Value{out}
+	return []core.Value{out}
 }
 
 // registerEngSpecControl installs the fixture `if` and `for`.
-func registerEngSpecControl(r *eng.Registry) {
-	r.RegisterNativeFunc(eng.NativeFunc{
+func registerEngSpecControl(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "if",
-		Signatures: []eng.Signature{{
-			Args:       []*eng.Type{eng.TAny, eng.TAny, eng.TAny},
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TAny, core.TAny, core.TAny},
 			NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
-			Impl:       eng.Go(fixIf3Handler),
+			Impl:       core.Go(fixIf3Handler),
 			ReturnsFn:  fixIf3ReturnsFn, BarrierPos: -1,
 		}},
 	})
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "for",
-		Signatures: []eng.Signature{
+		Signatures: []core.Signature{
 			{
-				Args:       []*eng.Type{eng.TInteger, eng.TList},
+				Args:       []*core.Type{core.TInteger, core.TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Impl:       eng.Go(fixForCountHandler),
+				Impl:       core.Go(fixForCountHandler),
 				ReturnsFn:  fixForReturnsFn, BarrierPos: -1,
 			},
 			{
-				Args:       []*eng.Type{eng.TList, eng.TList},
+				Args:       []*core.Type{core.TList, core.TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Impl:       eng.Go(fixForRangeHandler),
+				Impl:       core.Go(fixForRangeHandler),
 				ReturnsFn:  fixForRangeReturnsFn, BarrierPos: -1,
 			},
 		},
@@ -310,13 +312,13 @@ func registerEngSpecControl(r *eng.Registry) {
 // fixDoHandler mirrors basic's DoListHandler: run the body with no
 // inputs through the InvokeBody seam (so the VM can run it as a
 // compiled closure) and surface a body error as an Error VALUE.
-func fixDoHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-	if !eng.IsConcrete(args[0]) { //covergate:allow the body is a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
-		return nil, &eng.BoruError{Code: "do_error", Detail: "doq: argument must be a concrete list, got type literal"}
+func fixDoHandler(args []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
+	if !core.IsConcrete(args[0]) { //covergate:allow the body is a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
+		return nil, &core.BoruError{Code: "do_error", Detail: "doq: argument must be a concrete list, got type literal"}
 	}
-	result, err := eng.InvokeBody(r, args[0], nil)
+	result, err := core.InvokeBody(r, args[0], nil)
 	if err != nil {
-		return []eng.Value{eng.NewError(err)}, nil
+		return []core.Value{core.NewError(err)}, nil
 	}
 	return result, nil
 }
@@ -328,17 +330,17 @@ func fixDoHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *en
 // builtin TYPE names pass through raw — resolveTypeNameArgs), so the
 // body arrives as a value, never a Word. Raising bodies are outside
 // the fixture's model — battery rows keep bodies infallible.
-func fixDoReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+func fixDoReturnsFn(args []core.Value, r *core.Registry) []core.Value {
 	body := args[0]
-	if !(eng.IsConcrete(body) && body.Parent.ConformsTo(eng.TList)) {
-		return []eng.Value{eng.NewDynamicCarrier(eng.TAny)}
+	if !(core.IsConcrete(body) && body.Parent.ConformsTo(core.TList)) {
+		return []core.Value{core.NewDynamicCarrier(core.TAny)}
 	}
 	r.Check.CaughtBodyDepth++
-	stk := eng.RunCarrierBodyKeepDefs(r, body)
+	stk := core.RunCarrierBodyKeepDefs(r, body)
 	r.Check.CaughtBodyDepth--
 	if len(stk) == 0 {
-		if bl, err := eng.AsList(body); err == nil && !bl.IsNil() && bl.Len() > 0 {
-			return []eng.Value{eng.NewCarrier(eng.TError)}
+		if bl, err := core.AsList(body); err == nil && !bl.IsNil() && bl.Len() > 0 {
+			return []core.Value{core.NewCarrier(core.TError)}
 		}
 		return nil
 	}
@@ -352,31 +354,31 @@ func fixDoReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 // CompileDynBody, the each/fold shape): a body the closure path
 // declines lowers to an interpreter ISLAND instead of a DynEnv call,
 // driving the fallback-span record/lower/VM path.
-func registerEngSpecCallable(r *eng.Registry) {
-	r.RegisterNativeFunc(eng.NativeFunc{
+func registerEngSpecCallable(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "dofbq",
-		Callable: &eng.CallableSpec{BodyPos: 0, BodyOut: eng.BodyOutResidual, Inputs: func(_ []eng.Value) []eng.Value {
-			return []eng.Value{}
+		Callable: &core.CallableSpec{BodyPos: 0, BodyOut: core.BodyOutResidual, Inputs: func(_ []core.Value) []core.Value {
+			return []core.Value{}
 		}},
-		Signatures: []eng.Signature{{
-			Args:       []*eng.Type{eng.TList},
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Impl:       eng.Go(fixDoHandler),
+			Impl:       core.Go(fixDoHandler),
 			ReturnsFn:  fixDoReturnsFn, BarrierPos: -1,
-			CompileEffect: eng.CompileFallbackBody,
+			CompileEffect: core.CompileFallbackBody,
 		}},
 	})
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "doq",
-		Callable: &eng.CallableSpec{BodyPos: 0, BodyOut: eng.BodyOutResidual, Inputs: func(_ []eng.Value) []eng.Value {
-			return []eng.Value{}
+		Callable: &core.CallableSpec{BodyPos: 0, BodyOut: core.BodyOutResidual, Inputs: func(_ []core.Value) []core.Value {
+			return []core.Value{}
 		}},
-		Signatures: []eng.Signature{{
-			Args:       []*eng.Type{eng.TList},
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Impl:       eng.Go(fixDoHandler),
+			Impl:       core.Go(fixDoHandler),
 			ReturnsFn:  fixDoReturnsFn, BarrierPos: -1,
-			CompileEffect: eng.CompileFallbackBody | eng.CompileDynBody,
+			CompileEffect: core.CompileFallbackBody | core.CompileDynBody,
 		}},
 	})
 }
@@ -384,11 +386,11 @@ func registerEngSpecCallable(r *eng.Registry) {
 // fixParseRange decodes a for-range list mirroring basic's ParseRange:
 // [end] / [start end] / [start end step], every bound a concrete
 // Integer (the VM's OpForSetup taxonomy).
-func fixParseRange(elems []eng.Value) (start, end, step int64, err error) {
-	intAt := func(v eng.Value) (int64, error) {
+func fixParseRange(elems []core.Value) (start, end, step int64, err error) {
+	intAt := func(v core.Value) (int64, error) {
 		n, e := v.AsConcreteInteger()
 		if e != nil {
-			return 0, &eng.BoruError{Code: "for_error", Detail: "for: range: expected a concrete integer"}
+			return 0, &core.BoruError{Code: "for_error", Detail: "for: range: expected a concrete integer"}
 		}
 		return n, nil
 	}
@@ -417,11 +419,11 @@ func fixParseRange(elems []eng.Value) (start, end, step int64, err error) {
 			return 0, 0, 0, err
 		}
 		if step == 0 {
-			return 0, 0, 0, &eng.BoruError{Code: "for_error", Detail: "for: step cannot be zero"}
+			return 0, 0, 0, &core.BoruError{Code: "for_error", Detail: "for: step cannot be zero"}
 		}
 		return start, end, step, nil
 	}
-	return 0, 0, 0, &eng.BoruError{Code: "for_error", Detail: "for: range must have 1-3 elements"}
+	return 0, 0, 0, &core.BoruError{Code: "for_error", Detail: "for: range must have 1-3 elements"}
 }
 
 // fixLoopIterations mirrors basic's LoopIterations for the static
@@ -442,11 +444,11 @@ func fixLoopIterations(start, end, step int64) int64 {
 	return -1 //covergate:allow fixParseRange rejects step==0, so both signed arms above are exhaustive
 }
 
-func fixForRangeHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-	if !eng.IsConcrete(args[0]) { //covergate:allow the range is a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
-		return nil, &eng.BoruError{Code: "for_error", Detail: "for: range must be a concrete list, got type literal"}
+func fixForRangeHandler(args []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
+	if !core.IsConcrete(args[0]) { //covergate:allow the range is a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
+		return nil, &core.BoruError{Code: "for_error", Detail: "for: range must be a concrete list, got type literal"}
 	}
-	lst, _ := eng.AsList(args[0])
+	lst, _ := core.AsList(args[0])
 	start, end, step, err := fixParseRange(lst.Slice())
 	if err != nil {
 		return nil, err
@@ -461,31 +463,31 @@ func fixForRangeHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value,
 // decomposes for RecordLoop; a range whose bounds are computed keeps
 // const start/step and resolves the end operand (basic's
 // computedRangeBounds shape) so the lowering still emits FOR_SETUP.
-func fixForRangeReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+func fixForRangeReturnsFn(args []core.Value, r *core.Registry) []core.Value {
 	body := args[1]
-	iter := eng.NewCarrier(eng.TInteger)
-	es, _ := r.Check.Recorder().(*eng.EmitState)
+	iter := core.NewCarrier(core.TInteger)
+	es, _ := r.Check.Recorder().(*compiler.EmitState)
 
-	var startV, endV, stepV eng.Value
+	var startV, endV, stepV core.Value
 	lowerable, staticBounds := false, false
 	staticCount := int64(-1)
-	if cv := args[0]; eng.IsConcrete(cv) && cv.Parent.ConformsTo(eng.TList) {
-		if lst, err := eng.AsList(cv); err == nil && !lst.IsNil() {
+	if cv := args[0]; core.IsConcrete(cv) && cv.Parent.ConformsTo(core.TList) {
+		if lst, err := core.AsList(cv); err == nil && !lst.IsNil() {
 			elems := lst.Slice()
 			if st, en, sp, perr := fixParseRange(elems); perr == nil {
-				startV, endV, stepV = eng.NewInteger(st), eng.NewInteger(en), eng.NewInteger(sp)
+				startV, endV, stepV = core.NewInteger(st), core.NewInteger(en), core.NewInteger(sp)
 				lowerable, staticBounds = true, true
 				staticCount = fixLoopIterations(st, en, sp)
 				if staticCount == 0 {
-					return []eng.Value{}
+					return []core.Value{}
 				}
 			} else {
 				switch len(elems) {
 				case 1:
-					startV, endV, stepV = eng.NewInteger(0), elems[0], eng.NewInteger(1)
+					startV, endV, stepV = core.NewInteger(0), elems[0], core.NewInteger(1)
 					lowerable = true
 				case 2:
-					startV, endV, stepV = elems[0], elems[1], eng.NewInteger(1)
+					startV, endV, stepV = elems[0], elems[1], core.NewInteger(1)
 					lowerable = true
 				case 3:
 					startV, endV, stepV = elems[0], elems[1], elems[2]
@@ -498,14 +500,14 @@ func fixForRangeReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 		es.ArmLoopCapture()
 	}
 	provenTrips := staticBounds && staticCount >= 1
-	stk := eng.AnalyseLoopBody(r, body, []string{"i"}, []eng.Value{iter}, provenTrips)
-	out := eng.NewCarrier(eng.TList)
+	stk := check.AnalyseLoopBody(r, body, []string{"i"}, []core.Value{iter}, provenTrips)
+	out := core.NewCarrier(core.TList)
 	if len(stk) > 0 {
 		top := stk[len(stk)-1]
-		if eng.IsDisjunct(top) {
-			out = eng.NewCarrierTypedListValue(top)
+		if core.IsDisjunct(top) {
+			out = core.NewCarrierTypedListValue(top)
 		} else {
-			out = eng.NewCarrierTypedList(top.Parent)
+			out = core.NewCarrierTypedList(top.Parent)
 		}
 	}
 	if lowerable {
@@ -517,52 +519,52 @@ func fixForRangeReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, regionN, args[0].Pos())
 	}
 	if len(stk) == 0 && (!es.Active() || !lowerable) {
-		return []eng.Value{}
+		return []core.Value{}
 	}
 	const spreadCap = 256
 	if !es.Active() && staticBounds && staticCount >= 0 && len(stk) > 0 && staticCount*int64(len(stk)) <= spreadCap {
-		spread := make([]eng.Value, 0, int(staticCount)*len(stk))
+		spread := make([]core.Value, 0, int(staticCount)*len(stk))
 		for i := int64(0); i < staticCount; i++ {
 			spread = append(spread, stk...)
 		}
 		return spread
 	}
-	return []eng.Value{out}
+	return []core.Value{out}
 }
 
 // fixBakeFnHandler applies its fn argument to 7 — the runtime side of
 // the battery's stored-fn word.
-func fixBakeFnHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-	info, ok := args[0].Data.(eng.FnDefInfo)
+func fixBakeFnHandler(args []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
+	info, ok := args[0].Data.(core.FnDefInfo)
 	if !ok || len(info.Signatures) == 0 {
-		return nil, &eng.BoruError{Code: "type_error", Detail: "bakefnq: argument must be a fn"}
+		return nil, &core.BoruError{Code: "type_error", Detail: "bakefnq: argument must be a fn"}
 	}
-	return r.CallBoru(&info.Signatures[0], []eng.Value{eng.NewInteger(7)}, nil)
+	return r.CallBoru(&info.Signatures[0], []core.Value{core.NewInteger(7)}, nil)
 }
 
 // registerEngSpecBaking installs `bakefnq` and `bakebodyq` — battery
 // fixtures declaring the stored-fn / stored-body compile capabilities
 // (the spawn / service / codec-handler shapes), so recordCallOperands'
 // baking arms and compileStoredBody run standalone.
-func registerEngSpecBaking(r *eng.Registry) {
-	r.RegisterNativeFunc(eng.NativeFunc{
+func registerEngSpecBaking(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "bakefnq",
-		Signatures: []eng.Signature{{
-			Args:          []*eng.Type{eng.TFunction},
-			Impl:          eng.Go(fixBakeFnHandler),
-			Returns:       []*eng.Type{eng.TAny},
+		Signatures: []core.Signature{{
+			Args:          []*core.Type{core.TFunction},
+			Impl:          core.Go(fixBakeFnHandler),
+			Returns:       []*core.Type{core.TAny},
 			BarrierPos:    -1,
-			CompileEffect: eng.CompileStoresFn,
+			CompileEffect: core.CompileStoresFn,
 		}},
 	})
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "bakebodyq",
-		Signatures: []eng.Signature{{
-			Args:       []*eng.Type{eng.TList},
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Impl:       eng.Go(fixDoHandler),
+			Impl:       core.Go(fixDoHandler),
 			ReturnsFn:  fixDoReturnsFn, BarrierPos: -1,
-			CompileEffect: eng.CompileStoresBody,
+			CompileEffect: core.CompileStoresBody,
 		}},
 	})
 }
@@ -572,65 +574,65 @@ func registerEngSpecBaking(r *eng.Registry) {
 // InvokeBody seam — the minimal mirror of lang's each, registered so
 // the LAMBDA-HOOK compile machinery (tryRecordLambdaClosure,
 // lambdaHookCompatible, lambdaCallbackInputs) has a standalone driver.
-func fixEachHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-	lst, err := eng.AsList(args[1])
+func fixEachHandler(args []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
+	lst, err := core.AsList(args[1])
 	if err != nil || lst.IsNil() { //covergate:allow the data arg is a dispatch-matched concrete List; AsList cannot fail and a parsed list is never nil-backed
-		return []eng.Value{eng.NewList(nil)}, nil
+		return []core.Value{core.NewList(nil)}, nil
 	}
-	out := make([]eng.Value, 0, lst.Len())
+	out := make([]core.Value, 0, lst.Len())
 	for i := 0; i < lst.Len(); i++ {
-		res, err := eng.InvokeBody(r, args[0], []eng.Value{lst.Get(i)})
+		res, err := core.InvokeBody(r, args[0], []core.Value{lst.Get(i)})
 		if err != nil {
 			return nil, err
 		}
 		if len(res) == 0 {
-			return nil, &eng.BoruError{Code: "each_error", Detail: "eachq: body produced no result"}
+			return nil, &core.BoruError{Code: "each_error", Detail: "eachq: body produced no result"}
 		}
 		out = append(out, res[len(res)-1])
 	}
-	return []eng.Value{eng.NewList(out)}, nil
+	return []core.Value{core.NewList(out)}, nil
 }
 
 // fixEachReturnsFn models the residual: a typed list of the body's
 // modeled result over one element carrier (the fixture twin of lang's
 // eachReturnsFn — recorder suspended for the nested model).
-func fixEachReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+func fixEachReturnsFn(args []core.Value, r *core.Registry) []core.Value {
 	defer r.Check.Recorder().Suspend()()
 	body := args[0]
-	if !(eng.IsConcrete(body) && body.Parent.ConformsTo(eng.TList)) {
-		return []eng.Value{eng.NewCarrier(eng.TList)}
+	if !(core.IsConcrete(body) && body.Parent.ConformsTo(core.TList)) {
+		return []core.Value{core.NewCarrier(core.TList)}
 	}
-	bl, err := eng.AsList(body)
+	bl, err := core.AsList(body)
 	if err != nil || bl.IsNil() { //covergate:allow guarded by IsConcrete+ConformsTo(TList) above; AsList cannot fail and a concrete list is never nil-backed
-		return []eng.Value{eng.NewCarrier(eng.TList)}
+		return []core.Value{core.NewCarrier(core.TList)}
 	}
-	toks := append([]eng.Value{eng.ElementCarrierFromValue(args[1])}, bl.Slice()...)
-	stk := eng.RunCarrierBody(r, eng.NewList(toks))
+	toks := append([]core.Value{check.ElementCarrierFromValue(args[1])}, bl.Slice()...)
+	stk := core.RunCarrierBody(r, core.NewList(toks))
 	if len(stk) == 0 {
-		return []eng.Value{eng.NewCarrier(eng.TList)}
+		return []core.Value{core.NewCarrier(core.TList)}
 	}
-	return []eng.Value{eng.NewCarrierTypedList(stk[len(stk)-1].Parent)}
+	return []core.Value{core.NewCarrierTypedList(stk[len(stk)-1].Parent)}
 }
 
 // registerEngSpecHigherOrder installs eachq — the battery's
 // lambda-hook Callable (quotation and Function forms).
-func registerEngSpecHigherOrder(r *eng.Registry) {
-	r.RegisterNativeFunc(eng.NativeFunc{
+func registerEngSpecHigherOrder(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name:          "eachq",
-		CompileEffect: eng.CompileFallbackBody,
-		Callable: &eng.CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []eng.Value) []eng.Value {
-			return []eng.Value{eng.NewElementCarrier(eng.DataListElemTypeFromValue(a[1]))}
+		CompileEffect: core.CompileFallbackBody,
+		Callable: &core.CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []core.Value) []core.Value {
+			return []core.Value{check.NewElementCarrier(check.DataListElemTypeFromValue(a[1]))}
 		}},
-		Signatures: []eng.Signature{
+		Signatures: []core.Signature{
 			{
-				Args:       []*eng.Type{eng.TList, eng.TList},
+				Args:       []*core.Type{core.TList, core.TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Impl:       eng.Go(fixEachHandler),
+				Impl:       core.Go(fixEachHandler),
 				ReturnsFn:  fixEachReturnsFn, BarrierPos: -1,
 			},
 			{
-				Args:      []*eng.Type{eng.TFunction, eng.TList},
-				Impl:      eng.Go(fixEachHandler),
+				Args:      []*core.Type{core.TFunction, core.TList},
+				Impl:      core.Go(fixEachHandler),
 				ReturnsFn: fixEachReturnsFn, BarrierPos: -1,
 			},
 		},
@@ -643,7 +645,7 @@ func registerEngSpecHigherOrder(r *eng.Registry) {
 // nil-receiver guards), exactly as the interface no-ops did before the
 // S2 surface reduction removed the fragment/branch methods from the
 // check-facing interface.
-func recorderState(c *eng.CheckState) *eng.EmitState {
-	es, _ := c.Recorder().(*eng.EmitState)
+func recorderState(c *core.CheckState) *compiler.EmitState {
+	es, _ := c.Recorder().(*compiler.EmitState)
 	return es
 }

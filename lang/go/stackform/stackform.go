@@ -26,7 +26,7 @@
 // the real bytecode path; reach here for PBT shrinking.
 package stackform
 
-import eng "github.com/boru-lang/boru/eng/go"
+import core "github.com/boru-lang/boru/core/go"
 
 // Op is one element of a StackForm. The concrete variants are
 // PushLit, Call, Quote, DoEval (see below).
@@ -42,7 +42,7 @@ type Op interface {
 // Lists with Eval=true that were consumed as code bodies live as
 // Quote, not PushLit.
 type PushLit struct {
-	V eng.Value
+	V core.Value
 }
 
 func (PushLit) opMarker() {}

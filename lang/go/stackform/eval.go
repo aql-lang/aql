@@ -1,7 +1,7 @@
 package stackform
 
 import (
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Flatten serialises a StackForm into a token sequence the kernel
@@ -13,11 +13,11 @@ import (
 //
 // The resulting token sequence does NOT use any forward-collection
 // or paren grouping — it is a pure post-fix program.
-func Flatten(form *StackForm) []eng.Value {
+func Flatten(form *StackForm) []core.Value {
 	if form == nil {
 		return nil
 	}
-	out := make([]eng.Value, 0, len(form.Ops))
+	out := make([]core.Value, 0, len(form.Ops))
 	for _, op := range form.Ops {
 		switch o := op.(type) {
 		case PushLit:
@@ -25,18 +25,18 @@ func Flatten(form *StackForm) []eng.Value {
 		case Call:
 			// stack-only invocation: the engine reaches the Word
 			// with all args already on the stack below it.
-			w := eng.NewWordModified(o.Name, o.Arity, true, false)
+			w := core.NewWordModified(o.Name, o.Arity, true, false)
 			out = append(out, w)
 		case Quote:
 			// nested form serialises to a list literal. The list
 			// is marked Quoted so the kernel doesn't auto-eval it
 			// when consumed.
 			inner := Flatten(o.Body)
-			lst := eng.NewList(inner)
+			lst := core.NewList(inner)
 			lst.Quoted = true
 			out = append(out, lst)
 		case DoEval:
-			out = append(out, eng.NewWord("do"))
+			out = append(out, core.NewWord("do"))
 		}
 	}
 	return out
@@ -47,8 +47,8 @@ func Flatten(form *StackForm) []eng.Value {
 // partner of Compile — Eval(Compile(reg, src).form) should produce
 // the same final stack as running `src` directly (modulo PRNG state
 // for non-deterministic programs).
-func Eval(reg *eng.Registry, form *StackForm) ([]eng.Value, error) {
+func Eval(reg *core.Registry, form *StackForm) ([]core.Value, error) {
 	tokens := Flatten(form)
-	e := eng.NewTop(reg)
+	e := core.NewTop(reg)
 	return e.Run(tokens)
 }

@@ -1,7 +1,7 @@
 package shrink
 
 import (
-	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/stackform"
 )
 
 // Outcome reports how an evaluation of a candidate StackForm

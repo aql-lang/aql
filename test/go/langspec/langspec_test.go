@@ -22,7 +22,7 @@ import (
 
 	core "github.com/boru-lang/boru/core/go"
 
-	"github.com/boru-lang/boru/eng/go/specfix"
+	"github.com/boru-lang/boru/test/specfix"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"

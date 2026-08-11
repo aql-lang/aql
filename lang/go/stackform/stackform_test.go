@@ -3,7 +3,7 @@ package stackform
 import (
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Unit tests for stackform — structural operations on StackForm
@@ -17,7 +17,7 @@ func TestStackFormAppendAndLen(t *testing.T) {
 	if f.Len() != 0 {
 		t.Errorf("empty form len = %d, want 0", f.Len())
 	}
-	f.Append(PushLit{V: eng.NewInteger(1)})
+	f.Append(PushLit{V: core.NewInteger(1)})
 	f.Append(Call{Name: "add", Arity: 2})
 	if f.Len() != 2 {
 		t.Errorf("after 2 appends len = %d, want 2", f.Len())
@@ -26,29 +26,29 @@ func TestStackFormAppendAndLen(t *testing.T) {
 
 func TestStackFormEqual(t *testing.T) {
 	a := &StackForm{Ops: []Op{
-		PushLit{V: eng.NewInteger(1)},
-		PushLit{V: eng.NewInteger(2)},
+		PushLit{V: core.NewInteger(1)},
+		PushLit{V: core.NewInteger(2)},
 		Call{Name: "add", Arity: 2},
 	}}
 	b := &StackForm{Ops: []Op{
-		PushLit{V: eng.NewInteger(1)},
-		PushLit{V: eng.NewInteger(2)},
+		PushLit{V: core.NewInteger(1)},
+		PushLit{V: core.NewInteger(2)},
 		Call{Name: "add", Arity: 2},
 	}}
 	if !Equal(a, b) {
 		t.Error("identical forms should be Equal")
 	}
 	c := &StackForm{Ops: []Op{
-		PushLit{V: eng.NewInteger(1)},
-		PushLit{V: eng.NewInteger(3)},
+		PushLit{V: core.NewInteger(1)},
+		PushLit{V: core.NewInteger(3)},
 		Call{Name: "add", Arity: 2},
 	}}
 	if Equal(a, c) {
 		t.Error("forms differing in a literal should NOT be Equal")
 	}
 	d := &StackForm{Ops: []Op{
-		PushLit{V: eng.NewInteger(1)},
-		PushLit{V: eng.NewInteger(2)},
+		PushLit{V: core.NewInteger(1)},
+		PushLit{V: core.NewInteger(2)},
 		Call{Name: "sub", Arity: 2},
 	}}
 	if Equal(a, d) {
@@ -57,9 +57,9 @@ func TestStackFormEqual(t *testing.T) {
 }
 
 func TestStackFormEqualNestedQuote(t *testing.T) {
-	q1 := &StackForm{Ops: []Op{PushLit{V: eng.NewInteger(42)}}}
-	q2 := &StackForm{Ops: []Op{PushLit{V: eng.NewInteger(42)}}}
-	q3 := &StackForm{Ops: []Op{PushLit{V: eng.NewInteger(43)}}}
+	q1 := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(42)}}}
+	q2 := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(42)}}}
+	q3 := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(43)}}}
 	a := &StackForm{Ops: []Op{Quote{Body: q1}}}
 	b := &StackForm{Ops: []Op{Quote{Body: q2}}}
 	c := &StackForm{Ops: []Op{Quote{Body: q3}}}
@@ -73,11 +73,11 @@ func TestStackFormEqualNestedQuote(t *testing.T) {
 
 func TestStackFormWalk(t *testing.T) {
 	inner := &StackForm{Ops: []Op{
-		PushLit{V: eng.NewInteger(99)},
+		PushLit{V: core.NewInteger(99)},
 		Call{Name: "neg", Arity: 1},
 	}}
 	form := &StackForm{Ops: []Op{
-		PushLit{V: eng.NewInteger(1)},
+		PushLit{V: core.NewInteger(1)},
 		Quote{Body: inner},
 		Call{Name: "wrap", Arity: 1},
 	}}
@@ -85,7 +85,7 @@ func TestStackFormWalk(t *testing.T) {
 	Walk(form, func(_ []int, op Op) bool {
 		switch o := op.(type) {
 		case PushLit:
-			n, _ := eng.AsInteger(o.V)
+			n, _ := core.AsInteger(o.V)
 			seen = append(seen, "lit:"+itoa(n))
 		case Call:
 			seen = append(seen, "call:"+o.Name)
@@ -108,8 +108,8 @@ func TestStackFormWalk(t *testing.T) {
 
 func TestStackFormCost(t *testing.T) {
 	form := &StackForm{Ops: []Op{
-		PushLit{V: eng.NewInteger(1)}, // 1
-		PushLit{V: eng.NewInteger(2)}, // 1
+		PushLit{V: core.NewInteger(1)}, // 1
+		PushLit{V: core.NewInteger(2)}, // 1
 		Call{Name: "add", Arity: 2},   // 2
 	}}
 	if got := Cost(form); got != 4 {

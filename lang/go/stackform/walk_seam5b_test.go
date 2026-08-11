@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // s5beFakeOp is an in-package Op variant unknown to the switches, driving
@@ -55,19 +55,19 @@ func TestS5bECostDoEval(t *testing.T) {
 }
 
 func TestS5bEFlattenQuoteAndDoEval(t *testing.T) {
-	inner := &StackForm{Ops: []Op{PushLit{V: eng.NewInteger(1)}}}
+	inner := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(1)}}}
 	f := &StackForm{Ops: []Op{Quote{Body: inner}, DoEval{}}}
 	out := Flatten(f)
 	if len(out) != 2 {
 		t.Fatalf("Flatten produced %d tokens, want 2", len(out))
 	}
-	if !out[0].Quoted || !out[0].Parent.Equal(eng.TList) {
+	if !out[0].Quoted || !out[0].Parent.Equal(core.TList) {
 		t.Errorf("Quote must flatten to a quoted list, got %v", out[0])
 	}
-	if !eng.IsWord(out[1]) {
+	if !core.IsWord(out[1]) {
 		t.Fatalf("DoEval must flatten to the do word, got %v", out[1])
 	}
-	if w, _ := eng.AsWord(out[1]); w.Name != "do" {
+	if w, _ := core.AsWord(out[1]); w.Name != "do" {
 		t.Errorf("DoEval word = %q, want do", w.Name)
 	}
 }
@@ -84,7 +84,7 @@ func TestS5bEPrettyDoEvalAndUnknownOp(t *testing.T) {
 }
 
 func TestS5bEWalkEarlyStop(t *testing.T) {
-	inner := &StackForm{Ops: []Op{PushLit{V: eng.NewInteger(1)}, PushLit{V: eng.NewInteger(2)}}}
+	inner := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(1)}, PushLit{V: core.NewInteger(2)}}}
 	f := &StackForm{Ops: []Op{Quote{Body: inner}, DoEval{}}}
 
 	// Stop inside the Quote body: the nested walk returns false and the
@@ -113,7 +113,7 @@ func TestS5bEWalkEarlyStop(t *testing.T) {
 }
 
 func TestS5bEOpEqualMismatchArms(t *testing.T) {
-	if opEqual(PushLit{V: eng.NewInteger(1)}, DoEval{}) {
+	if opEqual(PushLit{V: core.NewInteger(1)}, DoEval{}) {
 		t.Error("PushLit vs DoEval must not be equal")
 	}
 	if !opEqual(DoEval{}, DoEval{}) {
@@ -132,8 +132,8 @@ func TestS5bEOpEqualMismatchArms(t *testing.T) {
 		t.Error("forms of different length must not be Equal")
 	}
 	// Quote bodies compare recursively.
-	q1 := Quote{Body: &StackForm{Ops: []Op{PushLit{V: eng.NewInteger(1)}}}}
-	q2 := Quote{Body: &StackForm{Ops: []Op{PushLit{V: eng.NewInteger(2)}}}}
+	q1 := Quote{Body: &StackForm{Ops: []Op{PushLit{V: core.NewInteger(1)}}}}
+	q2 := Quote{Body: &StackForm{Ops: []Op{PushLit{V: core.NewInteger(2)}}}}
 	if opEqual(q1, q2) {
 		t.Error("quotes with different bodies must not be equal")
 	}

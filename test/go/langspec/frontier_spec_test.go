@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/eng/go/specfix"
+	"github.com/boru-lang/boru/test/specfix"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"

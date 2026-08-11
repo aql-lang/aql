@@ -1,7 +1,7 @@
 package modules
 
 import (
-	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/stackform"
 	"github.com/boru-lang/boru/lang/go/native"
 )
 

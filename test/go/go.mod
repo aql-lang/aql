@@ -4,15 +4,21 @@ go 1.24.7
 
 require (
 	github.com/boru-lang/boru/basic/go v0.0.0
-	github.com/boru-lang/boru/eng/go v0.0.0
+	github.com/boru-lang/boru/core/go v0.0.0
 	github.com/boru-lang/boru/lang/go v0.0.0
 )
 
-require github.com/tabnas/bnf/go v0.1.2 // indirect
+require (
+	github.com/boru-lang/boru/check/go v0.0.0 // indirect
+	github.com/boru-lang/boru/compiler/go v0.0.0 // indirect
+	github.com/boru-lang/boru/eng/go v0.0.0 // indirect
+	github.com/tabnas/bnf/go v0.1.2 // indirect
+)
 
 require (
 	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/boru-lang/boru/parser/go v0.0.0
+	github.com/boru-lang/boru/test/specfix v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
@@ -63,3 +69,11 @@ replace github.com/boru-lang/boru/basic/go => ../../basic/go
 replace github.com/boru-lang/boru/lang/go => ../../lang/go
 
 replace github.com/boru-lang/boru/parser/go => ../../parser/go
+
+replace github.com/boru-lang/boru/test/specfix => ../specfix
+
+replace github.com/boru-lang/boru/core/go => ../../core/go
+
+replace github.com/boru-lang/boru/check/go => ../../check/go
+
+replace github.com/boru-lang/boru/compiler/go => ../../compiler/go

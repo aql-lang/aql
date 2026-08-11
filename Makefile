@@ -29,7 +29,7 @@
 
 # Order matters for `make test`: eng must build before basic, basic
 # before lang, etc.
-MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
+MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/specfix test/solardemo
 
 all: test
 

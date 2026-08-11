@@ -1,7 +1,7 @@
 package stackform
 
 import (
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Compile runs `tokens` through an Engine with a StackForm-recording
@@ -20,17 +20,17 @@ import (
 // clock-seeded top-level. The Recorder simply observes what the
 // engine does; if the program is non-deterministic, so is the
 // resulting StackForm.
-func Compile(reg *eng.Registry, tokens []eng.Value) (result []eng.Value, form *StackForm, err error) {
+func Compile(reg *core.Registry, tokens []core.Value) (result []core.Value, form *StackForm, err error) {
 	form = &StackForm{}
 	rec := &recorder{form: form}
-	e := eng.NewTop(reg)
+	e := core.NewTop(reg)
 	e.SetRecorder(rec)
 	result, err = e.Run(tokens)
 	return result, form, err
 }
 
 // recorder is the engine-side Recorder implementation that appends
-// Ops to a StackForm. Implements eng.Recorder.
+// Ops to a StackForm. Implements core.Recorder.
 //
 // skipPushes tracks handler-result re-pushes the engine emits as the
 // main loop scans past spliced results. Without this, every result
@@ -41,7 +41,7 @@ type recorder struct {
 	skipPushes int
 }
 
-func (r *recorder) OnPushLit(v eng.Value) {
+func (r *recorder) OnPushLit(v core.Value) {
 	if r.skipPushes > 0 {
 		r.skipPushes--
 		return
@@ -54,7 +54,7 @@ func (r *recorder) OnCall(name string, arity, returns int) {
 	r.skipPushes += returns
 }
 
-// Skip implements eng.RecorderSkipper. The engine calls this when
+// Skip implements core.RecorderSkipper. The engine calls this when
 // it's about to re-encounter N stack values that have already been
 // emitted (paren-close rewind, etc.).
 func (r *recorder) Skip(n int) {

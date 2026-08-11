@@ -190,7 +190,7 @@ type RecorderSkipper interface {
 }
 
 // Recorder receives events as the Engine executes a program. Used by
-// the eng/go/stackform package to build a canonical strict-stack
+// the lang/go/stackform package to build a canonical strict-stack
 // representation of a program (see design/PBT-PLAN.10.md and
 // design/boru-bytecode-report.0.md). Nil by default; install via
 // Engine.SetRecorder.
