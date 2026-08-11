@@ -336,3 +336,47 @@ func registerIndexFixtures(r *core.Registry) {
 		}},
 	})
 }
+
+// registerMopupFixtures installs letq and tri3q, the last two corpus
+// doors.
+//
+// letq is the plain def binding (`letq name value`, RunInCheck): reading
+// the bound name back is what drives the check-mode def-read tagging —
+// a dynamic bound value tags its origin, so diagnostics can say which
+// def a dynamic operand came from.
+//
+// tri3q is a 3-arg all-Any word: dispatching it in MIXED form (some
+// operands from the stack, some forward-collected) with an Any-typed
+// stack slot is the precondition for the mixed_form_call advisory — the
+// genuine footgun where the mixed reading binds differently from the
+// all-forward one.
+func registerMopupFixtures(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "letq",
+		Signatures: []core.Signature{{
+			Args:      []*core.Type{core.TAtom, core.TAny},
+			QuoteArgs: map[int]bool{0: true},
+			Returns:   []*core.Type{}, BarrierPos: -1,
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
+				name, _ := args[0].AsConcreteAtom()
+				if err := core.ValidateWordName(name); err != nil {
+					return nil, err
+				}
+				reg.Check.RecordDef(name, core.SrcPos{})
+				reg.Defs.Push(name, args[1])
+				return nil, nil
+			}, core.RunInCheck()),
+		}},
+	})
+
+	r.RegisterNativeFunc(core.NativeFunc{
+		Name: "tri3q",
+		Signatures: []core.Signature{{
+			Args:    []*core.Type{core.TAny, core.TAny, core.TAny},
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+			Impl: goImpl(func(args []core.Value) []core.Value {
+				return []core.Value{core.NewInteger(int64(len(args)))}
+			}),
+		}},
+	})
+}

@@ -169,6 +169,7 @@ func checkRow(input string) (string, error) {
 	registerControlFixtures(r)
 	registerDryFixtures(r)
 	registerIndexFixtures(r)
+	registerMopupFixtures(r)
 	r.InitRootContext()
 	r.Source = input
 
