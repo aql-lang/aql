@@ -36,6 +36,32 @@ func TestW8TabnasXmlValueOtherChild(t *testing.T) {
 	}
 }
 
+// --- tabnasXmlToValue non-element top level (the generic fallback) ---
+
+// The `xml` kind is the only caller, and since tabnas/xml v0.7.1 a source
+// that does not denote an element is a parse ERROR rather than a nil result,
+// so the kind's own path no longer reaches this arm. It is covered directly
+// instead of allowlisted: the arm is reachable as a function, and what it
+// must do — hand a non-element top level to the GENERIC conversion rather
+// than mint a malformed Xml element — is worth pinning. Before v0.7.1 the
+// decoder returned `(nil, nil)` for `""`, `"hello"` and `"<!-- c -->"`, and
+// those sources covered this arm through `parse xml`; a future decoder that
+// reintroduces a non-element success would land here again.
+func TestW8TabnasXmlValueNonElementTop(t *testing.T) {
+	// A string top level: generic conversion, NOT an Xml element.
+	v := tabnasXmlToValue("hello")
+	if s, _ := AsString(v); s != "hello" || !v.Is(TString) {
+		t.Errorf("non-map top level -> %s, want String hello", v.String())
+	}
+	if v.Is(TXml) {
+		t.Errorf("non-map top level must not become an Xml element, got %s", v.String())
+	}
+	// The nil top level the pre-v0.7.1 decoder produced: None, not a panic.
+	if got := tabnasXmlToValue(nil); !got.Is(TNone) {
+		t.Errorf("nil top level -> %s, want None", got.String())
+	}
+}
+
 // --- jsonRoundTrip marshal-error path ---
 
 func TestW8JsonRoundTripMarshalError(t *testing.T) {
