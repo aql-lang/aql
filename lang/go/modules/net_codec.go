@@ -471,6 +471,30 @@ type endpointTransport struct {
 	buf []byte
 }
 
+// connectCodecMirror is connect's check-mode guaranteed-error mirror. It
+// runs the handler's own first two decidable steps — the codec-presence
+// requirement and the address parse — over options that are concrete all
+// the way down, so a call that provably refuses before any dial is
+// reported at check time with the byte-identical code, detail and hint.
+// It stops there: resolveCodec may read registry state and the dial
+// itself is an effect, so neither runs during analysis.
+func connectCodecMirror() native.ReturnsFunc {
+	return native.MirrorReturns("connect", native.DeepConcreteOptions,
+		func(args []native.Value, r *native.Registry) error {
+			optsMap, err := native.RequireConcreteMap(args[0], "connect")
+			if err != nil {
+				return nil // not a readable map: dispatch owns the refusal
+			}
+			if _, ok := optsMap.Get("codec"); !ok {
+				return r.BoruErrorHint("net_error", "connect: a codec: is required (use connect-raw for a raw Socket)", "connect",
+					"pass codec: Net.lines / Net.json-lines / Net.http, or a custom {decode encode} map")
+			}
+			_, aErr := parseNetAddr(r, args[0], "connect", false)
+			return aErr
+		},
+		native.ReturnsStatic(native.TService))
+}
+
 func connectHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	optsMap, err := native.RequireConcreteMap(args[0], "connect")
 	if err != nil {
@@ -1003,7 +1027,8 @@ func codecNatives() []native.NativeFunc {
 		}},
 		{Name: "connect", Signatures: []native.Signature{
 			// connect {tcp: "host:port" codec: c} -> Endpoint.
-			{Args: T(native.TMap), Impl: native.Go(connectHandler), Returns: T(native.TService), BarrierPos: -1},
+			{Args: T(native.TMap), Impl: native.Go(connectHandler), Returns: T(native.TService),
+				ReturnsFn: connectCodecMirror(), BarrierPos: -1},
 		}},
 	}
 }

@@ -140,7 +140,7 @@ var unflaggedPins = map[string]int{
 	"module-io.tsv":         35,
 	"module-log.tsv":        6,
 	"module-minilang.tsv":   20,
-	"module-net.tsv":        14,
+	"module-net.tsv":        2,
 	"module-parse.tsv":      4,
 	"module-parselang.tsv":  13,
 	"module-query.tsv":      1,

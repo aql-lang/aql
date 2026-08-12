@@ -455,6 +455,16 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// `convert` of a PROVEN-Float source into a Big target — the one
 	// type-decidable convert refusal (native_type.go convertScalarReturns).
 	"convert_error": SeverityError,
+	// A boru:net address / TLS-option refusal decided from the call's OWN
+	// literal options — a missing tcp:, a port outside 0–65535, a
+	// client-only TLS key on a listener (net_socket.go parseNetAddr,
+	// tlsopts.go). The mirror runs the SAME validator the handler runs and
+	// only on options that are concrete all the way down, so the flagged
+	// program raises this exact code at run time before any socket is
+	// touched. Unclassified, these defaulted to Info and a proven failure
+	// read as a note.
+	"net_error":   SeverityError,
+	"fetch_error": SeverityError,
 	// `set` of a field outside a class instance's CLOSED schema
 	// (native_storage.go setClassInstanceReturns — the runtime's own code).
 	"sealed_field": SeverityError,

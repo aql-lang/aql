@@ -200,7 +200,7 @@ WORD describe
   [Scalar/Atom] barrier=1 quote={0}
   [] barrier=0
 WORD direct
-  [Node/Map] barrier=1 returns=[Any]
+  [Node/Map] barrier=1 returns=[Any] +returnsfn
 WORD div
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
   [Scalar/Bytes Scalar/Bytes] barrier=2 +returnsfn
@@ -608,7 +608,7 @@ WORD pow
   [Scalar/Boolean Scalar/Boolean] barrier=2 +returnsfn
   [Scalar/Atom Scalar/Atom] barrier=2 +returnsfn
 WORD prepare
-  [Node/Map] barrier=1 returns=[Any]
+  [Node/Map] barrier=1 returns=[Any] +returnsfn
 WORD print
   [Any] barrier=1
 WORD printstr

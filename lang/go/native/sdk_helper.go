@@ -11,27 +11,39 @@ import (
 // looks up or creates the SDK instance, and returns the SDK and entity name.
 // The return type is the narrow sdkClient seam (seams.go): production
 // instances are always *udk.UniversalSDK, tests plant fakes in r.SDKCache.
-func getSDK(apiMap ReadMap, opName string, r *Registry) (sdkClient, string, error) {
+// ValidateAPIDescriptor is getSDK's PURE prefix: everything decidable
+// from the descriptor MAP alone — a missing "spec", a non-String spec, a
+// non-String entity — returning the .json-trimmed spec and the entity
+// name. Split out so a check-mode mirror can run THIS and nothing else:
+// the rest of getSDK reads host state (the SDK cache, the manager, and
+// the manager's Make), which is not decidable from the source and must
+// stay with the runtime. Sharing these lines with the handler is what
+// keeps the mirrored message byte-identical.
+func ValidateAPIDescriptor(apiMap ReadMap, opName string) (string, string, error) {
 	specVal, ok := apiMap.Get("spec")
 	if !ok {
-		return nil, "", fmt.Errorf("%s: missing required \"spec\" field", opName)
+		return "", "", fmt.Errorf("%s: missing required \"spec\" field", opName)
 	}
-
 	spec, err := AsString(specVal)
 	if err != nil {
-		return nil, "", fmt.Errorf("%s: spec: %w", opName, err)
+		return "", "", fmt.Errorf("%s: spec: %w", opName, err)
 	}
-
 	var entityName string
 	if entityVal, ok := apiMap.Get("entity"); ok {
 		entityName, err = AsString(entityVal)
 		if err != nil {
-			return nil, "", fmt.Errorf("%s: entity: %w", opName, err)
+			return "", "", fmt.Errorf("%s: entity: %w", opName, err)
 		}
 	}
-
 	// Strip .json extension if present.
-	spec = strings.TrimSuffix(spec, ".json")
+	return strings.TrimSuffix(spec, ".json"), entityName, nil
+}
+
+func getSDK(apiMap ReadMap, opName string, r *Registry) (sdkClient, string, error) {
+	spec, entityName, err := ValidateAPIDescriptor(apiMap, opName)
+	if err != nil {
+		return nil, "", err
+	}
 
 	// Get or create SDK.
 	var sdkInst sdkClient

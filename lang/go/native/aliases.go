@@ -613,6 +613,8 @@ var (
 	ReturnsDynUnion        = check.ReturnsDynUnion
 	DryPassReturns         = check.DryPassReturns
 	DryPassWrap            = check.DryPassWrap
+	DeepConcreteOptions    = check.DeepConcreteOptions
+	MirrorReturns          = check.MirrorReturns
 	CheckListIndex         = check.CheckListIndex
 	CheckAtIndices         = check.CheckAtIndices
 	NewCarrierTypedListLen = check.NewCarrierTypedListLen
