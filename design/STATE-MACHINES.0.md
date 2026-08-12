@@ -94,6 +94,23 @@ through variable references); this RFC **endorses that fix as an independent
 effort** (§8 item 3) — it is the one language-level investment adjacent to
 state machines that pays for itself regardless.
 
+### Relationship to `BORU-VIZ.0.md`, `BORU-SCRY.0.md`, and `MODULE-VIEWS.0.md`
+
+The machine's tooling story rides the viz/scry split rather than growing its
+own: `boru:state` is a *producer* of the shared view-data contract
+(`BORU-VIZ.0.md` §3), never an emitter. `State.graph` returns the machine's
+structure as a §3.1 graph — states as nodes, transitions as labelled edges,
+the machine's semantics carried by the contract's open `kind:` vocabulary
+(`'initial'`/`'final'`, `'guarded'`/`'timer'` arcs, and `'current'` when
+given a snapshot) — so drawing is `Viz.graph (State.graph m) {}`, honesty
+about scale (budgets/elision), escaping, and determinism are inherited, and
+the graph a test asserts about (`Viz.cycles`, reachability) is
+byte-for-byte the graph the docs render. `State.lint` follows scry's
+introspection-as-data principle (findings are values, not prose). How a
+machine becomes an interactive *widget* — the `Tui.run {service: view:}`
+inspector, the `view`-word display bundle — is specified once for all
+modules in `MODULE-VIEWS.0.md`, with the machine as its worked example.
+
 ### Scope decisions (agreed)
 
 Maintainer-decided 2026-08-12:
@@ -187,7 +204,7 @@ onto boru; each shaped a concrete decision in §3.
 | 11 | Hierarchy is the one statechart feature worth its cost (the principled home for "handle X from any state"); regions, deep history, and the pseudostate zoo are traps; entry/exit actions are the safety feature | Harel→UML fragmentation, QP, XState v5 | flat v1 + phase-2 XOR hierarchy via the SCXML algorithm; entry/exit in v1 (§3.3.4); regions never |
 | 12 | Underspecification is not flexibility: 20+ mutually incompatible statechart semantics; the cure is one executable semantics + a conformance suite | von der Beeck's survey; SCXML's IRP tests | the §3.3 freeze list + `lang/spec/module-state.tsv` conformance rows from day one |
 | 13 | Callbacks fused to persistence is a tarpit; the machine must never own storage | Rails AASM/state_machines | snapshots are plain values; hosts and programs decide storage; no callback ever fires from a persistence layer |
-| 14 | The visualizer drives adoption; diagrams are a *generated view*, never a source | XState/Stately vs BPMN round-tripping | `State.diagram` emits Mermaid from the definition (phase 2) |
+| 14 | The visualizer drives adoption; diagrams are a *generated view*, never a source | XState/Stately vs BPMN round-tripping | `State.graph` emits the shared viz data contract from the definition; `Viz.graph` draws it (`BORU-VIZ.0.md` §3.1; phase 2) |
 | 15 | Model-based testing is the verification sweet spot that actually ships; full model checking demands a second artifact and drifts | Erlang QuickCheck `eqc_statem`, AWS S3 ShardStore vs SPIN/TLA+ | the definition *is* the model: `State.explore` derives generate-run-shrink testing from it (phase 3) |
 | 16 | The FSM-densest domain — RFC protocol machines (TCP, TLS 1.3 App. A, QUIC, HTTP/2) — never adopted FSM libraries; its correctness story is conformance suites and monitors | RFC 9293 §3.3.2, RFC 8446, RFC 9000 | `State.conform` trace monitors (phase 3); and honesty: `boru:net` codecs get a *candidate* tool, not a mandate |
 
@@ -479,11 +496,16 @@ top-first convention with `describe`-ready summaries.
   (§3.5.3); `opts.ctx` as in `init`, remaining opts pass through to `spawn`
   (mailbox bound etc.).
 
-Phase 2 adds `State.diagram` (Mermaid text from the definition) and
-`State.lint` (the §6.3 advisories as plain data, the observability channel
-for dynamically built specs); phase 3 adds `State.conform` (trace monitor)
-and `State.explore` (derived model-based testing) — named here so the v1
-data model reserves nothing that blocks them.
+Phase 2 adds `State.graph` (the machine's structure as the shared viz data
+contract, `BORU-VIZ.0.md` §3.1 — drawing is `Viz.graph (State.graph m) {}`,
+never a bespoke Mermaid emitter; the machine's semantics ride the contract
+as `kind:` tags, including `kind: 'current'` when given `{snap: s}` — see
+`MODULE-VIEWS.0.md` §2) and `State.lint` (the §6.3 advisories as plain
+data, the observability channel for dynamically built specs); phase 3 adds
+`State.conform` (trace monitor; a machine's event history is emitted as viz
+§3.3 trace rows, so `Viz.seq` draws it) and `State.explore` (derived
+model-based testing) — named here so the v1 data model reserves nothing
+that blocks them.
 
 Every export lands with `lang/spec/module-state.tsv` rows (ADR-003), and the
 conformance corpus for §3.3 lives in the same file.
@@ -669,7 +691,8 @@ conformance-corpus obligation (scope decision 6).
 - **`ProcessRuntime` sharing in the module loader** (§3.5.3 note).
 
 **Still missing after v1 (and where it lands):** hierarchy and definition-
-level composition (phase 2); diagram (phase 2); conform/explore (phase 3);
+level composition (phase 2); `State.graph` over the viz contract (phase 2);
+conform/explore (phase 3);
 deferred domain replies over `call` — blocked on `@from` (phase 3, with
 `boru:serve`); cancel-on-exit child work — blocked on links/monitors/
 supervision (phase 3+); persistence storage and distribution — not this
@@ -688,11 +711,13 @@ transport story is the distribution story).
   pinning, alphabet + payload validation, determinism rules); the `state_*`
   Errors and advisories of §6.3; the conformance TSV corpus pinning every
   freeze item, positive and negative rows paired.
-- **Phase 2 — hierarchy, composition, diagrams.** Nested `states:` per the
+- **Phase 2 — hierarchy, composition, views.** Nested `states:` per the
   SCXML algorithm (inner-first, LCA entry/exit, declaration-order
   tie-breaks) with its own conformance rows; parent machines embedding child
   machine values (pure child-step, child `done` surfacing as a parent
-  event); `State.diagram`; shallow history only if it falls out of the
+  event); `State.graph` over the viz contract (with hierarchy mapping onto
+  the contract's `group:` nesting, so `Viz.collapse` yields the
+  parent-state view for free); shallow history only if it falls out of the
   algorithm (open question #6).
 - **Phase 3 — tooling and services integration.** `State.conform` trace
   monitors; `State.explore` derived model-based testing (quota-capped);
@@ -707,10 +732,12 @@ transport story is the distribution story).
 
 The door machine end to end. (Illustrative surface; exact syntax settles
 during implementation. The spec literal, its dot-paths, and the `fold` replay
-idiom are verified against today's parser; the `State.*` words are this RFC.)
+idiom are verified against today's parser; the `State.*` words are this RFC;
+`Viz.graph` is `BORU-VIZ.0.md`'s.)
 
 ```boru
 import "boru:state"
+import "boru:viz"
 
 # ---- bindings: ordinary words; the spec refers to them by name ----------
 def announce  fn [[ev:Map ctx:Map] [Map] [ ctx ]]            # act: no ctx change
@@ -758,6 +785,12 @@ call {event: lock/q  key: "k1"} svc       # guard consulted; outcome record back
 def pid (State.start door)                # process- and clock-gated
 send {event: open/q} pid                  # 30s later, relock delivers
                                           # lock-timeout to the machine
+
+# ---- views: the same value, drawn (phase 2; BORU-VIZ.0.md) ---------------
+Viz.graph (State.graph door {snap: r1.snap}) {title: "door"}
+#   ~> Mermaid source: states as nodes, transitions as labelled edges, the
+#   current state tagged kind:'current' — viz styles it without ever
+#   learning what a snapshot is (MODULE-VIEWS.0.md §2).
 ```
 
 Note the conventions in play: the definition is a plain map whose guard and
