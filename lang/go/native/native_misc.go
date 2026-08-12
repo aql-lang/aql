@@ -217,6 +217,111 @@ func readHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	return doRead(r, path, "utf8", format, "lf", nil, args[0].Pos())
 }
 
+// readReturns is the check-mode result model for read's Pathon sigs.
+// The FORMAT decision — String vs Bytes vs the structured decoders — is
+// the handler's own routing over statically-known data (the target's
+// extension, the enc/offset/length opts), so with a CONCRETE Pathon
+// (and concrete opts, on the opts sig) the model resolves the same
+// routing and the residual carries the format's decode type; only the
+// TYPE is decided, the content stays a carrier. Anything
+// value-dependent — a carrier target (a Stream or handle can never be
+// concrete at check time, so those sigs need no model), a computed
+// opts map, a format whose decode shape depends on the payload —
+// declines to the declared dynamic Any, byte-identical to the bare
+// `Returns: [Any]` residual.
+func readReturns(withOpts bool) ReturnsFunc {
+	dynAny := func() []Value {
+		c := NewCarrier(TAny)
+		c.Dynamic = true
+		return []Value{c}
+	}
+	return func(args []Value, r *Registry) []Value {
+		if r == nil || len(args) < 1 || !IsConcrete(args[0]) {
+			return dynAny()
+		}
+		pi, err := AsPathon(args[0])
+		if err != nil {
+			return dynAny()
+		}
+		path := pi.String()
+		if withOpts {
+			// DEEP-concrete, not merely concrete: this model ROUTES on the
+			// options' interior (enc picks Bytes vs String, offset/length
+			// pick the positioned read, fmt overrides the extension), and a
+			// carrier FIELD inside a concrete map reads as absent — so a
+			// computed `{enc: e}` would silently take the utf8 default and
+			// claim String where the run produces Bytes. That was a real
+			// soundness violation, caught before merge.
+			if len(args) < 2 || !DeepConcrete(args[1]) {
+				return dynAny()
+			}
+			// Mirror readOptsHandler: the binary / positioned bypass
+			// first ({enc:'bytes'} reads Bytes, {offset}/{length} slices
+			// the decoded text), then the explicit-format / extension
+			// resolution doRead routes on.
+			enc, format, _, _, fmtExplicit, _ := parseFileOpts(args[1])
+			if enc == "bytes" || enc == "binary" {
+				return []Value{NewCarrier(TBytes)}
+			}
+			_, hasOffset := mapIntOpt(args[1], "offset")
+			_, hasLength := mapIntOpt(args[1], "length")
+			if hasOffset || hasLength {
+				return []Value{NewCarrier(TString)}
+			}
+			if !fmtExplicit {
+				if extFmt := formatFromExt(r, path); extFmt != "" {
+					format = extFmt
+				}
+			}
+			return readFormatResult(format, dynAny)
+		}
+		format := formatFromExt(r, path)
+		if format == "" {
+			format = "text"
+		}
+		return readFormatResult(format, dynAny)
+	}
+}
+
+// writeReturns is the check-mode result model for write's Pathon sigs:
+// the runtime hands back the target it wrote to VERBATIM (returnPath),
+// so a concrete Pathon argument IS the result — returning it keeps the
+// construction concrete through a write-then-read chain
+// (`IO.read (IO.write p "x")`), where the declared [Pathon] return
+// minted a fresh carrier and stranded read's format routing. Identity
+// is faithful by the same token: the runtime returns the caller's
+// value, not a fresh mint, so the model returning args[0] aliases
+// exactly where the interpreter does. A non-concrete target keeps the
+// declared fresh carrier.
+func writeReturns() ReturnsFunc {
+	return func(args []Value, r *Registry) []Value {
+		if len(args) >= 1 && IsConcrete(args[0]) {
+			if _, err := AsPathon(args[0]); err == nil {
+				return []Value{args[0]}
+			}
+		}
+		return []Value{NewCarrier(TPathon)}
+	}
+}
+
+// readFormatResult maps a resolved format name to its decode's result
+// type: text yields one String; lines a List of line strings; csv/tsv
+// a table-shaped List (TableData rides Parent=TList through both the
+// plain and the sqlite-stored wrapping). Every other format's shape
+// depends on the payload (a json root may be any node), so those
+// decline to the dynamic Any the sig declares.
+func readFormatResult(format string, dynAny func() []Value) []Value {
+	switch format {
+	case "text":
+		return []Value{NewCarrier(TString)}
+	case "lines":
+		return []Value{NewCarrier(TList)}
+	case "csv", "tsv":
+		return []Value{NewCarrier(TList)}
+	}
+	return dynAny()
+}
+
 func readOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	enc, format, _, nl, fmtExplicit, parserOpts := parseFileOpts(args[1])

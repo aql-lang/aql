@@ -45,6 +45,30 @@ func makeScalarReturns() ReturnsFunc {
 	return func(args []Value, r *Registry) []Value {
 		if len(args) >= 2 {
 			basicCheckMicronConstruction(r, args[0], args[1], args[0].Pos())
+			// An Ideal-routed construction over a fully-concrete source is
+			// a PURE parse of immutable scalar data — the same Instantiate
+			// the runtime runs, deterministic in its arguments — so the
+			// model runs it and surfaces the CONCRETE result (the typeof
+			// precedent: concrete-gated, blast radius off every
+			// non-concrete make). Downstream models then see the real
+			// value: two made Qions feed micronOpReturns' concrete error
+			// mirror, a made micron dispatches its exact overload, instead
+			// of every consumer widening at a bare carrier. The gate
+			// mirrors MakeScalarHandler's own routing test (Ideals.For)
+			// AND requires the routed kind to declare PureInstantiate —
+			// the Ideal contract puts no purity requirement on
+			// Instantiate in general, so an unmarked kind (a host
+			// constructor that may touch services) is never executed at
+			// analysis time (PR #346 review). A failed construction falls
+			// through to the fresh carrier — the validation above already
+			// carried the diagnostic.
+			if r != nil && core.IsBareTypeNode(args[0]) && core.IsConcrete(args[1]) {
+				if id := r.Ideals.For(args[0]); id != nil && id.PureInstantiate && id.Instantiate != nil {
+					if out, err := id.Instantiate(args[0], args[1], r); err == nil && len(out) == 1 && core.IsConcrete(out[0]) {
+						return out
+					}
+				}
+			}
 		}
 		return fresh(args, r)
 	}

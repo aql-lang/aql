@@ -89,6 +89,75 @@ func allConcreteArgs(args []core.Value) bool {
 	return true
 }
 
+// DeepConcreteOptions is the gate for a mirror whose validator reads an
+// OPTIONS MAP at position 0.
+//
+// Two clauses, each load-bearing:
+//
+//   - args[0] must be concrete ALL THE WAY DOWN (core.DeepConcrete), not
+//     merely concrete. A map literal written at a call site is concrete
+//     while a field inside it holds a carrier — `{tcp: p}` for a computed
+//     p — and a validator that projects fields with AsConcreteInteger /
+//     AsConcreteString reads that carrier as a MALFORMED option and
+//     reports a guaranteed error for a perfectly good program. That is a
+//     false positive, the one outcome the accuracy ratchet rejects
+//     outright, and it is not hypothetical: the corpus is full of
+//     `{tcp: (join …)}` rows, and the same shallowness produced a real
+//     soundness violation in read's option routing.
+//   - no LATER operand may be a dynamic carrier. A dynamic operand was
+//     matched optimistically, so the run may land on a different overload
+//     — or on no signature at all — and never reach the error being
+//     mirrored. A strict carrier at a later position is fine precisely
+//     because the validator does not read it (the arg0-only contract each
+//     caller must honour).
+//
+// allConcreteArgs is deliberately left shallow: the dry passes already in
+// the tree are gated that way and their handlers cope, so tightening it
+// would silence findings that are correct today.
+func DeepConcreteOptions(args []core.Value) bool {
+	if len(args) == 0 || !core.DeepConcrete(args[0]) {
+		return false
+	}
+	for _, a := range args[1:] {
+		if a.Dynamic {
+			return false
+		}
+	}
+	return true
+}
+
+// MirrorReturns is the concrete-gated guaranteed-error mirror for an
+// EFFECTFUL word. On the top-level straight line, when gate accepts the
+// operands, it runs validate — a PURE PREFIX of the word's own handler,
+// sharing the handler's source lines so the two cannot drift — and
+// reports its error as a check diagnostic with the byte-identical code
+// and detail. The residual is base's either way, so the mirror gates
+// without altering typing or the compile pass.
+//
+// It differs from DryPassWrap in exactly the two places an effectful
+// word requires. The caller supplies the GATE, because allConcreteArgs is
+// shallow (see DeepConcreteOptions). And the caller supplies a VALIDATOR
+// rather than the whole handler, because the handler must never run
+// during analysis: no socket may be opened, no SDK built, no policy
+// consulted, no file touched at check time. A word whose handler IS pure
+// wants DryPassWrap instead — this is the seam for the ones that are not.
+func MirrorReturns(word string, gate func([]core.Value) bool,
+	validate func([]core.Value, *core.Registry) error, base core.ReturnsFunc) core.ReturnsFunc {
+	return func(args []core.Value, r *core.Registry) []core.Value {
+		if CheckAtUncaughtTopLevel(r) && gate(args) {
+			if err := validate(args, r); err != nil {
+				code, detail := "type_error", err.Error()
+				var ae *core.BoruError
+				if errors.As(err, &ae) {
+					code, detail = ae.Code, ae.Detail
+				}
+				core.CheckAddUniqueDiagnostic(r, code, detail, word, args[0].Pos())
+			}
+		}
+		return base(args, r)
+	}
+}
+
 // dryPassOperands canonicalises the gated args for the handler run: a
 // strict none-SHAPE (a None carrier or literal) becomes the canonical
 // `none` sentinel, so the handler's payload probes (IsNone, truthiness)

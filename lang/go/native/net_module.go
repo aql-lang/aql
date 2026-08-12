@@ -22,6 +22,32 @@ package native
 // even though the wrapper FnSig does not copy it).
 // Parameterised by the per-import Fetch mints (ft) — the Response
 // values fetch returns carry that import's types.
+// apiDescriptorMirror is the check-mode guaranteed-error mirror for the
+// API words (prepare / direct): it runs ValidateAPIDescriptor — getSDK's
+// own pure prefix, sharing its lines so the message cannot drift — so a
+// descriptor that provably fails validation (a missing "spec", a
+// non-String spec or entity) is reported at check time with the
+// byte-identical detail. Everything getSDK does AFTER that prefix reads
+// host state (the SDK cache, the manager) and never runs during
+// analysis.
+//
+// Gated on DeepConcreteOptions: a descriptor whose spec is computed
+// (`{kind:"api" spec:(join …)}`) is a concrete Map with a carrier field,
+// and reading that field as a missing/malformed spec would flag a
+// correct program. The residual is the declared Any either way.
+func apiDescriptorMirror(word string) ReturnsFunc {
+	return MirrorReturns(word, DeepConcreteOptions,
+		func(args []Value, _ *Registry) error {
+			m, err := RequireConcreteMap(args[0], word)
+			if err != nil {
+				return nil // not a readable map: dispatch owns the refusal
+			}
+			_, _, vErr := ValidateAPIDescriptor(m, word)
+			return vErr
+		},
+		ReturnsStatic(TAny))
+}
+
 func NetModuleNatives(ft FetchModuleTypes) []NativeFunc {
 	return []NativeFunc{
 		{
@@ -37,14 +63,14 @@ func NetModuleNatives(ft FetchModuleTypes) []NativeFunc {
 			Name: "prepare",
 			Signatures: []Signature{
 				// The SDK's prepared fetch definition (anyToValue): Any.
-				{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, ReturnsFn: apiDescriptorMirror("prepare"), BarrierPos: -1},
 			},
 		},
 		{
 			Name: "direct",
 			Signatures: []Signature{
 				// The SDK's raw response (anyToValue): Any.
-				{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, ReturnsFn: apiDescriptorMirror("direct"), BarrierPos: -1},
 			},
 		},
 	}

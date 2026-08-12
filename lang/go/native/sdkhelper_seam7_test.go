@@ -98,3 +98,43 @@ func TestB3MergeAPIOptionsExistingField(t *testing.T) {
 		t.Fatalf("expected added opts key merged")
 	}
 }
+
+// apiDescriptorMirror is prepare/direct's check-mode guaranteed-error
+// mirror. The corpus drives the flagged shape (a descriptor with no
+// spec:); these cover the silent arms — a valid descriptor, and an
+// operand that clears the deep-concrete gate but is not a readable map,
+// where the refusal belongs to dispatch rather than the mirror.
+func TestAPIDescriptorMirrorArms(t *testing.T) {
+	rf := apiDescriptorMirror("prepare")
+
+	// The flagged shape, with the runtime's own detail.
+	r := mirrorReg(t)
+	om := NewOrderedMap()
+	om.Set("kind", NewString("api"))
+	if out := rf([]Value{NewMap(om)}, r); len(out) != 1 {
+		t.Fatalf("residual = %v, want one value", out)
+	}
+	if len(r.Check.Diagnostics) != 1 ||
+		!strings.Contains(r.Check.Diagnostics[0].Detail, `missing required "spec" field`) {
+		t.Fatalf("a spec-less descriptor must flag, got %+v", r.Check.Diagnostics)
+	}
+
+	// A complete descriptor is silent — validation passes and nothing
+	// beyond the pure prefix runs (no SDK is built during analysis).
+	r2 := mirrorReg(t)
+	ok := NewOrderedMap()
+	ok.Set("kind", NewString("api"))
+	ok.Set("spec", NewString("petstore.json"))
+	rf([]Value{NewMap(ok)}, r2)
+	if len(r2.Check.Diagnostics) != 0 {
+		t.Fatalf("a complete descriptor must stay silent, got %+v", r2.Check.Diagnostics)
+	}
+
+	// A non-map operand clears the gate (a scalar has no interior to
+	// disprove) but is not readable as a descriptor: the mirror declines.
+	r3 := mirrorReg(t)
+	rf([]Value{NewInteger(1)}, r3)
+	if len(r3.Check.Diagnostics) != 0 {
+		t.Fatalf("a non-map operand must be left to dispatch, got %+v", r3.Check.Diagnostics)
+	}
+}

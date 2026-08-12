@@ -123,6 +123,51 @@ func TestS7SameContainerXmlAndFlex(t *testing.T) {
 	}
 }
 
+// HasContainerIdentity must answer for exactly the payloads sameContainer
+// decides — the check pass declines to const-fold over them because its
+// values are copies and cannot carry runtime container identity.
+func TestS7HasContainerIdentity(t *testing.T) {
+	// Every identity-bearing payload sameContainer has an arm for.
+	identity := []Value{
+		NewList([]Value{NewInteger(1)}),
+		NewMap(NewOrderedMap()),
+		NewXmlElement("a", nil, []Value{NewString("x")}),
+		NewFlexList(nil),
+		NewFlexXml("a", nil, nil),
+		NewWeakFlexMap(),
+		NewWeakFlexList(),
+		NewWeakFlexXml("a"),
+	}
+	for _, v := range identity {
+		if !HasContainerIdentity(v) {
+			t.Errorf("%s (%T) compares by container identity but is not reported as such", v.Parent, v.Data)
+		}
+		// The mirror property that makes the predicate meaningful: the
+		// value aliases ITSELF under sameContainer.
+		if !sameContainer(v.Data, v.Data) {
+			t.Errorf("%T does not alias itself — the arms have drifted apart", v.Data)
+		}
+	}
+	// Scalars compare BY VALUE, so they keep folding. The immutable
+	// structured scalars are included deliberately: a Micron/Pathon/Time
+	// compares structurally, so a check-mode copy answers exactly as the
+	// runtime does.
+	byValue := []Value{
+		NewInteger(1), NewFloat(1.5), NewString("s"), NewBoolean(true), NewAtom("a"),
+		NewNone(),
+	}
+	for _, v := range byValue {
+		if HasContainerIdentity(v) {
+			t.Errorf("%s (%T) compares by value and must keep folding", v.Parent, v.Data)
+		}
+	}
+	// A payload with no aliasable identity at all (table data) is not a
+	// container for this purpose either — sameContainer's default arm.
+	if HasContainerIdentity(Value{}) {
+		t.Error("a zero value has no container identity")
+	}
+}
+
 func TestS7DeepEqualTypedListFallback(t *testing.T) {
 	a := NewValueRaw(TList, ChildTypeInfo{Child: NewTypeLiteral(TInteger)})
 	b := NewValueRaw(TList, ChildTypeInfo{Child: NewTypeLiteral(TInteger)})

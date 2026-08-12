@@ -142,3 +142,5 @@ def m {b:1} (sort m) eq m	false	…returning a fresh map, not the receiver
 size (flex {a:1})	1	size of a FlexMap counts entries
 size None	0	None is empty — size 0
 (make Pathon ['a']) eq (make Pathon ['a'])	true	Pathon is a SCALAR family — eq is value equality, not container identity
+def m {a:[1]} (m get 'a') eq (m get 'a')	true	two reads of one stored container are eq — identity is preserved by the read
+def m {a:[1]} def f fn [[s:String] [String] [s]] f (if ((m get 'a') eq (m get 'a')) ['s'] [7])	's'	check must NOT fold container eq: check-mode reads are clones, so a false fold would prune the live branch and flag correct code (PR #346 review)

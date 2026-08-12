@@ -879,19 +879,44 @@ func certValue(cert *x509.Certificate) native.Value {
 // words (send-bytes / shutdown / close): they produce no values.
 func netNoReturns(_ []native.Value, _ *native.Registry) []native.Value { return nil }
 
+// netAddrMirror is the check-mode guaranteed-error mirror for a word
+// whose options map is an ADDRESS: it runs parseNetAddr — the handler's
+// own first step, and a pure one (it reads the map and formats an
+// address; it opens nothing) — so a refusal decided by the literal
+// options is reported at check time with the byte-identical code and
+// detail. Reusing the handler's validator rather than restating its
+// messages is the point: the two cannot drift, down to the en dash in
+// "0–65535".
+//
+// The gate is DeepConcreteOptions, never plain concreteness: `{tcp: p}`
+// for a computed p is a concrete Map whose field is a carrier, and
+// parseNetAddr would read that carrier as a malformed port and flag a
+// correct program. The corpus is full of such rows (`{tcp: (join …)}`),
+// and so are the shipped example apps.
+func netAddrMirror(word string, listening bool, result *native.Type) native.ReturnsFunc {
+	return native.MirrorReturns(word, native.DeepConcreteOptions,
+		func(args []native.Value, r *native.Registry) error {
+			_, err := parseNetAddr(r, args[0], word, listening)
+			return err
+		},
+		native.ReturnsStatic(result))
+}
+
 // socketNatives lists the Tier-1 words BuildNetModule registers.
 func socketNatives() []native.NativeFunc {
 	T := func(ts ...*native.Type) []*native.Type { return ts }
 	return []native.NativeFunc{
 		{Name: "listen", Signatures: []native.Signature{
-			{Args: T(native.TMap), Impl: native.Go(listenHandler), Returns: T(TListener), BarrierPos: -1},
+			{Args: T(native.TMap), Impl: native.Go(listenHandler), Returns: T(TListener),
+				ReturnsFn: netAddrMirror("listen", true, TListener), BarrierPos: -1},
 		}},
 		{Name: "accept", Signatures: []native.Signature{
 			{Args: T(TListener, native.TMap), Impl: native.Go(acceptHandler), Returns: T(TSocket), BarrierPos: -1},
 			{Args: T(TListener), Impl: native.Go(acceptHandler), Returns: T(TSocket), BarrierPos: -1},
 		}},
 		{Name: "connect-raw", Signatures: []native.Signature{
-			{Args: T(native.TMap), Impl: native.Go(connectRawHandler), Returns: T(TSocket), BarrierPos: -1},
+			{Args: T(native.TMap), Impl: native.Go(connectRawHandler), Returns: T(TSocket),
+				ReturnsFn: netAddrMirror("connect-raw", false, TSocket), BarrierPos: -1},
 		}},
 		{Name: "serve-raw", Signatures: []native.Signature{
 			{Args: T(native.TMap, native.TAny), Impl: native.Go(serveRawHandler), Returns: T(TListener),

@@ -44,6 +44,61 @@ func IsConcrete(v Value) bool {
 	return v.Data != nil && !v.Carrier
 }
 
+// DeepConcrete reports whether v is concrete ALL THE WAY DOWN: concrete
+// itself, and — for a list or map — every element concrete too,
+// recursively.
+//
+// IsConcrete is deliberately SHALLOW, and that is a trap for check-mode
+// models. A map literal written at a call site is concrete even while a
+// field inside it still holds a carrier: in `IO.read p {enc: e}` with a
+// computed `e`, the options map passes IsConcrete but `enc` does not. The
+// field accessors (MapFieldString and friends) report a carrier field as
+// ABSENT, so a model that reads options to decide its result silently
+// takes the default branch — that is how `IO.read p {enc: <computed>}`
+// came to check as String while the run produced Bytes.
+//
+// So: gate on IsConcrete when the model merely needs a real value to
+// exist; gate on DeepConcrete when the model ROUTES on the interior —
+// reads fields, picks a branch per option, or hands the value to a
+// validator that projects fields. Anything not provably concrete to the
+// bottom must decline to the declared (widest) result instead.
+//
+// The recursion is depth-capped rather than cycle-tracked: a flex
+// container can be self-referential, and the honest answer for a
+// structure this deep is "cannot prove it", which is the safe direction.
+func DeepConcrete(v Value) bool {
+	return deepConcrete(v, 0)
+}
+
+// deepConcreteMaxDepth bounds DeepConcrete's walk. Options maps and the
+// literals models route on are shallow; anything deeper declines.
+const deepConcreteMaxDepth = 32
+
+func deepConcrete(v Value, depth int) bool {
+	if depth > deepConcreteMaxDepth || !IsConcrete(v) {
+		return false
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if !deepConcrete(e, depth+1) {
+				return false
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !deepConcrete(mv, depth+1) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // IsBareTypeNode reports whether v is a bare lattice node: it carries
 // no payload (Data == nil) and is not a CheckMode carrier. It is the
 // precise, intent-named replacement for the recurring

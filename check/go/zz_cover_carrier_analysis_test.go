@@ -206,6 +206,30 @@ func TestZcaToCarrierPreservations(t *testing.T) {
 		t.Errorf("schema payload = %T after strip, want *core.TypeSchemaInfo", got.Data)
 	}
 
+	// Micron values stay concrete: immutable structured scalars whose
+	// payload IS the value, preserved so the `make` model's surfaced
+	// construction reaches the concrete-operand mirrors (PR #346).
+	mfields := core.NewOrderedMap()
+	mfields.Set("address", core.NewString("a@b.c"))
+	micron := core.NewValueRaw(core.TEmailon, core.MicronPayload{Fields: mfields})
+	if got := toCarrier(micron); !core.IsConcrete(got) {
+		t.Error("a Micron value must survive carrier-stripping concrete")
+	} else if _, ok := got.Data.(core.MicronPayload); !ok {
+		t.Errorf("Micron payload = %T after strip, want core.MicronPayload", got.Data)
+	}
+	pathon := core.NewValueRaw(core.TPathon, core.PathonPayload{Info: core.PathonInfo{Parts: []string{"a"}}})
+	if got := toCarrier(pathon); !core.IsConcrete(got) {
+		t.Error("a Pathon value must survive carrier-stripping concrete")
+	} else if _, ok := got.Data.(core.PathonPayload); !ok {
+		t.Errorf("Pathon payload = %T after strip, want core.PathonPayload", got.Data)
+	}
+	// The negative pair: a micron-typed CARRIER (no payload) is already
+	// in carrier form and passes through unchanged — preservation is
+	// payload-gated, not type-gated.
+	if got := toCarrier(core.NewCarrier(core.TEmailon)); core.IsConcrete(got) || !got.Carrier {
+		t.Error("a micron-typed carrier must stay a carrier")
+	}
+
 	// MODULE values stay concrete so the get-resolution elision can
 	// still follow the descriptor.
 	mod := core.NewModuleInstance(core.ModuleDesc{ID: "zca:mod"})
