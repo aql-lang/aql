@@ -311,7 +311,13 @@ var typeNatives = []NativeFunc{
 				Patterns: map[int]Value{1: convertOptsPattern()},
 				Impl:     Go(convert3Handler),
 				// See the Ideal sig above: a VALUE of arg0's type, not the literal.
-				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
+				// The dry pass surfaces the handler's own option-map
+				// validation (unknown accuracy mode, places outside its
+				// domain, a non-finite source) at check time when every
+				// operand is a top-level literal — the handler is a pure
+				// scalar conversion, so a guaranteed runtime error is
+				// decidable right here.
+				ReturnsFn: DryPassWrap(convert3Handler, ReturnsFreshInstance(0)), BarrierPos: -1,
 			},
 			{
 				Args:     []*Type{TScalar, TScalar},

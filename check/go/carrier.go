@@ -2066,6 +2066,36 @@ func ReturnsStatic(types ...*core.Type) core.ReturnsFunc {
 	}
 }
 
+// ReturnsDynUnion models a declared value-or-sentinel union — env's
+// String-or-none, read-line's line-or-EOF, stat's record-or-absent — as a
+// DYNAMIC disjunct carrier over the alternatives. Dynamic, deliberately:
+// a STRICT union at these words would refuse every gradual call site that
+// feeds the result straight into a typed slot without a none-guard (the
+// pattern real io code uses everywhere), trading false negatives for
+// false positives. The dynamic bound keeps optimistic matching — the
+// runtime re-checks the concrete value, the same contract as every other
+// dynamic-modality hatch — while surfacing the real alternative set
+// instead of dynamic(Any). The precedent shape is the typed-patrun find
+// result, dynamic(Function ∪ None).
+// The union is minted INSIDE the closure, per invocation — never hoisted
+// to construction time. NewDynamicCarrierValue preserves its bound's
+// identity, and a hoisted bound gives every call site of every word
+// sharing the model ONE value ID (minted outside any check pass, so in
+// fact the empty ID). Identity is how the pipeline tracks values; a
+// shared ID let the def binder alias three separate read-line results to
+// one slot, which the compiled program then read back as three copies of
+// the LAST read — the TestReadLineStdinAdvances miscompile. ReturnsStatic
+// mints per call for the same reason; this must too.
+func ReturnsDynUnion(types ...*core.Type) core.ReturnsFunc {
+	return func(_ []core.Value, _ *core.Registry) []core.Value {
+		alts := make([]core.Value, len(types))
+		for i, t := range types {
+			alts[i] = core.NewTypeLiteral(t)
+		}
+		return []core.Value{core.NewDynamicCarrierValue(core.NewDisjunct(alts))}
+	}
+}
+
 // ReturnsNumericBinary models the arithmetic-tower result type for
 // add/sub/mul/div/mod/pow on [TNumber, TNumber]: the widest leaf wins
 // among the exact types (Integer < BigInteger < BigDecimal); an

@@ -17,18 +17,18 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 	r.Defs.Push("dep", core.NewInteger(1))
 
 	// A unit that would return 42 if the VM path ran.
-	p := &Program{
+	p := &compiler.Program{
 		Consts: []core.Value{core.NewInteger(42)},
-		Fns: []CompiledFn{{
+		Fns: []compiler.CompiledFn{{
 			Name:  "const42",
-			Code:  []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpRet, Arg: 0}},
+			Code:  []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpRet, Arg: 0}},
 			Debug: []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
 		}},
 	}
 	// The boru body the interpreter runs instead: a single literal 7.
 	sig := &core.Signature{Impl: &core.BoruImpl{
 		Body: []core.Value{core.NewInteger(7)},
-		Compiled: &CompiledFnRef{Prog: p, Unit: 0, DepSnap: map[string]compiler.DepSnapEntry{
+		Compiled: &compiler.CompiledFnRef{Prog: p, Unit: 0, DepSnap: map[string]compiler.DepSnapEntry{
 			"dep": {Depth: 99, Gen: -1}, // never matches → stale
 		}},
 	}}
@@ -44,7 +44,7 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 	}
 
 	// The positive twin: a FRESH snapshot takes the VM unit (42).
-	sig.Impl.(*core.BoruImpl).Compiled.(*CompiledFnRef).DepSnap = map[string]compiler.DepSnapEntry{
+	sig.Impl.(*core.BoruImpl).Compiled.(*compiler.CompiledFnRef).DepSnap = map[string]compiler.DepSnapEntry{
 		"dep": {Depth: r.Defs.Depth("dep"), Gen: r.Defs.Gen("dep")},
 	}
 	out, err = core.InvokeCallback(r, sig, nil, nil)
@@ -70,7 +70,7 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 
 	fd := BoruBodyFd(core.NewWord("dep"))
 	fd.Name = "reader"
-	ref, ok := StampDetachedFn(r, fd, core.SrcPos{Row: 1, Col: 1})
+	ref, ok := compiler.StampDetachedFn(r, fd, core.SrcPos{Row: 1, Col: 1})
 	if !ok {
 		t.Fatalf("initial stamp declined: %+v", r.StampEvents())
 	}

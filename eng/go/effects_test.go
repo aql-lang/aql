@@ -5,6 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The C1 effect fence (effects.go, design/RUNTIME-INDEPENDENCE-COMPLETION-
@@ -18,7 +21,7 @@ import (
 // A nil ledger counts nothing and never panics — the pre-fence behaviour for
 // registries assembled without NewRegistry (zero-value test fixtures).
 func TestEffectLedgerNilSafe(t *testing.T) {
-	var l *EffectLedger
+	var l *core.EffectLedger
 	l.Note() // must not panic
 	if got := l.Count(); got != 0 {
 		t.Fatalf("nil ledger Count = %d, want 0", got)
@@ -27,7 +30,7 @@ func TestEffectLedgerNilSafe(t *testing.T) {
 
 // The positive twin: a real ledger counts each Note.
 func TestEffectLedgerCounts(t *testing.T) {
-	l := &EffectLedger{}
+	l := &core.EffectLedger{}
 	if got := l.Count(); got != 0 {
 		t.Fatalf("fresh ledger Count = %d, want 0", got)
 	}
@@ -141,9 +144,9 @@ func TestArmEffectFenceNilWriters(t *testing.T) {
 
 // noteEffectSig builds a 0-arg, 0-result native signature whose handler marks
 // the registry's effect ledger — the unit-test stand-in for a printing word.
-func noteEffectSig() *Signature {
-	return &Signature{
-		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+func noteEffectSig() *core.Signature {
+	return &core.Signature{
+		Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
 			reg.NoteEffect()
 			return nil, nil
 		}),
@@ -165,31 +168,31 @@ func noteEffectSig() *Signature {
 // invisible to the ledger and the CallBoru retry runs the body again,
 // duplicating the peer-visible output.
 func TestInvokeCallbackBailAfterWriterEffectPropagates(t *testing.T) {
-	writeSig := &Signature{
-		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	writeSig := &core.Signature{
+		Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
 			_, _ = reg.Output.Write([]byte("x"))
 			return nil, nil
 		}),
 	}
-	p := &Program{
-		Sigs: []SigRef{{Word: "zz-write", Sig: writeSig}},
-		Fns: []CompiledFn{{
+	p := &compiler.Program{
+		Sigs: []compiler.SigRef{{Word: "zz-write", Sig: writeSig}},
+		Fns: []compiler.CompiledFn{{
 			Name: "write-then-boom", NParams: 0, NLocals: 0,
-			Code: []Instr{
-				{Op: OpCallNative, Arg: 0},
-				{Op: OpCallDynamic, Arg: 0},
-				{Op: OpRet, Arg: 0},
+			Code: []compiler.Instr{
+				{Op: compiler.OpCallNative, Arg: 0},
+				{Op: compiler.OpCallDynamic, Arg: 0},
+				{Op: compiler.OpRet, Arg: 0},
 			},
-			Debug: []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}, {Row: 1, Col: 1}},
+			Debug: []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}, {Row: 1, Col: 1}},
 		}},
 	}
-	ref := &CompiledFnRef{Prog: p, Unit: 0}
+	ref := &compiler.CompiledFnRef{Prog: p, Unit: 0}
 	r := runUnitReg(t)
 	var out bytes.Buffer
 	r.Output = &out
-	sig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
-	res, err := InvokeCallback(r, sig, nil, nil)
-	if !IsInternalErr(err) {
+	sig := &core.Signature{Impl: &core.BoruImpl{Body: []core.Value{core.NewInteger(42)}, Compiled: ref}}
+	res, err := core.InvokeCallback(r, sig, nil, nil)
+	if !core.IsInternalErr(err) {
 		t.Fatalf("fenced writer bail: err = %v (res=%v), want the propagated internal_error", err, res)
 	}
 	if out.String() != "x" {
@@ -201,25 +204,25 @@ func TestInvokeCallbackBailAfterWriterEffectPropagates(t *testing.T) {
 }
 
 func TestInvokeCallbackBailAfterEffectPropagates(t *testing.T) {
-	p := &Program{
-		Sigs: []SigRef{{Word: "zz-note", Sig: noteEffectSig()}},
-		Fns: []CompiledFn{{
+	p := &compiler.Program{
+		Sigs: []compiler.SigRef{{Word: "zz-note", Sig: noteEffectSig()}},
+		Fns: []compiler.CompiledFn{{
 			Name: "emit-then-boom", NParams: 0, NLocals: 0,
-			Code: []Instr{
-				{Op: OpCallNative, Arg: 0},
-				{Op: OpCallDynamic, Arg: 0},
-				{Op: OpRet, Arg: 0},
+			Code: []compiler.Instr{
+				{Op: compiler.OpCallNative, Arg: 0},
+				{Op: compiler.OpCallDynamic, Arg: 0},
+				{Op: compiler.OpRet, Arg: 0},
 			},
-			Debug: []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}, {Row: 1, Col: 1}},
+			Debug: []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}, {Row: 1, Col: 1}},
 		}},
 	}
-	ref := &CompiledFnRef{Prog: p, Unit: 0}
+	ref := &compiler.CompiledFnRef{Prog: p, Unit: 0}
 	r := runUnitReg(t)
 	// The sig carries a boru body the interpreter COULD run to 42 — the test
 	// is that the fence refuses to, because the effect already escaped.
-	sig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
-	out, err := InvokeCallback(r, sig, nil, nil)
-	if !IsInternalErr(err) {
+	sig := &core.Signature{Impl: &core.BoruImpl{Body: []core.Value{core.NewInteger(42)}, Compiled: ref}}
+	out, err := core.InvokeCallback(r, sig, nil, nil)
+	if !core.IsInternalErr(err) {
 		t.Fatalf("fenced callback bail: err = %v (out=%v), want the propagated internal_error", err, out)
 	}
 	if got := r.Effects.Count(); got != 1 {

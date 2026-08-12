@@ -644,7 +644,7 @@ core parser first"). Candidates, with verdicts:
 5. **Generalizing `receive`-style binding slots** to `add`/machine clauses
    (healing the route-only vs route+bind asymmetry) — **out of scope here**;
    it belongs to the processes/services design line. The asymmetry itself is
-   now recorded in the register as **NUR063** (Pending), so it cannot be
+   now recorded in the register as **NUR064** (Pending), so it cannot be
    silently baselined while that line decides.
 
 ## 9. Gap analysis

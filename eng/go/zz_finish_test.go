@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -121,16 +122,16 @@ func TestCompiledInterpString(t *testing.T) {
 
 // A unit whose body is [PUSH_LOCAL 0, RET] returns its single param verbatim.
 func TestRunUnitBindsParam(t *testing.T) {
-	p := &Program{
-		Fns: []CompiledFn{{
+	p := &compiler.Program{
+		Fns: []compiler.CompiledFn{{
 			Name:    "echo",
 			NParams: 1,
 			NLocals: 1,
-			Code:    []Instr{{Op: OpPushLocal, Arg: 0}, {Op: OpRet, Arg: 0}},
+			Code:    []compiler.Instr{{Op: compiler.OpPushLocal, Arg: 0}, {Op: compiler.OpRet, Arg: 0}},
 			Debug:   []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
 		}},
 	}
-	ref := &CompiledFnRef{Prog: p, Unit: 0}
+	ref := &compiler.CompiledFnRef{Prog: p, Unit: 0}
 	out, err := RunUnit(ref, runUnitReg(t), []core.Value{core.NewInteger(7)})
 	if err != nil {
 		t.Fatalf("RunUnit: %v", err)
@@ -147,17 +148,17 @@ func TestRunUnitBindsParam(t *testing.T) {
 // local 1 (the capture), so the per-call arg lands in slot 0 and the capture in
 // slot 1.
 func TestRunUnitBindsCapture(t *testing.T) {
-	p := &Program{
-		Fns: []CompiledFn{{
+	p := &compiler.Program{
+		Fns: []compiler.CompiledFn{{
 			Name:      "grabCapture",
 			NParams:   2,
 			NCaptures: 1,
 			NLocals:   2,
-			Code:      []Instr{{Op: OpPushLocal, Arg: 1}, {Op: OpRet, Arg: 0}},
+			Code:      []compiler.Instr{{Op: compiler.OpPushLocal, Arg: 1}, {Op: compiler.OpRet, Arg: 0}},
 			Debug:     []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
 		}},
 	}
-	ref := &CompiledFnRef{Prog: p, Unit: 0, Captures: []core.Value{core.NewInteger(99)}}
+	ref := &compiler.CompiledFnRef{Prog: p, Unit: 0, Captures: []core.Value{core.NewInteger(99)}}
 	out, err := RunUnit(ref, runUnitReg(t), []core.Value{core.NewInteger(7)})
 	if err != nil {
 		t.Fatalf("RunUnit: %v", err)
@@ -169,10 +170,10 @@ func TestRunUnitBindsCapture(t *testing.T) {
 
 // A unit index outside Prog.Fns is rejected (never indexed).
 func TestRunUnitUnitOutOfRange(t *testing.T) {
-	p := &Program{Fns: []CompiledFn{{Name: "only", NParams: 0, NLocals: 0,
-		Code: []Instr{{Op: OpRet, Arg: 0}}, Debug: []core.SrcPos{{}}}}}
+	p := &compiler.Program{Fns: []compiler.CompiledFn{{Name: "only", NParams: 0, NLocals: 0,
+		Code: []compiler.Instr{{Op: compiler.OpRet, Arg: 0}}, Debug: []core.SrcPos{{}}}}}
 	for _, unit := range []int{-1, 5} {
-		ref := &CompiledFnRef{Prog: p, Unit: unit}
+		ref := &compiler.CompiledFnRef{Prog: p, Unit: unit}
 		if _, err := RunUnit(ref, runUnitReg(t), nil); err == nil ||
 			!strings.Contains(err.Error(), "out of range") {
 			t.Fatalf("RunUnit(unit=%d) err = %v, want out of range", unit, err)
@@ -183,7 +184,7 @@ func TestRunUnitUnitOutOfRange(t *testing.T) {
 // A nil ref and a ref with a nil program both report "nil unit reference"
 // (the invoke seam treats a nil ref as "no runnable unit").
 func TestRunUnitNilRef(t *testing.T) {
-	for _, ref := range []*CompiledFnRef{nil, {Prog: nil, Unit: 0}} {
+	for _, ref := range []*compiler.CompiledFnRef{nil, {Prog: nil, Unit: 0}} {
 		if _, err := RunUnit(ref, runUnitReg(t), nil); err == nil ||
 			!strings.Contains(err.Error(), "nil unit reference") {
 			t.Fatalf("RunUnit(%v) err = %v, want nil unit reference", ref, err)
@@ -217,7 +218,7 @@ func TestSwapTailArgsBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	vc := &vmContext{p: &Program{DynEnv: true}, r: r, argsFloor: 0}
+	vc := &vmContext{p: &compiler.Program{DynEnv: true}, r: r, argsFloor: 0}
 	nl := []core.Value{core.NewInteger(7)}
 	// Root tail swap: floor-truncate then push.
 	_ = r.Args.Push(core.NewList([]core.Value{core.NewInteger(1)}))
@@ -242,7 +243,7 @@ func TestSwapTailArgsBranches(t *testing.T) {
 		t.Errorf("framed tail swap: want [7], got %v", top)
 	}
 	// Non-DynEnv: all three helpers no-op.
-	off := &vmContext{p: &Program{}, r: r}
+	off := &vmContext{p: &compiler.Program{}, r: r}
 	d := r.Args.Depth()
 	off.swapTailArgs(frames, nl, 1)
 	off.pushFrameArgs(nl, 1)
@@ -257,7 +258,7 @@ func TestSwapTailArgsBranches(t *testing.T) {
 // at NUnnamed.
 func TestCheckReturnContractNUnnamedArms(t *testing.T) {
 	r := seam7Reg(t)
-	fn := &CompiledFn{Name: "z9f", Returns: []*core.Type{core.TInteger}, NUnnamed: 1}
+	fn := &compiler.CompiledFn{Name: "z9f", Returns: []*core.Type{core.TInteger}, NUnnamed: 1}
 
 	// hasFrame deficit: 0 produced above the base, 1 declared.
 	if _, err := checkReturnContract(r, fn, []core.Value{core.NewInteger(9)}, 1, true); err == nil {
@@ -323,17 +324,17 @@ func TestSeam7CallUserPolyRuntimeNoMatchAndDrift(t *testing.T) {
 		}},
 	})
 	fd := r.Lookup("z9poly")
-	p := &Program{
+	p := &compiler.Program{
 		Consts: []core.Value{core.NewBoolean(true)}, // matches no arm (Integer only)
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallUserPoly, Arg: 0}},
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallUserPoly, Arg: 0}},
 		Debug:  []core.SrcPos{{}, {}},
-		UserPolys: []UserPolyRef{{
+		UserPolys: []compiler.UserPolyRef{{
 			Word: "z9poly", Arity: 1,
 			SigIdx: []int{0}, Units: []int{0}, Impls: []core.SigImpl{fd.Signatures[0].Impl},
 		}},
-		Fns: []CompiledFn{{
+		Fns: []compiler.CompiledFn{{
 			Name: "z9poly", NParams: 1, NLocals: 1, Returns: []*core.Type{core.TAny},
-			Code:  []Instr{{Op: OpPushLocal, Arg: 0}, {Op: OpRet}},
+			Code:  []compiler.Instr{{Op: compiler.OpPushLocal, Arg: 0}, {Op: compiler.OpRet}},
 			Debug: []core.SrcPos{{}, {}},
 		}},
 	}
@@ -342,7 +343,7 @@ func TestSeam7CallUserPolyRuntimeNoMatchAndDrift(t *testing.T) {
 
 	// Drift: the recorded impl is not the registered signature's impl.
 	vc := seam7VC(r)
-	drift := &UserPolyRef{
+	drift := &compiler.UserPolyRef{
 		Word: "z9poly", Arity: 1,
 		SigIdx: []int{0}, Units: []int{0}, Impls: []core.SigImpl{core.Boru([]core.Value{core.NewWord("other")})},
 	}
@@ -362,15 +363,15 @@ func TestPolyNoMatchRaiseDeclines(t *testing.T) {
 		t.Fatal("pnmw not registered")
 	}
 	window := []core.Value{core.NewBoolean(true), core.NewBoolean(false)}
-	if err := vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2}, fn, window, seam7Dbg, 0); err != nil {
+	if err := vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2}, fn, window, seam7Dbg, 0); err != nil {
 		t.Errorf("a nil spec must keep the defer, got %v", err)
 	}
 	spec := &core.PolyNoMatchSpec{Written: []int{0, 1}, StackTuple: []int{0, 1}, NSigs: 1}
-	if err := vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: spec}, nil, window, seam7Dbg, 0); err != nil {
+	if err := vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: spec}, nil, window, seam7Dbg, 0); err != nil {
 		t.Errorf("a nil fn must keep the defer, got %v", err)
 	}
 	drift := &core.PolyNoMatchSpec{Written: []int{0, 1}, StackTuple: []int{0, 1}, NSigs: 2}
-	if err := vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: drift}, fn, window, seam7Dbg, 0); err != nil {
+	if err := vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: drift}, fn, window, seam7Dbg, 0); err != nil {
 		t.Errorf("a table-length drift must keep the defer, got %v", err)
 	}
 	// A narrower-arity overload could match a runtime collection this raise
@@ -379,15 +380,15 @@ func TestPolyNoMatchRaiseDeclines(t *testing.T) {
 	r2 := pnmRegistry(t, []core.Signature{pnmSig(-1, core.TInteger, core.TString), pnmSig(-1, core.TInteger)})
 	fn2 := r2.Lookup("pnmw")
 	narrow := &core.PolyNoMatchSpec{Written: []int{0, 1}, StackTuple: []int{0, 1}, NSigs: 2}
-	if err := seam7VC(r2).polyNoMatchRaise(r2, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: narrow}, fn2, window, seam7Dbg, 0); err != nil {
+	if err := seam7VC(r2).polyNoMatchRaise(r2, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: narrow}, fn2, window, seam7Dbg, 0); err != nil {
 		t.Errorf("a narrower-arity live overload must keep the defer, got %v", err)
 	}
 	oobW := &core.PolyNoMatchSpec{Written: []int{2}, StackTuple: []int{0}, NSigs: 1}
-	if err := vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: oobW}, fn, window, seam7Dbg, 0); err != nil {
+	if err := vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: oobW}, fn, window, seam7Dbg, 0); err != nil {
 		t.Errorf("an out-of-window Written index must keep the defer, got %v", err)
 	}
 	oobS := &core.PolyNoMatchSpec{Written: []int{0}, StackTuple: []int{-1}, NSigs: 1}
-	if err := vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: oobS}, fn, window, seam7Dbg, 0); err != nil {
+	if err := vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: oobS}, fn, window, seam7Dbg, 0); err != nil {
 		t.Errorf("an out-of-window StackTuple index must keep the defer, got %v", err)
 	}
 }
@@ -410,10 +411,10 @@ func TestModuleGateVMPolyRematchArm(t *testing.T) {
 		ModuleCall: &core.ModuleCallID{Module: "boru:zz", Export: "denied"},
 	})
 
-	p := &Program{
-		Code:     []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallNativePoly, Arg: 0}},
+	p := &compiler.Program{
+		Code:     []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallNativePoly, Arg: 0}},
 		Consts:   []core.Value{core.NewInteger(1)},
-		PolyRefs: []PolyRef{{Word: "zz-poly", Arity: 1, Reg: sub}},
+		PolyRefs: []compiler.PolyRef{{Word: "zz-poly", Arity: 1, Reg: sub}},
 	}
 	if _, err := RunProgram(p, r); err == nil || !strings.Contains(err.Error(), "module export denied") {
 		t.Fatalf("the re-matched module overload must gate, got %v", err)
@@ -438,12 +439,12 @@ func TestModuleGateVMPolyRematchArm(t *testing.T) {
 func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
 	// A unit that raises internal_error when run: CALL_DYNAMIC over an empty
 	// stack underflows → vmErrAt(internal_error).
-	p := &Program{Fns: []CompiledFn{{
+	p := &compiler.Program{Fns: []compiler.CompiledFn{{
 		Name: "boom", NParams: 0, NLocals: 0,
-		Code:  []Instr{{Op: OpCallDynamic, Arg: 0}, {Op: OpRet, Arg: 0}},
+		Code:  []compiler.Instr{{Op: compiler.OpCallDynamic, Arg: 0}, {Op: compiler.OpRet, Arg: 0}},
 		Debug: []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
 	}}}
-	ref := &CompiledFnRef{Prog: p, Unit: 0}
+	ref := &compiler.CompiledFnRef{Prog: p, Unit: 0}
 	// Confirm the unit really does raise internal_error on its own.
 	if _, err := RunUnit(ref, runUnitReg(t), nil); !core.IsInternalErr(err) {
 		t.Fatalf("RunUnit err = %v, want an internal_error to drive the fallback", err)
@@ -470,11 +471,11 @@ func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
 func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
 	r := runUnitReg(t)
 	r.VmRunning = 1 // canHostVM() false; nestedRunner stays nil
-	p := &Program{Fns: []CompiledFn{{
+	p := &compiler.Program{Fns: []compiler.CompiledFn{{
 		Name: "x", NParams: 0, NLocals: 0,
-		Code: []Instr{{Op: OpRet, Arg: 0}}, Debug: []core.SrcPos{{Row: 1, Col: 1}},
+		Code: []compiler.Instr{{Op: compiler.OpRet, Arg: 0}}, Debug: []core.SrcPos{{Row: 1, Col: 1}},
 	}}}
-	ref := &CompiledFnRef{Prog: p, Unit: 0}
+	ref := &compiler.CompiledFnRef{Prog: p, Unit: 0}
 	// Direct: no VM path applies, so ran=false.
 	if _, _, ran := invokeCompiledUnit(r, ref, nil); ran {
 		t.Fatal("a busy registry with no nestedRunner must report ran=false")
@@ -508,23 +509,23 @@ func TestUserPolyNoMatchAltCoverageScreen(t *testing.T) {
 	if fd == nil || len(fd.Signatures) < 2 {
 		t.Fatal("upnm not installed")
 	}
-	vc := &vmContext{r: r, p: &Program{Fns: []CompiledFn{
+	vc := &vmContext{r: r, p: &compiler.Program{Fns: []compiler.CompiledFn{
 		{Name: "upnm", NParams: 1}, {Name: "upnm", NParams: 1},
 	}}}
 	window := []core.Value{core.NewBoolean(true)} // matches neither arm
-	full := &UserPolyRef{Word: "upnm", Arity: 1,
+	full := &compiler.UserPolyRef{Word: "upnm", Arity: 1,
 		SigIdx: []int{0, 1}, Units: []int{0, 1},
 		Impls: []core.SigImpl{fd.Signatures[0].Impl, fd.Signatures[1].Impl}}
 	_, _, err := vc.matchUserPoly(full, window, seam7Dbg, 0)
-	ae, ok := err.(*BoruError)
+	ae, ok := err.(*core.BoruError)
 	if !ok || ae.DeferAlt == nil || ae.DeferAlt.Code != "signature_error" {
 		t.Errorf("a covering subset must ride the alt, got %v", err)
 	}
-	partial := &UserPolyRef{Word: "upnm", Arity: 1,
+	partial := &compiler.UserPolyRef{Word: "upnm", Arity: 1,
 		SigIdx: []int{0}, Units: []int{0},
 		Impls: []core.SigImpl{fd.Signatures[0].Impl}}
 	_, _, err = vc.matchUserPoly(partial, window, seam7Dbg, 0)
-	ae, ok = err.(*BoruError)
+	ae, ok = err.(*core.BoruError)
 	if !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
 		t.Errorf("an uncovered live arm must keep the plain defer, got %v", err)
 	}
@@ -536,10 +537,10 @@ func TestUserPolyNoMatchAltCoverageScreen(t *testing.T) {
 // racing the shared invoker/scopes.
 func TestRunUnitRejectsConcurrentRun(t *testing.T) {
 	r := runUnitReg(t)
-	p := &Program{Fns: []CompiledFn{{Name: "x", NParams: 0, NLocals: 0,
-		Code: []Instr{{Op: OpRet, Arg: 0}}, Debug: []core.SrcPos{{}}}}}
+	p := &compiler.Program{Fns: []compiler.CompiledFn{{Name: "x", NParams: 0, NLocals: 0,
+		Code: []compiler.Instr{{Op: compiler.OpRet, Arg: 0}}, Debug: []core.SrcPos{{}}}}}
 	r.VmRunning = 1 // simulate an in-flight compiled run on this registry
-	_, err := RunUnit(&CompiledFnRef{Prog: p, Unit: 0}, r, nil)
+	_, err := RunUnit(&compiler.CompiledFnRef{Prog: p, Unit: 0}, r, nil)
 	var ae *core.BoruError
 	if err == nil || !errors.As(err, &ae) || ae.Code != "concurrency_error" {
 		t.Fatalf("RunUnit during an active run = %v, want concurrency_error", err)
@@ -558,11 +559,11 @@ func TestPolyNoMatchRaiseBuildsDiagnostic(t *testing.T) {
 	fn := r.Lookup("pnmw")
 	window := []core.Value{core.NewBoolean(true), core.NewString("s")}
 	spec := &core.PolyNoMatchSpec{Written: []int{0, 1}, StackTuple: []int{0, 1}, NSigs: 2, Pos: core.SrcPos{Row: 3, Col: 7}}
-	err := vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: spec}, fn, window, seam7Dbg, 0)
+	err := vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: spec}, fn, window, seam7Dbg, 0)
 	if err == nil {
 		t.Fatal("a valid spec must raise")
 	}
-	ae, ok := err.(*BoruError)
+	ae, ok := err.(*core.BoruError)
 	if !ok || ae.Code != "signature_error" {
 		t.Fatalf("raise = %v, want signature_error", err)
 	}
@@ -575,7 +576,7 @@ func TestPolyNoMatchRaiseBuildsDiagnostic(t *testing.T) {
 
 	// Primary reorder probe: the written tuple permutes the declared order.
 	permuted := []core.Value{core.NewString("s"), core.NewInteger(1)}
-	err = vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: spec}, fn, permuted, seam7Dbg, 0)
+	err = vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: spec}, fn, permuted, seam7Dbg, 0)
 	if err == nil || !strings.Contains(err.Error(), "did you swap the arguments?") {
 		t.Errorf("the primary reorder probe must fire over the written tuple:\n%v", err)
 	}
@@ -584,7 +585,7 @@ func TestPolyNoMatchRaiseBuildsDiagnostic(t *testing.T) {
 	// 1-tuple no 2-arg sig probes), the stack tuple permutes the declared
 	// pair — sigError's fallback probe, rebuilt from the same window.
 	sec := &core.PolyNoMatchSpec{Written: []int{0}, StackTuple: []int{0, 1}, NSigs: 2, Pos: core.SrcPos{Row: 1, Col: 1}}
-	err = vc.polyNoMatchRaise(r, &PolyRef{Word: "pnmw", Arity: 2, NoMatch: sec}, fn, permuted, seam7Dbg, 0)
+	err = vc.polyNoMatchRaise(r, &compiler.PolyRef{Word: "pnmw", Arity: 2, NoMatch: sec}, fn, permuted, seam7Dbg, 0)
 	if err == nil || !strings.Contains(err.Error(), "did you swap the arguments?") {
 		t.Errorf("the secondary reorder probe must fire over the stack tuple:\n%v", err)
 	}
@@ -600,7 +601,7 @@ func TestRunProgramRejectsConcurrentInterpreterRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	p := &Program{} // empty program: runs off the end, returns an empty residual
+	p := &compiler.Program{} // empty program: runs off the end, returns an empty residual
 
 	// NEGATIVE — an interpreter run is in flight (depth > 0): refuse with a
 	// concurrency_error, and the vmRunning flag must be released on that return

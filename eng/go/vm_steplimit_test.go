@@ -3,6 +3,9 @@ package eng
 import (
 	"errors"
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The VM's step budget — the CPU guard mirroring the interpreter's
@@ -12,22 +15,22 @@ import (
 
 // spinProgram is a hand-built endless tail loop: main CALL_USERs
 // into a fn whose only instruction tail-calls itself.
-func spinProgram() *Program {
-	return &Program{
-		Code:  []Instr{{Op: OpCallUser, Arg: 0}},
-		Debug: []SrcPos{{Row: 1, Col: 1}},
-		Fns: []CompiledFn{{
+func spinProgram() *compiler.Program {
+	return &compiler.Program{
+		Code:  []compiler.Instr{{Op: compiler.OpCallUser, Arg: 0}},
+		Debug: []core.SrcPos{{Row: 1, Col: 1}},
+		Fns: []compiler.CompiledFn{{
 			Name:    "spin",
 			NParams: 0,
 			NLocals: 0,
-			Code:    []Instr{{Op: OpTailCallUser, Arg: 0}},
-			Debug:   []SrcPos{{Row: 1, Col: 1}},
+			Code:    []compiler.Instr{{Op: compiler.OpTailCallUser, Arg: 0}},
+			Debug:   []core.SrcPos{{Row: 1, Col: 1}},
 		}},
 	}
 }
 
 func TestVMStepLimitExplicitError(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -36,7 +39,7 @@ func TestVMStepLimitExplicitError(t *testing.T) {
 	if err == nil {
 		t.Fatal("endless tail spin returned nil error, want evaluation_limit")
 	}
-	var ae *BoruError
+	var ae *core.BoruError
 	if !errors.As(err, &ae) || ae.Code != "evaluation_limit" {
 		t.Fatalf("error = %v, want code evaluation_limit", err)
 	}
@@ -44,15 +47,15 @@ func TestVMStepLimitExplicitError(t *testing.T) {
 
 // A program that finishes within budget must NOT be flagged.
 func TestVMStepLimitNotTrippedByNormalProgram(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	r.InitRootContext()
-	p := &Program{
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}},
-		Debug:  []SrcPos{{Row: 1, Col: 1}},
-		Consts: []Value{NewInteger(42)},
+	p := &compiler.Program{
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}},
+		Debug:  []core.SrcPos{{Row: 1, Col: 1}},
+		Consts: []core.Value{core.NewInteger(42)},
 	}
 	out, err := runProgram(p, r, 5000)
 	if err != nil {
@@ -68,7 +71,7 @@ func TestVMStepLimitNotTrippedByNormalProgram(t *testing.T) {
 // operand stack. Threaded inputs (NIn>0) are popped deepest-first and
 // pre-loaded onto the island.
 func TestVMFallbackIsland(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -79,11 +82,11 @@ func TestVMFallbackIsland(t *testing.T) {
 	r.InitRootContext()
 
 	// nIn=0: a fully-baked island `add 2 3`.
-	p := &Program{
-		Code:  []Instr{{Op: OpFallback, Arg: 0}},
-		Debug: []SrcPos{{Row: 1, Col: 1}},
-		Fallbacks: []FallbackSpan{{
-			Tokens: []Value{NewWord("add"), NewInteger(2), NewInteger(3)},
+	p := &compiler.Program{
+		Code:  []compiler.Instr{{Op: compiler.OpFallback, Arg: 0}},
+		Debug: []core.SrcPos{{Row: 1, Col: 1}},
+		Fallbacks: []core.FallbackSpan{{
+			Tokens: []core.Value{core.NewWord("add"), core.NewInteger(2), core.NewInteger(3)},
 			NIn:    0,
 			Desc:   "add",
 		}},
@@ -100,12 +103,12 @@ func TestVMFallbackIsland(t *testing.T) {
 	}
 
 	// nIn=1: one threaded input pre-loaded, island `add 10`.
-	p2 := &Program{
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpFallback, Arg: 0}},
-		Debug:  []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
-		Consts: []Value{NewInteger(7)},
-		Fallbacks: []FallbackSpan{{
-			Tokens: []Value{NewWord("add"), NewInteger(10)},
+	p2 := &compiler.Program{
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpFallback, Arg: 0}},
+		Debug:  []core.SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
+		Consts: []core.Value{core.NewInteger(7)},
+		Fallbacks: []core.FallbackSpan{{
+			Tokens: []core.Value{core.NewWord("add"), core.NewInteger(10)},
 			NIn:    1,
 			Desc:   "add",
 		}},

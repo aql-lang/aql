@@ -1,0 +1,16 @@
+# check/spec/advisory — the forward-greediness advisories.
+#
+# tri3q is 3-arg all-Any. Dispatching it in MIXED form — operands from
+# the stack while forward-collecting the rest — with an Any-typed stack
+# slot is the genuine footgun the mixed_form_call advisory exists for:
+# the mixed reading binds differently from the all-forward one. The
+# all-forward form is the recommended spelling and stays quiet.
+
+1 tri3q 2 3	Integer :: ?mixed_form_call	one stack operand, two forward
+1 2 tri3q 3	Integer :: ?mixed_form_call	two stack operands, one forward
+tri3q 1 2 3	Integer	all-forward: quiet
+
+# --- the def binding reads back with its bound value's leaf ---
+letq xq 5 xq	Integer
+letq xq 5 xq xq addq	Number
+letq yq 9 yq 1 addq	Number

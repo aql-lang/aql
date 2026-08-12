@@ -725,7 +725,7 @@ func checkModeSurfaceShape(e *core.Engine, w core.WordInfo, pos core.SrcPos) (bo
 			continue
 		}
 		sv, found := info.Required.Get(w.Name)
-		if !found { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+		if !found {
 			continue
 		}
 		sinfo, shape = info, sv
@@ -735,7 +735,7 @@ func checkModeSurfaceShape(e *core.Engine, w core.WordInfo, pos core.SrcPos) (bo
 		return false, nil
 	}
 	undef, ok := shape.Data.(core.FnUndefInfo)
-	if !ok || len(undef.Sigs) == 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+	if !ok || len(undef.Sigs) == 0 {
 		return false, nil
 	}
 	spec := core.SubstituteSelf(undef.Sigs[0], sinfo.Type)
@@ -1000,7 +1000,7 @@ func checkModeAssumeSig(e *core.Engine, w core.WordInfo, fn *core.FnDefInfo, fal
 		// there the diagnostic IS the genuine static report, so gate it on
 		// !Compiling, matching the fall-through path below.
 		es.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-		if !e.Registry.Check.Compiling && bestMatch < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+		if !e.Registry.Check.Compiling && bestMatch < 0 {
 			e.Registry.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code:   "no_signature",
 				Detail: core.NoMatchDetail(w.Name) + "; assuming best-fit candidate for analysis",

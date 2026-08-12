@@ -169,7 +169,7 @@ func TryShapedMethodDispatch(e *core.Engine, valIdx int) bool {
 	// native) with the outcome seam routed to RecordDynMethod.
 	r.Check.PendingMethodApply = &core.PendingMethodApply{Origin: v, Word: fnDef.Name}
 	outs := CarrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
-	if r.Check.PendingMethodApply != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if r.Check.PendingMethodApply != nil {
 		// Not consumed — an unexpected short-circuit upstream of the outcome
 		// seam. Decline wholesale; the carrier keeps today's paths.
 		r.Check.PendingMethodApply = nil
@@ -244,7 +244,7 @@ func shapedMethodApplyWindow(e *core.Engine, valIdx int, member core.Value) (*co
 	// the match the interpreter performs on the concrete member.
 	w := core.WordInfo{Name: fnDef.Name, ArgCount: -1}
 	sig, positions, _ := e.MatchSignature(fn, w, e.EffectiveResolved())
-	if sig == nil || sig.Fallback || len(positions) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if sig == nil || sig.Fallback || len(positions) == 0 {
 		return nil, nil, false
 	}
 	// Pure-forward, contiguous-prefix coverage: the matched positions must be
@@ -252,7 +252,7 @@ func shapedMethodApplyWindow(e *core.Engine, valIdx int, member core.Value) (*co
 	// stack below the carrier (a trailing/mixed shape) or skips a slot is not
 	// the statement-window apply — those keep today's paths.
 	for i, p := range positions {
-		if p != valIdx+1+i { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		if p != valIdx+1+i {
 			return nil, nil, false
 		}
 	}
@@ -264,7 +264,7 @@ func shapedMethodApplyWindow(e *core.Engine, valIdx int, member core.Value) (*co
 	// the shaped-method class is exactly the delegation-wrapper methods.
 	if sig.DispatchHandler() == nil || sig.FnFrame() != nil || sig.FullStack() ||
 		sig.RunInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
-		sig.ParkResult() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		sig.ParkResult() {
 		return nil, nil, false
 	}
 	return sig, positions, true
@@ -517,10 +517,10 @@ func tryMemberFnArrivalDispatch(e *core.Engine, valIdx int) bool {
 	resume := es.Suspend()
 	outs := CarrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
 	resume()
-	if len(outs) != 1 { //covergate:allow the declared-single-return gate above fixes CarrierResults' count for a boru-bodied sig (BuildFnBodyReturnsFn returns one carrier per declared return) — unreachable without a model fault (§compiler)
+	if len(outs) != 1 {
 		return false
 	}
-	if !es.RecordDynMethod(v, args, outs, fnDef.Name, v.Pos()) { //covergate:allow the fn carrier is event-produced (memberFnRead tags recorded reads only) and the window args are inert consts, so operand resolution cannot fail — unreachable without a recorder fault (§compiler)
+	if !es.RecordDynMethod(v, args, outs, fnDef.Name, v.Pos()) {
 		return false
 	}
 	e.Tape.Splice(valIdx, 1+n, outs...)

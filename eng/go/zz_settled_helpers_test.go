@@ -113,14 +113,14 @@ import (
 // anonFnVal builds an anonymous Function value the way `afn`/`=>` does:
 // Anonymous=true, authored sigs with a boru body. compileFnDef attaches
 // the body-runner handler at dispatch time.
-func anonFnVal(params []FnParam, returns []*Type, body []Value) Value {
-	return NewFunction(FnDefInfo{
+func anonFnVal(params []core.FnParam, returns []*core.Type, body []core.Value) core.Value {
+	return core.NewFunction(core.FnDefInfo{
 		Anonymous: true,
-		Signatures: []Signature{{
+		Signatures: []core.Signature{{
 			Params:     params,
 			Returns:    returns,
-			Impl:       Boru(body),
-			BarrierPos: BarrierAllForward,
+			Impl:       core.Boru(body),
+			BarrierPos: core.BarrierAllForward,
 		}},
 	})
 }

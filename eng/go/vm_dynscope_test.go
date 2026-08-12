@@ -2,6 +2,9 @@ package eng
 
 import (
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // vm_dynscope_test.go pins the dynamic-scope opcode pair (OpBindDynScope /
@@ -10,26 +13,26 @@ import (
 // binding, active token), plus the error-path unwind that keeps a failed run
 // from leaking bindings into the registry.
 
-func dsProgram(fns []CompiledFn, main []Instr, consts ...Value) *Program {
-	dbg := make([]SrcPos, len(main))
-	return &Program{Code: main, Debug: dbg, Consts: consts, Fns: fns}
+func dsProgram(fns []compiler.CompiledFn, main []compiler.Instr, consts ...core.Value) *compiler.Program {
+	dbg := make([]core.SrcPos, len(main))
+	return &compiler.Program{Code: main, Debug: dbg, Consts: consts, Fns: fns}
 }
 
 func TestBindDynScopeInstallAndRetCleanup(t *testing.T) {
 	r := seam7Reg(t)
-	fn := CompiledFn{
-		Name: "dsf", Returns: []*Type{TAny},
-		Code: []Instr{
-			{Op: OpPushConst, Arg: 0},    // 5
-			{Op: OpBindDynScope, Arg: 1}, // install dsx=5
-			{Op: OpLookupDynScope, Arg: 1},
-			{Op: OpRet},
+	fn := compiler.CompiledFn{
+		Name: "dsf", Returns: []*core.Type{core.TAny},
+		Code: []compiler.Instr{
+			{Op: compiler.OpPushConst, Arg: 0},    // 5
+			{Op: compiler.OpBindDynScope, Arg: 1}, // install dsx=5
+			{Op: compiler.OpLookupDynScope, Arg: 1},
+			{Op: compiler.OpRet},
 		},
-		Debug: make([]SrcPos, 4),
+		Debug: make([]core.SrcPos, 4),
 	}
-	p := dsProgram([]CompiledFn{fn},
-		[]Instr{{Op: OpCallUser, Arg: 0}},
-		NewInteger(5), NewString("dsx"))
+	p := dsProgram([]compiler.CompiledFn{fn},
+		[]compiler.Instr{{Op: compiler.OpCallUser, Arg: 0}},
+		core.NewInteger(5), core.NewString("dsx"))
 	out, err := RunProgram(p, r)
 	if err != nil {
 		t.Fatalf("bind+lookup: %v", err)
@@ -47,19 +50,19 @@ func TestBindDynScopeInstallAndRetCleanup(t *testing.T) {
 
 func TestBindDynScopeErrorUnwind(t *testing.T) {
 	r := seam7Reg(t)
-	fn := CompiledFn{
-		Name: "dsboom", Returns: []*Type{TAny},
-		Code: []Instr{
-			{Op: OpPushConst, Arg: 0},
-			{Op: OpBindDynScope, Arg: 1},
-			{Op: OpTrap, Arg: 0},
+	fn := compiler.CompiledFn{
+		Name: "dsboom", Returns: []*core.Type{core.TAny},
+		Code: []compiler.Instr{
+			{Op: compiler.OpPushConst, Arg: 0},
+			{Op: compiler.OpBindDynScope, Arg: 1},
+			{Op: compiler.OpTrap, Arg: 0},
 		},
-		Debug: make([]SrcPos, 3),
+		Debug: make([]core.SrcPos, 3),
 	}
-	p := dsProgram([]CompiledFn{fn},
-		[]Instr{{Op: OpCallUser, Arg: 0}},
-		NewInteger(9), NewString("dserr"))
-	p.Traps = []TrapSpec{{Code: "value_error", Detail: "boom", Word: "dsboom"}}
+	p := dsProgram([]compiler.CompiledFn{fn},
+		[]compiler.Instr{{Op: compiler.OpCallUser, Arg: 0}},
+		core.NewInteger(9), core.NewString("dserr"))
+	p.Traps = []compiler.TrapSpec{{Code: "value_error", Detail: "boom", Word: "dsboom"}}
 	if _, err := RunProgram(p, r); err == nil {
 		t.Fatal("trap must error")
 	}
@@ -71,31 +74,31 @@ func TestBindDynScopeErrorUnwind(t *testing.T) {
 func TestLookupDynScopeDeferralArms(t *testing.T) {
 	// Miss: no live binding.
 	r := seam7Reg(t)
-	p := dsProgram(nil, []Instr{{Op: OpLookupDynScope, Arg: 0}}, NewString("nosuch"))
+	p := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScope, Arg: 0}}, core.NewString("nosuch"))
 	_, err := RunProgram(p, r)
 	wantInternal(t, err, "dynamic-scope read miss for `nosuch`")
 
 	// A dispatching binding (FnDefInfo): the interpreter would dispatch, not
 	// substitute — defer.
 	r2 := seam7Reg(t)
-	r2.Defs.Push("dsfn", NewFunction(FnDefInfo{Name: "dsfn", Registry: r2,
-		Signatures: []Signature{{Returns: []*Type{TAny}, BarrierPos: -1}}}))
-	p2 := dsProgram(nil, []Instr{{Op: OpLookupDynScope, Arg: 0}}, NewString("dsfn"))
+	r2.Defs.Push("dsfn", core.NewFunction(core.FnDefInfo{Name: "dsfn", Registry: r2,
+		Signatures: []core.Signature{{Returns: []*core.Type{core.TAny}, BarrierPos: -1}}}))
+	p2 := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScope, Arg: 0}}, core.NewString("dsfn"))
 	_, err = RunProgram(p2, r2)
 	wantInternal(t, err, "dynamic-scope read of a dispatching binding `dsfn`")
 
 	// An active token (a splice marker): steps on the tape, never data — defer.
 	r3 := seam7Reg(t)
-	r3.Defs.Push("dssp", NewSplice(NewList([]Value{NewInteger(1)})))
-	p3 := dsProgram(nil, []Instr{{Op: OpLookupDynScope, Arg: 0}}, NewString("dssp"))
+	r3.Defs.Push("dssp", core.NewSplice(core.NewList([]core.Value{core.NewInteger(1)})))
+	p3 := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScope, Arg: 0}}, core.NewString("dssp"))
 	_, err = RunProgram(p3, r3)
 	wantInternal(t, err, "dynamic-scope read of an active token `dssp`")
 }
 
 func TestLookupDynScopeReadsTopLevelBinding(t *testing.T) {
 	r := seam7Reg(t)
-	r.Defs.Push("dsy", NewInteger(7))
-	p := dsProgram(nil, []Instr{{Op: OpLookupDynScope, Arg: 0}}, NewString("dsy"))
+	r.Defs.Push("dsy", core.NewInteger(7))
+	p := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScope, Arg: 0}}, core.NewString("dsy"))
 	out, err := RunProgram(p, r)
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
@@ -116,10 +119,10 @@ func TestLookupDynScopeDataArms(t *testing.T) {
 	// FnDefInfo binding: OpLookupDynScope DEFERS (name-position dispatch), but
 	// the DATA twin PUSHES it — the parselang-fn-dispatch parser operand.
 	r := seam7Reg(t)
-	fn := NewFunction(FnDefInfo{Name: "dspfn", Registry: r,
-		Signatures: []Signature{{Returns: []*Type{TAny}, BarrierPos: -1}}})
+	fn := core.NewFunction(core.FnDefInfo{Name: "dspfn", Registry: r,
+		Signatures: []core.Signature{{Returns: []*core.Type{core.TAny}, BarrierPos: -1}}})
 	r.Defs.Push("dspfn", fn)
-	p := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspfn"))
+	p := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScopeData, Arg: 0}}, core.NewString("dspfn"))
 	out, err := RunProgram(p, r)
 	if err != nil {
 		t.Fatalf("data read of a fn binding must PUSH, not defer: %v", err)
@@ -127,27 +130,27 @@ func TestLookupDynScopeDataArms(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("residual %v, want the pushed fn value", out)
 	}
-	if _, isFn := out[0].Data.(FnDefInfo); !isFn {
+	if _, isFn := out[0].Data.(core.FnDefInfo); !isFn {
 		t.Errorf("pushed %v, want the FnDefInfo parser value as data", out[0])
 	}
 
 	// Miss: no live binding — defer.
 	r2 := seam7Reg(t)
-	p2 := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspmiss"))
+	p2 := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScopeData, Arg: 0}}, core.NewString("dspmiss"))
 	_, err = RunProgram(p2, r2)
 	wantInternal(t, err, "dynamic-scope data read miss for `dspmiss`")
 
 	// A class binding is not a parser — defer.
 	r3 := seam7Reg(t)
-	r3.Defs.Push("dspcls", NewValueRaw(TClass, &ClassTypeInfo{Name: "Class/C", Fields: NewOrderedMap()}))
-	p3 := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspcls"))
+	r3.Defs.Push("dspcls", core.NewValueRaw(core.TClass, &core.ClassTypeInfo{Name: "Class/C", Fields: core.NewOrderedMap()}))
+	p3 := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScopeData, Arg: 0}}, core.NewString("dspcls"))
 	_, err = RunProgram(p3, r3)
 	wantInternal(t, err, "dynamic-scope data read of a class binding `dspcls`")
 
 	// An active token (a splice marker) steps on the tape, never data — defer.
 	r4 := seam7Reg(t)
-	r4.Defs.Push("dspsp", NewSplice(NewList([]Value{NewInteger(1)})))
-	p4 := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspsp"))
+	r4.Defs.Push("dspsp", core.NewSplice(core.NewList([]core.Value{core.NewInteger(1)})))
+	p4 := dsProgram(nil, []compiler.Instr{{Op: compiler.OpLookupDynScopeData, Arg: 0}}, core.NewString("dspsp"))
 	_, err = RunProgram(p4, r4)
 	wantInternal(t, err, "dynamic-scope data read of an active token `dspsp`")
 }
@@ -158,26 +161,26 @@ func TestLookupDynScopeDataArms(t *testing.T) {
 // dead frame's install stays readable in Defs (PR #233 review).
 func TestFlowSignalUnwindsEscapedFrameDynBinds(t *testing.T) {
 	r := seam7Reg(t)
-	fn := CompiledFn{
+	fn := compiler.CompiledFn{
 		Name: "dsbrk", Returns: nil,
-		Code: []Instr{
-			{Op: OpPushConst, Arg: 0},
-			{Op: OpBindDynScope, Arg: 1}, // install dsfl=5 in this frame
-			{Op: OpFlowBreak},            // escape to the caller's loop
+		Code: []compiler.Instr{
+			{Op: compiler.OpPushConst, Arg: 0},
+			{Op: compiler.OpBindDynScope, Arg: 1}, // install dsfl=5 in this frame
+			{Op: compiler.OpFlowBreak},            // escape to the caller's loop
 		},
-		Debug: make([]SrcPos, 3),
+		Debug: make([]core.SrcPos, 3),
 	}
-	main := []Instr{
-		{Op: OpPushConst, Arg: 2}, // step 1
-		{Op: OpPushConst, Arg: 3}, // end 3
-		{Op: OpPushConst, Arg: 4}, // start 0
-		{Op: OpForSetup, Arg: 0},  // iterator slot 0
-		{Op: OpForNext, Arg: 7},   // exit -> 7
-		{Op: OpCallUser, Arg: 0},  // per-iteration call that breaks
-		{Op: OpJmp, Arg: 4},       // back-edge
+	main := []compiler.Instr{
+		{Op: compiler.OpPushConst, Arg: 2}, // step 1
+		{Op: compiler.OpPushConst, Arg: 3}, // end 3
+		{Op: compiler.OpPushConst, Arg: 4}, // start 0
+		{Op: compiler.OpForSetup, Arg: 0},  // iterator slot 0
+		{Op: compiler.OpForNext, Arg: 7},   // exit -> 7
+		{Op: compiler.OpCallUser, Arg: 0},  // per-iteration call that breaks
+		{Op: compiler.OpJmp, Arg: 4},       // back-edge
 	}
-	p := dsProgram([]CompiledFn{fn}, main,
-		NewInteger(5), NewString("dsfl"), NewInteger(1), NewInteger(3), NewInteger(0))
+	p := dsProgram([]compiler.CompiledFn{fn}, main,
+		core.NewInteger(5), core.NewString("dsfl"), core.NewInteger(1), core.NewInteger(3), core.NewInteger(0))
 	p.NumLocals = 1
 	if _, err := RunProgram(p, r); err != nil {
 		t.Fatalf("break-out-of-callee run: %v", err)

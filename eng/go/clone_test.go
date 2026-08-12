@@ -1,43 +1,47 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // CloneValue must produce a deep, independent copy: mutating the clone
 // (or the original) must never be observable through the other.
 
 func TestCloneMapIndependence(t *testing.T) {
-	inner := NewOrderedMap()
-	inner.Set("x", NewInteger(1))
-	outer := NewOrderedMap()
-	outer.Set("inner", NewMap(inner))
-	orig := NewMap(outer)
+	inner := core.NewOrderedMap()
+	inner.Set("x", core.NewInteger(1))
+	outer := core.NewOrderedMap()
+	outer.Set("inner", core.NewMap(inner))
+	orig := core.NewMap(outer)
 
-	clone := CloneValue(orig)
+	clone := core.CloneValue(orig)
 
 	// The clone's nested map must be a distinct *OrderedMap.
-	cloneInnerV, _ := clone.Data.(MapPayload).M.Get("inner")
-	cloneInner := cloneInnerV.Data.(MapPayload).M
+	cloneInnerV, _ := clone.Data.(core.MapPayload).M.Get("inner")
+	cloneInner := cloneInnerV.Data.(core.MapPayload).M
 	if cloneInner == inner {
 		t.Fatal("clone shares the original's nested *OrderedMap")
 	}
 
 	// Mutating the original's nested map must not touch the clone.
-	inner.Set("x", NewInteger(999))
-	if v, _ := cloneInner.Get("x"); func() int64 { n, _ := AsInteger(v); return n }() != 1 {
+	inner.Set("x", core.NewInteger(999))
+	if v, _ := cloneInner.Get("x"); func() int64 { n, _ := core.AsInteger(v); return n }() != 1 {
 		t.Error("original mutation leaked into the clone's nested map")
 	}
 }
 
 func TestCloneStoreIndependence(t *testing.T) {
-	si := &StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]Value{}}
-	si.Set("k", NewInteger(1))
-	orig := NewStoreValue(TStore, si)
+	si := &core.StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]core.Value{}}
+	si.Set("k", core.NewInteger(1))
+	orig := core.NewStoreValue(core.TStore, si)
 
-	clone := CloneValue(orig)
-	cs, _ := AsStore(clone)
-	cs.Set("k", NewInteger(99))
+	clone := core.CloneValue(orig)
+	cs, _ := core.AsStore(clone)
+	cs.Set("k", core.NewInteger(99))
 
-	if v, _ := si.Get("k"); func() int64 { n, _ := AsInteger(v); return n }() != 1 {
+	if v, _ := si.Get("k"); func() int64 { n, _ := core.AsInteger(v); return n }() != 1 {
 		t.Error("clone store mutation leaked into the original")
 	}
 }
@@ -45,19 +49,19 @@ func TestCloneStoreIndependence(t *testing.T) {
 // A self-referential store must clone without infinite recursion, and
 // the clone's cycle must point at the clone (not the original).
 func TestCloneStoreCycle(t *testing.T) {
-	si := &StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]Value{}}
-	si.Set("self", NewStoreValue(TStore, si)) // cycle
+	si := &core.StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]core.Value{}}
+	si.Set("self", core.NewStoreValue(core.TStore, si)) // cycle
 
 	// If the cycle map were absent this would recurse forever and the
 	// test would time out — the failure signal we want.
-	clone := CloneValue(NewStoreValue(TStore, si))
+	clone := core.CloneValue(core.NewStoreValue(core.TStore, si))
 
-	cs, _ := AsStore(clone)
+	cs, _ := core.AsStore(clone)
 	selfV, ok := cs.Data["self"]
 	if !ok {
 		t.Fatal("cycle key lost in clone")
 	}
-	selfStore, _ := AsStore(selfV)
+	selfStore, _ := core.AsStore(selfV)
 	if selfStore != cs {
 		t.Error("cloned cycle points at the original (or a second copy), not the clone")
 	}
@@ -66,15 +70,15 @@ func TestCloneStoreCycle(t *testing.T) {
 func TestCloneListSharedSubstructurePreserved(t *testing.T) {
 	// A FlexList referenced twice in a list must clone to ONE shared
 	// clone (cycle map), not two independent copies.
-	shared := NewFlexList([]Value{NewInteger(1)})
-	orig := NewList([]Value{shared, shared})
+	shared := core.NewFlexList([]core.Value{core.NewInteger(1)})
+	orig := core.NewList([]core.Value{shared, shared})
 
-	clone := CloneValue(orig)
-	cl, _ := AsList(clone)
+	clone := core.CloneValue(orig)
+	cl, _ := core.AsList(clone)
 	a := cl.Get(0)
 	b := cl.Get(1)
-	fa, _ := a.Data.(*FlexListData)
-	fb, _ := b.Data.(*FlexListData)
+	fa, _ := a.Data.(*core.FlexListData)
+	fb, _ := b.Data.(*core.FlexListData)
 	if fa == nil || fb == nil {
 		t.Fatal("flexlist payloads missing after clone")
 	}
@@ -84,10 +88,10 @@ func TestCloneListSharedSubstructurePreserved(t *testing.T) {
 }
 
 func TestClonePreservesRefineType(t *testing.T) {
-	pos := MintTestType("Scalar/Number/Integer/Pos")
-	v := NewInteger(5)
+	pos := core.MintTestType("Scalar/Number/Integer/Pos")
+	v := core.NewInteger(5)
 	v.Parent = pos // a refine-subtyped integer
-	clone := CloneValue(v)
+	clone := core.CloneValue(v)
 	if !clone.Parent.Equal(pos) {
 		t.Errorf("clone Parent = %v, want the Pos refine type", clone.Parent)
 	}
@@ -96,9 +100,9 @@ func TestClonePreservesRefineType(t *testing.T) {
 func TestCloneSharesImmutableScalars(t *testing.T) {
 	// Scalars carry value payloads; a clone is equal and has the same
 	// payload (sharing is fine — nothing mutates a scalar in place).
-	for _, v := range []Value{NewInteger(7), NewString("hi"), NewBoolean(true), NewFloat(1.5)} {
-		c := CloneValue(v)
-		if !ExactEqual(c, v) {
+	for _, v := range []core.Value{core.NewInteger(7), core.NewString("hi"), core.NewBoolean(true), core.NewFloat(1.5)} {
+		c := core.CloneValue(v)
+		if !core.ExactEqual(c, v) {
 			t.Errorf("clone of scalar %v not equal to original", v)
 		}
 	}
@@ -111,11 +115,11 @@ func TestCloneTypeLiteralNoPanic(t *testing.T) {
 			t.Fatalf("clone of type literal panicked: %v", r)
 		}
 	}()
-	orig := NewTypeLiteral(TMap)
-	c := CloneValue(orig)
+	orig := core.NewTypeLiteral(core.TMap)
+	c := core.CloneValue(orig)
 	// A type literal IS its lattice node and has no payload; the clone is
 	// the same node (shared, immutable).
-	if c.ID != orig.ID || !ValueType(c).Equal(ValueType(orig)) {
+	if c.ID != orig.ID || !core.ValueType(c).Equal(core.ValueType(orig)) {
 		t.Error("type-literal clone is not the same lattice node")
 	}
 }
@@ -130,12 +134,12 @@ func (f fakeBody) DeepClone() any {
 }
 
 func TestCloneExtensionDeepCloner(t *testing.T) {
-	ft := MintTestType("Ideal/Fake")
-	orig := NewExtension(ft, fakeBody{data: []int{1, 2, 3}})
-	clone := CloneValue(orig)
+	ft := core.MintTestType("Ideal/Fake")
+	orig := core.NewExtension(ft, fakeBody{data: []int{1, 2, 3}})
+	clone := core.CloneValue(orig)
 
-	ob := orig.Data.(ExtensionPayload).Body.(fakeBody)
-	cb := clone.Data.(ExtensionPayload).Body.(fakeBody)
+	ob := orig.Data.(core.ExtensionPayload).Body.(fakeBody)
+	cb := clone.Data.(core.ExtensionPayload).Body.(fakeBody)
 	cb.data[0] = 99
 	if ob.data[0] != 1 {
 		t.Error("DeepCloner clone shares the original body slice")

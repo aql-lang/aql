@@ -1,0 +1,55 @@
+# check/spec/dispatch — dispatch selection and its diagnostics.
+#
+# Format: <input><TAB><expected>[<TAB><note>]
+# expected is renderCheck output: "<stack> :: <diag> <diag>", where the
+# stack is the residual carrier leaves and each diag is a severity sigil
+# (! error, ~ warning, ? info) followed by its code.
+#
+# The vocabulary is the four fixture words in spec_fixtures_test.go:
+# addq (Number Number -> Number), twoq (Integer->Integer / String->String),
+# strq (String -> String), predq (Integer -> Boolean).
+
+# --- literals carry their own leaf, no dispatch involved ---
+1	Integer
+1 2	Integer Integer
+"a"	ProperString
+
+# --- monomorphic dispatch commits to the signature's declared return ---
+1 2 addq	Number	Number, not Integer: the leaf is what addq DECLARES
+"a" strq	String
+1 predq	Boolean
+
+# --- overload selection picks the arm the operand's leaf conforms to ---
+1 twoq	Integer
+"x" twoq	String
+1 twoq twoq	Integer	the Integer arm's own return re-enters the same word
+"a" strq strq	String
+
+# --- arity: too few operands is no_signature, not a crash ---
+1 addq	Number :: !no_signature
+
+# --- surplus operands stay on the residual stack under the result ---
+1 2 3 addq	Integer Number
+
+# --- type mismatch on either side selects no arm ---
+"x" addq	Number :: !no_signature
+1 "x" addq	Number :: !no_signature
+1 predq twoq	String :: !no_signature	Boolean conforms to neither twoq arm
+1 2 addq predq	Boolean :: !no_signature	predq wants Integer; addq yields Number
+
+# --- an unknown word is Any, and says so once ---
+nosuchq	Any :: !undefined_word
+1 2 nosuchq	Integer Integer Any :: !undefined_word
+1 negq	Integer Any :: !undefined_word	negq is specfix vocabulary, absent here
+
+# --- a quote is DATA until something invokes it: its leaf is List and
+#     nothing inside it is dispatched (the first cut of this corpus read
+#     Number here, because the tokeniser was wrongly building grouping
+#     parens instead of a quote literal) ---
+[ 1 2 addq ]	List
+
+# --- statement sequencing keeps each statement's residual ---
+1 2 addq 3 4 addq	Integer Number
+
+# --- a forward word that leaves an operand stranded is called out ---
+1 2 addq 5 twoq	Integer String :: ?forward_strands_operand !no_signature

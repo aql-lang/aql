@@ -1,6 +1,11 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // The §4 collision guard, validated at the mechanism level
 // (design/module-fn-checkstate-ownership.1.md §5a, the prerequisite that makes
@@ -23,11 +28,11 @@ import "testing"
 // scopeID": the decision module that exercised the full §4 surface at the corpus
 // level is external, so the mechanism is validated directly here.
 func TestAnalysisScopeIDDisambiguatesMemoKeys(t *testing.T) {
-	parent, err := NewRegistry()
+	parent, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("parent: %v", err)
 	}
-	sub, err := NewRegistry() // a module sub-registry mints its own regID
+	sub, err := core.NewRegistry() // a module sub-registry mints its own regID
 	if err != nil {
 		t.Fatalf("sub: %v", err)
 	}
@@ -38,10 +43,10 @@ func TestAnalysisScopeIDDisambiguatesMemoKeys(t *testing.T) {
 	// Identical fn shape on both sides of the boundary: same name, same arg
 	// types — the exact §4 collision input.
 	name := "decide"
-	args := []Value{NewCarrier(TWord), NewCarrier(TMap)}
+	args := []core.Value{core.NewCarrier(core.TWord), core.NewCarrier(core.TMap)}
 
-	keyParent := FnAnalysisKey(parent.AnalysisScopeID(), name, args, nil, nil)
-	keySub := FnAnalysisKey(sub.AnalysisScopeID(), name, args, nil, nil)
+	keyParent := check.FnAnalysisKey(parent.AnalysisScopeID(), name, args, nil, nil)
+	keySub := check.FnAnalysisKey(sub.AnalysisScopeID(), name, args, nil, nil)
 	if keyParent == keySub {
 		t.Fatalf("§4 collision: a module fn and a parent fn share a memo key across registries\n  key: %q", keyParent)
 	}
@@ -50,8 +55,8 @@ func TestAnalysisScopeIDDisambiguatesMemoKeys(t *testing.T) {
 	// the two sides now build the SAME key, which is what re-creates the §4
 	// breakage under §5b's shared CheckState. Proving the scope prefix is
 	// precisely what keeps them apart.
-	constKeyParent := FnAnalysisKey(0, name, args, nil, nil)
-	constKeySub := FnAnalysisKey(0, name, args, nil, nil)
+	constKeyParent := check.FnAnalysisKey(0, name, args, nil, nil)
+	constKeySub := check.FnAnalysisKey(0, name, args, nil, nil)
 	if constKeyParent != constKeySub {
 		t.Fatal("control: identical inputs under a constant scope should produce identical keys")
 	}
@@ -66,16 +71,16 @@ func TestAnalysisScopeIDDisambiguatesMemoKeys(t *testing.T) {
 // Check is a shared *CheckState mutated in place during module-fn analysis. The
 // pre-conversion by-value snapshot is gone; this is what replaces it.
 func TestCheckStateCloneIsolatesMaps(t *testing.T) {
-	c := &CheckState{
+	c := &core.CheckState{
 		Mode:             true,
 		StepCount:        5,
-		FnSummaries:      map[string][]Value{"a": {NewCarrier(TInteger)}},
+		FnSummaries:      map[string][]core.Value{"a": {core.NewCarrier(core.TInteger)}},
 		FnInflight:       map[string]bool{"a": true},
 		FnAnalysisCounts: map[string]int{"a": 1},
-		DefsInstalled:    map[string]SrcPos{"a": {}},
+		DefsInstalled:    map[string]core.SrcPos{"a": {}},
 		DefsUsed:         map[string]bool{"a": true},
-		ContextTypes:     map[string]Value{"a": NewCarrier(TInteger)},
-		Diagnostics:      []CheckDiagnostic{{Code: "x"}},
+		ContextTypes:     map[string]core.Value{"a": core.NewCarrier(core.TInteger)},
+		Diagnostics:      []core.CheckDiagnostic{{Code: "x"}},
 	}
 	cp := c.Clone()
 
@@ -83,10 +88,10 @@ func TestCheckStateCloneIsolatesMaps(t *testing.T) {
 	cp.FnSummaries["b"] = nil
 	cp.FnInflight["b"] = true
 	cp.FnAnalysisCounts["b"] = 2
-	cp.DefsInstalled["b"] = SrcPos{}
+	cp.DefsInstalled["b"] = core.SrcPos{}
 	cp.DefsUsed["b"] = true
-	cp.ContextTypes["b"] = NewCarrier(TWord)
-	cp.Diagnostics = append(cp.Diagnostics, CheckDiagnostic{Code: "y"})
+	cp.ContextTypes["b"] = core.NewCarrier(core.TWord)
+	cp.Diagnostics = append(cp.Diagnostics, core.CheckDiagnostic{Code: "y"})
 	cp.StepCount = 99
 
 	// The original must observe none of it.

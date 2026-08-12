@@ -3,15 +3,17 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // runWith creates a fresh registry, applies the supplied setup fn (which
 // typically registers a few test words), then parses the input slice and
 // runs it. Tests in this file exercise the engine via the public native
 // registration API only — no boru parser, no built-in word library.
-func runWith(t *testing.T, setup func(*Registry), input []Value) []Value {
+func runWith(t *testing.T, setup func(*core.Registry), input []core.Value) []core.Value {
 	t.Helper()
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -22,7 +24,7 @@ func runWith(t *testing.T, setup func(*Registry), input []Value) []Value {
 		t.Fatalf("registration: %v", err)
 	}
 	r.InitRootContext()
-	out, err := NewTop(r).Run(input)
+	out, err := core.NewTop(r).Run(input)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -31,58 +33,58 @@ func runWith(t *testing.T, setup func(*Registry), input []Value) []Value {
 
 // registerAdd is a tiny native word that adds two integers.
 // Used as the canonical "engine works at all" probe.
-func registerAdd(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
+func registerAdd(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "add",
 
-		Signatures: []Signature{{
-			Args: []*Type{TInteger, TInteger},
-			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				a, _ := AsInteger(args[0])
-				b, _ := AsInteger(args[1])
-				return []Value{NewInteger(a + b)}, nil
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger, core.TInteger},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				a, _ := core.AsInteger(args[0])
+				b, _ := core.AsInteger(args[1])
+				return []core.Value{core.NewInteger(a + b)}, nil
 			}),
-			Returns: []*Type{TInteger}, BarrierPos: -1,
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
 		}},
 	})
 }
 
 // registerMul adds an integer multiplier. Used together with add for a
 // multi-word dispatch test.
-func registerMul(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
+func registerMul(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "mul",
 
-		Signatures: []Signature{{
-			Args: []*Type{TInteger, TInteger},
-			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				a, _ := AsInteger(args[0])
-				b, _ := AsInteger(args[1])
-				return []Value{NewInteger(a * b)}, nil
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger, core.TInteger},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				a, _ := core.AsInteger(args[0])
+				b, _ := core.AsInteger(args[1])
+				return []core.Value{core.NewInteger(a * b)}, nil
 			}),
-			Returns: []*Type{TInteger}, BarrierPos: -1,
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
 		}},
 	})
 }
 
 // registerNeg is a stack-only unary word for testing the path where
 // a word's sigs have BarrierPos=0 (no forward arg collection).
-func registerNeg(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
+func registerNeg(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "neg",
-		Signatures: []Signature{{
-			Args: []*Type{TInteger},
-			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				n, _ := AsInteger(args[0])
-				return []Value{NewInteger(-n)}, nil
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				n, _ := core.AsInteger(args[0])
+				return []core.Value{core.NewInteger(-n)}, nil
 			}),
-			Returns: []*Type{TInteger}, BarrierPos: 0,
+			Returns: []*core.Type{core.TInteger}, BarrierPos: 0,
 		}},
 	})
 }
 
 func TestSmokeRegistryStartsBare(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -98,11 +100,11 @@ func TestSmokeRegistryStartsBare(t *testing.T) {
 func TestSmokeRunWithNoWords(t *testing.T) {
 	// A program of pure literal values should round-trip via Run with
 	// no registered words at all.
-	out := runWith(t, nil, []Value{NewInteger(7)})
+	out := runWith(t, nil, []core.Value{core.NewInteger(7)})
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := AsInteger(out[0])
+	got, _ := core.AsInteger(out[0])
 	if got != 7 {
 		t.Errorf("got %d, want 7", got)
 	}
@@ -110,11 +112,11 @@ func TestSmokeRunWithNoWords(t *testing.T) {
 
 func TestSmokeAddForwardArgs(t *testing.T) {
 	// `add 2 3` uses forward collection; the handler should see args[0]=2, args[1]=3.
-	out := runWith(t, registerAdd, []Value{NewWord("add"), NewInteger(2), NewInteger(3)})
+	out := runWith(t, registerAdd, []core.Value{core.NewWord("add"), core.NewInteger(2), core.NewInteger(3)})
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := AsInteger(out[0])
+	got, _ := core.AsInteger(out[0])
 	if got != 5 {
 		t.Errorf("got %d, want 5", got)
 	}
@@ -122,11 +124,11 @@ func TestSmokeAddForwardArgs(t *testing.T) {
 
 func TestSmokeAddPrefixForm(t *testing.T) {
 	// `2 3 add` is the all-prefix form; matchSignature reads top-of-stack first.
-	out := runWith(t, registerAdd, []Value{NewInteger(2), NewInteger(3), NewWord("add")})
+	out := runWith(t, registerAdd, []core.Value{core.NewInteger(2), core.NewInteger(3), core.NewWord("add")})
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := AsInteger(out[0])
+	got, _ := core.AsInteger(out[0])
 	if got != 5 {
 		t.Errorf("got %d, want 5", got)
 	}
@@ -135,19 +137,19 @@ func TestSmokeAddPrefixForm(t *testing.T) {
 func TestSmokeMultipleWords(t *testing.T) {
 	// `add 2 3 mul 4` = (2+3)*4 = 20. The result of `add` lands on the
 	// stack as 5, then `mul` consumes 5 (prefix) and 4 (forward).
-	setup := func(r *Registry) {
+	setup := func(r *core.Registry) {
 		registerAdd(r)
 		registerMul(r)
 	}
-	input := []Value{
-		NewWord("add"), NewInteger(2), NewInteger(3),
-		NewWord("mul"), NewInteger(4),
+	input := []core.Value{
+		core.NewWord("add"), core.NewInteger(2), core.NewInteger(3),
+		core.NewWord("mul"), core.NewInteger(4),
 	}
 	out := runWith(t, setup, input)
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := AsInteger(out[0])
+	got, _ := core.AsInteger(out[0])
 	if got != 20 {
 		t.Errorf("got %d, want 20", got)
 	}
@@ -157,11 +159,11 @@ func TestSmokeStackOnlyDispatch(t *testing.T) {
 	// `5 neg` — neg is registered with BarrierPos:0 so the engine
 	// must consume the value from the prefix stack rather than
 	// forward-collecting.
-	out := runWith(t, registerNeg, []Value{NewInteger(5), NewWord("neg")})
+	out := runWith(t, registerNeg, []core.Value{core.NewInteger(5), core.NewWord("neg")})
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := AsInteger(out[0])
+	got, _ := core.AsInteger(out[0])
 	if got != -5 {
 		t.Errorf("got %d, want -5", got)
 	}
@@ -170,12 +172,12 @@ func TestSmokeStackOnlyDispatch(t *testing.T) {
 func TestSmokeUndefinedWordIsAnError(t *testing.T) {
 	// An unregistered word reaching the pointer must error rather than
 	// silently turn into an atom (cf. CLAUDE.md "Undefined Words" rule).
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	r.InitRootContext()
-	_, runErr := NewTop(r).Run([]Value{NewWord("nope")})
+	_, runErr := core.NewTop(r).Run([]core.Value{core.NewWord("nope")})
 	if runErr == nil {
 		t.Fatal("expected undefined_word error, got nil")
 	}
@@ -187,13 +189,13 @@ func TestSmokeUndefinedWordIsAnError(t *testing.T) {
 func TestSmokeSignatureMismatchIsAnError(t *testing.T) {
 	// `add "hello" 3` — handler expects two integers; passing a string
 	// should fail at dispatch time, not panic.
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	registerAdd(r)
 	r.InitRootContext()
-	_, runErr := NewTop(r).Run([]Value{NewWord("add"), NewString("hello"), NewInteger(3)})
+	_, runErr := core.NewTop(r).Run([]core.Value{core.NewWord("add"), core.NewString("hello"), core.NewInteger(3)})
 	if runErr == nil {
 		t.Fatal("expected signature error, got nil")
 	}

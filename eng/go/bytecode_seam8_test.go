@@ -3,6 +3,9 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // bytecode_seam8_test.go covers the residual formatting/constructor arms of
@@ -13,22 +16,22 @@ import (
 
 func TestW8OpcodeStringUnknown(t *testing.T) {
 	// An opcode past the name table renders its numeric fallback.
-	got := Opcode(250).String()
+	got := compiler.Opcode(250).String()
 	if got != "OP(250)" {
 		t.Fatalf("unknown opcode name = %q, want OP(250)", got)
 	}
 }
 
 func TestW8NewClosureValue(t *testing.T) {
-	v := NewClosure(3, []Value{NewInteger(1)})
-	cp, ok := v.Data.(ClosurePayload)
+	v := compiler.NewClosure(3, []core.Value{core.NewInteger(1)})
+	cp, ok := v.Data.(core.ClosurePayload)
 	if !ok {
 		t.Fatalf("NewClosure did not carry a ClosurePayload: %v", v)
 	}
 	if cp.Unit != 3 || len(cp.Captures) != 1 {
 		t.Fatalf("closure payload = %+v, want unit 3 with 1 capture", cp)
 	}
-	if !v.Parent.Equal(TFunction) {
+	if !v.Parent.Equal(core.TFunction) {
 		t.Fatalf("closure value parent = %v, want Function", v.Parent)
 	}
 }
@@ -36,17 +39,17 @@ func TestW8NewClosureValue(t *testing.T) {
 func TestW8DisassembleResidualOps(t *testing.T) {
 	// One program exercising the guarded-native, fallback, and user-poly
 	// disasm cases and the userpolys summary line.
-	sig := Signature{Args: []*Type{TInteger}, BarrierPos: -1}
-	p := &Program{
-		Code: []Instr{
-			{Op: OpCallNative, Arg: 0},
-			{Op: OpFallback, Arg: 0},
-			{Op: OpCallUserPoly, Arg: 0},
+	sig := core.Signature{Args: []*core.Type{core.TInteger}, BarrierPos: -1}
+	p := &compiler.Program{
+		Code: []compiler.Instr{
+			{Op: compiler.OpCallNative, Arg: 0},
+			{Op: compiler.OpFallback, Arg: 0},
+			{Op: compiler.OpCallUserPoly, Arg: 0},
 		},
-		Debug:     make([]SrcPos, 3),
-		Sigs:      []SigRef{{Word: "gw", Sig: &sig, Guard: true}},
-		Fallbacks: []FallbackSpan{{Desc: "fb", NIn: 1}},
-		UserPolys: []UserPolyRef{{Word: "up", Arity: 1, Units: []int{0}}},
+		Debug:     make([]core.SrcPos, 3),
+		Sigs:      []compiler.SigRef{{Word: "gw", Sig: &sig, Guard: true}},
+		Fallbacks: []core.FallbackSpan{{Desc: "fb", NIn: 1}},
+		UserPolys: []compiler.UserPolyRef{{Word: "up", Arity: 1, Units: []int{0}}},
 	}
 	out := p.Disassemble()
 	for _, want := range []string{

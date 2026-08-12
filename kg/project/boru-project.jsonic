@@ -171,6 +171,36 @@
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
+    {
+      id: "src:boru-viz"
+      kind: "text"
+      locator: "design/BORU-VIZ.0.md"
+      title: "boru:viz diagram source generation proposal"
+      retrieved_at: null
+      content_hash: "boru-viz-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
+      id: "src:boru-scry"
+      kind: "text"
+      locator: "design/BORU-SCRY.0.md"
+      title: "boru:scry introspection-as-data proposal"
+      retrieved_at: null
+      content_hash: "boru-scry-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
+      id: "src:go-module-graph"
+      kind: "text"
+      locator: "design/GO-MODULE-GRAPH.0.md"
+      title: "Go module graph and per-module coverage, measured"
+      retrieved_at: null
+      content_hash: "go-module-graph-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
   ]
   entities: [
     { key: "boru", type: "Concept", label: "boru language"
@@ -240,6 +270,8 @@
       attributes: { role: "the ten classes of measured core/go-vs-core/ts divergence behind core/spec/divergent.tsv, why the 1808-row crossdiff was blind to all of them, and the hit rate that makes the uncovered surface the place to look" } }
     { key: "go-ts-parity", type: "Document", label: "design/GO-TS-PARITY.0.md"
       attributes: { role: "the Go/TS parity program for core, parser and basic: the three shared TSV corpora and their two-runner rule, the capability table that forces core/ts before basic/ts, the divergence ledger, and the finding that an uncovered branch in one port is where a divergence hides" } }
+    { key: "go-module-graph", type: "Document", label: "design/GO-MODULE-GRAPH.0.md"
+      attributes: { role: "the measured Go-side snapshot: the module inventory, the direct-require graph and its twelve-edge transitive reduction, and per-module coverage in both columns — the merged ADR-008 gate and each module's own standalone suite" } }
     { key: "ts-parity-audit", type: "Document", label: "design/TS-PARITY-AUDIT.0.md"
       attributes: { role: "the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences" } }
     { key: "tabnas-upstream-first", type: "Document", label: "design/TABNAS-UPSTREAM-FIRST.0.md"
@@ -248,6 +280,10 @@
       attributes: { role: "the file-ready upstream defect report for the last live tabnas shim: both ports' runnable reproduction against the bare dependency, the follow-character table showing the divergence is conditional (0xFF.5 differs, 0xFF.x agrees), and the acceptance criterion that a regression test must cover both" } }
     { key: "state-machines", type: "Document", label: "design/STATE-MACHINES.0.md"
       attributes: { role: "the design RFC for general-purpose state machines: a mixed Go+boru boru:state module (definition/bindings/snapshot split, pure step, twelve-item semantic freeze, state_* check diagnostics, service and process hosts) and the argued decision to add words, not syntax" } }
+    { key: "boru-viz", type: "Document", label: "design/BORU-VIZ.0.md"
+      attributes: { role: "the boru:viz proposal: pure diagram-source generation (Mermaid + DOT, D2 later) from arbitrary data structures — code generation only, written in boru, with the shared graph/tree/trace/schema contract its §3 pins for boru:scry and every other producer" } }
+    { key: "boru-scry", type: "Document", label: "design/BORU-SCRY.0.md"
+      attributes: { role: "the boru:scry proposal: the mechanism whereby a boru system gains knowledge of itself as plain data — census, per-word, graph, schema and trace words curated over existing engine seams, and the plan for resolving the overlap with boru:debug" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [
@@ -511,6 +547,36 @@
       object: { kind: "entity", entity: "lang-go" }
       evidence: [{ source: "src:state-machines", locator: "Scope decisions (agreed)",
         quote: "State machines ship as the `boru:state` module" }]
+      confidence: 0.95 }
+    { subject: "boru-viz", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:boru-viz", locator: "title",
+        quote: "boru:viz — diagram source generation from arbitrary data structures" }]
+      confidence: 0.95 }
+    { subject: "boru-viz", predicate: "supports"
+      object: { kind: "entity", entity: "lang-go" }
+      evidence: [{ source: "src:boru-viz", locator: "Architecture — what is new",
+        quote: "`lang/go/modules/viz.go` — `BuildVizModule` scaffold" }]
+      confidence: 0.95 }
+    { subject: "boru-scry", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:boru-scry", locator: "title",
+        quote: "boru:scry — a boru system's knowledge of itself, as plain data" }]
+      confidence: 0.95 }
+    { subject: "boru-scry", predicate: "supports"
+      object: { kind: "entity", entity: "lang-go" }
+      evidence: [{ source: "src:boru-scry", locator: "Architecture",
+        quote: "File layout: `lang/go/modules/scry.go`, `docs_scry.go`," }]
+      confidence: 0.95 }
+    { subject: "go-module-graph", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:go-module-graph", locator: "title",
+        quote: "Go module graph and per-module coverage" }]
+      confidence: 0.95 }
+    { subject: "go-module-graph", predicate: "related_to"
+      object: { kind: "entity", entity: "kg" }
+      evidence: [{ source: "src:go-module-graph", locator: "Status",
+        quote: "the same ground truth `kg/gomod.boru` reads to build the knowledge graph's module view" }]
       confidence: 0.95 }
   ]
 }

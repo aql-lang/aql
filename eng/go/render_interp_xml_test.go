@@ -3,6 +3,8 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestRenderXmlTmplSrcMultiTokenHoles pins the source-form XmlInterp
@@ -12,22 +14,22 @@ import (
 // child element. The multi-token space separator in both loops is the
 // covered contract.
 func TestRenderXmlTmplSrcMultiTokenHoles(t *testing.T) {
-	tmpl := XmlTmpl{
+	tmpl := core.XmlTmpl{
 		Tag: "p",
-		Attr: []XmlAttrTmpl{{
+		Attr: []core.XmlAttrTmpl{{
 			Name: "x",
-			Parts: []InterpPart{
+			Parts: []core.InterpPart{
 				{Lit: "n="},
-				{Expr: []Value{NewInteger(1), NewWord("addq"), NewInteger(2)}},
+				{Expr: []core.Value{core.NewInteger(1), core.NewWord("addq"), core.NewInteger(2)}},
 			},
 		}},
-		Cren: []XmlCren{
-			{Kind: XmlCrenLit, Lit: "t"},
-			{Kind: XmlCrenExpr, Expr: []Value{NewWord("a"), NewWord("b")}},
-			{Kind: XmlCrenChild, Child: &XmlTmpl{Tag: "q"}},
+		Cren: []core.XmlCren{
+			{Kind: core.XmlCrenLit, Lit: "t"},
+			{Kind: core.XmlCrenExpr, Expr: []core.Value{core.NewWord("a"), core.NewWord("b")}},
+			{Kind: core.XmlCrenChild, Child: &core.XmlTmpl{Tag: "q"}},
 		},
 	}
-	v := NewXmlInterp(tmpl)
+	v := core.NewXmlInterp(tmpl)
 	got := v.String()
 	want := `interp-xml(<p x="n=${1 word(addq) 2}">t${word(a) word(b)}<q/></p>)`
 	if got != want {
@@ -36,9 +38,9 @@ func TestRenderXmlTmplSrcMultiTokenHoles(t *testing.T) {
 
 	// Negative pairing: an interp STRING with a multi-token expression
 	// renders in source form too — never the raw payload struct.
-	is := NewInterpString([]InterpPart{
+	is := core.NewInterpString([]core.InterpPart{
 		{Lit: "a "},
-		{Expr: []Value{NewWord("x"), NewWord("addq"), NewInteger(1)}},
+		{Expr: []core.Value{core.NewWord("x"), core.NewWord("addq"), core.NewInteger(1)}},
 	})
 	if s := is.String(); s != "interp('a ' ${word(x) word(addq) 1})" {
 		t.Errorf("interp render = %q", s)

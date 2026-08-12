@@ -1,0 +1,33 @@
+# check/spec/control — branch and loop analysis.
+#
+# ifq and forq (spec_fixtures_test.go registerControlFixtures) drive the
+# same core seam functions basic's production control words do — guard /
+# complement narrowing, carrier body runs, the def join, and
+# check.AnalyseLoopBody — with none of the recording protocol, which is
+# inactive in a compiler-less check run anyway. Forms are forward:
+# `ifq [cond] [then] [else]`, `forq N [body]`.
+
+# --- both arms are analysed and their results JOIN ---
+ifq [ 1 predq ] [ 2 ] [ 3 ]	Integer	same leaf both sides
+ifq [ 1 predq ] [ 2 ] [ "x" ]	Disjunct	different leaves join to a disjunct
+ifq [ 1 predq ] [ 2 ] [ 3 predq ]	Disjunct
+ifq [ 1 predq ] [ 1 anyq ] [ 3 ]	dynamic(Any)	a dynamic arm makes the join dynamic
+
+# --- a CONSTANT condition reduces to one arm and says so ---
+ifq [ true ] [ 2 ] [ 3 ]	Integer :: ~unreachable_branch
+ifq [ false ] [ 2 ] [ 3 ]	Integer :: ~unreachable_branch
+ifq [ false ] [ 2 ] [ 9 predq ]	Boolean :: ~unreachable_branch	the LIVE (else) arm's result commits
+
+# --- a non-boolean literal condition is not the constant reduction ---
+ifq [ 1 ] [ 2 ] [ 3 ]	Integer	no unreachable_branch: 1 is not a boolean literal
+
+# --- the loop body is analysed with the iterator bound as a carrier ---
+forq 3 [ 1 ]	Integer
+forq 3 [ 1 2 addq ]	Number
+forq 0 [ 1 ]	Integer	zero trips still analyses the body once
+forq 3 [ missingq ]	Any :: !undefined_word	an undefined word inside the body is caught
+
+# --- control composes with the rest of the vocabulary ---
+forq 3 [ ifq [ 1 predq ] [ 1 ] [ 2 ] ]	Integer
+forq 3 [ forq 2 [ 1 ] ]	Integer	nested loops
+defq cq [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] forq 3 [ 1 cq ]	Integer	a user fn inside a loop body

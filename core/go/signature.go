@@ -310,6 +310,31 @@ func SigTypeMatches(v Value, t *Type) bool {
 		if v.Parent != nil && t != nil && (v.Parent.ConformsTo(t) || t.ConformsTo(v.Parent)) {
 			return true
 		}
+		// A dynamic DISJUNCT bound matches if ANY alternative could — the
+		// optimistic dual of the strict-disjunct EVERY rule below. The
+		// runtime holds exactly one alternative, and gradual optimism picks
+		// the fitting one under the same contract as dynamic(Any): the
+		// runtime re-checks the concrete value. Without this arm a declared
+		// value-or-sentinel union (dynamic(Map ∪ None) from a stat-shaped
+		// word) fails every typed receiver slot — the Disjunct parent
+		// conforms to nothing and the whole-bound tand probe below cannot
+		// see through to the alternatives — so the union strands forward
+		// collection at the first field read.
+		if IsDisjunct(v) {
+			di, err := AsDisjunct(v)
+			if err == nil {
+				for _, alt := range di.Alternatives {
+					probe := alt
+					if IsBareTypeNode(alt) {
+						probe = CarrierOfLiteral(alt)
+					}
+					probe.Dynamic = true
+					if SigTypeMatches(probe, t) {
+						return true
+					}
+				}
+			}
+		}
 		bound := v
 		bound.Dynamic = false
 		return !IsNeverShape(TandValues(bound, NewCarrier(t)))
