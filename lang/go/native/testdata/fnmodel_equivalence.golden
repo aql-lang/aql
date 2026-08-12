@@ -271,7 +271,7 @@ WORD emit
 WORD enum
   [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum] +returnsfn
 WORD env
-  [Scalar/String] barrier=1 returns=[Any] +returnsfn
+  [Scalar/String] barrier=1 returns=[Any]
 WORD env-all
   [] barrier=0 returns=[Node/Map]
 WORD eq
@@ -640,8 +640,8 @@ WORD read
   [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
 WORD read-line
-  [Ideal/File] barrier=1 returns=[Any] +returnsfn
-  [Scalar/Atom/StreamKind] barrier=1 returns=[Any] +returnsfn
+  [Ideal/File] barrier=1 returns=[Any]
+  [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
 WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD receive
@@ -764,8 +764,8 @@ WORD stack-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD stat
-  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any] +returnsfn
-  [Scalar/Micron/Pathon] barrier=1 returns=[Any] +returnsfn
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Any]
 WORD state-of
   [Ideal/Service] barrier=1 returns=[Node/Map]
 WORD stderr
