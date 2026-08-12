@@ -257,6 +257,8 @@ func TestAllConcreteArgsBareTypeNode(t *testing.T) {
 
 func TestReturnsDynUnion(t *testing.T) {
 	r := newTestRegistry(t)
+	done := r.Check.Begin()
+	defer done()
 	f := ReturnsDynUnion(core.TString, core.TNone)
 	out := f(nil, r)
 	if len(out) != 1 {
@@ -268,5 +270,16 @@ func TestReturnsDynUnion(t *testing.T) {
 	}
 	if !core.IsDisjunct(v) {
 		t.Errorf("the bound must be the alternative set, got %s", v.Parent.Leaf())
+	}
+	// Each invocation mints a FRESH identity. A shared bound identity
+	// aliases every call site's modelled result — the def binder then
+	// collapses separate effectful evaluations into one slot, a proven
+	// miscompile (TestReadLineStdinAdvances, lang/go/test).
+	w := f(nil, r)[0]
+	if v.ID != "" && v.ID == w.ID {
+		t.Error("two invocations must not share a value ID")
+	}
+	if w.ID == "" {
+		t.Error("inside a check pass the modelled result must carry a minted ID")
 	}
 }

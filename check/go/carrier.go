@@ -2077,14 +2077,22 @@ func ReturnsStatic(types ...*core.Type) core.ReturnsFunc {
 // dynamic-modality hatch — while surfacing the real alternative set
 // instead of dynamic(Any). The precedent shape is the typed-patrun find
 // result, dynamic(Function ∪ None).
+// The union is minted INSIDE the closure, per invocation — never hoisted
+// to construction time. NewDynamicCarrierValue preserves its bound's
+// identity, and a hoisted bound gives every call site of every word
+// sharing the model ONE value ID (minted outside any check pass, so in
+// fact the empty ID). Identity is how the pipeline tracks values; a
+// shared ID let the def binder alias three separate read-line results to
+// one slot, which the compiled program then read back as three copies of
+// the LAST read — the TestReadLineStdinAdvances miscompile. ReturnsStatic
+// mints per call for the same reason; this must too.
 func ReturnsDynUnion(types ...*core.Type) core.ReturnsFunc {
-	alts := make([]core.Value, len(types))
-	for i, t := range types {
-		alts[i] = core.NewTypeLiteral(t)
-	}
-	union := core.NewDisjunct(alts)
 	return func(_ []core.Value, _ *core.Registry) []core.Value {
-		return []core.Value{core.NewDynamicCarrierValue(union)}
+		alts := make([]core.Value, len(types))
+		for i, t := range types {
+			alts[i] = core.NewTypeLiteral(t)
+		}
+		return []core.Value{core.NewDynamicCarrierValue(core.NewDisjunct(alts))}
 	}
 }
 
