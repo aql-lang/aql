@@ -203,3 +203,76 @@ func TestGetNodeReturnsDynamicDisjunctSchema(t *testing.T) {
 		t.Fatalf("plain dynamic receiver = %v, want dynamic Any", out)
 	}
 }
+
+// The boru:io guaranteed-error mirrors (exit / open / write-encoding).
+// The corpus drives the flagged shapes; these own the silent arms and
+// the gate declines that keep the false-positive pin at zero.
+func TestIOValidationMirrors(t *testing.T) {
+	r := mirrorReg(t)
+
+	// exit: the RANGE refusal is mirrored; a valid code is NOT — its
+	// runtime raise is the boru/exit control error, which is how the
+	// word works, not a program fault.
+	ex := exitCodeMirror()
+	ex([]Value{NewInteger(126)}, r)
+	if len(r.Check.Diagnostics) != 1 || r.Check.Diagnostics[0].Code != "exit_error" {
+		t.Fatalf("an out-of-range exit code must flag exit_error, got %+v", r.Check.Diagnostics)
+	}
+	r2 := mirrorReg(t)
+	ex([]Value{NewInteger(3)}, r2)
+	if len(r2.Check.Diagnostics) != 0 {
+		t.Fatalf("a valid exit code must stay silent, got %+v", r2.Check.Diagnostics)
+	}
+	// A computed code closes the gate.
+	r3 := mirrorReg(t)
+	ex([]Value{NewCarrier(TInteger)}, r3)
+	if len(r3.Check.Diagnostics) != 0 {
+		t.Fatalf("a computed exit code must not be flagged, got %+v", r3.Check.Diagnostics)
+	}
+
+	// open: an unknown mode flags; a known one and a missing opts map
+	// (the 1-arg sig's shape) stay silent.
+	op := openModeMirror(TAny)
+	r4 := mirrorReg(t)
+	op([]Value{modelPathon(t, r4, "mem://o.txt"), mapOfKV("mode", NewString("bogus"))}, r4)
+	if len(r4.Check.Diagnostics) != 1 || r4.Check.Diagnostics[0].Code != "open_error" {
+		t.Fatalf("an unknown open mode must flag open_error, got %+v", r4.Check.Diagnostics)
+	}
+	r5 := mirrorReg(t)
+	op([]Value{modelPathon(t, r5, "mem://o.txt"), mapOfKV("mode", NewString("append"))}, r5)
+	op([]Value{modelPathon(t, r5, "mem://o.txt")}, r5)
+	op([]Value{modelPathon(t, r5, "mem://o.txt"), mapOfKV("mode", NewCarrier(TString))}, r5)
+	if len(r5.Check.Diagnostics) != 0 {
+		t.Fatalf("valid/absent/computed modes must stay silent, got %+v", r5.Check.Diagnostics)
+	}
+
+	// write: an unencodable character and an unknown encoding flag; a
+	// representable one is silent, and a computed {enc:} closes the gate
+	// (reading it as absent would default to utf8 and flag nothing —
+	// or worse, flag a correct program).
+	w := writeEncMirror(2)
+	r6 := mirrorReg(t)
+	p := modelPathon(t, r6, "mem://l.txt")
+	w([]Value{p, NewString("€"), mapOfKV("enc", NewString("latin1"))}, r6)
+	if len(r6.Check.Diagnostics) != 1 || r6.Check.Diagnostics[0].Code != "write_error" {
+		t.Fatalf("an unencodable character must flag write_error, got %+v", r6.Check.Diagnostics)
+	}
+	r7 := mirrorReg(t)
+	w([]Value{p, NewString("x"), mapOfKV("enc", NewString("bogus"))}, r7)
+	if len(r7.Check.Diagnostics) != 1 {
+		t.Fatalf("an unknown encoding must flag, got %+v", r7.Check.Diagnostics)
+	}
+	r8 := mirrorReg(t)
+	w([]Value{p, NewString("hi"), mapOfKV("enc", NewString("utf16le"))}, r8)
+	w([]Value{p, NewString("€"), mapOfKV("enc", NewCarrier(TString))}, r8)
+	w([]Value{p, NewCarrier(TString), mapOfKV("enc", NewString("latin1"))}, r8)
+	if len(r8.Check.Diagnostics) != 0 {
+		t.Fatalf("representable/computed/carrier writes must stay silent, got %+v", r8.Check.Diagnostics)
+	}
+	// The residual still comes from writeReturns: a concrete Pathon
+	// target is handed back verbatim.
+	out := w([]Value{p, NewString("hi"), mapOfKV("enc", NewString("utf8"))}, r8)
+	if len(out) != 1 || !core.IsConcrete(out[0]) {
+		t.Fatalf("write residual = %v, want the concrete Pathon back", out)
+	}
+}

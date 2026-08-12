@@ -283,6 +283,36 @@ func readReturns(withOpts bool) ReturnsFunc {
 	}
 }
 
+// writeEncMirror flags a write whose ENCODING provably fails at run
+// time: an unknown {enc:} name, or content carrying a character the
+// requested encoding cannot represent (`"€" {enc:'latin1'}`). Both come
+// from encodeEnc — doWrite's own encoder, a pure function of
+// (content, enc) — so the mirror runs exactly that and wraps it the way
+// doWrite does, keeping code and detail byte-identical.
+//
+// Gated on deep concreteness of the OPTIONS map (a computed {enc:} must
+// not be read as a missing one) and on a concrete String content. A
+// Bytes payload is written verbatim with no encoding step, so those
+// sigs carry no mirror at all.
+func writeEncMirror(optsAt int) ReturnsFunc {
+	base := writeReturns()
+	return MirrorReturns("write",
+		func(args []Value) bool {
+			return len(args) > optsAt && DeepConcrete(args[optsAt]) && IsConcrete(args[1])
+		},
+		func(args []Value, r *Registry) error {
+			content, err := args[1].AsConcreteString()
+			if err != nil {
+				return nil // not a plain String: the value path owns it
+			}
+			enc, _, _, _, _, _ := parseFileOpts(args[optsAt])
+			if _, encErr := encodeEnc(content, enc); encErr != nil {
+				return r.BoruError("write_error", fmt.Sprintf("write: %v", encErr), "write")
+			}
+			return nil
+		}, base)
+}
+
 // writeReturns is the check-mode result model for write's Pathon sigs:
 // the runtime hands back the target it wrote to VERBATIM (returnPath),
 // so a concrete Pathon argument IS the result — returning it keeps the

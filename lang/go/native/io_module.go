@@ -1,6 +1,7 @@
 package native
 
 import (
+	"fmt"
 	"sort"
 
 	core "github.com/boru-lang/boru/core/go"
@@ -185,7 +186,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 				{Args: []*Type{TPathon, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
 				{Args: []*Type{streamKind, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
+				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPathon}, ReturnsFn: writeEncMirror(2), BarrierPos: -1},
 				{Args: []*Type{TPathon, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
 				{Args: []*Type{TPathon, TString}, Impl: Go(writeHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
 				{Args: []*Type{TPathon, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
@@ -319,9 +320,10 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// lying about how it died, so they are refused at the call.
 			Name: "exit",
 			Signatures: []Signature{{
-				Args:    []*Type{TInteger},
-				Impl:    Go(exitHandler),
-				Returns: []*Type{}, BarrierPos: -1,
+				Args:      []*Type{TInteger},
+				Impl:      Go(exitHandler),
+				ReturnsFn: exitCodeMirror(),
+				Returns:   []*Type{}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -413,7 +415,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// truncate, perm}; the default is a read-only open.
 			Name: "open",
 			Signatures: []Signature{
-				{Args: []*Type{TPathon, TMap}, Impl: Go(openImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TMap}, Impl: Go(openImpl), Returns: []*Type{handleType}, ReturnsFn: openModeMirror(handleType), BarrierPos: -1},
 				{Args: []*Type{TPathon}, Impl: Go(openImpl), Returns: []*Type{handleType}, BarrierPos: -1},
 			},
 		},
@@ -619,18 +621,59 @@ func envAllHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // exitHandler raises the reserved exit control error. It never returns a
 // value: the whole point is that execution stops here and the driver
 // decides what the status means.
-func exitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	code, err := args[0].AsConcreteInteger()
+// validateExitCode is exitHandler's PURE prefix: the two refusals
+// decidable from the code VALUE alone. Split out so the check-mode
+// mirror can run exactly this and nothing else — the handler's tail
+// raises the boru/exit CONTROL error, which is how `exit` works and
+// must never be mirrored as a program fault.
+func validateExitCode(v Value, r *Registry) error {
+	code, err := v.AsConcreteInteger()
 	if err != nil {
-		return nil, r.BoruErrorAt("exit_error", "exit: code must be an Integer",
-			"exit", args[0].Pos())
+		return r.BoruErrorAt("exit_error", "exit: code must be an Integer",
+			"exit", v.Pos())
 	}
 	if code < 0 || code > 125 {
-		return nil, r.BoruErrorHintAt("exit_error",
+		return r.BoruErrorHintAt("exit_error",
 			"exit: code must be 0..125", "exit",
 			"126 and 127 are reserved for the shell (not executable / not found) "+
 				"and 128+n means killed by signal n — a program that returns one "+
-				"of those misreports how it died", args[0].Pos())
+				"of those misreports how it died", v.Pos())
 	}
+	return nil
+}
+
+// exitCodeMirror flags an out-of-range literal exit code at check time.
+// The gate is the ordinary concrete one (a scalar has no interior, so
+// DeepConcrete and IsConcrete agree here), and the validator stops
+// before the control-error raise.
+func exitCodeMirror() ReturnsFunc {
+	return MirrorReturns("exit", DeepConcreteOptions,
+		func(args []Value, r *Registry) error { return validateExitCode(args[0], r) },
+		ReturnsStatic())
+}
+
+// openModeMirror flags an unknown {mode:} at check time by running
+// openOptsFromMap — doOpenWord's own first step, and a pure one (it
+// reads the options map and returns OpenOpts; it touches no file) —
+// wrapped exactly as the handler wraps it.
+func openModeMirror(result *Type) ReturnsFunc {
+	return MirrorReturns("open", DeepConcreteOptions,
+		func(args []Value, r *Registry) error {
+			if len(args) < 2 {
+				return nil
+			}
+			if _, err := openOptsFromMap(args[1]); err != nil {
+				return r.BoruError("open_error", fmt.Sprintf("open: %v", err), "open")
+			}
+			return nil
+		},
+		ReturnsStatic(result))
+}
+
+func exitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateExitCode(args[0], r); err != nil {
+		return nil, err
+	}
+	code, _ := args[0].AsConcreteInteger()
 	return nil, core.NewExitError(code, r.Source, args[0].Pos())
 }
