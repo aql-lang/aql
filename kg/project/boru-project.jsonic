@@ -161,6 +161,16 @@
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
+    {
+      id: "src:state-machines"
+      kind: "text"
+      locator: "design/STATE-MACHINES.0.md"
+      title: "general-purpose state machines: the boru:state module"
+      retrieved_at: null
+      content_hash: "state-machines-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
   ]
   entities: [
     { key: "boru", type: "Concept", label: "boru language"
@@ -236,6 +246,8 @@
       attributes: { role: "ADR-014's case study: why a tabnas parser defect is fixed upstream and never behind a boru shim — the five shims the 2026-08-10 upgrade retired, the two-workarounds-deep episode that earned the rule, and the boundary against boru's own grammar-layer divergences" } }
     { key: "tabnas-dot-boundary-report", type: "Document", label: "design/TABNAS-DOT-BOUNDARY-REPORT.0.md"
       attributes: { role: "the file-ready upstream defect report for the last live tabnas shim: both ports' runnable reproduction against the bare dependency, the follow-character table showing the divergence is conditional (0xFF.5 differs, 0xFF.x agrees), and the acceptance criterion that a regression test must cover both" } }
+    { key: "state-machines", type: "Document", label: "design/STATE-MACHINES.0.md"
+      attributes: { role: "the design RFC for general-purpose state machines: a mixed Go+boru boru:state module (definition/bindings/snapshot split, pure step, twelve-item semantic freeze, state_* check diagnostics, service and process hosts) and the argued decision to add words, not syntax" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [
@@ -489,6 +501,16 @@
       object: { kind: "entity", entity: "parser-go" }
       evidence: [{ source: "src:ts-parity-audit", locator: "the differential",
         quote: "After the fixes the differential is **0 divergences across 1,765 rows**." }]
+      confidence: 0.95 }
+    { subject: "state-machines", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:state-machines", locator: "title",
+        quote: "Design for general-purpose **state machines** in boru — a builtin" }]
+      confidence: 0.95 }
+    { subject: "state-machines", predicate: "supports"
+      object: { kind: "entity", entity: "lang-go" }
+      evidence: [{ source: "src:state-machines", locator: "Scope decisions (agreed)",
+        quote: "State machines ship as the `boru:state` module" }]
       confidence: 0.95 }
   ]
 }
