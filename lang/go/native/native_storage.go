@@ -1387,6 +1387,23 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	if rt, ok := container.Data.(RecordTypeInfo); ok && rt.Fields != nil {
 		return recordSchemaFieldReturns(rt, key)
 	}
+	// A DYNAMIC DISJUNCT receiver with a SHAPED alternative — stat's
+	// dynamic(Record∪None) union — resolves the field through the record
+	// alternative's schema, so `(IO.stat p).size` types dynamic(Integer)
+	// instead of dynamic(Any). Same gradual modality as the direct
+	// schema branch above: the None alternative (a stat miss) and any
+	// field absent at run time read optimistically and are discharged by
+	// a guard — recordSchemaFieldReturns never claims strictly. A union
+	// with no record alternative falls through unchanged.
+	if container.Dynamic {
+		if di, err := AsDisjunct(container); err == nil {
+			for _, alt := range di.Alternatives {
+				if rt, ok := alt.Data.(RecordTypeInfo); ok && rt.Fields != nil {
+					return recordSchemaFieldReturns(rt, key)
+				}
+			}
+		}
+	}
 	// A store-shaped FLEX carrier (`flex {…}` and the set-writes threaded
 	// through it — design/checker-precision-fronts.0.md §2 stage 1): a key
 	// this container saw written reads back its recorded bound, surfaced

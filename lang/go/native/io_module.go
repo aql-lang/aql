@@ -356,8 +356,8 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// target is a Pathon; an optional map carries {follow, resolve}.
 			Name: "stat",
 			Signatures: []Signature{
-				{Args: []*Type{TPathon, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(TMap, TNone), BarrierPos: -1},
-				{Args: []*Type{TPathon}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(TMap, TNone), BarrierPos: -1},
+				{Args: []*Type{TPathon, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, ReturnsFn: statShapeReturns(fileType), BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, ReturnsFn: statShapeReturns(fileType), BarrierPos: -1},
 			},
 		},
 		{
@@ -521,7 +521,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// filesystem reports a synthetic volume).
 			Name: "space",
 			Signatures: []Signature{
-				{Args: []*Type{TPathon}, Impl: Go(spaceHandler), Returns: []*Type{TMap}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(spaceHandler), Returns: []*Type{TMap}, ReturnsFn: spaceShapeReturns(), BarrierPos: -1},
 			},
 		},
 		{

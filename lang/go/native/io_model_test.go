@@ -107,3 +107,85 @@ func mapOfKV(k string, v Value) Value {
 	m.Set(k, v)
 	return NewMap(m)
 }
+
+func TestStatSpaceShapeReturns(t *testing.T) {
+	r := mirrorReg(t)
+
+	// stat: a dynamic Record∪None union whose record alternative carries
+	// the full buildStatRecord field set.
+	out := statShapeReturns(TAtom)(nil, r)
+	if len(out) != 1 || !out[0].Dynamic {
+		t.Fatalf("stat shape = %v, want one dynamic carrier", out)
+	}
+	di, err := AsDisjunct(out[0])
+	if err != nil || len(di.Alternatives) != 2 {
+		t.Fatalf("stat bound = (%v, %v), want a two-alternative disjunct", di, err)
+	}
+	rt, ok := di.Alternatives[0].Data.(core.RecordTypeInfo)
+	if !ok {
+		t.Fatalf("stat map alternative = %T, want a record schema", di.Alternatives[0].Data)
+	}
+	for _, field := range []string{"name", "path", "type", "size", "mode", "mtime", "owner", "group", "target", "xattr"} {
+		if _, ok := rt.Fields.Get(field); !ok {
+			t.Errorf("stat schema lacks %q", field)
+		}
+	}
+	if n := core.TypeNodeOf(di.Alternatives[1]); n == nil || !n.Equal(TNone) {
+		t.Errorf("stat second alternative = %v, want the None node", di.Alternatives[1])
+	}
+
+	// Identity discipline: two invocations mint DISTINCT values (the
+	// def-slot aliasing lesson — a shared hoisted bound aliased three
+	// reads onto one compiled slot).
+	again := statShapeReturns(TAtom)(nil, r)
+	if out[0].ID != "" && out[0].ID == again[0].ID {
+		t.Error("stat shape reuses one value identity across invocations")
+	}
+
+	// space: a dynamic record schema of the filesystem-stats fields.
+	sout := spaceShapeReturns()(nil, r)
+	if len(sout) != 1 || !sout[0].Dynamic {
+		t.Fatalf("space shape = %v, want one dynamic carrier", sout)
+	}
+	srt, ok := sout[0].Data.(core.RecordTypeInfo)
+	if !ok {
+		t.Fatalf("space bound = %T, want a record schema", sout[0].Data)
+	}
+	for _, field := range []string{"total", "free", "available", "bsize", "type"} {
+		if _, ok := srt.Fields.Get(field); !ok {
+			t.Errorf("space schema lacks %q", field)
+		}
+	}
+}
+
+func TestGetNodeReturnsDynamicDisjunctSchema(t *testing.T) {
+	r := mirrorReg(t)
+
+	// A dynamic Record∪None receiver resolves a schema field GRADUALLY.
+	recv := statShapeReturns(TAtom)(nil, r)[0]
+	out := getNodeReturns([]Value{NewString("size"), recv}, r)
+	if len(out) != 1 || !out[0].Dynamic || !out[0].Parent.Equal(TInteger) {
+		t.Fatalf("schema field through the union = %v, want dynamic Integer", out)
+	}
+	// A field outside the schema keeps dynamic Any (an open map at run
+	// time may carry it).
+	out = getNodeReturns([]Value{NewString("bogus"), recv}, r)
+	if len(out) != 1 || !out[0].Dynamic || !out[0].Parent.Equal(TAny) {
+		t.Fatalf("unknown field through the union = %v, want dynamic Any", out)
+	}
+	// A dynamic union with NO record alternative (env's String∪None)
+	// falls through unchanged.
+	strUnion := NewDynamicCarrierValue(NewDisjunct([]Value{
+		NewTypeLiteral(TString), NewTypeLiteral(TNone),
+	}))
+	out = getNodeReturns([]Value{NewString("size"), strUnion}, r)
+	if len(out) != 1 || !out[0].Dynamic || !out[0].Parent.Equal(TAny) {
+		t.Fatalf("recordless union = %v, want dynamic Any", out)
+	}
+	// A dynamic NON-disjunct receiver (plain dynamic Any) declines the
+	// probe and keeps the fallback.
+	out = getNodeReturns([]Value{NewString("size"), NewDynamicCarrier(TAny)}, r)
+	if len(out) != 1 || !out[0].Dynamic || !out[0].Parent.Equal(TAny) {
+		t.Fatalf("plain dynamic receiver = %v, want dynamic Any", out)
+	}
+}

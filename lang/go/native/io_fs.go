@@ -65,6 +65,53 @@ func buildStatRecord(fi capabilities.FileInfo, path string, fileType *Type) Valu
 	return NewMap(om)
 }
 
+// statShapeReturns is stat's check-mode result model: the same dynamic
+// Map∪None union ReturnsDynUnion declared before it, with the Map
+// alternative SHAPED — a record schema of buildStatRecord's fixed field
+// set — so a field read through the union resolves its declared type
+// (getNodeReturns' dynamic-disjunct schema branch) instead of widening
+// at dynamic(Any). Conditional fields are declared too (target rides
+// symlinks, xattr rides {xattr:true}): a schema read is GRADUAL
+// (recordSchemaFieldReturns), so a field absent at run time reads
+// optimistically and is discharged by a guard, never claimed strictly.
+// Everything is built INSIDE the closure — fresh value identities per
+// invocation (the def-slot aliasing lesson from #343's read-line
+// incident).
+func statShapeReturns(fileType *Type) ReturnsFunc {
+	return func(_ []Value, _ *Registry) []Value {
+		f := NewOrderedMap()
+		f.Set("name", NewTypeLiteral(TString))
+		f.Set("path", NewTypeLiteral(TString))
+		f.Set("type", NewTypeLiteral(fileType))
+		f.Set("size", NewTypeLiteral(TInteger))
+		f.Set("mode", NewTypeLiteral(TInteger))
+		f.Set("mtime", NewTypeLiteral(TInteger))
+		f.Set("owner", NewTypeLiteral(TInteger))
+		f.Set("group", NewTypeLiteral(TInteger))
+		f.Set("target", NewTypeLiteral(TString))
+		f.Set("xattr", NewTypeLiteral(TMap))
+		return []Value{NewDynamicCarrierValue(NewDisjunct([]Value{
+			NewRecordType(f), NewTypeLiteral(TNone),
+		}))}
+	}
+}
+
+// spaceShapeReturns is space's check-mode result model — the record
+// schema of spaceHandler's filesystem-stats map, dynamic like every
+// schema claim over a runtime-populated container. Built inside the
+// closure for the same identity discipline as statShapeReturns.
+func spaceShapeReturns() ReturnsFunc {
+	return func(_ []Value, _ *Registry) []Value {
+		f := NewOrderedMap()
+		f.Set("total", NewTypeLiteral(TInteger))
+		f.Set("free", NewTypeLiteral(TInteger))
+		f.Set("available", NewTypeLiteral(TInteger))
+		f.Set("bsize", NewTypeLiteral(TInteger))
+		f.Set("type", NewTypeLiteral(TString))
+		return []Value{NewDynamicCarrierValue(NewRecordType(f))}
+	}
+}
+
 // xattrValue renders one attribute payload: a String when the bytes are
 // valid UTF-8, Bytes otherwise — the mount read-payload convention.
 func xattrValue(v []byte) Value {
