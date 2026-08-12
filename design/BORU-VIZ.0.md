@@ -81,8 +81,10 @@ Boundaries against the neighbouring modules:
 3. **Pure words: data in, string out.** Signature convention
    `[value:Any opts:Map] ~> String` throughout. No I/O, no clock, no
    randomness. The caller composes with `boru:io` to write files. The
-   module therefore runs everywhere the engine runs: sandbox profile,
-   spec runner, wasm playground.
+   module therefore needs no capability or policy scope of its own and
+   runs wherever the engine runs — spec runner, wasm playground, and
+   sandboxed programs once the sandbox profile's module allowlist
+   admits it (§8).
 4. **Readable by default: budgets and honest elision.** Every tool
    that survives contact with a real codebase prunes before it draws
    (Doxygen caps local graphs at 50 nodes; pydeps defaults to a
@@ -212,7 +214,7 @@ if they outgrow viz they split into a future `boru:graph-util`
 |------|-----------|-----------|
 | `Viz.focus` | `Map opts:Map ~> Map` | The neighbourhood of `on:` within `depth:` hops (default 2), following `direction:'out'|'in'|'both'` (default both). The pydeps `--max-bacon` / go-callvis `-focus` operation. |
 | `Viz.collapse` | `Map opts:Map ~> Map` | Merge nodes into their `group:` (or by id `prefix:`), lifting edges to the merged nodes and dropping self-loops. The dependency-cruiser `collapsePattern` operation; turns a word graph into a module graph. |
-| `Viz.cycles` | `Map ~> List` | Strongly-connected components with more than one member, as a List of id-Lists. Pairs visualisation with validation on the same data (madge `--circular`): the same value drives a highlighted drawing or a test assertion. |
+| `Viz.cycles` | `Map ~> List` | Directed cycles, as a List of id-Lists: strongly-connected components with more than one member, **plus singleton components carrying a self-edge** (`a -> a` is a cycle — a directly recursive word must not slip the assertion). Pairs visualisation with validation on the same data (madge `--circular`): the same value drives a highlighted drawing or a test assertion. |
 
 Error codes (registered per `REFERENCE.md` error-code discipline):
 `viz_unknown_target`, `viz_unsupported_target`, `viz_bad_graph`,
@@ -254,8 +256,10 @@ lingua franca: ~35 years of Graphviz, cluster/rank/port control, and
 universal downstream tooling (local `dot`, VS Code extensions, Sphinx,
 Kroki, viz-js in any page). The emitter:
 
-- always double-quotes ids and labels, escaping `"` and `\` — the
-  only robust policy for arbitrary data;
+- always double-quotes ids and labels, escaping `"` and `\`, and
+  encodes literal line breaks as DOT `\n`/`\l` escapes — a raw newline
+  inside a quoted string breaks the parse, and arbitrary data contains
+  newlines;
 - maps `groups` to `subgraph cluster_<id>` blocks and `direction` to
   `rankdir`;
 - emits nodes and edges in sorted order with one statement per line,
@@ -311,7 +315,9 @@ Viz.shape config {}
 Viz.seq (Scry.trace [load-orders summarize] {}) {}
 
 # 5. the repository's own knowledge graph — kg output draws unchanged
-def g (IO.read (make Pathon "kg/out/graph.json"))
+#    (run from kg/, extending kg/README.md's own query example)
+import "./queries.boru"
+def g (IO.read (make Pathon "out/graph.json"))
 Viz.graph {edges: (KgQuery.edge-list g)} {title:'boru repo'}
 
 # 6. record schemas as a class diagram
@@ -371,10 +377,17 @@ lang/spec/module-viz.tsv        # executable spec rows (ADR-003)
 ## 8. Policy and safety
 
 Every viz word is pure: no file, network, clock, process, or terminal
-access, so no `lang/go/policy` scope gates it and it is importable
-under every shipped profile including `sandbox`, and in the wasm
-playground. Writing a diagram to disk is the caller's composition with
-`boru:io` and rides the existing `fileops`/`disk.write` gates.
+access, so no `lang/go/policy` scope gates the words themselves.
+Module *imports* are gated separately, and the `sandbox` profile
+denies them by default behind an explicit allowlist
+(`lang/go/policy/profiles/sandbox.jsonic` — currently `boru:math-util`,
+`boru:time-util`, `boru:io`, `boru:cli`). `boru:cli` is on that list
+precisely because it is pure; viz qualifies on the same argument, so
+phase 1 adds `boru:viz` to the sandbox allowlist (and to any profile
+extending it) with a purity comment mirroring cli's. Any boru modules
+`viz.boru` itself imports must be admitted the same way. Writing a
+diagram to disk is the caller's composition with `boru:io` and rides
+the existing `fileops`/`disk.write` gates.
 
 The one safety obligation viz itself carries is **escaping**: node
 labels come from arbitrary user data, and both Mermaid and DOT are
@@ -388,9 +401,10 @@ Ordered value-per-effort; each phase is shippable alone.
 
 1. **Phase 1 — the contract and the generic emitters.** §3 shapes;
    `Viz.graph`, `Viz.tree`, `Viz.shape`, `Viz.kinds`; Mermaid + DOT;
-   budgets, elision, escaping, determinism; full docs/spec/test
-   lattice. No scry dependency: kg output, adjacency literals, and
-   hand-built Maps are already drawable (§6 ex. 5).
+   budgets, elision, escaping, determinism; the sandbox-profile
+   allowlist line (§8); full docs/spec/test lattice. No scry
+   dependency: kg output, adjacency literals, and hand-built Maps are
+   already drawable (§6 ex. 5).
 2. **Phase 2 — the system views and transforms.** `Viz.seq` and
    `Viz.classes` over the scry phase-1/2 words
    ([BORU-SCRY.0.md](BORU-SCRY.0.md) §8); `Viz.focus`,
@@ -412,8 +426,8 @@ Ordered value-per-effort; each phase is shippable alone.
   single-line and error forms.
 - **Goldens**: `viz_test.boru` (boru:test) and `viz_test.go` pin exact
   emitter output for small fixed inputs, including every escaping
-  trap: labels containing `end`, `"`, `#`, `-->`, `];`, ids starting
-  `o`/`x`, unicode.
+  trap: labels containing `end`, `"`, `#`, `-->`, `];`, embedded
+  newlines (multi-line labels), ids starting `o`/`x`, unicode.
 - **Determinism**: permuting input node/edge order must not change one
   output byte; running twice must not either.
 - **Every positive test pairs with a negative one** (repo rule):

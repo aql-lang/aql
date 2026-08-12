@@ -74,6 +74,7 @@ keep the two in sync in the same commit.
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary — RESOLVED BY FIX in tabnas parser v0.8.3, shim deleted | PR #338 retirement attempt (flagged for NUR by Codex P1) |
 | [NUR062](#nur062) | Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible | PR #339 maintainer decision (flagged for NUR by Codex P1) |
+| [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2329,3 +2330,41 @@ exponents are *content*: `0XFF` is a typo for `0xFF` far more often than it
 is anything a user meant, whereas `0xAB` vs `0xab` and `1E3` vs `1e3` carry
 no such signal. Recording it Pending rather than Allowed because the
 **Allowed** verdict is the maintainer's to give, not this record's to assume.
+
+---
+
+## NUR063 — Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) {#nur063}
+
+**Status:** Pending · **Recorded:** 2026-08-12 · **Surfaced by:**
+design/BORU-SCRY.0.md §6 (the boru:scry proposal); flagged for this
+register by the PR #344 review (Codex P1)
+
+**Rule:** one capability, one home: a word lives in exactly one module
+surface and `boru describe` names it there — the module taxonomy
+`lang/go/CLAUDE.md` documents, and the same single-source value behind
+ADR-001's no-shadowing rule.
+
+**Divergence:** `boru:debug` shipped with seven data-returning
+self-knowledge words (`words`, `defs`, `modules`, `sig`, `body`,
+`deps`, `shape`). The accepted-in-discussion direction (2026-08-12)
+splits introspection into `boru:scry`, which adopts those seven — so if
+the proposal ships as designed, the same seven capabilities dispatch
+from two module surfaces backed by shared Go handlers. No code exists
+yet; the divergence begins the day `BuildScryModule` registers them.
+
+**Evidence:** design/BORU-SCRY.0.md §2 (the overlap inventory) and §6
+(the containment plan: shared handlers so behaviour cannot fork, scry
+canonical, the debug copies frozen at today's seven, `boru describe`
+marking the debug variants' canonical home).
+
+**Documentation status:** the plan is stated in design/BORU-SCRY.0.md
+§6 and its open question §9 Q1; nothing user-facing exists to update
+yet.
+
+**Proposed verdict:** none yet — deliberately. Keeping both surfaces
+indefinitely is an **Allowed** argument the maintainer may make;
+deprecating and later removing the debug copies is a resolve-by-fix
+path. design/BORU-SCRY.0.md §9 Q1 puts that choice to the maintainer
+with a lean (keep through one release, then decide with usage
+evidence). Recorded now so the dual surface cannot ship as an
+unexamined default.

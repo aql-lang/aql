@@ -51,7 +51,7 @@ possible (the `boru:debug` design principle, `DEBUG-MODULE.0.md` §2.4).
 | Word/type schema data | `inspect` (`lang/go/native/native_inspect.go`) | shapes are ad-hoc; scry pins stable ones |
 | Type lattice navigation | `boru:type-util` (`parent`, `root`, `lca`, `alts`, `paramsof`, `returnsof`) | navigation, not enumeration; no catalog of what exists |
 | Word docs / categories / module catalog | `lang/go/native/help` (categories table, `moduleCatalog`, `FuncInfo`) | **text-only** — the taxonomy is not exposed as data to boru at all |
-| Execution steps | `Engine.SetTrace` seam (`core/go/engine.go`); `Debug.trace`/`IO.trace` **print** | no data-returning trace |
+| Execution steps | the cross-registry hook `Registry.SetDebugTraceFrom` + `RunningEngineChain` (`core/go/debug_trace_hook_test.go`); `Debug.trace`/`IO.trace` **print** | no data-returning trace |
 | Value structure census | `Debug.shape`, `StructUtil.walk` | — (adopted) |
 | Static diagnostics / compilability | `Vm.check`, `Vm.compile` (already data) | none — stays in `boru:vm` (§3) |
 | Repo-level structure graph | kg bundle + `KgQuery.*` | none — offline/repo scope, deliberately separate (§3) |
@@ -91,9 +91,13 @@ re-packaging.
 
 ## 4. The word surface
 
-Notation: `~>` denotes "returns". All words are read-only and pure
-with respect to program state; none mutates the registry, none
-performs I/O. Graph-returning words emit the contract shape of
+Notation: `~>` denotes "returns". Every word except `Scry.trace` is
+read-only and pure: no registry mutation, no I/O. `Scry.trace` is the
+carve-out — the *observation* it adds is pure, but it **runs the body
+it is given**, so the body's own effects (I/O, `def`s, mutation)
+happen exactly as they would under `Debug.steps` (§8); callers and
+policy work must not treat a traced run as effect-free.
+Graph-returning words emit the contract shape of
 [BORU-VIZ.0.md](BORU-VIZ.0.md) §3.1 verbatim; `Scry.trace` emits §3.3
 rows; `Scry.schema` emits §3.4.
 
@@ -112,7 +116,7 @@ rows; `Scry.schema` emits §3.4.
 |------|-----------|-----------|
 | `Scry.sig` | `Any ~> List` | Signatures as `[{args returns} …]` (adopts `Debug.sig`). |
 | `Scry.body` | `Any ~> List` | Quoted body of a boru-defined word; atom `native` for host words (adopts `Debug.body`). |
-| `Scry.deps` | `List ~> List` | Distinct word names a quoted body references (adopts `Debug.deps` / `native.WalkBodyWords`). |
+| `Scry.deps` | `List ~> List` | Distinct word names a quoted body references (adopts `Debug.deps` / `native.WalkBodyWords`). Reach *receivers* are included; literal field keys are not — see `word-graph` for the module-export consequence. |
 | `Scry.info` | `String ~> Map` | Describe-as-data: `{name module category doc examples signatures}`. **Needs the one genuinely new Go export**: the `help` taxonomy (categories table, catalog, `FuncInfo`) surfaced as values (phase 3). |
 
 ### Graphs — how it hangs together
@@ -120,7 +124,7 @@ rows; `Scry.schema` emits §3.4.
 | Word | Signature | Behaviour |
 |------|-----------|-----------|
 | `Scry.module-graph` | `~> Map` | Contract graph: nodes = modules touched by this program (kind-tagged), edges = import relations (program → module always; module → module where a boru-written module's imports are known, e.g. `boru:repl` → `boru:net`). |
-| `Scry.word-graph` | `opts:Map ~> Map` | Contract graph of word references: fold `deps` over bodies. Opts: `{roots:[names]}` (default: all defs), `{depth:n}`, `{include-native:false}` (default — native leaves appear only with `true`, or the graph drowns in `add`/`get`). Nodes carry `kind:'native'|'defined'` and `group:<module>`, so `Viz.collapse` lifts it to a module view for free. |
+| `Scry.word-graph` | `opts:Map ~> Map` | Contract graph of word references. **Not** a plain fold of `deps`: `WalkBodyWords` deliberately does not walk literal Reach field keys (`core/go/fn_capture.go` — `.code` is a field name, not a reference), so a body's `MathUtil.sqrt` surfaces only `MathUtil`. The builder therefore additionally resolves Reach segments whose receiver is an imported module namespace into `Module.export` edges, or module calls would be absent from the graph. Opts: `{roots:[names]}` (default: all defs), `{depth:n}`, `{include-native:false}` (default — native leaves appear only with `true`, or the graph drowns in `add`/`get`). Nodes carry `kind:'native'|'defined'` and `group:<module>`, so `Viz.collapse` lifts it to a module view for free. |
 | `Scry.type-graph` | `opts:Map ~> Map` | Contract graph of a lattice fragment: parent edges from `{root:'Any' depth:n}` or `{types:[names]}`. |
 
 ### Values and runtime — what is this thing, what happened
@@ -129,7 +133,7 @@ rows; `Scry.schema` emits §3.4.
 |------|-----------|-----------|
 | `Scry.shape` | `Any ~> Map` | Structural census of a value: counts by kind, node count, max depth (adopts `Debug.shape`). |
 | `Scry.schema` | `Type ~> Map` | Contract schema of a record/class/surface type: `{name kind fields parents relations}` — the stable curation of what `inspect` returns ad-hoc. |
-| `Scry.trace` | `List opts:Map ~> List` | Run a quoted body, returning contract trace rows `[{seq word depth module} …]` instead of printing. Built on the existing `Engine.SetTrace` per-step callback (zero cost when unused); frame depth from the tape's frame marks. Opts: `{max-steps:10000}` (hard bound — the row List is memory), `{include-stack:false}` (`true` snapshots stack heads per row, expensive). Deterministic under `FixedClock` for spec rows. |
+| `Scry.trace` | `List opts:Map ~> List` | Run a quoted body, returning contract trace rows `[{seq word depth module} …]` instead of printing. Built on the **cross-registry debug trace hook** — `Registry.SetDebugTraceFrom` + `RunningEngineChain` — not `Engine.SetTrace` alone: `CallBoruNamed` runs each boru-defined or module-fn body in a fresh sub-engine and a module fn's frame leaves no tape marks (`core/go/registry.go`), so only the from-registry chain walk sees nested calls; `depth` is the engine-chain length. Effects of the body happen (see the §4 preamble carve-out). Opts: `{max-steps:10000}` (hard bound — the row List is memory), `{include-stack:false}` (`true` snapshots stack heads per row, expensive). Deterministic under `FixedClock` for spec rows. |
 
 Error codes: `scry_unknown_word`, `scry_unknown_type`,
 `scry_bad_roots`, `scry_trace_overflow` (body exceeded `max-steps`;
@@ -141,19 +145,23 @@ partial rows are *not* returned silently — overflow is an error unless
 ```
 import "boru:scry"
 import "boru:viz"
+import "boru:string-util"
 
 # what is loaded, and what does the import surface look like?
 Scry.modules                      # ~> [{id:'boru:io' namespace:'IO' imported:true} …]
 Viz.graph (Scry.module-graph) {}  # ~> paste into the PR
 
 # architectural assertion: my pipeline never touches the vault words
-def wg (Scry.word-graph {roots:['main-pipeline']})
-filter (get wg 'nodes') [n | starts-with (get n 'id') 'Vault.']
+# (filter's Function form: callback first, and over a list the
+#  callback receives a {key value} pair — read the node via .value)
+def pg (Scry.word-graph {roots:['main-pipeline']})
+filter ([n:Any] => [eq 0 (StringUtil.indexof "Vault." n.value.id)]) pg.nodes
 # ~> []   — assert empty in a boru:test case
 
 # which defined words are unreferenced? (census + graph, no new words)
-def all-defs (keys Scry.defs)
-def referenced (map (get (Scry.word-graph {}) 'edges') [e | get e 'to'])
+def wg (Scry.word-graph {})
+def all-defs (keys (Scry.defs))
+def referenced (each $.to wg.edges)   # Reach-lens each: one field per edge
 # … set-difference in ordinary boru
 
 # what ran, drawn as a sequence diagram
@@ -161,7 +169,7 @@ Viz.seq (Scry.trace [fetch parse summarize] {max-steps:5000}) {}
 
 # a record's schema, asserted and drawn from the same value
 def s (Scry.schema Order)
-(get s 'fields')                  # ~> [{name:'id' type:'String'} …]
+s.fields                          # ~> [{name:'id' type:'String'} …]
 Viz.classes [s] {}
 ```
 
@@ -180,11 +188,13 @@ Proposal, least-breaking first:
 2. **Scry is where the surface grows.** New capability (`word-graph`,
    `module-graph`, `schema`, data `trace`, `info`) lands only in scry;
    the debug copies are frozen at today's seven.
-3. **The dual surface is a non-uniformity.** It will be recorded in
-   `NUR.md` when implementation starts (recording is mandatory and
-   needs no maintainer instruction; the *verdict* — keep both
-   indefinitely vs deprecate the debug copies — is the maintainer's,
-   §9 Q1).
+3. **The dual surface is a non-uniformity, recorded as
+   [NUR063](../NUR.md#nur063) (Pending) in the same commit as this
+   note** — the register requires recording the moment a divergence
+   surfaces in a design note, not when implementation starts. The
+   *verdict* — keep both indefinitely vs deprecate the debug copies —
+   is the maintainer's (§9 Q1), and the record holds that question
+   open.
 
 `Debug.trace` (prints) and `Scry.trace` (returns rows) are different
 words for different jobs and both stay.
@@ -203,7 +213,10 @@ wrappers, docs/catalog/spec lattice — as itemised in
   `native.WalkBodyWords`, registry enumeration, `fn.Signatures`.
 - `inspect`'s type/word analysis (`lang/go/native/native_inspect.go`)
   under `Scry.schema`.
-- `Engine.SetTrace` + tape frame marks under `Scry.trace`.
+- The cross-registry debug trace hook — `Registry.SetDebugTraceFrom`
+  + `RunningEngineChain` — under `Scry.trace`. (`Engine.SetTrace`
+  alone cannot see into the sub-engines `CallBoruNamed` spawns for
+  boru-defined and module-fn bodies.)
 - The type registry under `Scry.types` / `Scry.type-graph`.
 
 **What is new (small, and only two touch anything outside the module):**
@@ -249,7 +262,7 @@ export, ADR-008 coverage throughout.
 1. **The debug overlap verdict** (§6): keep both surfaces
    indefinitely, or deprecate the seven debug copies once scry ships?
    (Leaning: keep through one release, then decide with usage
-   evidence; the NUR record holds the question open either way.)
+   evidence; NUR063 holds the question open either way.)
 2. **`Scry.info` shape**: is exporting the `help` taxonomy as data
    acceptable, and should `examples` ship in it (they are generated
    into `examples_gen.go` and sizeable)? (Leaning: yes, with
