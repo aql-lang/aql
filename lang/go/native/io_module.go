@@ -455,8 +455,8 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// of waiting. Returns a Lock (or none).
 			Name: "lock",
 			Signatures: []Signature{
-				{Args: []*Type{TPathon, TMap}, Impl: Go(lockImpl), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TPathon}, Impl: Go(lockImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TMap}, Impl: Go(lockImpl), Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(lockType, TNone), BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(lockImpl), Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(lockType, TNone), BarrierPos: -1},
 			},
 		},
 		{
