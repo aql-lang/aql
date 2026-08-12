@@ -159,8 +159,8 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 		{
 			Name: "read",
 			Signatures: []Signature{
-				{Args: []*Type{TPathon, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TPathon}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, ReturnsFn: readReturns(true), BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(readHandler), Returns: []*Type{TAny}, ReturnsFn: readReturns(false), BarrierPos: -1},
 				{Args: []*Type{streamKind, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{streamKind}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				// File-handle reads: {offset}/{length}/{enc} slice the handle.
@@ -181,14 +181,14 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			Signatures: []Signature{
 				// Binary writes: a Bytes payload is written verbatim (more
 				// specific than the TAny/TString sigs, so it wins dispatch).
-				{Args: []*Type{TPathon, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
+				{Args: []*Type{TPathon, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
 				{Args: []*Type{streamKind, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString}, Impl: Go(writeHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
+				{Args: []*Type{TPathon, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
+				{Args: []*Type{TPathon, TString}, Impl: Go(writeHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
+				{Args: []*Type{TPathon, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TPathon}, ReturnsFn: writeReturns(), BarrierPos: -1},
 				{Args: []*Type{streamKind, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TString}, Impl: Go(writeHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
