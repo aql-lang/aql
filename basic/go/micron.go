@@ -310,11 +310,15 @@ func (micronBehavior) MintSubtypeBehavior(def *Type, info *MicronTypeInfo) TypeB
 // lang's installIdeals wires Object/Record/Table.
 func InstallMicronIdeals(r *Registry) {
 	r.Ideals.Register(&core.Ideal{
-		Name:        "Micron",
-		Enabled:     true,
-		Accepts:     micronAccepts,
-		Construct:   micronConstruct,
-		Instantiate: micronInstantiate,
+		Name:      "Micron",
+		Enabled:   true,
+		Accepts:   micronAccepts,
+		Construct: micronConstruct,
+		// micronInstantiate is a pure literal parse — string/map in,
+		// MicronPayload value out, no host effects — so the check-mode
+		// `make` model may execute it over concrete data.
+		Instantiate:     micronInstantiate,
+		PureInstantiate: true,
 	})
 }
 

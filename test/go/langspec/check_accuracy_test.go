@@ -84,7 +84,7 @@ var unflaggedPins = map[string]int{
 	"control.tsv":           1,
 	"edge-containers-2.tsv": 1,
 	"edge-containers-3.tsv": 5,
-	"edge-dispatch-2.tsv":   1,
+	"edge-dispatch-2.tsv":   0,
 	// 3 -> 6: the three string-option leniency rows became ERROR rows when
 	// unknown option keys and out-of-domain values started being rejected.
 	// They are RUNTIME rejections — the option map is a plain Map at a Map
@@ -118,7 +118,7 @@ var unflaggedPins = map[string]int{
 	"generics.tsv":        3,
 	"higher-order.tsv":    4,
 	"macro.tsv":           1,
-	"micron.tsv":          3,
+	"micron.tsv":          0,
 	"module-debug.tsv":    3,
 	"module-emitlang.tsv": 8,
 	"module-fmt.tsv":      3,
@@ -154,7 +154,7 @@ var unflaggedPins = map[string]int{
 	"patrun.tsv":            1,
 	"reach.tsv":             3,
 	"record.tsv":            2,
-	"scalar-micron-ops.tsv": 8,
+	"scalar-micron-ops.tsv": 1,
 	"ref.tsv":               1,
 	"storage.tsv":           1,
 	"usurp.tsv":             1,

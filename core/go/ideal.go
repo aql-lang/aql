@@ -32,6 +32,16 @@ type Ideal struct {
 	// the type value and source data. It is the body of `make ‹typ›
 	// data`.
 	Instantiate func(typ, data Value, r *Registry) ([]Value, error)
+	// PureInstantiate declares Instantiate a pure function of
+	// (typ, data): no host effects, no registry mutation beyond value
+	// minting, deterministic in its arguments. Only a kind that sets
+	// it may have its Instantiate executed at ANALYSIS time (the
+	// check-mode `make` model runs pure constructors over concrete
+	// data to surface the real result); the contract otherwise places
+	// no purity requirement on Instantiate, so an unmarked kind — a
+	// host constructor that may touch services or carry state — is
+	// never run during checking, only at run time.
+	PureInstantiate bool
 }
 
 // IdealRegistry holds the type-kind descriptors for one Registry.

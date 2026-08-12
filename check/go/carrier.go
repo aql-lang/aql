@@ -305,9 +305,18 @@ func toCarrier(v core.Value) core.Value {
 	// stays a carrier for predicate matching. Precision only increases: a
 	// literal stays concrete until a word consumes it and produces a computed
 	// carrier, exactly as lists/maps already behave.
+	// Micron values (MicronPayload; Pathon's PathonPayload) are in the
+	// same class: immutable structured scalars whose payload IS the
+	// value. They join the list so the `make` model's surfaced
+	// construction SURVIVES to its consumers — stripping here rebuilt
+	// the bare carrier the model exists to improve on, so the
+	// concrete-operand mirrors (micronOpReturns' guaranteed-error
+	// replay, the pure-word dry pass) never saw a made micron
+	// (PR #346 review).
 	switch v.Data.(type) {
 	case core.IntPayload, core.StrPayload, core.BoolPayload, core.FloatPayload, core.AtomPayload,
-		core.BigIntPayload, core.DecimalPayload, core.TimePayload, core.DurationPayload, core.TimezonePayload:
+		core.BigIntPayload, core.DecimalPayload, core.TimePayload, core.DurationPayload, core.TimezonePayload,
+		core.MicronPayload, core.PathonPayload:
 		if core.IsConcrete(v) {
 			return v
 		}
