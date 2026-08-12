@@ -521,7 +521,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// filesystem reports a synthetic volume).
 			Name: "space",
 			Signatures: []Signature{
-				{Args: []*Type{TPathon}, Impl: Go(spaceHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(spaceHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 			},
 		},
 		{

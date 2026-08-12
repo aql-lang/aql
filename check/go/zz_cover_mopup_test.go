@@ -254,3 +254,19 @@ func TestAllConcreteArgsBareTypeNode(t *testing.T) {
 		t.Error("a DYNAMIC none must still block the dry pass")
 	}
 }
+
+func TestReturnsDynUnion(t *testing.T) {
+	r := newTestRegistry(t)
+	f := ReturnsDynUnion(core.TString, core.TNone)
+	out := f(nil, r)
+	if len(out) != 1 {
+		t.Fatalf("want one result, got %d", len(out))
+	}
+	v := out[0]
+	if !v.Dynamic {
+		t.Error("a declared union result must stay DYNAMIC — a strict union refuses gradual call sites")
+	}
+	if !core.IsDisjunct(v) {
+		t.Errorf("the bound must be the alternative set, got %s", v.Parent.Leaf())
+	}
+}

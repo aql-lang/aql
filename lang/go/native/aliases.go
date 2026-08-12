@@ -609,6 +609,7 @@ var (
 	ReturnsAddConcat       = check.ReturnsAddConcat
 	ReturnsPreserveListAt  = check.ReturnsPreserveListAt
 	ReturnsStatic          = check.ReturnsStatic
+	ReturnsDynUnion        = check.ReturnsDynUnion
 	DryPassReturns         = check.DryPassReturns
 	DryPassWrap            = check.DryPassWrap
 	CheckListIndex         = check.CheckListIndex
