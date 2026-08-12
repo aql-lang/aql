@@ -245,7 +245,14 @@ func readReturns(withOpts bool) ReturnsFunc {
 		}
 		path := pi.String()
 		if withOpts {
-			if len(args) < 2 || !IsConcrete(args[1]) {
+			// DEEP-concrete, not merely concrete: this model ROUTES on the
+			// options' interior (enc picks Bytes vs String, offset/length
+			// pick the positioned read, fmt overrides the extension), and a
+			// carrier FIELD inside a concrete map reads as absent — so a
+			// computed `{enc: e}` would silently take the utf8 default and
+			// claim String where the run produces Bytes. That was a real
+			// soundness violation, caught before merge.
+			if len(args) < 2 || !DeepConcrete(args[1]) {
 				return dynAny()
 			}
 			// Mirror readOptsHandler: the binary / positioned bypass

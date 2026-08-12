@@ -76,6 +76,20 @@ func TestReadReturnsRouting(t *testing.T) {
 	// format, e.g. a carrier {enc:…}), a short arg slice.
 	wantDynAny(t, rf2([]Value{p, NewCarrier(TMap)}, r), "carrier opts")
 	wantDynAny(t, rf2([]Value{p}, r), "missing opts")
+
+	// The SHALLOW-CONCRETENESS decline, and the reason this model gates on
+	// DeepConcrete: a map literal holding a computed field is IsConcrete,
+	// but the field accessors read that field as ABSENT, so the model
+	// would take the utf8 default and claim String where the run produces
+	// Bytes. Caught as a live soundness violation:
+	//   IO.read p {enc:e}   check: String   runtime: Bytes
+	computedEnc := mapOfKV("enc", NewCarrier(TString))
+	if !core.IsConcrete(computedEnc) {
+		t.Fatal("fixture: a map with a carrier field must still be IsConcrete — that is the trap being guarded")
+	}
+	wantDynAny(t, rf2([]Value{p, computedEnc}, r), "computed enc field")
+	wantDynAny(t, rf2([]Value{p, mapOfKV("offset", NewCarrier(TInteger))}, r), "computed offset field")
+	wantDynAny(t, rf2([]Value{p, mapOfKV("fmt", NewDynamicCarrier(TString))}, r), "computed fmt field")
 }
 
 func TestWriteReturnsIdentity(t *testing.T) {

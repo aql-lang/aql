@@ -454,6 +454,7 @@ var (
 	IsBareTypeNode           = core.IsBareTypeNode
 	IsCapitalisedName        = core.IsCapitalisedName
 	IsConcrete               = core.IsConcrete
+	DeepConcrete             = core.DeepConcrete
 	IsRecordShape            = core.IsRecordShape
 	IsTypeBody               = core.IsTypeBody
 	IsTypeLiteral            = core.IsTypeLiteral
