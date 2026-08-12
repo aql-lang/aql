@@ -226,6 +226,9 @@ func TestCheckAccuracyRatchet(t *testing.T) {
 			valueRows++
 			if flagged {
 				falsePositives++
+				if os.Getenv("BORU_LOG_FALSEPOS") != "" {
+					t.Logf("FALSEPOS %s: %s", e.Name(), strings.TrimSpace(parts[0]))
+				}
 				t.Logf("FALSE POSITIVE %s:L%d: %s", e.Name(), lineNum, input)
 			}
 		}
