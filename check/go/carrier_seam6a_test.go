@@ -58,6 +58,46 @@ func TestS6aScalarFoldOperandBigNumPayloads(t *testing.T) {
 	}
 }
 
+// A CONTAINER never folds, however inert its interior — `eq` over one is
+// container identity, which check mode's copies cannot carry. Pinned after
+// a live false positive: `(m get 'a') eq (m get 'a')` folded to false over
+// two clones of one stored list and pruned the live branch.
+func TestS6aScalarFoldOperandDeclinesContainers(t *testing.T) {
+	dataList := core.NewList([]core.Value{core.NewInteger(1)})
+	if !core.IsInertConst(dataList) {
+		t.Fatal("fixture: a data-only list must be an inert const — otherwise this test proves nothing")
+	}
+	if ScalarFoldOperand(dataList) {
+		t.Error("a data-only list is an inert const but must NOT fold (container identity)")
+	}
+	m := core.NewOrderedMap()
+	m.Set("a", core.NewInteger(1))
+	dataMap := core.NewMap(m)
+	if !core.IsInertConst(dataMap) {
+		t.Fatal("fixture: a data-only map must be an inert const")
+	}
+	if ScalarFoldOperand(dataMap) {
+		t.Error("a data-only map is an inert const but must NOT fold")
+	}
+	// The tail decline: a payload-bearing value that is neither a
+	// container nor a foldable scalar (a Word token). It used to be
+	// reached by the carrier-bearing list above, which now exits at the
+	// container guard.
+	if ScalarFoldOperand(core.NewWord("x")) {
+		t.Error("a Word token is not a scalar fold operand")
+	}
+	// The positive half of the contract: scalars — including the
+	// immutable structured ones, which compare structurally — keep
+	// folding, so `(n eq 0)` with a const n still reads as a known bool.
+	for _, v := range []core.Value{
+		core.NewInteger(0), core.NewString("s"), core.NewBoolean(false), core.NewAtom("a"),
+	} {
+		if !ScalarFoldOperand(v) {
+			t.Errorf("%s must remain a scalar fold operand", v.Parent)
+		}
+	}
+}
+
 // --- isConcreteContainerReturn ----------------------------------------------
 
 func TestS6aIsConcreteContainerReturn(t *testing.T) {

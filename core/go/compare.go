@@ -375,6 +375,30 @@ func ExactEqual(a, b Value) bool {
 // It must not apply `==` to a Payload directly: ListPayload holds a
 // slice and is therefore not a comparable type — a bare
 // `a.Data == b.Data` panics at runtime.
+// HasContainerIdentity reports whether v's equality is CONTAINER IDENTITY
+// rather than structure — i.e. whether sameContainer below, not
+// scalarFamilyEqual, decides `v eq w`. The arms mirror sameContainer's
+// exactly and must be kept in step with it.
+//
+// The caller this exists for is the CHECK pass: check mode's values are
+// copies by construction (a container read hands back a CloneValue so the
+// emitter's operand-provenance tracking gets a fresh ID), so it can never
+// model runtime container identity, and any static claim it makes about
+// one is unfounded. A concrete-operand const-fold over such a value
+// computed `false` for `(m get 'a') eq (m get 'a')` — two clones of one
+// stored list — where the runtime answers true, and the false condition
+// pruned a live branch into a false-positive diagnostic. See
+// check/go/carrier.go ScalarFoldOperand.
+func HasContainerIdentity(v Value) bool {
+	switch v.Data.(type) {
+	case MapPayload, ListPayload, XmlElementPayload,
+		*FlexListData, *FlexXmlData,
+		*WeakFlexMapData, *WeakFlexListData, *WeakFlexXmlData:
+		return true
+	}
+	return false
+}
+
 func sameContainer(a, b Payload) bool {
 	switch av := a.(type) {
 	case MapPayload:

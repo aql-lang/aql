@@ -579,6 +579,33 @@ func CarrierResults(r *core.Registry, word string, sig *core.Signature, args []c
 // value-scalar payloads: a compound carrier's payload is structural
 // (ChildTypeInfo) and a dynamic carrier's value is unknown — both decline.
 func ScalarFoldOperand(v core.Value) bool {
+	// A CONTAINER operand never folds, inert const or not — the guard the
+	// function's own name and contract always implied, restored after a
+	// live false positive was found (PR #346 adversarial review):
+	//
+	//	def m {a:[1]}
+	//	f (if ((m get 'a') eq (m get 'a')) ['s'] [7])   # f wants a String
+	//
+	// `eq` on a non-scalar is CONTAINER IDENTITY (core/go/compare.go, the
+	// sameContainer arms), not structure. At run time both reads return
+	// the SAME stored container, so the condition is true and the String
+	// arm runs. In check mode each read hands back a CloneValue — a fresh
+	// container, minted precisely because the emitter's operand-provenance
+	// tracking needs a fresh ID — so the fold computed false, `if` pruned
+	// the live branch, and the checker flagged correct code. No corpus row
+	// had this shape, so the false-positive pin never saw it.
+	//
+	// Check mode cannot model runtime container identity at all: its
+	// values are copies by construction. So the fold declines on every
+	// container, both operands' identity being equally unknowable, rather
+	// than declining per-word — `deq` / `cmp` over containers lose a
+	// const-fold the checker was never entitled to make from copies.
+	// Scalars are unaffected: their equality is by VALUE
+	// (scalarFamilyEqual), and the immutable structured scalars (Micron,
+	// Pathon, Time) compare structurally too, so both keep folding.
+	if core.HasContainerIdentity(v) {
+		return false
+	}
 	if core.IsInertConst(v) {
 		return true
 	}
