@@ -238,6 +238,21 @@ func TestIOValidationMirrors(t *testing.T) {
 	if len(r4.Check.Diagnostics) != 1 || r4.Check.Diagnostics[0].Code != "open_error" {
 		t.Fatalf("an unknown open mode must flag open_error, got %+v", r4.Check.Diagnostics)
 	}
+	// The gate reads the OPTIONS argument, so a computed path with a
+	// literal bad mode still flags — doOpenWord rejects the mode before
+	// it touches the path (PR #348 review).
+	rc := mirrorReg(t)
+	op([]Value{NewCarrier(TPathon), mapOfKV("mode", NewString("bogus"))}, rc)
+	if len(rc.Check.Diagnostics) != 1 {
+		t.Fatalf("a computed path with a literal bad mode must still flag, got %+v", rc.Check.Diagnostics)
+	}
+	// A DYNAMIC operand anywhere closes the gate: the overload is not fixed.
+	rd := mirrorReg(t)
+	op([]Value{NewDynamicCarrier(TPathon), mapOfKV("mode", NewString("bogus"))}, rd)
+	if len(rd.Check.Diagnostics) != 0 {
+		t.Fatalf("a dynamic target must close the gate, got %+v", rd.Check.Diagnostics)
+	}
+
 	r5 := mirrorReg(t)
 	op([]Value{modelPathon(t, r5, "mem://o.txt"), mapOfKV("mode", NewString("append"))}, r5)
 	op([]Value{modelPathon(t, r5, "mem://o.txt")}, r5)
@@ -269,6 +284,24 @@ func TestIOValidationMirrors(t *testing.T) {
 	if len(r8.Check.Diagnostics) != 0 {
 		t.Fatalf("representable/computed/carrier writes must stay silent, got %+v", r8.Check.Diagnostics)
 	}
+	// A RESERVED STREAM target declines: doWrite prints to the stream
+	// and returns before the encoder, so the program runs — flagging it
+	// was a false positive (PR #348 review, caught before merge).
+	r9 := mirrorReg(t)
+	w([]Value{modelPathon(t, r9, "<stdout>"), NewString("\u20ac"), mapOfKV("enc", NewString("latin1"))}, r9)
+	w([]Value{modelPathon(t, r9, "<stderr>"), NewString("\u20ac"), mapOfKV("enc", NewString("latin1"))}, r9)
+	if len(r9.Check.Diagnostics) != 0 {
+		t.Fatalf("a stream-sentinel target must not be encoded-checked, got %+v", r9.Check.Diagnostics)
+	}
+	// A DYNAMIC target declines too: the match was optimistic, so the
+	// runtime value may be a stream handle taking the other overload.
+	r10 := mirrorReg(t)
+	dynTarget := NewDynamicCarrier(TPathon)
+	w([]Value{dynTarget, NewString("\u20ac"), mapOfKV("enc", NewString("latin1"))}, r10)
+	if len(r10.Check.Diagnostics) != 0 {
+		t.Fatalf("a dynamic target must close the gate, got %+v", r10.Check.Diagnostics)
+	}
+
 	// The residual still comes from writeReturns: a concrete Pathon
 	// target is handed back verbatim.
 	out := w([]Value{p, NewString("hi"), mapOfKV("enc", NewString("utf8"))}, r8)

@@ -657,7 +657,14 @@ func exitCodeMirror() ReturnsFunc {
 // reads the options map and returns OpenOpts; it touches no file) —
 // wrapped exactly as the handler wraps it.
 func openModeMirror(result *Type) ReturnsFunc {
-	return MirrorReturns("open", DeepConcreteOptions,
+	// Gated at the OPTIONS argument, not the target: open's signature is
+	// [Pathon, Map], and doOpenWord rejects an unknown mode from the map
+	// alone, before it touches the path. Gating position 0 declined a
+	// computed path with a literal {mode:'bogus'} for no reason (PR #348
+	// review). The gate still refuses any DYNAMIC operand, so an
+	// optimistically-matched target cannot pull this model onto a call
+	// the runtime dispatches elsewhere.
+	return MirrorReturns("open", DeepConcreteOptionsAt(1),
 		func(args []Value, r *Registry) error {
 			if len(args) < 2 {
 				return nil

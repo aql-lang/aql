@@ -296,9 +296,21 @@ func readReturns(withOpts bool) ReturnsFunc {
 // sigs carry no mirror at all.
 func writeEncMirror(optsAt int) ReturnsFunc {
 	base := writeReturns()
+	gate := DeepConcreteOptionsAt(optsAt)
 	return MirrorReturns("write",
 		func(args []Value) bool {
-			return len(args) > optsAt && DeepConcrete(args[optsAt]) && IsConcrete(args[1])
+			if !gate(args) || len(args) <= optsAt || !IsConcrete(args[1]) {
+				return false
+			}
+			// A RESERVED STREAM path never reaches the encoder: doWrite
+			// branches on the sentinel and prints the content verbatim
+			// (fileio.go, the pathStdout / pathStderr arm), returning
+			// before encodeEnc. So `IO.write (make Pathon "<stdout>") "€"
+			// {enc:'latin1'}` runs fine, and a mirror that encoded anyway
+			// rejected a working program — a false positive caught in
+			// review before merge. Reuse the handler's own predicate so
+			// the two cannot drift.
+			return !isStreamPath(extractPath(args[0]))
 		},
 		func(args []Value, r *Registry) error {
 			content, err := args[1].AsConcreteString()
