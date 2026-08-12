@@ -58,8 +58,13 @@ by the cited file):
 - **Timer machinery at the host layer**: `receive … after <ms>`, plus
   `boru:time-util`'s clock-capability-gated words.
 - **Immutability-first values** (`eng/go/clone.go`) and immutable-only
-  messages (`PROCESSES.0.md` §6) — snapshots and events cross process
-  boundaries zero-copy and race-free.
+  messages (`PROCESSES.0.md` §6) — snapshots and events are plain immutable
+  maps, so they are always legal messages and always race-free. One
+  cost-model correction against that RFC's zero-copy stance: the shipped
+  `send` **deep-copies** even immutable payloads at the process boundary
+  ("Deep-copy at the boundary so the receiver can never observe the sender
+  mutating a shared container", `lang/go/native/native_process.go`), so a
+  snapshot crossing a process is copied today, not shared by reference.
 
 This is a **design RFC only — no implementation code yet**, matching how other
 subsystems were designed first (`PROCESSES.0.md`, `SERVICES.0.md`,
@@ -200,13 +205,16 @@ resolve, e.g. `spec.states.closed.on.open.to` → `open`):
 def door-spec {
   initial: closed/q
   # policy: error/q                 # the default; ignore/q opts out per machine
+  ctx: {key: ""  locks: 0}          # extended-state defaults; init merges over these
   events: {                         # optional declared alphabet (§3.3.11)
     open: {}  close: {}  lock: {key: String}  unlock: {key: String}
+    lock-timeout: {}                # timer events are ordinary alphabet members
   }
   states: {
     closed: { on: { open:  { to: open/q  act: announce/q } } }
     open:   { on: { close: { to: closed/q }
-                    lock:  { to: locked/q  when: key-fits/q } }
+                    lock:  { to: locked/q  when: key-fits/q }
+                    lock-timeout: { to: locked/q } }   # auto-relock on timer
               after: { relock: {ms: 30000  event: lock-timeout/q} } }
     locked: { entry: log-locked/q
               defer: [open/q]       # postponed while locked; replayed on exit
@@ -217,9 +225,12 @@ def door-spec {
 
 **Bindings** — a map from those names to function values, supplied to
 `State.define` (the `/r` reference form, or any fn value). Late binding is
-deliberate (§2 row 7): the same definition runs with production actions, test
-stubs, or no actions at all (`State.step` with an empty binding map is legal
-when the path taken triggers none).
+deliberate (§2 row 7): the same definition runs with production
+implementations or test stubs. Bindings are **complete at define time** —
+every name the spec references must resolve, and each bound value must fit
+its role's shape (§6.3 `state_unknown_name`, `state_bad_binding`) — so a
+missing or malformed implementation is a define-time error, never a
+step-time surprise; a test that wants inert behaviour binds stubs.
 
 **Snapshot** — a plain map owned by the caller/host, never by the machine:
 `{state: closed/q  ctx: {…}  deferred: []  timers: {…}  v: "…"}`. `ctx` is the
@@ -234,19 +245,37 @@ is where all §6.3 validation fires.
 ### 3.2 The pure step
 
 ```
-State.step <machine> <snap> {event: <atom> …} -> {snap: Map  effects: List  status: Atom}
+State.step <machine> <snap> {event: <atom> …} (opts) -> {snap: Map  effects: List  status: Atom}
 ```
 
-- **Pure**: no clock, no I/O, no mailbox. Time reaches the step only as timer
-  *events*; randomness and I/O only via effects.
-- `status` is one of `handled/q`, `deferred/q`, `ignored/q`, `done/q` (§3.3.8).
-- `effects` is the ordered list of requested actions the **host** must run
-  (§3.3.7): `{act: <name>  event: {…}  from: <state>  to: <state>}` entries for
-  entry/exit/transition actions, plus timer bookkeeping the hosts consume.
-- Guards (`when:`) are called with `(event ctx)` and must be pure predicates.
-  Purity is a **documented contract, not an enforced property** — boru has no
-  effect analysis for user fns today; §10 lists effect-checking as a later
-  possibility. Guard exceptions abort the step.
+The attached code splits into two kinds, so the step stays pure and replay
+stays honest (the Elm/sans-io split, §2 rows 5–6):
+
+- **Reducers.** The `act:`/`entry:`/`exit:` names bind to **pure context
+  reducers**, `(event ctx) -> <new-ctx>`, which the step runs **inside
+  itself**, in the §3.3.4 order, folding their results into `snap.ctx`
+  before it returns. A reducer that returns a plain map returns the new
+  `ctx`; the record form `{ctx: <map>  raise: [<event> …]  fx: [<desc> …]}`
+  additionally queues internal events (drained in-step, §3.3.2) and
+  requests host effects.
+- **Effects.** The `fx:` descriptors accumulated from the step's reducers
+  (plus timer bookkeeping the hosts consume) come back in `effects`, in
+  request order, for the **host** to execute after it adopts the new
+  snapshot (§3.3.7). Effects are the only place I/O lives; their results
+  re-enter the machine as ordinary events.
+
+So `State.step` is pure end to end — no clock, no I/O, no mailbox; time
+reaches it only as timer events — and `fold`-replay is correct by
+construction: context evolution happens in-step, while `fx` descriptors are
+deliberately **not** re-executed on replay (a replay reconstructs state; it
+must not re-fire the outside world).
+
+`status` is one of `handled/q`, `deferred/q`, `ignored/q`, `done/q`
+(§3.3.8). Guards (`when:`) are pure predicates over `(event ctx)`. Purity —
+of guards and reducers alike — is a **documented contract, not an enforced
+property**: boru has no effect analysis for user fns today; §10 lists it as
+a later possibility. A guard or reducer that raises aborts the step. `opts`
+carries `{migrate: <fn>}` for version skew (§3.3.9).
 
 Replay falls out of purity (idiom verified by run — element first,
 accumulator second, per `fold`'s binding order):
@@ -268,46 +297,57 @@ is wrong, and a change to this list is a new revision of this document.
 1. **Run-to-completion.** One external event per step; a step never observes a
    half-applied predecessor. Hosts guarantee serialization (the service
    handler mutex; the process loop's one-message-per-receive).
-2. **Internal before external.** An action may request `{raise: {event: …}}`;
-   raised events are processed within the same step, depth-first in raise
-   order, before the step returns. The returned snapshot reflects the full
-   microstep chain. A raise depth cap (default 64) turns runaway loops into
-   an error rather than a hang.
+2. **Internal before external.** A reducer may queue internal events via its
+   record form's `raise:` list (§3.2); raised events are processed within the
+   same step, depth-first in raise order, before the step returns. The
+   returned snapshot reflects the full microstep chain. A raise depth cap
+   (default 64) turns runaway loops into an error rather than a hang.
 3. **Postpone.** A state's `defer:` list names events to postpone. A deferred
    event is appended to `snap.deferred` with `status: deferred/q`. On any
    state *change*, the deferred list is replayed in original arrival order
    before any new external event, and events still deferred by the new state
-   go back on the list. The list is **bounded** (default cap: open question
-   #1); exceeding it is an error — an unbounded defer list would silently
-   recreate the mailbox-growth footgun that `PROCESSES.0.md` §1 rejects.
+   go back on the list. The list is **bounded**: default cap 256, overridable
+   per machine (`defer-cap: N` in the spec), and exceeding it raises
+   `state_defer_overflow` — the *behaviour* is frozen; only the default's
+   size is still tunable (open question #1). An unbounded defer list would
+   silently recreate the mailbox-growth footgun that `PROCESSES.0.md` §1
+   rejects.
 4. **Entry/exit ordering and self-transitions.** A transition runs: exit
-   action of the source state → transition `act:` → entry action of the
-   target. A transition **with `to:`** — including `to:` the current state —
-   is *external*: exit and entry run. A transition **without `to:`** is
-   *internal*: the machine stays put, only `act:` runs, no exit/entry, timers
-   untouched. This single explicit distinction removes the classic
-   self-transition bug class; there is no silent default.
-5. **Initial entry.** `State.init` returns `{snap effects}` where `effects`
-   contains the initial state's entry action (SCXML behaviour): a machine
-   with an entry action on its initial state observably runs it, once, at
-   init — not on the first step.
+   reducer of the source state → transition `act:` reducer → entry reducer of
+   the target, each folding `ctx` in that order (§3.2). A transition **with
+   `to:`** — including `to:` the current state — is *external*: exit and
+   entry run. A transition **without `to:`** is *internal*: the machine stays
+   put, only `act:` runs, no exit/entry, timers untouched. This single
+   explicit distinction removes the classic self-transition bug class; there
+   is no silent default.
+5. **Initial entry.** `State.init` runs the initial state's entry reducer —
+   its `ctx` result is folded into the returned snapshot, its `fx` requests
+   come back in `effects` (SCXML behaviour): initial entry happens
+   observably, once, at init — not on the first step.
 6. **Timers.** `after:` is a per-state **map of named timers**
    (`{relock: {ms: N  event: E}}`). Semantics: entering a state arms its
    timers (absolute deadlines from arrival time); *any state change* cancels
-   all timers of the exited state; an expired timer delivers its `event:`
-   like any external event. The pure step never reads a clock — it receives
-   timer events and emits arm/cancel bookkeeping in the snapshot's `timers:`
-   map; **hosts** own the clock. v1: the process host implements timers (as
-   absolute deadlines driving `receive … after` — recomputed each loop
-   iteration, so intervening events cannot starve a deadline); the service
-   host **has no timers** (§3.5.2, honestly: nothing runs between calls).
+   all timers of the exited state; a timer is **one-shot** — expiry removes
+   it from `snap.timers` before its `event:` is stepped, so an expiry the
+   machine ignores or handles internally cannot re-fire, and re-arming
+   happens only through a subsequent entry to the state. The pure step never
+   reads a clock — it receives timer events and carries arm/cancel
+   bookkeeping in the snapshot's `timers:` map; **hosts** own the clock.
+   Hosts must check expired absolute deadlines **before** taking the next
+   mailbox message: the shipped consume-front primitive pops a queued
+   message before it checks its own deadline (`core/go/process.go`
+   `PopFront`), so a naive `receive … after` loop under continuous traffic
+   would starve timers forever — the process host therefore delivers any
+   already-expired timer event first, and only then receives. v1: the
+   process host implements timers; the service host **has no timers**
+   (§3.5.2, honestly: nothing runs between calls).
 7. **Effects.** The host executes `effects` in list order, *after* adopting
    the new snapshot. An effect that raises: the host reifies the error
-   (`do … error …`); if the machine declares `catch: <event>` the error is
-   fed back as that event with the error map as payload; otherwise the host
-   re-raises. Effects must not `call` the machine's own hosting service
-   (self-`call` deadlocks — documented for services generally); `send` to it
-   is legal.
+   (`do … error …`); if the spec declares a top-level `catch: <event>` —
+   an ordinary alphabet member (§3.3.11) — the error is fed back as that
+   event with the error map as payload; otherwise the host re-raises.
+   Effects must not `call` the machine's own hosting service (self-`call`
+   deadlocks — documented for services generally); `send` to it is legal.
 8. **Final states.** A state with `final: true` may have `entry:` but no
    `on:`/`after:`/`defer:`. Stepping a machine whose snapshot is final
    returns `status: done/q` and the snapshot unchanged (no error — done is a
@@ -316,8 +356,14 @@ is wrong, and a change to this list is a new revision of this document.
    composition surfaces `done` to a parent machine as an event.
 9. **Version pinning.** `State.init` stamps `snap.v` with the content hash of
    the canonical definition. `State.step` with a mismatched pair raises
-   `state_version_skew` unless called with `{migrate: <fn>}`, whose result
-   snapshot must carry the new hash. No auto-migration, ever (§2 row 8).
+   `state_version_skew` unless called with `{migrate: <fn>}` in its opts,
+   whose result snapshot must carry the new hash. No auto-migration, ever
+   (§2 row 8). The hash covers the **definition only** — including its
+   optional author-bumped `version:` field — never the bindings: function
+   identity does not hash, so changing a bound implementation without any
+   spec change keeps `v` stable, and authors signal behavioural breaks by
+   bumping `version:`. That is the honest limit of value-hashing code
+   (open question #3).
 10. **Invalid input is loud.** A snapshot naming an unknown state, a
     malformed event (no `event:` atom), or an event outside a declared
     alphabet raises typed errors (`state_bad_snapshot`, `state_bad_event`).
@@ -326,15 +372,21 @@ is wrong, and a change to this list is a new revision of this document.
     step returns `status: ignored/q` with the snapshot unchanged.
 11. **Declared alphabet (optional, recommended).** With an `events:` block,
     every event name used anywhere (`on:`, `defer:`, `after:` targets,
-    `raise`) must be declared — checked at define time (§6.3) — and event
-    payloads are validated against the per-event schema at step time.
-    Without the block, the alphabet is implicit and payloads unvalidated;
-    the totality advisory (§6.3) then covers only mentioned events.
-12. **Determinism.** One transition per state×event (duplicates are
-    `state_conflict` at define time). Guarded variants of the same event in
-    one state are evaluated in declaration order, first true wins, and are
-    exempt from the conflict check; an all-guards-false outcome falls through
-    to the unhandled policy.
+    `raise`, the machine's `catch:`) must be declared — checked at define
+    time (§6.3) — and event payloads are validated against the per-event
+    schema at step time. Without the block, the alphabet is implicit and
+    payloads unvalidated; the totality advisory (§6.3) then covers only
+    mentioned events.
+12. **Determinism and guarded variants.** A state×event key maps to either a
+    single transition map or a **list of guarded variants** tried in
+    declaration order, first satisfied wins; an all-guards-false outcome
+    falls through to the unhandled policy. The list is the *only* spelling
+    for multiple arcs on one event: a duplicate map key collapses silently
+    at the parser, last one wins (verified by run: `{a: 1 a: 2}` → `{a:2}`),
+    so `State.define` never sees the duplicate and cannot diagnose it.
+    `state_conflict` is therefore defined over the list form: an unguarded
+    variant anywhere but last — it shadows every variant after it — is the
+    Error.
 
 ### 3.4 What v1 deliberately does not have
 
@@ -379,10 +431,12 @@ backpressure come from `SERVICES.0.md` §8.1 when the service is `serve`d.
 #### 3.5.3 Process host — `State.start <machine> (opts) -> Pid`
 
 A `spawn`ed tail-recursive receive loop (TCO-guaranteed) holding the snapshot
-as its loop binding: each iteration computes the nearest armed timer deadline,
-`receive`s with that `after`, steps the machine (timer expiry or arrived
-event), executes effects, and recurses on the new snapshot; it returns when a
-final state is entered. Events are tagged maps (`send {event: open/q} pid`),
+as its loop binding: each iteration first delivers any **already-expired**
+timer deadline as its event — the expiry check precedes the mailbox take,
+per §3.3.6, because the consume-front primitive would otherwise starve timers
+under continuous traffic — otherwise `receive`s with the nearest deadline as
+its `after`, steps the machine, executes effects, and recurses on the new
+snapshot; it returns when a final state is entered. Events are tagged maps (`send {event: open/q} pid`),
 the established message convention. Capability-gated like any `spawn`
 (`process` scope), with `clock` scope for the timer arm (§7).
 
@@ -402,26 +456,34 @@ shadowed (ADR-001; no core-word overloads are proposed). Signatures use the
 top-first convention with `describe`-ready summaries.
 
 - **`State.define <spec:Map> <bindings:Map> -> Machine`** — validate the spec
-  (all §6.3 rules), resolve guard/action names against `bindings`, and mint
-  the `Machine`. Raises `state_bad_spec` (and friends) on any violation; the
-  same rules fire at **check time** when the literals are concrete (§6.3).
-- **`State.init <machine:Machine> -> Map`** — `{snap effects}`: the initial
-  snapshot (version-stamped, §3.3.9) and the initial entry effects (§3.3.5).
-- **`State.step <machine:Machine> <snap:Map> <event:Map> -> Map`** — the pure
-  step (§3.2): `{snap effects status}`.
+  (all §6.3 rules), resolve guard/reducer names against `bindings` and check
+  each bound value against its role's shape (§6.3 `state_bad_binding`), and
+  mint the `Machine`. Raises `state_bad_spec` (and friends) on any violation;
+  the same Error rules fire at **check time** when the literals are concrete
+  (§6.3).
+- **`State.init <machine:Machine> (opts:Map) -> Map`** — `{snap effects}`:
+  the initial snapshot (version-stamped, §3.3.9; `ctx` = the spec's `ctx:`
+  defaults merged under `opts.ctx`) and the initial entry's `fx` (§3.3.5).
+- **`State.step <machine:Machine> <snap:Map> <event:Map> (opts:Map) -> Map`**
+  — the pure step (§3.2): `{snap effects status}`. `opts` carries
+  `{migrate: <fn>}`, the only path across a version skew (§3.3.9).
 - **`State.can <machine:Machine> <state:Atom> -> List`** — the event atoms
   with *table-level* transitions from that state. Documented loudly as
   table-level: guards are **not** evaluated (advertising guard-aware
   availability is the lie XState removed `nextEvents` over).
 - **`State.spec <machine:Machine> -> Map`** — the canonical definition back
   (bindings excluded): the diagram/diff/hash artifact.
-- **`State.serve <machine:Machine> -> Service`** — the service host (§3.5.2).
+- **`State.serve <machine:Machine> (opts:Map) -> Service`** — the service
+  host (§3.5.2); `opts.ctx` seeds the instance's extended state as in `init`.
 - **`State.start <machine:Machine> (opts:Map) -> Pid`** — the process host
-  (§3.5.3); opts pass through to `spawn` (mailbox bound etc.).
+  (§3.5.3); `opts.ctx` as in `init`, remaining opts pass through to `spawn`
+  (mailbox bound etc.).
 
-Phase 2 adds `State.diagram` (Mermaid text from the definition); phase 3 adds
-`State.conform` (trace monitor) and `State.explore` (derived model-based
-testing) — named here so the v1 data model reserves nothing that blocks them.
+Phase 2 adds `State.diagram` (Mermaid text from the definition) and
+`State.lint` (the §6.3 advisories as plain data, the observability channel
+for dynamically built specs); phase 3 adds `State.conform` (trace monitor)
+and `State.explore` (derived model-based testing) — named here so the v1
+data model reserves nothing that blocks them.
 
 Every export lands with `lang/spec/module-state.tsv` rows (ADR-003), and the
 conformance corpus for §3.3 lives in the same file.
@@ -479,16 +541,20 @@ the single table (`core/go/check_state.go`).
 ### 6.3 The `state_*` diagnostic family
 
 Minted by the Go-native `define` when its spec (and bindings-key set) are
-concrete literals at the call site — the common case for machine definitions —
-and enforced identically at runtime for dynamic specs (same codes, same
-messages, per the checker's mirror discipline):
+concrete literals at the call site — the common case for machine definitions.
+The **Error** rows are enforced identically at runtime for dynamic specs
+(same codes, same messages, per the checker's mirror discipline); the
+**Info** advisories are check-time findings only — a runtime `define` can
+neither gate nor warn, so dynamically built specs get them as plain data
+from `State.lint` (phase 2):
 
 | code | severity | meaning |
 |---|---|---|
 | `state_bad_spec` | Error | malformed shape: no `initial:`, unknown keys, nested `states:` (reserved for phase 2), `final` state with `on:` |
 | `state_unknown_target` | Error | a `to:` names an undeclared state |
-| `state_unknown_name` | Error | an unbound `act:`/`when:`/`entry:`/`exit:` name; or, with a declared alphabet, an event in `on:`/`defer:`/`after:`/`raise` outside `events:` |
-| `state_conflict` | Error | duplicate unguarded state×event arc (§3.3.12) |
+| `state_unknown_name` | Error | an unbound `act:`/`when:`/`entry:`/`exit:` name; or, with a declared alphabet, an event in `on:`/`defer:`/`after:`/`raise`/`catch:` outside `events:` |
+| `state_bad_binding` | Error | a bound value is not a function or does not fit its role — guard: `(Map Map) -> Boolean`; reducer: `(Map Map) ->` a map or the `{ctx raise fx}` record (§3.2) |
+| `state_conflict` | Error | an unguarded variant that is not last in its state×event variant list, shadowing every variant after it (§3.3.12) |
 | `state_unreachable` | Info | a state with no path from `initial:` (advisory per the "gate on wrongness, advise on smell" precedent, `case_unreachable_clause`) |
 | `state_unhandled` | Info | the state×alphabet totality matrix's holes, computed against the machine's declared policy; **Error** iff the spec opts in with `total: true` (open question #2) |
 | `state_no_final_path` | Info | machine declares a final state some state cannot reach — the honest pseudo-liveness check; real liveness is out of scope |
@@ -508,9 +574,14 @@ state-machine logic in plain boru get §6.1's checking for free, today:
 - **class-per-state + `tor` union**: data-carrying states as one class each,
   the state type as their union, transitions as per-state overloads —
   `partial_dispatch` reports the uncovered state, and an illegal
-  transition call is a check-time `no_signature` (typestate-lite; boru's
-  value semantics sidesteps the aliasing problem that killed typestate
-  proper, so *narrowing* rather than *proof* is the right ambition here).
+  transition call is a check-time `no_signature`. This is typestate-lite,
+  with the caveat stated honestly: class instances sit in boru's
+  shared-mutable column ("class instances are shared mutable state: writes
+  are visible through every alias", REFERENCE.md §Classes), so an alias to a
+  superseded state value can still invoke old-state operations — the
+  encoding delivers *narrowing*, never an alias-safe typestate proof, and
+  narrowing is the right ambition here (full typestate died of aliasing
+  everywhere it was tried).
 
 The module's documentation presents both as the drop-down path when the
 declarative table doesn't fit (HOWTO material), and `VALUE-PATTERN-DISPATCH.0.md`'s
@@ -572,8 +643,9 @@ core parser first"). Candidates, with verdicts:
    designed speculatively.
 5. **Generalizing `receive`-style binding slots** to `add`/machine clauses
    (healing the route-only vs route+bind asymmetry) — **out of scope here**;
-   it belongs to the processes/services design line, noted as a
-   cross-reference.
+   it belongs to the processes/services design line. The asymmetry itself is
+   now recorded in the register as **NUR063** (Pending), so it cannot be
+   silently baselined while that line decides.
 
 ## 9. Gap analysis
 
@@ -648,6 +720,7 @@ def key-fits  fn [[ev:Map ctx:Map] [Boolean] [ eq ev.key ctx.key ]]   # pure gua
 # ---- the machine: definition (data) + bindings (code), fused ------------
 def door (State.define {
   initial: closed/q                       # policy: error/q is the default
+  ctx: {key: "k1"  locks: 0}              # extended-state defaults; see init below
   events: { open: {}  close: {}  lock: {key: String}
             unlock: {key: String}  lock-timeout: {} }
   states: {
@@ -664,7 +737,8 @@ def door (State.define {
 } {announce: announce/r  log-locked: log-locked/r  key-fits: key-fits/r})
 
 # ---- standalone: pure stepping and replay -------------------------------
-def r0 (State.init door)                  # {snap effects} — entry of closed/q
+def r0 (State.init door {ctx: {key: "front-door"}})   # opts.ctx merges over
+                                          # the spec defaults; {snap effects}
 def r1 (State.step door r0.snap {event: open/q})
 r1.snap.state                             # => open
 r1.status                                 # => handled
@@ -687,10 +761,12 @@ send {event: open/q} pid                  # 30s later, relock delivers
 ```
 
 Note the conventions in play: the definition is a plain map whose guard and
-action leaves are **atoms naming words**, bound late by `State.define`, so
-the definition alone is canonical, diffable, and hashable; events are
-**tagged maps** (`{event: open/q …}`), the same convention the actor layer
-uses; the snapshot is caller-owned plain data — nothing above holds hidden
+reducer leaves are **atoms naming words**, bound late by `State.define`, so
+the definition alone is canonical, diffable, and hashable; the reducers run
+*inside* the pure step (§3.2), which is why the `fold` replay reconstructs
+`ctx` faithfully without re-firing any effect; events are **tagged maps**
+(`{event: open/q …}`), the same convention the actor layer uses; the
+snapshot is caller-owned plain data — nothing above holds hidden
 state except the hosts, which hold exactly the snapshot; the guard is a pure
 predicate over `(event ctx)`; the `relock` timer armed in `open` is cancelled
 by any exit from `open` and otherwise delivers `lock-timeout` as an ordinary
@@ -701,17 +777,23 @@ nothing); and the deferred `open` while locked replays, in order, the moment
 
 ## Open questions
 
-1. **Defer-list bound default** — the cap for `snap.deferred` before the step
-   errors. (Leaning 256, error on overflow, overridable per machine
-   `{defer-cap: N}`; mirrors the mailbox-bound posture.)
+1. **Defer-list cap size** — the overflow *behaviour* is frozen (§3.3.3:
+   bounded, `state_defer_overflow` error, per-machine `defer-cap: N`
+   override); is 256 the right default number? (Leaning yes; mirrors the
+   mailbox-bound posture.)
 2. **`state_unhandled` gating opt-in** — is `total: true` in the spec the
    right switch to promote the totality advisory to a gating Error, or should
    the strictest `policy: error/q` machines get it automatically? (Leaning
    the explicit `total: true`: policy governs *runtime* behaviour, totality
    is a *model* claim, and conflating them makes the terse case noisy.)
-3. **Content-hash algorithm for `snap.v`** — canonical `canon` text hashed
-   how? (Leaning fnv64 over the canonical form, the kg pipeline's digest
-   precedent; the field is opaque either way.)
+3. **Content-hash algorithm for `snap.v`, and the bindings gap** — canonical
+   `canon` text hashed how? (Leaning fnv64 over the canonical form, the kg
+   pipeline's digest precedent; the field is opaque either way.) And is the
+   author-bumped `version:` field (§3.3.9) enough to signal
+   binding-behaviour changes, or should `define` accept an explicit
+   implementation-version that folds into `v`? (Leaning `version:` alone:
+   an impl-version parameter is one more thing to forget, and it cannot be
+   verified against the code either.)
 4. **Outcome record shape from `State.serve`** — is `{state status}` enough,
    or should it carry the effect names executed for observability? (Leaning
    minimal now; `call {op: "status"}`-style introspection can come with the

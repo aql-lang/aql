@@ -74,6 +74,7 @@ keep the two in sync in the same commit.
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary — RESOLVED BY FIX in tabnas parser v0.8.3, shim deleted | PR #338 retirement attempt (flagged for NUR by Codex P1) |
 | [NUR062](#nur062) | Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible | PR #339 maintainer decision (flagged for NUR by Codex P1) |
+| [NUR063](#nur063) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2329,3 +2330,42 @@ exponents are *content*: `0XFF` is a typo for `0xFF` far more often than it
 is anything a user meant, whereas `0xAB` vs `0xab` and `1E3` vs `1e3` carry
 no such signal. Recording it Pending rather than Allowed because the
 **Allowed** verdict is the maintainer's to give, not this record's to assume.
+
+## NUR063 — Pattern clauses route-and-bind in `receive` but route-only in `add` {#nur063}
+
+**Status:** Pending · **Recorded:** 2026-08-12 · **Surfaced by:**
+`design/STATE-MACHINES.0.md` §8 (which names the asymmetry while declining to
+solve it there); flagged for this register by the PR #345 review (Codex P1).
+The split itself was designed deliberately in `PROCESSES.0.md` §3 and
+`SERVICES.0.md` §1 but never recorded here.
+
+**Rule:** one pattern-clause semantics per matcher. The service `add` and the
+process `receive` route through the same patrun matcher, and "match a message"
+is supposed to mean one thing everywhere (`SERVICES.0.md`: "the *same* matcher
+`receive` uses … 'Match a message' means one thing everywhere").
+
+**Divergence:** the two consumers give the same clause surface different
+powers. A `receive` clause pattern is two layers — scalar-tag *routing* via
+patrun plus `name:Type` *binding* slots destructured by the fn-param machinery
+(`PROCESSES.0.md` §3 "clause matching: routing vs. binding") — while an `add`
+pattern is routing only: "An `add` pattern routes; it does not bind"
+(`SERVICES.0.md` §1). So `{op:"create" text:String}` binds `text` into the
+body as a `receive` clause but silently binds nothing as an `add` pattern,
+where the handler must destructure `req.text` by hand. A reader cannot derive
+one behaviour from the other; each has to be learned.
+
+**Evidence:** `PROCESSES.0.md` §3 (the two-layer clause spec, including the
+explicit callout "The binding layer is specific to `receive`"); `SERVICES.0.md`
+§1 (the route-only rule for `add`); `design/STATE-MACHINES.0.md` §8 item 5
+(the asymmetry surfacing as a cost for any facility built over both).
+
+**Documentation status:** both design docs state their own side explicitly;
+no user-facing doc contrasts them.
+
+**Proposed verdict:** none yet — genuinely open. The candidate resolutions
+pull opposite ways: generalize binding slots into a facility `add` (and other
+patrun consumers) can opt into, or declare the split Allowed on the argument
+that `add` patterns are routing *tables* (inspectable, whole-request handlers)
+while `receive` clauses are *destructuring* sites. Deciding belongs to the
+processes/services design line; this record exists so the divergence is not
+silently baselined meanwhile.
