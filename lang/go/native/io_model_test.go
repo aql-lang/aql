@@ -255,7 +255,7 @@ func TestIOValidationMirrors(t *testing.T) {
 
 	r5 := mirrorReg(t)
 	op([]Value{modelPathon(t, r5, "mem://o.txt"), mapOfKV("mode", NewString("append"))}, r5)
-	op([]Value{modelPathon(t, r5, "mem://o.txt")}, r5)
+	op([]Value{modelPathon(t, r5, "mem://o.txt")}, r5) // one arg: the gate declines before the validator
 	op([]Value{modelPathon(t, r5, "mem://o.txt"), mapOfKV("mode", NewCarrier(TString))}, r5)
 	if len(r5.Check.Diagnostics) != 0 {
 		t.Fatalf("valid/absent/computed modes must stay silent, got %+v", r5.Check.Diagnostics)
@@ -293,6 +293,19 @@ func TestIOValidationMirrors(t *testing.T) {
 	if len(r9.Check.Diagnostics) != 0 {
 		t.Fatalf("a stream-sentinel target must not be encoded-checked, got %+v", r9.Check.Diagnostics)
 	}
+	// A DepScalar CONSTRAINT in the content slot declines: it matches
+	// TString at dispatch but carries bounds, not text, so there is
+	// nothing to encode (AsConcreteString rejects it by design).
+	r11 := mirrorReg(t)
+	dep := core.NewDepScalar(core.DepGT, NewInteger(3))
+	if !core.IsConcrete(dep) {
+		t.Fatal("fixture: a DepScalar constraint must be concrete — otherwise the gate, not this arm, declines")
+	}
+	w([]Value{p, dep, mapOfKV("enc", NewString("latin1"))}, r11)
+	if len(r11.Check.Diagnostics) != 0 {
+		t.Fatalf("a constraint in the content slot must decline, got %+v", r11.Check.Diagnostics)
+	}
+
 	// A DYNAMIC target declines too: the match was optimistic, so the
 	// runtime value may be a stream handle taking the other overload.
 	r10 := mirrorReg(t)

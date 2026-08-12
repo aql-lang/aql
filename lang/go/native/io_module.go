@@ -666,9 +666,8 @@ func openModeMirror(result *Type) ReturnsFunc {
 	// the runtime dispatches elsewhere.
 	return MirrorReturns("open", DeepConcreteOptionsAt(1),
 		func(args []Value, r *Registry) error {
-			if len(args) < 2 {
-				return nil
-			}
+			// DeepConcreteOptionsAt(1) has already required an operand at
+			// index 1, so the short-args case cannot reach the validator.
 			if _, err := openOptsFromMap(args[1]); err != nil {
 				return r.BoruError("open_error", fmt.Sprintf("open: %v", err), "open")
 			}

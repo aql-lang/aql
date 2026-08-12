@@ -313,9 +313,13 @@ func writeEncMirror(optsAt int) ReturnsFunc {
 			return !isStreamPath(extractPath(args[0]))
 		},
 		func(args []Value, r *Registry) error {
+			// A TString slot can hold a DepScalar CONSTRAINT (`String len
+			// 5`), which AsConcreteString rejects rather than reading as a
+			// zero value — there is no literal text to encode, so the
+			// mirror declines and the runtime owns it.
 			content, err := args[1].AsConcreteString()
 			if err != nil {
-				return nil // not a plain String: the value path owns it
+				return nil
 			}
 			enc, _, _, _, _, _ := parseFileOpts(args[optsAt])
 			if _, encErr := encodeEnc(content, enc); encErr != nil {
