@@ -248,7 +248,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			Signatures: []Signature{{
 				Args:    []*Type{TString},
 				Impl:    Go(envLookupHandler),
-				Returns: []*Type{TAny}, BarrierPos: -1,
+				Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(TString, TNone), BarrierPos: -1,
 			}},
 		},
 		{
@@ -272,12 +272,12 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 				{
 					Args:    []*Type{streamKind},
 					Impl:    Go(readLineHandler),
-					Returns: []*Type{TAny}, BarrierPos: -1,
+					Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(TString, TNone), BarrierPos: -1,
 				},
 				{
 					Args:    []*Type{handleType},
 					Impl:    Go(readLineHandler),
-					Returns: []*Type{TAny}, BarrierPos: -1,
+					Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(TString, TNone), BarrierPos: -1,
 				},
 			},
 		},
@@ -356,8 +356,8 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// target is a Pathon; an optional map carries {follow, resolve}.
 			Name: "stat",
 			Signatures: []Signature{
-				{Args: []*Type{TPathon, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TPathon}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(TMap, TNone), BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, ReturnsFn: ReturnsDynUnion(TMap, TNone), BarrierPos: -1},
 			},
 		},
 		{
