@@ -648,6 +648,9 @@ func TestCheckAnyFrontier(t *testing.T) {
 			}
 			valueRows++
 			if residualHasAnyFrontier(checked) {
+				if os.Getenv("BORU_LOG_ANYFRONTIER") != "" {
+					t.Logf("ANYFRONTIER %s: %s", e.Name(), strings.TrimSpace(parts[0]))
+				}
 				anyRows++
 				byFile[e.Name()]++
 			}
