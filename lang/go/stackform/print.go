@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Pretty renders a StackForm back to readable boru source. The output
@@ -15,7 +15,7 @@ import (
 //
 // Quote bodies render as bracketed lists. Calls render as their
 // word name. Literals use the engine's canonical string form via
-// eng.CanonValue when available, falling back to Value.String().
+// core.CanonValue when available, falling back to Value.String().
 func Pretty(form *StackForm) string {
 	if form == nil {
 		return ""
@@ -49,10 +49,10 @@ func pretty(sb *strings.Builder, form *StackForm, depth int) {
 	}
 }
 
-func writeLiteral(sb *strings.Builder, v eng.Value) {
+func writeLiteral(sb *strings.Builder, v core.Value) {
 	// Strings need quoting; everything else relies on Value.String().
-	if v.Parent != nil && v.Parent.ConformsTo(eng.TString) {
-		s, err := eng.AsString(v)
+	if v.Parent != nil && v.Parent.ConformsTo(core.TString) {
+		s, err := core.AsString(v)
 		if err == nil {
 			fmt.Fprintf(sb, "%q", s)
 			return

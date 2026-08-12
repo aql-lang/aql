@@ -1,5 +1,5 @@
 .PHONY: all build install test test-race test-ts test-ts-core test-ts-parser test-ts-parser-package vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test crossdiff parser-crossdiff parser-parity cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser facades \
+        spec-gen spec-test crossdiff parser-crossdiff parser-parity cover-gate-eng cover-gate-check cover-gate-compiler cover-gate-parser \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -29,7 +29,7 @@
 
 # Order matters for `make test`: eng must build before basic, basic
 # before lang, etc.
-MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
+MODULES := core/go check/go compiler/go parser/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/specfix test/solardemo
 
 all: test
 
@@ -96,28 +96,6 @@ spec-gen:
 # timeout is supplied because the exhaustive mode exceeds the 10-min default.
 spec-test:
 	cd test/go && go test -tags specgen -timeout 40m ./specgen/
-
-# ---- generated module facades ------------------------------------------
-#
-# eng/go/aliases_{core,check,compiler}.go re-export the lower modules'
-# surface under package eng so downstream code (basic, lang, cmd, calc,
-# wpg, the harnesses) compiles unchanged across the four-piece split
-# (design/ENG-FOUR-PIECE.0.md). They are GENERATED — regenerate after any
-# change to an exported symbol in core/check/compiler, then re-run the
-# checklist. The generator also derives the "cold" set (funcs no consumer
-# calls through the facade) and emits those as func-value re-exports, so
-# no wrapper body sits permanently uncovered under the ADR-008 gate.
-#
-# piecetool lives in its own module (tools/piecetool) that is NOT in
-# MODULES: it is a developer tool, so its statements stay out of the
-# repo-wide 100% coverage universe the shipped modules must satisfy.
-facades:
-	@cd tools/piecetool && go build -o "$(abspath $(COVER_DIR))/piecetool" .
-	@"$(abspath $(COVER_DIR))/piecetool" -facade core/go eng/go/aliases_core.go core
-	@"$(abspath $(COVER_DIR))/piecetool" -facade check/go eng/go/aliases_check.go check
-	@"$(abspath $(COVER_DIR))/piecetool" -facade compiler/go eng/go/aliases_compiler.go compiler
-	@cd eng/go && gofmt -w aliases_core.go aliases_check.go aliases_compiler.go
-	@echo "==> facades regenerated (run make fmt && make test)"
 
 # ---- per-module fan-out -------------------------------------------------
 
@@ -706,7 +684,7 @@ cover-gate-core:
 # make the ratchet a fiction. From 51 it ratchets UP as before — raise it
 # in the same change that raises coverage, and never lower it again
 # without a comparable structural reason recorded here.
-CHECK_GATE_FLOOR ?= 51
+CHECK_GATE_FLOOR ?= 100
 COMPILER_GATE_FLOOR ?= 62
 
 # cover-gate-parser — the parser's own gate. The parser is a LEAF over core

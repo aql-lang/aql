@@ -3,6 +3,8 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // These tests pin the no-panic policy (ADR-005) for the type-
@@ -11,7 +13,7 @@ import (
 
 func TestBuiltinInitErrorNilOnHealthyBuild(t *testing.T) {
 	// The shipped builtinDecls and T* constants must build cleanly.
-	if err := BuiltinInitError(); err != nil {
+	if err := core.BuiltinInitError(); err != nil {
 		t.Fatalf("BuiltinInitError() = %v, want nil on a healthy build", err)
 	}
 }
@@ -20,7 +22,7 @@ func TestRegisterTypeDuplicateFixedIDErrors(t *testing.T) {
 	// A FixedID collision must return an error (it used to panic at the
 	// call sites that wrapped this). Use a fresh dynamic table so we do
 	// not perturb the shared Builtin table.
-	tt := NewDynamicTypeTable()
+	tt := core.NewDynamicTypeTable()
 	// Seed a parent the external paths can hang off.
 	if _, err := tt.RegisterType("Zeta", 90001, "plugin:test", nil); err != nil {
 		t.Fatalf("first register: %v", err)
@@ -36,7 +38,7 @@ func TestRegisterTypeDuplicateFixedIDErrors(t *testing.T) {
 }
 
 func TestRegisterTypeBadPathErrors(t *testing.T) {
-	tt := NewDynamicTypeTable()
+	tt := core.NewDynamicTypeTable()
 	for _, bad := range []string{"", "lower", "Foo//Bar"} {
 		if _, err := tt.RegisterType(bad, 90010, "plugin:test", nil); err == nil {
 			t.Errorf("RegisterType(%q) = nil error, want rejection", bad)
@@ -53,7 +55,7 @@ func TestNoPanicOnRepeatedRegistration(t *testing.T) {
 			t.Fatalf("registration panicked instead of returning an error: %v", r)
 		}
 	}()
-	tt := NewDynamicTypeTable()
+	tt := core.NewDynamicTypeTable()
 	_, _ = tt.RegisterType("Quux", 90020, "plugin:test", nil)
 	_, _ = tt.RegisterType("Quux", 90020, "plugin:test", nil) // duplicate
 	_, _ = tt.RegisterType("", 0, "plugin:test", nil)         // malformed

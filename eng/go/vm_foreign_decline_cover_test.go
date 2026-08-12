@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // ADR-008 coverage for tryNativeFnApply's foreign-Boru-body decline: a fn
 // value whose name resolves in a FOREIGN sub-registry to a BORU-BODIED
@@ -9,11 +13,11 @@ import "testing"
 // the fast path declines so callDynamic islands through the interpreter's
 // foreign-wrapper branch. A same-registry boru fn keeps the fast path.
 func TestTryNativeFnApplyForeignBoruDeclines(t *testing.T) {
-	main, err := NewRegistry()
+	main, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreign, err := NewRegistry()
+	foreign, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,13 +25,13 @@ func TestTryNativeFnApplyForeignBoruDeclines(t *testing.T) {
 	// An installed boru-bodied fn in the foreign registry: `greet x = 42`
 	// (the body content is irrelevant; what matters is the BoruImpl sig
 	// with a body-splicing dispatch handler).
-	install := func(r *Registry) {
-		InstallFnDef(r, "greet", FnDefInfo{
+	install := func(r *core.Registry) {
+		core.InstallFnDef(r, "greet", core.FnDefInfo{
 			Name: "greet",
-			Signatures: []Signature{{
-				Params:  []FnParam{{Name: "x", Type: TAny}},
-				Impl:    Boru([]Value{NewInteger(42)}),
-				Returns: []*Type{TAny},
+			Signatures: []core.Signature{{
+				Params:  []core.FnParam{{Name: "x", Type: core.TAny}},
+				Impl:    core.Boru([]core.Value{core.NewInteger(42)}),
+				Returns: []*core.Type{core.TAny},
 			}},
 		})
 	}
@@ -35,10 +39,10 @@ func TestTryNativeFnApplyForeignBoruDeclines(t *testing.T) {
 	install(main)
 
 	vc := &vmContext{r: main}
-	args := []Value{NewInteger(1)}
+	args := []core.Value{core.NewInteger(1)}
 
 	// Foreign boru body: decline (done=false) so the caller islands.
-	_, done, err := vc.tryNativeFnApply(FnDefInfo{Name: "greet", Registry: foreign}, args)
+	_, done, err := vc.tryNativeFnApply(core.FnDefInfo{Name: "greet", Registry: foreign}, args)
 	if err != nil {
 		t.Fatalf("foreign decline: unexpected error %v", err)
 	}
@@ -48,7 +52,7 @@ func TestTryNativeFnApplyForeignBoruDeclines(t *testing.T) {
 
 	// Same-registry boru body: the fast path may proceed — the dispatching
 	// registry IS the owning registry, so module scope cannot be lost.
-	_, done, err = vc.tryNativeFnApply(FnDefInfo{Name: "greet", Registry: main}, args)
+	_, done, err = vc.tryNativeFnApply(core.FnDefInfo{Name: "greet", Registry: main}, args)
 	if err != nil {
 		t.Fatalf("same-registry apply: %v", err)
 	}

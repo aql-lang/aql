@@ -1,0 +1,18 @@
+# check/spec/index — static index bounds checking (indexcheck.go).
+#
+# `[indices] [data] atq` selects data elements; its check model runs
+# check.CheckAtIndices, so an index PROVABLY out of range over a
+# statically-known list length is flagged during analysis. The checker
+# only speaks when it can prove the fault: unknown lengths and unknown
+# indices stay silent.
+
+# --- provably in range: silent ---
+[ 0 1 ] [ 10 20 30 ] atq	List
+[ 2 ] [ 10 20 30 ] atq	List
+[ ] [ 10 ] atq	List	no indices, nothing to prove
+
+# --- provably out of range: one diagnostic per bad index ---
+[ 5 ] [ 10 20 30 ] atq	List :: !index_out_of_range
+[ -1 ] [ 10 20 ] atq	List :: !index_out_of_range	negative is below every list
+[ 0 7 ] [ 10 20 ] atq	List :: !index_out_of_range	the in-range 0 stays silent
+[ 4 9 ] [ 10 20 ] atq	List :: !index_out_of_range !index_out_of_range

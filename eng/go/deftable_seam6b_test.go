@@ -5,16 +5,20 @@ package eng
 // Replace-on-empty and Truncate-negative-want arms. All calls are direct
 // and in-package per design/TEST-SEAMS.10.md.
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 func TestS6b2DefTableNilReceiverGuards(t *testing.T) {
-	var dt *DefTable
+	var dt *core.DefTable
 
 	if _, ok := dt.TopEntry("x"); ok {
 		t.Error("nil TopEntry must miss")
 	}
-	dt.Push("x", NewInteger(1))                          // must not panic
-	dt.PushType("X", TInteger, NewTypeLiteral(TInteger)) // must not panic
+	dt.Push("x", core.NewInteger(1))                                    // must not panic
+	dt.PushType("X", core.TInteger, core.NewTypeLiteral(core.TInteger)) // must not panic
 	if _, ok := dt.PopEntry("x"); ok {
 		t.Error("nil PopEntry must miss")
 	}
@@ -33,12 +37,12 @@ func TestS6b2DefTableNilReceiverGuards(t *testing.T) {
 	if got := dt.Depth("x"); got != 0 {
 		t.Errorf("nil Depth = %d, want 0", got)
 	}
-	if dt.Replace("x", NewInteger(1)) {
+	if dt.Replace("x", core.NewInteger(1)) {
 		t.Error("nil Replace must be false")
 	}
-	dt.Truncate("x", 0)                 // must not panic
-	dt.Delete("x")                      // must not panic
-	dt.Set("x", []Value{NewInteger(1)}) // must not panic
+	dt.Truncate("x", 0)                           // must not panic
+	dt.Delete("x")                                // must not panic
+	dt.Set("x", []core.Value{core.NewInteger(1)}) // must not panic
 	if got := dt.Stack("x"); got != nil {
 		t.Errorf("nil Stack = %v, want nil", got)
 	}
@@ -57,17 +61,17 @@ func TestS6b2DefTableNilReceiverGuards(t *testing.T) {
 }
 
 func TestS6b2DefTableReplaceEmptyStack(t *testing.T) {
-	dt := NewDefTable()
-	if dt.Replace("s6b2gone", NewInteger(1)) {
+	dt := core.NewDefTable()
+	if dt.Replace("s6b2gone", core.NewInteger(1)) {
 		t.Error("Replace on an unbound name must be false")
 	}
 	// Positive twin: a bound name replaces.
-	dt.Push("s6b2here", NewInteger(1))
-	if !dt.Replace("s6b2here", NewInteger(2)) {
+	dt.Push("s6b2here", core.NewInteger(1))
+	if !dt.Replace("s6b2here", core.NewInteger(2)) {
 		t.Error("Replace on a bound name must succeed")
 	}
 	top, _ := dt.Top("s6b2here")
-	if n, err := AsInteger(top); err != nil || n != 2 {
+	if n, err := core.AsInteger(top); err != nil || n != 2 {
 		t.Errorf("replaced binding = %v (%v), want 2", top, err)
 	}
 }
@@ -76,24 +80,24 @@ func TestS6b2DefTableReplaceEmptyStack(t *testing.T) {
 // 1-based depth, preserving the entry's TypeDef; out-of-range depths (a slot
 // a check-time undef popped) are a false no-op, never a panic or a push.
 func TestDefTableSetAt(t *testing.T) {
-	var nilDT *DefTable
-	if nilDT.SetAt("x", 1, NewInteger(1)) {
+	var nilDT *core.DefTable
+	if nilDT.SetAt("x", 1, core.NewInteger(1)) {
 		t.Error("nil SetAt must be false")
 	}
 
-	dt := NewDefTable()
-	if dt.SetAt("x", 1, NewInteger(1)) {
+	dt := core.NewDefTable()
+	if dt.SetAt("x", 1, core.NewInteger(1)) {
 		t.Error("SetAt on an unbound name must be false")
 	}
-	dt.Push("x", NewInteger(10))
-	dt.Push("x", NewInteger(20))
-	if dt.SetAt("x", 0, NewInteger(99)) {
+	dt.Push("x", core.NewInteger(10))
+	dt.Push("x", core.NewInteger(20))
+	if dt.SetAt("x", 0, core.NewInteger(99)) {
 		t.Error("SetAt depth 0 must be false (depths are 1-based)")
 	}
-	if dt.SetAt("x", 3, NewInteger(99)) {
+	if dt.SetAt("x", 3, core.NewInteger(99)) {
 		t.Error("SetAt past the stack depth must be false (popped slot skips)")
 	}
-	if !dt.SetAt("x", 1, NewInteger(11)) || !dt.SetAt("x", 2, NewInteger(22)) {
+	if !dt.SetAt("x", 1, core.NewInteger(11)) || !dt.SetAt("x", 2, core.NewInteger(22)) {
 		t.Fatal("SetAt at live depths must succeed")
 	}
 	if top, _ := dt.Top("x"); mustInt(t, top) != 22 {
@@ -107,18 +111,18 @@ func TestDefTableSetAt(t *testing.T) {
 	}
 
 	// TypeDef preservation: a type binding's minted def survives the body swap.
-	dt.PushType("T", TInteger, NewTypeLiteral(TInteger))
-	if !dt.SetAt("T", 1, NewTypeLiteral(TNumber)) {
+	dt.PushType("T", core.TInteger, core.NewTypeLiteral(core.TInteger))
+	if !dt.SetAt("T", 1, core.NewTypeLiteral(core.TNumber)) {
 		t.Fatal("SetAt on a type binding must succeed")
 	}
-	if e, ok := dt.TopEntry("T"); !ok || e.TypeDef != TInteger {
+	if e, ok := dt.TopEntry("T"); !ok || e.TypeDef != core.TInteger {
 		t.Errorf("SetAt must preserve TypeDef, got %+v", e)
 	}
 }
 
-func mustInt(t *testing.T, v Value) int64 {
+func mustInt(t *testing.T, v core.Value) int64 {
 	t.Helper()
-	n, err := AsInteger(v)
+	n, err := core.AsInteger(v)
 	if err != nil {
 		t.Fatalf("not an integer: %v (%v)", v, err)
 	}
@@ -126,9 +130,9 @@ func mustInt(t *testing.T, v Value) int64 {
 }
 
 func TestS6b2DefTableTruncateNegativeWant(t *testing.T) {
-	dt := NewDefTable()
-	dt.Push("s6b2t", NewInteger(1))
-	dt.Push("s6b2t", NewInteger(2))
+	dt := core.NewDefTable()
+	dt.Push("s6b2t", core.NewInteger(1))
+	dt.Push("s6b2t", core.NewInteger(2))
 	// want < 0 clamps to 0 and removes the entry entirely.
 	dt.Truncate("s6b2t", -3)
 	if dt.Has("s6b2t") {

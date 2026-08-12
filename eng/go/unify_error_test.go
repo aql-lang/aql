@@ -3,21 +3,23 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 func TestUnifyExplainSuccess(t *testing.T) {
-	v, err := UnifyExplain(NewInteger(1), NewInteger(1))
+	v, err := core.UnifyExplain(core.NewInteger(1), core.NewInteger(1))
 	if err != nil {
 		t.Fatalf("unexpected failure: %v", err)
 	}
-	got, _ := AsInteger(v)
+	got, _ := core.AsInteger(v)
 	if got != 1 {
 		t.Fatalf("got %d, want 1", got)
 	}
 }
 
 func TestUnifyExplainScalarMismatch(t *testing.T) {
-	_, err := UnifyExplain(NewInteger(1), NewInteger(2))
+	_, err := core.UnifyExplain(core.NewInteger(1), core.NewInteger(2))
 	if err == nil {
 		t.Fatal("expected failure for 1 vs 2")
 	}
@@ -27,7 +29,7 @@ func TestUnifyExplainScalarMismatch(t *testing.T) {
 }
 
 func TestUnifyExplainCrossType(t *testing.T) {
-	_, err := UnifyExplain(NewInteger(1), NewString("hi"))
+	_, err := core.UnifyExplain(core.NewInteger(1), core.NewString("hi"))
 	if err == nil {
 		t.Fatal("expected failure for Integer vs String")
 	}
@@ -37,9 +39,9 @@ func TestUnifyExplainCrossType(t *testing.T) {
 }
 
 func TestUnifyExplainListIndexPath(t *testing.T) {
-	a := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
-	b := NewList([]Value{NewInteger(1), NewInteger(99), NewInteger(3)})
-	_, err := UnifyExplain(a, b)
+	a := core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)})
+	b := core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(99), core.NewInteger(3)})
+	_, err := core.UnifyExplain(a, b)
 	if err == nil {
 		t.Fatal("expected element mismatch")
 	}
@@ -52,15 +54,15 @@ func TestUnifyExplainListIndexPath(t *testing.T) {
 }
 
 func TestUnifyExplainNestedListPath(t *testing.T) {
-	a := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(4)}),
+	a := core.NewList([]core.Value{
+		core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2)}),
+		core.NewList([]core.Value{core.NewInteger(3), core.NewInteger(4)}),
 	})
-	b := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(99)}),
+	b := core.NewList([]core.Value{
+		core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2)}),
+		core.NewList([]core.Value{core.NewInteger(3), core.NewInteger(99)}),
 	})
-	_, err := UnifyExplain(a, b)
+	_, err := core.UnifyExplain(a, b)
 	if err == nil {
 		t.Fatal("expected nested mismatch")
 	}
@@ -71,15 +73,15 @@ func TestUnifyExplainNestedListPath(t *testing.T) {
 }
 
 func TestUnifyExplainMapKeyPath(t *testing.T) {
-	aMap := NewOrderedMap()
-	aMap.Set("name", NewString("alice"))
-	aMap.Set("age", NewInteger(30))
+	aMap := core.NewOrderedMap()
+	aMap.Set("name", core.NewString("alice"))
+	aMap.Set("age", core.NewInteger(30))
 
-	bMap := NewOrderedMap()
-	bMap.Set("name", NewString("alice"))
-	bMap.Set("age", NewInteger(99))
+	bMap := core.NewOrderedMap()
+	bMap.Set("name", core.NewString("alice"))
+	bMap.Set("age", core.NewInteger(99))
 
-	_, err := UnifyExplain(NewMap(aMap), NewMap(bMap))
+	_, err := core.UnifyExplain(core.NewMap(aMap), core.NewMap(bMap))
 	if err == nil {
 		t.Fatal("expected map mismatch")
 	}
@@ -89,9 +91,9 @@ func TestUnifyExplainMapKeyPath(t *testing.T) {
 }
 
 func TestUnifyExplainLengthMismatch(t *testing.T) {
-	a := NewList([]Value{NewInteger(1), NewInteger(2)})
-	b := NewList([]Value{NewInteger(1)})
-	_, err := UnifyExplain(a, b)
+	a := core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2)})
+	b := core.NewList([]core.Value{core.NewInteger(1)})
+	_, err := core.UnifyExplain(a, b)
 	if err == nil {
 		t.Fatal("expected length mismatch")
 	}

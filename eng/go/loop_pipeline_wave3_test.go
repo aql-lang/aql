@@ -3,6 +3,10 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	check "github.com/boru-lang/boru/check/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Coverage for the mark/move interpreter machinery (engine.go: stepMark,
@@ -19,7 +23,7 @@ import (
 
 // cforRun is the runtime handler: the interpreter's counted loop via
 // mark/body/moveCont splicing (the runForLoop shape).
-func cforRun(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func cforRun(args []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
 	n, err := args[0].AsConcreteInteger()
 	if err != nil {
 		return nil, r.BoruError("for_error", "cfor: count must be a concrete Integer", "cfor")
@@ -28,55 +32,55 @@ func cforRun(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value,
 		return nil, nil
 	}
 	body := args[1]
-	if !IsConcrete(body) {
+	if !core.IsConcrete(body) {
 		return nil, r.BoruError("for_error", "cfor: body must be a concrete list", "cfor")
 	}
-	lst, _ := AsList(body)
+	lst, _ := core.AsList(body)
 	bodySlice := lst.Slice()
 
-	InstallDef(r, "i", NewInteger(0))
-	bodyCopy := make([]Value, len(bodySlice))
+	core.InstallDef(r, "i", core.NewInteger(0))
+	bodyCopy := make([]core.Value, len(bodySlice))
 	copy(bodyCopy, bodySlice)
-	cont := &ForCont{Registry: r, IterName: "i", Current: 0, End: n, Step: 1, Body: bodyCopy}
+	cont := &core.ForCont{Registry: r, IterName: "i", Current: 0, End: n, Step: 1, Body: bodyCopy}
 
-	id := NextMarkID()
-	tokens := make([]Value, 0, len(bodySlice)+2)
-	tokens = append(tokens, NewMark(id, bodySlice...))
-	iter := make([]Value, len(bodySlice))
+	id := core.NextMarkID()
+	tokens := make([]core.Value, 0, len(bodySlice)+2)
+	tokens = append(tokens, core.NewMark(id, bodySlice...))
+	iter := make([]core.Value, len(bodySlice))
 	copy(iter, bodySlice)
 	tokens = append(tokens, iter...)
-	tokens = append(tokens, NewMoveCont(id, "cfor loop", cont))
+	tokens = append(tokens, core.NewMoveCont(id, "cfor loop", cont))
 	return tokens, nil
 }
 
 // cforReturns is the check-mode analysis + loop recording (the
 // forCarrierAnalyse shape, counted form only).
-func cforReturns(args []Value, r *Registry) []Value {
-	es, _ := r.Check.Recorder().(*EmitState)
+func cforReturns(args []core.Value, r *core.Registry) []core.Value {
+	es, _ := r.Check.Recorder().(*compiler.EmitState)
 	body := args[len(args)-1]
-	iter := NewCarrier(TInteger)
+	iter := core.NewCarrier(core.TInteger)
 	cv := args[0]
-	lowerable := IsConcrete(cv) && cv.Parent.ConformsTo(TInteger)
-	var startV, endV, stepV Value
+	lowerable := core.IsConcrete(cv) && cv.Parent.ConformsTo(core.TInteger)
+	var startV, endV, stepV core.Value
 	if lowerable {
-		startV, endV, stepV = NewInteger(0), cv, NewInteger(1)
+		startV, endV, stepV = core.NewInteger(0), cv, core.NewInteger(1)
 		es.ArmLoopCapture()
 	}
-	stk := AnalyseLoopBody(r, body, []string{"i"}, []Value{iter}, false)
-	out := NewCarrier(TList)
+	stk := check.AnalyseLoopBody(r, body, []string{"i"}, []core.Value{iter}, false)
+	out := core.NewCarrier(core.TList)
 	if len(stk) > 0 {
 		top := stk[len(stk)-1]
-		if IsDisjunct(top) {
-			out = NewCarrierTypedListValue(top)
+		if core.IsDisjunct(top) {
+			out = core.NewCarrierTypedListValue(top)
 		} else {
-			out = NewCarrierTypedList(top.Parent)
+			out = core.NewCarrierTypedList(top.Parent)
 		}
 	}
 	if lowerable {
 		frag := es.TakeFragment()
 		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, 0, args[0].Pos())
 	}
-	return []Value{out}
+	return []core.Value{out}
 }
 
 // registerLoopWords adds `cfor`, `break`, and `continue` to a
@@ -84,28 +88,28 @@ func cforReturns(args []Value, r *Registry) []Value {
 // runtime handlers raise the FlowCtrl signal; the recorder's call
 // classifier turns the check-mode dispatch into evBreak/evContinue by
 // NAME (the words must be called break/continue for that).
-func registerLoopWords(r *Registry) {
+func registerLoopWords(r *core.Registry) {
 	registerBranchWords(r)
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "cfor",
-		Signatures: []Signature{{
-			Args:       []*Type{TInteger, TList},
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TInteger, core.TList},
 			NoEvalArgs: map[int]bool{1: true},
-			Impl:       Go(cforRun),
+			Impl:       core.Go(cforRun),
 			ReturnsFn:  cforReturns,
 			BarrierPos: -1,
 		}},
 	})
-	for name, sig := range map[string]FlowCtrl{"break": FlowBreak, "continue": FlowContinue} {
+	for name, sig := range map[string]core.FlowCtrl{"break": core.FlowBreak, "continue": core.FlowContinue} {
 		ctrl := sig
-		r.RegisterNativeFunc(NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: name,
-			Signatures: []Signature{{
-				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Signatures: []core.Signature{{
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
 					r.FlowCtrl = ctrl
 					return nil, nil
 				}),
-				Returns: []*Type{}, BarrierPos: 0,
+				Returns: []*core.Type{}, BarrierPos: 0,
 			}},
 		})
 	}
@@ -115,9 +119,9 @@ func registerLoopWords(r *Registry) {
 
 func TestInterpretedForLoop(t *testing.T) {
 	r := covRegistry(t, registerLoopWords)
-	out, err := NewTop(r).Run([]Value{
-		NewWord("cfor"), NewInteger(3),
-		codeBody(NewWord("cadd"), NewWord("i"), NewInteger(10)),
+	out, err := core.NewTop(r).Run([]core.Value{
+		core.NewWord("cfor"), core.NewInteger(3),
+		codeBody(core.NewWord("cadd"), core.NewWord("i"), core.NewInteger(10)),
 	})
 	if err != nil {
 		t.Fatalf("cfor: %v", err)
@@ -126,7 +130,7 @@ func TestInterpretedForLoop(t *testing.T) {
 		t.Errorf("cfor results = %q", got)
 	}
 	// Zero-count loop runs zero times.
-	out, err = NewTop(r).Run([]Value{NewWord("cfor"), NewInteger(0), codeBody(NewInteger(1))})
+	out, err = core.NewTop(r).Run([]core.Value{core.NewWord("cfor"), core.NewInteger(0), codeBody(core.NewInteger(1))})
 	if err != nil || len(out) != 0 {
 		t.Errorf("cfor 0: out=%v err=%v", out, err)
 	}
@@ -135,13 +139,13 @@ func TestInterpretedForLoop(t *testing.T) {
 func TestInterpretedLoopBreakAndContinue(t *testing.T) {
 	r := covRegistry(t, registerLoopWords)
 	// break at i>2: only 0 1 2 accumulate.
-	out, err := NewTop(r).Run([]Value{
-		NewWord("cfor"), NewInteger(5),
+	out, err := core.NewTop(r).Run([]core.Value{
+		core.NewWord("cfor"), core.NewInteger(5),
 		codeBody(
-			NewWord("cif"),
-			NewOpenParen(), NewWord("cgt"), NewWord("i"), NewInteger(2), NewCloseParen(),
-			codeBody(NewWord("break")),
-			codeBody(NewWord("i")),
+			core.NewWord("cif"),
+			core.NewOpenParen(), core.NewWord("cgt"), core.NewWord("i"), core.NewInteger(2), core.NewCloseParen(),
+			codeBody(core.NewWord("break")),
+			codeBody(core.NewWord("i")),
 		),
 	})
 	if err != nil {
@@ -152,13 +156,13 @@ func TestInterpretedLoopBreakAndContinue(t *testing.T) {
 	}
 
 	// continue at i>2: partial results of later iterations are discarded.
-	out, err = NewTop(r).Run([]Value{
-		NewWord("cfor"), NewInteger(5),
+	out, err = core.NewTop(r).Run([]core.Value{
+		core.NewWord("cfor"), core.NewInteger(5),
 		codeBody(
-			NewWord("cif"),
-			NewOpenParen(), NewWord("cgt"), NewWord("i"), NewInteger(2), NewCloseParen(),
-			codeBody(NewWord("continue")),
-			codeBody(NewWord("i")),
+			core.NewWord("cif"),
+			core.NewOpenParen(), core.NewWord("cgt"), core.NewWord("i"), core.NewInteger(2), core.NewCloseParen(),
+			codeBody(core.NewWord("continue")),
+			codeBody(core.NewWord("i")),
 		),
 	})
 	if err != nil {
@@ -171,11 +175,11 @@ func TestInterpretedLoopBreakAndContinue(t *testing.T) {
 
 func TestBreakOutsideLoopErrors(t *testing.T) {
 	r := covRegistry(t, registerLoopWords)
-	_, err := NewTop(r).Run([]Value{NewWord("break")})
+	_, err := core.NewTop(r).Run([]core.Value{core.NewWord("break")})
 	if err == nil || !strings.Contains(err.Error(), "outside loop") {
 		t.Errorf("bare break: err = %v", err)
 	}
-	_, err = NewTop(r).Run([]Value{NewWord("continue")})
+	_, err = core.NewTop(r).Run([]core.Value{core.NewWord("continue")})
 	if err == nil || !strings.Contains(err.Error(), "outside loop") {
 		t.Errorf("bare continue: err = %v", err)
 	}
@@ -185,11 +189,11 @@ func TestMarkMoveReplay(t *testing.T) {
 	r := covRegistry(t, nil)
 	// A plain move replays the mark's saved body once (both mark and
 	// move are consumed by the jump).
-	id := NextMarkID()
-	out, err := NewTop(r).Run([]Value{
-		NewMark(id, NewInteger(7)),
-		NewInteger(7),
-		NewMove(id, "wave3 replay"),
+	id := core.NextMarkID()
+	out, err := core.NewTop(r).Run([]core.Value{
+		core.NewMark(id, core.NewInteger(7)),
+		core.NewInteger(7),
+		core.NewMove(id, "wave3 replay"),
 	})
 	if err != nil {
 		t.Fatalf("mark/move replay: %v", err)
@@ -201,15 +205,15 @@ func TestMarkMoveReplay(t *testing.T) {
 
 func TestMoveIfSplicesBranches(t *testing.T) {
 	r := covRegistry(t, nil)
-	run := func(cond Value) string {
+	run := func(cond core.Value) string {
 		t.Helper()
-		id := NextMarkID()
-		out, err := NewTop(r).Run([]Value{
-			NewMark(id),
+		id := core.NextMarkID()
+		out, err := core.NewTop(r).Run([]core.Value{
+			core.NewMark(id),
 			cond,
-			NewMoveIf(id, "wave3 if", &IfCont{
-				Then: []Value{NewInteger(1)},
-				Else: []Value{NewInteger(2)},
+			core.NewMoveIf(id, "wave3 if", &core.IfCont{
+				Then: []core.Value{core.NewInteger(1)},
+				Else: []core.Value{core.NewInteger(2)},
 			}),
 		})
 		if err != nil {
@@ -217,18 +221,18 @@ func TestMoveIfSplicesBranches(t *testing.T) {
 		}
 		return renderAll(out)
 	}
-	if got := run(NewBoolean(true)); got != "1" {
+	if got := run(core.NewBoolean(true)); got != "1" {
 		t.Errorf("then branch = %q", got)
 	}
-	if got := run(NewBoolean(false)); got != "2" {
+	if got := run(core.NewBoolean(false)); got != "2" {
 		t.Errorf("else branch = %q", got)
 	}
 
 	// Condition produced no value → runtime_error.
-	id := NextMarkID()
-	_, err := NewTop(r).Run([]Value{
-		NewMark(id),
-		NewMoveIf(id, "wave3 empty if", &IfCont{Then: []Value{NewInteger(1)}}),
+	id := core.NextMarkID()
+	_, err := core.NewTop(r).Run([]core.Value{
+		core.NewMark(id),
+		core.NewMoveIf(id, "wave3 empty if", &core.IfCont{Then: []core.Value{core.NewInteger(1)}}),
 	})
 	if err == nil || !strings.Contains(err.Error(), "condition produced no value") {
 		t.Errorf("empty condition: err = %v", err)
@@ -238,10 +242,10 @@ func TestMoveIfSplicesBranches(t *testing.T) {
 // --- compiled loop pipeline -------------------------------------------------
 
 func TestCompiledCountedLoop(t *testing.T) {
-	got := runDifferential(t, registerLoopWords, func() []Value {
-		return []Value{
-			NewWord("cfor"), NewInteger(3),
-			codeBody(NewWord("cadd"), NewWord("i"), NewInteger(10)),
+	got := runDifferential(t, registerLoopWords, func() []core.Value {
+		return []core.Value{
+			core.NewWord("cfor"), core.NewInteger(3),
+			codeBody(core.NewWord("cadd"), core.NewWord("i"), core.NewInteger(10)),
 		}
 	})
 	if got != "10 | 11 | 12" {
@@ -250,14 +254,14 @@ func TestCompiledCountedLoop(t *testing.T) {
 }
 
 func TestCompiledLoopBreak(t *testing.T) {
-	got := runDifferential(t, registerLoopWords, func() []Value {
-		return []Value{
-			NewWord("cfor"), NewInteger(5),
+	got := runDifferential(t, registerLoopWords, func() []core.Value {
+		return []core.Value{
+			core.NewWord("cfor"), core.NewInteger(5),
 			codeBody(
-				NewWord("cif"),
-				NewOpenParen(), NewWord("cgt"), NewWord("i"), NewInteger(2), NewCloseParen(),
-				codeBody(NewWord("break")),
-				codeBody(NewWord("i")),
+				core.NewWord("cif"),
+				core.NewOpenParen(), core.NewWord("cgt"), core.NewWord("i"), core.NewInteger(2), core.NewCloseParen(),
+				codeBody(core.NewWord("break")),
+				codeBody(core.NewWord("i")),
 			),
 		}
 	})
@@ -267,14 +271,14 @@ func TestCompiledLoopBreak(t *testing.T) {
 }
 
 func TestCompiledLoopContinue(t *testing.T) {
-	got := runDifferential(t, registerLoopWords, func() []Value {
-		return []Value{
-			NewWord("cfor"), NewInteger(5),
+	got := runDifferential(t, registerLoopWords, func() []core.Value {
+		return []core.Value{
+			core.NewWord("cfor"), core.NewInteger(5),
 			codeBody(
-				NewWord("cif"),
-				NewOpenParen(), NewWord("cgt"), NewWord("i"), NewInteger(2), NewCloseParen(),
-				codeBody(NewWord("continue")),
-				codeBody(NewWord("i")),
+				core.NewWord("cif"),
+				core.NewOpenParen(), core.NewWord("cgt"), core.NewWord("i"), core.NewInteger(2), core.NewCloseParen(),
+				codeBody(core.NewWord("continue")),
+				codeBody(core.NewWord("i")),
 			),
 		}
 	})
@@ -286,10 +290,10 @@ func TestCompiledLoopContinue(t *testing.T) {
 func TestCompiledLoopFeedsIterator(t *testing.T) {
 	// The loop result is variadic — only the program residual may
 	// absorb it; the iterator local drives OpPushLocal per iteration.
-	got := runDifferential(t, registerLoopWords, func() []Value {
-		return []Value{
-			NewWord("cfor"), NewInteger(4),
-			codeBody(NewWord("cmul"), NewWord("i"), NewWord("i")),
+	got := runDifferential(t, registerLoopWords, func() []core.Value {
+		return []core.Value{
+			core.NewWord("cfor"), core.NewInteger(4),
+			codeBody(core.NewWord("cmul"), core.NewWord("i"), core.NewWord("i")),
 		}
 	})
 	if got != "0 | 1 | 4 | 9" {
@@ -299,14 +303,14 @@ func TestCompiledLoopFeedsIterator(t *testing.T) {
 
 func TestCompiledLoopBranchValueArms(t *testing.T) {
 	// A computed condition over the iterator with plain value arms.
-	got := runDifferential(t, registerLoopWords, func() []Value {
-		return []Value{
-			NewWord("cfor"), NewInteger(5),
+	got := runDifferential(t, registerLoopWords, func() []core.Value {
+		return []core.Value{
+			core.NewWord("cfor"), core.NewInteger(5),
 			codeBody(
-				NewWord("cif"),
-				NewOpenParen(), NewWord("cgt"), NewWord("i"), NewInteger(2), NewCloseParen(),
-				NewInteger(1),
-				NewInteger(0),
+				core.NewWord("cif"),
+				core.NewOpenParen(), core.NewWord("cgt"), core.NewWord("i"), core.NewInteger(2), core.NewCloseParen(),
+				core.NewInteger(1),
+				core.NewInteger(0),
 			),
 		}
 	})
@@ -318,25 +322,25 @@ func TestCompiledLoopBranchValueArms(t *testing.T) {
 func TestCompiledLoopSideEffectBody(t *testing.T) {
 	// A body netting zero values per iteration is a side-effect loop
 	// (zeroOut); a following literal is the only program result.
-	setup := func(r *Registry) {
+	setup := func(r *core.Registry) {
 		registerLoopWords(r)
-		r.RegisterNativeFunc(NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: "csink",
-			Signatures: []Signature{{
-				Args: []*Type{TInteger},
-				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Signatures: []core.Signature{{
+				Args: []*core.Type{core.TInteger},
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 					return nil, nil
 				}),
-				Returns: []*Type{}, BarrierPos: -1,
+				Returns: []*core.Type{}, BarrierPos: -1,
 			}},
 		})
 	}
-	got := runDifferential(t, setup, func() []Value {
-		return []Value{
-			NewWord("cfor"), NewInteger(3),
-			codeBody(NewWord("csink"), NewWord("i")),
-			NewEnd(),
-			NewInteger(42),
+	got := runDifferential(t, setup, func() []core.Value {
+		return []core.Value{
+			core.NewWord("cfor"), core.NewInteger(3),
+			codeBody(core.NewWord("csink"), core.NewWord("i")),
+			core.NewEnd(),
+			core.NewInteger(42),
 		}
 	})
 	if got != "42" {
@@ -348,17 +352,17 @@ func TestNestedLoopsInterpretedAndRefused(t *testing.T) {
 	// The interpreter runs nested mark/move loops; the Stage-2 compiler
 	// refuses a loop whose result is another loop's body result — the
 	// refusal reason is pinned so a silent miscompile can't replace it.
-	tokens := func() []Value {
-		return []Value{
-			NewWord("cfor"), NewInteger(2),
+	tokens := func() []core.Value {
+		return []core.Value{
+			core.NewWord("cfor"), core.NewInteger(2),
 			codeBody(
-				NewWord("cfor"), NewInteger(2),
-				codeBody(NewWord("cadd"), NewWord("i"), NewInteger(100)),
+				core.NewWord("cfor"), core.NewInteger(2),
+				codeBody(core.NewWord("cadd"), core.NewWord("i"), core.NewInteger(100)),
 			),
 		}
 	}
 	ri := covRegistry(t, registerLoopWords)
-	out, err := NewTop(ri).Run(tokens())
+	out, err := core.NewTop(ri).Run(tokens())
 	if err != nil {
 		t.Fatalf("nested loops interpreted: %v", err)
 	}
@@ -383,7 +387,7 @@ func TestLoopSignatureErrorMentionsShape(t *testing.T) {
 	// raises the interpreter's detailed signature_error, including the
 	// expected-signature summary and nearby stack types.
 	r := covRegistry(t, registerLoopWords)
-	_, err := NewTop(r).Run([]Value{NewWord("cfor"), NewTypeLiteral(TInteger), codeBody(NewInteger(1))})
+	_, err := core.NewTop(r).Run([]core.Value{core.NewWord("cfor"), core.NewTypeLiteral(core.TInteger), codeBody(core.NewInteger(1))})
 	if err == nil || !strings.Contains(err.Error(), "signature_error") {
 		t.Fatalf("literal count: err = %v", err)
 	}

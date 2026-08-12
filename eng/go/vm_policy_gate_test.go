@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The VM-side word-policy gate (plan Phase 10): every NAMED compiled
@@ -26,52 +29,52 @@ func (d denyChecker) CheckWord(name string) error {
 	return nil
 }
 
-func gateReg(t *testing.T, deny string) *Registry {
+func gateReg(t *testing.T, deny string) *core.Registry {
 	t.Helper()
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	r.InitRootContext()
-	if err := r.Capabilities.Set(CapPolicy, denyChecker{word: deny}); err != nil {
+	if err := r.Capabilities.Set(core.CapPolicy, denyChecker{word: deny}); err != nil {
 		t.Fatalf("install checker: %v", err)
 	}
 	return r
 }
 
 func TestVMWordPolicyGateArms(t *testing.T) {
-	sig := Signature{Args: []*Type{TInteger}, Returns: []*Type{TInteger}, BarrierPos: -1,
-		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			return []Value{args[0]}, nil
+	sig := core.Signature{Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+		Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+			return []core.Value{args[0]}, nil
 		})}
-	one := NewInteger(1)
+	one := core.NewInteger(1)
 
 	cases := []struct {
 		name string
-		p    *Program
+		p    *compiler.Program
 	}{
-		{"call-native", &Program{
-			Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallNative, Arg: 0}},
-			Consts: []Value{one}, Sigs: []SigRef{{Word: "zz-gated", Sig: &sig}},
+		{"call-native", &compiler.Program{
+			Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallNative, Arg: 0}},
+			Consts: []core.Value{one}, Sigs: []compiler.SigRef{{Word: "zz-gated", Sig: &sig}},
 		}},
-		{"call-user", &Program{
-			Code: []Instr{{Op: OpCallUser, Arg: 0}},
-			Fns:  []CompiledFn{{Name: "zz-gated", NParams: 0}},
+		{"call-user", &compiler.Program{
+			Code: []compiler.Instr{{Op: compiler.OpCallUser, Arg: 0}},
+			Fns:  []compiler.CompiledFn{{Name: "zz-gated", NParams: 0}},
 		}},
-		{"call-native-poly", &Program{
-			Code:     []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallNativePoly, Arg: 0}},
-			Consts:   []Value{one},
-			PolyRefs: []PolyRef{{Word: "zz-gated", Arity: 1}},
+		{"call-native-poly", &compiler.Program{
+			Code:     []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallNativePoly, Arg: 0}},
+			Consts:   []core.Value{one},
+			PolyRefs: []compiler.PolyRef{{Word: "zz-gated", Arity: 1}},
 		}},
-		{"call-user-poly", &Program{
-			Code:      []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallUserPoly, Arg: 0}},
-			Consts:    []Value{one},
-			UserPolys: []UserPolyRef{{Word: "zz-gated", Arity: 1}},
+		{"call-user-poly", &compiler.Program{
+			Code:      []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallUserPoly, Arg: 0}},
+			Consts:    []core.Value{one},
+			UserPolys: []compiler.UserPolyRef{{Word: "zz-gated", Arity: 1}},
 		}},
-		{"call-dyn-method", &Program{
-			Code:       []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallDynMethod, Arg: 0}},
-			Consts:     []Value{one},
-			DynMethods: []DynMethodSpec{{Word: "zz-gated", NArgs: 1, NOut: 1}},
+		{"call-dyn-method", &compiler.Program{
+			Code:       []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallDynMethod, Arg: 0}},
+			Consts:     []core.Value{one},
+			DynMethods: []compiler.DynMethodSpec{{Word: "zz-gated", NArgs: 1, NOut: 1}},
 		}},
 	}
 	for _, c := range cases {
@@ -91,9 +94,9 @@ func TestVMWordPolicyGateArms(t *testing.T) {
 	}
 
 	// Internal markers are exempt, exactly as in policyGateWord.
-	marker := &Program{
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallNative, Arg: 0}},
-		Consts: []Value{one}, Sigs: []SigRef{{Word: "__zz", Sig: &sig}},
+	marker := &compiler.Program{
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallNative, Arg: 0}},
+		Consts: []core.Value{one}, Sigs: []compiler.SigRef{{Word: "__zz", Sig: &sig}},
 	}
 	if _, err := RunProgram(marker, gateReg(t, "__zz")); err != nil && strings.Contains(err.Error(), "zz-policy") {
 		t.Fatalf("internal marker must bypass the gate, got %v", err)

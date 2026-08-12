@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // TestVmDeferAltAttaches was dropped by the four-piece carve triage and is
 // restored here: vmDeferAlt is unexported in eng, so eng is the only module
@@ -9,12 +13,12 @@ import "testing"
 func TestVmDeferAltAttaches(t *testing.T) {
 	r := covRegistry(t, nil)
 	plain := vmDeferAlt(r, seam7Dbg, 0, "vm:poly-no-match", "x", nil)
-	if ae, ok := plain.(*BoruError); !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
+	if ae, ok := plain.(*core.BoruError); !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
 		t.Errorf("a nil alt must be a plain defer, got %v", plain)
 	}
-	alt := &BoruError{Code: "signature_error", Detail: "d"}
+	alt := &core.BoruError{Code: "signature_error", Detail: "d"}
 	err := vmDeferAlt(r, seam7Dbg, 0, "vm:poly-no-match", "x", alt)
-	ae, ok := err.(*BoruError)
+	ae, ok := err.(*core.BoruError)
 	if !ok || ae.Code != "internal_error" || ae.DeferAlt != alt {
 		t.Errorf("the alt must ride the internal defer, got %v", err)
 	}

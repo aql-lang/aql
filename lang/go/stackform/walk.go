@@ -1,6 +1,6 @@
 package stackform
 
-import eng "github.com/boru-lang/boru/eng/go"
+import core "github.com/boru-lang/boru/core/go"
 
 // Walk visits every Op in the StackForm, descending into Quote
 // bodies. `visit` returns false to stop the walk early.
@@ -35,7 +35,7 @@ func walk(form *StackForm, prefix []int, visit func([]int, Op) bool) bool {
 // same Op kinds in the same order, with equal literal values and
 // equal nested bodies.
 //
-// Literal equality uses eng.DeepEqual, which is value-equality
+// Literal equality uses core.DeepEqual, which is value-equality
 // modulo representation (Integer 1 equals Float 1.0 if the eng
 // comparator says so — see eng/go/compare.go).
 func Equal(a, b *StackForm) bool {
@@ -60,7 +60,7 @@ func opEqual(a, b Op) bool {
 		if !ok {
 			return false
 		}
-		return eng.DeepEqual(x.V, y.V)
+		return core.DeepEqual(x.V, y.V)
 	case Call:
 		y, ok := b.(Call)
 		return ok && x.Name == y.Name && x.Arity == y.Arity

@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // A Store is a copy-on-write prototype chain: CowSet layers the new
 // binding over the old store rather than editing it, because the old
@@ -14,27 +18,27 @@ import "testing"
 // over it.
 
 // tsStore builds a bare root store with the given own entries.
-func tsStore(entries map[string]Value) *StoreInstanceInfo {
-	si := &StoreInstanceInfo{TypeName: "Object/Store", Data: map[string]Value{}}
+func tsStore(entries map[string]core.Value) *core.StoreInstanceInfo {
+	si := &core.StoreInstanceInfo{TypeName: "Object/Store", Data: map[string]core.Value{}}
 	for k, v := range entries {
 		si.Data[k] = v
 	}
 	return si
 }
 
-func tsGet(t *testing.T, si *StoreInstanceInfo, key string) (Value, bool) {
+func tsGet(t *testing.T, si *core.StoreInstanceInfo, key string) (core.Value, bool) {
 	t.Helper()
 	return si.Get(key)
 }
 
 func TestStoreTombstoneHidesInheritedKey(t *testing.T) {
-	base := tsStore(map[string]Value{"k": NewInteger(1)})
+	base := tsStore(map[string]core.Value{"k": core.NewInteger(1)})
 	if _, ok := tsGet(t, base, "k"); !ok {
 		t.Fatal("base store must hold k")
 	}
 
 	// A layer over base that tombstones k.
-	layer := &StoreInstanceInfo{
+	layer := &core.StoreInstanceInfo{
 		TypeName:  base.TypeName,
 		Deleted:   map[string]bool{"k": true},
 		Prototype: base,
@@ -48,17 +52,17 @@ func TestStoreTombstoneHidesInheritedKey(t *testing.T) {
 		t.Error("the prototype must keep its own binding; the tombstone is layer-local")
 	}
 	// A key that was never tombstoned still resolves through the chain.
-	base.Data["other"] = NewInteger(2)
+	base.Data["other"] = core.NewInteger(2)
 	if _, ok := tsGet(t, layer, "other"); !ok {
 		t.Error("an untombstoned key must still resolve through the prototype")
 	}
 }
 
 func TestStoreOwnDataBeatsTombstone(t *testing.T) {
-	base := tsStore(map[string]Value{"k": NewInteger(1)})
-	layer := &StoreInstanceInfo{
+	base := tsStore(map[string]core.Value{"k": core.NewInteger(1)})
+	layer := &core.StoreInstanceInfo{
 		TypeName:  base.TypeName,
-		Data:      map[string]Value{"k": NewInteger(9)},
+		Data:      map[string]core.Value{"k": core.NewInteger(9)},
 		Deleted:   map[string]bool{"k": true},
 		Prototype: base,
 	}
@@ -66,7 +70,7 @@ func TestStoreOwnDataBeatsTombstone(t *testing.T) {
 	if !ok {
 		t.Fatal("a re-bound key must read, tombstone or not")
 	}
-	if n, _ := AsInteger(v); n != 9 {
+	if n, _ := core.AsInteger(v); n != 9 {
 		t.Errorf("own Data must win over Deleted; got %v", v)
 	}
 }
@@ -74,7 +78,7 @@ func TestStoreOwnDataBeatsTombstone(t *testing.T) {
 func TestStoreTombstoneOnRootWithNoPrototype(t *testing.T) {
 	// A tombstone with nothing below it: the key was never there, and the
 	// lookup must terminate rather than fall through to a nil prototype.
-	root := &StoreInstanceInfo{TypeName: "Object/Store", Deleted: map[string]bool{"k": true}}
+	root := &core.StoreInstanceInfo{TypeName: "Object/Store", Deleted: map[string]bool{"k": true}}
 	if _, ok := tsGet(t, root, "k"); ok {
 		t.Error("a tombstone on a root store must still read absent")
 	}
@@ -84,14 +88,14 @@ func TestStoreTombstoneOnRootWithNoPrototype(t *testing.T) {
 }
 
 func TestCowDelLayersAndPropagates(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	base := tsStore(map[string]Value{"k": NewInteger(1)})
+	base := tsStore(map[string]core.Value{"k": core.NewInteger(1)})
 	r.Contexts.PushExisting(base)
 
-	CowDel(base, "k", r)
+	core.CowDel(base, "k", r)
 	top := r.Contexts.Top()
 	if top == base {
 		t.Fatal("CowDel must layer, not edit the store in place")
@@ -105,7 +109,7 @@ func TestCowDelLayersAndPropagates(t *testing.T) {
 
 	// Deleting a key that was never bound is a no-op layer, not an error:
 	// del is idempotent and total, like has.
-	CowDel(r.Contexts.Top(), "never-there", r)
+	core.CowDel(r.Contexts.Top(), "never-there", r)
 	if _, ok := tsGet(t, r.Contexts.Top(), "never-there"); ok {
 		t.Error("deleting an unbound key must leave it absent")
 	}
@@ -116,7 +120,7 @@ func TestCowDelLayersAndPropagates(t *testing.T) {
 }
 
 func TestCowDelPropagatesUpTheParentChain(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -124,13 +128,13 @@ func TestCowDelPropagatesUpTheParentChain(t *testing.T) {
 	// parent layer too, exactly as CowSet does, or the parent keeps
 	// pointing at the pre-delete child.
 	parent := tsStore(nil)
-	child := tsStore(map[string]Value{"k": NewInteger(1)})
+	child := tsStore(map[string]core.Value{"k": core.NewInteger(1)})
 	child.Parent = parent
 	child.ParentKey = "kid"
-	parent.Data["kid"] = NewStoreValue(nil, child)
+	parent.Data["kid"] = core.NewStoreValue(nil, child)
 	r.Contexts.PushExisting(parent)
 
-	CowDel(child, "k", r)
+	core.CowDel(child, "k", r)
 
 	newParent := r.Contexts.Top()
 	if newParent == parent {
@@ -140,7 +144,7 @@ func TestCowDelPropagatesUpTheParentChain(t *testing.T) {
 	if !ok {
 		t.Fatal("the rebuilt parent must still reference the child")
 	}
-	nested, serr := AsStore(kid)
+	nested, serr := core.AsStore(kid)
 	if serr != nil {
 		t.Fatalf("AsStore on the rebuilt child: %v", serr)
 	}
@@ -150,14 +154,14 @@ func TestCowDelPropagatesUpTheParentChain(t *testing.T) {
 }
 
 func TestCloneCarriesTombstones(t *testing.T) {
-	base := tsStore(map[string]Value{"k": NewInteger(1)})
-	layer := &StoreInstanceInfo{
+	base := tsStore(map[string]core.Value{"k": core.NewInteger(1)})
+	layer := &core.StoreInstanceInfo{
 		TypeName:  base.TypeName,
 		Deleted:   map[string]bool{"k": true},
 		Prototype: base,
 	}
-	cp := CloneValue(NewStoreValue(nil, layer))
-	cs, serr := AsStore(cp)
+	cp := core.CloneValue(core.NewStoreValue(nil, layer))
+	cs, serr := core.AsStore(cp)
 	if serr != nil {
 		t.Fatalf("AsStore: %v", serr)
 	}
@@ -172,8 +176,8 @@ func TestCloneCarriesTombstones(t *testing.T) {
 	}
 	// A store with no tombstones clones to a nil map, not an empty one —
 	// same shape as before, so nothing downstream sees a new allocation.
-	plain := CloneValue(NewStoreValue(nil, base))
-	ps, serr := AsStore(plain)
+	plain := core.CloneValue(core.NewStoreValue(nil, base))
+	ps, serr := core.AsStore(plain)
 	if serr != nil {
 		t.Fatalf("AsStore(base clone): %v", serr)
 	}

@@ -37,6 +37,8 @@ package eng
 import (
 	"sync"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Test blocks re-homed by compiler-driven triage at the carve.
@@ -52,16 +54,16 @@ func TestRuntimeBailHookVmDefer(t *testing.T) {
 	r := runUnitReg(t)
 	var (
 		mu     sync.Mutex
-		events []BailEvent
+		events []core.BailEvent
 	)
-	disarm := r.ArmRuntimeBailHook(func(e BailEvent) {
+	disarm := r.ArmRuntimeBailHook(func(e core.BailEvent) {
 		mu.Lock()
 		defer mu.Unlock()
 		events = append(events, e)
 	})
 
 	err := vmDefer(r, nil, 0, "vm:test-site", "test defer message")
-	if !IsInternalErr(err) {
+	if !core.IsInternalErr(err) {
 		t.Fatalf("vmDefer error class = %v, want internal_error", err)
 	}
 	if len(events) != 1 || events[0].Site != "vm:test-site" || events[0].Reason != "test defer message" {
@@ -69,7 +71,7 @@ func TestRuntimeBailHookVmDefer(t *testing.T) {
 	}
 
 	disarm()
-	if err := vmDefer(r, nil, 0, "vm:test-site", "again"); !IsInternalErr(err) {
+	if err := vmDefer(r, nil, 0, "vm:test-site", "again"); !core.IsInternalErr(err) {
 		t.Fatalf("disarmed vmDefer error class = %v, want internal_error", err)
 	}
 	if len(events) != 1 {
@@ -83,12 +85,12 @@ func TestInheritObserveHooks(t *testing.T) {
 	parent := runUnitReg(t)
 	child := runUnitReg(t)
 	var c entryCollector
-	var bails []BailEvent
+	var bails []core.BailEvent
 	defer parent.ArmInterpEntryHook(c.add)()
-	defer parent.ArmRuntimeBailHook(func(e BailEvent) { bails = append(bails, e) })()
+	defer parent.ArmRuntimeBailHook(func(e core.BailEvent) { bails = append(bails, e) })()
 
 	child.InheritObserveHooks(parent)
-	if _, err := RunPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
+	if _, err := core.RunPooledSub(child, []core.Value{core.NewInteger(2)}, false); err != nil {
 		t.Fatalf("child runPooledSub: %v", err)
 	}
 	if len(c.entries) == 0 {

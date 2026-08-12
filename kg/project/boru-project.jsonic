@@ -181,6 +181,16 @@
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
+    {
+      id: "src:go-module-graph"
+      kind: "text"
+      locator: "design/GO-MODULE-GRAPH.0.md"
+      title: "Go module graph and per-module coverage, measured"
+      retrieved_at: null
+      content_hash: "go-module-graph-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
   ]
   entities: [
     { key: "boru", type: "Concept", label: "boru language"
@@ -250,6 +260,8 @@
       attributes: { role: "the ten classes of measured core/go-vs-core/ts divergence behind core/spec/divergent.tsv, why the 1808-row crossdiff was blind to all of them, and the hit rate that makes the uncovered surface the place to look" } }
     { key: "go-ts-parity", type: "Document", label: "design/GO-TS-PARITY.0.md"
       attributes: { role: "the Go/TS parity program for core, parser and basic: the three shared TSV corpora and their two-runner rule, the capability table that forces core/ts before basic/ts, the divergence ledger, and the finding that an uncovered branch in one port is where a divergence hides" } }
+    { key: "go-module-graph", type: "Document", label: "design/GO-MODULE-GRAPH.0.md"
+      attributes: { role: "the measured Go-side snapshot: the module inventory, the direct-require graph and its twelve-edge transitive reduction, and per-module coverage in both columns — the merged ADR-008 gate and each module's own standalone suite" } }
     { key: "ts-parity-audit", type: "Document", label: "design/TS-PARITY-AUDIT.0.md"
       attributes: { role: "the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences" } }
     { key: "tabnas-upstream-first", type: "Document", label: "design/TABNAS-UPSTREAM-FIRST.0.md"
@@ -533,6 +545,16 @@
       object: { kind: "entity", entity: "lang-go" }
       evidence: [{ source: "src:boru-scry", locator: "Architecture",
         quote: "File layout: `lang/go/modules/scry.go`, `docs_scry.go`," }]
+      confidence: 0.95 }
+    { subject: "go-module-graph", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:go-module-graph", locator: "title",
+        quote: "Go module graph and per-module coverage" }]
+      confidence: 0.95 }
+    { subject: "go-module-graph", predicate: "related_to"
+      object: { kind: "entity", entity: "kg" }
+      evidence: [{ source: "src:go-module-graph", locator: "Status",
+        quote: "the same ground truth `kg/gomod.boru` reads to build the knowledge graph's module view" }]
       confidence: 0.95 }
   ]
 }

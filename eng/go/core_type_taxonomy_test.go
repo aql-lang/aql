@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestInstallTypeNamePartConflictTaxonomy pins the taxonomy wrap on the
@@ -13,15 +15,15 @@ import (
 // leaked to hosts as a non-taxonomy failure (the TS crossdiff reported
 // it as UNEXPECTED:… instead of a code).
 func TestInstallTypeNamePartConflictTaxonomy(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	instErr := InstallType(r, "Integer", NewInteger(42))
+	instErr := core.InstallType(r, "Integer", core.NewInteger(42))
 	if instErr == nil {
 		t.Fatalf("rebinding a builtin type name must refuse")
 	}
-	var be *BoruError
+	var be *core.BoruError
 	if !errors.As(instErr, &be) {
 		t.Fatalf("refusal must be a BoruError, got %T: %v", instErr, instErr)
 	}
@@ -33,7 +35,7 @@ func TestInstallTypeNamePartConflictTaxonomy(t *testing.T) {
 	}
 
 	// Negative pairing: a fresh non-conflicting name installs cleanly.
-	if err := InstallType(r, "Zebra", NewTypeLiteral(TInteger)); err != nil {
+	if err := core.InstallType(r, "Zebra", core.NewTypeLiteral(core.TInteger)); err != nil {
 		t.Errorf("fresh type name must install, got %v", err)
 	}
 }

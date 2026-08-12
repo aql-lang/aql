@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/parser/go"
 )
 
@@ -37,7 +37,7 @@ func TestRunFileRenderedSkipRow(t *testing.T) {
 // list that errors when run reaches both the list arm's sub-run error
 // and the map loop's recursion-error check.
 func TestDoEvalMapValueErrorArms(t *testing.T) {
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,9 +51,9 @@ func TestDoEvalMapValueErrorArms(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("want one inert list value, got %d", len(vals))
 	}
-	om := eng.NewOrderedMap()
+	om := core.NewOrderedMap()
 	om.Set("a", vals[0])
-	if _, err := doEvalMapValue(r, eng.NewMap(om)); err == nil ||
+	if _, err := doEvalMapValue(r, core.NewMap(om)); err == nil ||
 		!strings.Contains(err.Error(), "argument must be a type") {
 		t.Errorf("want the sub-run's refine error, got %v", err)
 	}

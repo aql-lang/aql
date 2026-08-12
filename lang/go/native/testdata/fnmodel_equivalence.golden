@@ -81,8 +81,8 @@ WORD canon
 WORD case
   [Any Any] barrier=2 noeval={0,1} returns=[Any] +returnsfn
 WORD changecase
-  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
-  [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String] +returnsfn
+  [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String] +returnsfn
   [Scalar/String] barrier=1 returns=[Scalar/String]
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
 WORD class
@@ -271,7 +271,7 @@ WORD emit
 WORD enum
   [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum] +returnsfn
 WORD env
-  [Scalar/String] barrier=1 returns=[Any]
+  [Scalar/String] barrier=1 returns=[Any] +returnsfn
 WORD env-all
   [] barrier=0 returns=[Node/Map]
 WORD eq
@@ -480,8 +480,8 @@ WORD load
   [Ideal/Resource/Entity] barrier=1 returns=[Any]
   [Node/Map] barrier=1 returns=[Any]
 WORD lock
-  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
-  [Scalar/Micron/Pathon] barrier=1 returns=[Any]
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any] +returnsfn
+  [Scalar/Micron/Pathon] barrier=1 returns=[Any] +returnsfn
 WORD lower
   [Scalar/String] barrier=1 returns=[Scalar/String]
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
@@ -640,8 +640,8 @@ WORD read
   [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
 WORD read-line
-  [Ideal/File] barrier=1 returns=[Any]
-  [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
+  [Ideal/File] barrier=1 returns=[Any] +returnsfn
+  [Scalar/Atom/StreamKind] barrier=1 returns=[Any] +returnsfn
 WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD receive
@@ -673,7 +673,7 @@ WORD repeat
   [Scalar/Number/Integer Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
 WORD replace
-  [Scalar/String Scalar/String Scalar/String Node/Map] barrier=4 returns=[Scalar/String]
+  [Scalar/String Scalar/String Scalar/String Node/Map] barrier=4 returns=[Scalar/String] +returnsfn
   [Scalar/String Scalar/String Scalar/String] barrier=3 returns=[Scalar/String]
 WORD reverse
   [Node/List] barrier=1 +returnsfn
@@ -749,7 +749,7 @@ WORD sort
   [Node/Map] barrier=1 returns=[Node/Map]
   [Node/List] barrier=1 returns=[Node/List]
 WORD space
-  [Scalar/Micron/Pathon] barrier=1 returns=[Any]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Node/Map]
 WORD spawn
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Ideal/Pid]
   [Node/List] barrier=1 noeval={0} returns=[Ideal/Pid]
@@ -764,8 +764,8 @@ WORD stack-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD stat
-  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
-  [Scalar/Micron/Pathon] barrier=1 returns=[Any]
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any] +returnsfn
+  [Scalar/Micron/Pathon] barrier=1 returns=[Any] +returnsfn
 WORD state-of
   [Ideal/Service] barrier=1 returns=[Node/Map]
 WORD stderr

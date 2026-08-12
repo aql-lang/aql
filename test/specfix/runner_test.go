@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/parser/go"
 )
 
@@ -23,18 +23,18 @@ import (
 // (registry + fixtures + root context; parse then evaluate).
 func qRun(t *testing.T) Run {
 	t.Helper()
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
-		t.Fatalf("eng.NewRegistry: %v", err)
+		t.Fatalf("core.NewRegistry: %v", err)
 	}
 	RegisterQFixtures(r)
 	r.InitRootContext()
-	return func(input string) ([]eng.Value, error) {
+	return func(input string) ([]core.Value, error) {
 		values, perr := parser.Parse(input)
 		if perr != nil {
 			return nil, perr
 		}
-		return eng.NewTop(r).Run(values)
+		return core.NewTop(r).Run(values)
 	}
 }
 

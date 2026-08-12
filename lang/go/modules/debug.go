@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/boru-lang/boru/eng/go/stackform"
 	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/stackform"
 )
 
 // moduleNamesFn indirects the package-level Names() so the `debug-modules`

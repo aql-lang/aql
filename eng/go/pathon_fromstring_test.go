@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // TestNewPathonFromString pins the exported host-side Pathon constructor
 // against the `make Pathon "<s>"` parse it wraps: POSIX relative and
@@ -16,11 +20,11 @@ func TestNewPathonFromString(t *testing.T) {
 		{"", "", false},
 	}
 	for _, c := range cases {
-		v := NewPathonFromString(c.in)
-		if !IsPathon(v) {
+		v := core.NewPathonFromString(c.in)
+		if !core.IsPathon(v) {
 			t.Fatalf("NewPathonFromString(%q) is not a Pathon: %v", c.in, v)
 		}
-		info, err := AsPathon(v)
+		info, err := core.AsPathon(v)
 		if err != nil {
 			t.Fatalf("AsPathon(%q): %v", c.in, err)
 		}
@@ -30,11 +34,11 @@ func TestNewPathonFromString(t *testing.T) {
 		}
 	}
 	// Parity with the `make Pathon` string arm.
-	made, err := MakePathon(NewString("x/y"), false)
+	made, err := core.MakePathon(core.NewString("x/y"), false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	direct := NewPathonFromString("x/y")
+	direct := core.NewPathonFromString("x/y")
 	if made[0].String() != direct.String() {
 		t.Errorf("make-parity: %s vs %s", made[0], direct)
 	}

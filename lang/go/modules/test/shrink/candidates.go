@@ -2,7 +2,7 @@ package shrink
 
 import (
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/stackform"
 )
 
 // generateCandidates produces every candidate mutation of `form`

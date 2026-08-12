@@ -1,6 +1,11 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // FnAnalysisKey carries a per-registry scope id (design/module-fn-
 // checkstate-ownership.1.md §5a) so that a module sub-registry's fn cannot
@@ -12,10 +17,10 @@ import "testing"
 
 // sameKeyInputs returns a fixed (name, args, captures, body) tuple so the
 // only variable across calls is the scope id.
-func sameKeyInputs() (string, []Value, []CapturedBinding, []Value) {
+func sameKeyInputs() (string, []core.Value, []core.CapturedBinding, []core.Value) {
 	name := "decide"
-	args := []Value{NewCarrier(TWord), NewCarrier(TMap)}
-	body := []Value{NewWord("apply-op"), NewInteger(1)}
+	args := []core.Value{core.NewCarrier(core.TWord), core.NewCarrier(core.TMap)}
+	body := []core.Value{core.NewWord("apply-op"), core.NewInteger(1)}
 	return name, args, nil, body
 }
 
@@ -25,8 +30,8 @@ func TestFnAnalysisKeyScopeDisambiguates(t *testing.T) {
 	// Positive: same scope id + identical inputs → identical key. This is
 	// what keeps memoisation and in-flight recursion detection working —
 	// the same construction re-analysed must hit the same memo slot.
-	k1 := FnAnalysisKey(7, name, args, caps, body)
-	k1again := FnAnalysisKey(7, name, args, caps, body)
+	k1 := check.FnAnalysisKey(7, name, args, caps, body)
+	k1again := check.FnAnalysisKey(7, name, args, caps, body)
 	if k1 != k1again {
 		t.Fatalf("same scope + same inputs must yield the same key:\n  %q\n  %q", k1, k1again)
 	}
@@ -35,7 +40,7 @@ func TestFnAnalysisKeyScopeDisambiguates(t *testing.T) {
 	// name, arg types, body, and source position) must yield a DIFFERENT
 	// key. Without the scope discriminator these collide — exactly the
 	// parent-vs-module aliasing that broke the prior attempt (.0 §4).
-	k2 := FnAnalysisKey(8, name, args, caps, body)
+	k2 := check.FnAnalysisKey(8, name, args, caps, body)
 	if k1 == k2 {
 		t.Fatalf("distinct scope ids must not collide; both produced %q", k1)
 	}
@@ -46,8 +51,8 @@ func TestFnAnalysisKeyScopeOnlyDifference(t *testing.T) {
 	// stripping the leading "<scope>#" prefix must make them equal, proving
 	// the disambiguation is the prefix and nothing about the inputs drifted.
 	name, args, caps, body := sameKeyInputs()
-	k7 := FnAnalysisKey(7, name, args, caps, body)
-	k8 := FnAnalysisKey(8, name, args, caps, body)
+	k7 := check.FnAnalysisKey(7, name, args, caps, body)
+	k8 := check.FnAnalysisKey(8, name, args, caps, body)
 
 	strip := func(s string) string {
 		for i := 0; i < len(s); i++ {
@@ -63,11 +68,11 @@ func TestFnAnalysisKeyScopeOnlyDifference(t *testing.T) {
 }
 
 func TestNewRegistryScopeIDsDistinct(t *testing.T) {
-	r1, err := NewRegistry()
+	r1, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	r2, err := NewRegistry()
+	r2, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -78,7 +83,7 @@ func TestNewRegistryScopeIDsDistinct(t *testing.T) {
 		t.Fatalf("distinct registries must have distinct scope ids; both %d", r1.AnalysisScopeID())
 	}
 	// A nil registry is scope 0 (no panic) — the documented contract.
-	var rnil *Registry
+	var rnil *core.Registry
 	if rnil.AnalysisScopeID() != 0 {
 		t.Fatalf("nil registry scope id must be 0, got %d", rnil.AnalysisScopeID())
 	}
@@ -95,22 +100,22 @@ func TestFnAnalysisKeyNilParentArg(t *testing.T) {
 			t.Fatalf("FnAnalysisKey panicked on a nil-Parent (None root) arg: %v", r)
 		}
 	}()
-	noneArm := NewDynamicCarrierValue(NewTypeLiteral(TNone)) // Parent == nil
+	noneArm := core.NewDynamicCarrierValue(core.NewTypeLiteral(core.TNone)) // Parent == nil
 	if noneArm.Parent != nil {
 		t.Fatalf("test fixture invalid: expected a nil-Parent None carrier, got Parent=%v", noneArm.Parent)
 	}
-	args := []Value{noneArm, NewCarrier(TMap)}
-	caps := []CapturedBinding{{Name: "seed", Value: noneArm}}
-	body := []Value{NewWord("build")}
+	args := []core.Value{noneArm, core.NewCarrier(core.TMap)}
+	caps := []core.CapturedBinding{{Name: "seed", Value: noneArm}}
+	body := []core.Value{core.NewWord("build")}
 
-	kNone := FnAnalysisKey(1, "ins", args, caps, body)
+	kNone := check.FnAnalysisKey(1, "ins", args, caps, body)
 	if kNone == "" {
 		t.Fatalf("FnAnalysisKey returned an empty key")
 	}
 	// The None arg must still discriminate: a Map-typed first arg yields a
 	// different key, proving the nil-Parent fallback names the type (not a
 	// blanket constant).
-	kMap := FnAnalysisKey(1, "ins", []Value{NewCarrier(TMap), NewCarrier(TMap)}, nil, body)
+	kMap := check.FnAnalysisKey(1, "ins", []core.Value{core.NewCarrier(core.TMap), core.NewCarrier(core.TMap)}, nil, body)
 	if kNone == kMap {
 		t.Fatalf("nil-Parent None arg must key distinctly from a Map arg; both %q", kNone)
 	}

@@ -1,14 +1,14 @@
-// Package specrunner is the shared scaffolding for the .tsv spec-suite
+// Package specfix is the shared scaffolding for the .tsv spec-suite
 // test runners — `eng/go/spec_test.go` (kernel) and
 // `lang/go/test/spec_runner_test.go` (production language). Both walk a
 // directory of `.tsv` files and, for each non-blank/non-comment row,
 // parse the `<input><TAB><expected>[<TAB><note>]` columns, evaluate the
 // input through a caller-supplied engine, and compare the result stack
-// rendered through `eng.Canon` to `<expected>` (with a `ERROR:<wantSubstring>`
+// rendered through `core.Canon` to `<expected>` (with a `ERROR:<wantSubstring>`
 // form for expected-error rows).
 //
 // The caller supplies a Run function that does the parse-and-evaluate
-// step. Rendering lives in `eng.Canon`, which emits canonical boru source
+// step. Rendering lives in `core.Canon`, which emits canonical boru source
 // — a form that re-parses to the same stack.
 package specfix
 
@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // ErrSkipRow is the sentinel a Run / RenderRun returns to SKIP a row
@@ -36,7 +36,7 @@ var ErrSkipRow = errors.New("specfix: row skipped by the runner")
 // errored; a row marked `ERROR:<text>` in the .tsv passes when the
 // returned error's message contains `<text>` (empty `<text>` matches
 // any error).
-type Run func(input string) ([]eng.Value, error)
+type Run func(input string) ([]core.Value, error)
 
 // RunDir runs every `.tsv` file in dir as a subtest named after the
 // file's basename (minus the `.tsv` suffix). Each row inside the file
@@ -100,7 +100,7 @@ func RunFile(t *testing.T, path string, run Run) {
 			if strings.HasPrefix(expected, "ERROR:") {
 				want := expected[len("ERROR:"):]
 				if runErr == nil {
-					t.Fatalf("expected error containing %q, got result %v", want, eng.Canon(out))
+					t.Fatalf("expected error containing %q, got result %v", want, core.Canon(out))
 				}
 				if want != "" && !strings.Contains(runErr.Error(), want) {
 					t.Errorf("error %q does not contain %q", runErr.Error(), want)
@@ -111,7 +111,7 @@ func RunFile(t *testing.T, path string, run Run) {
 			if runErr != nil {
 				t.Fatalf("unexpected error: %v", runErr)
 			}
-			got := eng.Canon(out)
+			got := core.Canon(out)
 			if got != expected {
 				t.Errorf("got %q, want %q", got, expected)
 			}
@@ -129,7 +129,7 @@ func RunFile(t *testing.T, path string, run Run) {
 type RenderRun func(input string) (string, error)
 
 // RunDirRendered is RunDir for runners that render their own result
-// string rather than producing an eng.Value stack compared via Canon.
+// string rather than producing an core.Value stack compared via Canon.
 func RunDirRendered(t *testing.T, dir string, run RenderRun) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
