@@ -15,12 +15,14 @@ import (
 	"errors"
 	"testing"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/specfix"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
+	"github.com/boru-lang/boru/test/specfix"
 )
 
-func batteryRegistry(t *testing.T) *eng.Registry {
+func batteryRegistry(t *testing.T) *core.Registry {
 	t.Helper()
 	r, err := standaloneRegistry()
 	if err != nil {
@@ -31,20 +33,20 @@ func batteryRegistry(t *testing.T) *eng.Registry {
 }
 
 // runBatteryInterp runs one row on a fresh interpreter.
-func runBatteryInterp(t *testing.T, input string) ([]eng.Value, error) {
+func runBatteryInterp(t *testing.T, input string) ([]core.Value, error) {
 	t.Helper()
 	values, err := parser.Parse(input)
 	if err != nil {
 		t.Fatalf("parse %q: %v", input, err)
 	}
-	return eng.NewTop(batteryRegistry(t)).Run(values)
+	return core.NewTop(batteryRegistry(t)).Run(values)
 }
 
 // runBatteryCompiled runs one row through the recorder pipeline and
 // the VM when a Program materialises, falling back to a fresh
 // interpreter exactly like the corpus compile-or-fallback lane.
 // It reports whether the row genuinely executed on the VM.
-func runBatteryCompiled(t *testing.T, input string) ([]eng.Value, bool, error) {
+func runBatteryCompiled(t *testing.T, input string) ([]core.Value, bool, error) {
 	t.Helper()
 	values, err := parser.Parse(input)
 	if err != nil {
@@ -54,20 +56,20 @@ func runBatteryCompiled(t *testing.T, input string) ([]eng.Value, bool, error) {
 	rA.Source = input
 
 	finish := rA.Check.BeginCompilePass()
-	residual, runErr := eng.NewTop(rA).Run(values)
+	residual, runErr := core.NewTop(rA).Run(values)
 	rA.RescueForwardRefDiagnostics()
 	rA.Check.EmitUnusedDefDiagnostics()
-	var prog *eng.Program
+	var prog *compiler.Program
 	if runErr == nil && !rA.Check.SuppressedRuntimeError && !rA.Check.AmbiguousGradualSplit {
 		refuse := false
 		for _, d := range rA.Check.Diagnostics {
-			if !d.RuntimeMirror && (d.Severity == eng.SeverityError || d.CaughtAtRuntime) {
+			if !d.RuntimeMirror && (d.Severity == core.SeverityError || d.CaughtAtRuntime) {
 				refuse = true
 				break
 			}
 		}
 		if !refuse {
-			if p, _, ok := rA.Check.Recorder().(*eng.EmitState).Finalize(residual); ok {
+			if p, _, ok := rA.Check.Recorder().(*compiler.EmitState).Finalize(residual); ok {
 				prog = p
 			}
 		}
@@ -76,7 +78,7 @@ func runBatteryCompiled(t *testing.T, input string) ([]eng.Value, bool, error) {
 
 	if prog != nil {
 		out, vmErr := eng.RunProgram(prog, rA)
-		var be *eng.BoruError
+		var be *core.BoruError
 		if vmErr == nil || !errors.As(vmErr, &be) || be.Code != "internal_error" {
 			return out, true, vmErr
 		}
@@ -86,7 +88,7 @@ func runBatteryCompiled(t *testing.T, input string) ([]eng.Value, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	out, ferr := eng.NewTop(rB).Run(reparsed)
+	out, ferr := core.NewTop(rB).Run(reparsed)
 	return out, false, ferr
 }
 
@@ -107,12 +109,12 @@ func runBattery(t *testing.T, rows []batteryRow) {
 				compiledCount++
 			}
 			for lane, res := range map[string]struct {
-				out []eng.Value
+				out []core.Value
 				err error
 			}{"interp": {iOut, iErr}, "compiled": {cOut, cErr}} {
 				if row.wantErr != "" {
 					if res.err == nil {
-						t.Errorf("%s: want error containing %q, got %s", lane, row.wantErr, eng.Canon(res.out))
+						t.Errorf("%s: want error containing %q, got %s", lane, row.wantErr, core.Canon(res.out))
 					}
 					continue
 				}
@@ -120,7 +122,7 @@ func runBattery(t *testing.T, rows []batteryRow) {
 					t.Errorf("%s: unexpected error: %v", lane, res.err)
 					continue
 				}
-				if got := eng.Canon(res.out); got != row.want {
+				if got := core.Canon(res.out); got != row.want {
 					t.Errorf("%s: got %s, want %s", lane, got, row.want)
 				}
 			}
@@ -496,7 +498,7 @@ func runBatteryCheck(t *testing.T, input string) (string, error) {
 	specfix.RegisterCheckExtras(r)
 	r.Source = input
 	done := r.Check.Begin()
-	out, runErr := eng.NewTop(r).Run(values)
+	out, runErr := core.NewTop(r).Run(values)
 	r.RescueForwardRefDiagnostics()
 	r.Check.EmitUnusedDefDiagnostics()
 	diags := r.Check.Diagnostics

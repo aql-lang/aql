@@ -37,7 +37,6 @@ const usage = `usage:
   piecetool <dir>                              report the cross-piece inventory
   piecetool -demethod <dir> Recv.Name...       methods -> free functions
   piecetool -export <dir>                      export the cross-piece surface
-  piecetool -facade <dir> <out> [qualifier]    generate a facade over <dir>
   piecetool -exports <dir>                     list the exported symbols
   piecetool -qualify <dir> <piece>             qualify cross-piece uses
   piecetool -qualify-tests <dir> <piece> <files>
@@ -78,15 +77,6 @@ func run(args []string) error {
 			return err
 		}
 		return exportPass(args[1])
-	case "-facade":
-		if err := need(2); err != nil {
-			return err
-		}
-		qual := "core"
-		if len(args) > 3 {
-			qual = args[3]
-		}
-		return facadeFor(args[1], args[2], qual)
 	case "-exports":
 		if err := need(1); err != nil {
 			return err

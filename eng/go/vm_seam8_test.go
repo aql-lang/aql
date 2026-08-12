@@ -2,6 +2,9 @@ package eng
 
 import (
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // vm_seam8_test.go extends vm_seam7_test.go with the residual VM dispatch
@@ -17,7 +20,7 @@ import (
 // return one as a residual (see the residual notes in the fleet report).
 
 // w8Reg is seam7Reg plus a convenience for asserting registration succeeded.
-func w8Reg(t *testing.T) *Registry {
+func w8Reg(t *testing.T) *core.Registry {
 	t.Helper()
 	return seam7Reg(t)
 }
@@ -25,23 +28,23 @@ func w8Reg(t *testing.T) *Registry {
 // w8reg0 registers a 0-arg inner native `name` with the given handler and
 // returns a 0-arg trivial-delegation fn VALUE wrapping it (body [Word(name)],
 // no named params) — the `r.bool`-shaped method get/getr auto-applies.
-func w8Deleg0(t *testing.T, r *Registry, name string, impl Handler) Value {
+func w8Deleg0(t *testing.T, r *core.Registry, name string, impl core.Handler) core.Value {
 	t.Helper()
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: name,
-		Signatures: []Signature{{
-			Args: nil, Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: Go(impl),
+		Signatures: []core.Signature{{
+			Args: nil, Returns: []*core.Type{core.TAny}, BarrierPos: -1,
+			Impl: core.Go(impl),
 		}},
 	})
 	if err := r.Err(); err != nil {
 		t.Fatalf("register %s: %v", name, err)
 	}
-	return NewFunction(FnDefInfo{
+	return core.NewFunction(core.FnDefInfo{
 		Name: name, Registry: r,
-		Signatures: []Signature{{
-			Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: Boru([]Value{NewWord(name)}),
+		Signatures: []core.Signature{{
+			Returns: []*core.Type{core.TAny}, BarrierPos: -1,
+			Impl: core.Boru([]core.Value{core.NewWord(name)}),
 		}},
 	})
 }
@@ -49,14 +52,14 @@ func w8Deleg0(t *testing.T, r *Registry, name string, impl Handler) Value {
 // w8registerReturningPoly registers a get-family poly word `word` whose single
 // [TAny] overload returns `result` verbatim — the shape callPoly re-dispatches
 // and then post-processes (auto-apply / screen).
-func w8registerReturningPoly(t *testing.T, r *Registry, word string, result Value) {
+func w8registerReturningPoly(t *testing.T, r *core.Registry, word string, result core.Value) {
 	t.Helper()
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: word,
-		Signatures: []Signature{{
-			Args: []*Type{TAny}, Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{result}, nil
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TAny}, Returns: []*core.Type{core.TAny}, BarrierPos: -1,
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				return []core.Value{result}, nil
 			}),
 		}},
 	})
@@ -75,27 +78,27 @@ func w8registerReturningPoly(t *testing.T, r *Registry, word string, result Valu
 
 func TestW8CallPolyGetMethodValueStaysData(t *testing.T) {
 	r := w8Reg(t)
-	deleg := w8Deleg0(t, r, "w8zero", func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return []Value{NewInteger(99)}, nil
+	deleg := w8Deleg0(t, r, "w8zero", func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+		return []core.Value{core.NewInteger(99)}, nil
 	})
 	// `dot` is a get-word (isGetWord). Its poly result is the delegation
 	// method value; callPoly returns it VERBATIM — the arity-0
 	// CALL_DYN_METHOD the recorder emits right after is what applies it.
 	w8registerReturningPoly(t, r, "dot", deleg)
 	vc := seam7VC(r)
-	out, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1, NOut: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	out, err := vc.callPoly(&compiler.PolyRef{Word: "dot", Arity: 1, NOut: 1}, []core.Value{core.NewInteger(1)}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("callPoly method-value get: %v", err)
 	}
 	if len(out) != 1 {
 		t.Fatalf("method-value get residual = %v, want the member value", out)
 	}
-	fd, ok := out[0].Data.(FnDefInfo)
+	fd, ok := out[0].Data.(core.FnDefInfo)
 	if !ok || fd.Name != "w8zero" {
 		t.Errorf("get result = %v, want the w8zero delegation method value (unapplied)", out[0])
 	}
 	// The explicit landing opcode applies it — the runtime pair the recorder lays.
-	applied, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8zero", NArgs: 0, NOut: 1}, out, seam7Dbg, 0)
+	applied, err := vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "w8zero", NArgs: 0, NOut: 1}, out, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("arity-0 callDynMethod: %v", err)
 	}
@@ -110,12 +113,12 @@ func TestW8CallPolyGetMethodValueStaysData(t *testing.T) {
 func TestW8CallDynMethodZeroArgError(t *testing.T) {
 	r := w8Reg(t)
 	// The arity-0 applied inner native errors: callDynMethod surfaces it.
-	deleg := w8Deleg0(t, r, "w8zfail", func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	deleg := w8Deleg0(t, r, "w8zfail", func(_ []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
 		return nil, r.BoruError("value_error", "w8zfail: boom", "w8zfail")
 	})
 	vc := seam7VC(r)
-	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8zfail", NArgs: 0, NOut: 1},
-		[]Value{deleg}, seam7Dbg, 0)
+	_, err := vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "w8zfail", NArgs: 0, NOut: 1},
+		[]core.Value{deleg}, seam7Dbg, 0)
 	wantErr(t, err, "w8zfail: boom")
 }
 
@@ -124,9 +127,9 @@ func TestW8CallPolyResultScreened(t *testing.T) {
 	// A get-word poly whose result is a bare Word (not an FnDef): the
 	// auto-apply branch declines (not an FnDefInfo) and the belt-and-braces
 	// screen rejects the tape-coupled result (vm.go:317).
-	w8registerReturningPoly(t, r, "dot", NewWord("leak"))
+	w8registerReturningPoly(t, r, "dot", core.NewWord("leak"))
 	vc := seam7VC(r)
-	_, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1, NOut: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	_, err := vc.callPoly(&compiler.PolyRef{Word: "dot", Arity: 1, NOut: 1}, []core.Value{core.NewInteger(1)}, seam7Dbg, 0)
 	wantInternal(t, err, "tape-coupled poly result at dot")
 }
 
@@ -134,23 +137,23 @@ func TestW8CallPolyResultScreened(t *testing.T) {
 
 // w8Deleg1 registers a 1-arg inner native `name` and returns a
 // trivial-delegation fn VALUE wrapping it (body [Word(name)]).
-func w8Deleg1(t *testing.T, r *Registry, name string, impl Handler) Value {
+func w8Deleg1(t *testing.T, r *core.Registry, name string, impl core.Handler) core.Value {
 	t.Helper()
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: name,
-		Signatures: []Signature{{
-			Args: []*Type{TInteger}, Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: Go(impl),
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TAny}, BarrierPos: -1,
+			Impl: core.Go(impl),
 		}},
 	})
 	if err := r.Err(); err != nil {
 		t.Fatalf("register %s: %v", name, err)
 	}
-	return NewFunction(FnDefInfo{
+	return core.NewFunction(core.FnDefInfo{
 		Name: name, Registry: r,
-		Signatures: []Signature{{
-			Args: []*Type{TInteger}, Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: Boru([]Value{NewWord(name)}),
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TAny}, BarrierPos: -1,
+			Impl: core.Boru([]core.Value{core.NewWord(name)}),
 		}},
 	})
 }
@@ -160,15 +163,15 @@ func TestW8CallDynMethodDelegationResultScreened(t *testing.T) {
 	// A delegation method whose inner native returns a tape-coupled Word:
 	// tryNativeFnApply hands it back DIRECTLY (no island), so guard's
 	// screenResults rejects it (vm.go:622).
-	deleg := w8Deleg1(t, r, "w8mleak", func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return []Value{NewWord("leak")}, nil
+	deleg := w8Deleg1(t, r, "w8mleak", func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+		return []core.Value{core.NewWord("leak")}, nil
 	})
-	if !IsDelegationFnDef(deleg.Data.(FnDefInfo)) {
+	if !core.IsDelegationFnDef(deleg.Data.(core.FnDefInfo)) {
 		t.Fatal("w8mleak wrapper is not a delegation fn")
 	}
 	vc := seam7VC(r)
-	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8mleak", NArgs: 1, NOut: 1},
-		[]Value{NewInteger(5), deleg}, seam7Dbg, 0)
+	_, err := vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "w8mleak", NArgs: 1, NOut: 1},
+		[]core.Value{core.NewInteger(5), deleg}, seam7Dbg, 0)
 	wantInternal(t, err, "tape-coupled shaped method result at w8mleak")
 }
 
@@ -177,20 +180,20 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 	// A non-delegation user fn (named param disqualifies the fast path) that
 	// returns its arg cleanly: callDynMethod islands it and the guard SUCCESS
 	// return commits the shaped result (vm.go:657).
-	fn := NewFunction(FnDefInfo{
+	fn := core.NewFunction(core.FnDefInfo{
 		Name: "w8okmethod", Registry: r,
-		Signatures: []Signature{{
-			Params:  []FnParam{{Name: "n", Type: TInteger}},
-			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: Boru([]Value{NewWord("n")}),
+		Signatures: []core.Signature{{
+			Params:  []core.FnParam{{Name: "n", Type: core.TInteger}},
+			Returns: []*core.Type{core.TAny}, BarrierPos: core.BarrierAllForward,
+			Impl: core.Boru([]core.Value{core.NewWord("n")}),
 		}},
 	})
-	if IsDelegationFnDef(fn.Data.(FnDefInfo)) {
+	if core.IsDelegationFnDef(fn.Data.(core.FnDefInfo)) {
 		t.Fatal("named-param fn should NOT be a delegation")
 	}
 	vc := seam7VC(r)
-	out, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8okmethod", NArgs: 1, NOut: 1},
-		[]Value{NewInteger(5), fn}, seam7Dbg, 0)
+	out, err := vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "w8okmethod", NArgs: 1, NOut: 1},
+		[]core.Value{core.NewInteger(5), fn}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("island method success: %v", err)
 	}
@@ -212,13 +215,13 @@ func TestW8BindTypedResultScreened(t *testing.T) {
 	// the same compiler-bug shape vm_seam7 feeds the other dispatch guards.
 	// (A Word would be re-tagged by Unify and slip the IsWord screen, so a
 	// Forward — which survives Unify unchanged — is used.)
-	anyLit := NewTypeLiteral(TAny)
-	p := &Program{
-		Consts: []Value{NewForward(ForwardInfo{})},
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpBindTyped, Arg: 0}},
-		Debug:  []SrcPos{{}, {}},
-		TypedBinds: []TypedBindSpec{{
-			Kind: TypedBindDepScalar, Name: "tb", Describe: "Any", Cons: &anyLit,
+	anyLit := core.NewTypeLiteral(core.TAny)
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewForward(core.ForwardInfo{})},
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpBindTyped, Arg: 0}},
+		Debug:  []core.SrcPos{{}, {}},
+		TypedBinds: []core.TypedBindSpec{{
+			Kind: core.TypedBindDepScalar, Name: "tb", Describe: "Any", Cons: &anyLit,
 		}},
 	}
 	_, err := RunProgram(p, seam7Reg(t))

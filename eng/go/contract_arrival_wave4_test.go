@@ -3,6 +3,8 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Coverage for the runtime fn-return contract in both engines (engine.go
@@ -21,33 +23,33 @@ import (
 //   - cbools2: 0-arg → true, false (two values).
 //   - cpairany: (Any, Integer) → args[1].
 //   - cvoid:   0-arg → no values.
-func registerContractWords(r *Registry) {
-	zeroArg := func(name string, rets []*Type, vals func() []Value) {
-		r.RegisterNativeFunc(NativeFunc{
+func registerContractWords(r *core.Registry) {
+	zeroArg := func(name string, rets []*core.Type, vals func() []core.Value) {
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: name,
-			Signatures: []Signature{{
-				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Signatures: []core.Signature{{
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 					return vals(), nil
 				}),
 				Returns: rets, BarrierPos: -1,
 			}},
 		})
 	}
-	zeroArg("clie", []*Type{TAny}, func() []Value { return []Value{NewString("zzz")} })
-	zeroArg("cvar2", []*Type{TAny}, func() []Value { return []Value{NewInteger(1), NewInteger(2)} })
-	zeroArg("cbool", []*Type{TBoolean}, func() []Value { return []Value{NewBoolean(true)} })
-	zeroArg("cbools2", []*Type{TBoolean, TBoolean}, func() []Value {
-		return []Value{NewBoolean(true), NewBoolean(false)}
+	zeroArg("clie", []*core.Type{core.TAny}, func() []core.Value { return []core.Value{core.NewString("zzz")} })
+	zeroArg("cvar2", []*core.Type{core.TAny}, func() []core.Value { return []core.Value{core.NewInteger(1), core.NewInteger(2)} })
+	zeroArg("cbool", []*core.Type{core.TBoolean}, func() []core.Value { return []core.Value{core.NewBoolean(true)} })
+	zeroArg("cbools2", []*core.Type{core.TBoolean, core.TBoolean}, func() []core.Value {
+		return []core.Value{core.NewBoolean(true), core.NewBoolean(false)}
 	})
-	zeroArg("cvoid", []*Type{}, func() []Value { return nil })
-	r.RegisterNativeFunc(NativeFunc{
+	zeroArg("cvoid", []*core.Type{}, func() []core.Value { return nil })
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "cpairany",
-		Signatures: []Signature{{
-			Args: []*Type{TAny, TInteger},
-			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{args[1]}, nil
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TAny, core.TInteger},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				return []core.Value{args[1]}, nil
 			}),
-			Returns: []*Type{TInteger}, BarrierPos: -1,
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
 		}},
 	})
 }
@@ -59,38 +61,38 @@ func TestFnReturnTypeDivergenceParity(t *testing.T) {
 	// time (clie is declared Any, returns a String): the static pass
 	// accepts optimistically, and BOTH engines raise the identical
 	// return-type error at run time.
-	setup := func(r *Registry) {
+	setup := func(r *core.Registry) {
 		registerContractWords(r)
-		InstallFnDef(r, "wantint", FnDefInfo{
-			Signatures: []Signature{{
-				Params:     []FnParam{{Name: "x", Type: TInteger}},
-				Returns:    []*Type{TInteger},
-				Impl:       Boru(parenBody(NewOpenParen(), NewWord("clie"), NewCloseParen())),
-				BarrierPos: BarrierAllForward,
+		core.InstallFnDef(r, "wantint", core.FnDefInfo{
+			Signatures: []core.Signature{{
+				Params:     []core.FnParam{{Name: "x", Type: core.TInteger}},
+				Returns:    []*core.Type{core.TInteger},
+				Impl:       core.Boru(parenBody(core.NewOpenParen(), core.NewWord("clie"), core.NewCloseParen())),
+				BarrierPos: core.BarrierAllForward,
 			}},
 		})
 	}
-	runErrParity(t, setup, func() []Value {
-		return []Value{NewWord("wantint"), NewInteger(1)}
+	runErrParity(t, setup, func() []core.Value {
+		return []core.Value{core.NewWord("wantint"), core.NewInteger(1)}
 	}, "return value 1: expected Integer")
 }
 
 func TestFnReturnCountDivergenceParity(t *testing.T) {
 	// The body nets TWO values at run time where the fn declares one:
 	// both engines raise the identical return-count error.
-	setup := func(r *Registry) {
+	setup := func(r *core.Registry) {
 		registerContractWords(r)
-		InstallFnDef(r, "one", FnDefInfo{
-			Signatures: []Signature{{
-				Params:     []FnParam{{Name: "x", Type: TInteger}},
-				Returns:    []*Type{TInteger},
-				Impl:       Boru(parenBody(NewOpenParen(), NewWord("cvar2"), NewCloseParen())),
-				BarrierPos: BarrierAllForward,
+		core.InstallFnDef(r, "one", core.FnDefInfo{
+			Signatures: []core.Signature{{
+				Params:     []core.FnParam{{Name: "x", Type: core.TInteger}},
+				Returns:    []*core.Type{core.TInteger},
+				Impl:       core.Boru(parenBody(core.NewOpenParen(), core.NewWord("cvar2"), core.NewCloseParen())),
+				BarrierPos: core.BarrierAllForward,
 			}},
 		})
 	}
-	runErrParity(t, setup, func() []Value {
-		return []Value{NewWord("one"), NewInteger(1)}
+	runErrParity(t, setup, func() []core.Value {
+		return []core.Value{core.NewWord("one"), core.NewInteger(1)}
 	}, "expected 1 return value(s), got 2")
 }
 
@@ -101,8 +103,8 @@ func TestSpeculativeWordArrivalCompletes(t *testing.T) {
 	// forward. (Under the strict forward-barrier a bare `cbool` word would
 	// be a barrier and strand; the paren makes its Boolean the operand.)
 	r := covRegistry(t, registerContractWords)
-	out, err := NewTop(r).Run([]Value{
-		NewWord("cpairany"), NewOpenParen(), NewWord("cbool"), NewCloseParen(), NewInteger(5),
+	out, err := core.NewTop(r).Run([]core.Value{
+		core.NewWord("cpairany"), core.NewOpenParen(), core.NewWord("cbool"), core.NewCloseParen(), core.NewInteger(5),
 	})
 	if err != nil {
 		t.Fatalf("grouped arrival: %v", err)
@@ -117,8 +119,8 @@ func TestMultiValueArrivalFillsForward(t *testing.T) {
 	// grouped call produces two values, the first completes the dispatch and
 	// the second stays on the stack.
 	r := covRegistry(t, registerContractWords)
-	out, err := NewTop(r).Run([]Value{
-		NewInteger(9), NewWord("cpairany"), NewOpenParen(), NewWord("cbools2"), NewCloseParen(),
+	out, err := core.NewTop(r).Run([]core.Value{
+		core.NewInteger(9), core.NewWord("cpairany"), core.NewOpenParen(), core.NewWord("cbools2"), core.NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("multi-value arrival: %v", err)
@@ -134,7 +136,7 @@ func TestArrivalTypeMismatchImplicitEnd(t *testing.T) {
 	// so the forward resolves early (implicit end) and the re-dispatch
 	// raises a clean signature_error.
 	r := covRegistry(t, registerContractWords)
-	_, err := NewTop(r).Run([]Value{NewWord("cpairany"), NewWord("cbools2"), NewInteger(7)})
+	_, err := core.NewTop(r).Run([]core.Value{core.NewWord("cpairany"), core.NewWord("cbools2"), core.NewInteger(7)})
 	if err == nil {
 		t.Fatal("mismatched arrival did not error")
 	}
@@ -150,10 +152,10 @@ func TestVoidGroupCollectionResumes(t *testing.T) {
 	// A void paren group in the argument range is skipped; collection
 	// resumes with the following literals: `cadd (cvoid) 5 6` → 11.
 	r := covRegistry(t, registerContractWords)
-	out, err := NewTop(r).Run([]Value{
-		NewWord("cadd"),
-		NewOpenParen(), NewWord("cvoid"), NewCloseParen(),
-		NewInteger(5), NewInteger(6),
+	out, err := core.NewTop(r).Run([]core.Value{
+		core.NewWord("cadd"),
+		core.NewOpenParen(), core.NewWord("cvoid"), core.NewCloseParen(),
+		core.NewInteger(5), core.NewInteger(6),
 	})
 	if err != nil {
 		t.Fatalf("void group resume: %v", err)
@@ -167,10 +169,10 @@ func TestVoidGroupStarvationBlamesExpression(t *testing.T) {
 	// When the starved dispatch then fails, the error names the void
 	// expression (the ERRORS §3 blame shift), not a generic mismatch.
 	r := covRegistry(t, registerContractWords)
-	_, err := NewTop(r).Run([]Value{
-		NewWord("ccat"),
-		NewOpenParen(), NewWord("cvoid"), NewCloseParen(),
-		NewString("a"), NewInteger(5),
+	_, err := core.NewTop(r).Run([]core.Value{
+		core.NewWord("ccat"),
+		core.NewOpenParen(), core.NewWord("cvoid"), core.NewCloseParen(),
+		core.NewString("a"), core.NewInteger(5),
 	})
 	if err == nil {
 		t.Fatal("starved ccat did not error")
@@ -186,18 +188,18 @@ func TestAnonFnMapPatternParam(t *testing.T) {
 	// An anonymous fn whose param carries a MAP PATTERN dispatches via
 	// the stack-match open-unify branch, in check mode and at run time.
 	r := covRegistry(t, nil)
-	pat := mapOf("k", NewTypeLiteral(TInteger))
-	fnv := NewFunction(FnDefInfo{
+	pat := mapOf("k", core.NewTypeLiteral(core.TInteger))
+	fnv := core.NewFunction(core.FnDefInfo{
 		Anonymous: true,
-		Signatures: []Signature{{
-			Params:     []FnParam{{Name: "m", Type: TMap, Pattern: &pat}},
-			Returns:    []*Type{TInteger},
-			Impl:       Boru(parenBody(NewInteger(1))),
+		Signatures: []core.Signature{{
+			Params:     []core.FnParam{{Name: "m", Type: core.TMap, Pattern: &pat}},
+			Returns:    []*core.Type{core.TInteger},
+			Impl:       core.Boru(parenBody(core.NewInteger(1))),
 			BarrierPos: 0,
 		}},
 	})
 	done := r.Check.Begin()
-	out, err := NewTop(r).Run([]Value{mapOf("k", NewInteger(5)), fnv})
+	out, err := core.NewTop(r).Run([]core.Value{mapOf("k", core.NewInteger(5)), fnv})
 	done()
 	if err != nil {
 		t.Fatalf("check-mode pattern dispatch: %v", err)
@@ -205,7 +207,7 @@ func TestAnonFnMapPatternParam(t *testing.T) {
 	if got := renderAll(out); got != "1" {
 		t.Errorf("check-mode pattern dispatch = %q", got)
 	}
-	out, err = NewTop(r).Run([]Value{mapOf("k", NewInteger(5)), fnv})
+	out, err = core.NewTop(r).Run([]core.Value{mapOf("k", core.NewInteger(5)), fnv})
 	if err != nil {
 		t.Fatalf("runtime pattern dispatch: %v", err)
 	}
@@ -215,7 +217,7 @@ func TestAnonFnMapPatternParam(t *testing.T) {
 
 	// A non-conforming map (wrong value type) does not dispatch — the
 	// values stay on the stack as data.
-	out, err = NewTop(r).Run([]Value{mapOf("k", NewString("x")), fnv})
+	out, err = core.NewTop(r).Run([]core.Value{mapOf("k", core.NewString("x")), fnv})
 	if err != nil {
 		t.Fatalf("mismatched pattern: %v", err)
 	}

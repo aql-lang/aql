@@ -3,6 +3,8 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // stripANSI removes the color escapes so assertions read plainly.
@@ -32,20 +34,20 @@ func stripANSI(s string) string {
 func TestTraceColorizeRendersPayloads(t *testing.T) {
 	cases := []struct {
 		name string
-		v    Value
+		v    core.Value
 		want string
 	}{
-		{"string", NewString("hi"), `"hi"`},
-		{"integer", NewInteger(5), "5"},
-		{"negative_integer", NewInteger(-42), "-42"},
-		{"bool_true", NewBoolean(true), "true"},
-		{"bool_false", NewBoolean(false), "false"},
-		{"atom", NewAtom("sym"), "sym"},
-		{"type_literal", NewTypeLiteral(TInteger), "Integer"},
-		{"list", NewList([]Value{NewInteger(1), NewString("a")}), `[1 "a"]`},
+		{"string", core.NewString("hi"), `"hi"`},
+		{"integer", core.NewInteger(5), "5"},
+		{"negative_integer", core.NewInteger(-42), "-42"},
+		{"bool_true", core.NewBoolean(true), "true"},
+		{"bool_false", core.NewBoolean(false), "false"},
+		{"atom", core.NewAtom("sym"), "sym"},
+		{"type_literal", core.NewTypeLiteral(core.TInteger), "Integer"},
+		{"list", core.NewList([]core.Value{core.NewInteger(1), core.NewString("a")}), `[1 "a"]`},
 	}
 	for _, c := range cases {
-		got := stripANSI(TraceColorize(c.v))
+		got := stripANSI(core.TraceColorize(c.v))
 		if got != c.want {
 			t.Errorf("%s: TraceColorize = %q, want %q", c.name, got, c.want)
 		}

@@ -1,18 +1,22 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // TestS8CloneObject covers cloneObject (clone.go), reached when CloneValue
 // deep-clones a class instance: the field map is duplicated value-by-value
 // while the immutable TypeRef descriptor is shared.
 func TestS8CloneObject(t *testing.T) {
-	fields := NewOrderedMap()
-	fields.Set("x", NewInteger(1))
-	tref := &ClassTypeInfo{Name: "Class/C", Fields: NewOrderedMap()}
-	inst := NewClassInstance(TClass, ClassInstanceInfo{TypeRef: tref, Fields: fields})
+	fields := core.NewOrderedMap()
+	fields.Set("x", core.NewInteger(1))
+	tref := &core.ClassTypeInfo{Name: "Class/C", Fields: core.NewOrderedMap()}
+	inst := core.NewClassInstance(core.TClass, core.ClassInstanceInfo{TypeRef: tref, Fields: fields})
 
-	cl := CloneValue(inst)
-	ci, ok := cl.Data.(ClassInstanceInfo)
+	cl := core.CloneValue(inst)
+	ci, ok := cl.Data.(core.ClassInstanceInfo)
 	if !ok {
 		t.Fatalf("clone Data = %T, want ClassInstanceInfo", cl.Data)
 	}
@@ -23,14 +27,14 @@ func TestS8CloneObject(t *testing.T) {
 		t.Error("cloneObject should duplicate the field map, not share it")
 	}
 	// Mutating the clone's field map must not touch the original.
-	ci.Fields.Set("x", NewInteger(99))
-	if got, _ := fields.Get("x"); func() int64 { n, _ := AsInteger(got); return n }() != 1 {
+	ci.Fields.Set("x", core.NewInteger(99))
+	if got, _ := fields.Get("x"); func() int64 { n, _ := core.AsInteger(got); return n }() != 1 {
 		t.Error("deep clone leaked: mutating the clone changed the original field map")
 	}
 
 	// nil-Fields arm: cloneObject leaves Fields nil rather than allocating.
-	empty := CloneValue(NewClassInstance(TClass, ClassInstanceInfo{TypeRef: tref}))
-	if ec, _ := empty.Data.(ClassInstanceInfo); ec.Fields != nil {
+	empty := core.CloneValue(core.NewClassInstance(core.TClass, core.ClassInstanceInfo{TypeRef: tref}))
+	if ec, _ := empty.Data.(core.ClassInstanceInfo); ec.Fields != nil {
 		t.Error("cloneObject with nil Fields should keep Fields nil")
 	}
 }

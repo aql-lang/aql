@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // Regression for the optional-Options dispatch loop: ExpandOptionalSigs
 // used to `continue` past an omitted param whose default could not be
@@ -16,16 +20,16 @@ import "testing"
 // dispatch applies. Otherwise no overload is generated and the omission
 // fails dispatch honestly.
 
-func optSig(pattern Value) FnSig {
-	return FnSig{
-		Params: []FnParam{{
+func optSig(pattern core.Value) core.FnSig {
+	return core.FnSig{
+		Params: []core.FnParam{{
 			Name:     "m",
-			Type:     TMap,
+			Type:     core.TMap,
 			Pattern:  &pattern,
 			Optional: true,
 		}},
-		Returns: []*Type{TMap},
-		Impl:    Boru([]Value{NewWord("m")}),
+		Returns: []*core.Type{core.TMap},
+		Impl:    core.Boru([]core.Value{core.NewWord("m")}),
 	}
 }
 
@@ -33,9 +37,9 @@ func TestExpandOptionalSkipsUnsatisfiableDefault(t *testing.T) {
 	// Options{x:Integer} — type-only field, no default. The synthesized
 	// omitted value would be {} which the pattern rejects, so NO 0-arg
 	// overload may be generated.
-	fields := NewOrderedMap()
-	fields.Set("x", NewTypeLiteral(TInteger))
-	sigs := ExpandOptionalSigs("f", []FnSig{optSig(NewOptionsType(fields))})
+	fields := core.NewOrderedMap()
+	fields.Set("x", core.NewTypeLiteral(core.TInteger))
+	sigs := core.ExpandOptionalSigs("f", []core.FnSig{optSig(core.NewOptionsType(fields))})
 
 	if len(sigs) != 1 {
 		t.Fatalf("got %d sigs, want only the original (no omission overload): %+v", len(sigs), sigs)
@@ -48,9 +52,9 @@ func TestExpandOptionalSkipsUnsatisfiableDefault(t *testing.T) {
 func TestExpandOptionalKeepsSatisfiableDefault(t *testing.T) {
 	// Options{x:1} — concrete default. The omission overload must exist
 	// and its body must carry the synthesized {x:1} argument.
-	fields := NewOrderedMap()
-	fields.Set("x", NewInteger(1))
-	sigs := ExpandOptionalSigs("f", []FnSig{optSig(NewOptionsType(fields))})
+	fields := core.NewOrderedMap()
+	fields.Set("x", core.NewInteger(1))
+	sigs := core.ExpandOptionalSigs("f", []core.FnSig{optSig(core.NewOptionsType(fields))})
 
 	if len(sigs) != 2 {
 		t.Fatalf("got %d sigs, want original + 0-arg omission overload", len(sigs))
@@ -63,13 +67,13 @@ func TestExpandOptionalKeepsSatisfiableDefault(t *testing.T) {
 	if len(zero.Body()) != 2 {
 		t.Fatalf("expansion body has %d tokens, want 2 (word + default): %v", len(zero.Body()), zero.Body())
 	}
-	m, err := AsMap(zero.Body()[1])
+	m, err := core.AsMap(zero.Body()[1])
 	if err != nil || m == nil {
 		t.Fatalf("expansion body[1] is not the default map: %v", zero.Body()[1])
 	}
 	if v, ok := m.Get("x"); !ok {
 		t.Error("default map lost field x")
-	} else if n, _ := AsInteger(v); n != 1 {
+	} else if n, _ := core.AsInteger(v); n != 1 {
 		t.Errorf("default x = %d, want 1", n)
 	}
 }

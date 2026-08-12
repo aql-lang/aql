@@ -9,14 +9,16 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Test blocks re-homed by compiler-driven triage at the carve.
 
 func TestBestEffortNoMatch(t *testing.T) {
-	r := pnmRegistry(t, []Signature{pnmSig(-1, TInteger, TString), {Fallback: true}})
+	r := pnmRegistry(t, []core.Signature{pnmSig(-1, core.TInteger, core.TString), {Fallback: true}})
 	fn := r.Lookup("pnmw")
-	window := []Value{NewBoolean(true), NewBoolean(false)}
+	window := []core.Value{core.NewBoolean(true), core.NewBoolean(false)}
 	if bestEffortNoMatch(r, nil, "pnmw", window, seam7Dbg, 0) != nil {
 		t.Error("a nil fn must build no alt")
 	}
@@ -25,7 +27,7 @@ func TestBestEffortNoMatch(t *testing.T) {
 	}
 	// A mixed-arity table: another arity's collection could match at run
 	// time, so the interpreter is not proven to fail — no alt.
-	rMixed := pnmRegistry(t, []Signature{pnmSig(-1, TInteger, TString), pnmSig(-1, TInteger, TString, TBoolean)})
+	rMixed := pnmRegistry(t, []core.Signature{pnmSig(-1, core.TInteger, core.TString), pnmSig(-1, core.TInteger, core.TString, core.TBoolean)})
 	if bestEffortNoMatch(rMixed, rMixed.Lookup("pnmw"), "pnmw", window, seam7Dbg, 0) != nil {
 		t.Error("a mixed-arity table must build no alt")
 	}

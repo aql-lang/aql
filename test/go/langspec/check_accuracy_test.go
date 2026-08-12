@@ -31,10 +31,10 @@ import (
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/parser/go"
+	"github.com/boru-lang/boru/test/specfix"
 )
 
 // pinnedFalsePositives is the whole-corpus count of VALUE rows the checker
@@ -78,7 +78,6 @@ var unflaggedPins = map[string]int{
 	// as handler's runtime validation raises as_error over the concrete
 	// Integer.
 	"as.tsv":                2,
-	"bignum.tsv":            8,
 	"case.tsv":              2,
 	"class.tsv":             1,
 	"compare-restrict.tsv":  2,
@@ -227,6 +226,9 @@ func TestCheckAccuracyRatchet(t *testing.T) {
 			valueRows++
 			if flagged {
 				falsePositives++
+				if os.Getenv("BORU_LOG_FALSEPOS") != "" {
+					t.Logf("FALSEPOS %s: %s", e.Name(), strings.TrimSpace(parts[0]))
+				}
 				t.Logf("FALSE POSITIVE %s:L%d: %s", e.Name(), lineNum, input)
 			}
 		}
@@ -649,6 +651,9 @@ func TestCheckAnyFrontier(t *testing.T) {
 			}
 			valueRows++
 			if residualHasAnyFrontier(checked) {
+				if os.Getenv("BORU_LOG_ANYFRONTIER") != "" {
+					t.Logf("ANYFRONTIER %s: %s", e.Name(), strings.TrimSpace(parts[0]))
+				}
 				anyRows++
 				byFile[e.Name()]++
 			}

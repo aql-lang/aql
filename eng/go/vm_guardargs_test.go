@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // TestGuardArgs pins the clamps on guardArgs, the helper a runtime
 // param-contract guard uses to slice the leading n locals (the real
@@ -9,8 +13,8 @@ import "testing"
 // well-formed frame n == fn.NArgs is always within [0, len(locals)]; the
 // clamps are the defensive floor/ceiling for any other n.
 func TestGuardArgs(t *testing.T) {
-	a, b := NewInteger(1), NewInteger(2)
-	locals := []Value{a, b}
+	a, b := core.NewInteger(1), core.NewInteger(2)
+	locals := []core.Value{a, b}
 
 	// n within range returns the leading n locals.
 	if got := guardArgs(locals, 1); len(got) != 1 || got[0].String() != a.String() {

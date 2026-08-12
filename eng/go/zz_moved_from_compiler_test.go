@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
 	core "github.com/boru-lang/boru/core/go"
 )
 
@@ -17,12 +18,12 @@ func TestW8DispatchRematchVMGuard(t *testing.T) {
 	_ = r
 	// VM underflow guard.
 	vc := &vmContext{r: r}
-	if err := vc.dispatchRematch(&DispatchSpec{Word: "w", NArgs: 2, NWritten: 2}, nil, nil, 0); err == nil {
+	if err := vc.dispatchRematch(&compiler.DispatchSpec{Word: "w", NArgs: 2, NWritten: 2}, nil, nil, 0); err == nil {
 		t.Error("a short stack must error")
 	}
 	// VM render-bound guard: a spec whose written bound is outside 1..NArgs
 	// is malformed (the recorder proves the bound before recording).
-	if err := vc.dispatchRematch(&DispatchSpec{Word: "w", NArgs: 1},
+	if err := vc.dispatchRematch(&compiler.DispatchSpec{Word: "w", NArgs: 1},
 		[]core.Value{core.NewInteger(1)}, nil, 0); err == nil || !strings.Contains(err.Error(), "written bound") {
 		t.Errorf("a zero written bound must raise the bound guard, got %v", err)
 	}

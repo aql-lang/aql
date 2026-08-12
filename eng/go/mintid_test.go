@@ -3,6 +3,8 @@ package eng
 import (
 	"sync"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestMintIDNoSiblingCollision pins the fix for the sibling-table ID
@@ -18,18 +20,18 @@ import (
 // Language-level rows pin the same behaviour in
 // lang/spec/module-instance.tsv §7.
 func TestMintIDNoSiblingCollision(t *testing.T) {
-	parent := NewDynamicTypeTable()
+	parent := core.NewDynamicTypeTable()
 
 	// Two module-style sub-registries adopting the importing tree's
 	// counter: their mints must be distinct from each other and from
 	// the parent's own later mints.
-	m1 := NewDynamicTypeTable()
+	m1 := core.NewDynamicTypeTable()
 	m1.AdoptSeqFrom(parent)
-	m2 := NewDynamicTypeTable()
+	m2 := core.NewDynamicTypeTable()
 	m2.AdoptSeqFrom(parent)
-	t1 := m1.MintType("Foo", TInteger)
-	t2 := m2.MintType("Foo", TString)
-	tp := parent.MintType("TopLevel", TInteger)
+	t1 := m1.MintType("Foo", core.TInteger)
+	t2 := m2.MintType("Foo", core.TString)
+	tp := parent.MintType("TopLevel", core.TInteger)
 	if t1.ID == t2.ID {
 		t.Errorf("sibling module tables minted colliding IDs: %s", t1.ID)
 	}
@@ -40,8 +42,8 @@ func TestMintIDNoSiblingCollision(t *testing.T) {
 	// Concurrent-fork clones share the counter: same rule.
 	cf1 := parent.CloneDynamic()
 	cf2 := parent.CloneDynamic()
-	f1 := cf1.MintType("Fork1", TInteger)
-	f2 := cf2.MintType("Fork2", TInteger)
+	f1 := cf1.MintType("Fork1", core.TInteger)
+	f2 := cf2.MintType("Fork2", core.TInteger)
 	if f1.ID == f2.ID {
 		t.Errorf("sibling CloneDynamic() tables minted colliding IDs: %s", f1.ID)
 	}
@@ -58,16 +60,16 @@ func TestMintIDNoSiblingCollision(t *testing.T) {
 // of one program minting identical IDs (the type-soundness ratchet
 // compares the two engines' types by identity).
 func TestMintIDRollbackCloneCopies(t *testing.T) {
-	parent := NewDynamicTypeTable()
-	parent.MintType("Pre", TInteger)
+	parent := core.NewDynamicTypeTable()
+	parent.MintType("Pre", core.TInteger)
 
 	sandbox := parent.Clone()
-	sbMint := sandbox.MintType("Discarded", TInteger)
+	sbMint := sandbox.MintType("Discarded", core.TInteger)
 
 	// The sandbox mint must not advance the parent's counter: the
 	// parent's next mint takes the ordinal the sandbox used (the
 	// sandbox and its mints are about to be thrown away).
-	after := parent.MintType("After", TInteger)
+	after := parent.MintType("After", core.TInteger)
 	if after.ID != sbMint.ID {
 		t.Errorf("rollback clone advanced the parent counter: parent minted %s, sandbox minted %s (must reuse the discarded ordinal)", after.ID, sbMint.ID)
 	}
@@ -78,17 +80,17 @@ func TestMintIDRollbackCloneCopies(t *testing.T) {
 // counter must be atomic, not merely shared.
 func TestMintIDConcurrentUnique(t *testing.T) {
 	const perTable, tables = 50, 8
-	parent := NewDynamicTypeTable()
+	parent := core.NewDynamicTypeTable()
 
 	ids := make(chan string, perTable*tables)
 	var wg sync.WaitGroup
 	for i := 0; i < tables; i++ {
 		fork := parent.CloneDynamic()
 		wg.Add(1)
-		go func(tt *TypeTable) {
+		go func(tt *core.TypeTable) {
 			defer wg.Done()
 			for j := 0; j < perTable; j++ {
-				ids <- tt.MintType("C", TInteger).ID
+				ids <- tt.MintType("C", core.TInteger).ID
 			}
 		}(fork)
 	}

@@ -22,11 +22,11 @@ import (
 
 	core "github.com/boru-lang/boru/core/go"
 
-	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/parser/go"
+	"github.com/boru-lang/boru/test/specfix"
 )
 
 // specClock freezes time at a fixed instant so temporal words (`now`,

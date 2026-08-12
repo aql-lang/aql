@@ -3,6 +3,9 @@ package eng
 import (
 	"reflect"
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // CheckState's lifecycle is hand-maintained in two places — Begin() resets
@@ -47,7 +50,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 			"in Begin would be inert here and wrong if a body ever did check",
 	}
 
-	st := reflect.TypeOf(CheckState{})
+	st := reflect.TypeOf(core.CheckState{})
 	for i := 0; i < st.NumField(); i++ {
 		name := st.Field(i).Name
 		_, isReset := resetByBegin[name]
@@ -80,7 +83,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 
 	// Behavioral half: Begin() must actually zero every reset-classified
 	// field. Populate a CheckState with non-zero values, Begin, and compare.
-	c := &CheckState{Emit: NewEmitState()}
+	c := &core.CheckState{Emit: compiler.NewEmitState()}
 	populateNonZero(reflect.ValueOf(c).Elem())
 	done := c.Begin()
 	defer done()
@@ -96,14 +99,14 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 	}
 	// The canonical-reset field: Begin must swap any armed recorder back to
 	// the inactive no-op (never nil, never a leftover *EmitState).
-	if c.Emit != TheInactiveEmit {
+	if c.Emit != core.TheInactiveEmit {
 		t.Errorf("Begin() must reset CheckState.Emit to the inactive no-op recorder, got %T", c.Emit)
 	}
 
 	// Clone() must deep-copy every map/slice field: mutating the original
 	// after cloning must not change the clone. (Emit is a shared recorder
 	// reference by design — per-pass, reset to the inactive no-op by Begin.)
-	orig := &CheckState{}
+	orig := &core.CheckState{}
 	populateNonZero(reflect.ValueOf(orig).Elem())
 	clone := orig.Clone()
 	mutateContainers(reflect.ValueOf(orig).Elem())

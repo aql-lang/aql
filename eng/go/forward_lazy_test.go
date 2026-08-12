@@ -2,6 +2,8 @@ package eng
 
 import (
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestResolveForwardArgs_LazySkipOrdering pins the structure-first, lazy
@@ -23,52 +25,52 @@ import (
 func TestResolveForwardArgs_LazySkipOrdering(t *testing.T) {
 	var order []string
 
-	setup := func(r *Registry) {
+	setup := func(r *core.Registry) {
 		// imp: [String] (arity 1) records "imp"; [Integer Integer] (arity 2)
 		// exists only to raise MaxForwardArgs to 2 so the eager model would
 		// have pre-evaluated the trailing group.
-		r.RegisterNativeFunc(NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: "imp",
-			Signatures: []Signature{
+			Signatures: []core.Signature{
 				{
-					Args: []*Type{TString},
-					Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					Args: []*core.Type{core.TString},
+					Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 						order = append(order, "imp")
-						s, _ := AsString(args[0])
-						return []Value{NewString("file:" + s)}, nil
+						s, _ := core.AsString(args[0])
+						return []core.Value{core.NewString("file:" + s)}, nil
 					}),
-					Returns: []*Type{TString}, BarrierPos: -1,
+					Returns: []*core.Type{core.TString}, BarrierPos: -1,
 				},
 				{
-					Args: []*Type{TInteger, TInteger},
-					Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-						return []Value{NewString("two")}, nil
+					Args: []*core.Type{core.TInteger, core.TInteger},
+					Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+						return []core.Value{core.NewString("two")}, nil
 					}),
-					Returns: []*Type{TString}, BarrierPos: -1,
+					Returns: []*core.Type{core.TString}, BarrierPos: -1,
 				},
 			},
 		})
 		// probe: 0-arg word that records "probe" and yields a value.
-		r.RegisterNativeFunc(NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: "probe",
-			Signatures: []Signature{{
-				Args: []*Type{},
-				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Signatures: []core.Signature{{
+				Args: []*core.Type{},
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 					order = append(order, "probe")
-					return []Value{NewInteger(1)}, nil
+					return []core.Value{core.NewInteger(1)}, nil
 				}),
-				Returns: []*Type{TInteger}, BarrierPos: 0,
+				Returns: []*core.Type{core.TInteger}, BarrierPos: 0,
 			}},
 		})
 	}
 
 	// imp "x" (probe)
-	input := []Value{
-		NewWord("imp"),
-		NewString("x"),
-		NewOpenParen(),
-		NewWord("probe"),
-		NewCloseParen(),
+	input := []core.Value{
+		core.NewWord("imp"),
+		core.NewString("x"),
+		core.NewOpenParen(),
+		core.NewWord("probe"),
+		core.NewCloseParen(),
 	}
 
 	out := runWith(t, setup, input)
@@ -80,10 +82,10 @@ func TestResolveForwardArgs_LazySkipOrdering(t *testing.T) {
 	if len(out) != 2 {
 		t.Fatalf("stack = %v (len %d), want 2 values [file:x 1]", out, len(out))
 	}
-	if s, _ := AsString(out[0]); s != "file:x" {
+	if s, _ := core.AsString(out[0]); s != "file:x" {
 		t.Fatalf("out[0] = %v, want file:x", out[0])
 	}
-	if n, _ := AsInteger(out[1]); n != 1 {
+	if n, _ := core.AsInteger(out[1]); n != 1 {
 		t.Fatalf("out[1] = %v, want 1", out[1])
 	}
 }
@@ -94,41 +96,41 @@ func TestResolveForwardArgs_LazySkipOrdering(t *testing.T) {
 // word like `addq2 1 (probe)` runs the group and binds its result.
 func TestResolveForwardArgs_ClaimedGroupStillEvaluated(t *testing.T) {
 	var order []string
-	setup := func(r *Registry) {
-		r.RegisterNativeFunc(NativeFunc{
+	setup := func(r *core.Registry) {
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: "addq2",
-			Signatures: []Signature{{
-				Args: []*Type{TInteger, TInteger},
-				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Signatures: []core.Signature{{
+				Args: []*core.Type{core.TInteger, core.TInteger},
+				Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 					order = append(order, "addq2")
-					a, _ := AsInteger(args[0])
-					b, _ := AsInteger(args[1])
-					return []Value{NewInteger(a + b)}, nil
+					a, _ := core.AsInteger(args[0])
+					b, _ := core.AsInteger(args[1])
+					return []core.Value{core.NewInteger(a + b)}, nil
 				}),
-				Returns: []*Type{TInteger}, BarrierPos: -1,
+				Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
 			}},
 		})
-		r.RegisterNativeFunc(NativeFunc{
+		r.RegisterNativeFunc(core.NativeFunc{
 			Name: "probe",
-			Signatures: []Signature{{
-				Args: []*Type{},
-				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Signatures: []core.Signature{{
+				Args: []*core.Type{},
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 					order = append(order, "probe")
-					return []Value{NewInteger(40)}, nil
+					return []core.Value{core.NewInteger(40)}, nil
 				}),
-				Returns: []*Type{TInteger}, BarrierPos: 0,
+				Returns: []*core.Type{core.TInteger}, BarrierPos: 0,
 			}},
 		})
 	}
 
 	// addq2 2 (probe)  →  the paren IS a claimed forward arg, so it must be
 	// evaluated (probe runs first, before addq2 binds 2 + 40).
-	input := []Value{
-		NewWord("addq2"),
-		NewInteger(2),
-		NewOpenParen(),
-		NewWord("probe"),
-		NewCloseParen(),
+	input := []core.Value{
+		core.NewWord("addq2"),
+		core.NewInteger(2),
+		core.NewOpenParen(),
+		core.NewWord("probe"),
+		core.NewCloseParen(),
 	}
 	out := runWith(t, setup, input)
 	if len(order) != 2 || order[0] != "probe" || order[1] != "addq2" {
@@ -137,7 +139,7 @@ func TestResolveForwardArgs_ClaimedGroupStillEvaluated(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("stack = %v, want 1 value [42]", out)
 	}
-	if n, _ := AsInteger(out[0]); n != 42 {
+	if n, _ := core.AsInteger(out[0]); n != 42 {
 		t.Fatalf("out[0] = %v, want 42", out[0])
 	}
 }

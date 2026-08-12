@@ -4,49 +4,49 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/parser/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
 )
 
 // freshRegistry builds an eng-only Registry plus a small set of probe
 // natives. The /r suffix is a parser+kernel feature, so these tests
 // stay in eng and only need the kernel surface — no `ref` word, no
 // `apply` word, neither of which lives here. They test stepWord's
-// ForceRef branch, eng.ResolveRef directly, and the dispatch of
+// ForceRef branch, core.ResolveRef directly, and the dispatch of
 // unquoted Function values via execFnDefLiteral.
-func freshRegistry(t *testing.T) *eng.Registry {
+func freshRegistry(t *testing.T) *core.Registry {
 	t.Helper()
-	r, err := eng.NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "add",
 
-		Signatures: []eng.Signature{{
-			Args: []*eng.Type{eng.TInteger, eng.TInteger},
-			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				a, _ := eng.AsInteger(args[1])
-				b, _ := eng.AsInteger(args[0])
-				return []eng.Value{eng.NewInteger(a + b)}, nil
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger, core.TInteger},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				a, _ := core.AsInteger(args[1])
+				b, _ := core.AsInteger(args[0])
+				return []core.Value{core.NewInteger(a + b)}, nil
 			}),
-			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
 		}},
 	})
-	r.RegisterNativeFunc(eng.NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "mul",
 
-		Signatures: []eng.Signature{{
-			Args: []*eng.Type{eng.TInteger, eng.TInteger},
-			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				a, _ := eng.AsInteger(args[1])
-				b, _ := eng.AsInteger(args[0])
-				return []eng.Value{eng.NewInteger(a * b)}, nil
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger, core.TInteger},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				a, _ := core.AsInteger(args[1])
+				b, _ := core.AsInteger(args[0])
+				return []core.Value{core.NewInteger(a * b)}, nil
 			}),
-			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
 		}},
 	})
-	r.Defs.Push("answer", eng.NewInteger(42))
+	r.Defs.Push("answer", core.NewInteger(42))
 	if err := r.Err(); err != nil {
 		t.Fatalf("registration: %v", err)
 	}
@@ -54,26 +54,26 @@ func freshRegistry(t *testing.T) *eng.Registry {
 	return r
 }
 
-func runSrc(t *testing.T, r *eng.Registry, src string) []eng.Value {
+func runSrc(t *testing.T, r *core.Registry, src string) []core.Value {
 	t.Helper()
 	prog, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("Parse(%q): %v", src, err)
 	}
-	out, err := eng.NewTop(r).Run(prog)
+	out, err := core.NewTop(r).Run(prog)
 	if err != nil {
 		t.Fatalf("Run(%q): %v", src, err)
 	}
 	return out
 }
 
-func runSrcErr(t *testing.T, r *eng.Registry, src string) error {
+func runSrcErr(t *testing.T, r *core.Registry, src string) error {
 	t.Helper()
 	prog, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("Parse(%q): %v", src, err)
 	}
-	_, err = eng.NewTop(r).Run(prog)
+	_, err = core.NewTop(r).Run(prog)
 	return err
 }
 
@@ -87,7 +87,7 @@ func TestBareWordInvokesFnBinding(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(out), out)
 	}
-	got, _ := eng.AsInteger(out[0])
+	got, _ := core.AsInteger(out[0])
 	if got != 5 {
 		t.Errorf("bare `add` did not invoke: got %d, want 5", got)
 	}
@@ -106,13 +106,13 @@ func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 		t.Fatalf("got %d values, want 1", len(out))
 	}
 	v := out[0]
-	if !v.Parent.Equal(eng.TFunction) {
+	if !v.Parent.Equal(core.TFunction) {
 		t.Errorf("top.Parent=%s, want Function", v.Parent.String())
 	}
 	if v.Quoted {
 		t.Errorf("function value is Quoted — /r should produce unquoted in the new dispatch model")
 	}
-	fnDef, ok := v.Data.(eng.FnDefInfo)
+	fnDef, ok := v.Data.(core.FnDefInfo)
 	if !ok {
 		t.Fatalf("payload=%T, want FnDefInfo", v.Data)
 	}
@@ -132,18 +132,18 @@ func TestRefSuffixHoldsForwardArgsUndispatched(t *testing.T) {
 	if len(out) != 3 {
 		t.Fatalf("got %d values, want 3 [Function 2 3]: %v", len(out), out)
 	}
-	if !out[0].Parent.Equal(eng.TFunction) {
+	if !out[0].Parent.Equal(core.TFunction) {
 		t.Errorf("out[0].Parent=%s, want Function (held, not dispatched)", out[0].Parent.String())
 	}
-	if a, _ := eng.AsInteger(out[1]); a != 2 {
+	if a, _ := core.AsInteger(out[1]); a != 2 {
 		t.Errorf("out[1]=%v, want 2 (arg not consumed)", out[1])
 	}
-	if b, _ := eng.AsInteger(out[2]); b != 3 {
+	if b, _ := core.AsInteger(out[2]); b != 3 {
 		t.Errorf("out[2]=%v, want 3 (arg not consumed)", out[2])
 	}
 	// The call path still works through the bare word.
 	out2 := runSrc(t, freshRegistry(t), "add 2 3")
-	if got, _ := eng.AsInteger(out2[0]); got != 5 {
+	if got, _ := core.AsInteger(out2[0]); got != 5 {
 		t.Errorf("add 2 3 = %d, want 5", got)
 	}
 }
@@ -157,13 +157,13 @@ func TestRefSuffixHoldsStackArgsUndispatched(t *testing.T) {
 	if len(out) != 3 {
 		t.Fatalf("got %d values, want 3 [2 3 Function]: %v", len(out), out)
 	}
-	if a, _ := eng.AsInteger(out[0]); a != 2 {
+	if a, _ := core.AsInteger(out[0]); a != 2 {
 		t.Errorf("out[0]=%v, want 2", out[0])
 	}
-	if b, _ := eng.AsInteger(out[1]); b != 3 {
+	if b, _ := core.AsInteger(out[1]); b != 3 {
 		t.Errorf("out[1]=%v, want 3", out[1])
 	}
-	if !out[2].Parent.Equal(eng.TFunction) {
+	if !out[2].Parent.Equal(core.TFunction) {
 		t.Errorf("out[2].Parent=%s, want Function (held, not dispatched)", out[2].Parent.String())
 	}
 }
@@ -203,7 +203,7 @@ func TestRefSuffixUndefinedNameErrors(t *testing.T) {
 func TestRefStableInMap(t *testing.T) {
 	r := freshRegistry(t)
 
-	ops := eng.NewOrderedMap()
+	ops := core.NewOrderedMap()
 	for _, name := range []string{"add", "mul"} {
 		v, ok := resolveViaSlashR(t, r, name)
 		if !ok {
@@ -217,13 +217,13 @@ func TestRefStableInMap(t *testing.T) {
 		if !ok {
 			t.Fatalf("ops[%q] missing", name)
 		}
-		if !v.Parent.Equal(eng.TFunction) {
+		if !v.Parent.Equal(core.TFunction) {
 			t.Errorf("ops[%q].Parent=%s, want Function", name, v.Parent.String())
 		}
 		if v.Quoted {
 			t.Errorf("ops[%q] is Quoted — captured Function should be unquoted (live call-site)", name)
 		}
-		fnDef, ok := v.Data.(eng.FnDefInfo)
+		fnDef, ok := v.Data.(core.FnDefInfo)
 		if !ok {
 			t.Fatalf("ops[%q] payload=%T, want FnDefInfo", name, v.Data)
 		}
@@ -236,12 +236,12 @@ func TestRefStableInMap(t *testing.T) {
 	// (without popping the underlying FnDef). The map entry still
 	// holds the original Function value — the map stores referents,
 	// not names that get re-resolved.
-	r.Defs.Push("add", eng.NewString("shadowed"))
+	r.Defs.Push("add", core.NewString("shadowed"))
 	v, _ := ops.Get("add")
-	if !v.Parent.Equal(eng.TFunction) {
+	if !v.Parent.Equal(core.TFunction) {
 		t.Fatalf("after shadow, ops[add].Parent=%s, want Function still", v.Parent.String())
 	}
-	fnDef, _ := v.Data.(eng.FnDefInfo)
+	fnDef, _ := v.Data.(core.FnDefInfo)
 	if fnDef.Name != "add" {
 		t.Errorf("after shadow, captured fnDef.Name=%q, want %q", fnDef.Name, "add")
 	}
@@ -262,7 +262,7 @@ func TestRefStableInMap(t *testing.T) {
 		t.Fatal("expected add binding to be gone after double-pop")
 	}
 	stillThere, _ := ops.Get("add")
-	stillFn, _ := stillThere.Data.(eng.FnDefInfo)
+	stillFn, _ := stillThere.Data.(core.FnDefInfo)
 	if stillFn.Name != "add" || len(stillFn.Signatures) == 0 {
 		t.Errorf("post-undef captured fn lost shape: name=%q sigs=%d", stillFn.Name, len(stillFn.Signatures))
 	}
@@ -272,11 +272,11 @@ func TestRefStableInMap(t *testing.T) {
 // resulting value. The /r expression sits at end-of-program; with no
 // following args its sig doesn't match anything and it falls through
 // as data — that's how we get the captured value out.
-func resolveViaSlashR(t *testing.T, r *eng.Registry, name string) (eng.Value, bool) {
+func resolveViaSlashR(t *testing.T, r *core.Registry, name string) (core.Value, bool) {
 	t.Helper()
 	out := runSrc(t, r, name+"/r")
 	if len(out) != 1 {
-		return eng.Value{}, false
+		return core.Value{}, false
 	}
 	return out[0], true
 }
@@ -286,22 +286,22 @@ func resolveViaSlashR(t *testing.T, r *eng.Registry, name string) (eng.Value, bo
 // the /r suffix path.
 func TestResolveRefDirect(t *testing.T) {
 	r := freshRegistry(t)
-	v, ok := eng.ResolveRef(r, "mul")
+	v, ok := core.ResolveRef(r, "mul")
 	if !ok {
 		t.Fatal("ResolveRef(mul): not bound")
 	}
-	if !v.Parent.Equal(eng.TFunction) {
+	if !v.Parent.Equal(core.TFunction) {
 		t.Errorf("Parent=%s, want Function", v.Parent.String())
 	}
 	if v.Quoted {
 		t.Error("returned function is Quoted — should be unquoted")
 	}
-	fnDef, _ := v.Data.(eng.FnDefInfo)
+	fnDef, _ := v.Data.(core.FnDefInfo)
 	if fnDef.Name != "mul" {
 		t.Errorf("fnDef.Name=%q, want %q", fnDef.Name, "mul")
 	}
 
-	if _, ok := eng.ResolveRef(r, "nope"); ok {
+	if _, ok := core.ResolveRef(r, "nope"); ok {
 		t.Error("ResolveRef(nope): expected not-bound, got ok")
 	}
 }

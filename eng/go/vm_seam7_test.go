@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // vm_seam7_test.go drives the bytecode VM's defensive error arms and a few
@@ -19,9 +22,9 @@ import (
 // compiler-bug shape each guard defends against, and the VM's contract is to
 // return an internal_error BoruError (RunCompiled then re-runs the interpreter).
 
-func seam7Reg(t *testing.T) *Registry {
+func seam7Reg(t *testing.T) *core.Registry {
 	t.Helper()
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -36,7 +39,7 @@ func wantInternal(t *testing.T, err error, sub string) {
 	if err == nil {
 		t.Fatalf("want internal_error containing %q, got nil", sub)
 	}
-	var ae *BoruError
+	var ae *core.BoruError
 	if errors.As(err, &ae) {
 		if ae.Code != "internal_error" {
 			t.Fatalf("want internal_error, got %q (%v)", ae.Code, err)
@@ -58,9 +61,9 @@ func wantErr(t *testing.T, err error, sub string) {
 	}
 }
 
-var seam7Dbg = []SrcPos{{}}
+var seam7Dbg = []core.SrcPos{{}}
 
-func seam7VC(r *Registry) *vmContext {
+func seam7VC(r *core.Registry) *vmContext {
 	return &vmContext{r: r, ceiling: 1 << 20, stepLimit: 1 << 20}
 }
 
@@ -73,39 +76,39 @@ func TestSeam7NilProgram(t *testing.T) {
 
 func TestSeam7TapeCoupledDetectsTokens(t *testing.T) {
 	// Each tape-coupled token flavour trips tapeCoupled (vm.go:124-131).
-	toks := []Value{
-		NewWord("w"),
-		NewMark("m"),
-		NewMove("to", "why"),
-		NewForward(ForwardInfo{}),
-		NewOpenParen(),
-		NewSplice(NewInteger(1)),
+	toks := []core.Value{
+		core.NewWord("w"),
+		core.NewMark("m"),
+		core.NewMove("to", "why"),
+		core.NewForward(core.ForwardInfo{}),
+		core.NewOpenParen(),
+		core.NewSplice(core.NewInteger(1)),
 	}
 	for i := range toks {
-		if !tapeCoupled([]Value{toks[i]}) {
+		if !tapeCoupled([]core.Value{toks[i]}) {
 			t.Errorf("token %d (%s) not detected as tape-coupled", i, toks[i].String())
 		}
 	}
-	if tapeCoupled([]Value{NewInteger(1), NewString("x")}) {
+	if tapeCoupled([]core.Value{core.NewInteger(1), core.NewString("x")}) {
 		t.Error("plain data reported tape-coupled")
 	}
 }
 
 func TestSeam7ScreenResultsRejectsToken(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	err := vc.screenResults([]Value{NewWord("w")}, "poke", seam7Dbg, 0)
+	err := vc.screenResults([]core.Value{core.NewWord("w")}, "poke", seam7Dbg, 0)
 	wantInternal(t, err, "tape-coupled poke")
-	if err := vc.screenResults([]Value{NewInteger(1)}, "poke", seam7Dbg, 0); err != nil {
+	if err := vc.screenResults([]core.Value{core.NewInteger(1)}, "poke", seam7Dbg, 0); err != nil {
 		t.Errorf("clean results screened as tape-coupled: %v", err)
 	}
 }
 
 // --- run() dispatch error arms via malformed programs --------------------
 
-func runMalformed(t *testing.T, p *Program) error {
+func runMalformed(t *testing.T, p *compiler.Program) error {
 	t.Helper()
 	if p.Debug == nil {
-		p.Debug = make([]SrcPos, len(p.Code))
+		p.Debug = make([]core.SrcPos, len(p.Code))
 	}
 	_, err := RunProgram(p, seam7Reg(t))
 	return err
@@ -114,25 +117,25 @@ func runMalformed(t *testing.T, p *Program) error {
 func TestSeam7RunUnderflowArms(t *testing.T) {
 	cases := []struct {
 		name string
-		p    *Program
+		p    *compiler.Program
 		sub  string
 	}{
-		{"store-local", &Program{Code: []Instr{{Op: OpStoreLocal, Arg: 0}}, NumLocals: 1}, "STORE_LOCAL stack underflow"},
-		{"drop", &Program{Code: []Instr{{Op: OpDrop}}}, "DROP stack underflow"},
-		{"make-list", &Program{Code: []Instr{{Op: OpMakeList, Arg: 2}}}, "MAKE_LIST stack underflow"},
-		{"make-map", &Program{Code: []Instr{{Op: OpMakeMap, Arg: 0}}, MakeMaps: []MakeMapSpec{{Keys: []string{"a"}}}}, "MAKE_MAP stack underflow"},
-		{"interp", &Program{Code: []Instr{{Op: OpInterp, Arg: 0}}, Interps: []InterpSpec{{NHoles: 1, Segs: []InterpSeg{{Hole: true}}}}}, "INTERP stack underflow"},
-		{"interp-xml", &Program{Code: []Instr{{Op: OpInterpXml, Arg: 0}}, XmlInterps: []XmlInterpSpec{{NHoles: 1, Tmpl: XmlTmpl{Tag: "p"}}}}, "INTERP_XML stack underflow"},
-		{"push-closure", &Program{Code: []Instr{{Op: OpPushClosure, Arg: 0}}, Fns: []CompiledFn{{Name: "c", NCaptures: 2}}}, "PUSH_CLOSURE capture underflow"},
-		{"for-setup", &Program{Code: []Instr{{Op: OpForSetup, Arg: 0}}}, "FOR_SETUP underflow"},
-		{"for-next", &Program{Code: []Instr{{Op: OpForNext, Arg: 0}}}, "FOR_NEXT without a loop"},
-		{"jmpiffalse", &Program{Code: []Instr{{Op: OpJmpIfFalse, Arg: 5}}}, "JMP_IF_FALSE underflow"},
-		{"bind-typed", &Program{Code: []Instr{{Op: OpBindTyped, Arg: 0}}, TypedBinds: []TypedBindSpec{{Kind: TypedBindDepScalar, Name: "x"}}}, "BIND_TYPED stack underflow"},
-		{"call-native-poly", &Program{Code: []Instr{{Op: OpCallNativePoly, Arg: 0}}, PolyRefs: []PolyRef{{Word: "p", Arity: 2}}}, "CALL_NATIVE_POLY underflow"},
-		{"drop-to-mark", &Program{Code: []Instr{{Op: OpDropToMark}}}, "DROP_TO_MARK with no open mark"},
-		{"pop-mark", &Program{Code: []Instr{{Op: OpPopMark}}}, "POP_MARK with no open mark"},
-		{"unknown", &Program{Code: []Instr{{Op: Opcode(250)}}}, "unknown opcode"},
-		{"flow-break-noloop", &Program{Code: []Instr{{Op: OpFlowBreak}}}, "flow signal with no enclosing loop"},
+		{"store-local", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpStoreLocal, Arg: 0}}, NumLocals: 1}, "STORE_LOCAL stack underflow"},
+		{"drop", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpDrop}}}, "DROP stack underflow"},
+		{"make-list", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpMakeList, Arg: 2}}}, "MAKE_LIST stack underflow"},
+		{"make-map", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpMakeMap, Arg: 0}}, MakeMaps: []compiler.MakeMapSpec{{Keys: []string{"a"}}}}, "MAKE_MAP stack underflow"},
+		{"interp", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpInterp, Arg: 0}}, Interps: []compiler.InterpSpec{{NHoles: 1, Segs: []compiler.InterpSeg{{Hole: true}}}}}, "INTERP stack underflow"},
+		{"interp-xml", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpInterpXml, Arg: 0}}, XmlInterps: []compiler.XmlInterpSpec{{NHoles: 1, Tmpl: core.XmlTmpl{Tag: "p"}}}}, "INTERP_XML stack underflow"},
+		{"push-closure", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpPushClosure, Arg: 0}}, Fns: []compiler.CompiledFn{{Name: "c", NCaptures: 2}}}, "PUSH_CLOSURE capture underflow"},
+		{"for-setup", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpForSetup, Arg: 0}}}, "FOR_SETUP underflow"},
+		{"for-next", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpForNext, Arg: 0}}}, "FOR_NEXT without a loop"},
+		{"jmpiffalse", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpJmpIfFalse, Arg: 5}}}, "JMP_IF_FALSE underflow"},
+		{"bind-typed", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpBindTyped, Arg: 0}}, TypedBinds: []core.TypedBindSpec{{Kind: core.TypedBindDepScalar, Name: "x"}}}, "BIND_TYPED stack underflow"},
+		{"call-native-poly", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpCallNativePoly, Arg: 0}}, PolyRefs: []compiler.PolyRef{{Word: "p", Arity: 2}}}, "CALL_NATIVE_POLY underflow"},
+		{"drop-to-mark", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpDropToMark}}}, "DROP_TO_MARK with no open mark"},
+		{"pop-mark", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpPopMark}}}, "POP_MARK with no open mark"},
+		{"unknown", &compiler.Program{Code: []compiler.Instr{{Op: compiler.Opcode(250)}}}, "unknown opcode"},
+		{"flow-break-noloop", &compiler.Program{Code: []compiler.Instr{{Op: compiler.OpFlowBreak}}}, "flow signal with no enclosing loop"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -143,67 +146,67 @@ func TestSeam7RunUnderflowArms(t *testing.T) {
 
 func TestSeam7CallNativeUnderflow(t *testing.T) {
 	r := seam7Reg(t)
-	sig := Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: -1,
-		Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			return []Value{NewInteger(0)}, nil
+	sig := core.Signature{Args: []*core.Type{core.TInteger, core.TInteger}, BarrierPos: -1,
+		Impl: core.Go(func(a []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+			return []core.Value{core.NewInteger(0)}, nil
 		})}
-	p := &Program{
-		Code:  []Instr{{Op: OpCallNative, Arg: 0}},
-		Debug: []SrcPos{{}},
-		Sigs:  []SigRef{{Word: "twoarg", Sig: &sig}},
+	p := &compiler.Program{
+		Code:  []compiler.Instr{{Op: compiler.OpCallNative, Arg: 0}},
+		Debug: []core.SrcPos{{}},
+		Sigs:  []compiler.SigRef{{Word: "twoarg", Sig: &sig}},
 	}
 	_, err := RunProgram(p, r)
 	wantInternal(t, err, "CALL_NATIVE underflow at twoarg")
 }
 
 func TestSeam7CallUserUnderflow(t *testing.T) {
-	p := &Program{
-		Code:  []Instr{{Op: OpCallUser, Arg: 0}},
-		Debug: []SrcPos{{}},
-		Fns:   []CompiledFn{{Name: "f", NParams: 2, NLocals: 2}},
+	p := &compiler.Program{
+		Code:  []compiler.Instr{{Op: compiler.OpCallUser, Arg: 0}},
+		Debug: []core.SrcPos{{}},
+		Fns:   []compiler.CompiledFn{{Name: "f", NParams: 2, NLocals: 2}},
 	}
 	wantInternal(t, runMalformed(t, p), "CALL_USER underflow at f")
 }
 
 func TestSeam7BackwardJumpNotToForNext(t *testing.T) {
 	// A backward JMP whose target is not a FOR_NEXT is rejected.
-	p := &Program{
-		Consts: []Value{NewInteger(1)},
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpJmp, Arg: 0}},
-		Debug:  []SrcPos{{}, {}},
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewInteger(1)},
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpJmp, Arg: 0}},
+		Debug:  []core.SrcPos{{}, {}},
 	}
 	wantInternal(t, runMalformed(t, p), "backward jump not to a FOR_NEXT")
 }
 
 func TestSeam7BackwardConditionalJump(t *testing.T) {
 	// A JMP_IF_FALSE whose (taken) target is <= pc is rejected.
-	p := &Program{
-		Consts: []Value{NewBoolean(false)},
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpJmpIfFalse, Arg: 0}},
-		Debug:  []SrcPos{{}, {}},
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewBoolean(false)},
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpJmpIfFalse, Arg: 0}},
+		Debug:  []core.SrcPos{{}, {}},
 	}
 	wantInternal(t, runMalformed(t, p), "backward conditional jump")
 }
 
 func TestSeam7UnresolvableType(t *testing.T) {
-	p := &Program{
-		Code:  []Instr{{Op: OpPushType, Arg: 0}},
-		Debug: []SrcPos{{}},
-		Types: []TypeRef{{Name: "Bogus", ID: "no-such-id"}},
+	p := &compiler.Program{
+		Code:  []compiler.Instr{{Op: compiler.OpPushType, Arg: 0}},
+		Debug: []core.SrcPos{{}},
+		Types: []compiler.TypeRef{{Name: "Bogus", ID: "no-such-id"}},
 	}
 	wantInternal(t, runMalformed(t, p), "unresolvable type operand Bogus")
 }
 
 func TestSeam7CodeUnitEndedWithoutRet(t *testing.T) {
 	// main CALL_USERs into a unit that runs off the end with a live frame.
-	p := &Program{
-		Consts: []Value{NewInteger(7)},
-		Code:   []Instr{{Op: OpCallUser, Arg: 0}},
-		Debug:  []SrcPos{{}},
-		Fns: []CompiledFn{{
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewInteger(7)},
+		Code:   []compiler.Instr{{Op: compiler.OpCallUser, Arg: 0}},
+		Debug:  []core.SrcPos{{}},
+		Fns: []compiler.CompiledFn{{
 			Name: "noret", NParams: 0, NLocals: 0,
-			Code:  []Instr{{Op: OpPushConst, Arg: 0}},
-			Debug: []SrcPos{{}},
+			Code:  []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}},
+			Debug: []core.SrcPos{{}},
 		}},
 	}
 	wantInternal(t, runMalformed(t, p), "code unit ended without RET")
@@ -214,31 +217,31 @@ func TestSeam7CodeUnitEndedWithoutRet(t *testing.T) {
 func TestSeam7ForSetupRangeErrors(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
 	// Non-integer range triple.
-	_, _, err := vc.opForSetup([]Value{NewString("a"), NewString("b"), NewString("c")}, nil, 0, nil, -1, 0, seam7Dbg)
+	_, _, err := vc.opForSetup([]core.Value{core.NewString("a"), core.NewString("b"), core.NewString("c")}, nil, 0, nil, -1, 0, seam7Dbg)
 	wantErr(t, err, "range must be concrete Integers")
 	// Zero step (stack top→ start, then end, then step).
-	_, _, err = vc.opForSetup([]Value{NewInteger(0), NewInteger(5), NewInteger(1)}, nil, 0, nil, -1, 0, seam7Dbg)
+	_, _, err = vc.opForSetup([]core.Value{core.NewInteger(0), core.NewInteger(5), core.NewInteger(1)}, nil, 0, nil, -1, 0, seam7Dbg)
 	wantErr(t, err, "step cannot be zero")
 	// Underflow.
-	_, _, err = vc.opForSetup([]Value{NewInteger(1)}, nil, 0, nil, -1, 0, seam7Dbg)
+	_, _, err = vc.opForSetup([]core.Value{core.NewInteger(1)}, nil, 0, nil, -1, 0, seam7Dbg)
 	wantInternal(t, err, "FOR_SETUP underflow")
 }
 
 // --- vmMark error arms (direct) ------------------------------------------
 
 func TestSeam7VmMarkErrors(t *testing.T) {
-	if _, _, err := vmMark(OpDropToMark, nil, []Value{NewInteger(1)}, seam7Dbg, 0); err == nil {
+	if _, _, err := vmMark(compiler.OpDropToMark, nil, []core.Value{core.NewInteger(1)}, seam7Dbg, 0); err == nil {
 		t.Error("DROP_TO_MARK with no mark did not error")
 	} else {
 		wantInternal(t, err, "DROP_TO_MARK with no open mark")
 	}
 	// mark above current depth.
-	if _, _, err := vmMark(OpDropToMark, []int{5}, []Value{NewInteger(1)}, seam7Dbg, 0); err == nil {
+	if _, _, err := vmMark(compiler.OpDropToMark, []int{5}, []core.Value{core.NewInteger(1)}, seam7Dbg, 0); err == nil {
 		t.Error("DROP_TO_MARK above depth did not error")
 	} else {
 		wantInternal(t, err, "DROP_TO_MARK above current depth")
 	}
-	if _, _, err := vmMark(OpPopMark, nil, nil, seam7Dbg, 0); err == nil {
+	if _, _, err := vmMark(compiler.OpPopMark, nil, nil, seam7Dbg, 0); err == nil {
 		t.Error("POP_MARK with no mark did not error")
 	} else {
 		wantInternal(t, err, "POP_MARK with no open mark")
@@ -250,8 +253,8 @@ func TestSeam7VmMarkErrors(t *testing.T) {
 func TestSeam7CheckParamContractNilParam(t *testing.T) {
 	r := seam7Reg(t)
 	// A nil param slot is a guaranteed pass (the continue arm).
-	fn := &CompiledFn{Name: "f", Params: []*Type{nil}}
-	if err := checkParamContract(r, fn, []Value{NewInteger(1)}); err != nil {
+	fn := &compiler.CompiledFn{Name: "f", Params: []*core.Type{nil}}
+	if err := checkParamContract(r, fn, []core.Value{core.NewInteger(1)}); err != nil {
 		t.Errorf("nil param should pass, got %v", err)
 	}
 }
@@ -259,29 +262,29 @@ func TestSeam7CheckParamContractNilParam(t *testing.T) {
 func TestSeam7CheckNativeParamContractArms(t *testing.T) {
 	r := seam7Reg(t)
 	// break arm: more args than the sig's TotalArgs.
-	oneArg := Signature{Args: []*Type{TInteger}, BarrierPos: -1}
-	if err := checkNativeParamContract(r, &SigRef{Word: "one", Sig: &oneArg}, []Value{NewInteger(1), NewInteger(2)}); err != nil {
+	oneArg := core.Signature{Args: []*core.Type{core.TInteger}, BarrierPos: -1}
+	if err := checkNativeParamContract(r, &compiler.SigRef{Word: "one", Sig: &oneArg}, []core.Value{core.NewInteger(1), core.NewInteger(2)}); err != nil {
 		t.Errorf("extra args past sig arity should be ignored, got %v", err)
 	}
 	// Any slot: guaranteed pass.
-	anySig := Signature{Args: []*Type{TAny}, BarrierPos: -1}
-	if err := checkNativeParamContract(r, &SigRef{Word: "any", Sig: &anySig}, []Value{NewString("x")}); err != nil {
+	anySig := core.Signature{Args: []*core.Type{core.TAny}, BarrierPos: -1}
+	if err := checkNativeParamContract(r, &compiler.SigRef{Word: "any", Sig: &anySig}, []core.Value{core.NewString("x")}); err != nil {
 		t.Errorf("Any slot should pass, got %v", err)
 	}
 	// QuoteArgs slot: skipped (literal atom key bound as data).
-	quoteSig := Signature{Args: []*Type{TInteger}, QuoteArgs: map[int]bool{0: true}, BarrierPos: -1}
-	if err := checkNativeParamContract(r, &SigRef{Word: "q", Sig: &quoteSig}, []Value{NewAtom("k")}); err != nil {
+	quoteSig := core.Signature{Args: []*core.Type{core.TInteger}, QuoteArgs: map[int]bool{0: true}, BarrierPos: -1}
+	if err := checkNativeParamContract(r, &compiler.SigRef{Word: "q", Sig: &quoteSig}, []core.Value{core.NewAtom("k")}); err != nil {
 		t.Errorf("QuoteArgs slot should be skipped, got %v", err)
 	}
 	// Mismatch raises the byte-identical signature_error.
-	intSig := Signature{Args: []*Type{TInteger}, BarrierPos: -1}
-	err := checkNativeParamContract(r, &SigRef{Word: "iw", Sig: &intSig}, []Value{NewString("x")})
+	intSig := core.Signature{Args: []*core.Type{core.TInteger}, BarrierPos: -1}
+	err := checkNativeParamContract(r, &compiler.SigRef{Word: "iw", Sig: &intSig}, []core.Value{core.NewString("x")})
 	wantErr(t, err, "cannot call `iw`")
 }
 
 func TestSeam7CheckReturnContractUnderflow(t *testing.T) {
 	r := seam7Reg(t)
-	fn := &CompiledFn{Name: "g", Returns: []*Type{TInteger}}
+	fn := &compiler.CompiledFn{Name: "g", Returns: []*core.Type{core.TInteger}}
 	// Re-entrant (no frame) with too few values on the stack.
 	_, err := checkReturnContract(r, fn, nil, 0, false)
 	wantErr(t, err, "g")
@@ -293,9 +296,9 @@ func TestSeam7CheckReturnContractUnderflow(t *testing.T) {
 // --- vmMakeMap / vmInterp underflow (direct) -----------------------------
 
 func TestSeam7VmMakeMapInterpUnderflow(t *testing.T) {
-	p := &Program{
-		MakeMaps: []MakeMapSpec{{Keys: []string{"a", "b"}}},
-		Interps:  []InterpSpec{{NHoles: 2, Segs: []InterpSeg{{Hole: true}, {Hole: true}}}},
+	p := &compiler.Program{
+		MakeMaps: []compiler.MakeMapSpec{{Keys: []string{"a", "b"}}},
+		Interps:  []compiler.InterpSpec{{NHoles: 2, Segs: []compiler.InterpSeg{{Hole: true}, {Hole: true}}}},
 	}
 	_, err := vmMakeMap(p, nil, 0, seam7Dbg, 0)
 	wantInternal(t, err, "MAKE_MAP stack underflow")
@@ -307,17 +310,17 @@ func TestSeam7VmMakeMapInterpUnderflow(t *testing.T) {
 
 func TestSeam7CallPolyUnderflow(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callPoly(&PolyRef{Word: "p", Arity: 2}, nil, seam7Dbg, 0)
+	_, err := vc.callPoly(&compiler.PolyRef{Word: "p", Arity: 2}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_NATIVE_POLY underflow at p")
 }
 
 func TestSeam7MatchUserPolyArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
 	// underflow
-	_, _, err := vc.matchUserPoly(&UserPolyRef{Word: "u", Arity: 2}, nil, seam7Dbg, 0)
+	_, _, err := vc.matchUserPoly(&compiler.UserPolyRef{Word: "u", Arity: 2}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_USER_POLY underflow at u")
 	// unresolved fn (arity 0, so no underflow; Lookup misses)
-	_, _, err = vc.matchUserPoly(&UserPolyRef{Word: "nosuchfn", Arity: 0}, nil, seam7Dbg, 0)
+	_, _, err = vc.matchUserPoly(&compiler.UserPolyRef{Word: "nosuchfn", Arity: 0}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_USER_POLY unresolved fn nosuchfn")
 }
 
@@ -326,13 +329,13 @@ func TestSeam7MatchUserPolyArms(t *testing.T) {
 func TestSeam7CallDynamicArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
 	// leading underflow
-	_, err := vc.callDynamic(vc.r, 2, false, []Value{NewInteger(1)}, seam7Dbg, 0)
+	_, err := vc.callDynamic(vc.r, 2, false, []core.Value{core.NewInteger(1)}, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC underflow")
 	// trailing with arity != 1
-	_, err = vc.callDynamic(vc.r, 2, true, []Value{NewInteger(1), NewInteger(2), NewInteger(3)}, seam7Dbg, 0)
+	_, err = vc.callDynamic(vc.r, 2, true, []core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)}, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC_TRAILING with arity != 1")
 	// non-callable leading: value + args stay put.
-	got, err := vc.callDynamic(vc.r, 1, false, []Value{NewInteger(9), NewInteger(5)}, seam7Dbg, 0)
+	got, err := vc.callDynamic(vc.r, 1, false, []core.Value{core.NewInteger(9), core.NewInteger(5)}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("non-callable leading: %v", err)
 	}
@@ -346,7 +349,7 @@ func TestSeam7CallDynTrailTopArms(t *testing.T) {
 	_, err := vc.callDynTrailTop(vc.r, 1, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYN_TRAIL_TOP underflow")
 	// non-callable: [args, fn] left untouched.
-	got, err := vc.callDynTrailTop(vc.r, 1, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
+	got, err := vc.callDynTrailTop(vc.r, 1, []core.Value{core.NewInteger(5), core.NewInteger(9)}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("trail-top non-callable: %v", err)
 	}
@@ -360,22 +363,22 @@ func TestSeam7CallDynApplyTopArms(t *testing.T) {
 	_, err := vc.callDynApplyTop(vc.r, 1, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYN_APPLY_TOP underflow")
 	// A non-FnDefInfo, non-closure value raises applyHandler's own error.
-	_, err = vc.callDynApplyTop(vc.r, 1, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
+	_, err = vc.callDynApplyTop(vc.r, 1, []core.Value{core.NewInteger(5), core.NewInteger(9)}, seam7Dbg, 0)
 	wantErr(t, err, "carries no FnDefInfo")
 }
 
 func TestSeam7CallDynMethodArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, nil, seam7Dbg, 0)
+	_, err := vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYN_METHOD underflow at m")
 	// non-appliable value on top: shape claim failed → defer.
-	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, []core.Value{core.NewInteger(5), core.NewInteger(9)}, seam7Dbg, 0)
 	wantInternal(t, err, "is not an appliable function at run time")
 }
 
 func TestSeam7CallDynamicMixedUnderflow(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callDynamicMixed(vc.r, 2, []Value{NewInteger(1)}, seam7Dbg, 0)
+	_, err := vc.callDynamicMixed(vc.r, 2, []core.Value{core.NewInteger(1)}, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC_MIXED underflow")
 	_, err = vc.callDynamicMixed(vc.r, 0, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC_MIXED underflow")
@@ -384,7 +387,7 @@ func TestSeam7CallDynamicMixedUnderflow(t *testing.T) {
 // --- isDelegationFnDef / tryNativeFnApply (direct) -----------------------
 
 func TestSeam7IsDelegationFnDefEmpty(t *testing.T) {
-	if IsDelegationFnDef(FnDefInfo{}) {
+	if core.IsDelegationFnDef(core.FnDefInfo{}) {
 		t.Error("sig-less FnDefInfo reported as delegation")
 	}
 }
@@ -392,13 +395,13 @@ func TestSeam7IsDelegationFnDefEmpty(t *testing.T) {
 func TestSeam7TryNativeFnApplyNoSigs(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
 	// No registered inner and no own signatures → not applied (done=false).
-	_, done, err := vc.tryNativeFnApply(FnDefInfo{Name: "unregistered-xyz"}, nil)
+	_, done, err := vc.tryNativeFnApply(core.FnDefInfo{Name: "unregistered-xyz"}, nil)
 	if done || err != nil {
 		t.Errorf("no-sig fn: done=%v err=%v, want done=false err=nil", done, err)
 	}
 	// Own signatures present but no runtime match → still not applied.
-	fd := FnDefInfo{Name: "unregistered-xyz", Signatures: []Signature{{Args: []*Type{TInteger}, BarrierPos: -1}}}
-	_, done, err = vc.tryNativeFnApply(fd, []Value{NewString("x")})
+	fd := core.FnDefInfo{Name: "unregistered-xyz", Signatures: []core.Signature{{Args: []*core.Type{core.TInteger}, BarrierPos: -1}}}
+	_, done, err = vc.tryNativeFnApply(fd, []core.Value{core.NewString("x")})
 	if done || err != nil {
 		t.Errorf("own-sig no-match: done=%v err=%v, want done=false err=nil", done, err)
 	}
@@ -408,10 +411,10 @@ func TestSeam7TryNativeFnApplyNoSigs(t *testing.T) {
 
 func TestSeam7RunFallbackArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.runFallback(vc.r, &FallbackSpan{NIn: 2, Desc: "d"}, nil, seam7Dbg, 0)
+	_, err := vc.runFallback(vc.r, &core.FallbackSpan{NIn: 2, Desc: "d"}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "FALLBACK underflow at d")
 	// NIn > 1 with enough stack: the lowerer never threads >1, so it is refused.
-	_, err = vc.runFallback(vc.r, &FallbackSpan{NIn: 2, Desc: "d"}, []Value{NewInteger(1), NewInteger(2)}, seam7Dbg, 0)
+	_, err = vc.runFallback(vc.r, &core.FallbackSpan{NIn: 2, Desc: "d"}, []core.Value{core.NewInteger(1), core.NewInteger(2)}, seam7Dbg, 0)
 	wantInternal(t, err, "FALLBACK threads >1 input at d")
 }
 
@@ -419,7 +422,7 @@ func TestSeam7RunFallbackArms(t *testing.T) {
 
 func TestSeam7FlowSignalNoLoop(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, _, _, _, _, _, err := vc.flowSignal(OpFlowBreak, nil, nil, nil, nil, 0, -1, seam7Dbg)
+	_, _, _, _, _, _, err := vc.flowSignal(compiler.OpFlowBreak, nil, nil, nil, nil, 0, -1, seam7Dbg)
 	wantInternal(t, err, "flow signal with no enclosing loop")
 }
 
@@ -429,30 +432,30 @@ func TestSeam7FlowSignalNoLoop(t *testing.T) {
 // identity closure ON TOP of it, then applies the given trailing-fn opcode
 // (OpCallDynTrailTop / OpCallDynApplyTop / OpCallDynMethod), driving the
 // closure-invoke branch of the corresponding apply method.
-func seam7IdentityClosureProg(applyOp Opcode) *Program {
-	p := &Program{
-		Consts: []Value{NewInteger(5)},
-		Code: []Instr{
-			{Op: OpPushConst, Arg: 0},   // arg 5
-			{Op: OpPushClosure, Arg: 0}, // identity closure on top
-			{Op: applyOp, Arg: 1},       // apply the closure to its 1 arg
+func seam7IdentityClosureProg(applyOp compiler.Opcode) *compiler.Program {
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewInteger(5)},
+		Code: []compiler.Instr{
+			{Op: compiler.OpPushConst, Arg: 0},   // arg 5
+			{Op: compiler.OpPushClosure, Arg: 0}, // identity closure on top
+			{Op: applyOp, Arg: 1},                // apply the closure to its 1 arg
 		},
-		Debug: []SrcPos{{}, {}, {}},
-		Fns: []CompiledFn{{
-			Name: "id", NParams: 1, NLocals: 1, Returns: []*Type{TAny},
-			Code:  []Instr{{Op: OpPushLocal, Arg: 0}, {Op: OpRet}},
-			Debug: []SrcPos{{}, {}},
+		Debug: []core.SrcPos{{}, {}, {}},
+		Fns: []compiler.CompiledFn{{
+			Name: "id", NParams: 1, NLocals: 1, Returns: []*core.Type{core.TAny},
+			Code:  []compiler.Instr{{Op: compiler.OpPushLocal, Arg: 0}, {Op: compiler.OpRet}},
+			Debug: []core.SrcPos{{}, {}},
 		}},
 	}
-	if applyOp == OpCallDynMethod {
-		p.DynMethods = []DynMethodSpec{{Word: "m", NArgs: 1, NOut: 1}}
-		p.Code[2] = Instr{Op: OpCallDynMethod, Arg: 0}
+	if applyOp == compiler.OpCallDynMethod {
+		p.DynMethods = []compiler.DynMethodSpec{{Word: "m", NArgs: 1, NOut: 1}}
+		p.Code[2] = compiler.Instr{Op: compiler.OpCallDynMethod, Arg: 0}
 	}
 	return p
 }
 
 func TestSeam7ClosureApplyBranches(t *testing.T) {
-	for _, op := range []Opcode{OpCallDynTrailTop, OpCallDynApplyTop, OpCallDynMethod} {
+	for _, op := range []compiler.Opcode{compiler.OpCallDynTrailTop, compiler.OpCallDynApplyTop, compiler.OpCallDynMethod} {
 		p := seam7IdentityClosureProg(op)
 		got, err := RunProgram(p, seam7Reg(t))
 		if err != nil {
@@ -472,8 +475,8 @@ func TestSeam7ClosureApplyBranches(t *testing.T) {
 func TestSeam7RunCallDynErrArms(t *testing.T) {
 	// OpCallDynTrailTop / OpCallDynApplyTop with an empty stack: the method
 	// underflows and run() propagates the error (vm.go run-loop err arms).
-	for _, op := range []Opcode{OpCallDynTrailTop, OpCallDynApplyTop} {
-		p := &Program{Code: []Instr{{Op: op, Arg: 1}}, Debug: []SrcPos{{}}}
+	for _, op := range []compiler.Opcode{compiler.OpCallDynTrailTop, compiler.OpCallDynApplyTop} {
+		p := &compiler.Program{Code: []compiler.Instr{{Op: op, Arg: 1}}, Debug: []core.SrcPos{{}}}
 		_, err := RunProgram(p, seam7Reg(t))
 		if err == nil {
 			t.Fatalf("%v empty-stack apply did not error", op)
@@ -487,26 +490,26 @@ func TestSeam7RunCallDynErrArms(t *testing.T) {
 // seam7DelegReg registers a `cinc` (Integer→Integer, n+1) native and a
 // `cfail` (always errors) native, and returns delegation fn VALUES wrapping
 // each — a trivial-delegation FnDefInfo whose only sig body is `[Word(name)]`.
-func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
+func seam7DelegReg(t *testing.T) (r *core.Registry, inc, fail core.Value) {
 	t.Helper()
 	r = seam7Reg(t)
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "cinc",
-		Signatures: []Signature{{
-			Args:    []*Type{TInteger},
-			Returns: []*Type{TInteger}, BarrierPos: -1,
-			Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				n, _ := AsInteger(a[0])
-				return []Value{NewInteger(n + 1)}, nil
+		Signatures: []core.Signature{{
+			Args:    []*core.Type{core.TInteger},
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+			Impl: core.Go(func(a []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				n, _ := core.AsInteger(a[0])
+				return []core.Value{core.NewInteger(n + 1)}, nil
 			}),
 		}},
 	})
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "cfail",
-		Signatures: []Signature{{
-			Args:    []*Type{TInteger},
-			Returns: []*Type{TInteger}, BarrierPos: -1,
-			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		Signatures: []core.Signature{{
+			Args:    []*core.Type{core.TInteger},
+			Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, r *core.Registry) ([]core.Value, error) {
 				return nil, r.BoruError("value_error", "cfail: boom", "cfail")
 			}),
 		}},
@@ -514,12 +517,12 @@ func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
 	if err := r.Err(); err != nil {
 		t.Fatalf("registration: %v", err)
 	}
-	deleg := func(name string) Value {
-		return NewFunction(FnDefInfo{
+	deleg := func(name string) core.Value {
+		return core.NewFunction(core.FnDefInfo{
 			Name: name, Registry: r,
-			Signatures: []Signature{{
-				Args: []*Type{TInteger}, Returns: []*Type{TInteger}, BarrierPos: -1,
-				Impl: Boru([]Value{NewWord(name)}),
+			Signatures: []core.Signature{{
+				Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+				Impl: core.Boru([]core.Value{core.NewWord(name)}),
 			}},
 		})
 	}
@@ -528,13 +531,13 @@ func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
 
 func TestSeam7DelegationApplySuccess(t *testing.T) {
 	r, inc, _ := seam7DelegReg(t)
-	if !IsDelegationFnDef(inc.Data.(FnDefInfo)) {
+	if !core.IsDelegationFnDef(inc.Data.(core.FnDefInfo)) {
 		t.Fatal("cinc wrapper is not recognised as a delegation fn")
 	}
 	vc := seam7VC(r)
 	// callDynTrailTop / callDynApplyTop: fn ON TOP of its arg → [arg, fn].
-	for _, apply := range []func(*Registry, int, []Value, []SrcPos, int) ([]Value, error){vc.callDynTrailTop, vc.callDynApplyTop} {
-		got, err := apply(vc.r, 1, []Value{NewInteger(5), inc}, seam7Dbg, 0)
+	for _, apply := range []func(*core.Registry, int, []core.Value, []core.SrcPos, int) ([]core.Value, error){vc.callDynTrailTop, vc.callDynApplyTop} {
+		got, err := apply(vc.r, 1, []core.Value{core.NewInteger(5), inc}, seam7Dbg, 0)
 		if err != nil {
 			t.Fatalf("delegation apply: %v", err)
 		}
@@ -543,7 +546,7 @@ func TestSeam7DelegationApplySuccess(t *testing.T) {
 		}
 	}
 	// callDynamic: LEADING fn → [fn, arg].
-	got, err := vc.callDynamic(vc.r, 1, false, []Value{inc, NewInteger(5)}, seam7Dbg, 0)
+	got, err := vc.callDynamic(vc.r, 1, false, []core.Value{inc, core.NewInteger(5)}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("leading delegation apply: %v", err)
 	}
@@ -551,7 +554,7 @@ func TestSeam7DelegationApplySuccess(t *testing.T) {
 		t.Errorf("leading delegation cinc(5) = %d, want 6", n)
 	}
 	// callDynMethod: fn ON TOP, shape claim {NArgs:1, NOut:1}.
-	got, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cinc", NArgs: 1, NOut: 1}, []Value{NewInteger(5), inc}, seam7Dbg, 0)
+	got, err = vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "cinc", NArgs: 1, NOut: 1}, []core.Value{core.NewInteger(5), inc}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("method delegation apply: %v", err)
 	}
@@ -564,13 +567,13 @@ func TestSeam7DelegationApplyError(t *testing.T) {
 	r, _, fail := seam7DelegReg(t)
 	vc := seam7VC(r)
 	// Each apply path must surface the inner handler's error (delegation err arm).
-	_, err := vc.callDynTrailTop(vc.r, 1, []Value{NewInteger(5), fail}, seam7Dbg, 0)
+	_, err := vc.callDynTrailTop(vc.r, 1, []core.Value{core.NewInteger(5), fail}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynApplyTop(vc.r, 1, []Value{NewInteger(5), fail}, seam7Dbg, 0)
+	_, err = vc.callDynApplyTop(vc.r, 1, []core.Value{core.NewInteger(5), fail}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynamic(vc.r, 1, false, []Value{fail, NewInteger(5)}, seam7Dbg, 0)
+	_, err = vc.callDynamic(vc.r, 1, false, []core.Value{fail, core.NewInteger(5)}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fail}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "cfail", NArgs: 1, NOut: 1}, []core.Value{core.NewInteger(5), fail}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 }
 
@@ -579,48 +582,48 @@ func TestSeam7DelegationApplyError(t *testing.T) {
 // seam7ErrClosureProg builds a program whose closure declares a return type
 // its body violates, so invokeClosure surfaces the return-type error and each
 // apply method takes its closure-invoke ERROR arm.
-func seam7ErrClosureProg(applyOp Opcode) *Program {
-	p := &Program{
-		Consts: []Value{NewInteger(5), NewString("x")},
-		Code: []Instr{
-			{Op: OpPushConst, Arg: 0},
-			{Op: OpPushClosure, Arg: 0},
+func seam7ErrClosureProg(applyOp compiler.Opcode) *compiler.Program {
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewInteger(5), core.NewString("x")},
+		Code: []compiler.Instr{
+			{Op: compiler.OpPushConst, Arg: 0},
+			{Op: compiler.OpPushClosure, Arg: 0},
 			{Op: applyOp, Arg: 1},
 		},
-		Debug: []SrcPos{{}, {}, {}},
-		Fns: []CompiledFn{{
-			Name: "bad", NParams: 1, NLocals: 1, Returns: []*Type{TInteger},
-			Code:  []Instr{{Op: OpPushConst, Arg: 1}, {Op: OpRet}}, // returns a String
-			Debug: []SrcPos{{}, {}},
+		Debug: []core.SrcPos{{}, {}, {}},
+		Fns: []compiler.CompiledFn{{
+			Name: "bad", NParams: 1, NLocals: 1, Returns: []*core.Type{core.TInteger},
+			Code:  []compiler.Instr{{Op: compiler.OpPushConst, Arg: 1}, {Op: compiler.OpRet}}, // returns a String
+			Debug: []core.SrcPos{{}, {}},
 		}},
 	}
-	if applyOp == OpCallDynMethod {
-		p.DynMethods = []DynMethodSpec{{Word: "m", NArgs: 1, NOut: 1}}
-		p.Code[2] = Instr{Op: OpCallDynMethod, Arg: 0}
+	if applyOp == compiler.OpCallDynMethod {
+		p.DynMethods = []compiler.DynMethodSpec{{Word: "m", NArgs: 1, NOut: 1}}
+		p.Code[2] = compiler.Instr{Op: compiler.OpCallDynMethod, Arg: 0}
 	}
 	return p
 }
 
 func TestSeam7ClosureApplyErrorArms(t *testing.T) {
-	for _, op := range []Opcode{OpCallDynTrailTop, OpCallDynApplyTop, OpCallDynMethod} {
+	for _, op := range []compiler.Opcode{compiler.OpCallDynTrailTop, compiler.OpCallDynApplyTop, compiler.OpCallDynMethod} {
 		_, err := RunProgram(seam7ErrClosureProg(op), seam7Reg(t))
 		if err == nil {
 			t.Fatalf("%v erroring closure did not surface an error", op)
 		}
 	}
 	// callDynamic's leading closure error arm: [closure, arg], apply leading.
-	p := &Program{
-		Consts: []Value{NewInteger(5), NewString("x")},
-		Code: []Instr{
-			{Op: OpPushClosure, Arg: 0}, // closure at the base
-			{Op: OpPushConst, Arg: 0},   // its arg on top
-			{Op: OpCallDynamic, Arg: 1},
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewInteger(5), core.NewString("x")},
+		Code: []compiler.Instr{
+			{Op: compiler.OpPushClosure, Arg: 0}, // closure at the base
+			{Op: compiler.OpPushConst, Arg: 0},   // its arg on top
+			{Op: compiler.OpCallDynamic, Arg: 1},
 		},
-		Debug: []SrcPos{{}, {}, {}},
-		Fns: []CompiledFn{{
-			Name: "bad", NParams: 1, NLocals: 1, Returns: []*Type{TInteger},
-			Code:  []Instr{{Op: OpPushConst, Arg: 1}, {Op: OpRet}},
-			Debug: []SrcPos{{}, {}},
+		Debug: []core.SrcPos{{}, {}, {}},
+		Fns: []compiler.CompiledFn{{
+			Name: "bad", NParams: 1, NLocals: 1, Returns: []*core.Type{core.TInteger},
+			Code:  []compiler.Instr{{Op: compiler.OpPushConst, Arg: 1}, {Op: compiler.OpRet}},
+			Debug: []core.SrcPos{{}, {}},
 		}},
 	}
 	if _, err := RunProgram(p, seam7Reg(t)); err == nil {
@@ -634,13 +637,13 @@ func TestSeam7ClosureApplyErrorArms(t *testing.T) {
 // VALUE whose body calls the erroring `cfail` native — so applying it forces
 // the island sub-engine to error, exercising each apply method's island error
 // arm. (A named param disqualifies it from the trivial-delegation fast path.)
-func seam7UserFail(r *Registry) Value {
-	return NewFunction(FnDefInfo{
+func seam7UserFail(r *core.Registry) core.Value {
+	return core.NewFunction(core.FnDefInfo{
 		Name: "cuserfail", Registry: r,
-		Signatures: []Signature{{
-			Params:  []FnParam{{Name: "n", Type: TInteger}},
-			Returns: []*Type{TInteger}, BarrierPos: BarrierAllForward,
-			Impl: Boru([]Value{NewWord("cfail"), NewWord("n")}),
+		Signatures: []core.Signature{{
+			Params:  []core.FnParam{{Name: "n", Type: core.TInteger}},
+			Returns: []*core.Type{core.TInteger}, BarrierPos: core.BarrierAllForward,
+			Impl: core.Boru([]core.Value{core.NewWord("cfail"), core.NewWord("n")}),
 		}},
 	})
 }
@@ -648,19 +651,19 @@ func seam7UserFail(r *Registry) Value {
 func TestSeam7IslandApplyErrorArms(t *testing.T) {
 	r, _, _ := seam7DelegReg(t)
 	fn := seam7UserFail(r)
-	if IsDelegationFnDef(fn.Data.(FnDefInfo)) {
+	if core.IsDelegationFnDef(fn.Data.(core.FnDefInfo)) {
 		t.Fatal("user fail fn should NOT be a trivial delegation")
 	}
 	vc := seam7VC(r)
-	_, err := vc.callDynTrailTop(vc.r, 1, []Value{NewInteger(5), fn}, seam7Dbg, 0)
+	_, err := vc.callDynTrailTop(vc.r, 1, []core.Value{core.NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynApplyTop(vc.r, 1, []Value{NewInteger(5), fn}, seam7Dbg, 0)
+	_, err = vc.callDynApplyTop(vc.r, 1, []core.Value{core.NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cuserfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fn}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &compiler.DynMethodSpec{Word: "cuserfail", NArgs: 1, NOut: 1}, []core.Value{core.NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 	// callDynamicMixed islands its window verbatim — a window that calls cfail
 	// errors through the island (the mixed island error arm).
-	_, err = vc.callDynamicMixed(vc.r, 2, []Value{NewWord("cfail"), NewInteger(5)}, seam7Dbg, 0)
+	_, err = vc.callDynamicMixed(vc.r, 2, []core.Value{core.NewWord("cfail"), core.NewInteger(5)}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 }
 
@@ -669,11 +672,11 @@ func TestSeam7IslandApplyErrorArms(t *testing.T) {
 // unit index is out of range (a compile/run drift) is refused.
 func TestSeam7MatchUserPolyUnitShapeMismatch(t *testing.T) {
 	r := seam7Reg(t)
-	InstallFnDef(r, "cpoly", FnDefInfo{
-		Signatures: []Signature{{
-			Params:  []FnParam{{Name: "n", Type: TAny}},
-			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: Boru([]Value{NewWord("n")}),
+	core.InstallFnDef(r, "cpoly", core.FnDefInfo{
+		Signatures: []core.Signature{{
+			Params:  []core.FnParam{{Name: "n", Type: core.TAny}},
+			Returns: []*core.Type{core.TAny}, BarrierPos: core.BarrierAllForward,
+			Impl: core.Boru([]core.Value{core.NewWord("n")}),
 		}},
 	})
 	fd := r.Lookup("cpoly")
@@ -681,14 +684,14 @@ func TestSeam7MatchUserPolyUnitShapeMismatch(t *testing.T) {
 		t.Fatal("cpoly not installed")
 	}
 	n := fd.Signatures[0].TotalArgs()
-	vc := &vmContext{r: r, p: &Program{}} // no Fns → any unit index is out of range
-	pr := &UserPolyRef{
+	vc := &vmContext{r: r, p: &compiler.Program{}} // no Fns → any unit index is out of range
+	pr := &compiler.UserPolyRef{
 		Word: "cpoly", Arity: n,
-		SigIdx: []int{0}, Units: []int{999}, Impls: []SigImpl{fd.Signatures[0].Impl},
+		SigIdx: []int{0}, Units: []int{999}, Impls: []core.SigImpl{fd.Signatures[0].Impl},
 	}
-	window := make([]Value, n)
+	window := make([]core.Value, n)
 	for i := range window {
-		window[i] = NewInteger(1)
+		window[i] = core.NewInteger(1)
 	}
 	_, _, err := vc.matchUserPoly(pr, window, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_USER_POLY unit shape mismatch at cpoly")
@@ -700,27 +703,27 @@ func TestSeam7MatchUserPolyUnitShapeMismatch(t *testing.T) {
 // installs for gradual poly dispatch.
 func TestSeam7CallUserPolyParamContract(t *testing.T) {
 	r := seam7Reg(t)
-	InstallFnDef(r, "cpoly2", FnDefInfo{
-		Signatures: []Signature{{
-			Params:  []FnParam{{Name: "n", Type: TAny}},
-			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: Boru([]Value{NewWord("n")}),
+	core.InstallFnDef(r, "cpoly2", core.FnDefInfo{
+		Signatures: []core.Signature{{
+			Params:  []core.FnParam{{Name: "n", Type: core.TAny}},
+			Returns: []*core.Type{core.TAny}, BarrierPos: core.BarrierAllForward,
+			Impl: core.Boru([]core.Value{core.NewWord("n")}),
 		}},
 	})
 	fd := r.Lookup("cpoly2")
 	n := fd.Signatures[0].TotalArgs()
-	p := &Program{
-		Consts: []Value{NewString("x")}, // a String flows into a concrete Integer param
-		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpCallUserPoly, Arg: 0}},
-		Debug:  []SrcPos{{}, {}},
-		UserPolys: []UserPolyRef{{
+	p := &compiler.Program{
+		Consts: []core.Value{core.NewString("x")}, // a String flows into a concrete Integer param
+		Code:   []compiler.Instr{{Op: compiler.OpPushConst, Arg: 0}, {Op: compiler.OpCallUserPoly, Arg: 0}},
+		Debug:  []core.SrcPos{{}, {}},
+		UserPolys: []compiler.UserPolyRef{{
 			Word: "cpoly2", Arity: n,
-			SigIdx: []int{0}, Units: []int{0}, Impls: []SigImpl{fd.Signatures[0].Impl},
+			SigIdx: []int{0}, Units: []int{0}, Impls: []core.SigImpl{fd.Signatures[0].Impl},
 		}},
-		Fns: []CompiledFn{{
-			Name: "cpoly2", NParams: n, NLocals: n, Params: []*Type{TInteger}, Returns: []*Type{TAny},
-			Code:  []Instr{{Op: OpPushLocal, Arg: 0}, {Op: OpRet}},
-			Debug: []SrcPos{{}, {}},
+		Fns: []compiler.CompiledFn{{
+			Name: "cpoly2", NParams: n, NLocals: n, Params: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TAny},
+			Code:  []compiler.Instr{{Op: compiler.OpPushLocal, Arg: 0}, {Op: compiler.OpRet}},
+			Debug: []core.SrcPos{{}, {}},
 		}},
 	}
 	_, err := RunProgram(p, r)
@@ -729,16 +732,16 @@ func TestSeam7CallUserPolyParamContract(t *testing.T) {
 
 func TestSeam7CallNativeHandlerTokenScreened(t *testing.T) {
 	r := seam7Reg(t)
-	sig := Signature{
+	sig := core.Signature{
 		Args: nil, BarrierPos: -1,
-		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			return []Value{NewWord("leak")}, nil // a tape-coupled token must never reach the stack
+		Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+			return []core.Value{core.NewWord("leak")}, nil // a tape-coupled token must never reach the stack
 		}),
 	}
-	p := &Program{
-		Code:  []Instr{{Op: OpCallNative, Arg: 0}},
-		Debug: []SrcPos{{}},
-		Sigs:  []SigRef{{Word: "cretword", Sig: &sig}},
+	p := &compiler.Program{
+		Code:  []compiler.Instr{{Op: compiler.OpCallNative, Arg: 0}},
+		Debug: []core.SrcPos{{}},
+		Sigs:  []compiler.SigRef{{Word: "cretword", Sig: &sig}},
 	}
 	_, err := RunProgram(p, r)
 	wantInternal(t, err, "tape-coupled handler result at cretword")

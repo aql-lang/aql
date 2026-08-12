@@ -14,9 +14,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/specfix"
-	"github.com/boru-lang/boru/parser/go"
+	core "github.com/boru-lang/boru/core/go"
+	parser "github.com/boru-lang/boru/parser/go"
+	"github.com/boru-lang/boru/test/specfix"
 )
 
 // specfixProbeRegistry is standaloneRegistry plus Go-constructed
@@ -30,7 +30,7 @@ import (
 //	dshi  dep scalar Integer <= 5 (inspect's hi-bound arm)
 //	tbl   table type [{c:Integer}] (inspect's table arm)
 //	t_    a lowercase TYPE binding (typedDef's name-clash arm)
-func specfixProbeRegistry(t *testing.T) *eng.Registry {
+func specfixProbeRegistry(t *testing.T) *core.Registry {
 	t.Helper()
 	r, err := standaloneRegistry()
 	if err != nil {
@@ -39,45 +39,45 @@ func specfixProbeRegistry(t *testing.T) *eng.Registry {
 	specfix.RegisterCheckExtras(r)
 	specfix.RegisterControlWords(r)
 
-	def := r.Types.MintType("Class/P", eng.TClass)
-	fields := eng.NewOrderedMap()
-	fields.Set("x", eng.NewTypeLiteral(eng.TInteger))
-	pinfo := eng.ClassTypeInfo{Fields: fields, ID: "P1", Name: "Class/P"}
-	r.Defs.PushType("P", def, eng.NewClassType(def, pinfo))
+	def := r.Types.MintType("Class/P", core.TClass)
+	fields := core.NewOrderedMap()
+	fields.Set("x", core.NewTypeLiteral(core.TInteger))
+	pinfo := core.ClassTypeInfo{Fields: fields, ID: "P1", Name: "Class/P"}
+	r.Defs.PushType("P", def, core.NewClassType(def, pinfo))
 
-	ifields := eng.NewOrderedMap()
-	ifields.Set("x", eng.NewInteger(1))
-	r.Defs.Push("p", eng.NewClassInstance(def, eng.ClassInstanceInfo{TypeRef: &pinfo, Fields: ifields}))
+	ifields := core.NewOrderedMap()
+	ifields.Set("x", core.NewInteger(1))
+	r.Defs.Push("p", core.NewClassInstance(def, core.ClassInstanceInfo{TypeRef: &pinfo, Fields: ifields}))
 
-	mm := eng.NewOrderedMap()
-	mm.Set("y", eng.NewInteger(2))
-	r.Defs.Push("pm", eng.NewValueRaw(def, eng.MapPayload{M: mm}))
+	mm := core.NewOrderedMap()
+	mm.Set("y", core.NewInteger(2))
+	r.Defs.Push("pm", core.NewValueRaw(def, core.MapPayload{M: mm}))
 
-	r.Defs.Push("dslo", eng.NewDepScalar(eng.DepGTE, eng.NewInteger(1)))
-	r.Defs.Push("dshi", eng.NewDepScalar(eng.DepLTE, eng.NewInteger(5)))
+	r.Defs.Push("dslo", core.NewDepScalar(core.DepGTE, core.NewInteger(1)))
+	r.Defs.Push("dshi", core.NewDepScalar(core.DepLTE, core.NewInteger(5)))
 
 	// dd: a CONCRETE disjunct binding — the loop-capture models see a
 	// def-resolved Disjunct on the body stack (source can only reach a
 	// computed enum there, which check mode models as a carrier).
-	r.Defs.Push("dd", eng.NewEnum([]eng.Value{eng.NewAtom("a"), eng.NewAtom("b")}))
+	r.Defs.Push("dd", core.NewEnum([]core.Value{core.NewAtom("a"), core.NewAtom("b")}))
 
-	tf := eng.NewOrderedMap()
-	tf.Set("c", eng.NewTypeLiteral(eng.TInteger))
-	r.Defs.Push("tbl", eng.NewValueRaw(eng.TList, eng.TableTypeInfo{Record: eng.RecordTypeInfo{Fields: tf}}))
+	tf := core.NewOrderedMap()
+	tf.Set("c", core.NewTypeLiteral(core.TInteger))
+	r.Defs.Push("tbl", core.NewValueRaw(core.TList, core.TableTypeInfo{Record: core.RecordTypeInfo{Fields: tf}}))
 
-	r.Defs.PushType("t_", eng.TInteger, eng.NewTypeLiteral(eng.TInteger))
+	r.Defs.PushType("t_", core.TInteger, core.NewTypeLiteral(core.TInteger))
 
 	// P0: a class type whose info carries no Type back-reference (the
 	// raw-ClassTypeInfo shape), so objectWithParentH's TClass fallback
 	// for the minted child's parent def is exercised.
-	def0 := r.Types.MintType("Class/P0", eng.TClass)
-	f0 := eng.NewOrderedMap()
-	f0.Set("x", eng.NewTypeLiteral(eng.TInteger))
-	r.Defs.PushType("P0", def0, eng.NewValueRaw(def0, eng.ClassTypeInfo{Fields: f0, ID: "P0", Name: "Class/P0"}))
+	def0 := r.Types.MintType("Class/P0", core.TClass)
+	f0 := core.NewOrderedMap()
+	f0.Set("x", core.NewTypeLiteral(core.TInteger))
+	r.Defs.PushType("P0", def0, core.NewValueRaw(def0, core.ClassTypeInfo{Fields: f0, ID: "P0", Name: "Class/P0"}))
 
 	// nosig: a Function binding whose FnDefInfo declares no signatures,
 	// so buildInspection's empty-signature normalisation is exercised.
-	r.Defs.Push("nosig", eng.NewFunction(eng.FnDefInfo{Name: "nosig"}))
+	r.Defs.Push("nosig", core.NewFunction(core.FnDefInfo{Name: "nosig"}))
 	return r
 }
 
@@ -172,10 +172,10 @@ func TestSpecfixGuardProbes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
-			out, runErr := eng.NewTop(specfixProbeRegistry(t)).Run(values)
+			out, runErr := core.NewTop(specfixProbeRegistry(t)).Run(values)
 			if row.wantErr != "" {
 				if runErr == nil {
-					t.Fatalf("want error containing %q, got %s", row.wantErr, eng.Canon(out))
+					t.Fatalf("want error containing %q, got %s", row.wantErr, core.Canon(out))
 				}
 				if !strings.Contains(runErr.Error(), row.wantErr) {
 					t.Errorf("error %q does not contain %q", runErr.Error(), row.wantErr)
@@ -185,7 +185,7 @@ func TestSpecfixGuardProbes(t *testing.T) {
 			if runErr != nil {
 				t.Fatalf("unexpected error: %v", runErr)
 			}
-			got := eng.Canon(out)
+			got := core.Canon(out)
 			if row.want != "" && got != row.want {
 				t.Errorf("got %s, want %s", got, row.want)
 			}
@@ -211,7 +211,7 @@ func TestSpecfixCheckModeGuards(t *testing.T) {
 	r := specfixProbeRegistry(t)
 	r.Source = input
 	done := r.Check.Begin()
-	_, runErr := eng.NewTop(r).Run(values)
+	_, runErr := core.NewTop(r).Run(values)
 	done()
 	if runErr == nil || !strings.Contains(runErr.Error(), "must be a concrete list, got type literal") {
 		t.Errorf("want the record concrete-list guard, got %v", runErr)
@@ -230,7 +230,7 @@ func TestSpecfixLoopDisjunctCapture(t *testing.T) {
 		r := specfixProbeRegistry(t)
 		r.Source = input
 		done := r.Check.Begin()
-		stack, runErr := eng.NewTop(r).Run(values)
+		stack, runErr := core.NewTop(r).Run(values)
 		done()
 		if runErr != nil {
 			t.Fatalf("%q: %v", input, runErr)
@@ -255,7 +255,7 @@ func TestSpecfixNilArgsStack(t *testing.T) {
 			}
 			r := specfixProbeRegistry(t)
 			r.Args = nil
-			_, runErr := eng.NewTop(r).Run(values)
+			_, runErr := core.NewTop(r).Run(values)
 			if runErr == nil || !strings.Contains(runErr.Error(), "argsstack: nil stack") {
 				t.Errorf("want the nil args-stack error, got %v", runErr)
 			}

@@ -39,28 +39,28 @@ import (
 
 // Test blocks re-homed by compiler-driven triage at the carve.
 
-func parenBody(tokens ...Value) []Value {
-	out := []Value{NewOpenParen()}
+func parenBody(tokens ...core.Value) []core.Value {
+	out := []core.Value{core.NewOpenParen()}
 	out = append(out, tokens...)
-	out = append(out, NewCloseParen())
+	out = append(out, core.NewCloseParen())
 	return out
 }
 
 // --- anonymous fn values ----------------------------------------------------
 
-func mapOf(pairs ...any) Value {
-	m := NewOrderedMap()
+func mapOf(pairs ...any) core.Value {
+	m := core.NewOrderedMap()
 	for i := 0; i < len(pairs); i += 2 {
-		m.Set(pairs[i].(string), pairs[i+1].(Value))
+		m.Set(pairs[i].(string), pairs[i+1].(core.Value))
 	}
-	return NewMap(m)
+	return core.NewMap(m)
 }
 
 // --- MakeRecord ------------------------------------------------------------
 
-func runUnitReg(t *testing.T) *Registry {
+func runUnitReg(t *testing.T) *core.Registry {
 	t.Helper()
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -68,9 +68,9 @@ func runUnitReg(t *testing.T) *Registry {
 	return r
 }
 
-func newTestRegistry(t *testing.T) *Registry {
+func newTestRegistry(t *testing.T) *core.Registry {
 	t.Helper()
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -78,37 +78,37 @@ func newTestRegistry(t *testing.T) *Registry {
 	return r
 }
 
-func intStrRecord() RecordTypeInfo {
-	fields := NewOrderedMap()
-	fields.Set("a", NewTypeLiteral(TInteger))
-	fields.Set("b", NewTypeLiteral(TString))
-	return RecordTypeInfo{Fields: fields}
+func intStrRecord() core.RecordTypeInfo {
+	fields := core.NewOrderedMap()
+	fields.Set("a", core.NewTypeLiteral(core.TInteger))
+	fields.Set("b", core.NewTypeLiteral(core.TString))
+	return core.RecordTypeInfo{Fields: fields}
 }
 
-func testClassType() ClassTypeInfo {
-	fields := NewOrderedMap()
-	fields.Set("x", NewTypeLiteral(TInteger))
-	fields.Set("y", NewTypeLiteral(TString))
-	return ClassTypeInfo{Fields: fields, Name: "Class/Cov", ID: "T_cov000000001"}
+func testClassType() core.ClassTypeInfo {
+	fields := core.NewOrderedMap()
+	fields.Set("x", core.NewTypeLiteral(core.TInteger))
+	fields.Set("y", core.NewTypeLiteral(core.TString))
+	return core.ClassTypeInfo{Fields: fields, Name: "Class/Cov", ID: "T_cov000000001"}
 }
 
 // registerIslandWord registers a word with the given compile effect and
 // arg count and returns the REGISTERED sig pointer (identity matters).
 func registerIslandWord(t *testing.T, r *core.Registry, name string, effect core.CompileEffect, argc int, barrier int) *core.Signature {
 	t.Helper()
-	args := make([]*Type, argc)
+	args := make([]*core.Type, argc)
 	for i := range args {
-		args[i] = TAny
+		args[i] = core.TAny
 	}
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: name,
-		Signatures: []Signature{{
+		Signatures: []core.Signature{{
 			Args:          args,
 			CompileEffect: effect,
-			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewInteger(0)}, nil
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				return []core.Value{core.NewInteger(0)}, nil
 			}),
-			Returns: []*Type{TInteger}, BarrierPos: barrier,
+			Returns: []*core.Type{core.TInteger}, BarrierPos: barrier,
 		}},
 	})
 	if err := r.Err(); err != nil {
@@ -117,14 +117,14 @@ func registerIslandWord(t *testing.T, r *core.Registry, name string, effect core
 	return &r.Lookup(name).Signatures[0]
 }
 
-func moduleGateReg(t *testing.T, module, export string) *Registry {
+func moduleGateReg(t *testing.T, module, export string) *core.Registry {
 	t.Helper()
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	r.InitRootContext()
-	if err := r.Capabilities.Set(CapPolicy, denyExportChecker{module: module, export: export}); err != nil {
+	if err := r.Capabilities.Set(core.CapPolicy, denyExportChecker{module: module, export: export}); err != nil {
 		t.Fatalf("install checker: %v", err)
 	}
 	return r
@@ -134,10 +134,10 @@ func moduleGateReg(t *testing.T, module, export string) *Registry {
 // implements ModuleCallChecker only.
 type denyExportChecker struct{ module, export string }
 
-func pnmRegistry(t *testing.T, sigs []Signature) *Registry {
+func pnmRegistry(t *testing.T, sigs []core.Signature) *core.Registry {
 	t.Helper()
 	r := covRegistry(t, nil)
-	r.RegisterNativeFunc(NativeFunc{Name: "pnmw", Signatures: sigs})
+	r.RegisterNativeFunc(core.NativeFunc{Name: "pnmw", Signatures: sigs})
 	if err := r.Err(); err != nil {
 		t.Fatalf("register pnmw: %v", err)
 	}
@@ -145,28 +145,28 @@ func pnmRegistry(t *testing.T, sigs []Signature) *Registry {
 }
 
 func registerUserPolyList(r *core.Registry) {
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "clany",
-		Signatures: []Signature{{
-			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewList([]Value{NewInteger(1), NewInteger(2)})}, nil
+		Signatures: []core.Signature{{
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				return []core.Value{core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2)})}, nil
 			}),
-			Returns: []*Type{TAny}, BarrierPos: -1,
+			Returns: []*core.Type{core.TAny}, BarrierPos: -1,
 		}},
 	})
-	InstallFnDef(r, "upolyl", FnDefInfo{
-		Signatures: []Signature{
+	core.InstallFnDef(r, "upolyl", core.FnDefInfo{
+		Signatures: []core.Signature{
 			{
-				Params:     []FnParam{{Name: "l", Type: TList}},
-				Returns:    []*Type{TAny},
-				Impl:       Boru(parenBody(NewWord("l"))),
-				BarrierPos: BarrierAllForward,
+				Params:     []core.FnParam{{Name: "l", Type: core.TList}},
+				Returns:    []*core.Type{core.TAny},
+				Impl:       core.Boru(parenBody(core.NewWord("l"))),
+				BarrierPos: core.BarrierAllForward,
 			},
 			{
-				Params:     []FnParam{{Name: "s", Type: TString}},
-				Returns:    []*Type{TAny},
-				Impl:       Boru(parenBody(NewInteger(-1))),
-				BarrierPos: BarrierAllForward,
+				Params:     []core.FnParam{{Name: "s", Type: core.TString}},
+				Returns:    []*core.Type{core.TAny},
+				Impl:       core.Boru(parenBody(core.NewInteger(-1))),
+				BarrierPos: core.BarrierAllForward,
 			},
 		},
 	})

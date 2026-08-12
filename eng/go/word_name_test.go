@@ -3,6 +3,8 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestValidateWordNameAccepts pins the names the language-fundamental
@@ -39,7 +41,7 @@ func TestValidateWordNameAccepts(t *testing.T) {
 		"$1", "$a-b", "f$o", "_$inner",
 	}
 	for _, name := range good {
-		if err := ValidateWordName(name); err != nil {
+		if err := core.ValidateWordName(name); err != nil {
 			t.Errorf("ValidateWordName(%q) should accept, got %v", name, err)
 		}
 	}
@@ -79,12 +81,12 @@ func TestValidateWordNameRejects(t *testing.T) {
 		{"is-empty?", "illegal"},
 	}
 	for _, c := range cases {
-		err := ValidateWordName(c.name)
+		err := core.ValidateWordName(c.name)
 		if err == nil {
 			t.Errorf("ValidateWordName(%q) should reject, got nil error", c.name)
 			continue
 		}
-		boru, ok := err.(*BoruError)
+		boru, ok := err.(*core.BoruError)
 		if !ok {
 			t.Errorf("ValidateWordName(%q): expected *BoruError, got %T", c.name, err)
 			continue
@@ -102,15 +104,15 @@ func TestValidateWordNameRejects(t *testing.T) {
 // TestRegisterNativeFuncRejectsBadName — the validation chains all
 // the way out to RegisterNativeFunc; a bad name lands in r.errs.
 func TestRegisterNativeFuncRejectsBadName(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "Integer", // uppercase — invalid
-		Signatures: []Signature{{
-			Args: []*Type{TInteger},
-			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger},
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 				return nil, nil
 			}), BarrierPos: 0,
 		}},
@@ -128,29 +130,29 @@ func TestRegisterNativeFuncRejectsBadName(t *testing.T) {
 // rule through a minimal in-test `def` fixture so the assertion
 // reaches the same code path users hit with the production lang word.
 func TestDefRejectsBadName(t *testing.T) {
-	r, _ := NewRegistry()
-	r.RegisterNativeFunc(NativeFunc{
+	r, _ := core.NewRegistry()
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "def",
 
-		Signatures: []Signature{{
-			Args:       []*Type{TAtom, TAny},
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TAtom, core.TAny},
 			QuoteArgs:  map[int]bool{0: true},
 			NoEvalArgs: map[int]bool{1: true},
-			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
 				name, _ := args[0].AsConcreteAtom()
-				if err := ValidateWordName(name); err != nil {
+				if err := core.ValidateWordName(name); err != nil {
 					return nil, err
 				}
 				reg.Defs.Push(name, args[1])
 				return nil, nil
 			}),
-			Returns: []*Type{}, BarrierPos: -1,
+			Returns: []*core.Type{}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()
 
-	_, err := NewTop(r).Run([]Value{
-		NewWord("def"), NewWord("Integer"), NewInteger(42),
+	_, err := core.NewTop(r).Run([]core.Value{
+		core.NewWord("def"), core.NewWord("Integer"), core.NewInteger(42),
 	})
 	if err == nil {
 		t.Fatal("expected def to reject uppercase name, got nil")
@@ -169,7 +171,7 @@ func TestUnderscoreLeading(t *testing.T) {
 		"__pa", "__mark", "__fw", // engine-internal markers
 		"_unused", "_tmp-result", // user-facing leading underscore
 	} {
-		if err := ValidateWordName(name); err != nil {
+		if err := core.ValidateWordName(name); err != nil {
 			t.Errorf("underscore-leading %q should be valid, got %v", name, err)
 		}
 	}

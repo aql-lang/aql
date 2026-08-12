@@ -18,5 +18,6 @@ use (
 	./test/go
 	./tools/piecetool
 	./test/solardemo
+	./test/specfix
 	./wpg
 )

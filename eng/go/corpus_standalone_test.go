@@ -3,7 +3,7 @@ package eng_test
 // The STANDALONE kernel corpus run: every eng/spec row executed by
 // eng's own test suite — no other module's tests involved — so the
 // kernel's coverage stands on its own (the merged repo-wide cover gate
-// remains on top). The registry is eng.NewRegistry + the specfix
+// remains on top). The registry is core.NewRegistry + the specfix
 // fixture words + a mechanism-only stand-in for the content layer's
 // Micron Ideal: Pathon construction is kernel plumbing (MakePathon),
 // so its rows run here; the six Emailon/Urlon validator rows skip via
@@ -17,9 +17,11 @@ import (
 	"strings"
 	"testing"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 	eng "github.com/boru-lang/boru/eng/go"
-	"github.com/boru-lang/boru/eng/go/specfix"
-	"github.com/boru-lang/boru/parser/go"
+	parser "github.com/boru-lang/boru/parser/go"
+	"github.com/boru-lang/boru/test/specfix"
 )
 
 // standaloneContentRow reports whether a corpus row needs the content
@@ -33,24 +35,24 @@ func standaloneContentRow(input string) bool {
 // Instantiate wired to the kernel's own Pathon constructor. A
 // non-Pathon kind reaching it is a harness bug — the skip predicate
 // keeps those rows out.
-func installStandaloneMicronIdeal(r *eng.Registry) {
-	r.Ideals.Register(&eng.Ideal{
+func installStandaloneMicronIdeal(r *core.Registry) {
+	r.Ideals.Register(&core.Ideal{
 		Name:    "Micron",
 		Enabled: true,
-		Accepts: func(v eng.Value) bool {
-			return eng.IsMicronType(v) || (eng.IsBareTypeNode(v) && (&v).ConformsTo(eng.TMicron))
+		Accepts: func(v core.Value) bool {
+			return core.IsMicronType(v) || (core.IsBareTypeNode(v) && (&v).ConformsTo(core.TMicron))
 		},
-		Instantiate: func(typ, data eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-			if (&typ).Equal(eng.TPathon) {
-				return eng.MakePathon(data, false)
+		Instantiate: func(typ, data core.Value, _ *core.Registry) ([]core.Value, error) {
+			if (&typ).Equal(core.TPathon) {
+				return core.MakePathon(data, false)
 			}
 			return nil, fmt.Errorf("standalone corpus: %s needs the content layer", typ.String())
 		},
 	})
 }
 
-func standaloneRegistry() (*eng.Registry, error) {
-	r, err := eng.NewRegistry()
+func standaloneRegistry() (*core.Registry, error) {
+	r, err := core.NewRegistry()
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +64,7 @@ func standaloneRegistry() (*eng.Registry, error) {
 
 // TestSpecStandalone is the value-mode corpus, kernel-only.
 func TestSpecStandalone(t *testing.T) {
-	specfix.RunDir(t, filepath.Join("..", "spec"), func(input string) ([]eng.Value, error) {
+	specfix.RunDir(t, filepath.Join("..", "spec"), func(input string) ([]core.Value, error) {
 		if standaloneContentRow(input) {
 			return nil, specfix.ErrSkipRow
 		}
@@ -74,7 +76,7 @@ func TestSpecStandalone(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		return eng.NewTop(r).Run(values)
+		return core.NewTop(r).Run(values)
 	})
 }
 
@@ -96,7 +98,7 @@ func TestCheckSpecStandalone(t *testing.T) {
 		r.Source = input
 
 		done := r.Check.Begin()
-		out, runErr := eng.NewTop(r).Run(values)
+		out, runErr := core.NewTop(r).Run(values)
 		r.RescueForwardRefDiagnostics()
 		r.Check.EmitUnusedDefDiagnostics()
 		diags := r.Check.Diagnostics
@@ -119,7 +121,7 @@ func TestCheckSpecStandalone(t *testing.T) {
 // the emit/lower/VM pipeline is exercised — and validated — by eng's
 // own suite.
 func TestSpecCompiledStandalone(t *testing.T) {
-	specfix.RunDir(t, filepath.Join("..", "spec"), func(input string) ([]eng.Value, error) {
+	specfix.RunDir(t, filepath.Join("..", "spec"), func(input string) ([]core.Value, error) {
 		if standaloneContentRow(input) {
 			return nil, specfix.ErrSkipRow
 		}
@@ -134,20 +136,20 @@ func TestSpecCompiledStandalone(t *testing.T) {
 		rA.Source = input
 
 		finish := rA.Check.BeginCompilePass()
-		residual, runErr := eng.NewTop(rA).Run(values)
+		residual, runErr := core.NewTop(rA).Run(values)
 		rA.RescueForwardRefDiagnostics()
 		rA.Check.EmitUnusedDefDiagnostics()
-		var prog *eng.Program
+		var prog *compiler.Program
 		if runErr == nil && !rA.Check.SuppressedRuntimeError && !rA.Check.AmbiguousGradualSplit {
 			refuse := false
 			for _, d := range rA.Check.Diagnostics {
-				if !d.RuntimeMirror && (d.Severity == eng.SeverityError || d.CaughtAtRuntime) {
+				if !d.RuntimeMirror && (d.Severity == core.SeverityError || d.CaughtAtRuntime) {
 					refuse = true
 					break
 				}
 			}
 			if !refuse {
-				if p, _, ok := rA.Check.Recorder().(*eng.EmitState).Finalize(residual); ok {
+				if p, _, ok := rA.Check.Recorder().(*compiler.EmitState).Finalize(residual); ok {
 					prog = p
 				}
 			}
@@ -156,7 +158,7 @@ func TestSpecCompiledStandalone(t *testing.T) {
 
 		if prog != nil {
 			out, vmErr := eng.RunProgram(prog, rA)
-			var be *eng.BoruError
+			var be *core.BoruError
 			if vmErr == nil || !errors.As(vmErr, &be) || be.Code != "internal_error" {
 				return out, vmErr
 			}
@@ -176,7 +178,7 @@ func TestSpecCompiledStandalone(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		return eng.NewTop(rB).Run(reparsed)
+		return core.NewTop(rB).Run(reparsed)
 	})
 }
 
@@ -200,16 +202,16 @@ func TestInterpNestedCarrierNoBake(t *testing.T) {
 	}
 	rA.Source = input
 	finish := rA.Check.BeginCompilePass()
-	residual, runErr := eng.NewTop(rA).Run(values)
-	var prog *eng.Program
+	residual, runErr := core.NewTop(rA).Run(values)
+	var prog *compiler.Program
 	if runErr == nil {
-		if p, _, ok := rA.Check.Recorder().(*eng.EmitState).Finalize(residual); ok {
+		if p, _, ok := rA.Check.Recorder().(*compiler.EmitState).Finalize(residual); ok {
 			prog = p
 		}
 	}
 	finish()
 
-	var out []eng.Value
+	var out []core.Value
 	if prog != nil {
 		out, err = eng.RunProgram(prog, rA)
 		if err != nil {
@@ -218,12 +220,12 @@ func TestInterpNestedCarrierNoBake(t *testing.T) {
 	} else {
 		rB, _ := standaloneRegistry()
 		reparsed, _ := parser.Parse(input)
-		out, err = eng.NewTop(rB).Run(reparsed)
+		out, err = core.NewTop(rB).Run(reparsed)
 		if err != nil {
 			t.Fatalf("interp: %v", err)
 		}
 	}
-	if got := eng.Canon(out); got != expected {
+	if got := core.Canon(out); got != expected {
 		t.Errorf("got %s, want %s (compiled=%v)", got, expected, prog != nil)
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
-	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/stackform"
 )
 
 // fpEval makes a deterministic EvalFn from a predicate over forms.

@@ -3,6 +3,8 @@ package eng
 import (
 	"strings"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // These tests exercise the engine's deeper machinery (type system,
@@ -15,17 +17,17 @@ import (
 func TestTypePathBuiltins(t *testing.T) {
 	// Round-trip a few well-known type names through the canonical
 	// table and confirm they reach the correct *Type values.
-	table := TypeNameTable()
+	table := core.TypeNameTable()
 	cases := []struct {
 		name string
-		want *Type
+		want *core.Type
 	}{
-		{"Integer", TInteger},
-		{"String", TString},
-		{"Boolean", TBoolean},
-		{"List", TList},
-		{"Map", TMap},
-		{"Any", TAny},
+		{"Integer", core.TInteger},
+		{"String", core.TString},
+		{"Boolean", core.TBoolean},
+		{"List", core.TList},
+		{"Map", core.TMap},
+		{"Any", core.TAny},
 	}
 	for _, c := range cases {
 		got, ok := table[c.name]
@@ -41,29 +43,29 @@ func TestTypePathBuiltins(t *testing.T) {
 
 func TestTypeMatchHierarchy(t *testing.T) {
 	// Integer is a subtype of Number is a subtype of Scalar.
-	if !TInteger.ConformsTo(TNumber) {
+	if !core.TInteger.ConformsTo(core.TNumber) {
 		t.Error("Integer should match Number")
 	}
-	if !TInteger.ConformsTo(TScalar) {
+	if !core.TInteger.ConformsTo(core.TScalar) {
 		t.Error("Integer should match Scalar")
 	}
-	if !TInteger.ConformsTo(TAny) {
+	if !core.TInteger.ConformsTo(core.TAny) {
 		t.Error("Integer should match Any")
 	}
-	if TNumber.ConformsTo(TInteger) {
+	if core.TNumber.ConformsTo(core.TInteger) {
 		t.Error("Number should NOT match Integer (only the reverse)")
 	}
 }
 
 func TestCommonAncestorType(t *testing.T) {
 	// Integer + Float → Number; String + Integer → Scalar; List + Integer → Any.
-	if got := CommonAncestorType(TInteger, TFloat); !got.Equal(TNumber) {
+	if got := core.CommonAncestorType(core.TInteger, core.TFloat); !got.Equal(core.TNumber) {
 		t.Errorf("Integer+Float: got %v, want Number", got)
 	}
-	if got := CommonAncestorType(TString, TInteger); !got.Equal(TScalar) {
+	if got := core.CommonAncestorType(core.TString, core.TInteger); !got.Equal(core.TScalar) {
 		t.Errorf("String+Integer: got %v, want Scalar", got)
 	}
-	if got := CommonAncestorType(TList, TInteger); !got.Equal(TAny) {
+	if got := core.CommonAncestorType(core.TList, core.TInteger); !got.Equal(core.TAny) {
 		t.Errorf("List+Integer: got %v, want Any", got)
 	}
 }
@@ -73,21 +75,21 @@ func TestCommonAncestorType(t *testing.T) {
 func TestValueConstructors(t *testing.T) {
 	cases := []struct {
 		name  string
-		value Value
-		want  *Type
+		value core.Value
+		want  *core.Type
 	}{
-		{"integer", NewInteger(42), TInteger},
-		{"decimal", NewFloat(3.14), TFloat},
-		{"string", NewString("hi"), TString},
-		{"boolean", NewBoolean(true), TBoolean},
-		{"atom", NewAtom("x"), TAtom},
+		{"integer", core.NewInteger(42), core.TInteger},
+		{"decimal", core.NewFloat(3.14), core.TFloat},
+		{"string", core.NewString("hi"), core.TString},
+		{"boolean", core.NewBoolean(true), core.TBoolean},
+		{"atom", core.NewAtom("x"), core.TAtom},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if !c.value.Parent.ConformsTo(c.want) {
 				t.Errorf("Parent = %v does not match expected %v", c.value.Parent, c.want)
 			}
-			if !IsConcrete(c.value) {
+			if !core.IsConcrete(c.value) {
 				t.Error("Data should not be nil for a concrete value")
 			}
 		})
@@ -95,18 +97,18 @@ func TestValueConstructors(t *testing.T) {
 }
 
 func TestTypeLiteralVsConcrete(t *testing.T) {
-	lit := NewTypeLiteral(TString)
-	concrete := NewString("hello")
-	if !IsTypeLiteral(lit) {
+	lit := core.NewTypeLiteral(core.TString)
+	concrete := core.NewString("hello")
+	if !core.IsTypeLiteral(lit) {
 		t.Error("type literal should be IsTypeLiteral")
 	}
-	if IsConcrete(lit) {
+	if core.IsConcrete(lit) {
 		t.Error("type literal should NOT be IsConcrete")
 	}
-	if IsTypeLiteral(concrete) {
+	if core.IsTypeLiteral(concrete) {
 		t.Error("concrete string should NOT be IsTypeLiteral")
 	}
-	if !IsConcrete(concrete) {
+	if !core.IsConcrete(concrete) {
 		t.Error("concrete string should be IsConcrete")
 	}
 }
@@ -114,7 +116,7 @@ func TestTypeLiteralVsConcrete(t *testing.T) {
 // --- Registry def-stack helpers ------------------------------------------
 
 func TestDefStackPushPopShadow(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +124,7 @@ func TestDefStackPushPopShadow(t *testing.T) {
 		t.Error("fresh registry should not have x")
 	}
 
-	r.Defs.Push("x", NewInteger(1))
+	r.Defs.Push("x", core.NewInteger(1))
 	if !r.Defs.Has("x") {
 		t.Error("after push, x should exist")
 	}
@@ -130,15 +132,15 @@ func TestDefStackPushPopShadow(t *testing.T) {
 		t.Errorf("depth = %d, want 1", d)
 	}
 	v, _ := r.Defs.Top("x")
-	got, _ := AsInteger(v)
+	got, _ := core.AsInteger(v)
 	if got != 1 {
 		t.Errorf("top = %d, want 1", got)
 	}
 
 	// Shadow with a second push.
-	r.Defs.Push("x", NewInteger(2))
+	r.Defs.Push("x", core.NewInteger(2))
 	v, _ = r.Defs.Top("x")
-	got, _ = AsInteger(v)
+	got, _ = core.AsInteger(v)
 	if got != 2 {
 		t.Errorf("after second push, top = %d, want 2", got)
 	}
@@ -146,7 +148,7 @@ func TestDefStackPushPopShadow(t *testing.T) {
 	// Pop reveals the original.
 	r.Defs.Pop("x")
 	v, _ = r.Defs.Top("x")
-	got, _ = AsInteger(v)
+	got, _ = core.AsInteger(v)
 	if got != 1 {
 		t.Errorf("after pop, top = %d, want 1", got)
 	}
@@ -162,12 +164,12 @@ func TestSnapshotRestoreDefDepths(t *testing.T) {
 	// SnapshotDefDepths captures a per-name depth map; RestoreToDefDepths
 	// truncates each name back to its captured depth. This is the
 	// mechanism fn-body sandboxing uses to drop temporary bindings.
-	r, _ := NewRegistry()
-	r.Defs.Push("a", NewInteger(1))
+	r, _ := core.NewRegistry()
+	r.Defs.Push("a", core.NewInteger(1))
 	snap := r.Defs.Snapshot()
 
-	r.Defs.Push("a", NewInteger(2))
-	r.Defs.Push("b", NewInteger(99))
+	r.Defs.Push("a", core.NewInteger(2))
+	r.Defs.Push("b", core.NewInteger(99))
 	if d := r.Defs.Depth("a"); d != 2 {
 		t.Errorf("depth after pushes: a=%d, want 2", d)
 	}
@@ -187,49 +189,49 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 	// Register a "describe" word with two overloads: one for Integer,
 	// one for String. The engine must pick the right one based on arg
 	// types.
-	r, _ := NewRegistry()
-	r.RegisterNativeFunc(NativeFunc{
+	r, _ := core.NewRegistry()
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "describe",
 
-		Signatures: []Signature{
+		Signatures: []core.Signature{
 			{
-				Args: []*Type{TInteger},
-				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					n, _ := AsInteger(args[0])
+				Args: []*core.Type{core.TInteger},
+				Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+					n, _ := core.AsInteger(args[0])
 					if n == 0 {
-						return []Value{NewString("zero-int")}, nil
+						return []core.Value{core.NewString("zero-int")}, nil
 					}
-					return []Value{NewString("nonzero-int")}, nil
+					return []core.Value{core.NewString("nonzero-int")}, nil
 				}),
-				Returns: []*Type{TString}, BarrierPos: -1,
+				Returns: []*core.Type{core.TString}, BarrierPos: -1,
 			},
 			{
-				Args: []*Type{TString},
-				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					s, _ := AsString(args[0])
-					return []Value{NewString("string:" + s)}, nil
+				Args: []*core.Type{core.TString},
+				Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+					s, _ := core.AsString(args[0])
+					return []core.Value{core.NewString("string:" + s)}, nil
 				}),
-				Returns: []*Type{TString}, BarrierPos: -1,
+				Returns: []*core.Type{core.TString}, BarrierPos: -1,
 			},
 		},
 	})
 	r.InitRootContext()
 
 	cases := []struct {
-		input []Value
+		input []core.Value
 		want  string
 	}{
-		{[]Value{NewWord("describe"), NewInteger(5)}, "nonzero-int"},
-		{[]Value{NewWord("describe"), NewInteger(0)}, "zero-int"},
-		{[]Value{NewWord("describe"), NewString("hi")}, "string:hi"},
+		{[]core.Value{core.NewWord("describe"), core.NewInteger(5)}, "nonzero-int"},
+		{[]core.Value{core.NewWord("describe"), core.NewInteger(0)}, "zero-int"},
+		{[]core.Value{core.NewWord("describe"), core.NewString("hi")}, "string:hi"},
 	}
 	for _, c := range cases {
-		out, err := NewTop(r).Run(c.input)
+		out, err := core.NewTop(r).Run(c.input)
 		if err != nil {
 			t.Errorf("%v: error %v", c.input, err)
 			continue
 		}
-		got, _ := AsString(out[0])
+		got, _ := core.AsString(out[0])
 		if got != c.want {
 			t.Errorf("%v: got %q, want %q", c.input, got, c.want)
 		}
@@ -240,39 +242,39 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 	// Generic (Any) and specific (Integer) overloads of the same word.
 	// A concrete integer arg must dispatch to the specific overload.
 	hits := map[string]int{}
-	r, _ := NewRegistry()
-	r.RegisterNativeFunc(NativeFunc{
+	r, _ := core.NewRegistry()
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "tag",
 
-		Signatures: []Signature{
+		Signatures: []core.Signature{
 			{
-				Args: []*Type{TAny},
-				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Args: []*core.Type{core.TAny},
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 					hits["any"]++
-					return []Value{NewString("any")}, nil
+					return []core.Value{core.NewString("any")}, nil
 				}),
-				Returns: []*Type{TString}, BarrierPos: -1,
+				Returns: []*core.Type{core.TString}, BarrierPos: -1,
 			},
 			{
-				Args: []*Type{TInteger},
-				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Args: []*core.Type{core.TInteger},
+				Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 					hits["int"]++
-					return []Value{NewString("int")}, nil
+					return []core.Value{core.NewString("int")}, nil
 				}),
-				Returns: []*Type{TString}, BarrierPos: -1,
+				Returns: []*core.Type{core.TString}, BarrierPos: -1,
 			},
 		},
 	})
 	r.InitRootContext()
 
-	if _, err := NewTop(r).Run([]Value{NewWord("tag"), NewInteger(7)}); err != nil {
+	if _, err := core.NewTop(r).Run([]core.Value{core.NewWord("tag"), core.NewInteger(7)}); err != nil {
 		t.Fatal(err)
 	}
 	if hits["int"] != 1 || hits["any"] != 0 {
 		t.Errorf("specificity broken: hits=%v", hits)
 	}
 
-	if _, err := NewTop(r).Run([]Value{NewWord("tag"), NewString("foo")}); err != nil {
+	if _, err := core.NewTop(r).Run([]core.Value{core.NewWord("tag"), core.NewString("foo")}); err != nil {
 		t.Fatal(err)
 	}
 	if hits["any"] != 1 {
@@ -287,24 +289,24 @@ func TestOutputCapture(t *testing.T) {
 	// redirect it to a builder and read back the data — this verifies
 	// the engine threads r.Output through to handlers.
 	var buf strings.Builder
-	r, _ := NewRegistry()
+	r, _ := core.NewRegistry()
 	r.Output = &buf
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "emit",
 
-		Signatures: []Signature{{
-			Args: []*Type{TString},
-			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				s, _ := AsString(args[0])
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TString},
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
+				s, _ := core.AsString(args[0])
 				reg.Output.Write([]byte(s))
 				return nil, nil
 			}),
-			Returns: []*Type{}, BarrierPos: -1,
+			Returns: []*core.Type{}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()
 
-	if _, err := NewTop(r).Run([]Value{NewWord("emit"), NewString("hello world")}); err != nil {
+	if _, err := core.NewTop(r).Run([]core.Value{core.NewWord("emit"), core.NewString("hello world")}); err != nil {
 		t.Fatal(err)
 	}
 	if buf.String() != "hello world" {
@@ -317,20 +319,20 @@ func TestOutputCapture(t *testing.T) {
 func TestBoruErrorPropagation(t *testing.T) {
 	// A handler that explicitly returns a BoruError must surface that
 	// error from Run with the same code.
-	r, _ := NewRegistry()
-	r.RegisterNativeFunc(NativeFunc{
+	r, _ := core.NewRegistry()
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "bork",
 
-		Signatures: []Signature{{
-			Args: []*Type{TInteger},
-			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger},
+			Impl: core.Go(func(_ []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
 				return nil, reg.BoruError("test_failure", "always fails", "bork")
 			}), BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()
 
-	_, err := NewTop(r).Run([]Value{NewWord("bork"), NewInteger(0)})
+	_, err := core.NewTop(r).Run([]core.Value{core.NewWord("bork"), core.NewInteger(0)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -342,8 +344,8 @@ func TestBoruErrorPropagation(t *testing.T) {
 // --- Value helpers ------------------------------------------------------
 
 func TestRequireConcreteList(t *testing.T) {
-	concrete := NewList([]Value{NewInteger(1), NewInteger(2)})
-	rl, err := RequireConcreteList(concrete, "test")
+	concrete := core.NewList([]core.Value{core.NewInteger(1), core.NewInteger(2)})
+	rl, err := core.RequireConcreteList(concrete, "test")
 	if err != nil {
 		t.Fatalf("concrete list rejected: %v", err)
 	}
@@ -352,8 +354,8 @@ func TestRequireConcreteList(t *testing.T) {
 	}
 
 	// A bare TList literal must be rejected.
-	lit := NewTypeLiteral(TList)
-	if _, err := RequireConcreteList(lit, "test"); err == nil {
+	lit := core.NewTypeLiteral(core.TList)
+	if _, err := core.RequireConcreteList(lit, "test"); err == nil {
 		t.Error("expected error for type literal, got nil")
 	}
 }
@@ -361,12 +363,12 @@ func TestRequireConcreteList(t *testing.T) {
 func TestNewReadList(t *testing.T) {
 	// External constructor: this is the only way to build a ReadList
 	// from outside eng.
-	src := []Value{NewInteger(1), NewInteger(2), NewInteger(3)}
-	rl := NewReadList(src)
+	src := []core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)}
+	rl := core.NewReadList(src)
 	if rl.Len() != 3 {
 		t.Fatalf("len = %d, want 3", rl.Len())
 	}
-	got, _ := AsInteger(rl.Get(1))
+	got, _ := core.AsInteger(rl.Get(1))
 	if got != 2 {
 		t.Errorf("Get(1) = %d, want 2", got)
 	}
@@ -375,12 +377,12 @@ func TestNewReadList(t *testing.T) {
 // --- DefaultFormats moved to the host package; verify formats slot is empty ---
 
 func TestRegistryFormatsStartEmpty(t *testing.T) {
-	// eng.NewRegistry deliberately exposes no host concerns —
+	// core.NewRegistry deliberately exposes no host concerns —
 	// no formats, no file ops, no SQL store, only a generic
 	// capability slot. The host package wires every external
 	// service in via Registry.SetCapability before running user
 	// code. Pinned here so future drift surfaces in CI.
-	r, _ := NewRegistry()
+	r, _ := core.NewRegistry()
 	names, err := r.Capabilities.Names()
 	if err != nil {
 		t.Fatalf("Names: %v", err)

@@ -3,6 +3,8 @@ package eng
 import (
 	"testing"
 	"time"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // The process substrate (process.go): bounded mailboxes, overflow
@@ -13,13 +15,13 @@ import (
 // positive/negative pairing rule.
 
 func TestProcessMailboxFIFO(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 8, OverflowBlock)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 8, core.OverflowBlock)
 	if err := rt.Insert(p); err != nil {
 		t.Fatal(err)
 	}
 	for i := int64(1); i <= 3; i++ {
-		if err := p.Send(NewInteger(i)); err != nil {
+		if err := p.Send(core.NewInteger(i)); err != nil {
 			t.Fatalf("send %d: %v", i, err)
 		}
 	}
@@ -28,44 +30,44 @@ func TestProcessMailboxFIFO(t *testing.T) {
 		if err != nil || !ok {
 			t.Fatalf("pop %d: ok=%v err=%v", i, ok, err)
 		}
-		if n, _ := AsInteger(msg); n != i {
+		if n, _ := core.AsInteger(msg); n != i {
 			t.Errorf("pop %d: got %d (mailbox must be FIFO)", i, n)
 		}
 	}
 }
 
 func TestProcessMailboxOverflowFail(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 1, OverflowFail)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 1, core.OverflowFail)
 	_ = rt.Insert(p)
-	if err := p.Send(NewInteger(1)); err != nil {
+	if err := p.Send(core.NewInteger(1)); err != nil {
 		t.Fatalf("first send must fit: %v", err)
 	}
-	if err := p.Send(NewInteger(2)); err != ErrMailboxOverload {
+	if err := p.Send(core.NewInteger(2)); err != core.ErrMailboxOverload {
 		t.Errorf("second send into a full 'fail' mailbox: got %v, want ErrMailboxOverload", err)
 	}
 	// After draining one, sends succeed again.
 	if _, ok, _ := p.PopFront(0, false); !ok {
 		t.Fatal("drain failed")
 	}
-	if err := p.Send(NewInteger(3)); err != nil {
+	if err := p.Send(core.NewInteger(3)); err != nil {
 		t.Errorf("send after drain: %v", err)
 	}
 }
 
 func TestProcessMailboxOverflowDrop(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 1, OverflowDrop)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 1, core.OverflowDrop)
 	_ = rt.Insert(p)
-	_ = p.Send(NewInteger(1))
-	if err := p.Send(NewInteger(2)); err != nil {
+	_ = p.Send(core.NewInteger(1))
+	if err := p.Send(core.NewInteger(2)); err != nil {
 		t.Fatalf("drop overflow must not error: %v", err)
 	}
 	msg, ok, _ := p.PopFront(0, false)
 	if !ok {
 		t.Fatal("pop failed")
 	}
-	if n, _ := AsInteger(msg); n != 1 {
+	if n, _ := core.AsInteger(msg); n != 1 {
 		t.Errorf("kept message = %d, want 1 (the NEW message is dropped)", n)
 	}
 	if p.MailboxDepth() != 0 {
@@ -74,12 +76,12 @@ func TestProcessMailboxOverflowDrop(t *testing.T) {
 }
 
 func TestProcessMailboxOverflowBlockUnblocksOnDrain(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 1, OverflowBlock)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 1, core.OverflowBlock)
 	_ = rt.Insert(p)
-	_ = p.Send(NewInteger(1))
+	_ = p.Send(core.NewInteger(1))
 	done := make(chan error, 1)
-	go func() { done <- p.Send(NewInteger(2)) }()
+	go func() { done <- p.Send(core.NewInteger(2)) }()
 	select {
 	case err := <-done:
 		t.Fatalf("blocked send returned early: %v", err)
@@ -99,8 +101,8 @@ func TestProcessMailboxOverflowBlockUnblocksOnDrain(t *testing.T) {
 }
 
 func TestProcessPopFrontDeadline(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 4, OverflowBlock)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 4, core.OverflowBlock)
 	_ = rt.Insert(p)
 	start := time.Now()
 	_, ok, err := p.PopFront(60*time.Millisecond, true)
@@ -116,11 +118,11 @@ func TestProcessPopFrontDeadline(t *testing.T) {
 }
 
 func TestProcessSendToClosedIsDropped(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 4, OverflowBlock)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 4, core.OverflowBlock)
 	_ = rt.Insert(p)
 	p.Close()
-	if err := p.Send(NewInteger(1)); err != nil {
+	if err := p.Send(core.NewInteger(1)); err != nil {
 		t.Errorf("send to closed process must be a silent drop, got %v", err)
 	}
 	if p.MailboxDepth() != 0 {
@@ -129,8 +131,8 @@ func TestProcessSendToClosedIsDropped(t *testing.T) {
 }
 
 func TestProcessRuntimeShutdownWakesReceiver(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 4, OverflowBlock)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 4, core.OverflowBlock)
 	_ = rt.Insert(p)
 	done := make(chan error, 1)
 	go func() {
@@ -141,22 +143,22 @@ func TestProcessRuntimeShutdownWakesReceiver(t *testing.T) {
 	rt.Shutdown()
 	select {
 	case err := <-done:
-		if err != ErrRuntimeDown {
+		if err != core.ErrRuntimeDown {
 			t.Errorf("blocked receive after shutdown: got %v, want ErrRuntimeDown", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("blocked receive never woke on shutdown")
 	}
 	// Inserting into a down runtime is refused.
-	if err := rt.Insert(NewProcess(rt, 1, OverflowBlock)); err != ErrRuntimeDown {
+	if err := rt.Insert(core.NewProcess(rt, 1, core.OverflowBlock)); err != core.ErrRuntimeDown {
 		t.Errorf("insert after shutdown: got %v, want ErrRuntimeDown", err)
 	}
 }
 
 func TestProcessNameRegistry(t *testing.T) {
-	rt := NewProcessRuntime()
-	a := NewProcess(rt, 4, OverflowBlock)
-	b := NewProcess(rt, 4, OverflowBlock)
+	rt := core.NewProcessRuntime()
+	a := core.NewProcess(rt, 4, core.OverflowBlock)
+	b := core.NewProcess(rt, 4, core.OverflowBlock)
 	_ = rt.Insert(a)
 	_ = rt.Insert(b)
 
@@ -189,7 +191,7 @@ func TestProcessNameRegistry(t *testing.T) {
 }
 
 func TestForkConcurrentSharesProcessRuntime(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}

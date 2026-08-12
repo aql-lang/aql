@@ -1,0 +1,36 @@
+# check/spec/dynamic — non-concrete operands and the carriers they make.
+#
+# Every row here turns on anyq (Integer -> Any). Its return is not a
+# concrete leaf, so its result is a NON-CONCRETE operand, and that is the
+# only thing that reaches the dynamic-carrier family in carrier.go: the
+# "is any operand non-concrete" predicates, the disjunct carriers, and the
+# counting of which overloads stay reachable when the operand's type is
+# not yet known. A fully concrete row cannot get there by construction.
+#
+# `dynamic(X)` in the expected column is a dynamic carrier over leaf X;
+# a bare X is a strict one.
+
+# --- a non-concrete return is carried dynamically, not collapsed to Any ---
+1 anyq	dynamic(Any)
+1 anyq anyq	dynamic(Any)
+
+# --- feeding it to an OVERLOADED word keeps both arms live: the operand
+#     conforms to neither Integer nor String yet, so the result is the
+#     disjunction of what the reachable arms return ---
+1 anyq twoq	dynamic(Disjunct)
+1 anyq twoq twoq	dynamic(Disjunct)	the disjunct re-enters and stays disjunct
+
+# --- feeding it to a MONOMORPHIC word commits to that word's return,
+#     but the carrier stays dynamic: the value is still not known ---
+1 anyq predq	dynamic(Boolean)
+1 anyq strq	dynamic(String)
+
+# --- arity still applies to a dynamic operand: one operand is not two ---
+1 anyq addq	dynamic(Number) :: !no_signature
+
+# --- a dynamic operand alongside a concrete one is enough to dispatch ---
+1 anyq 2 addq	dynamic(Number)
+1 anyq 2 anyq addq	dynamic(Number)	both operands dynamic
+
+# --- a dynamic residual survives a following quote literal ---
+1 anyq [ 1 2 addq ]	dynamic(Any) List

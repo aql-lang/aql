@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // ADR-008 coverage for the small ProcessRuntime / Process accessor and
 // guard arms not exercised by the behavioural suite in process_test.go.
 
 func TestSyncOutputNilAndIdempotent(t *testing.T) {
-	rt := NewProcessRuntime()
+	rt := core.NewProcessRuntime()
 	defer rt.Shutdown()
 
 	if got := rt.SyncOutput(nil); got != nil {
@@ -18,7 +20,7 @@ func TestSyncOutputNilAndIdempotent(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	first := rt.SyncOutput(&buf)
-	sw, ok := first.(*SyncWriter)
+	sw, ok := first.(*core.SyncWriter)
 	if !ok {
 		t.Fatalf("SyncOutput = %T, want *SyncWriter", first)
 	}
@@ -29,7 +31,7 @@ func TestSyncOutputNilAndIdempotent(t *testing.T) {
 }
 
 func TestShutdownIdempotent(t *testing.T) {
-	rt := NewProcessRuntime()
+	rt := core.NewProcessRuntime()
 	rt.Shutdown()
 	rt.Shutdown() // second call takes the already-down early return
 	if !rt.Down() {
@@ -38,9 +40,9 @@ func TestShutdownIdempotent(t *testing.T) {
 }
 
 func TestLookupPid(t *testing.T) {
-	rt := NewProcessRuntime()
+	rt := core.NewProcessRuntime()
 	defer rt.Shutdown()
-	p := NewProcess(rt, 0, "")
+	p := core.NewProcess(rt, 0, "")
 	if err := rt.Insert(p); err != nil {
 		t.Fatal(err)
 	}
@@ -54,22 +56,22 @@ func TestLookupPid(t *testing.T) {
 }
 
 func TestRegisterNameAfterShutdown(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 0, "")
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 0, "")
 	if err := rt.Insert(p); err != nil {
 		t.Fatal(err)
 	}
 	rt.Shutdown()
-	if err := rt.RegisterName("late", p); !errors.Is(err, ErrRuntimeDown) {
+	if err := rt.RegisterName("late", p); !errors.Is(err, core.ErrRuntimeDown) {
 		t.Errorf("RegisterName after Shutdown = %v, want ErrRuntimeDown", err)
 	}
 }
 
 func TestRegisterNameRebindStripsPrevious(t *testing.T) {
-	rt := NewProcessRuntime()
+	rt := core.NewProcessRuntime()
 	defer rt.Shutdown()
-	a := NewProcess(rt, 0, "")
-	b := NewProcess(rt, 0, "")
+	a := core.NewProcess(rt, 0, "")
+	b := core.NewProcess(rt, 0, "")
 	if err := rt.Insert(a); err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +95,9 @@ func TestRegisterNameRebindStripsPrevious(t *testing.T) {
 }
 
 func TestNewProcessDefaultsAndAccessors(t *testing.T) {
-	rt := NewProcessRuntime()
+	rt := core.NewProcessRuntime()
 	defer rt.Shutdown()
-	p := NewProcess(rt, 0, "") // overflow "" defaults to OverflowBlock
+	p := core.NewProcess(rt, 0, "") // overflow "" defaults to OverflowBlock
 	if p.Runtime() != rt {
 		t.Error("Runtime() must return the owning runtime")
 	}
@@ -120,20 +122,20 @@ func TestNewProcessDefaultsAndAccessors(t *testing.T) {
 }
 
 func TestSendBlockOverflowRuntimeDownWake(t *testing.T) {
-	rt := NewProcessRuntime()
-	p := NewProcess(rt, 1, OverflowBlock)
+	rt := core.NewProcessRuntime()
+	p := core.NewProcess(rt, 1, core.OverflowBlock)
 	if err := rt.Insert(p); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Send(NewInteger(1)); err != nil {
+	if err := p.Send(core.NewInteger(1)); err != nil {
 		t.Fatal(err)
 	}
 	// Second send blocks on the full mailbox; the runtime shutdown must
 	// wake it with ErrRuntimeDown (the OverflowBlock down-check arm).
 	done := make(chan error, 1)
-	go func() { done <- p.Send(NewInteger(2)) }()
+	go func() { done <- p.Send(core.NewInteger(2)) }()
 	rt.Shutdown()
-	if err := <-done; !errors.Is(err, ErrRuntimeDown) {
+	if err := <-done; !errors.Is(err, core.ErrRuntimeDown) {
 		t.Errorf("blocked send after Shutdown = %v, want runtime-down/closed", err)
 	}
 }

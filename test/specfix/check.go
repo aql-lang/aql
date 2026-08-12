@@ -3,7 +3,7 @@ package specfix
 import (
 	"strings"
 
-	eng "github.com/boru-lang/boru/eng/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Check-corpus support, shared by the engspec check harness and eng's
@@ -21,7 +21,7 @@ import (
 // by the diagnostic code, in emission order. The ` :: …` suffix is
 // omitted when there are no diagnostics; an empty stack with diagnostics
 // renders as `:: <diag> …`.
-func RenderCheck(stack []eng.Value, diags []eng.CheckDiagnostic) string {
+func RenderCheck(stack []core.Value, diags []core.CheckDiagnostic) string {
 	parts := make([]string, len(stack))
 	for i, v := range stack {
 		if v.Dynamic {
@@ -38,9 +38,9 @@ func RenderCheck(stack []eng.Value, diags []eng.CheckDiagnostic) string {
 	for i, d := range diags {
 		sigil := "?"
 		switch d.Severity {
-		case eng.SeverityError:
+		case core.SeverityError:
 			sigil = "!"
-		case eng.SeverityWarning:
+		case core.SeverityWarning:
 			sigil = "~"
 		}
 		ds[i] = sigil + d.Code
@@ -52,14 +52,14 @@ func RenderCheck(stack []eng.Value, diags []eng.CheckDiagnostic) string {
 // chiefly `noretq`, a word with a Handler but NO Returns/ReturnsFn
 // annotation, so dispatch over it emits the missing_returns diagnostic
 // and falls back to a dynamic(Any) carrier.
-func RegisterCheckExtras(r *eng.Registry) {
-	r.RegisterNativeFunc(eng.NativeFunc{
+func RegisterCheckExtras(r *core.Registry) {
+	r.RegisterNativeFunc(core.NativeFunc{
 		Name: "noretq",
-		Signatures: []eng.Signature{{
-			Args:       []*eng.Type{eng.TInteger},
+		Signatures: []core.Signature{{
+			Args:       []*core.Type{core.TInteger},
 			BarrierPos: -1,
-			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				return []eng.Value{args[0]}, nil
+			Impl: core.Go(func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+				return []core.Value{args[0]}, nil
 			}),
 			// Deliberately no Returns / ReturnsFn.
 		}},
