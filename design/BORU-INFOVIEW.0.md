@@ -49,7 +49,9 @@ work:
   (`check/go/CLAUDE.md`), arming the existing per-step trace hook
   (`core/go/engine.go` — fires before every token dispatch) during a
   `Check` yields the carrier stack **at every source position** in one
-  pass, with zero changes to check/ or core/.
+  pass — retention work, not analysis work. (The cost and honesty
+  conditions this implies — snapshot copying, per-context fn-body
+  analysis, broken buffers — are owned by the oracle's design, §4.)
 - **The dynamic side is better-instrumented than Lean's.** Lean shows
   elaboration-time state only. boru's shipped debugger has whole-tape
   snapshots per step, a positioned time-travel ring, deterministic
@@ -109,12 +111,16 @@ work:
   dispatch against it and why (mono/poly/dynamic site, forward vs
   swap reading), then the existing help text. Today's hover shows
   documentation only, no state (`cmd/go/internal/lsp/hover.go`).
-- **Diagnostics, upgraded in place.** `DiagSuggestion.Replacement` —
-  already carried by every structured diagnostic and explicitly
-  designed as "the seed for editor code actions"
-  (`DIAGNOSTICS.0.md`) — becomes `textDocument/codeAction`;
-  secondary `Spans` become `DiagnosticRelatedInformation` instead of
-  being flattened into the message string.
+- **Diagnostics, upgraded in place — a two-sided job.** The
+  `DiagSuggestion.Replacement` field was designed as "the seed for
+  editor code actions" (`DIAGNOSTICS.0.md`), but no production
+  diagnostic populates it today (tests only), and secondary `Spans`
+  live on runtime `BoruError` alone — `CheckDiagnostic`
+  (`core/go/check_state.go`) does not carry them. So the upgrade is
+  data first, transport second: plumb `Spans` onto the check wire
+  and populate `Replacement` wherever the fix is mechanical, *then*
+  surface them as `textDocument/codeAction` and
+  `DiagnosticRelatedInformation`.
 - **Code lens from scry.** Above each `def`: reference count from
   `Scry.word-graph`, "run examples," "show dependency diagram."
 
@@ -122,9 +128,11 @@ work:
 
 - **The stack view.** Static carriers and, when a run/replay session
   exists, the actual values, side by side. The static column never
-  blocks on the dynamic one. An unfinished program still runs *to*
-  the gap and shows the concrete stack that arrives there beside the
-  expected carrier (Hazel's evaluation-around-holes).
+  blocks on the dynamic one. An unfinished-but-parseable program
+  still runs *to* the gap and shows the concrete stack that arrives
+  there beside the expected carrier (Hazel's
+  evaluation-around-holes); a buffer that does not parse degrades to
+  the longest-prefix static column (§4) — never to silence.
 - **Per-word stack diff.** What the word under the cursor consumed,
   produced, and rewrote — computed on carriers/values, not text, and
   directional relative to the cursor (Lean's goal diffing; for a
@@ -197,10 +205,31 @@ compiler/LSP commands, editor-agnostic):
 **What is new:**
 
 - `lang/go/checktrace.go` — the `CheckTrace` position→stack oracle:
-  arm the step trace during an ordinary `Check` run, bucket
-  snapshots by `SrcPos`, render carriers with the same leaf/dynamic
-  logic `CheckResult.Stack` already uses. ~100 lines; no check/ or
-  core/ changes.
+  arm the step trace during an ordinary `Check` run and render
+  carriers with the same leaf/dynamic logic `CheckResult.Stack`
+  already uses. Three honesty conditions the naive "bucket by
+  `SrcPos`" sketch misses, all owned here:
+  - **Context keying.** Fn bodies are re-analysed per call shape
+    (`check/go/check_fnbody.go`'s per-instantiation memos), so
+    inside a body one position legitimately carries one carrier
+    stack *per analysis context*. The table key is
+    (position, context) — never position alone, which would leave
+    hover at the mercy of whichever analysis wrote last. Consumers
+    show the join or a context picker (§11 Q7).
+  - **Cost.** The trace hook snapshots the whole tape per step
+    (`core/go/tape.go` — `Snapshot` is a full copy), so a traced
+    check is roughly quadratic in buffer size. `CheckTrace` runs on
+    demand per document version — debounced, cached, invalidated on
+    edit — and never rides the per-keystroke diagnostics pass. A
+    lightweight observer variant (position + top-k carriers, no
+    tape copy) is the one *optional* core seam, taken only if
+    profiling demands it.
+  - **Prefix tolerance.** `Check` parses before it runs, so a
+    mid-edit buffer (unclosed group, open string) yields no state
+    at all today. The oracle checks the longest parseable prefix —
+    the member-completion truncate-and-check move, generalised —
+    and answers "no state" beyond the break rather than inventing
+    one.
 - `cmd/go/internal/lsp/` — inlay hints, hover, code actions, `boru/stackAt`:
   the LSP tier over `CheckTrace` plus the diagnostics data already
   in hand. `boru/stackAt` is the one custom method (position →
@@ -209,16 +238,27 @@ compiler/LSP commands, editor-agnostic):
   beside Lean's interactive RPC.
 - A **state-by-position verb on the debug surface** — serve a ring
   entry by row/ordinal over the existing remote-stepping HTTP
-  surface, falling back to `replay` for evicted stops. Host-layer
-  only; inherits the ring's honesty contract (snapshots are
-  authoritative for the stack; bindings stay live).
+  surface, falling back to `replay` for evicted stops; inherits the
+  ring's honesty contract (snapshots are authoritative for the
+  stack; bindings stay live). Granularity is honest about what the
+  ring stores: history is recorded on **line transitions** and
+  entries carry a row but no column
+  (`cmd/go/internal/debugger/debugger.go`), so Phase 2 serves
+  line-level state host-layer-only — a cursor mid-line answers with
+  its line's entry. Word-level dynamic state requires the
+  ring/replay to retain word-level stop identities: a real (small)
+  debugger extension, deliberately scoped out of Phase 2 rather
+  than promised as free.
 - The **display protocol** — the contract [BORU-VIZ.0.md](BORU-VIZ.0.md)
-  §12 Q2 deferred: a value renders as a kind-tagged bundle
-  `{kind:'text'|'mermaid'|'dot'|'tui' payload:String}`, with
-  `text` always present as the fallback (Jupyter's
-  graceful-degradation rule). The panel, the playground, and the
-  attach client render by kind; everything else ignores kinds it
-  does not know.
+  §12 Q2 deferred: a value renders as a **representation map keyed
+  by kind** — `{text:'…' mermaid:'…'}`, kinds `text`/`mermaid`/
+  `dot`/`tui` — with the `text` key **required on every bundle**.
+  This is Jupyter's mime-bundle rule in full: the producer emits
+  every representation it has, the client picks the richest kind it
+  knows and ignores the rest, and the mandatory `text` entry
+  guarantees degradation is always to plain text, never to loss. (A
+  single `{kind payload}` object cannot honour that guarantee —
+  a client ignoring an unknown kind would drop the value.)
 - The **panel clients**: an HTML page served by the boru process on
   the debugserve pattern (token + loopback), and a TUI view over
   `Tui.serve`/`boru attach` for terminal-native use. Editors embed
@@ -236,18 +276,19 @@ Both requests are cheap now and breaking later:
    it.
 2. **Viz/scry adopt the §4 display protocol** as the shape of "this
    value knows how to show itself," resolving VIZ §12 Q2 in favour
-   of the kind-tagged bundle above.
+   of the representation map above (mandatory `text` key).
 
 ## 6. Delivery phases
 
 Ordered value-per-effort; each phase is shippable and useful alone.
 
 1. **Phase 1 — the LSP tier (no panel, no new process).**
-   `CheckTrace`; stack inlay hints with the elision policy; hover
-   upgraded to state + dispatch; code actions from
-   `DiagSuggestion.Replacement`; `Spans` →
-   `relatedInformation`; `boru/stackAt`. Works in every editor in
-   `editors/` on day one.
+   `CheckTrace` with its three honesty conditions (§4); stack inlay
+   hints with the elision policy; hover upgraded to state +
+   dispatch; the two-sided diagnostics upgrade (§3 — populate
+   `Replacement`, plumb `Spans` onto the check wire, then serve
+   code actions and `relatedInformation`); `boru/stackAt`. Works in
+   every editor in `editors/` on day one.
 2. **Phase 2 — the dynamic column.** The state-by-position verb over
    ring/replay; hover and `boru/stackAt` gain actual values when a
    debug session or replay exists; the static/dynamic pairing lands.
@@ -261,11 +302,16 @@ Ordered value-per-effort; each phase is shippable and useful alone.
 
 ## 7. Policy and safety
 
-The LSP evaluates buffer contents and is already loopback-guarded and
-single-client for that reason; the panel inherits `debugserve`'s
-bearer-token + loopback discipline and its threat posture (an
-introspection surface over the user's own process, never exposed off
-the machine by default). The static tier (Phase 1) adds no execution
+The LSP evaluates buffer contents and is loopback-bound *by default*
+— but `boru lsp -host` legally widens the bind ("only widen this on
+a trusted network") and the transport is unauthenticated. Static
+carriers are no more sensitive than the diagnostics already served;
+**actual run values are** — so the rule is: `boru/stackAt` serves
+dynamic state only on loopback binds, degrading to static-only on a
+widened bind unless the LSP transport grows the same bearer-token
+discipline the panel uses. The panel itself inherits `debugserve`'s
+bearer-token + loopback posture (an introspection surface over the
+user's own process, never exposed off the machine by default). The static tier (Phase 1) adds no execution
 beyond what diagnostics-per-keystroke already performs — `CheckTrace`
 is the same check run, observed. Dynamic state is served only from an
 explicitly started debug session or replay, never by silently running
@@ -277,7 +323,9 @@ apply-edit flow; nothing mutates a program behind the user's back
 
 - `CheckTrace` goldens: position→stack tables for fixture programs,
   pinned exactly; permutation/determinism tests (same source → same
-  table; unrelated edits do not perturb distant rows).
+  table; unrelated edits do not perturb distant rows); a fn body
+  analysed under two call shapes yields **both** contexts at its
+  positions, pinned separately (the context-keying condition, §4).
 - Truncation honesty: positions inside fn bodies resolve through the
   body-analysis path, and positions in unchecked/errored regions
   answer "no state" rather than a stale or invented stack — paired
@@ -390,6 +438,11 @@ apply-edit flow; nothing mutates a program behind the user's back
    Should the playground adopt `boru/stackAt` + the display protocol
    and become the zero-install infoview demo? (Leaning: yes at
    Phase 3 — it is the cheapest place to show the whole story.)
+7. **Multi-context presentation.** When (position, context) keying
+   yields several carrier stacks at one position (§4), does hover
+   show the join, the most recent call shape, or a picker? (Leaning:
+   join with a count badge — "2 contexts" — expanding to the list;
+   a picker only in the panel.)
 
 No ADR entry is proposed — per repo policy this stays a `design/`
 note until a maintainer says otherwise.
