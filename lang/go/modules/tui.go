@@ -601,7 +601,8 @@ func tuiTier1Natives() []native.NativeFunc {
 	T := func(ts ...*native.Type) []*native.Type { return ts }
 	return []native.NativeFunc{
 		{Name: "open", Signatures: []native.Signature{
-			{Args: T(native.TMap), Impl: native.Go(tuiOpenHandler), Returns: T(TTerminal), BarrierPos: -1},
+			{Args: T(native.TMap), Impl: native.Go(tuiOpenHandler), Returns: T(TTerminal),
+				ReturnsFn: tuiOpenMirror(), BarrierPos: -1},
 		}},
 		{Name: "close", Signatures: []native.Signature{
 			{Args: T(TTerminal), Impl: native.Go(tuiCloseHandler), Returns: T(),

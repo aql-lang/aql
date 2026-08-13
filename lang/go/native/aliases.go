@@ -455,6 +455,7 @@ var (
 	IsCapitalisedName        = core.IsCapitalisedName
 	IsConcrete               = core.IsConcrete
 	DeepConcrete             = core.DeepConcrete
+	DeepKnown                = core.DeepKnown
 	IsRecordShape            = core.IsRecordShape
 	IsTypeBody               = core.IsTypeBody
 	IsTypeLiteral            = core.IsTypeLiteral

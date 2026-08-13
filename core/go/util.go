@@ -99,6 +99,52 @@ func deepConcrete(v Value, depth int) bool {
 	return true
 }
 
+// DeepKnown is DeepConcrete widened by allConcreteArgs' rule: a BARE
+// TYPE NODE carries no payload, but it is inert and self-evaluating, so
+// the checked node IS the runtime operand. DeepConcrete rejects one
+// (IsConcrete needs a payload), and rejecting it nested inside a literal
+// throws away a decidable case — `{value: None}` is as statically known
+// as `{value: 5}`, and a validator that demands a String refuses both at
+// run time.
+//
+// Use DeepKnown where the model routes on the interior of a literal a
+// call site WRITES OUT; use DeepConcrete where the model needs a real
+// payload to read (a string to parse, bytes to encode). Carriers and
+// dynamic values are refused at every level either way — those are the
+// shapes whose runtime value analysis does NOT hold.
+func DeepKnown(v Value) bool {
+	return deepKnown(v, 0)
+}
+
+func deepKnown(v Value, depth int) bool {
+	if depth > deepConcreteMaxDepth || v.Dynamic {
+		return false
+	}
+	if !IsConcrete(v) {
+		// The one payload-less operand whose value is nonetheless known.
+		return IsBareTypeNode(v)
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if !deepKnown(e, depth+1) {
+				return false
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !deepKnown(mv, depth+1) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // IsBareTypeNode reports whether v is a bare lattice node: it carries
 // no payload (Data == nil) and is not a CheckMode carrier. It is the
 // precise, intent-named replacement for the recurring

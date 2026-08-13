@@ -514,7 +514,7 @@ func tuiServeNatives() []native.NativeFunc {
 	return []native.NativeFunc{
 		{Name: "serve", Signatures: []native.Signature{
 			{Args: T(native.TMap, native.TMap), Impl: native.Go(tuiServeHandler), Returns: T(native.TAny),
-				BarrierPos: -1, CompileEffect: native.CompileStoresFn},
+				ReturnsFn: tuiServeMirror(), BarrierPos: -1, CompileEffect: native.CompileStoresFn},
 		}},
 	}
 }

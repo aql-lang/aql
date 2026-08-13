@@ -77,6 +77,30 @@ func VaultIdentityName(v native.Value) (string, bool) {
 	return ref.name, true
 }
 
+// validateVaultIdentityAlias is vaultIdentityHandler's PURE PREFIX: the
+// alias must be a non-empty concrete String. Split out so the check-mode
+// mirror below runs the handler's own source lines and the two cannot
+// drift apart.
+func validateVaultIdentityAlias(args []native.Value, r *native.Registry) error {
+	alias, err := args[0].AsConcreteString()
+	if err != nil || alias == "" {
+		return r.BoruError("vault_error", "identity: alias must be a non-empty String", "identity")
+	}
+	return nil
+}
+
+// vaultIdentityMirror reports that refusal statically. Nothing before it
+// in the handler can fail and nothing in it touches the vault — minting a
+// handle is lazy (the doc comment above) — so a concrete empty alias is a
+// guaranteed run-time error. The residual stays the declared handle type.
+func vaultIdentityMirror() native.ReturnsFunc {
+	return native.MirrorReturns("identity", concreteArgsGate(1),
+		validateVaultIdentityAlias,
+		func(_ []native.Value, _ *native.Registry) []native.Value {
+			return []native.Value{native.NewCarrier(TVaultIdentity)}
+		})
+}
+
 // vaultIdentityHandler implements `Vault.identity <alias>`.
 //
 // The credential is resolved LAZILY: the ClientIdentity registered here
@@ -84,10 +108,10 @@ func VaultIdentityName(v native.Value) (string, bool) {
 // now. That means a rotated secret is picked up without re-running the
 // program, and a program that never dials never reveals anything.
 func vaultIdentityHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	alias, err := args[0].AsConcreteString()
-	if err != nil || alias == "" {
-		return nil, r.BoruError("vault_error", "identity: alias must be a non-empty String", "identity")
+	if err := validateVaultIdentityAlias(args, r); err != nil {
+		return nil, err
 	}
+	alias, _ := args[0].AsConcreteString()
 	name := "vault:" + alias
 	native.RegisterClientIdentity(r, name, capabilities.IdentityFunc(
 		func(capabilities.CertRequest) (*tls.Certificate, error) {

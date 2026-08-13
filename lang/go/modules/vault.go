@@ -373,6 +373,99 @@ func firstLine(s string) string {
 
 func vaultNoReturns(_ []native.Value, _ *native.Registry) []native.Value { return nil }
 
+// vaultDeclaredReturns is the check-mode residual a vault op's declared
+// Returns would have produced on its own — one fresh carrier of ret, and
+// a declared Any riding DYNAMIC (the declaredReturnCarriers default arm's
+// rule: a strict Any carrier conforms to no typed slot and would poison
+// every downstream consumer). Attaching a ReturnsFn replaces Returns
+// entirely, so the mirror has to hand this back verbatim.
+func vaultDeclaredReturns(ret *native.Type) native.ReturnsFunc {
+	if ret == nil {
+		return vaultNoReturns
+	}
+	return func(_ []native.Value, _ *native.Registry) []native.Value {
+		c := native.NewCarrier(ret)
+		if ret.Equal(native.TAny) {
+			c.Dynamic = true
+		}
+		return []native.Value{c}
+	}
+}
+
+// concreteArgsGate gates a usage mirror whose validator reads EVERY
+// positional arg — a required key out of an option bag, each element of
+// a paths list. All n operands must be statically KNOWN all the way down,
+// and the arity must be the one the word declares (a short slice would
+// index out of range inside the validator).
+//
+// Known, not concrete: DeepKnown also admits a bare type node, because
+// `{value: None}` is as decided as `{value: 5}` and the validator refuses
+// both at run time. A dynamic operand still closes the gate for the
+// reason DeepConcreteOptionsAt states: it was matched optimistically, so
+// the runtime value may not be the shape being validated.
+func concreteArgsGate(n int) func([]native.Value) bool {
+	return func(args []native.Value) bool {
+		if len(args) != n {
+			return false
+		}
+		for _, a := range args {
+			if a.Dynamic || !native.DeepKnown(a) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// argsMatchDeclared reports whether every operand conforms to the type
+// its signature position declares.
+//
+// A ReturnsFn is not reached only through a plain signature match: the
+// union-combo expansion (carrier.go) also invokes it per ALTERNATIVE, and
+// an alternative that does not inhabit the declared slot would otherwise
+// reach a validator that reports "must be a Map" for an operand the run
+// never routes here at all. This is the overload rule the dynamic-operand
+// decline already states, applied to the shape rather than the modality.
+func argsMatchDeclared(args []native.Value, declared []*native.Type) bool {
+	if len(args) != len(declared) {
+		return false
+	}
+	for i, a := range args {
+		if a.Parent == nil || !a.Parent.ConformsTo(declared[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// vaultUsageMirror is the concrete-gated mirror of one vault word's
+// usage contract. It runs makeVaultHandler's own PURE PREFIX — the
+// policy gate, then vaultCollectParams — in the handler's declared
+// order, so the diagnostic carries the byte-identical code and detail
+// the runtime raises.
+//
+// The policy gate is consulted but its refusal is NOT reported: when the
+// policy denies the op the runtime never reaches the usage validation,
+// so claiming a usage defect there would name the wrong error. Declining
+// keeps the mirror's rule exact — it fires only where the run does.
+func vaultUsageMirror(op vaultOp, base native.ReturnsFunc) native.ReturnsFunc {
+	declared := make([]*native.Type, len(op.params))
+	for i, p := range op.params {
+		declared[i] = p.typ
+	}
+	return native.MirrorReturns(op.name, concreteArgsGate(len(op.params)),
+		func(args []native.Value, r *native.Registry) error {
+			if !argsMatchDeclared(args, declared) {
+				return nil
+			}
+			if polErr := checkVaultPolicy(r, op.name, op.pol); polErr != nil {
+				return nil
+			}
+			_, err := vaultCollectParams(op, args, r)
+			return err
+		}, base)
+}
+
 // vaultNatives derives the sub-registry natives from the op table: one
 // single-signature native per op, all-forward (BarrierPos -1 — the
 // module-wrapper dispatch rule).
@@ -395,6 +488,12 @@ func vaultNatives() []native.NativeFunc {
 			sig.Returns = T()
 			sig.ReturnsFn = vaultNoReturns
 		}
+		// A word with no positional args has no usage contract to model —
+		// vaultCollectParams over an empty param list cannot fail — so only
+		// the arg-taking words carry the mirror.
+		if len(op.params) > 0 {
+			sig.ReturnsFn = vaultUsageMirror(op, vaultDeclaredReturns(op.ret))
+		}
 		out = append(out, native.NativeFunc{
 			Name:       vaultInnerName(op.name),
 			Signatures: []native.Signature{sig},
@@ -409,6 +508,7 @@ func vaultNatives() []native.NativeFunc {
 			Args:       T(native.TString),
 			Impl:       native.Go(vaultIdentityHandler),
 			Returns:    T(TVaultIdentity),
+			ReturnsFn:  vaultIdentityMirror(),
 			BarrierPos: -1,
 		}},
 	})

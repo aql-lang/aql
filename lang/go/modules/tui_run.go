@@ -431,7 +431,7 @@ func tuiRunNatives() []native.NativeFunc {
 	return []native.NativeFunc{
 		{Name: "run", Signatures: []native.Signature{
 			{Args: T(native.TMap), Impl: native.Go(tuiRunHandler), Returns: T(native.TAny),
-				BarrierPos: -1, CompileEffect: native.CompileStoresFn},
+				ReturnsFn: tuiRunMirror(), BarrierPos: -1, CompileEffect: native.CompileStoresFn},
 		}},
 	}
 }
