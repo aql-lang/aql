@@ -349,7 +349,23 @@ func withSpanReturnsFn(args []Value, r *Registry) []Value {
 	}
 	stk := RunCarrierBody(r, body)
 	if len(stk) == 0 {
-		return []Value{NewCarrier(TAny)}
+		// NOTHING, matching the handler's `return nil, nil` for an empty
+		// body residual. Claiming one Any here was an ARITY over-claim,
+		// not merely an imprecise type: check modelled a value the run
+		// never pushes, so a trailing word consumed the phantom
+		// statically and starved at run time —
+		// `Log.with-span "s" [Log.info "x"] Log.info` faulted under
+		// -force-compile with CALL_NATIVE underflow at log-info, while
+		// the interpreter left the un-dispatched Function on the stack.
+		//
+		// Deliberately NOT `do`'s rule. do's ReturnsFn yields
+		// NewCarrier(TError) for a non-empty body with an empty residual
+		// (basic/go/native_control.go) because do CATCHES: the raise is a
+		// value it can hand back. with-span RE-RAISES (the runErr path
+		// below), so there is no such value, and copying do's shape here
+		// would reinstate the phantom. If with-span is ever made to catch,
+		// this needs revisiting with it.
+		return nil
 	}
 	return []Value{stk[len(stk)-1]}
 }

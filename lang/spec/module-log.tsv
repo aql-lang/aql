@@ -83,6 +83,8 @@ import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def h (L
 import "boru:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q	ERROR:sink-exists	registering an already-taken sink name is rejected
 import "boru:log" ; def a (Log.span "a") ; def b (Log.span "b") ; Log.end-span a	ERROR:span-mismatch	ending a span that is not the active one is rejected
 import "boru:log" ; Log.with-span "op" [raise "boom"]	ERROR:boom	with-span re-raises a body error (after ending the span)
+import "boru:log" ; def x (Log.with-span "op" [Log.info "y"])	ERROR:returns nothing	a body that leaves nothing makes with-span return nothing — def has no value to bind, and check must say so rather than model a phantom
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "x"] ; Log.traces size	1	the empty-residual arity is 0, so a following word is not fed a phantom value
 Log.info "x"	ERROR:undefined_word	`Log` is unbound without import
 import "boru:log" ; Log.set-level loud/q	ERROR:unknown level	an unknown level atom is rejected
 import "boru:log" ; Log.set-format pretty/q	ERROR:unknown format	an unknown console format is rejected

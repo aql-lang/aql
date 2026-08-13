@@ -313,6 +313,23 @@ func writeEncMirror(optsAt int) ReturnsFunc {
 			return !isStreamPath(extractPath(args[0]))
 		},
 		func(args []Value, r *Registry) error {
+			// writeOptsHandler's order, top to bottom. The anchor is the
+			// HANDLER, not doWrite: writeOptsHandler rejects a read-only
+			// {fmt:} before it ever calls doWrite, so `{fmt:"xml"
+			// exclusive:true atomic:true}` raises the FORMAT error at run
+			// time. Modelling doWrite's first step and calling that the
+			// beginning named the option combo instead — the same mistake
+			// this file's audit was fixing, one frame up.
+			enc, format, mode, _, fmtExplicit, _ := parseFileOpts(args[optsAt])
+			if fErr := checkWritableFormat(r, format, fmtExplicit); fErr != nil {
+				return fErr
+			}
+			if cErr := validateWriteOptionCombo(r,
+				mapBoolOpt(args[optsAt], "atomic", false),
+				mapBoolOpt(args[optsAt], "exclusive", false),
+				mode, args[0].Pos()); cErr != nil {
+				return cErr
+			}
 			// A TString slot can hold a DepScalar CONSTRAINT (`String len
 			// 5`), which AsConcreteString rejects rather than reading as a
 			// zero value — there is no literal text to encode, so the
@@ -321,7 +338,6 @@ func writeEncMirror(optsAt int) ReturnsFunc {
 			if err != nil {
 				return nil
 			}
-			enc, _, _, _, _, _ := parseFileOpts(args[optsAt])
 			if _, encErr := encodeEnc(content, enc); encErr != nil {
 				return r.BoruError("write_error", fmt.Sprintf("write: %v", encErr), "write")
 			}

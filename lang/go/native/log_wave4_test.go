@@ -629,10 +629,17 @@ func TestW4LogShapeFns(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("withSpanReturnsFn = %v", out)
 	}
-	// …an empty body yields an Any carrier…
+	// …an empty body yields NOTHING, matching the handler's `nil, nil`.
+	//
+	// This assertion used to require one Any carrier, which pinned the
+	// phantom as if it were the contract: the handler pushes no value for
+	// an empty residual, so modelling one is an arity over-claim that a
+	// following word consumes statically and starves on at run time
+	// (-force-compile faulted with CALL_NATIVE underflow). Asserting the
+	// arity, not merely `len(out) != 1`, is what makes this a real pin.
 	out = withSpanReturnsFn([]Value{NewString("n"), NewList(nil)}, r)
-	if len(out) != 1 {
-		t.Fatalf("withSpanReturnsFn empty = %v", out)
+	if len(out) != 0 {
+		t.Fatalf("withSpanReturnsFn empty = %v, want no values", out)
 	}
 	// …and a non-list body falls to the gradual dynamic hatch.
 	out = withSpanReturnsFn([]Value{NewString("n"), NewTypeLiteral(TList)}, r)

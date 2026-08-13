@@ -363,11 +363,27 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 	return result, nil
 }
 
+// validateWriteOptionCombo is doWrite's FIRST fallible step, and a pure
+// function of the option flags alone: {exclusive} means "create, failing
+// if the path exists", which cannot be reconciled with an append or with
+// the write-temp-then-rename atomic path.
+//
+// Split out so the check-mode mirror can run it in the handler's ORDER.
+// encodeEnc comes later, so a mirror that validated only the encoding
+// reported the wrong error whenever both were wrong — and reported
+// nothing at all when only this was.
+func validateWriteOptionCombo(r *Registry, atomic, exclusive bool, mode string, pos SrcPos) error {
+	if exclusive && (atomic || mode == "append") {
+		return r.BoruErrorAt("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write", pos)
+	}
+	return nil
+}
+
 func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, exclusive bool, pos SrcPos) ([]Value, error) {
 	content = applyNL(content, nl)
 
-	if exclusive && (atomic || mode == "append") {
-		return nil, r.BoruErrorAt("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write", pos)
+	if err := validateWriteOptionCombo(r, atomic, exclusive, mode, pos); err != nil {
+		return nil, err
 	}
 
 	// Handle stdout/stderr special paths.

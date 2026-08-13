@@ -815,12 +815,31 @@ func delStoreReturnsFn(args []Value, r *Registry) []Value {
 		return nil
 	}
 	key := StoreKey(args[0])
+	// The forget marker is DYNAMIC Any — the widening this comment
+	// describes — not strict. Strict Any is the one carrier that conforms
+	// to NO typed slot, so recording it turns "this key is no longer
+	// narrowed" into "every later use of it refuses". getStoreReturnsFn
+	// hands the recorded carrier straight back to the consumer, so the
+	// marker's modality is the consumer's modality:
+	//
+	//   context set 'k' 1 end context del 'k' end
+	//   context set 'k' 2 end (context get 'k') add 1
+	//
+	// ran to 3 while check reported no_signature on `add` — a false
+	// positive on a working program.
+	//
+	// The flex column reaches the right answer by a different road: its
+	// reader wraps every shape hit through check.ShapeFieldRead, which is
+	// always gradual, so a strict marker never escapes there. Widening the
+	// marker here rather than de-stricting the store READER keeps every
+	// genuinely-recorded carrier strict, so ordinary set/get precision —
+	// and the refusals that depend on it — is untouched.
 	if !r.Check.Compiling {
 		if ss, ok := check.StoreShapeOf(args[1]); ok {
-			ss.RecordKey(key, NewCarrier(TAny))
+			ss.RecordKey(key, NewDynamicCarrier(TAny))
 		}
 	}
-	r.Check.RecordContextSet(key, NewCarrier(TAny))
+	r.Check.RecordContextSet(key, NewDynamicCarrier(TAny))
 	return nil
 }
 
@@ -1516,7 +1535,31 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	if IsConcrete(val) && (val.Parent.ConformsTo(TList) || val.Parent.ConformsTo(TMap)) {
 		return []Value{CloneValue(val)}
 	}
-	return []Value{NewCarrier(val.Parent)}
+	return []Value{elementReadCarrier(val)}
+}
+
+// elementReadCarrier builds the carrier for a container element / field
+// read. The stored value's MODALITY rides along: a gradual bound put
+// into a container is still a gradual bound when it comes back out.
+//
+// Rebuilding it strict invents certainty the value never had, and the
+// two ways that goes wrong are both live:
+//
+//   - dynamic(Any) becomes strict Any — the one carrier that conforms to
+//     no typed slot — so a value that merely had an unknown type starts
+//     REFUSING every typed use. `def l [(context get 'k')] (l get 0) add 1`
+//     ran to 3 while check reported no_signature on `add`.
+//   - dynamic(T) becomes strict T, which promotes a wrong-but-gradual
+//     bound into a wrong-and-committed one. `typeCovered` waves through
+//     any Dynamic carrier, so laundering is also what makes a stale flex
+//     shape VISIBLE to the soundness gate rather than merely wrong.
+//
+// Fixing the modality does not fix a stale bound — a wrong dynamic(T) is
+// still wrong. It stops the read from upgrading the claim.
+func elementReadCarrier(el Value) Value {
+	c := NewCarrier(el.Parent)
+	c.Dynamic = el.Dynamic
+	return c
 }
 
 // getIntKeyReturns narrows an INTEGER-key read over a CONCRETE list to the
@@ -1569,7 +1612,7 @@ func getIntKeyReturns(args []Value, r *Registry) []Value {
 	if c, ok := AnalyseCodeEffect(r, el); ok {
 		return []Value{c}
 	}
-	return []Value{NewCarrier(el.Parent)}
+	return []Value{elementReadCarrier(el)}
 }
 
 func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
