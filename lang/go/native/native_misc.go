@@ -313,12 +313,17 @@ func writeEncMirror(optsAt int) ReturnsFunc {
 			return !isStreamPath(extractPath(args[0]))
 		},
 		func(args []Value, r *Registry) error {
-			// doWrite's order, not the encoder's alone. The option-combo
-			// refusal is its FIRST fallible step, so it must be modelled
-			// first: `{exclusive:true atomic:true enc:'bogus'}` raises the
-			// COMBO error at run time, and a mirror that only encoded
-			// named the encoding instead.
-			enc, _, mode, _, _, _ := parseFileOpts(args[optsAt])
+			// writeOptsHandler's order, top to bottom. The anchor is the
+			// HANDLER, not doWrite: writeOptsHandler rejects a read-only
+			// {fmt:} before it ever calls doWrite, so `{fmt:"xml"
+			// exclusive:true atomic:true}` raises the FORMAT error at run
+			// time. Modelling doWrite's first step and calling that the
+			// beginning named the option combo instead — the same mistake
+			// this file's audit was fixing, one frame up.
+			enc, format, mode, _, fmtExplicit, _ := parseFileOpts(args[optsAt])
+			if fErr := checkWritableFormat(r, format, fmtExplicit); fErr != nil {
+				return fErr
+			}
 			if cErr := validateWriteOptionCombo(r,
 				mapBoolOpt(args[optsAt], "atomic", false),
 				mapBoolOpt(args[optsAt], "exclusive", false),

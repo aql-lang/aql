@@ -211,6 +211,8 @@ import "boru:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "
 import "boru:io"  IO.write (make Pathon "mem://x.txt") "x" {exclusive:true atomic:true}	ERROR:{exclusive} cannot combine	{exclusive} and {atomic} are contradictory create strategies
 import "boru:io"  IO.write (make Pathon "mem://x.txt") "x" {exclusive:true mode:"append"}	ERROR:{exclusive} cannot combine	{exclusive} cannot append to a file it insists must not exist
 import "boru:io"  IO.write (make Pathon "mem://x.txt") "x" {exclusive:true atomic:true enc:"bogus"}	ERROR:{exclusive} cannot combine	the option-combo refusal precedes the encoding one — doWrite's order
+import "boru:io"  IO.write (make Pathon "mem://x.txt") "x" {fmt:"xml"}	ERROR:is read-only	an explicit parser-backed fmt cannot be written
+import "boru:io"  IO.write (make Pathon "mem://x.txt") "x" {fmt:"xml" exclusive:true atomic:true}	ERROR:is read-only	the read-only fmt refusal precedes the option combo — writeOptsHandler's order, one frame above doWrite
 #
 # §24  advisory locks — IO.lock takes an advisory lock on a Pathon
 #      ({shared:true} for a read lock); {block:false} returns `none` on
