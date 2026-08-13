@@ -232,3 +232,35 @@ func TestTuiServeMirrorValidatesTransportBeforePolicy(t *testing.T) {
 		t.Fatalf("detail = %q, want %q", reg.Check.Diagnostics[0].Detail, want)
 	}
 }
+
+// TestTuiServeMirrorDeclinesAtTerminalGate covers serve's SECOND gate.
+// Under `sandbox` the net gate declines first, so the terminal gate is
+// never reached with a denial; it takes the split profile
+// (tui_serve_test.go's shape — network allowed, terminal not installed)
+// to get past the net gate and be refused by the terminal one.
+//
+// The app config here is malformed, so the assertion is meaningful: the
+// mirror stays silent because the run never reaches parseTuiApp.
+func TestTuiServeMirrorDeclinesAtTerminalGate(t *testing.T) {
+	split, err := policy.LoadInline(`{version: 1  name: "split"  scopes: {
+	    network:  { words: { default: "allow" } }
+	    terminal: { install: false }
+	  }}`)
+	if err != nil {
+		t.Fatalf("load split policy: %v", err)
+	}
+	reg, rErr := native.DefaultRegistryWithPolicy(split)
+	if rErr != nil {
+		t.Fatalf("registry: %v", rErr)
+	}
+	t.Cleanup(reg.Check.Begin())
+
+	tuiServeMirror()([]native.Value{
+		tuiMirrorMap("tcp", native.NewInteger(0), "token", native.NewString("x")),
+		native.NewMap(native.NewOrderedMap()), // missing update — never reached
+	}, reg)
+	if len(reg.Check.Diagnostics) != 0 {
+		t.Fatalf("a terminal-denied serve must not report the app config, got %+v",
+			reg.Check.Diagnostics)
+	}
+}
