@@ -73,6 +73,9 @@ import "boru:net" def svc (service {}) add {} ([r:Map state:Any] => [ r.line ]) 
 # negative — a wire protocol is never implicit
 import "boru:net" def svc (service {}) Net.listen {tcp: 0} svc	ERROR:codec	listen over a service requires an explicit codec
 import "boru:net" Net.connect {tcp: "127.0.0.1:1"}	ERROR:codec	connect requires an explicit codec
+import "boru:net" Net.connect {tcp: "127.0.0.1:1" codec: 5}	ERROR:codec: must be a {decode encode} map	a non-map codec is refused before the socket is dialled
+import "boru:net" Net.connect {tcp: "127.0.0.1:1" codec: {decode: 5}}	ERROR:codec must carry decode: and encode:	a codec missing a direction is refused before the socket is dialled
+import "boru:net" Net.connect {tcp: 99 codec: 5}	ERROR:codec: must be a {decode encode} map	the codec refusal precedes the address one — connectHandler's order
 
 # --- Fetch accessor word extensions: import transplants these onto the
 # importer's bare dot/get/dotr/getr/has so a Response reads directly.

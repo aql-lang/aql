@@ -313,6 +313,18 @@ func writeEncMirror(optsAt int) ReturnsFunc {
 			return !isStreamPath(extractPath(args[0]))
 		},
 		func(args []Value, r *Registry) error {
+			// doWrite's order, not the encoder's alone. The option-combo
+			// refusal is its FIRST fallible step, so it must be modelled
+			// first: `{exclusive:true atomic:true enc:'bogus'}` raises the
+			// COMBO error at run time, and a mirror that only encoded
+			// named the encoding instead.
+			enc, _, mode, _, _, _ := parseFileOpts(args[optsAt])
+			if cErr := validateWriteOptionCombo(r,
+				mapBoolOpt(args[optsAt], "atomic", false),
+				mapBoolOpt(args[optsAt], "exclusive", false),
+				mode, args[0].Pos()); cErr != nil {
+				return cErr
+			}
 			// A TString slot can hold a DepScalar CONSTRAINT (`String len
 			// 5`), which AsConcreteString rejects rather than reading as a
 			// zero value — there is no literal text to encode, so the
@@ -321,7 +333,6 @@ func writeEncMirror(optsAt int) ReturnsFunc {
 			if err != nil {
 				return nil
 			}
-			enc, _, _, _, _, _ := parseFileOpts(args[optsAt])
 			if _, encErr := encodeEnc(content, enc); encErr != nil {
 				return r.BoruError("write_error", fmt.Sprintf("write: %v", encErr), "write")
 			}

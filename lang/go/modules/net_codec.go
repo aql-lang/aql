@@ -113,20 +113,38 @@ type codecFuncs struct {
 	decode, encode, encodeReq, decodeResp native.Value
 }
 
-func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, error) {
+// validateCodecShape is resolveCodec's PURE PREFIX: the codec value must
+// be a readable map carrying decode: and encode:.
+//
+// Split out because only this half may run during analysis — what
+// follows STAMPS the codec's fn values for compilation, a side effect
+// that has no business firing on the check pass. The mirror therefore
+// gets the refusals without the stamping, and cannot drift from the
+// handler's wording.
+func validateCodecShape(r *native.Registry, v native.Value, word string) (native.ReadMap, error) {
 	mp, err := native.RequireConcreteMap(v, word)
 	if err != nil {
-		return codecFuncs{}, r.BoruErrorHint("net_error", word+": codec: must be a {decode encode} map", word,
+		return nil, r.BoruErrorHint("net_error", word+": codec: must be a {decode encode} map", word,
 			"use a built-in codec (Net.lines, Net.json-lines, Net.http) or supply your own functions")
+	}
+	_, okD := mp.Get("decode")
+	_, okE := mp.Get("encode")
+	if !okD || !okE {
+		return nil, r.BoruErrorHint("net_error", word+": codec must carry decode: and encode: functions", word,
+			"decode: [buf:Bytes] -> {msg rest}|{need n};  encode: [reply] -> Bytes")
+	}
+	return mp, nil
+}
+
+func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, error) {
+	mp, err := validateCodecShape(r, v, word)
+	if err != nil {
+		return codecFuncs{}, err
 	}
 	var cf codecFuncs
 	get := func(key string) (native.Value, bool) { return mp.Get(key) }
-	dec, okD := get("decode")
-	enc, okE := get("encode")
-	if !okD || !okE {
-		return codecFuncs{}, r.BoruErrorHint("net_error", word+": codec must carry decode: and encode: functions", word,
-			"decode: [buf:Bytes] -> {msg rest}|{need n};  encode: [reply] -> Bytes")
-	}
+	dec, _ := get("decode")
+	enc, _ := get("encode")
 	// Detached-stamp each custom boru codec fn so the per-request invokeFn →
 	// InvokeCallback dispatch runs it on the VM instead of CallBoru. The codec
 	// fns live INSIDE this map, where the compile-time store-fn bake never
@@ -485,9 +503,17 @@ func connectCodecMirror() native.ReturnsFunc {
 			if err != nil {
 				return nil // not a readable map: dispatch owns the refusal
 			}
-			if _, ok := optsMap.Get("codec"); !ok {
+			cv, ok := optsMap.Get("codec")
+			if !ok {
 				return r.BoruErrorHint("net_error", "connect: a codec: is required (use connect-raw for a raw Socket)", "connect",
 					"pass codec: Net.lines / Net.json-lines / Net.http, or a custom {decode encode} map")
+			}
+			// connectHandler's order: it RESOLVES the codec before handing
+			// off to connectRawHandler, so a malformed codec refuses before
+			// the address is ever parsed. Validating the address first
+			// would name the wrong error when both are wrong.
+			if _, cErr := validateCodecShape(r, cv, "connect"); cErr != nil {
+				return cErr
 			}
 			_, aErr := parseNetAddr(r, args[0], "connect", false)
 			return aErr
