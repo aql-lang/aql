@@ -476,6 +476,21 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// encoder, pure in (content, enc): an unknown encoding name, or
 	// content carrying a character the encoding cannot represent.
 	"write_error": SeverityError,
+	// boru:vault ARGUMENT refusals, mirrored from the words' own pure
+	// prefixes: vaultCollectParams (a missing / empty / non-String
+	// required option key, a non-String scan path element) and identity's
+	// alias check. Both run BEFORE the backend lookup — the headless
+	// contract module-vault.tsv §4 pins — so a flagged call raises this
+	// code at run time whether or not a vault backend is registered.
+	"vault_usage": SeverityError,
+	"vault_error": SeverityError,
+	// boru:tui ARGUMENT refusals, on the same footing: open's option
+	// parse, and the app-config / transport-option parses run and serve
+	// perform BEFORE the terminal is opened or the listener bound
+	// (module-tui.tsv). `unsupported` is the §11.7 alt-screen reservation
+	// — an accepted key whose false spelling is refused loudly.
+	"tui_error":   SeverityError,
+	"unsupported": SeverityError,
 	// `set` of a field outside a class instance's CLOSED schema
 	// (native_storage.go setClassInstanceReturns — the runtime's own code).
 	"sealed_field": SeverityError,
