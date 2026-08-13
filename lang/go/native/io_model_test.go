@@ -203,3 +203,122 @@ func TestGetNodeReturnsDynamicDisjunctSchema(t *testing.T) {
 		t.Fatalf("plain dynamic receiver = %v, want dynamic Any", out)
 	}
 }
+
+// The boru:io guaranteed-error mirrors (exit / open / write-encoding).
+// The corpus drives the flagged shapes; these own the silent arms and
+// the gate declines that keep the false-positive pin at zero.
+func TestIOValidationMirrors(t *testing.T) {
+	r := mirrorReg(t)
+
+	// exit: the RANGE refusal is mirrored; a valid code is NOT — its
+	// runtime raise is the boru/exit control error, which is how the
+	// word works, not a program fault.
+	ex := exitCodeMirror()
+	ex([]Value{NewInteger(126)}, r)
+	if len(r.Check.Diagnostics) != 1 || r.Check.Diagnostics[0].Code != "exit_error" {
+		t.Fatalf("an out-of-range exit code must flag exit_error, got %+v", r.Check.Diagnostics)
+	}
+	r2 := mirrorReg(t)
+	ex([]Value{NewInteger(3)}, r2)
+	if len(r2.Check.Diagnostics) != 0 {
+		t.Fatalf("a valid exit code must stay silent, got %+v", r2.Check.Diagnostics)
+	}
+	// A computed code closes the gate.
+	r3 := mirrorReg(t)
+	ex([]Value{NewCarrier(TInteger)}, r3)
+	if len(r3.Check.Diagnostics) != 0 {
+		t.Fatalf("a computed exit code must not be flagged, got %+v", r3.Check.Diagnostics)
+	}
+
+	// open: an unknown mode flags; a known one and a missing opts map
+	// (the 1-arg sig's shape) stay silent.
+	op := openModeMirror(TAny)
+	r4 := mirrorReg(t)
+	op([]Value{modelPathon(t, r4, "mem://o.txt"), mapOfKV("mode", NewString("bogus"))}, r4)
+	if len(r4.Check.Diagnostics) != 1 || r4.Check.Diagnostics[0].Code != "open_error" {
+		t.Fatalf("an unknown open mode must flag open_error, got %+v", r4.Check.Diagnostics)
+	}
+	// The gate reads the OPTIONS argument, so a computed path with a
+	// literal bad mode still flags — doOpenWord rejects the mode before
+	// it touches the path (PR #348 review).
+	rc := mirrorReg(t)
+	op([]Value{NewCarrier(TPathon), mapOfKV("mode", NewString("bogus"))}, rc)
+	if len(rc.Check.Diagnostics) != 1 {
+		t.Fatalf("a computed path with a literal bad mode must still flag, got %+v", rc.Check.Diagnostics)
+	}
+	// A DYNAMIC operand anywhere closes the gate: the overload is not fixed.
+	rd := mirrorReg(t)
+	op([]Value{NewDynamicCarrier(TPathon), mapOfKV("mode", NewString("bogus"))}, rd)
+	if len(rd.Check.Diagnostics) != 0 {
+		t.Fatalf("a dynamic target must close the gate, got %+v", rd.Check.Diagnostics)
+	}
+
+	r5 := mirrorReg(t)
+	op([]Value{modelPathon(t, r5, "mem://o.txt"), mapOfKV("mode", NewString("append"))}, r5)
+	op([]Value{modelPathon(t, r5, "mem://o.txt")}, r5) // one arg: the gate declines before the validator
+	op([]Value{modelPathon(t, r5, "mem://o.txt"), mapOfKV("mode", NewCarrier(TString))}, r5)
+	if len(r5.Check.Diagnostics) != 0 {
+		t.Fatalf("valid/absent/computed modes must stay silent, got %+v", r5.Check.Diagnostics)
+	}
+
+	// write: an unencodable character and an unknown encoding flag; a
+	// representable one is silent, and a computed {enc:} closes the gate
+	// (reading it as absent would default to utf8 and flag nothing —
+	// or worse, flag a correct program).
+	w := writeEncMirror(2)
+	r6 := mirrorReg(t)
+	p := modelPathon(t, r6, "mem://l.txt")
+	w([]Value{p, NewString("€"), mapOfKV("enc", NewString("latin1"))}, r6)
+	if len(r6.Check.Diagnostics) != 1 || r6.Check.Diagnostics[0].Code != "write_error" {
+		t.Fatalf("an unencodable character must flag write_error, got %+v", r6.Check.Diagnostics)
+	}
+	r7 := mirrorReg(t)
+	w([]Value{p, NewString("x"), mapOfKV("enc", NewString("bogus"))}, r7)
+	if len(r7.Check.Diagnostics) != 1 {
+		t.Fatalf("an unknown encoding must flag, got %+v", r7.Check.Diagnostics)
+	}
+	r8 := mirrorReg(t)
+	w([]Value{p, NewString("hi"), mapOfKV("enc", NewString("utf16le"))}, r8)
+	w([]Value{p, NewString("€"), mapOfKV("enc", NewCarrier(TString))}, r8)
+	w([]Value{p, NewCarrier(TString), mapOfKV("enc", NewString("latin1"))}, r8)
+	if len(r8.Check.Diagnostics) != 0 {
+		t.Fatalf("representable/computed/carrier writes must stay silent, got %+v", r8.Check.Diagnostics)
+	}
+	// A RESERVED STREAM target declines: doWrite prints to the stream
+	// and returns before the encoder, so the program runs — flagging it
+	// was a false positive (PR #348 review, caught before merge).
+	r9 := mirrorReg(t)
+	w([]Value{modelPathon(t, r9, "<stdout>"), NewString("\u20ac"), mapOfKV("enc", NewString("latin1"))}, r9)
+	w([]Value{modelPathon(t, r9, "<stderr>"), NewString("\u20ac"), mapOfKV("enc", NewString("latin1"))}, r9)
+	if len(r9.Check.Diagnostics) != 0 {
+		t.Fatalf("a stream-sentinel target must not be encoded-checked, got %+v", r9.Check.Diagnostics)
+	}
+	// A DepScalar CONSTRAINT in the content slot declines: it matches
+	// TString at dispatch but carries bounds, not text, so there is
+	// nothing to encode (AsConcreteString rejects it by design).
+	r11 := mirrorReg(t)
+	dep := core.NewDepScalar(core.DepGT, NewInteger(3))
+	if !core.IsConcrete(dep) {
+		t.Fatal("fixture: a DepScalar constraint must be concrete — otherwise the gate, not this arm, declines")
+	}
+	w([]Value{p, dep, mapOfKV("enc", NewString("latin1"))}, r11)
+	if len(r11.Check.Diagnostics) != 0 {
+		t.Fatalf("a constraint in the content slot must decline, got %+v", r11.Check.Diagnostics)
+	}
+
+	// A DYNAMIC target declines too: the match was optimistic, so the
+	// runtime value may be a stream handle taking the other overload.
+	r10 := mirrorReg(t)
+	dynTarget := NewDynamicCarrier(TPathon)
+	w([]Value{dynTarget, NewString("\u20ac"), mapOfKV("enc", NewString("latin1"))}, r10)
+	if len(r10.Check.Diagnostics) != 0 {
+		t.Fatalf("a dynamic target must close the gate, got %+v", r10.Check.Diagnostics)
+	}
+
+	// The residual still comes from writeReturns: a concrete Pathon
+	// target is handed back verbatim.
+	out := w([]Value{p, NewString("hi"), mapOfKV("enc", NewString("utf8"))}, r8)
+	if len(out) != 1 || !core.IsConcrete(out[0]) {
+		t.Fatalf("write residual = %v, want the concrete Pathon back", out)
+	}
+}

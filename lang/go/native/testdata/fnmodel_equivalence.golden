@@ -282,7 +282,7 @@ WORD escape
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]
 WORD exit
-  [Scalar/Number/Integer] barrier=1
+  [Scalar/Number/Integer] barrier=1 +returnsfn
 WORD export
   [Scalar/String Node/Map] barrier=2 runcheck
   [Scalar/Atom Node/Map] barrier=2 runcheck
@@ -565,7 +565,7 @@ WORD now
 WORD of
   [Node/List Any] barrier=1 runcheck typearg={1} returns=[Type]
 WORD open
-  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Ideal/File]
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Ideal/File] +returnsfn
   [Scalar/Micron/Pathon] barrier=1 returns=[Ideal/File]
 WORD or
   [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]

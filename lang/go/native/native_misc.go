@@ -283,6 +283,52 @@ func readReturns(withOpts bool) ReturnsFunc {
 	}
 }
 
+// writeEncMirror flags a write whose ENCODING provably fails at run
+// time: an unknown {enc:} name, or content carrying a character the
+// requested encoding cannot represent (`"€" {enc:'latin1'}`). Both come
+// from encodeEnc — doWrite's own encoder, a pure function of
+// (content, enc) — so the mirror runs exactly that and wraps it the way
+// doWrite does, keeping code and detail byte-identical.
+//
+// Gated on deep concreteness of the OPTIONS map (a computed {enc:} must
+// not be read as a missing one) and on a concrete String content. A
+// Bytes payload is written verbatim with no encoding step, so those
+// sigs carry no mirror at all.
+func writeEncMirror(optsAt int) ReturnsFunc {
+	base := writeReturns()
+	gate := DeepConcreteOptionsAt(optsAt)
+	return MirrorReturns("write",
+		func(args []Value) bool {
+			if !gate(args) || len(args) <= optsAt || !IsConcrete(args[1]) {
+				return false
+			}
+			// A RESERVED STREAM path never reaches the encoder: doWrite
+			// branches on the sentinel and prints the content verbatim
+			// (fileio.go, the pathStdout / pathStderr arm), returning
+			// before encodeEnc. So `IO.write (make Pathon "<stdout>") "€"
+			// {enc:'latin1'}` runs fine, and a mirror that encoded anyway
+			// rejected a working program — a false positive caught in
+			// review before merge. Reuse the handler's own predicate so
+			// the two cannot drift.
+			return !isStreamPath(extractPath(args[0]))
+		},
+		func(args []Value, r *Registry) error {
+			// A TString slot can hold a DepScalar CONSTRAINT (`String len
+			// 5`), which AsConcreteString rejects rather than reading as a
+			// zero value — there is no literal text to encode, so the
+			// mirror declines and the runtime owns it.
+			content, err := args[1].AsConcreteString()
+			if err != nil {
+				return nil
+			}
+			enc, _, _, _, _, _ := parseFileOpts(args[optsAt])
+			if _, encErr := encodeEnc(content, enc); encErr != nil {
+				return r.BoruError("write_error", fmt.Sprintf("write: %v", encErr), "write")
+			}
+			return nil
+		}, base)
+}
+
 // writeReturns is the check-mode result model for write's Pathon sigs:
 // the runtime hands back the target it wrote to VERBATIM (returnPath),
 // so a concrete Pathon argument IS the result — returning it keeps the

@@ -46,6 +46,24 @@ func TestDeepConcreteOptionsGate(t *testing.T) {
 	if DeepConcreteOptions([]core.Value{concrete, core.NewDynamicCarrier(core.TAny)}) {
 		t.Error("a dynamic later operand must close the gate")
 	}
+	// The AT variant gates the argument the validator actually reads —
+	// open's options are args[1], not args[0].
+	atOne := DeepConcreteOptionsAt(1)
+	if !atOne([]core.Value{core.NewCarrier(core.TString), concrete}) {
+		t.Error("a computed operand at 0 must not close a gate reading position 1")
+	}
+	if atOne([]core.Value{concrete, computed}) {
+		t.Error("a computed options map at the READ position must close the gate")
+	}
+	if atOne([]core.Value{concrete}) {
+		t.Error("an index past the operands closes the gate")
+	}
+	// A DYNAMIC operand at ANY position closes it: the runtime may take a
+	// different overload than the one being modelled.
+	if atOne([]core.Value{core.NewDynamicCarrier(core.TAny), concrete}) {
+		t.Error("a dynamic operand at position 0 must close the gate")
+	}
+
 	// Degenerate shapes.
 	if DeepConcreteOptions(nil) {
 		t.Error("no operands: nothing to validate")

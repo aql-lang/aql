@@ -115,15 +115,35 @@ func allConcreteArgs(args []core.Value) bool {
 // the tree are gated that way and their handlers cope, so tightening it
 // would silence findings that are correct today.
 func DeepConcreteOptions(args []core.Value) bool {
-	if len(args) == 0 || !core.DeepConcrete(args[0]) {
-		return false
-	}
-	for _, a := range args[1:] {
-		if a.Dynamic {
+	return DeepConcreteOptionsAt(0)(args)
+}
+
+// DeepConcreteOptionsAt is DeepConcreteOptions for a word whose options
+// map is NOT at position 0 — `open [Pathon, Map]`, `write [Pathon,
+// String, Map]`. It deep-checks the argument the validator actually
+// READS, so a computed path with a literal options map still gates in
+// (PR #348 review: gating position 0 declined those and quietly cost
+// precision).
+//
+// The dynamic rule widens to EVERY position, including the target.
+// A dynamic operand was matched optimistically, so the runtime value
+// may select a DIFFERENT OVERLOAD than the one being modelled — a
+// gradual `IO.write` target that turns out to be a stream at run time
+// takes the stream branch, which never reaches the encoder the mirror
+// is validating. Modelling one overload's failure while the run takes
+// another is a false positive, so any dynamic operand closes the gate.
+func DeepConcreteOptionsAt(idx int) func([]core.Value) bool {
+	return func(args []core.Value) bool {
+		if idx >= len(args) || !core.DeepConcrete(args[idx]) {
 			return false
 		}
+		for _, a := range args {
+			if a.Dynamic {
+				return false
+			}
+		}
+		return true
 	}
-	return true
 }
 
 // MirrorReturns is the concrete-gated guaranteed-error mirror for an

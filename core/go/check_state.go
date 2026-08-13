@@ -465,6 +465,17 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// read as a note.
 	"net_error":   SeverityError,
 	"fetch_error": SeverityError,
+	// boru:io refusals decided from the call's OWN literal arguments —
+	// an exit code outside 0..125, an unknown {mode:} on open. Each
+	// mirror runs the handler's own pure prefix over deep-concrete
+	// operands, so the flagged program raises this code at run time
+	// before touching a file or the process.
+	"exit_error": SeverityError,
+	"open_error": SeverityError,
+	// write's ENCODING refusals, mirrored from encodeEnc — doWrite's own
+	// encoder, pure in (content, enc): an unknown encoding name, or
+	// content carrying a character the encoding cannot represent.
+	"write_error": SeverityError,
 	// `set` of a field outside a class instance's CLOSED schema
 	// (native_storage.go setClassInstanceReturns — the runtime's own code).
 	"sealed_field": SeverityError,

@@ -614,6 +614,7 @@ var (
 	DryPassReturns         = check.DryPassReturns
 	DryPassWrap            = check.DryPassWrap
 	DeepConcreteOptions    = check.DeepConcreteOptions
+	DeepConcreteOptionsAt  = check.DeepConcreteOptionsAt
 	MirrorReturns          = check.MirrorReturns
 	CheckListIndex         = check.CheckListIndex
 	CheckAtIndices         = check.CheckAtIndices

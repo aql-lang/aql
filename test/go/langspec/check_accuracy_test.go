@@ -137,7 +137,7 @@ var unflaggedPins = map[string]int{
 	// (IO.exit 126 / 200). The two rows the checker DOES flag — the String
 	// code and the non-String env name — are signature errors, which is
 	// exactly the line between the two: shape is static, value is not.
-	"module-io.tsv":         35,
+	"module-io.tsv":         30,
 	"module-log.tsv":        6,
 	"module-minilang.tsv":   20,
 	"module-net.tsv":        2,
