@@ -300,6 +300,7 @@ context set 'k' 7 end context del 'k' end context has 'k'	false	Store del remove
 context set 'k' 7 end context del 'k' end context get 'k'	ERROR:unknown key	…and the strict reader misses, as for a key never set
 context del 'zz' end context has 'zz'	false	deleting an unbound key is a no-op
 context set 'k' 1 end context del 'k' end context set 'k' 2 end context get 'k'	2	a set after a del re-binds in the same layer
+context set 'k' 1 end context del 'k' end context set 'k' 2 end (context get 'k') add 1	3	…and the re-bound value is USABLE: del's forget-marker must be gradual, not strict Any, or every typed use of the key refuses
 # The layer-local half — a tombstone hides an INHERITED key without touching
 # the layer that owns it — needs a scope-pushing word, and every one of those
 # is a code-body word the compiler refuses, so it cannot live in this corpus.

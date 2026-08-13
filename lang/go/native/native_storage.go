@@ -815,12 +815,31 @@ func delStoreReturnsFn(args []Value, r *Registry) []Value {
 		return nil
 	}
 	key := StoreKey(args[0])
+	// The forget marker is DYNAMIC Any — the widening this comment
+	// describes — not strict. Strict Any is the one carrier that conforms
+	// to NO typed slot, so recording it turns "this key is no longer
+	// narrowed" into "every later use of it refuses". getStoreReturnsFn
+	// hands the recorded carrier straight back to the consumer, so the
+	// marker's modality is the consumer's modality:
+	//
+	//   context set 'k' 1 end context del 'k' end
+	//   context set 'k' 2 end (context get 'k') add 1
+	//
+	// ran to 3 while check reported no_signature on `add` — a false
+	// positive on a working program.
+	//
+	// The flex column reaches the right answer by a different road: its
+	// reader wraps every shape hit through check.ShapeFieldRead, which is
+	// always gradual, so a strict marker never escapes there. Widening the
+	// marker here rather than de-stricting the store READER keeps every
+	// genuinely-recorded carrier strict, so ordinary set/get precision —
+	// and the refusals that depend on it — is untouched.
 	if !r.Check.Compiling {
 		if ss, ok := check.StoreShapeOf(args[1]); ok {
-			ss.RecordKey(key, NewCarrier(TAny))
+			ss.RecordKey(key, NewDynamicCarrier(TAny))
 		}
 	}
-	r.Check.RecordContextSet(key, NewCarrier(TAny))
+	r.Check.RecordContextSet(key, NewDynamicCarrier(TAny))
 	return nil
 }
 
