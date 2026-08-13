@@ -60,13 +60,29 @@ func TestTuiOpenMirrorArms(t *testing.T) {
 		t.Fatalf("valid open options must stay silent, got %+v", r4.Check.Diagnostics)
 	}
 
-	// A non-map operand passes the deep-concrete gate (an Integer has no
-	// interior to disprove) but is not readable as options: the mirror
-	// declines and leaves the refusal to dispatch.
+	// An operand that does not inhabit the Map slot reaches this ReturnsFn
+	// only through union-combo expansion; the run never routes it here, so
+	// the mirror declines and leaves the refusal to dispatch.
 	r5 := vaultMirrorRegistry(t)
 	rf([]native.Value{native.NewInteger(1)}, r5)
 	if len(r5.Check.Diagnostics) != 0 {
-		t.Fatalf("a non-map operand must be left to dispatch, got %+v", r5.Check.Diagnostics)
+		t.Fatalf("an off-type operand must be left to dispatch, got %+v", r5.Check.Diagnostics)
+	}
+
+	// A MAP-SHAPED operand that AsMap cannot expose is the opposite case:
+	// the structural subtypes share Parent=TMap and satisfy the signature,
+	// so the run reaches the handler and raises this exact error.
+	r7 := vaultMirrorRegistry(t)
+	rf([]native.Value{{Parent: native.TMap, Data: native.RecordTypeInfo{}}}, r7)
+	if len(r7.Check.Diagnostics) != 1 || r7.Check.Diagnostics[0].Detail != "open: options must be a Map" {
+		t.Fatalf("an unreadable map-shaped operand must flag, got %+v", r7.Check.Diagnostics)
+	}
+
+	// A bare type node as an option VALUE is decided, not unknown.
+	r8 := vaultMirrorRegistry(t)
+	rf([]native.Value{tuiMirrorMap("alt-screen", native.NewTypeLiteral(native.TNone))}, r8)
+	if len(r8.Check.Diagnostics) != 1 || r8.Check.Diagnostics[0].Detail != "open: alt-screen: must be a Boolean" {
+		t.Fatalf("a None alt-screen must flag, got %+v", r8.Check.Diagnostics)
 	}
 
 	// A computed option value closes the gate — the runtime value decides.
@@ -166,8 +182,8 @@ func TestTuiMirrorsDeclineUnderPolicy(t *testing.T) {
 	}{
 		{"open", tuiOpenMirror(), []native.Value{tuiMirrorMap("alt-screen", native.NewInteger(5))}},
 		{"run", tuiRunMirror(), []native.Value{emptyMap}},
-		// serve's own tui policy gate sits behind the NET one, so a denied
-		// sandbox stops it at checkNetPolicy — the other declining arm.
+		// serve reaches its policy gates only with the transport VALID, so
+		// this input is what exercises its declining arms.
 		{"serve", tuiServeMirror(), []native.Value{
 			tuiMirrorMap("tcp", native.NewInteger(0), "token", native.NewString("x")), emptyMap}},
 	}
@@ -183,5 +199,36 @@ func TestTuiMirrorsDeclineUnderPolicy(t *testing.T) {
 				c.word, reg.Check.Diagnostics)
 		}
 		done()
+	}
+}
+
+// TestTuiServeMirrorValidatesTransportBeforePolicy pins the ordering the
+// handler defines. tuiServeHandler reads the transport options FIRST and
+// only then consults a policy, so a malformed `tcp:` raises tui_error at
+// run time even under a policy that denies the terminal outright. A
+// mirror that consulted the terminal gate up front would drop that
+// diagnostic — the bug this test exists to catch.
+func TestTuiServeMirrorValidatesTransportBeforePolicy(t *testing.T) {
+	pol, err := policy.Load("sandbox")
+	if err != nil {
+		t.Fatalf("load sandbox policy: %v", err)
+	}
+	reg, rErr := native.DefaultRegistryWithPolicy(pol)
+	if rErr != nil {
+		t.Fatalf("registry: %v", rErr)
+	}
+	t.Cleanup(reg.Check.Begin())
+
+	// No tcp: at all — tuiServeOptsOf refuses before any gate is reached.
+	tuiServeMirror()([]native.Value{
+		native.NewMap(native.NewOrderedMap()),
+		native.NewMap(native.NewOrderedMap()),
+	}, reg)
+	if len(reg.Check.Diagnostics) != 1 || reg.Check.Diagnostics[0].Code != "tui_error" {
+		t.Fatalf("a malformed transport must flag even under a denying policy, got %+v",
+			reg.Check.Diagnostics)
+	}
+	if want := "serve: tcp: must be an Integer port"; reg.Check.Diagnostics[0].Detail != want {
+		t.Fatalf("detail = %q, want %q", reg.Check.Diagnostics[0].Detail, want)
 	}
 }

@@ -394,25 +394,48 @@ func vaultDeclaredReturns(ret *native.Type) native.ReturnsFunc {
 
 // concreteArgsGate gates a usage mirror whose validator reads EVERY
 // positional arg — a required key out of an option bag, each element of
-// a paths list. All n operands must be concrete all the way down, and
-// the arity must be the one the word declares (a short slice would index
-// out of range inside the validator).
+// a paths list. All n operands must be statically KNOWN all the way down,
+// and the arity must be the one the word declares (a short slice would
+// index out of range inside the validator).
 //
-// A dynamic operand closes the gate for the reason DeepConcreteOptionsAt
-// states: it was matched optimistically, so the runtime value may not be
-// the shape being validated.
+// Known, not concrete: DeepKnown also admits a bare type node, because
+// `{value: None}` is as decided as `{value: 5}` and the validator refuses
+// both at run time. A dynamic operand still closes the gate for the
+// reason DeepConcreteOptionsAt states: it was matched optimistically, so
+// the runtime value may not be the shape being validated.
 func concreteArgsGate(n int) func([]native.Value) bool {
 	return func(args []native.Value) bool {
 		if len(args) != n {
 			return false
 		}
 		for _, a := range args {
-			if a.Dynamic || !native.DeepConcrete(a) {
+			if a.Dynamic || !native.DeepKnown(a) {
 				return false
 			}
 		}
 		return true
 	}
+}
+
+// argsMatchDeclared reports whether every operand conforms to the type
+// its signature position declares.
+//
+// A ReturnsFn is not reached only through a plain signature match: the
+// union-combo expansion (carrier.go) also invokes it per ALTERNATIVE, and
+// an alternative that does not inhabit the declared slot would otherwise
+// reach a validator that reports "must be a Map" for an operand the run
+// never routes here at all. This is the overload rule the dynamic-operand
+// decline already states, applied to the shape rather than the modality.
+func argsMatchDeclared(args []native.Value, declared []*native.Type) bool {
+	if len(args) != len(declared) {
+		return false
+	}
+	for i, a := range args {
+		if a.Parent == nil || !a.Parent.ConformsTo(declared[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // vaultUsageMirror is the concrete-gated mirror of one vault word's
@@ -426,8 +449,15 @@ func concreteArgsGate(n int) func([]native.Value) bool {
 // so claiming a usage defect there would name the wrong error. Declining
 // keeps the mirror's rule exact — it fires only where the run does.
 func vaultUsageMirror(op vaultOp, base native.ReturnsFunc) native.ReturnsFunc {
+	declared := make([]*native.Type, len(op.params))
+	for i, p := range op.params {
+		declared[i] = p.typ
+	}
 	return native.MirrorReturns(op.name, concreteArgsGate(len(op.params)),
 		func(args []native.Value, r *native.Registry) error {
+			if !argsMatchDeclared(args, declared) {
+				return nil
+			}
 			if polErr := checkVaultPolicy(r, op.name, op.pol); polErr != nil {
 				return nil
 			}

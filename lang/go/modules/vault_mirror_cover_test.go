@@ -99,6 +99,44 @@ func TestVaultUsageMirrorArms(t *testing.T) {
 	if len(r5.Check.Diagnostics) != 0 {
 		t.Fatalf("a short arg slice must be left to dispatch, got %+v", r5.Check.Diagnostics)
 	}
+
+	// Gate decline 4 — an operand that does not inhabit the declared slot.
+	// It reaches here only through union-combo expansion, and the run never
+	// routes it to this word, so "spec: must be a Map" would be a defect
+	// reported against an overload that is not taken.
+	r6 := vaultMirrorRegistry(t)
+	rf([]native.Value{native.NewInteger(1)}, r6)
+	if len(r6.Check.Diagnostics) != 0 {
+		t.Fatalf("an off-type operand must be left to dispatch, got %+v", r6.Check.Diagnostics)
+	}
+
+	// A bare type node inside the bag is DECIDED, not unknown: `None` is
+	// as statically known as a String, and the run refuses it the same way.
+	r7 := vaultMirrorRegistry(t)
+	withNone := native.NewOrderedMap()
+	withNone.Set("alias", native.NewString("a"))
+	withNone.Set("value", native.NewTypeLiteral(native.TNone))
+	rf([]native.Value{native.NewMap(withNone)}, r7)
+	if len(r7.Check.Diagnostics) != 1 || r7.Check.Diagnostics[0].Detail != "add: value: must be a non-empty String" {
+		t.Fatalf("a None option value must flag, got %+v", r7.Check.Diagnostics)
+	}
+}
+
+func TestArgsMatchDeclared(t *testing.T) {
+	// The conformance guard itself: arity, a conforming operand, an
+	// off-type one, and the nil-Parent value a zero Value carries.
+	if argsMatchDeclared(nil, []*native.Type{native.TMap}) {
+		t.Fatal("a short arg slice must not match")
+	}
+	if !argsMatchDeclared([]native.Value{vaultMap("alias", "a")}, []*native.Type{native.TMap}) {
+		t.Fatal("a Map operand must match a declared Map slot")
+	}
+	if argsMatchDeclared([]native.Value{native.NewInteger(1)}, []*native.Type{native.TMap}) {
+		t.Fatal("an Integer operand must not match a declared Map slot")
+	}
+	if argsMatchDeclared([]native.Value{{}}, []*native.Type{native.TMap}) {
+		t.Fatal("a Parent-less value must not match")
+	}
 }
 
 func TestVaultUsageMirrorDeclinesUnderPolicy(t *testing.T) {

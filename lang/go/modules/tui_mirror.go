@@ -17,13 +17,20 @@ import (
 // the call site writes literally, and every check below is a pure
 // function of those maps.
 
-// tuiUsageMirror wires one word's pure prefix into a gated mirror.
+// tuiPolicyFirstMirror wires the pure prefix of a word whose handler
+// consults the terminal policy BEFORE validating anything — open and run,
+// both of which gate on `open` as their first statement.
 //
 // The policy gate is consulted but never reported: when the policy denies
 // the word the run raises the refusal and never reaches the validation,
 // so claiming a usage defect there would name the wrong error. Declining
 // keeps the mirror firing exactly where the run does.
-func tuiUsageMirror(word, polOp string, arity int,
+//
+// serve does NOT use this: its handler validates the transport options
+// first and only then reaches a policy gate, so it carries its own order
+// (tuiServeMirror below). The order is the contract — a mirror that gates
+// earlier than its handler silently drops the diagnostics in between.
+func tuiPolicyFirstMirror(word, polOp string, arity int,
 	validate func([]native.Value, *native.Registry) error, base native.ReturnsFunc) native.ReturnsFunc {
 	return native.MirrorReturns(word, concreteArgsGate(arity),
 		func(args []native.Value, r *native.Registry) error {
@@ -49,11 +56,22 @@ func tuiDynAnyReturns(_ []native.Value, _ *native.Registry) []native.Value {
 // readers and the §11.7 alt-screen reservation. It stops where the
 // handler stops being pure — acquireTuiBackend, which needs a host.
 func tuiOpenMirror() native.ReturnsFunc {
-	return tuiUsageMirror("open", "open", 1,
+	return tuiPolicyFirstMirror("open", "open", 1,
 		func(args []native.Value, r *native.Registry) error {
 			mp, _ := native.AsMap(args[0])
 			if mp == nil {
-				return nil // not an options map — dispatch owns that refusal
+				// A value that does not inhabit the Map slot at all reaches
+				// this ReturnsFn only through union-combo expansion, and the
+				// run never routes it here — decline.
+				//
+				// A MAP-SHAPED one is different: the structural subtypes
+				// (RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo) share
+				// Parent=TMap and satisfy the signature, but AsMap cannot
+				// expose them, so the handler raises this exact error.
+				if !args[0].Parent.Equal(native.TMap) {
+					return nil
+				}
+				return r.BoruError("tui_error", "open: options must be a Map", "open")
 			}
 			var err error
 			if _, err = tuiOptBoolean(mp, "mouse"); err == nil {
@@ -73,25 +91,34 @@ func tuiOpenMirror() native.ReturnsFunc {
 // parseTuiApp, which is the handler's entire prefix before the process
 // runtime is touched.
 func tuiRunMirror() native.ReturnsFunc {
-	return tuiUsageMirror("run", "open", 1,
+	return tuiPolicyFirstMirror("run", "open", 1,
 		func(args []native.Value, r *native.Registry) error {
 			_, err := parseTuiApp(args[0], "run", r)
 			return err
 		}, tuiDynAnyReturns)
 }
 
-// tuiServeMirror models tuiServeHandler's prefix in the handler's order:
-// the transport options first, then the app config. The net policy gate
-// between them is consulted for the same reason tuiUsageMirror consults
-// the tui one — a refusal there means the run never reaches parseTuiApp.
+// tuiServeMirror walks tuiServeHandler's prefix in the handler's OWN
+// order, which is the one place in this file where the policy gates are
+// not first: transport options, then the net policy, then the terminal
+// policy, then the app config.
+//
+// That order is load-bearing. A malformed `tcp:` raises tui_error at run
+// time even under a policy that denies the terminal, because the handler
+// never gets as far as the terminal gate — so a mirror that consulted
+// that gate up front would drop a guaranteed diagnostic. Each gate
+// declines only the validation that comes AFTER it.
 func tuiServeMirror() native.ReturnsFunc {
-	return tuiUsageMirror("serve", "serve", 2,
+	return native.MirrorReturns("serve", concreteArgsGate(2),
 		func(args []native.Value, r *native.Registry) error {
 			opts, err := tuiServeOptsOf(args[0], r)
 			if err != nil {
 				return err
 			}
 			if netErr := checkNetPolicy(r, "serve", "listen", "", opts.port); netErr != nil {
+				return nil
+			}
+			if polErr := checkTuiPolicy(r, "serve", "serve"); polErr != nil {
 				return nil
 			}
 			_, err = parseTuiApp(args[1], "serve", r)
