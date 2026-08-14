@@ -691,7 +691,7 @@ WORD seek
   [Ideal/File Scalar/Number/Integer Node/Map] barrier=3 returns=[Scalar/Number/Integer]
   [Ideal/File Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD selector
-  [Node/Map Any] barrier=2 returns=[Any]
+  [Node/Map Any] barrier=2 returns=[Node/List]
 WORD self
   [] barrier=0 returns=[Ideal/Pid]
 WORD send

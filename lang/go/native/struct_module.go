@@ -108,8 +108,11 @@ var StructModuleNatives = []NativeFunc{
 	{
 		Name: "selector",
 		Signatures: []Signature{
-			// Select result depends on the queried structure: Any.
-			{Args: []*Type{TMap, TAny}, Impl: Go(selectorHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			// The ELEMENTS depend on the queried structure, but the
+			// container never does: voxgigstruct.Select's Go return
+			// type is []any, so the convert-back always builds a List
+			// — a no-match selects the empty one. List, not Any.
+			{Args: []*Type{TMap, TAny}, Impl: Go(selectorHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
