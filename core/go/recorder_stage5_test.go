@@ -29,6 +29,10 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 		t.Fatal("inactive Sites must be nil")
 	}
 
+	// --- inline context-boundary regions (NUR054): no-ops.
+	e.PushInlineCtxBoundary()
+	e.PopInlineCtxBoundary()
+
 	// --- Stage-0b probe promotions.
 	if e.InClosureUnit() {
 		t.Fatal("inactive InClosureUnit must be false")

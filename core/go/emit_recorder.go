@@ -70,6 +70,21 @@ type EmitRecorder interface {
 	MarkUncompilable(reason string)
 	Sites() map[string]int
 
+	// --- inline context-boundary regions (NUR054) ------------------------
+	// PushInlineCtxBoundary / PopInlineCtxBoundary bracket a check-run
+	// region whose RUNTIME twin is a fresh sub-engine — and therefore a
+	// context-layer push (Engine.Run's Contexts Push/Pop pair) — but whose
+	// COMPILED lowering is INLINE in the enclosing unit with no frame to
+	// push: the `case` desugar's clause fragments, list auto-evaluation,
+	// interp-string holes. The recorder latches the open-unit depth at
+	// entry, so a closure unit opened INSIDE the region (a `do` body in a
+	// case arm — bracketed at run time by the VM's enterBodyUnit) is not
+	// attributed to the region while it records. The compiler's dispatch
+	// recorder uses the bracket to refuse ambient-context writes the inline
+	// lowering would leak one scope too far (NUR054). Inactive: no-ops.
+	PushInlineCtxBoundary()
+	PopInlineCtxBoundary()
+
 	// SetCatchVariadic latches the NEXT catch-word (CompileFallbackBody)
 	// dispatch's recorded result as VARIADIC: `do` catches a body raise into
 	// ONE Error value, so a fallible multi-value body's runtime count varies
@@ -204,6 +219,8 @@ func (inactiveEmit) RecordLoop(Value, Value, Value, EmitFragmentRef, []Value, st
 
 func (inactiveEmit) MarkUncompilable(string) {}
 func (inactiveEmit) SetCatchVariadic(bool)   {}
+func (inactiveEmit) PushInlineCtxBoundary()  {}
+func (inactiveEmit) PopInlineCtxBoundary()   {}
 
 func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
 func (inactiveEmit) NoteDefRead(string, string)          {}

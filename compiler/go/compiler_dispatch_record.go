@@ -95,6 +95,30 @@ func recordDispatchOutcome(r *core.Registry, word string, sig *core.Signature, a
 			return
 		}
 	}
+	// NUR054 refusal: `context` INSIDE an inline-lowered region (a case
+	// clause fragment, an auto-evaluated list argument, an interp-string
+	// hole) hands out the region's own context layer — the sub-engine push
+	// the compiled inline stream does not mirror — so a set/del through that
+	// handle lands one scope too shallow compiled and the write escapes the
+	// region (`case 1 [ 1 [ context set y 1 5 ] 2 [ 6 ] ] context has y` →
+	// compiled true, interpreted false). Refuse the program so the
+	// interpreter owns it: slow, not wrong. A handle minted OUTSIDE the
+	// region (`def s (context)` — an in-place layer write that persists
+	// identically on both engines) and a write inside a closure unit within
+	// the region (the VM brackets those bodies at enterBodyUnit) both keep
+	// compiling — see noteInlineCtxRead / InInlineCtxBoundary.
+	if es, isEmit := r.Check.Recorder().(*EmitState); isEmit && es.Active() {
+		if word == "context" && len(out) == 1 {
+			es.noteInlineCtxRead(out[0].ID)
+		}
+		if (word == "set" || word == "del") && es.inlineCtxArg(args) {
+			es.MarkUncompilable("`" + word + "` writes through a context handle read inside an " +
+				"inline-lowered body (a case clause / auto-evaluated list / interp hole): the " +
+				"interpreter scopes the write to the body's own context layer, and the inline " +
+				"stream has no layer to scope it to (NUR054); the program runs on the interpreter")
+			return
+		}
+	}
 	if !check.TryRecordMethodApply(r, word, args, out, pos) &&
 		!tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&

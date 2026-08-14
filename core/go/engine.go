@@ -4233,6 +4233,25 @@ func AutoEvalConsumedMap(r *Registry, v Value, dataMap bool) (Value, error) {
 	return NewTop(r).AutoEvalMap(v, dataMap, true)
 }
 
+// runInlineCtxRegion runs input on a pooled sub-engine, bracketing the run
+// as an inline context-boundary region while an analysis pass is live
+// (EmitRecorder.PushInlineCtxBoundary — NUR054): the sub-run's RUNTIME twin
+// pushes a context layer (Engine.Run's Contexts Push/Pop pair), but its
+// recorded events lower INLINE into the enclosing unit (OpMakeList /
+// OpInterp assembly), so an ambient-context write inside it must refuse
+// rather than compile one scope too shallow. Outside analysis the wrapper is
+// exactly RunPooledSub — the hot interpreter path pays nothing.
+func (e *Engine) runInlineCtxRegion(input []Value, elemEvalRecordable bool) ([]Value, error) {
+	if !e.Registry.analysisActive() {
+		return RunPooledSub(e.Registry, input, elemEvalRecordable)
+	}
+	es := e.Registry.analysisRecorder()
+	es.PushInlineCtxBoundary()
+	res, err := RunPooledSub(e.Registry, input, elemEvalRecordable)
+	es.PopInlineCtxBoundary()
+	return res, err
+}
+
 func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	elems, _ := AsList(val)
 	if elems.Len() == 0 {
@@ -4240,7 +4259,7 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	}
 	input := make([]Value, elems.Len())
 	copy(input, elems.Slice())
-	result, err := RunPooledSub(e.Registry, input, e.IsTop || consumed || e.ElemEvalRecordable)
+	result, err := e.runInlineCtxRegion(input, e.IsTop || consumed || e.ElemEvalRecordable)
 	if err != nil {
 		return Value{}, err
 	}
@@ -4341,7 +4360,7 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (s string, dynamic bool, ho
 			buf.WriteString(part.Lit)
 			continue
 		}
-		result, runErr := RunPooledSub(e.Registry, part.Expr, false)
+		result, runErr := e.runInlineCtxRegion(part.Expr, false)
 		if runErr != nil {
 			return "", dynamic, nil, false, runErr
 		}

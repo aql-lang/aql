@@ -31,6 +31,8 @@ func TestInactiveEmitMethods(t *testing.T) {
 	if e.Sites() != nil {
 		t.Fatal("inactive Sites should be nil")
 	}
+	e.PushInlineCtxBoundary()
+	e.PopInlineCtxBoundary()
 	// Stage-0b promotions: the probes that replaced the concrete
 	// *EmitState asserts all decline on the inactive recorder.
 	if e.InClosureUnit() || e.StoredGradualActive() {

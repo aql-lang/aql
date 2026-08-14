@@ -278,7 +278,14 @@ func CaseReturnsFn(args []Value, r *Registry) []Value {
 						cond := NewList(append([]Value{NewWord("do")}, caseGuardTokens(v, elems[0])...))
 						then := NewList(caseBlockTokens(v, elems[1]))
 						rest := NewList(caseBlockTokens(v, elems[2]))
-						return if3ReturnsFn([]Value{cond, then, rest}, r)
+						// The desugared chain lowers its fragments INLINE where the
+						// runtime CaseHandler isolates each block in a sub-engine —
+						// bracket the desugar so an ambient-context write inside a
+						// fragment refuses instead of escaping its layer (NUR054).
+						es.PushInlineCtxBoundary()
+						out := if3ReturnsFn([]Value{cond, then, rest}, r)
+						es.PopInlineCtxBoundary()
+						return out
 					}
 				}
 			}
@@ -327,11 +334,20 @@ func CaseReturnsFn(args []Value, r *Registry) []Value {
 	// planValueDefLocals then promotes to a frame local once the fragment reads
 	// are recorded. if3ReturnsFn returns the branch-join type AND records the
 	// lowering.
-	if r.Check.Recorder().CanSeatAcrossFragment(v) {
+	if es := r.Check.Recorder(); es.CanSeatAcrossFragment(v) {
 		cond := NewList(caseGuardTokens(v, elems[0]))
 		then := NewList(caseBlockTokens(v, elems[1]))
 		rest := buildCaseChain(v, elems, 2)
-		return if3ReturnsFn([]Value{cond, then, NewList(rest)}, r)
+		// The desugared nested-`if` chain lowers every clause guard and block
+		// INLINE into the enclosing unit, where the runtime CaseHandler runs
+		// each matched block in a sub-engine (runCaseBody → RunResolved) with
+		// its own context layer. Bracket the whole desugar as an inline
+		// context-boundary region so an ambient-context write inside a clause
+		// refuses (NUR054) instead of compiling one scope too shallow.
+		es.PushInlineCtxBoundary()
+		out := if3ReturnsFn([]Value{cond, then, NewList(rest)}, r)
+		es.PopInlineCtxBoundary()
+		return out
 	}
 	// Otherwise the island / whole-program fallback owns COMPILATION, but the
 	// result TYPE is still computable: the join of every clause block's
