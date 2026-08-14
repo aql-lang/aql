@@ -30,6 +30,15 @@ import "boru:time-util"  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 
 import "boru:time-util" TimeUtil.now	2021-01-01T00:00:00Z	now reads the (frozen, in specs) clock
 import "boru:time-util" typeof TimeUtil.now	Instant	now yields an Instant
 import "boru:time-util" TimeUtil.await [[1 add 2] [3 add 4]]	[3 7]	await runs bodies in parallel
+import "boru:time-util" TimeUtil.await []	[]	an empty parallels list returns the empty List, before any mode is read
+import "boru:time-util" size (TimeUtil.await {mode:'full'} [[1 add 2] [3 add 4]])	2	`full` has no error escape — always a List, one row per branch
+import "boru:time-util" (TimeUtil.await {mode:'full'} [[1 add 2]]) get 0	{status:ok/q value:3}	each `full` row wraps its branch outcome
+import "boru:time-util" (TimeUtil.await {mode:'full'} [[1 div 0]]) get 0	{status:error/q value:error(division by zero)}	a rejected branch becomes a row, not an escape
+import "boru:time-util" typeof (TimeUtil.await [[1 div 0]])	Error	`all` short-circuits a rejecting branch to that branch's Error
+import "boru:time-util" typeof (TimeUtil.await [[1 add 2] [3 add 4]])	List	…and builds the List when every branch succeeds
+import "boru:time-util" TimeUtil.await {mode:5} [[1 add 2]]	[3]	a non-String/Atom mode reads as the default, it does not raise
+import "boru:time-util" TimeUtil.await {mode:'bogus'} [[1 add 2]]	ERROR:await_error	an unknown mode raises
+import "boru:time-util" TimeUtil.await {mode:'bogus'} []	[]	…but NOT for an empty list: doAwait returns before it selects a runner
 #
 # §6  negative — the namespace is unbound until imported; words gone from core
 TimeUtil.unix 0	ERROR:undefined_word	`TimeUtil` is undefined without `import`

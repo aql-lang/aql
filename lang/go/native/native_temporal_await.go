@@ -500,3 +500,176 @@ func awaitAny(r *Registry, elems []Value) ([]Value, error) {
 	// All rejected — return the last error.
 	return lastErr.values, nil
 }
+
+// awaitRunner selects doAwait's per-mode implementation, or nil when the
+// mode has no arm. The handler and the check-time mirror share this ONE
+// table, so a mode can never be known to one and unknown to the other.
+func awaitRunner(mode string) func(*Registry, []Value) ([]Value, error) {
+	switch mode {
+	case "all":
+		return awaitAll
+	case "full":
+		return awaitFull
+	case "first":
+		return awaitFirst
+	case "any":
+		return awaitAny
+	}
+	return nil
+}
+
+// awaitUnknownMode is doAwait's unknown-mode raise. The mirror reports it
+// through this same constructor, so the check diagnostic and the runtime
+// error cannot drift in code or in detail.
+func awaitUnknownMode(r *Registry, mode string) error {
+	return r.BoruError("await_error",
+		fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
+}
+
+// awaitModeGate accepts a call only when BOTH operands the validator reads
+// are concrete. DeepConcreteOptions' arg0-only contract does not hold here:
+// the validator reads the parallels list too, for the empty short-circuit.
+// Position 1 is checked SHALLOW on purpose — the validator asks it for
+// Len() alone, and the elements are unevaluated code bodies that deep
+// concreteness would refuse for no reason.
+func awaitModeGate(args []Value) bool {
+	return len(args) == 2 && DeepConcreteOptionsAt(0)(args) && IsConcrete(args[1])
+}
+
+// awaitModeMirror flags an unknown {mode:} at check time.
+//
+// The walk is doAwait's, and the ORDER is the whole point: doAwait returns
+// the empty List for an empty parallels list BEFORE it ever selects a
+// runner, so `await {mode:'bogus'} []` runs clean. A mirror that validated
+// the mode first would flag that program — the handler-order rule on a word
+// where a short-circuit sits between the entry and the raise being mirrored.
+func awaitModeMirror() ReturnsFunc {
+	return MirrorReturns("await", awaitModeGate,
+		func(args []Value, r *Registry) error {
+			// awaitModeGate has already required a concrete operand at 1.
+			if lst, err := AsList(args[1]); err == nil && !lst.IsNil() && lst.Len() == 0 {
+				return nil
+			}
+			mode := awaitOptsMode(args[0])
+			if awaitRunner(mode) == nil {
+				return awaitUnknownMode(r, mode)
+			}
+			return nil
+		},
+		awaitOptsReturns)
+}
+
+// awaitOptsMode reads the `mode` option out of await's options argument.
+// awaitWithOptsHandler and the check model share this ONE reader, so the
+// model can never resolve a different mode than the run does.
+func awaitOptsMode(opts Value) string {
+	mode := "all"
+	if oi, err := AsOptionsType(opts); err == nil {
+		if v, ok := oi.Fields.Get("mode"); ok {
+			mode = awaitModeName(v, mode)
+		}
+		return mode
+	}
+	if optsMap, _ := AsMap(opts); optsMap != nil {
+		if v, ok := optsMap.Get("mode"); ok {
+			mode = awaitModeName(v, mode)
+		}
+	}
+	return mode
+}
+
+// awaitModeName reads a mode field spelled either way — `{mode:'full'}` or
+// `{mode:full/q}` — and keeps def when it is neither String nor Atom, so
+// `{mode:5}` runs the DEFAULT mode rather than reaching doAwait's
+// unknown-mode raise. Preserved verbatim from the handler: the check model
+// has to inherit that quirk, not correct it.
+func awaitModeName(v Value, def string) string {
+	if s, err := AsString(v); err == nil {
+		return s
+	}
+	if a, err := AsAtom(v); err == nil {
+		return a
+	}
+	return def
+}
+
+// awaitOptsReturns models the 2-arg form's residual. The mode has to be
+// READ before it can select a shape, so a non-concrete options argument
+// resolves nothing: `all` is the handler's default only when the map is
+// there to be missing a `mode` key.
+func awaitOptsReturns(args []Value, _ *Registry) []Value {
+	if len(args) < 2 || !IsConcrete(args[0]) {
+		return []Value{NewCarrier(TAny)}
+	}
+	return awaitResidual(awaitOptsMode(args[0]), args[1])
+}
+
+// awaitDefaultReturns models the 1-arg form, which pins mode to "all".
+func awaitDefaultReturns(args []Value, _ *Registry) []Value {
+	if len(args) < 1 {
+		return []Value{NewCarrier(TAny)}
+	}
+	return awaitResidual("all", args[0])
+}
+
+// awaitResidual walks doAwait's own statement order: a non-concrete
+// parallels list raises before any mode is consulted, an EMPTY list returns
+// the empty List ahead of the mode switch, and only then does the mode
+// select a shape.
+//
+// Two of the four modes have a knowable residual:
+//
+//   - full — awaitFull has no error escape. Every branch, rejected or not,
+//     becomes a {status value} map in the result list, so the result is a
+//     List for every input, and a list of MAPS specifically: awaitFull's
+//     only write into the result is `out[i] = NewMap(m)`. Typed, so a
+//     `(await {mode:'full'} […]) get 0` reads a Map rather than an Any.
+//   - all — awaitAll builds a List, EXCEPT that the first rejecting branch
+//     short-circuits to that branch's single Error value (branchOutcome's
+//     err arms both carry exactly one). Both arms are reachable, so the
+//     residual is genuinely the union.
+//
+// The `all` union is DYNAMIC, and the reason is worth stating because the
+// strict form was tried first and is wrong. A strict disjunct DISTRIBUTES
+// over dispatch: every alternative must dispatch or the call is refused, so
+// `(await […]) get 0` — a program that runs fine — collects two
+// partial_dispatch warnings and a hard no_signature. That is a false
+// positive bought with precision nobody asked for. The dynamic form matches
+// optimistically (no refusal) while still naming both arms, so a downstream
+// Error accessor dispatches its Error overload instead of no_signature-ing
+// on a bare List. It is `do`'s scalar-tor-Error shape, for `do`'s reason.
+//
+// What the dynamic form costs: typeCovered (check_accuracy_test.go) opens
+// with `if checked.Dynamic { return true }`, so the soundness gate cannot
+// falsify this claim. It is justified by READING awaitAll's two return
+// statements, not by the gate agreeing with it — the gate is silent here,
+// which is not the same as the gate assenting.
+//
+// first and any hand back the WINNING BRANCH's whole residual — any type at
+// any arity, including none (`await {mode:'first'} [[]]` returns nothing at
+// run time while this arity-1 model claims a value, and a 3-value branch
+// body returns three). That divergence is real and predates this model; it
+// needs the variadic-result machinery `do` reaches through
+// SetCatchVariadic, which is keyed to CompileFallbackBody and so does not
+// reach a CompileStoresBodyList word. Left as Any rather than papered over.
+func awaitResidual(mode string, parallels Value) []Value {
+	if !IsConcrete(parallels) {
+		return []Value{NewCarrier(TAny)}
+	}
+	// doAwait's own emptiness test, and its own leniency: it reads
+	// `_lst.Slice()` and branches on len alone, so a NIL payload counts as
+	// empty exactly like a zero-length one. An `!IsNil()` guard here would
+	// be stricter than the handler and would model the nil case as the mode
+	// switch's result, which the run never reaches.
+	if lst, err := AsList(parallels); err == nil && len(lst.Slice()) == 0 {
+		return []Value{NewCarrier(TList)}
+	}
+	switch mode {
+	case "full":
+		return []Value{NewCarrierTypedList(TMap)}
+	case "all":
+		return []Value{NewDynamicCarrierValue(
+			NewDisjunct([]Value{NewTypeLiteral(TList), NewTypeLiteral(TError)}))}
+	}
+	return []Value{NewCarrier(TAny)}
+}

@@ -491,6 +491,11 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// — an accepted key whose false spelling is refused loudly.
 	"tui_error":   SeverityError,
 	"unsupported": SeverityError,
+	// boru:time-util await's unknown {mode:}, mirrored from doAwait's own
+	// runner table. The mirror declines an EMPTY parallels list, because
+	// doAwait returns before it ever selects a runner — so a flagged call
+	// is one that reaches the raise, not merely one that spells a bad mode.
+	"await_error": SeverityError,
 	// `set` of a field outside a class instance's CLOSED schema
 	// (native_storage.go setClassInstanceReturns — the runtime's own code).
 	"sealed_field": SeverityError,

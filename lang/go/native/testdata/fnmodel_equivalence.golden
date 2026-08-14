@@ -45,8 +45,8 @@ WORD args
 WORD as
   [Any Any] barrier=1 returns=[Any] +returnsfn
 WORD await
-  [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
-  [Node/List] barrier=1 noeval={0} returns=[Any]
+  [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any] +returnsfn
+  [Node/List] barrier=1 noeval={0} returns=[Any] +returnsfn
 WORD band
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD base
