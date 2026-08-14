@@ -105,6 +105,49 @@ func returnPatternAt(pats []*core.Value, i int) *core.Value {
 	return pats[i]
 }
 
+// nur068ReturnCarrier resolves declared-return slot i's two NUR068 record
+// shapes for BuildFnBodyReturnsFn (extracted to keep that closure under the
+// cyclomatic gate):
+//
+//  1. A declared RECORD return (TMap + field-schema pattern) keeps its
+//     schema on the result carrier — dynamic(Map)+RecordTypeInfo, the exact
+//     shape `make R {…}` and a record-typed param produce — so a field read
+//     through the constructor narrows. The runtime ReturnCheck enforces the
+//     same declared shape, so the claim is sound; gradual, so it only
+//     narrows reads, never dispatch.
+//  2. A fn declared to return a BARE Map whose body residual carries a
+//     RECORD SCHEMA (a `make R` result, a shape-ReturnsFn helper's carrier)
+//     surfaces the residual's schema instead of the shapeless declared
+//     carrier — the record twin of BuildFnBodyReturnsFn's concrete-closure
+//     rule, and NUR068's reach for constructors that CANNOT carry the
+//     record annotation (NUR069: an Any field refuses none at the
+//     pattern-unify boundaries while make admits it, so the annotation
+//     would be a false runtime contract). Sound: the residual is the
+//     checker's own model of the body and lies within the declared Map.
+//     PLAIN-CHECK ONLY (!Compiling), same as the closure rule: the compile
+//     pass keeps the declared carrier so the recorded call results and the
+//     RET contract are untouched. A struct copy with a freshly minted ID
+//     (the recordSchemaCarrier discipline) keeps the surfaced result's
+//     identity distinct from the residual's — the schema payload itself is
+//     immutable and shared.
+func nur068ReturnCarrier(r *core.Registry, t *core.Type, pats []*core.Value, i, declared int, stk []core.Value) (core.Value, bool) {
+	if rc, ok := recordReturnCarrier(t, returnPatternAt(pats, i)); ok {
+		return rc, true
+	}
+	if !r.Check.Compiling && t.Equal(core.TMap) &&
+		returnPatternAt(pats, i) == nil && len(stk) >= declared {
+		if bv := stk[len(stk)-declared+i]; bv.Carrier &&
+			bv.Parent != nil && bv.Parent.ConformsTo(core.TMap) {
+			if _, isRec := bv.Data.(core.RecordTypeInfo); isRec {
+				sv := bv
+				sv.ID = core.GenerateID(core.IDPrefixForType(core.TMap))
+				return sv, true
+			}
+		}
+	}
+	return core.Value{}, false
+}
+
 // typedContainerCarrier generalises a TYPED-container param ({:T} map / [:T] list)
 // to a carrier that PRESERVES its declared ELEMENT type — the D2 read-precision
 // foundation (design/TYPED-CONTAINER-ELEMENT-PRECISION.0.md, Part A). The element

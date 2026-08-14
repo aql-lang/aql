@@ -667,44 +667,12 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 					out[i] = dv
 					continue
 				}
-				// A declared RECORD return (TMap + field-schema pattern) keeps its
-				// schema on the result carrier — dynamic(Map)+RecordTypeInfo, the
-				// exact shape `make R {…}` and a record-typed param produce — so a
-				// field read through the constructor narrows (NUR068). The runtime
-				// ReturnCheck enforces the same declared shape, so the claim is
-				// sound; gradual, so it only narrows reads, never dispatch.
-				if rc, ok := recordReturnCarrier(t, returnPatternAt(declaredReturnPatterns, i)); ok {
+				// NUR068: a declared record return keeps its schema, and a bare
+				// Map return surfaces a record-schema body residual — see
+				// nur068ReturnCarrier.
+				if rc, ok := nur068ReturnCarrier(r, t, declaredReturnPatterns, i, len(declaredReturns), stk); ok {
 					out[i] = rc
 					continue
-				}
-				// A fn declared to return a BARE Map whose body residual carries a
-				// RECORD SCHEMA (a `make R` result, a shape-ReturnsFn helper's
-				// carrier) surfaces the residual's schema instead of the shapeless
-				// declared carrier — the record twin of the concrete-closure rule
-				// above, and NUR068's reach for constructors that CANNOT carry the
-				// record annotation (NUR069: an Any field refuses none at the
-				// pattern-unify boundaries while make admits it, so the annotation
-				// would be a false runtime contract). Sound: the residual is the
-				// checker's own model of the body and lies within the declared Map.
-				//
-				// PLAIN-CHECK ONLY (!Compiling), same as the closure rule: the
-				// compile pass keeps the declared carrier so the recorded call
-				// results and the RET contract are untouched. A struct copy with
-				// a freshly minted ID (the recordSchemaCarrier discipline) keeps
-				// the surfaced result's identity distinct from the residual's —
-				// the schema payload itself is immutable and shared.
-				if !r.Check.Compiling && t.Equal(core.TMap) &&
-					returnPatternAt(declaredReturnPatterns, i) == nil &&
-					len(stk) >= len(declaredReturns) {
-					if bv := stk[len(stk)-len(declaredReturns)+i]; bv.Carrier &&
-						bv.Parent != nil && bv.Parent.ConformsTo(core.TMap) {
-						if _, isRec := bv.Data.(core.RecordTypeInfo); isRec {
-							sv := bv
-							sv.ID = core.GenerateID(core.IDPrefixForType(core.TMap))
-							out[i] = sv
-							continue
-						}
-					}
 				}
 				c := core.NewCarrier(t)
 				// A declared `Any` return is "statically unknown", not "the Any
