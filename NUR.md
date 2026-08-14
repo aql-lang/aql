@@ -76,6 +76,7 @@ keep the two in sync in the same commit.
 | [NUR062](#nur062) | Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible | PR #339 maintainer decision (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
+| [NUR065](#nur065) | `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions | PR #351 await result model (flagged for NUR by Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2410,3 +2411,50 @@ that `add` patterns are routing *tables* (inspectable, whole-request handlers)
 while `receive` clauses are *destructuring* sites. Deciding belongs to the
 processes/services design line; this record exists so the divergence is not
 silently baselined meanwhile.
+
+---
+
+## NUR065 — `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions {#nur065}
+
+**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** PR #351,
+while reading `doAwait`'s four arms to build a result model; flagged for this
+register by the PR #351 review (Codex P1).
+
+**Rule:** a word's declared result arity is its runtime arity. A signature
+that declares one result must push exactly one value, or a downstream consumer
+is seated against a stack the run does not produce — the rule PR #350 restated
+when `with-span` claimed a phantom value its handler never pushed.
+
+**Divergence:** `await`'s four modes do not agree on how many values they
+produce, but one signature covers all four. `all` and `full` build a single
+List (or, for `all`, the one Error a rejecting branch short-circuits to), so
+arity 1 is right. `first` and `any` instead hand back `pr.values` — the
+*whole residual* of whichever branch won — which is however many values that
+branch's body left. Both directions are reachable:
+
+```
+TimeUtil.await {mode:'first'} [[]]        run: (nothing)   model: 1 value
+TimeUtil.await {mode:'first'} [[1 2 3]]   run: 1 2 3       model: 1 value
+```
+
+The mode is an ordinary option read at run time, so the two families cannot
+be split into separate signatures on the arg types alone.
+
+**Evidence:** `lang/go/native/native_temporal_await.go` — `awaitFirst` and
+`awaitAny` return `first.values` / `ir.pr.values` unchanged, against
+`awaitAll` / `awaitFull` whose returns are `[]Value{NewList(out)}`;
+`lang/go/native/time_async_module.go` declares `Returns: []*Type{TAny}` (one
+seat) for both signatures.
+
+**Documentation status:** stated at the model's call site in
+`awaitResidual`'s header, which declines to model `first` / `any` for exactly
+this reason. No user-facing doc mentions it; `boru describe await` shows one
+result.
+
+**Proposed verdict:** none yet. The fix is not a return-type change but a
+VARIADIC result, and the machinery `do` uses — `SetCatchVariadic`, which
+latches the next dispatch's recorded result as variadic — is keyed to
+`CompileFallbackBody` and so does not reach `await`, a `CompileStoresBodyList`
+word. Widening that seam is a compiler-side decision. Recorded so the model's
+deliberate `Any` for these two modes is understood as an unresolved arity
+divergence rather than mere imprecision.

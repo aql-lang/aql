@@ -526,6 +526,22 @@ func awaitUnknownMode(r *Registry, mode string) error {
 		fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
 }
 
+// awaitParallelsEmpty is doAwait's own emptiness test, and its own leniency:
+// doAwait reads `_lst.Slice()` and branches on len alone, so a NIL payload
+// counts as empty exactly like a zero-length one.
+//
+// ONE predicate, shared by the mirror and the result model, because two
+// copies of it already drifted: the model was written with an extra
+// `!IsNil()` guard, a direct test caught it there, and the identical guard
+// three lines above in the mirror survived the fix (PR #351 review, Codex
+// P2). In the mirror the drift is worse than imprecision — a nil-backed
+// empty list with an unknown mode would be flagged error-severity while
+// doAwait returns the empty List and the program runs.
+func awaitParallelsEmpty(parallels Value) bool {
+	lst, err := AsList(parallels)
+	return err == nil && len(lst.Slice()) == 0
+}
+
 // awaitModeGate accepts a call only when BOTH operands the validator reads
 // are concrete. DeepConcreteOptions' arg0-only contract does not hold here:
 // the validator reads the parallels list too, for the empty short-circuit.
@@ -547,7 +563,7 @@ func awaitModeMirror() ReturnsFunc {
 	return MirrorReturns("await", awaitModeGate,
 		func(args []Value, r *Registry) error {
 			// awaitModeGate has already required a concrete operand at 1.
-			if lst, err := AsList(args[1]); err == nil && !lst.IsNil() && lst.Len() == 0 {
+			if awaitParallelsEmpty(args[1]) {
 				return nil
 			}
 			mode := awaitOptsMode(args[0])
@@ -651,17 +667,14 @@ func awaitDefaultReturns(args []Value, _ *Registry) []Value {
 // body returns three). That divergence is real and predates this model; it
 // needs the variadic-result machinery `do` reaches through
 // SetCatchVariadic, which is keyed to CompileFallbackBody and so does not
-// reach a CompileStoresBodyList word. Left as Any rather than papered over.
+// reach a CompileStoresBodyList word. Left as Any rather than papered over,
+// and recorded as NUR065 so the Any is read as an open arity divergence
+// rather than as imprecision someone should tighten.
 func awaitResidual(mode string, parallels Value) []Value {
 	if !IsConcrete(parallels) {
 		return []Value{NewCarrier(TAny)}
 	}
-	// doAwait's own emptiness test, and its own leniency: it reads
-	// `_lst.Slice()` and branches on len alone, so a NIL payload counts as
-	// empty exactly like a zero-length one. An `!IsNil()` guard here would
-	// be stricter than the handler and would model the nil case as the mode
-	// switch's result, which the run never reaches.
-	if lst, err := AsList(parallels); err == nil && len(lst.Slice()) == 0 {
+	if awaitParallelsEmpty(parallels) {
 		return []Value{NewCarrier(TList)}
 	}
 	switch mode {

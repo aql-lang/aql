@@ -42,6 +42,28 @@ func TestAwaitResidualEmptyListPrecedesTheMode(t *testing.T) {
 	}
 }
 
+// The emptiness predicate is shared by the mirror and the result model, and
+// this is the test that keeps them shared: two copies of it drifted once
+// already, and in the MIRROR the drift flags an error-severity diagnostic on
+// a program doAwait runs to completion.
+func TestAwaitParallelsEmptyMatchesTheHandler(t *testing.T) {
+	// A NIL payload is empty, exactly as doAwait's len(Slice()) reads it.
+	if !awaitParallelsEmpty(NewList(nil)) {
+		t.Error("nil-backed list: not empty, but doAwait returns the empty List for it")
+	}
+	if !awaitParallelsEmpty(NewList([]Value{})) {
+		t.Error("zero-length list: not empty")
+	}
+	if awaitParallelsEmpty(NewList([]Value{NewList(nil)})) {
+		t.Error("one-branch list reads as empty — the mode switch would be skipped")
+	}
+	// A non-list cannot be asked for a length; the gate keeps it out, and the
+	// predicate must not claim emptiness for it either.
+	if awaitParallelsEmpty(NewInteger(5)) {
+		t.Error("non-list reads as empty")
+	}
+}
+
 func TestAwaitResidualKnownModes(t *testing.T) {
 	nonEmpty := NewList([]Value{NewList(nil)})
 

@@ -62,9 +62,16 @@ var Natives = []NativeFunc{
 
 		Signatures: []Signature{
 			{
+				// RunInCheck for quote's reason, on quote's handler: the
+				// header above promises "words → atoms … behave exactly like
+				// `quote`", and a bare-word codequote takes the identical /q
+				// capture through the identical quoteWordHandler. Leaving it
+				// off made that promise false in check mode alone —
+				// `m dot (codequote a)` stayed dynamic(Any) where
+				// `m dot (quote a)` reads Integer (PR #351 review, Codex P2).
 				Args:      []*Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
-				Impl:      Go(quoteWordHandler),
+				Impl:      Go(quoteWordHandler, RunInCheck()),
 				Returns:   []*Type{TAtom}, BarrierPos: -1,
 			},
 			{

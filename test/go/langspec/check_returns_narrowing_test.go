@@ -115,6 +115,10 @@ func TestReturnsAnnotationNarrowing(t *testing.T) {
 		// NEGATIVE: the key is real enough to be MISSED — a quoted name that
 		// is not in the map narrows to None, not to a permissive Any.
 		{"quote-missing-key-narrows-none", `def m {a:1 b:2} m get (quote zz)`, false, false},
+		// codequote's bare-word form IS quote's — same /q capture, same
+		// handler — so it narrows identically. Its paren form stays raw.
+		{"codequote-dot-key-narrows", `def m {a:1} m dot (codequote a)`, false, false},
+		{"codequote-into-keys-flags", `def m {a:1} keys (m dot (codequote a))`, true, false},
 		// ---- date arithmetic: every arm builds a Date ----
 		{"add-days-narrows", `import "boru:time-util" TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000))`, false, false},
 		{"earliest-narrows", `import "boru:time-util" TimeUtil.earliest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))`, false, false},

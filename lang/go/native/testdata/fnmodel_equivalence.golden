@@ -97,7 +97,7 @@ WORD close
 WORD cmp
   [Any Any] barrier=2 returns=[Scalar/Number/Integer] +returnsfn
 WORD codequote
-  [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Scalar/Atom]
   [Any] barrier=1 runcheck noeval={0} +returnsfn
 WORD concat
   [Node/Map Node/List] barrier=2 returns=[Scalar/String]
