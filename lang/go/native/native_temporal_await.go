@@ -668,7 +668,7 @@ func awaitDefaultReturns(args []Value, _ *Registry) []Value {
 // needs the variadic-result machinery `do` reaches through
 // SetCatchVariadic, which is keyed to CompileFallbackBody and so does not
 // reach a CompileStoresBodyList word. Left as Any rather than papered over,
-// and recorded as NUR065 so the Any is read as an open arity divergence
+// and recorded as NUR067 so the Any is read as an open arity divergence
 // rather than as imprecision someone should tighten.
 func awaitResidual(mode string, parallels Value) []Value {
 	if !IsConcrete(parallels) {
