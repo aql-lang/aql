@@ -5257,10 +5257,15 @@ func (es *EmitState) NoteFrozenRead(name string) {
 		return
 	}
 	// A read attributed to a STORED-REF unit (a service/minilang handler, a
-	// spawn body) is already rebind-safe: NotifyNameRebound poisons the ref
-	// itself and InvokeCallback falls back to CallBoru for just that handler,
-	// keeping the rest of the program compiled (the PR #243 discipline).
-	// Only ordinary CALL_USER units need the whole-program hammer.
+	// spawn body) is not recorded HERE: its rebind handling lives in
+	// NotifyNameRebound directly. Per-ref poisoning (the PR #243 discipline)
+	// still covers unit-internal rebinds, but a MODULE-SCOPE rebind of a
+	// stored-ref dep now refuses the whole program there too — poisoning's
+	// CallBoru fallback reads pass-hoisted def state, not point-in-program
+	// state (the F1 miscompile, design/RELOAD-INVALIDATION.0.md §3; interim
+	// until §5.6's bind twins). So the skip below does not exempt stored-ref
+	// deps from the hammer; it only keeps their reads out of frozenReads,
+	// whose entries would otherwise double-report the same rebind.
 	if rec := es.openUnitRecs[len(es.openUnitRecs)-1]; rec >= 0 && rec < len(es.fnRecs) && es.fnRecs[rec].storedRefUnit {
 		return
 	}
