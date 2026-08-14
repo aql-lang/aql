@@ -78,6 +78,8 @@ keep the two in sync in the same commit.
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
 | [NUR066](#nur066) | `end` and `none` are reachable as map keys by `get`/`getr` but not by the dot-path sugar that lowers to them; every other keyword works in both | surfaced while verifying `design/STATE-MACHINES.0.md` §11.3 examples (PR #352) |
+| [NUR067](#nur067) | `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions | PR #351 await result model (flagged for NUR by Codex P1) |
+| [NUR068](#nur068) | A `refine Record` type keeps its schema as a fn PARAM and as a `class` return, but loses it as a fn RETURN | PR #351 Any-frontier survey (minimal repro while narrowing `boru:test`'s constructors) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2522,3 +2524,117 @@ documentation debt honestly — a reserved-key list in `REACH.10.md` plus a
 one option that should not persist. Recorded now so it is not lost; PR #352
 worked around it by renaming its example event, which fixes that example and
 nothing else.
+
+---
+---
+
+## NUR067 — `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions {#nur067}
+
+**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** PR #351,
+while reading `doAwait`'s four arms to build a result model; flagged for this
+register by the PR #351 review (Codex P1).
+
+**Rule:** a word's declared result arity is its runtime arity. A signature
+that declares one result must push exactly one value, or a downstream consumer
+is seated against a stack the run does not produce — the rule PR #350 restated
+when `with-span` claimed a phantom value its handler never pushed.
+
+**Divergence:** `await`'s four modes do not agree on how many values they
+produce, but one signature covers all four. `all` and `full` build a single
+List (or, for `all`, the one Error a rejecting branch short-circuits to), so
+arity 1 is right. `first` and `any` instead hand back `pr.values` — the
+*whole residual* of whichever branch won — which is however many values that
+branch's body left. Both directions are reachable:
+
+```
+TimeUtil.await {mode:'first'} [[]]        run: (nothing)   model: 1 value
+TimeUtil.await {mode:'first'} [[1 2 3]]   run: 1 2 3       model: 1 value
+```
+
+The mode is an ordinary option read at run time, so the two families cannot
+be split into separate signatures on the arg types alone.
+
+**Evidence:** `lang/go/native/native_temporal_await.go` — `awaitFirst` and
+`awaitAny` return `first.values` / `ir.pr.values` unchanged, against
+`awaitAll` / `awaitFull` whose returns are `[]Value{NewList(out)}`;
+`lang/go/native/time_async_module.go` declares `Returns: []*Type{TAny}` (one
+seat) for both signatures.
+
+**Documentation status:** stated at the model's call site in
+`awaitResidual`'s header, which declines to model `first` / `any` for exactly
+this reason. No user-facing doc mentions it; `boru describe await` shows one
+result.
+
+**Proposed verdict:** none yet. The fix is not a return-type change but a
+VARIADIC result, and the machinery `do` uses — `SetCatchVariadic`, which
+latches the next dispatch's recorded result as variadic — is keyed to
+`CompileFallbackBody` and so does not reach `await`, a `CompileStoresBodyList`
+word. Widening that seam is a compiler-side decision. Recorded so the model's
+deliberate `Any` for these two modes is understood as an unresolved arity
+divergence rather than mere imprecision.
+
+---
+
+## NUR068 — A `refine Record` type keeps its schema as a fn PARAM and as a `class` return, but loses it as a fn RETURN {#nur068}
+
+**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** the PR #351
+Any-frontier survey — annotating `boru:test`'s `case` / `spec` /
+`spec-with-subs` with their record types changed nothing, and the minimal
+repro below explains why.
+
+**Rule:** a declared type means the same thing wherever it is declared. A
+value of type `R` carries R's field schema, so `x get "field"` narrows to
+that field's declared type, whether `x` arrived as a param, from a `make`,
+or as a function's result.
+
+**Divergence:** three paths, two agree and one does not.
+
+```
+def R refine Record [name:String n:Integer]
+
+(make R {name:"a" n:1}) get "name"                    -> dynamic(String)   narrows
+def p fn [[c:R] [String] [c get "name"]]              -> String            narrows (PARAM)
+def mk fn [[] [R] [make R {name:"a" n:1}]]
+(mk) get "name"                                       -> dynamic(Any)      LOST
+```
+
+A `class` in the same return position keeps its schema, so the divergence is
+specific to `refine Record` as a RETURN:
+
+```
+def C class {name:"z" n:0}
+def mk2 fn [[] [C] [make C {name:"a" n:1}]]
+(mk2) get "name"                                      -> ProperString      narrows
+```
+
+The residual carriers say where it goes wrong. A class return residual is
+`C` — the nominal node, whose `Data` is the shape the accessor reads. A
+record `make` residual prints `dynamic(Map)` but carries a `RecordTypeInfo`
+payload, which is the other way the accessor can reach a schema. A record
+RETURN residual is a bare `Map`: neither the nominal node nor the payload,
+so both recovery paths miss it.
+
+The declared return is otherwise honoured — `def mk fn [[] [R] [17]]` is
+refused in check and at run time — so this is the CARRIER losing the schema,
+not the annotation being ignored.
+
+**Evidence:** `lang/go/native/native_storage.go` §`getNodeReturns` has both
+recovery branches, and the second one's comment already names this case
+("a module fn declared `[TestCase]`") — the intent is present and the
+carrier does not reach it. `check/go/carrier.go:752` builds a declared
+return as a plain `core.NewCarrier(t)`.
+
+**Documentation status:** none — the divergence is silent. Both spellings
+type-check and both run correctly; only the checker's precision differs.
+
+**Proposed verdict:** none yet, but this is more likely a defect than an
+allowed split, since the class path already demonstrates the intended
+behaviour in the same position. Recorded rather than fixed inside PR #351:
+`declaredReturnCarriers` is on every dispatch, and making a record return
+strict-and-shaped there could refuse programs that pass today, so it wants
+its own change with its own false-positive measurement.
+
+**Frontier cost:** the reason it was worth chasing. The remaining
+Any-frontier is dominated by field reads through constructor functions
+(`module-test`'s `(Test.case …) get "name"` family, and the same shape in
+`module-log`), which no per-word annotation can narrow while this holds.

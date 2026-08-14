@@ -326,7 +326,9 @@ func addDateNative(name string, build func(n int) (years, months, days int)) nat
 				y, m, d := build(int(n))
 				return []native.Value{native.NewDate(t.AddDate(y, m, d))}, nil
 			}),
-			Returns: []*native.Type{native.TAny}, BarrierPos: -1,
+			// Every path builds a Date — the shift changes the value, never
+			// the type.
+			Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 		}},
 	}
 }
@@ -782,7 +784,8 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(t2)}, nil
 				}),
-				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
+				// Both arms return NewDate — the comparison picks which one.
+				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -798,7 +801,8 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(t2)}, nil
 				}),
-				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
+				// Both arms return NewDate — the comparison picks which one.
+				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 			}},
 		},
 		// --- Conversion ---
@@ -947,7 +951,8 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(result)}, nil
 				}),
-				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
+				// Every unit arm builds a Date; an unknown unit raises instead.
+				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -987,7 +992,8 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(result)}, nil
 				}),
-				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
+				// Every unit arm builds a Date; an unknown unit raises instead.
+				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 			}},
 		},
 		// --- Timezone ---

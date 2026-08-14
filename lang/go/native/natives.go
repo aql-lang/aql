@@ -26,9 +26,18 @@ var Natives = []NativeFunc{
 			{
 				// /q captures the upcoming Word as an Atom for us; the
 				// handler just marks it Quoted=true.
+				//
+				// RunInCheck for the same reason the TAny sibling below has
+				// it, and it is the whole VALUE of quoting a name: /q hands
+				// the handler a CONCRETE Atom, so running it yields the
+				// actual quoted symbol instead of a bare Atom carrier, and a
+				// consumer that reads the key gets one. `m dot (quote a)`
+				// checked dynamic(Any) against a payload-free carrier while
+				// the identical `m.a` checked Integer — the key was there to
+				// be read and the model threw it away.
 				Args:      []*Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
-				Impl:      Go(quoteWordHandler),
+				Impl:      Go(quoteWordHandler, RunInCheck()),
 				Returns:   []*Type{TAtom}, BarrierPos: -1,
 			},
 			{
@@ -53,9 +62,16 @@ var Natives = []NativeFunc{
 
 		Signatures: []Signature{
 			{
+				// RunInCheck for quote's reason, on quote's handler: the
+				// header above promises "words → atoms … behave exactly like
+				// `quote`", and a bare-word codequote takes the identical /q
+				// capture through the identical quoteWordHandler. Leaving it
+				// off made that promise false in check mode alone —
+				// `m dot (codequote a)` stayed dynamic(Any) where
+				// `m dot (quote a)` reads Integer (PR #351 review, Codex P2).
 				Args:      []*Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
-				Impl:      Go(quoteWordHandler),
+				Impl:      Go(quoteWordHandler, RunInCheck()),
 				Returns:   []*Type{TAtom}, BarrierPos: -1,
 			},
 			{

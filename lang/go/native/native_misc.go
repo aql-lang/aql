@@ -888,25 +888,7 @@ func doTimeout(tt TemporalModuleTypes, r *Registry, args []Value, isList bool) (
 
 func awaitWithOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	// args[0] = Options, args[1] = List (parallels)
-	mode := "all"
-	if oi, err := AsOptionsType(args[0]); err == nil {
-		if v, ok := oi.Fields.Get("mode"); ok {
-			if s, err := AsString(v); err == nil {
-				mode = s
-			} else if a, err := AsAtom(v); err == nil {
-				mode = a
-			}
-		}
-	} else if optsMap, _ := AsMap(args[0]); optsMap != nil {
-		if v, ok := optsMap.Get("mode"); ok {
-			if s, err := AsString(v); err == nil {
-				mode = s
-			} else if a, err := AsAtom(v); err == nil {
-				mode = a
-			}
-		}
-	}
-	return doAwait(r, mode, args[1])
+	return doAwait(r, awaitOptsMode(args[0]), args[1])
 }
 
 func awaitDefaultHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -923,16 +905,9 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 		return []Value{NewList([]Value{})}, nil
 	}
 
-	switch mode {
-	case "all":
-		return awaitAll(r, elems)
-	case "full":
-		return awaitFull(r, elems)
-	case "first":
-		return awaitFirst(r, elems)
-	case "any":
-		return awaitAny(r, elems)
-	default:
-		return nil, r.BoruError("await_error", fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
+	run := awaitRunner(mode)
+	if run == nil {
+		return nil, awaitUnknownMode(r, mode)
 	}
+	return run(r, elems)
 }

@@ -67,8 +67,8 @@ func TimeAsyncModuleNatives(tt TemporalModuleTypes) []NativeFunc {
 			// runs the carriers via RunUnit; refused elements interpret unchanged.
 			CompileEffect: CompileStoresBodyList,
 			Signatures: []Signature{
-				{Args: []*Type{TOptions, TList}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(awaitWithOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TList}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(awaitDefaultHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TOptions, TList}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(awaitWithOptsHandler), ReturnsFn: awaitModeMirror(), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TList}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(awaitDefaultHandler), ReturnsFn: awaitDefaultReturns, Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 		{
