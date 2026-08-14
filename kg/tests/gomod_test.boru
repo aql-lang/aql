@@ -216,10 +216,11 @@ end
 "check/go depends on core/go" Test.test end
 [(deps-of "compiler-go") ["check-go" "core-go"] Assert.equal]
 "compiler/go depends on check and core" Test.test end
-[(deps-of "eng-go") ["check-go" "compiler-go" "core-go" "parser-go"]
+[(deps-of "eng-go")
+      ["check-go" "compiler-go" "core-go" "parser-go" "test-specfix"]
       Assert.equal
   ]
-"eng/go depends on the four pieces below it" Test.test end
+"eng/go depends on the five modules below it" Test.test end
 [(deps-of "parser-go") ["core-go"] Assert.equal]
 "parser/go depends on core alone — it is a leaf over the kernel"
 Test.test end
