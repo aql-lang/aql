@@ -4654,7 +4654,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 		//     clause always bakes a plain CALL_NATIVE.)
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
-	case hasUncoveredQuoteArg(sig) && !core.IsGetWord(word) && !core.IsGetrWord(word) && word != "set" && word != "del" && !quoteInertOK:
+	case hasUncoveredQuoteArg(sig) && !core.IsGetWord(word) && !core.IsGetrWord(word) && !setDelKernelSig(es.reg, word, sig) && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set/del are exempt — plain accessors/mutators whose
@@ -4664,8 +4664,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 		// an object/class/store/flex field write (`p set x 7`); the receiver is
 		// a non-const instance (mutation-safety holds — instance types are
 		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
-		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
-		// so the word-name match admits only the real mutator, never a usurp.
+		// a` already relies on), and the set/del exemption is keyed on BINDING
+		// IDENTITY (setDelKernelSig, NUR057) — the matched sig must be the
+		// kernel registration's own Locked signature, so an open-words
+		// extension of set/del never rides an argument made for the mutator.
 		// `del` is `set`'s inverse (atom-keyed map-entry removal, copy-return
 		// on Map / in-place on FlexMap) and inherits the same argument verbatim.
 		// quoteInertOK is the principled extension of that exemption to a MODULE
@@ -4771,6 +4773,39 @@ func (es *EmitState) recordShuffleElided(word string, sig *core.Signature, args,
 // untyped list. Guarded on pointer identity with the registry's own binding so
 // a shadowed name (a user `def swap …`, whose sig has an fnFrame anyway) never
 // rides the exemption. depth/pick/roll are full-stack words and refused earlier.
+
+// setDelKernelSig is the binding-identity key that replaced the bare name
+// test in the two set/del quote-arg exemptions (NUR057). Those exemptions
+// were argued for the kernel mutator ("`set` cannot be shadowed (it is a
+// builtin)"), but `set`/`del` are NOT in sealedWords — they are extendable —
+// so the name alone could admit a shape the argument does not cover. The
+// admitted set is exactly what the corpus differential proves sound:
+//
+//   - a LOCKED sig — a Go registration (the kernel mutator, or a module
+//     inner native reached by delegation). Locked is stamped only by the
+//     Go registration path, so it is a registration identity no runtime
+//     construction can counterfeit; pointer identity into Lookup's table
+//     was tried and is fragile (the aggregate rebuilds when an extension
+//     entry lands, invalidating element addresses).
+//   - a BORU-BODIED sig under the name — an open-words extension
+//     (`def set fn [[k:Atom/q …] …]`): its /q param is an ordinary
+//     forward-capture bound into a CALL_USER frame, nothing re-steps, and
+//     the as.tsv/open-words.tsv extension rows compile with verified parity.
+//
+// What can no longer ride is a RUNTIME-MINTED handler sig under the name —
+// the usurp-wrapper class the old comment feared (`def set (usurp …)`
+// copies QuoteArgs onto a handler that RE-STEPS its result): never Locked,
+// no boru body, and precisely the shape the quoted-operand refusal exists
+// for.
+func setDelKernelSig(_ *core.Registry, word string, sig *core.Signature) bool {
+	if word != "set" && word != "del" {
+		return false
+	}
+	if sig == nil {
+		return false
+	}
+	return sig.Locked || len(sig.Body()) > 0
+}
 
 func (es *EmitState) dynamicStackShuffleOK(word string, sig *core.Signature) bool {
 	if !core.DynStackShuffleWords[word] {

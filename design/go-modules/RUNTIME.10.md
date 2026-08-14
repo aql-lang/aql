@@ -50,8 +50,10 @@ simply `Runtime.goos`, `Runtime.num-cpu`, etc.
 All words are **zero-arg constants** — they read nothing from the stack
 and return a single scalar. Their inner native sigs declare
 **`BarrierPos: 0`** (constant-style, exactly like `math-pi`/`math-e` in
-`math.go`), not `-1`: there is no arg to collect, so the stack-only
-boundary is correct.
+`math.go`). At zero args the spelling is byte-identical to `-1` after
+registration (`-1` normalizes to `TotalArgs()` = 0 — NUR023), so this
+is an idiom choice, not a divergence from ADR-004's forward-eligible
+default.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|

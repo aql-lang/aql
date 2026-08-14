@@ -59,8 +59,9 @@ func RunTypedBind(r *Registry, spec *TypedBindSpec, v Value) (Value, error) {
 				spec.Name, spec.Describe)
 		}
 		if _, ok := Unify(v, NewTypeLiteral(root)); !ok {
-			return Value{}, fmt.Errorf("def %s: value %s does not unify with declared type %s",
-				spec.Name, v.String(), spec.Describe)
+			return Value{}, r.BoruError("type_error",
+				fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+					spec.Name, v.String(), spec.Describe), spec.Name)
 		}
 		return ReparentValue(v, def), nil
 	case TypedBindDepScalar:
@@ -73,8 +74,9 @@ func RunTypedBind(r *Registry, spec *TypedBindSpec, v Value) (Value, error) {
 		// value with its base tag — DepScalar subsets never reparent).
 		unified, ok := Unify(v, *spec.Cons)
 		if !ok {
-			return Value{}, fmt.Errorf("def %s: value %s does not unify with declared type %s",
-				spec.Name, v.String(), spec.Describe)
+			return Value{}, r.BoruError("type_error",
+				fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+					spec.Name, v.String(), spec.Describe), spec.Name)
 		}
 		return unified, nil
 	}

@@ -905,6 +905,49 @@ func LookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 	return info, true
 }
 
+// typedDefUnifyMirror emits the failed-unify check diagnostic for a typed
+// def (NUR058). An INERT-CONST body is an exactly-known operand — the
+// check-time value IS the runtime value, byte for byte — so the finding is
+// a GUARANTEED runtime error mirror whose detail text cannot drift. The
+// stamp is sound only when the COMPILED program raises identically: the
+// check arm installs a carrier and continues, so on a recording pass the
+// mirror is completed by a terminal RecordTrap (the macroexpand
+// discipline), and a declined trap (nested occurrence) keeps the
+// unstamped, compile-refusing emission. Deep inertness, not shallow
+// concreteness, is the gate: a concrete LIST holding a check-mode
+// abstract class instance renders differently at check time than the
+// runtime value does (`[Box of [String]]` vs `[Box of [String]{value:…}]`
+// — the generics container rows), so such a body keeps the unstamped
+// emission and its runtime BIND_TYPED raise, which renders the live
+// value. A carrier body likewise stays unstamped — the static refusal is
+// an approximation the runtime value could still satisfy.
+func typedDefUnifyMirror(r *Registry, name, detail string, body Value, pos SrcPos) {
+	// The name token's Pos can be unset (a synthesized pair), and an
+	// auto-evaluated LIST body is rebuilt without one while its elements
+	// keep theirs — fall back down the chain so the compiled trap reports
+	// a real position like the interpreter's raise.
+	if pos.Row == 0 {
+		pos = body.Pos()
+	}
+	if pos.Row == 0 {
+		if lst, err := AsList(body); err == nil && !lst.IsNil() && lst.Len() > 0 {
+			pos = lst.Get(0).Pos()
+		}
+	}
+	if core.IsInertConst(body) && (!r.Check.Compiling ||
+		r.Check.Recorder().RecordTrap("type_error", detail, name, "", pos)) {
+		CheckAddUniqueDiagnostic(r, "type_error", detail, name, pos)
+		return
+	}
+	r.Check.AddDiagnostic(CheckDiagnostic{
+		Code:   "type_error",
+		Detail: detail,
+		Word:   name,
+		Row:    pos.Row,
+		Col:    pos.Col,
+	})
+}
+
 func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
@@ -1157,18 +1200,22 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				return InstallAndRecordDef(r, name, bound, args[0].Pos())
 			}
 			if r.Check.IsActive() {
-				r.Check.AddDiagnostic(CheckDiagnostic{
-					Code: "type_error",
-					Detail: fmt.Sprintf("def %s: value %s does not unify with declared type %s",
-						name, body.String(), describeType()),
-					Word: name,
-					Row:  args[0].Pos().Row,
-					Col:  args[0].Pos().Col,
-				})
+				// A CONCRETE body is an exactly-known operand, so the failed
+				// unify is a GUARANTEED runtime error mirror — the non-check
+				// branch below raises the identical text — and rides the
+				// stamping helper (RuntimeMirror + dedupe, NUR058). A carrier
+				// body keeps the unstamped emission: the static refusal is an
+				// approximation the runtime value could still satisfy, so the
+				// compile pipeline must keep refusing on it.
+				// Mirror discipline lives in typedDefUnifyMirror (NUR058).
+				typedDefUnifyMirror(r, name,
+					fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+						name, body.String(), describeType()), body, args[0].Pos())
 				return InstallAndRecordDef(r, name, NewCarrier(def), args[0].Pos())
 			}
-			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
-				name, body.String(), describeType())
+			return nil, r.BoruError("type_error",
+				fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+					name, body.String(), describeType()), name)
 		}
 	}
 	// Registry-armed: a container constraint may carry a bare
@@ -1178,18 +1225,17 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	unified, ok := UnifyR(body, constraint, r)
 	if !ok {
 		if r.Check.IsActive() {
-			r.Check.AddDiagnostic(CheckDiagnostic{
-				Code: "type_error",
-				Detail: fmt.Sprintf("def %s: value %s does not unify with declared type %s",
-					name, body.String(), describeType()),
-				Word: name,
-				Row:  args[0].Pos().Row,
-				Col:  args[0].Pos().Col,
-			})
+			// Same mirror discipline as the refine-ancestor arm above
+			// (NUR058): exactly-known operands stamp RuntimeMirror; a
+			// carrier body keeps the unstamped, compile-refusing emission.
+			typedDefUnifyMirror(r, name,
+				fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+					name, body.String(), describeType()), body, args[0].Pos())
 			return InstallAndRecordDef(r, name, NewCarrier(constraint.Parent), args[0].Pos())
 		}
-		return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
-			name, body.String(), describeType())
+		return nil, r.BoruError("type_error",
+			fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+				name, body.String(), describeType()), name)
 	}
 	// A typed-container constraint ({:T}/[:T]) over a NON-CONCRETE body — a flex
 	// carrier whose concrete elements are unknown at check time — validates its
