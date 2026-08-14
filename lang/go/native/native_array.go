@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // arrayNatives (core) and ArrayModuleNatives (the boru:array module)
@@ -1719,12 +1721,13 @@ func foldNoInitReturnsFn(args []Value, r *Registry) []Value {
 	// element carriers became join-aware these rows were flagged only
 	// coincidentally (the strict-Any accumulator failed the body's
 	// dispatch as a no_signature on the body word).
+	// Routed through the stamping helper (NUR058): staticEmptyFoldDetail
+	// fires only over an exactly-known (concrete, statically-empty)
+	// collection, so the finding is a RuntimeMirror — the program compiles
+	// and fold's own handler raises the byte-identical error — and the
+	// dedupe absorbs re-analysis under repeated call shapes.
 	if emptyDetail := staticEmptyFoldDetail(args[1]); emptyDetail != "" {
-		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:   "fold_error",
-			Detail: emptyDetail,
-			Word:   "fold",
-		})
+		core.CheckAddUniqueDiagnostic(r, "fold_error", emptyDetail, "fold", args[1].Pos())
 		return []Value{NewCarrier(TAny)}
 	}
 	elemC := ElementCarrierFromValue(args[1])

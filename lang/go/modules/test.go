@@ -582,13 +582,14 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Args:       []*native.Type{native.TString, native.TList, native.TList},
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
-				// NO shape ReturnsFn here, deliberately: Test.prop's result
-				// flows into run-property's `p:PropertySpec` PARAM, and a
-				// record-schema carrier (RecordTypeInfo payload) does not
-				// pass a record-refine param's pattern unify — the shape
-				// claim would silently kill that dispatch (a check-accuracy
-				// FP). The result stays a plain Map carrier; the
-				// PropertyResult/summary shapes below feed only field READS.
+				// The shape carrier flows into run-property's
+				// `p:PropertySpec` PARAM as well as field reads: a
+				// record-schema carrier unifies with a record-refine
+				// param's field-bag pattern by the runtime's open rule
+				// (unifyRecordSchemaCarrierVsMap, NUR068), so the claim
+				// narrows `p get "runs"` without killing that dispatch —
+				// the constraint that used to keep this sig shapeless.
+				ReturnsFn:  testPropSpecShapeReturns,
 				BarrierPos: -1,
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
@@ -719,6 +720,21 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 // claims are dynamic (gradual, guard-discharged); value-dependent fields
 // (failing-input / shrunk-input / error — Any by the PropertyResult decl)
 // stay dynamic(Any) via the schema's own Any constraint.
+
+// testPropSpecShapeReturns mirrors the PropertySpec record the test-prop
+// handler constructs (name/gen/property with the runs/seed/max-shrinks
+// defaults), field-for-field in the preamble type's order. gen/property
+// are quoted CODE bodies, typed List by the schema.
+func testPropSpecShapeReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	fields := native.NewOrderedMap()
+	fields.Set("name", native.NewTypeLiteral(native.TString))
+	fields.Set("gen", native.NewTypeLiteral(native.TList))
+	fields.Set("property", native.NewTypeLiteral(native.TList))
+	fields.Set("runs", native.NewTypeLiteral(native.TInteger))
+	fields.Set("seed", native.NewTypeLiteral(native.TInteger))
+	fields.Set("max-shrinks", native.NewTypeLiteral(native.TInteger))
+	return []native.Value{native.NewDynamicCarrierValue(native.NewRecordType(fields))}
+}
 
 func testPropResultShapeReturns(_ []native.Value, _ *native.Registry) []native.Value {
 	fields := native.NewOrderedMap()
@@ -1500,6 +1516,17 @@ def TestResult refine Record [
 # Helpers to construct specs declaratively
 # ============================================================
 
+# The constructors below deliberately declare [Map], NOT their record
+# types (NUR069): the none-vs-Any half of that record is resolved (an
+# Any field admits none at every boundary now), but the CallBoru
+# asymmetry stands — a module fn's return is never checked interpreted
+# (trim-only) while the compiled RET enforces the declared pattern, so
+# ANY record annotation here would raise compiled-only errors for a
+# non-conforming return the interpreter passes through. Check-mode
+# narrowing does not need the annotation: the body residual (make's
+# schema carrier / check-prop's shape ReturnsFn) surfaces through the
+# declared bare Map on the plain pass (BuildFnBodyReturnsFn's
+# record-residual rule, NUR068).
 # (named test-case internally: 'case' is a core word and module
 # preambles cannot redefine builtins; the export key stays 'case'.)
 def test-case fn [[out:Any in:List name:String] [Map] [

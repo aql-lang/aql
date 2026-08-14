@@ -321,6 +321,20 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module`:                                                                        {why: "NUR031: repeat import is a cache no-op — same descriptor instance", failsWith: "operand of unknown provenance"},
 	`import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module`:                                               {why: "NUR031: re-import after undef mints a FRESH descriptor (identity is per-import-instance)", failsWith: "operand of unknown provenance"},
 
+	// NUR067 — await's winner-takes-all modes (frontier-await-winner.tsv):
+	// `first` / `any` hand back the winning branch's WHOLE residual, 0-or-more
+	// values — a count that can EXCEED any static seat, the direction the L-DO
+	// variadic mark cannot express. The 1-seat layout was a live MISCOMPILE
+	// (`size [(await {mode:'any'} [[7 8]])]` — interpreter 2, compiled a
+	// stranded 7 and a 1-element list), so awaitVariadicResult now refuses the
+	// compile pass wholesale and the interpreter owns these modes. Graduation
+	// = a runtime-variadic region representation (an OpStackMark-style collect
+	// with no static count); the refusal arm then records the region and the
+	// rows move to lang/spec/module-time.tsv.
+	`import "boru:time-util" TimeUtil.await {mode:'first'} [[1 2 3]]`:      {why: "NUR067: the winner's 3-value residual has no static seat", failsWith: "runtime-variadic (0-or-more values) with no static seat"},
+	`import "boru:time-util" size [(TimeUtil.await {mode:'any'} [[7 8]])]`: {why: "NUR067: the miscompile shape — both values must reach the collecting paren", failsWith: "runtime-variadic (0-or-more values) with no static seat"},
+	`import "boru:time-util" 99 TimeUtil.await {mode:'first'} [[]]`:        {why: "NUR067: an empty winner contributes nothing — the zero-count direction", failsWith: "runtime-variadic (0-or-more values) with no static seat"},
+
 	// Net drivers — plan Phase 5: per-iteration mark/collect in the for: lowering.
 
 	// GRADUATED 2026-07-14 (L-EACH, plan Phase 5): the three forward-drift

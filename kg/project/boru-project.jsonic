@@ -172,6 +172,26 @@
       metadata: { repository: "boru-lang/boru" }
     }
     {
+      id: "src:hot-code-loading"
+      kind: "text"
+      locator: "design/HOT-CODE-LOADING.0.md"
+      title: "hot code loading: the mechanism report and reload design"
+      retrieved_at: null
+      content_hash: "hot-code-loading-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
+      id: "src:reload-invalidation"
+      kind: "text"
+      locator: "design/RELOAD-INVALIDATION.0.md"
+      title: "reload invalidation: hot reload with transparent compilation at zero hot-path cost"
+      retrieved_at: null
+      content_hash: "reload-invalidation-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
       id: "src:boru-viz"
       kind: "text"
       locator: "design/BORU-VIZ.0.md"
@@ -308,6 +328,10 @@
       attributes: { role: "the boru:scry proposal: the mechanism whereby a boru system gains knowledge of itself as plain data — census, per-word, graph, schema and trace words curated over existing engine seams, and the plan for resolving the overlap with boru:debug" } }
     { key: "boru-infoview", type: "Document", label: "design/BORU-INFOVIEW.0.md"
       attributes: { role: "the boru infoview proposal: position-indexed stack display learned from the Lean 4 infoview — carriers at the cursor via a trace-armed Check, actual values via the debugger's ring and replay, LSP-first delivery (inlay hints, hover, code actions, boru/stackAt), then a binary-served panel rendering scry data through viz" } }
+    { key: "hot-code-loading", type: "Document", label: "design/HOT-CODE-LOADING.0.md"
+      attributes: { role: "the report on boru's hot code loading ability — late binding end to end, uncached file modules, GC-generational old code, fork snapshot semantics, the aless re-anchor precedent, the BEAM comparison — and the reload-as-a-protocol design: a reload word with keep-old-on-failure, supervisor-broadcast propagation, the Plugin.migrate state hook, handler-stack hygiene, a persistent Vm.open sub-engine" } }
+    { key: "reload-invalidation", type: "Document", label: "design/RELOAD-INVALIDATION.0.md"
+      attributes: { role: "how hot reload and transparent compilation coexist without slowing compiled code: per-ref valid flags flipped push-style through a reverse dependency index (the HotSpot/Truffle/Julia equilibrium), ref unification at Finalize, world-pinned whole-program units, per-world restamp budgets — plus the confirmed F1 pass-hoisting divergence and its interim whole-program-refusal fix" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [
@@ -571,6 +595,26 @@
       object: { kind: "entity", entity: "lang-go" }
       evidence: [{ source: "src:state-machines", locator: "Scope decisions (agreed)",
         quote: "State machines ship as the `boru:state` module" }]
+      confidence: 0.95 }
+    { subject: "hot-code-loading", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:hot-code-loading", locator: "title",
+        quote: "A report on boru's **hot code loading** ability" }]
+      confidence: 0.95 }
+    { subject: "hot-code-loading", predicate: "supports"
+      object: { kind: "entity", entity: "lang-go" }
+      evidence: [{ source: "src:hot-code-loading", locator: "2.3",
+        quote: "Re-import **is** reload, today, for" }]
+      confidence: 0.95 }
+    { subject: "reload-invalidation", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:reload-invalidation", locator: "title",
+        quote: "How **hot code reloading** and **transparent compilation** coexist without" }]
+      confidence: 0.95 }
+    { subject: "reload-invalidation", predicate: "supports"
+      object: { kind: "entity", entity: "compiler-go" }
+      evidence: [{ source: "src:reload-invalidation", locator: "5. The design",
+        quote: "replace the per-invoke DepSnap walk with a per-ref valid" }]
       confidence: 0.95 }
     { subject: "boru-viz", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }

@@ -67,7 +67,24 @@ already routes a request (`{op:"inc" n:1}` matches a handler for `{op:"inc"}`,
 extra keys are payload) — the *same* matcher `receive` uses for selective receive.
 "Match a message" means one thing everywhere.
 
-This is a **design RFC only — no implementation code yet.**
+This began as a **design RFC only**; that is no longer the whole truth:
+
+> **Status (2026-08-14).** The executable slice has landed — the process
+> substrate (`spawn`/`self`/`send`/`receive`/registry,
+> `lang/go/native/native_process.go`, `core/go/process.go`), the phase-1
+> in-process service model (`service`/`add`/`call`/`send`/`state-of`/
+> `wrap`/`prior`, `lang/go/native/native_service.go`), and `boru:net`
+> tiers 1–2 (raw sockets incl. TLS, codecs, `listen {tcp codec} <svc>`,
+> `connect → Endpoint` where an Endpoint IS a `Service`,
+> `lang/go/modules/net_socket.go` / `net_codec.go`) — with divergences
+> recorded in `NETWORK-IMPLEMENTATION-PLAN.0.md` (notably: services
+> serialize with an internal mutex instead of running as served
+> processes; the state accessor is `state-of`; state is a flex map).
+> `server`/`serve`/`pool`/supervision-as-a-value, `defer`/`reply`,
+> streaming replies, and distribution remain design-only. Body text
+> below predates that slice; where it says "still missing", consult the
+> plan. §7.4 records three requirements adopted 2026-08 from the Elixir
+> comparison, one of which (hot code loading) **revises** §7.3's stance.
 
 ### Relationship to `NETWORK-SERVERS.0.md`
 
@@ -460,12 +477,13 @@ listener wrapper) split maps directly: the **interceptors + `target`** are the
 proxy core, and the **service lifecycle + `listen` transport** are the wrapper —
 so consolidation removes the bespoke wrapper, not the credential logic.
 
-## 7. Lessons from BEAM's weaknesses
+## 7. Lessons from BEAM — weaknesses and adopted strengths
 
 BEAM is the inspiration, but its model has well-known weaknesses. Below are the
 generally-agreed ones, the ecosystem's responses, and the stance boru takes — two
 of them (zero-copy messaging and backpressure) are load-bearing enough to change
-the design.
+the design. §7.4 then records the reverse lesson: three BEAM/Elixir *strengths*
+adopted as requirements.
 
 ### 7.1 Zero-copy messaging — boru structurally avoids BEAM's biggest tax
 
@@ -529,8 +547,138 @@ jobs). boru should take a stance up front:
 | Single `gen_server` bottleneck | pooling, sharding, scalable registries | a server is a collection of services; shard by key into many services; a router/proxy pin (Open Q #2) fronts them |
 | NIF safety / scheduler blocking | dirty schedulers, Rustler | natives run on Go's preemptively-scheduled goroutines; a slow native can't stall a cooperative scheduler the way a BEAM NIF can |
 | Mnesia limits | khepri, external DBs | no built-in DB ambition — persistence is an external service |
-| Hot code loading complexity | rolling/blue-green deploys | not a goal; out of scope |
+| Hot code loading complexity | rolling/blue-green deploys | **stance revised 2026-08** — adopted as a requirement for the plugin system (§7.4.1); mechanism report + design in `HOT-CODE-LOADING.0.md`. boru dodges most of BEAM's complexity: the interpreter is late-bound and compiled units self-invalidate on rebinding, so reload is a *protocol* (a control message per owning loop), not a global module-table swap |
 | Testing concurrency | QuickCheck, PropEr, Concuerror | property-based testing is already idiomatic here (`lang/spec`); systematic concurrency testing to follow |
+
+### 7.4 The strengths worth adopting — three requirements (added 2026-08)
+
+The Elixir ecosystem's pitch for this architecture is not only what BEAM
+avoids but what falls out of it for free. Three of those payoffs are adopted
+as requirements of this design. The observation that motivates adopting
+rather than deferring them: *they can all be built from scratch in other
+languages, but on BEAM the building blocks are part of the runtime* — and
+the audit below shows boru is in the same position: each requirement
+composes from machinery the runtime already ships (patrun, forks, services,
+capabilities, codecs), not from new substrate.
+
+#### 7.4.1 Hot-code swapping → a plugin system that reloads live without dropping state
+
+**Requirement.** Hot-code swapping must support an extensible **plugin
+system** in the style of the Pi coding agent's extensions: a plugin is
+loaded into a running host, edited on disk, and **reloaded live without
+dropping state** — the host keeps running, the plugin's accumulated state
+survives the swap.
+
+**What boru already has** (full report: `HOT-CODE-LOADING.0.md`): word
+references resolve through the def table at call time (module-level names
+are deliberately not closure-captured); re-`def` shadows; file modules are
+**never cached**, so re-`import` already re-reads, re-runs, and rebinds a
+module's namespace; compiled units whose dependencies are rebound
+self-invalidate (`NotifyNameRebound`) and fall back to the interpreter, so
+a swap de-optimizes rather than mis-executes; old fn values pin their old
+module sub-registry until GC — BEAM's current/old code generations without
+the purge. On this document's own model the split is exactly right: a
+service's **state** (a flex map) is untouched by handler registration,
+and `add` on an existing pattern *stacks* — so "swap the handlers, keep
+the state" is nearly native. The service is the plugin unit: **a plugin is
+a module exporting a service constructor** (§2 verbatim — no separate
+plugin format), reloaded by re-importing the module and re-registering
+handlers on the living service.
+
+**What it adds to this design.** A `reload` word (re-import with
+keep-old-generation-on-failure); reload **propagation as a control
+message** — a `server` broadcasts `{op:"reload"}` and each service
+re-imports inside its own mutex-held dispatch turn, each process inside
+its own `receive` loop (never by cross-goroutine mutation; running forks
+hold independent def-table snapshots by design); a **state-migration
+hook** (`Plugin.migrate old-state -> state`, the `code_change` analog —
+precedented by aless's watch-reload re-anchor, which preserves view state
+across a document rebuild and keeps the old generation when the new one
+fails to parse); handler-stack replacement (today `add` can only push);
+and a **persistent `boru:vm` sub-engine** (`Vm.open`) so an *untrusted*
+plugin runs behind an attenuated policy and reload = rebuild the
+sub-engine, re-injecting host-held state. Gaps carried in §10; phasing in
+§11.
+
+#### 7.4.2 Client-server architecture as a byproduct of the actor model
+
+**Requirement.** The OpenCode observation: once the core is an actor
+system, splitting a tool into a **server** (the engine and its state) and
+thin **clients** (UIs attaching over a wire) is not an architecture
+project — it is a byproduct. And the same actor substrate supplies both
+**I/O concurrency** (an actor parked per connection) and **CPU
+concurrency** (goroutines are M:N scheduled across cores, §7.3) with one
+model.
+
+**Audit: this already fell out.** The byproduct effect is not
+speculative — it happened in this codebase, twice, before it was a
+requirement:
+
+- **`Tui.serve` + `boru attach`** (`lang/go/modules/tui_serve.go`,
+  `cmd/go/internal/attach/`): a boru TUI app `serve`d over TCP runs the
+  *same driver loop* as local `Tui.run` against the remote half of the
+  renderer seam; widget trees stream down as json-lines, input events
+  come back up, and the attach client is deliberately dumb — no engine
+  client-side. Multiple viewers can attach; with `reattach: true` the app
+  **keeps running headless** when the last viewer detaches and a later
+  viewer resumes with the current frame — session persistence, the
+  OpenCode property, from the actor loop's indifference to where its
+  renderer lives.
+- **`Endpoint` = `Service`** (`NETWORK-CLIENTS.0.md`; implemented in
+  `net_codec.go`): `connect` returns a value of the *same* `Service` type
+  this document defines, so `call`/`send`/`wrap` work identically against
+  a remote peer — client-server is the in-process model exposed on a
+  wire, which is precisely §4's transport tier doing its job. `boru:repl`
+  (a socket REPL service) and the `api`+`ctl` control plane (§5) are the
+  same shape again.
+
+**What it adds to this design.** Mostly confirmation: §4 (transport) and
+§5 (CLI-server consolidation) *are* the client-server story and stay the
+priority. Two sharpenings: the §5 consolidation should treat
+`Tui.serve`/`attach` as its reference client (protocol conventions —
+handshake, auth token, reattach — to be shared, not re-invented per
+service), and the uniform contract (§8) is what keeps a client honest
+about the server being remote — no local-mode special cases.
+
+#### 7.4.3 Built-in distribution → isolating the brains from the hands
+
+**Requirement.** Distribution must make it natural to isolate the
+**brains** (the coordinating stateful session — e.g. an agentic session
+holding model context and conversation state) from the **hands** (sandbox
+plus tools — executors that run effects). Concretely: run the session on
+your machine while it coordinates executors inside Docker containers or
+on remote nodes; or one session coordinating **multiple** nodes — the
+Livebook topology (one notebook driving several attached runtimes).
+
+**What boru already has.** The pieces are the ones this document already
+specifies, plus two that shipped: the **uniform assume-remote contract**
+(§8) means the brains' `call {op:"run" …} executor` is written once and
+works whether the executor is a local service, a Docker-confined process,
+or a remote node; the **proxy + capability model** (§6, §7.3) is the
+trust boundary — each hand holds only the scopes its policy grants
+(`sandbox`/`compute` profiles hard-deny `process`/`network`/fs), so a
+compromised hand cannot become a brain, avoiding disterl's all-or-nothing
+trust; **`boru exec`** (`cmd/go/internal/exec/`) is a working hand today —
+a stateless HTTP execute service with policy flags, one fresh engine per
+request; and **`boru:vm`** is the same attenuation applied in-process.
+What Livebook gets from BEAM distribution and boru still lacks is the
+node layer itself: membership, health, a cross-node registry, and the
+location-transparent `call` over it (§9.1 "Horizontal", §10).
+
+**What it adds to this design.** A named target profile for the
+distribution phase — the **brains/hands split** becomes the acceptance
+test for "Later: distribution" (§11), replacing the abstract
+"location-transparent call across nodes": (1) a **hands node** is `boru
+serve` running an exec-shaped service under a restrictive profile,
+reachable via `connect`, its capabilities declared to the brains; (2) the
+**brains** is an ordinary boru program (or served session) holding
+`Endpoint`s to many hands, fanning `call`s out under §8 timeouts/retries
+and §9.2 pooling (a pool over hands *is* the multi-node Livebook
+topology); (3) the **proxy** (§6) fronts hands that face untrusted input,
+so credentials and quota live brains-side. Distribution's gap list (§10)
+gains no new mechanism from this — it gains its *shape* and its ordering
+rationale: membership + health first, because a brains/hands system is
+usable long before full mesh transparency.
 
 ## 8. Delivery semantics — one uniform messaging surface
 
@@ -870,6 +1018,19 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
   node join/leave (consistent hashing); lands with distribution.
 - **Lean / copy-on-write registry forks** (§9.1) — the #1 scalability lever;
   reduces per-process memory toward BEAM-class process density.
+- **Hot code reload + plugin system** (§7.4.1, `HOT-CODE-LOADING.0.md`) — a
+  `reload` word (re-import, keep-old-on-failure, generation counter); reload
+  propagation as a supervisor control message; the `Plugin.migrate`
+  state-migration hook; handler-stack replacement on services (`add` can only
+  push today); a persistent attenuated sub-engine (`Vm.open`/`load`/`call`/
+  `close`) for untrusted plugins; generation observability via
+  `{op:"status"}`.
+- **Brains/hands distribution profile** (§7.4.3) — a blessed pairing of a
+  coordinating session with capability-attenuated executors: a hands-node
+  serve profile (exec-shaped service under `sandbox`/`compute`), Endpoint
+  fan-out + §9.2 pooling on the brains side, proxy-fronted credentials.
+  Mechanism-wise this is the existing distribution gap (membership, health,
+  cross-node registry) — reordered so membership + health land first.
 
 ## 11. Phased roadmap
 
@@ -886,14 +1047,24 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the
   served `call` deadline + delivery-error set (§8.2); **intra-node `pool`** load
   balancing (§9.2).
+- **Phase 2b: hot reload + plugins** (§7.4.1). `reload`, the supervisor
+  reload broadcast, `Plugin.migrate`, handler-stack replacement, `Vm.open`.
+  Placed with phase 2 because the propagation rule rides the supervisor's
+  control requests; the in-process `reload` word itself has no phase-2
+  dependency and may land with phase 1.
 - **Phase 3: transport + proxy.** `boru:net` `listen`/`connect` (HTTP/stdio/TCP/
   JSON-RPC); remote `call` failure modes + retries under the uniform contract (§8.2);
   `proxy` with streaming replies and capability-checked interceptors;
   **inter-node load balancing** via a multi-target proxy (§9.2); begin refactoring
-  the CLI servers (§5) onto the model — vault-proxy as the proving ground. → the
+  the CLI servers (§5) onto the model — vault-proxy as the proving ground, with
+  `Tui.serve`/`attach` as the reference client protocol (§7.4.2). → the
   network-server goal.
-- **Later: distribution.** Location-transparent `call`/`send` across nodes;
-  cross-node membership/health + `"hash"`-pool rebalancing (§9.2).
+- **Later: distribution — shaped as brains/hands** (§7.4.3). Cross-node
+  membership/health first, then the hands-node serve profile + Endpoint
+  fan-out (a pool over hands, §9.2), then location-transparent `call`/`send`
+  and `"hash"`-pool rebalancing. Acceptance test: a session on one machine
+  coordinating executors in containers and on remote nodes under attenuated
+  capabilities.
 
 ## 12. Worked example
 
@@ -951,3 +1122,18 @@ serve ( server [ app gw ] )               # run everything (blocks)
    and should a `pool` auto-scale its worker `size` under sustained `overload`, or
    stay fixed-size with shedding? (Leaning: `"p2c"` default, fixed-size first,
    elasticity later with metrics.)
+10. **Reload granularity & failure ownership** (§7.4.1) — is `reload`
+    per-module only (per-service rebuilds being supervisor convention), and
+    does a failed `Plugin.migrate` keep the old generation running (the aless
+    rule) or crash into the restart policy? (Leaning: per-module word;
+    keep-old + report — supervision stays about faults, not upgrades. Full
+    question set in `HOT-CODE-LOADING.0.md` §6.)
+11. **Plugin trust tiers** (§7.4.1) — same-engine module (cheap, shared heap)
+    vs per-plugin `Vm.open` sub-engine (isolated, rebuildable): host's choice
+    per plugin, or a policy-driven default? (Leaning: host's choice, with the
+    restrictive profiles forcing the sub-engine tier.)
+12. **The hands-node profile** (§7.4.3) — is a "hand" just `boru serve
+    exec`-under-`sandbox` reached via `connect`, or a dedicated agent service
+    with a declared tool manifest (capabilities advertised to the brains at
+    handshake)? (Leaning: start as the former; the manifest is an `{op:"meta"}`
+    convention, not new machinery.)

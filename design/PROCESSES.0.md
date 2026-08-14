@@ -38,8 +38,15 @@ BEAM-like runtime:
 What is missing is a *long-lived* process primitive, mailboxes, `send`/`receive`,
 PIDs, and a named process registry. This document specifies them.
 
-This is a **design RFC only — no implementation code yet**, matching how other
-subsystems were designed first (`STREAM-WORDS.0.md`, `PERMISSIONS-PLAN.10.md`).
+This began as a **design RFC only**, matching how other subsystems were
+designed first (`STREAM-WORDS.0.md`, `PERMISSIONS-PLAN.10.md`). **Status
+(2026-08-14):** phase 1 has since landed — `spawn`/`self`/`send`/`receive`/
+`register`/`whereis`/`unregister`, the opaque `Pid`, bounded mailboxes with
+`"block"`/`"fail"`/`"drop"` overflow, patrun dispatch with `name:Type`
+binding slots, and `process`-scope gating
+(`lang/go/native/native_process.go`, `core/go/process.go`) — with the
+executable-slice decisions recorded in `NETWORK-IMPLEMENTATION-PLAN.0.md`.
+Links/monitors, supervision, and distribution remain design-only.
 
 ### Relationship to `boru:stream`
 
@@ -447,8 +454,12 @@ What this RFC adds, and what still blocks the network-server end-goal:
 - **Phase 3: networking + binary.** TCP/HTTP server primitive + actor-per-
   connection; a `Bytes` value type and bit-syntax for binary framing → the
   stated efficient/safe JSON **and** binary network-server goal.
-- **Later (optional): distribution.** Location-transparent `send` across nodes,
-  the BEAM feature that turns actors into a distributed system.
+- **Later: distribution.** Location-transparent `send` across nodes, the BEAM
+  feature that turns actors into a distributed system. No longer merely
+  optional: the brains/hands requirement (`SERVICES.0.md` §7.4.3 — a
+  coordinating session isolating model/session state from capability-
+  attenuated sandbox executors, locally or across nodes) motivates it and
+  shapes its ordering (membership + health before full transparency).
 
 The OTP-style **service/server DX** that rides on these phases is specified
 separately in `SERVICES.0.md` (its `serve`/`server`/`proxy`/`listen`/`connect`

@@ -611,21 +611,54 @@ func awaitModeName(v Value, def string) string {
 
 // awaitOptsReturns models the 2-arg form's residual. The mode has to be
 // READ before it can select a shape, so a non-concrete options argument
-// resolves nothing: `all` is the handler's default only when the map is
-// there to be missing a `mode` key.
-func awaitOptsReturns(args []Value, _ *Registry) []Value {
+// resolves nothing knowable — and "nothing knowable" includes the ARITY:
+// a runtime `first`/`any` mode is reachable, so the model is the variadic
+// spread, not a one-seat Any (NUR067).
+func awaitOptsReturns(args []Value, r *Registry) []Value {
 	if len(args) < 2 || !IsConcrete(args[0]) {
-		return []Value{NewCarrier(TAny)}
+		return awaitVariadicResult(r)
 	}
-	return awaitResidual(awaitOptsMode(args[0]), args[1])
+	return awaitResidual(r, awaitOptsMode(args[0]), args[1])
 }
 
-// awaitDefaultReturns models the 1-arg form, which pins mode to "all".
-func awaitDefaultReturns(args []Value, _ *Registry) []Value {
+// awaitDefaultReturns models the 1-arg form, which pins mode to "all" —
+// arity 1 on every path, so the variadic machinery is never armed here.
+func awaitDefaultReturns(args []Value, r *Registry) []Value {
 	if len(args) < 1 {
 		return []Value{NewCarrier(TAny)}
 	}
-	return awaitResidual("all", args[0])
+	return awaitResidual(r, "all", args[0])
+}
+
+// awaitVariadicResult models a winner-takes-all residual — `first` / `any`
+// hand back the winning branch's WHOLE residual, any count including zero
+// (`await {mode:'first'} [[]]` nets nothing; a 3-value branch nets three).
+//
+// PLAIN pass: the variadic-spread carrier, so the checked arity is honest
+// in both directions (the soundness oracle absorbs 0-or-more entries). The
+// element is the deliberate Any: the branches are unevaluated code bodies
+// run on isolated forks, so the winning residual's types genuinely cannot
+// be bounded here — see the SpreadPayload contract note.
+//
+// COMPILE pass: REFUSE (whole-program interpreter fallback). The runtime
+// count can EXCEED any modeled seat count — the winner's residual is
+// 0-or-more values — and the emitter's variadic machinery (the L-DO
+// SetCatchVariadic mark) covers only the SHRINKING direction (`do`'s N
+// no-raise vs 1 caught): a 1-seat event that delivers three values
+// strands two of them outside every laid-out consumer. That was a live
+// wrong-answer bug on the default path — `size [(await {mode:'any'}
+// [[7 8]])]` compiled to a stranded 7 and a 1-element list where the
+// interpreter answers 2 (NUR067's miscompile). Until a
+// runtime-variadic region representation exists, first/any awaits run
+// interpreted; graduation = that representation, at which point this
+// arm records the region instead of refusing.
+func awaitVariadicResult(r *Registry) []Value {
+	if r != nil && r.Check.Compiling {
+		r.Check.Recorder().MarkUncompilable(
+			"await first/any: the winning branch's whole residual is runtime-variadic (0-or-more values) with no static seat; the program runs on the interpreter (NUR067)")
+		return []Value{NewDynamicCarrier(TAny)}
+	}
+	return []Value{core.NewVariadicCarrier(NewTypeLiteral(TAny))}
 }
 
 // awaitResidual walks doAwait's own statement order: a non-concrete
@@ -663,14 +696,25 @@ func awaitDefaultReturns(args []Value, _ *Registry) []Value {
 //
 // first and any hand back the WINNING BRANCH's whole residual — any type at
 // any arity, including none (`await {mode:'first'} [[]]` returns nothing at
-// run time while this arity-1 model claims a value, and a 3-value branch
-// body returns three). That divergence is real and predates this model; it
-// needs the variadic-result machinery `do` reaches through
-// SetCatchVariadic, which is keyed to CompileFallbackBody and so does not
-// reach a CompileStoresBodyList word. Left as Any rather than papered over,
-// and recorded as NUR067 so the Any is read as an open arity divergence
-// rather than as imprecision someone should tighten.
-func awaitResidual(mode string, parallels Value) []Value {
+// run time, and a 3-value branch body returns three) — so their model is
+// the VARIADIC result (awaitVariadicResult): the variadic-spread carrier on
+// the plain pass (honest 0-or-more arity for the soundness oracle), a
+// whole-program refusal on the compile pass — NUR067, which began life as
+// this model's recorded arity divergence and turned out to be a live
+// miscompile; the count can exceed any static seat, a direction the L-DO
+// variadic mark cannot express.
+//
+// The two variadic arms fire for a NON-CONCRETE parallels list too: the
+// runtime list could be empty (one List) or not (the winner's residual), so
+// only the variadic claim covers both. The fixed-arity arms clear the
+// compile-pass latch (awaitClearVariadic) so a pending mark never leaks.
+func awaitResidual(r *Registry, mode string, parallels Value) []Value {
+	if mode == "first" || mode == "any" {
+		if IsConcrete(parallels) && awaitParallelsEmpty(parallels) {
+			return []Value{NewCarrier(TList)}
+		}
+		return awaitVariadicResult(r)
+	}
 	if !IsConcrete(parallels) {
 		return []Value{NewCarrier(TAny)}
 	}

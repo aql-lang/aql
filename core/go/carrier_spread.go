@@ -11,10 +11,16 @@ package core
 // entry denoting 0-or-more values of element type Elem. It exists ONLY on the
 // plain-check surface (a `[]`-declared recursive fn whose body leaks a
 // per-frame value — recursion.tsv:53 — cannot be modelled by a fixed-length
-// residual because the depth is a runtime value) and is consumed only by the
-// soundness oracle. Elem is a Value (a type literal or a disjunct of the
-// per-frame leaked types), never Any/Dynamic — a variadic-Any marker would let
-// the oracle admit a wrong-typed leak.
+// residual because the depth is a runtime value; `await`'s winner-takes-all
+// `first`/`any` residual — NUR067) and is consumed only by the soundness
+// oracle. Elem is a Value (a type literal or a disjunct of the
+// per-frame leaked types), never Any/Dynamic for a producer whose element
+// types are STATICALLY KNOWABLE — a variadic-Any marker would let the oracle
+// admit a wrong-typed leak. The one deliberate Any element is `await`'s
+// winner-takes-all model (awaitVariadicResult): the branches are unevaluated
+// code bodies run on isolated forks, so the winning residual's types
+// genuinely cannot be bounded — there the Any IS the honest claim, not a
+// laundered one.
 type SpreadPayload struct {
 	PayloadBase
 	Elem Value

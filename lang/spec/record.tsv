@@ -139,3 +139,27 @@ refine Record [ 'not a map' ]	ERROR:	each element must be a pair (single-key map
 def R1 (refine Record [a:Integer b:Integer]) def R2 (refine Record [b:Integer a:Integer]) R1 unify R2	'~unify-fail' false	reordered field bodies do not unify
 def R2 (refine Record [b:Integer a:Integer]) make R2 [2 1]	{b:2 a:1}	positional make fills declared field order
 def R1 (refine Record [a:Integer b:Integer]) def R2 (refine Record [b:Integer a:Integer]) (make R1 [1 2]) deq (make R2 [2 1])	true	same-content instances stay deq-equal across order-variant types
+		
+# === NUR068 — a record schema means the same thing as a fn RETURN ===		
+# A `refine Record` type declared as a fn's return keeps its field		
+# schema on the result (the same schema `make R` and a record-typed		
+# param carry), so field reads through constructor functions narrow		
+# and schema-breaking uses are refused. The negatives pin the refusal		
+# side: a wrong-typed return, a field read fed to a map word, and a		
+# constructor result reaching a DIFFERENT record's param.		
+def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [make R {name:'a' n:1}]] (mk) get 'name'	'a'	field read through a constructor fn
+def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [make R {name:'a' n:1}]] (mk) get 'n'	1	second field, second type
+def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [make R {name:'a' n:1}]] def use fn [[c:R] [String] [c get 'name']] use (mk)	'a'	constructor result into the SAME record's param dispatches
+def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [17]] mk	ERROR:mk: return value 1: expected Map, got Integer	declared record return still enforced
+def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [make R {name:'a' n:1}]] keys ((mk) get 'name')	ERROR:cannot call `keys`	a schema-typed field read is not a map
+def R (refine Record [name:String n:Integer]) def S (refine Record [tag:Atom v:List]) def mk fn [[] [R] [make R {name:'a' n:1}]] def use fn [[s:S] [Atom] [s get 'tag']] use (mk)	ERROR:cannot call `use`	a DIFFERENT record's param stays provably disjoint
+		
+# === NUR069 (none axis) — a record field declared Any admits none ===		
+# Any is the top of the value domain: Any ∩ none = none. One reading		
+# at every boundary — make, a record-typed param, a declared record		
+# return, and the unify word itself — matching `is`, which always		
+# admitted none for Any.		
+def R (refine Record [x:Any]) make R {x:none}	{x:none}	make admits (as it always did)
+def R (refine Record [x:Any]) def f fn [[c:R] [Map] [c]] f (make R {x:none})	{x:none}	a record param admits the none-fielded instance
+def R (refine Record [x:Any]) def mk fn [[] [R] [make R {x:none}]] mk	{x:none}	a declared record return admits it too
+None unify Any	None true	the unify word agrees: the intersection is none
