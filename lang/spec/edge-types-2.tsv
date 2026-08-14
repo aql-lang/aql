@@ -72,7 +72,7 @@ tnot (tnot Integer)	Integer	¬¬T folds back to T
 5 is Never	false	nothing is a member of Never
 none is Never	false	…not even none
 5 is Any	true	everything concrete is a member of Any
-none is Any	false	…EXCEPT none — absence is outside Any's membership (the :Any PARAM still admits it, user-types.tsv §6)
+none is Any	true	…INCLUDING none (NUR069): Any is the top of the value domain, one reading at every membership site — the :Any param always admitted it (user-types.tsv §6), make's Any field admitted it, and unify/is now agree
 5 is (tnot Never)	true	¬Never behaves as Any
 5 is (tnot Any)	false	¬Any behaves as Never
 # (dropped) `tnot Never` — type-algebra precision gap; same disposition

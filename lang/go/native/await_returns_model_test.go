@@ -7,7 +7,11 @@ package native
 // concrete list, and `first` / `any` are non-deterministic. So they are
 // driven here, against the same functions the handler dispatches through.
 
-import "testing"
+import (
+	"testing"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // wantResidual asserts a one-value residual whose carrier node is want.
 func wantResidual(t *testing.T, label string, got []Value, want *Type) {
@@ -23,13 +27,38 @@ func wantResidual(t *testing.T, label string, got []Value, want *Type) {
 func TestAwaitResidualDeclines(t *testing.T) {
 	// A non-concrete parallels list: doAwait raises before it reads a mode,
 	// so there is no residual to model.
-	wantResidual(t, "carrier parallels", awaitResidual("all", NewCarrier(TList)), TAny)
+	wantResidual(t, "carrier parallels", awaitResidual(nil, "all", NewCarrier(TList)), TAny)
 
-	// first / any hand back the WINNING branch's whole residual — any type
-	// at any arity — and an unknown mode raises. Neither is modellable.
-	for _, mode := range []string{"first", "any", "bogus"} {
-		wantResidual(t, "mode "+mode,
-			awaitResidual(mode, NewList([]Value{NewList(nil)})), TAny)
+	// An unknown mode raises — not modellable.
+	wantResidual(t, "mode bogus",
+		awaitResidual(nil, "bogus", NewList([]Value{NewList(nil)})), TAny)
+}
+
+// first / any hand back the WINNING branch's whole residual — any type at
+// ANY ARITY, including zero — so the model is the variadic spread, not a
+// one-seat Any (NUR067). The element is the deliberate Any of an unbounded
+// winner (the SpreadPayload contract note).
+func TestAwaitResidualWinnerModesAreVariadic(t *testing.T) {
+	nonEmpty := NewList([]Value{NewList(nil)})
+	for _, mode := range []string{"first", "any"} {
+		got := awaitResidual(nil, mode, nonEmpty)
+		if len(got) != 1 {
+			t.Fatalf("%s: got %d residual values, want the one spread", mode, len(got))
+		}
+		elem, ok := core.IsVariadicSpread(got[0])
+		if !ok {
+			t.Fatalf("%s: residual %+v, want a variadic-spread carrier", mode, got[0])
+		}
+		if !ValueType(elem).Equal(TAny) {
+			t.Errorf("%s: spread element %v, want the deliberate Any", mode, elem)
+		}
+		// A NON-CONCRETE parallels list is variadic too: the runtime list
+		// could be empty (one List) or not (the winner's residual), so only
+		// the spread covers both counts.
+		carrier := awaitResidual(nil, mode, NewCarrier(TList))
+		if _, ok := core.IsVariadicSpread(carrier[0]); !ok {
+			t.Errorf("%s: carrier parallels must model variadic, got %+v", mode, carrier[0])
+		}
 	}
 }
 
@@ -38,7 +67,7 @@ func TestAwaitResidualEmptyListPrecedesTheMode(t *testing.T) {
 	// parallels list models as a List for every mode — including one with
 	// no runner at all. This is the ordering the mirror has to honour.
 	for _, mode := range []string{"all", "full", "first", "any", "bogus"} {
-		wantResidual(t, "empty/"+mode, awaitResidual(mode, NewList(nil)), TList)
+		wantResidual(t, "empty/"+mode, awaitResidual(nil, mode, NewList(nil)), TList)
 	}
 }
 
@@ -68,7 +97,7 @@ func TestAwaitResidualKnownModes(t *testing.T) {
 	nonEmpty := NewList([]Value{NewList(nil)})
 
 	// full has no error escape: always a List, and a list of MAPS.
-	full := awaitResidual("full", nonEmpty)
+	full := awaitResidual(nil, "full", nonEmpty)
 	wantResidual(t, "full", full, TList)
 	ci, ok := full[0].Data.(ChildTypeInfo)
 	if !ok || ci.Child.Parent != TMap {
@@ -77,7 +106,7 @@ func TestAwaitResidualKnownModes(t *testing.T) {
 
 	// all is List-or-Error, named as a dynamic union so the claim does not
 	// distribute over dispatch (a strict disjunct refuses `… get 0`).
-	all := awaitResidual("all", nonEmpty)
+	all := awaitResidual(nil, "all", nonEmpty)
 	if len(all) != 1 {
 		t.Fatalf("all: got %d residual values, want 1", len(all))
 	}
@@ -102,16 +131,28 @@ func TestAwaitResidualKnownModes(t *testing.T) {
 
 func TestAwaitOptsReturnsDeclinesUnreadableOptions(t *testing.T) {
 	// The mode has to be READ before it can select a shape: an options
-	// carrier resolves nothing, and must NOT fall through to the "all"
-	// default (that default belongs to a map that is present and simply
-	// missing a mode key).
-	wantResidual(t, "options carrier",
-		awaitOptsReturns([]Value{NewCarrier(TOptions), NewList(nil)}, nil), TAny)
+	// carrier resolves nothing — including the ARITY, since a runtime
+	// first/any mode is reachable, so the model is the variadic spread
+	// (NUR067), never the one-seat "all" default (that default belongs to a
+	// map that is present and simply missing a mode key).
+	unread := awaitOptsReturns([]Value{NewCarrier(TOptions), NewList(nil)}, nil)
+	if len(unread) != 1 {
+		t.Fatalf("options carrier: got %d residual values, want the one spread", len(unread))
+	}
+	if _, ok := core.IsVariadicSpread(unread[0]); !ok {
+		t.Errorf("options carrier: residual %+v, want a variadic-spread carrier", unread[0])
+	}
 
 	// Short args cannot reach the reader either. A ReturnsFn is called with
 	// the matched operands, so this is defensive — but the rule is that a
 	// handler-side index is guarded, not that it is provably safe.
-	wantResidual(t, "short args", awaitOptsReturns(nil, nil), TAny)
+	short := awaitOptsReturns(nil, nil)
+	if len(short) != 1 {
+		t.Fatalf("short args: got %d residual values, want the one spread", len(short))
+	}
+	if _, ok := core.IsVariadicSpread(short[0]); !ok {
+		t.Errorf("short args: residual %+v, want a variadic-spread carrier", short[0])
+	}
 	wantResidual(t, "short args (1-arg form)", awaitDefaultReturns(nil, nil), TAny)
 }
 
@@ -137,5 +178,30 @@ func TestAwaitRunnerTableMatchesTheMirror(t *testing.T) {
 	}
 	if awaitRunner("bogus") != nil {
 		t.Error("awaitRunner(bogus) is non-nil — the mirror would miss a mode that raises")
+	}
+}
+
+// The COMPILE pass refuses the winner-takes-all modes wholesale: the
+// runtime count can exceed any static seat (NUR067's miscompile), so the
+// Compiling arm marks the program uncompilable and keeps the one-seat
+// dynamic Any for the recorded event's shape.
+func TestAwaitVariadicResultCompilePassRefuses(t *testing.T) {
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := reg.Check.Begin()
+	defer done()
+	reg.Check.Compiling = true
+	defer func() { reg.Check.Compiling = false }()
+	got := awaitVariadicResult(reg)
+	if len(got) != 1 {
+		t.Fatalf("compile pass: got %d residual values, want 1", len(got))
+	}
+	if _, spread := core.IsVariadicSpread(got[0]); spread {
+		t.Error("compile pass must keep the one-seat dynamic Any, not the spread")
+	}
+	if !got[0].Dynamic || got[0].Parent == nil || !got[0].Parent.Equal(TAny) {
+		t.Errorf("compile pass residual %+v, want dynamic(Any)", got[0])
 	}
 }

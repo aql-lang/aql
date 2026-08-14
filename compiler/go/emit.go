@@ -1286,7 +1286,11 @@ func (es *EmitState) SetCatchVariadic(pending bool) {
 // CompileFallbackBody dispatch: true exactly once, for the dispatch whose
 // ReturnsFn set it (the fallible multi-value `do` body — its runtime count
 // is N on no-raise but 1 on the caught path, so the recorded event must be
-// variadic rather than seated at the static N).
+// variadic rather than seated at the static N). The variadic mark covers
+// only that SHRINKING direction — a count that can EXCEED the modeled
+// seats (await's winner-takes-all first/any) has no event-level
+// representation and refuses wholesale instead (awaitVariadicResult's
+// MarkUncompilable, NUR067).
 func (es *EmitState) catchVariadicFor(sig *core.Signature) bool {
 	if es == nil || !es.catchVariadicPending || sig == nil ||
 		!sig.CompileEffect.Has(core.CompileFallbackBody) {

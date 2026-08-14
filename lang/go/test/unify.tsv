@@ -43,9 +43,11 @@ false	42	false
 # None unifies only with itself
 None	None	true	None
 
-# None does not unify with any
-None	Any	false
-Any	None	false
+# None unifies with Any (NUR069): Any is the top of the value
+# domain, the intersection is None — aligned with make's field rule
+# and `is`
+None	Any	true	None
+Any	None	true	None
 
 # None does not unify with scalars
 None	1	false
@@ -392,9 +394,12 @@ false	false	true	false
 {}	{}	true	{}
 {a:1}	{a:1}	true	{a:1}
 
-# --- Any as identity element: Any unify x == x (commutative) ---
-Any	None	false
-None	Any	false
+# --- Any as identity element: Any unify x == x (commutative).
+# None is IN the domain (NUR069): Any ∩ None = None. Never and
+# Absent stay outside — Never is the empty type and Absent is
+# non-presence (the ?:T optionality signal), not a value. ---
+Any	None	true	None
+None	Any	true	None
 Any	Never	false
 Never	Any	false
 Any	Absent	false

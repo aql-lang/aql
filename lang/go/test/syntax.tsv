@@ -196,10 +196,12 @@ String unify Number	'~unify-fail' false
 Number unify Boolean	'~unify-fail' false
 Boolean unify String	'~unify-fail' false
 
-# === Unify - none only unifies with itself ===
+# === Unify - none unifies with itself and with Any (NUR069:
+# Any is the top of the value domain, so Any ∩ none = none — the
+# same reading make's field rule and `is` always had) ===
 None unify None	None true
-None unify Any	'~unify-fail' false
-Any unify None	'~unify-fail' false
+None unify Any	None true
+Any unify None	None true
 None unify 1	'~unify-fail' false
 1 unify None	'~unify-fail' false
 None unify "hello"	'~unify-fail' false

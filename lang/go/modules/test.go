@@ -1517,15 +1517,16 @@ def TestResult refine Record [
 # ============================================================
 
 # The constructors below deliberately declare [Map], NOT their record
-# types (NUR069): a record field declared Any REFUSES none at every
-# pattern-unify boundary while make ADMITS it, so a [TestCase] /
-# [PropertyResult] return contract is false whenever a field is none
-# (out: none, failing-input: none on a passing property) — the compiled
-# RET would raise where the interpreter's module CallBoru path checks
-# nothing. Check-mode narrowing does not need the annotation: the body
-# residual (make's schema carrier / check-prop's shape ReturnsFn)
-# surfaces through the declared bare Map on the plain pass
-# (BuildFnBodyReturnsFn's record-residual rule, NUR068).
+# types (NUR069): the none-vs-Any half of that record is resolved (an
+# Any field admits none at every boundary now), but the CallBoru
+# asymmetry stands — a module fn's return is never checked interpreted
+# (trim-only) while the compiled RET enforces the declared pattern, so
+# ANY record annotation here would raise compiled-only errors for a
+# non-conforming return the interpreter passes through. Check-mode
+# narrowing does not need the annotation: the body residual (make's
+# schema carrier / check-prop's shape ReturnsFn) surfaces through the
+# declared bare Map on the plain pass (BuildFnBodyReturnsFn's
+# record-residual rule, NUR068).
 # (named test-case internally: 'case' is a core word and module
 # preambles cannot redefine builtins; the export key stays 'case'.)
 def test-case fn [[out:Any in:List name:String] [Map] [
