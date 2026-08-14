@@ -59,25 +59,23 @@ keep the two in sync in the same commit.
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
-| [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
-| [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list — NARROWED (apply/__casematch pinned in REFERENCE's closed list; the 0-arg doc split reconciled as a byte-identical idiom; stays Pending on the refined-ADR axis) | 2026-07-22 uniformity review |
+| [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list — NARROWED (apply/__casematch pinned in REFERENCE's closed list; the 0-arg doc split reconciled as a byte-identical idiom); VERDICT 2026-08-14: draft the refinement as a `design/` note, promotion to ADR decided separately | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
-| [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
-| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
+| [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically — VERDICT 2026-08-14: resolve by fix (String-only grouping keys); Map-key identity stays open as its own line | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
+| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon) | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
-| [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
+| [NUR053](#nur053) | The truthiness consumers do not share one domain — VERDICT 2026-08-14: resolve by fix (widen `convert Boolean`'s source slot to `Any`) | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler — RESOLVED BY FIX: inline-lowered regions refuse ambient-context writes (the NUR037 mechanism) | 2026-08-02 NUR register review |
-| [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in | 2026-08-02 NUR register review |
+| [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
 | [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim — RESOLVED BY FIX (binding-identity keying, the flex-gate discipline) | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped — RESOLVED BY FIX (fold/typed-def/patrun stamped, the typed-def mirror completed with a recorded trap and a coded raise; the advisory sites classified) | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary — RESOLVED BY FIX in tabnas parser v0.8.3, shim deleted | PR #338 retirement attempt (flagged for NUR by Codex P1) |
-| [NUR062](#nur062) | Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible | PR #339 maintainer decision (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
-| [NUR066](#nur066) | `end` and `none` are reachable as map keys by `get`/`getr` but not by the dot-path sugar that lowers to them; every other keyword works in both | surfaced while verifying `design/STATE-MACHINES.0.md` §11.3 examples (PR #352) |
+| [NUR066](#nur066) | `end` and `none` are reachable as map keys by `get`/`getr` but not by the dot-path sugar that lowers to them; every other keyword works in both — VERDICT 2026-08-14: resolve by fix (a marker-valued dot segment uses its source text) | surfaced while verifying `design/STATE-MACHINES.0.md` §11.3 examples (PR #352) |
 | [NUR067](#nur067) | `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions — RESOLVED BY FIX (the variadic-spread model; the 1-seat compiled layout was a live miscompile, now a sound ledgered refusal) | PR #351 await result model (flagged for NUR by Codex P1) |
 | [NUR068](#nur068) | A `refine Record` type keeps its schema as a fn PARAM and as a `class` return, but loses it as a fn RETURN — RESOLVED BY FIX (schema-bearing return carriers + the record-carrier unify admission) | PR #351 Any-frontier survey (minimal repro while narrowing `boru:test`'s constructors) |
 | [NUR069](#nur069) | A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither — NARROWED: the none-vs-Any axis is resolved by fix (`Any ∩ none = none` at every boundary); the CallBoru return asymmetry remains | NUR068's resolution (the reverted `boru:test` constructor annotations) |
@@ -828,10 +826,16 @@ argument; a second unqualified IO word would need its own NUR.
 
 ## NUR022 — `del` covers a fraction of `set`'s containers {#nur022}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-14 (the container gap was
+RESOLVED BY FIX 2026-08-02; the surviving slot asymmetry is allowed —
+see the verdict at the end) · **Recorded:** 2026-07-22 ·
+**Surfaced by:** full-repo uniformity review
 
-**Rule:** the storage-column words cover the same containers — a key
-that `set` can write, `del` can remove.
+**Rule (as restated by the 2026-08-14 verdict):** the storage-column
+words cover the same **keys** — a key that `set` can write, `del` can
+remove. **Slots are out of scope**: a declared Class field and a List
+index are positions, not keys, and the inverse of writing a position is
+writing a different value, not removing the position.
 **Divergence (as recorded, now FIXED — see below):** `set` dispatched
 over Class, Store, FlexXml, WeakFlexXml, FlexMap, WeakFlexMap, Map,
 List, FlexList, WeakFlexList (and carried a registered `type_error`
@@ -934,22 +938,30 @@ silently reopen the gap, and a `del`-only container is caught too.
 Behaviour: `lang/spec/flex.tsv` §12; kernel:
 `eng/go/store_tombstone_test.go`.
 
-### What is left for a maintainer
+### Verdict (maintainer, 2026-08-14): Allowed — slots are not keys
 
-One asymmetry survives on purpose and needs a verdict, because under
-the rule as literally worded it is still a divergence: **`set` can
-write a declared Class field and `del` cannot remove it.**
+One asymmetry survives on purpose: **`set` can write a declared Class
+field and `del` cannot remove it.** Under the rule as originally
+worded that was still a divergence; the verdict is that the WORDING
+was wrong, not the behaviour.
 
-The argument for allowing it: a class field is a **slot**, not a key.
-The inverse of writing a value to a slot is writing a different
-value, not deleting the slot — an instance missing a declared field
-would no longer satisfy its own type. The same reading is what makes
-the List refusal correct (`set` replaces at an index; removal shifts
-the tail, which is a different operation). If that slot-vs-key line
-is the right one, the rule should be restated as "a **key** that
-`set` can write, `del` can remove" with slots explicitly out of
-scope, and this record becomes Allowed. Stays **Pending** on that
-verdict.
+A class field is a **slot**, not a key. The inverse of writing a value
+to a slot is writing a different value, not deleting the slot — an
+instance missing a declared field would no longer satisfy its own
+type. The same reading is what makes the List refusal correct (`set`
+replaces at an index; removal shifts the tail, which is a different
+operation), so the line is not a special case for Class: it is the
+same line drawn twice. The rule at the top of this record is
+therefore restated as "a **key** that `set` can write, `del` can
+remove", with slots explicitly out of scope, and the record is
+**Allowed**.
+
+What remains true and is deliberately NOT closed here: the `get` hole
+recorded in the investigation step above — an absent key and a
+present-`none` key are indistinguishable through the reader — belongs
+to the **sentinel-values programme**, which the 2026-07-31 verdict
+opened as its own design line. That programme decides whether a
+distinct miss sentinel exists; it does not reopen this record.
 
 ---
 
@@ -1060,8 +1072,19 @@ stack-only registration sits outside the closed list any more. The
 (`design/go-modules/README.10.md`, `RUNTIME.10.md`): at zero args
 `-1` and `0` are byte-identical after registration normalization, so
 the passages now describe an idiom choice, not competing defaults.
-What remains Pending is exactly the refined-ADR axis above — an
-explicit maintainer-instruction item per the ADR-addition rule.
+What remains Pending is exactly the refined-ADR axis above.
+
+**Verdict (maintainer, 2026-08-14 — draft as a design note first):**
+write the refinement's material as a `design/` note covering all four
+topics the 2026-07-31 verdict named — barrier positions and what each
+`BarrierPos` value means, the argument-handling categories a word can
+occupy (forward-eligible, mixed-barrier, stack-only, quoting slots),
+stack-only behaviour and its closed list, and the chaining rationale
+— and decide on promoting it into `ADR.md` **separately**. This keeps
+the ADR rule's discovery/decision split intact: the note is
+discovery, however settled it reads, and only an explicit instruction
+turns it into an ADR entry. The record stays **Pending** until that
+promotion decision is made, not merely until the note is written.
 
 ---
 
@@ -1249,8 +1272,35 @@ at all — whatever you group by is flattened to its text render, and
 - **Deeper question flagged:** whether Map-keys-as-rendered-strings
   is the real thing to reconsider, language-wide.
 
-Next step: a design decision between (a)/(b)/(c) — possibly folded
-into a broader Map-key-identity review. Unresolved until then.
+### Verdict (maintainer, 2026-08-14 — resolve by fix, option (b))
+
+**Grouping keys become String-only.** A String key IS its render, so
+the lossy step disappears and two distinct keys can never collide —
+the divergence cannot arise rather than being judged benign.
+
+The costs the re-open identified are accepted deliberately, and the
+fix must pin both rather than let them surface as surprises:
+
+- **The 1-arg form loses generality.** `group [1 2 3]` works today and
+  will require a conversion first. The refusal must say so — a
+  `group`-specific message naming the String requirement, not a bare
+  `signature_error`.
+- **NaN totality changes character.** `nan` cannot be a key at all, so
+  the non-reflexive-key problem is *forbidden* rather than *folded*.
+  `group [nan nan]` → `{nan:[0 1]}` (pinned today in
+  `lang/spec/module-array.tsv` §3) becomes a refusal, and that row
+  flips with a comment recording why.
+
+Note what this verdict does NOT decide: **Map-keys-as-rendered-strings
+language-wide** stays open. This record's fix removes `group` as a
+symptom by construction, and the deeper question — whether Map keys
+should carry value identity at all — is not settled by restricting one
+word's key domain. It should be documented as the language-wide fact
+it is (REFERENCE.md currently scopes the statement to `group`), and
+carried as its own design line.
+
+Stays **Pending** until the signature change, the two flipped spec
+rows, and the refusal message land.
 
 ### Evidence
 
@@ -1424,6 +1474,37 @@ acceptance:
   payload to its own type for IDENTITY only and never reads a field.
   The module defect this record raised is therefore closed; the
   reflexivity requirement below is met for modules.
+
+### Verdict (maintainer, 2026-08-14 — resolve by fix, the full shape)
+
+Not the minimal reflexivity patch: **route `eq`/`deq` through the
+type's `Behavior` for Ideals** — replacing the kernel's hardcoded arms
+with the same capability dispatch every other operation uses — **and
+give functions a stable canon independent of the binding name**, so
+two references to one function compare equal and order together.
+
+That is the future ADR the 2026-07-24 record deferred to and this
+record proposed; the verdict takes it. Doing only the reflexive half
+(`f/r deq f/r` → true by identity) would satisfy the standing
+requirement below while leaving `a/r eq b/r` → false for two bindings
+of one function — a wrong answer that is *harder* to see once
+reflexivity stops signalling that fn equality is unfinished. The
+canon is the load-bearing half: `def a (f/r)` canons `fn a[…]` and
+`def b (f/r)` canons `fn b[…]`, which is why `eq` and `tcmp` disagree
+about one function reached two ways.
+
+The fix must cover the whole fall-through set, not just Function/Word:
+host `ExtensionPayload` values, `class` types and refinements of one,
+disjunction/`enum` types, `fnsig` and `surface` types, and any
+uninstantiated `gen` schema. A namespace's `deq`-reflexivity follows
+for free once its exports are reflexive (`IO deq IO`,
+`StringUtil deq StringUtil` are false today for exactly that reason),
+so that is the measurable acceptance signal alongside the direct rows.
+The Sealed Payload rule stands: identity compares a boxed pointer and
+never reads a field, as the descriptor fix already did.
+
+Stays **Pending** until the Behavior routing and the name-independent
+canon land.
 
 **Standing requirement (maintainer, 2026-07-31; module half
 discharged 2026-08-02):** every value — functions and modules
@@ -1901,11 +1982,19 @@ none / empty collection are …"). NUR001 (Allowed) rests its rationale
 on the same assertion; its allowance is about *content vs presence* and
 survives — this record is the domain question it was silently
 carrying.
-**Proposed verdict:** argue or fix — either widen `convert Boolean`'s
-source slot to `Any` so the three consumers coincide (the uniform
-answer, and `convert` already has a total presence rule to apply), or
-state the Scalar-only domain at TRUTHINESS.0.md and at `convert`'s
-documentation and argue why conversion is narrower than coercion.
+**Verdict (maintainer, 2026-08-14 — resolve by fix):** widen
+`convert Boolean`'s source slot to `Any`, so `if`, `make Boolean` and
+`convert Boolean` coincide on one domain as well as one rule. This is
+the uniform answer and the cheap one: `convert` already has a total
+presence rule to apply (`coerceBooleanTruthy`), so widening the slot
+is admission, not new semantics. It also makes the three documents
+that already assert the shared rule — `design/TRUTHINESS.0.md` §2,
+REFERENCE.md's `convert Boolean` description, and the shipped
+`boru describe convert` help text — true as written, rather than
+requiring three caveats. NUR001's allowance keeps resting on a claim
+that holds. Stays **Pending** until the fix lands, with spec rows in
+both directions (each falsy member coerces; the presence rule is
+unchanged for Scalars).
 
 **Note (2026-08-02): the RULE is now pluggable; the DOMAIN split is
 untouched.** `CoerceBoolean` gained a `Truther` capability walk, so a
@@ -2111,27 +2200,57 @@ Go-only Ideal hook. `lang/go/native/native_behave.go` — the
 lists the seven installable slots, and nothing states that
 construction is not among them or why.
 
-**Proposed verdict:** argue or fix. The fix is a `Maker` capability
-(`fn [[Any] [T]]`, dispatched by `MakeConvert` before its switch and
-by `MakeObjHandler` before the Ideals registry) plus a `behave make/q`
-slot, which would make the capability surface complete. The argument
-for allowing it is that construction is not a property of a value —
-there is no receiver to dispatch on, only a target type and an
-arbitrary source — so it belongs to the type's CONSTRUCTOR
-registration rather than to its value Behavior, and the Ideals
-registry is the right home. If that argument is taken, it should be
-stated where the capability list is documented, since the list is
-otherwise read as exhaustive. Note that this record does NOT block on
-the sentinel-values programme or on NUR018 (`Store`/`Error`
-deliberately not being `make` targets) — those decide WHICH types
-construct, this decides WHO gets to say how.
+**Verdict (maintainer, 2026-08-14 — resolve by fix):** add the
+`Maker` capability (`fn [[Any] [T]]`), dispatched by `MakeConvert`
+before its scalar switch and by `MakeObjHandler` before the Ideals
+registry, plus the eighth `behave make/q` slot — completing the
+capability surface.
+
+The counter-argument was considered and not taken: construction has no
+receiver to dispatch on, only a target type and an arbitrary source,
+which is a real disanalogy with the seven value-Behavior slots. What
+it does not answer is the **Go-vs-boru asymmetry** — a Go-side Ideal
+already customises construction through `Ideal.Instantiate`, so the
+capability exists; only its boru-side spelling is missing. Closing
+that is the fix, and it is what makes the documented capability list
+honest rather than requiring a paragraph explaining an omission.
+
+Scope, unchanged by this verdict: it does NOT block on the
+sentinel-values programme or on NUR018 (`Store`/`Error` deliberately
+not being `make` targets) — those decide WHICH types construct, this
+decides WHO gets to say how. Stays **Pending** until the capability,
+the slot, and their negative rows (a declined `Maker` falls through to
+today's behaviour; a wrong-typed return is refused) land.
 
 ---
 
 ## NUR057 — The compiler exempts `set`/`del` by name on an unenforced no-shadow claim {#nur057}
 
-**Status:** Pending · **Recorded:** 2026-08-03 · **Surfaced by:**
-lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`)
+**Status:** RESOLVED BY FIX · **Recorded:** 2026-08-03 · **Resolved:**
+2026-08-14 · **Surfaced by:** lang/eng content audit
+(`design/LANG-ENG-CONTENT-AUDIT.0.md`)
+
+**Resolution:** both exemption sites now key on REGISTRATION IDENTITY
+rather than on the name, via one helper (`setDelKernelSig`) used at the
+quote-arg refusal and at the poly admission. A sig is admitted when it
+is **Locked** — only the Go registration path stamps Locked, so no
+runtime construction can counterfeit it — or **boru-bodied**, an
+open-words extension (`def set fn [[k:Atom/q …] …]`) whose `/q` param
+is an ordinary CALL_USER capture and which the differential verifies
+compiles with parity. What declines is exactly the class the old
+comment feared and could not exclude: a runtime-minted handler such as
+`def set (usurp …)`, which copies QuoteArgs onto a handler that
+re-steps its result.
+
+Pointer identity into `Lookup`'s table — the `dynamicStackShuffleOK`
+idiom, and the obvious first choice — was tried and REJECTED as
+fragile: the aggregate rebuilds when an extension entry lands, so the
+pointer stops matching and legitimate boru-bodied extensions
+(`as.tsv:52-54`, `open-words.tsv:38`) regressed. That failure is why
+the predicate is a property of the sig, not an address.
+
+Pinned by `compiler/go/setdel_kernel_sig_test.go` (Locked admits,
+boru-bodied admits, runtime-minted declines, name scope, nil).
 
 **Rule:** a kernel special case keyed on a word NAME is sound only
 when the name reliably denotes the kernel registration. The
@@ -2170,8 +2289,41 @@ exemptions on binding identity like the `flex` gate.
 
 ## NUR058 — Language-layer guaranteed-error mirrors are emitted unstamped {#nur058}
 
-**Status:** Pending · **Recorded:** 2026-08-03 · **Surfaced by:**
-lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`)
+**Status:** RESOLVED BY FIX · **Recorded:** 2026-08-03 · **Resolved:**
+2026-08-14 · **Surfaced by:** lang/eng content audit
+(`design/LANG-ENG-CONTENT-AUDIT.0.md`)
+
+**Resolution:** the lang-layer mirrors are stamped, and one of them
+needed more than a stamp to be sound.
+
+- `fold`'s static-empty no-init mirror and `patrun add`'s
+  proven-concrete wrong-type mirror now route through
+  `CheckAddUniqueDiagnostic`, which stamps `RuntimeMirror` for every
+  caller — the mechanism the rule already named.
+- The **typed-def unify-failure** mirrors were the interesting case:
+  the stamp ALONE would have been unsound. A stamp tells the compile
+  pipeline "the program compiles and raises the identical error", but
+  the check arm installs a carrier and continues, so the compiled
+  program would not have raised at all. The mirror is therefore
+  completed the macroexpand way — a terminal `RecordTrap` on the
+  recording pass, with a declined trap keeping the unstamped,
+  compile-refusing emission — gated on **deep** inertness
+  (`IsInertConst`, not shallow `IsConcrete`: a concrete list holding a
+  check-mode abstract class instance renders differently at check time
+  than at run time, so those rows keep their runtime `BIND_TYPED`
+  raise), and with a position chain that survives synthesized name
+  tokens and pos-less auto-evaluated list bodies.
+- The interpreter's raise and `RunTypedBind`'s VM twins moved from
+  plain `fmt.Errorf` to the coded `[boru/type_error]`, so the two
+  engines raise byte-identically.
+- A statically-failing typed-def over an inert body now takes the
+  **correct-error disposition** the gates prefer: it compiles to the
+  terminal trap instead of refusing.
+
+The audit also classified every remaining direct `AddDiagnostic`
+caller as analysis-class or advisory — correctly unstamped, and
+recorded as such so the absence of a stamp there reads as a decision
+rather than an oversight.
 
 **Rule:** a check diagnostic that mirrors a GUARANTEED runtime error
 carries `CheckDiagnostic.RuntimeMirror` — stamped by
@@ -2364,9 +2516,10 @@ that made the retirement provable stay as the regression pin.
 
 ## NUR062 — Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible {#nur062}
 
-**Status:** Pending · **Recorded:** 2026-08-11 · **Surfaced by:** the
-maintainer's decision on PR #339 ("only lowercase should be valid for numeric
-syntax prefixes"); flagged for this register by the PR #339 review (Codex P1)
+**Status:** Allowed · **Date:** 2026-08-14 · **Recorded:** 2026-08-11 ·
+**Surfaced by:** the maintainer's decision on PR #339 ("only lowercase should
+be valid for numeric syntax prefixes"); flagged for this register by the
+PR #339 review (Codex P1)
 
 **Rule:** one lexical convention per kind of thing. Letters inside a numeric
 literal are either case-significant or they are not.
@@ -2406,12 +2559,17 @@ a DATA numeric".
 (tree-sitter, pygments) reject uppercase markers so highlighting cannot
 advertise a literal the language refuses.
 
-**Proposed verdict:** **Allowed** — the asymmetry is deliberate and the
-argument is that a marker is a *spelling of syntax* while digits and
-exponents are *content*: `0XFF` is a typo for `0xFF` far more often than it
-is anything a user meant, whereas `0xAB` vs `0xab` and `1E3` vs `1e3` carry
-no such signal. Recording it Pending rather than Allowed because the
-**Allowed** verdict is the maintainer's to give, not this record's to assume.
+**Verdict (maintainer, 2026-08-14): Allowed** — as proposed. The asymmetry
+is deliberate: a marker is a *spelling of syntax* while digits and exponents
+are *content*. `0XFF` is a typo for `0xFF` far more often than it is anything
+a user meant, whereas `0xAB` vs `0xab` and `1E3` vs `1e3` carry no such
+signal, so refusing the first while accepting the others is a diagnostic, not
+an inconsistency. The rule is already stated in REFERENCE.md §"Numeric
+literals" with its scope, pinned by refusal and name-position rows in
+`parser/spec/` that both port runners re-render independently, and both
+editor grammars reject uppercase markers so highlighting cannot advertise a
+literal the language refuses. No code or documentation change follows from
+this verdict — the record closes as it stands.
 
 ---
 
@@ -2591,16 +2749,27 @@ a keyword exclusion, `REFERENCE.md` has no reserved-word list for map keys,
 and the error message (`no signature matches … got (Map, None)`) names
 neither the cause nor the `get` workaround, so a user meets this as a puzzle.
 
-**Proposed verdict:** none yet. The plausible resolutions differ in cost.
-Make the dot chain treat a marker-valued segment as its source text, restoring
-the lowering identity outright. Or declare it Allowed and pay the
-documentation debt honestly — a reserved-key list in `REACH.10.md` plus a
-`dot`-specific diagnostic that says "`end` is a keyword here; use
-`m get end/q`" instead of a bare `no_signature`. Either way the current state
-— a silent, undocumented, two-name exception to a stated equivalence — is the
-one option that should not persist. Recorded now so it is not lost; PR #352
-worked around it by renaming its example event, which fixes that example and
-nothing else.
+**Verdict (maintainer, 2026-08-14 — resolve by fix):** make the dot chain
+treat a marker-valued segment as its **source text**, restoring the lowering
+identity outright: `m.none` and `m.end` read those fields exactly as
+`m get none/q` and `m get end/q` do, and as every other keyword segment
+already does.
+
+The documentation alternative (a reserved-key list plus a `dot`-specific
+diagnostic) was available and not taken: it would spend real work to explain
+an exception rather than remove it, and leave `REACH.10.md`'s single-source
+lowering contract carrying a two-name asterisk. The whole argument for the
+exception was implementation history — the lexer resolves both names to
+marker values before the dot chain sees them — which is not a semantic
+reason, and the keyword family disproves it (`def`, `fn`, `if`, `case`,
+`true`, `and` … all work in both positions).
+
+Fix scope: the segment must be recovered as text at the point the `Reach`
+lowers to its `dot`/`dotr` chain, with rows for both names in both accessor
+flavours, and a negative row proving a marker in an EXPRESSION position is
+unaffected (`m.k end` must still terminate the statement). Stays **Pending**
+until that lands. PR #352 worked around it by renaming its example event,
+which fixes that example and nothing else.
 
 ---
 ---
