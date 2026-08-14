@@ -2370,10 +2370,29 @@ func (es *EmitState) NotifyNameRebound(name string) {
 	if es == nil || !es.Active() {
 		return
 	}
+	depHit := false
 	for _, ref := range es.storedFnRefs {
 		if ref.depNames[name] {
 			ref.poisoned = true
+			depHit = true
 		}
+	}
+	// Poisoning alone is NOT enough for a module-scope rebind: the poisoned
+	// ref's CallBoru fallback resolves the LIVE def table, but module-scope
+	// def sites execute only in the compile pass (RunInCheck) — by VM time
+	// the table already holds the PASS-FINAL binding, so every call
+	// (including calls sequenced BEFORE the rebind in program order) reads
+	// the final value where the interpreter reads the point-in-program one
+	// (design/RELOAD-INVALIDATION.0.md §3 F1: interpreter 6 105 12,
+	// compiled-with-poisoning 12 12 12). The prior discipline's cases —
+	// a single call AFTER the last rebind — coincide with pass-final state,
+	// which is why per-ref poisoning looked sufficient. Refuse the whole
+	// program (interpreter fallback, correct values) until the §5.6 bind
+	// twins make VM-time def order real. Same module-scope guard as the
+	// frozen-read hammer below: a body-local def inside another unit's
+	// analysis shadows independently and must not refuse.
+	if depHit && len(es.openUnitRecs) == 0 {
+		es.MarkUncompilable("module binding " + name + " rebound after a stored handler captured it as a dep")
 	}
 	// A splice-expanded binding (expandStaticSplices) is FROZEN inside an
 	// OpPushClosure unit, which — unlike a spawn ref — cannot be unstamped
