@@ -2,23 +2,32 @@ package lang
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
-// TestCompiledStoredHandlerFreezeRedefine pins the fix for PR #243 comment #2: a compiled
-// stored service handler FREEZES its module-level dependencies at the `add`
-// (registration) source point, while the interpreter resolves those same names at
-// CALL time. If a dependency is undef'd or redefined BETWEEN the `add` and the
-// `call`, the frozen unit served the stale definition — a compile ≠ interpret
-// MISCOMPILE (the cardinal forbidden outcome). The fix: a def/undef of a name an
-// already-created stored ref reads (NotifyNameRebound) POISONS that ref, so
-// Finalize leaves it unstamped (Prog nil) and InvokeCallback falls back to
-// CallBoru — the interpreter, which resolves the live definition. compile ==
-// interpret MUST hold, and the ref must NOT be stamped (StoredRefStampedCount 0).
+// TestCompiledStoredHandlerFreezeRedefine pins the discipline for PR #243 comment #2,
+// REVISED by design/RELOAD-INVALIDATION.0.md §3 F1: a compiled stored service
+// handler FREEZES its module-level dependencies at the `add` (registration)
+// source point, while the interpreter resolves those same names at CALL time.
+// The original fix POISONED the ref (NotifyNameRebound → CallBoru fallback)
+// and kept the rest of the program compiled — which is sound only for calls
+// sequenced AFTER the last rebind: module-scope def sites execute in the
+// compile pass (RunInCheck), so the fallback's "live" def table holds the
+// PASS-FINAL binding for every call, including calls BEFORE the rebind in
+// program order (the F1 miscompile, pinned by
+// TestStoredHandlerMidProgramRebindRefusesAndMatches below). The revised
+// discipline: a module-scope rebind of a name an already-created stored ref
+// reads REFUSES the whole program — interpreter fallback, correct values —
+// exactly like the frozen-module-read hammer.
 func TestCompiledStoredHandlerFreezeRedefine(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	cases := []struct{ name, src, want string }{
-		// A USER FN dep is undef'd then redefined between add and call. Frozen
-		// helper=x+1 → 6; live helper=x+2 → 7. Fall back → 7.
+		// A USER FN dep is undef'd then redefined between add and call.
+		// Live helper=x+2 at the call → 7.
 		{"user fn undef+redef",
 			`def helper ([x:Integer] => [x add 1])
 def svc (service {})
@@ -26,7 +35,7 @@ add {} ([r:Map state:Any] => [helper 5]) svc
 undef helper
 def helper ([x:Integer] => [x add 2])
 call {} svc`, "[7]"},
-		// A bare redefinition (no undef) of a user fn dep — still diverges.
+		// A bare redefinition (no undef) of a user fn dep.
 		{"user fn bare redef",
 			`def helper ([x:Integer] => [x add 1])
 def svc (service {})
@@ -49,39 +58,80 @@ call {} svc`, "[11]"},
 			if err != nil {
 				t.Fatalf("CompileCheck error: %v", err)
 			}
-			if prog == nil {
-				t.Fatalf("top-level program must still compile, refused: %q", reason)
+			if prog != nil {
+				t.Fatalf("a module-scope rebind of a stored-handler dep must refuse; compiled instead")
 			}
-			// The handler ref was created at `add`, then poisoned by the later
-			// def/undef of its dep — so it is recorded but NOT stamped.
-			if got := prog.StoredRefCount(); got != 1 {
-				t.Fatalf("StoredRefCount = %d, want 1 (the handler ref)", got)
+			if !strings.Contains(reason, "rebound after a stored handler") {
+				t.Errorf("refusal reason = %q, want the stored-handler rebind hammer", reason)
 			}
-			if got := prog.StoredRefStampedCount(); got != 0 {
-				t.Errorf("StoredRefStampedCount = %d, want 0 (poisoned → interpreter fallback)", got)
+			gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
+			if compiled {
+				t.Errorf("expected the interpreter fallback")
 			}
-			got, err := a.RunCompiledStrict(c.src)
-			if err != nil {
-				t.Fatalf("RunCompiledStrict: %v", err)
+			if errC != nil || errI != nil {
+				t.Fatalf("run errors: compiled=%v interp=%v", errC, errI)
 			}
-			b, _ := New()
-			want, _ := b.RunInterp(c.src)
-			if fmt.Sprint(got) != fmt.Sprint(want) {
-				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
+			if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", gotC, gotI)
 			}
-			if fmt.Sprint(got) != c.want {
-				t.Errorf("got %v, want %s", got, c.want)
+			if fmt.Sprint(gotC) != c.want {
+				t.Errorf("got %v, want %s", gotC, c.want)
 			}
 		})
+	}
+}
+
+// TestStoredHandlerMidProgramRebindRefusesAndMatches is the F1 pin
+// (design/RELOAD-INVALIDATION.0.md §3): calls BEFORE a rebind must see the
+// point-in-program binding. Under the pre-revision per-ref poisoning this
+// program compiled and printed the pass-final value for every call
+// (12 12 12); the interpreter's documented call-time-binding semantics give
+// 6, then 105, then 12. The program must refuse and the fallback must match
+// the interpreter exactly.
+func TestStoredHandlerMidProgramRebindRefusesAndMatches(t *testing.T) {
+	// Legacy refusal+fallback-parity contract (see note above).
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	src := `def bonus 1
+def svc (service {})
+add {op:"go"} ([req:Map state:Any] => [bonus add 5]) svc
+call {op:"go"} svc
+def bonus 100
+call {op:"go"} svc
+def bonus 7
+call {op:"go"} svc`
+	a, _ := New()
+	prog, reason, _, err := a.CompileCheck(src)
+	if err != nil {
+		t.Fatalf("CompileCheck error: %v", err)
+	}
+	if prog != nil {
+		t.Fatalf("mid-program rebind of a stored-handler dep must refuse; compiled instead")
+	}
+	if !strings.Contains(reason, "rebound after a stored handler") {
+		t.Errorf("refusal reason = %q, want the stored-handler rebind hammer", reason)
+	}
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if compiled {
+		t.Errorf("expected the interpreter fallback")
+	}
+	if errC != nil || errI != nil {
+		t.Fatalf("run errors: compiled=%v interp=%v", errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("compiled %v != interpreter %v (the F1 MISCOMPILE)", gotC, gotI)
+	}
+	if want := "[6 105 12]"; fmt.Sprint(gotI) != want {
+		t.Errorf("interpreter baseline drifted: got %v, want %s", gotI, want)
 	}
 }
 
 // TestCompiledStoredHandlerStableDepCompiles is the POSITIVE guard: a stored handler over
 // a module dependency that is NEVER redefined (the shape of every real boru:net
 // app handler — todo-api's live-todos, mini-redis's arg-at/kv-read) MUST still
-// compile its unit and be stamped. Proves the fix is PRECISE — keyed on actual
-// redefinition, not "reads a module ref" — so the apps keep their compiled
-// speedup. compile == interpret, and the ref IS stamped (StoredRefStampedCount 1).
+// compile its unit and be stamped. Proves the hammer is PRECISE — keyed on
+// actual redefinition, not "reads a module ref" — so the apps keep their
+// compiled speedup. compile == interpret, and the ref IS stamped
+// (StoredRefStampedCount 1).
 func TestCompiledStoredHandlerStableDepCompiles(t *testing.T) {
 	src := `def helper ([x:Integer] => [x add 1])
 def svc (service {})
