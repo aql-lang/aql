@@ -612,11 +612,25 @@ arrives here in two forms.
 #### 3.6.1 `classify:` — the function form
 
 A machine-level name in the spec, bound like any other (§3.1), whose role is
-`(raw:Any  ctx:Map) -> Map`: **pure**, returning an event map. `State.step`
-then accepts `{raw: <value>}` where it otherwise takes `{event: <atom>}`.
-Purity is the same documented-not-enforced contract as guards and reducers
-(§3.2), for the same reason — the step must stay replayable — and it is the
-reason classification is not simply "host code the machine calls."
+`(raw:Any) -> Map`: **pure**, returning an event map. `State.step` then
+accepts `{raw: <value>}` where it otherwise takes `{event: <atom>}`. Purity is
+the same documented-not-enforced contract as guards and reducers (§3.2), for
+the same reason — the step must stay replayable — and it is the reason
+classification is not simply "host code the machine calls."
+
+The role takes **`raw` alone, not `(raw ctx)`** — frozen, and worth stating
+because the opposite is the tempting default. Three things fall out of it, all
+of which the context-taking version loses. Classification stays reproducible:
+the same input classifies the same way regardless of when in a run it arrives,
+so a classified event log means one thing forever. `State.classify <machine>
+<raw>` is well defined, needing no snapshot to answer with (a context-taking
+classifier could not be exercised standalone at all — the thing §4 says is
+most worth testing alone). And the two forms stay uniform: `classes:` is a
+partition over input values and could not consult a context if it wanted to,
+so a context-taking fn form would put the two spellings of one role on
+different footings. Context-sensitivity has a home already, one step later and
+visible in the table: a **guard**, which sees `(event ctx)` and can refuse a
+transition the classification alone would have allowed.
 
 The function form is the escape hatch: it handles inputs no partition
 describes — classifying a parsed record by three of its fields, say. Its cost
@@ -626,7 +640,10 @@ machine's edge: an event atom the classifier invents but `events:` never
 declared is a step-time `state_bad_event`, where the table form would have
 caught it at define time. That asymmetry is the whole reason `classes:` is
 the preferred form, and open question #7 asks whether the fn form should
-ship in v1 at all.
+ship in v1 at all. Because it is one role with two spellings held to
+different standards, it is recorded in the register as **NUR065** (Pending) —
+alphabet closure, payload shape, and diagnostics all diverge — so it cannot
+be silently baselined while that question is open.
 
 #### 3.6.2 `classes:` — the table form (preferred)
 
@@ -845,7 +862,7 @@ from `State.lint` (phase 2):
 | `state_bad_spec` | Error | malformed shape: no `initial:`, unknown keys, nested `states:` (reserved for phase 2), `final` state with `on:` |
 | `state_unknown_target` | Error | a `to:` names an undeclared state |
 | `state_unknown_name` | Error | an unbound `act:`/`when:`/`entry:`/`exit:`/`classify:` name; or, with a declared alphabet, an event in `on:`/`defer:`/`after:`/`raise`/`catch:`/`classes:` outside `events:` |
-| `state_bad_binding` | Error | a bound value is not a function or does not fit its role — guard: `(Map Map) -> Boolean`; reducer: `(Map Map) ->` a map or the `{ctx raise fx}` record (§3.2); classifier: `(Any Map) -> Map` (§3.6.1) |
+| `state_bad_binding` | Error | a bound value is not a function or does not fit its role — guard: `(Map Map) -> Boolean`; reducer: `(Map Map) ->` a map or the `{ctx raise fx}` record (§3.2); classifier: `(Any) -> Map` (§3.6.1) |
 | `state_conflict` | Error | an unguarded variant that is not last in its state×event variant list, shadowing every variant after it (§3.3.12) |
 | `state_bad_class` | Error | a malformed `classes:` entry: a range that is not `[lo hi]` with `lo` ordered before `hi`, a class overlapping another non-catch-all class, more than one `any/q`, or both `classes:` and `classify:` declared (§3.6.2) |
 | `state_class_gap` | Info | a `classes:` table with no `any/q` catch-all — the input domain has holes that surface only at step time as `state_bad_event` (Noble's `other?` column, §3.6.2) |
@@ -1058,7 +1075,7 @@ import "boru:viz"
 
 # ---- bindings: ordinary words; the spec refers to them by name ----------
 def announce  fn [[ev:Map ctx:Map] [Map] [ ctx ]]            # act: no ctx change
-def log-locked fn [[ev:Map ctx:Map] [Map] [ ctx set locks (add (ctx get locks/q) 1) ]]
+def log-locked fn [[ev:Map ctx:Map] [Map] [ set locks/q (add 1 ctx.locks) ctx ]]
 def key-fits  fn [[ev:Map ctx:Map] [Boolean] [ eq ev.key ctx.key ]]   # pure guard
 
 # ---- the machine: definition (data) + bindings (code), fused ------------
@@ -1139,7 +1156,7 @@ import "boru:string-util"
 #   ( 1 )     DROP >1     EMIT >1     DROP >1     EMIT >2
 #   ( 2 )     DROP >2     EMIT >2     DROP >2     DROP >2
 
-def keep fn [[ev:Map ctx:Map] [Map] [ ctx set text (add ev.raw ctx.text) ]]
+def keep fn [[ev:Map ctx:Map] [Map] [ set text/q (add ev.raw ctx.text) ctx ]]
 
 def fixed-point (State.define {
   initial: start/q
@@ -1205,7 +1222,7 @@ Four things this pins down, three of them corrections the port forces:
   constraint the Forth design predates rather than violates.
 - **Termination is the host's, until you make it the machine's.** His loop
   ends on a carriage return tested outside the FSM. Above, `fold` simply runs
-  out of characters. Giving the alphabet an `end` event and the machine
+  out of characters. Giving the alphabet an end-of-input event and the machine
   `final: true` accept/reject states moves the decision inside, which is what
   §3.3.8 and the `state_no_final_path` advisory (§6.3) are able to reason
   about — §11.3 does it that way.
@@ -1219,28 +1236,35 @@ he calls "rather repetitious"; then two states plus an `id.len` counter and a
 first's visibility (§3.6.3), and puts the constant back in the definition:
 
 ```boru
-def bump        fn [[ev:Map ctx:Map] [Map] [ ctx set n (add ctx.n 1) ]]
-def under-limit fn [[ev:Map ctx:Map] [Boolean] [ ctx.n lt ctx.max ]]
+def bump        fn [[ev:Map ctx:Map] [Map] [ set n/q (add 1 ctx.n) ctx ]]
+def under-limit fn [[ev:Map ctx:Map] [Boolean] [ lt ctx.max ctx.n ]]
 
 def ident (State.define {
   initial: start/q
   ctx: {n: 0  max: 7}                 # the bound is spec data, not a literal
   classes: { letter: [["A" "Z"] ["a" "z"]]  digit: [["0" "9"]]  other: any/q }
-  events: { letter: {raw: String}  digit: {raw: String}  other: {raw: String} }
+  events: { letter: {raw: String}  digit: {raw: String}  other: {raw: String}
+            input-end: {} }         # declared, but no class produces it
   states: {
-    start: { on: { letter: {to: body/q  act: bump/q}
-                   digit:  {to: bad/q}
-                   other:  {to: bad/q} } }
-    body:  { on: { letter: [ {to: body/q  act: bump/q  when: under-limit/q}
-                             {to: too-long/q} ]
-                   digit:  [ {to: body/q  act: bump/q  when: under-limit/q}
-                             {to: too-long/q} ]
-                   other:  {to: done/q} } }
+    start: { on: { letter:    {to: body/q  act: bump/q}
+                   digit:     {to: bad/q}
+                   other:     {to: bad/q}
+                   input-end: {to: bad/q} } }
+    body:  { on: { letter:    [ {to: body/q  act: bump/q  when: under-limit/q}
+                                {to: too-long/q} ]
+                   digit:     [ {to: body/q  act: bump/q  when: under-limit/q}
+                                {to: too-long/q} ]
+                   other:     {to: done/q}
+                   input-end: {to: done/q} } }
     done:     {final: true}
     bad:      {final: true}
     too-long: {final: true}
   }
 } {bump: bump/r  under-limit: under-limit/r})
+
+# the driver classifies each character, then injects end-of-input itself:
+#   fold [scan] (StringUtil.split '' "x1y") (State.init ident).snap
+#   State.step ident that-snap {event: input-end/q}   # => status done
 ```
 
 Five states where Noble has eight or two, and the accounting is worth being
@@ -1252,22 +1276,45 @@ precise about, because it is the whole content of row 21:
   (`state< (id) @ 1 =`). Distinct `final: true` states put the outcome *in*
   the machine, where §3.3.8 returns `done/q` and a reader can see all three
   results without reading the driving loop.
+- **`input-end:` is a declared event that no class produces.** It is the
+  concrete case of §3.6.2's classes-are-a-subset-of-the-alphabet rule: the
+  driver classifies characters and then injects `{event: input-end/q}`
+  itself. (Not spelled `end`: that is the `end`/`;` keyword, and while it is a
+  legal map key and atom, `spec.states.body.on.end.to` does not resolve —
+  NUR066.) Without it
+  the machine only reaches `done` when a *non*-identifier character happens to
+  follow, so an input ending exactly at the identifier's last character would
+  sit in `body` forever and the "termination is now the machine's" claim of
+  §11.2 would be false.
 - **The branch is enumerated, not computed.** `[{… when: under-limit/q} {to:
   too-long/q}]` is his `>1?` — same data dependence, same two possible
   successors, same `ctx` supplying the "additional information, external to
   the current state and current input." The difference is that both targets
   are literal atoms, so `State.graph` draws `body --letter [under-limit]-->
-  body` alongside `body --letter--> too-long`, `State.can` reports both, and
-  `state_conflict` confirms the unguarded variant is last (§3.3.12).
-- **The bound lives in `ctx:` defaults, not in the guard body.** This is the
-  refinement §3.6.3 asks for and Noble's example does not reach: `max: 7` is
-  part of the definition, so it is covered by the content hash (§3.3.9),
-  returned by `State.spec`, and visible to anything reading the machine —
-  while `under-limit` stays a general "have we room" predicate reusable
-  across machines. Written the other way, with `7` inside the fn, the table
-  shows *that* a bound decides the branch but never *what* it is, and the
+  body` alongside `body --letter--> too-long` and `state_conflict` confirms
+  the unguarded variant is last (§3.3.12). (`State.can` is *not* part of that
+  claim: per §4 it answers with event atoms only, so it reports `letter` and
+  says nothing about which of the two targets a given `ctx` would reach —
+  deliberately, for the same reason it does not evaluate guards.)
+- **The bound is declared data, not a literal buried in the guard.** This is
+  the refinement §3.6.3 asks for and Noble's example does not reach: `max: 7`
+  sits in the spec, so it is diffable, returned by `State.spec`, covered by
+  the definition hash (§3.3.9), and visible to anything reading the machine —
+  while `under-limit` stays a general "have we room" predicate reusable across
+  machines. Written the other way, with `7` inside the fn, the table shows
+  *that* a bound decides the branch but never *what* it is, and the
   eight-state version — whose only virtue was making the number countable —
   would still be telling the reader something this one hides.
+
+  **What that does *not* buy, stated plainly:** `ctx:` holds *defaults*, and
+  §4's `State.init` merges `opts.ctx` over them. So `State.init ident
+  {ctx: {max: 100}}` yields an instance that accepts 100-character
+  identifiers while carrying the same `snap.v` — the hash covers the
+  definition, and the definition's `max` is still 7. Declaring the bound in
+  `ctx:` therefore buys **visibility and diffability, not inviolability**: it
+  is the right home for a tunable default, and the wrong home for an
+  invariant that must hold across every instance. v1 has nowhere better to
+  put one — open question #9 asks whether it should.
 
 ## Open questions
 
@@ -1289,6 +1336,22 @@ precise about, because it is the whole content of row 21:
    wide alphabet pays per hole. Candidate rule: `classes:` implies
    `total: true` unless the spec says `total: false`; everything else keeps
    the opt-in. Maintainer call; the advisory itself is unchanged either way.
+
+   That rule needs the matrix named, because §3.6.2 defines two and they are
+   not interchangeable. **External totality** is `|states| × |classes|`: every
+   state handles every input category. **Full-alphabet totality** is
+   `|states| × |events|`, which additionally demands a cell for each declared
+   event no class produces — `raise`d internal events, `after:` timer events,
+   the `end:` of §11.3. The implication above is meant as the *external* one
+   only: filling the class grid is what writing a table already means, whereas
+   requiring every state to handle every timer event would force a wall of
+   `{}` cells for timers only one state can ever arm, which is noise, not
+   coverage. So the two should be separate checks with separate switches —
+   external totality implied by `classes:`, full-alphabet totality remaining
+   the explicit `total: true` — and `state_unhandled` should say which grid a
+   given hole is in. Decide this before either becomes gating; shipping one
+   ambiguous `total:` is precisely the semantic-fragmentation failure §2 row
+   12 exists to prevent.
 3. **Content-hash algorithm for `snap.v`, and the bindings gap** — canonical
    `canon` text hashed how? (Leaning fnv64 over the canonical form, the kg
    pipeline's digest precedent; the field is opaque either way.) And is the
@@ -1325,3 +1388,17 @@ precise about, because it is the whole content of row 21:
    general specification, and let the implementation compile the dense cases
    and scan the rest, per §3.6.2's representation-freedom clause. Revisit iff
    a scanning classifier shows up in the codec benchmarks.)
+9. **Is there a home for a non-overridable definition constant?** §11.3 puts
+   the identifier's seven-character bound in `ctx:` so the table shows it, and
+   §11.3's closing note records what that misses: `opts.ctx` merges over
+   `ctx:` at `State.init` (§4), so an instance can be started with a different
+   bound while carrying the same `snap.v`. `ctx:` is the right home for a
+   tunable default and the wrong one for a model invariant, and v1 offers
+   nothing else. Candidate: a `consts:` block — plain data, hashed with the
+   definition, readable by guards and reducers as a third argument or through
+   a distinguished `ctx` key, and simply not mergeable at `init`. (Leaning
+   defer: it is one more spec key and one more binding-shape change, and the
+   §11.3 bound is a genuine tunable rather than an invariant, so the
+   motivating example does not actually demand it. Revisit if a v1 machine
+   turns up whose correctness depends on a constant no caller may move — a
+   protocol machine's window or retry cap is the likely first one.)
