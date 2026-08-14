@@ -167,7 +167,7 @@
       locator: "design/STATE-MACHINES.0.md"
       title: "general-purpose state machines: the boru:state module"
       retrieved_at: null
-      content_hash: "state-machines-2026-08"
+      content_hash: "state-machines-2026-08-14"
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
@@ -299,7 +299,7 @@
     { key: "tabnas-dot-boundary-report", type: "Document", label: "design/TABNAS-DOT-BOUNDARY-REPORT.0.md"
       attributes: { role: "the file-ready upstream defect report for the last live tabnas shim: both ports' runnable reproduction against the bare dependency, the follow-character table showing the divergence is conditional (0xFF.5 differs, 0xFF.x agrees), and the acceptance criterion that a regression test must cover both" } }
     { key: "state-machines", type: "Document", label: "design/STATE-MACHINES.0.md"
-      attributes: { role: "the design RFC for general-purpose state machines: a mixed Go+boru boru:state module (definition/bindings/snapshot split, pure step, twelve-item semantic freeze, state_* check diagnostics, service and process hosts) and the argued decision to add words, not syntax" } }
+      attributes: { role: "the design RFC for general-purpose state machines: a mixed Go+boru boru:state module (definition/bindings/snapshot split, pure step, thirteen-item semantic freeze, in-definition input classification via classes:/classify:, state_* check diagnostics, service and process hosts) and the argued decision to add words, not syntax — revised against Noble's Forth FSM paper for the tabular lineage the statechart survey had missed" } }
     { key: "module-views", type: "Document", label: "design/MODULE-VIEWS.0.md"
       attributes: { role: "the rich-display sequel BORU-VIZ.0.md deferred: how any module exposes views and widgets of its own semantics — producer words over the viz data contract with kind-tag vocabulary, TUI widgets by composition, the view word's display bundles via open-word extension, and dashboard alignment with DEBUG-MODULE §7" } }
     { key: "boru-viz", type: "Document", label: "design/BORU-VIZ.0.md"

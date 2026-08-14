@@ -76,6 +76,8 @@ keep the two in sync in the same commit.
 | [NUR062](#nur062) | Numeric marker letters are lowercase-only while every other letter in a literal is case-flexible | PR #339 maintainer decision (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
+| [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
+| [NUR066](#nur066) | `end` and `none` are reachable as map keys by `get`/`getr` but not by the dot-path sugar that lowers to them; every other keyword works in both | surfaced while verifying `design/STATE-MACHINES.0.md` §11.3 examples (PR #352) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2410,3 +2412,113 @@ that `add` patterns are routing *tables* (inspectable, whole-request handlers)
 while `receive` clauses are *destructuring* sites. Deciding belongs to the
 processes/services design line; this record exists so the divergence is not
 silently baselined meanwhile.
+
+## NUR065 — Two spellings of the classifier role get different static guarantees {#nur065}
+
+**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:**
+`design/STATE-MACHINES.0.md` §3.6 (which introduces both spellings and states
+the asymmetry as a preference rather than resolving it); flagged for this
+register by the PR #352 review (Codex P1).
+
+**Rule:** one role, one set of guarantees. A spec key's static checking should
+follow from *what it means*, not from which of two spellings the author
+happened to pick — the same uniformity principle behind one parser, one
+argument-positioning convention, one total order.
+
+**Divergence:** `boru:state`'s classification edge has two spellings of a
+single role — "turn a raw input into an alphabet member" — and they are
+checked to different standards:
+
+- **Alphabet closure.** Every `classes:` key must be a declared `events:`
+  member, checked at define time (`state_unknown_name`, §6.3). A `classify:`
+  fn's output domain is not statically knowable, so an event atom it invents
+  that `events:` never declared is only a step-time `state_bad_event`. The
+  §3.3.11 closure guarantee therefore holds up to the machine's edge for one
+  spelling and through it for the other.
+- **Payload shape.** `classes:` produces a frozen `{event: <class> raw: <v>}`
+  (§3.6.2), so a reducer always reaches the input as `ev.raw`. A `classify:`
+  fn returns the whole event map and owns its payload shape, so nothing about
+  a classified event's contents is derivable from the spec.
+- **Diagnostics.** `state_bad_class` (Error) and `state_class_gap` (Info)
+  exist only for the table form. The fn form has no analogue of either, so a
+  classifier with an unreachable branch or an uncovered input domain is
+  invisible to `boru check` and to `State.lint`.
+
+**Evidence:** `design/STATE-MACHINES.0.md` §3.6.1 (the fn form's stated cost),
+§3.6.2 (the four frozen table-form properties and the payload freeze), §6.3
+(the `state_*` table, where the two class diagnostics have no fn-form rows),
+and open question #7 (whether the fn form should ship in v1 at all).
+
+**Documentation status:** the design document states the asymmetry openly and
+names `classes:` the preferred form; no user-facing doc exists yet, since the
+module is unimplemented.
+
+**Proposed verdict:** none yet — it is open question #7, and the candidate
+resolutions are the obvious three. Drop the fn form, making the role uniform
+by having one spelling (cleanest, but leaves inputs no partition describes
+with no answer). Keep both and declare the split Allowed on the argument that
+a *declarative partition* and an *arbitrary function* are honestly different
+things whose guarantees cannot be equal — in which case `State.lint` should
+report fn-form classification so the weaker guarantee is visible at the use
+site, not just in this document. Or narrow the gap by requiring a fn-form
+classifier to declare its output alphabet in the spec, recovering closure
+while leaving the mapping opaque. This record exists so the divergence is not
+silently baselined while that question is decided.
+
+## NUR066 — `end` and `none` are unreachable by dot-path but reachable by `get` {#nur066}
+
+**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** verifying a
+worked example in `design/STATE-MACHINES.0.md` §11.3 (PR #352), which needed
+an end-of-input event and reached for the name `end`.
+
+**Rule:** dot access **is** a `get`/`getr` chain. `design/REACH.10.md` is the
+single source of truth for the lowering, and `REACH.10.md` is listed in
+`design/README.md` as exactly that — "dot-access lowering to `get`/`getr`
+chains". So `m.k` and `m get k/q` are supposed to differ in spelling only.
+
+**Divergence:** for two key names they differ in outcome. Both of these are
+legal map keys and legal quoted atoms, and both are readable by `get` and
+`getr` — but neither survives the dot-path sugar:
+
+```boru
+def m {none: 1  end: 2  ok: 3}
+m get none/q     ;# 1        m getr none/q  ;# 1
+m get end/q      ;# 2        m.ok           ;# 3
+m.none           ;# check error: cannot call `dot` … got (Map, None)
+m.end            ;# check error: cannot call `dot` … got (Map, __ED)
+```
+
+The cause is that the lexer resolves both names to **marker values** before
+the dot chain sees them — `none` to the None value, `end` to the
+`Word/__ED` end-marker (`core/go/types.go` `TEnd`, `core/go/value.go`
+`NewEnd`, "the `end` / `;` keyword") — so the segment arrives as a marker
+rather than as a field name and no `dot` signature matches.
+
+What makes this a non-uniformity rather than ordinary keyword behaviour is
+that it is **not** how boru's other keywords behave. `def`, `fn`, `if`, `do`,
+`case`, `let`, `while`, `for`, `and`, `or`, `not`, `true` and `false` all work
+as dot-path segments *and* as `get` keys (verified by run, one probe per
+name). Only the two marker-valued names are the exception, so a reader cannot
+derive the rule from the family: it is not "keywords are not field names," it
+is these two.
+
+**Evidence:** the probes above, run against a binary built from this tree;
+`core/go/types.go:63` and `core/go/typetable.go:815` (`Word/__ED`, alias
+`End`); `core/go/value.go` `NewEnd`/`IsEnd`; `design/REACH.10.md` (the
+lowering contract dot access is meant to honour).
+
+**Documentation status:** unrecorded anywhere. `REACH.10.md` does not mention
+a keyword exclusion, `REFERENCE.md` has no reserved-word list for map keys,
+and the error message (`no signature matches … got (Map, None)`) names
+neither the cause nor the `get` workaround, so a user meets this as a puzzle.
+
+**Proposed verdict:** none yet. The plausible resolutions differ in cost.
+Make the dot chain treat a marker-valued segment as its source text, restoring
+the lowering identity outright. Or declare it Allowed and pay the
+documentation debt honestly — a reserved-key list in `REACH.10.md` plus a
+`dot`-specific diagnostic that says "`end` is a keyword here; use
+`m get end/q`" instead of a bare `no_signature`. Either way the current state
+— a silent, undocumented, two-name exception to a stated equivalence — is the
+one option that should not persist. Recorded now so it is not lost; PR #352
+worked around it by renaming its example event, which fixes that example and
+nothing else.
