@@ -4,6 +4,21 @@ Design for general-purpose **state machines** in boru — a builtin
 **`boru:state`** module (mixed Go+boru), plus the verdict on language
 primitives: state machines arrive as **words and data literals, not syntax**.
 
+> **Revised 2026-08-14** against J.V. Noble, *Finite State Machines in Forth*
+> (<https://www.forth.org/literature/noble.html>), the tabular lineage's
+> clearest statement. The survey behind §2 was entirely statechart-shaped;
+> Noble's paper is the other tradition, and reading it against this design
+> found one genuine hole and several places where the argument was weaker
+> than it needed to be. The substantive change is **§3.6**, which moves input
+> classification — how raw bytes or code points become alphabet members —
+> inside the definition, with freeze item 13 and two new diagnostics. The
+> rest is reinforcement or correction: prior-art rows 17–22 and §2.1, the
+> rationale that §3.3.12 was missing (and the outright decline of computed
+> transition targets), error coordinates in §3.3.4, the unblessed
+> boolean-flag encoding in §6.4, a sharper argument in §8 item 1, a revised
+> leaning on open question #2, and two new worked examples (§§11.2–11.3)
+> taken straight from the paper.
+
 ## Context
 
 boru has no state-machine facility today — `grep -rn "boru:state"` over the
@@ -184,10 +199,13 @@ UML, SCXML, Samek's QP), languages with first-class machine support (Erlang
 `gen_fsm`→`gen_statem`, P, UnrealScript, Ragel, Esterel, Plaid/typestate),
 the library ecosystem (XState, Stateless, Boost.*, Python `transitions`,
 Rails AASM, Redux), durable/distributed machines (Step Functions, Temporal,
-replicated state machines, event sourcing), and the practical-verification
-literature (model checking adoption, eqc_statem-style model-based testing).
-The rows below are the lessons that survived contact with production, mapped
-onto boru; each shaped a concrete decision in §3.
+replicated state machines, event sourcing), the practical-verification
+literature (model checking adoption, eqc_statem-style model-based testing),
+and — added in this revision — the **tabular lineage**: transition tables as
+the artifact, from the dragon book's lexer tables through Noble's Forth FSM
+compiler (rows 17–22) to Ragel and `re2c`. The rows below are the lessons
+that survived contact with production, mapped onto boru; each shaped a
+concrete decision in §3.
 
 | # | Hard lesson | Source | boru realization |
 |---|---|---|---|
@@ -207,6 +225,39 @@ onto boru; each shaped a concrete decision in §3.
 | 14 | The visualizer drives adoption; diagrams are a *generated view*, never a source | XState/Stately vs BPMN round-tripping | `State.graph` emits the shared viz data contract from the definition; `Viz.graph` draws it (`BORU-VIZ.0.md` §3.1; phase 2) |
 | 15 | Model-based testing is the verification sweet spot that actually ships; full model checking demands a second artifact and drifts | Erlang QuickCheck `eqc_statem`, AWS S3 ShardStore vs SPIN/TLA+ | the definition *is* the model: `State.explore` derives generate-run-shrink testing from it (phase 3) |
 | 16 | The FSM-densest domain — RFC protocol machines (TCP, TLS 1.3 App. A, QUIC, HTTP/2) — never adopted FSM libraries; its correctness story is conformance suites and monitors | RFC 9293 §3.3.2, RFC 8446, RFC 9000 | `State.conform` trace monitors (phase 3); and honesty: `boru:net` codecs get a *candidate* tool, not a mandate |
+| 17 | The definition must be **isomorphic to the state table** — not merely machine-readable, but readable *as* the table, one cell per state×input — so a reader audits the design by inspection instead of by tracing control flow | Noble, *FSM in Forth* §3.3 (the stated goal: "a one-to-one relation between the definition and the state table") | the spec map's `states:`×`on:` nesting *is* that table; §3.6's `classes:` supplies the column headings and §6.3's totality matrix is literally the table's shape |
+| 18 | Factor input classification into **one** pure classifier that runs once per input — ideally a lookup table — never as predicates re-tested inside each state | Noble, *FSM in Forth* §3.2 (`cat->col#`), §4 (`TAB:`/`install` decoders) | `classify:` / `classes:` in the definition (§3.6), pure, exactly one call per external event (freeze item 13) |
+| 19 | Totality is the *shape* of a table, not an afterthought: an explicit "other" column plus a fully written grid leaves no hole to forget | Noble, *FSM in Forth* Fig. 1 and every table in §§3–4 (an `other?` column throughout) | `classes:`' `any/q` catch-all keeps the alphabet small and closed, so the §6.3 totality matrix is dense and `total: true` becomes cheap (open question #2) |
+| 20 | Mediate a transition through a **named** thing, never a bare number — names read better, and decisively, a name can later *compute* its target, which is how a deterministic table becomes nondeterministic with no change to the machinery | Noble, *FSM in Forth* §3.3, §4 (the `>1` CONSTANT becoming the `>1?` word) | boru takes the **names** and declines the **computed target**: guarded variants (§3.3.12) buy the same compression while every `to:` stays a literal atom, so `State.graph` and `state_unknown_target` keep working (§3.4) |
+| 21 | Extended state collapses a repetitive state chain — Noble's eight-state identifier table becomes two states plus a counter — but the rule then lives *outside* the table, where no table-level tool can see it | Noble, *FSM in Forth* §4 (the `(id)` machine, both ways) | `ctx` plus a **named guard** keeps the bound visible *in* the table as `when: under-limit/q`: the middle term §3.6.3 recommends and §11.3 works through |
+| 22 | The table outlives the dispatch technique — the same table needed different implementations on indirect- versus direct-threaded Forths | Noble, *FSM in Forth* Appendix | the §3.3 freeze is over **semantics**, never representation: a future dense or compiled step is a representation change that needs no new spec row (§3.6.2) |
+
+### 2.1 Two lineages, one module
+
+Rows 1–16 come from the **statechart lineage**, which exists to structure
+large reactive systems: its problems are hierarchy, deferral, entry/exit
+discipline, and run-to-completion, and its inputs are already symbolic
+(`open`, `lock`, a button press). Rows 17–22 come from the **tabular
+lineage**, which exists to dispatch dense input cheaply and legibly: its
+problems are classifying a byte or code point, filling every cell of a
+state×class grid, and keeping the source text isomorphic to that grid.
+
+The two are not rivals — they answer different questions, and this design
+had only the first set of answers. That mattered because boru's own
+FSM-densest code sits in the *second* lineage: the parser drives a
+declarative table artifact both engines load
+(`design/DECLARATIVE-GRAMMAR.0.md`), and the `boru:net` codecs ahead of us
+are byte-stream machines. Row 16 recorded that protocol machines never
+adopted FSM libraries and left it there; the tabular lineage supplies the
+missing half of the explanation — those machines were already using a
+better-fitting formalism, and a statechart library does not serve it.
+
+The concrete consequence is §3.6: the machine's **edge** — how raw input
+becomes an alphabet member — moves inside the definition, where it is
+hashed, drawn, and checked with everything else. Everything else in the
+tabular lineage lands as reinforcement of choices already made (§3.3.12,
+§6.4, §8 item 1) or as a correction of emphasis (§3.3.4's error
+coordinates, §3.6.3's tradeoff), not as new machinery.
 
 ## 3. The machine model
 
@@ -240,6 +291,13 @@ def door-spec {
 }
 ```
 
+The full set of top-level spec keys is `initial:`, `policy:`, `ctx:`,
+`events:`, `states:`, `catch:` (§3.3.7), `defer-cap:` (§3.3.3), `version:`
+(§3.3.9), `total:` (§6.3), and — for machines fed raw input rather than
+symbolic events — exactly one of `classes:` or `classify:` (§3.6). Anything
+else is `state_bad_spec`, so this list is normative and grows only by
+revision of this document.
+
 **Bindings** — a map from those names to function values, supplied to
 `State.define` (the `/r` reference form, or any fn value). Late binding is
 deliberate (§2 row 7): the same definition runs with production
@@ -255,6 +313,19 @@ extended state (a plain map the actions/guards read and return). Deliberately
 **not** a minted type: the snapshot is the persistence artifact, and a plain
 map is exactly what `canon`/`jsonify` and the immutable-message rule
 (`PROCESSES.0.md` §6) already handle.
+
+Externalizing the snapshot completes a move the tabular lineage started and
+stopped halfway through. Noble's FSM begins with a global `mystate` variable,
+and §3.4 of that paper relocates it *into each machine's data structure* — for
+exactly the reason this design cares about, that a global "precludes such
+finesse" as nesting a machine inside another or recursing. But state-per-
+definition only buys one instance per definition: embed the same machine value
+twice in a parent and the two children share a state cell again, and the paper
+needs a `state<` accessor to reach in and initialize it. Carrying the state
+entirely outside the definition is the fixed point of that argument — the
+definition becomes reentrant by construction, phase 2's machine-in-machine
+composition (§3.4) needs no per-instance cloning, and there is nothing to
+accessor into.
 
 `State.define` fuses definition + bindings into a **`Machine`** value (§5) and
 is where all §6.3 validation fires.
@@ -307,7 +378,7 @@ fold [apply-event] event-log (State.init door) dot snap
 
 ### 3.3 The v1 semantic freeze
 
-These twelve items are the specification. Every one gets conformance rows in
+These thirteen items are the specification. Every one gets conformance rows in
 `lang/spec/module-state.tsv`; an implementation that diverges from this list
 is wrong, and a change to this list is a new revision of this document.
 
@@ -329,14 +400,31 @@ is wrong, and a change to this list is a new revision of this document.
    size is still tunable (open question #1). An unbounded defer list would
    silently recreate the mailbox-growth footgun that `PROCESSES.0.md` §1
    rejects.
-4. **Entry/exit ordering and self-transitions.** A transition runs: exit
+4. **Entry/exit ordering, self-transitions, and failure coordinates.** A transition runs: exit
    reducer of the source state → transition `act:` reducer → entry reducer of
    the target, each folding `ctx` in that order (§3.2). A transition **with
    `to:`** — including `to:` the current state — is *external*: exit and
    entry run. A transition **without `to:`** is *internal*: the machine stays
    put, only `act:` runs, no exit/entry, timers untouched. This single
    explicit distinction removes the classic self-transition bug class; there
-   is no silent default.
+   is no silent default. It is also the one item that does not survive a
+   naive port *from* a tabular machine: a Forth-style table has no entry/exit
+   actions, so its "stay in state 1" cell (`EMIT >1` from state 1) means
+   boru's **internal** transition — `{act: …}` with no `to:` — and
+   transliterating the `>1` into `to:` silently adds an exit/entry pair and
+   re-arms the state's timers (§11.2 shows the correct reading).
+
+   **Where a failure happened is part of the failure.** A guard or reducer
+   that raises aborts the step atomically: the caller's snapshot is untouched,
+   so there is never a half-applied state to reason about. The raised error
+   nevertheless carries the transition's coordinates —
+   `{from: <state>  event: <atom>  to: <state>|none  phase: guard/q|exit/q|act/q|entry/q}`.
+   Noble took the other half of this trade, deliberately updating the state
+   variable *before* running the cell's action so that an `ABORT` inside it
+   could report where it occurred without a per-cell error handler; putting the
+   coordinates in the error buys the same locatability without giving up
+   atomicity, which matters more here because the snapshot is the persistence
+   artifact and a half-applied one would be persisted.
 5. **Initial entry.** `State.init` runs the initial state's entry reducer —
    its `ctx` result is folded into the returned snapshot, its `fx` requests
    come back in `effects` (SCXML behaviour): initial entry happens
@@ -405,6 +493,35 @@ is wrong, and a change to this list is a new revision of this document.
     variant anywhere but last — it shadows every variant after it — is the
     Error.
 
+    The guarded-variant list is also the *reason* this design has no
+    **computed** transition target, the tabular lineage's alternative spelling.
+    Noble mediates every transition through a word, and observes that the same
+    machinery then serves nondeterministic machines for free: swap the `>1`
+    constant for a `>1?` word that returns state 1 or state 2 depending on a
+    counter, and nothing else changes. His framing of what that buys is exactly
+    right and boru keeps it — there is nothing random about such a machine,
+    "what permits multiple possibilities is additional information, external
+    to the current state and current input," which is precisely `ctx`. What
+    boru declines is the *spelling*. A computed target is opaque to everything
+    downstream of the definition: `state_unknown_target` cannot check it,
+    `State.graph` cannot draw the arc, `State.can` cannot report it, and the
+    totality matrix cannot count it — the definition stops being isomorphic to
+    the table (row 17) at the moment it matters most. A guarded variant list
+    recovers the whole of that expressiveness with literal `to:` atoms: the
+    branch is still data-dependent, the alternatives are merely enumerated
+    instead of computed. Computed targets are therefore declined outright
+    (§3.4), not deferred.
+13. **Classification is pure, and happens exactly once.** When a machine
+    declares `classify:` or `classes:` (§3.6), an external event supplied as
+    `{raw: <value>}` is classified once, before transition selection, and the
+    resulting event map is what the state table, `defer:`, and the snapshot
+    all see; the raw value reaches guards and reducers only as that map's
+    payload (§3.6.2). Internal `raise`d events and timer events
+    are **never** classified: they are already alphabet members. A step given
+    an explicit `{event: …}` skips classification entirely, so a classified
+    machine stays directly testable at the symbolic level and a replay over a
+    log of classified events never re-runs the classifier.
+
 ### 3.4 What v1 deliberately does not have
 
 Hierarchy (phase 2, by the SCXML algorithm — the spec's nested-`states:`
@@ -412,9 +529,10 @@ shape is *reserved* and rejected with a clear error so flat specs stay
 forward-compatible), machine-in-machine composition (phase 2: a parent
 embedding a child machine value, stepping it purely, and receiving its
 `done`), orthogonal regions (never), do-activities (never — long-running work
-is a child process, cancel-on-exit, once supervision lands), history states
-(open question #6), and domain replies computed by actions on the service
-host (phase 3, blocked on `@from`).
+is a child process, cancel-on-exit, once supervision lands), computed
+transition targets (never — §3.3.12), history states (open question #6), and
+domain replies computed by actions on the service host (phase 3, blocked on
+`@from`).
 
 ### 3.5 Hosts
 
@@ -464,6 +582,150 @@ shutdown-context diverge. The `boru:state` loader must share the parent
 registry's `Procs` pointer (one line in the loader, plus a pinning test), and
 this constraint holds for any future module that spawns on the user's behalf.
 
+### 3.6 Input classification — the machine's edge
+
+Everything above assumes events *arrive* symbolic: `{event: open/q}`,
+`{event: lock/q key: "k1"}`. That holds for a door, a service request, an
+actor message. It is false for the domain the repo has the most of. A codec
+or a scanner is fed bytes or code points, and the machine's alphabet is a
+handful of **categories** — digit, letter, delimiter, everything-else — that
+some layer must derive from each input.
+
+Before this revision that layer was unowned: the honest reading of §3.5 was
+"the host does it, somehow." That puts the alphabet's definition outside the
+definition, with four consequences worth naming, since each is a promise this
+document makes elsewhere and quietly broke here. The mapping is not covered
+by `snap.v`, so two machines that classify differently can share a version
+hash. It is invisible to `State.graph`, so the drawn edge labels are the
+categories with nothing saying what produces them. It cannot be checked
+against `events:`, so a classifier emitting an undeclared atom is a
+step-time surprise in a design that promised define-time. And each host
+reimplements it, so the service and process hosts of one machine can
+disagree about what its input means.
+
+The tabular lineage factors this seam *into* the machine and has done since
+the 1990s: Noble's `cat->col#` maps a character to a column index, and his
+`TAB:` decoder does it as a 128-entry lookup table filled by range
+(`1 ' [id] ASCII Z ASCII A install`). That is the missing piece, and it
+arrives here in two forms.
+
+#### 3.6.1 `classify:` — the function form
+
+A machine-level name in the spec, bound like any other (§3.1), whose role is
+`(raw:Any  ctx:Map) -> Map`: **pure**, returning an event map. `State.step`
+then accepts `{raw: <value>}` where it otherwise takes `{event: <atom>}`.
+Purity is the same documented-not-enforced contract as guards and reducers
+(§3.2), for the same reason — the step must stay replayable — and it is the
+reason classification is not simply "host code the machine calls."
+
+The function form is the escape hatch: it handles inputs no partition
+describes — classifying a parsed record by three of its fields, say. Its cost
+is that a fn's output domain is not statically knowable, so none of §3.6.2's
+checks apply and the alphabet-closure guarantee (§3.3.11) stops at the
+machine's edge: an event atom the classifier invents but `events:` never
+declared is a step-time `state_bad_event`, where the table form would have
+caught it at define time. That asymmetry is the whole reason `classes:` is
+the preferred form, and open question #7 asks whether the fn form should
+ship in v1 at all.
+
+#### 3.6.2 `classes:` — the table form (preferred)
+
+A map from **event atom** to a list of selectors, each either a literal value
+or a two-element inclusive range `[lo hi]` over boru's total value order
+(`TYPE-ORDERING.10.md`). Exactly one class may be the atom `any/q` — the
+catch-all, Noble's `other?` column. Verified against today's parser (this
+literal parses; `spec.classes.digit` → `[["0" "9"]]`,
+`spec.classes get other/q` → `any`):
+
+```boru
+classes: {
+  digit: [["0" "9"]]
+  letter: [["A" "Z"] ["a" "z"]]
+  point: ["."]
+  other: any/q
+}
+```
+
+This is `TAB:` and `install` — except that it is *data*, so it is hashed with
+the definition, drawn with the graph, and checked with the alphabet. Four
+frozen properties, each earning something:
+
+- **Disjoint.** Non-catch-all classes must not overlap; overlap is
+  `state_bad_class` (Error). Disjointness makes the classifier a genuine
+  partition, so its result cannot depend on map key order — the same reason
+  §3.3.12 refuses to read meaning into duplicate keys.
+- **Total, or flagged.** With `any/q` the classifier is total by
+  construction. Without it, an unmatched input raises `state_bad_event` at
+  step time and `define` emits `state_class_gap` (Info) at check time. Every
+  table in Noble's paper carries the `other?` column; this makes its absence
+  visible rather than fatal, matching the "gate on wrongness, advise on
+  smell" precedent.
+- **Closed against the alphabet.** Every class key must be a declared
+  `events:` member (`state_unknown_name`), so the column headings and the
+  alphabet are one artifact rather than two that can drift. The classes are
+  a *subset* of the alphabet — `raise`d internal events and `after:` timer
+  events are declared members that no input classifies to — which makes the
+  §6.3 totality matrix `|states| × |events|` overall and
+  `|states| × |classes|` over the externally-driven part. That width is
+  Noble's `WIDE`, which his tables must declare and which his row shapes
+  check structurally (`4 WIDE FSM: …`); boru derives it from `events:`
+  instead of restating it, so the two cannot disagree.
+- **Representation-free.** `classes:` specifies a partition, not a lookup
+  table. An implementation may compile it to a 256-entry byte table, a
+  code-point trie, or a linear scan; the semantics are identical, so its
+  conformance rows pin the *partition* and never a dispatch cost. This is
+  row 22: the same table needed two implementations across threading models,
+  and survived both because the table was never the technique.
+
+The event a `classes:` partition produces is frozen too, because a table
+form that inferred payloads would be exactly the ad-hoc magic row 6 warns
+about: classifying `v` yields `{event: <class-atom>  raw: v}` — the class
+becomes the event and the input survives verbatim under `raw:`, the same key
+`State.step` accepts it under. So a state's reducers reach the original value
+as `ev.raw`, and a classified event's `events:` entry declares `{raw: <type>}`
+like any other payload (§11.2). The fn form has no such rule: it returns the
+whole event map and therefore owns its own payload shape, which is the other
+half of why it cannot be checked.
+
+#### 3.6.3 Classification and the state-explosion tradeoff
+
+Noble's identifier machine appears twice in the paper. First as eight states
+— one per accepted character position, since a FORTRAN identifier is at most
+seven characters — with a table he calls "rather repetitious." Then as two
+states plus an `id.len` counter and a computed transition, which "has fewer
+states and consumes less memory despite the extra definitions."
+
+The second version is smaller, and the cost he does not price is the one this
+design cares about most: **the seven-character bound has left the table.** No
+diagram shows it, no lint reasons about it, `State.graph` would draw two nodes
+where the rule has eight positions, and the totality matrix is total over a
+model that no longer expresses the constraint. Extended state does not merely
+compress a machine; it moves part of the specification somewhere tools cannot
+follow.
+
+boru's recommendation is the middle term that Noble's own machinery makes
+available and his example skips: keep the counter in `ctx`, and express the
+decision as a **named guard in the table** — `when: under-limit/q` — rather
+than as a computed target. Two states, and the bound stays a labelled arc
+that `State.graph` draws, `State.can` reports, and `state_conflict` checks
+for a last-position unguarded fallback. §11.3 works both encodings through.
+
+The general rule, and the honest limit of it: prefer states for structure the
+reader should see, `ctx` for quantities, and a named guard wherever a
+quantity decides structure. No check enforces this — it is a modelling
+judgement, and a `ctx` field that secretly encodes a state is beyond anything
+§6.3 can detect.
+
+#### 3.6.4 What classification is not
+
+It is not a lexer. `classes:` partitions **one** input value per step: no
+lookahead, no maximal munch, no capture. A tokeniser over `boru:state`
+classifies one code point per step and accumulates the lexeme in `ctx` —
+which is exactly the shape of Noble's `<fp#>` loop, and of §11.2 below. boru's
+own parser stays on tabnas and its declarative grammar artifact
+(`design/DECLARATIVE-GRAMMAR.0.md`); nothing here proposes to replace it, and
+the parity obligations on that artifact are a good reason not to try.
+
 ## 4. Language surface (the `boru:state` words)
 
 All proposed names verified collision-free: `State` resolves to nothing today
@@ -484,6 +746,14 @@ top-first convention with `describe`-ready summaries.
 - **`State.step <machine:Machine> <snap:Map> <event:Map> (opts:Map) -> Map`**
   — the pure step (§3.2): `{snap effects status}`. `opts` carries
   `{migrate: <fn>}`, the only path across a version skew (§3.3.9).
+- **`State.classify <machine:Machine> <raw:Any> -> Map`** — run the machine's
+  classifier alone (§3.6) and return the event map it yields; raises
+  `state_bad_event` when the input matches no class and the machine declares
+  no `any/q` catch-all, and `state_bad_spec` when the machine declares no
+  classifier at all. Pure, so it needs no host. It exists because the
+  classifier is the piece most worth testing in isolation — Noble checks
+  `cat->col#` at the REPL character by character before wiring it into
+  anything — and because that test should not require constructing a snapshot.
 - **`State.can <machine:Machine> <state:Atom> -> List`** — the event atoms
   with *table-level* transitions from that state. Documented loudly as
   table-level: guards are **not** evaluated (advertising guard-aware
@@ -514,7 +784,7 @@ conformance corpus for §3.3 lives in the same file.
 
 One minted type: **`Machine`**, an Ideal following the `Timeout`/`Interval`
 precedent (`design/IDEAL.10.md`) — **opaque** (internals reached only via
-`State.spec`/`State.can`), **immutable** (a legal message payload; send a
+`State.spec`/`State.can`/`State.classify`), **immutable** (a legal message payload; send a
 machine to a process), **comparable** by its definition content hash
 (consistent with `TYPE-ORDERING.10.md`), **printable** as e.g.
 `Machine<door 3 states>`. Minted per the module-type pattern so `describe`
@@ -574,9 +844,11 @@ from `State.lint` (phase 2):
 |---|---|---|
 | `state_bad_spec` | Error | malformed shape: no `initial:`, unknown keys, nested `states:` (reserved for phase 2), `final` state with `on:` |
 | `state_unknown_target` | Error | a `to:` names an undeclared state |
-| `state_unknown_name` | Error | an unbound `act:`/`when:`/`entry:`/`exit:` name; or, with a declared alphabet, an event in `on:`/`defer:`/`after:`/`raise`/`catch:` outside `events:` |
-| `state_bad_binding` | Error | a bound value is not a function or does not fit its role — guard: `(Map Map) -> Boolean`; reducer: `(Map Map) ->` a map or the `{ctx raise fx}` record (§3.2) |
+| `state_unknown_name` | Error | an unbound `act:`/`when:`/`entry:`/`exit:`/`classify:` name; or, with a declared alphabet, an event in `on:`/`defer:`/`after:`/`raise`/`catch:`/`classes:` outside `events:` |
+| `state_bad_binding` | Error | a bound value is not a function or does not fit its role — guard: `(Map Map) -> Boolean`; reducer: `(Map Map) ->` a map or the `{ctx raise fx}` record (§3.2); classifier: `(Any Map) -> Map` (§3.6.1) |
 | `state_conflict` | Error | an unguarded variant that is not last in its state×event variant list, shadowing every variant after it (§3.3.12) |
+| `state_bad_class` | Error | a malformed `classes:` entry: a range that is not `[lo hi]` with `lo` ordered before `hi`, a class overlapping another non-catch-all class, more than one `any/q`, or both `classes:` and `classify:` declared (§3.6.2) |
+| `state_class_gap` | Info | a `classes:` table with no `any/q` catch-all — the input domain has holes that surface only at step time as `state_bad_event` (Noble's `other?` column, §3.6.2) |
 | `state_unreachable` | Info | a state with no path from `initial:` (advisory per the "gate on wrongness, advise on smell" precedent, `case_unreachable_clause`) |
 | `state_unhandled` | Info | the state×alphabet totality matrix's holes, computed against the machine's declared policy; **Error** iff the spec opts in with `total: true` (open question #2) |
 | `state_no_final_path` | Info | machine declares a final state some state cannot reach — the honest pseudo-liveness check; real liveness is out of scope |
@@ -609,14 +881,37 @@ The module's documentation presents both as the drop-down path when the
 declarative table doesn't fit (HOWTO material), and `VALUE-PATTERN-DISPATCH.0.md`'s
 precision fixes (§8 item 3) make the second encoding robust through variables.
 
+And a third encoding stays deliberately **unblessed**: *boolean history
+flags* — a `previous-minus?`/`previous-dp?` pair of mutable fields consulted
+by a nest of `if`s. This is the shape the module displaces, and the tabular
+lineage supplies the sharpest argument against it on record. Noble opens by
+writing exactly this version of a five-rule number validator, complete with
+"history semaphores," and then observes of the result: "it is difficult to
+tell by inspection that the word `LEGAL?`'s logic is actually incorrect." The
+bug is in the published example, after factoring and simplification, and the
+encoding is why it survives.
+
+The lesson is not that flags are verbose. It is that **correctness stops
+being checkable by reading**: a table has one variable and one cell per
+state×input, so a wrong cell is a wrong cell you can point at, whereas N
+booleans admit 2^N configurations with no artifact enumerating them. That is
+also why the checker cannot help here and never will — `case_not_exhaustive`
+needs a closed type to be exhaustive over, and a flag pile declares none.
+This is the concrete content of §Context's observation that today's services
+"scatter their transition logic across patrun rules and `case` clauses": the
+cost is not the scattering, it is that no reviewer can confirm the result.
+
 ## 7. Safety & capability integration
 
 Per `design/PERMISSIONS.10.md` scopes, and composing with `boru:vm`
 attenuation:
 
-- **`State.define` / `init` / `step` / `can` / `spec`**: pure — no capability,
-  usable in `sandbox`/`compute` profiles, spec-rowable under the frozen spec
-  clock (no `hermeticExempt` growth).
+- **`State.define` / `init` / `step` / `can` / `spec` / `classify`**: pure — no
+  capability, usable in `sandbox`/`compute` profiles, spec-rowable under the
+  frozen spec clock (no `hermeticExempt` growth). Classification is inside
+  this set by design (§3.6.1): a classifier that reached for I/O would put
+  I/O in the step, which §3.2 forbids, so the pure-role contract is what keeps
+  the machine's new edge on the correct side of this line.
 - **`State.start`**: gated exactly like `spawn` (`process` scope), plus
   `clock` scope when the machine declares `after:` timers (the host arms real
   deadlines). Restrictive profiles get the whole pure surface and `State.serve`,
@@ -647,6 +942,19 @@ core parser first"). Candidates, with verdicts:
    as idiomatic forward-form boru (verified, §3.1) — the sugar would buy
    punctuation. Revisit only on demonstrated post-v1 usage pain, per the amop
    report's condition. *(Maintainer-decided 2026-08-12: words only.)*
+   The tabular lineage adds a datum that sharpens this considerably. Forth is
+   the language in which minting syntax is *cheapest* — the compiler is
+   user-extensible by premise, and Noble's `FSM:` **is** a compiler extension,
+   a defining word. He had every facility to mint machine syntax, and the
+   paper is four successive refinements (§§3.1→3.4) of *not* doing so: each
+   step factors more out of the code and into a **data table**, and the stated
+   goal throughout is that the definition read one-to-one as that table. If
+   the language whose whole premise is "extend the compiler" converges on
+   library-plus-data, the case for boru — whose parser is its most expensive
+   surface — to mint syntax instead is very weak. Note also what the paper
+   *does* consider worth a language-level construct: not the machine, but the
+   `CASE:`/`;CASE` and `TAB:` defining words underneath it, i.e. dispatch and
+   lookup primitives. boru has those already (`case`, maps, `patrun`).
 2. **Mailbox-level postpone / selective receive** — **declined.**
    `PROCESSES.0.md` deliberately demoted selective receive; snapshot-held
    deferral is the visible, bounded version of the same power, and Erlang's
@@ -673,8 +981,9 @@ core parser first"). Candidates, with verdicts:
 
 **This RFC adds:** the machine model (three artifacts, pure step, the §3.3
 freeze), the `boru:state` surface (§4), the `Machine` type (§5), the
-`state_*` check family (§6.3), two hosts over shipped layers (§3.5), and the
-conformance-corpus obligation (scope decision 6).
+`state_*` check family (§6.3), two hosts over shipped layers (§3.5), the
+in-definition classification edge (§3.6), and the conformance-corpus
+obligation (scope decision 6).
 
 **Preconditions (phase 0):**
 
@@ -705,12 +1014,16 @@ transport story is the distribution story).
   sharing; (independent, already recorded elsewhere) the
   `VALUE-PATTERN-DISPATCH.0.md` partition fixes.
 - **Phase 1 — the core module.** `define`/`init`/`step`/`can`/`spec`/
-  `serve`/`start`; the §3.3 semantics complete (RTC, internal drain, bounded
-  postpone, entry/exit + explicit self-transition kinds, named state timers
-  on the process host, effects contract with `catch:`, final states, version
-  pinning, alphabet + payload validation, determinism rules); the `state_*`
-  Errors and advisories of §6.3; the conformance TSV corpus pinning every
-  freeze item, positive and negative rows paired.
+  `classify`/`serve`/`start`; the §3.3 semantics complete (RTC, internal
+  drain, bounded postpone, entry/exit + explicit self-transition kinds, named
+  state timers on the process host, effects contract with `catch:`, final
+  states, version pinning, alphabet + payload validation, determinism rules,
+  classify-once); the classification edge of §3.6 — the `classes:` partition
+  with its disjointness and closure checks first, since it is the form that
+  earns the diagnostics, with `classify:` alongside it as the escape hatch
+  (open question #7); the `state_*` Errors and advisories of §6.3; the
+  conformance TSV corpus pinning every freeze item, positive and negative
+  rows paired.
 - **Phase 2 — hierarchy, composition, views.** Nested `states:` per the
   SCXML algorithm (inner-first, LCA entry/exit, declaration-order
   tie-breaks) with its own conformance rows; parent machines embedding child
@@ -728,12 +1041,16 @@ transport story is the distribution story).
   effect/purity analysis for guards; persistence conventions
   (snapshot-store recipes, not machinery).
 
-## 11. Worked example
+## 11. Worked examples
 
-The door machine end to end. (Illustrative surface; exact syntax settles
-during implementation. The spec literal, its dot-paths, and the `fold` replay
-idiom are verified against today's parser; the `State.*` words are this RFC;
-`Viz.graph` is `BORU-VIZ.0.md`'s.)
+Three: the door, for the statechart features (hosts, deferral, timers); then
+Noble's two machines, for the tabular ones (classification, total tables, and
+the state-versus-`ctx` tradeoff). In all three the syntax is illustrative and
+settles during implementation, but every spec literal, dot-path, reducer,
+guard, and `fold`/`split` idiom below was **run against today's parser and
+binary**; only the `State.*` and `Viz.*` words are prospective.
+
+### 11.1 The door — hosts, deferral, timers
 
 ```boru
 import "boru:state"
@@ -808,6 +1125,150 @@ event (auto-relock); `lock` in `locked` shows an *internal* transition (no
 nothing); and the deferred `open` while locked replays, in order, the moment
 `unlock` succeeds.
 
+### 11.2 Noble's fixed-point number — classification and a total table
+
+The paper's running example, transcribed. His Fig. 1 is reproduced in the
+comment so the isomorphism (row 17) can be checked by eye:
+
+```boru
+import "boru:state"
+import "boru:string-util"
+
+#   input:  |  other?   |   num?    |  minus?   |    dp?    |
+#   ( 0 )     DROP >0     EMIT >1     EMIT >1     EMIT >2
+#   ( 1 )     DROP >1     EMIT >1     DROP >1     EMIT >2
+#   ( 2 )     DROP >2     EMIT >2     DROP >2     DROP >2
+
+def keep fn [[ev:Map ctx:Map] [Map] [ ctx set text (add ev.raw ctx.text) ]]
+
+def fixed-point (State.define {
+  initial: start/q
+  ctx: {text: ""}
+  classes: {                          # his cat->col# / TAB: decoder, as data
+    digit: [["0" "9"]]
+    minus: ["-"]
+    point: ["."]
+    other: any/q                      # his `other?` column
+  }
+  events: { digit: {raw: String}  minus: {raw: String}
+            point: {raw: String}  other: {raw: String} }
+  states: {
+    #           other?      num?                minus?              dp?
+    start: {on: {other: {}  digit: {to: int/q   act: keep/q}
+                            minus: {to: int/q   act: keep/q}
+                            point: {to: frac/q  act: keep/q}}}
+    int:   {on: {other: {}  digit: {act: keep/q}
+                            minus: {}
+                            point: {to: frac/q  act: keep/q}}}
+    frac:  {on: {other: {}  digit: {act: keep/q}
+                            minus: {}
+                            point: {}}}
+  }
+} {keep: keep/r})
+
+State.classify fixed-point "3"        # => {event: digit  raw: "3"}
+State.classify fixed-point "x"        # => {event: other  raw: "x"}
+
+def scan fn [[c:String snap:Map] [Map] [
+  def r (State.step fixed-point snap {raw: c})
+  r.snap
+]]
+def r0 (State.init fixed-point)
+fold [scan] (StringUtil.split '' "-3.1x4159.7") r0.snap
+#   => state frac, ctx.text "-3.141597" — the 'x' and the second '.' are
+#      consumed and dropped while every legal character after them is still
+#      accepted, exactly as Noble's Getafix declines to echo an illegal
+#      character but keeps taking input.
+```
+
+Four things this pins down, three of them corrections the port forces:
+
+- **The table is total, so `policy:` is inert.** Twelve cells, all written,
+  because the `other` class exists. Under `policy: error/q` (the default,
+  scope decision 3) nothing here can raise `state_unhandled_event` — not
+  because the policy is lenient but because the alphabet is closed and the
+  grid is full. This is row 19 in one machine, and the reason open question
+  #2 now leans shape-dependent.
+- **`{}` is an explicit ignore, and it is *internal*.** Those cells are
+  Noble's `DROP`. Note carefully that his state-1 `DROP >1` and `EMIT >1`
+  become `{}` and `{act: keep/q}` with **no `to:`** — because his Forth has no
+  entry/exit actions, `>1` from state 1 means "stay", whereas boru's `to:` the
+  current state is an *external* self-transition that runs exit and entry and
+  re-arms the state's timers (§3.3.4). A mechanical transliteration of the
+  arrow is a bug; the explicit distinction is what makes it a visible one.
+- **`EMIT` cannot survive the port, and shouldn't.** His action echoes to the
+  terminal — I/O inside the machine, which §3.2 forbids. Two honest
+  translations: accumulate into `ctx`, as above, which is right when the
+  validated text is the product; or have the reducer return an `fx:`
+  descriptor for the host to execute, which is right when the echo genuinely
+  is the point. That choice is precisely the sans-io split of row 5 — a
+  constraint the Forth design predates rather than violates.
+- **Termination is the host's, until you make it the machine's.** His loop
+  ends on a carriage return tested outside the FSM. Above, `fold` simply runs
+  out of characters. Giving the alphabet an `end` event and the machine
+  `final: true` accept/reject states moves the decision inside, which is what
+  §3.3.8 and the `state_no_final_path` advisory (§6.3) are able to reason
+  about — §11.3 does it that way.
+
+### 11.3 Noble's identifier — states versus `ctx`, and where the bound lives
+
+A FORTRAN identifier: a letter, then up to six more letters or digits. The
+paper gives it twice — eight states, one per character position, in a table
+he calls "rather repetitious"; then two states plus an `id.len` counter and a
+`>1?` word that computes its own target. boru takes the second's size and the
+first's visibility (§3.6.3), and puts the constant back in the definition:
+
+```boru
+def bump        fn [[ev:Map ctx:Map] [Map] [ ctx set n (add ctx.n 1) ]]
+def under-limit fn [[ev:Map ctx:Map] [Boolean] [ ctx.n lt ctx.max ]]
+
+def ident (State.define {
+  initial: start/q
+  ctx: {n: 0  max: 7}                 # the bound is spec data, not a literal
+  classes: { letter: [["A" "Z"] ["a" "z"]]  digit: [["0" "9"]]  other: any/q }
+  events: { letter: {raw: String}  digit: {raw: String}  other: {raw: String} }
+  states: {
+    start: { on: { letter: {to: body/q  act: bump/q}
+                   digit:  {to: bad/q}
+                   other:  {to: bad/q} } }
+    body:  { on: { letter: [ {to: body/q  act: bump/q  when: under-limit/q}
+                             {to: too-long/q} ]
+                   digit:  [ {to: body/q  act: bump/q  when: under-limit/q}
+                             {to: too-long/q} ]
+                   other:  {to: done/q} } }
+    done:     {final: true}
+    bad:      {final: true}
+    too-long: {final: true}
+  }
+} {bump: bump/r  under-limit: under-limit/r})
+```
+
+Five states where Noble has eight or two, and the accounting is worth being
+precise about, because it is the whole content of row 21:
+
+- **Two live states, three outcomes.** Both of his versions collapse "not an
+  identifier" and "identifier ended" into one terminal state and recover the
+  distinction afterwards from a flag test on the state variable
+  (`state< (id) @ 1 =`). Distinct `final: true` states put the outcome *in*
+  the machine, where §3.3.8 returns `done/q` and a reader can see all three
+  results without reading the driving loop.
+- **The branch is enumerated, not computed.** `[{… when: under-limit/q} {to:
+  too-long/q}]` is his `>1?` — same data dependence, same two possible
+  successors, same `ctx` supplying the "additional information, external to
+  the current state and current input." The difference is that both targets
+  are literal atoms, so `State.graph` draws `body --letter [under-limit]-->
+  body` alongside `body --letter--> too-long`, `State.can` reports both, and
+  `state_conflict` confirms the unguarded variant is last (§3.3.12).
+- **The bound lives in `ctx:` defaults, not in the guard body.** This is the
+  refinement §3.6.3 asks for and Noble's example does not reach: `max: 7` is
+  part of the definition, so it is covered by the content hash (§3.3.9),
+  returned by `State.spec`, and visible to anything reading the machine —
+  while `under-limit` stays a general "have we room" predicate reusable
+  across machines. Written the other way, with `7` inside the fn, the table
+  shows *that* a bound decides the branch but never *what* it is, and the
+  eight-state version — whose only virtue was making the number countable —
+  would still be telling the reader something this one hides.
+
 ## Open questions
 
 1. **Defer-list cap size** — the overflow *behaviour* is frozen (§3.3.3:
@@ -819,6 +1280,15 @@ nothing); and the deferred `open` while locked replays, in order, the moment
    the strictest `policy: error/q` machines get it automatically? (Leaning
    the explicit `total: true`: policy governs *runtime* behaviour, totality
    is a *model* claim, and conflating them makes the terse case noisy.)
+   **Revised by §3.6:** the leaning is now that the right default is
+   *shape-dependent*, because the cost of totality is not constant. A machine
+   with a `classes:` partition has a small closed alphabet with a catch-all
+   in it, so its matrix is `|states| × |classes|` and filling it is what
+   writing the table already means — Noble never writes a partial one, and
+   §11.2's twelve cells cost nothing. A sparse `events:`-only machine over a
+   wide alphabet pays per hole. Candidate rule: `classes:` implies
+   `total: true` unless the spec says `total: false`; everything else keeps
+   the opt-in. Maintainer call; the advisory itself is unchanged either way.
 3. **Content-hash algorithm for `snap.v`, and the bindings gap** — canonical
    `canon` text hashed how? (Leaning fnv64 over the canonical form, the kg
    pipeline's digest precedent; the field is opaque either way.) And is the
@@ -838,3 +1308,20 @@ nothing); and the deferred `open` while locked replays, in order, the moment
 6. **Shallow history in phase 2** — adopt iff it falls out of the SCXML
    algorithm without new semantics; deep history is declined outright.
    (Leaning yes-if-free.)
+7. **Should `classify:` (the fn form, §3.6.1) ship at all in v1?** The
+   `classes:` table earns every check in §6.3; the fn form earns none — its
+   output domain is unknowable, so a machine using it silently loses the
+   alphabet closure that is half the point of §3.6. Shipping both risks the
+   fn form becoming the default because it is the familiar one. (Leaning
+   ship both but document `classes:` as the form with the diagnostics, and
+   have `State.lint` (phase 2) note a machine that classifies by fn — the
+   same posture as `state_class_gap`: visible, not fatal.)
+8. **How far does `classes:` range over?** §3.6.2 defines selectors over
+   boru's total value order, which makes `[1 9]` over integers and
+   `[a-atom z-atom]` over atoms as legal as `["0" "9"]` over single-character
+   strings. That generality is free at the specification level and may not be
+   free at the implementation level — a dense byte table has an obvious
+   compilation, an arbitrary ordered range does not. (Leaning: keep the
+   general specification, and let the implementation compile the dense cases
+   and scan the rest, per §3.6.2's representation-freedom clause. Revisit iff
+   a scanning classifier shows up in the codec benchmarks.)
