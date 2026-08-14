@@ -4143,8 +4143,12 @@ func TestTypedDefBindCompiles(t *testing.T) {
 	// Negatives — what must NOT change:
 	// (a) a STATIC (concrete) typed-def body keeps the proven const-pool
 	//     reparent — no BIND_TYPED is emitted;
-	// (b) a statically-failing typed-def stays a check-diagnostics row (no
-	//     Program, flagged in both engines), never a compiled bind.
+	// (b) a statically-failing typed-def over a CONCRETE body compiles to
+	//     the TERMINAL TRAP, never a bind (FLIPPED by NUR058: the failed
+	//     unify over an exactly-known operand is a guaranteed-error
+	//     MIRROR, so the row takes the correct-error disposition — the
+	//     compiled program raises the interpreter-identical
+	//     [boru/type_error] instead of refusing to compile).
 	staticSrc := `def Pt (refine Integer) def p:Pt 5 typeof p`
 	prog, reason, _, cerr := mustNew(t).CompileCheck(staticSrc)
 	if cerr != nil || prog == nil {
@@ -4158,9 +4162,21 @@ func TestTypedDefBindCompiles(t *testing.T) {
 	if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("static typed-def parity: compiled=%v/%v/%v interp=%v/%v", gotC, compiled, errC, gotI, errI)
 	}
-	if prog, _, _, _ := mustNew(t).CompileCheck(`def x:(Integer gt 10) 5 x`); prog != nil {
-		t.Errorf("statically-failing DepScalar typed-def must stay a check-diagnostics row, got a Program:\n%s",
-			prog.Disassemble())
+	const failingSrc = `def x:(Integer gt 10) 5 x`
+	fprog, freason, _, ferr := mustNew(t).CompileCheck(failingSrc)
+	if ferr != nil || fprog == nil {
+		t.Fatalf("statically-failing DepScalar typed-def must compile the trap (NUR058): reason=%q err=%v", freason, ferr)
+	}
+	if !strings.Contains(fprog.Disassemble(), "TRAP") {
+		t.Errorf("statically-failing typed-def must be the terminal trap, got:\n%s", fprog.Disassemble())
+	}
+	if strings.Contains(fprog.Disassemble(), "BIND_TYPED") {
+		t.Errorf("statically-failing typed-def must never emit a bind:\n%s", fprog.Disassemble())
+	}
+	_, errFC := mustNew(t).RunCompiledStrict(failingSrc)
+	_, errFI := mustNew(t).Run(failingSrc)
+	if errFC == nil || errFI == nil || errFC.Error() != errFI.Error() {
+		t.Errorf("failing typed-def trap parity: compiled=%v interp=%v", errFC, errFI)
 	}
 }
 
