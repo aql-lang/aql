@@ -343,25 +343,36 @@ var typeNatives = []NativeFunc{
 			// signature ADMISSION, not new semantics: the handlers below needed
 			// no change at all.
 			//
-			// Ordered AFTER the scalar sigs so a Scalar source keeps matching
-			// exactly the signature it matches today; these only claim the
-			// shapes that previously reached no signature and raised.
+			// Source order is NOT dispatch order — SortSignatures ranks by
+			// specificity, and `Boolean` outranks `Scalar` at position 0, so
+			// these claim every Boolean-target call including the Scalar ones.
+			// That is harmless: they route to the same handlers, and the
+			// ReturnsFn they replace (convertScalarReturns) only ever adds a
+			// Float→Big diagnostic, which a Boolean target cannot reach.
 			{
 				Args:      []*Type{TBoolean, TAny},
 				TypeArgs:  map[int]bool{0: true},
 				Impl:      Go(convert2Handler),
 				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
 			},
+			// The options form is deliberately UNPATTERNED, unlike its Scalar
+			// sibling, and validates inside the handler instead. With an `Any`
+			// source at arity 2, a pattern here would be a trap: a malformed
+			// options map fails the pattern, dispatch falls back to the arity-2
+			// row, and the OPTIONS MAP itself is coerced as the source while the
+			// real source strands on the stack — `convert Boolean {truthyy:true}
+			// 'no'` answering true rather than false, from one typo'd key. So
+			// this row claims the whole 3-arg Boolean shape unconditionally and
+			// `convertBoolOptsHandler` names the bad key loudly. Because it
+			// DELEGATES on a well-formed map, the fix is independent of how the
+			// sorter happens to order the two rows.
 			{
 				Args:     []*Type{TBoolean, TMap, TAny},
 				TypeArgs: map[int]bool{0: true},
-				Patterns: map[int]Value{1: convertOptsPattern()},
-				Impl:     Go(convert3Handler),
-				// Mirrors the Scalar options form, including its dry pass: the
-				// `truthy` option's YAML parse (coerceBooleanTruthy) falls back
-				// to the same presence rule, so it is total over this wider
-				// source domain too.
-				ReturnsFn: DryPassWrap(convert3Handler, ReturnsFreshInstance(0)), BarrierPos: -1,
+				Impl:     Go(convertBoolOptsHandler),
+				// Dry-passed like the Scalar options form, so a literal call with
+				// a bad option key is reported at CHECK time, not only at run time.
+				ReturnsFn: DryPassWrap(convertBoolOptsHandler, ReturnsFreshInstance(0)), BarrierPos: -1,
 			},
 		},
 	},
@@ -1186,6 +1197,62 @@ func convertOptsPattern() Value {
 	// decimal places to round the Float's exact value to.
 	baseOpts.Set("places", NewDisjunct([]Value{NewTypeLiteral(TInteger), NewTypeLiteral(TNone)}))
 	return NewOptionsType(baseOpts)
+}
+
+// convertBoolOptsKinds is the options-map contract convertOptsPattern
+// expresses as an OptionsType, restated as data so the Boolean form can
+// CHECK it rather than match on it. Key → the type its value must
+// conform to; a `none` value is always allowed (the pattern's `tor None`
+// arm), meaning "option not supplied".
+var convertBoolOptsKinds = map[string]*Type{
+	"base":     TString,
+	"truthy":   TBoolean,
+	"accuracy": TString,
+	"places":   TInteger,
+}
+
+// convertBoolOptsHandler is `convert Boolean <opts> <src>`. It exists
+// because the Boolean form's SOURCE slot is `Any` (NUR053), which makes
+// a pattern on the options slot actively harmful: a map that failed the
+// pattern would fall through to the arity-2 row and be coerced AS THE
+// SOURCE, silently answering for the wrong value while the real source
+// stranded on the stack. So this row matches every 3-arg Boolean call
+// and validates here, naming the offending key.
+//
+// On a well-formed map it delegates unchanged to convert3Handler, which
+// is what makes the repair independent of signature sort order: whichever
+// of the two Boolean rows the sorter puts first, a valid call computes
+// the same answer.
+func convertBoolOptsHandler(args []Value, named map[string]Value, body []Value, r *Registry) ([]Value, error) {
+	// Arity guard FIRST, and it refuses rather than delegating: the
+	// no-signature recovery can assume a sig with a short arg window, and
+	// convert3Handler indexes args[2] unconditionally — so delegating a
+	// short window would panic, which this codebase does not permit
+	// (ADR-005). Found by the paired negative test, not by inspection.
+	if len(args) != 3 {
+		return nil, r.BoruError("convert_error",
+			"convert Boolean: the options form needs a target, an options map and a source",
+			"convert")
+	}
+	if IsConcrete(args[1]) {
+		if m, err := AsMap(args[1]); err == nil && m != nil {
+			for _, k := range m.Keys() {
+				want, known := convertBoolOptsKinds[k]
+				if !known {
+					return nil, r.BoruErrorHint("convert_error",
+						"convert Boolean: unknown option key "+k,
+						"convert", "known options are base, truthy, accuracy, places")
+				}
+				v, _ := m.Get(k)
+				if v.Parent == nil || v.Parent.ConformsTo(TNone) || v.Parent.ConformsTo(want) {
+					continue
+				}
+				return nil, r.BoruError("convert_error",
+					"convert Boolean: option "+k+" expects "+want.Name(), "convert")
+			}
+		}
+	}
+	return convert3Handler(args, named, body, r)
 }
 
 // yamlTruthy maps a string to a boolean using the YAML 1.1 boolean
