@@ -67,6 +67,44 @@ func recordSchemaCarrier(p core.FnParam, a core.Value) (core.Value, bool) {
 	return core.Value{}, false
 }
 
+// recordReturnCarrier is recordSchemaCarrier's RETURN-side twin (NUR068): a
+// declared return naming a record type resolves to TMap plus a NewMap
+// field→type schema pattern (ResolveSigType's Record rule — the nominal node
+// is dropped so dispatch stays structural), and the carrier builders used to
+// keep only the *Type, producing a bare Map carrier that NEITHER
+// getNodeReturns recovery branch can read (no RecordTypeInfo payload, no
+// schema-bearing Parent). Rebuild the schema-bearing carrier the make/param
+// paths already produce — dynamic(Map) carrying RecordTypeInfo — so a field
+// read through a constructor fn (`(mk) get "name"`) narrows exactly as
+// `(make R {…}) get "name"` does. GRADUAL, never strict, for the same reason
+// the param twin is: the runtime return check enforces the declared shape, so
+// the schema claim only narrows reads; a strict shaped carrier could refuse
+// dispatches today's bare Map carrier admits. Returns (zero,false) for a
+// non-Map declared type, a patternless return, and non-record patterns
+// (Options → OptionsTypeInfo, typed maps → ChildTypeInfo — both keep their
+// existing carriers). The fresh ID follows the param twin's rule: result
+// carriers are recorded per-value by the bytecode emitter (RecordUserCall
+// provenance), so two record returns must not share one identity.
+func recordReturnCarrier(t *core.Type, pat *core.Value) (core.Value, bool) {
+	if t == nil || pat == nil || !t.Equal(core.TMap) {
+		return core.Value{}, false
+	}
+	if pm, ok := pat.Data.(core.MapPayload); ok && pm.M != nil {
+		return core.Value{ID: core.GenerateID(core.IDPrefixForType(core.TMap)), Parent: core.TMap, Carrier: true, Dynamic: true, Data: core.RecordTypeInfo{Fields: pm.M}}, true
+	}
+	return core.Value{}, false
+}
+
+// returnPatternAt reads a positional return pattern, tolerating a nil or
+// short slice (ParseFnReturns allocates patterns only when some position
+// has one) — the same leniency ReturnCheckInfo.ReturnPattern applies.
+func returnPatternAt(pats []*core.Value, i int) *core.Value {
+	if i < 0 || i >= len(pats) {
+		return nil
+	}
+	return pats[i]
+}
+
 // typedContainerCarrier generalises a TYPED-container param ({:T} map / [:T] list)
 // to a carrier that PRESERVES its declared ELEMENT type — the D2 read-precision
 // foundation (design/TYPED-CONTAINER-ELEMENT-PRECISION.0.md, Part A). The element

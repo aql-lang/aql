@@ -31,11 +31,20 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 	}
 
 	// Bare Map type literal: unifies with any Map-family value except
-	// a record (records are nominal).
+	// a record (records are nominal). A record-SCHEMA CARRIER is the
+	// exception to the exception (NUR068): it abstracts a runtime map
+	// INSTANCE conforming to the schema — and a concrete record instance
+	// IS a plain map, which the family rule below accepts — so the
+	// carrier passes a bare Map constraint exactly as its runtime value
+	// would. Only the check-mode carrier takes this arm; a record type
+	// BODY as a value keeps the nominal refusal.
 	aLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TMap)
 	bLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TMap)
 	if aLit {
 		if sb == ShapeRecord {
+			if b.Carrier {
+				return b, nil
+			}
 			return Value{}, unifyFail("Map type literal does not unify with Record", a, b)
 		}
 		if sb == ShapeOptions {
@@ -49,6 +58,9 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 	}
 	if bLit {
 		if sa == ShapeRecord {
+			if a.Carrier {
+				return a, nil
+			}
 			return Value{}, unifyFail("Map type literal does not unify with Record", a, b)
 		}
 		if sa == ShapeOptions {
@@ -69,6 +81,9 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 	// order is part of a record's identity.
 	if sa == ShapeRecord || sb == ShapeRecord {
 		if sa != sb {
+			if res, handled, err := unifyRecordSchemaCarrierVsMap(a, sa, b, sb); handled {
+				return res, err
+			}
 			return Value{}, unifyFail("Record only unifies with Record", a, b)
 		}
 		aRT, _ := AsRecordType(a)
@@ -243,4 +258,74 @@ func unifyRecordTypes(a, b RecordTypeInfo) (Value, *UnifyError) {
 		return Value{}, err
 	}
 	return NewRecordType(result), nil
+}
+
+// unifyRecordSchemaCarrierVsMap admits a check-mode record-SCHEMA CARRIER
+// (Carrier=true, Data=RecordTypeInfo — a record-typed param binding, a `make R`
+// residual, or a declared record RETURN, NUR068) against a CONCRETE map by the
+// same verdict the RUNTIME reaches for the map instance the carrier abstracts.
+// A record param's dispatch pattern is a concrete field-bag map (ResolveSigType
+// flattens the record to TMap + NewMap(fields)), and the runtime admits an
+// instance via OpenUnifyMap: every pattern key must be present and unify, extra
+// instance keys are open. The carrier's schema pins exactly which keys its
+// runtime instance has — a record instance carries exactly its schema's keys —
+// so mirror that rule over the schema: each map key present in the schema must
+// unify with the schema's field type; a map key the schema lacks must accept
+// Absent (the `?:T` desugaring), else the pair is provably disjoint. The
+// result is the CARRIER itself — the narrower record-typed view, preserving
+// its gradual modality and provenance identity. A TYPED-map side ({:T}) takes
+// the same admission with the child constraint checked against every schema
+// field type (the runtime admits an instance iff every stored value meets the
+// child; a field type that cannot meet it makes every instance fail).
+// handled=false (fall through to the nominal refusal) for a non-carrier
+// record side or an unreadable map; a record type BODY as a value keeps
+// Record-only-unifies-with-Record.
+func unifyRecordSchemaCarrierVsMap(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool, *UnifyError) {
+	var rec, m Value
+	switch {
+	case sa == ShapeRecord && a.Carrier && (sb == ShapeMap || sb == ShapeTypedMap):
+		rec, m = a, b
+	case sb == ShapeRecord && b.Carrier && (sa == ShapeMap || sa == ShapeTypedMap):
+		rec, m = b, a
+	default:
+		return Value{}, false, nil
+	}
+	rt, _ := AsRecordType(rec)
+	if rt.Fields == nil {
+		return Value{}, false, nil
+	}
+	// A TYPED map ({:T}) admits the carrier iff every schema field type can
+	// meet the child constraint — the runtime rule projected over the schema
+	// (unifyTypedMapWithConcrete unifies every stored VALUE with the child,
+	// and a field's values inhabit its field type). An impossible field
+	// (String field vs {:Integer}) is provably disjoint, exactly as every
+	// runtime instance of the schema would be.
+	if ct, err := AsChildType(m); err == nil {
+		for _, key := range rt.Fields.Keys() {
+			fVal, _ := rt.Fields.Get(key)
+			if _, uerr := unifyInner(fVal, ct.Child); uerr != nil {
+				return Value{}, true, uerr.withPath("field:" + key)
+			}
+		}
+		return rec, true, nil
+	}
+	mm, _ := AsMap(m)
+	if mm == nil {
+		return Value{}, false, nil
+	}
+	absentVal := NewTypeLiteral(TAbsent)
+	for _, key := range mm.Keys() {
+		mVal, _ := mm.Get(key)
+		fVal, ok := rt.Fields.Get(key)
+		if !ok {
+			if _, err := unifyInner(mVal, absentVal); err != nil {
+				return Value{}, true, err.withPath("key:" + key)
+			}
+			continue
+		}
+		if _, err := unifyInner(fVal, mVal); err != nil {
+			return Value{}, true, err.withPath("key:" + key)
+		}
+	}
+	return rec, true, nil
 }
