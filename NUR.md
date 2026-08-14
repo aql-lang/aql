@@ -77,6 +77,7 @@ keep the two in sync in the same commit.
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions | PR #351 await result model (flagged for NUR by Codex P1) |
+| [NUR066](#nur066) | A `refine Record` type keeps its schema as a fn PARAM and as a `class` return, but loses it as a fn RETURN | PR #351 Any-frontier survey (minimal repro while narrowing `boru:test`'s constructors) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2458,3 +2459,69 @@ latches the next dispatch's recorded result as variadic — is keyed to
 word. Widening that seam is a compiler-side decision. Recorded so the model's
 deliberate `Any` for these two modes is understood as an unresolved arity
 divergence rather than mere imprecision.
+
+---
+
+## NUR066 — A `refine Record` type keeps its schema as a fn PARAM and as a `class` return, but loses it as a fn RETURN {#nur066}
+
+**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** the PR #351
+Any-frontier survey — annotating `boru:test`'s `case` / `spec` /
+`spec-with-subs` with their record types changed nothing, and the minimal
+repro below explains why.
+
+**Rule:** a declared type means the same thing wherever it is declared. A
+value of type `R` carries R's field schema, so `x get "field"` narrows to
+that field's declared type, whether `x` arrived as a param, from a `make`,
+or as a function's result.
+
+**Divergence:** three paths, two agree and one does not.
+
+```
+def R refine Record [name:String n:Integer]
+
+(make R {name:"a" n:1}) get "name"                    -> dynamic(String)   narrows
+def p fn [[c:R] [String] [c get "name"]]              -> String            narrows (PARAM)
+def mk fn [[] [R] [make R {name:"a" n:1}]]
+(mk) get "name"                                       -> dynamic(Any)      LOST
+```
+
+A `class` in the same return position keeps its schema, so the divergence is
+specific to `refine Record` as a RETURN:
+
+```
+def C class {name:"z" n:0}
+def mk2 fn [[] [C] [make C {name:"a" n:1}]]
+(mk2) get "name"                                      -> ProperString      narrows
+```
+
+The residual carriers say where it goes wrong. A class return residual is
+`C` — the nominal node, whose `Data` is the shape the accessor reads. A
+record `make` residual prints `dynamic(Map)` but carries a `RecordTypeInfo`
+payload, which is the other way the accessor can reach a schema. A record
+RETURN residual is a bare `Map`: neither the nominal node nor the payload,
+so both recovery paths miss it.
+
+The declared return is otherwise honoured — `def mk fn [[] [R] [17]]` is
+refused in check and at run time — so this is the CARRIER losing the schema,
+not the annotation being ignored.
+
+**Evidence:** `lang/go/native/native_storage.go` §`getNodeReturns` has both
+recovery branches, and the second one's comment already names this case
+("a module fn declared `[TestCase]`") — the intent is present and the
+carrier does not reach it. `check/go/carrier.go:752` builds a declared
+return as a plain `core.NewCarrier(t)`.
+
+**Documentation status:** none — the divergence is silent. Both spellings
+type-check and both run correctly; only the checker's precision differs.
+
+**Proposed verdict:** none yet, but this is more likely a defect than an
+allowed split, since the class path already demonstrates the intended
+behaviour in the same position. Recorded rather than fixed inside PR #351:
+`declaredReturnCarriers` is on every dispatch, and making a record return
+strict-and-shaped there could refuse programs that pass today, so it wants
+its own change with its own false-positive measurement.
+
+**Frontier cost:** the reason it was worth chasing. The remaining
+Any-frontier is dominated by field reads through constructor functions
+(`module-test`'s `(Test.case …) get "name"` family, and the same shape in
+`module-log`), which no per-word annotation can narrow while this holds.
