@@ -31,28 +31,31 @@ import (
 // to a closure, and nothing re-examined it. So the table is explicit about
 // mode rather than trusting any single-engine assertion.
 //
-// Second, IT RECORDS WHAT IS STILL BROKEN. The fix brackets the VM's
-// re-entrant body entry (vmContext.enterBodyUnit), which covers every
-// closure-unit body — `do`, `each`, `fold`, `filter`, `outer`, `scan`, and
-// those same words nested inside a fn. It CANNOT cover a body the compiler
-// INLINES into the caller's unit, because there is no call to wrap: the `case`
-// desugaring to a nested-`if` chain, `otherwise`'s list argument, and list
-// auto-evaluation all emit the body's tokens straight into the enclosing code.
-// Those rows are marked `wantDiverge` and are pinned as divergences ON
-// PURPOSE. An honest inventory of a partial fix beats a suite that quietly
-// covers only the fixed half — that is how the original gap survived.
+// Second, IT RECORDS HOW EACH FORM IS COVERED, because the coverage is
+// two different mechanisms. Closure-unit bodies — `do`, `each`, `fold`,
+// `filter`, `outer`, `scan`, and those same words nested inside a fn — are
+// BRACKETED at the VM's re-entrant body entry (vmContext.enterBodyUnit). A
+// body the compiler INLINES into the caller's unit — the `case` desugaring
+// to a nested-`if` chain, `otherwise`'s list argument, list
+// auto-evaluation, an interp-string hole — has no call to wrap, so it
+// cannot be bracketed at all: instead, a context write through a handle
+// read inside one REFUSES compilation (NUR054, the "slow, not wrong" rule)
+// and the whole program runs on the interpreter, whose scoping is
+// canonical. Those rows therefore agree the way the ungrouped map-slot row
+// below agrees — both sides of the comparison are the interpreter — and if
+// the emitter ever learns to lower them with a real context-frame opcode
+// pair, they start exercising two engines instead of one.
 //
-// The semantics call for the remaining rows has since been made: the
-// INTERPRETER is canonical, under the rule that a paren form is never a
-// boundary (the value is resolved and then made available to the signature
-// matcher). One of the two directions that implies is done — the
-// paren-grouped apply no longer over-contains, because an island run is no
-// longer treated as a body (Engine.isIsland). The other is not: the three
-// INLINED forms still need to BECOME boundaries when compiled, which takes an
-// emitted context-frame opcode pair, since there is no call to wrap.
+// The refusal fires AT THE MINT — a `context` read inside the inline
+// region refuses, because the region's layer has no compiled twin and every
+// consumption that can tell it from the ambient layer (a write, an alias, an
+// identity probe, a render, a baked container element) would diverge. A
+// store handle bound OUTSIDE the region (`def s (context)` … `s set` in a
+// case arm) is an in-place layer write that persists identically on both
+// engines, and it KEEPS COMPILING — the compile-status rows in
+// TestNur054InlineCtxRefusal pin both directions.
 //
-// If a `wantDiverge` row starts AGREEING, that is good news and the row should
-// move to the agreeing set. If an agreeing row starts diverging, the frame has
+// If an agreeing row starts diverging, the frame (or the refusal) has
 // regressed.
 func TestContextBoundaryDifferential(t *testing.T) {
 	cases := []struct {
@@ -104,31 +107,60 @@ context has y`},
 		{name: "called lambda", src: `def g ([] => [ context set y 1 5 ])
 g
 context has y`},
+		// An `if` CODE-BODY condition is NoEval (handler-run, not list
+		// auto-evaluation), so it is outside the NUR054 inline regions and
+		// keeps compiling (TestNur054InlineCtxRefusal pins that); this row
+		// pins that the engines also AGREE on where its write lands.
+		{name: "if code-body condition", src: `if [ context set y 1 true ] [ 5 ] [ 6 ]
+context has y`},
 
-		// ---- INLINED bodies: not bracketable by any seam ----
+		// ---- INLINED bodies: not bracketable by any seam — covered by the
+		// NUR054 refusal instead. Each of these programs REFUSES compilation
+		// (`context` read inside the inline region hands out the region's own
+		// layer; a set/del through that handle would land one scope too
+		// shallow compiled), so both sides of the comparison are the
+		// interpreter and the rows agree trivially. The refusal reason is
+		// pinned by TestNur054InlineCtxRefusal.
 		{name: "case clause body", src: `case 1 [ 1 [ context set y 1 5 ] 2 [ 6 ] ]
-context has y`,
-			wantDiverge: true,
-			why: "the compiler desugars `case` to an inline nested-`if` chain " +
-				"(conditional.go), so the clause body is emitted into the caller's " +
-				"unit and no closure is ever created"},
+context has y`},
 		{name: "otherwise list argument", src: `false otherwise [ context set y 1 5 ]
-context has y`,
-			wantDiverge: true,
-			why:         "the list argument is evaluated inline in the caller's unit"},
+context has y`},
 		{name: "def list auto-evaluation", src: `def b [ context set y 1 5 ]
-context has y`,
-			wantDiverge: true,
-			why: "`def name [list]` auto-evaluates the list; the interpreter does " +
-				"it in a sub-engine, the emitter records it as OpMakeList operands " +
-				"emitted inline. The write lands at BIND time, before anything runs " +
-				"the body — deleting every later reference leaves it unchanged",
-		},
+context has y`},
 		{name: "fn list argument never used", src: `def run fn [[b:List] [Any] [ 0 ]]
 run [ context set y 1 5 ]
-context has y`,
-			wantDiverge: true,
-			why:         "same inline list auto-evaluation, reached as a call argument"},
+context has y`},
+		// The newly-measured members of the same inline class, found while
+		// closing NUR054: a collection-argument list, an interp-string hole,
+		// and the `del` twin of the recorded `set` divergence.
+		{name: "each collection list", src: `each [ drop 0 ] [ context set y 1 1 ]
+context has y`},
+		{name: "interp-string hole", src: "`x${context set y 1 5}`\ncontext has y"},
+		{name: "context del in case arm", src: `context set y 9
+case 1 [ 1 [ context del y 5 ] 2 [ 6 ] ]
+context has y`},
+		// The 2026-08-14 Codex review round's three confirmed escapes, closed
+		// by moving the refusal to the MINT (`context` read in-region): a
+		// re-IDed alias a write-site rule could not chase, an xml child hole
+		// the region brackets had missed, and an identity probe through an
+		// escaped handle.
+		{name: "aliased write via dup in otherwise list",
+			src: "false otherwise [ context dup drop set y 1 5 ]\ncontext has y"},
+		{name: "xml child hole", src: `<p>${context set y 1 5}</p> drop
+context has y`},
+		{name: "identity eq in interp hole", src: "def s (context)\n`x${context eq s}`"},
+		// Provenance precision: a store handle bound OUTSIDE the inline
+		// region written inside it is an in-place layer write that persists
+		// identically on both engines — it keeps compiling AND agrees.
+		{name: "outside-bound store handle written in case arm", src: `def s (context)
+case 1 [ 1 [ s set y 1 5 ] 2 [ 6 ] ]
+context has y`},
+		// `if` branches are not context boundaries in EITHER engine, so a
+		// branch-joined `context` handle written at the top level is the
+		// ambient layer on both — it keeps compiling AND agrees (measured
+		// against the Codex round's contrary claim).
+		{name: "branch-joined handle written at top level", src: `if true [ context ] [ context ] set y 1 5
+context has y`},
 		// PAREN-GROUPED, and FIXED — this row used to diverge in the OPPOSITE
 		// direction (compiled CONTAINED the write, interpreted leaked it),
 		// which is why it is worth keeping the mechanism written down. The
@@ -176,11 +208,11 @@ context has y`},
 	// budget — so the count is pinned, and enlarging it has to be a
 	// deliberate, reviewable edit to this number with a reason.
 	//
-	// This may only go DOWN. NUR054 records the open divergence and the
-	// semantics call is already made — the interpreter is canonical — so
-	// every one of these rows is scheduled to become an agreeing row once
-	// the emitted context-frame opcode pair lands.
-	const openDivergenceBudget = 4
+	// This may only go DOWN — and it reached 0 when the NUR054 refusal
+	// landed: an inline-lowered form the compiler cannot bracket now refuses
+	// compilation instead of answering differently, so no recorded
+	// divergence remains. A new entry here means a fresh contract breach.
+	const openDivergenceBudget = 0
 	open := 0
 	for _, c := range cases {
 		if c.wantDiverge {

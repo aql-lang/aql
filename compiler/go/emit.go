@@ -670,6 +670,14 @@ type EmitState struct {
 	// closure's analysis args frame is the CallableSpec inputs, not the
 	// enclosing fn's per-call args the interpreter reads at run time.
 	openUnitRecs []int
+	// inlineCtxBounds tracks the OPEN inline context-boundary regions
+	// (EmitRecorder.PushInlineCtxBoundary): each entry latches
+	// len(openUnitRecs) at region entry, so InInlineCtxBoundary is true only
+	// while recording INLINE within the innermost region — a closure/fn unit
+	// opened inside the region (whose body the compiled runtime brackets with
+	// its own context frame at enterBodyUnit) breaks the equality until it
+	// closes. NUR054.
+	inlineCtxBounds []int
 	// dynEnv arms the program-wide DYNAMIC-ENVIRONMENT mode: a CompileDynBody
 	// dispatch was recorded (tryRecordDynBody — a computed or context-word
 	// `do` body lowered to a CALL_NATIVE whose handler re-runs the body at
@@ -1134,6 +1142,36 @@ func (es *EmitState) InClosureUnit() bool {
 
 func (es *EmitState) Active() bool {
 	return es != nil && es.Compilable && es.suspended == 0
+}
+
+// PushInlineCtxBoundary opens an inline context-boundary region: a check-run
+// region whose runtime twin is a fresh sub-engine (a context-layer push) but
+// whose compiled lowering is inline in the enclosing unit. The open-unit
+// depth is latched so units opened inside the region un-mark it while their
+// bodies record — the VM brackets those with its own context frame. NUR054.
+func (es *EmitState) PushInlineCtxBoundary() {
+	if es == nil {
+		return
+	}
+	es.inlineCtxBounds = append(es.inlineCtxBounds, len(es.openUnitRecs))
+}
+
+// PopInlineCtxBoundary closes the innermost inline context-boundary region.
+func (es *EmitState) PopInlineCtxBoundary() {
+	if es == nil || len(es.inlineCtxBounds) == 0 {
+		return
+	}
+	es.inlineCtxBounds = es.inlineCtxBounds[:len(es.inlineCtxBounds)-1]
+}
+
+// InInlineCtxBoundary reports whether recording currently sits INLINE inside
+// an inline context-boundary region: a region is open, and no closure/fn
+// unit has been opened since its entry.
+func (es *EmitState) InInlineCtxBoundary() bool {
+	if es == nil || len(es.inlineCtxBounds) == 0 {
+		return false
+	}
+	return es.inlineCtxBounds[len(es.inlineCtxBounds)-1] == len(es.openUnitRecs)
 }
 
 // Active is the exported view of active() for native handlers that

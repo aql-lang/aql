@@ -95,6 +95,32 @@ func recordDispatchOutcome(r *core.Registry, word string, sig *core.Signature, a
 			return
 		}
 	}
+	// NUR054 refusal, AT THE MINT: `context` INSIDE an inline-lowered region
+	// (a case clause fragment, an auto-evaluated list argument, an
+	// interp-string / xml hole) hands out the region's own context layer —
+	// the sub-engine push the compiled inline stream does not mirror — so the
+	// compiled handle denotes the AMBIENT layer and every consumption that
+	// can tell the two apart diverges: a set/del escapes the region
+	// (`case 1 [ 1 [ context set y 1 5 ] 2 [ 6 ] ] context has y` → compiled
+	// true, interpreted false), and so do the paths a write-site rule cannot
+	// chase — a re-IDed alias (`context dup drop set …`), an identity probe
+	// (`context eq s`), a render, a handle baked into a container or interp
+	// hole. Refusing the READ itself closes them all at once: no alias can be
+	// constructed from a handle that never compiles. The program falls back
+	// to the interpreter, whose scoping is canonical — slow, not wrong. A
+	// handle minted OUTSIDE the region (`def s (context)` — an in-place layer
+	// write that persists identically on both engines) and a `context` inside
+	// a closure unit within the region (the VM brackets those bodies at
+	// enterBodyUnit — the InInlineCtxBoundary depth latch) both keep
+	// compiling.
+	if es, isEmit := r.Check.Recorder().(*EmitState); isEmit && es.Active() &&
+		word == "context" && es.InInlineCtxBoundary() {
+		es.MarkUncompilable("`context` is read inside an inline-lowered body (a case clause / " +
+			"auto-evaluated list / interp hole): the interpreter gives that body its own " +
+			"context layer, and the inline stream has no layer to hand out (NUR054); the " +
+			"program runs on the interpreter")
+		return
+	}
 	if !check.TryRecordMethodApply(r, word, args, out, pos) &&
 		!tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&

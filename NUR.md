@@ -66,7 +66,7 @@ keep the two in sync in the same commit.
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
-| [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
+| [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler — RESOLVED BY FIX: inline-lowered regions refuse ambient-context writes (the NUR037 mechanism) | 2026-08-02 NUR register review |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in | 2026-08-02 NUR register review |
 | [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim — RESOLVED BY FIX (binding-identity keying, the flex-gate discipline) | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped — RESOLVED BY FIX (fold/typed-def/patrun stamped, the typed-def mirror completed with a recorded trap and a coded raise; the advisory sites classified) | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
@@ -1924,9 +1924,71 @@ divergence, and it stands unchanged.
 
 ## NUR054 — Context write boundaries differ between the interpreter and the compiler {#nur054}
 
-**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:** NUR
-register review (sweeping for divergences described in code but not
-recorded)
+**Status:** RESOLVED BY FIX · **Recorded:** 2026-08-02 · **Resolved:**
+2026-08-14 · **Surfaced by:** NUR register review (sweeping for divergences
+described in code but not recorded)
+
+**Resolution:** the refusal option — the NUR037 mechanism the verdict below
+names. The forms the compiler INLINES into the caller's unit (the `case`
+desugar's clause fragments, auto-evaluated list arguments — `otherwise`'s
+list, a `def name [list]` body, an unused fn list argument, a collection
+argument — and interp-string holes, a member of the same class found while
+closing this record, along with the `del` twin of the recorded `set`) have no
+call for `enterBodyUnit` to bracket (`eng/go/vm.go`'s path-5 map), so a
+context write inside one now REFUSES compilation and the whole program runs
+on the interpreter, whose scoping is canonical: slow, not wrong.
+
+Mechanically: the check-run regions whose runtime twin is a fresh sub-engine
+(a context-layer push at `Engine.Run`) but whose recorded events lower inline
+are bracketed as **inline context-boundary regions**
+(`EmitRecorder.PushInlineCtxBoundary` — `core.Engine.runInlineCtxRegion`
+around list auto-evaluation, interp-string holes and xml child holes,
+`CaseReturnsFn` around its two `if3ReturnsFn` desugar sites). The bracket
+latches the open-unit depth, so a closure unit opened inside the region (a
+`do` body in a case arm — bracketed at run time by the VM's own context
+frame) is not attributed to it. The refusal fires **at the mint**:
+`recordDispatchOutcome` refuses a `context` dispatch recorded inline inside
+a region, because the handle it would return denotes the region's own layer
+— which has no compiled twin — and every consumption that can tell that
+layer from the ambient one diverges. Refusing the read closes them all at
+once; a set/del-only rule was shipped first and a same-day Codex review
+round demonstrated three consumptions it could not chase (a `dup`-re-IDed
+alias, an `eq` identity probe, an unbracketed xml child hole — all three
+reproduced and now pinned; the round's fourth example, an `if` branch-join
+handle written at the top level, was REFUTED by measurement: `if` branches
+are not context boundaries in either engine, so the joined handle is ambient
+on both). Measured both ways: a handle bound OUTSIDE the region
+(`def s (context)` … `s set` in a case arm) is an in-place layer write that
+persists identically on both engines and KEEPS COMPILING, as do `if`/`for`/
+fn bodies (not boundaries in either engine), `if` code-body conditions, and
+closure-unit bodies.
+
+The differential inventory went to zero and grew teeth:
+`lang/go/context_boundary_differential_test.go`'s `openDivergenceBudget` is
+now **0** (four `wantDiverge` rows flipped to the agreeing set, plus new rows
+for the collection-list / interp-hole / xml-hole / `del` / alias / identity /
+outside-bound-handle / branch-join forms);
+`TestNur054InlineCtxRefusal` pins the refusal reason and the keep-compiling
+set; `TestDocumentedContextBoundaries` now asserts the CONTAINED value on
+both engines for the inlined forms, and EXPLANATION.md's caveat says the
+boundary holds either way (by fallback, not by bracketing). `boru.go`'s
+"the step budget is the one place" wording is TRUE again — the second
+exception disappeared, which is the correction the verdict asked for.
+Corpus impact: ONE row — flex.tsv's container-read twin
+(`def l [(context get 'k')] …`) reads context inside an auto-evaluated
+list, so it moved to the frontier ledger
+(`lang/spec/frontier/frontier-context-inline.tsv`; green semantics kept,
+graduation = the emitted context-frame opcode pair). The census, the
+refusal gate and every other ledger are unchanged, and the plain
+interpreter path pays nothing (the bracket is a no-op outside an armed
+compile pass).
+
+Left as recorded, deliberately: the interpreter's boundary SET itself (the
+`verse-report` note's "which call forms are boundaries" inconsistency —
+e.g. `if`/`for`/fn bodies leaking while `case` arms contain) is a language-
+level question this fix does not touch; both engines now agree on every
+form, which is this record's contract. The step-budget note at the bottom
+stays a candidate for its own Allowed record.
 
 **Rule:** the execution engines agree. `lang/go/boru.go:911-916` states
 the `RunCompiled` contract as "identical results either way, the flag
