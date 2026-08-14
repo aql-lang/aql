@@ -143,6 +143,17 @@ const docMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [
 // refusal reason substring (stable core only); "" is the bootstrap sentinel.
 // Signatures transcribed from the 2026-07-13 bootstrap run.
 var frontierCompileLedger = map[string]frontierEntryLS{
+	// NUR054 — a `context` read inside an inline-lowered body (here an
+	// auto-evaluated def-list): the interpreter gives that body its own
+	// context layer, the inline stream has no layer to hand out, and every
+	// layer-distinguishing consumption of the handle would diverge — so the
+	// mint refuses (recordDispatchOutcome) and the interpreter owns the
+	// program. Moved from flex.tsv:304 (its point is flex gradual typing,
+	// not context scoping — the green semantics stay on record here).
+	// Graduation = an emitted context-frame opcode pair bracketing
+	// inline-lowered regions.
+	`context set 'k' 1 end context del 'k' end context set 'k' 2 end def l [(context get 'k')] (l get 0) add 1`: {why: "NUR054: a context read inside an auto-evaluated list has no compiled context layer", failsWith: "no layer to hand out"},
+
 	// Conditional fn-shadow — a MISCOMPILE (variation sweep,
 	// forward-barrier.tsv:73); now a SOUND REFUSAL: a user fn redefined
 	// inside a conditionally-reached body overlap-removes the enclosing

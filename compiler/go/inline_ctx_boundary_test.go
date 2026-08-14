@@ -1,10 +1,6 @@
 package compiler
 
-import (
-	"testing"
-
-	core "github.com/boru-lang/boru/core/go"
-)
+import "testing"
 
 // TestInlineCtxBoundaryLatch pins the inline context-boundary region
 // mechanics (NUR054): the region latches the open-unit depth at entry, so
@@ -17,10 +13,6 @@ func TestInlineCtxBoundaryLatch(t *testing.T) {
 	nilES.PopInlineCtxBoundary()
 	if nilES.InInlineCtxBoundary() {
 		t.Fatal("nil EmitState must not report an inline region")
-	}
-	nilES.noteInlineCtxRead("id")
-	if nilES.inlineCtxArg([]core.Value{core.NewInteger(1)}) {
-		t.Fatal("nil EmitState must not match an inline-ctx arg")
 	}
 
 	es := &EmitState{}
@@ -51,36 +43,5 @@ func TestInlineCtxBoundaryLatch(t *testing.T) {
 	es.PopInlineCtxBoundary()
 	if es.InInlineCtxBoundary() {
 		t.Fatal("all regions closed: must not be inline")
-	}
-}
-
-// TestInlineCtxReadNoting pins noteInlineCtxRead / inlineCtxArg: only reads
-// resolved INLINE inside a region are noted (an empty ID and an out-of-region
-// read are not), and inlineCtxArg matches any arg carrying a noted ID.
-func TestInlineCtxReadNoting(t *testing.T) {
-	es := &EmitState{}
-	handle := core.NewCarrier(core.TStore)
-
-	// Out of region / empty ID: not noted.
-	es.noteInlineCtxRead(handle.ID)
-	es.PushInlineCtxBoundary()
-	es.noteInlineCtxRead("")
-	if es.inlineCtxArg([]core.Value{handle}) {
-		t.Fatal("nothing noted yet: inlineCtxArg must decline")
-	}
-
-	es.noteInlineCtxRead(handle.ID)
-	if !es.inlineCtxArg([]core.Value{core.NewInteger(1), handle}) {
-		t.Fatal("noted handle among args: inlineCtxArg must match")
-	}
-	other := core.NewCarrier(core.TStore)
-	if es.inlineCtxArg([]core.Value{other}) {
-		t.Fatal("an un-noted store handle must not match")
-	}
-	// The note is provenance, not region state: it outlives the region (a
-	// handle that escapes the region is still the region's layer).
-	es.PopInlineCtxBoundary()
-	if !es.inlineCtxArg([]core.Value{handle}) {
-		t.Fatal("noted handle must still match after the region closes")
 	}
 }

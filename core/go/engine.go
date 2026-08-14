@@ -4550,7 +4550,12 @@ func (e *Engine) BuildXmlFromTmpl(t XmlTmpl) (Value, bool, []Value, bool, error)
 			holes = append(holes, cHoles...)
 			cren = append(cren, child)
 		case XmlCrenExpr:
-			results, err := RunPooledSub(e.Registry, c.Expr, false)
+			// An inline context-boundary region exactly like an interp-string
+			// hole: the child hole's runtime twin is a sub-engine (a context-
+			// layer push), but its events lower inline into OpInterpXml's
+			// enclosing unit (NUR054 — the attribute holes ride evalInterpParts
+			// and are bracketed there).
+			results, err := e.runInlineCtxRegion(c.Expr, false)
 			if err != nil {
 				return Value{}, false, nil, false, err
 			}

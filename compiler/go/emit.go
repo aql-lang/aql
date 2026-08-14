@@ -678,15 +678,6 @@ type EmitState struct {
 	// its own context frame at enterBodyUnit) breaks the equality until it
 	// closes. NUR054.
 	inlineCtxBounds []int
-	// inlineCtxIDs holds the operand IDs `context` returned while INSIDE an
-	// inline context-boundary region — handles to the region's own context
-	// layer, which exists on the interpreter (the sub-engine's push) but has
-	// no compiled twin in the inline stream. A set/del reaching one of these
-	// IDs refuses (recordDispatchOutcome); a store handle bound OUTSIDE the
-	// region (`def s (context)` — an in-place layer write that persists
-	// identically on both engines) is never in the set and keeps compiling.
-	// NUR054.
-	inlineCtxIDs map[string]bool
 	// dynEnv arms the program-wide DYNAMIC-ENVIRONMENT mode: a CompileDynBody
 	// dispatch was recorded (tryRecordDynBody — a computed or context-word
 	// `do` body lowered to a CALL_NATIVE whose handler re-runs the body at
@@ -1181,35 +1172,6 @@ func (es *EmitState) InInlineCtxBoundary() bool {
 		return false
 	}
 	return es.inlineCtxBounds[len(es.inlineCtxBounds)-1] == len(es.openUnitRecs)
-}
-
-// noteInlineCtxRead records a `context` result operand as a handle to an
-// inline region's own context layer (see inlineCtxIDs). Only reads that
-// resolve INLINE inside a region are noted; everything else is a handle both
-// engines scope identically.
-func (es *EmitState) noteInlineCtxRead(id string) {
-	if es == nil || id == "" || !es.InInlineCtxBoundary() {
-		return
-	}
-	if es.inlineCtxIDs == nil {
-		es.inlineCtxIDs = map[string]bool{}
-	}
-	es.inlineCtxIDs[id] = true
-}
-
-// inlineCtxArg reports whether any arg carries an operand ID noted by
-// noteInlineCtxRead — a write through such an arg leaks one scope too far
-// when lowered inline (NUR054).
-func (es *EmitState) inlineCtxArg(args []core.Value) bool {
-	if es == nil || es.inlineCtxIDs == nil {
-		return false
-	}
-	for _, a := range args {
-		if es.inlineCtxIDs[a.ID] {
-			return true
-		}
-	}
-	return false
 }
 
 // Active is the exported view of active() for native handlers that

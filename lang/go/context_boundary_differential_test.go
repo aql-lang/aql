@@ -46,12 +46,14 @@ import (
 // the emitter ever learns to lower them with a real context-frame opcode
 // pair, they start exercising two engines instead of one.
 //
-// The refusal is deliberately provenance-precise: it keys on the operand
-// `context` returned INSIDE the inline region (the handle to the region's
-// own layer), not on the region alone. A store handle bound OUTSIDE the
-// region (`def s (context)` … `s set` in a case arm) is an in-place layer
-// write that persists identically on both engines, and it KEEPS COMPILING —
-// the compile-status rows in TestNur054InlineCtxRefusal pin both directions.
+// The refusal fires AT THE MINT — a `context` read inside the inline
+// region refuses, because the region's layer has no compiled twin and every
+// consumption that can tell it from the ambient layer (a write, an alias, an
+// identity probe, a render, a baked container element) would diverge. A
+// store handle bound OUTSIDE the region (`def s (context)` … `s set` in a
+// case arm) is an in-place layer write that persists identically on both
+// engines, and it KEEPS COMPILING — the compile-status rows in
+// TestNur054InlineCtxRefusal pin both directions.
 //
 // If an agreeing row starts diverging, the frame (or the refusal) has
 // regressed.
@@ -137,11 +139,27 @@ context has y`},
 		{name: "context del in case arm", src: `context set y 9
 case 1 [ 1 [ context del y 5 ] 2 [ 6 ] ]
 context has y`},
+		// The 2026-08-14 Codex review round's three confirmed escapes, closed
+		// by moving the refusal to the MINT (`context` read in-region): a
+		// re-IDed alias a write-site rule could not chase, an xml child hole
+		// the region brackets had missed, and an identity probe through an
+		// escaped handle.
+		{name: "aliased write via dup in otherwise list",
+			src: "false otherwise [ context dup drop set y 1 5 ]\ncontext has y"},
+		{name: "xml child hole", src: `<p>${context set y 1 5}</p> drop
+context has y`},
+		{name: "identity eq in interp hole", src: "def s (context)\n`x${context eq s}`"},
 		// Provenance precision: a store handle bound OUTSIDE the inline
 		// region written inside it is an in-place layer write that persists
 		// identically on both engines — it keeps compiling AND agrees.
 		{name: "outside-bound store handle written in case arm", src: `def s (context)
 case 1 [ 1 [ s set y 1 5 ] 2 [ 6 ] ]
+context has y`},
+		// `if` branches are not context boundaries in EITHER engine, so a
+		// branch-joined `context` handle written at the top level is the
+		// ambient layer on both — it keeps compiling AND agrees (measured
+		// against the Codex round's contrary claim).
+		{name: "branch-joined handle written at top level", src: `if true [ context ] [ context ] set y 1 5
 context has y`},
 		// PAREN-GROUPED, and FIXED — this row used to diverge in the OPPOSITE
 		// direction (compiled CONTAINED the write, interpreted leaked it),

@@ -1927,32 +1927,46 @@ Mechanically: the check-run regions whose runtime twin is a fresh sub-engine
 (a context-layer push at `Engine.Run`) but whose recorded events lower inline
 are bracketed as **inline context-boundary regions**
 (`EmitRecorder.PushInlineCtxBoundary` — `core.Engine.runInlineCtxRegion`
-around list auto-evaluation and interp holes, `CaseReturnsFn` around its two
-`if3ReturnsFn` desugar sites). The bracket latches the open-unit depth, so a
-closure unit opened inside the region (a `do` body in a case arm — bracketed
-at run time by the VM's own context frame) is not attributed to it. The
-refusal keys on PROVENANCE, not on the region alone: `recordDispatchOutcome`
-notes the operand `context` returns while inline inside a region (a handle
-to the region's own layer — the layer the inline stream cannot mirror), and
-refuses a `set`/`del` whose args carry a noted ID. Measured both ways: a
-handle bound OUTSIDE the region (`def s (context)` … `s set` in a case arm)
-is an in-place layer write that persists identically on both engines and
-KEEPS COMPILING, as do `if`/`for`/fn bodies (not boundaries in either
-engine) and closure-unit bodies.
+around list auto-evaluation, interp-string holes and xml child holes,
+`CaseReturnsFn` around its two `if3ReturnsFn` desugar sites). The bracket
+latches the open-unit depth, so a closure unit opened inside the region (a
+`do` body in a case arm — bracketed at run time by the VM's own context
+frame) is not attributed to it. The refusal fires **at the mint**:
+`recordDispatchOutcome` refuses a `context` dispatch recorded inline inside
+a region, because the handle it would return denotes the region's own layer
+— which has no compiled twin — and every consumption that can tell that
+layer from the ambient one diverges. Refusing the read closes them all at
+once; a set/del-only rule was shipped first and a same-day Codex review
+round demonstrated three consumptions it could not chase (a `dup`-re-IDed
+alias, an `eq` identity probe, an unbracketed xml child hole — all three
+reproduced and now pinned; the round's fourth example, an `if` branch-join
+handle written at the top level, was REFUTED by measurement: `if` branches
+are not context boundaries in either engine, so the joined handle is ambient
+on both). Measured both ways: a handle bound OUTSIDE the region
+(`def s (context)` … `s set` in a case arm) is an in-place layer write that
+persists identically on both engines and KEEPS COMPILING, as do `if`/`for`/
+fn bodies (not boundaries in either engine), `if` code-body conditions, and
+closure-unit bodies.
 
 The differential inventory went to zero and grew teeth:
 `lang/go/context_boundary_differential_test.go`'s `openDivergenceBudget` is
 now **0** (four `wantDiverge` rows flipped to the agreeing set, plus new rows
-for the collection-list / interp-hole / `del` / outside-bound-handle forms);
+for the collection-list / interp-hole / xml-hole / `del` / alias / identity /
+outside-bound-handle / branch-join forms);
 `TestNur054InlineCtxRefusal` pins the refusal reason and the keep-compiling
 set; `TestDocumentedContextBoundaries` now asserts the CONTAINED value on
 both engines for the inlined forms, and EXPLANATION.md's caveat says the
 boundary holds either way (by fallback, not by bracketing). `boru.go`'s
 "the step budget is the one place" wording is TRUE again — the second
 exception disappeared, which is the correction the verdict asked for.
-Corpus impact: zero — no spec row newly refuses (the census, refusal-gate
-and frontier ledgers are unchanged), and the plain interpreter path pays
-nothing (the bracket is a no-op outside an armed compile pass).
+Corpus impact: ONE row — flex.tsv's container-read twin
+(`def l [(context get 'k')] …`) reads context inside an auto-evaluated
+list, so it moved to the frontier ledger
+(`lang/spec/frontier/frontier-context-inline.tsv`; green semantics kept,
+graduation = the emitted context-frame opcode pair). The census, the
+refusal gate and every other ledger are unchanged, and the plain
+interpreter path pays nothing (the bracket is a no-op outside an armed
+compile pass).
 
 Left as recorded, deliberately: the interpreter's boundary SET itself (the
 `verse-report` note's "which call forms are boundaries" inconsistency —

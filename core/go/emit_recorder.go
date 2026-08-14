@@ -80,8 +80,11 @@ type EmitRecorder interface {
 	// entry, so a closure unit opened INSIDE the region (a `do` body in a
 	// case arm — bracketed at run time by the VM's enterBodyUnit) is not
 	// attributed to the region while it records. The compiler's dispatch
-	// recorder uses the bracket to refuse ambient-context writes the inline
-	// lowering would leak one scope too far (NUR054). Inactive: no-ops.
+	// recorder uses the bracket to refuse a `context` read recorded inline
+	// inside a region — the handle would denote the region's own layer,
+	// which has no compiled twin, so every layer-distinguishing consumption
+	// (a write, an alias, an identity probe) would diverge (NUR054).
+	// Inactive: no-ops.
 	PushInlineCtxBoundary()
 	PopInlineCtxBoundary()
 

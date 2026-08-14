@@ -74,6 +74,7 @@ g`, leaked, leaked},
 		{"otherwise list argument", `false otherwise [ context set y 1 5 ]`, contained, contained},
 		{"list auto-evaluation", `def b [ context set y 1 5 ]`, contained, contained},
 		{"interp-string hole", "`x${context set y 1 5}` drop", contained, contained},
+		{"xml child hole", `<p>${context set y 1 5}</p> drop`, contained, contained},
 	}
 
 	for _, c := range cases {

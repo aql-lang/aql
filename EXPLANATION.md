@@ -802,10 +802,10 @@ Two caveats. `set` on a context layer is copy-on-write, so "writes are
 local" means the write does not reach the parent LAYER — a nested body
 still sees, and can shadow, everything above it. And the bytecode compiler
 cannot bracket the boundaries it INLINES into the caller's code — a `case`
-clause body, an auto-evaluated list, an interp-string hole — so a context
-write inside one refuses compilation and the whole program runs on the
-interpreter instead (slow, not wrong): the boundary above holds on both
-engines either way. See NUR054 and
+clause body, an auto-evaluated list, an interp-string or xml hole — so a
+`context` reference inside one refuses compilation and the whole program
+runs on the interpreter instead (slow, not wrong): the boundary above holds
+on both engines either way. See NUR054 and
 `design/verse-report-defects-investigation.0.md` §B.
 
 
