@@ -86,6 +86,35 @@ func TestReturnsAnnotationNarrowing(t *testing.T) {
 		// raise-spec value the checker cannot type, so it STAYS on the
 		// frontier — the narrowing is confined to code/message.
 		{"err-payload-key-stays-frontier", `def e (do [raise {code: bad_input/q, message: "m", got: 42}])  e dot got`, false, true},
+
+		// ---- selector: the CONTAINER is knowable even when the elements
+		// are not. voxgigstruct.Select's Go return type is []any.
+		{"selector-container-narrows", `import "boru:struct-util" StructUtil.selector {color:'red'} {a:{color:'red'}}`, false, false},
+		// NEGATIVE: a plain List is not a FlexList, so the narrowed return
+		// makes append REFUSE where the Any residual matched optimistically.
+		{"selector-into-append-flags", `import "boru:struct-util" append 1 (StructUtil.selector {color:'red'} {a:{color:'red'}})`, true, false},
+		// …and the ELEMENTS stay honest: a selected child is any shape.
+		{"selector-element-stays-frontier", `import "boru:struct-util" (StructUtil.selector {color:'red'} {a:{color:'red'}}) get 0`, false, true},
+
+		// ---- await: modelled per mode, from doAwait's own order ----
+		{"await-all-narrows", `import "boru:time-util" TimeUtil.await [[1 add 2] [3 add 4]]`, false, false},
+		{"await-full-elem-narrows", `import "boru:time-util" (TimeUtil.await {mode:'full'} [[1 add 2]]) get 0`, false, false},
+		{"await-empty-list-narrows", `import "boru:time-util" TimeUtil.await []`, false, false},
+		// NEGATIVE (does-not-over-claim): first hands back the winning
+		// branch's whole residual, so it must STAY on the frontier.
+		{"await-first-stays-frontier", `import "boru:time-util" TimeUtil.await {mode:'first'} [[1 add 2]]`, false, true},
+		// The unknown-mode mirror flags — but only where doAwait reaches the
+		// raise. The empty-list row above is the same bad mode, unflagged.
+		{"await-bad-mode-flags", `import "boru:time-util" TimeUtil.await {mode:'bogus'} [[1 add 2]]`, true, false},
+		{"await-bad-mode-empty-list-clean", `import "boru:time-util" TimeUtil.await {mode:'bogus'} []`, false, false},
+
+		// ---- quote: /q hands the handler a CONCRETE Atom, so running it in
+		// check mode yields the quoted symbol a key reader can actually read.
+		{"quote-dot-key-narrows", `def m {a:1} m dot (quote a)`, false, false},
+		{"quote-get-key-narrows", `def m {a:1 b:2} m get (quote a)`, false, false},
+		// NEGATIVE: the key is real enough to be MISSED — a quoted name that
+		// is not in the map narrows to None, not to a permissive Any.
+		{"quote-missing-key-narrows-none", `def m {a:1 b:2} m get (quote zz)`, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

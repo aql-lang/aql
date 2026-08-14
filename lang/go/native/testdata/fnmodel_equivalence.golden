@@ -617,7 +617,7 @@ WORD push
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList] +returnsfn
   [Any Node/List] barrier=2 returns=[Node/List] +returnsfn
 WORD quote
-  [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Scalar/Atom]
   [Any] barrier=1 runcheck noeval={0} +returnsfn
 WORD raise
   [Scalar/Atom Scalar/String] barrier=2 quote={0} +returnsfn
