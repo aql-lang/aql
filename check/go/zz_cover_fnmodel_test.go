@@ -439,6 +439,75 @@ func TestZzFmReturnsFnDeferredListAnonymous(t *testing.T) {
 	}
 }
 
+// NUR068: a declared RECORD return (TMap + field-bag ReturnPattern)
+// resolves to the schema-bearing dynamic(Map)+RecordTypeInfo carrier —
+// the same shape make/param produce — instead of a bare Map carrier.
+func TestZzFmReturnsFnRecordSchemaCarrier(t *testing.T) {
+	r := newTestRegistry(t)
+	done := r.Check.Begin()
+	defer done()
+
+	fields := core.NewOrderedMap()
+	fields.Set("name", core.NewTypeLiteral(core.TString))
+	pat := core.NewMap(fields)
+	sig := core.FnSig{
+		Returns:        []*core.Type{core.TMap},
+		ReturnPatterns: []*core.Value{&pat},
+		Impl:           core.Boru([]core.Value{core.NewInteger(1)}),
+	}
+	rf := BuildFnBodyReturnsFn(r, "zzfmrec", sig, core.FnDefInfo{})
+	out := rf(nil, r)
+	if len(out) != 1 || !out[0].Carrier || !out[0].Dynamic {
+		t.Fatalf("record-return result = %#v, want one dynamic schema carrier", out)
+	}
+	rt, ok := out[0].Data.(core.RecordTypeInfo)
+	if !ok || rt.Fields == nil {
+		t.Fatalf("record-return Data = %#v, want the RecordTypeInfo schema", out[0].Data)
+	}
+}
+
+// NUR068's residual-surfacing twin: a fn declared to return a BARE Map
+// whose body residual is a record-SCHEMA carrier surfaces the schema on
+// the plain pass (cloned, fresh identity) and keeps the shapeless
+// declared carrier on the compile pass.
+func TestZzFmReturnsFnBareMapSurfacesRecordResidual(t *testing.T) {
+	r := newTestRegistry(t)
+	done := r.Check.Begin()
+	defer done()
+
+	fields := core.NewOrderedMap()
+	fields.Set("name", core.NewTypeLiteral(core.TString))
+	res := core.NewDynamicCarrierValue(core.NewRecordType(fields))
+	sig := core.FnSig{
+		Returns: []*core.Type{core.TMap},
+		Impl:    core.Boru([]core.Value{res}),
+	}
+	rf := BuildFnBodyReturnsFn(r, "zzfmsurf", sig, core.FnDefInfo{})
+	out := rf(nil, r)
+	if len(out) != 1 || !out[0].Carrier {
+		t.Fatalf("surfaced result = %#v, want one carrier", out)
+	}
+	rt, ok := out[0].Data.(core.RecordTypeInfo)
+	if !ok || rt.Fields == nil {
+		t.Fatalf("surfaced Data = %#v, want the residual's RecordTypeInfo", out[0].Data)
+	}
+	if out[0].ID == "" || out[0].ID == res.ID {
+		t.Error("surfaced residual must carry a freshly minted identity")
+	}
+
+	// The COMPILE pass keeps the declared bare Map carrier (the recorded
+	// call results and the RET contract are untouched).
+	r.Check.Compiling = true
+	defer func() { r.Check.Compiling = false }()
+	out2 := rf(nil, r)
+	if len(out2) != 1 {
+		t.Fatalf("compile-pass result = %#v, want one carrier", out2)
+	}
+	if _, isRec := out2[0].Data.(core.RecordTypeInfo); isRec {
+		t.Error("the compile pass must keep the shapeless declared Map carrier")
+	}
+}
+
 // A generic fn whose return names an INFERABLE type parameter refines to
 // the call's binding (no unbound_param report).
 func TestZzFmReturnsFnGenBindingInferred(t *testing.T) {

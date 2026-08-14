@@ -752,6 +752,13 @@ func declaredReturnCarriers(r *core.Registry, word string, sig *core.Signature, 
 	default:
 		out = make([]core.Value, len(sig.Returns))
 		for i, t := range sig.Returns {
+			// A declared RECORD return (TMap + field-schema pattern) keeps its
+			// schema on the result carrier, mirroring BuildFnBodyReturnsFn's
+			// declared loop — see recordReturnCarrier (NUR068).
+			if rc, ok := recordReturnCarrier(t, returnPatternAt(sig.ReturnPatterns, i)); ok {
+				out[i] = rc
+				continue
+			}
 			c := core.NewCarrier(t)
 			// A declared `Any` return means "statically unknown", not
 			// "inhabits only the Any root": a STRICT Any carrier

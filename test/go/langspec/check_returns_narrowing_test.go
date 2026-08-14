@@ -57,6 +57,34 @@ func TestReturnsAnnotationNarrowing(t *testing.T) {
 		// honest bound stays dynamic(Any).
 		{"make-record-any-field-stays", `import "boru:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "out"`, false, true},
 
+		// ---- NUR068: a record schema means the same thing as a fn RETURN.
+		// A declared `refine Record` return keeps its schema on the result
+		// carrier (recordReturnCarrier), so the three declaration positions
+		// — make, param, RETURN — now agree, and a schema carrier passes a
+		// record param's field-bag pattern by the runtime's open rule
+		// (unifyRecordSchemaCarrierVsMap).
+		{"record-return-field-narrows", `def R refine Record [name:String n:Integer] def mk fn [[] [R] [make R {name:"a" n:1}]] (mk) get "name"`, false, false},
+		{"record-return-into-same-param-clean", `def R refine Record [name:String n:Integer] def mk fn [[] [R] [make R {name:"a" n:1}]] def use fn [[c:R] [String] [c get "name"]] use (mk)`, false, false},
+		{"make-into-record-param-clean", `def R refine Record [name:String n:Integer] def p fn [[c:R] [String] [c get "name"]] p (make R {name:"a" n:1})`, false, false},
+		// NEGATIVE (the precision now flags what dynamic(Any) matched):
+		// a String field read is not a map, and a DIFFERENT record's
+		// param is provably disjoint (exact-key record membership).
+		{"record-return-field-into-keys-flags", `def R refine Record [name:String n:Integer] def mk fn [[] [R] [make R {name:"a" n:1}]] keys ((mk) get "name")`, true, false},
+		{"record-return-disjoint-param-flags", `def R refine Record [name:String n:Integer] def S refine Record [tag:Atom v:List] def mk fn [[] [R] [make R {name:"a" n:1}]] def use fn [[s:S] [Atom] [s get "tag"]] use (mk)`, true, false},
+		// NEGATIVE (does-not-over-claim): a field the schema does not
+		// declare keeps the honest dynamic(Any).
+		{"record-return-unknown-field-stays", `def R refine Record [name:String n:Integer] def mk fn [[] [R] [make R {name:"a" n:1}]] (mk) get "zz"`, false, true},
+		// The boru:test constructor family the NUR068 survey traced. The
+		// constructors deliberately stay [Map] (NUR069 — a record
+		// annotation would be a false runtime contract for none-valued
+		// Any fields); the narrowing comes from BuildFnBodyReturnsFn's
+		// record-residual surfacing plus Test.prop's shape ReturnsFn.
+		{"test-case-name-narrows", `import "boru:test"  (Test.case 6 [3] "d3") get "name"`, false, false},
+		{"test-case-any-field-stays", `import "boru:test"  (Test.case 6 [3] "d3") get "out"`, false, true},
+		{"test-spec-name-narrows", `import "boru:test"  (Test.spec [] double/q "doubling") get "name"`, false, false},
+		{"test-prop-runs-narrows", `import "boru:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"`, false, false},
+		{"test-run-property-ok-narrows", `import "boru:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end (p Test.run-property) get "ok"`, false, false},
+
 		// ---- Vm.check / Vm.compile report shapes ----
 		{"vm-check-ok-narrows", `import "boru:vm" (Vm.check "1 add 2").ok`, false, false},
 		{"vm-compile-reason-narrows", `import "boru:vm" (Vm.compile "1 add (((").reason`, false, false},
