@@ -390,6 +390,99 @@ func TestDeclaredReturnCarriersMissingReturns(t *testing.T) {
 	}
 }
 
+// TestDeclaredReturnCarriersRecordSchema pins NUR068's declared-return
+// resolution: a record return (TMap + field-bag ReturnPattern) builds
+// the schema-bearing dynamic(Map)+RecordTypeInfo carrier instead of a
+// bare Map carrier, so field reads through the word narrow. A pattern
+// that is not a field-bag map (Options) keeps the plain Map carrier.
+func TestDeclaredReturnCarriersRecordSchema(t *testing.T) {
+	r := newTestRegistry(t)
+	fields := core.NewOrderedMap()
+	fields.Set("name", core.NewTypeLiteral(core.TString))
+	pat := core.NewMap(fields)
+	sig := &core.Signature{
+		Returns:        []*core.Type{core.TMap},
+		ReturnPatterns: []*core.Value{&pat},
+		Impl:           covCDImpl(),
+	}
+	out := declaredReturnCarriers(r, "mkq", sig, nil, core.SrcPos{Row: 5, Col: 1})
+	if len(out) != 1 || !out[0].Carrier || !out[0].Dynamic {
+		t.Fatalf("record return = %#v, want one dynamic carrier", out)
+	}
+	rt, ok := out[0].Data.(core.RecordTypeInfo)
+	if !ok || rt.Fields == nil {
+		t.Fatalf("record return Data = %#v, want the RecordTypeInfo schema", out[0].Data)
+	}
+	if ft, ok := rt.Fields.Get("name"); !ok || !core.ValueType(ft).Equal(core.TString) {
+		t.Fatalf("schema field name = %#v, want the String constraint", rt.Fields)
+	}
+	if out[0].ID == "" {
+		t.Error("record return carrier must mint a fresh identity")
+	}
+
+	// An Options pattern is NOT a record schema: the plain Map carrier
+	// (ChildTypeInfo payload) stands.
+	opat := core.NewOptionsType(fields)
+	osig := &core.Signature{
+		Returns:        []*core.Type{core.TMap},
+		ReturnPatterns: []*core.Value{&opat},
+		Impl:           covCDImpl(),
+	}
+	oout := declaredReturnCarriers(r, "mkq", osig, nil, core.SrcPos{Row: 6, Col: 1})
+	if len(oout) != 1 {
+		t.Fatalf("options return = %#v, want one carrier", oout)
+	}
+	if _, isRec := oout[0].Data.(core.RecordTypeInfo); isRec {
+		t.Fatal("an Options pattern must not build a record-schema carrier")
+	}
+}
+
+// --- recordReturnCarrier / returnPatternAt (NUR068 unit pins) --------------
+
+func TestRecordReturnCarrierGates(t *testing.T) {
+	fields := core.NewOrderedMap()
+	fields.Set("n", core.NewTypeLiteral(core.TInteger))
+	pat := core.NewMap(fields)
+
+	if _, ok := recordReturnCarrier(nil, &pat); ok {
+		t.Error("nil type must decline")
+	}
+	if _, ok := recordReturnCarrier(core.TInteger, &pat); ok {
+		t.Error("a non-Map declared type must decline")
+	}
+	if _, ok := recordReturnCarrier(core.TMap, nil); ok {
+		t.Error("a patternless return must decline")
+	}
+	opat := core.NewOptionsType(fields)
+	if _, ok := recordReturnCarrier(core.TMap, &opat); ok {
+		t.Error("an Options pattern must decline")
+	}
+	rc, ok := recordReturnCarrier(core.TMap, &pat)
+	if !ok || !rc.Carrier || !rc.Dynamic || rc.ID == "" {
+		t.Fatalf("field-bag pattern = (%#v, %v), want a fresh dynamic schema carrier", rc, ok)
+	}
+	if rt, isRec := rc.Data.(core.RecordTypeInfo); !isRec || rt.Fields == nil {
+		t.Fatalf("carrier Data = %#v, want RecordTypeInfo", rc.Data)
+	}
+}
+
+func TestReturnPatternAtLeniency(t *testing.T) {
+	pat := core.NewInteger(1)
+	pats := []*core.Value{nil, &pat}
+	if got := returnPatternAt(pats, 0); got != nil {
+		t.Errorf("position 0 = %v, want nil", got)
+	}
+	if got := returnPatternAt(pats, 1); got != &pat {
+		t.Errorf("position 1 = %v, want the stored pattern", got)
+	}
+	if got := returnPatternAt(pats, 2); got != nil {
+		t.Errorf("out-of-range = %v, want nil", got)
+	}
+	if got := returnPatternAt(nil, 0); got != nil {
+		t.Errorf("nil slice = %v, want nil", got)
+	}
+}
+
 // --- applyGradualContagion -------------------------------------------------
 
 func TestApplyGradualContagionStrictAdvisory(t *testing.T) {

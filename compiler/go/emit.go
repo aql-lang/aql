@@ -1286,7 +1286,11 @@ func (es *EmitState) SetCatchVariadic(pending bool) {
 // CompileFallbackBody dispatch: true exactly once, for the dispatch whose
 // ReturnsFn set it (the fallible multi-value `do` body — its runtime count
 // is N on no-raise but 1 on the caught path, so the recorded event must be
-// variadic rather than seated at the static N).
+// variadic rather than seated at the static N). The variadic mark covers
+// only that SHRINKING direction — a count that can EXCEED the modeled
+// seats (await's winner-takes-all first/any) has no event-level
+// representation and refuses wholesale instead (awaitVariadicResult's
+// MarkUncompilable, NUR067).
 func (es *EmitState) catchVariadicFor(sig *core.Signature) bool {
 	if es == nil || !es.catchVariadicPending || sig == nil ||
 		!sig.CompileEffect.Has(core.CompileFallbackBody) {
@@ -2370,10 +2374,29 @@ func (es *EmitState) NotifyNameRebound(name string) {
 	if es == nil || !es.Active() {
 		return
 	}
+	depHit := false
 	for _, ref := range es.storedFnRefs {
 		if ref.depNames[name] {
 			ref.poisoned = true
+			depHit = true
 		}
+	}
+	// Poisoning alone is NOT enough for a module-scope rebind: the poisoned
+	// ref's CallBoru fallback resolves the LIVE def table, but module-scope
+	// def sites execute only in the compile pass (RunInCheck) — by VM time
+	// the table already holds the PASS-FINAL binding, so every call
+	// (including calls sequenced BEFORE the rebind in program order) reads
+	// the final value where the interpreter reads the point-in-program one
+	// (design/RELOAD-INVALIDATION.0.md §3 F1: interpreter 6 105 12,
+	// compiled-with-poisoning 12 12 12). The prior discipline's cases —
+	// a single call AFTER the last rebind — coincide with pass-final state,
+	// which is why per-ref poisoning looked sufficient. Refuse the whole
+	// program (interpreter fallback, correct values) until the §5.6 bind
+	// twins make VM-time def order real. Same module-scope guard as the
+	// frozen-read hammer below: a body-local def inside another unit's
+	// analysis shadows independently and must not refuse.
+	if depHit && len(es.openUnitRecs) == 0 {
+		es.MarkUncompilable("module binding " + name + " rebound after a stored handler captured it as a dep")
 	}
 	// A splice-expanded binding (expandStaticSplices) is FROZEN inside an
 	// OpPushClosure unit, which — unlike a spawn ref — cannot be unstamped
@@ -5273,10 +5296,15 @@ func (es *EmitState) NoteFrozenRead(name string) {
 		return
 	}
 	// A read attributed to a STORED-REF unit (a service/minilang handler, a
-	// spawn body) is already rebind-safe: NotifyNameRebound poisons the ref
-	// itself and InvokeCallback falls back to CallBoru for just that handler,
-	// keeping the rest of the program compiled (the PR #243 discipline).
-	// Only ordinary CALL_USER units need the whole-program hammer.
+	// spawn body) is not recorded HERE: its rebind handling lives in
+	// NotifyNameRebound directly. Per-ref poisoning (the PR #243 discipline)
+	// still covers unit-internal rebinds, but a MODULE-SCOPE rebind of a
+	// stored-ref dep now refuses the whole program there too — poisoning's
+	// CallBoru fallback reads pass-hoisted def state, not point-in-program
+	// state (the F1 miscompile, design/RELOAD-INVALIDATION.0.md §3; interim
+	// until §5.6's bind twins). So the skip below does not exempt stored-ref
+	// deps from the hammer; it only keeps their reads out of frozenReads,
+	// whose entries would otherwise double-report the same rebind.
 	if rec := es.openUnitRecs[len(es.openUnitRecs)-1]; rec >= 0 && rec < len(es.fnRecs) && es.fnRecs[rec].storedRefUnit {
 		return
 	}

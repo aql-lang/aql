@@ -100,9 +100,10 @@ end
 [(((KgQuery.dependents-of graph core.id) size) gt 0) true Assert.equal]
 "but things depend ON core/go" Test.test end
 [(names (KgQuery.dependencies-of graph eng.id))
-      ["check/go" "compiler/go" "core/go" "parser/go"] Assert.equal
+      ["check/go" "compiler/go" "core/go" "parser/go" "test/specfix"]
+      Assert.equal
   ]
-"eng/go depends on check, compiler, core and parser" Test.test end
+"eng/go depends on the five modules below it" Test.test end
 [((filter [eq "core/go"]
               (names (KgQuery.dependents-of graph eng.id))
           )

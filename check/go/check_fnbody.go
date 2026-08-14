@@ -667,6 +667,13 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 					out[i] = dv
 					continue
 				}
+				// NUR068: a declared record return keeps its schema, and a bare
+				// Map return surfaces a record-schema body residual — see
+				// nur068ReturnCarrier.
+				if rc, ok := nur068ReturnCarrier(r, t, declaredReturnPatterns, i, len(declaredReturns), stk); ok {
+					out[i] = rc
+					continue
+				}
 				c := core.NewCarrier(t)
 				// A declared `Any` return is "statically unknown", not "the Any
 				// root": a STRICT Any conforms to no typed slot, so a user fn
