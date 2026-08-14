@@ -299,9 +299,17 @@ The recommended shape — all pieces exist except the words:
    pinned-old-generation counts through the debug/status surface
    (`call {op:"status"}` already reports mailbox stats; add code
    generations) so the "GC is the purge" stance is inspectable.
-6. **Documentation of the compiled boundary** — force-compiled programs
-   do not re-import (§2.2); serving + hot reload runs interpreted or
-   per-module-stamped. Not a code gap; a stated rule.
+6. **Reconciling reload with the compiled tier** — superseded as a
+   "stated rule": `RELOAD-INVALIDATION.0.md` designs the mechanism that
+   lets reload and transparent compilation coexist with *zero* hot-path
+   cost (per-ref valid flags flipped push-style through a reverse
+   dependency index, replacing the per-invoke `DepsFresh` walk;
+   compile-time refs unified with detached refs at Finalize; world-pinned
+   whole-program units with the `InvokeCallback` seam as the reload
+   boundary; a per-world restamp budget replacing the lifetime cap). It
+   also records a confirmed pre-existing compiled-mode divergence
+   (mid-program rebind of a stored-handler dep) that must be pinned and
+   fixed regardless of reload.
 
 Explicit non-goals, matching BEAM experience: no in-place mutation of
 shared export maps (racy; rejected in favour of §4.2's message
