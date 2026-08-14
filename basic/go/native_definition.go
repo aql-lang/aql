@@ -905,6 +905,30 @@ func LookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 	return info, true
 }
 
+// typedDefUnifyMirror emits the failed-unify check diagnostic for a typed
+// def (NUR058). A CONCRETE body is an exactly-known operand, so the finding
+// is a GUARANTEED runtime error mirror — but the stamp is sound only when
+// the COMPILED program raises identically: the check arm installs a carrier
+// and continues, so on a recording pass the mirror is completed by a
+// terminal RecordTrap (the macroexpand discipline), and a declined trap
+// (nested occurrence) keeps the unstamped, compile-refusing emission. A
+// carrier body always stays unstamped — the static refusal is an
+// approximation the runtime value could still satisfy.
+func typedDefUnifyMirror(r *Registry, name, detail string, body Value, pos SrcPos) {
+	if IsConcrete(body) && (!r.Check.Compiling ||
+		r.Check.Recorder().RecordTrap("type_error", detail, name, "", pos)) {
+		CheckAddUniqueDiagnostic(r, "type_error", detail, name, pos)
+		return
+	}
+	r.Check.AddDiagnostic(CheckDiagnostic{
+		Code:   "type_error",
+		Detail: detail,
+		Word:   name,
+		Row:    pos.Row,
+		Col:    pos.Col,
+	})
+}
+
 func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
@@ -1164,27 +1188,10 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				// body keeps the unstamped emission: the static refusal is an
 				// approximation the runtime value could still satisfy, so the
 				// compile pipeline must keep refusing on it.
-				detail := fmt.Sprintf("def %s: value %s does not unify with declared type %s",
-					name, body.String(), describeType())
-				// The stamp is sound only when the COMPILED program raises the
-				// identical error: the check arm installs a carrier and
-				// continues, so without a recorded trap the compiled bind
-				// would silently succeed where the interpreter raises. On a
-				// recording pass the trap IS the mirror (the macroexpand
-				// discipline); a declined trap (nested occurrence) keeps the
-				// unstamped, compile-refusing emission.
-				if IsConcrete(body) && (!r.Check.Compiling ||
-					r.Check.Recorder().RecordTrap("type_error", detail, name, "", args[0].Pos())) {
-					CheckAddUniqueDiagnostic(r, "type_error", detail, name, args[0].Pos())
-				} else {
-					r.Check.AddDiagnostic(CheckDiagnostic{
-						Code:   "type_error",
-						Detail: detail,
-						Word:   name,
-						Row:    args[0].Pos().Row,
-						Col:    args[0].Pos().Col,
-					})
-				}
+				// Mirror discipline lives in typedDefUnifyMirror (NUR058).
+				typedDefUnifyMirror(r, name,
+					fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+						name, body.String(), describeType()), body, args[0].Pos())
 				return InstallAndRecordDef(r, name, NewCarrier(def), args[0].Pos())
 			}
 			return nil, r.BoruError("type_error",
@@ -1202,21 +1209,9 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// Same mirror discipline as the refine-ancestor arm above
 			// (NUR058): exactly-known operands stamp RuntimeMirror; a
 			// carrier body keeps the unstamped, compile-refusing emission.
-			detail := fmt.Sprintf("def %s: value %s does not unify with declared type %s",
-				name, body.String(), describeType())
-			// Same trap-completed mirror as the refine-ancestor arm above.
-			if IsConcrete(body) && (!r.Check.Compiling ||
-				r.Check.Recorder().RecordTrap("type_error", detail, name, "", args[0].Pos())) {
-				CheckAddUniqueDiagnostic(r, "type_error", detail, name, args[0].Pos())
-			} else {
-				r.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "type_error",
-					Detail: detail,
-					Word:   name,
-					Row:    args[0].Pos().Row,
-					Col:    args[0].Pos().Col,
-				})
-			}
+			typedDefUnifyMirror(r, name,
+				fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+					name, body.String(), describeType()), body, args[0].Pos())
 			return InstallAndRecordDef(r, name, NewCarrier(constraint.Parent), args[0].Pos())
 		}
 		return nil, r.BoruError("type_error",
