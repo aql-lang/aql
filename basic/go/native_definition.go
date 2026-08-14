@@ -915,6 +915,12 @@ func LookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 // carrier body always stays unstamped — the static refusal is an
 // approximation the runtime value could still satisfy.
 func typedDefUnifyMirror(r *Registry, name, detail string, body Value, pos SrcPos) {
+	// The name token's Pos can be unset (a synthesized pair); the parsed
+	// BODY literal always carries one — fall back so the compiled trap
+	// reports a real position like the interpreter's raise.
+	if pos.Row == 0 {
+		pos = body.Pos()
+	}
 	if IsConcrete(body) && (!r.Check.Compiling ||
 		r.Check.Recorder().RecordTrap("type_error", detail, name, "", pos)) {
 		CheckAddUniqueDiagnostic(r, "type_error", detail, name, pos)

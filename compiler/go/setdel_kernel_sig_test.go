@@ -2,9 +2,12 @@ package compiler
 
 // NUR057 — unit pins for setDelKernelSig, the binding-identity key that
 // replaced the bare `word != "set" && word != "del"` tests in the two
-// quote-arg exemptions. The exemptions' argument covers only the kernel
-// mutator, so a sig must prove it IS the kernel registration's own Locked
-// signature in the live registry — never merely carry the name.
+// quote-arg exemptions. The admitted set: a LOCKED sig (a Go registration —
+// Locked is stamped only by the registration path, so no runtime
+// construction can counterfeit it) or a BORU-BODIED sig (an open-words
+// extension, an ordinary CALL_USER capture). A runtime-minted handler sig
+// under the name — the usurp-wrapper class the exemptions' old no-shadow
+// comment feared — has neither and declines.
 
 import (
 	"testing"
@@ -29,7 +32,6 @@ func TestSetDelKernelSigIdentity(t *testing.T) {
 			Returns:   []*core.Type{core.TMap},
 		}},
 	})
-
 	fn := r.Lookup("set")
 	if fn == nil || len(fn.Signatures) == 0 {
 		t.Fatal("registered set not found")
@@ -39,30 +41,39 @@ func TestSetDelKernelSigIdentity(t *testing.T) {
 		t.Fatal("a Go registration must arrive Locked — the discriminator depends on it")
 	}
 	if !setDelKernelSig(r, "set", kernel) {
-		t.Error("the kernel registration's own sig must be admitted")
+		t.Error("the kernel registration's own (Locked) sig must be admitted")
 	}
 
-	// The same word NAME with a sig that is NOT the registry's binding — the
-	// shape of an open-words extension dispatch — must decline.
-	stray := *kernel
-	if setDelKernelSig(r, "set", &stray) {
-		t.Error("a copy outside the live binding must decline (pointer identity)")
+	// A boru-BODIED sig under the name (an open-words extension shape):
+	// admitted — its /q param is an ordinary CALL_USER capture.
+	ext := core.Signature{
+		Args:      []*core.Type{core.TAtom, core.TAny, core.TMap},
+		QuoteArgs: map[int]bool{0: true},
+		Impl:      core.Boru([]core.Value{core.NewInteger(1)}),
 	}
-	unlocked := *kernel
-	unlocked.Locked = false
-	if setDelKernelSig(r, "set", &unlocked) {
-		t.Error("an unlocked sig (a boru extension is never Locked) must decline")
+	if !setDelKernelSig(r, "set", &ext) {
+		t.Error("a boru-bodied extension sig must be admitted")
 	}
 
-	// Any other word name declines regardless of identity.
+	// A RUNTIME-MINTED handler sig under the name — not Locked, no boru
+	// body (the usurp-wrapper class) — must decline.
+	wrapper := core.Signature{
+		Args:      []*core.Type{core.TAtom, core.TAny, core.TMap},
+		QuoteArgs: map[int]bool{0: true},
+		Impl:      core.Go(noop),
+	}
+	if setDelKernelSig(r, "set", &wrapper) {
+		t.Error("a runtime-minted (unlocked, bodiless) sig must decline")
+	}
+
+	// Any other word name declines regardless of identity; nil declines.
 	if setDelKernelSig(r, "get", kernel) {
 		t.Error("the key is scoped to set/del by name")
 	}
-	// Nil-safety and an unregistered word.
-	if setDelKernelSig(nil, "set", kernel) || setDelKernelSig(r, "set", nil) {
-		t.Error("nil registry / sig must decline")
+	if setDelKernelSig(r, "set", nil) {
+		t.Error("nil sig must decline")
 	}
-	if setDelKernelSig(r, "del", kernel) {
-		t.Error("del is not registered in this registry — no binding, no admission")
+	if !setDelKernelSig(nil, "del", kernel) {
+		t.Error("the registry is not consulted — a Locked del-named sig admits")
 	}
 }

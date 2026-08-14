@@ -4751,33 +4751,37 @@ func (es *EmitState) recordShuffleElided(word string, sig *core.Signature, args,
 // a shadowed name (a user `def swap …`, whose sig has an fnFrame anyway) never
 // rides the exemption. depth/pick/roll are full-stack words and refused earlier.
 
-// setDelKernelSig reports whether a `set` / `del` dispatch's matched sig is
-// the KERNEL registration's own (Locked) signature in the given registry —
-// the binding-identity key that replaced the bare name test in the two
-// quote-arg exemptions (NUR057). Those exemptions were argued for the kernel
-// mutator ("`set` cannot be shadowed (it is a builtin)"), but `set`/`del`
-// are NOT in sealedWords — they are extendable — so a word-extension sig
-// merged under the same name could reach an exemption whose argument does
-// not cover it. The pointer walk over the live binding's signatures is
-// dynamicStackShuffleOK's discipline; Locked additionally pins the sig to a
-// Go registration, so a boru extension sig (never Locked) can never ride.
-func setDelKernelSig(reg *core.Registry, word string, sig *core.Signature) bool {
+// setDelKernelSig is the binding-identity key that replaced the bare name
+// test in the two set/del quote-arg exemptions (NUR057). Those exemptions
+// were argued for the kernel mutator ("`set` cannot be shadowed (it is a
+// builtin)"), but `set`/`del` are NOT in sealedWords — they are extendable —
+// so the name alone could admit a shape the argument does not cover. The
+// admitted set is exactly what the corpus differential proves sound:
+//
+//   - a LOCKED sig — a Go registration (the kernel mutator, or a module
+//     inner native reached by delegation). Locked is stamped only by the
+//     Go registration path, so it is a registration identity no runtime
+//     construction can counterfeit; pointer identity into Lookup's table
+//     was tried and is fragile (the aggregate rebuilds when an extension
+//     entry lands, invalidating element addresses).
+//   - a BORU-BODIED sig under the name — an open-words extension
+//     (`def set fn [[k:Atom/q …] …]`): its /q param is an ordinary
+//     forward-capture bound into a CALL_USER frame, nothing re-steps, and
+//     the as.tsv/open-words.tsv extension rows compile with verified parity.
+//
+// What can no longer ride is a RUNTIME-MINTED handler sig under the name —
+// the usurp-wrapper class the old comment feared (`def set (usurp …)`
+// copies QuoteArgs onto a handler that RE-STEPS its result): never Locked,
+// no boru body, and precisely the shape the quoted-operand refusal exists
+// for.
+func setDelKernelSig(_ *core.Registry, word string, sig *core.Signature) bool {
 	if word != "set" && word != "del" {
 		return false
 	}
-	if reg == nil || sig == nil || !sig.Locked {
+	if sig == nil {
 		return false
 	}
-	fn := reg.Lookup(word)
-	if fn == nil {
-		return false
-	}
-	for i := range fn.Signatures {
-		if &fn.Signatures[i] == sig {
-			return true
-		}
-	}
-	return false
+	return sig.Locked || len(sig.Body()) > 0
 }
 
 func (es *EmitState) dynamicStackShuffleOK(word string, sig *core.Signature) bool {
