@@ -195,6 +195,23 @@ convert Boolean {truthy:true} 'maybe'	true	a non-token string falls back to pres
 convert Boolean {truthy:true} ''	false	…and the empty string falls back to false
 convert Boolean {truthy:true} 0	false	truthy leaves a non-String source to ordinary coercion
 convert Boolean {truthy:false} 'false'	true	truthy:false is plain presence coercion — 'false' is non-empty → true
+convert Boolean [1]	true	NUR053: the SOURCE domain is Any — a non-empty List coerces, as `if` and `make Boolean` always did
+convert Boolean []	false	…and an empty List is false
+convert Boolean {a:1}	true	…a non-empty Map is true
+convert Boolean {}	false	…an empty Map is false
+convert Boolean none	false	…and none is false: the three falsy members that used to raise signature_error
+make Boolean []	false	…and `make Boolean` agrees exactly: the two CONSTRUCTORS now share a domain, not just a rule (NUR053)
+def m {} if m ['T'] ['F']	'F'	`if` agrees for every shape it reads as a VALUE — an empty Map is false
+def m {a:1} if m ['T'] ['F']	'T'	…and a non-empty Map is true
+if none ['T'] ['F']	'F'	…and none is false, matching both constructors
+def xs [0] if xs ['T'] ['F']	'F'	but a LIST condition is CODE, not a value: `if` RUNS it (the body yields 0, which is falsy) — NUR070
+def xs [0] convert Boolean xs	true	…while both constructors coerce the same list by presence: non-empty → true. `if` and the constructors give OPPOSITE answers here (NUR070)
+def xs [0] make Boolean xs	true	…and `make Boolean` agrees with `convert`, not with `if`
+convert Boolean {truthy:true} [1]	true	the options form takes the wider domain too — truthy's YAML parse falls back to presence
+convert Boolean {truthy:true} none	false	…and falls back for none as well
+convert Integer [1 2]	ERROR:no signature matches	NUR053 widened the BOOLEAN target only: an Integer target has no total presence rule, so a List source still has no signature
+convert String [1 2]	ERROR:no signature matches	…and a String target likewise stays Scalar-sourced
+convert Integer none	ERROR:no signature matches	…none is refused for a non-Boolean target for the same reason
 convert String {truthy:true} 42	'42'	truthy is inert for a non-Boolean target
 convert Integer 3.99	3	Float → Integer truncates toward zero
 convert Integer -3.99	-3	…for negatives too

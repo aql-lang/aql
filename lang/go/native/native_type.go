@@ -328,6 +328,41 @@ var typeNatives = []NativeFunc{
 				// refusal: a Float source into a Big target always raises.
 				ReturnsFn: convertScalarReturns, BarrierPos: -1,
 			},
+			// NUR053 — the truthiness DOMAIN. `if` and `make Boolean` accept
+			// any value; these two sigs make `convert Boolean` accept any value
+			// too, so the three consumers of the One Truthiness Model share a
+			// domain as well as a rule.
+			//
+			// They are Boolean-target-ONLY (arg0 is the `Boolean` type literal,
+			// not `Scalar`) on purpose: the general scalar sigs above stay
+			// Scalar-sourced, because there is no total presence rule to apply
+			// for an Integer or a Date target — `convert Integer [1 2]` has no
+			// meaning and must keep raising. Boolean is the one target whose
+			// conversion IS a coercion, and `CoerceBoolean` — the very function
+			// `if` applies — is already total over every value mode, so this is
+			// signature ADMISSION, not new semantics: the handlers below needed
+			// no change at all.
+			//
+			// Ordered AFTER the scalar sigs so a Scalar source keeps matching
+			// exactly the signature it matches today; these only claim the
+			// shapes that previously reached no signature and raised.
+			{
+				Args:      []*Type{TBoolean, TAny},
+				TypeArgs:  map[int]bool{0: true},
+				Impl:      Go(convert2Handler),
+				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
+			},
+			{
+				Args:     []*Type{TBoolean, TMap, TAny},
+				TypeArgs: map[int]bool{0: true},
+				Patterns: map[int]Value{1: convertOptsPattern()},
+				Impl:     Go(convert3Handler),
+				// Mirrors the Scalar options form, including its dry pass: the
+				// `truthy` option's YAML parse (coerceBooleanTruthy) falls back
+				// to the same presence rule, so it is total over this wider
+				// source domain too.
+				ReturnsFn: DryPassWrap(convert3Handler, ReturnsFreshInstance(0)), BarrierPos: -1,
+			},
 		},
 	},
 }

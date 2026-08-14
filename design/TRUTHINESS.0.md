@@ -74,6 +74,33 @@ truthiness. Making the conversion path parse content would fork
 truthiness into two rules — a worse non-uniformity than the one it
 fixes.
 
+**The DOMAIN, as distinct from the rule** (NUR053, resolved
+2026-08-14). The two constructors share the rule *and* the domain:
+`convert Boolean` accepts any value, exactly as `make Boolean` does,
+so the falsy members that are not Scalars coerce rather than raising
+(`convert Boolean []` → false, `{}` → false, `none` → false). Before
+that fix `convert Boolean`'s source slot was Scalar-only and those
+three raised `signature_error`, which made the paragraph above true of
+the rule and false of the domain.
+
+`if` shares the domain for every shape it reads as a **value** — Map,
+None, String, and the numeric leaves all agree with both constructors.
+It does **not** for a **List**, which `if` reads as a *code body to
+run* rather than a value to coerce. The two readings disagree, and not
+only at the edges:
+
+```
+def xs [0]   if xs ['T'] ['F']        # → 'F'    the body runs, yields 0, falsy
+def xs [0]   convert Boolean xs       # → true   non-empty list is present
+def xs [0]   make Boolean xs          # → true
+def xs []    if xs ['T'] ['F']        # → error: condition produced no value
+```
+
+That is the code-body condition form working as designed
+(`if [ … ] [then] [else]`), so it is not a defect in `if` — but it does
+mean "every consumer of the truthiness rule agrees" is false for one
+source shape. **NUR070** records it and holds the verdict.
+
 **Content parsing is an explicit opt-in:** `convert Boolean {truthy:
 true} <src>` first matches a String against the YAML boolean tokens
 (`y`/`yes`/`true`/`on`, `n`/`no`/`false`/`off`, case-insensitive,
