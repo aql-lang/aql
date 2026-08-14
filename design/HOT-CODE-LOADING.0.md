@@ -72,12 +72,25 @@ Hot swap usually dies at the compiler; here it already survived it:
   unstamped and `InvokeCallback` **falls back to `CallBoru`**, where the
   interpreter resolves the new binding at call time
   (`basic/go/native_definition.go`, the def- and undef-site comments).
-- Runtime-stamped module fns carry **dep snapshots keyed on def-table
-  generations**; a fork compares stamp-time generations and falls back to
-  interpretation when stale (`core/go/deftable.go::Clone`, the `gen`
-  comment; `design/RUNTIME-STAMPING.0.md`). Wrong-code execution is
-  structurally excluded; the cost of a swap is de-optimization, not
-  incorrectness.
+- Runtime-stamped (**detached**) fn units — the module-load sweep, service
+  handlers stamped at `add`, codec fns — carry **dep snapshots keyed on
+  def-table generations** (per dep: shadow depth + mutation generation,
+  generations carried across `ForkConcurrent` clones); `InvokeCallback`
+  validates freshness on every invoke and falls back to `CallBoru` on any
+  mismatch (`compiler/go/bytecode.go::DepsFresh`;
+  `design/RUNTIME-STAMPING.0.md`). Wrong-code execution is structurally
+  excluded; the cost of a swap is de-optimization, not incorrectness.
+- Better: for detached refs the de-optimization is **temporary**. Each
+  carries a JIT re-stamp box (`RestampBox`,
+  `compiler/go/stamp_runtime.go::JitRestamp`; `REFUSAL-CLOSURE.0.md` §7c):
+  a stale ref re-compiles against the **live** bindings at invoke time —
+  a stable rebind pays one compile and runs on the VM again — bounded at
+  `RestampMaxTries = 3` total re-compiles per ref so a hot rebinding loop
+  degrades to the interpreter instead of paying a compile per invoke.
+  Compile-time refs (created inside a whole-program pass) have no box: a
+  poisoned unit stays on the interpreter for good. And since a re-imported
+  module re-runs the stamp sweep at load (§2.3), the **new** generation
+  enters compiled execution immediately either way.
 - The one hard boundary: a **force-compiled program bakes its imports at
   the compile pass** ("the VM program does not re-import",
   `lang/go/native/native_module_module.go`, the `!Compiling` comment).
@@ -222,7 +235,7 @@ reload. §5.4 proposes the persistent handle.
 | Local calls stay in old code until qualified call | captured fn values keep old code | same, by design |
 | `code_change/2` state migration | aless `reanchor` precedent; service state survives handler swap (§2.6) | no blessed hook (§5.2) |
 | `code:purge/1` kills lingering old-code processes | last reference dies → GC reclaims sub-registry | no forced purge; leak shape is "old closure retains module" |
-| `.beam` load; JIT re-warms | `import` re-reads source; stamping re-runs at load; `NotifyNameRebound` de-optimizes stale units | force-compiled whole programs bake imports (§2.2) |
+| `.beam` load; JIT re-warms | `import` re-reads source; stamping re-runs at load; stale detached refs **JIT re-stamp** at invoke (`RestampBox`, ≤3 tries); `NotifyNameRebound` de-optimizes compile-time units permanently | force-compiled whole programs bake imports (§2.2) |
 | `sys:suspend/resume` around upgrade | service dispatch mutex; `Pausable` / `{op:"pause"}` control requests (SERVICES §5) | wiring reload into the pause window is convention, not code |
 
 The structural difference worth stating plainly: BEAM needs the module
