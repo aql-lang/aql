@@ -906,22 +906,35 @@ func LookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 }
 
 // typedDefUnifyMirror emits the failed-unify check diagnostic for a typed
-// def (NUR058). A CONCRETE body is an exactly-known operand, so the finding
-// is a GUARANTEED runtime error mirror — but the stamp is sound only when
-// the COMPILED program raises identically: the check arm installs a carrier
-// and continues, so on a recording pass the mirror is completed by a
-// terminal RecordTrap (the macroexpand discipline), and a declined trap
-// (nested occurrence) keeps the unstamped, compile-refusing emission. A
-// carrier body always stays unstamped — the static refusal is an
-// approximation the runtime value could still satisfy.
+// def (NUR058). An INERT-CONST body is an exactly-known operand — the
+// check-time value IS the runtime value, byte for byte — so the finding is
+// a GUARANTEED runtime error mirror whose detail text cannot drift. The
+// stamp is sound only when the COMPILED program raises identically: the
+// check arm installs a carrier and continues, so on a recording pass the
+// mirror is completed by a terminal RecordTrap (the macroexpand
+// discipline), and a declined trap (nested occurrence) keeps the
+// unstamped, compile-refusing emission. Deep inertness, not shallow
+// concreteness, is the gate: a concrete LIST holding a check-mode
+// abstract class instance renders differently at check time than the
+// runtime value does (`[Box of [String]]` vs `[Box of [String]{value:…}]`
+// — the generics container rows), so such a body keeps the unstamped
+// emission and its runtime BIND_TYPED raise, which renders the live
+// value. A carrier body likewise stays unstamped — the static refusal is
+// an approximation the runtime value could still satisfy.
 func typedDefUnifyMirror(r *Registry, name, detail string, body Value, pos SrcPos) {
-	// The name token's Pos can be unset (a synthesized pair); the parsed
-	// BODY literal always carries one — fall back so the compiled trap
-	// reports a real position like the interpreter's raise.
+	// The name token's Pos can be unset (a synthesized pair), and an
+	// auto-evaluated LIST body is rebuilt without one while its elements
+	// keep theirs — fall back down the chain so the compiled trap reports
+	// a real position like the interpreter's raise.
 	if pos.Row == 0 {
 		pos = body.Pos()
 	}
-	if IsConcrete(body) && (!r.Check.Compiling ||
+	if pos.Row == 0 {
+		if lst, err := AsList(body); err == nil && !lst.IsNil() && lst.Len() > 0 {
+			pos = lst.Get(0).Pos()
+		}
+	}
+	if core.IsInertConst(body) && (!r.Check.Compiling ||
 		r.Check.Recorder().RecordTrap("type_error", detail, name, "", pos)) {
 		CheckAddUniqueDiagnostic(r, "type_error", detail, name, pos)
 		return
