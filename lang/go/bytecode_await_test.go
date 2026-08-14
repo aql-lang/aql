@@ -21,7 +21,10 @@ func TestAwaitCompiledBranchParity(t *testing.T) {
 		`import "boru:time-util" TimeUtil.await [[def x 5 x add 1] [3 mul 4]]`,
 		`import "boru:time-util" TimeUtil.await [[raise bad_input "boom"] [3 mul 4]]`,
 		`import "boru:time-util" TimeUtil.await {mode:"full"} [[raise bad_input "boom"] [3 mul 4]]`,
-		`import "boru:time-util" TimeUtil.await {mode:"any"} [[raise bad_input "boom"] [3 mul 4]]`,
+		// The winner-takes-all modes (first/any) are NOT here: their result
+		// is the winning branch's whole residual — a runtime-variable count —
+		// so the compile pass refuses them wholesale (NUR067; the pinned
+		// refusal is TestAwaitWinnerModesRefuseCompilation below).
 	}
 	for _, src := range cases {
 		t.Run(src, func(t *testing.T) {
@@ -46,6 +49,42 @@ func TestAwaitCompiledBranchParity(t *testing.T) {
 			}
 			if fmt.Sprintf("%v", gotC) != fmt.Sprintf("%v", gotI) {
 				t.Errorf("parity: compiled %v != interp %v", gotC, gotI)
+			}
+		})
+	}
+}
+
+// TestAwaitWinnerModesRefuseCompilation — first/any hand back the winning
+// branch's WHOLE residual (0-or-more values, a count that can EXCEED any
+// static seat), so the compile pass refuses wholesale and the interpreter
+// owns these modes (NUR067 — the pre-refusal 1-seat layout was a live
+// miscompile: `size [(await {mode:'any'} [[7 8]])]` stranded a value).
+// The refusal reason is pinned so a graduation (a runtime-variadic region
+// representation) flips this test loudly.
+func TestAwaitWinnerModesRefuseCompilation(t *testing.T) {
+	for _, src := range []string{
+		`import "boru:time-util" TimeUtil.await {mode:"any"} [[raise bad_input "boom"] [3 mul 4]]`,
+		`import "boru:time-util" TimeUtil.await {mode:"first"} [[1 2 3]]`,
+	} {
+		t.Run(src, func(t *testing.T) {
+			a, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, compiled, err := a.RunCompiled(src)
+			if compiled {
+				t.Fatal("a winner-mode await must refuse compilation — has the runtime-variadic region representation landed? Graduate the frontier-await-winner.tsv ledger rows with this pin")
+			}
+			if err == nil || !strings.Contains(err.Error(), "runtime-variadic (0-or-more values) with no static seat") {
+				t.Fatalf("refusal reason drifted: %v", err)
+			}
+			// The interpreter owns the modes, byte-identically.
+			b, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := b.RunInterp(src); err != nil {
+				t.Fatalf("RunInterp: %v", err)
 			}
 		})
 	}

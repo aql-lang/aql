@@ -425,7 +425,7 @@ func init() {
 		}},
 		{func(v Value, _ ValueShape) bool { return IsSurfaceType(v) }, unifySurface},
 		{func(_ Value, s ValueShape) bool { return s == ShapeNever }, foldDegenRoot("never", ShapeNever)},
-		{func(_ Value, s ValueShape) bool { return s == ShapeNone }, foldDegenRoot("none", ShapeNone)},
+		{func(_ Value, s ValueShape) bool { return s == ShapeNone }, foldNoneRoot},
 		{func(_ Value, s ValueShape) bool { return s == ShapeAbsent }, foldDegenRoot("absent", ShapeAbsent)},
 		{func(_ Value, s ValueShape) bool { return s == ShapeAny }, func(_, other Value) (Value, *UnifyError) {
 			// Any yields the other (more specific) side.
@@ -436,6 +436,26 @@ func init() {
 			return unifyTypeParam(ruling, typeParamLitNode(ruling), other)
 		}},
 	}
+}
+
+// foldNoneRoot is the None root's fold: none unifies with none — and
+// with the Any side of a pair (NUR069). `Any` is the top of the value
+// domain: `TNone.ConformsTo(TAny)` already holds, `none is Any` is
+// true, and `make`'s bare-literal field rule admits none for an `Any`
+// constraint (MakeFieldValueR's ConformsTo arm) — the unifier was the
+// one boundary that read `Any` as "anything except none", which split
+// a record's declared-`Any` field between construction (admitted) and
+// every pattern walk (refused). The intersection is the none side (the
+// narrower). Stated here, not in the Any fold, because None outranks
+// Any in the fold order; Never and Absent keep their self-only rule —
+// in particular the `?:T` optional-key machinery depends on
+// `Unify(Any, Absent)` refusing (an `Any` field is required, not
+// optional).
+func foldNoneRoot(ruling, other Value) (Value, *UnifyError) {
+	if Shape(other) == ShapeAny {
+		return ruling, nil
+	}
+	return foldDegenRoot("none", ShapeNone)(ruling, other)
 }
 
 // foldDegenRoot builds the self-only fold a degenerate root (Never,

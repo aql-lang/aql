@@ -78,7 +78,9 @@ type EmitRecorder interface {
 	// fallibility (lang doBodyMayRaise) and runs immediately before its own
 	// dispatch records — sets/clears it per dispatch; the record paths
 	// consume it keyed to the CompileFallbackBody sig, so it can never leak
-	// onto an unrelated word's event. Plan Phase 5, L-DO.
+	// onto an unrelated word's event. Plan Phase 5, L-DO. (The mark covers
+	// only the SHRINKING direction; a count that can EXCEED the modeled
+	// seats — await first/any — refuses wholesale instead, NUR067.)
 	SetCatchVariadic(pending bool)
 
 	// --- dispatch / value recording -------------------------------------

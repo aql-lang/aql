@@ -78,9 +78,9 @@ keep the two in sync in the same commit.
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
 | [NUR066](#nur066) | `end` and `none` are reachable as map keys by `get`/`getr` but not by the dot-path sugar that lowers to them; every other keyword works in both | surfaced while verifying `design/STATE-MACHINES.0.md` §11.3 examples (PR #352) |
-| [NUR067](#nur067) | `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions | PR #351 await result model (flagged for NUR by Codex P1) |
+| [NUR067](#nur067) | `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions — RESOLVED BY FIX (the variadic-spread model; the 1-seat compiled layout was a live miscompile, now a sound ledgered refusal) | PR #351 await result model (flagged for NUR by Codex P1) |
 | [NUR068](#nur068) | A `refine Record` type keeps its schema as a fn PARAM and as a `class` return, but loses it as a fn RETURN — RESOLVED BY FIX (schema-bearing return carriers + the record-carrier unify admission) | PR #351 Any-frontier survey (minimal repro while narrowing `boru:test`'s constructors) |
-| [NUR069](#nur069) | A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither | NUR068's resolution (the reverted `boru:test` constructor annotations) |
+| [NUR069](#nur069) | A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither — NARROWED: the none-vs-Any axis is resolved by fix (`Any ∩ none = none` at every boundary); the CallBoru return asymmetry remains | NUR068's resolution (the reverted `boru:test` constructor annotations) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2531,9 +2531,37 @@ nothing else.
 
 ## NUR067 — `await`'s `first` / `any` modes return the winning branch's whole residual, so the check model's arity is wrong in both directions {#nur067}
 
-**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** PR #351,
+**Status:** RESOLVED BY FIX · **Recorded:** 2026-08-14 · **Resolved:**
+2026-08-14 · **Surfaced by:** PR #351,
 while reading `doAwait`'s four arms to build a result model; flagged for this
 register by the PR #351 review (Codex P1).
+
+**Resolution:** the arity claim is now honest, and chasing it surfaced a
+LIVE MISCOMPILE the divergence had been hiding.
+
+- **The model** (`awaitVariadicResult`): `first` / `any` — and an
+  unreadable options argument, whose runtime mode could be either — model
+  as the VARIADIC-SPREAD carrier (0-or-more values), so the soundness
+  oracle covers both directions (`await {mode:'first'} [[]]` nets nothing,
+  a 3-value branch nets three). The spread's element is the deliberate
+  `Any` of an unboundable winner — the branches are unevaluated code
+  bodies run on isolated forks — recorded as the one sanctioned exception
+  in the `SpreadPayload` contract.
+- **The miscompile**: the old 1-seat layout was not just imprecise — the
+  emitter's variadic mark (L-DO `SetCatchVariadic`) covers only the
+  SHRINKING direction (`do`'s N no-raise vs 1 caught), and a count that
+  EXCEEDS the modeled seat strands values outside every laid-out consumer:
+  `size [(await {mode:'any'} [[7 8]])]` answered 2 interpreted and a
+  stranded 7 plus a 1-element list compiled, on the default path. The
+  compile pass now REFUSES the winner-takes-all modes wholesale
+  (`MarkUncompilable`, interpreter fallback — sound and byte-identical),
+  pinned as three green-semantics rows in
+  `lang/spec/frontier/frontier-await-winner.tsv` with
+  `frontierCompileLedger` entries whose graduation criterion is a
+  runtime-variadic region representation (an OpStackMark-style collect
+  with no static count); the refusal arm then records the region instead
+  and the rows move to `lang/spec/module-time.tsv`. Model pins in
+  `lang/go/native/await_returns_model_test.go`.
 
 **Rule:** a word's declared result arity is its runtime arity. A signature
 that declares one result must push exactly one value, or a downstream consumer
@@ -2710,10 +2738,41 @@ Any-frontier is dominated by field reads through constructor functions
 
 ## NUR069 — A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither {#nur069}
 
-**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** NUR068's
+**Status:** Pending (NARROWED — the none-vs-Any axis is RESOLVED BY FIX,
+2026-08-14; the CallBoru return asymmetry remains) · **Recorded:**
+2026-08-14 · **Surfaced by:** NUR068's
 resolution — annotating `boru:test`'s constructors with their record types
 shipped a compiled/interpreted divergence, and this is why the annotations
 were reverted.
+
+**Resolution of the none-vs-Any axis (maintainer verdict: "Any admits
+none", 2026-08-14):** the unifier's None fold now admits the Any side —
+`Any ∩ none = none`, the intersection the lattice already implied
+(`TNone.ConformsTo(TAny)` is what let `make`'s ConformsTo field rule and
+the `:Any` param admit none all along). One arm (`foldNoneRoot`,
+`core/go/unify.go`), scoped to None: Never and Absent keep their
+self-only folds — in particular `Unify(Any, Absent)` still refuses, which
+is what keeps an `Any` field REQUIRED (the `?:T` optional-key machinery
+rides Absent). The change carries through every consulted boundary in one
+step: the record-param pattern walk, the interpreter's and the VM's
+return checks, the `unify` word (`None unify Any → None true`,
+`unify.tsv` / `syntax.tsv` flipped), and `is` membership — `none is Any`
+is now **true** (`edge-types-2.tsv` §3 flipped; its old comment conceded
+the `:Any` param already admitted none, so keeping `is` at false would
+have minted a fresh is-vs-unify split). The four repro rows below now
+agree on `{x:none}` on both engines; pinned in `lang/spec/record.tsv`
+§NUR069 and `core/go/unify_none_any_test.go`.
+
+**What remains open — the CallBoru return asymmetry:** a module fn's
+declared return is never checked on the interpreter's CallBoru path
+(trim-only, documented in `checkReturnContract`) while a compiled unit's
+RET enforces type and pattern — so a NON-conforming module-fn return
+still diverges (interpreter passes it through, compiled raises). This is
+why `boru:test`'s constructors stay `[Map]` even after the none fix. The
+candidate resolutions: enforce declared returns on CallBoru (uniform,
+may refuse programs that run today), or exempt module-fn units from the
+RET pattern check (uniform the other way, weakens compiled contracts),
+or document the asymmetry as Allowed.
 
 **Rule:** a type means the same thing at every boundary that consults it.
 If `make R {x: none}` constructs an inhabitant of `R` (schema
@@ -2763,7 +2822,9 @@ in code (`checkReturnContract`); the none-vs-Any-field split is documented
 nowhere — `make`'s leniency and the pattern walks' strictness each look
 locally deliberate.
 
-**Proposed verdict:** none yet. The candidate resolutions pull in
+**Proposed verdict (as recorded; the none axis was resolved by the first
+option — see the Resolution above):** none yet. The candidate resolutions
+pull in
 different directions — teach the field-bag unify walks that a schema's
 `Any` constraint admits none (aligning on `make`'s reading; touches every
 pattern boundary), or make `make` refuse none for an `Any` field (aligning

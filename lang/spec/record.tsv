@@ -153,3 +153,13 @@ def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [make R {name:'a
 def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [17]] mk	ERROR:mk: return value 1: expected Map, got Integer	declared record return still enforced
 def R (refine Record [name:String n:Integer]) def mk fn [[] [R] [make R {name:'a' n:1}]] keys ((mk) get 'name')	ERROR:cannot call `keys`	a schema-typed field read is not a map
 def R (refine Record [name:String n:Integer]) def S (refine Record [tag:Atom v:List]) def mk fn [[] [R] [make R {name:'a' n:1}]] def use fn [[s:S] [Atom] [s get 'tag']] use (mk)	ERROR:cannot call `use`	a DIFFERENT record's param stays provably disjoint
+		
+# === NUR069 (none axis) — a record field declared Any admits none ===		
+# Any is the top of the value domain: Any ∩ none = none. One reading		
+# at every boundary — make, a record-typed param, a declared record		
+# return, and the unify word itself — matching `is`, which always		
+# admitted none for Any.		
+def R (refine Record [x:Any]) make R {x:none}	{x:none}	make admits (as it always did)
+def R (refine Record [x:Any]) def f fn [[c:R] [Map] [c]] f (make R {x:none})	{x:none}	a record param admits the none-fielded instance
+def R (refine Record [x:Any]) def mk fn [[] [R] [make R {x:none}]] mk	{x:none}	a declared record return admits it too
+None unify Any	None true	the unify word agrees: the intersection is none
