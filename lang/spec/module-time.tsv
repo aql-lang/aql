@@ -78,6 +78,9 @@ import "boru:time-util"  TimeUtil.format "2006-01-02" (TimeUtil.to-date (TimeUti
 import "boru:time-util"  TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-24	add days
 import "boru:time-util"  TimeUtil.add-months 2 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2024-01-14	add months
 import "boru:time-util"  TimeUtil.add-years 3 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2026-11-14	add years
+import "boru:time-util"  typeof (TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000)))	Date	a shift changes the value, never the type
+import "boru:time-util"  keys (TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000)))	ERROR:signature_error	…so a Date is not a Map
+import "boru:time-util"  TimeUtil.to-unix (TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000)))	ERROR:uncalled_function	…and not an Instant either — to-unix takes an Instant
 #
 # §12  duration constructors — calendar (Integer → CalendarDuration)
 import "boru:time-util"  TimeUtil.years 2	P2Y0M0D	n years as a CalendarDuration

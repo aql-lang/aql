@@ -115,6 +115,15 @@ func TestReturnsAnnotationNarrowing(t *testing.T) {
 		// NEGATIVE: the key is real enough to be MISSED — a quoted name that
 		// is not in the map narrows to None, not to a permissive Any.
 		{"quote-missing-key-narrows-none", `def m {a:1 b:2} m get (quote zz)`, false, false},
+		// ---- date arithmetic: every arm builds a Date ----
+		{"add-days-narrows", `import "boru:time-util" TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000))`, false, false},
+		{"earliest-narrows", `import "boru:time-util" TimeUtil.earliest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))`, false, false},
+		{"start-of-narrows", `import "boru:time-util" TimeUtil.start-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000))`, false, false},
+		{"start-of-chains-into-date-word", `import "boru:time-util" TimeUtil.is-leap-year (TimeUtil.start-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000)))`, false, false},
+		// NEGATIVE: a Date is not a Map, and not an Instant either — both
+		// uses ran into a runtime error while the Any residual matched.
+		{"add-days-into-keys-flags", `import "boru:time-util" keys (TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000)))`, true, false},
+		{"add-days-into-to-unix-flags", `import "boru:time-util" TimeUtil.to-unix (TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000)))`, true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
