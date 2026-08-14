@@ -153,7 +153,11 @@ references. Register the builder in the `modules` map in
 - Inner native sigs MUST use `BarrierPos: -1` so the swap form
   `a Ns.word b` dispatches. This is the sharp edge in `lang/go/CLAUDE.md`
   "Module FnDef Wrappers — inner sig BarrierPos", pinned by
-  `wrapper_dispatch_test.go`. Zero-arg constants use `BarrierPos: 0`.
+  `wrapper_dispatch_test.go`. For ZERO-ARG constants the two spellings
+  are byte-identical after registration (`-1` normalizes to
+  `TotalArgs()`, which is 0 at zero args — NUR023): `-1` is the ADR-004
+  uniform default, `0` an accepted constant-style idiom; existing
+  registrations use both and neither is wrong.
 - `FnSig.Params` and `NativeSig.Args` are **top-first, sig order**:
   position 0 is the top of the stack. Document signatures in this order.
 - Module words are invoked **args-before-dot**: `a b Ns.word` (stack

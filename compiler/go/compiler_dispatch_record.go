@@ -503,8 +503,11 @@ func tryRecordPoly(r *core.Registry, word string, sig *core.Signature, args, out
 	// receiver mutation (set: Store/Object/Array; del: FlexMap) and copy-return
 	// (Map/List) are faithful under runtime re-match: callPoly runs the same
 	// handler over the same concrete receiver the interpreter would. Other
-	// quoted-operand words (usurp / ref-family meta) re-step tokens and stay out.
-	if len(sig.QuoteArgs) > 0 && !core.IsGetWord(word) && !core.IsGetrWord(word) && word != "set" && word != "del" {
+	// quoted-operand words (usurp / ref-family meta) re-step tokens and stay
+	// out. The set/del admission is keyed on BINDING IDENTITY against
+	// matchReg's own Locked registration (setDelKernelSig, NUR057), not the
+	// bare name — an open-words extension sig declines to the ordinary paths.
+	if len(sig.QuoteArgs) > 0 && !core.IsGetWord(word) && !core.IsGetrWord(word) && !setDelKernelSig(matchReg, word, sig) {
 		return false
 	}
 	// A fn-valued operand or result means a fn-invoking / fn-returning word

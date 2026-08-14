@@ -991,6 +991,21 @@ All stack words are stack-only (modifier `/s`).
 | `depth` | `→ n` | Current stack size |
 | `stack` | `→ [...]` | Entire stack as a list |
 
+Two non-shuffle words are also stack-only, by semantic necessity
+rather than Forth tradition, and are pinned here per ADR-004 (a
+stack-only registration outside this list needs the same
+justification weight as a new init-time panic — NUR023):
+
+- `apply` (the `[Function]` overload) — `args… fn apply` means "take
+  the function off the stack and apply it to the preceding values";
+  forward collection would force callers to put the fn's arguments
+  after it, fighting the left-to-right stack flow the word exists to
+  serve. (`apply f/r 5` therefore raises — spell it `5 f/r apply`.)
+- `__casematch` — the `case` desugar's internal match probe (each
+  clause lowers to `if (v match __casematch) …`), always fed by the
+  synthesized chain's stack discipline. The `__` prefix marks it
+  internal; it is describable but not meant for direct calls.
+
 ### Arithmetic
 
 Forward-collecting, Integer/Float with auto-promotion. The

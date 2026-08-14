@@ -60,7 +60,7 @@ keep the two in sync in the same commit.
 |---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
-| [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
+| [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list — NARROWED (apply/__casematch pinned in REFERENCE's closed list; the 0-arg doc split reconciled as a byte-identical idiom; stays Pending on the refined-ADR axis) | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
@@ -68,8 +68,8 @@ keep the two in sync in the same commit.
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in | 2026-08-02 NUR register review |
-| [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
-| [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
+| [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim — RESOLVED BY FIX (binding-identity keying, the flex-gate discipline) | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
+| [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped — RESOLVED BY FIX (fold/typed-def/patrun stamped, the typed-def mirror completed with a recorded trap and a coded raise; the advisory sites classified) | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR061](#nur061) | The stock scanners split a base-prefixed run at the `.` boundary — RESOLVED BY FIX in tabnas parser v0.8.3, shim deleted | PR #338 retirement attempt (flagged for NUR by Codex P1) |
@@ -1047,6 +1047,20 @@ reporting a failed dispatch. Recorded as ADR candidate 4 in the
 resolution plan; this record stays Pending until the refined ADR
 either absorbs the exceptions into the documented rule or the
 registrations are changed to conform.
+
+**Narrowed (2026-08-14):** the two divergence axes that were pure
+documentation debt are closed. `apply`'s `[Function]` overload and
+`__casematch` are PINNED in REFERENCE §"Stack manipulation" with their
+semantic rationales (`args… fn apply` is intrinsically about the stack
+— ADR-004's own exception clause; `__casematch` is the `case`
+desugar's internal, always-stack-fed probe), so no argument-taking
+stack-only registration sits outside the closed list any more. The
+0-arg guidance split is reconciled in both documents
+(`design/go-modules/README.10.md`, `RUNTIME.10.md`): at zero args
+`-1` and `0` are byte-identical after registration normalization, so
+the passages now describe an idiom choice, not competing defaults.
+What remains Pending is exactly the refined-ADR axis above — an
+explicit maintainer-instruction item per the ADR-addition rule.
 
 ---
 

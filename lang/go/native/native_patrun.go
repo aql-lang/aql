@@ -181,13 +181,14 @@ func patrunAddReturns(args []Value, r *Registry) []Value {
 	if r != nil && !r.Check.Compiling && len(args) >= 3 {
 		if ss, ok := check.StoreShapeOf(args[2]); ok && ss.DeclaredVal != nil &&
 			!ss.DeclaredVal.Equal(TAny) && IsConcrete(args[1]) && !args[1].Is(ss.DeclaredVal) {
-			r.Check.AddDiagnostic(core.CheckDiagnostic{
-				Code:   "patrun_error",
-				Detail: fmt.Sprintf("add: value must be a %s, got %s", ss.DeclaredVal.Leaf(), args[1].Parent.String()),
-				Word:   "add",
-				Row:    args[1].Pos().Row,
-				Col:    args[1].Pos().Col,
-			})
+			// A proven-concrete wrong-typed value is a GUARANTEED runtime
+			// error mirror of patrunAddHandler's guard — stamped and deduped
+			// through the helper (NUR058). Plain-check-only today (the
+			// !Compiling gate above), so the stamp is classification, not a
+			// compile-behavior change.
+			core.CheckAddUniqueDiagnostic(r, "patrun_error",
+				fmt.Sprintf("add: value must be a %s, got %s", ss.DeclaredVal.Leaf(), args[1].Parent.String()),
+				"add", args[1].Pos())
 		}
 	}
 	return nil
