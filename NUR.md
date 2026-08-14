@@ -2609,7 +2609,11 @@ follow-on record (NUR069) bars from carrying the annotation.
    CARRIER (only the carrier — a record type body keeps the nominal
    refusal) by the same open verdict the runtime reaches for the instance
    it abstracts, and provably-disjoint schemas still refuse. The
-   bare-`Map`-literal arms take the same carrier exception.
+   bare-`Map`-literal arms take the same carrier exception, and a TYPED
+   map ({:T}) admits the carrier iff every schema field type can meet the
+   child constraint — the runtime rule (every stored value meets the
+   child) projected over the schema, since a field type that cannot meet
+   it makes every instance fail.
 
 3. **The residual-surfacing twin**, for constructors that CANNOT carry the
    record annotation. Re-annotating `boru:test`'s constructors
@@ -2722,7 +2726,7 @@ If `make R {x: none}` constructs an inhabitant of `R` (schema
 def R refine Record [x:Any]
 make R {x:none}                          -> {x:none}        make ADMITS
 def f fn [[c:R] [Map] [c]]  f (make R {x:none})
-                                         -> no_signature    param pattern REFUSES
+                                         -> signature_error param pattern REFUSES
 def mk fn [[] [R] [make R {x:none}]] mk  -> type_error      top-level RETURN REFUSES…
 import module [def mk fn [[] [R] [make R {x:none}]] export "M" {mk: mk/r}] M.mk
                                          -> {x:none}        …but a MODULE fn's return

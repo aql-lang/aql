@@ -309,10 +309,16 @@ func unifyRecordSchemaCarrierVsMap(a Value, sa ValueShape, b Value, sb ValueShap
 		}
 		return rec, true, nil
 	}
-	mm, _ := AsMap(m)
-	if mm == nil {
+	// Read the field bag through the payload probe, NOT AsMap: a ShapeMap
+	// value whose payload is not a readable MapPayload (an ExtensionPayload
+	// under a TMap parent, a Go-API-built MapPayload{M: nil} — AsMap boxes
+	// that nil *OrderedMap in a non-nil ReadMap, so an interface-nil guard
+	// misses it) declines to the nominal refusal instead of dereferencing.
+	pm, pok := m.Data.(MapPayload)
+	if !pok || pm.M == nil {
 		return Value{}, false, nil
 	}
+	mm := pm.M
 	absentVal := NewTypeLiteral(TAbsent)
 	for _, key := range mm.Keys() {
 		mVal, _ := mm.Get(key)

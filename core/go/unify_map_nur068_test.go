@@ -135,6 +135,27 @@ func TestNur068EmptySchemaCarrierFallsThrough(t *testing.T) {
 	}
 }
 
+func TestNur068UnreadableMapSideFallsThrough(t *testing.T) {
+	// A ShapeMap value with no readable field bag declines the admission
+	// (falls to the nominal refusal) instead of dereferencing. Two shapes:
+	// a TMap-parent ExtensionPayload (classified ShapeMap by the default
+	// map-family arm; not a MapPayload at all), and a Go-API-built
+	// MapPayload{M: nil} (AsMap boxes the nil *OrderedMap in a non-nil
+	// ReadMap, so only the payload probe catches it — the no-panics rule).
+	rec := recSchemaCarrier(nur068Schema())
+	ext := Value{Parent: TMap, Data: ExtensionPayload{Body: 42}}
+	if _, err := unifyMapFamily(rec, Shape(rec), ext, Shape(ext)); err == nil {
+		t.Fatal("an extension-payload map must fall through to the refusal")
+	}
+	nilMap := Value{Parent: TMap, Data: MapPayload{}}
+	if _, err := unifyMapFamily(rec, Shape(rec), nilMap, Shape(nilMap)); err == nil {
+		t.Fatal("a nil-OrderedMap MapPayload must fall through to the refusal")
+	}
+	if _, err := unifyMapFamily(nilMap, Shape(nilMap), rec, Shape(rec)); err == nil {
+		t.Fatal("a nil-OrderedMap MapPayload must fall through (swapped)")
+	}
+}
+
 func TestNur068RecordCarrierVsMapLiteral(t *testing.T) {
 	rec := recSchemaCarrier(nur068Schema())
 	lit := NewTypeLiteral(TMap)
