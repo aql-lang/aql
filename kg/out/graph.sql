@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '8690038565249736391');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '5751192141781236183');
 INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
@@ -33,7 +33,7 @@ INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '760548540237
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
-INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '7723592497163916731', 21854);
+INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '5535815165775657404', 31235);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
 INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '3044536311677551962', 23460);
 INSERT INTO input_files VALUES ('../design/HOT-CODE-LOADING.0.md', '27384681369847472', 19039);
@@ -55,7 +55,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5798490287673095801', 500);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '4279307119422634738', 41400);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '6821591340566652590', 41850);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-14', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -252,7 +252,7 @@ INSERT INTO entities VALUES ('ent:Document:6369673620858945660', 'Document', 'en
 INSERT INTO entities VALUES ('ent:Document:7583878321315113890', 'Document', 'design/TABNAS-UPSTREAM-FIRST.0.md', 'design/tabnas-upstream-first.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:7583878321315113890', 'role', 'ADR-014''s case study: why a tabnas parser defect is fixed upstream and never behind a boru shim — the five shims the 2026-08-10 upgrade retired, the two-workarounds-deep episode that earned the rule, and the boundary against boru''s own grammar-layer divergences');
 INSERT INTO entities VALUES ('ent:Document:7594380001231677524', 'Document', 'design/FUNCTION-VALUE-SCOPE.0.md', 'design/function-value-scope.0.md', 'accepted');
-INSERT INTO entity_attributes VALUES ('ent:Document:7594380001231677524', 'role', 'the defect report and design for free-word resolution in function values: the interpreter resolves them in the RUNNING module while the bytecode compiler resolves them in the DEFINING one, so a cross-module fn value can silently bind a same-named word in the caller and return a wrong number with boru check clean; the mechanism (FnDefInfo.Registry set at export, honoured on the value path and by the VM, dropped by name dispatch and by the native-callback seam), why closure capture cannot carry it, and the phased fix');
+INSERT INTO entity_attributes VALUES ('ent:Document:7594380001231677524', 'role', 'the defect report and design for free-word resolution in function values: the interpreter resolves them in the RUNNING module while the bytecode compiler resolves them in the DEFINING one, so a cross-module fn value can silently bind a same-named word in the caller and return a wrong number with boru check clean; the mechanism (FnDefInfo.Registry set at export, honoured on the value path and by the VM, dropped by name dispatch and by the native-callback seam), why closure capture cannot carry it, the phased fix, the tree-wide migration audit measuring 0 migration sites and 0 silent-change sites against 224+ repaired (the cost is nil because the ecosystem already worked around it in writing — 12 utils unroll Cli.main, aless ships a wrapper, sort.aql is one file), the finding that every divergence runner in the ecosystem runs compile-preferring mode in its INTERPRETER column and is structurally blind, and the three-clause target semantics for function values');
 INSERT INTO entities VALUES ('ent:Document:7770110494347118706', 'Document', 'lang/go/CLAUDE.md', 'lang/go/claude.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:8799605016341004740', 'Document', 'design/TS-PARITY-AUDIT.0.md', 'design/ts-parity-audit.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:8799605016341004740', 'role', 'the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences');

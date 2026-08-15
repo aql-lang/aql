@@ -66,7 +66,17 @@ Three dispatch classes, three different behaviours:
 |---|---|---|---|
 | **Value dispatch** | `A.pub 5`; an *unnamed* `Function` param applied directly | ✅ defining module | ✅ defining module |
 | **Name dispatch** | bound to a name — `def g (A.pub/r)`, or a **named** `f:Function` param | ❌ **running module** | ✅ defining module |
-| **Native callback** | passed to a Go-implemented higher-order word (`filter`, `each`, service handlers, codecs, `Tui.run`) | ❌ **running module** | ❌ **running module** |
+| **Native callback — group 1** (6 sites) | `filter`, map-lambda `each`/`fold`, `StructUtil.walk`, core `walk`, `IO.mount`, `boru:parse` | ❌ **running module** | ❌ **running module** |
+| **Native callback — group 2** (8 sites) | `RunPredicate`, service handlers ×2, codecs, `serve-raw`, `Model`, `Tui.run` update/view | ❌ **running module** | ✅ defining module |
+
+> **Correction (§10 audit).** An earlier revision of this table claimed *all*
+> native-callback sites were wrong on both engines. That holds only for
+> group 1. Group 2 already diverges like name dispatch — and two of them
+> (`net_codec.go:100`, `native_service.go:419,423`) are **verified
+> miscompiles today, check-clean**. `RunPredicate` is the worst single
+> site in the tree: `native_type.go:825-829` converts its failure into a
+> silent `false` rather than an error, so a `refine` predicate that
+> cannot resolve its own helper quietly rejects every value.
 
 Two consequences worth stating separately, because they have different
 severities:
@@ -326,10 +336,31 @@ the rule says the answer is `6`.
    (`core/go/core_helpers.go:626`), or check keeps reporting
    `undefined_word` for code that now runs correctly — the `t9.aql`
    error above is exactly that pass.
-4. **The compiler needs no separate edit.** `CompiledFn.Reg` is stamped
-   from the registry the analysis pass ran the body in, so the compiled
-   path follows the interpreter automatically. Every differential row in
-   this class flips to agreement.
+4. **The compiler needs no separate edit** for name dispatch:
+   `CompiledFn.Reg` is stamped from the registry the analysis pass ran
+   the body in, so the compiled path follows automatically.
+
+**Two further changes the audit found are required, which this plan
+originally missed** (§10.4). Threading `FnDefInfo` is necessary but not
+sufficient:
+
+5. **`InvokeCompiled`'s freshness check must be re-anchored to the
+   defining registry.** `core/go/invoke.go:79` validates
+   `CompiledFnRef.depsFresh` against the *invoking* registry, which is
+   why adding an unrelated `def` in another module can flip the answer.
+   Threading `fnDef` fixes the interpreter fallback but leaves this
+   check meaningless unless it moves too.
+6. **The two competing stamp registries must agree.**
+   `serviceAddHandler` (`native_service.go:249`) and `resolveCodec`
+   (`net_codec.go:161-162`) stamp on the **running** registry, while
+   `native_module_module.go:369` stamps on the **module** registry.
+   After the fix these disagree, and the same source yields two scopes
+   depending on which stamp won.
+
+**Cost, measured:** 14 mechanical call-site edits. The audit checked the
+warning below and **it does not materialise** — every one of the 14 sites
+already type-asserts the `FnDefInfo` to reach `.Captured` and simply
+discards the rest, so no site is blocked on having only a `*Signature`.
 
 ### 7.4 Hazards
 
@@ -361,10 +392,15 @@ real precedent for flipping a scoping default in a live ecosystem:
   differential spec battery pinning `t3.aql`-shaped programs across
   interpreter / check / compiler, so the current disagreement is a
   recorded failure rather than an invisible one.
-- **Phase 1** — fix the **native-callback seam** (§7.3 item 1) first. It
-  is wrong on *both* engines, so there is no divergence to migrate and no
-  behaviour anyone can be relying on across engines — it is a pure bug
-  fix, and it is the class the library ecosystem actually hits.
+- **Phase 1** — fix the **native-callback seam** (§7.3 items 1, 5, 6)
+  first: it is the class the library ecosystem actually hits, and the
+  audit measured its migration exposure at **zero**. It is *not*,
+  however, the "pure bug fix with nothing to migrate" this plan
+  originally assumed — group 2 already diverges (§2), so the seam fix
+  must land **together with** the `depsFresh` re-anchoring and the
+  stamp-registry reconciliation, or it will repair the interpreter
+  fallback while leaving the VM path arriving at the right answer for
+  the wrong reason.
 - **Phase 2** — fix **name dispatch** (items 2–3). This is the one that
   changes interpreter semantics; land it with the spec rows and a
   `boru check` diagnostic that reports every free word which *would*
@@ -398,9 +434,161 @@ an error**.
    module registry in place, or replace it?** §7.2 says it must mutate:
    replacing orphans every function value already handed out. This
    constrains that design and should be recorded there too.
-4. **Is the current behaviour load-bearing anywhere in-tree?** A
-   tree-wide audit under a Phase-2 diagnostic answers this; until then
-   the migration cost is unmeasured.
+4. ~~**Is the current behaviour load-bearing anywhere in-tree?**~~
+   **ANSWERED — no.** Measured tree-wide in §10: **0 migration sites and
+   0 silent-change sites** across the language repo and all seven library
+   repos, against **224+ sites that the fix repairs**. The migration cost
+   is nil; the reason it is nil is that the ecosystem already worked
+   around the defect, in writing (§10.2).
+
+## 10. Migration audit
+
+Tree-wide, over `/home/user/boru` and the seven sibling library repos.
+Each site classified: **A** the fix repairs it · **B** the fix breaks it
+(migration) · **C** the fix silently changes its value · **D**
+unaffected.
+
+### 10.1 The numbers
+
+| | A (repaired) | B (migration) | C (silent change) | unauditable |
+|---|---|---|---|---|
+| Library repos (7) | **224** | **0** | **0** | 16 files + 2 probe shapes |
+| boru repo | 3 + 12 worked-around | **0** | **0** | — |
+
+**The migration cost is zero.** No function value anywhere in the tree
+resolves a free word that exists only in the module that runs it, and no
+module pair that exchanges function values shares a module-level name.
+
+Two caveats keep this honest. **B and C are not unreachable** — both were
+reproduced against `sort`'s shipped, documented comparator API. The class-C
+repro is the one to look at: with `by-string` defined in both the caller
+and `sort.aql`, the same program returns
+
+```
+--no-compile    → ["Apple", "fig", "pear"]     (ascending)
+--force-compile → ["pear", "fig", "Apple"]     (descending)
+```
+
+— opposite orderings, exit 0, no diagnostic on either engine. And the
+**collision scan found one near-miss**: `trie.aql`/`radix.aql`/`tst.aql`/
+`burst.aql` share 28–33 module-level names pairwise. They are class D only
+because the variants exchange Lists, never function values. Add one
+function-valued word to that API and the tree acquires its first class-C
+site.
+
+### 10.2 Why the cost is zero: the ecosystem already paid it
+
+The zero is not evidence the defect is harmless. It is evidence that
+every library author hit it and worked around it, and three of them wrote
+down why:
+
+- **`boru/utils/*.boru` — 12 CLI tools, and not one calls `Cli.main`.**
+  Each unrolls it into `Cli.dispatch` plus three statements, naming this
+  defect. `cat.boru:209-217` also prices it: routing through `Cli.main`
+  forces interpreter mode, costing **12× on the hot path** (8.6 s vs
+  0.72 s over 8,000 lines, measured).
+- **`aless-app.aql:432-435`** — the `Aless.feed` wrapper exists solely
+  because "an `/r`-parked update fn called from another module cannot
+  resolve this module's private words; a module wrapper can."
+- **`sort.aql` is one 1,490-line file because of this**, with 34
+  `Function` params and 11 exports needing privates. `CLAUDE.md` states
+  it as a structural rule. After the fix, all 34 seams become safe and
+  **the file can finally be split** — the single largest win in the
+  corpus.
+
+Every comparator example in every `AGENTS.md` is written with a
+builtin-only body. That is not style; it is the shape that dodges the
+defect.
+
+### 10.3 The guards never could have caught it
+
+Seven of nine repos ship a divergence runner whose job is exactly
+interpreter-vs-compiler comparison. **All of them are structurally
+blind**, for one reason:
+
+```sh
+interp="$("$AQL" "$s" 2>&1)"      # sort/test/divergence/run.sh:76 — and 5 siblings
+```
+
+No flag means the **default** mode, which prefers the bytecode compiler.
+The column labelled `INTERPRETER` is running the compiler, so the gate
+compares bytecode against bytecode. Proof on the one file that actually
+diverges:
+
+```
+boru              test/sort_unit_test.aql  → all green   exit 0
+boru --no-compile test/sort_unit_test.aql  → FAIL reverse …  exit 1
+```
+
+The runner prints `INTERPRETER ok` for a file the interpreter fails.
+**Fix: add `--no-compile` to the interpreter leg — one line per repo.**
+This should land regardless of anything else in this document.
+
+Two further blind spots bound the audit's reach: the **checker implements
+the old rule**, so `--force-compile` refuses precisely the programs that
+trip the defect (16 files unauditable that way); and `lang/spec/*.tsv`
+has **zero rows** exercising a cross-module function value, a boru codec,
+a cross-module service handler, `IO.mount` across modules, `Tui.run`'s
+update/view, or `Model.*` at all. `make verify-bytecode` could not have
+caught this because the corpus never poses the question.
+
+### 10.4 Corrections to this document
+
+The audit falsified three claims made in earlier sections, now fixed
+in place: the native-callback classification (§2 — group 2 diverges
+rather than being uniformly wrong), the "hard ones" warning in §7.3 (no
+site is blocked on a bare `*Signature`; the fix is 14 mechanical edits),
+and the characterisation of phase 1 as a pure bug fix (§8 — it must land
+with two further changes).
+
+### 10.5 Unrelated breakage found in passing
+
+**`/home/user/aless` does not run at all.** All 14 modules import the
+retired `aql:` namespace (`import "aql:io"` → `module "aql:io" not
+found`); the modules now live under `boru:`. A `sed 's/"aql:/"boru:/g'`
+port runs clean, so it is a pure rename. Not this defect, but it means
+the repo has been dead since the namespace change and nothing reported it.
+
+## 11. Target semantics
+
+The rule this document recommends is one clause of a three-clause model.
+Stating all three together matters, because users do not experience them
+separately — they experience one expectation, which every mainstream
+language meets:
+
+> **A function value means the same thing wherever it goes.**
+
+1. **Free names resolve where the function was written** — lexically by
+   module, dynamically in time. This document. boru already has Python's
+   model (local → captured → module globals → builtins) and differs in
+   one respect: its "module globals" is whichever module is running.
+   `FnDefInfo.Registry` is the missing `__globals__` pointer, already
+   set. This is completing a design, not replacing one.
+2. **Captures should be bindings, not values.** Today `Captured` holds a
+   shallow snapshot, so the universal counter idiom silently does not
+   work — the closure sees the value at construction forever, unless the
+   payload happens to be pointer-backed, which makes the rule invisible
+   and type-dependent. Python, JS, Lua, Scheme and Ruby all capture the
+   *cell*. This is also the invariant hot reload needs
+   (`HOT-CODE-LOADING.0.md`): capture bindings and redefinition stays
+   visible.
+3. **A function value is data until something applies it.** The `sort`
+   combinator fault (§5) is this rule breaking: `Sort.by-number` is a
+   value in one argument position and an application in another. In a
+   concatenative language a bare word *is* application, so `/r` is right
+   and worth keeping — the defect is the inconsistency. A parameter slot
+   typed `Function` should never auto-apply its argument.
+
+The spec sentence:
+
+> A function value carries the scope it was written in. Its free names
+> are looked up in its **defining** module, at **call** time; names it
+> captured from an enclosing function are shared **bindings**, not
+> copies; and a function value is **data** until something applies it.
+
+Rules 1 and 3 are live defects with reproductions. Rule 2 is latent —
+nobody has filed it because the `flex`-cell workaround is discoverable —
+and it will surface the first time someone ports a closure-heavy design.
 
 ## Appendix — how other languages bind free names in a function value
 
