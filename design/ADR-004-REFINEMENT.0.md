@@ -1,11 +1,12 @@
 # ADR-004 refinement — argument-handling categories
 
-**Status: DRAFT / discovery.** This note is the material for a refined
-ADR-004, written under NUR023's 2026-08-14 verdict. It is **not** an ADR
-entry and does not become one implicitly: promotion into `ADR.md` is a
-separate, explicit maintainer decision (`ADR.md`'s own header rule, and
-`lang/go/CLAUDE.md` §"ADRs — only on explicit instruction"). Until then
-this is discovery, however settled it reads.
+**Status: PROMOTED.** Written under NUR023's 2026-08-14 verdict as the
+material for a refined ADR-004, and promoted on explicit maintainer
+instruction 2026-08-15: ADR-004 now carries an amendment replacing "the
+sole exception is the Forth stack vocabulary" with the four categories,
+and cites this note. The ADR is the rule; this remains the reasoning,
+the measurements and the rejected alternatives behind it. The three
+questions in §5 stay open — promotion did not decide them.
 
 **Why it exists.** ADR-004 as accepted (2026-06-09) is six sentences:
 every word ships forward-collecting; the sole exception is the Forth
@@ -312,17 +313,24 @@ share a mechanism.
 
 ---
 
-## 5. What promotion would change in ADR-004
+## 5. What promotion changed in ADR-004
 
-If this material is promoted, the ADR's substance changes in three
-ways and its default does not change at all:
+Promotion landed 2026-08-15 as a 20-word amendment — ADR-004 sits
+exactly at the 111-word cap. What that buys is point 1 outright and
+point 2 by naming; **point 3 does not fit an ADR entry and was not
+attempted**, which is the cap working as designed: the rationale lives
+in §3 here, and the amendment's citation is what carries a reader to
+it. The default does not change at all.
 
 1. **"The sole exception is the Forth stack vocabulary" becomes false
    and is replaced** by the four categories, with stack-only defined as
    a closed list of two tiers plus the admission test in §2.3.
 2. **Mixed-barrier is named as a first-class category**, not an
-   unmentioned middle ground — with the 20-word measurement as the
-   evidence that it is ordinary rather than exceptional.
+   unmentioned middle ground — with §2.2's measurement as the evidence
+   that it is ordinary rather than exceptional: **97 of 493 signatures**
+   carry an intermediate barrier, spread over 19 words. (Not the
+   frequently-quoted 20; that is the word-level mixed-OVERLOAD count,
+   and §2.2 sets out why the two differ by exactly `apply`.)
 3. **The rationale is stated** (§3), so the forward default reads as a
    composition argument rather than a preference, and the rejection of
    per-word flips follows from it instead of standing alone.

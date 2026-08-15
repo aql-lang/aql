@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '8790581290881310413');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '619065559291493468');
 INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
@@ -24,7 +24,7 @@ INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221
 INSERT INTO input_files VALUES ('../cmd/go/go.mod', '3353403068991243004', 4229);
 INSERT INTO input_files VALUES ('../compiler/go/go.mod', '142593282390199928', 331);
 INSERT INTO input_files VALUES ('../core/go/go.mod', '2316996521694161686', 98);
-INSERT INTO input_files VALUES ('../design/ADR-004-REFINEMENT.0.md', '1751633692040085940', 19288);
+INSERT INTO input_files VALUES ('../design/ADR-004-REFINEMENT.0.md', '631969750913133884', 19844);
 INSERT INTO input_files VALUES ('../design/BASIC-CHECK-CUT.0.md', '1575227922863509534', 8195);
 INSERT INTO input_files VALUES ('../design/BORU-INFOVIEW.0.md', '2090869893701264049', 24408);
 INSERT INTO input_files VALUES ('../design/BORU-SCRY.0.md', '3285728856019765195', 16574);
@@ -55,8 +55,8 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5798490287673095801', 500);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '6979528229379744664', 41182);
-INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-14', 'primary', '{
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '2333493761551140693', 41244);
+INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:agents', 'text', 'AGENTS.md', 'AGENTS.md agent guide', NULL, 'agents-2026-07', 'primary', '{
@@ -242,7 +242,7 @@ INSERT INTO entities VALUES ('ent:Document:5292060467150439417', 'Document', 'NU
 INSERT INTO entities VALUES ('ent:Document:5313783338663858074', 'Document', 'design/RELOAD-INVALIDATION.0.md', 'design/reload-invalidation.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:5313783338663858074', 'role', 'how hot reload and transparent compilation coexist without slowing compiled code: per-ref valid flags flipped push-style through a reverse dependency index (the HotSpot/Truffle/Julia equilibrium), ref unification at Finalize, world-pinned whole-program units, per-world restamp budgets — plus the confirmed F1 pass-hoisting divergence and its interim whole-program-refusal fix');
 INSERT INTO entities VALUES ('ent:Document:5807284485979550128', 'Document', 'design/ADR-004-REFINEMENT.0.md', 'design/adr-004-refinement.0.md', 'accepted');
-INSERT INTO entity_attributes VALUES ('ent:Document:5807284485979550128', 'role', 'draft material for a refined ADR-004 (NUR023): the four argument-handling categories (forward-eligible, mixed-barrier, stack-only, quoting slots), BarrierPos semantics and its five resolution sites, the stack-only closed list with a two-criterion admission test that admits both apply and __casematch, and the composition rationale — measured at 97 intermediate-barrier signatures of 493, distinguished from the 20-word mixed-overload count');
+INSERT INTO entity_attributes VALUES ('ent:Document:5807284485979550128', 'role', 'ADR-004''s reasoning note, PROMOTED 2026-08-15 into the record''s four-categories amendment (NUR023, retired): the four argument-handling categories (forward-eligible, mixed-barrier, stack-only, quoting slots), BarrierPos semantics and its five resolution sites, the stack-only closed list with a two-criterion admission test that admits both apply and __casematch, and the composition rationale — measured at 97 intermediate-barrier signatures of 493, distinguished from the 20-word mixed-overload count');
 INSERT INTO entities VALUES ('ent:Document:5873755881373321364', 'Document', 'design/TABNAS-DOT-BOUNDARY-REPORT.0.md', 'design/tabnas-dot-boundary-report.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:5873755881373321364', 'role', 'the file-ready upstream defect report for the last live tabnas shim: both ports'' runnable reproduction against the bare dependency, the follow-character table showing the divergence is conditional (0xFF.5 differs, 0xFF.x agrees), and the acceptance criterion that a regression test must cover both');
 INSERT INTO entities VALUES ('ent:Document:6176355086953937469', 'Document', 'TUTORIAL.md', 'tutorial.md', 'accepted');
