@@ -56,7 +56,7 @@ run { a: [ pairq 7 ] }	{a:[7 7]}
 run { a: [ pairq 1 ] }	{a:[1 1]}
 run { a: p( pairq 7 ) }	{a:[7 7]}
 run { a: p( p( addq 1 2 ) ) }	{a:3}
-run {q a: p( addq 1 2 ) }	{a:paren([word(addq) 1 2])}
+run {q a: p( addq 1 2 ) }	{a:(addq 1 2)}
 run { a: p( boomq 1 ) }	ERROR:fixture_boom
 run { a: p( nosuchword ) }	ERROR:undefined_word
 
@@ -105,7 +105,7 @@ run [ [ 1 ] [ 2 ] ]	[[1] [2]]
 # --- the `list` kind carries the same structure notation -------------------
 # So a row can pin a nested value's RENDER without running it.
 list [ 1 2 ]	[[1 2]]
-list p( addq 1 2 )	[paren([word(addq) 1 2])]
+list p( addq 1 2 )	[(addq 1 2)]
 
 # --- a RUNTIME map handed to a word is data, at consumption too ----------
 # The Eval gate applies where a map is CONSUMED as an argument, not only at

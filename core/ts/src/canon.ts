@@ -494,21 +494,18 @@ function canonWordModifiers(w: WordInfo): string {
 // canonSugar renders a sugar marker back to the surface syntax it came
 // from (NUR059), or null when the kind has no spelling of its own.
 //
-// The modifier kinds (usurp / stack-args / forward-args / force-arity) are
-// lowered from a `/`-suffix that canonWordModifiers already renders on the
-// word itself, so reaching them here means a bare marker with no word to
-// attach to; those keep the fallback rather than inventing a spelling for a
-// shape the user cannot write.
+// ONLY the angle form is handled, and the restraint is measured. The
+// modifier kinds are lowered from a `/`-suffix canonWordModifiers already
+// renders on the word itself. The lambda / mini / type-bound spellings
+// were TRIED and withdrawn: a per-row fixpoint check showed `+m'src'`
+// rendering `+m<src>` (SugarInfo does not retain the source delimiter) and
+// `w/t` rendering `[w/q]/t`, which does not parse. A spelling that does
+// not round-trip is worse than the debug form, because it looks like
+// source.
 function canonSugar(info: SugarInfo): string | null {
   switch (info.kind) {
     case "angle":
       return info.name + "<" + (info.items ?? []).map(canonTypeTag).join(" ") + ">";
-    case "lambda":
-      return "=>";
-    case "mini":
-      return "+" + info.name + "<" + info.src + ">";
-    case "type-bound":
-      return (info.items ?? []).map(canonTypeTag).join(" ") + "/t";
   }
   return null;
 }

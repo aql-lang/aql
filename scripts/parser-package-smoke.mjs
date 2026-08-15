@@ -105,7 +105,9 @@ try {
   `
   const actual = JSON.parse(run(process.execPath, ['--input-type=module', '--eval', smokeSource], temp))
   const expected = {
-    parse: 'sugar(angle Box [paren([word(Integer)])])',
+    // NUR059 gave the angle sugar a SOURCE form; this used to pin the
+    // debug dump `sugar(angle Box [paren([word(Integer)])])`.
+    parse: 'Box<(Integer)>',
     number: '100.0',
     lex: {
       tokens: [

@@ -500,12 +500,16 @@ func canonWordModifiers(w WordInfo) string {
 // so `[:Box<Integer>]` canon'd as `[:sugar(angle Box [word(Integer)])]` —
 // a debug dump no parser accepts.
 //
-// Only the kinds with a spelling of their OWN are handled. The modifier
-// kinds (usurp / stack-args / forward-args / force-arity) are lowered
-// from a `/`-suffix that canonWordModifiers already renders on the word
-// itself, so reaching them here means a bare marker with no word to
-// attach to; those keep the fallback rather than inventing a spelling for
-// a shape the user cannot write.
+// ONLY the angle form is handled, and the restraint is measured rather
+// than cautious. The modifier kinds (usurp / stack-args / forward-args /
+// force-arity) are lowered from a `/`-suffix canonWordModifiers already
+// renders on the word itself, so reaching them here means a bare marker
+// the user cannot write. The other three were TRIED and withdrawn: a
+// per-row fixpoint check (does the new render re-parse to itself?) showed
+// `+m'src'` rendering `+m<src>`, which re-parses with a stray `>` because
+// SugarInfo does not retain the source delimiter, and `w/t` rendering
+// `[w/q]/t`, which does not parse at all. A spelling that does not
+// round-trip is worse than the debug form, because it looks like source.
 func canonSugar(info SugarInfo) (string, bool) {
 	switch info.Kind {
 	case SugarAngle:
@@ -514,16 +518,6 @@ func canonSugar(info SugarInfo) (string, bool) {
 			parts[i] = canonTypeTag(it)
 		}
 		return info.Name + "<" + strings.Join(parts, " ") + ">", true
-	case SugarLambda:
-		return "=>", true
-	case SugarMini:
-		return "+" + info.Name + "<" + info.Src + ">", true
-	case SugarTypeBound:
-		parts := make([]string, len(info.Items))
-		for i, it := range info.Items {
-			parts[i] = canonTypeTag(it)
-		}
-		return strings.Join(parts, " ") + "/t", true
 	}
 	return "", false
 }

@@ -63,7 +63,7 @@ keep the two in sync in the same commit.
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon) | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain — VERDICT 2026-08-15: resolve by fix (enumeration walks the prototype chain with masking; a `del` tombstone hides the key from BOTH) | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
-| [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon — VERDICT 2026-08-15: resolve by fix (source-form renderers for the sugar kinds, the `/r` and `/N` modifiers and the paren group, on BOTH engines) | 2026-08-08 Go/TS canon parity work |
+| [NUR072](#nur072) | Three sugar kinds (mini, type-bound, lambda) still canon in DEBUG form after NUR059 — withdrawn there because the renders do not round-trip: SugarInfo does not retain the mini delimiter, and type-bound renders its Items rather than the bound's text; also carries the undecided bare-word question (`word(foo)` vs `foo`, 175 corpus rows) | NUR059's fix, 2026-08-15 |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
@@ -1659,59 +1659,6 @@ had rotted by a factor of two.
 
 ---
 
-## NUR059 — Several value kinds render in DEBUG spelling inside canon {#nur059}
-
-**Status:** Pending · **Recorded:** 2026-08-08 · **Surfaced by:** closing
-the Go/TS parser parity ledger (`parser/spec/divergent.tsv` to zero)
-
-**Rule:** `CanonValue` renders canonical boru **source** — the string it
-produces parses back as the same value. Every other container type tag now
-obeys it: `[:Integer]`, `[:Integer 1 2]`, `{:String}`, `{:Integer a:1}`.
-**Divergence:** several kinds fall through to `Value.String`'s debug form,
-which is not boru syntax and does not parse back:
-
-```
-[:Box<Integer>]   canon ->  [:sugar(angle Box [word(Integer)])]
-foo/r             canon ->  word(foo)                  — the /r is LOST
-foo/2             canon ->  word(foo)                  — the /2 is LOST
-(1 add 2)/q       canon ->  paren([1 word(add) 2]) /q
-[:Integer]        canon ->  [:Integer]                 (correct)
-foo/q             canon ->  foo/q                      (correct)
-```
-
-Each has no source-form renderer, so the generic value path yields the
-debug spelling. The `/r` and `/2` cases are the worst of them: the
-modifier is not merely spelled oddly, it is **dropped**, so the canon says
-something the source did not.
-
-**Evidence:** `parser/spec/parse.tsv` pins the current output for each of
-these. Found by `scripts/parity-probe.sh` sweeping the language surface;
-the same sweep caught the dispatch-mod marker rendering two DIFFERENT
-debug spellings (Go `word()({false true})`, TS `word(undefined)`), which
-was a genuine parity defect and is fixed — these are the residue where
-both engines agree on a wrong render.
-**Both engines AGREE**, so this is not a parity defect and correctly does
-not sit in `divergent.tsv` — it is a render-quality gap that the parity
-work made visible by fixing every neighbouring case.
-**Proposed verdict:** fix — canon needs a source-form renderer for each
-of these (`Box<Integer>` for `SugarAngle` and the other sugar kinds, the
-`/r` and `/N` word modifiers off `WordInfo`, and the paren group), on both
-engines. Until then the corpus rows are the pin: a fix to one engine alone
-fails loudly.
-
-**Verdict (maintainer, 2026-08-15 — resolve by fix):** canon gains a
-**source-form renderer** for each kind that currently falls through to
-`Value.String`'s debug form — `Box<Integer>` for the sugar kinds, the
-`/r` and `/N` word modifiers off `WordInfo`, and the paren group — on
-**both engines** in the same change.
-
-The round-trip is canon's contract, and these kinds break it silently:
-`foo/r` rendering as `word(foo)` does not merely look wrong, it LOSES
-the `/r` — re-parsing the canon yields a different program. The
-corpus rows are the pin that keeps the two ports honest: a fix to one
-engine alone fails the parity ledger loudly, which is the intended
-forcing function rather than an obstacle. Stays **Pending** until both
-renderers land.
 
 ## NUR052 — Store enumeration reads the top COW layer; lookup walks the chain {#nur052}
 
@@ -1856,6 +1803,47 @@ the slot, and their negative rows (a declined `Maker` falls through to
 today's behaviour; a wrong-typed return is refused) land.
 
 ---
+
+## NUR072 — Three sugar kinds still canon in debug form, and their source spelling is not recoverable {#nur072}
+
+**Status:** Pending · **Recorded:** 2026-08-15 · **Surfaced by:** NUR059's
+fix — the residue its per-row fixpoint check refused
+
+**Rule:** `CanonValue` renders canonical boru **source** — the string it
+produces parses back as the same value (ADR-015).
+
+**Divergence:** NUR059 gave the angle sugar, the paren group and the word
+`/`-modifiers a source form. Three sugar kinds were attempted in the same
+change and **withdrawn**, because a fixpoint check — does the new render
+re-parse to itself? — proved the spellings wrong:
+
+```
++m'src'   rendered  +m<src>    re-parses with a stray `>`
+w/t       rendered  [w/q]/t    does not parse at all
+```
+
+The mini case is not a coding slip: **`SugarInfo` does not retain the
+source delimiter.** `+m'src'`, `+m<src>` and `+m|src|` all lex to the same
+payload, so no renderer can reproduce what the user wrote without the
+parser keeping it. The type-bound case renders its `Items`, which hold the
+bound as a list containing an atom rather than the bound's own text.
+
+The lambda marker is a third shape: `=>` renders fine on its own, but every
+row containing one ALSO contains a bare word, which canon spells
+`word(x)` — so the row cannot reach a fixpoint whatever the lambda does.
+
+**Verdict:** none yet. A spelling that does not round-trip is worse than
+the debug form, because it looks like source; that is why these were
+withdrawn rather than shipped. Fixing them needs either a parser change
+(retain the mini delimiter) or the bare-word decision below.
+
+**The bare-word question, deliberately not decided:** canon spells a Word
+value `word(foo)`. Rendering it bare would change **175 of
+`parser/spec/parse.tsv`'s 724 rows**, and it is a real question rather
+than a formatting one — `word(foo)` denotes a word VALUE, while bare
+`foo` re-parses as a word that will be DISPATCHED. NUR059 scoped its word
+arm to modifier-bearing words for exactly this reason. Whoever takes this
+record decides that first.
 
 ## NUR060 — The parser twins disagree on open-input sources beyond the corpus {#nur060}
 

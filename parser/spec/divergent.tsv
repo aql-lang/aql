@@ -10,7 +10,7 @@
 # divergence class from the 2026-08-09 probe sweep (55 divergences across
 # 2,587 sources); see parser/spec/README.md §"The current debt" and
 # NUR.md §NUR060, which stays open until this ledger is empty again.
-[1 =>	[paren([1 sugar(lambda) 1])]	[1]	trailing `=>` with no body: the Go arrowfold still folds (the input doubles as the body); the TS fold drops the paren group from the value stream entirely. A DATA-class divergence — Go matches the fold-always arrowfold grammar.
+[1 =>	[(1 sugar(lambda) 1)]	[1]	trailing `=>` with no body: the Go arrowfold still folds (the input doubles as the body); the TS fold drops the paren group from the value stream entirely. A DATA-class divergence — Go matches the fold-always arrowfold grammar. (Go column re-rendered 2026-08-15: NUR059 gave the paren group a source form, so the Go side spells `(1 …)` rather than `paren([1 …])`; the DIVERGENCE is unchanged — TS still drops the group.)
 if . `${x}` =>	if.(interp(${word(x)}) sugar(lambda) interp(${word(x)}))	if.interp(${word(x)})	the same trailing-arrow fold loss, inside a dotchain segment: Go folds the interp into a lambda group, TS keeps only the bare interp.
 ? ? :	word(?) word(?)	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	a trailing bare colon: Go accepts and drops the empty implicit pair, TS refuses the whole source — an accept/reject split.
 def x 2 => ,	ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)	word(def) word(x) 2	`=>` then `,`: Go refuses the empty element, TS accepts and silently drops both trailing tokens — an accept/reject split in the opposite direction from the bare-colon row.
