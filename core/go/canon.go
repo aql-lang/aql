@@ -249,6 +249,37 @@ func CanonValue(v Value) string {
 		return "{" + joinEntries(m, canonChild) + "}"
 	case IsReach(v):
 		return canonReach(v)
+	case IsWord(v) && hasWordModifiers(v):
+		// A word carries its `/`-modifiers in the payload, and dropping
+		// them made canon say something the source did not (NUR059): both
+		// `foo/r` and `foo/2` rendered `word(foo)`, so re-parsing the canon
+		// yielded a different program.
+		//
+		// Scoped to words that HAVE a modifier. A bare word keeps its
+		// existing `word(foo)` spelling: rendering every word bare is a
+		// far larger change (175 of the corpus's 724 rows) and a different
+		// question — `word(foo)` denotes a word VALUE, while bare `foo`
+		// re-parses as a word that will be DISPATCHED — which this record
+		// does not decide. The modifier-bearing form follows the atom
+		// convention the record cites as already correct (`foo/q`).
+		w, _ := AsWord(v)
+		return w.Name + canonWordModifiers(w)
+	case IsSugar(v):
+		// Sugar markers have a surface spelling of their own; without one
+		// they fell through to the debug dump `sugar(angle Box [word(…)])`
+		// (NUR059).
+		if info, ok := AsSugar(v); ok {
+			if out, handled := canonSugar(info); handled {
+				return out
+			}
+		}
+		return v.String()
+	case IsParenExpr(v):
+		// `(1 add 2)` rather than `paren([1 word(add) 2])` (NUR059). The
+		// body renders through canonReachTokens, which keeps words bare —
+		// inside a group they are CODE, not atom data.
+		toks, _ := AsParenExpr(v)
+		return "(" + canonReachTokens(toks) + ")"
 	case isFnDefValue(v):
 		// A function value participates in the total order (cmp/sort),
 		// so its canon form must DISCRIMINATE between distinct fns —
@@ -414,4 +445,85 @@ func canonFnDef(fd FnDefInfo) string {
 	}
 	b.WriteByte(']')
 	return b.String()
+}
+
+// canonWordModifiers renders the `/`-suffix a WordInfo carries, or "" when
+// it carries none (NUR059).
+//
+// Canon's contract is that its output re-parses to the same value, and
+// these modifiers used to break it SILENTLY rather than loudly: a word
+// with a modifier fell through to `Value.String`'s debug form, which
+// spells every word `word(foo)` — so `foo/r` and `foo/2` both canon'd as
+// `word(foo)` and the modifier was not merely mis-spelled but DROPPED.
+// Re-parsing that canon yields a different program.
+//
+// The letters may be written in any order at the call site, so canon picks
+// one CANONICAL order — digits, then f|s, then u, then r — and emits it
+// consistently. `scanWordModifier` accepts that order, so the render
+// re-parses; a stable order also keeps canon a usable sort key, which the
+// total order relies on.
+//
+// `/q` is not here: a quoted word is an ATOM by the time it is a value
+// (parseWord returns one before the modifier switch is reached), and the
+// Atom arm already renders `name/q`.
+// hasWordModifiers reports whether v is a Word carrying any `/`-suffix.
+func hasWordModifiers(v Value) bool {
+	w, err := AsWord(v)
+	return err == nil && canonWordModifiers(w) != ""
+}
+
+func canonWordModifiers(w WordInfo) string {
+	var b strings.Builder
+	if w.ArgCount >= 0 {
+		b.WriteString(strconv.Itoa(w.ArgCount))
+	}
+	switch {
+	case w.ForceForward:
+		b.WriteByte('f')
+	case w.ForceStack:
+		b.WriteByte('s')
+	}
+	if w.ForceUsurp {
+		b.WriteByte('u')
+	}
+	if w.ForceRef {
+		b.WriteByte('r')
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "/" + b.String()
+}
+
+// canonSugar renders a sugar marker back to the surface syntax it came
+// from (NUR059). Without this the marker fell through to `Value.String`,
+// so `[:Box<Integer>]` canon'd as `[:sugar(angle Box [word(Integer)])]` —
+// a debug dump no parser accepts.
+//
+// Only the kinds with a spelling of their OWN are handled. The modifier
+// kinds (usurp / stack-args / forward-args / force-arity) are lowered
+// from a `/`-suffix that canonWordModifiers already renders on the word
+// itself, so reaching them here means a bare marker with no word to
+// attach to; those keep the fallback rather than inventing a spelling for
+// a shape the user cannot write.
+func canonSugar(info SugarInfo) (string, bool) {
+	switch info.Kind {
+	case SugarAngle:
+		parts := make([]string, len(info.Items))
+		for i, it := range info.Items {
+			parts[i] = canonTypeTag(it)
+		}
+		return info.Name + "<" + strings.Join(parts, " ") + ">", true
+	case SugarLambda:
+		return "=>", true
+	case SugarMini:
+		return "+" + info.Name + "<" + info.Src + ">", true
+	case SugarTypeBound:
+		parts := make([]string, len(info.Items))
+		for i, it := range info.Items {
+			parts[i] = canonTypeTag(it)
+		}
+		return strings.Join(parts, " ") + "/t", true
+	}
+	return "", false
 }

@@ -23,7 +23,7 @@ import {
 } from "./type.ts";
 import { Decimal } from "./decimal.ts";
 import { urlonHref, type UrlonInfo } from "./value.ts";
-import type { DispatchModInfo, FnDefInfo, XmlElement } from "./value.ts";
+import type { DispatchModInfo, FnDefInfo, SugarInfo, WordInfo, XmlElement } from "./value.ts";
 import {
   ChildType,
   ErrorInfo,
@@ -31,8 +31,10 @@ import {
   OrderedMap,
   Value,
   asReach,
+  asSugar,
   isEnd,
   isReach,
+  isSugar,
 } from "./value.ts";
 
 // canonXml renders an XML element, normalising an empty element to the
@@ -310,6 +312,37 @@ export function canonValue(v: Value): string {
   if (isReach(v)) {
     return canonReach(v);
   }
+  if (v.isWord()) {
+    // A word carries its `/`-modifiers in the payload, and dropping them
+    // made canon say something the source did not (NUR059): both `foo/r`
+    // and `foo/2` rendered `word(foo)`, so re-parsing the canon yielded a
+    // different program.
+    //
+    // Scoped to words that HAVE a modifier. A bare word keeps its existing
+    // `word(foo)` spelling: rendering every word bare is a far larger
+    // change and a different question — `word(foo)` denotes a word VALUE,
+    // while bare `foo` re-parses as a word that will be DISPATCHED — which
+    // this record does not decide.
+    const w = v.asWord();
+    const mods = canonWordModifiers(w);
+    if (mods !== "") return w.name + mods;
+  }
+  if (isSugar(v)) {
+    // Sugar markers have a surface spelling of their own; without one they
+    // fell through to the debug dump `sugar(angle Box [word(…)])` (NUR059).
+    const info = asSugar(v);
+    if (info !== undefined) {
+      const out = canonSugar(info);
+      if (out !== null) return out;
+    }
+    return v.toString();
+  }
+  if (v.isParenExpr() && Array.isArray(v.data)) {
+    // `(1 add 2)` rather than `paren([1 word(add) 2])` (NUR059). The body
+    // renders through canonReachTokens, which keeps words bare — inside a
+    // group they are CODE, not atom data.
+    return "(" + canonReachTokens(v.data as Value[]) + ")";
+  }
   if (v.isFnDef()) {
     return canonFnDef(v.asFnDef());
   }
@@ -431,4 +464,51 @@ export function valToString(v: Value): string {
   if (v.vType.matches(TBoolean)) return v.asBoolean() ? "true" : "false";
   if (v.isWord()) return v.asWord().name;
   return v.toString();
+}
+
+// canonWordModifiers renders the `/`-suffix a WordInfo carries, or "" when
+// it carries none (NUR059).
+//
+// Canon's contract is that its output re-parses to the same value, and
+// these modifiers used to break it SILENTLY rather than loudly: a word with
+// a modifier fell through to the debug form, which spells every word
+// `word(foo)` — so `foo/r` and `foo/2` both canon'd as `word(foo)` and the
+// modifier was not merely mis-spelled but DROPPED.
+//
+// The letters may be written in any order at the call site, so canon picks
+// one CANONICAL order — digits, then f|s, then u, then r — matching the Go
+// twin exactly. A stable order also keeps canon a usable sort key.
+//
+// `/q` is not here: a quoted word is an ATOM by the time it is a value, and
+// the Atom arm already renders `name/q`.
+function canonWordModifiers(w: WordInfo): string {
+  let out = "";
+  if (w.argCount !== undefined && w.argCount >= 0) out += String(w.argCount);
+  if (w.forceForward) out += "f";
+  else if (w.forceStack) out += "s";
+  if (w.forceUsurp) out += "u";
+  if (w.forceRef) out += "r";
+  return out === "" ? "" : "/" + out;
+}
+
+// canonSugar renders a sugar marker back to the surface syntax it came
+// from (NUR059), or null when the kind has no spelling of its own.
+//
+// The modifier kinds (usurp / stack-args / forward-args / force-arity) are
+// lowered from a `/`-suffix that canonWordModifiers already renders on the
+// word itself, so reaching them here means a bare marker with no word to
+// attach to; those keep the fallback rather than inventing a spelling for a
+// shape the user cannot write.
+function canonSugar(info: SugarInfo): string | null {
+  switch (info.kind) {
+    case "angle":
+      return info.name + "<" + (info.items ?? []).map(canonTypeTag).join(" ") + ">";
+    case "lambda":
+      return "=>";
+    case "mini":
+      return "+" + info.name + "<" + info.src + ">";
+    case "type-bound":
+      return (info.items ?? []).map(canonTypeTag).join(" ") + "/t";
+  }
+  return null;
 }
