@@ -64,7 +64,8 @@ keep the two in sync in the same commit.
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically — VERDICT 2026-08-14: resolve by fix (String-only grouping keys); Map-key identity stays open as its own line | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon) | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
-| [NUR053](#nur053) | The truthiness consumers do not share one domain — VERDICT 2026-08-14: resolve by fix (widen `convert Boolean`'s source slot to `Any`) | 2026-08-02 NUR register review |
+| [NUR053](#nur053) | The truthiness consumers do not share one domain — RESOLVED BY FIX (Boolean-target `convert` sigs with an `Any` source; the two CONSTRUCTORS now share a domain exactly, and measuring it split out NUR070) | 2026-08-02 NUR register review |
+| [NUR070](#nur070) | `if` reads a List condition as CODE while every other truthiness consumer coerces it — the two readings give opposite answers on the same bound value | surfaced implementing NUR053's fix (2026-08-14) |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler — RESOLVED BY FIX: inline-lowered regions refuse ambient-context writes (the NUR037 mechanism) | 2026-08-02 NUR register review |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
 | [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim — RESOLVED BY FIX (binding-identity keying, the flex-gate discipline) | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
@@ -1940,8 +1941,38 @@ follows it for free (a chain-walking enumeration would need to honour
 
 ## NUR053 — The truthiness consumers do not share one domain {#nur053}
 
-**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:** NUR
-register review (auditing NUR001's rationale)
+**Status:** RESOLVED BY FIX · **Recorded:** 2026-08-02 · **Resolved:**
+2026-08-14 · **Surfaced by:** NUR register review (auditing NUR001's
+rationale)
+
+**Resolution:** `convert` gained two **Boolean-target** signatures with
+an `Any` SOURCE — the 2-arg form and the options form — so the three
+falsy members that used to raise now coerce (`convert Boolean []` →
+false, `{}` → false, `none` → false). No handler changed: `CoerceBoolean`,
+the very function `if` applies, is already total over every value mode,
+so this was signature ADMISSION rather than new semantics, exactly as
+the verdict anticipated.
+
+The sigs are Boolean-target-only, and deliberately so. The general
+scalar sigs stay Scalar-sourced because there is no total presence rule
+to apply for an Integer or a Date target — `convert Integer [1 2]` has
+no meaning and still raises, pinned by negative rows alongside the
+positive ones. Boolean is the one target whose conversion IS a
+coercion. They are also ordered AFTER the scalar sigs, so a Scalar
+source keeps matching the signature it matched before and the change
+can only claim shapes that previously reached no signature at all.
+
+**What measuring it turned up — now NUR070.** The record's premise
+above ("`if` and `make Boolean` accept any value") is true of Map,
+None, String and the numeric leaves, and FALSE of a List: `if` does not
+coerce a list at all, it RUNS it as a code body. So `def xs [0]` gives
+`if xs` → false while both constructors give true, and `def xs []`
+makes `if` raise where both constructors give false. That is a real
+divergence and a different one — the two CONSTRUCTORS now share a
+domain exactly, which is what this record asked for; the `if`-vs-List
+split is recorded as **NUR070** rather than silently folded in here or
+claimed as fixed. `design/TRUTHINESS.0.md` §2 now states both the
+domain and the split.
 
 **Rule:** one truthiness model, applied by every construct that
 coerces a value to a Boolean. `design/TRUTHINESS.0.md` (the One
@@ -3078,3 +3109,85 @@ intuition and existing programs), or spell nullable fields explicitly
 (`x:(Any tor None)`) and keep both readings — and the CallBoru return
 asymmetry is a separate axis entirely. Wants its own measured change, the
 NUR068 way.
+
+---
+
+## NUR070 — `if` reads a List condition as CODE while every other truthiness consumer coerces it {#nur070}
+
+**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:**
+implementing NUR053's fix (measuring whether the three consumers really
+share a domain once `convert Boolean`'s slot was widened)
+
+**Rule:** one truthiness model, applied by every construct that coerces
+a value to a Boolean — `design/TRUTHINESS.0.md`, the One Truthiness
+Model. NUR053's premise, and the sentence this record corrects, was that
+"`if` and `make Boolean` accept any value".
+
+**Divergence:** they do not agree on a **List**. `make Boolean` and
+`convert Boolean` coerce a list by PRESENCE (non-empty → true); `if`
+does not coerce it at all — it runs it as a **code body** and takes the
+truthiness of what the body leaves. The two readings give opposite
+answers on the same bound value, and the disagreement is not confined to
+an edge case:
+
+```
+def xs [0]   if xs ['T'] ['F']        # → 'F'     the body runs, yields 0, falsy
+def xs [0]   convert Boolean xs       # → true    non-empty list is present
+def xs [0]   make Boolean xs          # → true
+
+def xs []    if xs ['T'] ['F']        # → [boru/runtime_error]: if: condition
+                                      #   produced no value
+def xs []    convert Boolean xs       # → false
+def xs []    make Boolean xs          # → false
+```
+
+Every other source shape agrees. Measured across the three consumers:
+Map (`{}` → false, `{a:1}` → true), `none` → false, empty String →
+false, and the numeric leaves including the Big ones (NUR055's rows)
+all give the same answer through `if`, `convert Boolean` and
+`make Boolean`. The List is the sole shape where the consumers split.
+
+**Why it is not simply a defect in `if`:** the code-body condition is a
+deliberate, documented form — `if [ … ] [then] [else]` runs its
+condition, which is how a computed condition is spelled, and the
+compiled path models it (the "if code-body condition" row in
+`lang/go/context_boundary_differential_test.go`). The non-uniformity is
+not that the form exists; it is that **the same value gets two different
+readings depending on how it reaches `if`**, with nothing at the call
+site to distinguish them: a literal `[ … ]` is unambiguously code, but a
+bound name holding a List is read as code too, where the value reading
+is at least as plausible.
+
+**Evidence:** `lang/spec/edge-scalars-3.tsv` (the NUR053 domain block
+now pins both sides — the Map/None agreement rows and the three List
+rows showing the split); `core/go/core_helpers.go` `CoerceBoolean` (the
+presence rule the two constructors share); `design/TRUTHINESS.0.md` §2
+(amended by NUR053's fix to state the domain, and to name this split).
+
+**Documentation status:** newly documented by this record and the
+TRUTHINESS.0.md §2 amendment; before them, nothing stated that `if`'s
+domain differs from the constructors' for one shape, and NUR053's own
+text asserted the opposite.
+
+**Proposed verdict:** argue or fix, and the options are genuinely
+balanced.
+
+- **Allowed** — a List in a condition position is code, full stop; that
+  is what a concatenative language should mean by it, and the truthiness
+  model governs values, not code positions. Cost: `design/TRUTHINESS.0.md`
+  must say the model has one shape-shaped hole, and the `if xs` case
+  stays a trap for anyone holding a list in a variable.
+- **Fix by distinguishing the spellings** — a LITERAL list condition
+  stays code (unchanged), while a condition that arrives as an already-
+  evaluated VALUE coerces. This is the reading that makes `if xs` agree
+  with both constructors, and it is what a user who wrote `def xs []`
+  almost certainly meant. Cost: the two spellings stop being
+  interchangeable, and the distinction has to survive the compiled path
+  as well as the interpreter.
+- **Fix by widening the error** — keep the code-body reading but make
+  the empty case a diagnostic that names the ambiguity rather than the
+  bare "condition produced no value".
+
+This record does NOT block NUR053, which is resolved: the constructor
+pair now shares a domain exactly, and this is the residue that pairing
+them revealed.

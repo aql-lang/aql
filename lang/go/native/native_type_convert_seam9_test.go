@@ -269,3 +269,70 @@ func TestW9Convert3HandlerTruthy(t *testing.T) {
 		t.Errorf("convert String {truthy:true} 'no' = %q, want \"no\"", s)
 	}
 }
+
+// TestConvertBoolOptsHandlerArms drives convertBoolOptsHandler's guard arms
+// directly, because the spec rows can only reach the validating path: at run
+// time a matched `[Boolean Map Any]` call always arrives with three args and
+// a CONCRETE map, so the defensive arms have no source-level spelling.
+//
+// The handler exists because the Boolean form's source slot is `Any`
+// (NUR053), which makes a pattern on the options slot a trap — a malformed
+// map would fall back to the 2-arg row and be coerced AS THE SOURCE. These
+// cases pin that it validates when it can and DELEGATES otherwise, which is
+// what keeps the repair independent of signature sort order.
+func TestConvertBoolOptsHandlerArms(t *testing.T) {
+	r := seam5Reg(t)
+
+	// Short arg window: REFUSED, not delegated. convert3Handler indexes
+	// args[2] unconditionally, so delegating here would panic — and this
+	// codebase does not permit a panic on any input (ADR-005).
+	if _, err := convertBoolOptsHandler(
+		[]Value{NewTypeLiteral(TBoolean), NewString("x")}, nil, nil, r); err == nil {
+		t.Fatal("a short arg window must be refused, not delegated into an indexing handler")
+	}
+
+	// A non-concrete options slot (a Map CARRIER, as check mode produces):
+	// nothing to inspect, so it must delegate rather than guess.
+	if _, err := convertBoolOptsHandler(
+		[]Value{NewTypeLiteral(TBoolean), NewCarrier(TMap), NewString("x")}, nil, nil, r); err != nil {
+		t.Fatalf("carrier options slot must delegate, got %v", err)
+	}
+
+	// A concrete NON-map in the slot (AsMap declines): same, delegate.
+	if _, err := convertBoolOptsHandler(
+		[]Value{NewTypeLiteral(TBoolean), NewInteger(1), NewString("x")}, nil, nil, r); err != nil {
+		t.Fatalf("non-map options slot must delegate, got %v", err)
+	}
+
+	// An unknown key is refused by NAME — the whole point of the handler.
+	_, err := convertBoolOptsHandler(
+		[]Value{NewTypeLiteral(TBoolean), optsKV("truthyy", NewBoolean(true)), NewString("no")}, nil, nil, r)
+	if err == nil || !strings.Contains(err.Error(), "unknown option key truthyy") {
+		t.Fatalf("unknown key must be refused by name, got %v", err)
+	}
+
+	// A known key with the wrong value type is refused by TYPE.
+	_, err = convertBoolOptsHandler(
+		[]Value{NewTypeLiteral(TBoolean), optsKV("truthy", NewString("yes")), NewString("no")}, nil, nil, r)
+	if err == nil || !strings.Contains(err.Error(), "option truthy expects Boolean") {
+		t.Fatalf("wrong-typed option must be refused by type, got %v", err)
+	}
+
+	// A known key explicitly set to `none` means "not supplied" (the
+	// pattern's `tor None` arm) — accepted, and presence coercion applies.
+	out, err := convertBoolOptsHandler(
+		[]Value{NewTypeLiteral(TBoolean), optsKV("truthy", NewTypeLiteral(TNone)), NewString("no")}, nil, nil, r)
+	if err != nil {
+		t.Fatalf("none-valued option must be accepted: %v", err)
+	}
+	if b, _ := AsBoolean(out[0]); !b {
+		t.Errorf(`convert Boolean {truthy:none} 'no' = %v, want true (presence)`, out[0])
+	}
+}
+
+// optsKV builds a one-entry options map for the arms above.
+func optsKV(k string, v Value) Value {
+	m := NewOrderedMap()
+	m.Set(k, v)
+	return NewMap(m)
+}
