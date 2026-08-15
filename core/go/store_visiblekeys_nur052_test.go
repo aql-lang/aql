@@ -75,3 +75,59 @@ func TestNUR052VisibleKeysEmpty(t *testing.T) {
 		t.Fatalf("an empty store enumerates nothing, got %v", got)
 	}
 }
+
+// A tombstone masks only when its value is TRUE. `Deleted` is an exported
+// map a host can write, and Get tests the boolean rather than the key's
+// presence — so `Deleted[k] = false` leaves the inherited key live. The
+// walk must test it the same way, or enumeration would hide a key that
+// lookup still answers: this record's divergence in miniature, and the
+// state is already exercised by the store-tombstone tests.
+func TestNUR052FalseTombstoneDoesNotMask(t *testing.T) {
+	parent := nur052Store(map[string]Value{"a": NewInteger(1)}, nil, nil)
+	child := nur052Store(nil, map[string]bool{"a": false}, parent)
+	if _, ok := child.Get("a"); !ok {
+		t.Fatal("a false tombstone must leave the key reachable by lookup")
+	}
+	if got := child.VisibleKeys(); len(got) != 1 || got[0] != "a" {
+		t.Fatalf("…and enumeration must agree, got %v", got)
+	}
+}
+
+// VisibleEntries carries the WINNING value with each key, captured as the
+// walk first sees it. Resolving each key with a separate Get from the head
+// would re-walk the chain per key — quadratic in the layer count.
+func TestNUR052VisibleEntriesCarryTheWinningValue(t *testing.T) {
+	parent := nur052Store(map[string]Value{"k": NewInteger(1), "p": NewInteger(9)}, nil, nil)
+	child := nur052Store(map[string]Value{"k": NewInteger(2)}, nil, parent)
+	got := child.VisibleEntries()
+	if len(got) != 2 || got[0].Key != "k" || got[1].Key != "p" {
+		t.Fatalf("entries must be sorted by key, got %v", got)
+	}
+	if n, _ := AsInteger(got[0].Value); n != 2 {
+		t.Fatalf("the shadowing child's value must win, got %v", got[0].Value)
+	}
+	if n, _ := AsInteger(got[1].Value); n != 9 {
+		t.Fatalf("the inherited value must ride along, got %v", got[1].Value)
+	}
+}
+
+// storeDeepEqual compares the VISIBLE entries, so two stores that convert
+// to the same map — and answer identically to every lookup — are deq even
+// when their newest layers hold different keys. Which layer a key was
+// written on is not part of a store's value (NUR031 defined a Store's deq
+// as the same projection as `convert Map`, and that projection now walks).
+func TestNUR052DeqUsesTheVisibleProjection(t *testing.T) {
+	base := nur052Store(map[string]Value{"a": NewInteger(1), "b": NewInteger(2)}, nil, nil)
+	// s1: everything on one layer. s2: `a` rewritten on a child layer.
+	s1 := base
+	s2 := nur052Store(map[string]Value{"a": NewInteger(1)}, nil,
+		nur052Store(map[string]Value{"a": NewInteger(7), "b": NewInteger(2)}, nil, nil))
+	if !storeDeepEqual(s1, s2) {
+		t.Fatal("same visible entries must be deq, whatever the layer shape")
+	}
+	// A genuine value difference still separates them.
+	s3 := nur052Store(map[string]Value{"a": NewInteger(1), "b": NewInteger(99)}, nil, nil)
+	if storeDeepEqual(s1, s3) {
+		t.Fatal("a differing visible value must NOT be deq")
+	}
+}

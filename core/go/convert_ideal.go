@@ -169,10 +169,8 @@ func storeEntryMap(v Value) *OrderedMap {
 	// prototype chain with masking and tombstones exactly as Get does, so
 	// a Store shows the keys it answers for (NUR052). Reading si.Data
 	// directly under-reported every key inherited from a parent layer.
-	for _, k := range si.VisibleKeys() {
-		if v, ok := si.Get(k); ok {
-			out.Set(k, v)
-		}
+	for _, e := range si.VisibleEntries() {
+		out.Set(e.Key, e.Value)
 	}
 	return out
 }

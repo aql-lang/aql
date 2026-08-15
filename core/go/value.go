@@ -1097,9 +1097,10 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 	return Value{}, false
 }
 
-// VisibleKeys returns every key this store ANSWERS FOR, walking the
-// prototype chain with masking and tombstones — the same rule Get
-// applies, so enumeration and lookup describe one keyset (NUR052).
+// VisibleEntries returns every key this store ANSWERS FOR with the value
+// it answers WITH, walking the prototype chain in one pass with masking
+// and tombstones — the same rule Get applies, so enumeration and lookup
+// describe one keyset (NUR052).
 //
 // Enumeration used to read only the newest copy-on-write layer while Get
 // walked the chain, so two sets through `context set` left two keys
@@ -1116,27 +1117,59 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 //     does not consult the prototype for it;
 //   - otherwise the prototype answers.
 //
-// Returned sorted, because every caller renders or compares the result
-// and map iteration order is not stable.
-func (si *StoreInstanceInfo) VisibleKeys() []string {
+// It returns VALUES, not just keys, and that is a correctness property
+// rather than a convenience: resolving each key with a separate Get from
+// the head would re-walk the chain per key, which is quadratic in the
+// layer count (a Store with one key per layer over 10k layers spends
+// seconds in `convert Map` alone). Capturing the winning value at the
+// moment the walk first sees the key keeps it linear.
+//
+// A tombstone masks only when its value is TRUE. `Deleted` is an exported
+// map a host can write, and Get tests the boolean rather than the key's
+// presence — so `Deleted[k] = false` leaves the inherited key live. The
+// walk must test it the same way or enumeration would hide a key lookup
+// still answers, which is this record's divergence in miniature.
+//
+// Sorted by key, because every caller renders or compares the result and
+// map iteration order is not stable.
+func (si *StoreInstanceInfo) VisibleEntries() []StoreEntry {
 	seen := map[string]bool{}
-	var out []string
+	var out []StoreEntry
 	for layer := si; layer != nil; layer = layer.Prototype {
-		for k := range layer.Data {
+		for k, v := range layer.Data {
 			if seen[k] {
 				continue
 			}
 			seen[k] = true
-			out = append(out, k)
+			out = append(out, StoreEntry{Key: k, Value: v})
 		}
 		// A tombstone masks the key for every DEEPER layer, but only after
 		// this layer's own Data has been consulted: CowSet-after-CowDel
 		// writes the key back, and that revival must win.
-		for k := range layer.Deleted {
-			seen[k] = true
+		for k, dead := range layer.Deleted {
+			if dead {
+				seen[k] = true
+			}
 		}
 	}
-	sort.Strings(out)
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+// StoreEntry is one visible key/value pair from VisibleEntries.
+type StoreEntry struct {
+	Key   string
+	Value Value
+}
+
+// VisibleKeys is VisibleEntries projected to its keys, for callers that
+// only need the keyset.
+func (si *StoreInstanceInfo) VisibleKeys() []string {
+	entries := si.VisibleEntries()
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Key
+	}
 	return out
 }
 
