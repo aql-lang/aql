@@ -32,6 +32,15 @@ type Registry struct {
 
 	// Defs holds the stacked bodies for `def`-defined words. See deftable.go.
 	Defs *DefTable
+
+	// predicateCalls counts the predicate-body invocations currently in
+	// flight (RunPredicate). Non-zero suppresses the CallBoru declared-
+	// return enforcement NUR069 added, because a predicate's declared
+	// return is not its contract: the protocol signals "doesn't match"
+	// with a None or Boolean-false residual whatever the body declares.
+	// A counter rather than a bool so a predicate whose body triggers
+	// another predicate restores the outer state correctly.
+	predicateCalls int
 	// types holds named type definitions installed by the `type` word —
 	// type literals, records, disjuncts, typed lists/maps, options,
 	// records, object types, dependent scalars (DepInteger, DepString,
@@ -1672,11 +1681,7 @@ func (r *Registry) CallBoruNamed(sig *FnSig, args []Value, captures []CapturedBi
 	// call-scoped data, trimmed up to unnamedCount. Leaking them into the
 	// caller's stream would let a resolved fn-value argument re-step and
 	// fire there (the inert-arguments invariant,
-	// design/ARG-SEMANTICS-UNIFICATION.0.md). Trim ONLY — this path has
-	// never enforced return count/type (guard predicates signal failure
-	// via a None residual, lambdas auto-declare [Any] over side-effect
-	// bodies), so the frame path's validation errors are deliberately not
-	// mirrored here; that asymmetry is pre-existing and documented.
+	// design/ARG-SEMANTICS-UNIFICATION.0.md).
 	// Undeclared returns keep the historical flow-through (the residual
 	// IS the return), matching the frame path, which emits no ReturnCheck
 	// in that case.
@@ -1687,6 +1692,21 @@ func (r *Registry) CallBoruNamed(sig *FnSig, args []Value, captures []CapturedBi
 			}
 			result = result[extra:]
 		}
+	}
+	// …and then ENFORCE the declared contract, which this path did not do
+	// (NUR069). It used to trim and ask nothing about type, so a module
+	// export returning the wrong shape passed silently on the interpreter
+	// while a compiled unit's RET raised — the same annotation enforced on
+	// one dispatch path and not the other. That split is what turned
+	// NUR068's constructor annotations into a compiled-vs-interpreted
+	// divergence.
+	//
+	// The check is the frame path's, not a second implementation that
+	// agrees today: validateReturnTypesIn is the function the interpreter's
+	// ReturnCheck runs, so `v.Is(exp)` plus the degraded-Any pattern walk
+	// mean the same thing here as everywhere else.
+	if err := r.enforceCallBoruReturns(sig, label, result); err != nil {
+		return nil, err
 	}
 	// Strip any dispatch ascription (`v as T`) from the frame's results:
 	// the same match-time-only rule as the tape frame-collapse path — an
@@ -1892,7 +1912,18 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// (nested in a live run, or fresh on an idle registry) and falls back to
 	// CallBoru — the interpreter — otherwise. The predicate sandbox (above) wraps
 	// either engine identically.
+	// A predicate's declared return is NOT its contract: the protocol
+	// below signals "doesn't match" with a None or Boolean-false
+	// residual whatever the body declares, so `def Positive fn
+	// [n:Integer Integer [if (n gt 0) [n] [None]]]` returns None on the
+	// failing branch BY DESIGN. Enforcing the declared return here
+	// (NUR069) would turn that signal into a type_error and destroy the
+	// "does not satisfy" diagnostic, so the enforcement is suppressed
+	// for exactly this call — scoped to the invocation, not the
+	// registry's lifetime.
+	r.predicateCalls++
 	result, err := InvokeCallback(r, predSig, []Value{candidate}, fnDef.Captured)
+	r.predicateCalls--
 	if err != nil {
 		return Value{}, false, err
 	}
@@ -1929,4 +1960,41 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		}
 	}
 	return out, true, nil
+}
+
+// enforceCallBoruReturns applies a fn's declared return contract to the
+// results of a CallBoru dispatch (NUR069). Nil when the sig declares no
+// returns — an undeclared return keeps the historical flow-through, the
+// residual IS the return, matching the frame path, which emits no
+// ReturnCheck in that case.
+//
+// The count is NOT enforced, only the types of the positions present.
+// Enforcing arity here would break the two shapes this path exists to
+// serve, and that the old trim-only comment named: a guard predicate
+// signals failure with a None residual, and a lambda auto-declares
+// `[Any]` over a side-effect body. Both are legitimate callers whose
+// residual count does not match the declaration, and neither is a TYPE
+// violation — which is what this record is about. The compiled side
+// already declines to raise on a count mismatch (checkReturnContract's
+// RetReplay arm defers to the interpreter), so leaving count alone here
+// keeps the two paths agreeing rather than trading one asymmetry for
+// another.
+func (r *Registry) enforceCallBoruReturns(sig *FnSig, name string, result []Value) error {
+	n := len(sig.Returns)
+	if n == 0 || r.predicateCalls > 0 {
+		return nil
+	}
+	if len(result) < n {
+		n = len(result)
+	}
+	if n == 0 {
+		return nil
+	}
+	rc := ReturnCheckInfo{
+		FuncName:       name,
+		Returns:        sig.Returns[:n],
+		ReturnPatterns: sig.ReturnPatterns,
+		Decl:           sig.Decl,
+	}
+	return validateReturnTypesIn(r, rc, result[len(result)-n:], 0, r.Source)
 }
