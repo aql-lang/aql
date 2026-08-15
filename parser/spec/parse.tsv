@@ -96,7 +96,19 @@ Box<>	sugar(angle Box [])	-
 <a>${{k:1}}</a>	interp-xml(<a>${{k:1}}</a>)	-
 <a>${(}</a>	ERR xml: in ${...}: [boru/syntax_error]: unmatched opening parenthesis	-
 `a\\nb`	'a\\nb'	-
-`t\\ta\\r\\\\q\\`e\\$s\\zx`	't\\ta\\r\\\\q`e$s\\\\zx'	-
+`t\\ta\\r\\\\q\\`e\\$s\\zx`	't\\ta\\r\\\\q`e$szx'	NUR026: the template escape set is now the quoted-string set — the unknown `\\z` yields a bare `z` (was `\\z`)
+# NUR026 — a template takes the QUOTED-STRING escape vocabulary. The rows
+# below are the escapes that were inert in a template before the fix, plus
+# the malformed-input residual that is deliberately NOT at parity (jsonic
+# RAISES on a bad \\x in a quoted string; the template lexer has no error
+# channel, so it keeps the literal reading — recorded, not silent).
+# The \\b / \\f / \\v control characters are pinned in the two ports' unit
+# tests instead: their canon carries a RAW control byte, which no single
+# TSV line can hold (the corpus escape set is \\n, \\t, \\\\ only).
+`a\\x41b`	'aAb'	two-hex-digit byte, newly live in a template (NUR026)
+`a\\u0041b`	'aAb'	four-hex-digit rune, newly live (NUR026)
+`a\\0b`	'a0b'	\\0 is the digit, exactly as in a quoted string (NUR026)
+`a\\xZZb`	'axZZb'	MALFORMED \\x stays literal in a template — the recorded residual
 [inf -inf nan]	[inf -inf nan]	-
 0x10	16	-
 0o17	15	-

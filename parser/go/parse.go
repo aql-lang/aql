@@ -1756,31 +1756,113 @@ func processTemplateEscapes(s string) string {
 	buf.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\\' && i+1 < len(s) {
-			next := s[i+1]
-			switch next {
-			case 'n':
-				buf.WriteByte('\n')
-			case 't':
-				buf.WriteByte('\t')
-			case 'r':
-				buf.WriteByte('\r')
-			case '\\':
-				buf.WriteByte('\\')
-			case '`':
-				buf.WriteByte('`')
-			case '$':
-				buf.WriteByte('$')
-			default:
-				// Unknown escape: keep as-is.
-				buf.WriteByte('\\')
-				buf.WriteByte(next)
-			}
-			i++ // skip the escaped char
+			i += writeStringEscape(&buf, s, i+1)
 		} else {
 			buf.WriteByte(s[i])
 		}
 	}
 	return buf.String()
+}
+
+// writeStringEscape decodes ONE escape sequence — the character(s) after
+// a backslash at s[at:] — into buf, and returns how many bytes of s it
+// consumed (always >= 1, counting the escape character itself).
+//
+// This is the single escape vocabulary for boru string literals
+// (NUR026). Templates used to carry a hand-rolled six-case switch
+// (`\n \t \r \\ ` $`) that kept everything else LITERAL, while quoted
+// strings rode jsonic's native handling and got the full set — so
+// `size "z\x41z"` was 3 and its template spelling 6. That was an
+// implementation accident, not a design choice: the backtick was
+// removed from jsonic's StringChars so templates could carry `${…}`
+// interpolation, and the replacement escape handler was never brought
+// to parity. A reader should not have to know which quoting form they
+// are in to know what `\x41` means.
+//
+// The vocabulary matches what jsonic accepts for `"…"` / `'…'`,
+// measured 2026-08-15:
+//
+//	\n \t \r \b \f \v   the control characters
+//	\xNN                one byte, two hex digits
+//	\uNNNN              one rune, four hex digits
+//	anything else       the character itself, backslash DROPPED
+//
+// That last rule is the behaviour change to watch, and it is the one
+// the record asked to pin: `\z` is `z` and `\0` is `0`, in a template
+// exactly as in a quoted string. The template-only spellings need no
+// case of their own — a backslash before a backtick or a `$` falls into
+// the default arm and yields the bare character, which is what they
+// always meant.
+//
+// One asymmetry SURVIVES here, deliberately and recorded: a MALFORMED
+// \x / \u (too few digits, or a non-hex digit) falls through to the
+// default arm, so a template's `\xZZ` is `xZZ`, while jsonic RAISES on
+// the same sequence in a quoted string ("does not encode a valid ASCII
+// character" — measured 2026-08-15, not assumed). Matching that needs
+// an error channel this call site does not have: the caller is a
+// jsonic LexMatcher returning a *Token, so raising means changing the
+// lexer seam, which is the unified-lexer work NUR026's earlier verdict
+// sketched and this one did not ask for. The vocabulary — what a
+// well-formed escape MEANS — is now identical in both forms, which is
+// the divergence the record was opened for; the malformed-input
+// REPORTING difference is narrower and stays on the record.
+func writeStringEscape(buf *strings.Builder, s string, at int) int {
+	switch c := s[at]; c {
+	case 'n':
+		buf.WriteByte('\n')
+	case 't':
+		buf.WriteByte('\t')
+	case 'r':
+		buf.WriteByte('\r')
+	case 'b':
+		buf.WriteByte('\b')
+	case 'f':
+		buf.WriteByte('\f')
+	case 'v':
+		buf.WriteByte('\v')
+	case 'x':
+		if r, ok := parseHexEscape(s, at+1, 2); ok {
+			buf.WriteByte(byte(r))
+			return 3
+		}
+		buf.WriteByte(c)
+	case 'u':
+		if r, ok := parseHexEscape(s, at+1, 4); ok {
+			buf.WriteRune(rune(r))
+			return 5
+		}
+		buf.WriteByte(c)
+	default:
+		// Unknown escape: the character itself, backslash dropped —
+		// jsonic's rule for a quoted string, now the template's too.
+		buf.WriteByte(c)
+	}
+	return 1
+}
+
+// parseHexEscape reads exactly n hex digits at s[at:] and returns their
+// value. ok=false when the run is short or contains a non-hex digit, so
+// the caller can fall back to the literal-character reading.
+func parseHexEscape(s string, at, n int) (uint32, bool) {
+	if at+n > len(s) {
+		return 0, false
+	}
+	var v uint32
+	for i := at; i < at+n; i++ {
+		var d uint32
+		switch c := s[i]; {
+		case c >= '0' && c <= '9':
+			d = uint32(c - '0')
+		case c >= 'a' && c <= 'f':
+			d = uint32(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			d = uint32(c-'A') + 10
+		default:
+			return 0, false
+		}
+		v = v<<4 | d
+	}
+	return v, true
 }
 
 // numberVal wraps a float64 with its source text and source position so
