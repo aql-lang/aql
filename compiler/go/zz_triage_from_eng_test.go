@@ -873,3 +873,50 @@ func TestNoteLoopCarriedArms(t *testing.T) {
 		t.Fatal("an unresolvable re-resolved pre value should refuse")
 	}
 }
+
+// TestFinalizeSkipsPoisonedStoredRef pins the OTHER half of the poison
+// contract. TestNotifyNameReboundBranches above proves the flag is set on
+// the right refs; this proves Finalize ACTS on it — a poisoned ref is left
+// unstamped (Prog nil), so InvokeCallback falls back to CallBoru and
+// resolves the rebound name live, while a clean ref is back-stamped with
+// the built program.
+//
+// Without this, the `if ref.poisoned { continue }` arm in Finalize was the
+// single uncovered statement in the whole tree: every existing test either
+// set the flag without finalizing, or finalized without a poisoned ref.
+func TestFinalizeSkipsPoisonedStoredRef(t *testing.T) {
+	es := NewEmitState()
+	// The zeroOut-phantom residual is the minimal shape that finalizes
+	// successfully (TestFinalizeResidualArms uses the same setup).
+	phantom := core.NewInteger(1)
+	es.producedBy[phantom.ID] = producer{seq: 1}
+	f := es.eventInfo[1]
+	f.zeroOut = true
+	es.eventInfo[1] = f
+
+	poisoned := &CompiledFnRef{depNames: map[string]bool{"helper": true}}
+	clean := &CompiledFnRef{depNames: map[string]bool{"kv": true}}
+	es.storedFnRefs = []*CompiledFnRef{poisoned, clean}
+
+	// The rebind must happen with a unit OPEN. A module-scope rebind
+	// (openUnitRecs empty) additionally marks the whole program
+	// uncompilable — see NotifyNameRebound's F1 note — so Finalize refuses
+	// and never reaches the skip arm. Only a rebind inside another unit's
+	// analysis (a body-local def, which shadows independently) leaves a
+	// poisoned ref on a program that still finalizes. That asymmetry is why
+	// this arm went uncovered.
+	es.openUnitRecs = []int{0}
+	es.NotifyNameRebound("helper")
+	es.openUnitRecs = nil
+
+	prog, why, ok := es.Finalize([]core.Value{phantom})
+	if !ok || prog == nil {
+		t.Fatalf("Finalize must succeed on an empty program: ok=%v prog=%v why=%q", ok, prog, why)
+	}
+	if poisoned.Prog != nil {
+		t.Error("a poisoned ref must be left UNSTAMPED so InvokeCallback falls back to CallBoru")
+	}
+	if clean.Prog != prog {
+		t.Errorf("a clean ref must be back-stamped with the built program: got %v", clean.Prog)
+	}
+}
