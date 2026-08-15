@@ -1892,7 +1892,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// (nested in a live run, or fresh on an idle registry) and falls back to
 	// CallBoru — the interpreter — otherwise. The predicate sandbox (above) wraps
 	// either engine identically.
-	result, err := InvokeCallback(r, predSig, []Value{candidate}, fnDef.Captured)
+	result, err := InvokeCallbackFn(r, &fnDef, predSig, []Value{candidate})
 	if err != nil {
 		return Value{}, false, err
 	}

@@ -22,11 +22,11 @@ import "fmt"
 // lambda (Function value) — ready to run once per map entry.
 type mapBody struct {
 	lambda  bool
-	closure bool              // when a compiled-closure body (VM-driven)
-	fn      Value             // when lambda: the Function value
-	body    Value             // when closure: the closure value (run via InvokeBody)
-	caps    []CapturedBinding // when lambda: its captured bindings
-	tokens  []Value           // when quotation: the body tokens
+	closure bool       // when a compiled-closure body (VM-driven)
+	fn      Value      // when lambda: the Function value
+	body    Value      // when closure: the closure value (run via InvokeBody)
+	fnDef   *FnDefInfo // when lambda: its definition (captures + defining registry)
+	tokens  []Value    // when quotation: the body tokens
 }
 
 // newMapBody classifies the body arg: a compiled CLOSURE (the bytecode VM
@@ -40,7 +40,7 @@ func newMapBody(reg *Registry, body Value, word string) (mapBody, error) {
 	if body.Parent.ConformsTo(TFunction) {
 		mb := mapBody{lambda: true, fn: body}
 		if fd, ok := body.Data.(FnDefInfo); ok {
-			mb.caps = fd.Captured
+			mb.fnDef = &fd
 		}
 		return mb, nil
 	}
@@ -107,7 +107,9 @@ func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
 	if sig == nil {
 		return Value{}, false, fmt.Errorf("no matching lambda signature for %d argument(s)", len(args))
 	}
-	res, err := reg.CallBoru(sig, args, mb.caps)
+	// CallBoruFn, not reg.CallBoru: a lambda passed in from another module runs
+	// on its DEFINING registry (design/FUNCTION-VALUE-SCOPE.0.md).
+	res, err := CallBoruFn(reg, mb.fnDef, sig, args)
 	if err != nil {
 		return Value{}, false, err
 	}

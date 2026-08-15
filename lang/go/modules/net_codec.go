@@ -97,7 +97,7 @@ func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native
 	}
 	// InvokeCallback runs a compiled codec body on the VM (nested in the live run,
 	// or fresh on an idle connection fork) and falls back to CallBoru otherwise.
-	res, err := core.InvokeCallback(r, sig, args, fnInfo.Captured)
+	res, err := core.InvokeCallbackFn(r, fnInfo, sig, args)
 	if err != nil {
 		return native.Value{}, err
 	}

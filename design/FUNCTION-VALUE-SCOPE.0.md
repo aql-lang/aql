@@ -1,17 +1,23 @@
 # FUNCTION VALUE SCOPE
 
 Where a function value's **free words** resolve — the module that *defined*
-it, or the module that *runs* it — and why boru currently answers both,
-depending on which engine executes the program. Suffix `.0`: design and
-defect report; no fix is implemented.
+it, or the module that *runs* it — and why boru answered both, depending on
+which engine executed the program.
 
-**Status:** defect + design. The behaviour below is a **compile ≠
-interpret divergence that can return a silently wrong number**, verified
-first-hand against `boru 0.1.0-dev (git 96bf5f9e)`. It is not recorded
-anywhere else in `design/` — the closest prior mentions
-(`FN-VALUE-DISPATCH.0.md` §, `VOXGIG-COMPILE-LEAVES.1.md`) are
-compile-time emitter findings of the same *shape* but a different
-problem. This is the first statement of the runtime rule.
+**Status (2026-08-15): rule 1 is IMPLEMENTED; rules 2 and 3 are not.**
+The divergence this document opens with — a **compile ≠ interpret
+disagreement that returned a silently wrong number**, verified first-hand
+against `boru 0.1.0-dev (git 96bf5f9e)` — is fixed: a function value now
+resolves its free words in its defining module on both engines, whether it
+is applied, bound to a name, or passed through a native callback. See
+**§12** for exactly what landed, what did not, and why. The file keeps its
+`.0` suffix because §11's other two clauses are still design-only, and
+because a dozen code comments cite this path.
+
+The defect is not recorded anywhere else in `design/` — the closest prior
+mentions (`FN-VALUE-DISPATCH.0.md` §, `VOXGIG-COMPILE-LEAVES.1.md`) are
+compile-time emitter findings of the same *shape* but a different problem.
+This is the first statement of the runtime rule.
 
 ## 1. Summary
 
@@ -606,3 +612,110 @@ The unifying observation is Moses's (1970): a function value is
 meaningless without its environment, so the environment must be *part of
 the value*. boru already made that decision — `FnDefInfo.Registry` is the
 environment pointer. What remains is to consult it everywhere.
+
+## 12. Implementation log — 2026-08-15
+
+Rule 1 of §11 ("free names resolve where the function was written") is
+implemented across every path §4.2 listed as not honouring
+`fnDef.Registry`. Rules 2 and 3 are **not** implemented; §12.4 records
+where each one actually lives, so the next pass starts from a located
+mechanism rather than re-deriving one.
+
+### 12.1 The seam
+
+Three functions in `core/go/invoke.go` now answer the scope question once
+for every caller:
+
+- **`FnHome(r, fnDef) (*Registry, []CapturedBinding)`** — the whole rule
+  in three lines: the defining registry when the value carries one, the
+  caller's otherwise. `Registry` is set only at module-export resolution
+  (§4.1), so a fn defined in the running scope takes the same path it
+  always did and the common case is byte-identical.
+- **`InvokeCallbackFn(r, fnDef, sig, args)`** — `InvokeCallback` with the
+  definition in hand. Also re-anchors `InvokeCompiled`'s `depsFresh`
+  check (§7.3 item 5), which was previously evaluated against a registry
+  nobody had asked about.
+- **`CallBoruFn(r, fnDef, sig, args)`** — the interpreter-only sibling.
+  Six words (`filter`, the map-lambda `each`/`fold` bodies, core `walk`,
+  `StructUtil.walk`, `IO.mount`, `boru:parse`) already choose between a
+  compiled closure and an interpreter `FnDefInfo` themselves; routing
+  their `FnDefInfo` half through `InvokeCallback` would silently move
+  those bodies onto the VM. Fixing *where* free words resolve must not
+  also change *which* engine resolves them.
+
+### 12.2 What changed, by class
+
+| Class | Sites | Change |
+|---|---|---|
+| Native callbacks (§7.3 item 1) | `filter.go`, `native_map_iter.go`, `walk.go`, `walk_core.go`, `io_mount.go`, `parse.go`, `native_service.go` ×2, `net_codec.go`, `model.go`, `tui_run.go` ×2, `registry.go` (`RunPredicate`) | route through the seam |
+| `serve-raw` (§7.3 item 1, deferred as a concurrency hazard) | `net_socket.go` | the acceptor forks the **defining** registry; per-connection `ForkConcurrent` keeps the goroutines isolated, so the module is never shared. Writers stay the caller's. |
+| Name dispatch (§7.3 items 2–3) | `core/go/core_helpers.go` — `compileFnSigs`, `InstallFnDef` | the body handler and the construction-time analysis pass are both built against the defining registry, so `def g A.pub` answers exactly as `A.pub` |
+| Stamp reconciliation (§7.3 item 6) | `compiler/go/stamp_runtime.go` — `StampFnValue`, `StampFnValueInPlace` | a stored handler is stamped where it is **stored** but runs where it was **written**; the detached compile now uses the defining registry, so the VM unit and the interpreter fallback cannot disagree |
+| Closure lowering (**not** in the original plan) | `compiler/go/callable_words.go` — `foreignFnHome` | see §12.3 |
+
+### 12.3 One change the plan missed, found by testing
+
+§7.3 item 4 claimed *"the compiler needs no separate edit."* It does.
+
+The compiler lowers a higher-order word's fn operand to a **closure unit
+compiled against the calling module** (`tryRecordLambdaClosure`). So with
+the seam fixed and nothing else, `filter A.big xs` returned the defining
+module's answer interpreted and the calling module's answer compiled —
+trading a wrong value for a *mode-dependent* one, which is worse.
+
+`foreignFnHome` declines the lowering when the fn value carries a foreign
+`Registry`. The refusal falls through to the runtime callback path, which
+now runs the body on its own registry, so the engines agree. Compiling a
+foreign body correctly — against `fd.Registry`, with its own const pool
+and stamp registry — is the real fix and is Phase 2 work; refusing costs
+the closure fast path on a cross-module callback and nothing at all on
+the same-module one.
+
+Under `--force-compile` (the strict mode) this surfaces as an honest
+refusal rather than a silent miscompile: `walk` with a cross-module hook
+now says *"function value reaches walk (Stage 3)"* instead of returning
+the wrong answer. Default mode falls back and produces the right value.
+
+### 12.4 Not implemented
+
+- **§11 rule 2 — captures as bindings, not values.** Still a shallow
+  snapshot. This is a change to the closure representation, not a routing
+  choice: `FnDefInfo.Captured` holds `Value` copies, `InstallFrameBinding`
+  installs them per call, and the compiled path binds them as **trailing
+  unit slots** at `OpPushClosure` — all three would have to move to cells
+  together, or the engines diverge on the counter idiom instead of
+  agreeing on the wrong answer. Latent, as §11 says: the `flex`-cell
+  workaround is discoverable, so nobody has filed it.
+- **§11 rule 3 — a `Function`-typed slot must not auto-apply.** Still
+  live, and confirmed by repro: with `def nought fn [[] [Integer] [7]]`
+  and `def grab fn [[f:Function] [Any] [f]]`, `typeof (grab nought)` is
+  `Integer`, not `Function`. Worth recording that **`/r` does not rescue
+  this shape** — `grab nought/r` is `Integer` too — so the documented
+  workaround is not general.
+
+  The mechanism is *not* the callback seam and not `FnInertArgs` (which
+  is recorder-only, read by `recordCallOperands`). It is the step loop:
+  a bare word at the pointer dispatches, and forward collection has no
+  channel telling the stepper that the slot it is filling is
+  `Function`-typed. Fixing it means threading the target slot's type from
+  `matchSignature`'s forward phase into the step decision, then mirroring
+  that in the checker, the recorder and the VM. That is a staged change
+  with its own migration story — §8's phases cover rule 1 only — not a
+  line in this one.
+
+### 12.5 Evidence
+
+- `lang/spec/module-fnvalue-boundary.tsv` §4 — five rows: applying,
+  naming, a named `f:Function` parameter, a native callback seam, and the
+  negative (a module-private word stays private).
+- `lang/go/function_value_scope_test.go` — the five callback classes on
+  **both** engines, plus a check-clean pass (the defect was invisible to
+  `boru check`; the fix must not become a false positive there).
+- `lang/go/modules/net_serveraw_scope_test.go` — `serve-raw` over real
+  loopback sockets, two sequential connections, verified to fail without
+  the fix.
+- `core/go/invoke_fnhome_test.go` — `FnHome`'s three arms.
+
+The census, differential, refusal-ceiling and check-accuracy gates in
+`test/go/langspec` are unchanged by all of this, which is the load-bearing
+negative result: the fix moved no compiled row's disposition.

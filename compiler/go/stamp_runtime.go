@@ -240,12 +240,21 @@ func StampFnValue(r *core.Registry, v core.Value) (core.Value, bool) {
 	// whose body declines stays plain and interprets — per-sig, fail-safe.
 	// The sig slice clones once (and each stamped impl clones) so the stamp
 	// never writes through a shared pointer of a published value.
+
+	// Stamp against the fn's DEFINING registry
+	// (design/FUNCTION-VALUE-SCOPE.0.md §7.3 item 6). A stored handler is
+	// stamped where it is STORED — `service add`, codec resolution — but run
+	// where it was WRITTEN, so compiling the body against the storing registry
+	// would bake in that module's bindings for the body's free words and hand
+	// the VM a different answer from the interpreter fallback. Same registry
+	// for a fn defined in the running scope, so the common path is unchanged.
+	home, _ := core.FnHome(r, &fd)
 	var sigs []core.Signature
 	for i := range fd.Signatures {
 		if !storedSigEligible(&fd.Signatures[i]) {
 			continue
 		}
-		ref, ok := StampDetachedSig(r, fd, i, v.Pos())
+		ref, ok := StampDetachedSig(home, fd, i, v.Pos())
 		if !ok {
 			continue
 		}
@@ -288,12 +297,14 @@ func StampFnValueInPlace(r *core.Registry, v core.Value) bool {
 	// Per-sig stamps onto the value's own shared impls (pre-publication —
 	// see the doc above): every stampable own sig gets its own ref
 	// (REFUSAL-CLOSURE §7b); a declining body leaves that sig plain.
+	// The defining registry compiles the body — see StampFnValue.
+	homeIP, _ := core.FnHome(r, &fd)
 	any := false
 	for i := range fd.Signatures {
 		if !storedSigEligible(&fd.Signatures[i]) {
 			continue
 		}
-		ref, ok := StampDetachedSig(r, fd, i, v.Pos())
+		ref, ok := StampDetachedSig(homeIP, fd, i, v.Pos())
 		if !ok {
 			continue
 		}
