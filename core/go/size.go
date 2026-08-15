@@ -150,7 +150,12 @@ func (idealRootBehavior) Size(v Value) int {
 		}
 	case *StoreInstanceInfo:
 		if d != nil {
-			return len(d.Data)
+			// The VISIBLE keyset, walking the prototype chain with masking
+			// and tombstones — the same rule Get applies, so `size` counts
+			// the keys the store answers for (NUR052). `len(d.Data)` read
+			// only the newest copy-on-write layer, so two `context set`s
+			// left two keys reachable by get/has and a size of 1.
+			return len(d.VisibleKeys())
 		}
 	case TableData:
 		return len(d.Rows)

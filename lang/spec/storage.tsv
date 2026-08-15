@@ -140,3 +140,21 @@ def k 'dyn' {a:1} set (k) 2	{a:1 dyn:2}	computed key — parens take the VALUE o
 def m {a:1} def m2 (m set b 2) m	{a:1}	the receiver is NOT mutated — m is unchanged
 def m {a:1} def m2 (m set b 2) m2	{a:1 b:2}	…the new binding carries the update
 Map 1 'a' set	ERROR:signature_error	a bare Map type literal cannot be set
+
+# ---- NUR052: enumeration walks the prototype chain, like lookup ----
+# A Store's enumeration (`size`, `convert Map`) used to read only the newest
+# copy-on-write layer while `get`/`has` walked the full chain, so two sets
+# left two keys reachable by lookup and ONE visible to enumeration. One
+# store, one keyset, whichever word asks: VisibleKeys walks the chain with
+# the SAME precedence Get applies — own layer wins, a tombstone masks
+# deeper layers, otherwise the prototype answers.
+context set a/q 1 end context set b/q 2 end ((context) has a/q) and ((context) has b/q)	true	both keys answer to lookup, as they always did
+context set a/q 1 end context set b/q 2 end (size (context)) eq (size (convert Map (context)))	true	…and enumeration now agrees with itself across both words
+context set a/q 1 end context set b/q 2 end (convert Map (context)) has 'a'	true	the inherited key is ENUMERATED, not just reachable — the divergence this record opened
+context set k/q 1 end do [context set k/q 2 end (size (context))]	2	MASKING: a child layer shadows the parent's key, so it appears ONCE…
+context set k/q 1 end do [context set k/q 2 end ((context) get k/q)]	2	…at the CHILD's value, matching what lookup answers
+context set a/q 1 end context set b/q 2 end context del b/q end ((context) has b/q)	false	a tombstoned key is invisible to lookup…
+context set a/q 1 end context set b/q 2 end context del b/q end ((convert Map (context)) has 'b')	false	…and to enumeration, by construction — CowDel's layer has no own entry to enumerate
+context set a/q 1 end context set b/q 2 end context del b/q end ((context) has a/q)	true	the sibling key survives the delete
+context set a/q 1 end context del a/q end context set a/q 3 end ((context) get a/q)	3	a set AFTER a del revives the key — the own layer is consulted before the tombstone masks deeper ones
+context set a/q 1 end context del a/q end context set a/q 3 end ((convert Map (context)) has 'a')	true	…and the revival is enumerated too

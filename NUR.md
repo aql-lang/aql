@@ -61,7 +61,6 @@ keep the two in sync in the same commit.
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon); REFINED 2026-08-15 — the halves are one root cause (the binding name in FnDefInfo.Name drives eq, canon and tcmp alike), so: BOX FnDefInfo for eq (reference) and compare signatures+body for deq (NUR011 as written), canon renders the ANONYMOUS fn literal, and PR #366's native-callback seam lands first. Design-unblocked, sequenced | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
-| [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain — VERDICT 2026-08-15: resolve by fix (enumeration walks the prototype chain with masking; a `del` tombstone hides the key from BOTH) | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
 | [NUR072](#nur072) | Three sugar kinds (mini, type-bound, lambda) still canon in DEBUG form after NUR059 — withdrawn there because the renders do not round-trip: SugarInfo does not retain the mini delimiter, and type-bound renders its Items rather than the bound's text; also carries the undecided bare-word question (`word(foo)` vs `foo`, 175 corpus rows) | NUR059's fix, 2026-08-15 |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
@@ -1712,80 +1711,6 @@ had rotted by a factor of two.
 ---
 
 
-## NUR052 — Store enumeration reads the top COW layer; lookup walks the chain {#nur052}
-
-**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:**
-NUR-EFFORT-TRIAGE probing of NUR022 (del/set symmetry)
-
-**Rule:** a container's enumeration agrees with its lookup — the keys
-a Store *shows* (`size`, `convert Map`) are the keys it *answers for*
-(`get`, `has`). (`each` has no Store signature at all, so iteration is
-not a third enumeration path here; a Store is walked by converting it
-first, which is the projection at issue.)
-**Divergence:** Store enumeration reads only the newest copy-on-write
-layer while lookup walks the full prototype chain:
-
-```
-$ boru do 'context set a/q 1  context set b/q 2
-           print (size (context))            # 1
-           print ((context) get a/q)         # 1   — lookup sees a
-           print ((context) has a/q)         # true
-           print (convert Map (context))'    # {"b": 2} — enumeration does not
-```
-
-Two sets, two live keys by lookup, one key by enumeration.
-**Evidence:** the session above (verified 2026-08-02, current binary);
-`eng/go/value.go::StoreInstanceInfo.Get` (prototype-chain walk) vs
-`eng/go/convert_ideal.go::storeEntryMap` (own-entry projection).
-**Documentation status:** NUR031's resolved Store-equality arm
-describes `deq` as "the same own-entry projection as `convert Map`" —
-so the asymmetry also leaks into which Stores compare `deq`-equal.
-Not otherwise documented.
-**Proposed verdict:** investigate then fix or argue — either
-enumeration walks the chain (with masking, so a child layer's key
-shadows its parent's), or lookup is documented as deliberately
-chain-walking while enumeration is own-layer (and the words' docs say
-which they use). Any `del`-symmetry work under NUR022 must land on
-whichever answer is chosen (a tombstoned key must be invisible to
-BOTH).
-
-**NUR022's `del` landed 2026-08-02 and satisfies that constraint**
-without deciding the record. `CowDel` writes a tombstone into a NEW
-layer whose own `Data` is empty, so a deleted key is invisible to
-lookup (Get honours the tombstone) and invisible to enumeration
-(there is no own entry to enumerate) — verified:
-
-```
-$ boru do 'context set a/q 1 context set b/q 2 context del b/q end
-           print ((context) has b/q)        # false
-           print (convert Map (context))    # {}
-           print (size (context))           # 0
-           print ((context) has a/q)'       # true — still reachable by lookup
-```
-
-The `{}` / `0` in that session is this record's divergence, not the
-delete: enumeration under-reports `a` exactly as it did before. So the
-tombstone is neutral here — it does not deepen the split and does not
-close it, and whichever answer this record takes, the tombstone
-follows it for free (a chain-walking enumeration would need to honour
-`Deleted`, which is the same predicate `Get` already applies).
-
-**Verdict (maintainer, 2026-08-15 — resolve by fix):** enumeration
-**walks the prototype chain**, with masking — a child layer's key
-shadows its parent's, and a `del` tombstone hides the key from BOTH
-enumeration and lookup. One store, one keyset, whichever word asks.
-
-The alternative (documenting own-layer enumeration against
-chain-walking lookup) was available and not taken: it would leave
-`size (context)` and `(context) get k` answering about different
-things, which is a divergence explained rather than removed. The
-constraint NUR022 flagged is already satisfied — `CowDel`'s tombstones
-stop the walk, so a deleted key is invisible to both sides by
-construction. Stays **Pending** until the walk lands, with rows pinning
-masking (a shadowed parent key appears ONCE, at the child's value) and
-tombstone invisibility.
-
----
 
 ## NUR056 — `make`-constructibility is the one capability with no opt-in {#nur056}
 

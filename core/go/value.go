@@ -1097,6 +1097,49 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 	return Value{}, false
 }
 
+// VisibleKeys returns every key this store ANSWERS FOR, walking the
+// prototype chain with masking and tombstones — the same rule Get
+// applies, so enumeration and lookup describe one keyset (NUR052).
+//
+// Enumeration used to read only the newest copy-on-write layer while Get
+// walked the chain, so two sets through `context set` left two keys
+// reachable by `get`/`has` and one visible to `size` / `convert Map`. A
+// container whose enumeration disagrees with its lookup is answering
+// about two different things.
+//
+// The walk mirrors Get's precedence exactly, which is what makes them
+// agree by construction rather than by coincidence:
+//
+//   - a key in this layer's own Data wins, so a child's value SHADOWS the
+//     parent's and the key appears ONCE, at the child's value;
+//   - a key tombstoned here is invisible from here down, and the walk
+//     does not consult the prototype for it;
+//   - otherwise the prototype answers.
+//
+// Returned sorted, because every caller renders or compares the result
+// and map iteration order is not stable.
+func (si *StoreInstanceInfo) VisibleKeys() []string {
+	seen := map[string]bool{}
+	var out []string
+	for layer := si; layer != nil; layer = layer.Prototype {
+		for k := range layer.Data {
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, k)
+		}
+		// A tombstone masks the key for every DEEPER layer, but only after
+		// this layer's own Data has been consulted: CowSet-after-CowDel
+		// writes the key back, and that revival must win.
+		for k := range layer.Deleted {
+			seen[k] = true
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Set stores a key-value pair directly (for internal/init use only).
 // boru code should use the set word which does COW via CowSet.
 func (si *StoreInstanceInfo) Set(key string, val Value) {
