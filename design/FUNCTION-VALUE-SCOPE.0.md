@@ -746,6 +746,25 @@ with it since the M1 wave.
   with its own migration story — §8's phases cover rule 1 only — not a
   line in this one.
 
+  **It is not only a toy repro — it is costing the `sort` library a green
+  suite today, and §5 needs a correction because of it.** §5 called the
+  combinator fault "mode-independent". That holds for the *standalone*
+  shape: `[3 9 1 5] Sort.quick (Sort.by-number Sort.reverse) end` raises
+  `[boru/uncalled_function]: call to 'by-number' matched no signature` at
+  CHECK time, identically under `--no-compile`, `--compile` and
+  `--force-compile`. But inside the test framework the same combinator is
+  a **runtime divergence**: `sort_unit_test.aql` is `ok` compiled and
+  `FAIL` interpreted. So "mode-independent" is true of the check-time
+  error and false of the in-suite behaviour, and rule 3 owns both.
+
+  That divergence had been invisible because every divergence runner in
+  the ecosystem ran `$AQL "$s"` — the DEFAULT compile-preferring mode —
+  in its column labelled INTERPRETER, and so compared bytecode against
+  bytecode. Fixed in the five library repos by passing `--no-compile`;
+  `sort`'s gate correctly goes red as a result. A/B'd against boru before
+  and after rule 1 (`8c0df3e`/`1a4600c`): byte-identical in all three
+  modes, so the failure is pre-existing and rule 1 is not implicated.
+
 ### 12.5 Evidence
 
 - `lang/spec/module-fnvalue-boundary.tsv` §4 — four rows: applying,

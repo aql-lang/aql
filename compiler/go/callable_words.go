@@ -325,10 +325,7 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	// cleanly), rides the stack at OpPushClosure, and binds a trailing unit
 	// slot in invokeClosureOn — value-identical to the interpreter's
 	// construction-time snapshot, taken at the same program point per dispatch.
-	if foreignFnHome(r, fd) {
-		return false
-	}
-	lam, ok := lambdaHookCompatible(fd, inputs, shape, true)
+	lam, ok := lambdaHookCompatible(r, fd, inputs, shape, true)
 	if !ok {
 		return false
 	}
@@ -400,7 +397,23 @@ func foreignFnHome(r *core.Registry, fd *core.FnDefInfo) bool {
 //     a KeyVal (a Map subtype) the carrier conservatively under-types as a
 //     plain Map, so any Map-family param is accepted there and only a
 //     provably-incompatible param (a scalar, a sibling container) refuses.
-func lambdaHookCompatible(fd *core.FnDefInfo, inputs []core.Value, shape core.ClosureInShape, allowCaptures bool) (*core.Signature, bool) {
+func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Value, shape core.ClosureInShape, allowCaptures bool) (*core.Signature, bool) {
+	// A fn value DEFINED in another module resolves its free words THERE
+	// (design/FUNCTION-VALUE-SCOPE.0.md); a closure unit is compiled against r,
+	// the module doing the CALLING, so lowering one would bake in whatever r
+	// binds for those names — one answer interpreted, another compiled, no
+	// diagnostic either way. Declining leaves the runtime callback seam
+	// (core.CallBoruFn) to run the body on its own registry, which is where the
+	// interpreter runs it too, so the engines agree. Compiling a foreign body
+	// correctly is the cross-registry-unit follow-up; the frontier ledger entry
+	// for the `filter A.big` row records what it takes.
+	//
+	// This lives here rather than at the two call sites so there is ONE branch
+	// to reach and to cover: the BODY-lambda path exercises it, and the
+	// extras/hook path (walk's ascend slot) inherits it for free.
+	if foreignFnHome(r, fd) {
+		return nil, false
+	}
 	lam, ok := fd.FirstOwnSig()
 	if !ok || len(lam.Body()) == 0 {
 		return nil, false
@@ -502,10 +515,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 		if !insOK { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return false
 		}
-		if foreignFnHome(r, &fd) {
-			return false
-		}
-		lam, lamOK := lambdaHookCompatible(&fd, hookIns, hookShape, false)
+		lam, lamOK := lambdaHookCompatible(r, &fd, hookIns, hookShape, false)
 		if !lamOK {
 			return false
 		}
