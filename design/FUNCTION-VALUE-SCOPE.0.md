@@ -665,16 +665,59 @@ trading a wrong value for a *mode-dependent* one, which is worse.
 
 `foreignFnHome` declines the lowering when the fn value carries a foreign
 `Registry`. The refusal falls through to the runtime callback path, which
-now runs the body on its own registry, so the engines agree. Compiling a
-foreign body correctly — against `fd.Registry`, with its own const pool
-and stamp registry — is the real fix and is Phase 2 work; refusing costs
-the closure fast path on a cross-module callback and nothing at all on
-the same-module one.
+now runs the body on its own registry, so the engines agree. Refusing
+costs the closure fast path on a cross-module callback and nothing at all
+on the same-module one.
 
 Under `--force-compile` (the strict mode) this surfaces as an honest
 refusal rather than a silent miscompile: `walk` with a cross-module hook
 now says *"function value reaches walk (Stage 3)"* instead of returning
 the wrong answer. Default mode falls back and produces the right value.
+
+**The decline has a measured cost, and it is on the record.** `filter` with
+a cross-module predicate now compiles with one interpreter ISLAND
+(`FALLBACK b0 ; filter`) instead of a native closure. The main corpus
+ratchets islands to zero (`compiled_coverage_test.go`'s `islandGate`), so
+the row lives in `lang/spec/frontier/frontier-fnvalue-scope.tsv` — the
+frontier corpus, which `computeCensus` skips structurally because it is a
+subdirectory — with its graduation criterion pinned in
+`frontier_spec_test.go`'s ledger under `failsWith: "islanded"`. Its
+SEMANTICS stay pinned on both engines by
+`lang/go/function_value_scope_test.go`; only its compiled *disposition*
+moved out of the ratchet.
+
+**What graduating it actually takes.** An earlier draft of this section
+called the real fix "its own const pool and stamp registry". That was
+imprecise on both counts, and the correction is worth recording because it
+makes the work smaller than it sounded:
+
+- The **const pool is per-`Program`, not per-registry** (`emit.go:714`), so
+  no split is needed; the **type** pool is already resolved `curReg`-first
+  at run time (`vm.go:1583`).
+- The **runtime half already ships**: `CompiledFn.Reg` (`bytecode.go:970`)
+  plus `enterUnit`'s `if p.Fns[u].Reg != nil { curReg = p.Fns[u].Reg }`
+  (`vm.go:1403`) already give a closure unit its own dispatch registry, and
+  `StartFnCompile`'s parameter is already named `fnReg` (`emit.go:3314`).
+- Of the four compile-side roles `r` plays in `recordClosureDispatch`,
+  three are **solved patterns the named foreign-fn path already uses**:
+  `shareCheckStateFrom` (`check/go/check_recovery.go:527`) for the
+  `CheckState`, and `fd.Registry.AnalysisScopeID()` for the memo key —
+  exactly what `check/go/check_fnbody.go:312,513` does.
+- The **one unsolved role is capture operands.**
+  `recordClosureDispatch` resolves them in the CALLER's emit tables
+  (`callable_words.go:474`), and `dynScopeRescue`'s fallback re-resolves
+  them at run time against the caller's `curReg` (`vm.go:1902`), so a
+  foreign module-scope capture has no operand home. Closing it needs either
+  a refusal for foreign closures carrying non-lexical captures, or a
+  registry-tagged dyn-scope operand so `OpLookupDynScope` can name
+  `fd.Registry`. A second, smaller asymmetry rides along: `enterBodyUnit`
+  brackets contexts on the CALLING registry (`vm.go:294`) while `curReg`
+  would be `fd.Registry`.
+
+Note this also revises §7.4's blanket hazard. The freeze/rebind ledger
+keying on one `DefTable` is a real constraint, but `shareCheckStateFrom`
+is the existing answer to it — the named foreign-fn path has been living
+with it since the M1 wave.
 
 ### 12.4 Not implemented
 
@@ -705,9 +748,11 @@ the wrong answer. Default mode falls back and produces the right value.
 
 ### 12.5 Evidence
 
-- `lang/spec/module-fnvalue-boundary.tsv` §4 — five rows: applying,
-  naming, a named `f:Function` parameter, a native callback seam, and the
-  negative (a module-private word stays private).
+- `lang/spec/module-fnvalue-boundary.tsv` §4 — four rows: applying,
+  naming, a named `f:Function` parameter, and the negative (a
+  module-private word stays private).
+- `lang/spec/frontier/frontier-fnvalue-scope.tsv` — the fifth, the native
+  callback seam, out in the frontier corpus because it islands (§12.3).
 - `lang/go/function_value_scope_test.go` — the five callback classes on
   **both** engines, plus a check-clean pass (the defect was invisible to
   `boru check`; the fix must not become a false positive there).
@@ -716,6 +761,18 @@ the wrong answer. Default mode falls back and produces the right value.
   the fix.
 - `core/go/invoke_fnhome_test.go` — `FnHome`'s three arms.
 
-The census, differential, refusal-ceiling and check-accuracy gates in
-`test/go/langspec` are unchanged by all of this, which is the load-bearing
-negative result: the fix moved no compiled row's disposition.
+**No pre-existing compiled row's disposition moved**, which is the
+load-bearing negative result for a change that touches core dispatch. It
+was measured rather than assumed: the corpus is 7366 rows / 7000 compiled
+/ 0 islanded / 0 refused before these spec rows, and 7370 / 7003 / 0 / 0
+after — every gate at its ratchet. An intermediate revision put all five
+rows in the main corpus and read 7371 / 7004 / **1** islanded, which is
+how the closure-lowering cost was found at all; moving that one row to the
+frontier is what §12.3 records. `make verify-bytecode` — the whole-corpus
+interpreter/compiler differential plus the race and args-aliasing gates —
+passes.
+
+The lesson worth keeping: the census, differential, refusal-ceiling and
+check-accuracy gates all passed while `TestCompiledCoverage` and
+`TestOnlyMetaFallsBack` did not. Running a subset of `test/go/langspec`
+and generalising to "the gates" is not a verification.

@@ -1,0 +1,17 @@
+# Cross-module fn value in a higher-order word's CLOSURE slot
+# (design/FUNCTION-VALUE-SCOPE.0.md §12.3).
+#
+# A function value resolves its free words in the module that DEFINED it. The
+# interpreter now does this at every seam; the compiler cannot yet, because it
+# lowers a higher-order word's fn operand to a closure unit compiled against
+# the CALLING module. Compiling this body against the caller silently baked the
+# caller's `lim` (100) and returned [] where the interpreter returns [3 4] — a
+# compile != interpret miscompile, check-clean. compiler/go/callable_words.go's
+# foreignFnHome therefore DECLINES the lowering, and `filter` islands.
+#
+# The island is correct, just slow: the OpFallback span runs the callback seam,
+# which routes the body to its defining registry (core.CallBoruFn). The row is
+# here rather than in lang/spec/module-fnvalue-boundary.tsv §4 because it is the
+# one row of that section the compiler cannot yet model, and the main corpus
+# ratchets islands to zero.
+import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/r}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]	[3 4]	a cross-module predicate resolves `lim` in its OWN module (2), not the caller's (100)
