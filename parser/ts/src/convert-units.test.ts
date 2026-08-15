@@ -17,7 +17,7 @@ import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 
 import { TAtom, TBoolean, TFloat } from '@boru-lang/core'
-import { resolveTextValue } from './convert.ts'
+import { processTemplateEscapes, resolveTextValue } from './convert.ts'
 
 describe('resolveTextValue', () => {
   it('classifies the boolean words as Booleans', () => {
@@ -53,5 +53,49 @@ describe('resolveTextValue', () => {
       assert.ok(v.vType.matches(TAtom), `${text} should conform to Atom`)
       assert.equal(v.asAtom(), text)
     }
+  })
+})
+
+// NUR026 — a template takes the QUOTED-STRING escape vocabulary. The
+// \b / \f / \v cases live here rather than in parser/spec/parse.tsv
+// because their canon carries a RAW control byte, which no single TSV
+// line can hold (that corpus's escape set is \n, \t, \\ only). The Go
+// twin is TestTemplateWave3Escapes / TestProcessTemplateEscapesWave3.
+describe('processTemplateEscapes (NUR026)', () => {
+  it('decodes the control characters, including the newly live ones', () => {
+    assert.equal(processTemplateEscapes('a\\nb'), 'a\nb')
+    assert.equal(processTemplateEscapes('a\\tb'), 'a\tb')
+    assert.equal(processTemplateEscapes('a\\rb'), 'a\rb')
+    assert.equal(processTemplateEscapes('a\\bb'), 'a\bb')
+    assert.equal(processTemplateEscapes('a\\fb'), 'a\fb')
+    assert.equal(processTemplateEscapes('a\\vb'), 'a\vb')
+  })
+
+  it('decodes hex and unicode escapes', () => {
+    assert.equal(processTemplateEscapes('a\\x41b'), 'aAb')
+    assert.equal(processTemplateEscapes('a\\u0041b'), 'aAb')
+    // Hex LETTERS in both cases — digits alone leave the a-f / A-F
+    // branches of parseHexEscape unexercised.
+    assert.equal(processTemplateEscapes('a\\x4ab'), 'aJb')
+    assert.equal(processTemplateEscapes('a\\x4Ab'), 'aJb')
+    assert.equal(processTemplateEscapes('a\\u00e9b'), 'a\u00e9b')
+    assert.equal(processTemplateEscapes('a\\u00E9b'), 'a\u00e9b')
+  })
+
+  it('drops the backslash on an unknown escape', () => {
+    // The behaviour change: `\z` was `\z`, and is `z` now — matching
+    // what the same sequence has always meant in "…" / '…'.
+    assert.equal(processTemplateEscapes('a\\zb'), 'azb')
+    assert.equal(processTemplateEscapes('a\\0b'), 'a0b')
+    // The template-only spellings need no case of their own.
+    assert.equal(processTemplateEscapes('a\\`b'), 'a`b')
+    assert.equal(processTemplateEscapes('a\\$b'), 'a$b')
+    assert.equal(processTemplateEscapes('a\\\\b'), 'a\\b')
+  })
+
+  it('keeps a malformed hex escape literal — the recorded residual', () => {
+    assert.equal(processTemplateEscapes('a\\xZZb'), 'axZZb')
+    assert.equal(processTemplateEscapes('a\\u00b'), 'au00b')
+    assert.equal(processTemplateEscapes('tail\\'), 'tail\\')
   })
 })

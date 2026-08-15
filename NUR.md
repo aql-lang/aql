@@ -59,7 +59,7 @@ keep the two in sync in the same commit.
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
-| [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — VERDICT 2026-08-15: resolve by fix (templates take the full quoted-string escape set) | 2026-07-22 uniformity review |
+| [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically — VERDICT 2026-08-14: resolve by fix (String-only grouping keys); Map-key identity stays open as its own line | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon) | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain — VERDICT 2026-08-15: resolve by fix (enumeration walks the prototype chain with masking; a `del` tombstone hides the key from BOTH) | 2026-08-02 NUR-EFFORT-TRIAGE probing |
@@ -1024,7 +1024,9 @@ the resolution plan (semantic vs deterministic ordering).
 
 ## NUR026 — Escape sets diverge between quoted strings and templates {#nur026}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Pending (NARROWED — the escape VOCABULARY is resolved by
+fix, 2026-08-15; the malformed-input REPORTING difference remains) ·
+**Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
 
 **Rule:** one escape vocabulary across string literal forms.
 **Divergence:** quoted strings (`"…"`/`'…'`) accept jsonic's full
@@ -1075,6 +1077,66 @@ spellings. The cost to watch and pin: a template containing a backslash
 sequence that is inert today would start escaping, so the fix wants
 rows for each newly-live escape and for the sequences that must stay
 literal. Stays **Pending** until it lands.
+
+### Resolved: the vocabulary (2026-08-15)
+
+`writeStringEscape` (Go) / `readStringEscape` (TS) is now the single
+escape vocabulary, and it is the quoted-string one, measured against
+jsonic rather than assumed:
+
+```
+\n \t \r \b \f \v   the control characters
+\xNN                one byte, two hex digits
+\uNNNN              one rune, four hex digits
+anything else       the character itself, backslash DROPPED
+```
+
+`size "z\x41z"` and its template spelling now agree. The last rule is
+the behaviour change the verdict asked to pin: `\z` is `z` and `\0` is
+`0` in a template exactly as in a quoted string, where both were
+previously literal. The template-only spellings need no case of their
+own — `\``` and `\$` fall into the default arm and yield the bare
+character, which is what they always meant.
+
+Pinned in `parser/spec/parse.tsv` (both ports, no shared code) for the
+newly-live escapes and the flipped unknown-escape row, and in the two
+ports' unit tests for `\b` / `\f` / `\v`, whose canon carries a raw
+control byte no single TSV line can hold.
+
+**The migration cost is real, and REGEX is where it lands.** A regex
+written in a template is the common case of "a backslash sequence that
+was inert": `\s`, `\[`, `\(`, `\?`, `\]` all used to survive to the
+regex engine and now lose their backslash at parse time. Every
+backslash a regex needs must be written DOUBLED in a template — `\\s`,
+not `\s` — exactly as it already had to be in a quoted string.
+
+The tree's own sources were the proof: a repo-wide scan for templates
+whose meaning changes found **two lines, both in
+`lang/go/modules/sift.boru`** — the size-suffix matcher (`\s`) and the
+pattern tokenizer (`\[`, `\(`, `\?`, `\]`) — and both broke loudly
+(`TestSiftBoruCoverage`: 13 failures, `error parsing regexp`) rather
+than silently. Both are migrated in the same commit. The loudness is
+the mitigating fact: a mangled regex fails to compile, so this is not
+the class of change that quietly returns wrong answers.
+
+### What REMAINS open — malformed input
+
+A malformed `\x` / `\u` (too few digits, or a non-hex digit) is
+reported differently by the two forms:
+
+```
+"a\xZZb"    ERROR: the escape sequence … does not encode a valid ASCII character
+`a\xZZb`    'axZZb'   — the literal reading, no error
+```
+
+The VOCABULARY is uniform; what a well-formed escape means no longer
+depends on the quoting form, which is the divergence this record was
+opened for. What is left is error REPORTING, and closing it needs an
+error channel the call site does not have: the template path is a
+jsonic `LexMatcher` returning a `*Token`, so raising means changing the
+lexer seam — the unified-lexer work the 2026-07-31 verdict sketched and
+the 2026-08-15 verdict did not ask for. Recorded rather than silently
+accepted, with a spec row pinning the residual.
 
 ---
 
