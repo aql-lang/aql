@@ -634,11 +634,14 @@ func TestReplicate(t *testing.T) {
 
 // --- group ---
 
+// Keys are Strings only (NUR030): an Atom key is refused, which is what
+// keeps the record's collision case — the type literal `Integer` and the
+// atom `Integer/q`, both rendering "Integer" — from re-opening.
 func TestGroupTwoArgs(t *testing.T) {
 	r := arrayTestReg()
 	result := runBoru(t, r, []Value{
 		NewWord("group"),
-		NewList([]Value{NewAtom("a"), NewAtom("b"), NewAtom("a")}),
+		NewList([]Value{NewString("a"), NewString("b"), NewString("a")}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 	})
 	m, _ := AsMap(result[0])
