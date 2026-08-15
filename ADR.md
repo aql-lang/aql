@@ -271,3 +271,21 @@ from boru's OWN grammar layer stay boru's, recorded in `NUR.md`. A
 temporary shim needs its upstream issue linked in the comment and a NUR
 record holding it open.
 [TABNAS-UPSTREAM-FIRST.0.md](design/TABNAS-UPSTREAM-FIRST.0.md)
+
+---
+
+## ADR-015 — Canon always round-trips {#adr-015}
+
+**Status:** Accepted · **Date:** 2026-08-15
+
+`canon v` renders boru source that re-parses to a value `deq` to `v`.
+Every value; no exempt kinds. A rendering no parser accepts — a debug
+spelling, a struct dump, a pointer address — is a defect, not a display
+choice: canon is the serialisation boundary, so a value that cannot be
+written cannot be moved, stored, or compared across ports. Exempting
+the awkward kinds would exempt exactly the interesting values.
+A property gate over the spec corpus enforces it in both
+ports, landing with a shrinking ledger of failing kinds. NUR031
+(fn/host `deq` reflexivity, name-independent fn canon) is a
+prerequisite.
+[CANON-ROUNDTRIP.0.md](design/CANON-ROUNDTRIP.0.md)

@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '4386328928605224030');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '619065559291493468');
 INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
@@ -29,6 +29,7 @@ INSERT INTO input_files VALUES ('../design/BASIC-CHECK-CUT.0.md', '1575227922863
 INSERT INTO input_files VALUES ('../design/BORU-INFOVIEW.0.md', '2090869893701264049', 24408);
 INSERT INTO input_files VALUES ('../design/BORU-SCRY.0.md', '3285728856019765195', 16574);
 INSERT INTO input_files VALUES ('../design/BORU-VIZ.0.md', '1948552775752251328', 25772);
+INSERT INTO input_files VALUES ('../design/CANON-ROUNDTRIP.0.md', '5849445988911864215', 6387);
 INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '7605485402373327537', 10411);
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
@@ -54,7 +55,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5798490287673095801', 500);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '3055252205383090327', 39880);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '2333493761551140693', 41244);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -74,6 +75,9 @@ INSERT INTO sources VALUES ('src:boru-scry', 'text', 'design/BORU-SCRY.0.md', 'b
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:boru-viz', 'text', 'design/BORU-VIZ.0.md', 'boru:viz diagram source generation proposal', NULL, 'boru-viz-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:canon-roundtrip', 'text', 'design/CANON-ROUNDTRIP.0.md', 'CANON-ROUNDTRIP — canon always round-trips', NULL, 'canon-roundtrip-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:cli-md', 'text', 'CLI.md', 'CLI.md subcommand reference', NULL, 'cli-md-2026-08', 'primary', '{
@@ -248,6 +252,8 @@ INSERT INTO entities VALUES ('ent:Document:6369673620858945660', 'Document', 'en
 INSERT INTO entities VALUES ('ent:Document:7583878321315113890', 'Document', 'design/TABNAS-UPSTREAM-FIRST.0.md', 'design/tabnas-upstream-first.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:7583878321315113890', 'role', 'ADR-014''s case study: why a tabnas parser defect is fixed upstream and never behind a boru shim — the five shims the 2026-08-10 upgrade retired, the two-workarounds-deep episode that earned the rule, and the boundary against boru''s own grammar-layer divergences');
 INSERT INTO entities VALUES ('ent:Document:7770110494347118706', 'Document', 'lang/go/CLAUDE.md', 'lang/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:8751021793288559660', 'Document', 'design/CANON-ROUNDTRIP.0.md', 'design/canon-roundtrip.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:8751021793288559660', 'role', 'ADR-015''s reasoning: why canon is a VALUE round-trip (deq) rather than a textual fixpoint, why no kind is exempt, the 2026-08-15 measurements showing functions render as a debug spelling keyed on the binding name and Store as a pointer-bearing Go struct dump, NUR031 as the equality prerequisite, and the two-port property gate that lands with a shrinking failure ledger');
 INSERT INTO entities VALUES ('ent:Document:8799605016341004740', 'Document', 'design/TS-PARITY-AUDIT.0.md', 'design/ts-parity-audit.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:8799605016341004740', 'role', 'the parser twin parity audit: the render defects the stream oracle found, the parser/spec corpus that replaced the self-referential battery, and the open divergences');
 INSERT INTO entities VALUES ('ent:Document:8875579216819453768', 'Document', 'design/GO-TS-PARITY.0.md', 'design/go-ts-parity.0.md', 'accepted');
@@ -538,6 +544,8 @@ INSERT INTO assertions VALUES ('ast:3384030660507785166', 'ent:Document:11622427
 INSERT INTO assertion_evidence VALUES ('ast:3384030660507785166', 'src:basic-check-cut', 'title', 'BASIC-CHECK-CUT.0 — removing `basic`''s dependency on `check`', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3410841662781299382', 'ent:Document:4790579719562719716', 'supports', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3410841662781299382', 'src:core-ts-coverage', 'The corpus is not the instrument', 'keep growing `core/spec` as a cross-engine spec, and stop treating it', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:3427363101233560350', 'ent:Document:8751021793288559660', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:3427363101233560350', 'src:canon-roundtrip', 'title', 'CANON-ROUNDTRIP — canon always round-trips', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3438862149494160814', 'ent:SoftwareModule:4589894982256403754', 'part_of', 'entity', 'ent:SoftwareModule:4361728672720029650', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3438862149494160814', 'src:go-tree', 'cmd/go/genhelp', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:351832070028345115', 'ent:SoftwareModule:4125120573695539350', 'part_of', 'entity', 'ent:SoftwareModule:5138375578915662736', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -720,6 +728,8 @@ INSERT INTO assertions VALUES ('ast:8927535347315204632', 'ent:Concept:609441131
 INSERT INTO assertion_evidence VALUES ('ast:8927535347315204632', 'src:cli-md', 'The vault', 'HTTP wire protocol for secret provision', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8933845283517661039', 'ent:SoftwareModule:8376380866775607244', 'part_of', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8933845283517661039', 'src:go-tree', 'lang/go/formatter', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:8946871445019255259', 'ent:Document:8751021793288559660', 'supports', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:8946871445019255259', 'src:canon-roundtrip', 'The contract', '`canon v` renders a value as boru source text which, re-parsed,', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8955705768046061429', 'ent:Document:203047846460430642', 'supports', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8955705768046061429', 'src:decl-grammar', 'The contract', 'parser/go/grammar.json is the single source of the boru grammar''s STRUCTURE, loaded by both parsers', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:897358123486782210', 'ent:Document:3294415633888265368', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
