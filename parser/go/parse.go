@@ -402,7 +402,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]core.Value, error) {
 						return nil, err
 					}
 					// emitPrimary appends exactly one value on success.
-					seg.KeyLit = tmp[0]
+					seg.KeyLit = reachSegmentName(keyItem, tmp[0], kpos)
 				}
 				segs = append(segs, seg)
 			}
@@ -1463,6 +1463,44 @@ func wordBaseName(text string) string {
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
+// reachSegmentName restores the dot-access lowering identity for a segment
+// spelled as a BARE NAME. Dot access IS a `get`/`getr` chain
+// (design/REACH.10.md is the single source of truth for the lowering), so
+// `m.k` and `m get k/q` are meant to differ in spelling only. They did not:
+// the reserved VALUE literals — `none`, `end`, `inf`, `-inf`, `nan` —
+// resolve to their values in parseWord before the chain sees them, so the
+// segment arrived as a marker or a Float and no `dot` signature matched
+// (NUR066). The `/q` form never had the problem, because a modifier suffix
+// returns an atom before the literal switch is reached, which is why
+// `m get none/q` read the field all along.
+//
+// The rule is DERIVED rather than a list of names: a segment whose source
+// token is an unquoted valid word name that parseWord turned into
+// something OTHER than a Word is exactly a reserved literal, and as a
+// field name it means the name. A new literal joins parseWord and this
+// stays in step with no second edit.
+//
+// Non-names are untouched and keep their literal readings: `m.1` indexes,
+// `m.'k'` is a string key, `m.(expr)` is computed (handled by the caller),
+// and the punctuation-spelled markers fail ValidateWordName — `;` among
+// them, which is the reason the grammar hands the semicolon its own text
+// instead of rewriting it to `end`. `m.;` therefore stays the error it was
+// rather than silently reading a field called `end`.
+func reachSegmentName(keyItem any, key core.Value, pos core.SrcPos) core.Value {
+	if core.IsWord(key) {
+		return key
+	}
+	node, _ := deSite(keyItem)
+	text, ok := node.(jsonic.Text)
+	if !ok || text.Quote != "" {
+		return key
+	}
+	if core.ValidateWordName(text.Str) != nil {
+		return key
+	}
+	return withPos(core.NewWord(text.Str), pos)
+}
+
 func parseWord(text string) (core.Value, error) {
 	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, valid := scanWordModifier(text)
 
@@ -1568,8 +1606,14 @@ func parseWord(text string) (core.Value, error) {
 	// engine recognises them by Parent identity (parens, end / ';').
 	// These would otherwise become plain Word values that the engine
 	// would have to name-dispatch in stepWord.
+	//
+	// `;` carries its OWN text rather than being rewritten to `end` in
+	// the grammar (as `)` already does): the two spell the same value but
+	// are not the same source, and a dot-path segment has to tell them
+	// apart — `m.end` names a field, `m.;` is a stray terminator
+	// (reachSegmentName, NUR066).
 	switch name {
-	case "end":
+	case "end", ";":
 		return core.NewEnd(), nil
 	case ")":
 		return core.NewCloseParen(), nil

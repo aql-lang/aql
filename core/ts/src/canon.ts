@@ -31,6 +31,7 @@ import {
   OrderedMap,
   Value,
   asReach,
+  isEnd,
   isReach,
 } from "./value.ts";
 
@@ -382,6 +383,12 @@ function canonReachToken(v: Value): string {
   if (v.isParenExpr() && Array.isArray(v.data))
     return "(" + canonReachTokens(v.data as Value[]) + ")";
   if (isReach(v)) return canonReach(v);
+  // The end marker renders as `;` inside a reach, never as `end`. A bare
+  // `end` in reach-token position is a WORD — a field name in a segment, an
+  // ordinary word in a paren body (NUR066) — so spelling the marker `end`
+  // here would re-parse as that word and silently change the program. `;`
+  // re-parses to this marker.
+  if (isEnd(v)) return ";";
   return canonValue(v);
 }
 

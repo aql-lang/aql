@@ -104,3 +104,24 @@ def i 0 end [[1 2] [3 4]] get i	[1 2]	get-evaluated index into a nested list
 # ---- Module export: dotted member access ----
 import "boru:math-util" end MathUtil.sqrt 16.0	4.0	. over a module export resolves the member fn
 import "boru:math-util" end MathUtil dot sqrt 16.0	4.0	dot is the explicit form of the . member access
+
+# ---- Reserved value literals as field names (NUR066) ----
+# Dot access IS a get/getr chain (design/REACH.10.md), so `m.k` and
+# `m get k/q` must differ in spelling only. The reserved VALUE literals used
+# to resolve to their values before the chain saw the segment, so `m.none`
+# and `m.end` failed to dispatch while `m get none/q` read the field. The
+# rows below pin the identity for the whole class, positively (dot reads it)
+# and by agreement (dot and get return the same thing).
+{none:1 end:2 inf:3 nan:4}.none	1	`none` as a dot segment names the field
+{none:1 end:2 inf:3 nan:4}.end	2	`end` as a dot segment names the field
+{none:1 end:2 inf:3 nan:4}.inf	3	`inf` as a dot segment names the field
+{none:1 end:2 inf:3 nan:4}.nan	4	`nan` as a dot segment names the field
+{-inf:5}.-inf	5	`-inf` too — a leading hyphen is a legal word name
+def m {none:1 end:2} end (m.none) eq (m get none/q)	true	dot and get agree on `none` — the lowering identity
+def m {none:1 end:2} end (m.end) eq (m get end/q)	true	dot and get agree on `end` — the lowering identity
+{a:{none:6}}.a.none	6	a reserved-literal segment chains like any other
+{none:7}!.none	7	the strict getr segment takes the name too
+{a:1}.none	None	a missing reserved-literal field is an ordinary forgiving miss
+{a:1}!.none	ERROR:not_found	getr on a missing reserved-literal field raises, like any other key
+def m {none:1 k:2} end (m.k end 9)	2 9	the negative: a marker in EXPRESSION position still terminates, it is only the SEGMENT that is a name
+def m {k:2} end def x m.k ; add x 1	3	`;` still terminates a statement immediately after a reach

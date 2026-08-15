@@ -719,7 +719,7 @@ export function convertTopLevelItems(items: unknown[], d: ParseDepth): Value[] {
             const tmp: Value[] = []
             emitPrimary(tmp, keyItem, kpos, d)
             // emitPrimary appends exactly one value on success.
-            seg.keyLit = tmp[0]!
+            seg.keyLit = reachSegmentName(keyItem, tmp[0]!, kpos)
           }
           segs.push(seg)
         }
@@ -1809,6 +1809,54 @@ function wordBaseName(text: string): string {
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
+// BARE_WORD_NAME mirrors core.ValidateWordName's character rule on the Go
+// side (that rule is not ported to core/ts): first character [a-z_-$], the
+// rest [a-z0-9_-$]. ValidateWordName additionally rejects the all-`$` and
+// all-`-` names; those are not repeated here because they cannot reach this
+// point — parseWord returns a WORD for both, and the only caller
+// (reachSegmentName) has already returned by then. The shared `parser/spec`
+// rows both ports run are what actually keep the two in step; this is a
+// convenience, not a second source of truth.
+const BARE_WORD_NAME = /^[a-z_$-][a-z0-9_$-]*$/
+
+// reachSegmentName restores the dot-access lowering identity for a segment
+// spelled as a BARE NAME. Dot access IS a `get`/`getr` chain
+// (design/REACH.10.md is the single source of truth for the lowering), so
+// `m.k` and `m get k/q` are meant to differ in spelling only. They did not:
+// the reserved VALUE literals — `none`, `end`, `inf`, `-inf`, `nan` —
+// resolve to their values in parseWord before the chain sees them, so the
+// segment arrived as a marker or a Float and no `dot` signature matched
+// (NUR066). The `/q` form never had the problem, because a modifier suffix
+// returns an atom before the literal switch is reached, which is why
+// `m get none/q` read the field all along.
+//
+// The rule is DERIVED rather than a list of names: a segment whose source
+// token is an unquoted valid word name that parseWord turned into
+// something OTHER than a Word is exactly a reserved literal, and as a
+// field name it means the name. A new literal joins parseWord and this
+// stays in step with no second edit.
+//
+// Non-names are untouched and keep their literal readings: `m.1` indexes,
+// `m.'k'` is a string key, `m.(expr)` is computed (handled by the caller),
+// and the punctuation-spelled markers fail the name rule — `;` among them,
+// which is the reason the grammar hands the semicolon its own text instead
+// of rewriting it to `end`. `m.;` therefore stays the error it was rather
+// than silently reading a field called `end`.
+function reachSegmentName(keyItem: unknown, key: Value, pos: SrcPos): Value {
+  if (key.isWord()) {
+    return key
+  }
+  const [node] = deSite(keyItem)
+  const text = asText(node)
+  if (text === undefined || text.quote !== '') {
+    return key
+  }
+  if (!BARE_WORD_NAME.test(text.str)) {
+    return key
+  }
+  return withPos(newWord(text.str), pos)
+}
+
 export function parseWord(text: string): Value {
   const m = scanWordModifier(text)
   const name = m.base
@@ -1918,8 +1966,15 @@ export function parseWord(text: string): Value {
   // engine recognises them by Parent identity (parens, end / ';').
   // These would otherwise become plain Word values that the engine
   // would have to name-dispatch in stepWord.
+  //
+  // `;` carries its OWN text rather than being rewritten to `end` in
+  // the grammar (as `)` already does): the two spell the same value but
+  // are not the same source, and a dot-path segment has to tell them
+  // apart — `m.end` names a field, `m.;` is a stray terminator
+  // (reachSegmentName, NUR066).
   switch (name) {
     case 'end':
+    case ';':
       return newEnd()
     case ')':
       return newCloseParen()

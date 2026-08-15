@@ -254,6 +254,24 @@ a/su	word(a)	-
 <a n/>	<a n=""/>	-
 <>	ERR xml: expected a tag name after '<'	-
 a.b	a.b	-
+# NUR066 — a dot segment spelled as a BARE NAME is a field name, even when
+# that name is one of the parser's reserved VALUE literals. Dot access IS a
+# get/getr chain (design/REACH.10.md), so `m.k` and `m get k/q` must differ in
+# spelling only; `none`/`end`/`inf`/`-inf`/`nan` used to resolve to their
+# values before the chain saw them and no `dot` signature matched.
+a.none	a.none	a reserved value literal is a field name in a segment (NUR066)
+a.end	a.end	`end` names the field, not the end marker (NUR066)
+a.inf	a.inf	the IEEE literals are names here too (NUR066)
+a.nan	a.nan	-
+a.-inf	a.-inf	a leading hyphen is a legal word name (NUR066)
+a!.none	a!.none	the getr segment follows the same rule (NUR066)
+a.none.end	a.none.end	chained reserved-literal segments (NUR066)
+$.end	$.end	a receiverless lens takes the name too (NUR066)
+# The negative: a stray terminator is NOT a field name. `;` keeps its own
+# grammar text rather than being rewritten to `end`, so it stays the end
+# marker and `a.;` stays the error it was — and canon spells it back as `;`,
+# not `end`, which would re-parse as the field name above.
+a.;	a.;	a semicolon segment stays the end marker, distinct from a.end (NUR066)
 a.b /s	sugar(stack-args) a.b	reach receiver followed by standalone stack modifier
 a.'k'	a.'k'	-
 a.0	a.0	-
