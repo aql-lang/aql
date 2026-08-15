@@ -48,7 +48,7 @@ import (
 )
 
 const (
-	parseSpecRowCount     = 720
+	parseSpecRowCount     = 724
 	divergentSpecRowCount = 9
 	nestingSpecRowCount   = 18
 	shapeSpecRowCount     = 28

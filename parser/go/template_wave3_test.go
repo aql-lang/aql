@@ -7,7 +7,10 @@ import (
 )
 
 // TestTemplateWave3Escapes pins every escape sequence in template literal
-// text, including the unknown-escape passthrough.
+// text. The vocabulary is the QUOTED-STRING one (NUR026): the control
+// characters, \xNN, \uNNNN, and an unknown escape yielding the bare
+// character. `a\zb` was `a\zb` before the fix and is `azb` now — the
+// behaviour change the record asked to pin, in both directions.
 func TestTemplateWave3Escapes(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{"`a\\nb`", "a\nb"},
@@ -16,7 +19,15 @@ func TestTemplateWave3Escapes(t *testing.T) {
 		{"`a\\\\b`", "a\\b"},
 		{"`a\\`b`", "a`b"},
 		{"`a\\$b`", "a$b"},
-		{"`a\\zb`", "a\\zb"}, // unknown escape kept as-is
+		{"`a\\zb`", "azb"},     // unknown escape: backslash DROPPED (was `a\zb`)
+		{"`a\\0b`", "a0b"},     // \0 is the digit, exactly as in "a\0b"
+		{"`a\\bb`", "a\bb"},    // newly live: backspace
+		{"`a\\fb`", "a\fb"},    // newly live: formfeed
+		{"`a\\vb`", "a\vb"},    // newly live: vertical tab
+		{"`a\\x41b`", "aAb"},   // newly live: two-hex-digit byte
+		{"`a\\u0041b`", "aAb"}, // newly live: four-hex-digit rune
+		{"`a\\xZZb`", "axZZb"}, // MALFORMED \x stays literal (see readStringEscape)
+		{"`a\\u00b`", "au00b"}, // MALFORMED \u likewise
 	}
 	for _, c := range cases {
 		vals := mustParseWave3(t, c.src)
@@ -42,8 +53,20 @@ func TestProcessTemplateEscapesWave3(t *testing.T) {
 		`a\\b`:       `a\b`,
 		"a\\`b":      "a`b",
 		`a\$b`:       "a$b",
-		`a\qb`:       `a\qb`,
-		`tail\`:      `tail\`, // lone trailing backslash is preserved
+		`a\qb`:       `aqb`, // unknown escape: bare character (NUR026)
+		`a\x41b`:     "aAb",
+		`a\u0041b`:   "aAb",
+		// Hex LETTERS in both cases — digits alone leave parseHexEscape's
+		// a-f / A-F branches unexercised.
+		`a\x4ab`:   "aJb",
+		`a\x4Ab`:   "aJb",
+		`a\u00e9b`: "a\u00e9b",
+		`a\u00E9b`: "a\u00e9b",
+		// Short runs and non-hex digits fall back to the literal reading.
+		`a\x4`:   "ax4",
+		`a\u004`: "au004",
+		`a\bb`:   "a\bb",
+		`tail\`:  `tail\`, // lone trailing backslash is preserved
 	}
 	for in, want := range cases {
 		if got := processTemplateEscapes(in); got != want {
