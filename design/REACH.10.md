@@ -175,6 +175,18 @@ Two implementation stages:
 
 Semantics are **unchanged** — the node lowers to / calls the same `get`/`getr`.
 
+That identity is a **contract on the SEGMENT, not only on the chain**: `m.k`
+and `m get k/q` differ in spelling only, for every `k` a user can write. It
+held for `def`, `fn`, `if`, `case`, `true` … and failed for the parser's
+reserved VALUE literals — `none`, `end`, `inf`, `-inf`, `nan` — which
+resolved to their values before the chain saw the segment, so no `dot`
+signature matched while `get` read the field (NUR066). A segment spelled as
+a bare name is now the NAME, derived from what `parseWord` produced rather
+than from a list, so a new literal cannot silently re-open the hole. The
+punctuation-spelled markers are excluded (they are not word names), which is
+why the grammar hands `;` its own text instead of rewriting it to `end`:
+`m.end` reads a field, `m.;` is a stray terminator and still an error.
+
 ---
 
 ## 5. Preservation contract (does this keep the existing sugars?)
@@ -219,6 +231,13 @@ string key → `."x"`; computed key → `.(expr)` (canon of `KeyExpr`);
 `read ∘ print` round-trips: `canon (codequote m.a.b)` → `m.a.b`. Add to the
 printer round-trip audit (LISP-ANALYSIS §8 #10). This is what makes a quoted
 reach *walkable* (one node with `Receiver` + `Segments`) rather than an idiom.
+
+One rendering follows from §4's lowering identity rather than from the
+surface: the **end marker inside a reach prints as `;`, never as `end`**. A
+bare `end` in reach-token position is a WORD — a field name in a segment, an
+ordinary word in a paren body — so spelling the marker `end` would re-parse
+as that word and silently change the program. The marker can only have come
+from a `;`, and `;` is what re-parses to it (NUR066, resolved 2026-08-15).
 
 ---
 
