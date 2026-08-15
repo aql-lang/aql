@@ -217,7 +217,17 @@
       locator: "design/ADR-004-REFINEMENT.0.md"
       title: "ADR-004 refinement — argument-handling categories"
       retrieved_at: null
-      content_hash: "adr-004-refinement-2026-08-14"
+      content_hash: "adr-004-refinement-2026-08-15"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
+      id: "src:canon-roundtrip"
+      kind: "text"
+      locator: "design/CANON-ROUNDTRIP.0.md"
+      title: "CANON-ROUNDTRIP — canon always round-trips"
+      retrieved_at: null
+      content_hash: "canon-roundtrip-2026-08-15"
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
@@ -345,7 +355,9 @@
     { key: "boru-viz", type: "Document", label: "design/BORU-VIZ.0.md"
       attributes: { role: "the boru:viz proposal: pure diagram-source generation (Mermaid + DOT, D2 later) from arbitrary data structures — code generation only, written in boru, with the shared graph/tree/trace/schema contract its §3 pins for boru:scry and every other producer" } }
     { key: "adr-004-refinement", type: "Document", label: "design/ADR-004-REFINEMENT.0.md"
-      attributes: { role: "draft material for a refined ADR-004 (NUR023): the four argument-handling categories (forward-eligible, mixed-barrier, stack-only, quoting slots), BarrierPos semantics and its five resolution sites, the stack-only closed list with a two-criterion admission test that admits both apply and __casematch, and the composition rationale — measured at 97 intermediate-barrier signatures of 493, distinguished from the 20-word mixed-overload count" } }
+      attributes: { role: "ADR-004's reasoning note, PROMOTED 2026-08-15 into the record's four-categories amendment (NUR023, retired): the four argument-handling categories (forward-eligible, mixed-barrier, stack-only, quoting slots), BarrierPos semantics and its five resolution sites, the stack-only closed list with a two-criterion admission test that admits both apply and __casematch, and the composition rationale — measured at 97 intermediate-barrier signatures of 493, distinguished from the 20-word mixed-overload count" } }
+    { key: "canon-roundtrip", type: "Document", label: "design/CANON-ROUNDTRIP.0.md"
+      attributes: { role: "ADR-015's reasoning: why canon is a VALUE round-trip (deq) rather than a textual fixpoint, why no kind is exempt, the 2026-08-15 measurements showing functions render as a debug spelling keyed on the binding name and Store as a pointer-bearing Go struct dump, NUR031 as the equality prerequisite, and the two-port property gate that lands with a shrinking failure ledger" } }
     { key: "boru-scry", type: "Document", label: "design/BORU-SCRY.0.md"
       attributes: { role: "the boru:scry proposal: the mechanism whereby a boru system gains knowledge of itself as plain data — census, per-word, graph, schema and trace words curated over existing engine seams, and the plan for resolving the overlap with boru:debug" } }
     { key: "boru-infoview", type: "Document", label: "design/BORU-INFOVIEW.0.md"
@@ -619,6 +631,16 @@
       object: { kind: "entity", entity: "forward" }
       evidence: [{ source: "src:adr-004-refinement", locator: "Why it exists",
         quote: "ADR-004 describes a default but not a system." }]
+      confidence: 0.95 }
+    { subject: "canon-roundtrip", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:canon-roundtrip", locator: "title",
+        quote: "CANON-ROUNDTRIP — canon always round-trips" }]
+      confidence: 0.95 }
+    { subject: "canon-roundtrip", predicate: "supports"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:canon-roundtrip", locator: "The contract",
+        quote: "`canon v` renders a value as boru source text which, re-parsed," }]
       confidence: 0.95 }
     { subject: "state-machines", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }

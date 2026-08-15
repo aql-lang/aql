@@ -59,19 +59,15 @@ keep the two in sync in the same commit.
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
-| [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list — NARROWED (apply/__casematch pinned in REFERENCE's closed list; the 0-arg doc split reconciled as a byte-identical idiom); VERDICT 2026-08-14: draft the refinement as a `design/` note, promotion to ADR decided separately | 2026-07-22 uniformity review |
-| [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — VERDICT 2026-08-15: resolve by fix (templates take the full quoted-string escape set) | 2026-07-22 uniformity review |
-| [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically — VERDICT 2026-08-14: resolve by fix (String-only grouping keys); Map-key identity stays open as its own line | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
-| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon) | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
+| [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
+| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon); REFINED 2026-08-15 — the halves are one root cause (the binding name in FnDefInfo.Name drives eq, canon and tcmp alike), so: BOX FnDefInfo for eq (reference) and compare signatures+body for deq (NUR011 as written), canon renders the ANONYMOUS fn literal, and PR #366's native-callback seam lands first. Design-unblocked, sequenced | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain — VERDICT 2026-08-15: resolve by fix (enumeration walks the prototype chain with masking; a `del` tombstone hides the key from BOTH) | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
-| [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon — VERDICT 2026-08-15: resolve by fix (source-form renderers for the sugar kinds, the `/r` and `/N` modifiers and the paren group, on BOTH engines) | 2026-08-08 Go/TS canon parity work |
+| [NUR072](#nur072) | Three sugar kinds (mini, type-bound, lambda) still canon in DEBUG form after NUR059 — withdrawn there because the renders do not round-trip: SugarInfo does not retain the mini delimiter, and type-bound renders its Items rather than the bound's text; also carries the undecided bare-word question (`word(foo)` vs `foo`, 175 corpus rows) | NUR059's fix, 2026-08-15 |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
-| [NUR066](#nur066) | `end` and `none` are reachable as map keys by `get`/`getr` but not by the dot-path sugar that lowers to them; every other keyword works in both — VERDICT 2026-08-14: resolve by fix (a marker-valued dot segment uses its source text) | surfaced while verifying `design/STATE-MACHINES.0.md` §11.3 examples (PR #352) |
-| [NUR069](#nur069) | A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither — NARROWED: the none-vs-Any axis is resolved by fix (`Any ∩ none = none` at every boundary); the CallBoru return asymmetry remains; VERDICT 2026-08-15 on the remaining axis: resolve by fix (enforce the CallBoru return contract) | NUR068's resolution (the reverted `boru:test` constructor annotations) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -970,129 +966,6 @@ distinct miss sentinel exists; it does not reopen this record.
 
 ---
 
-## NUR023 — Stack-only registrations outside ADR-004's closed list {#nur023}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** ADR-004 — every word ships forward-eligible
-(`BarrierPos: -1`); the only stack-only words are the traditional
-Forth vocabulary, pinned as a closed list in REFERENCE; a new
-stack-only word "needs the same justification weight as a new
-init-time panic".
-**Divergence:** two argument-taking words carry `BarrierPos: 0`
-(stack-only) with a code-comment-only rationale and are not in the
-pinned list — `apply`'s one-argument `[Function]` signature, and
-`__casematch`'s two-argument `[Any Any]` signature (user-reachable and
-describable: `boru describe
-__casematch` prints "Precedence: stack"; the `__` prefix is convention,
-not enforcement).
-
-Secondarily, the guidance for **0-arg** words is itself split, and the
-registrations follow it inconsistently. ADR-004 says every word ships
-forward-eligible (`BarrierPos: -1`) "unless their semantics are
-intrinsically about the stack", while `design/go-modules/README.10.md`
-:156 and `RUNTIME.10.md`:50-54 both say "zero-arg constants use
-`BarrierPos: 0`" and call that "correct" because there is no arg to
-collect. Most 0-arg words follow the latter (`now`, `math-pi`/`math-e`,
-the clock words, `break`/`continue`, `gensym`, `__folder`/`__file`,
-`spacer`); `boru:io`'s `stdin`/`stdout`/`stderr` use `-1` instead. The
-split is provably inert — `eng/go/registry.go:1594-1596` normalizes
-`-1` to `TotalArgs()`, which is 0 at zero args, so the stored
-signatures are byte-identical — but two documents give opposite
-defaults for the same case, and that is what the refined ADR has to
-settle.
-**Evidence** (paths relative to the repo root):
-`lang/go/native/native_ref.go:50-67` (`apply`, rationale comment at
-:51-54, `BarrierPos: 0` at :67);
-`lang/go/native/native_control.go:131-137` (`__casematch`);
-REFERENCE.md §"Stack manipulation" (the pinned list);
-`lang/go/native/time_async_module.go:26`;
-`lang/go/modules/math.go:342` (`math-pi`; `math-e` at :353 is the same
-shape); `lang/go/native/native_fileinfo.go:25,33`;
-`lang/go/modules/tui_widgets.go:332`;
-`lang/go/native/io_module.go:91`.
-**Documentation status:** undocumented, no longer contradicted. Until
-2026-08-02 it was worse than undocumented: `boru describe apply`
-printed "Precedence: forward — looks ahead for arguments first. apply
-x y <=> y apply x <=> y x apply", and the stated equivalence is false
-for the `[Function]` row (`apply f/r 5` raises a signature_error,
-`5 f/r apply` works). The cause was broader than this record's two
-words — the renderer branched on a single binary `info.ForwardArgs`
-flag, so EVERY mixed-barrier word printed the full forward
-equivalence chain including a spelling it refuses. Measured blast
-radius: **20 of the 249 describable core words** — `or`, `otherwise`,
-`get`, `getr`, `dot`, `dotr`, `has`, `apply`, `guard`, `error`,
-`exposes`, `of`, `extends`, `default`, `tor`, `tand`, `teq`, `is`,
-`as`, `tis`. `dot` is the subject of NUR049 (16 of its 18 rows are
-mixed-barrier); `or` is the plainest: the help advertised
-`or x y <=> y or x <=> y x or`, and `or false true` raises
-`insufficient_args` while `false true or` → true. Its sibling `and`
-carries the `-1` sentinel and is genuinely all-forward, so the two
-connectives really do differ — the help just could not say so.
-
-That misreport is **fixed**. `precedenceShape` in
-`lang/go/native/help/help.go` classifies a word by whether its
-signatures agree about argument sourcing; `writePrecedenceMixed`
-renders the disagreeing case as a per-group count plus the one
-spelling that satisfies every row — full stack form, which always
-dispatches because a forward-eligible position accepts a stack value
-too (verified: `5 inc/r apply` → 6, `xs $.1 apply` → the indexed
-element, `m a/q dot` → the field). Uniform words are untouched:
-`add` still prints the forward chain, `dup` the stack line, and a
-module export whose wrapper carries the unnormalized `-1` sentinel
-(`ArrayUtil.indices`) still reads as forward.
-Tests: `lang/go/native/help/precedence_test.go` pins all three shapes
-and both directions — a genuinely uniform word must keep its
-unqualified line, and a mixed one must never claim one.
-
-What remains undocumented is the *rule* the diagnostic now reports
-around: ADR-004's closed list contains neither exception, and nothing
-states why a word occupies its category. That is the gap the verdict
-below directs at, and it is why this record stays Pending.
-
-**Verdict (maintainer, 2026-07-31 — resolve by ADR refinement,
-`design/NUR-RESOLUTION-PLAN.0.md`):** ADR-004 is **incomplete**, and
-the divergences recorded here are symptoms of the gap. The ADR should
-be refined — on explicit maintainer instruction, per the ADR-addition
-rule — to describe: **barrier positions** (`BarrierPos` and what each
-value means), the **argument-handling categories** a word can occupy
-(forward-eligible, mixed-barrier, stack-only, quoting slots), the
-**stack-only behaviour** and its closed list (including `apply`'s
-`[Function]` case or its removal), and the **chaining rationale**
-(why forward collection composes the way it does). Diagnostics should
-then *explain* why a word occupies its category rather than merely
-reporting a failed dispatch. Recorded as ADR candidate 4 in the
-resolution plan; this record stays Pending until the refined ADR
-either absorbs the exceptions into the documented rule or the
-registrations are changed to conform.
-
-**Narrowed (2026-08-14):** the two divergence axes that were pure
-documentation debt are closed. `apply`'s `[Function]` overload and
-`__casematch` are PINNED in REFERENCE §"Stack manipulation" with their
-semantic rationales (`args… fn apply` is intrinsically about the stack
-— ADR-004's own exception clause; `__casematch` is the `case`
-desugar's internal, always-stack-fed probe), so no argument-taking
-stack-only registration sits outside the closed list any more. The
-0-arg guidance split is reconciled in both documents
-(`design/go-modules/README.10.md`, `RUNTIME.10.md`): at zero args
-`-1` and `0` are byte-identical after registration normalization, so
-the passages now describe an idiom choice, not competing defaults.
-What remains Pending is exactly the refined-ADR axis above.
-
-**Verdict (maintainer, 2026-08-14 — draft as a design note first):**
-write the refinement's material as a `design/` note covering all four
-topics the 2026-07-31 verdict named — barrier positions and what each
-`BarrierPos` value means, the argument-handling categories a word can
-occupy (forward-eligible, mixed-barrier, stack-only, quoting slots),
-stack-only behaviour and its closed list, and the chaining rationale
-— and decide on promoting it into `ADR.md` **separately**. This keeps
-the ADR rule's discovery/decision split intact: the note is
-discovery, however settled it reads, and only an explicit instruction
-turns it into an ADR entry. The record stays **Pending** until that
-promotion decision is made, not merely until the note is written.
-
----
-
 ## NUR024 — Two orderings by design: semantic (`cmp`) and deterministic (`tcmp`) {#nur024}
 
 **Status:** Allowed · **Date:** 2026-07-31 (recorded Pending
@@ -1149,7 +1022,9 @@ the resolution plan (semantic vs deterministic ordering).
 
 ## NUR026 — Escape sets diverge between quoted strings and templates {#nur026}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Pending (NARROWED — the escape VOCABULARY is resolved by
+fix, 2026-08-15; the malformed-input REPORTING difference remains) ·
+**Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
 
 **Rule:** one escape vocabulary across string literal forms.
 **Divergence:** quoted strings (`"…"`/`'…'`) accept jsonic's full
@@ -1201,138 +1076,65 @@ sequence that is inert today would start escaping, so the fix wants
 rows for each newly-live escape and for the sequences that must stay
 literal. Stays **Pending** until it lands.
 
----
+### Resolved: the vocabulary (2026-08-15)
 
-## NUR030 — `group` co-groups deq-distinct keys that render identically {#nur030}
+`writeStringEscape` (Go) / `readStringEscape` (TS) is now the single
+escape vocabulary, and it is the quoted-string one, measured against
+jsonic rather than assumed:
 
-**Status:** Pending · **Recorded:** 2026-07-23 · **Surfaced by:**
-PR #309 review (Codex P1) · **Re-opened:** 2026-07-31 (maintainer
-review, `design/NUR-RESOLUTION-PLAN.0.md`; was Allowed 2026-07-24 —
-the allowance's reasoning is retained below as data, not as a verdict)
+```
+\n \t \r \b \f \v   the control characters
+\xNN                one byte, two hex digits
+\uNNNN              one rune, four hex digits
+anything else       the character itself, backslash DROPPED
+```
 
-All samples below are spelled bare (`group …`) for readability; `group`
-lives in `boru:array-util`, so every one runs as
-`import "boru:array-util"  ArrayUtil.group …` (a bare `group` is
-undefined — the name resolves in `describe` to the unrelated
-`boru:query` word).
+`size "z\x41z"` and its template spelling now agree. The last rule is
+the behaviour change the verdict asked to pin: `\z` is `z` and `\0` is
+`0` in a template exactly as in a quoted string, where both were
+previously literal. The template-only spellings need no case of their
+own — `\``` and `\$` fall into the default arm and yield the bare
+character, which is what they always meant.
 
-### The uniform rule
+Pinned in `parser/spec/parse.tsv` (both ports, no shared code) for the
+newly-live escapes and the flipped unknown-escape row, and in the two
+ports' unit tests for `\b` / `\f` / `\v`, whose canon carries a raw
+control byte no single TSV line can hold.
 
-The collection words operate on `deq` classes (NUR011 / NUR015): one
-group per value, membership by deep value equality.
+**The migration cost is real, and REGEX is where it lands.** A regex
+written in a template is the common case of "a backslash sequence that
+was inert": `\s`, `\[`, `\(`, `\?`, `\]` all used to survive to the
+regex engine and now lose their backslash at parse time. Every
+backslash a regex needs must be written DOUBLED in a template — `\\s`,
+not `\s` — exactly as it already had to be in a quoted string.
 
-### The mechanism (clarified 2026-07-31)
+The tree's own sources were the proof: a repo-wide scan for templates
+whose meaning changes found **two lines, both in
+`lang/go/modules/sift.boru`** — the size-suffix matcher (`\s`) and the
+pattern tokenizer (`\[`, `\(`, `\?`, `\]`) — and both broke loudly
+(`TestSiftBoruCoverage`: 13 failures, `error parsing regexp`) rather
+than silently. Both are migrated in the same commit. The loudness is
+the mitigating fact: a mangled regex fails to compile, so this is not
+the class of change that quietly returns wrong answers.
 
-`group` is **not higher-order** — it takes no function. Two forms:
+### What REMAINS open — malformed input
 
-- **1-arg** `group [list]`: each element becomes a Map key; collected
-  under it is the list of **indices** where that element occurs —
-  `group [1 2 3]` → `{1:[0] 2:[1] 3:[2]}`; `group [1 1.0 2]` →
-  `{1:[0 1] 2:[2]}` (1 and 1.0 are one `deq` class). The element is
-  the key and the index is the bucketed payload, not the other way
-  round.
-- **2-arg** `group [keys] [values]`: bucket each value under its
-  parallel key — `group ['a' 'b' 'a'] [1 2 3]` → `{'a':[1 3] 'b':[2]}`.
+A malformed `\x` / `\u` (too few digits, or a non-hex digit) is
+reported differently by the two forms:
 
-### The divergence
+```
+"a\xZZb"    ERROR: the escape sequence … does not encode a valid ASCII character
+`a\xZZb`    'axZZb'   — the literal reading, no error
+```
 
-`group` returns a Map, and **a Map key is a rendered string**. Two
-keys that are `deq`-distinct but render identically therefore share
-one Map entry: `group [Integer Integer/q]` (a type literal and a
-same-named atom, `deq`-unequal) yields the single group
-`{Integer:[0 1]}`.
-
-### The 2026-07-24 allowance (superseded as a verdict)
-
-The fold is forced by `group`'s Map return shape and is arguably
-benign: no index is lost — both occurrences are retained under the
-shared key — and the same fold is what makes `group` total over the
-common **non-reflexive** keys. Two mechanisms produce them: `nan` is
-`DeqKeyed` but never `DeepEqual` to itself under the IEEE rule NUR013
-records, while everything that reaches `DeepEqual`'s unsupported
-fall-through — which NUR031 tracks and `DeqNeverEqual` mirrors — is
-never equal to itself, as is any container or instance transitively
-holding one. That second set is not closed, and enumerating it has
-proved
-error-prone; the reliable test is `x deq x`. Values known to be in it:
-functions and words, host payloads, `class` type values and refinements
-of one, disjunction types (`tor`, and `enum` on top of it), `fnsig` and
-`surface` types, and any uninstantiated `gen` schema whatever its base.
-Values known NOT to be in it: concrete Record/Options/Table/Micron type
-values, and — since NUR034 — the container/root literals `List`, `Map`
-and `Any`, which were non-reflexive when this record was written and
-now group through `deq` rather than the render fold. The fold gives
-`group [nan nan]` → `{nan:[0 1]}` where raising on a render collision
-would make grouping NaN-bearing data a hard error. The lossless
-`[[rep group] …]` pair shape was rejected as breaking `group`'s Map
-shape and every caller.
-
-### Why re-opened
-
-The allowance treats the render fold as forced; the review pushes one
-level down: the **root cause is that Map keys are rendered strings**
-at all — whatever you group by is flattened to its text render, and
-`group` is one symptom of that language-wide fact.
-
-- **Maintainer proposal to explore:** restrict the grouping-key list
-  to **Strings**. A String key IS its render — no lossy step, and
-  distinct keys can never collide; this divergence could not arise.
-- **Costs identified (why it is not a slam-dunk):** the 1-arg form
-  loses generality (`group [1 2 3]` works directly today; String-only
-  keys force a conversion first), and NaN totality changes character —
-  `nan` could not be a key at all, so the non-reflexive-key problem is
-  *forbidden* rather than *folded*.
-- **Alternatives on the table:** (a) status quo — any value as key,
-  lossy render fold, "benign"; (b) String-only keys — no collisions,
-  simpler model, ergonomic cost for non-String data; (c) grouped
-  pairs `[[rep group] …]` — lossless, breaks the Map shape (rejected
-  by the 2026-07-24 record).
-- **Deeper question flagged:** whether Map-keys-as-rendered-strings
-  is the real thing to reconsider, language-wide.
-
-### Verdict (maintainer, 2026-08-14 — resolve by fix, option (b))
-
-**Grouping keys become String-only.** A String key IS its render, so
-the lossy step disappears and two distinct keys can never collide —
-the divergence cannot arise rather than being judged benign.
-
-The costs the re-open identified are accepted deliberately, and the
-fix must pin both rather than let them surface as surprises:
-
-- **The 1-arg form loses generality.** `group [1 2 3]` works today and
-  will require a conversion first. The refusal must say so — a
-  `group`-specific message naming the String requirement, not a bare
-  `signature_error`.
-- **NaN totality changes character.** `nan` cannot be a key at all, so
-  the non-reflexive-key problem is *forbidden* rather than *folded*.
-  `group [nan nan]` → `{nan:[0 1]}` (pinned today in
-  `lang/spec/module-array.tsv` §3) becomes a refusal, and that row
-  flips with a comment recording why.
-
-Note what this verdict does NOT decide: **Map-keys-as-rendered-strings
-language-wide** stays open. This record's fix removes `group` as a
-symptom by construction, and the deeper question — whether Map keys
-should carry value identity at all — is not settled by restricting one
-word's key domain. It should be documented as the language-wide fact
-it is (REFERENCE.md currently scopes the statement to `group`), and
-carried as its own design line.
-
-Stays **Pending** until the signature change, the two flipped spec
-rows, and the refusal message land.
-
-### Evidence
-
-- `lang/go/native/native_array.go` — `deqGrouper.add` (the render-key
-  fold, commented).
-- `lang/spec/module-array.tsv` §3 — `group [Integer Integer/q]` →
-  `{Integer:[0 1]}` and `group [nan nan] [1 2]` → `{nan:[1 2]}` pin
-  both the collision fold and the non-reflexive fold.
-- REFERENCE.md, the ArrayUtil `deq`-membership callout ("`group`'s map
-  keys stay rendered strings") — states the render-key fold, but scoped to
-  `group` ("`group`'s map keys stay rendered strings") rather than as
-  the language-wide fact about Map keys that the re-open argues is the
-  root cause. That the general statement is undocumented is part of
-  what this record now tracks.
+The VOCABULARY is uniform; what a well-formed escape means no longer
+depends on the quoting form, which is the divergence this record was
+opened for. What is left is error REPORTING, and closing it needs an
+error channel the call site does not have: the template path is a
+jsonic `LexMatcher` returning a `*Token`, so raising means changing the
+lexer seam — the unified-lexer work the 2026-07-31 verdict sketched and
+the 2026-08-15 verdict did not ask for. Recorded rather than silently
+accepted, with a spec row pinning the residual.
 
 ---
 
@@ -1523,6 +1325,59 @@ never reads a field, as the descriptor fix already did.
 
 Stays **Pending** until the Behavior routing and the name-independent
 canon land.
+
+### Verdict refinement (maintainer, 2026-08-15) — the three questions the fix could not answer for itself
+
+Implementation recon established that the two "halves" this record
+names are **not separable**: `def a (f/r)` stamps the binding name into
+`FnDefInfo.Name`, and that ONE field is what `eq` reads (via
+`ExactEqual`'s type-body arm → `ValuesEqual` over the payload struct),
+what `canon` renders, and what `tcmp` orders on (`compare_types.go`
+sorts by `CanonValue`). Fixing equality alone would mean special-casing
+`eq` to ignore `Name` while canon still shows it — leaving `eq` and
+canon disagreeing, which is the "wrong answer that is *harder* to see"
+the verdict above warns about. `FnDefInfo` is a value struct with no
+stable reference, so identity has to come from somewhere new. Three
+decisions follow.
+
+**1. Identity model: box for `eq`, structural for `deq`.** Exactly what
+NUR011 already says for every other Ideal — `eq` is reference identity,
+`deq` is deep value equality — applied to functions for the first time.
+`FnDefInfo` is boxed behind a pointer (the shape `*ModuleDesc` already
+uses, and for the same reason: the struct holds a Go map, so `==` on the
+bare value would panic), so two bindings of one function share it and
+`a/r eq b/r` is true. `deq` compares signatures and body, so
+`f/r deq f/r` is true and a re-parsed canon is `deq` to its original.
+
+The alternatives were rejected on measurable grounds. Reference identity
+for BOTH would leave `parse(canon(f/r)) deq f/r` permanently false — a
+re-parsed function is a fresh box — so ADR-015's gate could never go
+green for functions, only ever carry them on its ledger. Structural for
+both would collapse the `eq`/`deq` distinction and make two
+independently-written identical functions `eq`, contradicting NUR011's
+reference rule.
+
+**2. Canon: the anonymous fn literal.** `canon (f/r)` renders
+`fn [[x:Any] [Any] [x]]` — the name is dropped entirely, not replaced.
+It is already valid source, it re-parses to a structurally identical
+function, and it is name-independent by construction rather than by a
+naming scheme. With structural `deq` that satisfies ADR-015 with no new
+syntax and no new record. (A stable DERIVED name was available and not
+taken: it keeps debug readability but needs a scheme, and the name is
+not part of what re-parses, so it would be decoration on the contract
+rather than part of it.)
+
+**3. Sequencing: PR #366's native-callback seam lands first.** That PR
+reports `installDef` → `buildFnBodyHandler` rebuilding a fn's handler
+closed over the INSTALLING registry, dropping `FnDefInfo.Registry` —
+the same code path that stamps the binding name. Its callback-seam half
+is a pure bug fix with no cross-engine divergence to migrate, so
+landing it first means this record edits `installDef` once, against
+settled behaviour, instead of twice with a rebase between.
+
+**This record is therefore DESIGN-UNBLOCKED but SEQUENCED**: it stays
+Pending, and its next action is gated on #366's callback-seam fix
+rather than on a further decision.
 
 **Standing requirement (maintainer, 2026-07-31; module half
 discharged 2026-08-02):** every value — functions and modules
@@ -1856,59 +1711,6 @@ had rotted by a factor of two.
 
 ---
 
-## NUR059 — Several value kinds render in DEBUG spelling inside canon {#nur059}
-
-**Status:** Pending · **Recorded:** 2026-08-08 · **Surfaced by:** closing
-the Go/TS parser parity ledger (`parser/spec/divergent.tsv` to zero)
-
-**Rule:** `CanonValue` renders canonical boru **source** — the string it
-produces parses back as the same value. Every other container type tag now
-obeys it: `[:Integer]`, `[:Integer 1 2]`, `{:String}`, `{:Integer a:1}`.
-**Divergence:** several kinds fall through to `Value.String`'s debug form,
-which is not boru syntax and does not parse back:
-
-```
-[:Box<Integer>]   canon ->  [:sugar(angle Box [word(Integer)])]
-foo/r             canon ->  word(foo)                  — the /r is LOST
-foo/2             canon ->  word(foo)                  — the /2 is LOST
-(1 add 2)/q       canon ->  paren([1 word(add) 2]) /q
-[:Integer]        canon ->  [:Integer]                 (correct)
-foo/q             canon ->  foo/q                      (correct)
-```
-
-Each has no source-form renderer, so the generic value path yields the
-debug spelling. The `/r` and `/2` cases are the worst of them: the
-modifier is not merely spelled oddly, it is **dropped**, so the canon says
-something the source did not.
-
-**Evidence:** `parser/spec/parse.tsv` pins the current output for each of
-these. Found by `scripts/parity-probe.sh` sweeping the language surface;
-the same sweep caught the dispatch-mod marker rendering two DIFFERENT
-debug spellings (Go `word()({false true})`, TS `word(undefined)`), which
-was a genuine parity defect and is fixed — these are the residue where
-both engines agree on a wrong render.
-**Both engines AGREE**, so this is not a parity defect and correctly does
-not sit in `divergent.tsv` — it is a render-quality gap that the parity
-work made visible by fixing every neighbouring case.
-**Proposed verdict:** fix — canon needs a source-form renderer for each
-of these (`Box<Integer>` for `SugarAngle` and the other sugar kinds, the
-`/r` and `/N` word modifiers off `WordInfo`, and the paren group), on both
-engines. Until then the corpus rows are the pin: a fix to one engine alone
-fails loudly.
-
-**Verdict (maintainer, 2026-08-15 — resolve by fix):** canon gains a
-**source-form renderer** for each kind that currently falls through to
-`Value.String`'s debug form — `Box<Integer>` for the sugar kinds, the
-`/r` and `/N` word modifiers off `WordInfo`, and the paren group — on
-**both engines** in the same change.
-
-The round-trip is canon's contract, and these kinds break it silently:
-`foo/r` rendering as `word(foo)` does not merely look wrong, it LOSES
-the `/r` — re-parsing the canon yields a different program. The
-corpus rows are the pin that keeps the two ports honest: a fix to one
-engine alone fails the parity ledger loudly, which is the intended
-forcing function rather than an obstacle. Stays **Pending** until both
-renderers land.
 
 ## NUR052 — Store enumeration reads the top COW layer; lookup walks the chain {#nur052}
 
@@ -2053,6 +1855,56 @@ the slot, and their negative rows (a declined `Maker` falls through to
 today's behaviour; a wrong-typed return is refused) land.
 
 ---
+
+## NUR072 — Three sugar kinds still canon in debug form, and their source spelling is not recoverable {#nur072}
+
+**Status:** Pending · **Recorded:** 2026-08-15 · **Surfaced by:** NUR059's
+fix — the residue its per-row fixpoint check refused
+
+**Rule:** `CanonValue` renders canonical boru **source** — the string it
+produces parses back as the same value (ADR-015).
+
+**Divergence:** NUR059 gave the angle sugar, the paren group and the word
+`/`-modifiers a source form. Three sugar kinds were attempted in the same
+change and **withdrawn**, because a fixpoint check — does the new render
+re-parse to itself? — proved the spellings wrong:
+
+```
++m'src'   rendered  +m<src>    re-parses with a stray `>`
+w/t       rendered  [w/q]/t    does not parse at all
+```
+
+The mini case is not a coding slip: **`SugarInfo` does not retain the
+source delimiter.** `+m'src'`, `+m<src>` and `+m|src|` all lex to the same
+payload, so no renderer can reproduce what the user wrote without the
+parser keeping it. The type-bound case renders its `Items`, which hold the
+bound as a list containing an atom rather than the bound's own text.
+
+The lambda marker is a third shape: `=>` renders fine on its own, but every
+row containing one ALSO contains a bare word, which canon spells
+`word(x)` — so the row cannot reach a fixpoint whatever the lambda does.
+
+**Verdict:** none yet. A spelling that does not round-trip is worse than
+the debug form, because it looks like source; that is why these were
+withdrawn rather than shipped. Fixing them needs either a parser change
+(retain the mini delimiter) or the bare-word decision below.
+
+**A THIRD kind, found by Codex review on PR #372:** the `/N` arity is an
+exact int64 in Go and a JS `number` in TS, so a magnitude above 2^53 is
+ROUNDED at parse — `x/9223372036854775807` canons as
+`x/9223372036854776000` in TS, outside the accepted int64 range, so it
+cannot be re-parsed as a modifier at all. The loss is in the TS
+**payload**, not the renderer, which only made it visible; fixing it
+means carrying the arity exactly in `parser/ts`. Pinned meanwhile as a
+row in `parser/spec/divergent.tsv`, the shrink-toward-zero ledger.
+
+**The bare-word question, deliberately not decided:** canon spells a Word
+value `word(foo)`. Rendering it bare would change **175 of
+`parser/spec/parse.tsv`'s 724 rows**, and it is a real question rather
+than a formatting one — `word(foo)` denotes a word VALUE, while bare
+`foo` re-parses as a word that will be DISPATCHED. NUR059 scoped its word
+arm to modifier-bearing words for exactly this reason. Whoever takes this
+record decides that first.
 
 ## NUR060 — The parser twins disagree on open-input sources beyond the corpus {#nur060}
 
@@ -2322,190 +2174,6 @@ module actually gets used, and the document is still in flux.
 
 Stays **Pending** by design, so the asymmetry cannot be silently
 baselined while that question is open.
-
-## NUR066 — `end` and `none` are unreachable by dot-path but reachable by `get` {#nur066}
-
-**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:** verifying a
-worked example in `design/STATE-MACHINES.0.md` §11.3 (PR #352), which needed
-an end-of-input event and reached for the name `end`.
-
-**Rule:** dot access **is** a `get`/`getr` chain. `design/REACH.10.md` is the
-single source of truth for the lowering, and `REACH.10.md` is listed in
-`design/README.md` as exactly that — "dot-access lowering to `get`/`getr`
-chains". So `m.k` and `m get k/q` are supposed to differ in spelling only.
-
-**Divergence:** for two key names they differ in outcome. Both of these are
-legal map keys and legal quoted atoms, and both are readable by `get` and
-`getr` — but neither survives the dot-path sugar:
-
-```boru
-def m {none: 1  end: 2  ok: 3}
-m get none/q     ;# 1        m getr none/q  ;# 1
-m get end/q      ;# 2        m.ok           ;# 3
-m.none           ;# check error: cannot call `dot` … got (Map, None)
-m.end            ;# check error: cannot call `dot` … got (Map, __ED)
-```
-
-The cause is that the lexer resolves both names to **marker values** before
-the dot chain sees them — `none` to the None value, `end` to the
-`Word/__ED` end-marker (`core/go/types.go` `TEnd`, `core/go/value.go`
-`NewEnd`, "the `end` / `;` keyword") — so the segment arrives as a marker
-rather than as a field name and no `dot` signature matches.
-
-What makes this a non-uniformity rather than ordinary keyword behaviour is
-that it is **not** how boru's other keywords behave. `def`, `fn`, `if`, `do`,
-`case`, `let`, `while`, `for`, `and`, `or`, `not`, `true` and `false` all work
-as dot-path segments *and* as `get` keys (verified by run, one probe per
-name). Only the two marker-valued names are the exception, so a reader cannot
-derive the rule from the family: it is not "keywords are not field names," it
-is these two.
-
-**Evidence:** the probes above, run against a binary built from this tree;
-`core/go/types.go:63` and `core/go/typetable.go:815` (`Word/__ED`, alias
-`End`); `core/go/value.go` `NewEnd`/`IsEnd`; `design/REACH.10.md` (the
-lowering contract dot access is meant to honour).
-
-**Documentation status:** unrecorded anywhere. `REACH.10.md` does not mention
-a keyword exclusion, `REFERENCE.md` has no reserved-word list for map keys,
-and the error message (`no signature matches … got (Map, None)`) names
-neither the cause nor the `get` workaround, so a user meets this as a puzzle.
-
-**Verdict (maintainer, 2026-08-14 — resolve by fix):** make the dot chain
-treat a marker-valued segment as its **source text**, restoring the lowering
-identity outright: `m.none` and `m.end` read those fields exactly as
-`m get none/q` and `m get end/q` do, and as every other keyword segment
-already does.
-
-The documentation alternative (a reserved-key list plus a `dot`-specific
-diagnostic) was available and not taken: it would spend real work to explain
-an exception rather than remove it, and leave `REACH.10.md`'s single-source
-lowering contract carrying a two-name asterisk. The whole argument for the
-exception was implementation history — the lexer resolves both names to
-marker values before the dot chain sees them — which is not a semantic
-reason, and the keyword family disproves it (`def`, `fn`, `if`, `case`,
-`true`, `and` … all work in both positions).
-
-Fix scope: the segment must be recovered as text at the point the `Reach`
-lowers to its `dot`/`dotr` chain, with rows for both names in both accessor
-flavours, and a negative row proving a marker in an EXPRESSION position is
-unaffected (`m.k end` must still terminate the statement). Stays **Pending**
-until that lands. PR #352 worked around it by renaming its example event,
-which fixes that example and nothing else.
-
----
----
-
-## NUR069 — A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither {#nur069}
-
-**Status:** Pending (NARROWED — the none-vs-Any axis is RESOLVED BY FIX,
-2026-08-14; the CallBoru return asymmetry remains) · **Recorded:**
-2026-08-14 · **Surfaced by:** NUR068's
-resolution — annotating `boru:test`'s constructors with their record types
-shipped a compiled/interpreted divergence, and this is why the annotations
-were reverted.
-
-**Resolution of the none-vs-Any axis (maintainer verdict: "Any admits
-none", 2026-08-14):** the unifier's None fold now admits the Any side —
-`Any ∩ none = none`, the intersection the lattice already implied
-(`TNone.ConformsTo(TAny)` is what let `make`'s ConformsTo field rule and
-the `:Any` param admit none all along). One arm (`foldNoneRoot`,
-`core/go/unify.go`), scoped to None: Never and Absent keep their
-self-only folds — in particular `Unify(Any, Absent)` still refuses, which
-is what keeps an `Any` field REQUIRED (the `?:T` optional-key machinery
-rides Absent). The change carries through every consulted boundary in one
-step: the record-param pattern walk, the interpreter's and the VM's
-return checks, the `unify` word (`None unify Any → None true`,
-`unify.tsv` / `syntax.tsv` flipped), and `is` membership — `none is Any`
-is now **true** (`edge-types-2.tsv` §3 flipped; its old comment conceded
-the `:Any` param already admitted none, so keeping `is` at false would
-have minted a fresh is-vs-unify split). The four repro rows below now
-agree on `{x:none}` on both engines; pinned in `lang/spec/record.tsv`
-§NUR069 and `core/go/unify_none_any_test.go`.
-
-**What remains open — the CallBoru return asymmetry:** a module fn's
-declared return is never checked on the interpreter's CallBoru path
-(trim-only, documented in `checkReturnContract`) while a compiled unit's
-RET enforces type and pattern — so a NON-conforming module-fn return
-still diverges (interpreter passes it through, compiled raises). This is
-why `boru:test`'s constructors stay `[Map]` even after the none fix. The
-candidate resolutions: enforce declared returns on CallBoru (uniform,
-may refuse programs that run today), or exempt module-fn units from the
-RET pattern check (uniform the other way, weakens compiled contracts),
-or document the asymmetry as Allowed.
-
-**Rule:** a type means the same thing at every boundary that consults it.
-If `make R {x: none}` constructs an inhabitant of `R` (schema
-`[x:Any]`), then that value IS an `R` — at a `c:R` param, at a declared
-`[R]` return, interpreted and compiled alike.
-
-**Divergence:** three boundaries, three verdicts.
-
-```
-def R refine Record [x:Any]
-make R {x:none}                          -> {x:none}        make ADMITS
-def f fn [[c:R] [Map] [c]]  f (make R {x:none})
-                                         -> signature_error param pattern REFUSES
-def mk fn [[] [R] [make R {x:none}]] mk  -> type_error      top-level RETURN REFUSES…
-import module [def mk fn [[] [R] [make R {x:none}]] export "M" {mk: mk/r}] M.mk
-                                         -> {x:none}        …but a MODULE fn's return
-                                                            is never checked (CallBoru
-                                                            is trim-only), so the same
-                                                            annotation is enforced on
-                                                            one dispatch path and not
-                                                            the other
-```
-
-The root is `Unify(Any-literal, none)` → "none only unifies with none":
-the None arm outranks the Any arm, so a schema's `Any` constraint — which
-`make` treats as "any stored value" — reads as "anything except none" at
-every pattern-unify site (param dispatch's OpenUnifyMap field walk, the
-interpreter's `validateReturnTypes`, the VM's `checkReturnContract`). The
-CallBoru asymmetry (module fn returns trim-only, documented in
-`checkReturnContract`) then splits the return-side verdict again between
-dispatch paths, which is what turned NUR068's constructor annotations into
-a compiled-vs-interpreted divergence: a passing property's
-`failing-input: none` failed the compiled RET's `[PropertyResult]`
-contract while the interpreted module call checked nothing.
-
-**Evidence:** `lang/go/modules/test.go` — the constructor block's comment
-("deliberately declare [Map], NOT their record types") with the NUR068
-resolution's revert; the probe pair in that resolution
-(`Test.case none [1] "returns-none"` — interpreter returns the instance,
-pre-revert compiled raised `test-case: return value 1: expected
-{name:String in:List out:Any}, got Map`). `core/go/unify.go`'s None
-handling; `eng/go/vm.go` `checkReturnContract` (the trim-only CallBoru
-note).
-
-**Documentation status:** the CallBoru trim-only asymmetry is documented
-in code (`checkReturnContract`); the none-vs-Any-field split is documented
-nowhere — `make`'s leniency and the pattern walks' strictness each look
-locally deliberate.
-
-**Proposed verdict (as recorded; the none axis was resolved by the first
-option — see the Resolution above):** none yet. The candidate resolutions
-pull in
-different directions — teach the field-bag unify walks that a schema's
-`Any` constraint admits none (aligning on `make`'s reading; touches every
-pattern boundary), or make `make` refuse none for an `Any` field (aligning
-on the unifier's reading; breaks the "declared Any means any value"
-intuition and existing programs), or spell nullable fields explicitly
-(`x:(Any tor None)`) and keep both readings — and the CallBoru return
-asymmetry is a separate axis entirely. Wants its own measured change, the
-NUR068 way.
-
-**Verdict (maintainer, 2026-08-15 — resolve by fix, the remaining
-axis):** make the module **CallBoru return path enforce the declared
-return contract**, like every other boundary, instead of trimming to
-arity and asking nothing about type.
-
-The asymmetry is the part this record still tracks: a fn's params are
-checked, its returns are trimmed, and a module export that returns the
-wrong shape passes silently. Enforcing it may surface violations in
-shipped modules — that is the point, not a reason to defer, and the
-measurement is the safeguard: run the corpus first and count what newly
-fails, the way NUR068's frontier measurement gated its change. If the
-count is large the fix ships behind a measured, recorded ledger rather
-than being abandoned. Stays **Pending** until enforcement lands.
 
 ---
 

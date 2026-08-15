@@ -119,6 +119,15 @@ var unflaggedPins = map[string]int{
 	"higher-order.tsv":    4,
 	"macro.tsv":           1,
 	"micron.tsv":          0,
+	// module-array.tsv: 0 → 6, all six from NUR030's fix. `group`'s keys
+	// are Strings only, and the refusal is a RUNTIME check on each key's
+	// type — it cannot be static, because the signature is `[TList]` /
+	// `[TList TList]` and a List's ELEMENT types are not part of it. A
+	// list whose elements are statically Integer is still a well-typed
+	// argument; only walking it finds the bad key. Flagging these would
+	// need element-type carriers on the list slots, which the checker
+	// does not have and this record did not open.
+	"module-array.tsv":    6,
 	"module-debug.tsv":    3,
 	"module-emitlang.tsv": 8,
 	"module-fmt.tsv":      3,
@@ -137,23 +146,29 @@ var unflaggedPins = map[string]int{
 	// (IO.exit 126 / 200). The two rows the checker DOES flag — the String
 	// code and the non-String env name — are signature errors, which is
 	// exactly the line between the two: shape is static, value is not.
-	"module-io.tsv":         30,
-	"module-log.tsv":        6,
-	"module-minilang.tsv":   20,
-	"module-net.tsv":        2,
-	"module-parse.tsv":      4,
-	"module-parselang.tsv":  13,
-	"module-query.tsv":      1,
-	"module-sift.tsv":       24,
-	"module-struct.tsv":     2,
-	"module-time.tsv":       2,
-	"module-tui.tsv":        5,
-	"module-vault-tui.tsv":  1,
-	"module-vault.tsv":      43,
-	"open-words.tsv":        3,
-	"patrun.tsv":            1,
-	"reach.tsv":             3,
-	"record.tsv":            2,
+	"module-io.tsv":        30,
+	"module-log.tsv":       6,
+	"module-minilang.tsv":  20,
+	"module-net.tsv":       2,
+	"module-parse.tsv":     4,
+	"module-parselang.tsv": 13,
+	"module-query.tsv":     1,
+	"module-sift.tsv":      24,
+	"module-struct.tsv":    2,
+	"module-time.tsv":      2,
+	"module-tui.tsv":       5,
+	"module-vault-tui.tsv": 1,
+	"module-vault.tsv":     43,
+	"open-words.tsv":       3,
+	"patrun.tsv":           1,
+	"reach.tsv":            3,
+	// record.tsv: 2 → 3 with NUR069's enforcement rows. Three ERROR rows
+	// were added (a module fn returning the wrong type in each direction,
+	// and a predicate's failing branch); the checker statically flags two
+	// of them and misses one — the enforcement itself is a RUNTIME check
+	// on the CallBoru dispatch path, so a violation the static pass
+	// cannot resolve to a concrete return value stays the runtime's job.
+	"record.tsv":            3,
 	"scalar-micron-ops.tsv": 1,
 	"ref.tsv":               1,
 	"storage.tsv":           1,

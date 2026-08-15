@@ -1028,6 +1028,18 @@ func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *BoruEr
 // builtins/objects are unchanged (v.Is ≡ v.Parent.ConformsTo on concrete
 // values). See design/REFINE-NEWTYPE-VS-SUBSET.10.md.
 func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra int) error {
+	return validateReturnTypesIn(e.Registry, rc, results, extra, e.effectiveSource())
+}
+
+// validateReturnTypesIn is validateReturnTypes with the Engine's two
+// dependencies passed explicitly — the registry (for the check-mode
+// gradual exemption) and the source text (for error rendering). The
+// split exists so the REGISTRY-side dispatch path (CallBoruNamed) can
+// enforce the identical contract without an Engine in hand: NUR069's
+// verdict is that a declared return means the same thing at every
+// boundary, and the way to guarantee that is one implementation, not
+// two that agree today.
+func validateReturnTypesIn(reg *Registry, rc ReturnCheckInfo, results []Value, extra int, src string) error {
 	for k, exp := range rc.Returns {
 		got := results[extra+k]
 		// A GRADUAL (dynamic) residual optimistically conforms to any declared
@@ -1040,11 +1052,11 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 		// Without this, a fn dispatched through a path that surfaces a dynamic
 		// body residual (module / mini-kind dispatch) wrongly fails its own
 		// declared-return check while the identical body called directly passes.
-		if got.Dynamic && e.Registry != nil && e.Registry.analysisActive() {
+		if got.Dynamic && reg != nil && reg.analysisActive() {
 			continue
 		}
 		if !got.Is(exp) {
-			return e.returnTypeError(rc, k+1, exp, got)
+			return BuildReturnTypeError(src, rc.FuncName, k+1, exp, got, rc.Pos, rc.Decl)
 		}
 		// A declared return whose *Type degraded to Any carries its real
 		// domain in the pattern — a union output (`def IS (Integer tor
@@ -1056,7 +1068,7 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 		// "expected Any" the degraded type would produce.
 		if pat := rc.ReturnPattern(k); pat != nil {
 			if _, ok := Unify(*pat, got); !ok {
-				return e.returnTypeError(rc, k+1, pat, got)
+				return BuildReturnTypeError(src, rc.FuncName, k+1, pat, got, rc.Pos, rc.Decl)
 			}
 		}
 	}

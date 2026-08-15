@@ -402,7 +402,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]core.Value, error) {
 						return nil, err
 					}
 					// emitPrimary appends exactly one value on success.
-					seg.KeyLit = tmp[0]
+					seg.KeyLit = reachSegmentName(keyItem, tmp[0], kpos)
 				}
 				segs = append(segs, seg)
 			}
@@ -1463,6 +1463,44 @@ func wordBaseName(text string) string {
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
+// reachSegmentName restores the dot-access lowering identity for a segment
+// spelled as a BARE NAME. Dot access IS a `get`/`getr` chain
+// (design/REACH.10.md is the single source of truth for the lowering), so
+// `m.k` and `m get k/q` are meant to differ in spelling only. They did not:
+// the reserved VALUE literals — `none`, `end`, `inf`, `-inf`, `nan` —
+// resolve to their values in parseWord before the chain sees them, so the
+// segment arrived as a marker or a Float and no `dot` signature matched
+// (NUR066). The `/q` form never had the problem, because a modifier suffix
+// returns an atom before the literal switch is reached, which is why
+// `m get none/q` read the field all along.
+//
+// The rule is DERIVED rather than a list of names: a segment whose source
+// token is an unquoted valid word name that parseWord turned into
+// something OTHER than a Word is exactly a reserved literal, and as a
+// field name it means the name. A new literal joins parseWord and this
+// stays in step with no second edit.
+//
+// Non-names are untouched and keep their literal readings: `m.1` indexes,
+// `m.'k'` is a string key, `m.(expr)` is computed (handled by the caller),
+// and the punctuation-spelled markers fail ValidateWordName — `;` among
+// them, which is the reason the grammar hands the semicolon its own text
+// instead of rewriting it to `end`. `m.;` therefore stays the error it was
+// rather than silently reading a field called `end`.
+func reachSegmentName(keyItem any, key core.Value, pos core.SrcPos) core.Value {
+	if core.IsWord(key) {
+		return key
+	}
+	node, _ := deSite(keyItem)
+	text, ok := node.(jsonic.Text)
+	if !ok || text.Quote != "" {
+		return key
+	}
+	if core.ValidateWordName(text.Str) != nil {
+		return key
+	}
+	return withPos(core.NewWord(text.Str), pos)
+}
+
 func parseWord(text string) (core.Value, error) {
 	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, valid := scanWordModifier(text)
 
@@ -1568,8 +1606,14 @@ func parseWord(text string) (core.Value, error) {
 	// engine recognises them by Parent identity (parens, end / ';').
 	// These would otherwise become plain Word values that the engine
 	// would have to name-dispatch in stepWord.
+	//
+	// `;` carries its OWN text rather than being rewritten to `end` in
+	// the grammar (as `)` already does): the two spell the same value but
+	// are not the same source, and a dot-path segment has to tell them
+	// apart — `m.end` names a field, `m.;` is a stray terminator
+	// (reachSegmentName, NUR066).
 	switch name {
-	case "end":
+	case "end", ";":
 		return core.NewEnd(), nil
 	case ")":
 		return core.NewCloseParen(), nil
@@ -1712,31 +1756,113 @@ func processTemplateEscapes(s string) string {
 	buf.Grow(len(s))
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\\' && i+1 < len(s) {
-			next := s[i+1]
-			switch next {
-			case 'n':
-				buf.WriteByte('\n')
-			case 't':
-				buf.WriteByte('\t')
-			case 'r':
-				buf.WriteByte('\r')
-			case '\\':
-				buf.WriteByte('\\')
-			case '`':
-				buf.WriteByte('`')
-			case '$':
-				buf.WriteByte('$')
-			default:
-				// Unknown escape: keep as-is.
-				buf.WriteByte('\\')
-				buf.WriteByte(next)
-			}
-			i++ // skip the escaped char
+			i += writeStringEscape(&buf, s, i+1)
 		} else {
 			buf.WriteByte(s[i])
 		}
 	}
 	return buf.String()
+}
+
+// writeStringEscape decodes ONE escape sequence — the character(s) after
+// a backslash at s[at:] — into buf, and returns how many bytes of s it
+// consumed (always >= 1, counting the escape character itself).
+//
+// This is the single escape vocabulary for boru string literals
+// (NUR026). Templates used to carry a hand-rolled six-case switch
+// (`\n \t \r \\ ` $`) that kept everything else LITERAL, while quoted
+// strings rode jsonic's native handling and got the full set — so
+// `size "z\x41z"` was 3 and its template spelling 6. That was an
+// implementation accident, not a design choice: the backtick was
+// removed from jsonic's StringChars so templates could carry `${…}`
+// interpolation, and the replacement escape handler was never brought
+// to parity. A reader should not have to know which quoting form they
+// are in to know what `\x41` means.
+//
+// The vocabulary matches what jsonic accepts for `"…"` / `'…'`,
+// measured 2026-08-15:
+//
+//	\n \t \r \b \f \v   the control characters
+//	\xNN                one byte, two hex digits
+//	\uNNNN              one rune, four hex digits
+//	anything else       the character itself, backslash DROPPED
+//
+// That last rule is the behaviour change to watch, and it is the one
+// the record asked to pin: `\z` is `z` and `\0` is `0`, in a template
+// exactly as in a quoted string. The template-only spellings need no
+// case of their own — a backslash before a backtick or a `$` falls into
+// the default arm and yields the bare character, which is what they
+// always meant.
+//
+// One asymmetry SURVIVES here, deliberately and recorded: a MALFORMED
+// \x / \u (too few digits, or a non-hex digit) falls through to the
+// default arm, so a template's `\xZZ` is `xZZ`, while jsonic RAISES on
+// the same sequence in a quoted string ("does not encode a valid ASCII
+// character" — measured 2026-08-15, not assumed). Matching that needs
+// an error channel this call site does not have: the caller is a
+// jsonic LexMatcher returning a *Token, so raising means changing the
+// lexer seam, which is the unified-lexer work NUR026's earlier verdict
+// sketched and this one did not ask for. The vocabulary — what a
+// well-formed escape MEANS — is now identical in both forms, which is
+// the divergence the record was opened for; the malformed-input
+// REPORTING difference is narrower and stays on the record.
+func writeStringEscape(buf *strings.Builder, s string, at int) int {
+	switch c := s[at]; c {
+	case 'n':
+		buf.WriteByte('\n')
+	case 't':
+		buf.WriteByte('\t')
+	case 'r':
+		buf.WriteByte('\r')
+	case 'b':
+		buf.WriteByte('\b')
+	case 'f':
+		buf.WriteByte('\f')
+	case 'v':
+		buf.WriteByte('\v')
+	case 'x':
+		if r, ok := parseHexEscape(s, at+1, 2); ok {
+			buf.WriteByte(byte(r))
+			return 3
+		}
+		buf.WriteByte(c)
+	case 'u':
+		if r, ok := parseHexEscape(s, at+1, 4); ok {
+			buf.WriteRune(rune(r))
+			return 5
+		}
+		buf.WriteByte(c)
+	default:
+		// Unknown escape: the character itself, backslash dropped —
+		// jsonic's rule for a quoted string, now the template's too.
+		buf.WriteByte(c)
+	}
+	return 1
+}
+
+// parseHexEscape reads exactly n hex digits at s[at:] and returns their
+// value. ok=false when the run is short or contains a non-hex digit, so
+// the caller can fall back to the literal-character reading.
+func parseHexEscape(s string, at, n int) (uint32, bool) {
+	if at+n > len(s) {
+		return 0, false
+	}
+	var v uint32
+	for i := at; i < at+n; i++ {
+		var d uint32
+		switch c := s[i]; {
+		case c >= '0' && c <= '9':
+			d = uint32(c - '0')
+		case c >= 'a' && c <= 'f':
+			d = uint32(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			d = uint32(c-'A') + 10
+		default:
+			return 0, false
+		}
+		v = v<<4 | d
+	}
+	return v, true
 }
 
 // numberVal wraps a float64 with its source text and source position so

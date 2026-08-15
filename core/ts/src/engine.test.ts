@@ -214,7 +214,10 @@ describe("Engine.run — containers", () => {
     // holds the pair of rows, and both engines are asked.
     const m = new OrderedMap();
     m.set("k", newParenExpr([newWord("addq"), newInteger(1n), newInteger(1n)]));
-    assert.equal(run([newMap(m)]), "{k:paren([word(addq) 1 1])}");
+    // NUR059 gave the paren group a SOURCE form; this pinned the debug
+    // dump `paren([word(addq) 1 1])`. The POINT of the row is unchanged:
+    // a runtime map is left alone, its paren value unevaluated.
+    assert.equal(run([newMap(m)]), "{k:(addq 1 1)}");
   });
 
   it("leaves a plain map alone", () => {

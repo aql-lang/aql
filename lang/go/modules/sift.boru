@@ -101,7 +101,7 @@ def sift-float-shaped fn [[s:String] [Boolean] [
 ]]
 
 def sift-to-size fn [[t:String cell:String] [Any] [
-  def m (t mini re `^\s*([0-9]+([.][0-9]+)?)\s*([a-zA-Z]*)\s*$` {})
+  def m (t mini re `^\\s*([0-9]+([.][0-9]+)?)\\s*([a-zA-Z]*)\\s*$` {})
   if (m.ok not) [ raise sift_type_error (join "" ["not a size: " cell]) ] [
     def num (m.fst.g get 0)
     def mult (sift-size-unit (StringUtil.lower (m.fst.g get 2)))
@@ -691,7 +691,7 @@ def sift-fam-fixed fn [[src:String opts:Map] [List] [
 # ----------------------------------------------------------------------------
 # Returns the ordered capturing-group names ("" for an unnamed group).
 def sift-group-names fn [[re:String] [List] [
-  def toks ((re mini re `\\.|\[(?:\\.|[^\]])*\]|\(\?P<[A-Za-z0-9_]+>|\(\?<[A-Za-z0-9_]+>|\(\?|\(` {}).ms)
+  def toks ((re mini re `\\.|\\[(?:\\.|[^\\]])*\\]|\\(\\?P<[A-Za-z0-9_]+>|\\(\\?<[A-Za-z0-9_]+>|\\(\\?|\\(` {}).ms)
   def loop fn [[items:List i:Integer acc:List] [List] [
     if (i gte (size items)) [acc] [
       def tok (items get i)

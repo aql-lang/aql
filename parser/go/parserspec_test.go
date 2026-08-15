@@ -48,10 +48,10 @@ import (
 )
 
 const (
-	parseSpecRowCount     = 711
-	divergentSpecRowCount = 9
+	parseSpecRowCount     = 724
+	divergentSpecRowCount = 10
 	nestingSpecRowCount   = 18
-	shapeSpecRowCount     = 26
+	shapeSpecRowCount     = 28
 )
 
 // specRow is one decoded corpus line: the source plus its columns.

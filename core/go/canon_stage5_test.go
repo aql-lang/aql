@@ -95,6 +95,38 @@ func TestX5CanonReachTokenNested(t *testing.T) {
 	}
 }
 
+func TestX5CanonReachTokenEndMarker(t *testing.T) {
+	// The end marker renders as `;` INSIDE a reach, never as `end`
+	// (NUR066). A bare `end` in reach-token position is a Word — a field
+	// name in a segment — so spelling the marker `end` here would
+	// re-parse as that field and silently change the program. Pinned in
+	// both positions the token appears in.
+	if got := canonReachToken(NewEnd()); got != ";" {
+		t.Fatalf("the end marker canons as `;` inside a reach, got %q", got)
+	}
+	stray := NewReach(ReachInfo{
+		Receiver: []Value{NewWord("m")},
+		Segments: []ReachSeg{{KeyLit: NewEnd()}},
+	})
+	if got := canonReach(stray); got != "m.;" {
+		t.Fatalf("a marker SEGMENT canons as m.;, got %q", got)
+	}
+	// The contrast that makes the arm load-bearing: the WORD `end` is a
+	// field name and keeps its own spelling, so the two do not collide.
+	named := NewReach(ReachInfo{
+		Receiver: []Value{NewWord("m")},
+		Segments: []ReachSeg{{KeyLit: NewWord("end")}},
+	})
+	if got := canonReach(named); got != "m.end" {
+		t.Fatalf("a Word segment named `end` canons as m.end, got %q", got)
+	}
+	// Top-level canon is UNAFFECTED — outside a reach `end` is still the
+	// marker's own spelling (CanonValue's own IsEnd arm).
+	if got := CanonValue(NewEnd()); got != "end" {
+		t.Fatalf("top-level end still canons as `end`, got %q", got)
+	}
+}
+
 func TestX5CanonFnDefMultiSigMultiParam(t *testing.T) {
 	sigA := Signature{
 		Params:  []FnParam{{Name: "a", Type: TInteger}, {Name: "b", Type: TString}},
