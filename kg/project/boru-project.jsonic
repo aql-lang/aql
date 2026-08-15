@@ -192,6 +192,16 @@
       metadata: { repository: "boru-lang/boru" }
     }
     {
+      id: "src:function-value-scope"
+      kind: "text"
+      locator: "design/FUNCTION-VALUE-SCOPE.0.md"
+      title: "function value scope: where a fn value's free words resolve"
+      retrieved_at: null
+      content_hash: "function-value-scope-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
       id: "src:boru-viz"
       kind: "text"
       locator: "design/BORU-VIZ.0.md"
@@ -354,6 +364,8 @@
       attributes: { role: "the boru infoview proposal: position-indexed stack display learned from the Lean 4 infoview — carriers at the cursor via a trace-armed Check, actual values via the debugger's ring and replay, LSP-first delivery (inlay hints, hover, code actions, boru/stackAt), then a binary-served panel rendering scry data through viz" } }
     { key: "hot-code-loading", type: "Document", label: "design/HOT-CODE-LOADING.0.md"
       attributes: { role: "the report on boru's hot code loading ability — late binding end to end, uncached file modules, GC-generational old code, fork snapshot semantics, the aless re-anchor precedent, the BEAM comparison — and the reload-as-a-protocol design: a reload word with keep-old-on-failure, supervisor-broadcast propagation, the Plugin.migrate state hook, handler-stack hygiene, a persistent Vm.open sub-engine" } }
+    { key: "function-value-scope", type: "Document", label: "design/FUNCTION-VALUE-SCOPE.0.md"
+      attributes: { role: "the defect report and design for free-word resolution in function values: the interpreter resolves them in the RUNNING module while the bytecode compiler resolves them in the DEFINING one, so a cross-module fn value can silently bind a same-named word in the caller and return a wrong number with boru check clean; the mechanism (FnDefInfo.Registry set at export, honoured on the value path and by the VM, dropped by name dispatch and by the native-callback seam), why closure capture cannot carry it, the phased fix, the tree-wide migration audit measuring 0 migration sites and 0 silent-change sites against 224+ repaired (the cost is nil because the ecosystem already worked around it in writing — 12 utils unroll Cli.main, aless ships a wrapper, sort.aql is one file), the finding that every divergence runner in the ecosystem runs compile-preferring mode in its INTERPRETER column and is structurally blind, and the three-clause target semantics for function values" } }
     { key: "reload-invalidation", type: "Document", label: "design/RELOAD-INVALIDATION.0.md"
       attributes: { role: "how hot reload and transparent compilation coexist without slowing compiled code: per-ref valid flags flipped push-style through a reverse dependency index (the HotSpot/Truffle/Julia equilibrium), ref unification at Finalize, world-pinned whole-program units, per-world restamp budgets — plus the confirmed F1 pass-hoisting divergence and its interim whole-program-refusal fix" } }
     { key: "org", type: "Organization", label: "boru-lang" }
@@ -649,6 +661,16 @@
       object: { kind: "entity", entity: "lang-go" }
       evidence: [{ source: "src:hot-code-loading", locator: "2.3",
         quote: "Re-import **is** reload, today, for" }]
+      confidence: 0.95 }
+    { subject: "function-value-scope", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:function-value-scope", locator: "title",
+        quote: "Where a function value's **free words** resolve" }]
+      confidence: 0.95 }
+    { subject: "function-value-scope", predicate: "supports"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:function-value-scope", locator: "1. Summary",
+        quote: "The mechanism for the correct behaviour already exists and is already" }]
       confidence: 0.95 }
     { subject: "reload-invalidation", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }

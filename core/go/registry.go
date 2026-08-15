@@ -1921,8 +1921,16 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// "does not satisfy" diagnostic, so the enforcement is suppressed
 	// for exactly this call — scoped to the invocation, not the
 	// registry's lifetime.
+	//
+	// InvokeCallbackFn, not InvokeCallback: a predicate written in another
+	// module resolves its free words THERE
+	// (design/FUNCTION-VALUE-SCOPE.0.md). This site is the worst one in the
+	// tree to get wrong — native_type.go turns a predicate failure into a
+	// silent `false`, so a `refine` predicate that cannot reach its own
+	// helper quietly rejects every value. The suppression bracket above is
+	// orthogonal and still applies.
 	r.predicateCalls++
-	result, err := InvokeCallback(r, predSig, []Value{candidate}, fnDef.Captured)
+	result, err := InvokeCallbackFn(r, &fnDef, predSig, []Value{candidate})
 	r.predicateCalls--
 	if err != nil {
 		return Value{}, false, err

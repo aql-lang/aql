@@ -87,6 +87,72 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 	return r.CallBoru(sig, args, captures)
 }
 
+// InvokeCallbackFn is InvokeCallback for a fn VALUE whose definition is in
+// hand. It runs the body in the fn's DEFINING registry whenever the value came
+// from another module, so a callback's free words resolve where the function
+// was WRITTEN rather than where it happens to be invoked
+// (design/FUNCTION-VALUE-SCOPE.0.md).
+//
+// This is the seam fix for the native-callback class. `filter`, service
+// handlers, codecs, Tui.run's update/view, refine predicates and the rest all
+// reach a user fn through a Go word, and every one of them previously ran the
+// body on the INVOKING registry — so a module-private helper the callback
+// depends on either failed to resolve (undefined_word) or, when the invoking
+// module happened to bind the same name, silently resolved to the WRONG
+// definition and returned a plausible wrong answer. The interpreter's own
+// foreign-registry branch (execFnDefSig) has always routed the value path this
+// way; this makes the native seam agree with it.
+//
+// Routing through the defining registry also re-anchors the compiled path's
+// dep-freshness test: InvokeCompiled evaluates CompiledFnRef.depsFresh against
+// whichever registry it is handed, so handing it the caller's registry made the
+// check answer a question nobody asked.
+//
+// FnHome picks the registry and the captures; see its comment for the two nil
+// cases.
+func InvokeCallbackFn(r *Registry, fnDef *FnDefInfo, sig *Signature, args []Value) ([]Value, error) {
+	target, caps := FnHome(r, fnDef)
+	return InvokeCallback(target, sig, args, caps)
+}
+
+// CallBoruFn is InvokeCallbackFn's interpreter-only sibling: it applies the same
+// defining-registry routing but keeps the call on CallBoru instead of offering
+// the body to the VM first.
+//
+// The distinction is deliberate. The words that reach here — `filter`'s
+// Function form, the map-lambda `each`/`fold` bodies, core `walk` /
+// `StructUtil.walk`, `IO.mount`'s fileops handlers, `boru:parse`'s matcher and
+// action callbacks — each already decide between a compiled CLOSURE (routed to
+// InvokeBody) and an interpreter FnDefInfo, and that split is byte-identical to
+// their pre-seam handlers. Routing the FnDefInfo half through InvokeCallback
+// would silently move those bodies onto the VM, which is an execution-engine
+// change and not what design/FUNCTION-VALUE-SCOPE.0.md §11 asks for. Fixing WHERE
+// free words resolve must not also change WHICH engine resolves them.
+func CallBoruFn(r *Registry, fnDef *FnDefInfo, sig *Signature, args []Value) ([]Value, error) {
+	target, caps := FnHome(r, fnDef)
+	return target.CallBoru(sig, args, caps)
+}
+
+// FnHome answers the two questions every native callback seam has to ask about
+// a fn VALUE before running it: which registry resolves its free words, and
+// which captures ride along.
+//
+// The defining registry wins whenever the fn carries one, so a callback's free
+// words resolve where the function was WRITTEN rather than where a Go word
+// happens to invoke it. Both nil cases fall back to the caller's registry and
+// are correct by construction: fnDef == nil is a synthesized carrier sig with no
+// fn value behind it, and fnDef.Registry == nil is a fn defined in the running
+// scope, whose defining registry IS r.
+func FnHome(r *Registry, fnDef *FnDefInfo) (*Registry, []CapturedBinding) {
+	if fnDef == nil {
+		return r, nil
+	}
+	if fnDef.Registry != nil {
+		return fnDef.Registry, fnDef.Captured
+	}
+	return r, fnDef.Captured
+}
+
 // isInternalErr reports whether err is an internal_error-class BoruError — the
 // signal runVMEntry stamps on a recovered VM panic / lowering soundness bailout,
 // and the exact class RunCompiled resolves by re-running on the interpreter. The

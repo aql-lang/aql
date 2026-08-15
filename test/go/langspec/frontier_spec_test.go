@@ -237,6 +237,53 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// varyRefusalLedger ("islanded").
 	`[10 20] each [drop 1 2 3 1 pick]`: {why: "full-stack word in a code body: the fold declines outside the top unit; the island seam owns it", failsWith: "islanded"},
 
+	// Bare deref of a Function-typed PARAM where no argument is available
+	// (design/FUNCTION-VALUE-SCOPE.0.md §11 rule 3, §12.4). The SLOT is fine —
+	// stepWord's TFunction intercept binds the argument as a reference. Reading
+	// the bound param in the body is what diverges: the interpreter treats a
+	// bare name as a CALL (arity 0 applies, arity >=1 raises), the compiler
+	// treats a param as a VALUE slot (RegisterLocal) and yields the Function.
+	// Both are internally consistent under different models, and both are
+	// check-clean, so this is a language decision rather than a defect with a
+	// right answer. The middle case (arity >=1 WITH arguments) already agrees on
+	// both engines and is pinned green five times in the main corpus.
+	//
+	// Graduation = a maintainer decision on one question: is a Function-bound
+	// name read with no argument available a nullary call, or a value?
+	`def nought fn [[] [Integer] [7]] def grab fn [[f:Function] [Any] [f]] typeof (grab nought)`:          {why: "arity-0 Function param read bare: interpreter applies it, compiler yields the Function", failsWith: "value parity"},
+	`def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)`: {why: "arity-1 Function param read bare with no argument: interpreter raises, compiler yields the Function", failsWith: "parity"},
+
+	// Cross-module fn value in a higher-order word's CLOSURE slot
+	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3). A fn value resolves its free
+	// words in its DEFINING module; the closure lowering compiles the body
+	// against the CALLING one, so compiling this baked the caller's `lim`
+	// (100) and returned [] where the interpreter returns [3 4] — a
+	// check-clean miscompile. foreignFnHome (compiler/go/callable_words.go)
+	// declines the lowering, and the callback seam's island runs the body on
+	// its own registry (core.CallBoruFn), so parity holds and the island is
+	// merely slow.
+	//
+	// Graduation = compile the foreign body against fd.Registry. The RUNTIME
+	// half already exists: CompiledFn.Reg (compiler/go/bytecode.go:970) plus
+	// enterUnit's `if p.Fns[u].Reg != nil { curReg = p.Fns[u].Reg }`
+	// (eng/go/vm.go:1403-1414) already give a closure unit its own dispatch
+	// registry, and StartFnCompile's fnReg parameter (compiler/go/emit.go:3314)
+	// already plumbs it. Three of the four compile-side roles are solved
+	// patterns the NAMED foreign-fn path already uses — shareCheckStateFrom
+	// (check/go/check_recovery.go:527) for the CheckState, and
+	// fd.Registry.AnalysisScopeID() for the memo key, exactly as
+	// check/go/check_fnbody.go:312,513 does. The one unsolved role is CAPTURE
+	// OPERANDS: recordClosureDispatch resolves them in the CALLER's emit tables
+	// (callable_words.go:474-481) and dynScopeRescue re-resolves them at run
+	// time against the caller's curReg (eng/go/vm.go:1902), so a foreign
+	// module-scope capture has no operand home. Closing it needs either a
+	// refusal for foreign closures with non-lexical captures, or a
+	// registry-tagged dyn-scope operand so OpLookupDynScope can name
+	// fd.Registry. The context bracket is a second, smaller asymmetry:
+	// enterBodyUnit pushes/pops on the CALLING registry (vm.go:294-300) while
+	// curReg would be fd.Registry.
+	`import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/r}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]`: {why: "a fn value from another module reaches a higher-order word's closure slot; the lowering would resolve its free words in the CALLING module, so it declines and the callback-seam island owns it", failsWith: "islanded"},
+
 	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns —
 	// the P1.3 target — GRADUATED 2026-08-03 (completeness-review §8.2(3)/
 	// §9.11): tryCompileUserPolyArms records the position-wise JOIN of the

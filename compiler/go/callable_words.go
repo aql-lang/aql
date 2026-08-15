@@ -325,7 +325,7 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	// cleanly), rides the stack at OpPushClosure, and binds a trailing unit
 	// slot in invokeClosureOn — value-identical to the interpreter's
 	// construction-time snapshot, taken at the same program point per dispatch.
-	lam, ok := lambdaHookCompatible(fd, inputs, shape, true)
+	lam, ok := lambdaHookCompatible(r, fd, inputs, shape, true)
 	if !ok {
 		return false
 	}
@@ -346,6 +346,30 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	// merged order.
 	captures := moduleScopeMutableCaptures(r, lam.Body(), fd.Captured)
 	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
+}
+
+// foreignFnHome reports whether fd is a fn VALUE that was DEFINED in another
+// module — its `Registry` is set and is not the registry being compiled.
+//
+// Such a body's free words resolve in the DEFINING module
+// (design/FUNCTION-VALUE-SCOPE.0.md): that is what `execFnDefLiteral` does at
+// runtime and what the CallBoruFn / InvokeCallbackFn seams now do for every
+// native callback. A closure unit, though, is compiled against `r` — the module
+// doing the CALLING — so lowering a foreign fn's body bakes in whatever `r`
+// happens to bind for those names. The two engines then disagree: `filter
+// P.big xs` returns one answer interpreted and another compiled, with no
+// diagnostic either way.
+//
+// Declining the lowering is the whole fix. The refusal falls through to the
+// runtime callback path, which runs the body on fd.Registry — the same place
+// the interpreter runs it — so the answers match. Compiling the body correctly
+// (against fd.Registry, with its own const pool and stamp registry) is the
+// larger Phase-2 change; refusing costs only the closure fast path on a
+// cross-module callback, and costs nothing at all on the common same-module one.
+// Both callers take fd from `args[i].Data.(core.FnDefInfo)` and pass its
+// address, so fd is never nil here.
+func foreignFnHome(r *core.Registry, fd *core.FnDefInfo) bool {
+	return fd.Registry != nil && fd.Registry != r
 }
 
 // lambdaHookCompatible reports whether a LAMBDA hook value can compile to a
@@ -373,7 +397,23 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 //     a KeyVal (a Map subtype) the carrier conservatively under-types as a
 //     plain Map, so any Map-family param is accepted there and only a
 //     provably-incompatible param (a scalar, a sibling container) refuses.
-func lambdaHookCompatible(fd *core.FnDefInfo, inputs []core.Value, shape core.ClosureInShape, allowCaptures bool) (*core.Signature, bool) {
+func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Value, shape core.ClosureInShape, allowCaptures bool) (*core.Signature, bool) {
+	// A fn value DEFINED in another module resolves its free words THERE
+	// (design/FUNCTION-VALUE-SCOPE.0.md); a closure unit is compiled against r,
+	// the module doing the CALLING, so lowering one would bake in whatever r
+	// binds for those names — one answer interpreted, another compiled, no
+	// diagnostic either way. Declining leaves the runtime callback seam
+	// (core.CallBoruFn) to run the body on its own registry, which is where the
+	// interpreter runs it too, so the engines agree. Compiling a foreign body
+	// correctly is the cross-registry-unit follow-up; the frontier ledger entry
+	// for the `filter A.big` row records what it takes.
+	//
+	// This lives here rather than at the two call sites so there is ONE branch
+	// to reach and to cover: the BODY-lambda path exercises it, and the
+	// extras/hook path (walk's ascend slot) inherits it for free.
+	if foreignFnHome(r, fd) {
+		return nil, false
+	}
 	lam, ok := fd.FirstOwnSig()
 	if !ok || len(lam.Body()) == 0 {
 		return nil, false
@@ -475,7 +515,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 		if !insOK { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return false
 		}
-		lam, lamOK := lambdaHookCompatible(&fd, hookIns, hookShape, false)
+		lam, lamOK := lambdaHookCompatible(r, &fd, hookIns, hookShape, false)
 		if !lamOK {
 			return false
 		}

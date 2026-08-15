@@ -941,11 +941,13 @@ func callParseFn(r *native.Registry, fn native.Value, args []native.Value) ([]na
 	if sig == nil {
 		return nil, fmt.Errorf("no matching callback signature")
 	}
-	var caps []native.CapturedBinding
+	var fnDef *native.FnDefInfo
 	if fd, ok := fn.Data.(native.FnDefInfo); ok {
-		caps = fd.Captured
+		fnDef = &fd
 	}
-	return r.CallBoru(sig, args, caps)
+	// CallBoruFn, not r.CallBoru: a matcher/action written in the grammar's own
+	// module resolves its free words there (design/FUNCTION-VALUE-SCOPE.0.md).
+	return core.CallBoruFn(r, fnDef, sig, args)
 }
 
 // abnfOptsFrom reads the {start tag builtins marks} option map into the

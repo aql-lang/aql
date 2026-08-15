@@ -1,0 +1,42 @@
+# Bare deref of a Function-typed PARAM, with no argument available
+# (design/FUNCTION-VALUE-SCOPE.0.md §11 rule 3, §12.4).
+#
+# The Function SLOT is fine: stepWord's TFunction intercept (core/go/engine.go)
+# binds the argument as a reference, driven by hasPendingForwardExpectingFunction
+# reading SigArgType off the pending forward. What diverges is READING that bound
+# param inside the body where no argument follows it:
+#
+#   arity 0, no args   interpreter APPLIES (Integer/7)   compiler yields Function
+#   arity >=1, args    both APPLY                        (agreed — see
+#                                                         module-fnvalue-boundary,
+#                                                         fn-value.tsv, five rows)
+#   arity >=1, no args interpreter RAISES signature_error compiler yields Function
+#
+# Rows 1 and 3 are check-clean compile != interpret divergences, and row 1 is a
+# silent wrong VALUE in default mode — the class
+# lang/go/bytecode_stored_handler_freeze_test.go gates as MISCOMPILE.
+#
+# They are here rather than in the main corpus because NEITHER ENGINE IS
+# OBVIOUSLY RIGHT, and picking one is a language decision, not a bug fix:
+#
+#   * The interpreter's model is "a bare name is a call" — spec'd by
+#     path-modifier.tsv ("a bare fn name remains a call/barrier") and
+#     fn-value.tsv ("with no argument the 0-arg signature still answers"), and
+#     conceded by rule 3 itself: "in a concatenative language a bare word IS
+#     application, so /r is right and worth keeping".
+#   * The compiler's model is "a param is a value slot" — the param is lowered
+#     to a unit local (RegisterLocal) and never becomes a dispatchable name.
+#
+# Adopting the interpreter's model means changing the VM's param-slot lowering.
+# Adopting the compiler's model means a bare param name stops being callable,
+# which contradicts the invariant rule 3 says to keep. The `expected` column
+# below is the INTERPRETER's answer, because the interpreter is this corpus's
+# semantics oracle — not because it is the decided answer.
+#
+# Graduation = a maintainer decision on ONE question: when a name bound to a
+# Function value is read where no argument is available, is that a nullary call
+# or a value? Note the answer is arity-discriminated in practice — the middle row
+# already agrees on both engines — so the edit is likely narrow; the cost is
+# re-baselining the spec corpus and the differential gate, not the edit.
+def nought fn [[] [Integer] [7]] def grab fn [[f:Function] [Any] [f]] typeof (grab nought)	Integer	arity-0 Function param read bare: the interpreter APPLIES it (7 -> Integer), the compiler yields the Function
+def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)	ERROR:no signature matches	arity-1 Function param read bare with no argument: the interpreter RAISES, the compiler yields the Function

@@ -76,11 +76,13 @@ func makeWalkApply(cb Value, r *Registry, callErr *error) func(*string, any, any
 			*callErr = fmt.Errorf("walk: no matching callback signature")
 			return val
 		}
-		var cbCaps []CapturedBinding
+		var cbDef *FnDefInfo
 		if fd, ok := cb.Data.(FnDefInfo); ok {
-			cbCaps = fd.Captured
+			cbDef = &fd
 		}
-		cbResult, err := r.CallBoru(cbSig, cbArgs, cbCaps)
+		// CallBoruFn, not r.CallBoru: the callback resolves its free words in the
+		// module that DEFINED it (design/FUNCTION-VALUE-SCOPE.0.md).
+		cbResult, err := CallBoruFn(r, cbDef, cbSig, cbArgs)
 		if err != nil {
 			*callErr = err
 			return val

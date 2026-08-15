@@ -31,3 +31,31 @@ import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] e
 import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, bm: (fn [[x:Integer] [Integer] [raise oops_e "bang"]])}] end L.useanon L.bm 1	ERROR:bang	a raise inside the value-dispatched body propagates out as the same error
 import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/r, brk: (fn [[x:Integer] [Any] [break]])}] end L.looper L.brk	1	a break in a value-dispatched body terminates the enclosing loop — identical to a named call (the escaped frame's cleanup tail is unwound, not leaked)
 import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [(args.0 1) def acc (acc add 1)] acc]] export "L" {looper: looper/r, skp: (fn [[x:Integer] [Any] [continue]])}] end L.looper L.skp	0	a continue in a value-dispatched body skips the rest of the iteration — identical to a named call; the escaped frame's args list is popped, so the caller's args stay its own
+#
+# ──────────────────────────────────────────────────────────────────────
+# §4  a fn VALUE carries its DEFINING module's scope
+#
+# design/FUNCTION-VALUE-SCOPE.0.md. A function value's free words resolve
+# in the module that WROTE it, at CALL time — not in whichever module
+# happens to run it. Each row below binds the module's private helper name
+# to a DIFFERENT definition at top level; the module's answer (6, or
+# [3 4]) proves the body read its own, and the caller's answer (500, or an
+# empty list) is the pre-fix result. Nothing type-checks the difference —
+# both definitions are [[Integer] [Integer]] — so a regression here is a
+# silently wrong number, not an error.
+#
+# Applying a value and NAMING it must agree: the asymmetry ("applying a
+# value keeps its scope, naming it loses it") was the defect.
+import module [def secret fn [[n:Integer] [Integer] [n add 1]] def pub fn [[n:Integer] [Integer] [secret n]] export "A" {pub: pub/r}] end def secret fn [[n:Integer] [Integer] [n mul 100]] A.pub 5	6	APPLYING an export resolves its free `secret` in the DEFINING module (500 = the caller's)
+import module [def secret fn [[n:Integer] [Integer] [n add 1]] def pub fn [[n:Integer] [Integer] [secret n]] export "A" {pub: pub/r}] end def g A.pub def secret fn [[n:Integer] [Integer] [n mul 100]] g 5	6	BINDING an export to a name keeps its scope too — `def g A.pub` must answer exactly as `A.pub`
+import module [def secret fn [[n:Integer] [Integer] [n add 1]] def pub fn [[n:Integer] [Integer] [secret n]] export "A" {pub: pub/r}] end def secret fn [[n:Integer] [Integer] [n mul 100]] def apply1 fn [[f:Function n:Integer] [Integer] [f n]] apply1 A.pub 5	6	a named `f:Function` PARAMETER — the commonest way a library takes a callback — keeps the argument's scope
+# The NATIVE callback seam (filter's Function form) belongs here too, but it
+# is the one row of this section the compiler cannot yet model: the closure
+# lowering declines a foreign fn value, so the call ISLANDS. It therefore
+# lives in lang/spec/frontier/frontier-fnvalue-scope.tsv, outside this
+# ratchet, with its graduation criterion pinned in the frontier ledger. Its
+# SEMANTICS are pinned on both engines by
+# lang/go/function_value_scope_test.go ("filter Function form").
+#
+# The negative: scope travels with the VALUE, it does not open the module.
+import module [def hidden fn [[n:Integer] [Integer] [n add 1]] def only fn [[n:Integer] [Integer] [hidden n]] export "A" {only: only/r}] end hidden 5	ERROR:undefined_word	a module-private word stays private — the importer cannot reach `hidden`, only the exported value can

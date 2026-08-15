@@ -416,11 +416,11 @@ func runHandlerChain(r *Registry, state Value, req Value, chain []Value) ([]Valu
 	priorFn := makePriorFn(r, state, rest)
 	args3 := []Value{req, state, priorFn}
 	if sig := MatchFnSig(handler, args3); sig != nil {
-		return core.InvokeCallback(r, sig, args3, fnInfo.Captured)
+		return core.InvokeCallbackFn(r, fnInfo, sig, args3)
 	}
 	args2 := []Value{req, state}
 	if sig := MatchFnSig(handler, args2); sig != nil {
-		return core.InvokeCallback(r, sig, args2, fnInfo.Captured)
+		return core.InvokeCallbackFn(r, fnInfo, sig, args2)
 	}
 	return nil, r.BoruErrorHint("service_error",
 		"handler signature must be [req state] or [req state prior]",

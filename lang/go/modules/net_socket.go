@@ -546,7 +546,24 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 	// Fork ON THE CALLER'S GOROUTINE (the ForkConcurrent contract); the
 	// accept loop owns this fork and forks it again per connection.
-	acceptorFork := r.ForkConcurrent()
+	//
+	// Fork from the handler's DEFINING registry, not from the caller's: the
+	// handler body's free words resolve where it was WRITTEN
+	// (design/FUNCTION-VALUE-SCOPE.0.md), so a `serve-raw` handler exported by
+	// a module must see that module's private helpers. Forking is what makes
+	// this safe to do here rather than just passing the module registry along —
+	// the per-connection goroutines each get their own cloned Defs/Types and a
+	// private context layer, so they never share mutable state with the module
+	// or with each other. The fork inherits the DEFINING registry's
+	// capabilities, which a module body already inherited from its importer at
+	// load time, so this widens nothing.
+	//
+	// Writers stay the CALLER's (below): output belongs to the program that
+	// started the server, not to whichever module supplied the handler.
+	forkBase, _ := core.FnHome(r, fnInfo)
+	acceptorFork := forkBase.ForkConcurrent()
+	acceptorFork.Output = r.Output
+	acceptorFork.ErrOutput = r.ErrOutput
 	rt := r.Procs
 	if rt != nil {
 		acceptorFork.Output = rt.SyncOutput(r.Output)
@@ -596,7 +613,7 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 				// is idle, the body runs on the VM (RunUnit) — closing the ~19x
 				// interpreter penalty the networking benchmark measured — else it
 				// falls back to CallBoru, byte-identical.
-				if _, hErr := core.InvokeCallback(connFork, sig, []native.Value{sock}, fnInfo.Captured); hErr != nil {
+				if _, hErr := core.InvokeCallbackFn(connFork, fnInfo, sig, []native.Value{sock}); hErr != nil {
 					// `closed` is the normal end of a connection; anything
 					// else is a real handler failure worth logging.
 					var ae *core.BoruError

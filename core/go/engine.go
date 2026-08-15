@@ -2720,6 +2720,17 @@ func (e *Engine) stepWord(val Value) error {
 		// overload of the name (across stacked defs), not just the topmost
 		// entry's own sigs.
 		if fnDef := e.Registry.Lookup(w.Name); fnDef != nil {
+			// Resolving a name INTO a Function slot is a use of that def, for
+			// the same reason ResolveRef records one (core_ref.go:31-35): the
+			// name is consumed as a value rather than called, so nothing else
+			// on this path marks it. Without the note, `boru check` reports
+			// `unused_def` for every fn handed bare to a callback API — the
+			// canonical `Sort.quick mycmp xs` idiom — which is a false positive
+			// on the single most common way a library takes a function.
+			//
+			// Noted only on a SUCCESSFUL Lookup, so a genuinely unused def
+			// still warns: the fall-through below is a non-fn word.
+			e.Registry.noteAnalysisUse(w.Name)
 			e.Tape.Set(e.Pointer, NewFunction(*fnDef))
 			return e.stepLiteral()
 		}

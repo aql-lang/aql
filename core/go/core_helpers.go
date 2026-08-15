@@ -623,7 +623,12 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	// (an undefined word, an in-body forward strand). Bytecode recording is
 	// suspended (a registration is not part of the program's straight line; the
 	// armed compile at first dispatch deletes this suspended summary and re-records).
-	r.analysisFnConstructionPass(name, entry)
+	// Same registry as the body handler above: analysing a foreign fn's body
+	// against the INSTALLING registry reports `undefined_word` for every
+	// module-private name the body legitimately reaches
+	// (design/FUNCTION-VALUE-SCOPE.0.md §7.3 item 3).
+	home, _ := FnHome(r, &fnDef)
+	home.analysisFnConstructionPass(name, entry)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
@@ -637,6 +642,23 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 // (`def <locked word> fn […]` — the open-words merge), so an added
 // signature dispatches byte-identically to an installed fn's.
 func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) []Signature {
+	// The body runs — and its free words resolve — in the registry that
+	// DEFINED the fn, not the one installing the name
+	// (design/FUNCTION-VALUE-SCOPE.0.md §4.3). `def g A.pub` and a named
+	// `f:Function` parameter both funnel here, and building the handler
+	// against the installing registry is what made `A.pub 5` and
+	// `def g A.pub  g 5` give DIFFERENT answers: applying a value kept its
+	// scope, naming it lost it.
+	//
+	// Registry is set only at module-export resolution, so a fn defined in
+	// the running scope has none and this is r — the common path is byte-
+	// identical. Only a value that arrived from another module moves.
+	//
+	// The rebind is TOTAL and deliberate: every remaining use of r below —
+	// buildFnBodyHandler's closed-over registry, its body analyses, the frame
+	// tail, analysisReturnsFn — wants the defining one. Read the rest of this
+	// function as "r is where this fn lives".
+	r, _ = FnHome(r, &fnDef)
 	// Expand optional parameters into additional signatures.
 	sigs := ExpandOptionalSigs(name, fnDef.OwnSigs())
 	compiled := make([]Signature, 0, len(sigs))

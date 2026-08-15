@@ -50,10 +50,10 @@ type walkHook struct {
 	present bool
 	lambda  bool
 	closure bool
-	fn      Value             // when lambda: the Function value
-	body    Value             // when closure: run via InvokeBody
-	caps    []CapturedBinding // when lambda: its captured bindings
-	tokens  []Value           // when quotation: the body tokens
+	fn      Value      // when lambda: the Function value
+	body    Value      // when closure: run via InvokeBody
+	fnDef   *FnDefInfo // when lambda: its definition (captures + defining registry)
+	tokens  []Value    // when quotation: the body tokens
 }
 
 // walkEntry is one child of a node: its key (map key, or stringified index for
@@ -135,7 +135,7 @@ func walkClassifyHook(r *Registry, body Value) (walkHook, error) {
 		h.lambda = true
 		h.fn = body
 		if fd, ok := body.Data.(FnDefInfo); ok {
-			h.caps = fd.Captured
+			h.fnDef = &fd
 		}
 		return h, nil
 	}
@@ -162,7 +162,9 @@ func callWalkHook(r *Registry, h walkHook, arg Value) error {
 		if sig == nil {
 			return r.BoruError("walk_error", "walk: no matching hook signature", "walk")
 		}
-		_, err := r.CallBoru(sig, []Value{arg}, h.caps)
+		// CallBoruFn, not r.CallBoru: a hook lambda written in another module
+		// resolves its free words THERE (design/FUNCTION-VALUE-SCOPE.0.md).
+		_, err := CallBoruFn(r, h.fnDef, sig, []Value{arg})
 		return err
 	}
 	if h.closure {

@@ -372,7 +372,7 @@ func (d *tuiDriver) applyUpdate(state, msg native.Value) (native.Value, bool, er
 	if sig == nil {
 		return native.Value{}, false, d.reg.BoruError("tui_error", "run: update does not accept (state, event)", "run")
 	}
-	out, err := core.InvokeCallback(d.reg, sig, []native.Value{state, msg}, d.app.updateInfo.Captured)
+	out, err := core.InvokeCallbackFn(d.reg, d.app.updateInfo, sig, []native.Value{state, msg})
 	if err != nil {
 		return native.Value{}, false, err
 	}
@@ -415,7 +415,7 @@ func (d *tuiDriver) render(state native.Value) error {
 	if sig == nil {
 		return d.reg.BoruError("tui_error", "run: view does not accept the state", "run")
 	}
-	out, err := core.InvokeCallback(d.reg, sig, []native.Value{state}, d.app.viewInfo.Captured)
+	out, err := core.InvokeCallbackFn(d.reg, d.app.viewInfo, sig, []native.Value{state})
 	if err != nil {
 		return err
 	}

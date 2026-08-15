@@ -384,9 +384,12 @@ func parseStep(s string) model.Step {
 // model build), else falls back to the interpreter (CallBoru) — captures and
 // ineligible shapes decline the stamp and interpret unchanged.
 func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.ActionDef {
-	var caps []native.CapturedBinding
+	// The fn's own definition is hoisted out of the type-assert so the action
+	// closure can hand it to InvokeCallbackFn: a model action written in another
+	// module must resolve its free words there (design/FUNCTION-VALUE-SCOPE.0.md).
+	var fnInfo *native.FnDefInfo
 	if fd, ok := fnVal.Data.(native.FnDefInfo); ok {
-		caps = fd.Captured
+		fnInfo = &fd
 	}
 	return model.ActionDef{
 		Step: step,
@@ -400,7 +403,7 @@ func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.Actio
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: no matching signature (declare one param for the model Map)"))
 				return model.ActionResult{OK: false}
 			}
-			res, err := core.InvokeCallback(h.actionReg, sig, []native.Value{modelVal}, caps)
+			res, err := core.InvokeCallbackFn(h.actionReg, fnInfo, sig, []native.Value{modelVal})
 			if err != nil {
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: %w", err))
 				return model.ActionResult{OK: false}
