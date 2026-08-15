@@ -60,7 +60,7 @@ keep the two in sync in the same commit.
 |---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — VERDICT 2026-08-15: resolve by fix (templates take the full quoted-string escape set) | 2026-07-22 uniformity review |
-| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon) | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
+| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon); REFINED 2026-08-15 — the halves are one root cause (the binding name in FnDefInfo.Name drives eq, canon and tcmp alike), so: BOX FnDefInfo for eq (reference) and compare signatures+body for deq (NUR011 as written), canon renders the ANONYMOUS fn literal, and PR #366's native-callback seam lands first. Design-unblocked, sequenced | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain — VERDICT 2026-08-15: resolve by fix (enumeration walks the prototype chain with masking; a `del` tombstone hides the key from BOTH) | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
 | [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon — VERDICT 2026-08-15: resolve by fix (source-form renderers for the sugar kinds, the `/r` and `/N` modifiers and the paren group, on BOTH engines) | 2026-08-08 Go/TS canon parity work |
@@ -1264,6 +1264,59 @@ never reads a field, as the descriptor fix already did.
 
 Stays **Pending** until the Behavior routing and the name-independent
 canon land.
+
+### Verdict refinement (maintainer, 2026-08-15) — the three questions the fix could not answer for itself
+
+Implementation recon established that the two "halves" this record
+names are **not separable**: `def a (f/r)` stamps the binding name into
+`FnDefInfo.Name`, and that ONE field is what `eq` reads (via
+`ExactEqual`'s type-body arm → `ValuesEqual` over the payload struct),
+what `canon` renders, and what `tcmp` orders on (`compare_types.go`
+sorts by `CanonValue`). Fixing equality alone would mean special-casing
+`eq` to ignore `Name` while canon still shows it — leaving `eq` and
+canon disagreeing, which is the "wrong answer that is *harder* to see"
+the verdict above warns about. `FnDefInfo` is a value struct with no
+stable reference, so identity has to come from somewhere new. Three
+decisions follow.
+
+**1. Identity model: box for `eq`, structural for `deq`.** Exactly what
+NUR011 already says for every other Ideal — `eq` is reference identity,
+`deq` is deep value equality — applied to functions for the first time.
+`FnDefInfo` is boxed behind a pointer (the shape `*ModuleDesc` already
+uses, and for the same reason: the struct holds a Go map, so `==` on the
+bare value would panic), so two bindings of one function share it and
+`a/r eq b/r` is true. `deq` compares signatures and body, so
+`f/r deq f/r` is true and a re-parsed canon is `deq` to its original.
+
+The alternatives were rejected on measurable grounds. Reference identity
+for BOTH would leave `parse(canon(f/r)) deq f/r` permanently false — a
+re-parsed function is a fresh box — so ADR-015's gate could never go
+green for functions, only ever carry them on its ledger. Structural for
+both would collapse the `eq`/`deq` distinction and make two
+independently-written identical functions `eq`, contradicting NUR011's
+reference rule.
+
+**2. Canon: the anonymous fn literal.** `canon (f/r)` renders
+`fn [[x:Any] [Any] [x]]` — the name is dropped entirely, not replaced.
+It is already valid source, it re-parses to a structurally identical
+function, and it is name-independent by construction rather than by a
+naming scheme. With structural `deq` that satisfies ADR-015 with no new
+syntax and no new record. (A stable DERIVED name was available and not
+taken: it keeps debug readability but needs a scheme, and the name is
+not part of what re-parses, so it would be decoration on the contract
+rather than part of it.)
+
+**3. Sequencing: PR #366's native-callback seam lands first.** That PR
+reports `installDef` → `buildFnBodyHandler` rebuilding a fn's handler
+closed over the INSTALLING registry, dropping `FnDefInfo.Registry` —
+the same code path that stamps the binding name. Its callback-seam half
+is a pure bug fix with no cross-engine divergence to migrate, so
+landing it first means this record edits `installDef` once, against
+settled behaviour, instead of twice with a rebase between.
+
+**This record is therefore DESIGN-UNBLOCKED but SEQUENCED**: it stays
+Pending, and its next action is gated on #366's callback-seam fix
+rather than on a further decision.
 
 **Standing requirement (maintainer, 2026-07-31; module half
 discharged 2026-08-02):** every value — functions and modules
