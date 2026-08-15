@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"sort"
 )
 
 // ErrNoConverter lets a Behavior decline the IdealConverter capability so
@@ -166,13 +165,12 @@ func storeEntryMap(v Value) *OrderedMap {
 	if err != nil || si == nil {
 		return out
 	}
-	keys := make([]string, 0, len(si.Data))
-	for k := range si.Data {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		out.Set(k, si.Data[k])
+	// The VISIBLE keyset, not this layer's own — enumeration walks the
+	// prototype chain with masking and tombstones exactly as Get does, so
+	// a Store shows the keys it answers for (NUR052). Reading si.Data
+	// directly under-reported every key inherited from a parent layer.
+	for _, e := range si.VisibleEntries() {
+		out.Set(e.Key, e.Value)
 	}
 	return out
 }

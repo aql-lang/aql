@@ -754,12 +754,21 @@ func storeDeepEqual(a, b *StoreInstanceInfo) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	if len(a.Data) != len(b.Data) {
+	// The VISIBLE entries, not each store's newest copy-on-write layer
+	// (NUR052). NUR031 defined a Store's deq as "the same own-entry
+	// projection as `convert Map`", and that projection now walks the
+	// prototype chain — so comparing a.Data to b.Data would leave two
+	// stores that convert to the same map, and answer identically to
+	// every lookup, comparing UNEQUAL because their newest layers happen
+	// to hold different keys. Which layer a key was written on is not
+	// part of a store's value.
+	ae, be := a.VisibleEntries(), b.VisibleEntries()
+	if len(ae) != len(be) {
 		return false
 	}
-	for k, av := range a.Data {
-		bv, ok := b.Data[k]
-		if !ok || !DeepEqual(av, bv) {
+	// Both slices are sorted by key, so one pass compares them.
+	for i, e := range ae {
+		if e.Key != be[i].Key || !DeepEqual(e.Value, be[i].Value) {
 			return false
 		}
 	}
