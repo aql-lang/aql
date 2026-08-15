@@ -8,10 +8,14 @@
 > approval — it discharges ADR candidate 2 of
 > `design/NUR-RESOLUTION-PLAN.0.md`.
 >
-> Surfaced NURs: [NUR057](../NUR.md#nur057), [NUR058](../NUR.md#nur058);
-> NUR059 and NUR060 were surfaced by §6 and RESOLVED by the stage-6
-> implementation (records deleted per the register's resolved-record
-> rule; the numbers are retired).
+> Surfaced NURs: NUR057 and NUR058, both since RESOLVED BY FIX and their
+> records deleted (2026-08-15) per the register's resolved-record rule —
+> the anchors went with them, so these are deliberately plain text;
+> `git log -S NUR057` recovers the history, and both numbers are retired,
+> never reassigned. NUR059 and NUR060 were also surfaced by §6 but are
+> **still open** (Pending in the register) — an earlier revision of this
+> note claimed they had been resolved and deleted by the stage-6
+> implementation, which the register contradicts; corrected 2026-08-15.
 
 ## 0. The boundary principle (maintainer direction, 2026-08-03)
 

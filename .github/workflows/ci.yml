@@ -92,6 +92,25 @@ jobs:
       - name: Parser Go/TypeScript parity and 100% coverage
         run: make parser-parity
 
+      # core/go profiled by ITS OWN suite alone, floor 100 — the standalone
+      # gate from design/ENG-FOUR-PIECE.0.md Stage 5.
+      #
+      # Added for the same reason the knowledge-graph step above was: it ran
+      # only as a local pre-commit gate, so the rule was enforced solely by
+      # remembering to run it. The merged ADR-008 gate (`make cover-gate`)
+      # went un-run in CI too, and a statement in compiler/go sat uncovered
+      # on main until a hand-run of the checklist found it — a 100% floor
+      # nothing checks is a 100% floor nobody keeps.
+      #
+      # This is the CORE gate specifically, not the whole repo-wide
+      # cover-gate: core is the piece with no upward dependencies and a
+      # settled 100% floor, and its suite runs in a couple of minutes,
+      # where the merged gate re-profiles all 13 modules (~20 min) and
+      # would dominate the job. Widening CI to the merged gate is a
+      # separate call about CI budget.
+      - name: Core standalone coverage gate (ADR-008, floor 100)
+        run: make cover-gate-core
+
       # The bytecode compiler's correctness gates (differential,
       # whole-corpus parity, combination matrix, alloc ceilings) run as
       # part of `make test`. The race-detector gates do not, so run them

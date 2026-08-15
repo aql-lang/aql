@@ -596,13 +596,29 @@ cover-profile:
 	done
 
 cover-check:
-	@echo "==> cover-check ($(abspath $(COVER_DIR))/*.xout)"
-	@cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/*.xout
+	@echo "==> [cover-check] START — analysing $(abspath $(COVER_DIR))/*.xout against floor $(GATE_FLOOR)%"
+	@cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/*.xout \
+	  || { echo "==> [cover-check] FAILED — below the $(GATE_FLOOR)% floor (see the uncovered count above)"; exit 1; }
+	@echo "==> [cover-check] PASS"
 
+# cover-gate announces each STAGE's start and finish on its own line, so a
+# CI log or a scrollback tells you which stage you are in — and, on a
+# failure, which stage failed — without reading the interleaved per-module
+# chatter. The stages are the same two addressable targets documented
+# above; naming them here is presentation, not a second mechanism.
 cover-gate:
-	@$(MAKE) --no-print-directory cover-profile
-	@$(MAKE) --no-print-directory cover-check
-	@echo "==> cover-gate done"
+	@echo "==> [cover-gate] START — 2 stages: profile, then check (floor $(GATE_FLOOR)%)"
+	@t0=$$(date +%s); \
+	  echo "==> [cover-gate] stage 1/2: cover-profile ($(words $(MODULES)) modules)"; \
+	  $(MAKE) --no-print-directory cover-profile \
+	    || { echo "==> [cover-gate] FAILED at stage 1/2 (cover-profile) after $$(($$(date +%s) - t0))s"; exit 1; }; \
+	  echo "==> [cover-gate] stage 1/2 cover-profile DONE in $$(($$(date +%s) - t0))s"; \
+	  t1=$$(date +%s); \
+	  echo "==> [cover-gate] stage 2/2: cover-check"; \
+	  $(MAKE) --no-print-directory cover-check \
+	    || { echo "==> [cover-gate] FAILED at stage 2/2 (cover-check) after $$(($$(date +%s) - t1))s"; exit 1; }; \
+	  echo "==> [cover-gate] stage 2/2 cover-check DONE in $$(($$(date +%s) - t1))s"; \
+	  echo "==> [cover-gate] ALL STAGES PASSED in $$(($$(date +%s) - t0))s"
 
 # cover-gate-eng — the STANDALONE kernel gate (design/ENG-COVERAGE-
 # PARITY.0.md): eng/go profiled by ITS OWN suite only (the standalone
@@ -646,12 +662,16 @@ CORE_GATE_FLOOR ?= 100
 cover-gate-core:
 	@mkdir -p $(COVER_DIR)
 	@rm -f $(COVER_DIR)/core_standalone.engout
-	@echo "==> cover-gate-core (standalone, floor $(CORE_GATE_FLOOR)%)"
-	@( cd core/go && go test -timeout 25m \
+	@echo "==> [cover-gate-core] START — stage 1/2: profile core/go by its own suite (floor $(CORE_GATE_FLOOR)%)"
+	@t0=$$(date +%s); ( cd core/go && go test -timeout 25m \
 	  -coverpkg=github.com/boru-lang/boru/core/go/... \
 	  -coverprofile=$(abspath $(COVER_DIR))/core_standalone.engout ./... > $(abspath $(COVER_DIR))/core_standalone.log 2>&1 ) \
-	  || { echo "==> cover-gate-core test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/core_standalone.log; exit 1; }
-	@cd test/go && go run ./covergate -threshold $(CORE_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/core_standalone.engout
+	  || { echo "==> [cover-gate-core] FAILED at stage 1/2 (test run):"; tail -30 $(abspath $(COVER_DIR))/core_standalone.log; exit 1; }; \
+	  echo "==> [cover-gate-core] stage 1/2 profile DONE in $$(($$(date +%s) - t0))s"
+	@echo "==> [cover-gate-core] stage 2/2: check against floor $(CORE_GATE_FLOOR)%"
+	@cd test/go && go run ./covergate -threshold $(CORE_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/core_standalone.engout \
+	  || { echo "==> [cover-gate-core] FAILED at stage 2/2 — below the $(CORE_GATE_FLOOR)% floor"; exit 1; }
+	@echo "==> [cover-gate-core] ALL STAGES PASSED (floor $(CORE_GATE_FLOOR)%)"
 
 # cover-gate-check / cover-gate-compiler — the standalone gates for the
 # two middle pieces (design/ENG-FOUR-PIECE.0.md Stage 6), the twins of
