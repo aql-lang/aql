@@ -88,6 +88,10 @@ flips are rejected; the levers are the call-site modifiers and grouping.
 > **Amendment (2026-07-30).** `uncalled_function` raises at the call
 > site at runtime, not as a check-mode advisory.
 
+> **Amendment (2026-08-15).** Four categories, not one exception: `|`
+> splits signatures into forward-eligible, mixed-barrier, stack-only,
+> quoting slots. [ADR-004-REFINEMENT.0.md](design/ADR-004-REFINEMENT.0.md)
+
 ---
 
 ## ADR-005 — No deliberate panics {#adr-005}
