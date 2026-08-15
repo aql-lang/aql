@@ -1980,13 +1980,24 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 // keeps the two paths agreeing rather than trading one asymmetry for
 // another.
 func (r *Registry) enforceCallBoruReturns(sig *FnSig, name string, result []Value) error {
-	n := len(sig.Returns)
-	if n == 0 || r.predicateCalls > 0 {
+	if len(sig.Returns) == 0 || r.predicateCalls > 0 {
 		return nil
 	}
-	if len(result) < n {
-		n = len(result)
+	// Align head-to-head exactly as the frame path does: residuals BEYOND
+	// the declared count sit at the BOTTOM (they are unconsumed unnamed
+	// args, already trimmed above), so position k of the declaration pairs
+	// with result[extra+k]. Taking the tail of the results against the head
+	// of the declaration would pair the wrong ones whenever the counts
+	// differ.
+	extra := len(result) - len(sig.Returns)
+	if extra < 0 {
+		extra = 0
 	}
+	// n cannot exceed len(sig.Returns): when the residual is at least as
+	// long as the declaration, extra absorbs the whole surplus and n lands
+	// exactly on the declared count; when it is shorter, extra is 0 and n
+	// is the residual length. So no upper clamp is needed here.
+	n := len(result) - extra
 	if n == 0 {
 		return nil
 	}
@@ -1996,5 +2007,5 @@ func (r *Registry) enforceCallBoruReturns(sig *FnSig, name string, result []Valu
 		ReturnPatterns: sig.ReturnPatterns,
 		Decl:           sig.Decl,
 	}
-	return validateReturnTypesIn(r, rc, result[len(result)-n:], 0, r.Source)
+	return validateReturnTypesIn(r, rc, result[extra:extra+n], 0, r.Source)
 }
