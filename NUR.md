@@ -68,7 +68,6 @@ keep the two in sync in the same commit.
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
-| [NUR069](#nur069) | A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither — NARROWED: the none-vs-Any axis is resolved by fix (`Any ∩ none = none` at every boundary); the CallBoru return asymmetry remains; VERDICT 2026-08-15 on the remaining axis: resolve by fix (enforce the CallBoru return contract) | NUR068's resolution (the reverted `boru:test` constructor annotations) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2125,120 +2124,6 @@ module actually gets used, and the document is still in flux.
 
 Stays **Pending** by design, so the asymmetry cannot be silently
 baselined while that question is open.
-
----
-
-## NUR069 — A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither {#nur069}
-
-**Status:** Pending (NARROWED — the none-vs-Any axis is RESOLVED BY FIX,
-2026-08-14; the CallBoru return asymmetry remains) · **Recorded:**
-2026-08-14 · **Surfaced by:** NUR068's
-resolution — annotating `boru:test`'s constructors with their record types
-shipped a compiled/interpreted divergence, and this is why the annotations
-were reverted.
-
-**Resolution of the none-vs-Any axis (maintainer verdict: "Any admits
-none", 2026-08-14):** the unifier's None fold now admits the Any side —
-`Any ∩ none = none`, the intersection the lattice already implied
-(`TNone.ConformsTo(TAny)` is what let `make`'s ConformsTo field rule and
-the `:Any` param admit none all along). One arm (`foldNoneRoot`,
-`core/go/unify.go`), scoped to None: Never and Absent keep their
-self-only folds — in particular `Unify(Any, Absent)` still refuses, which
-is what keeps an `Any` field REQUIRED (the `?:T` optional-key machinery
-rides Absent). The change carries through every consulted boundary in one
-step: the record-param pattern walk, the interpreter's and the VM's
-return checks, the `unify` word (`None unify Any → None true`,
-`unify.tsv` / `syntax.tsv` flipped), and `is` membership — `none is Any`
-is now **true** (`edge-types-2.tsv` §3 flipped; its old comment conceded
-the `:Any` param already admitted none, so keeping `is` at false would
-have minted a fresh is-vs-unify split). The four repro rows below now
-agree on `{x:none}` on both engines; pinned in `lang/spec/record.tsv`
-§NUR069 and `core/go/unify_none_any_test.go`.
-
-**What remains open — the CallBoru return asymmetry:** a module fn's
-declared return is never checked on the interpreter's CallBoru path
-(trim-only, documented in `checkReturnContract`) while a compiled unit's
-RET enforces type and pattern — so a NON-conforming module-fn return
-still diverges (interpreter passes it through, compiled raises). This is
-why `boru:test`'s constructors stay `[Map]` even after the none fix. The
-candidate resolutions: enforce declared returns on CallBoru (uniform,
-may refuse programs that run today), or exempt module-fn units from the
-RET pattern check (uniform the other way, weakens compiled contracts),
-or document the asymmetry as Allowed.
-
-**Rule:** a type means the same thing at every boundary that consults it.
-If `make R {x: none}` constructs an inhabitant of `R` (schema
-`[x:Any]`), then that value IS an `R` — at a `c:R` param, at a declared
-`[R]` return, interpreted and compiled alike.
-
-**Divergence:** three boundaries, three verdicts.
-
-```
-def R refine Record [x:Any]
-make R {x:none}                          -> {x:none}        make ADMITS
-def f fn [[c:R] [Map] [c]]  f (make R {x:none})
-                                         -> signature_error param pattern REFUSES
-def mk fn [[] [R] [make R {x:none}]] mk  -> type_error      top-level RETURN REFUSES…
-import module [def mk fn [[] [R] [make R {x:none}]] export "M" {mk: mk/r}] M.mk
-                                         -> {x:none}        …but a MODULE fn's return
-                                                            is never checked (CallBoru
-                                                            is trim-only), so the same
-                                                            annotation is enforced on
-                                                            one dispatch path and not
-                                                            the other
-```
-
-The root is `Unify(Any-literal, none)` → "none only unifies with none":
-the None arm outranks the Any arm, so a schema's `Any` constraint — which
-`make` treats as "any stored value" — reads as "anything except none" at
-every pattern-unify site (param dispatch's OpenUnifyMap field walk, the
-interpreter's `validateReturnTypes`, the VM's `checkReturnContract`). The
-CallBoru asymmetry (module fn returns trim-only, documented in
-`checkReturnContract`) then splits the return-side verdict again between
-dispatch paths, which is what turned NUR068's constructor annotations into
-a compiled-vs-interpreted divergence: a passing property's
-`failing-input: none` failed the compiled RET's `[PropertyResult]`
-contract while the interpreted module call checked nothing.
-
-**Evidence:** `lang/go/modules/test.go` — the constructor block's comment
-("deliberately declare [Map], NOT their record types") with the NUR068
-resolution's revert; the probe pair in that resolution
-(`Test.case none [1] "returns-none"` — interpreter returns the instance,
-pre-revert compiled raised `test-case: return value 1: expected
-{name:String in:List out:Any}, got Map`). `core/go/unify.go`'s None
-handling; `eng/go/vm.go` `checkReturnContract` (the trim-only CallBoru
-note).
-
-**Documentation status:** the CallBoru trim-only asymmetry is documented
-in code (`checkReturnContract`); the none-vs-Any-field split is documented
-nowhere — `make`'s leniency and the pattern walks' strictness each look
-locally deliberate.
-
-**Proposed verdict (as recorded; the none axis was resolved by the first
-option — see the Resolution above):** none yet. The candidate resolutions
-pull in
-different directions — teach the field-bag unify walks that a schema's
-`Any` constraint admits none (aligning on `make`'s reading; touches every
-pattern boundary), or make `make` refuse none for an `Any` field (aligning
-on the unifier's reading; breaks the "declared Any means any value"
-intuition and existing programs), or spell nullable fields explicitly
-(`x:(Any tor None)`) and keep both readings — and the CallBoru return
-asymmetry is a separate axis entirely. Wants its own measured change, the
-NUR068 way.
-
-**Verdict (maintainer, 2026-08-15 — resolve by fix, the remaining
-axis):** make the module **CallBoru return path enforce the declared
-return contract**, like every other boundary, instead of trimming to
-arity and asking nothing about type.
-
-The asymmetry is the part this record still tracks: a fn's params are
-checked, its returns are trimmed, and a module export that returns the
-wrong shape passes silently. Enforcing it may surface violations in
-shipped modules — that is the point, not a reason to defer, and the
-measurement is the safeguard: run the corpus first and count what newly
-fails, the way NUR068's frontier measurement gated its change. If the
-count is large the fix ships behind a measured, recorded ledger rather
-than being abandoned. Stays **Pending** until enforcement lands.
 
 ---
 

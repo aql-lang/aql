@@ -115,6 +115,11 @@ func TestGenFnCallBindingAlignment(t *testing.T) {
 
 // TestModuleWrapperSigBodyPairing pins the execFnDefLiteral
 // sub-registry fix: a module-preamble fn with two SAME-ARITY
+// The declared returns are [String] because the bodies return strings.
+// They read [Boolean] until NUR069 made the CallBoru path enforce a
+// declared return, which surfaced the mismatch — the fixture had been
+// lying about its own contract, and nothing asked.
+//
 // overloads must run the body belonging to the signature
 // matchSignature selected — the old arity-only pick ran the FIRST
 // 3-arg body with the OTHER sig's args (surfaced by Phase 8's
@@ -124,7 +129,7 @@ func TestModuleWrapperSigBodyPairing(t *testing.T) {
 		`import module [
 		   def Comparable surface {cmp: (fnsig [[Self Self] [Integer]])}
 		   Integer exposes Comparable
-		   def aop gen [(T extends Comparable)] fn [[rhs:T op:String lhs:T] [Boolean] ["bounded"] [rhs:Any op:String lhs:Any] [Boolean] ["catchall"]]
+		   def aop gen [(T extends Comparable)] fn [[rhs:T op:String lhs:T] [String] ["bounded"] [rhs:Any op:String lhs:Any] [String] ["catchall"]]
 		   export "M" {aop: aop/r}
 		 ]`,
 		`[(M.aop 3 "x" 5) (M.aop {a:1} "x" 5)]`,
