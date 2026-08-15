@@ -242,7 +242,7 @@ not**, and the distinction matters because the two need different fixes:
 |---|---|---|
 | Symptom | `uncalled_function: call to 'by-number' matched no signature` | `undefined_word: <name>`, or a wrong value |
 | Phase | **check / static**, exit 1, never runs | **runtime**, catchable |
-| Mode-dependent | no — identical on both engines | **yes** (name dispatch) |
+| Mode-dependent | **standalone: no** — the check error is identical on both engines. **In a suite: yes** — `sort_unit_test.aql` is `ok` compiled and `FAIL` interpreted (corrected 2026-08-15; see §12.4) | **yes** (name dispatch) |
 | Fix | add `/r` → works | `/r` is irrelevant |
 
 `(Sort.by-number Sort.reverse)` fails because the bare namespace word is
@@ -722,29 +722,97 @@ with it since the M1 wave.
 ### 12.4 Not implemented
 
 - **§11 rule 2 — captures as bindings, not values.** Still a shallow
-  snapshot. This is a change to the closure representation, not a routing
-  choice: `FnDefInfo.Captured` holds `Value` copies, `InstallFrameBinding`
-  installs them per call, and the compiled path binds them as **trailing
-  unit slots** at `OpPushClosure` — all three would have to move to cells
-  together, or the engines diverge on the counter idiom instead of
-  agreeing on the wrong answer. Latent, as §11 says: the `flex`-cell
-  workaround is discoverable, so nobody has filed it.
-- **§11 rule 3 — a `Function`-typed slot must not auto-apply.** Still
-  live, and confirmed by repro: with `def nought fn [[] [Integer] [7]]`
-  and `def grab fn [[f:Function] [Any] [f]]`, `typeof (grab nought)` is
-  `Integer`, not `Function`. Worth recording that **`/r` does not rescue
-  this shape** — `grab nought/r` is `Integer` too — so the documented
-  workaround is not general.
+  snapshot, and the representation swap is necessary but **nowhere near
+  sufficient**. Two blockers sit upstream of it, both verified in source,
+  and neither was visible when rule 2 was written:
 
-  The mechanism is *not* the callback seam and not `FnInertArgs` (which
-  is recorder-only, read by `recordCallOperands`). It is the step loop:
-  a bare word at the pointer dispatches, and forward collection has no
-  channel telling the stepper that the slot it is filling is
-  `Function`-typed. Fixing it means threading the target slot's type from
-  `matchSignature`'s forward phase into the step decision, then mirroring
-  that in the checker, the recorder and the VM. That is a staged change
-  with its own migration story — §8's phases cover rule 1 only — not a
-  line in this one.
+  **(a) `def` is a push, not a mutation, so a cell has nothing to
+  observe.** `DefTable.Push` *appends* a `DefEntry`
+  (`core/go/deftable.go:96-102`); `def` never overwrites, and frame
+  teardown pops by depth. A `*Cell` bound to the entry live at
+  construction would therefore still miss a later `def n 2`, which
+  pushes a *new* entry the cell does not point at. Cells buy nothing
+  until `def` of an already-frame-bound name becomes write-through —
+  which collides with `InstallFrameBinding`'s deliberate shadowing
+  (`core/go/core_helpers.go:37-39`), whose reason is a fixed correctness
+  bug (`design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md`).
+
+  **(b) The counter idiom's closure never captures the name at all.**
+  Rule 2 justifies itself with "the universal counter idiom silently does
+  not work". But in `def n 0` + `([] => [def n (n add 1) n])`, the body
+  `def`s `n`, so `CollectBodyLocalDefs` marks it a body-local
+  (`core/go/fn_capture.go:373-380`) and `ComputeCaptures` skips it
+  (`:334-337`). **`n` is not in `Captured` under any representation.**
+  Making that idiom work needs a `nonlocal`/`set!` distinction in the
+  surface language — new syntax, a spec change, and a checker story —
+  before the capture representation matters at all.
+
+  So landing only the swap is a pure-cost change: it breaks three
+  cross-module seam signatures (`core/go/emit_recorder.go`,
+  `dispatch_slots.go`, `analysis_hooks.go`, each with an `inactive*` stub
+  that becomes a fresh ADR-008 obligation) and the compiled trailing-slot
+  path (`CompiledFn.NCaptures`, `OpPushClosure`'s `copy`,
+  `bindUnitLocals`), falsifies three explicit soundness comments that
+  assert the snapshot rule, and unsettles `FnAnalysisKey`'s memo, which
+  keys on the capture's *content type* — while moving zero user-visible
+  behaviour. That is the definition of a half-change, and it is why this
+  stays design-only.
+- **§11 rule 3 — a `Function`-typed slot must not auto-apply.**
+  **Retraction: an earlier revision of this section described the wrong
+  mechanism, and rule 3 as *worded* is already satisfied.**
+
+  It said "forward collection has no channel telling the stepper that the
+  slot it is filling is `Function`-typed". There is one:
+  `hasPendingForwardExpectingFunction` (`core/go/engine.go`) walks back to
+  the pending forward and reads `SigArgType(fwd.Sig, nextIdx)`, and
+  `stepWord`'s `TFunction` intercept turns the word into a reference
+  instead of executing it. A `f:Function` parameter binds its argument as
+  a value, correctly, on both engines.
+
+  **The live defect is one level in: reading that bound param inside the
+  body where no argument follows it.** Measured:
+
+  | body shape | `--no-compile` | `--force-compile` | `boru check` |
+  |---|---|---|---|
+  | arity 0, no args — `[f]` | `Integer` (**applies**, → 7) | `Function` | 0 errors |
+  | arity ≥1, args present — `[f n]` | `10` | `10` | 0 errors |
+  | arity ≥1, no args — `[c]` | raises `signature_error` | `Function` | 0 errors |
+
+  Rows 1 and 3 are **check-clean compile ≠ interpret divergences**, and
+  row 1 is a silent wrong *value* in default mode — the class
+  `bytecode_stored_handler_freeze_test.go` gates as MISCOMPILE. My
+  original repro (`typeof (grab nought)` → `Integer`) is row 1; I had
+  attributed it to the slot, and it is the deref.
+
+  **Neither engine is simply wrong**, which is why this is not a bug fix.
+  The interpreter's model is *a bare name is a call* — spec'd by
+  `path-modifier.tsv` ("a bare fn name remains a call/barrier") and
+  `fn-value.tsv` ("with no argument the 0-arg signature still answers"),
+  and conceded by rule 3 itself: "in a concatenative language a bare word
+  *is* application, so `/r` is right and worth keeping". The compiler's
+  model is *a param is a value slot* — lowered to a unit local
+  (`RegisterLocal`), never a dispatchable name. Row 2 is where the two
+  models agree, and it is pinned green five times over
+  (`fn-value.tsv:135-137`, `module-fnvalue-boundary.tsv:51`,
+  `path-modifier.tsv:62-67`, `frontier-chained-apply.tsv:25`,
+  `module-parselang.tsv:120`) — so any fix must preserve it.
+
+  Both divergent rows are now in
+  `lang/spec/frontier/frontier-fnparam-deref.tsv`, visible to the gate
+  without asserting an answer. **The decision is one sentence: when a name
+  bound to a `Function` value is read where no argument is available, is
+  that a nullary call or a value?** It is arity-discriminated in practice,
+  so the edit is likely narrow; the cost is re-baselining the spec corpus
+  and the differential gate.
+
+  One contained, decision-free bug fell out of this and **is** fixed here:
+  the `TFunction` intercept resolved the name without recording a use, so
+  `boru check` reported `unused_def` for every fn handed bare to a
+  callback API — `Sort.quick mycmp xs`, the commonest way a boru library
+  takes a function. The sibling `ResolveRef` path has recorded the use
+  since the `export "X" { f: impl/r }` form was fixed; the intercept now
+  matches it, noted only on a successful fn lookup so a genuinely unused
+  def still warns (`lang/go/fnslot_unused_def_test.go`, both directions).
 
   **It is not only a toy repro — it is costing the `sort` library a green
   suite today, and §5 needs a correction because of it.** §5 called the

@@ -237,6 +237,22 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// varyRefusalLedger ("islanded").
 	`[10 20] each [drop 1 2 3 1 pick]`: {why: "full-stack word in a code body: the fold declines outside the top unit; the island seam owns it", failsWith: "islanded"},
 
+	// Bare deref of a Function-typed PARAM where no argument is available
+	// (design/FUNCTION-VALUE-SCOPE.0.md §11 rule 3, §12.4). The SLOT is fine —
+	// stepWord's TFunction intercept binds the argument as a reference. Reading
+	// the bound param in the body is what diverges: the interpreter treats a
+	// bare name as a CALL (arity 0 applies, arity >=1 raises), the compiler
+	// treats a param as a VALUE slot (RegisterLocal) and yields the Function.
+	// Both are internally consistent under different models, and both are
+	// check-clean, so this is a language decision rather than a defect with a
+	// right answer. The middle case (arity >=1 WITH arguments) already agrees on
+	// both engines and is pinned green five times in the main corpus.
+	//
+	// Graduation = a maintainer decision on one question: is a Function-bound
+	// name read with no argument available a nullary call, or a value?
+	`def nought fn [[] [Integer] [7]] def grab fn [[f:Function] [Any] [f]] typeof (grab nought)`:          {why: "arity-0 Function param read bare: interpreter applies it, compiler yields the Function", failsWith: "value parity"},
+	`def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)`: {why: "arity-1 Function param read bare with no argument: interpreter raises, compiler yields the Function", failsWith: "parity"},
+
 	// Cross-module fn value in a higher-order word's CLOSURE slot
 	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3). A fn value resolves its free
 	// words in its DEFINING module; the closure lowering compiles the body
