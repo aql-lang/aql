@@ -58,21 +58,20 @@ keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
-| [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
+| [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list — NARROWED (apply/__casematch pinned in REFERENCE's closed list; the 0-arg doc split reconciled as a byte-identical idiom); VERDICT 2026-08-14: draft the refinement as a `design/` note, promotion to ADR decided separately | 2026-07-22 uniformity review |
-| [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
+| [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — VERDICT 2026-08-15: resolve by fix (templates take the full quoted-string escape set) | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically — VERDICT 2026-08-14: resolve by fix (String-only grouping keys); Map-key identity stays open as its own line | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon) | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
-| [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
-| [NUR070](#nur070) | `if` reads a List condition as CODE while every other truthiness consumer coerces it — the two readings give opposite answers on the same bound value | surfaced implementing NUR053's fix (2026-08-14) |
+| [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain — VERDICT 2026-08-15: resolve by fix (enumeration walks the prototype chain with masking; a `del` tombstone hides the key from BOTH) | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
-| [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon | 2026-08-08 Go/TS canon parity work |
+| [NUR059](#nur059) | Several value kinds render in DEBUG spelling inside canon — VERDICT 2026-08-15: resolve by fix (source-form renderers for the sugar kinds, the `/r` and `/N` modifiers and the paren group, on BOTH engines) | 2026-08-08 Go/TS canon parity work |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
-| [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
-| [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
-| [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
+| [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
+| [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
+| [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
 | [NUR066](#nur066) | `end` and `none` are reachable as map keys by `get`/`getr` but not by the dot-path sugar that lowers to them; every other keyword works in both — VERDICT 2026-08-14: resolve by fix (a marker-valued dot segment uses its source text) | surfaced while verifying `design/STATE-MACHINES.0.md` §11.3 examples (PR #352) |
-| [NUR069](#nur069) | A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither — NARROWED: the none-vs-Any axis is resolved by fix (`Any ∩ none = none` at every boundary); the CallBoru return asymmetry remains | NUR068's resolution (the reverted `boru:test` constructor annotations) |
+| [NUR069](#nur069) | A record field declared `Any` admits `none` at `make` but refuses it at every pattern-unify boundary, and the module CallBoru return path enforces neither — NARROWED: the none-vs-Any axis is resolved by fix (`Any ∩ none = none` at every boundary); the CallBoru return asymmetry remains; VERDICT 2026-08-15 on the remaining axis: resolve by fix (enforce the CallBoru return contract) | NUR068's resolution (the reverted `boru:test` constructor annotations) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -450,6 +449,18 @@ ownership rule is recorded, but the migrations consolidate in the new
 `types/go` component with capability opt-ins (the refinement-base
 capability closes this record), not in eng — the kernel stays
 content-free.
+
+**Verdict (maintainer, 2026-08-15 — WAIT, no narrow fix):** do **not**
+add `Bytes` to `canonicalBaseType` as a one-line patch. This record
+closes through the **ADR-012 `types/go` consolidation** and its
+refinement-base capability, as the retargeted direction describes.
+
+The reasoning is that a special case added now is a special case the
+consolidation would have to unwind: the point of the capability is that
+a type DECLARES its refinement-base participation, and hand-listing one
+more leaf in the resolver is the mechanism the remediation replaces.
+The gap is real and stays visible in the meantime — that is what a
+Pending record is for. Stays **Pending** until the consolidation lands.
 
 ---
 
@@ -1177,6 +1188,19 @@ place — and (3) parses templates, interpolation included, correctly.
 This retires the hand-rolled `processTemplateEscapes` path and its
 minimal escape set. Stays Pending until the unified lexer lands.
 
+**Verdict (maintainer, 2026-08-15 — resolve by fix):** **templates take
+the full quoted-string escape set**, so one string syntax means one
+escape vocabulary and `size "z\x41z"` and its template spelling agree.
+
+Documenting the asymmetry was the cheaper option and was not taken: a
+reader should not have to know which quoting form they are in to know
+what `\x41` means. The narrowing direction (cutting quoted strings down
+to the template set) was rejected outright — it removes working
+spellings. The cost to watch and pin: a template containing a backslash
+sequence that is inert today would start escaping, so the fix wants
+rows for each newly-live escape and for the sequences that must stay
+literal. Stays **Pending** until it lands.
+
 ---
 
 ## NUR030 — `group` co-groups deq-distinct keys that render identically {#nur030}
@@ -1872,6 +1896,20 @@ of these (`Box<Integer>` for `SugarAngle` and the other sugar kinds, the
 engines. Until then the corpus rows are the pin: a fix to one engine alone
 fails loudly.
 
+**Verdict (maintainer, 2026-08-15 — resolve by fix):** canon gains a
+**source-form renderer** for each kind that currently falls through to
+`Value.String`'s debug form — `Box<Integer>` for the sugar kinds, the
+`/r` and `/N` word modifiers off `WordInfo`, and the paren group — on
+**both engines** in the same change.
+
+The round-trip is canon's contract, and these kinds break it silently:
+`foo/r` rendering as `word(foo)` does not merely look wrong, it LOSES
+the `/r` — re-parsing the canon yields a different program. The
+corpus rows are the pin that keeps the two ports honest: a fix to one
+engine alone fails the parity ledger loudly, which is the intended
+forcing function rather than an obstacle. Stays **Pending** until both
+renderers land.
+
 ## NUR052 — Store enumeration reads the top COW layer; lookup walks the chain {#nur052}
 
 **Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:**
@@ -1929,6 +1967,21 @@ tombstone is neutral here — it does not deepen the split and does not
 close it, and whichever answer this record takes, the tombstone
 follows it for free (a chain-walking enumeration would need to honour
 `Deleted`, which is the same predicate `Get` already applies).
+
+**Verdict (maintainer, 2026-08-15 — resolve by fix):** enumeration
+**walks the prototype chain**, with masking — a child layer's key
+shadows its parent's, and a `del` tombstone hides the key from BOTH
+enumeration and lookup. One store, one keyset, whichever word asks.
+
+The alternative (documenting own-layer enumeration against
+chain-walking lookup) was available and not taken: it would leave
+`size (context)` and `(context) get k` answering about different
+things, which is a divergence explained rather than removed. The
+constraint NUR022 flagged is already satisfied — `CowDel`'s tombstones
+stop the walk, so a deleted key is invisible to both sides by
+construction. Stays **Pending** until the walk lands, with rows pinning
+masking (a shadowed parent key appears ONCE, at the child's value) and
+tombstone invisibility.
 
 ---
 
@@ -2142,6 +2195,20 @@ with a lean (keep through one release, then decide with usage
 evidence). Recorded now so the dual surface cannot ship as an
 unexamined default.
 
+**Verdict (maintainer, 2026-08-15):** **`boru:scry` is canonical.** The
+`boru:debug` copies stay, frozen at today's seven and backed by the
+SAME handlers so behaviour cannot fork, with `boru describe` naming
+scry as the canonical home — and they are **deprecated on a stated
+timeline** rather than kept indefinitely.
+
+That is the one-capability-one-home rule applied with a migration path
+instead of a break: keeping both forever would need an argument for why
+this capability is exempt, and none was offered beyond convenience.
+Recorded before `BuildScryModule` exists, so the dual surface never
+ships as an unexamined default — which is what this record was opened
+to prevent. Stays **Pending** until scry ships with the deprecation
+notice in place.
+
 ---
 
 ## NUR064 — Pattern clauses route-and-bind in `receive` but route-only in `add` {#nur064}
@@ -2182,6 +2249,17 @@ that `add` patterns are routing *tables* (inspectable, whole-request handlers)
 while `receive` clauses are *destructuring* sites. Deciding belongs to the
 processes/services design line; this record exists so the divergence is not
 silently baselined meanwhile.
+
+**Verdict (maintainer, 2026-08-15 — defer, deliberately):** decided in
+the **processes/services design line**, when those modules are actually
+built, not here and not now. Both candidate resolutions (generalise
+binding slots into a facility `add` can opt into, or declare the split
+Allowed on the routing-table-vs-destructuring-site argument) depend on
+implementation experience this record does not have.
+
+The record keeps doing its job meanwhile: the divergence is written
+down, so building either module against the other's assumption is a
+choice rather than an accident. Stays **Pending** by design.
 
 ## NUR065 — Two spellings of the classifier role get different static guarantees {#nur065}
 
@@ -2234,6 +2312,16 @@ site, not just in this document. Or narrow the gap by requiring a fn-form
 classifier to declare its output alphabet in the spec, recovering closure
 while leaving the mapping opaque. This record exists so the divergence is not
 silently baselined while that question is decided.
+
+**Verdict (maintainer, 2026-08-15 — defer, deliberately):** decided in
+the **state-machine design line** as its open question #7, when
+`boru:state` is built. The three candidates (drop the fn form, keep
+both with `State.lint` reporting the weaker guarantee, or require a
+fn-form classifier to declare its output alphabet) all turn on how the
+module actually gets used, and the document is still in flux.
+
+Stays **Pending** by design, so the asymmetry cannot be silently
+baselined while that question is open.
 
 ## NUR066 — `end` and `none` are unreachable by dot-path but reachable by `get` {#nur066}
 
@@ -2405,13 +2493,47 @@ intuition and existing programs), or spell nullable fields explicitly
 asymmetry is a separate axis entirely. Wants its own measured change, the
 NUR068 way.
 
+**Verdict (maintainer, 2026-08-15 — resolve by fix, the remaining
+axis):** make the module **CallBoru return path enforce the declared
+return contract**, like every other boundary, instead of trimming to
+arity and asking nothing about type.
+
+The asymmetry is the part this record still tracks: a fn's params are
+checked, its returns are trimmed, and a module export that returns the
+wrong shape passes silently. Enforcing it may surface violations in
+shipped modules — that is the point, not a reason to defer, and the
+measurement is the safeguard: run the corpus first and count what newly
+fails, the way NUR068's frontier measurement gated its change. If the
+count is large the fix ships behind a measured, recorded ledger rather
+than being abandoned. Stays **Pending** until enforcement lands.
+
 ---
 
 ## NUR070 — `if` reads a List condition as CODE while every other truthiness consumer coerces it {#nur070}
 
-**Status:** Pending · **Recorded:** 2026-08-14 · **Surfaced by:**
-implementing NUR053's fix (measuring whether the three consumers really
-share a domain once `convert Boolean`'s slot was widened)
+**Status:** Allowed · **Date:** 2026-08-15 · **Recorded:** 2026-08-14 ·
+**Surfaced by:** implementing NUR053's fix (measuring whether the three
+consumers really share a domain once `convert Boolean`'s slot was
+widened)
+
+**Verdict (maintainer, 2026-08-15): Allowed — a List in a condition
+position is CODE.** That is what a concatenative language should mean by
+a bracketed body there, and the One Truthiness Model governs *values*,
+not code positions: `if [ … ]` running its condition is the language's
+way of spelling a computed condition, not an accident to be coerced
+away. The two readings genuinely differ, and the code reading is the
+intended one.
+
+What the allowance costs, stated so it cannot rot: `design/TRUTHINESS.0.md`
+§2 must say the model has one shape-shaped hole — a List reaching `if`
+is executed, so the "every consumer agrees" claim holds for Map, None,
+String and the numeric leaves and NOT for List — and `if xs` where `xs`
+holds a list stays a sharp edge for anyone who expected presence
+coercion. The §2 amendment landed with NUR053's fix and already states
+both the domain and this split, with the measured opposite-answer table.
+The spec rows in `lang/spec/edge-scalars-3.tsv` pin it in both
+directions, so the accepted behaviour is executable rather than merely
+described.
 
 **Rule:** one truthiness model, applied by every construct that coerces
 a value to a Boolean — `design/TRUTHINESS.0.md`, the One Truthiness
