@@ -385,7 +385,13 @@ function canonChild(v: Value): string {
 // the debug spelling `word(Integer)` into what is meant to be source.
 // Mirrors core/go/canon.go canonTypeTag.
 function canonTypeTag(v: Value): string {
-  if (v.isWord()) return v.asWord().name;
+  // The modifier suffix rides along (NUR059): an angle argument can be a
+  // modifier-bearing word (`Box<a/r>`), and emitting the bare name would
+  // drop it — the same silent loss one level down.
+  if (v.isWord()) {
+    const w = v.asWord();
+    return w.name + canonWordModifiers(w);
+  }
   return canonChild(v);
 }
 
@@ -412,7 +418,15 @@ function canonFnDef(fd: FnDefInfo): string {
 // eng/go/canon.go::canonReach (words stay bare; a codequote-captured
 // reach wraps so it round-trips).
 function canonReachToken(v: Value): string {
-  if (v.isWord()) return v.asWord().name;
+  // Bare NAME plus any modifier suffix (NUR059). A reach SEGMENT never
+  // carries one — the parser peels a trailing `/mod` off the final key and
+  // applies it to the whole reach — so segments render exactly as before.
+  // A word inside a PAREN body can carry one, and `(x/r)` losing its `/r`
+  // would be the same defect this record removes.
+  if (v.isWord()) {
+    const w = v.asWord();
+    return w.name + canonWordModifiers(w);
+  }
   if (v.isParenExpr() && Array.isArray(v.data))
     return "(" + canonReachTokens(v.data as Value[]) + ")";
   if (isReach(v)) return canonReach(v);

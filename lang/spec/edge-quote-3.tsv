@@ -55,7 +55,7 @@ def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) type
 def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) get 0	7	a literal node reads back as data
 def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) get 1	ERROR:signature_error	the word node re-fires when pulled out bare
 def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) do	14	the expansion is runnable data — do replays it
-def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 (2 mul 3))	[paren([2 word(mul) 3]) word(add) paren([2 word(mul) 3])]	a paren operand rides the expansion as a raw paren node
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 (2 mul 3))	[(2 mul 3) word(add) (2 mul 3)]	a paren operand rides the expansion as a raw paren node
 def sq (macro [[e] [quote [unquote e mul unquote e]]]) def gr (macro [[y] [quote [sq unquote y]]]) macroexpand (gr 4)	[4 word(mul) 4]	macroexpand is recursive: the inner macro expands too
 def sq (macro [[e] [quote [unquote e mul unquote e]]]) def gr (macro [[y] [quote [sq unquote y]]]) gr 4	16	…and the nested call runs to the same answer
 def sq (macro [[e] [quote [unquote e mul unquote e]]]) def gr (macro [[y] [quote [sq unquote y add 1]]]) gr 3	10	an expansion mixing a nested macro call with literal tokens

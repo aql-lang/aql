@@ -1836,6 +1836,15 @@ the debug form, because it looks like source; that is why these were
 withdrawn rather than shipped. Fixing them needs either a parser change
 (retain the mini delimiter) or the bare-word decision below.
 
+**A THIRD kind, found by Codex review on PR #372:** the `/N` arity is an
+exact int64 in Go and a JS `number` in TS, so a magnitude above 2^53 is
+ROUNDED at parse — `x/9223372036854775807` canons as
+`x/9223372036854776000` in TS, outside the accepted int64 range, so it
+cannot be re-parsed as a modifier at all. The loss is in the TS
+**payload**, not the renderer, which only made it visible; fixing it
+means carrying the arity exactly in `parser/ts`. Pinned meanwhile as a
+row in `parser/spec/divergent.tsv`, the shrink-toward-zero ledger.
+
 **The bare-word question, deliberately not decided:** canon spells a Word
 value `word(foo)`. Rendering it bare would change **175 of
 `parser/spec/parse.tsv`'s 724 rows**, and it is a real question rather

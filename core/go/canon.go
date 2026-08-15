@@ -319,8 +319,13 @@ func canonChild(v Value) string {
 // leak the debug spelling `word(Integer)` into what is meant to be source.
 func canonTypeTag(v Value) string {
 	if IsWord(v) {
+		// The modifier suffix rides along (NUR059): an angle argument can
+		// be a modifier-bearing word (`Box<a/r>`, `Box<a/2>`), and emitting
+		// the bare name would drop it — the same silent loss this record
+		// exists to remove, reintroduced one level down. A tag that carries
+		// no modifier renders exactly as before.
 		w, _ := AsWord(v)
-		return w.Name
+		return w.Name + canonWordModifiers(w)
 	}
 	return canonChild(v)
 }
@@ -331,8 +336,14 @@ func canonTypeTag(v Value) string {
 func canonReachToken(v Value) string {
 	switch {
 	case IsWord(v):
+		// Bare NAME plus any modifier suffix (NUR059). A reach SEGMENT
+		// never carries one — the parser peels a trailing `/mod` off the
+		// final key and applies it to the whole reach — so segments render
+		// exactly as before (`m.a`, not `m.a/q`). A word inside a PAREN
+		// body can carry one, and `(x/r)` losing its `/r` would be the
+		// same defect this record removes.
 		w, _ := AsWord(v)
-		return w.Name
+		return w.Name + canonWordModifiers(w)
 	case IsParenExpr(v):
 		toks, _ := AsParenExpr(v)
 		return "(" + canonReachTokens(toks) + ")"

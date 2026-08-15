@@ -18,8 +18,8 @@ codequote 99	99	scalar passes through unchanged
 codequote [1 add 2]	(quote [1 word(add) 2])	list captured raw (unevaluated)
 
 # --- the new behaviour: a paren is captured RAW as code ---
-codequote (1 add 2)	paren([1 word(add) 2])	paren captured raw — NOT evaluated to 3
-codequote (nosuchword)	paren([word(nosuchword)])	contents NOT evaluated — no undefined_word error
+codequote (1 add 2)	(1 add 2)	paren captured raw — NOT evaluated to 3
+codequote (nosuchword)	(nosuchword)	contents NOT evaluated — no undefined_word error
 
 # --- guard: quote keeps its evaluate-then-quote semantics (unchanged) ---
 quote (1 add 2)	3	quote still evaluates the paren, then quotes the result
