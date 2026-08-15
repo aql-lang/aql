@@ -1181,60 +1181,79 @@ func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 
 // ---- group ----
 
-// deqGrouper accumulates deq-equivalence classes for the group word
-// (NUR015 — grouping was previously keyed on the rendered form, a third
-// equality notion). Membership in a class is deq: scalars by value
-// (eq and deq coincide there), Nodes/Ideals by deep value. The output
-// map's keys stay RENDERED strings (a map key is a string), taken from
-// each class's FIRST occurrence. Two keys that render identically share
-// one entry — deq-equal keys by design, and deq-DISTINCT keys because a
-// string can name only one (NUR030, Pending — re-opened 2026-07-31,
-// so this fold is current behaviour, not a settled verdict): this is
-// what makes
-// `group [nan nan]` fold to `{nan:[0 1]}` (NaN is deq-unequal to
-// itself) instead of erroring.
+// deqGrouper accumulates grouping classes for the group word over
+// STRING keys only (NUR030, resolved 2026-08-15).
+//
+// The history is worth keeping, because the current shape is the answer
+// to it. Grouping was once keyed on the rendered form — a third equality
+// notion alongside eq and deq (NUR015) — and was then moved to deq
+// classes with the output map's keys still taken from each class's FIRST
+// occurrence's render. That left a lossy step: a Map key IS a string, so
+// two deq-DISTINCT keys that rendered identically shared one entry
+// (`group [Integer Integer/q]` → `{Integer:[0 1]}`), and the same fold
+// silently absorbed the NON-REFLEXIVE keys — `nan`, and everything
+// reaching DeepEqual's fall-through (NUR031).
+//
+// Restricting the key domain removes the step rather than judging it
+// benign: a String key IS its render, so no two distinct keys can
+// collide and the divergence cannot arise. The map key is the string's
+// CONTENT (AsString), not `Value.String()` — a refined String
+// (`def S (refine String)`) renders with its quotes, so keying on the
+// render would reintroduce a spelling the content never had.
+//
+// Two costs are deliberate, and the refusal below is what makes them
+// visible rather than surprising:
+//
+//   - the 1-arg form loses generality — `group [1 2 3]` now needs a
+//     conversion first;
+//   - NaN totality changes character — `nan` cannot be a key at all, so
+//     a non-reflexive key is FORBIDDEN rather than folded.
 type deqGrouper struct {
 	reps    DeqIndex       // class representatives, in creation order
-	rkIndex map[string]int // rendered key → class position
+	rkIndex map[string]int // key content → class position
 	repKeys []string
 	groups  [][]Value
 }
 
-func (g *deqGrouper) add(key, v Value) {
-	// Membership is deq: a key deq-equal to an existing class rep folds
-	// into that class. The deq probe is a single DeqIndex lookup.
-	if ri := g.reps.FirstMatch(key); ri >= 0 {
-		g.groups[ri] = append(g.groups[ri], v)
-		return
+// groupKeyContent returns key's string content, or an error naming the
+// String requirement. A bare `signature_error` would leave a user
+// guessing which argument was wrong and why, so the message says the
+// word, the offending type and the fix.
+func groupKeyContent(r *Registry, key Value) (string, error) {
+	if !key.Parent.ConformsTo(TString) {
+		return "", r.BoruError(
+			arrayWordErrCode("group"),
+			"group: grouping keys must be Strings; got "+TypeNameOf(key)+
+				" — convert the key first (a Map key is a string, so a"+
+				" non-String key would have to be rendered, and two"+
+				" distinct keys can render alike)",
+			"group",
+		)
 	}
-	// NUR030 (Pending): a Map key is a string, so two deq-DISTINCT keys
-	// that render identically must share one group entry. This also
-	// folds the NON-REFLEXIVE keys, which arrive by two routes: `nan` is
-	// DeqKeyed, but the bucket's pairwise DeepEqual is false for it
-	// (IEEE), so the probe above misses and this render key catches it;
-	// everything that reaches DeepEqual's unsupported fall-through gets
-	// DeqNeverEqual from DeqKey (NUR031): fn/Word values, host payloads,
-	// and the type values that share it — class types and refinements of
-	// one, tor/enum disjunctions, fnsig, surface, and uninstantiated gen
-	// schemas. Either way `group [nan nan]` is `{nan:[0 1]}` rather than
-	// an error. (Concrete Record/Options/Table/Micron type values ARE
-	// reflexive, as are the container/root literals since NUR034 made
-	// `List`/`Map`/`Any` so — all fold through the deq probe above.) The
-	// rare genuinely-distinct collision (the type literal `Integer` and
-	// the atom `Integer/q`, both rendering "Integer") co-groups too;
-	// no index is lost, and the alternative — erroring — would break
-	// grouping over NaN-bearing data. See NUR.md NUR030.
-	rk := key.String()
-	if ri, ok := g.rkIndex[rk]; ok {
+	s, _ := AsString(key)
+	return s, nil
+}
+
+func (g *deqGrouper) add(r *Registry, key, v Value) error {
+	content, err := groupKeyContent(r, key)
+	if err != nil {
+		return err
+	}
+	// Two Strings with the same content are deq-equal (a refined String
+	// is deq to its plain twin), so content identity IS class identity
+	// and one map lookup decides membership. The DeqIndex is still the
+	// class-representative store, keeping creation order stable.
+	if ri, ok := g.rkIndex[content]; ok {
 		g.groups[ri] = append(g.groups[ri], v)
-		return
+		return nil
 	}
 	if g.rkIndex == nil {
 		g.rkIndex = map[string]int{}
 	}
-	g.rkIndex[rk] = g.reps.Add(key)
-	g.repKeys = append(g.repKeys, rk)
+	g.rkIndex[content] = g.reps.Add(key)
+	g.repKeys = append(g.repKeys, content)
 	g.groups = append(g.groups, []Value{v})
+	return nil
 }
 
 func (g *deqGrouper) toMap() Value {
@@ -1259,7 +1278,9 @@ func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	var g deqGrouper
 	for i := 0; i < keys.Len(); i++ {
-		g.add(keys.Get(i), values.Get(i))
+		if err := g.add(r, keys.Get(i), values.Get(i)); err != nil {
+			return nil, err
+		}
 	}
 	return []Value{g.toMap()}, nil
 }
@@ -1271,7 +1292,9 @@ func groupOneHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	var g deqGrouper
 	for i := 0; i < list.Len(); i++ {
-		g.add(list.Get(i), NewInteger(int64(i)))
+		if err := g.add(r, list.Get(i), NewInteger(int64(i))); err != nil {
+			return nil, err
+		}
 	}
 	return []Value{g.toMap()}, nil
 }
