@@ -41,8 +41,8 @@ def Box<T> class {value:T} def b (make Box<Integer> {value:7}) end case b [Box<I
 def Box<T> class {value:T} def b (make Box<String> {value:'s'}) end case b [Box<Integer> 'int-box' 'other']	'other'	…and not a sibling
 #
 # §3  canonical-stream visibility — macros and Vm.parse see the structural marker (ADR-012 amendment: the parser emits no names; the engine lowers the marker on evaluation)
-def Box<T> class {value:T} def m (macro [[e] [ quote [ unquote e ] ]]) end macroexpand (m Box<Integer>)	[sugar(angle Box [word(Integer)])]	a raw-capturing macro receives the angle marker as inert data
-import "boru:vm" def Box<T> class {value:T} end Vm.parse "Box<Integer>"	(quote [sugar(angle Box [word(Integer)])])	Vm.parse of sugared source emits the marker stream
+def Box<T> class {value:T} def m (macro [[e] [ quote [ unquote e ] ]]) end macroexpand (m Box<Integer>)	[Box<Integer>]	a raw-capturing macro receives the angle marker as inert data (NUR059 gave it a SOURCE form; it read `sugar(angle Box [word(Integer)])`)
+import "boru:vm" def Box<T> class {value:T} end Vm.parse "Box<Integer>"	(quote [Box<Integer>])	Vm.parse of sugared source emits the marker stream (NUR059: the marker now canons as source)
 #
 # §4  negatives — the gate and the entry grammar are loud
 5 < 3	ERROR:tag name	`<` in value position now opens an XML literal (design/XML-LITERAL.0.md); ` 3` is not a tag name. Comparisons are lt/gt, never `<`.
