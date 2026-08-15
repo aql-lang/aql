@@ -4,8 +4,8 @@ import "boru:array-util" end ArrayUtil.at ['a','b'] ['c','d']	['c' 'c']	array-ut
 import "boru:array-util" end ArrayUtil.compress ['a','b'] ['c','d']	['c' 'd']	array-util:compress
 import "boru:array-util" end ArrayUtil.expand ['a','b'] ['c','d']	['c' 'd']	array-util:expand
 import "boru:array-util" end ArrayUtil.grade ['a','b']	[0 1]	array-util:grade
-import "boru:array-util" end ArrayUtil.group ['a','b'] ['c','d']	{'a':['c'] 'b':['d']}	array-util:group
-import "boru:array-util" end ArrayUtil.group ['e','f']	{'e':[0] 'f':[1]}	array-util:group
+import "boru:array-util" end ArrayUtil.group ['a','b'] ['c','d']	{a:['c'] b:['d']}	array-util:group
+import "boru:array-util" end ArrayUtil.group ['e','f']	{e:[0] f:[1]}	array-util:group
 import "boru:array-util" end ArrayUtil.indices ['a','b'] ['c','d']	[-1 -1]	array-util:indices
 import "boru:array-util" end ArrayUtil.insert-at 2 2 ['a','b']	['a' 'b' 2]	array-util:insert-at
 import "boru:array-util" end ArrayUtil.member ['a','b'] ['c','d']	[false false]	array-util:member

@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/boru-lang/boru/lang/go/native"
@@ -157,12 +158,37 @@ func TestArrayCompressMismatch(t *testing.T) {
 }
 
 // group has two signatures (1-arg and 2-arg); confirm both dispatch.
+// Keys are Strings only and the map key is the string's CONTENT, so the
+// entries are `a:`/`b:` and not the render's `'a':`/`'b':` (NUR030).
 func TestArrayModuleGroupBothSigs(t *testing.T) {
 	r := arrayRegistry(t)
-	// 1-arg: group equal values by their index.
-	assertArrayResult(t, r, `ArrayUtil.group ["a","b","a"]`, `{'a':[0 2] 'b':[1]}`)
+	// 1-arg: group equal keys by their index.
+	assertArrayResult(t, r, `ArrayUtil.group ["a","b","a"]`, `{a:[0 2] b:[1]}`)
 	// 2-arg (forward form, keys then values): group values by parallel keys.
-	assertArrayResult(t, r, `ArrayUtil.group ["a","b","a"] [1,2,3]`, `{'a':[1 3] 'b':[2]}`)
+	assertArrayResult(t, r, `ArrayUtil.group ["a","b","a"] [1,2,3]`, `{a:[1 3] b:[2]}`)
+}
+
+// The negative half: a non-String key is refused in BOTH signatures,
+// with a message that names the requirement rather than a bare
+// signature_error (NUR030's verdict makes the two accepted costs — the
+// 1-arg form's lost generality and NaN's forbidden key — explicit).
+func TestArrayModuleGroupRefusesNonStringKeys(t *testing.T) {
+	r := arrayRegistry(t)
+	for _, src := range []string{
+		`ArrayUtil.group [1,2,3]`,
+		`ArrayUtil.group [1,2] ["a","b"]`,
+		`ArrayUtil.group [nan nan] [1,2]`,
+		`ArrayUtil.group ["a",1] [1,2]`,
+	} {
+		_, err := runArraySrc(t, r, src)
+		if err == nil {
+			t.Errorf("%s: expected a refusal, got none", src)
+			continue
+		}
+		if !strings.Contains(err.Error(), "grouping keys must be Strings") {
+			t.Errorf("%s: error must name the String requirement, got %v", src, err)
+		}
+	}
 }
 
 // Deep flatten is the core `flatten -1` (no ArrayUtil.flatten); `indexof`

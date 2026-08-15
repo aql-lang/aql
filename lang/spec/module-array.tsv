@@ -41,23 +41,39 @@ import "boru:array-util"  ArrayUtil.remove-at 0 []	ERROR:index_out_of_range	remo
 import "boru:array-util"  ArrayUtil.member [1 5 3] [1 2 3]	[true false true]	member: is each needle present in the haystack
 import "boru:array-util"  ArrayUtil.unique [1 2 2 3 3 3]	[1 2 3]	unique: distinct elements, first-seen order
 import "boru:array-util"  ArrayUtil.indices [20 99 10] [10 20 30]	[1 -1 0]	indices: position of each needle in the haystack, -1 if absent
-import "boru:array-util"  ArrayUtil.group [1 2 3]	{1:[0] 2:[1] 3:[2]}	group (1-arg): map each value to the indices where it occurs
+import "boru:array-util"  ArrayUtil.group ['a' 'b' 'c']	{a:[0] b:[1] c:[2]}	group (1-arg): map each key to the indices where it occurs
 # the membership/grouping words compare by deq — the VALUE equality
 # (NUR015 fix: they previously keyed on the rendered form, a third
 # equality notion): scalars by value (eq and deq coincide there),
-# Nodes/Ideals by deep value (eq is reference identity there). group's
-# map keys stay rendered strings, so two deq-distinct keys that render
-# identically share one entry — NUR030 (Pending, re-opened 2026-07-31).
+# Nodes/Ideals by deep value (eq is reference identity there).
+#
+# group is the exception, and deliberately so: its keys are STRINGS ONLY
+# (NUR030, resolved 2026-08-15). A Map key IS a string, so a non-String
+# key had to be RENDERED, and two deq-distinct keys that rendered alike
+# then shared one entry. Restricting the domain removes the lossy step
+# instead of judging it benign — the collision cannot arise. The map key
+# is the string's CONTENT, so a group's own output is readable back with
+# the key the caller supplied; it previously was not (the key carried the
+# render's quote characters, and `get 'a'` on the result returned None).
 import "boru:array-util"  ArrayUtil.unique [1 1.0]	[1]	cross-leaf magnitude dedups: 1 deq 1.0
 import "boru:array-util"  ArrayUtil.unique [["a"] ["a"]]	[['a']]	structurally-equal lists dedup, though eq (reference) distinguishes them
 import "boru:array-util"  ArrayUtil.unique [nan nan]	[nan nan]	NaN is deq-unequal to itself — both kept, honestly
 import "boru:array-util"  ArrayUtil.member [1.0] [1 2]	[true]	membership by value: 1.0 is in [1 2]
 import "boru:array-util"  ArrayUtil.member [["a"]] [["a"]]	[true]	…and by deep value for Nodes
 import "boru:array-util"  ArrayUtil.indices [2.0] [1 2]	[1]	index lookup by value
-import "boru:array-util"  ArrayUtil.group [1 1.0 2]	{1:[0 1] 2:[2]}	one value class per group; the key is the FIRST occurrence's render
-import "boru:array-util"  ArrayUtil.group [Integer Integer/q]	{Integer:[0 1]}	deq-distinct classes whose renders collide share one key (NUR030, Pending) — the map key is a string
-import "boru:array-util"  ArrayUtil.group [nan nan] [1 2]	{nan:[1 2]}	NaN is deq-unequal to itself, but both render "nan", so they co-group rather than error
-import "boru:array-util"  ArrayUtil.group ['a' 'b' 'a'] [1 2 3]	{'a':[1 3] 'b':[2]}	group (2-arg): bucket values by their parallel key
+import "boru:array-util"  ArrayUtil.group ['a' 'b' 'a'] [1 2 3]	{a:[1 3] b:[2]}	group (2-arg): bucket values by their parallel key
+import "boru:array-util"  (ArrayUtil.group ['a' 'b' 'a'] [1 2 3]) get 'a'	[1 3]	the key the caller supplied reads the group back — the map key is the string's CONTENT
+import "boru:array-util"  keys (ArrayUtil.group ['a' 'b'] [1 2])	['a' 'b']	…and the key set is exactly the supplied keys, carrying no render quoting
+import "boru:array-util"  def S (refine String) end def k:S 'a' end ArrayUtil.group [k 'a'] [1 2]	{a:[1 2]}	a refined String is deq to its plain twin and groups with it, under the shared content key
+# The two NUR030 folds, now REFUSED rather than folded. Both rows flipped
+# 2026-08-15 with the fix: the first was the deq-distinct collision that
+# opened the record, the second the non-reflexive key it also absorbed.
+import "boru:array-util"  ArrayUtil.group [Integer Integer/q]	ERROR:grouping keys must be Strings	a type literal and a same-named atom no longer collide — neither can be a key at all (NUR030)
+import "boru:array-util"  ArrayUtil.group [nan nan] [1 2]	ERROR:grouping keys must be Strings	NaN is FORBIDDEN as a key rather than folded; was {nan:[1 2]} (NUR030)
+import "boru:array-util"  ArrayUtil.group [1 2 3]	ERROR:grouping keys must be Strings	the 1-arg form loses generality by design — convert first (NUR030)
+import "boru:array-util"  ArrayUtil.group [1 2] ['a' 'b']	ERROR:grouping keys must be Strings	the 2-arg form refuses a non-String key too
+import "boru:array-util"  ArrayUtil.group [none] [1]	ERROR:grouping keys must be Strings	none is not a String either
+import "boru:array-util"  ArrayUtil.group ['a' 1] [1 2]	ERROR:grouping keys must be Strings	a single bad key in an otherwise-String list is refused
 #
 # §4  neighborhoods
 import "boru:array-util"  ArrayUtil.window 2 [1 2 3 4]	[[1 2] [2 3] [3 4]]	window: all contiguous slices of the given width

@@ -94,7 +94,9 @@ func w3HandlerErr(t *testing.T, name string, h func([]Value, map[string]Value, [
 // ---- group (one-arg overload) ----
 
 func TestW3GroupOneArg(t *testing.T) {
-	w3ArrayWant(t, `group ['a' 'b' 'a' 'c' 'b']`, `{'a':[0 2] 'b':[1 4] 'c':[3]}`)
+	// The map key is the string's CONTENT, not its render (NUR030), so
+	// the entries are `a:`/`b:`/`c:` rather than `'a':`/`'b':`/`'c':`.
+	w3ArrayWant(t, `group ['a' 'b' 'a' 'c' 'b']`, `{a:[0 2] b:[1 4] c:[3]}`)
 	w3ArrayWant(t, `group []`, `{}`)
 	w3HandlerErr(t, "group", groupOneHandler, "group: expected",
 		NewTypeLiteral(TList))

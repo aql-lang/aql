@@ -119,6 +119,15 @@ var unflaggedPins = map[string]int{
 	"higher-order.tsv":    4,
 	"macro.tsv":           1,
 	"micron.tsv":          0,
+	// module-array.tsv: 0 → 6, all six from NUR030's fix. `group`'s keys
+	// are Strings only, and the refusal is a RUNTIME check on each key's
+	// type — it cannot be static, because the signature is `[TList]` /
+	// `[TList TList]` and a List's ELEMENT types are not part of it. A
+	// list whose elements are statically Integer is still a well-typed
+	// argument; only walking it finds the bad key. Flagging these would
+	// need element-type carriers on the list slots, which the checker
+	// does not have and this record did not open.
+	"module-array.tsv":    6,
 	"module-debug.tsv":    3,
 	"module-emitlang.tsv": 8,
 	"module-fmt.tsv":      3,

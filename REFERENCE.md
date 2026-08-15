@@ -2018,22 +2018,34 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `ArrayUtil.member` | Per-element membership test, by `deq` | `[1,2,3] ArrayUtil.member [2,3,4]` returns `[true,true,false]` |
 | `ArrayUtil.unique` | Remove duplicates, by `deq` | `ArrayUtil.unique [1,2,2,3]` returns `[1,2,3]` |
 | `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent), by `deq`; haystack is the final argument | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
-| `ArrayUtil.group` | Group values by parallel keys (or indices by value), one group per `deq` class | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
+| `ArrayUtil.group` | Group values by parallel **String** keys (or indices by String value) | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
 
 > **The membership/grouping words compare by `deq`** — the value
 > equality: `ArrayUtil.unique [1 1.0]` returns `[1]` (cross-leaf
 > magnitude), and `unique [["a"] ["a"]]` returns `[['a']]` even though
 > `eq` (reference identity for compounds) distinguishes the two lists.
-> `group`'s map keys stay rendered strings — the first occurrence's
-> render names each `deq` class. Two keys that render identically share
-> one entry: this folds `deq`-distinct look-alikes (the type literal
-> `Integer` and the atom `Integer/q`), and — because `nan` is
-> `deq`-unequal to itself — it also groups all `nan` keys together
-> (`group [nan nan]` → `{nan:[0,1]}`). The same fold catches every
-> other value that is not `deq` to itself — function and word values,
-> `class`/`tor`/`enum`/`fnsig`/`surface` and generic-schema type values,
-> host payloads, and any container holding one. `unique` keeps those
-> apart, so `group` and `unique` can disagree on the same list.
+> **`group` takes STRING keys only**, and it is the one word in the
+> family that restricts its domain. The reason is general: **a Map key
+> is a string, language-wide**. A Map therefore cannot carry a key's
+> value identity — anything else has to be rendered to name an entry,
+> and two distinct values can render alike. `group` used to do exactly
+> that, which folded `deq`-distinct look-alikes (the type literal
+> `Integer` and the atom `Integer/q`) into one entry, and swept up every
+> value that is not `deq` to itself besides — `nan`, function and word
+> values, `class`/`tor`/`enum`/`fnsig`/`surface` and generic-schema type
+> values, host payloads, and any container holding one.
+>
+> Restricting the key domain removes the lossy step instead of judging
+> it benign: a String key **is** its render, so the collision cannot
+> arise. The map key is the string's *content*, so a group reads back
+> with the key you supplied (`(group ['a'] [1]) get 'a'` → `[1]`). Two
+> consequences are deliberate: the 1-arg form needs a conversion first
+> (`group [1 2 3]` is refused, naming the String requirement), and a
+> non-reflexive key is now *forbidden* rather than folded — `group [nan
+> nan]` raises where it once returned `{nan:[0,1]}`.
+>
+> `unique` and `member` are unaffected: they return values, not Map
+> keys, so they keep full `deq` semantics over any value.
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 
