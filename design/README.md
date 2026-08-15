@@ -32,6 +32,14 @@ pass and carry no implied status either way.
 
 ## Living references — argument ordering & dispatch
 
+- `ADR-004-REFINEMENT.0.md` — the four argument-handling categories
+  (forward-eligible, mixed-barrier, stack-only, quoting slots),
+  `BarrierPos` semantics and its single resolution boundary, the
+  stack-only closed list and its admission test, and the composition
+  rationale for the forward default. **Draft material for a refined
+  ADR-004** (NUR023): its description of current behaviour is accurate
+  and current, but it is *discovery*, not an ADR entry — promotion into
+  `ADR.md` is a separate maintainer decision.
 - `SIGNATURES.10.md` — signature shape, top-first positions, `/q` rules.
 - `SIG-ORDER-REFACTOR.10.md` — the §1.4 top-first unification (end state).
 - `FORWARD-COLLECTION-PHASES.10.md` — the two-phase collection model.

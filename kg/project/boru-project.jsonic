@@ -202,6 +202,16 @@
       metadata: { repository: "boru-lang/boru" }
     }
     {
+      id: "src:adr-004-refinement"
+      kind: "text"
+      locator: "design/ADR-004-REFINEMENT.0.md"
+      title: "ADR-004 refinement — argument-handling categories"
+      retrieved_at: null
+      content_hash: "adr-004-refinement-2026-08-14"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
       id: "src:boru-scry"
       kind: "text"
       locator: "design/BORU-SCRY.0.md"
@@ -324,6 +334,8 @@
       attributes: { role: "the rich-display sequel BORU-VIZ.0.md deferred: how any module exposes views and widgets of its own semantics — producer words over the viz data contract with kind-tag vocabulary, TUI widgets by composition, the view word's display bundles via open-word extension, and dashboard alignment with DEBUG-MODULE §7" } }
     { key: "boru-viz", type: "Document", label: "design/BORU-VIZ.0.md"
       attributes: { role: "the boru:viz proposal: pure diagram-source generation (Mermaid + DOT, D2 later) from arbitrary data structures — code generation only, written in boru, with the shared graph/tree/trace/schema contract its §3 pins for boru:scry and every other producer" } }
+    { key: "adr-004-refinement", type: "Document", label: "design/ADR-004-REFINEMENT.0.md"
+      attributes: { role: "draft material for a refined ADR-004 (NUR023): the four argument-handling categories (forward-eligible, mixed-barrier, stack-only, quoting slots), BarrierPos semantics and its five resolution sites, the stack-only closed list with a two-criterion admission test that admits both apply and __casematch, and the composition rationale — measured at 97 intermediate-barrier signatures of 493, distinguished from the 20-word mixed-overload count" } }
     { key: "boru-scry", type: "Document", label: "design/BORU-SCRY.0.md"
       attributes: { role: "the boru:scry proposal: the mechanism whereby a boru system gains knowledge of itself as plain data — census, per-word, graph, schema and trace words curated over existing engine seams, and the plan for resolving the overlap with boru:debug" } }
     { key: "boru-infoview", type: "Document", label: "design/BORU-INFOVIEW.0.md"
@@ -585,6 +597,16 @@
       object: { kind: "entity", entity: "parser-go" }
       evidence: [{ source: "src:ts-parity-audit", locator: "the differential",
         quote: "After the fixes the differential is **0 divergences across 1,765 rows**." }]
+      confidence: 0.95 }
+    { subject: "adr-004-refinement", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:adr-004-refinement", locator: "title",
+        quote: "ADR-004 refinement — argument-handling categories" }]
+      confidence: 0.95 }
+    { subject: "adr-004-refinement", predicate: "supports"
+      object: { kind: "entity", entity: "forward" }
+      evidence: [{ source: "src:adr-004-refinement", locator: "Why it exists",
+        quote: "ADR-004 describes a default but not a system." }]
       confidence: 0.95 }
     { subject: "state-machines", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }
