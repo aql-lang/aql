@@ -797,13 +797,42 @@ with it since the M1 wave.
   `path-modifier.tsv:62-67`, `frontier-chained-apply.tsv:25`,
   `module-parselang.tsv:120`) — so any fix must preserve it.
 
-  Both divergent rows are now in
-  `lang/spec/frontier/frontier-fnparam-deref.tsv`, visible to the gate
-  without asserting an answer. **The decision is one sentence: when a name
-  bound to a `Function` value is read where no argument is available, is
-  that a nullary call or a value?** It is arity-discriminated in practice,
-  so the edit is likely narrow; the cost is re-baselining the spec corpus
-  and the differential gate.
+  Both divergent rows are in
+  `lang/spec/frontier/frontier-fnparam-deref.tsv`.
+
+  **RULED, 2026-08-15 (maintainer): a bare name is a CALL; `/r` is how you
+  ask for the value. Arity discrimination is explicitly rejected.** That
+  settles both divergent rows without a new rule, and it makes the
+  interpreter the correct engine in each:
+
+  | shape | correct behaviour | interpreter | compiler |
+  |---|---|---|---|
+  | `[f]`, arity 0 | apply | ✅ `Integer` | ❌ `Function` |
+  | `[c]`, arity ≥1 | raise `signature_error` | ✅ raises | ❌ `Function` |
+  | `[c/r]`, arity ≥1 | the value | ✅ `Function` | ✅ `Function` |
+  | `[f/r]`, arity 0 | the value | ❌ `Integer` | ✅ `Function` |
+
+  So this is not a semantic choice at all — it is **two ordinary bugs**,
+  one per engine, and the last row is the one that matters most, because
+  it is the prescribed workaround failing:
+
+  1. **The compiler must treat a bare Function-bound name as a call.** It
+     lowers the param to a unit local (`RegisterLocal`) and reads it as a
+     value, so it neither applies nor raises. Rows 1 and 2 above.
+  2. **`/r` must park a 0-arg fn bound to a PARAM.** It already works
+     everywhere else — `typeof nought/r` at module level is `Function` on
+     both engines, and `[c/r]` at arity ≥1 is `Function` on both. Only a
+     0-arg *param* deref ignores the modifier and applies. Row 4.
+
+  Bug 2 is the sharp one: the documented answer to "how do I pass a
+  function as a value" silently does the opposite in one shape, and it
+  fails *quietly* — `f/r` yields `7` where the author asked for the
+  function.
+
+  Two earlier readings of this section were wrong and are retracted above
+  and here: the slot does not auto-apply (it is the body deref), and this
+  is not a maintainer decision about semantics (the rule was already
+  `/r`; the engines just fail to honour it).
 
   One contained, decision-free bug fell out of this and **is** fixed here:
   the `TFunction` intercept resolved the name without recording a use, so
