@@ -1099,3 +1099,89 @@ The lesson worth keeping: the census, differential, refusal-ceiling and
 check-accuracy gates all passed while `TestCompiledCoverage` and
 `TestOnlyMetaFallsBack` did not. Running a subset of `test/go/langspec`
 and generalising to "the gates" is not a verification.
+
+### 12.6 Break 1 is fixed; clause 3 is measured and still forked
+
+**Break 1 (`[f/r]` body residual) is implemented.** One condition and one
+pointer bump in `stepCloseParen` (`core/go/engine.go`): a fn **frame**
+whose collapse leaves exactly one unquoted `Function` value is delivering
+a *return*, so the rewind steps past it instead of re-stepping it into a
+call.
+
+The mechanism is `ParkResult` — `ref`'s own — and the reason it is the
+right one is that it is **positional**: inertness is a property of the
+pointer at one index at one moment, and nothing is stamped on the value.
+That is exactly clause 1 ("`/r` is not sticky"). The two value-borne
+markers nearby are both wrong here: `Quoted` travels with the value and
+would make it permanently inert, and `ReachGroup` is a barrier hint of
+the opposite polarity.
+
+A **user** paren still re-steps, because the two collapses are told apart
+by `FrameOpenInfo` (`core/go/fn_frame.go`), which is machine-generated
+only — `NewFrameOpen` / `NewFrameOpenSpan` are the sole constructors, so
+no source text can forge it.
+
+Pinned as `lang/spec/ref.tsv` §8, three rows: the 0-arg param case, a
+module-scope name (proving it is not param-specific), and a 1-arg case
+(ADR-016). Arguments are handed over with `/r` per clause 2. Measured on
+the full corpus: `TestSpecProd` green, `TestSpecCompiledDifferential`
+6219 rows compiled / **0** mismatches — no pre-existing row moved.
+
+#### The clause-3 fork, now measured rather than posed
+
+A fourth row was drafted — `((h z/r))` → `42`, to pin that the park is
+positional and the returned reference still dispatches — and **dropped**,
+because it is the one row in 6219 that diverges: interpreter `42`,
+compiled `fn z`. The compiler does not re-step a paren-collapsed
+`Function`; the interpreter does. That divergence is pre-existing and
+unexercised anywhere else in the corpus, and it is precisely what clause
+3 turns on, so pinning either answer now would pre-empt the ruling. The
+`ref.tsv` §8 header records this and says not to add the row.
+
+Implementing clause 3 was attempted and measured. **The narrow and broad
+readings are not separable by any positional mechanism**, which was not
+known when the fork was first posed:
+
+- Dropping the frame-only condition (any paren collapsing to a `Function`
+  parks) breaks **every namespace call** — `MathUtil.sqrt 0` — because
+  dot access is lowered to `( MathUtil dot sqrt )` and its re-step *is*
+  the dispatch. Excluding `ReachGroup` fixes that class entirely.
+- With that exclusion the corpus reads **31 failing rows across 9 files**.
+  Seven are `ref.tsv` §2 + row 43, which clause 3 voids by design. The
+  rest are not: `(fn Integer [Integer] [10 add]) 7` and
+  `([n:Integer] => [n add 1]) 5` — **inline application of a function
+  literal** — plus the `(sub2/r) 10 3` family in `modifiers` and `usurp`.
+
+The finding: an inline fn **literal** inside a paren and a `/r`
+**reference** inside a paren reach the close paren in the *same* state —
+a stepped-past `Function` at `openIdx+1`. `/r` (`stepWordRef` →
+`stepLiteral`) and `ref` (`ParkResult`) both just advance the pointer.
+So "only a `/r`/`ref` reference survives its paren" cannot be expressed
+positionally; it needs a transient marker **on the value**, cleared by
+the collapse that consumes it — which is the value-borne mechanism clause
+1 rejects, and which would leak the moment the value is stored.
+
+That leaves two implementable readings, and the choice is a language
+decision, not a defect:
+
+| | `(z/r)` / `(ref z)` | `(inc/r) 5` | `(fn …) 7`, `([n] => […]) 5` |
+|---|---|---|---|
+| today | `42` | `6` | applies |
+| **broad** — no paren re-steps a `Function` | `fn z` ✅ | two values ✅ | **two values** (idiom removed) |
+| **narrow** — only a held reference survives | `fn z` ✅ | two values ✅ | applies |
+
+Broad is what clause 3 says literally and costs the inline-application
+idiom (24 of the 31 rows, spec-covered across `fn-triple`, `modifiers`,
+`usurp`, `recursion`, `apply`, `corpus-core`, `corpus-structures`,
+`module-fmt`). Narrow keeps it but needs the rejected mechanism. Neither
+is a bug fix, so neither is taken here.
+
+**Clause 2 is blocked for a different reason.** It supersedes ADR-011's
+final sentence (§12.4 records the measurement), and ADRs are amended only
+on explicit maintainer instruction — so implementing it would leave an
+Accepted record stating the opposite of the engine. The `unused_def` fix
+in `7e98aeb` hooks the same `TFunction` intercept and reworks with it.
+
+**Break 2** (the compiler's *"fn value read from a container
+auto-dispatches (Stage 3)"* refusal) is untouched and independent of all
+of the above.
