@@ -16,8 +16,8 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  Bare reference is inert (held) — `ref` ≡ `/r`, no auto-fire
-def z fn [[][Integer][42]]  z/r	fn z[[][Integer][42]]	bare /r holds a 0-arg fn — NOT fired
-def z fn [[][Integer][42]]  ref z	fn z[[][Integer][42]]	bare ref holds identically (no re-step)
+def z fn [[][Integer][42]]  z/r	fn [[][Integer][42]]	bare /r holds a 0-arg fn — NOT fired
+def z fn [[][Integer][42]]  ref z	fn [[][Integer][42]]	bare ref holds identically (no re-step)
 def inc fn [[n:Integer][Integer][n add 1]]  typeof (inc/r)	Function	a held reference is a Function value
 def inc fn [[n:Integer][Integer][n add 1]]  typeof (ref inc)	Function	ref yields a Function value
 #

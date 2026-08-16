@@ -117,3 +117,22 @@ def s (context) (s deq s)	true	…and deq to itself
 (do [raise "boom"]) deq (do [raise "boom"])	true	deq agrees with eq on an Error
 (do [raise "boom"]) eq (do [raise "bang"])	false	different messages are not equal
 (do [raise bad_input "x"]) eq (do [raise other "x"])	false	different codes are not equal
+
+# ── The code and type values: the rest of the fall-through (NUR031) ───
+# A word and a declared type were the last kinds `deq` rejected outright
+# — equal to nothing, not even themselves. Both are IMMUTABLE
+# declarations, so eq and deq coincide on them, as they already do on an
+# Error and on a scalar leaf. (A function is the third; its rows are
+# compile-refused as fn-value operands, so they live in
+# lang/spec/frontier/frontier-nur031-fn-eq.tsv.)
+(quote [x]) deq (quote [x])	true	a word is deq to an equal word — content, since a word IS its name and modifiers
+(quote [x]) deq (quote [y])	false	…and different names are not deq
+(quote [x add 1]) deq (quote [x add 1])	true	quoted code compares element-wise now that its words do
+(quote [x add 1]) deq (quote [x add 2])	false	…and discriminates on any element
+def P class {a: Integer} P deq P	true	a class TYPE is deq to itself — the reflexivity the record required of every value
+def P class {a: Integer} P eq P	true	…and eq to itself, the same answer: a type is a declaration, so eq ≡ deq on it
+def P class {a: Integer} def Q class {a: Integer} P deq Q	false	GOTCHA: two class types with identical fields are NOT deq — types are nominal, so eq and deq both require the same declaration
+def E enum ['a' 'b'] E deq E	true	an enum likewise
+def S fnsig [[Integer] [Integer]] S deq S	true	…a fnsig likewise
+def G gen [T] class {v: T} G deq G	true	…and an uninstantiated gen schema, the last of the type kinds
+List deq List	true	the bare type literals were already reflexive and stay so (NUR034)

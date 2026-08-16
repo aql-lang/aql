@@ -71,8 +71,8 @@ import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export 
 import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w "x"	ERROR:uncalled_function	a named export called with a mismatched arg raises AT THE CALL
 import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  print (M.w "x")	ERROR:uncalled_function	and a consumer around it does not silence it — the old drain never fired here
 import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  def y (M.w "x")  y	ERROR:uncalled_function	nor does binding the result with def
-import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w	fn w[[x:Integer][Integer][word(x)]]	a bare reference with no argument is still a VALUE, not a call
-import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w/r	fn w[[x:Integer][Integer][word(x)]]	/r means "the function is what I want" — no dispatch, no error
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w	fn [[x:Integer][Integer][word(x)]]	a bare reference with no argument is still a VALUE, not a call
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w/r	fn [[x:Integer][Integer][word(x)]]	/r means "the function is what I want" — no dispatch, no error
 import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  def g M.w/r  g 5	5	and the parked value is still callable, which is what a caller wanted it for
 #
 # §6  a value-called dispatch SEALS at collection completion (NUR038).
