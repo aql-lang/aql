@@ -31,12 +31,18 @@ func TestNUR031FnDeqIsReflexive(t *testing.T) {
 // Content equality ignores the BINDING NAME, which is what made two
 // references to one function compare unequal. The name is how a function
 // was reached, not part of what it is.
+// Two separately-minted payloads, so the identity short-circuit cannot
+// answer this — it reaches canon, which is where the name-independence has
+// to hold.
 func TestNUR031FnDeqIgnoresTheBindingName(t *testing.T) {
 	r, _ := NewRegistry()
-	f := nur031Fn(t, r, "f", []Value{NewInteger(1)})
-	renamed, _ := f.Data.(FnDefInfo)
-	renamed.Name = "a"
-	if !DeepEqual(f, NewFunction(renamed)) {
+	body := []Value{NewInteger(1)}
+	f := nur031Fn(t, r, "f", body)
+	a := nur031Fn(t, r, "a", body)
+	if sameFnIdentity(f.Data.(FnDefInfo), a.Data.(FnDefInfo)) {
+		t.Fatal("two constructions are two identities — the canon path must answer")
+	}
+	if !DeepEqual(f, a) {
 		t.Fatal("the same function under another name must be deq")
 	}
 }
@@ -85,12 +91,146 @@ func TestNUR031EqStaysReferenceIdentity(t *testing.T) {
 	}
 }
 
-// A zero-signature payload has no array to key on, so it is never
-// reference-equal — answering true would make every empty fn value eq.
-func TestNUR031EmptySignaturesAreNotReferenceEqual(t *testing.T) {
+// The record's own case: one function reached through two names. `def a
+// (f/r)` and `def b (f/r)` name one function, so `a/r eq b/r` is true —
+// and getting there means surviving the reach, which rebuilds the dispatch
+// aggregate (and its Signatures slice) separately for each name.
+func TestNUR031IdentitySurvivesRebinding(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	InstallFnDef(r, "f", FnDefInfo{Signatures: []Signature{{
+		Params:  []FnParam{{Name: "n", Type: TInteger}},
+		Returns: []*Type{TInteger},
+		Impl:    Boru([]Value{NewInteger(1)}),
+	}}})
+	fr, ok := ResolveRef(r, "f")
+	if !ok {
+		t.Fatal("ResolveRef f")
+	}
+	// What `def a (f/r)` / `def b (f/r)` leave behind: the reached value
+	// bound under two further names.
+	r.Defs.Push("a", fr)
+	r.Defs.Push("b", fr)
+	ar, _ := ResolveRef(r, "a")
+	br, _ := ResolveRef(r, "b")
+	if !ExactEqual(ar, br) {
+		t.Fatal("two names for one function must be eq")
+	}
+	if !ExactEqual(ar, fr) {
+		t.Fatal("…and eq to the function they were reached from")
+	}
+	// The aggregate really was rebuilt per name — otherwise this test would
+	// pass on the old Signatures-array key and prove nothing.
+	if &ar.Data.(FnDefInfo).Signatures[0] == &br.Data.(FnDefInfo).Signatures[0] {
+		t.Fatal("expected per-name aggregates with distinct Signatures arrays")
+	}
+}
+
+// A payload with no token has no identity. Every FnDefInfo built as a
+// literal outside NewFunction is one — a compile-time carrier, a probe —
+// and answering true would make them all eq to each other.
+func TestNUR031UntokenedPayloadsAreNotReferenceEqual(t *testing.T) {
 	a := FnDefInfo{Name: "a"}
 	if sameFnIdentity(a, a) {
-		t.Fatal("a zero-signature payload has no reference identity")
+		t.Fatal("a payload with no identity token is not reference-equal")
+	}
+	if tokened, ok := NewFunction(a).Data.(FnDefInfo); !ok || !sameFnIdentity(tokened, tokened) {
+		t.Fatal("…but NewFunction mints one, and a fn is eq to itself")
+	}
+}
+
+// The bucketed collection scans (unique / member / indices / group) must
+// agree with deq, or `unique` keeps what `deq` calls a duplicate. Before
+// this, DeqKey classified a function DeqNeverEqual — filed nowhere,
+// matching nothing — which was correct only while deq rejected functions.
+func TestNUR031FnDeqKeyMatchesDeq(t *testing.T) {
+	r, _ := NewRegistry()
+	body := []Value{NewInteger(1)}
+	f := nur031Fn(t, r, "f", body)
+	g := nur031Fn(t, r, "g", body)
+	h := nur031Fn(t, r, "h", []Value{NewInteger(2)})
+	if _, c := DeqKey(f); c != DeqKeyed {
+		t.Fatalf("a function must be DeqKeyed, got class %d", c)
+	}
+	if deqFam(f) != "F" {
+		t.Fatalf("a function must scan in the fn family, got %q", deqFam(f))
+	}
+	// Deq-equal functions share a bucket; a different body does not.
+	fk, _ := DeqKey(f)
+	gk, _ := DeqKey(g)
+	hk, _ := DeqKey(h)
+	if fk != gk {
+		t.Error("deq-equal functions must share a bucket")
+	}
+	if fk == hk {
+		t.Error("a different body must not share a bucket")
+	}
+	// End to end through the index — what `unique` actually calls.
+	var idx DeqIndex
+	idx.Add(f)
+	if got := idx.FirstMatch(g); got != 0 {
+		t.Errorf("FirstMatch(deq-equal fn) = %d, want 0", got)
+	}
+	if got := idx.FirstMatch(h); got != -1 {
+		t.Errorf("FirstMatch(different fn) = %d, want -1", got)
+	}
+}
+
+// The same agreement for the declared TYPE values, the other kind this
+// record moved out of the never-equal class.
+func TestNUR031TypeValueDeqKeyMatchesDeq(t *testing.T) {
+	// A disjunction — `def E enum ['a' 'b']`'s shape — is the cheapest
+	// declared type body to build here; the arm keys on the type body,
+	// not on which declarer produced it.
+	pv := NewDisjunct([]Value{NewString("a"), NewString("b")})
+	qv := NewEnum([]Value{NewString("a"), NewString("b")})
+	if !IsTypeBody(pv) || !IsTypeBody(qv) {
+		t.Fatal("fixture: both values must be type bodies")
+	}
+	if !DeepEqual(pv, pv) {
+		t.Fatal("a declared type must be deq to itself")
+	}
+	if DeepEqual(pv, qv) {
+		t.Fatal("…and not to a different declaration")
+	}
+	pk, c := DeqKey(pv)
+	if c != DeqKeyed {
+		t.Fatalf("a declared type must be DeqKeyed, got class %d", c)
+	}
+	if qk, _ := DeqKey(qv); pk == qk {
+		t.Error("two declarations must not share a bucket")
+	}
+	var idx DeqIndex
+	idx.Add(pv)
+	if got := idx.FirstMatch(pv); got != 0 {
+		t.Errorf("FirstMatch(self) = %d, want 0", got)
+	}
+	if got := idx.FirstMatch(qv); got != -1 {
+		t.Errorf("FirstMatch(other declaration) = %d, want -1", got)
+	}
+}
+
+// A compiled CLOSURE is the VM's spelling of a fn value, and it must
+// answer deq the way the interpreter's fn value does — by content. It
+// reaches the type-body arm rather than the fn arm (its payload is a
+// ClosurePayload, not a FnDefInfo), and the comparison lands on its
+// Render, which is the fn's canon: the same string fnStructurallyEqual
+// compares. Without this the two engines would disagree about `deq` on
+// the same function.
+func TestNUR031CompiledClosureDeqMatchesTheInterpreter(t *testing.T) {
+	a := NewValueRaw(TFunction, ClosurePayload{Unit: 1, Render: "fn [[][Integer][1]]"})
+	twin := NewValueRaw(TFunction, ClosurePayload{Unit: 1, Render: "fn [[][Integer][1]]"})
+	other := NewValueRaw(TFunction, ClosurePayload{Unit: 2, Render: "fn [[][Integer][2]]"})
+	if !DeepEqual(a, a) {
+		t.Fatal("a closure must be deq to itself")
+	}
+	if !DeepEqual(a, twin) {
+		t.Fatal("…and to a closure of the same function — content, like the interpreter")
+	}
+	if DeepEqual(a, other) {
+		t.Fatal("…but not to a closure of a different function")
 	}
 }
 

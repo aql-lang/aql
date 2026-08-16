@@ -1,0 +1,59 @@
+# NUR031 Function-value equality — the second half of the record, after
+# the Module-descriptor half (frontier-nur031-module-eq.tsv, resolved
+# 2026-08-02). A function's `eq` is REFERENCE identity per NUR011's rule
+# for every Ideal, keyed on an identity token minted once per authored
+# function and copied by every derivation that leaves it the same
+# function; its `deq` is CONTENT equality, compared as canon — which is
+# name-independent, so the binding a function was reached through is not
+# part of what it is. Before this a function was deq to NOTHING, not even
+# itself, which made ADR-015's round-trip unsatisfiable for the kind.
+#
+# These rows are semantically GREEN on the interpreter and compile-REFUSED
+# on a PRE-EXISTING limitation with nothing to do with equality: a
+# function VALUE reaching a non-inert word is refused outright
+# ("function value reaches eq/deq/canon (Stage 3)",
+# EmitState.RecordCallOperands). The same refusal fires on the pre-fix
+# binary for the identical shape — the fix changed the ANSWER, not the
+# compile status. Sound interpreter fallback (differential-clean), so the
+# ratcheted main corpus does not own them.
+#
+# Graduation = a compiled representation for a function value as an
+# operand, the Stage-3 fn-value work. At that point delete these ledger
+# entries and move the rows into lang/spec/compare-restrict.tsv (the
+# NUR031 opaque-Ideal section) and lang/spec/fn-value.tsv.
+
+# --- reflexivity: the defect this record closed --------------------------
+def f fn x:Integer [Integer] [x add 1] f/r eq f/r	true	a function is reflexively eq — the identity token survives the reach
+def f fn x:Integer [Integer] [x add 1] f/r deq f/r	true	…and reflexively deq, which is what ADR-015's round-trip needs of the kind
+
+# --- eq is reference identity, and identity survives rebinding -----------
+def f fn x:Integer [Integer] [x add 1] def a (f/r) def b (f/r) a/r eq b/r	true	two names for ONE function are eq — identity survives rebinding
+def f fn x:Integer [Integer] [x add 1] def a (f/r) a/r eq f/r	true	…and the rebound name is eq to the function it was reached from
+def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r eq g/r	false	GOTCHA: two independently-written functions with identical content are NOT eq — eq is identity, not content
+
+# --- deq is content equality --------------------------------------------
+def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r deq g/r	true	…but they ARE deq: same params, same returns, same body
+def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/r deq h/r	false	a different BODY is a different value — deq discriminates it
+def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/r deq s/r	false	…as does a different signature
+
+# --- content is canon, and canon carries no binding name -----------------
+def f fn x:Integer [Integer] [x add 1] canon (f/r)	'fn [[x:Integer][Integer][word(x) word(add) 1]]'	canon renders the anonymous fn literal — no `fn f`, because the name is how it was reached
+def f fn x:Integer [Integer] [x add 1] def a (f/r) (canon (a/r)) eq (canon (f/r))	true	so one function under two names has ONE canon — the name-independence deq rides on
+
+# --- cross-kind: a function against a non-function -----------------------
+def f fn x:Integer [Integer] [x add 1] f/r eq 1	false	cross-type eq is false, never an error
+def f fn x:Integer [Integer] [x add 1] f/r deq 1	false	deq likewise
+
+# --- the record's measurable acceptance signal ---------------------------
+# A namespace is deq-reflexive only when every export is. A module
+# exporting a FUNCTION was therefore not deq to itself — the fn
+# fall-through seen through a namespace, and the signal the verdict named
+# for this record.
+import "boru:io" IO deq IO	true	a function-exporting namespace is deq to itself — the fn fall-through, closed
+import "boru:string-util" StringUtil deq StringUtil	true	…and so is every other native module's namespace
+
+# The deq-keyed COLLECTION path (ArrayUtil.unique over functions) is not
+# here: it compiles, because the fn value reaches an inert-fn slot rather
+# than a comparison word, so the main corpus owns those rows
+# (lang/spec/module-array.tsv, the unique block). The WORD and TYPE halves
+# of the same fall-through compile too — lang/spec/compare-restrict.tsv.

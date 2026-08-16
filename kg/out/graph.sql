@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '8597399116252112737');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '2249083939216081129');
 INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
@@ -29,7 +29,7 @@ INSERT INTO input_files VALUES ('../design/BASIC-CHECK-CUT.0.md', '1575227922863
 INSERT INTO input_files VALUES ('../design/BORU-INFOVIEW.0.md', '2090869893701264049', 24408);
 INSERT INTO input_files VALUES ('../design/BORU-SCRY.0.md', '3285728856019765195', 16574);
 INSERT INTO input_files VALUES ('../design/BORU-VIZ.0.md', '1948552775752251328', 25772);
-INSERT INTO input_files VALUES ('../design/CANON-ROUNDTRIP.0.md', '5849445988911864215', 6387);
+INSERT INTO input_files VALUES ('../design/CANON-ROUNDTRIP.0.md', '6116825350476773035', 7262);
 INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '7605485402373327537', 10411);
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);

@@ -35,7 +35,10 @@ guarantee.
 ## 2. What this costs, measured
 
 The contract is **not satisfied today**, and the gap is not a rounding
-error. Measured 2026-08-15 against a build of this tree:
+error. Measured 2026-08-15 against a build of this tree — the fn line
+below has since changed (NUR031's fix, 2026-08-16: `canon (f/r)` now
+renders `fn [[x:Any][Any][word(x)]]`, name-independent); the Store line
+still reads exactly as measured:
 
 ```
 canon 1              -> 1                      ok
@@ -68,6 +71,17 @@ renderers on both engines — is the first tranche of ADR-015 work, and
 this ADR is what makes it a rule rather than a preference.
 
 ## 3. The prerequisite: NUR031
+
+> **Discharged 2026-08-16.** NUR031 is resolved and its record retired.
+> `f/r deq f/r` is true, a function's `deq` is its content compared as
+> canon, canon renders the anonymous fn literal (no binding name), and
+> the remaining fall-through kinds — words, declared type values, sealed
+> host `ExtensionPayload` values — are reflexive too. The equality half
+> of the gate below is therefore satisfied for every kind; what the
+> fn/host kinds still lack is a renderer, the same thing Store lacks.
+> One residual was recorded rather than fixed: `eq` has no per-type
+> capability where `deq` has `DeepEqualer` (NUR073). The section below
+> is kept as written for the reasoning it carries.
 
 A `deq` round-trip is unsatisfiable for a value that is not `deq` to
 **itself**, and that is today's state for functions and host

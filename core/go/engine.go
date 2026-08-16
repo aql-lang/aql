@@ -5792,6 +5792,8 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		Anonymous:      fnDef.Anonymous,
 		Captured:       fnDef.Captured,
 		MiniKind:       fnDef.MiniKind,
+		// Compiling a body does not make a different function (NUR031).
+		ident: fnDef.ident,
 	}
 }
 

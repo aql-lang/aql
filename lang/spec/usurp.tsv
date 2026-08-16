@@ -31,13 +31,13 @@ def cat3 fn [[a:String b:String c:String][String][a add b add c]]  cat3/u 'x' 'y
 def f fn [[a:Integer b:String][String][b add (a convert String)]]  f 7 'hi'	'hi7'	baseline: heterogeneous sig
 def f fn [[a:Integer b:String][String][b add (a convert String)]]  f/u 'hi' 7	'hi7'	usurped sig is [String Integer]; a=7 b='hi'
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp (ref sub2))}  ops.rev 10 3	-7	wrapper captured in a map dispatches via dot-access
-def inc fn [[n:Integer][Integer][n add 1]]  quote (usurp (ref inc))	fn inc[[n:Integer][Integer][]]	quoted usurp is inert data — the Function value itself
+def inc fn [[n:Integer][Integer][n add 1]]  quote (usurp (ref inc))	fn [[n:Integer][Integer][]]	quoted usurp is inert data — the Function value itself
 nope/u	ERROR:undefined_word	/u on an unbound name
 def x 5  x/u	ERROR:illegal_ref	/u on a non-fn binding is rejected
 #
 # ─── by-name form: `usurp f` resolves the word to its bound function ───
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2 10 3	-7	usurp by name: capture + resolve + reverse
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2	fn sub2[[b:Integer a:Integer][Integer][]]	by-name with no args holds the reversed wrapper
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2	fn [[b:Integer a:Integer][Integer][]]	by-name with no args holds the reversed wrapper
 def cat3 fn [[a:String b:String c:String][String][a add b add c]]  usurp cat3 'x' 'y' 'z'	'zyx'	by-name reverses all three args
 if true [99] [88]	99	baseline if: if cond then else
 usurp if [88] [99] true	99	by-name usurp of `if` — cond-first (else then cond)
@@ -51,8 +51,8 @@ usurp 5	ERROR:signature_error	usurp of a non-word literal matches neither overlo
 # /ur (and the equivalent /ru) build the reversed-arg wrapper but, like
 # /r, leave it on the stack as data without invoking. The held wrapper
 # dispatches when re-stepped (grouped in a paren, or via apply).
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ur	fn sub2[[b:Integer a:Integer][Integer][]]	/ur holds the reversed wrapper (params b,a) — not invoked
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ru	fn sub2[[b:Integer a:Integer][Integer][]]	/ru is the same as /ur (order-independent modifier letters)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ur	fn [[b:Integer a:Integer][Integer][]]	/ur holds the reversed wrapper (params b,a) — not invoked
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ru	fn [[b:Integer a:Integer][Integer][]]	/ru is the same as /ur (order-independent modifier letters)
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ur) 10 3	-7	grouped reffed-usurp wrapper dispatches (reversed: 3 sub 10)
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ru) 10 3	-7	/ru grouped dispatches identically
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/ur apply	7	apply a held reversed wrapper (reversed args → 10 sub 3)

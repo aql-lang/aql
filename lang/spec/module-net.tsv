@@ -87,11 +87,11 @@ import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (
 import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (do [r!.nope] error [dot code]) Net.close l; v	key_error/q	the strict twin raises where the lenient read returns none
 import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r has "status") Net.close l; v	true	has reports a present Response field (String key: a /q operand refuses to compile — a pre-existing limit, not specific to this overload)
 import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (convert Map r) Net.close l; v.status	204	the convert Map route still works — it was the only one before the accessors
-import "boru:net" Net.dot	fn dot[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dot is exported as a Fetch-only accessor overload
-import "boru:net" Net.get	fn get[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.get likewise
-import "boru:net" Net.dotr	fn dotr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dotr likewise
-import "boru:net" Net.getr	fn getr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.getr likewise
-import "boru:net" Net.has	fn has[[:String :Fetch][Boolean][] [:Atom :Fetch][Boolean][]]	Net.has likewise
+import "boru:net" Net.dot	fn [[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dot is exported as a Fetch-only accessor overload
+import "boru:net" Net.get	fn [[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.get likewise
+import "boru:net" Net.dotr	fn [[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dotr likewise
+import "boru:net" Net.getr	fn [[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.getr likewise
+import "boru:net" Net.has	fn [[:String :Fetch][Boolean][] [:Atom :Fetch][Boolean][]]	Net.has likewise
 import "boru:net" {a:1} Net.dot a/q	ERROR:uncalled_function	the overloads are anchored on the Fetch type: a Map is NOT a receiver for the qualified form
 
 # --- Server-side TLS (design/NETWORK-TLS-PLAN.0.md §5 phase 6). A

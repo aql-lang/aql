@@ -224,14 +224,34 @@ func TestNUR031ModuleDescriptorEquality(t *testing.T) {
 	if ExactEqual(mA, hostPayload) || DeepEqual(mA, hostPayload) {
 		t.Error("a descriptor must not equal a non-descriptor ExtensionPayload")
 	}
-	// The mirrored pair (a's body is not a *ModuleDesc): handled=false —
-	// the terminal fall-through keeps host payloads equal to nothing,
-	// including themselves.
+	// The mirrored pair (a's body is not a *ModuleDesc): the descriptor
+	// arm declines and the sealed host-payload arm answers — a descriptor
+	// and a host payload have different bodies, so still false.
 	if ExactEqual(hostPayload, mA) || DeepEqual(hostPayload, mA) {
 		t.Error("a non-descriptor ExtensionPayload must not equal a descriptor")
 	}
-	if ExactEqual(hostPayload, hostPayload) || DeepEqual(hostPayload, hostPayload) {
-		t.Error("a host ExtensionPayload stays equal to nothing (unchanged by NUR031)")
+	// …but a host payload IS equal to itself now (NUR031's last
+	// fall-through member), and unequal to a different one.
+	if !ExactEqual(hostPayload, hostPayload) || !DeepEqual(hostPayload, hostPayload) {
+		t.Error("a sealed host ExtensionPayload must be eq/deq to itself")
+	}
+	if ExactEqual(hostPayload, NewValueRaw(TIdeal, ExtensionPayload{Body: 43})) {
+		t.Error("…and unequal to a payload with a different body")
+	}
+	// An UNCOMPARABLE body (a bare map) would panic on `==`: the arm
+	// answers false instead of taking the process down, in both
+	// directions and against itself.
+	badBody := NewValueRaw(TIdeal, ExtensionPayload{Body: map[string]int{"a": 1}})
+	if ExactEqual(badBody, badBody) || DeepEqual(badBody, badBody) {
+		t.Error("an uncomparable payload body has no identity — false, not a panic")
+	}
+	if ExactEqual(badBody, hostPayload) || ExactEqual(hostPayload, badBody) {
+		t.Error("…in either order")
+	}
+	// A host payload against a NON-payload: the arm claims the pair (a is
+	// an ExtensionPayload) and must answer, not read b's data as one.
+	if ExactEqual(hostPayload, NewInteger(1)) || DeepEqual(hostPayload, NewInteger(1)) {
+		t.Error("a host payload must not equal a non-payload")
 	}
 	// Descriptor vs a non-Ideal / non-ExtensionPayload value: false.
 	if ExactEqual(mA, NewInteger(1)) || DeepEqual(mA, NewInteger(1)) {
@@ -283,10 +303,17 @@ func TestNUR031HandleFamilyByKind(t *testing.T) {
 	if handleKind(NewInteger(1)) != "" {
 		t.Fatal("handleKind must return empty for a non-handle")
 	}
-	// An ExtensionPayload whose body is NOT a *ModuleDesc is a host
-	// payload, not a handle.
-	if handleKind(NewValueRaw(TIdeal, ExtensionPayload{Body: 42})) != "" {
-		t.Fatal("handleKind must return empty for a non-descriptor ExtensionPayload")
+	// An ExtensionPayload whose body is NOT a *ModuleDesc is a SEALED
+	// HOST payload. It is deq-comparable since NUR031 gave it box
+	// identity, but handleKind stays descriptor-only: the host family is
+	// assigned BELOW the DeepEqualer arm so a capability-carrying host
+	// type keeps its own, tighter family.
+	host := NewValueRaw(TIdeal, ExtensionPayload{Body: 42})
+	if handleKind(host) != "" {
+		t.Fatal("handleKind must stay descriptor-only for an ExtensionPayload")
+	}
+	if deqFam(host) != "H:Host" {
+		t.Fatalf("a sealed host payload must scan in the host family, got %q", deqFam(host))
 	}
 	// A Module descriptor alias (same boxed pointer, other Parent) shares
 	// the deq family, like the timer alias above.
@@ -315,13 +342,41 @@ func TestNUR031DeqKeyClassification(t *testing.T) {
 			t.Errorf("handle %T must have a deq family", v.Data)
 		}
 	}
-	// A code value stays never-equal.
-	if _, c := DeqKey(NewWord("f")); c != DeqNeverEqual {
-		t.Error("a Word must stay DeqNeverEqual")
+	// The word arm answers on BOTH sides of the family, and the arms
+	// above it (type body, scalar) must not claim a word first.
+	if !ExactEqual(NewWord("f"), NewWord("f")) || !DeepEqual(NewWord("f"), NewWord("f")) {
+		t.Error("equal words must be eq and deq — a word is value-like")
 	}
-	// A non-descriptor ExtensionPayload (host payload) stays never-equal.
-	if _, c := DeqKey(NewValueRaw(TIdeal, ExtensionPayload{Body: 42})); c != DeqNeverEqual {
-		t.Error("a host ExtensionPayload must stay DeqNeverEqual")
+	if ExactEqual(NewWord("f"), NewWordRef("f")) || DeepEqual(NewWord("f"), NewWordRef("f")) {
+		t.Error("`f` and `f/r` are different words")
+	}
+	if ExactEqual(NewWord("f"), NewString("f")) || DeepEqual(NewWord("f"), NewString("f")) {
+		t.Error("a word is not its name as a String")
+	}
+	// A sealed host payload joins them: box identity makes it
+	// deq-comparable, scanned pairwise within the host family.
+	host := NewValueRaw(TIdeal, ExtensionPayload{Body: 42})
+	if _, c := DeqKey(host); c != DeqUnkeyed {
+		t.Error("a host ExtensionPayload must be DeqUnkeyed")
+	}
+	if deqFam(host) == "" {
+		t.Error("…with a deq family, or the pairwise scan never reaches it")
+	}
+	// A Word left the never-equal class entirely (NUR031): it is
+	// value-like, so it gets an EXACT key rather than a pairwise scan.
+	if _, c := DeqKey(NewWord("f")); c != DeqKeyed {
+		t.Error("a Word must be DeqKeyed — canon is its exact key")
+	}
+	// Two words with the same name but different MODIFIERS are different
+	// values, so they must not share a bucket.
+	wk, _ := DeqKey(NewWord("f"))
+	rk, _ := DeqKey(NewWordRef("f"))
+	if wk == rk {
+		t.Error("`f` and `f/r` are different words and need different keys")
+	}
+	// What REMAINS never-equal: an instance with no readable fields.
+	if _, c := DeqKey(NewClassInstance(TStore, ClassInstanceInfo{})); c != DeqNeverEqual {
+		t.Error("a field-less instance must stay DeqNeverEqual")
 	}
 	// A DeqIndex finds the SAME descriptor instance among seen values but
 	// never merges a distinct instance (identity is the deq relation).

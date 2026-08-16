@@ -58,6 +58,8 @@ import "boru:array-util"  ArrayUtil.group ['a' 'b' 'c']	{a:[0] b:[1] c:[2]}	grou
 import "boru:array-util"  ArrayUtil.unique [1 1.0]	[1]	cross-leaf magnitude dedups: 1 deq 1.0
 import "boru:array-util"  ArrayUtil.unique [["a"] ["a"]]	[['a']]	structurally-equal lists dedup, though eq (reference) distinguishes them
 import "boru:array-util"  ArrayUtil.unique [nan nan]	[nan nan]	NaN is deq-unequal to itself — both kept, honestly
+import "boru:array-util"  def f fn x:Integer [Integer] [x add 1]  def g fn x:Integer [Integer] [x add 1]  size (ArrayUtil.unique [f/r g/r])	1	NUR031: the deq scan merges two deq-equal FUNCTIONS — DeqKey buckets a function by its canon, matching deq's content equality
+import "boru:array-util"  def f fn x:Integer [Integer] [x add 1]  def h fn x:Integer [Integer] [x add 2]  size (ArrayUtil.unique [f/r h/r])	2	…and keeps two whose bodies differ, exactly as deq answers
 import "boru:array-util"  ArrayUtil.member [1.0] [1 2]	[true]	membership by value: 1.0 is in [1 2]
 import "boru:array-util"  ArrayUtil.member [["a"]] [["a"]]	[true]	…and by deep value for Nodes
 import "boru:array-util"  ArrayUtil.indices [2.0] [1 2]	[1]	index lookup by value

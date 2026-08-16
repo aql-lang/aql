@@ -803,7 +803,38 @@ type FnDefInfo struct {
 	// Empty for every source-authored clone, whose author is the
 	// exporting module's TypeTable.MintOwner instead.
 	ExtOwner string
+	// ident is the function's IDENTITY token: the reference `eq`
+	// compares for a fn value (NUR031). It is minted once, by
+	// NewFunction, for a payload that arrives without one, and then
+	// COPIED by every derivation that keeps the function the same
+	// function — installation (InstallFnDef's compiled entry), the
+	// cross-stack dispatch aggregate, the per-dispatch anon recompile,
+	// a trivial-delegation rebind. Deriving a genuinely DIFFERENT
+	// dispatch table (a word-extension clone, a usurp wrapper) builds a
+	// fresh FnDefInfo literal instead, so it mints its own.
+	//
+	// A token is needed because the payload has no other stable
+	// reference. The Signatures backing array looks like one and is
+	// not: aggregateDispatch rebuilds the slice for every boru-bodied
+	// word, per NAME, so `def a (f/r)` and `def b (f/r)` — one function
+	// under two names — landed on two arrays and read as two functions.
+	// The token is what survives the rebuild.
+	//
+	// Unexported so only this module can mint one: a FnDefInfo built as
+	// a literal outside core (a compile-time carrier, a probe value)
+	// carries nil and has no identity, which is the honest answer for a
+	// synthesized payload with no fn behind it.
+	ident *fnIdent
 }
+
+// fnIdent is a fn value's identity token — allocated for its ADDRESS
+// alone, never read.
+//
+// The one byte is load-bearing. An empty struct is zero-sized, and Go
+// gives every zero-sized allocation the same address (runtime.zerobase),
+// so `&fnIdent{}` would hand every function in the program one shared
+// token and make them all eq. A single byte forces distinct addresses.
+type fnIdent struct{ _ byte }
 
 // CapturedBinding is one lexically-captured name in a closure. The
 // list is sorted by Name for deterministic install order so that two
@@ -2555,7 +2586,18 @@ func NewMoveIf(to, reason string, ifCont *IfCont) Value {
 // NewFunction creates a function reference value. The underlying data is a
 // FnDefInfo, but the type is TFunction so it can be matched by function-typed
 // parameters and passed to other functions without being called.
+//
+// It also mints the payload's identity token when it has none (NUR031). This
+// is the one seam every fn VALUE passes through, so minting here — rather
+// than at each of the two dozen construction sites — is what makes "a fn
+// value always has an identity" true by construction. A payload that already
+// carries a token keeps it, which is what lets identity survive rebinding:
+// the reach path (ResolveRef → Lookup → NewFunction) re-wraps a copy on every
+// mention of the name and must not re-mint.
 func NewFunction(info FnDefInfo) Value {
+	if info.ident == nil {
+		info.ident = &fnIdent{}
+	}
 	return NewValueRaw(TFunction, info)
 }
 

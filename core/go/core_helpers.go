@@ -104,6 +104,10 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 						Signatures:     append([]Signature(nil), inner.Signatures...),
 						MaxForwardArgs: inner.MaxForwardArgs,
 						Registry:       reg,
+						// A trivial-delegation rebind is the inner word under
+						// another name — the record's own case — so it inherits
+						// the inner word's identity token (NUR031).
+						ident: inner.ident,
 					}
 					r.Defs.Push(name, NewFunction(rebound))
 					if r.ready && r.OnRegisterHook != nil {

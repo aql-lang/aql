@@ -1179,6 +1179,12 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		// aggregate IS the clone's view — a `name/r` reference (ResolveRef
 		// wraps the aggregate) must stay recognisable at export transplant.
 		Extends: top.Extends,
+		// The aggregate is a VIEW of the newest entry's function, not a new
+		// one, so it carries that entry's identity token (NUR031) — as the
+		// rest of the metadata above already does. Without this the rebuilt
+		// Signatures slice would be the only reference left, and it is per
+		// NAME: two names for one function would answer `eq` false.
+		ident: top.ident,
 	}
 }
 

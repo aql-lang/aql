@@ -368,6 +368,31 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module`:                                                                        {why: "NUR031: repeat import is a cache no-op — same descriptor instance", failsWith: "operand of unknown provenance"},
 	`import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module`:                                               {why: "NUR031: re-import after undef mints a FRESH descriptor (identity is per-import-instance)", failsWith: "operand of unknown provenance"},
 
+	// NUR031 Function-value equality (frontier-nur031-fn-eq.tsv): the
+	// second half of the record — eq is the identity token, deq is canon
+	// content. Semantically green; refused for a reason unrelated to
+	// equality, and one the PRE-fix binary refuses identically: a function
+	// VALUE reaching a non-inert word is declined outright by
+	// EmitState.RecordCallOperands. Graduation = a compiled representation
+	// for a function value as an operand (the Stage-3 fn-value work); the
+	// rows then move to compare-restrict.tsv and fn-value.tsv.
+	`def f fn x:Integer [Integer] [x add 1] f/r eq f/r`:                                         {why: "NUR031: a function is reflexively eq", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] f/r deq f/r`:                                        {why: "NUR031: …and reflexively deq — ADR-015's prerequisite for the kind", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def a (f/r) def b (f/r) a/r eq b/r`:                 {why: "NUR031: two names for one function are eq — identity survives rebinding", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def a (f/r) a/r eq f/r`:                             {why: "NUR031: …and eq to the function they were reached from", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r eq g/r`:  {why: "NUR031: identical content is NOT eq — eq is identity", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r deq g/r`: {why: "NUR031: …but it IS deq — deq is content", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/r deq h/r`: {why: "NUR031: a different body is a different value", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/r deq s/r`:         {why: "NUR031: a different signature likewise", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] canon (f/r)`:                                        {why: "NUR031: canon renders the anonymous fn literal — no binding name", failsWith: "function value reaches canon (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def a (f/r) (canon (a/r)) eq (canon (f/r))`:         {why: "NUR031: one function under two names has ONE canon", failsWith: "function value reaches canon (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] f/r eq 1`:                                           {why: "NUR031: cross-type eq is false, never an error", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] f/r deq 1`:                                          {why: "NUR031: cross-type deq likewise", failsWith: "function value reaches deq (Stage 3)"},
+	// The namespace rows refuse for the MODULE-synthetic reason above, not
+	// the fn-value one: a namespace binding has no bakeable operand home.
+	`import "boru:io" IO deq IO`:                          {why: "NUR031: a function-exporting namespace is deq-reflexive — the record's acceptance signal", failsWith: "operand of unknown provenance"},
+	`import "boru:string-util" StringUtil deq StringUtil`: {why: "NUR031: …and so is every other native module's namespace", failsWith: "operand of unknown provenance"},
+
 	// NUR067 — await's winner-takes-all modes (frontier-await-winner.tsv):
 	// `first` / `any` hand back the winning branch's WHOLE residual, 0-or-more
 	// values — a count that can EXCEED any static seat, the direction the L-DO
