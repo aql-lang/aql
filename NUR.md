@@ -60,9 +60,9 @@ keep the two in sync in the same commit.
 |---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
-| [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
 | [NUR072](#nur072) | Three sugar kinds (mini, type-bound, lambda) still canon in DEBUG form after NUR059 — withdrawn there because the renders do not round-trip: SugarInfo does not retain the mini delimiter, and type-bound renders its Items rather than the bound's text; also carries the undecided bare-word question (`word(foo)` vs `foo`, 175 corpus rows) | NUR059's fix, 2026-08-15 |
 | [NUR075](#nur075) | `deq` is extensible per type (`DeepEqualer`), `eq` is not — the one part of the retired NUR031's verdict its fix did not take: the divergences closed by adding kernel arms rather than by routing through `Behavior`, so a type can define its own deep equality but not its own identity | NUR031's fix, 2026-08-16 |
+| [NUR076](#nur076) | A `behave`-installed capability is invisible to check mode, because `behave` does not run there — for `make` that turns a working program into a check FAILURE: a type whose Maker ignores the schema still has the schema's unknown/missing-field rules applied statically | NUR056's fix, 2026-08-17 (flagged by the PR #379 review, Codex P1) |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
@@ -1437,77 +1437,6 @@ had rotted by a factor of two.
 
 ---
 
-
-
-## NUR056 — `make`-constructibility is the one capability with no opt-in {#nur056}
-
-**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:** NUR
-register review (auditing the TypeBehavior capability surface)
-
-> Numbered 056, not 055: NUR055 was opened and resolved earlier in this
-> same review (`cde2d3f` then `b5051be` — Big numeric values reading as
-> uniformly falsy), and a resolved record's number is retired forever.
-
-**Rule:** a type says how it participates in a kernel operation
-through its Behavior — one mechanism, reachable from Go via a
-capability interface and from boru via a `behave` slot.
-
-**Divergence:** every kernel operation follows that rule except
-construction. Ordering, rendering, membership, unification, hashing,
-walking, projection, const-baking, truthiness, deep equality and size
-are all capability-dispatched, and seven of them have `behave` slots
-(`compare`, `canon`, `nodify`, `unify`, `truthy`, `deq`, `size`).
-`make` has neither: its scalar arm is a closed switch over the kernel
-leaves, and its Ideal arm dispatches through a *registry* of Ideal
-kinds rather than through the type's Behavior.
-
-```
-$ boru do 'def C (refine Float) behave make/q (fn [[String] [C] [1.0]])'
-  error: behave make: unknown behavior name;
-         known: canon, compare, deq, nodify, size, truthy, unify
-```
-
-So a user type can define what it MEANS in every operation that
-consumes it, and nothing about how it is BUILT. A Go-side Ideal can
-(via `Ideal.Instantiate`), which makes this also a Go-vs-boru
-asymmetry, not only a missing capability.
-
-**Evidence** (paths relative to the repo root):
-`eng/go/core_make.go` — `MakeConvert`'s `default:` arm raising
-"make: unsupported target type" is the closed scalar switch;
-`MakeObjHandler`'s `reg.Ideals.For(targetVal).Instantiate` is the
-Go-only Ideal hook. `lang/go/native/native_behave.go` — the
-`behaviors` table, seven entries, no construction slot.
-`eng/go/typebehavior.go` — the capability interfaces that do exist.
-
-**Documentation status:** undocumented. `boru describe behave` now
-lists the seven installable slots, and nothing states that
-construction is not among them or why.
-
-**Verdict (maintainer, 2026-08-14 — resolve by fix):** add the
-`Maker` capability (`fn [[Any] [T]]`), dispatched by `MakeConvert`
-before its scalar switch and by `MakeObjHandler` before the Ideals
-registry, plus the eighth `behave make/q` slot — completing the
-capability surface.
-
-The counter-argument was considered and not taken: construction has no
-receiver to dispatch on, only a target type and an arbitrary source,
-which is a real disanalogy with the seven value-Behavior slots. What
-it does not answer is the **Go-vs-boru asymmetry** — a Go-side Ideal
-already customises construction through `Ideal.Instantiate`, so the
-capability exists; only its boru-side spelling is missing. Closing
-that is the fix, and it is what makes the documented capability list
-honest rather than requiring a paragraph explaining an omission.
-
-Scope, unchanged by this verdict: it does NOT block on the
-sentinel-values programme or on NUR018 (`Store`/`Error` deliberately
-not being `make` targets) — those decide WHICH types construct, this
-decides WHO gets to say how. Stays **Pending** until the capability,
-the slot, and their negative rows (a declined `Maker` falls through to
-today's behaviour; a wrong-typed return is refused) land.
-
----
-
 ## NUR072 — Three sugar kinds still canon in debug form, and their source spelling is not recoverable {#nur072}
 
 **Status:** Pending · **Recorded:** 2026-08-15 · **Surfaced by:** NUR059's
@@ -1611,6 +1540,79 @@ capability can reach, against `DeepEqual`'s terminal
 `deepEqualCapability` call; `lang/go/native/native_behave.go` (the
 `behave` slots, `DeepEqualer` among them and no `eq` twin);
 `core/go/capability_gaps_test.go`.
+
+## NUR076 — A `behave`-installed capability is invisible to check mode {#nur076}
+
+**Status:** Pending · **Recorded:** 2026-08-17 · **Surfaced by:** NUR056's
+fix (the `Maker` capability); flagged for this register by the PR #379
+review (Codex P1)
+
+**Rule:** the checker and the interpreter agree. A program the interpreter
+runs is a program `boru check` accepts — the same twins discipline the
+compiled differential enforces for the VM.
+
+**Divergence:** `behave` does not take effect in check mode. The type is
+minted (a check pass sees `C` exist), but the capability wrapper is never
+installed, so every `behave`-installed slot is absent from the checker's
+view of the program.
+
+For six of the eight slots that is invisible: `compare`, `canon`, `nodify`,
+`unify`, `truthy`, `deq` and `size` change what a program COMPUTES, and
+check mode does not evaluate. `make` is different, because the checker
+actively VALIDATES a construction against the target's declared schema —
+so a type that supplies its own constructor is judged against rules its
+constructor never runs:
+
+```
+def P class {a: Integer}
+behave make/q (fn Any P [make P {a: 42}])
+make P {bogus: 1}
+
+  boru run -no-check   ->  Class/P{a:42}     the constructor ignores its source
+  boru check           ->  2 errors          unknown field "bogus", missing "a"
+```
+
+The check failure gates the run, so the program does not execute at all
+under the default pre-flight — a working program rejected outright.
+
+**What the NUR056 fix could and could not do.** `makeObjReturns` now asks
+`core.HasMaker` before applying `CheckMakeConstruction`, so a Maker the
+checker CAN see suppresses the schema validation. That covers a Go-side
+Maker, which is installed at registry construction and therefore present
+during check. It cannot cover a `behave`-installed one, because the wrapper
+arrives only by executing the `behave` call — which check mode does not do.
+The guard is correct and the residue is exactly the ordering it cannot
+close.
+
+**Why it was not fixed here:** running `behave` in check mode means
+executing arbitrary user bodies during static analysis. That is a language
+decision about what `boru check` is allowed to do, several sizes larger
+than the capability this record's parent added, and it would apply to all
+eight slots at once rather than to `make`.
+
+**Evidence:** `lang/go/native/native_behave.go` (the wrapper install, run
+only by `behaveHandler` execution); `lang/go/native/native_make.go`
+`makeObjReturns` (the `HasMaker` guard and what it cannot see);
+`core/go/maker_capability.go` `HasMaker`; the transcript above, measured
+2026-08-17.
+
+**Documentation status:** `boru describe behave` states that `make` runs
+ahead of every kernel construction path, which is true at RUNTIME and is
+where the asymmetry shows. Nothing user-facing says a `behave` slot is
+invisible to `boru check`.
+
+**Proposed verdict:** none yet. Three candidates. (1) Run `behave` in check
+mode — closes it for all eight slots, at the cost of executing user code
+during analysis. (2) Have the checker recognise a `behave make` call
+SYNTACTICALLY and suppress the schema validation for that target — narrow
+and cheap, but a second mechanism that knows about one word. (3) Allowed,
+on the argument that check mode is a static approximation and a custom
+constructor is exactly the kind of dynamism it may decline to model — in
+which case `make` should not be schema-validating a type it cannot prove
+owns its own construction, which is closer to (2) than to accepting the
+current answer.
+
+---
 
 ## NUR060 — The parser twins disagree on open-input sources beyond the corpus {#nur060}
 

@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -331,5 +332,252 @@ behave size/q (fn [[Bag] [Integer] [99]])`); err != nil {
 	out = sizeReturns([]Value{sack}, r)
 	if n, err := core.AsInteger(out[0]); err != nil || n != 2 {
 		t.Errorf("a body-less refinement must keep the fold: %v (%v)", out[0].String(), err)
+	}
+}
+
+// ─── the make slot (NUR056) ───────────────────────────────────────────
+//
+// Construction was the eighth kernel operation and the only one with no
+// opt-in: a type could say what it MEANS in every operation that consumed
+// it and nothing about how it was BUILT — while a Go-side Ideal could
+// already customise construction through Ideal.Instantiate, making this a
+// Go-vs-boru asymmetry as well as a missing capability.
+
+// TestBehaveMakeSlot: the installed constructor owns `make` for its type,
+// and the type it refines is untouched.
+func TestBehaveMakeSlot(t *testing.T) {
+	v := bcTop(t, `
+def Cel (refine Float)
+behave make/q (fn [[Float] [Cel] [a sub 32.0 mul 0.5555]])
+[(make Cel 212.0) (make Float "2.5")]`)
+	elems, err := core.AsMutableList(v)
+	if err != nil || len(elems) != 2 {
+		t.Fatalf("expected a 2-element list, got %s (%v)", v.String(), err)
+	}
+	if f, _ := core.AsFloat(elems[0]); f < 99.9 || f > 100.1 {
+		t.Errorf("make Cel = %s, want the constructor's answer (~99.99)", elems[0].String())
+	}
+	if f, _ := core.AsFloat(elems[1]); f != 2.5 {
+		t.Errorf("make Float = %s — the untouched builtin must keep the kernel rule", elems[1].String())
+	}
+}
+
+// The SOURCE is arbitrary — that is what makes this a constructor rather
+// than a coercion, and why the slot reads its target from the fn's return
+// type rather than from a param.
+func TestBehaveMakeTakesAnySource(t *testing.T) {
+	if !bcBool(t, `
+def Tag (refine String)
+behave make/q (fn [[Any] [Tag] ["fixed"]])
+(make Tag 42) eq (make Tag ["a list"])`) {
+		t.Error("a constructor must accept any source shape")
+	}
+}
+
+// The result is TAGGED with the target type, so the constructed value is
+// really a Tag and not a bare String that happens to look like one.
+func TestBehaveMakeResultCarriesTheTargetType(t *testing.T) {
+	if !bcBool(t, `
+def Tag (refine String)
+behave make/q (fn [[Any] [Tag] ["fixed"]])
+(make Tag 1) is Tag`) {
+		t.Error("the constructed value must carry the target type")
+	}
+}
+
+// The capability outranks the Ideal REGISTRY — the Go-side construction
+// hook it is the boru-side twin of — so an object type's constructor wins
+// over the kind-level default.
+func TestBehaveMakeOutranksTheIdealRegistry(t *testing.T) {
+	if !bcBool(t, `
+def P class {a: Integer}
+behave make/q (fn [[Any] [P] [make P {a: 42}]])
+(make P "ignored") dot a eq 42`) {
+		t.Error("a class type's own constructor must outrank the Ideal default")
+	}
+}
+
+// …and the body above proves the re-entrancy guard: it calls `make P`
+// on its OWN type, which would loop forever without one. The inner call
+// falls through to the kernel path, exactly as the render/nodify guards
+// do for their slots.
+func TestBehaveMakeReentrancyFallsToTheKernel(t *testing.T) {
+	if !bcBool(t, `
+def Q class {a: Integer}
+behave make/q (fn [[Any] [Q] [make Q {a: 1}]])
+(make Q "x") dot a eq 1`) {
+		t.Error("a self-recursive constructor must fall through, not loop")
+	}
+}
+
+// A body returning the target's BASE type is reparented rather than
+// refused — the same courtesy the kernel's own newtype construction
+// extends, so `[1.0]` is a legal body.
+func TestBehaveMakeReparentsABaseTypedResult(t *testing.T) {
+	if !bcBool(t, `
+def C (refine Float)
+behave make/q (fn [[String] [C] [1.0]])
+(make C "anything") is C`) {
+		t.Error("a base-typed result must be reparented to the target")
+	}
+}
+
+// A body returning something else entirely is REFUSED. `make` is the
+// language's narrowest construction boundary; letting a body smuggle an
+// off-type value through it would make the capability a hole.
+func TestBehaveMakeRefusesAnOffTypeResult(t *testing.T) {
+	_, err := w9Run(t, w9Reg(t), `
+def C (refine Float)
+behave make/q (fn [[String] [C] ["not a float"]])
+make C "x"`)
+	if err == nil {
+		t.Fatal("an off-type constructor result was accepted")
+	}
+	if !strings.Contains(err.Error(), "C") {
+		t.Errorf("the refusal must name the target type: %v", err)
+	}
+}
+
+// A RAISING body is the constructor's answer, not a decline: falling
+// through to the kernel's coercion would produce a value the type's own
+// constructor refused.
+func TestBehaveMakeBodyErrorReachesTheCaller(t *testing.T) {
+	_, err := w9Run(t, w9Reg(t), `
+def C (refine Float)
+behave make/q (fn [[String] [C] [raise bad_input "C needs a number"]])
+make C "x"`)
+	if err == nil {
+		t.Fatal("a raising constructor must not fall through to the kernel")
+	}
+	if !strings.Contains(err.Error(), "C needs a number") {
+		t.Errorf("the body's own error must reach the caller: %v", err)
+	}
+}
+
+// Installing ANOTHER slot must not change construction — the wrapper
+// satisfies core.Maker structurally whether or not a make body exists,
+// so the empty case has to decline. This is the same regression the size
+// slot hit (PR #325) and is the reason ErrNoMaker exists.
+func TestBehaveMakeDoesNotSwallowConstruction(t *testing.T) {
+	v := bcTop(t, `
+def Level (refine Integer)
+behave canon/q (fn [[Level] [String] ["<lvl>"]])
+make Level 7`)
+	if n, err := core.AsInteger(v); err != nil || n != 7 {
+		t.Errorf("make = %s, want 7 — a slotless type must keep kernel construction", v.String())
+	}
+}
+
+func TestBehaveMakeRejectsWrongShapes(t *testing.T) {
+	for _, tc := range []struct{ name, src, want string }{
+		{
+			name: "two params",
+			src: `def C (refine Float)
+behave make/q (fn [[String String] [C] [1.0]])`,
+			want: "make: fn must take 1 arg",
+		},
+		{
+			name: "two returns",
+			src: `def C (refine Float)
+behave make/q (fn [[String] [C C] [1.0 1.0]])`,
+			want: "make: fn must return exactly 1 value",
+		},
+		{
+			name: "Any return names no type",
+			src: `def C (refine Float)
+behave make/q (fn [[String] [Any] [1.0]])`,
+			want: "must declare a concrete return type",
+		},
+	} {
+		_, err := w9Run(t, w9Reg(t), tc.src)
+		if err == nil {
+			t.Errorf("%s: accepted", tc.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %q does not mention %q", tc.name, err, tc.want)
+		}
+	}
+}
+
+// The make slot reads its target from the RETURN type and never looks at
+// the param — the one place a `behave` slot takes its target from
+// anywhere but a parameter. Every other slot derives T from param 0, so
+// changing the param type would retarget the install; here it must not.
+func TestBehaveMakeTargetsItsReturnTypeNotItsParam(t *testing.T) {
+	for _, param := range []string{"Any", "String", "Integer"} {
+		src := `def C (refine Float)
+behave make/q (fn [[` + param + `] [C] [1.0]])
+(make C "x") is C`
+		out, err := w9Run(t, w9Reg(t), src)
+		if err != nil {
+			t.Errorf("param %s: %v", param, err)
+			continue
+		}
+		if b, _ := core.AsBoolean(out[len(out)-1]); !b {
+			t.Errorf("param %s: the install must target C, whatever the source slot says", param)
+		}
+	}
+}
+
+// A refinement that installs a DIFFERENT slot still inherits its base's
+// constructor: its own wrapper carries no make body, so it delegates to
+// the Behavior it replaced rather than declining outright. Without that
+// hand-off, adding `behave canon` to a subtype would silently remove the
+// base's constructor — the same shape as the size-slot regression, one
+// level up the chain.
+func TestBehaveMakeInheritedThroughAWrappedRefinement(t *testing.T) {
+	v := bcTop(t, `
+def A (refine Float)
+behave make/q (fn String A [1.0])
+def B (refine A)
+behave canon/q (fn B String ["<b>"])
+[(make B "x") ((make B "x") is B)]`)
+	elems, err := core.AsMutableList(v)
+	if err != nil || len(elems) != 2 {
+		t.Fatalf("expected a 2-element list, got %s (%v)", v.String(), err)
+	}
+	if r := elems[0].String(); !strings.Contains(r, "<b>") {
+		t.Errorf("the subtype's own canon must render the result, got %s", r)
+	}
+	if b, _ := core.AsBoolean(elems[1]); !b {
+		t.Error("the base's constructor must build a value of the SUBTYPE")
+	}
+}
+
+// prevMaker is a Behavior that also constructs — the shape a Go-side host
+// type would install directly.
+type prevMaker struct {
+	core.TypeBehavior
+	built Value
+}
+
+func (p prevMaker) MakeValue(*core.Type, Value) (Value, error) { return p.built, nil }
+
+// A wrapper carrying no make body hands construction to the Behavior it
+// REPLACED, rather than declining outright.
+//
+// Not reachable from boru source: `behave` reuses an existing wrapper on
+// the same type rather than nesting, and refuses builtin types outright,
+// so no boru program can put a Maker underneath a wrapper. It is reachable
+// the day a Go host installs a constructing Behavior on a user type and a
+// boru `behave canon` wraps it — at which point declining here would
+// silently drop that constructor, since makerCapability's walk moves on to
+// the PARENT node and never revisits this one.
+func TestBehaveMakeDelegatesToTheWrappedBehavior(t *testing.T) {
+	built := NewFloat(7)
+	u := &userBehavior{prev: prevMaker{TypeBehavior: core.DefaultBehavior, built: built}}
+	out, err := u.MakeValue(core.TFloat, NewString("x"))
+	if err != nil {
+		t.Fatalf("delegation must reach the wrapped Maker: %v", err)
+	}
+	if f, _ := core.AsFloat(out); f != 7 {
+		t.Errorf("got %s, want the wrapped Behavior's answer", out.String())
+	}
+	// …and with no Maker underneath, it declines so the parent-chain walk
+	// continues rather than claiming the construction.
+	plain := &userBehavior{prev: core.DefaultBehavior}
+	if _, err := plain.MakeValue(core.TFloat, NewString("x")); !errors.Is(err, core.ErrNoMaker) {
+		t.Errorf("a slotless wrapper must decline with ErrNoMaker, got %v", err)
 	}
 }

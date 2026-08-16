@@ -26,7 +26,7 @@ import (
 func makeObjReturns() ReturnsFunc {
 	fresh := ReturnsFreshInstance(0)
 	return func(args []Value, r *Registry) []Value {
-		if len(args) >= 2 {
+		if len(args) >= 2 && !core.HasMaker(r, args[0]) {
 			check.CheckMakeConstruction(r, args[0], args[1], args[0].Pos())
 		}
 		return fresh(args, r)

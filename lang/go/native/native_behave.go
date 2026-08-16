@@ -22,6 +22,7 @@ import (
 //	behave truthy/q  (fn [[Foo]     [Boolean] [body]])
 //	behave deq/q     (fn [[Foo Foo] [Boolean] [body]])
 //	behave size/q    (fn [[Foo]     [Integer] [body]])
+//	behave make/q    (fn [[Any]     [Foo]     [body]])
 //
 // The handler validates the fn's first sig against the behavior's
 // declared shape, extracts the target type from the input params,
@@ -29,7 +30,11 @@ import (
 // the body runs whenever the kernel dispatches the corresponding
 // capability (CompareValues for compare, Value.String for canon,
 // NodifyValue for nodify, Unify for unify, CoerceBoolean for truthy,
-// DeepEqual for deq, SizeOf for size).
+// DeepEqual for deq, SizeOf for size, TryMake for make).
+//
+// `make` is the one slot whose target comes from the fn's RETURN type
+// rather than its params, because construction has no receiver — only a
+// target type and an arbitrary source. See validateMakeSig.
 //
 // Calling `behave` again on the same type with the same or a
 // different behavior is additive — the existing userBehavior wrapper
@@ -137,6 +142,15 @@ var behaviors = map[string]behaviorEntry{
 	"size": {
 		validate: validateSizeSig,
 		install:  func(u *userBehavior, body []core.Value) { u.sizeBody = body },
+	},
+	// The eighth and last slot (NUR056). Construction was the one kernel
+	// operation with no opt-in: a type could say what it MEANS in every
+	// operation that consumed it and nothing about how it was BUILT,
+	// while a Go-side Ideal could already customise construction through
+	// Ideal.Instantiate — a Go-vs-boru asymmetry, not just a gap.
+	"make": {
+		validate: validateMakeSig,
+		install:  func(u *userBehavior, body []core.Value) { u.makeBody = body },
 	},
 }
 
@@ -374,6 +388,35 @@ func validateSizeSig(sig core.FnSig) (*core.Type, error) {
 	return t, nil
 }
 
+// validateMakeSig enforces shape `[[Any] [T] [body]]` and returns T —
+// read from the RETURN type, which is the one place a `behave` slot
+// takes its target from anywhere but a parameter (NUR056).
+//
+// That is inherent, not an inconsistency to tidy away. The other seven
+// capabilities answer a question ABOUT a value of T, so T is what they
+// receive; construction answers how to PRODUCE one, so T is what it
+// yields, and the source it is handed can be any type at all. Requiring
+// a declared param type would be requiring the constructor to accept
+// exactly one input shape, which is the opposite of what a constructor
+// is for.
+func validateMakeSig(sig core.FnSig) (*core.Type, error) {
+	if len(sig.Params) != 1 {
+		return nil, fmt.Errorf("make: fn must take 1 arg (got %d)", len(sig.Params))
+	}
+	if len(sig.Returns) != 1 {
+		return nil, fmt.Errorf("make: fn must return exactly 1 value")
+	}
+	// One branch for both refusals: a missing return type and an `Any` one
+	// fail for the same reason — neither names a type to construct — and
+	// folding them keeps the nil guard (which stops the Equal call below
+	// from dereferencing nothing) without a second arm no fn spelling can
+	// reach.
+	if t := sig.Returns[0]; t == nil || t.Equal(core.TAny) {
+		return nil, fmt.Errorf("make: fn must declare a concrete return type — that is the type being constructed, and Any names none")
+	}
+	return sig.Returns[0], nil
+}
+
 // userBehavior is the shared wrapper type that carries one or more
 // boru-bodied capability slots on a target *Type. The TypeBehavior
 // surface (Match / Format / Equal) delegates to the previous
@@ -387,7 +430,7 @@ func validateSizeSig(sig core.FnSig) (*core.Type, error) {
 // → Value.String. The per-Parent inRender guard breaks the loop by
 // falling back to the previous Behavior's Format on re-entry. A
 // parallel inNodify guard handles `tonode`-bodies that recurse into
-// the same Parent, and inTruthy/inDeq/inSize the same for the newer
+// the same Parent, and inTruthy/inDeq/inSize/inMake the same for the newer
 // slots. The guards assume the kernel's single-goroutine engine model:
 // they are SAME-GOROUTINE re-entry breaks, not synchronization.
 // ForkConcurrent registries share the *Type node and therefore this
@@ -395,7 +438,7 @@ func validateSizeSig(sig core.FnSig) (*core.Type, error) {
 // the flags and runs the body against the INSTALLING registry — the
 // known limitation recorded as design/BORU-SHARP-EDGES.0.md G14; the
 // fix (fork-local capability execution state) needs its own design
-// pass and applies to all seven slots alike.
+// pass and applies to all eight slots alike.
 type userBehavior struct {
 	prev        core.TypeBehavior
 	registry    *Registry
@@ -411,12 +454,14 @@ type userBehavior struct {
 	truthyBody []Value
 	deqBody    []Value
 	sizeBody   []Value
+	makeBody   []Value
 	inRender   bool
 	inNodify   bool
 	inUnify    bool
 	inTruthy   bool
 	inDeq      bool
 	inSize     bool
+	inMake     bool
 }
 
 // Match delegates to prev — `behave` does not currently install
@@ -769,6 +814,32 @@ func (u *userBehavior) Size(v Value) int {
 // to `a` and returns the top of the resulting stack. Shared by the
 // truthy and size slots, whose only difference is the return type they
 // then demand.
+// MakeValue runs the installed make body if any, else delegates to prev's
+// Maker, else declines with ErrNoMaker so construction proceeds exactly as
+// it did before the slot existed (NUR056).
+//
+// Unlike every other slot, a body ERROR is returned rather than swallowed.
+// `make` raises on failure, so a constructor rejecting its source is a real
+// answer — "a C cannot be built from that" — and falling through to the
+// kernel's coercion would silently produce a value the type's own
+// constructor refused. The result's CONFORMANCE to the target is checked by
+// the kernel (makerCapability), not here: it is a rule about `make`, so a
+// Go-side Maker is held to it too.
+func (u *userBehavior) MakeValue(target *core.Type, src Value) (Value, error) {
+	if len(u.makeBody) == 0 {
+		if mk, ok := u.prev.(core.Maker); ok {
+			return mk.MakeValue(target, src)
+		}
+		return Value{}, core.ErrNoMaker
+	}
+	if u.inMake {
+		return Value{}, core.ErrNoMaker
+	}
+	u.inMake = true
+	defer func() { u.inMake = false }()
+	return u.runUnaryBody(u.makeBody, src, "make")
+}
+
 func (u *userBehavior) runUnaryBody(body []Value, v Value, slot string) (Value, error) {
 	r := u.registry
 	if r == nil {

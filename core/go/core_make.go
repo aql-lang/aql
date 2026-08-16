@@ -611,6 +611,13 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return MakeHandler([]Value{inst, srcVal}, nil, nil, reg)
 	}
 
+	// The target type's own constructor, ahead of the Ideal registry
+	// (NUR056) — the same precedence MakeObjHandler applies, on the
+	// generic path a `make` reaches when no arity-specific sig matched.
+	if out, ok, err := TryMake(reg, targetVal, srcVal); ok {
+		return out, err
+	}
+
 	// Structural kinds (object / record / table) instantiate through
 	// the Ideal registry — see ideal.go and design/IDEAL.10.md.
 	if reg != nil {
@@ -892,6 +899,21 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return nil, err
 	}
 
+	// The target type's own constructor, here too (NUR056). The options
+	// form reaches the structural branches below DIRECTLY — it does not
+	// route through MakeHandler — so without this arm `make T data` used
+	// the custom constructor while `make T data opts` silently used the
+	// kernel's, which is precisely the kind of same-word-two-answers split
+	// the record was opened against.
+	//
+	// The options themselves are not forwarded: they configure the KERNEL's
+	// construction (`base`, Pathon's `abs`), and a type that supplies its
+	// own constructor is not running that code. A Maker that needs options
+	// takes them from its source.
+	if out, ok, err := TryMake(reg, targetVal, srcVal); ok {
+		return out, err
+	}
+
 	if IsClassType(targetVal) {
 		objType, _ := AsClassType(targetVal)
 		return makeObject(objType, srcVal, reg)
@@ -920,6 +942,13 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 // MakeScalarHandler converts a scalar value to a target scalar type.
 func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
+	// The target type's own constructor outranks every kernel path
+	// (NUR056) — including the user-refinement newtype arm below, which
+	// rewrites the target to its builtin BASE before reaching
+	// MakeConvert, and so would hide a Maker installed on the refinement.
+	if out, ok, err := TryMake(reg, targetVal, srcVal); ok {
+		return out, err
+	}
 	// A scalar target claimed by a registered Ideal kind (the Micron
 	// family — whose resolved def body is a MicronTypeInfo, not a bare
 	// literal — and its newtypes) constructs through that Ideal's
@@ -972,6 +1001,12 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
+	// Ahead of the Ideals REGISTRY (NUR056): the registry is the Go-side
+	// construction hook, and the capability is its boru-side twin — a type
+	// that says how it is built outranks the kind-level default.
+	if out, ok, err := TryMake(reg, targetVal, srcVal); ok {
+		return out, err
+	}
 	if reg != nil {
 		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
 			return ideal.Instantiate(targetVal, srcVal, reg)
@@ -1011,6 +1046,13 @@ func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Reg
 // Exported so production lang and downstream tooling can reuse the
 // same scalar-coercion logic that backs `make`.
 func MakeConvert(src Value, targetType *Type) (Value, error) {
+	// The target type's own constructor first (NUR056). This is the arm
+	// that serves the callers reaching the shared scalar coercion
+	// directly — record-field coercion via MakeFieldValue — since the
+	// `make` handlers consult TryMake before they get here.
+	if out, ok, err := makerCapability(targetType, src); ok {
+		return out, err
+	}
 	switch {
 	case targetType.ConformsTo(TString):
 		return NewString(ValToString(src)), nil
