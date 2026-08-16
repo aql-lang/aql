@@ -999,81 +999,40 @@ func sameFnIdentity(a, b FnDefInfo) bool {
 	return &a.Signatures[0] == &b.Signatures[0]
 }
 
-// fnStructurallyEqual reports whether two fn payloads have the same VALUE —
-// the same signatures and bodies, ignoring the binding name (NUR031).
+// fnStructurallyEqual reports whether two fn payloads have the same VALUE
+// (NUR031). deq is deep value equality per NUR011, and a function's value
+// is its CONTENT: parameters, returns and body.
 //
-// Reference identity short-circuits: the same function is trivially deq to
-// itself, and that is the common case.
+// The comparison is canon — the content serialisation the language already
+// has, now that NUR059 and this record made it name-INDEPENDENT. That
+// choice is borrowed from Unison's content-addressed code, and it is
+// borrowed for exactly one job: different body, different canon, not deq.
+//
+// Walking `Impl` instead does not work, and the failure is silent rather
+// than loud: after InstallFnDef a signature's Impl is a Go handler
+// (buildFnBodyHandler), so there is no body to reach and every installed
+// function reads as identical to every other of the same arity — a false
+// POSITIVE, strictly worse than the false negative it replaced. canonFnDef
+// renders from OwnSigs and still sees the body after installation, which is
+// what makes it the reachable content.
+//
+// The DEFINING MODULE is part of the content. boru resolves a function's
+// free words in the module that defined it (design/FUNCTION-VALUE-SCOPE.0.md,
+// "lexical module, dynamic within it"), so two identical bodies in different
+// modules do not mean the same thing — which is also why boru cannot adopt
+// content addressing wholesale the way Unison does: Unison hashes
+// dependencies transitively and has no ambient namespace, while boru keeps
+// one deliberately (module-level dynamic binding is what hot reload rides
+// on). Registry is set only at module-export resolution, so two locally
+// defined fns both carry nil and compare on content alone.
 func fnStructurallyEqual(a, b FnDefInfo) bool {
+	// The same function is trivially deq to itself, and that is the common
+	// case — worth short-circuiting before rendering two canons.
 	if sameFnIdentity(a, b) {
 		return true
 	}
-	as, bs := a.OwnSigs(), b.OwnSigs()
-	if len(as) != len(bs) {
+	if a.Registry != nil && b.Registry != nil && a.Registry != b.Registry {
 		return false
 	}
-	for i := range as {
-		if !sigStructurallyEqual(&as[i], &bs[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// sigStructurallyEqual compares one signature pair by the parts a caller
-// can observe: the parameter names and types, the declared returns, and the
-// body. Impl is compared through the body it carries — a Go-implemented
-// signature has none, so two distinct natives with identical shapes are
-// deq, which is the same answer the canon-based ordering already gives.
-func sigStructurallyEqual(a, b *Signature) bool {
-	if len(a.Params) != len(b.Params) || len(a.Returns) != len(b.Returns) {
-		return false
-	}
-	for i := range a.Params {
-		if a.Params[i].Name != b.Params[i].Name {
-			return false
-		}
-		if !sameTypePtr(a.Params[i].Type, b.Params[i].Type) {
-			return false
-		}
-	}
-	for i := range a.Returns {
-		if !sameTypePtr(a.Returns[i], b.Returns[i]) {
-			return false
-		}
-	}
-	ab, aIsBoru := fnSigBody(a)
-	bb, bIsBoru := fnSigBody(b)
-	if aIsBoru != bIsBoru {
-		return false
-	}
-	if len(ab) != len(bb) {
-		return false
-	}
-	for i := range ab {
-		if !DeepEqual(ab[i], bb[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// fnSigBody returns a signature's boru body, and whether it HAS one. A
-// Go-implemented signature does not, and a Go sig must not read as
-// body-equal to a boru sig that happens to have an empty body — hence the
-// second result rather than a bare nil slice.
-func fnSigBody(sig *Signature) ([]Value, bool) {
-	if bi, ok := sig.Impl.(*BoruImpl); ok && bi != nil {
-		return bi.Body, true
-	}
-	return nil, false
-}
-
-// sameTypePtr compares two declared-type slots, tolerating nil (an
-// unannotated param or return).
-func sameTypePtr(a, b *Type) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return a.Equal(b)
+	return canonFnDef(a) == canonFnDef(b)
 }
