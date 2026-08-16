@@ -801,7 +801,9 @@ with it since the M1 wave.
   `lang/spec/frontier/frontier-fnparam-deref.tsv`.
 
   **RULED, 2026-08-15 (maintainer): a bare name is a CALL; `/r` is how you
-  ask for the value. Arity discrimination is explicitly rejected.** That
+  ask for the value. Arity discrimination is explicitly rejected**, and
+  the general form is now **ADR-016** — arity and origin never change how
+  a function behaves. That
   settles both divergent rows without a new rule, and it makes the
   interpreter the correct engine in each:
 
@@ -819,15 +821,46 @@ with it since the M1 wave.
   1. **The compiler must treat a bare Function-bound name as a call.** It
      lowers the param to a unit local (`RegisterLocal`) and reads it as a
      value, so it neither applies nor raises. Rows 1 and 2 above.
-  2. **`/r` must park a 0-arg fn bound to a PARAM.** It already works
-     everywhere else — `typeof nought/r` at module level is `Function` on
-     both engines, and `[c/r]` at arity ≥1 is `Function` on both. Only a
-     0-arg *param* deref ignores the modifier and applies. Row 4.
+  2. **`/r` must park a 0-arg fn bound to a PARAM.** Row 4. The scope is
+     narrow and worth stating exactly, because the obvious general claim
+     is wrong — measured:
+
+     | shape | interp | compiled |
+     |---|---|---|
+     | `typeof nought/r` (module level) | `Function` | `Function` |
+     | `[zero/r]` (list, REFERENCE.md's own example) | `[fn zero]` | `[fn zero]` |
+     | `[[f/r]]` — 0-arg param inside a list | `[fn f]` | `[fn zero]` |
+     | `[c/r]` — arity ≥1 param, body residual | `Function` | `Function` |
+     | **`[f/r]` — 0-arg param, body residual** | **`7`** | `Function` |
+
+     So `/r` parks correctly at module level, inside a list, and at arity
+     ≥1. It fails in exactly one place: a **0-arg** Function param that is
+     the body's **residual**. The likely mechanism is the dispatch-mod
+     marker being dropped at the body tail before it can park the value
+     (`stepLiteral` drops an unconsumed marker as a no-op) — but that is a
+     hypothesis, not a measurement, and should be confirmed before fixing.
+
+     `REFERENCE.md:2239` already promises the behaviour this breaks: *"The
+     reference holds at any arity and in any position … `[zero/r]` is
+     `[<function>]` even for a 0-arg `zero` (it is **not** fired)."* So
+     this is a documented-contract violation as well as an ADR-016 one.
 
   Bug 2 is the sharp one: the documented answer to "how do I pass a
   function as a value" silently does the opposite in one shape, and it
   fails *quietly* — `f/r` yields `7` where the author asked for the
   function.
+
+  **ADR-016 names a third, which this note had not caught.**
+  `execFnDefLiteral` (`core/go/engine.go:5271`) gates on
+  `(fnDef.Anonymous || fnDef.Macro) && fwdCount == 0 && len(positions) == 0`
+  → treat as data. That keys on **origin as well as arity**: a 0-arg
+  *anonymous* value alone on the stack is data, where a 0-arg *named* one
+  dispatches. It is load-bearing — the comment records that it is what
+  makes `def f ([] => [body])` bind the Function rather than the body's
+  result — so the replacement must keep that binding working without
+  consulting `Anonymous`. `lang/go/CLAUDE.md`'s "Sharp edge: 0-arg
+  lambdas as values vs as calls" documents it as a design and is now
+  annotated as describing a defect.
 
   Two earlier readings of this section were wrong and are retracted above
   and here: the slot does not auto-apply (it is the body deref), and this
