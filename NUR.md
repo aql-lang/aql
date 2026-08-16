@@ -67,7 +67,8 @@ keep the two in sync in the same commit.
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
-| [NUR073](#nur073) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
+| [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled. Not pinnable in the spec corpus because the ORACLE is what the open `/r` clause-3 ruling decides — the frontier corpus needs the interpreter to be right, and here that is the question | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
+| [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2205,7 +2206,68 @@ them revealed.
 
 ---
 
-## NUR073 — `canon` renders a function's parameter names, so alpha-equivalent functions render differently {#nur073}
+## NUR073 — The engines disagree on re-stepping a paren-collapsed Function {#nur073}
+
+**Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** PR #375
+(break 1 of the `/r` survey) — a spec row drafted to pin the park's
+positionality turned out to be the one row in 6219 the compiled
+differential rejects; flagged for this register by the PR #375 review
+(Codex P1)
+
+**Rule:** the interpreter and the compiler are twins. A row runs the same
+on both, and the whole-corpus differential
+(`TestSpecCompiledDifferential`) is the gate that says so.
+
+**Divergence:** a paren whose collapse leaves a single `Function` value is
+RE-STEPPED by the interpreter — which dispatches it — and not by the
+compiler.
+
+```
+def z fn [[][Integer][42]]  def h fn [[f:Function][Any][f/r]]  ((h z/r))
+    interpreted   42        (the outer paren re-steps the returned reference)
+    compiled      fn z      (the value rides out inert)
+```
+
+It is PRE-EXISTING — PR #375 discovered it rather than caused it — and it
+is the only such row in the corpus, which is why the differential has been
+green all along: nothing else nests a paren around a Function-returning
+call. The single-paren spellings agree (`(z/r)` → `42` on both), so the
+divergence needs the value to arrive at a paren close having already been
+produced by an inner one.
+
+**Why it is recorded here rather than pinned in a corpus.** Every other
+home for an engine disagreement needs a known-correct answer:
+`lang/spec/*.tsv` asserts one outcome, and `lang/spec/frontier/*.tsv`
+takes the INTERPRETER as its semantics oracle (`TestFrontierSpecInterp`
+requires every frontier row to pass interpreted) while ledgering the
+compile status. Here the oracle itself is the open question — maintainer
+clause 3 of the 2026-08-16 `/r` ruling says *"parens do not re-step; they
+place a value or values on the forward stack"*, under which the COMPILED
+answer is the correct one and the interpreter is wrong. Pinning `42`
+would baseline a behaviour already ruled against; pinning `fn z` would
+implement the ruling by the back door.
+
+**What blocks the fix.** Clause 3 was implemented and measured on PR #375
+(`design/FUNCTION-VALUE-SCOPE.0.md` §12.6). The finding: the narrow
+reading ("only a `/r`/`ref` reference survives its paren") and the broad
+one ("no paren re-steps a Function") are **not separable by any
+positional mechanism** — an inline fn literal and a `/r` reference reach
+the close paren in the identical state, a stepped-past `Function` at
+`openIdx+1`, because `stepWordRef` and `ParkResult` both merely advance
+the pointer. Broad costs 24 spec rows of inline function application
+(`(fn Integer [Integer] [10 add]) 7`, `([n:Integer] => [n add 1]) 5`);
+narrow needs a transient marker ON the value, which clause 1 (`/r` is not
+sticky) rejects. Whichever is chosen closes this record, since both
+readings give `fn z`.
+
+**Verdict:** none yet. Waiting on the clause-3 ruling; it is a language
+decision, not a defect to be picked by an implementer. Meanwhile the row
+is deliberately absent from every corpus, and `lang/spec/ref.tsv` §8's
+header says so in place, so the gap is not mistaken for coverage.
+
+---
+
+## NUR074 — `canon` renders a function's parameter names, so alpha-equivalent functions render differently {#nur074}
 
 **Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:**
 `design/unison-hash-identity-probe.0.md` P4, a proof-of-concept pass over the

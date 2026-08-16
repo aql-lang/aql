@@ -221,7 +221,7 @@ rewrites variables to positional references for exactly this reason. So the
 normalisation idea #1 needs is strictly larger than NUR031: strip the binding
 name **and** de-name the parameters.
 
-**Now recorded as `NUR.md` §NUR073**, on PR #376's review — the register's
+**Now recorded as `NUR.md` §NUR074**, on PR #376's review — the register's
 job being that a divergence is never silently baselined, and this one would
 have been the moment NUR031 landed and appeared to close the function-canon
 story. The record leaves the choice open between de-naming parameters in
