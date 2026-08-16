@@ -33,6 +33,11 @@ hazard (P10) is itself a PASS, and every verdict below is *derived by the
 probe* rather than asserted by it (a distinction PR #376's review forced,
 and which changed the P2 result — see §4).
 
+Counted by **property**. The script emits more than one `PASS`/`FAIL` line
+for several of them — P1 checks `deq`, the canons and the digests
+separately, P9 walks four value kinds — so tallying its output lines gives
+a larger number (currently 7 and 9) measuring assertions, not properties.
+
 | | Property | Result |
 |---|---|---|
 | P1 | canonicity — `deq` values canon identically | **FAIL** |
