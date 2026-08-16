@@ -309,6 +309,25 @@ func ExactEqual(a, b Value) bool {
 		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
+	// Function values (NUR031). eq is REFERENCE identity, per NUR011's rule
+	// for every Ideal — and the reference is the Signatures backing array.
+	// Two bindings of one function share it, because a rebind copies the
+	// FnDefInfo struct and the copy's slice header still points at the same
+	// array; two independently-written functions never do.
+	//
+	// That is what the record's "box FnDefInfo" asks for, already present:
+	// boxing would add a pointer for an identity the payload can already
+	// supply, and would change the representation every kernel arm keying
+	// on `FnDefInfo` reads. Before this, eq fell to the type-body arm below,
+	// which compares the payload STRUCT — including Name — so `def a (f/r)`
+	// and `def b (f/r)` were not eq though they name one function.
+	if af, aok := a.Data.(FnDefInfo); aok {
+		if bf, bok := b.Data.(FnDefInfo); bok {
+			return sameFnIdentity(af, bf)
+		}
+		return false
+	}
+
 	// Types: structural comparison.
 	if IsTypeBody(a) && IsTypeBody(b) {
 		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
@@ -644,6 +663,23 @@ func DeepEqual(a, b Value) bool {
 		return eq
 	}
 
+	// Function values (NUR031). deq is DEEP VALUE equality, per NUR011: a
+	// function's value is its signatures and body, so two references to one
+	// function are deq, and so is a function re-parsed from its own canon —
+	// which is what ADR-015 needs, and what reference identity alone could
+	// never give (a re-parsed function is a fresh array).
+	//
+	// The NAME is deliberately excluded. It is the binding a function was
+	// reached through, not part of the function: including it is exactly
+	// what made `a/r deq b/r` false for two bindings of one function, and
+	// what kept `f/r deq f/r` false at all.
+	if af, aok := a.Data.(FnDefInfo); aok {
+		if bf, bok := b.Data.(FnDefInfo); bok {
+			return fnStructurallyEqual(af, bf)
+		}
+		return false
+	}
+
 	// Last chance before the terminal verdict: a type that installed the
 	// DeepEqualer capability answers for its own values. Placing the walk
 	// HERE rather than at the top is what makes it additive — it can only
@@ -948,4 +984,96 @@ func NeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 
 func DeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(DeepEqual(args[0], args[1]))}, nil
+}
+
+// sameFnIdentity reports whether two fn payloads are the SAME function —
+// reference identity, keyed on the Signatures backing array (NUR031).
+//
+// A zero-signature payload has no array to key on, so it is never
+// reference-equal to anything: there is nothing to distinguish two of them
+// by, and answering true would make every empty fn value eq.
+func sameFnIdentity(a, b FnDefInfo) bool {
+	if len(a.Signatures) == 0 || len(b.Signatures) == 0 {
+		return false
+	}
+	return &a.Signatures[0] == &b.Signatures[0]
+}
+
+// fnStructurallyEqual reports whether two fn payloads have the same VALUE —
+// the same signatures and bodies, ignoring the binding name (NUR031).
+//
+// Reference identity short-circuits: the same function is trivially deq to
+// itself, and that is the common case.
+func fnStructurallyEqual(a, b FnDefInfo) bool {
+	if sameFnIdentity(a, b) {
+		return true
+	}
+	as, bs := a.OwnSigs(), b.OwnSigs()
+	if len(as) != len(bs) {
+		return false
+	}
+	for i := range as {
+		if !sigStructurallyEqual(&as[i], &bs[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// sigStructurallyEqual compares one signature pair by the parts a caller
+// can observe: the parameter names and types, the declared returns, and the
+// body. Impl is compared through the body it carries — a Go-implemented
+// signature has none, so two distinct natives with identical shapes are
+// deq, which is the same answer the canon-based ordering already gives.
+func sigStructurallyEqual(a, b *Signature) bool {
+	if len(a.Params) != len(b.Params) || len(a.Returns) != len(b.Returns) {
+		return false
+	}
+	for i := range a.Params {
+		if a.Params[i].Name != b.Params[i].Name {
+			return false
+		}
+		if !sameTypePtr(a.Params[i].Type, b.Params[i].Type) {
+			return false
+		}
+	}
+	for i := range a.Returns {
+		if !sameTypePtr(a.Returns[i], b.Returns[i]) {
+			return false
+		}
+	}
+	ab, aIsBoru := fnSigBody(a)
+	bb, bIsBoru := fnSigBody(b)
+	if aIsBoru != bIsBoru {
+		return false
+	}
+	if len(ab) != len(bb) {
+		return false
+	}
+	for i := range ab {
+		if !DeepEqual(ab[i], bb[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// fnSigBody returns a signature's boru body, and whether it HAS one. A
+// Go-implemented signature does not, and a Go sig must not read as
+// body-equal to a boru sig that happens to have an empty body — hence the
+// second result rather than a bare nil slice.
+func fnSigBody(sig *Signature) ([]Value, bool) {
+	if bi, ok := sig.Impl.(*BoruImpl); ok && bi != nil {
+		return bi.Body, true
+	}
+	return nil, false
+}
+
+// sameTypePtr compares two declared-type slots, tolerating nil (an
+// unannotated param or return).
+func sameTypePtr(a, b *Type) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(b)
 }
