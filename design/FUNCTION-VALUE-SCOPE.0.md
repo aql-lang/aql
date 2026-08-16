@@ -850,6 +850,75 @@ with it since the M1 wave.
   fails *quietly* — `f/r` yields `7` where the author asked for the
   function.
 
+  **Surveyed 2026-08-16, and it is a family rather than one shape.** The
+  full matrix (interpreter | compiled):
+
+  | shape | interp | compiled | |
+  |---|---|---|---|
+  | `typeof nought/r` (module, 0-arg) | `Function` | `Function` | ok |
+  | `typeof one/r` (module, 1-arg) | `Function` | `Function` | ok |
+  | `[nought/r]` (list literal) | `[fn nought]` | `[fn nought]` | ok |
+  | `typeof N.z/r` (namespace, 0-arg) | `Function` | `Function` | ok |
+  | `typeof N.o/r` (namespace, 1-arg) | `Function` | `Function` | ok |
+  | `[c/r]` (body residual, 1-arg param) | `Function` | `Function` | ok |
+  | `{k: one/r}` → `(m.k)` (1-arg) | `Function` | `Function` | ok |
+  | **`[f/r]`** (body residual, **0-arg** param) | **`7`** | `Function` | interp wrong |
+  | **`{k: nought/r}` → `(m.k)`** (**0-arg**) | **`7`** | *refuses* | interp wrong |
+  | `[[f/r]]` (0-arg param in a list) | `[fn f]` | `[fn nought]` | **name diverges** |
+
+  **RULED (maintainer, 2026-08-16): store-time `/r` PERSISTS.** A value
+  parked with `/r` stays inert wherever it is later read. So the
+  interpreter is wrong in both marked rows — including the map read, where
+  the `/r` was at *store* time and `REFERENCE.md` only documents the
+  `m.fn arg` form. The compiler's refusal there (*"fn value read from a
+  container auto-dispatches (Stage 3)"*) is a **gap to close**, not a
+  correct answer.
+
+  The pattern is exactly what ADR-016 forbids: a **0-arg** parked fn fires
+  where a **1-arg** one parks. Worth testing before fixing whether the
+  arity-≥1 park is the marker being *honoured* or merely dispatch failing
+  for want of arguments — if the latter, `/r` is not honoured in these
+  positions at all and the fix is larger than a 0-arg special case.
+
+  **A third divergence, found in the same survey and previously unrecorded:
+  `canon` renders a different NAME per engine.** `canon` of a `/r`-parked
+  param gives `[fn f[[][Integer][7]]]` interpreted (the *binding* name) and
+  `[fn nought[[][Integer][7]]]` compiled (the *defining* name) — the same
+  value, different user-visible text, which ADR-015 (canon always
+  round-trips) has an interest in.
+
+  **RULED (maintainer, 2026-08-16): `canon` renders fn values with NO NAME.**
+  That subsumes the divergence rather than picking a winner: with no name
+  on either engine there is nothing to disagree about. The load-bearing
+  check before implementing is that a nameless rendering still
+  **re-parses to a `deq`-equal value**, since ADR-015 admits no exempt
+  kinds.
+
+  **This ruling is not new work — it is NUR031 becoming actionable, and
+  this document's own §12 work is what unblocked it.** NUR031's refined
+  verdict (2026-08-15) already states the same target and the same root
+  cause:
+
+  > the halves are one root cause (the binding name in `FnDefInfo.Name`
+  > drives `eq`, canon and `tcmp` alike), so: BOX `FnDefInfo` for `eq`
+  > (reference) and compare signatures+body for `deq` (NUR011 as written),
+  > **canon renders the ANONYMOUS fn literal**, and **PR #366's
+  > native-callback seam lands first**. Design-unblocked, sequenced
+
+  PR #366 landed as `7e98aeb`. So NUR031's stated prerequisite is
+  satisfied and its sequence says this is next. Two things follow that a
+  reader should not have to rediscover:
+
+  - **The name divergence measured above is a *symptom* of NUR031**, not a
+    separate defect. `FnDefInfo.Name` driving the rendering is exactly the
+    root cause NUR031 names; the interpreter shows the binding name and the
+    compiler the defining name because they disagree about which `Name` the
+    value carries.
+  - **`eq`, `deq` and `tcmp` move with canon.** NUR031 treats them as one
+    change for one reason — the same field feeds all four — so a canon-only
+    fix would leave `eq` still keyed on the binding name and the record
+    still open.
+
   **ADR-016 names a third, which this note had not caught.**
   `execFnDefLiteral` (`core/go/engine.go:5271`) gates on
   `(fnDef.Anonymous || fnDef.Macro) && fwdCount == 0 && len(positions) == 0`
