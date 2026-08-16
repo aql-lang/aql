@@ -80,7 +80,7 @@ this ADR is what makes it a rule rather than a preference.
 > of the gate below is therefore satisfied for every kind; what the
 > fn/host kinds still lack is a renderer, the same thing Store lacks.
 > One residual was recorded rather than fixed: `eq` has no per-type
-> capability where `deq` has `DeepEqualer` (NUR074). The section below
+> capability where `deq` has `DeepEqualer` (NUR075). The section below
 > is kept as written for the reasoning it carries.
 
 A `deq` round-trip is unsatisfiable for a value that is not `deq` to

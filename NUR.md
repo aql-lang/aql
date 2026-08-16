@@ -62,12 +62,13 @@ keep the two in sync in the same commit.
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
 | [NUR072](#nur072) | Three sugar kinds (mini, type-bound, lambda) still canon in DEBUG form after NUR059 — withdrawn there because the renders do not round-trip: SugarInfo does not retain the mini delimiter, and type-bound renders its Items rather than the bound's text; also carries the undecided bare-word question (`word(foo)` vs `foo`, 175 corpus rows) | NUR059's fix, 2026-08-15 |
-| [NUR074](#nur074) | `deq` is extensible per type (`DeepEqualer`), `eq` is not — the one part of the retired NUR031's verdict its fix did not take: the divergences closed by adding kernel arms rather than by routing through `Behavior`, so a type can define its own deep equality but not its own identity | NUR031's fix, 2026-08-16 |
+| [NUR075](#nur075) | `deq` is extensible per type (`DeepEqualer`), `eq` is not — the one part of the retired NUR031's verdict its fix did not take: the divergences closed by adding kernel arms rather than by routing through `Behavior`, so a type can define its own deep equality but not its own identity | NUR031's fix, 2026-08-16 |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
 | [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled. Not pinnable in the spec corpus because the ORACLE is what the open `/r` clause-3 ruling decides — the frontier corpus needs the interpreter to be right, and here that is the question | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
+| [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -1557,7 +1558,7 @@ than a formatting one — `word(foo)` denotes a word VALUE, while bare
 arm to modifier-bearing words for exactly this reason. Whoever takes this
 record decides that first.
 
-## NUR074 — `deq` is extensible per type, `eq` is not {#nur074}
+## NUR075 — `deq` is extensible per type, `eq` is not {#nur075}
 
 **Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** the
 retired NUR031's fix — the one part of its verdict the fix did not take
@@ -2042,3 +2043,84 @@ readings give `fn z`.
 decision, not a defect to be picked by an implementer. Meanwhile the row
 is deliberately absent from every corpus, and `lang/spec/ref.tsv` §8's
 header says so in place, so the gap is not mistaken for coverage.
+
+---
+
+## NUR074 — `canon` renders a function's parameter names, so alpha-equivalent functions render differently {#nur074}
+
+**Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:**
+`design/unison-hash-identity-probe.0.md` P4, a proof-of-concept pass over the
+canon contract; flagged for this register by the PR #376 review (Codex P1).
+
+**Rule:** a value's canonical rendering should depend on the **value**, not on
+names incidental to how it happened to be written. NUR031 already applies that
+principle to one half of a function's incidental naming — its 2026-08-15
+refinement directs that "canon renders the ANONYMOUS fn literal", removing the
+*binding* name from the rendering. Parameter names are the same class of
+incidental naming and are not covered by that verdict.
+
+**Divergence:** two **unbound** anonymous functions differing only in a
+parameter name render differently, so no binding name is involved and this is
+independent of NUR031:
+
+```
+canon ([x:Number] => [mul x x])  ->  fn [[x:Number][Any][word(mul) word(x) word(x)]]
+canon ([y:Number] => [mul y y])  ->  fn [[y:Number][Any][word(mul) word(y) word(y)]]
+FAIL  alpha-equivalent fns canon identically
+```
+
+The two functions are behaviourally indistinguishable — same arity, same
+parameter type, same body modulo the bound name — and there is no source
+spelling either could have that the other could not. Landing NUR031 in full
+leaves this exactly as it is.
+
+**Why it matters beyond cosmetics:** any scheme deriving an *identity* from
+canon (`design/CONTENT-ADDRESSING.0.md`) inherits the divergence — two
+alpha-equivalent definitions get two identities, so a content-addressed cache
+or dedup would treat them as different code. That document does not propose
+changing `canon` to fix it; it lists alpha-normalisation as a step a hashing
+layer must perform for itself. This record exists so the choice between those
+two homes is made deliberately rather than by default.
+
+**Sharpened by NUR031's fix (2026-08-16):** that record resolved by making a
+function's `deq` its CONTENT compared *as canon*, so canon is no longer only a
+rendering — it is the equality. Alpha-equivalent functions are therefore not
+`deq`, and the bucketed collection scans inherit it: `unique` over
+`([x:Number] => [mul x x])` and `([y:Number] => [mul y y])` keeps both. The
+"beyond cosmetics" paragraph above is now a live language behaviour rather than
+a property of a hypothetical hashing layer, which raises the stakes on
+candidate 1 below. Nothing about NUR031's fix depends on the answer — it
+compares whatever canon renders — so this stays independently decidable.
+
+**Evidence:** `scripts/hash-identity-probe.boru` P4 and its wrapper
+`scripts/hash-identity-probe.sh`; `design/unison-hash-identity-probe.0.md` §4;
+`core/go/compare.go` `fnStructurallyEqual` (the canon-as-equality path);
+`NUR.md` §NUR031 (retired 2026-08-16 — `git log -S NUR031` for the
+binding-name half and its 2026-08-15 refinement).
+
+**Documentation status:** `boru describe canon` says canon renders "canonical,
+round-trippable boru source" and says nothing about naming. ADR-015 requires
+only that the rendering re-parse to a `deq` value, which the current output
+would satisfy for functions once NUR031 and NUR072 land — parameter names do
+not break the round-trip, only the canonicity of the rendering.
+
+**Proposed verdict:** none yet; three candidates, and they put the fix in
+different places.
+
+1. **De-name parameters in canon**, rendering them positionally the way Unison
+   rewrites variables. Makes canon genuinely canonical for functions, but the
+   output stops being readable source and the parser would have to accept the
+   positional form — a large change reaching `parser/spec`.
+2. **Allowed**, on the argument that `canon` renders *source* and source has
+   parameter names, so alpha-normalisation is not its job. Then any identity
+   scheme must normalise on top of canon, and that obligation should be
+   written down where the scheme is (`CONTENT-ADDRESSING.0.md` §4.2 already
+   lists it as step 3).
+3. **Split the two jobs** — keep `canon` readable and define a separate normal
+   form for identity, which is also the cleanest answer to NUR072's bare-word
+   question and to the map-ordering question `CONTENT-ADDRESSING.0.md` §4.4
+   Phase 0 raises. Most work, and it makes the identity story independent of
+   every rendering decision.
+
+Recorded now so the divergence is not silently baselined by NUR031 landing and
+appearing to close the function-canon story.
