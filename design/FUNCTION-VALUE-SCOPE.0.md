@@ -866,13 +866,52 @@ with it since the M1 wave.
   | **`{k: nought/r}` → `(m.k)`** (**0-arg**) | **`7`** | *refuses* | interp wrong |
   | `[[f/r]]` (0-arg param in a list) | `[fn f]` | `[fn nought]` | **name diverges** |
 
-  **RULED (maintainer, 2026-08-16): store-time `/r` PERSISTS.** A value
-  parked with `/r` stays inert wherever it is later read. So the
-  interpreter is wrong in both marked rows — including the map read, where
-  the `/r` was at *store* time and `REFERENCE.md` only documents the
-  `m.fn arg` form. The compiler's refusal there (*"fn value read from a
-  container auto-dispatches (Stage 3)"*) is a **gap to close**, not a
-  correct answer.
+  **RULED (maintainer, 2026-08-16), superseding an earlier reading of this
+  section: `/r` IS NOT STICKY.**
+
+  > `name/r` is sugar for `ref name`. It deactivates exactly **one** use —
+  > the one it is attached to. Any **subsequent** use of the value, in any
+  > context, is function **invocation**. To deactivate again you write
+  > `/r` (or `ref`) again. **The same rule applies at every arity.**
+
+  This is a deliberate boru difference from languages where a bare name is
+  the reference and parentheses mean invocation. boru has no
+  parens-for-invocation, so a bare name **is** invocation and `/r` is the
+  opt-out. An earlier revision of this section recorded a "store-time `/r`
+  persists" reading; that is withdrawn. It would have made every
+  `export "M" {w: w/r}` inert and stranded the argument in `M.inc 5` — 81
+  spec rows use that idiom — and it contradicted `lang/spec/ref.tsv:8-15`,
+  which already states the rule correctly:
+
+  > "The SAME value dispatches normally when it is re-stepped elsewhere:
+  > unwrapped from a paren, retrieved from a map slot, or handed to
+  > `apply`."
+
+  Under the rule each break has a **different** correct engine, which is
+  why they are two fixes rather than one:
+
+  | break | shape | correct | to fix |
+  |---|---|---|---|
+  | 1 | `[f/r]` body residual | **compiled** (`Function`) — the `/r` is at the use, so h returns the value | **interpreter** |
+  | 2 | `{k: z/r}` → `(m.k)` | **interpreter** (`7`) — the `/r` parked the *store*; the read is a fresh use, so it invokes | **compiler** |
+
+  For break 1 the `/r` is doing its job: measured, `[f/r ; 5]` does **not**
+  fire at the word step where `[f ; 5]` does. The call comes later, at the
+  **fn-frame collapse**, which re-steps the body's residual after the
+  marker is gone. A fn body's residual is a *return value*, not a fresh
+  use, so that re-step must not invoke it — while a **user** paren re-step
+  must still fire (`lang/spec/ref.tsv:26` pins `(z/r)` → `42`).
+
+  For break 2 the compiler refuses (*"fn value read from a container
+  auto-dispatches (Stage 3)"*) where the interpreter correctly invokes.
+  Closing that refusal is the fix.
+
+  **One case the rule leaves open, flagged rather than decided.** A 1-arg
+  container read with no argument yields the fn value on *both* engines
+  (`(m.k)` → `fn o(Integer)`), while a bare 1-arg name as a fn-body
+  residual **raises** `signature_error`. Both are "a use with no arguments
+  available" and "the same rule applies at every arity" says they should
+  agree. They do not. Needs a ruling before either is treated as settled.
 
   The pattern is exactly what ADR-016 forbids: a **0-arg** parked fn fires
   where a **1-arg** one parks. Worth testing before fixing whether the
