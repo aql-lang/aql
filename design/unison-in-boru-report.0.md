@@ -1,5 +1,14 @@
 # Unison in boru: Applicability Report
 
+> **Corrected 2026-08-16 by `unison-hash-identity-probe.0.md`.** A proof of
+> concept built the hash this report proposes and ran it against the tree.
+> Two claims below were wrong and are corrected in place: ADR-015 supplies
+> *faithfulness*, not *canonicity*, so "one ADR away" understates the
+> prerequisite (§1 of the probe); and a hash of canon text does **not** track
+> a definition's meaning, so idea #1 as originally scoped would reproduce the
+> F1 divergence rather than fix it (§2 of the probe). Idea #2 is unaffected
+> and is now clearly the first move. Read the probe alongside this.
+
 ## Scope
 
 Evaluate what the **Unison** programming language
@@ -129,16 +138,30 @@ diagnosed at length and not yet solved:
 - The prerequisites are **already committed work, for independent reasons**.
   ADR-015 requires `canon` to round-trip for every value, and NUR031 requires
   functions to have a canon *independent of the binding name*. Normalising away
-  the name before hashing is exactly what Unison does to an AST. boru is one
-  already-accepted ADR away from being able to hash a definition; it simply has
-  no consumer for the result yet.
+  the name before hashing is exactly what Unison does to an AST.
 
-**Verdict: moderate, and the payoff is disproportionate.** No new syntax and no
-user-visible concept: a `Hash` derived over `canon` output plus referent
-hashes, a hash→unit map replacing the generation/poison machinery, and the AOT
-codec baking hashes where it currently bakes names and refuses. It should be
-scoped as an implementation key first; the *workflow* implications (§"What does
-NOT transfer") are a separate and much larger conversation.
+> **Corrected.** The original text continued "boru is one already-accepted ADR
+> away from being able to hash a definition." The probe shows that is wrong on
+> two counts. ADR-015 gives *faithfulness* (`parse(canon v) deq v`), not
+> *canonicity* (`deq x y` ⟹ `canon x == canon y`) — and
+> `CANON-ROUNDTRIP.0.md` §1 records that the second reading was deliberately
+> rejected — so canonicity is a **new** rule, not a pending one. And NUR031
+> removes only the *binding* name; parameter names still change the digest, so
+> alpha-normalisation is a further requirement. boru is one ADR away from
+> hashing **data**; hashing **code** is a programme. See the probe, §1 and §4.
+
+**Verdict: revised — a programme, not a patch.** The shape is still right (a
+`Hash` over normalised canon plus referent hashes, a hash→unit map replacing
+the generation/poison machinery, the AOT codec baking hashes where it bakes
+names and refuses). But the prerequisites are, in order: canonicity as a new
+rule; alpha-normalisation beyond NUR031; a **referent-substitution step**
+without which the digest tracks text rather than meaning and reproduces F1
+instead of fixing it; macro expansion in the hashed form; cycle components;
+the fn-canon and Store renderers; and the compiler's Stage 3 "function value
+reaches canon" refusal lifted. Sequence it after #2, and expect it to surface
+a language question — referent substitution runs straight into call-time
+binding. The *workflow* implications (§"What does NOT transfer") remain a
+separate and much larger conversation.
 
 ### 2. Content-hash pinning on the module-registry path (cheapest real win)
 
@@ -277,23 +300,30 @@ composed.
 ## Recommended framing
 
 Read Unison as a language that took three things boru already has — code as
-data, a canonical rendering, structural equality — and drew the one conclusion
+data, a faithful rendering, structural equality — and drew the one conclusion
 boru has not: *make the canonical form the identity*. The recommendation is to
-draw that conclusion inward, not outward.
+draw that conclusion inward, not outward — and, per the probe, to be honest
+that boru's rendering is faithful but not yet canonical.
 
 Sequence:
 
-0. **Land ADR-015 and NUR031 anyway.** They are already accepted work; note in
-   passing that a name-independent, round-tripping `canon` is precisely the
-   normalisation step a definition hash needs. Nothing below is possible
-   without them, and they are worth landing regardless.
+0. **Land ADR-015 and NUR031 anyway**, and open a record for **canonicity**
+   (`deq x y` ⟹ `canon x == canon y`), which no ADR currently states and
+   which every step below needs. Expect it to force a decision the probe
+   surfaces: map key order is preserved by `canon` and insignificant to `deq`,
+   so canonicity means either sorting keys in the canonical form or narrowing
+   `deq`. That is a language question worth its own record.
 1. **Adopt hash pinning on the registry path (#2).** Independent of everything
    else, already recommended by `MODULE-SECURITY.0.md` §9.3, specified by
    `boru-vendor.0.md` §5, and does not touch the language.
-2. **Expose a `hash` word** over the canon contract — the canonical digest of
-   any value. Pure library-level, no engine change, immediately useful for
-   spec fixtures, dedup, and the knowledge-graph pipeline, and it makes the
-   canon round-trip *testable by a property* rather than by inspection.
+2. **Expose a `hash` word** over the canon contract — but bill it as a **data**
+   digest. The probe shows it is sound today for scalars, lists and maps and
+   unsound for functions and handles, so it ships documented as such rather
+   than as "the identity of a definition". Pure library-level, no engine
+   change, immediately useful for spec fixtures, dedup, and the
+   knowledge-graph pipeline, and it makes the canon contract *testable by a
+   property* rather than by inspection. Closing P1 (canonicity) is what turns
+   it from useful into trustworthy.
 3. **Then #1, as an internal key** for compiled units — targeting the
    `DepsFresh` hot-path cost, the F1 divergence, and the AOT codec's refusal
    list, all of which are live problems with recorded evidence.
@@ -305,14 +335,22 @@ definitions as a language rule, for the reasons above.
 
 ## Verdict
 
-**Unison is not a paradigm for boru to adopt; it is a proof that boru's own
-accepted contracts have an unclaimed payoff.** ADR-015 already forces every
-value to have a canonical, re-parseable source form, and NUR031 already forces
-that form to be name-independent for functions. Unison's entire edifice —
-no builds, free renames, exact test caching, conflict-free dependency
-coexistence — is what you get by hashing that form and treating the result as
-identity. boru does not need the database, the workflow, or the type-identity
-half. It needs one derived key and four places to use it, three of which
-(`DepsFresh` on the hot path, the F1 rebinding divergence, the AOT codec's
-symbolic-reference problem) are *already open, already documented* defects that
-the name-as-identity model is the root cause of.
+**Unison is not a paradigm for boru to adopt; it is a lens on defects boru has
+already documented.** Three of them — `DepsFresh` on the hot path, the F1
+rebinding divergence, the AOT codec's symbolic-reference problem — share a root
+cause the Unison comparison names precisely: **the name is the identity**. boru
+does not need the database, the workflow, or the type-identity half to act on
+that.
+
+What it does need is more than this report first estimated. ADR-015 gets boru
+to a *faithful* rendering, not a *canonical* one, and a digest over that
+rendering names its dependencies rather than addressing them — so it tracks
+text, not meaning. Hashing **data** is one ADR away; hashing **code** is a
+programme whose first hard question (how do you substitute referents in a
+language that binds at call time?) is a language decision, not an
+implementation detail. The measured basis for both statements is
+`unison-hash-identity-probe.0.md`.
+
+The recommendation that survives unchanged is the cheap one: pin the registry
+path by content hash. It needs none of the above, `MODULE-SECURITY.0.md` §9.3
+already asks for it, and `boru-vendor.0.md` §5 already specifies its shape.
