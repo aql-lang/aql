@@ -906,12 +906,78 @@ with it since the M1 wave.
   auto-dispatches (Stage 3)"*) where the interpreter correctly invokes.
   Closing that refusal is the fix.
 
-  **One case the rule leaves open, flagged rather than decided.** A 1-arg
-  container read with no argument yields the fn value on *both* engines
-  (`(m.k)` → `fn o(Integer)`), while a bare 1-arg name as a fn-body
-  residual **raises** `signature_error`. Both are "a use with no arguments
-  available" and "the same rule applies at every arity" says they should
-  agree. They do not. Needs a ruling before either is treated as settled.
+  **RULED in full (maintainer, 2026-08-16).** Four clauses, which together
+  redefine how a function value is held and applied. Each was measured
+  against the engine before being written down here.
+
+  1. **`/r` is sugar for `ref name` and deactivates ONE use.** Any
+     subsequent use, in any context, is invocation. Same at every arity.
+  2. **Passing a function as an argument requires `/r`.** It is what stops
+     the function firing in place.
+  3. **Parens do not re-step.** They place a value (or values) on the
+     forward stack. So `(ref z)` ≡ `ref z` and `(z/r)` ≡ `z/r`.
+  4. **`inc/r 5` is TWO VALUES**, not a call. Applying a held reference is
+     what `apply` is for.
+
+  ### What that changes, measured
+
+  Clause 3 is narrower than it sounds — an ordinary paren is untouched
+  (`(1 add 2)` → `3`). Only a paren whose *result* is a Function moves,
+  because only that result was being re-dispatched:
+
+  | input | today | ruled |
+  |---|---|---|
+  | `z/r` | `fn z` | unchanged |
+  | `(z/r)` | **`42`** | `fn z` |
+  | `ref z` | `fn z` | unchanged |
+  | `(ref z)` | **`42`** | `fn z` |
+  | `inc/r 5` | `fn inc(Integer) 5` | unchanged |
+  | `(inc/r) 5` | **`6`** | `fn inc(Integer) 5` |
+
+  **`lang/spec/ref.tsv` §2 is void.** Its heading — *"The held value
+  dispatches when RE-STEPPED (paren unwrap)"* — is the thing being
+  withdrawn. Rows 25-30 and row 43 change; the header contract at lines
+  11-12 loses the clause "unwrapped from a paren".
+
+  The rest of that file **survives**, which is the check that the rulings
+  are consistent rather than merely decisive:
+
+  - **§3** (map slots, rows 33-34) — a fresh use invokes. Matches the
+    break-2 ruling exactly.
+  - **§4** (`apply`, 37-39) — explicit application, and by clause 4 it
+    becomes the *only* way to apply a held reference.
+  - **§5** lambdas, **§6** negatives — unaffected.
+  - **§7** (58-59) — pins `typeof inc/r` ≡ `typeof (inc/r)`, both
+    `Function`. **That is clause 3 already holding in one corner**, and
+    it is the strongest existing evidence for the ruling.
+
+  ### ADR-011 needs an amendment — flagged, not made
+
+  Clause 2 supersedes ADR-011's final sentence:
+
+  > "…`/r` takes the reference and is no collection barrier; **a bare fn
+  > name before a `Function`-typed slot resolves as a reference.**"
+
+  That clause is why `h zero` and `h zero/r` are indistinguishable today
+  — measured: with a `Function`-typed slot both collect `zero` as a
+  value, while with an `Any` slot the bare name **invokes**
+  (*"h is still waiting for 2 argument(s) when `zero` begins its own
+  dispatch"*). So the slot type, not `/r`, decides — which is precisely
+  what clause 2 rejects.
+
+  ADR entries are added and amended only on explicit maintainer
+  instruction, so this is recorded here rather than edited into `ADR.md`.
+
+  ### Blast radius
+
+  - `lang/spec/ref.tsv`: 7 rows (§2 plus row 43) + the header contract.
+  - `:Function` params across the whole spec corpus: **20 rows, 9 of which
+    pass a bare name** and would need `/r` under clause 2.
+  - Ecosystem: every callback API. `sort`'s `AGENTS.md` already tells users
+    to write `/r` (*"A bare own-word comparator auto-invokes; `/r` passes
+    it as a value"*), so the documentation is already aligned.
+  - The `unused_def` fix landed in `7e98aeb` hooks the `TFunction`
+    intercept clause 2 retires, so it needs rework alongside.
 
   The pattern is exactly what ADR-016 forbids: a **0-arg** parked fn fires
   where a **1-arg** one parks. Worth testing before fixing whether the
