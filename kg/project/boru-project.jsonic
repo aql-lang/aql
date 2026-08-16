@@ -182,6 +182,16 @@
       metadata: { repository: "boru-lang/boru" }
     }
     {
+      id: "src:content-addressing"
+      kind: "text"
+      locator: "design/CONTENT-ADDRESSING.0.md"
+      title: "content addressing: identity by hash, and what it would actually take"
+      retrieved_at: null
+      content_hash: "content-addressing-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
       id: "src:reload-invalidation"
       kind: "text"
       locator: "design/RELOAD-INVALIDATION.0.md"
@@ -366,6 +376,8 @@
       attributes: { role: "the report on boru's hot code loading ability — late binding end to end, uncached file modules, GC-generational old code, fork snapshot semantics, the aless re-anchor precedent, the BEAM comparison — and the reload-as-a-protocol design: a reload word with keep-old-on-failure, supervisor-broadcast propagation, the Plugin.migrate state hook, handler-stack hygiene, a persistent Vm.open sub-engine" } }
     { key: "function-value-scope", type: "Document", label: "design/FUNCTION-VALUE-SCOPE.0.md"
       attributes: { role: "the defect report and design for free-word resolution in function values: the interpreter resolves them in the RUNNING module while the bytecode compiler resolves them in the DEFINING one, so a cross-module fn value can silently bind a same-named word in the caller and return a wrong number with boru check clean; the mechanism (FnDefInfo.Registry set at export, honoured on the value path and by the VM, dropped by name dispatch and by the native-callback seam), why closure capture cannot carry it, the phased fix, the tree-wide migration audit measuring 0 migration sites and 0 silent-change sites against 224+ repaired (the cost is nil because the ecosystem already worked around it in writing — 12 utils unroll Cli.main, aless ships a wrapper, sort.aql is one file), the finding that every divergence runner in the ecosystem runs compile-preferring mode in its INTERPRETER column and is structurally blind, and the three-clause target semantics for function values" } }
+    { key: "content-addressing", type: "Document", label: "design/CONTENT-ADDRESSING.0.md"
+      attributes: { role: "the design note for deriving a definition's identity from its content rather than its name: the three costs that share that root cause (the per-invoke DepsFresh walk, the AOT codec's symbolic-reference refusals, the pre-1.0 rename tax), the split between an ARTIFACT digest over file bytes — unblocked, already specified by boru-vendor §5 — and a DEFINITION digest over meaning, which needs canonicity, alpha normalisation, macro expansion, referent substitution and cycle components; three options for referent substitution under call-time binding, recommending a (text digest, world digest) compound key; a five-phase sequence; and the rejections — codebase-as-database, hash-based type identity, immutable definitions as a language rule. Measured by design/unison-hash-identity-probe.0.md and scripts/hash-identity-probe.sh" } }
     { key: "reload-invalidation", type: "Document", label: "design/RELOAD-INVALIDATION.0.md"
       attributes: { role: "how hot reload and transparent compilation coexist without slowing compiled code: per-ref valid flags flipped push-style through a reverse dependency index (the HotSpot/Truffle/Julia equilibrium), ref unification at Finalize, world-pinned whole-program units, per-world restamp budgets — plus the confirmed F1 pass-hoisting divergence and its interim whole-program-refusal fix" } }
     { key: "org", type: "Organization", label: "boru-lang" }
@@ -531,6 +543,11 @@
       evidence: [{ source: "src:readme", locator: "Repository layout",
         quote: "Internal design notes and proposals." }]
       confidence: 0.9 }
+    { subject: "content-addressing", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:content-addressing", locator: "title",
+        quote: "CONTENT-ADDRESSING.0 — identity by hash, and what it would actually take" }]
+      confidence: 0.95 }
     { subject: "completeness-review", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }
       evidence: [{ source: "src:completeness-review", locator: "title",

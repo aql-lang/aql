@@ -28,19 +28,22 @@ testable tonight. Every finding below is about what goes into the digest, so
 none of them changes if the digest function does.
 
 Ten properties, each one something content-addressed identity requires.
-Verdict: **3 PASS, 8 FAIL, 1 hazard cleared.**
+Verdict: **2 PASS, 8 FAIL, 1 hazard investigated and cleared** — where the
+hazard (P10) is itself a PASS, and every verdict below is *derived by the
+probe* rather than asserted by it (a distinction PR #376's review forced,
+and which changed the P2 result — see §4).
 
 | | Property | Result |
 |---|---|---|
 | P1 | canonicity — `deq` values canon identically | **FAIL** |
-| P2 | a fn's canon is a parseable source form | **FAIL** |
+| P2 | a fn's canon re-parses to the same function | **FAIL** (§4) |
 | P3 | name-independence — canon carries no binding name | **FAIL** |
 | P4 | alpha-invariance — parameter names don't change identity | **FAIL** |
 | P5 | closure sensitivity — identity tracks referents, not names | **FAIL** |
 | P6 | macro expansion is visible to the hash | **FAIL** |
 | P7 | canon terminates on a dependency cycle | PASS (see §3) |
 | P8/P9 | a digest is stable across processes | **FAIL** for `Store` |
-| P10 | Go and TS canon agree byte for byte | **PASS** (§5) |
+| P10 | Go and TS canon agree byte for byte (floats + strings) | **PASS** (§5) |
 
 ## 1. The correction: round-tripping is not canonicity
 
@@ -48,7 +51,7 @@ The report says boru is "one already-accepted ADR away from being able to
 hash a definition." **That is wrong, and P1 is the counterexample.**
 
 ```
-PASS  m1 deq m2                       # {a:1 b:2} deq {b:2 a:1}  -> true
+PASS  deq m1 m2                       # {a:1 b:2} deq {b:2 a:1}  -> true
    canon m1 = {a:1 b:2}
    canon m2 = {b:2 a:1}
 FAIL  canon m1 eq canon m2
@@ -107,12 +110,21 @@ cannot do that substitution by simply walking the canon output, because
 resolving `dbl` to a referent is the very thing boru defers to call time.
 
 This matters because the report offered hash identity as the fix for the
-`DepsFresh` hot-path cost and the F1 rebinding divergence
-(`RELOAD-INVALIDATION.0.md` §2.2, §3). A digest with this property would not
-fix them — **it would reproduce F1 exactly**, serving a compiled unit for
-`usedbl` that was built against the old `dbl`. A text hash used as a compiled-
-unit cache key is not a weaker version of the Unison scheme; for this purpose
-it is unsound.
+`DepsFresh` hot-path cost (`RELOAD-INVALIDATION.0.md` §2.2). A digest with
+this property does not deliver it: it would serve a compiled unit for
+`usedbl` that was built against the old `dbl`. A text hash used as a
+compiled-unit cache key is not a weaker version of the Unison scheme; for
+this purpose it is unsound.
+
+> **Correction (PR #376 review).** This section originally also claimed the
+> digest "would reproduce F1 exactly." That overstated the connection.
+> F1 (`RELOAD-INVALIDATION.0.md` §3) is a **phase-ordering** defect, not an
+> identity one: module-scope `def` sites execute only during the compile
+> pass, so by VM time the def table already holds the final binding and no
+> runtime rebind occurs at all — there is nothing for a cache key, hashed or
+> otherwise, to miss on. F1 needs runtime bind lowering or a conservative
+> refusal. The finding in this section stands on its own terms (a text
+> digest does not track meaning); it is simply not a statement about F1.
 
 P6 is the same defect with a wider blast radius. Macros are not expanded in
 canon:
@@ -147,10 +159,36 @@ at the same time.
 P2, P3 and P8 confirm defects the tree already records; the probe adds
 measurements rather than news.
 
-- **P2 — fn canon does not re-parse.** `fn sq[[x:Number][Number][word(mul)
-  word(x) word(x)]]` fed back to the parser is a hard error
-  (`cannot call 'fn' — no signature matches`). ADR-015 already calls a
-  rendering no parser accepts a defect; NUR059 holds it open.
+- **P2 — fn canon does not re-parse to the same function, and the
+  anonymous form fails *silently*.** PR #376's review pointed out that the
+  probe was asserting this rather than measuring it; making the wrapper
+  really re-parse produced a sharper result than the assertion.
+
+  The **named** rendering `fn sq[[x:Number]…]` is a hard parse error
+  (`fn` receives two tokens, no signature matches). But the **anonymous**
+  rendering *parses cleanly into something else*:
+
+  ```
+  original applied to 5 = 25
+  canon                 = fn [[x:Number][Number][word(mul) word(x) word(x)]]
+  FAIL  re-parsed fn does not behave identically (got '<error>', want '25')
+  FAIL  canon does not even reach a fixpoint — each pass adds a layer:
+     pass 2 = fn [[x:Number][Number][word(word) (mul) word(word) (x) word(word) (x)]]
+  ```
+
+  `word(mul)` re-reads as a **call to a word named `word`** taking `(mul)`,
+  so the round-trip neither preserves behaviour nor reaches a textual
+  fixpoint — it accretes a wrapper on every pass. This is worse than the
+  named form's loud failure: ADR-015's own diagnostic reading (a fixpoint
+  violation is always a contract violation, `CANON-ROUNDTRIP.0.md` §1)
+  catches it, but nothing else would.
+
+  This is **not a new divergence**: `NUR.md` §NUR072 already holds the
+  bare-word question open, and states it exactly — "`word(foo)` denotes a
+  word VALUE, while bare `foo` re-parses as a word that will be
+  DISPATCHED", with rendering it bare touching 175 of `parse.tsv`'s 724
+  rows. What this measurement adds is the behavioural consequence: the
+  fixpoint is not merely unreached, it *diverges*, one wrapper per pass.
 - **P3 — fn canon carries the binding name.** `sq` and `sq2` have
   byte-identical bodies and different canons. NUR031's verdict already
   requires a name-independent fn canon.
@@ -178,22 +216,37 @@ FAIL  alpha-equivalent fns canon identically
 ```
 
 No binding name appears at all, so this is independent of P3. NUR031 removes
-the *binding* name; nothing on the books removes *parameter* names. Unison
+the *binding* name; nothing on the books removed *parameter* names. Unison
 rewrites variables to positional references for exactly this reason. So the
 normalisation idea #1 needs is strictly larger than NUR031: strip the binding
 name **and** de-name the parameters.
 
+**Now recorded as `NUR.md` §NUR073**, on PR #376's review — the register's
+job being that a divergence is never silently baselined, and this one would
+have been the moment NUR031 landed and appeared to close the function-canon
+story. The record leaves the choice open between de-naming parameters in
+`canon` itself, declaring it Allowed and putting the obligation on any
+hashing layer, or splitting readable rendering from an identity normal form.
+
 ## 5. One hazard investigated and cleared
 
 The report's cross-port worry does not survive measurement. Go and TS canon
-agree byte for byte on all twelve float cases tried, including max double,
-the smallest subnormal, `-0.0`, and shortest-round-trip repr edges
-(`0.1+0.2`, `123456789.123456789`), plus unicode, escapes and the empty
-string:
+agree byte for byte on all twelve float cases — max double, the smallest
+subnormal, `-0.0`, and shortest-round-trip repr edges (`0.1+0.2`,
+`123456789.123456789`) — and on a string battery covering an embedded
+quote, non-ASCII and astral-plane characters, the empty string, and
+backslash/tab/newline escapes:
 
 ```
 PASS  all 12 float renderings agree across ports
+PASS  string/unicode/escape renderings agree across ports
+   ['a"b' 'é🔥' '' 'back\\slash' 'tab\tx' 'nl\nx']
 ```
+
+The string half was added in response to PR #376's review, which correctly
+noted that the first version of this section cleared unicode and escapes on
+the strength of a **Go-only** run while the cross-port wrapper compared
+floats alone.
 
 An apparent `1000000` vs `1000000.0` divergence in an earlier draft of the
 probe was the probe's own fault — a bare `1e6` parses as an **Integer**, so

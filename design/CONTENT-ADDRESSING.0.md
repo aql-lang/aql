@@ -16,25 +16,36 @@
 
 ## 1. The thesis
 
-Four costs boru is currently paying share a single root cause, and it is
+Three costs boru is currently paying share a single root cause, and it is
 not a bug in any of them. It is that **a definition's identity is its
 name.**
 
 | Cost | Where |
 |---|---|
 | Every invoke of a runtime-stamped callback pays a pull-based `DepsFresh` walk — ~2–10 Go map lookups before the VM executes one opcode. "Compiled code gets no slower" is violated *before reload exists*. | `RELOAD-INVALIDATION.0.md` §1, §2.2 |
-| **F1**, a confirmed shipped divergence: a mid-program rebind gives `6 105 12` interpreted and `12 12 12` compiled. | `RELOAD-INVALIDATION.0.md` §3 |
-| The AOT codec must invent "a stable symbolic identity a fresh process re-resolves" for every pointer in a `*Program`, and its table is mostly **refusals** — user-poly calls (whose `Impls` are pointer identities), interpreter islands, exotic const payloads. | `AOT-COMPILE.0.md` §3.2 |
+| The AOT codec must invent "a stable symbolic identity a fresh process re-resolves" for every pointer in a `*Program`, and its table is mostly **refusals** — user-poly calls, interpreter islands, exotic const payloads. | `AOT-COMPILE.0.md` §3.2 |
 | The pre-1.0 rename tax: `test.test` → `Test.test`, every utility module gaining `-util`, word families relocated between modules — each breaking every downstream program for **zero** semantic change. | `README.md` §Upgrade notes |
 
 Each is being solved separately: generation counters and poisoning for the
-first two, a per-pool whitelist for the third, a migration note for the
-fourth. Content addressing is the observation that they are one problem.
+first, a per-pool whitelist for the second, a migration note for the
+third. Content addressing is the observation that they are one problem.
 If identity were derived from *what a definition is* rather than *what it
 is called*, then staleness is not a runtime property to validate (it is a
-cache miss), a rebind is not a mutation to propagate (it is a new
-identity), a cross-process reference needs no re-resolution scheme (the
+cache miss), a cross-process reference needs no re-resolution scheme (the
 identity travels), and a rename touches no code (only a name map).
+
+> **Not on this list: F1.** An earlier draft of this note counted
+> `RELOAD-INVALIDATION.0.md` §3's confirmed divergence (`6 105 12`
+> interpreted, `12 12 12` compiled) as a fourth symptom. That was wrong,
+> and PR #376's review caught it. F1's mechanism is **phase ordering, not
+> identity**: the rebinds *do* correctly poison the stored ref, but
+> module-scope `def` sites execute only during the **compile pass**, so by
+> VM time the def table already holds the final `bonus` and there is no
+> runtime rebind left for any cache key to miss on. Capturing a hash
+> cannot restore `6 105 12`; that needs runtime bind lowering or a
+> conservative refusal. Hashing is **complementary** — once binds are
+> lowered to runtime, a hash-keyed cache misses correctly on each one —
+> but it is not the fix, and this note no longer claims it is.
 
 That is the thesis. The rest of this note is about how far boru can
 actually go, which is further than nothing and considerably less than
@@ -175,22 +186,34 @@ language property, and it makes every dependent recompile on any change.
 **Recommendation: (b) for the compiled-unit key; (a) only if the workflow
 payoffs are ever wanted, and only as an explicit language decision.**
 
-Option (b) deserves emphasis because it is cheap and it solves the
-expensive problem. It is what `depNames` + `Gen`/`Depth` already *is* —
-`RELOAD-INVALIDATION.0.md` §2.2 — but collapsed from a **per-invoke walk
-over the dep set** into a **single equality check on a precomputed
-digest**. That is precisely constraint 3 ("compiled code gets no slower"),
-satisfied without moving to pushed invalidation and without a language
-change. It also retires the AOT codec's worst refusal: a user-poly call is
-refused today because `Impls` are *pointer identities* that can never
-survive a process boundary; a digest over the impl set is a stable
-identity that can.
+Option (b) deserves emphasis because it collapses the **hot path**: what
+`depNames` + `Gen`/`Depth` does per invoke — a walk over the dep set,
+two map lookups per dep (`RELOAD-INVALIDATION.0.md` §2.2) — becomes a
+single equality check on a precomputed digest. That is constraint 3
+("compiled code gets no slower") satisfied without a language change.
 
-The honest cost of (b): the world digest must be recomputed when any
-referenced name rebinds, so it moves work to the rebind event — the same
-move `RELOAD-INVALIDATION.0.md` §4 observes every production VM made.
-This note's contribution is that hashing lets that move be made *without*
-building the reverse index and republication machinery of §5.2–5.3 first.
+**What (b) does not buy, corrected after PR #376 review.** Two earlier
+claims here were too strong:
+
+- **It does not avoid the reverse index.** Something has to update a
+  unit's world digest when a name in its assumption set rebinds, and
+  finding those units *is* a reverse dependency index — the machinery of
+  `RELOAD-INVALIDATION.0.md` §5.2. The only way to skip it is a single
+  global world counter bumped on any rebind, which is one integer compare
+  on the hot path but **over-invalidates**: every compiled unit misses on
+  every unrelated rebind. So (b) is a choice between a reverse index for
+  precision and a global counter for simplicity, not an escape from both.
+  What (b) genuinely changes is the *hot path* cost, which becomes O(1)
+  either way; the rebind-event cost is the same work §5.2 already
+  describes.
+- **It does not by itself retire the user-poly refusal.**
+  `AOT-COMPILE.0.md` §3.2 refuses `UserPolyRef` for **two independent**
+  reasons: live `Impls` pointer identities, *and* stored-mode `Sigs` — a
+  body-local overload table "a live name `Lookup` could never resolve"
+  and which cannot be re-derived in a fresh process. A digest over the
+  impl set replaces the first. The second is untouched, and any design
+  that wants this refusal lifted must separately specify how stored-mode
+  `Sigs` are serialized or reconstructed.
 
 ### 4.4 Phasing
 
@@ -209,10 +232,21 @@ Each phase is independently shippable and ends green.
   capability-manifest work: a manifest is advisory unless manifest and
   bytes are pinned together.
 - **Phase 2 — a `hash` word, scoped to data.** Ship the digest for
-  scalars, lists, and maps, documented as **not** applying to functions or
-  handles until §4.2 is closed. Sound today (P9), immediately useful for
-  spec fixtures, dedup, and the knowledge-graph pipeline, and it makes the
-  canon contract testable by a property rather than by inspection.
+  scalars and lists, documented as **not** applying to functions or
+  handles until §4.2 is closed. Deterministic across processes today
+  (P9), and it makes the canon contract testable by a property rather
+  than by inspection.
+
+  **Maps are excluded until Phase 0.** An earlier draft listed maps here
+  and recommended the digest for dedup; PR #376's review caught the
+  contradiction with this note's own P1 result. `{a:1 b:2}` and
+  `{b:2 a:1}` are `deq` and digest differently, so for maps the digest is
+  a **byte-serialization checksum, not content identity** — sound for
+  "did these bytes change?", unsound for "are these the same value?", and
+  dedup is the second question. Either gate map hashing on Phase 0
+  canonicity, or ship it for maps with that limitation stated in the word's
+  own documentation. It must not be described as content identity before
+  canonicity lands.
 - **Phase 3 — world-digest keying for compiled units** (option b).
   Targets the `DepsFresh` hot-path cost and the user-poly refusal. Needs
   Phase 0 and the Stage 3 refusal lifted; needs *none* of steps 3–6.
@@ -239,11 +273,21 @@ programme and should not be entered by accident.
    call site has *a* referent. With signature-set dispatch it has a set,
    and the digest must cover the set — or the scheme must restrict itself
    to option (b), where names are never resolved.
-5. **Does the digest need to be cryptographic?** For the artifact digest,
-   yes (it is a supply-chain control). For a compiled-unit cache key, a
-   fast non-cryptographic digest is sufficient and `BinUtil.fnv64` already
-   exists. These are different requirements on the same word, and §4.1's
-   split is the reason to keep them separable.
+5. **Does the digest need to be collision-resistant?** For the artifact
+   digest, yes — it is a supply-chain control. For a compiled-unit cache
+   key the earlier draft said a fast non-cryptographic digest "is
+   sufficient"; PR #376's review corrected that, and it is worth stating
+   sharply: **a collision in a compiled-unit key serves code compiled for
+   a different definition** — a miscompile, not a stale read.
+   `BinUtil.fnv64` clears the sign bit (`lang/go/modules/binary.go`
+   `sign63Mask`), so it supplies **63 bits**, and FNV is not collision
+   resistant at any width. A fast digest is therefore admissible only as
+   an **index**, with the lookup verifying the full key — the normalised
+   canon and assumption set — on hit, or else the key must be a
+   collision-resistant digest from `boru:crypto` (designed, unbuilt).
+   Specify the verification; do not treat the digest alone as the key.
+   These are different requirements on the same word, which is another
+   reason §4.1's split has to hold.
 
 ## 6. Rejected
 

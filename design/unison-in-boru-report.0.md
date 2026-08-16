@@ -5,9 +5,12 @@
 > Two claims below were wrong and are corrected in place: ADR-015 supplies
 > *faithfulness*, not *canonicity*, so "one ADR away" understates the
 > prerequisite (§1 of the probe); and a hash of canon text does **not** track
-> a definition's meaning, so idea #1 as originally scoped would reproduce the
-> F1 divergence rather than fix it (§2 of the probe). Idea #2 is unaffected
-> and is now clearly the first move. Read the probe alongside this.
+> a definition's meaning, so idea #1 as originally scoped does not deliver the
+> hot-path fix it promises (§2 of the probe). A later review pass struck a
+> third claim: **F1 is not evidence for this idea at all** — its cause is
+> phase ordering, not identity (see the corrected bullet in idea #1). Idea #2
+> is unaffected and is now clearly the first move. Read the probe alongside
+> this.
 
 ## Scope
 
@@ -123,10 +126,15 @@ diagnosed at length and not yet solved:
 - `RELOAD-INVALIDATION.0.md` §3 F1 is a **confirmed shipped divergence**:
   `def bonus 1` … `def bonus 100` prints `6 105 12` interpreted and `12 12 12`
   compiled, because module-scope `def` executes only during the compile pass.
-  The argument underneath is "which binding does this call see?" — a question
-  that is ill-posed while a name is the identity and well-posed the moment a
-  name is an *indirection to* an identity. The captured hash answers it without
-  a poisoning protocol.
+
+> **Corrected (PR #376 review).** This bullet originally argued that a
+> captured hash answers F1's "which binding does this call see?" without a
+> poisoning protocol. It does not. F1's mechanism is **phase ordering**: the
+> `def` sites all execute in the compile pass, so by VM time the def table
+> holds only the final `bonus` and **no runtime rebind occurs** for any cache
+> key to miss on. Hash identity cannot restore `6 105 12`; that needs runtime
+> bind lowering or a conservative refusal. F1 is therefore *not* evidence for
+> this idea, and is struck from the list. The other two bullets stand.
 - `AOT-COMPILE.0.md` §3.2 is, read plainly, an attempt to invent hash identity
   one pool at a time. It needs "a stable symbolic identity a fresh process
   re-resolves" for every pointer in a `*Program`, and its table is mostly
@@ -155,8 +163,7 @@ diagnosed at length and not yet solved:
 the generation/poison machinery, the AOT codec baking hashes where it bakes
 names and refuses). But the prerequisites are, in order: canonicity as a new
 rule; alpha-normalisation beyond NUR031; a **referent-substitution step**
-without which the digest tracks text rather than meaning and reproduces F1
-instead of fixing it; macro expansion in the hashed form; cycle components;
+without which the digest tracks text rather than meaning; macro expansion in the hashed form; cycle components;
 the fn-canon and Store renderers; and the compiler's Stage 3 "function value
 reaches canon" refusal lifted. Sequence it after #2, and expect it to surface
 a language question — referent substitution runs straight into call-time
@@ -325,8 +332,9 @@ Sequence:
    property* rather than by inspection. Closing P1 (canonicity) is what turns
    it from useful into trustworthy.
 3. **Then #1, as an internal key** for compiled units — targeting the
-   `DepsFresh` hot-path cost, the F1 divergence, and the AOT codec's refusal
-   list, all of which are live problems with recorded evidence.
+   `DepsFresh` hot-path cost and the AOT codec's refusal list, both live
+   problems with recorded evidence. (Not F1: see the corrected bullet in
+   idea #1.)
 4. **Then #3 (name→hash indirection) and #4 (test caching)**, in that order,
    once #1 exists and effect rows can certify determinism.
 
@@ -336,11 +344,12 @@ definitions as a language rule, for the reasons above.
 ## Verdict
 
 **Unison is not a paradigm for boru to adopt; it is a lens on defects boru has
-already documented.** Three of them — `DepsFresh` on the hot path, the F1
-rebinding divergence, the AOT codec's symbolic-reference problem — share a root
-cause the Unison comparison names precisely: **the name is the identity**. boru
-does not need the database, the workflow, or the type-identity half to act on
-that.
+already documented.** Two of them — `DepsFresh` on the hot path and the AOT
+codec's symbolic-reference problem — share a root cause the Unison comparison
+names precisely: **the name is the identity**; the pre-1.0 rename tax is a
+third, paid by users rather than by the runtime. boru does not need the
+database, the workflow, or the type-identity half to act on that. (An earlier
+draft counted F1 as a fourth; it is not — its cause is phase ordering.)
 
 What it does need is more than this report first estimated. ADR-015 gets boru
 to a *faithful* rendering, not a *canonical* one, and a digest over that

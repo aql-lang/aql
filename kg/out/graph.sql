@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '6923450101030912485');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '7108009126207483831');
 INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
@@ -30,6 +30,7 @@ INSERT INTO input_files VALUES ('../design/BORU-INFOVIEW.0.md', '209086989370126
 INSERT INTO input_files VALUES ('../design/BORU-SCRY.0.md', '3285728856019765195', 16574);
 INSERT INTO input_files VALUES ('../design/BORU-VIZ.0.md', '1948552775752251328', 25772);
 INSERT INTO input_files VALUES ('../design/CANON-ROUNDTRIP.0.md', '5849445988911864215', 6387);
+INSERT INTO input_files VALUES ('../design/CONTENT-ADDRESSING.0.md', '2493386413761043225', 18345);
 INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '7605485402373327537', 10411);
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
@@ -56,7 +57,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5798490287673095801', 500);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '5118222963562891971', 43276);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '4803240464447713897', 44879);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -85,6 +86,9 @@ INSERT INTO sources VALUES ('src:cli-md', 'text', 'CLI.md', 'CLI.md subcommand r
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:completeness-review', 'text', 'design/checker-compiler-completeness-review.0.md', 'Type checker + bytecode compiler — completeness review', NULL, 'completeness-review-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:content-addressing', 'text', 'design/CONTENT-ADDRESSING.0.md', 'content addressing: identity by hash, and what it would actually take', NULL, 'content-addressing-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:core-ts-coverage', 'text', 'design/CORE-TS-COVERAGE.0.md', 'core/ts coverage program', NULL, 'core-ts-coverage-2026-08', 'primary', '{
@@ -224,6 +228,8 @@ INSERT INTO entities VALUES ('ent:Document:3080274854606714513', 'Document', 'AD
 INSERT INTO entities VALUES ('ent:Document:3294415633888265368', 'Document', 'design/checker-compiler-completeness-review.0.md', 'design/checker-compiler-completeness-review.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:3294415633888265368', 'role', 'the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work');
 INSERT INTO entities VALUES ('ent:Document:3521225411209893772', 'Document', 'design/LANG-ENG-CONTENT-AUDIT.0.md', 'design/lang-eng-content-audit.0.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:3534903004749141856', 'Document', 'design/CONTENT-ADDRESSING.0.md', 'design/content-addressing.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:3534903004749141856', 'role', 'the design note for deriving a definition''s identity from its content rather than its name: the three costs that share that root cause (the per-invoke DepsFresh walk, the AOT codec''s symbolic-reference refusals, the pre-1.0 rename tax), the split between an ARTIFACT digest over file bytes — unblocked, already specified by boru-vendor §5 — and a DEFINITION digest over meaning, which needs canonicity, alpha normalisation, macro expansion, referent substitution and cycle components; three options for referent substitution under call-time binding, recommending a (text digest, world digest) compound key; a five-phase sequence; and the rejections — codebase-as-database, hash-based type identity, immutable definitions as a language rule. Measured by design/unison-hash-identity-probe.0.md and scripts/hash-identity-probe.sh');
 INSERT INTO entities VALUES ('ent:Document:3904106568037504161', 'Document', 'AGENTS.md', 'agents.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:3955423872539901697', 'Document', 'HOWTO.md', 'howto.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:4163489813681141089', 'Document', 'README.md', 'readme.md', 'accepted');
@@ -650,6 +656,8 @@ INSERT INTO assertions VALUES ('ast:6024405707462587556', 'ent:Document:48150861
 INSERT INTO assertion_evidence VALUES ('ast:6024405707462587556', 'src:readme', 'Documentation', 'Reference | You need the precise behaviour of a syntax form, type, or word.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:6112159793123999904', 'ent:Document:4529681846923033548', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:6112159793123999904', 'src:module-views', 'title', 'Design for **module-provided views and widgets** in boru', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:6197320912878839009', 'ent:Document:3534903004749141856', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:6197320912878839009', 'src:content-addressing', 'title', 'CONTENT-ADDRESSING.0 — identity by hash, and what it would actually take', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:6294168041362264130', 'ent:SoftwareModule:2013670336276694550', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/core/go"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:6294168041362264130', 'src:gomod:core-go', 'module directive', 'module github.com/boru-lang/boru/core/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:6299681106539820881', 'ent:Document:6186742803977787158', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);

@@ -23,44 +23,99 @@
 import "boru:bin-util"
 import "boru:string-util"
 
-
 print "== P1: canonicity — deq values must canon identically =="
-print "   ADR-015 gives parse(canon v) deq v. Hashing needs the converse too."
+print
+"   ADR-015 gives parse(canon v) deq v. Hashing needs the converse too."
 def m1 {a:1 b:2}
 def m2 {b:2 a:1}
-print (StringUtil.concat [(if (m1 deq m2) ["PASS  "] ["FAIL  "]) "m1 deq m2"])
+print
+(StringUtil.concat [(if (deq m1 m2) ["PASS  "] ["FAIL  "]) "deq m1 m2"])
 print (StringUtil.concat ["   canon m1 = " (canon m1)])
 print (StringUtil.concat ["   canon m2 = " (canon m2)])
-print (StringUtil.concat [(if ((canon m1) eq (canon m2)) ["PASS  "] ["FAIL  "]) "canon m1 eq canon m2"])
+print
+(StringUtil.concat
+      [(if (eq (canon m1) (canon m2)) ["PASS  "] ["FAIL  "])
+          "canon m1 eq canon m2"
+      ]
+  )
 print (StringUtil.concat ["   hash m1  = " (BinUtil.fnv64 (canon m1))])
 print (StringUtil.concat ["   hash m2  = " (BinUtil.fnv64 (canon m2))])
-print (StringUtil.concat [(if ((BinUtil.fnv64 (canon m1)) eq (BinUtil.fnv64 (canon m2))) ["PASS  "] ["FAIL  "]) "hash m1 eq hash m2"])
+print
+(StringUtil.concat
+      [(if
+              (eq (BinUtil.fnv64 (canon m1)) (BinUtil.fnv64 (canon m2)))
+              ["PASS  "] ["FAIL  "]
+          )
+          "hash m1 eq hash m2"
+      ]
+  )
 
 print ""
-print "== P2: a fn's canon must be a parseable source form =="
+print "== P2: a fn's canon must re-parse to the same function =="
 def sq fn x:Number Number [mul x x]
-print (StringUtil.concat ["   canon (sq/r) = " (canon (sq/r))])
-print "   the word(...) spelling is a debug form; re-parsing it is a hard error"
-print "FAIL  fn canon re-parses"
+print (StringUtil.concat ["   named canon = " (canon (sq/r))])
+print
+(StringUtil.concat
+      ["   anon  canon = " (canon (fn x:Number Number [mul x x]))]
+  )
+print
+"   the named form does not re-parse at all (`fn` gets 2 tokens, no"
+print
+"   signature matches). The anonymous form DOES parse — into something"
+print
+"   else: word(mul) re-reads as a call to a word named `word`, so each"
+print
+"   round-trip adds a layer. Silent corruption, not a loud failure."
+print
+"   VERDICT is derived by scripts/hash-identity-probe.sh, which really"
+print
+"   re-parses and applies the result (a single run cannot eval text)."
 
 print ""
-print "== P3: name-independence — a fn's canon must not carry its binding =="
+print
+"== P3: name-independence — a fn's canon must not carry its binding =="
 def sq2 fn x:Number Number [mul x x]
 print (StringUtil.concat ["   canon (sq/r)  = " (canon (sq/r))])
 print (StringUtil.concat ["   canon (sq2/r) = " (canon (sq2/r))])
-print (StringUtil.concat [(if ((canon (sq/r)) eq (canon (sq2/r))) ["PASS  "] ["FAIL  "]) "identical bodies canon identically"])
+print
+(StringUtil.concat
+      [(if (eq (canon (sq/r)) (canon (sq2/r))) ["PASS  "] ["FAIL  "])
+          "identical bodies canon identically"
+      ]
+  )
 
 print ""
-print "== P4: alpha-invariance — parameter names must not change identity =="
-print "   unbound anonymous fns, so no binding name appears at all: independent of P3."
-print (StringUtil.concat ["   canon x-form = " (canon ([x:Number] => [mul x x]))])
-print (StringUtil.concat ["   canon y-form = " (canon ([y:Number] => [mul y y]))])
-print (StringUtil.concat [(if ((canon ([x:Number] => [mul x x])) eq (canon ([y:Number] => [mul y y]))) ["PASS  "] ["FAIL  "]) "alpha-equivalent fns canon identically"])
+print
+"== P4: alpha-invariance — parameter names must not change identity =="
+print
+"   unbound anonymous fns, so no binding name appears at all: independent of P3."
+print
+(StringUtil.concat
+      ["   canon x-form = " (canon ([x:Number] => [mul x x]))]
+  )
+print
+(StringUtil.concat
+      ["   canon y-form = " (canon ([y:Number] => [mul y y]))]
+  )
+print
+(StringUtil.concat
+      [(if
+              (eq (canon ([x:Number] => [mul x x]))
+                  (canon ([y:Number] => [mul y y]))
+              )
+              ["PASS  "] ["FAIL  "]
+          )
+          "alpha-equivalent fns canon identically"
+      ]
+  )
 
 print ""
-print "== P5: closure sensitivity — identity must track referents, not names =="
-print "   canon renders a callee as its NAME, so rebinding the callee changes"
-print "   what the caller means while leaving the caller's canon untouched."
+print
+"== P5: closure sensitivity — identity must track referents, not names =="
+print
+"   canon renders a callee as its NAME, so rebinding the callee changes"
+print
+"   what the caller means while leaving the caller's canon untouched."
 def dbl fn n:Number Number [mul n 2]
 def usedbl fn n:Number Number [dbl n]
 def h-before (BinUtil.fnv64 (canon (usedbl/r)))
@@ -68,32 +123,58 @@ def v-before (usedbl 5)
 def dbl fn n:Number Number [mul n 100]
 def h-after (BinUtil.fnv64 (canon (usedbl/r)))
 def v-after (usedbl 5)
-print (StringUtil.concat ["   usedbl 5 before = " v-before "   after = " v-after])
-print (StringUtil.concat ["   hash before     = " h-before "   after = " h-after])
-print "   the meaning changed, as call-time binding requires; the question is"
+print
+(StringUtil.concat
+      ["   usedbl 5 before = " v-before "   after = " v-after]
+  )
+print
+(StringUtil.concat
+      ["   hash before     = " h-before "   after = " h-after]
+  )
+print
+"   the meaning changed, as call-time binding requires; the question is"
 print "   only whether the hash noticed"
-print (StringUtil.concat [(if (not (h-before eq h-after)) ["PASS  "] ["FAIL  "]) "hash tracked the meaning change"])
+print
+(StringUtil.concat
+      [(if (not (eq h-before h-after)) ["PASS  "] ["FAIL  "])
+          "hash tracked the meaning change"
+      ]
+  )
 
 print ""
 print "== P6: macros are a dependency the hash cannot see =="
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
 def usem fn n:Number Any [unless (n eq 0) [n]]
 print (StringUtil.concat ["   canon (usem/r) = " (canon (usem/r))])
-print "   the macro call survives unexpanded, so a macro edit is invisible"
-print "FAIL  canon shows the expansion"
+print
+"   the macro call survives unexpanded, so a macro edit is invisible"
+print
+(StringUtil.concat
+      [(if (StringUtil.contains "unless" (canon (usem/r)))
+              ["FAIL  "] ["PASS  "]
+          )
+          "canon shows the expansion rather than the macro call"
+      ]
+  )
 
 print ""
-print "== P7: cycles — mutual recursion renders by name, so canon terminates =="
+print
+"== P7: cycles — mutual recursion renders by name, so canon terminates =="
 def isodd fn n:Number Any [if (n eq 0) [false] [iseven (sub n 1)]]
 def iseven fn n:Number Any [if (n eq 0) [true] [isodd (sub n 1)]]
 print (StringUtil.concat ["   canon (isodd/r) = " (canon (isodd/r))])
 print "PASS  canon terminates on a cycle"
-print "   NOTE: passes only because canon does NOT follow references — the"
-print "   same property that makes P5 fail. Substituting referents to fix P5"
-print "   reintroduces the cycle and needs Unison-style cycle components."
+print
+"   NOTE: passes only because canon does NOT follow references — the"
+print
+"   same property that makes P5 fail. Substituting referents to fix P5"
+print
+"   reintroduces the cycle and needs Unison-style cycle components."
 
 print ""
-print "== P8: Store canon is a Go struct dump carrying pointer addresses =="
+print
+"== P8: Store canon is a Go struct dump carrying pointer addresses =="
 print (StringUtil.concat ["   canon (context) = " (canon (context))])
-print "   pointer addresses vary per process; the .sh wrapper compares the"
+print
+"   pointer addresses vary per process; the .sh wrapper compares the"
 print "   hash across two runs, which one run cannot do."

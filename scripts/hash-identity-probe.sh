@@ -8,6 +8,8 @@
 # wrapper runs the in-language battery (scripts/hash-identity-probe.boru)
 # and adds the two checks a single boru process cannot make for itself:
 #
+#   P2v cross-process re-parse — canon a function, feed the rendering back
+#       to a fresh process, and check the result still behaves.
 #   P9  cross-process determinism — the same expression hashed in two
 #       separate processes must produce the same digest.
 #   P10 cross-port canon parity — Go and TS must render a value to the
@@ -25,6 +27,29 @@ boru="$repo/cmd/go/bin/boru"
 
 # --- the in-language battery (P1-P8) ------------------------------------
 "$boru" --no-compile "$repo/scripts/hash-identity-probe.boru"
+
+# --- P2v: does a fn's canon really re-parse to the same function? --------
+# The in-language battery can print the rendering but cannot eval text, so
+# the round-trip is derived here: render, re-parse, apply, compare.
+echo
+echo "== P2v: fn canon re-parse — render, re-parse, apply =="
+orig=$("$boru" do --no-compile 'def g (fn [[x:Number][Number][mul x x]]) g 5' 2>/dev/null | tail -1 || true)
+rendered=$("$boru" do --no-compile 'canon (fn [[x:Number][Number][mul x x]])' 2>/dev/null | tail -1 || true)
+echo "   original applied to 5 = $orig"
+echo "   canon                 = $rendered"
+rt=$("$boru" do --no-compile "def f ($rendered) f 5" 2>/dev/null | tail -1 || true)
+if [ -n "$orig" ] && [ "$rt" = "$orig" ]; then
+  echo "PASS  re-parsed fn behaves identically ($rt)"
+else
+  echo "FAIL  re-parsed fn does not behave identically (got '${rt:-<error>}', want '$orig')"
+fi
+again=$("$boru" do --no-compile "canon ($rendered)" 2>/dev/null | tail -1 || true)
+if [ "$again" = "$rendered" ]; then
+  echo "PASS  canon reaches a textual fixpoint"
+else
+  echo "FAIL  canon does not even reach a fixpoint — each pass adds a layer:"
+  echo "   pass 2 = $again"
+fi
 
 # --- P9: cross-process determinism --------------------------------------
 echo
@@ -74,3 +99,26 @@ else
 fi
 echo "   NOTE: every case is a decimal literal so both sides hold a Float."
 echo "   Comparing unlike types here measures the test setup, not canon."
+
+# Strings: quoting, unicode and escapes are the other place two runtimes
+# drift. Floats alone do not license a claim about these. Non-ASCII is
+# written as a literal character on BOTH sides — an escape form the two
+# languages spell differently would measure the escape, not canon.
+"$boru" do --no-compile "canon ['a\"b' 'é🔥' '' 'back\\\\slash' 'tab\tx' 'nl\nx']" 2>/dev/null \
+  | tail -1 > "$tmp/go-s.txt"
+cat > "$tmp/ts-s.ts" <<'TSEOF'
+import { canonValue } from "REPOPATH/core/ts/src/canon.ts";
+import { newString, newList } from "REPOPATH/core/ts/src/value.ts";
+const ss = ['a"b', 'LITERAL', '', 'back\\slash', 'tab\tx', 'nl\nx'];
+console.log(canonValue(newList(ss.map((s) => newString(s)))));
+TSEOF
+sed -i "s|REPOPATH|$repo|g; s|LITERAL|é🔥|" "$tmp/ts-s.ts"
+node --experimental-strip-types --no-warnings "$tmp/ts-s.ts" > "$tmp/ts-s.txt" 2>/dev/null || true
+if [ -s "$tmp/ts-s.txt" ] && diff -q "$tmp/go-s.txt" "$tmp/ts-s.txt" >/dev/null; then
+  echo "PASS  string/unicode/escape renderings agree across ports"
+  echo "   $(cat "$tmp/go-s.txt")"
+else
+  echo "FAIL  string canon diverges across ports (or the TS build failed):"
+  echo "   go = $(cat "$tmp/go-s.txt")"
+  echo "   ts = $(cat "$tmp/ts-s.txt" 2>/dev/null)"
+fi
