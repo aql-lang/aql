@@ -289,3 +289,18 @@ ports, landing with a shrinking ledger of failing kinds. NUR031
 (fn/host `deq` reflexivity, name-independent fn canon) is a
 prerequisite.
 [CANON-ROUNDTRIP.0.md](design/CANON-ROUNDTRIP.0.md)
+
+---
+
+## ADR-016 — Arity and origin never change function behaviour {#adr-016}
+
+**Status:** Accepted · **Date:** 2026-08-15 · sharpens ADR-011
+
+Every function behaves the same way whatever its arity and wherever it
+came from — named or anonymous, module or local, boru or native.
+ADR-011 fixes the rules; this record forbids *exceptions* keyed on arity
+or origin. Two exist today, and are defects rather than design: `/r`
+fails to park a 0-arg fn bound to a param, yielding the call's result
+where the author asked for the function; and `execFnDefLiteral` treats a
+0-arg **anonymous** value as data where a named one dispatches.
+[FUNCTION-VALUE-SCOPE.0.md](design/FUNCTION-VALUE-SCOPE.0.md)

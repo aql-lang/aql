@@ -243,15 +243,15 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// the bound param in the body is what diverges: the interpreter treats a
 	// bare name as a CALL (arity 0 applies, arity >=1 raises), the compiler
 	// treats a param as a VALUE slot (RegisterLocal) and yields the Function.
-	// Both are internally consistent under different models, and both are
-	// check-clean, so this is a language decision rather than a defect with a
-	// right answer. The middle case (arity >=1 WITH arguments) already agrees on
-	// both engines and is pinned green five times in the main corpus.
+	// RULED 2026-08-15 (maintainer): a bare name is a CALL; `/r` is how you ask
+	// for the value, and arity discrimination is explicitly rejected. So the
+	// INTERPRETER is correct in both rows and the compiler is wrong. The middle
+	// case (arity >=1 WITH arguments) already agrees on both engines and is
+	// pinned green five times in the main corpus.
 	//
-	// Graduation = a maintainer decision on one question: is a Function-bound
-	// name read with no argument available a nullary call, or a value?
-	`def nought fn [[] [Integer] [7]] def grab fn [[f:Function] [Any] [f]] typeof (grab nought)`:          {why: "arity-0 Function param read bare: interpreter applies it, compiler yields the Function", failsWith: "value parity"},
-	`def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)`: {why: "arity-1 Function param read bare with no argument: interpreter raises, compiler yields the Function", failsWith: "parity"},
+	// Graduation = the compiler treats a bare Function-bound name as a call.
+	`def nought fn [[] [Integer] [7]] def grab fn [[f:Function] [Any] [f]] typeof (grab nought)`:          {why: "arity-0 Function param read bare: a bare name is a CALL (ruled 2026-08-15), so applying is correct and the compiler is wrong to yield the Function", failsWith: "value parity"},
+	`def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)`: {why: "arity-1 Function param read bare with no argument: a bare name is a CALL, so raising is correct and the compiler is wrong to yield the Function", failsWith: "parity"},
 
 	// Cross-module fn value in a higher-order word's CLOSURE slot
 	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3). A fn value resolves its free

@@ -14,14 +14,14 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '8597399116252112737');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '6923450101030912485');
 INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
 INSERT INTO input_files VALUES ('../CLI.md', '147469389202745130', 79458);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
 INSERT INTO input_files VALUES ('../basic/go/go.mod', '592614718618454325', 457);
 INSERT INTO input_files VALUES ('../calc/go/go.mod', '6164707914494689882', 605);
 INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221);
-INSERT INTO input_files VALUES ('../cmd/go/go.mod', '3353403068991243004', 4229);
+INSERT INTO input_files VALUES ('../cmd/go/go.mod', '1944156304528717652', 4919);
 INSERT INTO input_files VALUES ('../compiler/go/go.mod', '142593282390199928', 331);
 INSERT INTO input_files VALUES ('../core/go/go.mod', '2316996521694161686', 98);
 INSERT INTO input_files VALUES ('../design/ADR-004-REFINEMENT.0.md', '631969750913133884', 19844);
@@ -34,7 +34,7 @@ INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '760548540237
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
-INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '4503460216283559417', 46593);
+INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '7223964562279472177', 49883);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
 INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '3044536311677551962', 23460);
 INSERT INTO input_files VALUES ('../design/HOT-CODE-LOADING.0.md', '27384681369847472', 19039);

@@ -684,6 +684,15 @@ lambdas. Don't expect to capture caller args; pass them explicitly.
 
 ### Sharp edge: 0-arg lambdas as values vs as calls
 
+> **ADR-016 makes this a DEFECT, not a design.** Arity and origin never
+> change how a function behaves, and this gate keys on both: a 0-arg
+> **anonymous** value is data where a 0-arg **named** one dispatches.
+> The paragraph below describes what the code does today, not what it
+> should do. Do not build on it, and do not add a second exception in
+> its shape. The replacement has to keep `def f ([] => [body])` binding
+> the Function without keying on `Anonymous` — see
+> `design/FUNCTION-VALUE-SCOPE.0.md` §12.4.
+
 An anonymous Function value sitting on the stack with **no args
 available** does NOT auto-invoke — it stays as data, which is what
 `def f ([] => [body])` relies on (def receives the Function, binds f
