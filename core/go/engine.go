@@ -6208,12 +6208,19 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // test is the same one tagReachCollapsedFn uses. Returning the OFFSET rather
 // than a bool keeps the branch out of stepCloseParen, which sits at its
 // cyclomatic cap (NUR038).
+//
+// The value test MIRRORS stepLiteral's dispatch guard exactly — same three
+// clauses, same order — because the invariant is "park iff the re-step would
+// have CALLED it". A looser test (dropping the TFunction check, so a Function
+// reparented to a refined function type also parks) would step past a value
+// stepLiteral would merely have pushed, silently losing its OnPushLit for any
+// installed Recorder. Keep the two in lockstep if either moves.
 func (e *Engine) fnReturnPark(idx, closeIdx int, wasFrameOpen bool) int {
 	if !wasFrameOpen || closeIdx != idx+2 || idx >= e.Tape.Len() {
 		return 0
 	}
 	v := e.Tape.At(idx)
-	if isFnDefValue(v) && !v.Quoted {
+	if v.Parent.Equal(TFunction) && isFnDefValue(v) && !v.Quoted {
 		return 1
 	}
 	return 0

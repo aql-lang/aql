@@ -73,9 +73,11 @@ def inc fn [[n:Integer][Integer][n add 1]]  typeof (inc/r)	Function	…and the p
 #
 #     NOT pinned here: what a USER paren does to such a return. `((h z/r))`
 #     is an open interpreter/compiler divergence (interp 42, compiled the fn
-#     value) — the §2 re-step rule it turns on is itself under revision. See
-#     design/FUNCTION-VALUE-SCOPE.0.md §12.6; do not add a row for it until
-#     that is ruled.
+#     value) — the §2 re-step rule it turns on is itself under revision, so
+#     there is no oracle to pin it against, in this corpus or the frontier
+#     one. Recorded as NUR073 (Pending) so the gap is not mistaken for
+#     coverage; reasoning in design/FUNCTION-VALUE-SCOPE.0.md §12.6. Do not
+#     add a row for it until clause 3 is ruled.
 def z fn [[][Integer][42]]  def h fn [[f:Function][Any][f/r]]  typeof (h z/r)	Function	a /r'd param returned from a body is the fn, not its result
 def z fn [[][Integer][42]]  def h fn [[][Any][z/r]]  typeof (h)	Function	same for a module-scope name — not param-specific
 def inc fn [[n:Integer][Integer][n add 1]]  def h fn [[f:Function][Any][f/r]]  typeof (h inc/r)	Function	arity does not change it (ADR-016)

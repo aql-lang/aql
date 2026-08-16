@@ -1135,8 +1135,17 @@ because it is the one row in 6219 that diverges: interpreter `42`,
 compiled `fn z`. The compiler does not re-step a paren-collapsed
 `Function`; the interpreter does. That divergence is pre-existing and
 unexercised anywhere else in the corpus, and it is precisely what clause
-3 turns on, so pinning either answer now would pre-empt the ruling. The
-`ref.tsv` §8 header records this and says not to add the row.
+3 turns on, so pinning either answer now would pre-empt the ruling.
+
+It has no home in either corpus, which is the point: `lang/spec/*.tsv`
+asserts one outcome, and `lang/spec/frontier/*.tsv` takes the
+**interpreter** as its semantics oracle (`TestFrontierSpecInterp` requires
+every frontier row to pass interpreted) while ledgering only the compile
+status — and here the oracle is the question, since under clause 3 the
+COMPILED answer is the correct one. So it is recorded as **NUR073**
+(Pending), which is what that register is for: a divergence that is never
+lost or silently baselined while its verdict is open. The `ref.tsv` §8
+header points at it and says not to add the row.
 
 Implementing clause 3 was attempted and measured. **The narrow and broad
 readings are not separable by any positional mechanism**, which was not
