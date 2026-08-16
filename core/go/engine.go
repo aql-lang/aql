@@ -6184,6 +6184,48 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 	}
 }
 
+// fnReturnPark reports how far past a collapsed paren's start the pointer must
+// land: 1 when the paren is a fn FRAME delivering a single unquoted Function
+// value as its RETURN, 0 otherwise. Returning a function is not a fresh use of
+// it, so stepCloseParen's rewind must step PAST that value rather than re-step
+// it into a call (design/FUNCTION-VALUE-SCOPE.0.md §12.6; `def h fn
+// [[f:Function] [Any] [f/r]]` returned 7 where it must return the fn value).
+//
+// This is the ParkResult idiom (see spliceMatchResults), which `ref` already
+// uses, and it is deliberately POSITIONAL: inertness is a property of the
+// pointer at one index at one moment, and nothing is stamped on the value.
+// That matters because `/r` is NOT sticky — the parked value must still
+// dispatch at its next use, read back from a map or handed to `apply`. The two
+// value-borne markers nearby are both wrong here: `Quoted` travels with the
+// value and would make it permanently inert, and `ReachGroup` is a barrier
+// hint of the opposite polarity.
+//
+// A USER paren still re-steps (lang/spec/ref.tsv §2) because it carries no
+// FrameOpenInfo — that payload is machine-generated only (NewFrameOpen /
+// NewFrameOpenSpan are its sole constructors), so no source text can forge it,
+// and it is the ONLY thing distinguishing the two collapses. Callers snapshot
+// it before the pair removals destroy the open paren. The exactly-one-survivor
+// test is the same one tagReachCollapsedFn uses. Returning the OFFSET rather
+// than a bool keeps the branch out of stepCloseParen, which sits at its
+// cyclomatic cap (NUR038).
+//
+// The value test MIRRORS stepLiteral's dispatch guard exactly — same three
+// clauses, same order — because the invariant is "park iff the re-step would
+// have CALLED it". A looser test (dropping the TFunction check, so a Function
+// reparented to a refined function type also parks) would step past a value
+// stepLiteral would merely have pushed, silently losing its OnPushLit for any
+// installed Recorder. Keep the two in lockstep if either moves.
+func (e *Engine) fnReturnPark(idx, closeIdx int, wasFrameOpen bool) int {
+	if !wasFrameOpen || closeIdx != idx+2 || idx >= e.Tape.Len() {
+		return 0
+	}
+	v := e.Tape.At(idx)
+	if v.Parent.Equal(TFunction) && isFnDefValue(v) && !v.Quoted {
+		return 1
+	}
+	return 0
+}
+
 // viableConsumesAt reports whether any still-viable signature collects a
 // forward argument at position pos (i.e. pos is within its barrier).
 // Free-function body of resolveForwardArgs' viableConsumes closure,
@@ -7308,6 +7350,12 @@ func (e *Engine) stepCloseParen() error {
 		return e.syntaxError("unmatched closing parenthesis", ")")
 	}
 	wasReachGroup := e.Tape.At(openIdx).ReachGroup
+	// Snapshot BEFORE the pair removals below destroy the open paren. A fn
+	// FRAME's open paren carries FrameOpenInfo (fn_frame.go); a user-written
+	// paren does not. That payload is machine-generated only — the sole
+	// constructors are NewFrameOpen / NewFrameOpenSpan — so no source text can
+	// forge it, and it is the ONLY thing distinguishing the two collapses.
+	wasFrameOpen := IsFrameOpen(e.Tape.At(openIdx))
 
 	// Resolve any forwards inside the paren scope via implicit end.
 	// We loop because resolving a forward may cause re-evaluation.
@@ -7625,7 +7673,12 @@ func (e *Engine) stepCloseParen() error {
 		}
 	}
 
-	e.Pointer = openIdx
+	// Rewind onto the collapsed region so the main loop re-encounters what
+	// survived — then step PAST it when this paren is a fn frame handing back
+	// a Function, which is a return rather than a fresh use (fnReturnPark).
+	// Read here, after the removals and with closeIdx still the pre-removal
+	// index CheckModeParenFnCollapse may have rewritten above.
+	e.Pointer = openIdx + e.fnReturnPark(openIdx, closeIdx, wasFrameOpen)
 	return nil
 }
 
