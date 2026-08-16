@@ -259,6 +259,13 @@ func TestNUR031ModuleDescriptorEquality(t *testing.T) {
 	if ExactEqual(ptrPayload, NewInteger(1)) || DeepEqual(ptrPayload, NewInteger(1)) {
 		t.Error("a host payload must not equal a non-payload")
 	}
+	// The ASYMMETRIC pair — a claims the comparison because ITS body is a
+	// pointer, but b's is not, so there is still nothing to compare it to.
+	// The arm must answer false rather than fall through to an arm that
+	// would read the two payloads some other way.
+	if ExactEqual(ptrPayload, hostPayload) || DeepEqual(ptrPayload, hostPayload) {
+		t.Error("a pointer payload must not equal a contents-only one")
+	}
 	// A nil body is not a pointer either.
 	nilPayload := NewValueRaw(TIdeal, ExtensionPayload{})
 	if ExactEqual(nilPayload, nilPayload) {
