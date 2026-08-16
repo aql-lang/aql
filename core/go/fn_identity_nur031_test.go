@@ -248,3 +248,82 @@ func TestNUR031FnAgainstNonFn(t *testing.T) {
 		t.Fatal("…nor deq to one")
 	}
 }
+
+// ─── PR #377 review (Codex) ───────────────────────────────────────────
+
+// CAPTURES are part of a function's content. canonFnDef renders params,
+// returns and body — not the closure environment — so two closures built
+// by one factory over different arguments render identically and behave
+// entirely differently. Without this, `(make-adder 5)` and
+// `(make-adder 9)` were deq, and `unique` would discard one of them.
+func TestNUR031ClosureCapturesAreContent(t *testing.T) {
+	r, _ := NewRegistry()
+	body := []Value{NewInteger(1)}
+	mk := func(captured Value) FnDefInfo {
+		fd, _ := nur031Fn(t, r, "adder", body).Data.(FnDefInfo)
+		fd.ident = nil // two separate constructions, so canon must answer
+		fd.Captured = []CapturedBinding{{Name: "x", Value: captured}}
+		return fd
+	}
+	five, nine := mk(NewInteger(5)), mk(NewInteger(9))
+	if fnStructurallyEqual(five, nine) {
+		t.Fatal("closures over different captures must NOT be deq")
+	}
+	if !fnStructurallyEqual(five, mk(NewInteger(5))) {
+		t.Fatal("…but equal captures over one body must be")
+	}
+	// A differing capture NAME counts too, not just the value.
+	renamed := mk(NewInteger(5))
+	renamed.Captured = []CapturedBinding{{Name: "y", Value: NewInteger(5)}}
+	if fnStructurallyEqual(five, renamed) {
+		t.Fatal("a differently-NAMED capture is a different environment")
+	}
+	// And an absent environment is not the same as a present one.
+	bare := mk(NewInteger(5))
+	bare.Captured = nil
+	if fnStructurallyEqual(five, bare) {
+		t.Fatal("a closure is not deq to the same body with no captures")
+	}
+}
+
+// The DEFINING SCOPE is content, and a nil Registry is a scope like any
+// other — "wherever this is running", which is not a named module. An
+// earlier `both non-nil` guard admitted the mixed pair, so a
+// module-owned fn and a locally defined one with identical text compared
+// deq although their free words resolve in different registries.
+func TestNUR031NilAndModuleScopesAreDifferentContent(t *testing.T) {
+	r, _ := NewRegistry()
+	body := []Value{NewInteger(1)}
+	owned, _ := nur031Fn(t, r, "f", body).Data.(FnDefInfo)
+	local := owned
+	local.ident = nil
+	local.Registry = nil
+	owned.ident = nil
+	if fnStructurallyEqual(owned, local) {
+		t.Fatal("a module-owned fn and a locally defined one are different content")
+	}
+	other := local
+	if !fnStructurallyEqual(local, other) {
+		t.Fatal("…while two locally defined ones still compare on content")
+	}
+}
+
+// A dispatch aggregate that UNIONS several stacked entries is a
+// composite no single authored function identifies: its lower overloads
+// come from entries the top one never saw. Inheriting the top entry's
+// token there would make two such composites eq although their deeper
+// overloads run different code.
+func TestNUR031CompositeAggregateHasNoIdentity(t *testing.T) {
+	tok := &fnIdent{}
+	one := []FnDefInfo{{ident: tok}}
+	if aggregateIdent(one) != tok {
+		t.Fatal("a sole entry IS the function — its token rides the aggregate")
+	}
+	two := []FnDefInfo{{ident: tok}, {ident: &fnIdent{}}}
+	if aggregateIdent(two) != nil {
+		t.Fatal("a multi-entry union must not inherit the top entry's identity")
+	}
+	if aggregateIdent(nil) != nil {
+		t.Fatal("an empty entry list has no identity either")
+	}
+}

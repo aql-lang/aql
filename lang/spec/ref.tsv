@@ -57,3 +57,27 @@ ref nope	ERROR:undefined_word	ref on an unbound name
 #     a signature_error and had to be grouped as `typeof (inc/r)`.)
 def inc fn [[n:Integer][Integer][n add 1]]  typeof inc/r	Function	bare /r resolves as a forward arg (was the grouping gotcha)
 def inc fn [[n:Integer][Integer][n add 1]]  typeof (inc/r)	Function	…and the paren spelling still agrees
+#
+# §8  A fn body's RETURN is delivered, not re-used
+#     A frame collapsing to a single Function value hands it back; the
+#     frame's own collapse is not a fresh use of it, so it is not invoked
+#     there. This is the ParkResult idiom (`ref`'s own mechanism) applied
+#     to the frame result, and it is POSITIONAL — nothing is stamped on
+#     the value, so the returned reference still dispatches at its next
+#     use (§3 map slot, §4 apply both still hold).
+#     Before this, `[f/r]` returned the CALL'S RESULT (7) rather than the
+#     function — /r silently doing the opposite of what it says.
+#
+#     The argument is handed over with `/r` because passing a function as an
+#     argument requires it; a bare name is a call.
+#
+#     NOT pinned here: what a USER paren does to such a return. `((h z/r))`
+#     is an open interpreter/compiler divergence (interp 42, compiled the fn
+#     value) — the §2 re-step rule it turns on is itself under revision, so
+#     there is no oracle to pin it against, in this corpus or the frontier
+#     one. Recorded as NUR073 (Pending) so the gap is not mistaken for
+#     coverage; reasoning in design/FUNCTION-VALUE-SCOPE.0.md §12.6. Do not
+#     add a row for it until clause 3 is ruled.
+def z fn [[][Integer][42]]  def h fn [[f:Function][Any][f/r]]  typeof (h z/r)	Function	a /r'd param returned from a body is the fn, not its result
+def z fn [[][Integer][42]]  def h fn [[][Any][z/r]]  typeof (h)	Function	same for a module-scope name — not param-specific
+def inc fn [[n:Integer][Integer][n add 1]]  def h fn [[f:Function][Any][f/r]]  typeof (h inc/r)	Function	arity does not change it (ADR-016)

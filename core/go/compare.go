@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 )
 
 // ErrNoComparer is returned by Comparer.Compare implementations that
@@ -720,8 +721,9 @@ func DeepEqual(a, b Value) bool {
 	// this fallback must not pre-empt it. On the eq side there is no such
 	// walk, so that arm lives up in opaqueIdealExactEqual instead.
 	if ap, ok := a.Data.(ExtensionPayload); ok {
-		eq, _ := hostPayloadIdentity(ap, b)
-		return eq
+		if eq, handled := hostPayloadIdentity(ap, b); handled {
+			return eq
+		}
 	}
 
 	// Different types or unsupported — not equal.
@@ -792,39 +794,53 @@ func moduleDescIdentity(av ExtensionPayload, b Value) (bool, bool) {
 	return ok && ad == bd, true
 }
 
-// hostPayloadIdentity compares two SEALED host payloads by their boxed
-// Body — an `IO.open` file handle, a lock, a watcher, an mmap, a query
-// builder (NUR031). These were the last members of the record's
-// fall-through set: not eq to themselves, not deq to themselves.
+// hostPayloadIdentity is REFERENCE identity for a SEALED host payload
+// whose Body is a POINTER — an `IO.open` file handle, a lock, a watcher,
+// an mmap, a query builder (NUR031). These were the last members of the
+// record's fall-through set: not eq to themselves, not deq to themselves.
 //
-// Comparing the box is the only equality the kernel may give them, and
+// Reference identity is the only equality the kernel may give them, and
 // it is the right one: a host handle is an opaque reference, like a
-// timer, so its identity IS its value and eq and deq coincide. What `==`
-// on an `any` means follows the body the host chose — POINTER identity
-// for the pointer bodies every in-tree host boxes, value equality for a
-// comparable value body — and both readings say the same thing about the
-// only property this arm was added to guarantee: a payload equals
-// itself. The Sealed Payload rule holds throughout: the Body is
-// compared, never read into. A host type wanting a structural equality
-// installs the DeepEqualer capability, whose walk runs BEFORE this arm
-// on the deq side.
+// timer, so its identity IS its value and eq and deq coincide. The
+// Sealed Payload rule holds throughout — the pointer is compared, never
+// read through.
 //
-// An uncomparable Body — a bare Go map or slice, which no in-tree host
-// boxes but nothing forbids — panics on `==`. It has no identity to
-// compare, so the honest answer is false, and it must not take the
-// process down: hence the recover, which is the guard and not a
-// fall-through (the arm still reports handled).
-func hostPayloadIdentity(a ExtensionPayload, b Value) (eq bool, handled bool) {
+// The POINTER restriction is the whole contract, not a convenience.
+// `ExtensionPayload` is a value struct, so a Value copy shares nothing
+// but the Body; if the Body is not a reference there is no identity to
+// compare, only its contents — and comparing contents would make two
+// independently constructed payloads `eq`, which is exactly what
+// reference identity must not say. A non-pointer body therefore
+// DECLINES, leaving construction of an equality to the host: a type that
+// wants one installs the DeepEqualer capability, whose walk runs before
+// this arm on the deq side.
+//
+// Declining also removes the `==`-on-`any` panic entirely. A map- or
+// slice-bodied payload is uncomparable in Go and would have crashed the
+// process; it is not a pointer, so it never reaches the comparison.
+func hostPayloadIdentity(a ExtensionPayload, b Value) (bool, bool) {
+	if !isPointerBody(a.Body) {
+		return false, false
+	}
 	bp, ok := b.Data.(ExtensionPayload)
 	if !ok {
 		return false, true
 	}
-	defer func() {
-		if recover() != nil {
-			eq, handled = false, true
-		}
-	}()
+	if !isPointerBody(bp.Body) {
+		return false, true
+	}
 	return a.Body == bp.Body, true
+}
+
+// isPointerBody reports whether a sealed payload's Body is a pointer —
+// the only shape carrying an identity independent of its contents.
+// reflect is the only way to ask this of an `any`; the cost is confined
+// to the equality fall-through, which no hot path reaches.
+func isPointerBody(body any) bool {
+	if body == nil {
+		return false
+	}
+	return reflect.TypeOf(body).Kind() == reflect.Ptr
 }
 
 // opaqueIdealDeepEqual is the `deq` (deep-value) half of NUR031. It
@@ -1128,8 +1144,38 @@ func fnStructurallyEqual(a, b FnDefInfo) bool {
 	if sameFnIdentity(a, b) {
 		return true
 	}
-	if a.Registry != nil && b.Registry != nil && a.Registry != b.Registry {
+	// The DEFINING SCOPE is part of the content, and a nil Registry is a
+	// scope like any other — it means "wherever this is running", which is
+	// not the same place as a named module. Admitting a nil/non-nil pair
+	// here (as an earlier `both non-nil` guard did) let a module-owned fn
+	// and a locally defined one with identical text compare deq although
+	// their free words resolve in different registries.
+	if a.Registry != b.Registry {
+		return false
+	}
+	// CAPTURES are content too. canonFnDef renders params, returns and
+	// body — not the closure environment — so two closures built from one
+	// factory over different arguments have identical canon and entirely
+	// different behaviour. Comparing the captures is what stops
+	// `(make-adder 5)` and `(make-adder 9)` reading as the same function,
+	// and stops `unique` discarding one of them.
+	if !capturedBindingsEqual(a.Captured, b.Captured) {
 		return false
 	}
 	return canonFnDef(a) == canonFnDef(b)
+}
+
+// capturedBindingsEqual compares two closure environments by name and by
+// captured VALUE. Both lists are sorted by name at construction
+// (ComputeCaptures), so a positional walk is a set comparison.
+func capturedBindingsEqual(a, b []CapturedBinding) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || !DeepEqual(a[i].Value, b[i].Value) {
+			return false
+		}
+	}
+	return true
 }

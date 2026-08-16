@@ -260,12 +260,14 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 		return "", DeqUnkeyed
 	}
 
-	// A sealed HOST payload with no capability (NUR031): compared by box
-	// identity, which is not a per-value key the kernel may compute
-	// without reading the payload — so scan pairwise within the host
-	// family. Below the capability arm for the same reason deqFam's twin
-	// branch is.
-	if _, ok := v.Data.(ExtensionPayload); ok {
+	// A sealed HOST payload with no capability (NUR031): compared by
+	// POINTER identity, which is not a per-value key the kernel may
+	// compute without reading the payload — so scan pairwise within the
+	// host family. Below the capability arm for the same reason deqFam's
+	// twin branch is; restricted to pointer bodies for the same reason
+	// hostPayloadIdentity is, so a contents-only payload stays never-equal
+	// rather than being scanned for a match it can never have.
+	if p, ok := v.Data.(ExtensionPayload); ok && isPointerBody(p.Body) {
 		return "", DeqUnkeyed
 	}
 
@@ -373,7 +375,7 @@ func deqFam(v Value) string {
 	// one of them scans in one family. BELOW the capability arm on
 	// purpose — a host type that installed a DeepEqualer keeps its own,
 	// tighter family, and only the payloads with no capability land here.
-	if _, ok := v.Data.(ExtensionPayload); ok {
+	if p, ok := v.Data.(ExtensionPayload); ok && isPointerBody(p.Body) {
 		return "H:Host"
 	}
 	return ""

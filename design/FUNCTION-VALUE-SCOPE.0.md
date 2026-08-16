@@ -797,13 +797,249 @@ with it since the M1 wave.
   `path-modifier.tsv:62-67`, `frontier-chained-apply.tsv:25`,
   `module-parselang.tsv:120`) — so any fix must preserve it.
 
-  Both divergent rows are now in
-  `lang/spec/frontier/frontier-fnparam-deref.tsv`, visible to the gate
-  without asserting an answer. **The decision is one sentence: when a name
-  bound to a `Function` value is read where no argument is available, is
-  that a nullary call or a value?** It is arity-discriminated in practice,
-  so the edit is likely narrow; the cost is re-baselining the spec corpus
-  and the differential gate.
+  Both divergent rows are in
+  `lang/spec/frontier/frontier-fnparam-deref.tsv`.
+
+  **RULED, 2026-08-15 (maintainer): a bare name is a CALL; `/r` is how you
+  ask for the value. Arity discrimination is explicitly rejected**, and
+  the general form is now **ADR-016** — arity and origin never change how
+  a function behaves. That
+  settles both divergent rows without a new rule, and it makes the
+  interpreter the correct engine in each:
+
+  | shape | correct behaviour | interpreter | compiler |
+  |---|---|---|---|
+  | `[f]`, arity 0 | apply | ✅ `Integer` | ❌ `Function` |
+  | `[c]`, arity ≥1 | raise `signature_error` | ✅ raises | ❌ `Function` |
+  | `[c/r]`, arity ≥1 | the value | ✅ `Function` | ✅ `Function` |
+  | `[f/r]`, arity 0 | the value | ❌ `Integer` | ✅ `Function` |
+
+  So this is not a semantic choice at all — it is **two ordinary bugs**,
+  one per engine, and the last row is the one that matters most, because
+  it is the prescribed workaround failing:
+
+  1. **The compiler must treat a bare Function-bound name as a call.** It
+     lowers the param to a unit local (`RegisterLocal`) and reads it as a
+     value, so it neither applies nor raises. Rows 1 and 2 above.
+  2. **`/r` must park a 0-arg fn bound to a PARAM.** Row 4. The scope is
+     narrow and worth stating exactly, because the obvious general claim
+     is wrong — measured:
+
+     | shape | interp | compiled |
+     |---|---|---|
+     | `typeof nought/r` (module level) | `Function` | `Function` |
+     | `[zero/r]` (list, REFERENCE.md's own example) | `[fn zero]` | `[fn zero]` |
+     | `[[f/r]]` — 0-arg param inside a list | `[fn f]` | `[fn zero]` |
+     | `[c/r]` — arity ≥1 param, body residual | `Function` | `Function` |
+     | **`[f/r]` — 0-arg param, body residual** | **`7`** | `Function` |
+
+     So `/r` parks correctly at module level, inside a list, and at arity
+     ≥1. It fails in exactly one place: a **0-arg** Function param that is
+     the body's **residual**. The likely mechanism is the dispatch-mod
+     marker being dropped at the body tail before it can park the value
+     (`stepLiteral` drops an unconsumed marker as a no-op) — but that is a
+     hypothesis, not a measurement, and should be confirmed before fixing.
+
+     `REFERENCE.md:2239` already promises the behaviour this breaks: *"The
+     reference holds at any arity and in any position … `[zero/r]` is
+     `[<function>]` even for a 0-arg `zero` (it is **not** fired)."* So
+     this is a documented-contract violation as well as an ADR-016 one.
+
+  Bug 2 is the sharp one: the documented answer to "how do I pass a
+  function as a value" silently does the opposite in one shape, and it
+  fails *quietly* — `f/r` yields `7` where the author asked for the
+  function.
+
+  **Surveyed 2026-08-16, and it is a family rather than one shape.** The
+  full matrix (interpreter | compiled):
+
+  | shape | interp | compiled | |
+  |---|---|---|---|
+  | `typeof nought/r` (module, 0-arg) | `Function` | `Function` | ok |
+  | `typeof one/r` (module, 1-arg) | `Function` | `Function` | ok |
+  | `[nought/r]` (list literal) | `[fn nought]` | `[fn nought]` | ok |
+  | `typeof N.z/r` (namespace, 0-arg) | `Function` | `Function` | ok |
+  | `typeof N.o/r` (namespace, 1-arg) | `Function` | `Function` | ok |
+  | `[c/r]` (body residual, 1-arg param) | `Function` | `Function` | ok |
+  | `{k: one/r}` → `(m.k)` (1-arg) | `Function` | `Function` | ok |
+  | **`[f/r]`** (body residual, **0-arg** param) | **`7`** | `Function` | interp wrong |
+  | **`{k: nought/r}` → `(m.k)`** (**0-arg**) | **`7`** | *refuses* | interp wrong |
+  | `[[f/r]]` (0-arg param in a list) | `[fn f]` | `[fn nought]` | **name diverges** |
+
+  **RULED (maintainer, 2026-08-16), superseding an earlier reading of this
+  section: `/r` IS NOT STICKY.**
+
+  > `name/r` is sugar for `ref name`. It deactivates exactly **one** use —
+  > the one it is attached to. Any **subsequent** use of the value, in any
+  > context, is function **invocation**. To deactivate again you write
+  > `/r` (or `ref`) again. **The same rule applies at every arity.**
+
+  This is a deliberate boru difference from languages where a bare name is
+  the reference and parentheses mean invocation. boru has no
+  parens-for-invocation, so a bare name **is** invocation and `/r` is the
+  opt-out. An earlier revision of this section recorded a "store-time `/r`
+  persists" reading; that is withdrawn. It would have made every
+  `export "M" {w: w/r}` inert and stranded the argument in `M.inc 5` — 81
+  spec rows use that idiom — and it contradicted `lang/spec/ref.tsv:8-15`,
+  which already states the rule correctly:
+
+  > "The SAME value dispatches normally when it is re-stepped elsewhere:
+  > unwrapped from a paren, retrieved from a map slot, or handed to
+  > `apply`."
+
+  Under the rule each break has a **different** correct engine, which is
+  why they are two fixes rather than one:
+
+  | break | shape | correct | to fix |
+  |---|---|---|---|
+  | 1 | `[f/r]` body residual | **compiled** (`Function`) — the `/r` is at the use, so h returns the value | **interpreter** |
+  | 2 | `{k: z/r}` → `(m.k)` | **interpreter** (`7`) — the `/r` parked the *store*; the read is a fresh use, so it invokes | **compiler** |
+
+  For break 1 the `/r` is doing its job: measured, `[f/r ; 5]` does **not**
+  fire at the word step where `[f ; 5]` does. The call comes later, at the
+  **fn-frame collapse**, which re-steps the body's residual after the
+  marker is gone. A fn body's residual is a *return value*, not a fresh
+  use, so that re-step must not invoke it — while a **user** paren re-step
+  must still fire (`lang/spec/ref.tsv:26` pins `(z/r)` → `42`).
+
+  For break 2 the compiler refuses (*"fn value read from a container
+  auto-dispatches (Stage 3)"*) where the interpreter correctly invokes.
+  Closing that refusal is the fix.
+
+  **RULED in full (maintainer, 2026-08-16).** Four clauses, which together
+  redefine how a function value is held and applied. Each was measured
+  against the engine before being written down here.
+
+  1. **`/r` is sugar for `ref name` and deactivates ONE use.** Any
+     subsequent use, in any context, is invocation. Same at every arity.
+  2. **Passing a function as an argument requires `/r`.** It is what stops
+     the function firing in place.
+  3. **Parens do not re-step.** They place a value (or values) on the
+     forward stack. So `(ref z)` ≡ `ref z` and `(z/r)` ≡ `z/r`.
+  4. **`inc/r 5` is TWO VALUES**, not a call. Applying a held reference is
+     what `apply` is for.
+
+  ### What that changes, measured
+
+  Clause 3 is narrower than it sounds — an ordinary paren is untouched
+  (`(1 add 2)` → `3`). Only a paren whose *result* is a Function moves,
+  because only that result was being re-dispatched:
+
+  | input | today | ruled |
+  |---|---|---|
+  | `z/r` | `fn z` | unchanged |
+  | `(z/r)` | **`42`** | `fn z` |
+  | `ref z` | `fn z` | unchanged |
+  | `(ref z)` | **`42`** | `fn z` |
+  | `inc/r 5` | `fn inc(Integer) 5` | unchanged |
+  | `(inc/r) 5` | **`6`** | `fn inc(Integer) 5` |
+
+  **`lang/spec/ref.tsv` §2 is void.** Its heading — *"The held value
+  dispatches when RE-STEPPED (paren unwrap)"* — is the thing being
+  withdrawn. Rows 25-30 and row 43 change; the header contract at lines
+  11-12 loses the clause "unwrapped from a paren".
+
+  The rest of that file **survives**, which is the check that the rulings
+  are consistent rather than merely decisive:
+
+  - **§3** (map slots, rows 33-34) — a fresh use invokes. Matches the
+    break-2 ruling exactly.
+  - **§4** (`apply`, 37-39) — explicit application, and by clause 4 it
+    becomes the *only* way to apply a held reference.
+  - **§5** lambdas, **§6** negatives — unaffected.
+  - **§7** (58-59) — pins `typeof inc/r` ≡ `typeof (inc/r)`, both
+    `Function`. **That is clause 3 already holding in one corner**, and
+    it is the strongest existing evidence for the ruling.
+
+  ### ADR-011 needs an amendment — flagged, not made
+
+  Clause 2 supersedes ADR-011's final sentence:
+
+  > "…`/r` takes the reference and is no collection barrier; **a bare fn
+  > name before a `Function`-typed slot resolves as a reference.**"
+
+  That clause is why `h zero` and `h zero/r` are indistinguishable today
+  — measured: with a `Function`-typed slot both collect `zero` as a
+  value, while with an `Any` slot the bare name **invokes**
+  (*"h is still waiting for 2 argument(s) when `zero` begins its own
+  dispatch"*). So the slot type, not `/r`, decides — which is precisely
+  what clause 2 rejects.
+
+  ADR entries are added and amended only on explicit maintainer
+  instruction, so this is recorded here rather than edited into `ADR.md`.
+
+  ### Blast radius
+
+  - `lang/spec/ref.tsv`: 7 rows (§2 plus row 43) + the header contract.
+  - `:Function` params across the whole spec corpus: **20 rows, 9 of which
+    pass a bare name** and would need `/r` under clause 2.
+  - Ecosystem: every callback API. `sort`'s `AGENTS.md` already tells users
+    to write `/r` (*"A bare own-word comparator auto-invokes; `/r` passes
+    it as a value"*), so the documentation is already aligned.
+  - The `unused_def` fix landed in `7e98aeb` hooks the `TFunction`
+    intercept clause 2 retires, so it needs rework alongside.
+
+  The pattern is exactly what ADR-016 forbids: a **0-arg** parked fn fires
+  where a **1-arg** one parks. Worth testing before fixing whether the
+  arity-≥1 park is the marker being *honoured* or merely dispatch failing
+  for want of arguments — if the latter, `/r` is not honoured in these
+  positions at all and the fix is larger than a 0-arg special case.
+
+  **A third divergence, found in the same survey and previously unrecorded:
+  `canon` renders a different NAME per engine.** `canon` of a `/r`-parked
+  param gives `[fn f[[][Integer][7]]]` interpreted (the *binding* name) and
+  `[fn nought[[][Integer][7]]]` compiled (the *defining* name) — the same
+  value, different user-visible text, which ADR-015 (canon always
+  round-trips) has an interest in.
+
+  **RULED (maintainer, 2026-08-16): `canon` renders fn values with NO NAME.**
+  That subsumes the divergence rather than picking a winner: with no name
+  on either engine there is nothing to disagree about. The load-bearing
+  check before implementing is that a nameless rendering still
+  **re-parses to a `deq`-equal value**, since ADR-015 admits no exempt
+  kinds.
+
+  **This ruling is not new work — it is NUR031 becoming actionable, and
+  this document's own §12 work is what unblocked it.** NUR031's refined
+  verdict (2026-08-15) already states the same target and the same root
+  cause:
+
+  > the halves are one root cause (the binding name in `FnDefInfo.Name`
+  > drives `eq`, canon and `tcmp` alike), so: BOX `FnDefInfo` for `eq`
+  > (reference) and compare signatures+body for `deq` (NUR011 as written),
+  > **canon renders the ANONYMOUS fn literal**, and **PR #366's
+  > native-callback seam lands first**. Design-unblocked, sequenced
+
+  PR #366 landed as `7e98aeb`. So NUR031's stated prerequisite is
+  satisfied and its sequence says this is next. Two things follow that a
+  reader should not have to rediscover:
+
+  - **The name divergence measured above is a *symptom* of NUR031**, not a
+    separate defect. `FnDefInfo.Name` driving the rendering is exactly the
+    root cause NUR031 names; the interpreter shows the binding name and the
+    compiler the defining name because they disagree about which `Name` the
+    value carries.
+  - **`eq`, `deq` and `tcmp` move with canon.** NUR031 treats them as one
+    change for one reason — the same field feeds all four — so a canon-only
+    fix would leave `eq` still keyed on the binding name and the record
+    still open.
+
+  **ADR-016 names a third, which this note had not caught.**
+  `execFnDefLiteral` (`core/go/engine.go:5271`) gates on
+  `(fnDef.Anonymous || fnDef.Macro) && fwdCount == 0 && len(positions) == 0`
+  → treat as data. That keys on **origin as well as arity**: a 0-arg
+  *anonymous* value alone on the stack is data, where a 0-arg *named* one
+  dispatches. It is load-bearing — the comment records that it is what
+  makes `def f ([] => [body])` bind the Function rather than the body's
+  result — so the replacement must keep that binding working without
+  consulting `Anonymous`. `lang/go/CLAUDE.md`'s "Sharp edge: 0-arg
+  lambdas as values vs as calls" documents it as a design and is now
+  annotated as describing a defect.
+
+  Two earlier readings of this section were wrong and are retracted above
+  and here: the slot does not auto-apply (it is the body deref), and this
+  is not a maintainer decision about semantics (the rule was already
+  `/r`; the engines just fail to honour it).
 
   One contained, decision-free bug fell out of this and **is** fixed here:
   the `TFunction` intercept resolved the name without recording a use, so
@@ -863,3 +1099,98 @@ The lesson worth keeping: the census, differential, refusal-ceiling and
 check-accuracy gates all passed while `TestCompiledCoverage` and
 `TestOnlyMetaFallsBack` did not. Running a subset of `test/go/langspec`
 and generalising to "the gates" is not a verification.
+
+### 12.6 Break 1 is fixed; clause 3 is measured and still forked
+
+**Break 1 (`[f/r]` body residual) is implemented.** One condition and one
+pointer bump in `stepCloseParen` (`core/go/engine.go`): a fn **frame**
+whose collapse leaves exactly one unquoted `Function` value is delivering
+a *return*, so the rewind steps past it instead of re-stepping it into a
+call.
+
+The mechanism is `ParkResult` — `ref`'s own — and the reason it is the
+right one is that it is **positional**: inertness is a property of the
+pointer at one index at one moment, and nothing is stamped on the value.
+That is exactly clause 1 ("`/r` is not sticky"). The two value-borne
+markers nearby are both wrong here: `Quoted` travels with the value and
+would make it permanently inert, and `ReachGroup` is a barrier hint of
+the opposite polarity.
+
+A **user** paren still re-steps, because the two collapses are told apart
+by `FrameOpenInfo` (`core/go/fn_frame.go`), which is machine-generated
+only — `NewFrameOpen` / `NewFrameOpenSpan` are the sole constructors, so
+no source text can forge it.
+
+Pinned as `lang/spec/ref.tsv` §8, three rows: the 0-arg param case, a
+module-scope name (proving it is not param-specific), and a 1-arg case
+(ADR-016). Arguments are handed over with `/r` per clause 2. Measured on
+the full corpus: `TestSpecProd` green, `TestSpecCompiledDifferential`
+6219 rows compiled / **0** mismatches — no pre-existing row moved.
+
+#### The clause-3 fork, now measured rather than posed
+
+A fourth row was drafted — `((h z/r))` → `42`, to pin that the park is
+positional and the returned reference still dispatches — and **dropped**,
+because it is the one row in 6219 that diverges: interpreter `42`,
+compiled `fn z`. The compiler does not re-step a paren-collapsed
+`Function`; the interpreter does. That divergence is pre-existing and
+unexercised anywhere else in the corpus, and it is precisely what clause
+3 turns on, so pinning either answer now would pre-empt the ruling.
+
+It has no home in either corpus, which is the point: `lang/spec/*.tsv`
+asserts one outcome, and `lang/spec/frontier/*.tsv` takes the
+**interpreter** as its semantics oracle (`TestFrontierSpecInterp` requires
+every frontier row to pass interpreted) while ledgering only the compile
+status — and here the oracle is the question, since under clause 3 the
+COMPILED answer is the correct one. So it is recorded as **NUR073**
+(Pending), which is what that register is for: a divergence that is never
+lost or silently baselined while its verdict is open. The `ref.tsv` §8
+header points at it and says not to add the row.
+
+Implementing clause 3 was attempted and measured. **The narrow and broad
+readings are not separable by any positional mechanism**, which was not
+known when the fork was first posed:
+
+- Dropping the frame-only condition (any paren collapsing to a `Function`
+  parks) breaks **every namespace call** — `MathUtil.sqrt 0` — because
+  dot access is lowered to `( MathUtil dot sqrt )` and its re-step *is*
+  the dispatch. Excluding `ReachGroup` fixes that class entirely.
+- With that exclusion the corpus reads **31 failing rows across 9 files**.
+  Seven are `ref.tsv` §2 + row 43, which clause 3 voids by design. The
+  rest are not: `(fn Integer [Integer] [10 add]) 7` and
+  `([n:Integer] => [n add 1]) 5` — **inline application of a function
+  literal** — plus the `(sub2/r) 10 3` family in `modifiers` and `usurp`.
+
+The finding: an inline fn **literal** inside a paren and a `/r`
+**reference** inside a paren reach the close paren in the *same* state —
+a stepped-past `Function` at `openIdx+1`. `/r` (`stepWordRef` →
+`stepLiteral`) and `ref` (`ParkResult`) both just advance the pointer.
+So "only a `/r`/`ref` reference survives its paren" cannot be expressed
+positionally; it needs a transient marker **on the value**, cleared by
+the collapse that consumes it — which is the value-borne mechanism clause
+1 rejects, and which would leak the moment the value is stored.
+
+That leaves two implementable readings, and the choice is a language
+decision, not a defect:
+
+| | `(z/r)` / `(ref z)` | `(inc/r) 5` | `(fn …) 7`, `([n] => […]) 5` |
+|---|---|---|---|
+| today | `42` | `6` | applies |
+| **broad** — no paren re-steps a `Function` | `fn z` ✅ | two values ✅ | **two values** (idiom removed) |
+| **narrow** — only a held reference survives | `fn z` ✅ | two values ✅ | applies |
+
+Broad is what clause 3 says literally and costs the inline-application
+idiom (24 of the 31 rows, spec-covered across `fn-triple`, `modifiers`,
+`usurp`, `recursion`, `apply`, `corpus-core`, `corpus-structures`,
+`module-fmt`). Narrow keeps it but needs the rejected mechanism. Neither
+is a bug fix, so neither is taken here.
+
+**Clause 2 is blocked for a different reason.** It supersedes ADR-011's
+final sentence (§12.4 records the measurement), and ADRs are amended only
+on explicit maintainer instruction — so implementing it would leave an
+Accepted record stating the opposite of the engine. The `unused_def` fix
+in `7e98aeb` hooks the same `TFunction` intercept and reworks with it.
+
+**Break 2** (the compiler's *"fn value read from a container
+auto-dispatches (Stage 3)"* refusal) is untouched and independent of all
+of the above.

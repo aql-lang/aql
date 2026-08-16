@@ -1179,13 +1179,29 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		// aggregate IS the clone's view — a `name/r` reference (ResolveRef
 		// wraps the aggregate) must stay recognisable at export transplant.
 		Extends: top.Extends,
-		// The aggregate is a VIEW of the newest entry's function, not a new
-		// one, so it carries that entry's identity token (NUR031) — as the
-		// rest of the metadata above already does. Without this the rebuilt
-		// Signatures slice would be the only reference left, and it is per
-		// NAME: two names for one function would answer `eq` false.
-		ident: top.ident,
+		// The aggregate carries the newest entry's identity token (NUR031)
+		// ONLY when that entry is the whole function. Without a token here
+		// the rebuilt Signatures slice would be the only reference left,
+		// and it is per NAME — so two names for one function would answer
+		// `eq` false, which is the defect the record opened on.
+		//
+		// With several stacked entries the aggregate is a COMPOSITE that no
+		// single authored function identifies: its lower overloads come
+		// from entries the top one never saw. Inheriting the top token
+		// there would make two composites `eq` whose deeper overloads run
+		// different code, so they get no identity instead — the same answer
+		// a payload with no token gets, and the pre-record behaviour.
+		ident: aggregateIdent(entries),
 	}
+}
+
+// aggregateIdent returns the identity token a dispatch aggregate may
+// inherit: the sole entry's, or none when the union spans several.
+func aggregateIdent(entries []FnDefInfo) *fnIdent {
+	if len(entries) != 1 {
+		return nil
+	}
+	return entries[0].ident
 }
 
 // fnFallbackSig builds the synthetic 0-arg catch-all signature for a

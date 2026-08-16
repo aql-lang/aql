@@ -318,23 +318,25 @@ func TestDeqIndexCapabilityFamiliesDoNotCross(t *testing.T) {
 	}
 }
 
-func TestDeqIndexFallsToBoxIdentityWithoutCapability(t *testing.T) {
-	// The negative direction: with NO DeepEqualer in the chain the value
-	// falls to NUR031's sealed-payload arm — box identity, scanned
-	// pairwise within the host family — rather than to the terminal.
+func TestDeqIndexNeverEqualPreservedWithoutCapability(t *testing.T) {
+	// With NO DeepEqualer in the chain the terminal classification stands.
+	// NUR031's sealed-payload arm does NOT rescue this fixture: its Body
+	// is a STRING, and reference identity needs a reference — a payload
+	// whose body is not a pointer has only contents, and comparing those
+	// would make two independently built payloads eq. So it declines, and
+	// the pre-capability answer is what remains.
 	a, b := capDeqPair(t, "PlainIndexIdeal", nil)
-	if _, class := DeqKey(a); class != DeqUnkeyed {
-		t.Errorf("DeqKey class = %v, want DeqUnkeyed for a plain host payload", class)
+	if _, class := DeqKey(a); class != DeqNeverEqual {
+		t.Errorf("DeqKey class = %v, want DeqNeverEqual for a non-pointer host payload", class)
 	}
 	var idx DeqIndex
 	idx.Add(a)
-	// Distinct payloads still do not match — box identity, not structure.
 	if got := idx.FirstMatch(b); got != -1 {
 		t.Errorf("FirstMatch = %d, want -1", got)
 	}
-	// …but a payload finds ITSELF, which is what the record required.
-	if got := idx.FirstMatch(a); got != 0 {
-		t.Errorf("FirstMatch(self) = %d, want 0", got)
+	// Reflexive probe included: never-equal means equal to NOTHING.
+	if got := idx.FirstMatch(a); got != -1 {
+		t.Errorf("FirstMatch(self) = %d, want -1", got)
 	}
 }
 
