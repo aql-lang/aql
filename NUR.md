@@ -69,7 +69,7 @@ keep the two in sync in the same commit.
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
 | [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled. Not pinnable in the spec corpus because the ORACLE is what the open `/r` clause-3 ruling decides — the frontier corpus needs the interpreter to be right, and here that is the question | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
 | [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
-| [NUR076](#nur076) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
+| [NUR077](#nur077) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2030,17 +2030,30 @@ would baseline a behaviour already ruled against; pinning `fn z` would
 implement the ruling by the back door.
 
 **What blocks the fix.** Clause 3 was implemented and measured on PR #375
-(`design/FUNCTION-VALUE-SCOPE.0.md` §12.6). The finding: the narrow
-reading ("only a `/r`/`ref` reference survives its paren") and the broad
-one ("no paren re-steps a Function") are **not separable by any
-positional mechanism** — an inline fn literal and a `/r` reference reach
-the close paren in the identical state, a stepped-past `Function` at
-`openIdx+1`, because `stepWordRef` and `ParkResult` both merely advance
-the pointer. Broad costs 24 spec rows of inline function application
-(`(fn Integer [Integer] [10 add]) 7`, `([n:Integer] => [n add 1]) 5`);
-narrow needs a transient marker ON the value, which clause 1 (`/r` is not
-sticky) rejects. Whichever is chosen closes this record, since both
-readings give `fn z`.
+(`design/FUNCTION-VALUE-SCOPE.0.md` §12.6), and **re-measured 2026-08-17**
+with two corrections — see `design/FN-VALUE-OPEN-WORK.0.md` §2, which is
+now the current account.
+
+The two readings are **not separable *positionally*** — an inline fn
+literal and a `/r` reference reach the close paren in bit-identical
+state, because `stepWordRef` and `ParkResult` both merely advance the
+pointer. But `FnDefInfo.Name` **does** separate them (a reference carries
+the name it resolved; a literal does not), and `Name` is intrinsic rather
+than the transient value-borne marker clause 1 rejects. Measured:
+narrow-by-name costs 24 corpus rows, broad costs 30, and narrow recovers
+all 6 inline-application rows with no new failures. So the earlier
+conclusion that narrow needs a rejected mechanism is **withdrawn**.
+
+**Correction to this record.** It previously said "whichever is chosen
+closes this record, since both readings give `fn z`". Measured: both give
+**`fn f`**; the compiler gives `fn z`. Clause 3 closes the *value*
+divergence — under narrow, `canon`, `typeof` and `deq` all agree with the
+compiled answer — but a **name-rendering** difference survives, because
+`f/r` resolves the *param* name through `ResolveRef` while the compiler
+carries the defining name. That residue belongs to NUR074's class (canon
+already strips the name; the residual renderer does not), so this record
+is discharged by clause 3 **plus** a row pinned via `canon`/`typeof`
+rather than on the bare residual.
 
 **Verdict:** none yet. Waiting on the clause-3 ruling; it is a language
 decision, not a defect to be picked by an implementer. Meanwhile the row
@@ -2130,7 +2143,7 @@ appearing to close the function-canon story.
 
 ---
 
-## NUR076 — A StackForm can call a word but cannot apply a function value {#nur076}
+## NUR077 — A StackForm can call a word but cannot apply a function value {#nur077}
 
 **Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** fixing the
 `OnCall` frame-skeleton over-count — the round-trip contract held for every

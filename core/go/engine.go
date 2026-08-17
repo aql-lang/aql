@@ -6118,7 +6118,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	tokens = append(tokens, NewCloseParen())
 
 	// Report the application to an installed Recorder with an EMPTY name,
-	// which stackform.Replayable refuses (NUR076).
+	// which stackform.Replayable refuses (NUR077).
 	//
 	// This splice path bypasses execMatch entirely, so without any event a fn
 	// VALUE applied off a container or a param produced NO op at all and the

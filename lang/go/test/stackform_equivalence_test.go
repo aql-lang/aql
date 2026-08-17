@@ -297,7 +297,7 @@ func TestStackFormEquivalence_UserFunctions(t *testing.T) {
 // container — is not expressible: `Call{Name, Arity}` re-invokes by name and
 // does not consume a receiver, while an application consumes the fn value the
 // stack already holds. Recording it as a Call would strand that value; the op
-// vocabulary needs an apply-style Op it does not have (NUR076).
+// vocabulary needs an apply-style Op it does not have (NUR077).
 //
 // Before this, these silently evaluated to the FUNCTION rather than its
 // result — the same class of quiet wrongness the over-count caused, and the
