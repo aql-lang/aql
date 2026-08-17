@@ -2528,7 +2528,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 		// DATA it is a legitimate arrival for a pending forward, so no
 		// barrier commit here.
 		e.Tape.Set(e.Pointer, v)
-		if e.recorder != nil && IsRecordableLiteral(v) {
+		if e.recorder != nil && !e.inFnFrame() && IsRecordableLiteral(v) {
 			e.recorder.OnPushLit(v)
 		}
 		e.Pointer++
@@ -2649,7 +2649,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	// resolved function (that is what a bare word does). The value
 	// stays a plain Function, so it still dispatches when later stepped
 	// (e.g. `get` for `pkg.fn` / `m.fn arg`, or a bare word).
-	if e.recorder != nil && IsRecordableLiteral(v) {
+	if e.recorder != nil && !e.inFnFrame() && IsRecordableLiteral(v) {
 		e.recorder.OnPushLit(v)
 	}
 	e.Pointer++
@@ -3511,7 +3511,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return e.stampErrPos(e.maybeAddFnShapeHint(err))
 	}
 	if e.recorder != nil {
-		e.recorder.OnCall(match.Name, n, len(results))
+		e.recordDispatch(match.Name, n, results)
 	}
 
 	// Stamp handler-produced ReturnCheck markers and fresh Function
@@ -3955,7 +3955,7 @@ func (e *Engine) stepLiteral() error {
 		// Record the literal-push event for any installed Recorder.
 		// Skip engine-internal control values (markers, the recorded
 		// FnDef-as-data above is handled by OnCall when it dispatches).
-		if e.recorder != nil && IsRecordableLiteral(val) {
+		if e.recorder != nil && !e.inFnFrame() && IsRecordableLiteral(val) {
 			e.recorder.OnPushLit(val)
 		}
 		e.Pointer++
@@ -4126,7 +4126,7 @@ func (e *Engine) stepLiteral() error {
 		// Stack args fired OnPushLit earlier when their source
 		// literals reached the pointer (via the bare-stack branch
 		// in stepLiteral). Only the forward args need this hook.
-		if e.recorder != nil && fwd.CollectedArgs > 0 {
+		if e.recorder != nil && !e.inFnFrame() && fwd.CollectedArgs > 0 {
 			start := funcIdx - fwd.CollectedArgs
 			for i := start; i < funcIdx; i++ {
 				if i >= 0 && i < e.Tape.Len() {
@@ -5466,6 +5466,83 @@ func IsRecordableLiteral(v Value) bool {
 	return true
 }
 
+// inFnFrame reports whether the pointer currently sits INSIDE a fn frame —
+// i.e. an unmatched frame-open paren lies before it. Recorder events fired
+// from in there are a callee's internals, not the caller's strict-stack
+// program, so every recorder site suppresses on it (design/PBT-PLAN.10.md:
+// a `Call` is one Op per dispatch, with bodies belonging to a nested Quote,
+// never to the top level).
+//
+// Deliberately COMPUTED FROM THE TAPE rather than tracked in a counter.
+// A counter has to be incremented where a frame is spliced and decremented
+// where it collapses, and those are not balanced: TCO REPLACES a frame with
+// another (one open, one close, no nesting), an error unwinds out of a frame
+// without ever reaching its close paren, and the step limit and tape-growth
+// ceiling both abandon a frame mid-flight. A counter that mis-tracks on any
+// of those leaves suppression latched on and silently truncates the rest of
+// the form — the exact failure mode this function exists to end. Reading the
+// tape re-derives the answer from scratch at every event, so it cannot
+// desynchronise.
+//
+// The scan is O(pointer) and runs ONLY when a recorder is installed — every
+// call site guards on `e.recorder != nil` first, and Go's && short-circuits,
+// so an ordinary Run never executes it. The two production recorder consumers
+// (`Debug.disasm`, the PBT gen-program shrinker) both run small programs.
+func (e *Engine) inFnFrame() bool {
+	depth := 0
+	for i := e.Pointer - 1; i >= 0; i-- {
+		v := e.Tape.At(i)
+		if IsCloseParen(v) {
+			depth++
+			continue
+		}
+		if IsOpenParen(v) {
+			if depth > 0 {
+				depth--
+				continue
+			}
+			if IsFrameOpen(v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// recordDispatch reports one dispatch to an installed Recorder, choosing the
+// `returns` count the recorder's skip accounting actually needs.
+//
+// For a NATIVE, `results` is the handler's return values: the main loop
+// re-encounters each one at the pointer and fires OnPushLit, so the recorder
+// must skip exactly that many — `len(results)` is right.
+//
+// For a BORU FN, `results` is the spliced fn-frame SKELETON (frame-open paren,
+// bound arg cells, body tokens, teardown), which is not the return count at
+// all — a 1-arg/1-return fn splices eight tokens. Passing that through poisoned
+// the skip counter and swallowed unrelated later literals: `def z fn
+// [[][Integer][42]] z 99` recorded a form that dropped the 99, and the PBT
+// shrinker consequently reported counterexamples its generator cannot produce.
+// A frame's return values are accounted for elsewhere — stepCloseParen's
+// RecorderSkipper hook skips the survivors when the frame collapses — so the
+// right count HERE is zero.
+//
+// The discriminator is the spliced tokens themselves, NOT `Sig.FnFrame()`,
+// which is neither necessary nor sufficient: buildFnBodyHandler's
+// foreign-registry early return (core_helpers.go) runs a module export's body
+// in a sub-engine and returns real VALUES while FnFrame stays non-nil, so
+// keying on the sig would mis-account the hottest module-call path.
+func (e *Engine) recordDispatch(name string, arity int, results []Value) {
+	if e.inFnFrame() {
+		// A callee's own dispatch. The enclosing Call already stands for it.
+		return
+	}
+	if len(results) > 0 && IsFrameOpen(results[0]) {
+		e.recorder.OnCall(name, arity, 0)
+		return
+	}
+	e.recorder.OnCall(name, arity, len(results))
+}
+
 // trivialDelegationTarget reports the inner native name a wrapper FnSig
 // purely delegates to — body of the form `[Word(inner)]` with all-
 // unnamed Params — and whether the sig has that shape at all. Unlike
@@ -6021,6 +6098,23 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		EvalResidual:   !anonymous || BodyEvalsResidual(sig.Body()),
 	})
 	tokens = append(tokens, NewCloseParen())
+
+	// Report the application to an installed Recorder with an EMPTY name,
+	// which stackform.Replayable refuses (NUR074).
+	//
+	// This splice path bypasses execMatch entirely, so without any event a fn
+	// VALUE applied off a container or a param produced NO op at all and the
+	// recorded form silently dropped the call — replaying to the function
+	// itself instead of its result. Refusing is the fix; recording a real
+	// Call is not, EVEN when the value carries a name. `Call{Name, Arity}`
+	// re-invokes by name and does not consume a receiver, whereas an
+	// application consumes the fn value the stack already holds — so a named
+	// Call would strand that value and produce it twice. Expressing this
+	// faithfully needs an apply-style Op the vocabulary does not have; until
+	// it does, the honest form is one that refuses rather than one that lies.
+	if e.recorder != nil && !e.inFnFrame() {
+		e.recorder.OnCall("", nArgs, 0)
+	}
 
 	if len(indices) == nArgs && nArgs > 0 {
 		firstArgIdx := indices[0]
@@ -7644,14 +7738,25 @@ func (e *Engine) stepCloseParen() error {
 	// stepCloseParen complexity cap (NUR038).
 	e.tagReachCollapsedFn(openIdx, closeIdx, wasReachGroup)
 
+	// Computed once: the park drives BOTH the rewind below and the recorder's
+	// skip count, and the two must agree. Read here — after the pair removals,
+	// with closeIdx still the pre-removal index CheckModeParenFnCollapse may
+	// have rewritten above.
+	park := e.fnReturnPark(openIdx, closeIdx, wasFrameOpen)
+
 	// Recorder hook: the values that survived inside the paren will
 	// be re-encountered by the main loop after we set pointer back
 	// to openIdx (below). They were already emitted to the recorder
 	// during the in-paren execution (via stepLiteral or via execMatch
 	// for handler results), so tell a SkipRecorder to ignore the
 	// next round.
+	// A PARKED return is the one survivor the rewind steps PAST, so it is
+	// never re-encountered and must not be skipped — otherwise the pending
+	// skip swallows the next real literal instead. (Raised on PR #375; it was
+	// unobservable until the frame-skeleton over-count above was fixed,
+	// because that over-count kept the counter far from zero.)
 	if skipper, ok := e.recorder.(RecorderSkipper); ok && e.recorder != nil {
-		survived := 0
+		survived := -park
 		// Contents now sit at [openIdx .. closeIdx-2] inclusive.
 		// (closeIdx was the position of the CloseParen BEFORE the
 		// pair removals; both removals happened above so the
@@ -7674,11 +7779,9 @@ func (e *Engine) stepCloseParen() error {
 	}
 
 	// Rewind onto the collapsed region so the main loop re-encounters what
-	// survived — then step PAST it when this paren is a fn frame handing back
-	// a Function, which is a return rather than a fresh use (fnReturnPark).
-	// Read here, after the removals and with closeIdx still the pre-removal
-	// index CheckModeParenFnCollapse may have rewritten above.
-	e.Pointer = openIdx + e.fnReturnPark(openIdx, closeIdx, wasFrameOpen)
+	// survived — stepping past a fn frame's Function return, which is a
+	// delivery rather than a fresh use (fnReturnPark).
+	e.Pointer = openIdx + park
 	return nil
 }
 

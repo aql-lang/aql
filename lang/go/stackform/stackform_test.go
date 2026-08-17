@@ -147,3 +147,50 @@ func itoa(n int64) string {
 	}
 	return string(b[i:])
 }
+
+// Replayable is the guard that stops a form the recorder could not capture
+// faithfully from being replayed to a different answer than the program it
+// came from (NUR074). Its arms are unit-tested here because two of them are
+// unreachable from Compile: a nil form, and a Quote body — which the recorder
+// never emits today (see the package doc), so only a hand-built form reaches
+// the recursion.
+func TestReplayable(t *testing.T) {
+	named := Call{Name: "add", Arity: 2}
+	unnamed := Call{Name: "", Arity: 1}
+
+	t.Run("nil form is replayable", func(t *testing.T) {
+		if err := Replayable(nil); err != nil {
+			t.Errorf("Replayable(nil) = %v, want nil — an empty program replays as itself", err)
+		}
+	})
+
+	t.Run("named calls are replayable", func(t *testing.T) {
+		f := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(1)}, named}}
+		if err := Replayable(f); err != nil {
+			t.Errorf("Replayable = %v, want nil — a word call re-invokes by name", err)
+		}
+	})
+
+	t.Run("an unnamed call is refused", func(t *testing.T) {
+		f := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(1)}, unnamed}}
+		if err := Replayable(f); err != ErrUnnamedApply {
+			t.Errorf("Replayable = %v, want ErrUnnamedApply — an applied fn value has no name to re-invoke", err)
+		}
+	})
+
+	t.Run("an unnamed call NESTED in a Quote is refused", func(t *testing.T) {
+		// The recursion arm: a quoted sub-program is still replayed, so an
+		// unreplayable op inside one is just as fatal as at the top level.
+		f := &StackForm{Ops: []Op{Quote{Body: &StackForm{Ops: []Op{unnamed}}}}}
+		if err := Replayable(f); err != ErrUnnamedApply {
+			t.Errorf("Replayable = %v, want ErrUnnamedApply — a Quote body is not exempt", err)
+		}
+	})
+
+	t.Run("a Quote of replayable ops is fine", func(t *testing.T) {
+		f := &StackForm{Ops: []Op{Quote{Body: &StackForm{Ops: []Op{named}}}}}
+		if err := Replayable(f); err != nil {
+			t.Errorf("Replayable = %v, want nil — the recursion must not refuse everything it walks", err)
+		}
+	})
+}

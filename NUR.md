@@ -68,6 +68,7 @@ keep the two in sync in the same commit.
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
 | [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled. Not pinnable in the spec corpus because the ORACLE is what the open `/r` clause-3 ruling decides — the frontier corpus needs the interpreter to be right, and here that is the question | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
+| [NUR074](#nur074) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2263,3 +2264,62 @@ readings give `fn z`.
 decision, not a defect to be picked by an implementer. Meanwhile the row
 is deliberately absent from every corpus, and `lang/spec/ref.tsv` §8's
 header says so in place, so the gap is not mistaken for coverage.
+
+---
+
+## NUR074 — A StackForm can call a word but cannot apply a function value {#nur074}
+
+**Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** fixing the
+`OnCall` frame-skeleton over-count — the round-trip contract held for every
+NAMED call once that landed, and the residue was exactly this shape
+
+**Rule:** `stackform.Eval(Compile(reg, src))` produces the same final stack as
+running `src` directly (`lang/go/stackform/eval.go`). Uniformly: the same
+promise for every program, not for a favoured subset.
+
+**Divergence:** the op vocabulary has one invocation form, `Call{Name,
+Arity}`, and `Flatten` replays it as a stack-only WORD. That can express
+calling a bound word. It cannot express **applying a function value**:
+
+```
+([n:Integer] => [n add 1]) 5                  # an inline lambda
+def fs [ fn [[n:Integer][Integer][n add 1]] ] ((fs get 0) 5)
+def m {f: (fn [[n:Integer][Integer][n add 1]])} (m.f 5)
+```
+
+Two independent obstacles, and the second is why a name would not rescue it:
+
+1. An **anonymous** function has no name for `Call` to reference.
+2. A `Call` does **not consume a receiver**, while an application consumes the
+   fn value the stack already holds. So even for a value that *does* carry a
+   name — `def m {f: inc/r}` then `m.f 5` — replaying it as `Call{inc}` leaves
+   the function stranded on the stack and produces it twice.
+
+**What it cost, before this record existed.** These forms replayed to the
+FUNCTION instead of its result, silently. `lang/go/modules/test.go`'s
+gen-program shrinker decides Fail/Pass by replaying the form, so a program in
+this class could report a "minimal counterexample" its own generator cannot
+produce.
+
+**Interim:** `Eval` REFUSES rather than replays. The engine records these
+applications with an EMPTY `Call` name (`execFnDefSig`'s splice, which bypasses
+`execMatch` entirely and previously recorded nothing at all), and
+`stackform.Replayable` rejects the form with `ErrUnnamedApply`. Loud beats
+quietly wrong: the shrinker falls back to value-level shrinking, which is what
+it already did for these programs, rather than trusting a bogus form. Pinned
+by `TestStackFormRefusesFunctionValueApplication`
+(`lang/go/test/stackform_equivalence_test.go`).
+
+One shape is still only *incidentally* loud: a fn read from a container and
+dispatched through `execMatch` (`def inc … def m {f: inc/r} (m.f 5)`) records
+`Call{dot}` + `Call{inc}`, and the stranded function surfaces at replay as
+`uncalled_function` rather than as this refusal. Same root cause; it needs the
+same fix.
+
+**Verdict:** none yet. The shape of one is clear — an apply-style Op that
+consumes the fn value from the stack, which `Flatten` can serialise using the
+existing `apply` word (`lang/spec/ref.tsv` §4 already pins `5 inc/r apply`) —
+but it is a vocabulary addition, not a defect fix, and the recorder needs a
+seam that carries the applied VALUE rather than a name. `Quote`/`DoEval` are
+reserved in the vocabulary and unused; whether the apply case folds into
+`DoEval` or earns its own Op is part of the decision.
