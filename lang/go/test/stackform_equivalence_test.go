@@ -10,6 +10,7 @@
 package test
 
 import (
+	"errors"
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
@@ -73,11 +74,46 @@ func stacksEqual(a, b []core.Value) bool {
 		return false
 	}
 	for i := range a {
-		if !core.DeepEqual(a[i], b[i]) {
+		// Functions are checked FIRST and never fall through to the plain deq
+		// below. Ordering is load-bearing: `deq` returns true for two
+		// Functions differing only in Quoted, so a leading DeepEqual would
+		// short-circuit past the one property this suite most needs to see.
+		if isFn(a[i]) && isFn(b[i]) {
+			if fnValuesEqual(a[i], b[i]) {
+				continue
+			}
 			return false
 		}
+		if core.DeepEqual(a[i], b[i]) {
+			continue
+		}
+		return false
 	}
 	return true
+}
+
+func isFn(v core.Value) bool {
+	return v.Parent != nil && v.Parent.Equal(core.TFunction)
+}
+
+// fnValuesEqual compares two Function values for round-trip purposes.
+//
+// Since NUR031's fix landed, `deq` handles functions properly: it is
+// reflexive, and it discriminates closure environments — verified, two
+// closures capturing `x=1` and `x=2` are NOT DeepEqual. So the structural
+// half needs nothing hand-written any more, and the earlier canon-based
+// fallback here is gone with it.
+//
+// What deq still does not see is `Quoted`, and that omission is defensible on
+// its own terms — the flag is a transient marker, not part of a value's
+// identity. It makes deq the wrong SOLE test here all the same, because that
+// flag is precisely what the replay borrows to keep a Function inert and has
+// to give back: `/r` parks positionally and stamps nothing, so a mark left in
+// place returns a permanently-inert copy of a live value. Canon cannot stand
+// in either — its Function branch renders name, params, returns and body, and
+// never the flag.
+func fnValuesEqual(a, b core.Value) bool {
+	return a.Quoted == b.Quoted && core.DeepEqual(a, b)
 }
 
 // TestStackFormEquivalence_Arithmetic covers integer + decimal
@@ -199,5 +235,112 @@ func TestStackFormPrettyRoundTrip(t *testing.T) {
 					stackform.Pretty(form1), pretty, stackform.Pretty(form2))
 			}
 		})
+	}
+}
+
+// TestStackFormEquivalence_UserFunctions is the case the suite above was
+// missing entirely: every one of its programs calls a NATIVE word, so the
+// contract went untested for a boru `fn` and the recorder broke it for
+// years without a red test.
+//
+// It broke two ways at once. The frame-splice OVER-COUNT: OnCall was handed
+// `len(results)`, which for a boru fn is the spliced fn-frame skeleton (eight
+// tokens for a 1-arg/1-return fn), not the return count — so the recorder's
+// skip counter swallowed unrelated later literals, and `z 99` recorded a form
+// that dropped the 99. And the BODY LEAK: the callee's own dispatches were
+// recorded at top level, so the form re-ran fragments of the body after the
+// call had already run it.
+//
+// The trailing-literal rows are the over-count's direct witness: a value
+// AFTER the call is exactly what an inflated skip count eats.
+func TestStackFormEquivalence_UserFunctions(t *testing.T) {
+	const z = `def z fn [[] [Integer] [42]] `
+	const inc = `def inc fn [[n:Integer] [Integer] [n add 1]] `
+
+	for _, src := range []string{
+		z + `z`,
+		z + `z 99`,          // over-count witness: 0-arg
+		inc + `inc 5`,       // body leak witness: add/__pa/undef leaked
+		inc + `(inc 5) 99`,  // over-count witness: 1-arg
+		inc + `inc (inc 5)`, // nesting
+		inc + `def twice fn [[n:Integer] [Integer] [inc (inc n)]] twice 5`,
+		`def p fn [[] [Integer Integer] [1 2]] p`, // multi-return
+		`def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]] fact 4`,
+		// A fn handed to a fn as a Function param — the callback shape every
+		// boru library uses — with the returned reference held by /r.
+		inc + `def ap fn [[f:Function n:Integer] [Integer] [f n]] ap inc/r 5`,
+		z + `def h fn [[f:Function] [Any] [f/r]] h z/r 99`,
+		// A `/r` reference left as the RESIDUAL, not consumed by a later call.
+		// Flatten has to mark a Function PushLit Quoted to stop the replay
+		// dispatching it, and Quoted is STICKY where `/r` is positional — so
+		// without Eval undoing the mark this row returns a permanently-inert
+		// copy of a value the direct run returns live. `canon` omits the flag,
+		// so only stacksEqual's explicit check sees it (PR #378 review, P1).
+		inc + `inc/r`,
+		z + `z/r`,
+		// A CLOSURE as the residual: same shape, but the value also carries a
+		// captured environment. canon deliberately omits Captured too, so this
+		// row is only meaningful because stacksEqual compares it (P2).
+		`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] (mk 5)`,
+	} {
+		t.Run(src, func(t *testing.T) {
+			equivalentRun(t, src)
+		})
+	}
+}
+
+// TestStackFormRefusesFunctionValueApplication pins the NEGATIVE half: a
+// program the recorder cannot capture faithfully must be REFUSED, never
+// replayed to a different answer than it was recorded from.
+//
+// Applying a function VALUE — an inline lambda, or a fn read out of a
+// container — is not expressible: `Call{Name, Arity}` re-invokes by name and
+// does not consume a receiver, while an application consumes the fn value the
+// stack already holds. Recording it as a Call would strand that value; the op
+// vocabulary needs an apply-style Op it does not have (NUR076).
+//
+// Before this, these silently evaluated to the FUNCTION rather than its
+// result — the same class of quiet wrongness the over-count caused, and the
+// reason the PBT shrinker could report a counterexample its generator cannot
+// produce.
+func TestStackFormRefusesFunctionValueApplication(t *testing.T) {
+	for _, src := range []string{
+		`([n:Integer] => [n add 1]) 5`,
+		`def fs [ fn [[n:Integer] [Integer] [n add 1]] ] ((fs get 0) 5)`,
+		`def m {f: (fn [[n:Integer] [Integer] [n add 1]])} (m.f 5)`,
+	} {
+		t.Run(src, func(t *testing.T) {
+			r := stackformReg(t)
+			tokens, err := parser.Parse(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, form, err := stackform.Compile(r, tokens)
+			if err != nil {
+				t.Fatalf("compile %q: %v", src, err)
+			}
+			if err := stackform.Replayable(form); !errors.Is(err, stackform.ErrUnnamedApply) {
+				t.Errorf("%q: Replayable = %v, want ErrUnnamedApply\n  form: %s",
+					src, err, stackform.Pretty(form))
+			}
+			if _, err := stackform.Eval(stackformReg(t), form); !errors.Is(err, stackform.ErrUnnamedApply) {
+				t.Errorf("%q: Eval = %v, want it to refuse rather than replay", src, err)
+			}
+		})
+	}
+
+	// POSITIVE control: an ordinary named call in the same suite must stay
+	// replayable, so the refusal cannot silently widen to everything.
+	r := stackformReg(t)
+	tokens, err := parser.Parse(`def inc fn [[n:Integer] [Integer] [n add 1]] inc 5`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, form, err := stackform.Compile(r, tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stackform.Replayable(form); err != nil {
+		t.Errorf("a named fn call must stay replayable, got %v", err)
 	}
 }

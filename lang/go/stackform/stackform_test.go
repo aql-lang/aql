@@ -147,3 +147,82 @@ func itoa(n int64) string {
 	}
 	return string(b[i:])
 }
+
+// Replayable is the guard that stops a form the recorder could not capture
+// faithfully from being replayed to a different answer than the program it
+// came from (NUR076). Its arms are unit-tested here because two of them are
+// unreachable from Compile: a nil form, and a Quote body — which the recorder
+// never emits today (see the package doc), so only a hand-built form reaches
+// the recursion.
+func TestReplayable(t *testing.T) {
+	named := Call{Name: "add", Arity: 2}
+	unnamed := Call{Name: "", Arity: 1}
+
+	t.Run("nil form is replayable", func(t *testing.T) {
+		if err := Replayable(nil); err != nil {
+			t.Errorf("Replayable(nil) = %v, want nil — an empty program replays as itself", err)
+		}
+	})
+
+	t.Run("named calls are replayable", func(t *testing.T) {
+		f := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(1)}, named}}
+		if err := Replayable(f); err != nil {
+			t.Errorf("Replayable = %v, want nil — a word call re-invokes by name", err)
+		}
+	})
+
+	t.Run("an unnamed call is refused", func(t *testing.T) {
+		f := &StackForm{Ops: []Op{PushLit{V: core.NewInteger(1)}, unnamed}}
+		if err := Replayable(f); err != ErrUnnamedApply {
+			t.Errorf("Replayable = %v, want ErrUnnamedApply — an applied fn value has no name to re-invoke", err)
+		}
+	})
+
+	t.Run("an unnamed call NESTED in a Quote is refused", func(t *testing.T) {
+		// The recursion arm: a quoted sub-program is still replayed, so an
+		// unreplayable op inside one is just as fatal as at the top level.
+		f := &StackForm{Ops: []Op{Quote{Body: &StackForm{Ops: []Op{unnamed}}}}}
+		if err := Replayable(f); err != ErrUnnamedApply {
+			t.Errorf("Replayable = %v, want ErrUnnamedApply — a Quote body is not exempt", err)
+		}
+	})
+
+	t.Run("a Quote of replayable ops is fine", func(t *testing.T) {
+		f := &StackForm{Ops: []Op{Quote{Body: &StackForm{Ops: []Op{named}}}}}
+		if err := Replayable(f); err != nil {
+			t.Errorf("Replayable = %v, want nil — the recursion must not refuse everything it walks", err)
+		}
+	})
+}
+
+// A Function pushed inside a Quote body needs the same inert-then-restored
+// treatment as one at the top level, so flattenStamped merges the nested
+// body's stamped set into its own. Without the merge, Eval would leave a
+// nested reference permanently Quoted — the P1 defect, one level down.
+//
+// Hand-built because the recorder never emits Quote today (see the package
+// doc); the vocabulary reserves it, and this keeps the recursion honest for
+// when it does.
+func TestFlattenStampsThroughQuote(t *testing.T) {
+	fn := core.NewFunction(core.FnDefInfo{Name: "held"})
+	if fn.Quoted {
+		t.Fatal("fixture must start unquoted")
+	}
+
+	form := &StackForm{Ops: []Op{Quote{Body: &StackForm{Ops: []Op{PushLit{V: fn}}}}}}
+	tokens, stamped := flattenStamped(form)
+
+	if len(stamped) != 1 {
+		t.Errorf("stamped = %v, want the nested Function — Eval cannot restore what it is not told about", stamped)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("tokens = %v, want one quoted list", tokens)
+	}
+	inner, err := core.AsList(tokens[0])
+	if err != nil || inner.Len() != 1 {
+		t.Fatalf("nested body did not flatten to a one-element list: %v", tokens[0])
+	}
+	if !inner.Get(0).Quoted {
+		t.Error("the nested Function was not marked inert — it would dispatch on replay")
+	}
+}
