@@ -1,23 +1,56 @@
 # FN-VALUE-OPEN-WORK — what is left of the function-value line
 
 > **Status:** Open-work inventory. Four items remain from the `/r` survey and
-> the StackForm recorder work (PRs #366, #375, #378). Two need a maintainer
-> ruling and cannot be started without one; two are unblocked engineering.
-> Every number here was re-measured against `8732662` — the figures the
-> earlier notes carry were taken before several merges and **three of them
-> were wrong**. §6 lists the corrections so the stale ones stop propagating.
+> the StackForm recorder work (PRs #366, #375, #378). **All four are now
+> unblocked engineering** — the maintainer ruled on the open decisions
+> 2026-08-17 (see §1.1). Every number here was re-measured against
+> `8732662` — the figures the earlier notes carry were taken before several
+> merges and **three of them were wrong**. §6 lists the corrections so the
+> stale ones stop propagating.
 
 ## 1. The four items, and who is blocking each
 
 | # | Item | State | Blocked on |
 |---|---|---|---|
-| A | **Clause 3** — "parens do not re-step" | Measured three ways. A discriminator was **found** that the earlier note said did not exist. | Maintainer: pick narrow or broad (§2) |
-| B | **Clause 2** — passing a function requires `/r` | Mechanism located (4 sites, ~56 lines). Blast radius **3 rows**, not 9. | Maintainer: amend ADR-011 (§3) |
+| A | **Clause 3** — "parens do not re-step" | Measured three ways. **RULED 2026-08-17: BROAD** (§1.1). | Nobody — unblocked (§2) |
+| B | **Clause 2** — passing a function requires `/r` | Mechanism located (4 sites, ~56 lines). Blast radius **3 rows**, not 9. **ADR-011 amended 2026-08-17**; all four sites retire together (§1.1). | Nobody — unblocked (§3) |
 | C | **Break 2** — compiler refuses a 0-arg fn read from a plain container | Refusal is **sound**; it masks a confirmed miscompile. The mechanism to close it already exists and ships at arity 0. | Nobody — unblocked (§4) |
-| D | **NUR077** — a StackForm cannot apply a function value | Design sketch tested. `apply` works as the target but has two holes. | Nobody — unblocked, but see §5 before building |
+| D | **NUR077** — a StackForm cannot apply a function value | Design sketch tested. **RULED 2026-08-17: a new dedicated Apply Op** (§1.1). Two holes to close first — see §5 before building. | Nobody — unblocked (§5) |
 
-A and B are language decisions. C and D are engineering, and C is the smaller
-and better-understood of the two.
+### 1.1 The 2026-08-17 maintainer rulings
+
+Four decisions, taken together, close every "blocked on maintainer" line
+above:
+
+1. **Clause 3 is implemented BROAD.** A user paren never re-steps its
+   collapsed value — reference and inline fn literal alike — so
+   `(fn Integer [Integer] [10 add]) 7` becomes two values and the
+   inline-application idiom is removed from the language. The
+   narrow-by-`FnDefInfo.Name` alternative (§2.3) is rejected. The
+   `ReachGroup` exclusion stays load-bearing (§2.1). Accepted costs: 30
+   corpus rows (7 voided by design, 23 to rewrite), and the §2.1
+   recorder-skip hazard means `TestSpecCompiledDifferential` and the
+   stackform round-trip suite must be measured alongside `TestSpecProd`.
+2. **ADR-011 is amended and clause 2 is to be implemented.** The fourth
+   clause of ADR-011's final sentence is struck (recorded in `ADR.md`);
+   passing a function as an argument requires `/r`, universally.
+3. **All four clause-2 sites retire together**, including site C
+   (`sigWantsFunctionAt`) — the NUR038 call-head barrier goes with the
+   intercept rather than being kept for the Any-slot misfire. This
+   **re-opens the NUR038 call-head question**: the swallowed-call-head
+   misfire the barrier guarded returns and needs a fresh answer as part
+   of item B's implementation, measured in that PR rather than decided
+   in the abstract. The `unused_def` use-recording re-homes with it
+   (§3.4).
+4. **NUR077 gets a new dedicated Apply Op** (not a `DoEval` extension):
+   arity-carrying, consumes the fn value, seamed at `execFnDefLiteral`
+   (§5.1), serialised by `Flatten` via the existing `apply` word — after
+   the §5.2 over-count and the two §5 holes are fixed as their own
+   changes.
+
+A and B were language decisions and are now taken. C and D are
+engineering, and C is the smaller and better-understood of the two; the
+§7 order stands.
 
 ## 2. Item A — clause 3, and the discriminator that was missed
 

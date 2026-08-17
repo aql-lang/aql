@@ -963,6 +963,14 @@ with it since the M1 wave.
 
   ### ADR-011 needs an amendment — flagged, not made
 
+  > **Made, 2026-08-17.** The maintainer instructed the amendment: the
+  > fourth clause is struck in `ADR.md`, and clause 2 is to be
+  > implemented — with all four engine sites retiring together (the
+  > NUR038 call-head barrier included, re-opening that question inside
+  > the implementing PR). The same rulings set clause 3 to **broad** and
+  > NUR077 to a **dedicated Apply Op** — see
+  > `design/FN-VALUE-OPEN-WORK.0.md` §1.1, the current account.
+
   Clause 2 supersedes ADR-011's final sentence:
 
   > "…`/r` takes the reference and is no collection barrier; **a bare fn

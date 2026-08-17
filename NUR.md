@@ -67,9 +67,9 @@ keep the two in sync in the same commit.
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
-| [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled. Not pinnable in the spec corpus because the ORACLE is what the open `/r` clause-3 ruling decides — the frontier corpus needs the interpreter to be right, and here that is the question | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
+| [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled — VERDICT 2026-08-17: resolve by fix, clause 3 implemented BROAD (a user paren never re-steps, inline application removed; ReachGroup exclusion stays); discharged by the fix plus a `canon`/`typeof`-pinned row, the name residue being NUR074's class | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
 | [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
-| [NUR077](#nur077) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
+| [NUR077](#nur077) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer — VERDICT 2026-08-17: resolve by fix, a NEW dedicated Apply Op (arity-carrying, consumes the value, seamed at `execFnDefLiteral`; `DoEval` stays reserved), after the two prerequisite recorder/gate defects are fixed | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2055,10 +2055,19 @@ already strips the name; the residual renderer does not), so this record
 is discharged by clause 3 **plus** a row pinned via `canon`/`typeof`
 rather than on the bare residual.
 
-**Verdict:** none yet. Waiting on the clause-3 ruling; it is a language
-decision, not a defect to be picked by an implementer. Meanwhile the row
-is deliberately absent from every corpus, and `lang/spec/ref.tsv` §8's
-header says so in place, so the gap is not mistaken for coverage.
+**Verdict:** resolve by fix — **BROAD** (maintainer, 2026-08-17). The
+clause-3 implementation fork is decided: a user paren never re-steps its
+collapsed value, reference and inline literal alike, so
+`(fn Integer [Integer] [10 add]) 7` becomes two values and the
+inline-application idiom is removed. The narrow-by-`FnDefInfo.Name`
+alternative (measured in `design/FN-VALUE-OPEN-WORK.0.md` §2.3) is
+rejected. The `ReachGroup` exclusion stays load-bearing (dot access still
+dispatches). Costs accepted with the ruling: 30 corpus rows change (7
+voided by design, 23 to rewrite), and per §2.1's warning the compiled
+differential and the stackform round-trip suite must be measured, since
+the park now feeds the recorder's skip accounting. The record is
+discharged by the fix **plus** a row pinned via `canon`/`typeof` — the
+surviving name-rendering residue belongs to NUR074's class.
 
 ---
 
@@ -2210,10 +2219,13 @@ Raised by the PR #378 review (Codex P1/P2), which also observed that neither
 `Captured` and the `Quoted` flag — so the round-trip suite compares Function
 values field-wise rather than by canon (`fnValuesEqual`).
 
-**Verdict:** none yet. The shape of one is clear — an apply-style Op that
-consumes the fn value from the stack, which `Flatten` can serialise using the
-existing `apply` word (`lang/spec/ref.tsv` §4 already pins `5 inc/r apply`) —
-but it is a vocabulary addition, not a defect fix, and the recorder needs a
-seam that carries the applied VALUE rather than a name. `Quote`/`DoEval` are
-reserved in the vocabulary and unused; whether the apply case folds into
-`DoEval` or earns its own Op is part of the decision.
+**Verdict:** resolve by fix — a **new dedicated Apply Op** (maintainer,
+2026-08-17). The op carries the arity, consumes the fn value from the
+stack, and is seamed at `execFnDefLiteral` (the only site that knows the
+callee arrived as a value — `design/FN-VALUE-OPEN-WORK.0.md` §5.1);
+`Flatten` serialises it via the existing `apply` word. `DoEval` stays
+reserved — it is payloadless and cannot carry the arity. Two prerequisite
+defects are fixed first, as their own changes: the argument-literal
+skip-accounting over-count (§5.2 — the silently-wrong half), then the
+ADR-016 0-arg anonymous-fn gate and `apply`'s own double-recording (§5's
+two holes), so the Op does not reintroduce quiet wrongness.
