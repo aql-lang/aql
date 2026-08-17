@@ -52,10 +52,14 @@ type Engine struct {
 	Pointer   int
 	Registry  *Registry
 	trace     TraceCallback
-	traceNote string          // annotation set during execution for the next trace call
-	recorder  Recorder        // optional StackForm recorder; see stackform package
-	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
-	marks     map[string]bool // active mark IDs (for mark/move control flow)
+	traceNote string   // annotation set during execution for the next trace call
+	recorder  Recorder // optional StackForm recorder; see stackform package
+	// sawFnFrame latches once this engine splices a fn frame, so inFnFrame can
+	// skip its prefix scan entirely for a program that has none. Monotonic by
+	// design — see inFnFrame.
+	sawFnFrame bool
+	stepLimit  int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
+	marks      map[string]bool // active mark IDs (for mark/move control flow)
 	// sealFnValue / sealFnValueIdx: one-shot commit seal for a VALUE-called
 	// function whose forward collection just COMPLETED. Completion re-steps
 	// the callee stack-only; a WORD callee gets that via the /s token
@@ -5489,6 +5493,17 @@ func IsRecordableLiteral(v Value) bool {
 // so an ordinary Run never executes it. The two production recorder consumers
 // (`Debug.disasm`, the PBT gen-program shrinker) both run small programs.
 func (e *Engine) inFnFrame() bool {
+	// Fast path for the common shape: if this engine has never spliced a fn
+	// frame, no unmatched frame-open can exist and the scan is pure waste. A
+	// flat recorded program — which is what `Debug.disasm` gets handed most
+	// often — would otherwise pay a full prefix walk per literal, making
+	// Compile quadratic in program length for a program with no functions at
+	// all. The flag is MONOTONIC (set, never cleared), so it carries none of
+	// the balance hazard that rules a depth counter out: it can only ever say
+	// "no frame has existed yet", which is exactly when skipping is safe.
+	if !e.sawFnFrame {
+		return false
+	}
 	depth := 0
 	for i := e.Pointer - 1; i >= 0; i-- {
 		v := e.Tape.At(i)
@@ -5537,6 +5552,7 @@ func (e *Engine) recordDispatch(name string, arity int, results []Value) {
 		return
 	}
 	if len(results) > 0 && IsFrameOpen(results[0]) {
+		e.sawFnFrame = true
 		e.recorder.OnCall(name, arity, 0)
 		return
 	}
@@ -6113,6 +6129,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// faithfully needs an apply-style Op the vocabulary does not have; until
 	// it does, the honest form is one that refuses rather than one that lies.
 	if e.recorder != nil && !e.inFnFrame() {
+		e.sawFnFrame = true
 		e.recorder.OnCall("", nArgs, 0)
 	}
 

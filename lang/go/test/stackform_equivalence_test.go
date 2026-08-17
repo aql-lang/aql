@@ -79,11 +79,9 @@ func stacksEqual(a, b []core.Value) bool {
 		}
 		// NUR031: a Function value is not `deq` to ITSELF — eq/deq key on the
 		// binding name rather than the function — so DeepEqual reports two
-		// identical functions as different. Fall back to the canonical
-		// rendering for that one kind, which does distinguish them. Delete
-		// this arm when NUR031 resolves.
-		if isFn(a[i]) && isFn(b[i]) &&
-			core.Canon([]core.Value{a[i]}) == core.Canon([]core.Value{b[i]}) {
+		// identical functions as different. Fall back to a hand-written
+		// comparison for that one kind. Delete this arm when NUR031 resolves.
+		if isFn(a[i]) && isFn(b[i]) && fnValuesEqual(a[i], b[i]) {
 			continue
 		}
 		return false
@@ -93,6 +91,41 @@ func stacksEqual(a, b []core.Value) bool {
 
 func isFn(v core.Value) bool {
 	return v.Parent != nil && v.Parent.Equal(core.TFunction)
+}
+
+// fnValuesEqual compares two Function values for round-trip purposes.
+//
+// It cannot just be `Canon(a) == Canon(b)`. `canonFnDef` renders name, params,
+// returns and body, and DELIBERATELY omits both the closure environment
+// (core/go/canon.go: "excludes Registry and Captured") and the Quoted flag —
+// omissions that are right for canon's own job (identity for ordering, and not
+// spilling a module's exports) and wrong for this one. Two closures capturing
+// `x=1` and `x=2` canon identically while invoking to different results, and a
+// value the replay left permanently inert canons the same as the live one it
+// was recorded from. Both are exactly the corruption these tests exist to
+// catch, so compare them explicitly.
+func fnValuesEqual(a, b core.Value) bool {
+	if a.Quoted != b.Quoted {
+		return false
+	}
+	if core.Canon([]core.Value{a}) != core.Canon([]core.Value{b}) {
+		return false
+	}
+	fa, aok := a.Data.(core.FnDefInfo)
+	fb, bok := b.Data.(core.FnDefInfo)
+	if !aok || !bok {
+		return aok == bok
+	}
+	if len(fa.Captured) != len(fb.Captured) {
+		return false
+	}
+	for i := range fa.Captured {
+		if fa.Captured[i].Name != fb.Captured[i].Name ||
+			!core.DeepEqual(fa.Captured[i].Value, fb.Captured[i].Value) {
+			return false
+		}
+	}
+	return true
 }
 
 // TestStackFormEquivalence_Arithmetic covers integer + decimal
@@ -249,6 +282,18 @@ func TestStackFormEquivalence_UserFunctions(t *testing.T) {
 		// boru library uses — with the returned reference held by /r.
 		inc + `def ap fn [[f:Function n:Integer] [Integer] [f n]] ap inc/r 5`,
 		z + `def h fn [[f:Function] [Any] [f/r]] h z/r 99`,
+		// A `/r` reference left as the RESIDUAL, not consumed by a later call.
+		// Flatten has to mark a Function PushLit Quoted to stop the replay
+		// dispatching it, and Quoted is STICKY where `/r` is positional — so
+		// without Eval undoing the mark this row returns a permanently-inert
+		// copy of a value the direct run returns live. `canon` omits the flag,
+		// so only stacksEqual's explicit check sees it (PR #378 review, P1).
+		inc + `inc/r`,
+		z + `z/r`,
+		// A CLOSURE as the residual: same shape, but the value also carries a
+		// captured environment. canon deliberately omits Captured too, so this
+		// row is only meaningful because stacksEqual compares it (P2).
+		`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] (mk 5)`,
 	} {
 		t.Run(src, func(t *testing.T) {
 			equivalentRun(t, src)

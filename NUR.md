@@ -2316,6 +2316,24 @@ dispatched through `execMatch` (`def inc … def m {f: inc/r} (m.f 5)`) records
 `uncalled_function` rather than as this refusal. Same root cause; it needs the
 same fix.
 
+**A second face of the same gap: a function VALUE cannot be pushed inertly
+either.** `Flatten` has to mark a `PushLit` of a Function `Quoted`, because a
+Function reaching the engine pointer DISPATCHES and only a Quoted one stays
+data. But `Quoted` is STICKY where `/r` is positional
+(`design/FUNCTION-VALUE-SCOPE.0.md` §12.6), so the mark is not a faithful
+stand-in for the parking the direct run does — left in place it rides out on
+the result and the replayed value is permanently inert where the recorded one
+was live. `Eval` therefore UNDOES the mark on the way out (`unstamp`), which
+restores the recorded state exactly for every shape but one: a program that
+produces both a quoted and an unquoted copy of the same function and leaves
+the quoted one in the result. An apply-style Op would retire this half too,
+since a function that is applied would no longer need to be pushed at all.
+
+Raised by the PR #378 review (Codex P1/P2), which also observed that neither
+`canon` nor `deq` can see the difference — `canonFnDef` deliberately omits both
+`Captured` and the `Quoted` flag — so the round-trip suite compares Function
+values field-wise rather than by canon (`fnValuesEqual`).
+
 **Verdict:** none yet. The shape of one is clear — an apply-style Op that
 consumes the fn value from the stack, which `Flatten` can serialise using the
 existing `apply` word (`lang/spec/ref.tsv` §4 already pins `5 inc/r apply`) —

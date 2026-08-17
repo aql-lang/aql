@@ -36,9 +36,17 @@ var ErrUnnamedApply = errors.New(
 // The resulting token sequence does NOT use any forward-collection
 // or paren grouping — it is a pure post-fix program.
 func Flatten(form *StackForm) []core.Value {
+	tokens, _ := flattenStamped(form)
+	return tokens
+}
+
+// flattenStamped is Flatten plus the canon of every Function value it had to
+// mark Quoted, which Eval needs in order to undo the mark afterwards.
+func flattenStamped(form *StackForm) ([]core.Value, map[string]bool) {
 	if form == nil {
-		return nil
+		return nil, nil
 	}
+	stamped := map[string]bool{}
 	out := make([]core.Value, 0, len(form.Ops))
 	for _, op := range form.Ops {
 		switch o := op.(type) {
@@ -48,12 +56,18 @@ func Flatten(form *StackForm) []core.Value {
 			// strict-stack form a function that should be called is a
 			// Call op, so a PushLit of one is by construction data —
 			// the `/r`-held reference the recorder saw. Marking it
-			// Quoted is what makes that inertness survive the round
-			// trip, since `/r` parks positionally and stamps nothing on
-			// the value (design/FUNCTION-VALUE-SCOPE.0.md §12.6).
+			// Quoted is what keeps it inert through the replay.
+			//
+			// But Quoted is STICKY where `/r` is positional
+			// (design/FUNCTION-VALUE-SCOPE.0.md §12.6), so the mark is
+			// not free: left in place it travels out on the result and
+			// the replayed value is permanently inert where the
+			// recorded one was live. Eval undoes it — that is what the
+			// returned set is for.
 			v := o.V
 			if v.Parent != nil && v.Parent.Equal(core.TFunction) && !v.Quoted {
 				v.Quoted = true
+				stamped[core.Canon([]core.Value{o.V})] = true
 			}
 			out = append(out, v)
 		case Call:
@@ -65,7 +79,10 @@ func Flatten(form *StackForm) []core.Value {
 			// nested form serialises to a list literal. The list
 			// is marked Quoted so the kernel doesn't auto-eval it
 			// when consumed.
-			inner := Flatten(o.Body)
+			inner, innerStamped := flattenStamped(o.Body)
+			for k := range innerStamped {
+				stamped[k] = true
+			}
 			lst := core.NewList(inner)
 			lst.Quoted = true
 			out = append(out, lst)
@@ -73,7 +90,7 @@ func Flatten(form *StackForm) []core.Value {
 			out = append(out, core.NewWord("do"))
 		}
 	}
-	return out
+	return out, stamped
 }
 
 // Replayable reports whether Eval can faithfully replay this form,
@@ -115,7 +132,39 @@ func Eval(reg *core.Registry, form *StackForm) ([]core.Value, error) {
 	if err := Replayable(form); err != nil {
 		return nil, err
 	}
-	tokens := Flatten(form)
-	e := core.NewTop(reg)
-	return e.Run(tokens)
+	tokens, stamped := flattenStamped(form)
+	out, err := core.NewTop(reg).Run(tokens)
+	if err != nil {
+		return out, err
+	}
+	return unstamp(out, stamped), nil
+}
+
+// unstamp restores the recorded state of every Function that flattenStamped
+// had to mark Quoted to keep it inert during the replay. Without this the
+// round trip returns a permanently-inert copy of a value the direct run
+// returns live — and `canon` renders a fn without its Quoted flag, so no
+// canon-based comparison would ever notice.
+//
+// Matching is by canon because Flatten stamps a COPY. A stamped entry is by
+// construction a value the recorder saw UNQUOTED (the mark is only applied to
+// those), so clearing the flag returns it to what was recorded. The one shape
+// this cannot separate is a program that produces both a quoted and an
+// unquoted copy of the SAME function and leaves the quoted one in the result.
+func unstamp(vals []core.Value, stamped map[string]bool) []core.Value {
+	if len(stamped) == 0 {
+		return vals
+	}
+	for i, v := range vals {
+		if v.Quoted && v.Parent != nil && v.Parent.Equal(core.TFunction) &&
+			stamped[core.Canon([]core.Value{unquotedCopy(v)})] {
+			vals[i] = unquotedCopy(v)
+		}
+	}
+	return vals
+}
+
+func unquotedCopy(v core.Value) core.Value {
+	v.Quoted = false
+	return v
 }

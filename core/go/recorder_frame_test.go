@@ -85,11 +85,62 @@ func TestInFnFrame(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e := &Engine{Tape: NewTape(tc.tape, 4), Pointer: tc.pointer}
+			// sawFnFrame is the monotonic latch real execution sets at the
+			// splice site; set it here so these cases exercise the SCAN
+			// rather than the fast path, which the sibling test pins.
+			e := &Engine{Tape: NewTape(tc.tape, 4), Pointer: tc.pointer, sawFnFrame: true}
 			if got := e.inFnFrame(); got != tc.want {
 				t.Errorf("inFnFrame = %v, want %v — %s", got, tc.want, tc.why)
 			}
 		})
+	}
+}
+
+// The fast path: with no frame ever spliced there can be no unmatched
+// frame-open, so the prefix scan is skipped. Without it, a flat program pays a
+// full walk per literal and Compile is quadratic in program length for a
+// program containing no functions at all (PR #378 review, P3).
+//
+// The latch is what makes this safe, and its soundness argument is narrow
+// enough to pin: inFnFrame is only ever reached with a recorder installed
+// (every call site short-circuits on `e.recorder != nil` first), and both
+// frame-splice sites set the latch under that same guard — so a frame cannot
+// reach the tape unlatched while anything is looking. The end-to-end proof
+// that the latch really is set lives in TestFnValueApplicationIsRecordedUnnamed
+// and lang/go's round-trip suite, which would suppress nothing without it.
+func TestInFnFrameFastPath(t *testing.T) {
+	tape := []Value{NewFrameOpen(&FnFrameMeta{}), NewInteger(1)}
+
+	unlatched := &Engine{Tape: NewTape(tape, 4), Pointer: 1}
+	if unlatched.inFnFrame() {
+		t.Error("unlatched engine scanned the tape — the fast path is not firing")
+	}
+
+	latched := &Engine{Tape: NewTape(tape, 4), Pointer: 1, sawFnFrame: true}
+	if !latched.inFnFrame() {
+		t.Error("latched engine missed a frame that IS on the tape")
+	}
+}
+
+// BenchmarkFlatProgramRecording measures the shape the fast path exists for: a
+// long, function-free program with a recorder installed. Run with -benchtime
+// to vary N; the point is that cost stays linear rather than quadratic.
+func BenchmarkFlatProgramRecording(b *testing.B) {
+	prog := make([]Value, 0, 2000)
+	for i := 0; i < 2000; i++ {
+		prog = append(prog, NewInteger(int64(i)))
+	}
+	r, err := NewRegistry()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e := NewTop(r)
+		e.SetRecorder(&frameRec{})
+		if _, err := e.Run(prog); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -125,7 +176,8 @@ func TestRecordDispatch(t *testing.T) {
 		// The callee's own internals: the enclosing Call already stands for
 		// them, and recording them leaked body fragments into the caller's form.
 		rec := &frameRec{}
-		e := &Engine{Tape: NewTape([]Value{frameOpen, NewInteger(1)}, 4), Pointer: 1}
+		e := &Engine{Tape: NewTape([]Value{frameOpen, NewInteger(1)}, 4), Pointer: 1,
+			sawFnFrame: true} // latched at the splice in real execution
 		e.SetRecorder(rec)
 		e.recordDispatch("add", 2, []Value{NewInteger(3)})
 		if len(rec.calls) != 0 {
