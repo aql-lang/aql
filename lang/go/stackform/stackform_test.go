@@ -150,7 +150,7 @@ func itoa(n int64) string {
 
 // Replayable is the guard that stops a form the recorder could not capture
 // faithfully from being replayed to a different answer than the program it
-// came from (NUR076). Its arms are unit-tested here because two of them are
+// came from (NUR077). Its arms are unit-tested here because two of them are
 // unreachable from Compile: a nil form, and a Quote body — which the recorder
 // never emits today (see the package doc), so only a hand-built form reaches
 // the recursion.

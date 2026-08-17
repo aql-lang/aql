@@ -613,6 +613,16 @@ meaningless without its environment, so the environment must be *part of
 the value*. boru already made that decision — `FnDefInfo.Registry` is the
 environment pointer. What remains is to consult it everywhere.
 
+> **Superseded in part, 2026-08-17.** §12.4 and §12.6's open-work
+> conclusions were re-measured against `8732662` and **three of their
+> figures were wrong** — the clause-3 row count, the clause-2 bare-name
+> count, and the claim that narrow and broad are inseparable (they are
+> separable, by `FnDefInfo.Name`). The current account of what remains,
+> with corrected numbers and a per-item blocker, is
+> [FN-VALUE-OPEN-WORK.0.md](FN-VALUE-OPEN-WORK.0.md). This section stays
+> as the record of how the landed work was reasoned about; read the newer
+> note before starting anything from it.
+
 ## 12. Implementation log — 2026-08-15
 
 Rule 1 of §11 ("free names resolve where the function was written") is

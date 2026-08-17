@@ -16,7 +16,7 @@ import (
 // BY NAME and does not consume a receiver, while an application consumes
 // the fn value the stack already holds — so even when the applied value
 // carries a name, replaying it as a Call would strand that value and
-// produce it twice. It needs an apply-style Op; see NUR076.
+// produce it twice. It needs an apply-style Op; see NUR077.
 //
 // Refusing is the point. The alternative — what this replaced — is a
 // form that silently replays to a different answer than the program it
