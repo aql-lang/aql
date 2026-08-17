@@ -31,9 +31,12 @@ import (
 // Containers propagate unkeyedness up from their children.
 //
 // DeqNeverEqual marks values that reach DeepEqual's unsupported
-// fall-through (functions, words, uncompared host payloads, …):
-// deq-equal to nothing, including themselves, so scans can skip them
-// entirely.
+// fall-through: deq-equal to nothing, including themselves, so scans
+// can skip them entirely. NUR031 emptied this class of everything a
+// user can name — functions and words are keyed by canon, declared
+// type values by their type identity, sealed host payloads scanned by
+// box identity — leaving the internal shapes and the instances with no
+// readable fields.
 
 // DeqKeyClass classifies how a value participates in bucketed deq
 // scans — see the contract above.
@@ -257,8 +260,62 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 		return "", DeqUnkeyed
 	}
 
-	// DeepEqual's unsupported fall-through — code values (functions,
-	// words) and uncompared host payloads: deq-equal to nothing.
+	// A sealed HOST payload with no capability (NUR031): compared by
+	// POINTER identity, which is not a per-value key the kernel may
+	// compute without reading the payload — so scan pairwise within the
+	// host family. Below the capability arm for the same reason deqFam's
+	// twin branch is; restricted to pointer bodies for the same reason
+	// hostPayloadIdentity is, so a contents-only payload stays never-equal
+	// rather than being scanned for a match it can never have.
+	if p, ok := v.Data.(ExtensionPayload); ok && isPointerBody(p.Body) {
+		return "", DeqUnkeyed
+	}
+
+	// Functions (NUR031): deq is CONTENT equality, compared as canon —
+	// which NUR059 and NUR031 made name-independent — so canon is itself
+	// a sound bucket. The defining registry discriminates too
+	// (fnStructurallyEqual rejects equal canon from different modules),
+	// which only makes this bucket COARSER than equality, and coarser is
+	// what the contract allows: DeepEqual confirms each candidate.
+	//
+	// Classifying functions DeqNeverEqual — as this arm did while deq
+	// rejected them — is what the deq change would otherwise have left
+	// stale, and the divergence is silent: Add files the value nowhere
+	// and FirstMatch answers -1, so `unique` keeps two functions `deq`
+	// calls duplicates.
+	if fd, ok := v.Data.(FnDefInfo); ok {
+		return "f:" + canonFnDef(fd), DeqKeyed
+	}
+
+	// Words (NUR031): a word is value-like — eq and deq both compare the
+	// whole WordInfo — and canon renders every field of it, name and
+	// modifiers alike, so canon is an exact key here rather than merely a
+	// sound one.
+	if _, ok := v.Data.(WordInfo); ok && v.Parent != nil {
+		return "w:" + v.Parent.ID + ":" + CanonValue(v), DeqKeyed
+	}
+
+	// Declared type VALUES (NUR031): deq shares eq's type-body arm, which
+	// requires the SAME nominal type, so the type's own identity is a
+	// sound bucket — coarser than equality, and DeepEqual confirms each
+	// candidate. The BARE literals never reach here: the type-identity
+	// arm near the top already keys them, with the same discriminator.
+	//
+	// No deqFam entry to match. A declared type is deq only to another
+	// value of its own type, and the unkeyed residents (render-matched
+	// containers, handles, capability-owned values) are none of those, so
+	// there is nothing for a family to keep reachable — while an
+	// inaccurate one could hide a render-matched type-level operand from
+	// the scan.
+	if IsTypeBody(v) && v.Parent != nil {
+		return "t:" + v.Parent.ID, DeqKeyed
+	}
+
+	// DeepEqual's unsupported fall-through. NUR031 emptied this class of
+	// everything a user can name — the code values, the type values and
+	// the host payloads all found an answer above — leaving the internal
+	// shapes (a carrier, a forward/move marker) and the instances with no
+	// readable fields: deq-equal to nothing, including themselves.
 	return "", DeqNeverEqual
 }
 
@@ -296,6 +353,13 @@ func deqFam(v Value) string {
 	if k := handleKind(v); k != "" {
 		return "H:" + k
 	}
+	// Functions scan among themselves (NUR031): a fn is deq only to
+	// another fn, so its own family keeps the scan tight and stops the
+	// depth-capped unkeyed values (the only other residents of the
+	// empty family) from being rescanned on every fn lookup.
+	if _, ok := v.Data.(FnDefInfo); ok {
+		return "F"
+	}
 	// Capability-carrying values scan within the family of the OWNING
 	// node — the nearest ancestor implementing DeepEqualer. Sound and
 	// tight: DeepEqual consults the capability via the LCA walk, and two
@@ -306,6 +370,13 @@ func deqFam(v Value) string {
 	// entries by family; FirstMatch scans allByFam only).
 	if owner := DeepEqualerOwner(ValueType(v)); owner != nil {
 		return "DE:" + owner.ID
+	}
+	// A sealed HOST payload (NUR031): compared by box identity, so every
+	// one of them scans in one family. BELOW the capability arm on
+	// purpose — a host type that installed a DeepEqualer keeps its own,
+	// tighter family, and only the payloads with no capability land here.
+	if p, ok := v.Data.(ExtensionPayload); ok && isPointerBody(p.Body) {
+		return "H:Host"
 	}
 	return ""
 }
@@ -325,8 +396,11 @@ func handleKind(v Value) string {
 		return "Interval"
 	case ExtensionPayload:
 		// Only the Ideal/Module DESCRIPTOR (a boxed *ModuleDesc) is a
-		// deq-comparable handle; every other ExtensionPayload body is a
-		// host/plugin payload the kernel does not compare.
+		// handle the kernel compares HERE. A sealed host payload is
+		// deq-comparable too since NUR031 (box identity), but it is
+		// classified further down — below the DeepEqualer arm, so a host
+		// type that installed the capability keeps answering for its own
+		// values instead of being pre-empted by the fallback.
 		if _, ok := d.Body.(*ModuleDesc); ok {
 			return "Module"
 		}

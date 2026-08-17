@@ -195,7 +195,7 @@ func TestRecordDispatch(t *testing.T) {
 // `Call{Name, Arity}` re-invokes by name and does not consume a receiver,
 // while an application consumes the fn value the stack already holds, so a
 // named Call would strand it. stackform.Replayable refuses the empty name
-// rather than replaying a lie (NUR074).
+// rather than replaying a lie (NUR076).
 func TestFnValueApplicationIsRecordedUnnamed(t *testing.T) {
 	for _, tc := range []struct {
 		name string

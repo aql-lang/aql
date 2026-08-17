@@ -415,10 +415,20 @@ func canonReach(v Value) string {
 // so unlike formatFnDef it must distinguish fns that String() renders
 // identically. It never touches FnDefInfo.Registry or .Captured.
 func canonFnDef(fd FnDefInfo) string {
+	// NO NAME (NUR031). Canon used to render `fn NAME[…]` keyed on the
+	// binding the function happened to be reached through, so `def a (f/r)`
+	// and `def b (f/r)` — two bindings of ONE function — canon'd
+	// differently. That made canon name-DEPENDENT, which ADR-015 cannot
+	// live with: a canon keyed on a name cannot round-trip, because
+	// re-parsing it under a different binding yields a different rendering
+	// of the same function.
+	//
+	// The anonymous fn literal is already valid source, re-parses to a
+	// structurally identical function, and is name-independent by
+	// construction rather than by a naming scheme. With the structural deq
+	// below, `parse(canon(f/r)) deq f/r` holds.
 	var b strings.Builder
-	b.WriteString("fn ")
-	b.WriteString(fd.Name)
-	b.WriteByte('[')
+	b.WriteString("fn [")
 	sigs := fd.OwnSigs()
 	for i := range sigs {
 		if i > 0 {

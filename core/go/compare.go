@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 )
 
 // ErrNoComparer is returned by Comparer.Compare implementations that
@@ -307,6 +308,25 @@ func ExactEqual(a, b Value) bool {
 			return false
 		}
 		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
+	}
+
+	// Function values (NUR031). eq is REFERENCE identity, per NUR011's rule
+	// for every Ideal — and the reference is the payload's identity token
+	// (FnDefInfo.ident), minted once per authored function and copied by
+	// every derivation that leaves it the same function. Two bindings of one
+	// function share it; two independently-written functions never do.
+	//
+	// This is the record's "box FnDefInfo", narrowed to the one field that
+	// needed boxing: a full box would change the representation every kernel
+	// arm keying on `FnDefInfo` reads, for an identity a single unexported
+	// pointer supplies. Before this, eq fell to the type-body arm below,
+	// which compares the payload STRUCT — including Name — so `def a (f/r)`
+	// and `def b (f/r)` were not eq though they name one function.
+	if af, aok := a.Data.(FnDefInfo); aok {
+		if bf, bok := b.Data.(FnDefInfo); bok {
+			return sameFnIdentity(af, bf)
+		}
+		return false
 	}
 
 	// Types: structural comparison.
@@ -644,6 +664,23 @@ func DeepEqual(a, b Value) bool {
 		return eq
 	}
 
+	// Function values (NUR031). deq is DEEP VALUE equality, per NUR011: a
+	// function's value is its signatures and body, so two references to one
+	// function are deq, and so is a function re-parsed from its own canon —
+	// which is what ADR-015 needs, and what reference identity alone could
+	// never give (a re-parsed function is a fresh array).
+	//
+	// The NAME is deliberately excluded. It is the binding a function was
+	// reached through, not part of the function: including it is exactly
+	// what made `a/r deq b/r` false for two bindings of one function, and
+	// what kept `f/r deq f/r` false at all.
+	if af, aok := a.Data.(FnDefInfo); aok {
+		if bf, bok := b.Data.(FnDefInfo); bok {
+			return fnStructurallyEqual(af, bf)
+		}
+		return false
+	}
+
 	// Last chance before the terminal verdict: a type that installed the
 	// DeepEqualer capability answers for its own values. Placing the walk
 	// HERE rather than at the top is what makes it additive — it can only
@@ -651,6 +688,42 @@ func DeepEqual(a, b Value) bool {
 	// See deepequal_capability.go.
 	if eq, handled := deepEqualCapability(a, b); handled {
 		return eq
+	}
+
+	// Declared type VALUES (NUR031): a `class` and refinements of one, a
+	// disjunction / `enum`, a `fnsig` or `surface`, an uninstantiated
+	// `gen` schema. A type is an immutable DECLARATION, so eq and deq
+	// coincide on it exactly as they do on a scalar leaf and on an Error
+	// — and deq gets that by SHARING eq's arm rather than deriving a
+	// second answer that could disagree with it.
+	//
+	// This sits at the bottom, next to the terminal, for the same reason
+	// the capability walk does: from here it can only turn `false` into a
+	// real answer. Placing it above would capture the type bodies that
+	// ARE containers (an implicit-map record shape, a Table type) and
+	// change answers the container arms already give correctly.
+	//
+	// The bare literals (`List deq List`) never reach here — the NUR034
+	// arm near the top answers them, and answers them the same way.
+	//
+	// A compiled CLOSURE lands here too (IsTypeBody admits a Function-typed
+	// value, and the fn arm above claimed only the FnDefInfo payloads), and
+	// that is the answer it wants: the comparison reaches its Render, which
+	// IS the fn's canon — so the VM's closure and the interpreter's fn value
+	// answer deq the same way, by content.
+	if IsTypeBody(a) && IsTypeBody(b) {
+		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
+	}
+
+	// A SEALED HOST payload (NUR031): box identity, the same answer eq
+	// gives. It sits below the capability walk deliberately — a host type
+	// that installed a DeepEqualer has a real value equality to offer, and
+	// this fallback must not pre-empt it. On the eq side there is no such
+	// walk, so that arm lives up in opaqueIdealExactEqual instead.
+	if ap, ok := a.Data.(ExtensionPayload); ok {
+		if eq, handled := hostPayloadIdentity(ap, b); handled {
+			return eq
+		}
 	}
 
 	// Different types or unsupported — not equal.
@@ -680,8 +753,20 @@ func opaqueIdealExactEqual(a, b Value) (bool, bool) {
 		// type as well as equal fields (a `refine Error` subtype is not
 		// eq to a plain Error).
 		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	case WordInfo:
+		bv, ok := b.Data.(WordInfo)
+		// A word is the other value-like code value (NUR031): an
+		// immutable name-plus-modifiers with no reference behind it, so
+		// eq ≡ deq and both compare the whole struct — the modifiers
+		// included, since `f/r` and `f/s` are different words. It is
+		// comparable by construction (only string/int/bool fields), the
+		// same property that lets Error compare by fields.
+		return ok && a.Parent.Equal(b.Parent) && av == bv, true
 	case ExtensionPayload:
-		return moduleDescIdentity(av, b)
+		if eq, handled := moduleDescIdentity(av, b); handled {
+			return eq, handled
+		}
+		return hostPayloadIdentity(av, b)
 	}
 	return false, false
 }
@@ -709,6 +794,55 @@ func moduleDescIdentity(av ExtensionPayload, b Value) (bool, bool) {
 	return ok && ad == bd, true
 }
 
+// hostPayloadIdentity is REFERENCE identity for a SEALED host payload
+// whose Body is a POINTER — an `IO.open` file handle, a lock, a watcher,
+// an mmap, a query builder (NUR031). These were the last members of the
+// record's fall-through set: not eq to themselves, not deq to themselves.
+//
+// Reference identity is the only equality the kernel may give them, and
+// it is the right one: a host handle is an opaque reference, like a
+// timer, so its identity IS its value and eq and deq coincide. The
+// Sealed Payload rule holds throughout — the pointer is compared, never
+// read through.
+//
+// The POINTER restriction is the whole contract, not a convenience.
+// `ExtensionPayload` is a value struct, so a Value copy shares nothing
+// but the Body; if the Body is not a reference there is no identity to
+// compare, only its contents — and comparing contents would make two
+// independently constructed payloads `eq`, which is exactly what
+// reference identity must not say. A non-pointer body therefore
+// DECLINES, leaving construction of an equality to the host: a type that
+// wants one installs the DeepEqualer capability, whose walk runs before
+// this arm on the deq side.
+//
+// Declining also removes the `==`-on-`any` panic entirely. A map- or
+// slice-bodied payload is uncomparable in Go and would have crashed the
+// process; it is not a pointer, so it never reaches the comparison.
+func hostPayloadIdentity(a ExtensionPayload, b Value) (bool, bool) {
+	if !isPointerBody(a.Body) {
+		return false, false
+	}
+	bp, ok := b.Data.(ExtensionPayload)
+	if !ok {
+		return false, true
+	}
+	if !isPointerBody(bp.Body) {
+		return false, true
+	}
+	return a.Body == bp.Body, true
+}
+
+// isPointerBody reports whether a sealed payload's Body is a pointer —
+// the only shape carrying an identity independent of its contents.
+// reflect is the only way to ask this of an `any`; the cost is confined
+// to the equality fall-through, which no hot path reaches.
+func isPointerBody(body any) bool {
+	if body == nil {
+		return false
+	}
+	return reflect.TypeOf(body).Kind() == reflect.Ptr
+}
+
 // opaqueIdealDeepEqual is the `deq` (deep-value) half of NUR031. It
 // differs from the eq half only for Store, whose deep value is its own
 // entry set (structural), and matches it for the pure handles and Error.
@@ -734,10 +868,17 @@ func opaqueIdealDeepEqual(a, b Value) (bool, bool) {
 	case ErrorInfo:
 		bv, ok := b.Data.(ErrorInfo)
 		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	case WordInfo:
+		bv, ok := b.Data.(WordInfo)
+		return ok && a.Parent.Equal(b.Parent) && av == bv, true
 	case ExtensionPayload:
 		// The Module descriptor: deq is its reference identity, matching
 		// eq (see moduleDescIdentity — an opaque handle with no deeper
-		// structure than its identity, like the timers).
+		// structure than its identity, like the timers). A SEALED HOST
+		// payload is deq-comparable too (NUR031), but its arm sits at the
+		// bottom of DeepEqual, below the DeepEqualer walk, so a host type
+		// that installed the capability answers for its own values rather
+		// than being pre-empted by the box-identity fallback.
 		return moduleDescIdentity(av, b)
 	}
 	return false, false
@@ -948,4 +1089,93 @@ func NeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 
 func DeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(DeepEqual(args[0], args[1]))}, nil
+}
+
+// sameFnIdentity reports whether two fn payloads are the SAME function —
+// reference identity, keyed on the identity token NewFunction mints and
+// every same-function derivation copies (NUR031).
+//
+// The token exists because the payload offers no other stable reference.
+// The Signatures backing array is the obvious candidate and is wrong: for a
+// boru-bodied word aggregateDispatch rebuilds that slice per NAME, so two
+// bindings of one function (`def a (f/r)` / `def b (f/r)`) land on two
+// arrays and read as two functions — the record's complaint exactly.
+//
+// A payload with no token — a FnDefInfo literal built outside NewFunction,
+// i.e. a compile-time carrier or a probe with no fn value behind it — has
+// no identity, and answering true would make every one of them eq to every
+// other.
+func sameFnIdentity(a, b FnDefInfo) bool {
+	if a.ident == nil || b.ident == nil {
+		return false
+	}
+	return a.ident == b.ident
+}
+
+// fnStructurallyEqual reports whether two fn payloads have the same VALUE
+// (NUR031). deq is deep value equality per NUR011, and a function's value
+// is its CONTENT: parameters, returns and body.
+//
+// The comparison is canon — the content serialisation the language already
+// has, now that NUR059 and this record made it name-INDEPENDENT. That
+// choice is borrowed from Unison's content-addressed code, and it is
+// borrowed for exactly one job: different body, different canon, not deq.
+//
+// Walking `Impl` instead does not work, and the failure is silent rather
+// than loud: after InstallFnDef a signature's Impl is a Go handler
+// (buildFnBodyHandler), so there is no body to reach and every installed
+// function reads as identical to every other of the same arity — a false
+// POSITIVE, strictly worse than the false negative it replaced. canonFnDef
+// renders from OwnSigs and still sees the body after installation, which is
+// what makes it the reachable content.
+//
+// The DEFINING MODULE is part of the content. boru resolves a function's
+// free words in the module that defined it (design/FUNCTION-VALUE-SCOPE.0.md,
+// "lexical module, dynamic within it"), so two identical bodies in different
+// modules do not mean the same thing — which is also why boru cannot adopt
+// content addressing wholesale the way Unison does: Unison hashes
+// dependencies transitively and has no ambient namespace, while boru keeps
+// one deliberately (module-level dynamic binding is what hot reload rides
+// on). Registry is set only at module-export resolution, so two locally
+// defined fns both carry nil and compare on content alone.
+func fnStructurallyEqual(a, b FnDefInfo) bool {
+	// The same function is trivially deq to itself, and that is the common
+	// case — worth short-circuiting before rendering two canons.
+	if sameFnIdentity(a, b) {
+		return true
+	}
+	// The DEFINING SCOPE is part of the content, and a nil Registry is a
+	// scope like any other — it means "wherever this is running", which is
+	// not the same place as a named module. Admitting a nil/non-nil pair
+	// here (as an earlier `both non-nil` guard did) let a module-owned fn
+	// and a locally defined one with identical text compare deq although
+	// their free words resolve in different registries.
+	if a.Registry != b.Registry {
+		return false
+	}
+	// CAPTURES are content too. canonFnDef renders params, returns and
+	// body — not the closure environment — so two closures built from one
+	// factory over different arguments have identical canon and entirely
+	// different behaviour. Comparing the captures is what stops
+	// `(make-adder 5)` and `(make-adder 9)` reading as the same function,
+	// and stops `unique` discarding one of them.
+	if !capturedBindingsEqual(a.Captured, b.Captured) {
+		return false
+	}
+	return canonFnDef(a) == canonFnDef(b)
+}
+
+// capturedBindingsEqual compares two closure environments by name and by
+// captured VALUE. Both lists are sorted by name at construction
+// (ComputeCaptures), so a positional walk is a set comparison.
+func capturedBindingsEqual(a, b []CapturedBinding) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || !DeepEqual(a[i].Value, b[i].Value) {
+			return false
+		}
+	}
+	return true
 }

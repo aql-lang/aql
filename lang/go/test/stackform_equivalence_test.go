@@ -74,14 +74,17 @@ func stacksEqual(a, b []core.Value) bool {
 		return false
 	}
 	for i := range a {
-		if core.DeepEqual(a[i], b[i]) {
-			continue
+		// Functions are checked FIRST and never fall through to the plain deq
+		// below. Ordering is load-bearing: `deq` returns true for two
+		// Functions differing only in Quoted, so a leading DeepEqual would
+		// short-circuit past the one property this suite most needs to see.
+		if isFn(a[i]) && isFn(b[i]) {
+			if fnValuesEqual(a[i], b[i]) {
+				continue
+			}
+			return false
 		}
-		// NUR031: a Function value is not `deq` to ITSELF — eq/deq key on the
-		// binding name rather than the function — so DeepEqual reports two
-		// identical functions as different. Fall back to a hand-written
-		// comparison for that one kind. Delete this arm when NUR031 resolves.
-		if isFn(a[i]) && isFn(b[i]) && fnValuesEqual(a[i], b[i]) {
+		if core.DeepEqual(a[i], b[i]) {
 			continue
 		}
 		return false
@@ -95,37 +98,22 @@ func isFn(v core.Value) bool {
 
 // fnValuesEqual compares two Function values for round-trip purposes.
 //
-// It cannot just be `Canon(a) == Canon(b)`. `canonFnDef` renders name, params,
-// returns and body, and DELIBERATELY omits both the closure environment
-// (core/go/canon.go: "excludes Registry and Captured") and the Quoted flag —
-// omissions that are right for canon's own job (identity for ordering, and not
-// spilling a module's exports) and wrong for this one. Two closures capturing
-// `x=1` and `x=2` canon identically while invoking to different results, and a
-// value the replay left permanently inert canons the same as the live one it
-// was recorded from. Both are exactly the corruption these tests exist to
-// catch, so compare them explicitly.
+// Since NUR031's fix landed, `deq` handles functions properly: it is
+// reflexive, and it discriminates closure environments — verified, two
+// closures capturing `x=1` and `x=2` are NOT DeepEqual. So the structural
+// half needs nothing hand-written any more, and the earlier canon-based
+// fallback here is gone with it.
+//
+// What deq still does not see is `Quoted`, and that omission is defensible on
+// its own terms — the flag is a transient marker, not part of a value's
+// identity. It makes deq the wrong SOLE test here all the same, because that
+// flag is precisely what the replay borrows to keep a Function inert and has
+// to give back: `/r` parks positionally and stamps nothing, so a mark left in
+// place returns a permanently-inert copy of a live value. Canon cannot stand
+// in either — its Function branch renders name, params, returns and body, and
+// never the flag.
 func fnValuesEqual(a, b core.Value) bool {
-	if a.Quoted != b.Quoted {
-		return false
-	}
-	if core.Canon([]core.Value{a}) != core.Canon([]core.Value{b}) {
-		return false
-	}
-	fa, aok := a.Data.(core.FnDefInfo)
-	fb, bok := b.Data.(core.FnDefInfo)
-	if !aok || !bok {
-		return aok == bok
-	}
-	if len(fa.Captured) != len(fb.Captured) {
-		return false
-	}
-	for i := range fa.Captured {
-		if fa.Captured[i].Name != fb.Captured[i].Name ||
-			!core.DeepEqual(fa.Captured[i].Value, fb.Captured[i].Value) {
-			return false
-		}
-	}
-	return true
+	return a.Quoted == b.Quoted && core.DeepEqual(a, b)
 }
 
 // TestStackFormEquivalence_Arithmetic covers integer + decimal
@@ -309,7 +297,7 @@ func TestStackFormEquivalence_UserFunctions(t *testing.T) {
 // container — is not expressible: `Call{Name, Arity}` re-invokes by name and
 // does not consume a receiver, while an application consumes the fn value the
 // stack already holds. Recording it as a Call would strand that value; the op
-// vocabulary needs an apply-style Op it does not have (NUR074).
+// vocabulary needs an apply-style Op it does not have (NUR076).
 //
 // Before this, these silently evaluated to the FUNCTION rather than its
 // result — the same class of quiet wrongness the over-count caused, and the

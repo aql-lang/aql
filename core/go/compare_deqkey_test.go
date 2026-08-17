@@ -248,18 +248,36 @@ func TestDeqKeyBranches(t *testing.T) {
 			t.Fatalf("expected DeqUnkeyed for %v", v)
 		}
 	}
-	// DeqNeverEqual is now only the code/opaque values and instances with
-	// no readable fields — a Store is DeqUnkeyed after NUR031 (covered by
-	// TestNUR031DeqKeyClassification).
+	// DeqNeverEqual is now only instances with no readable fields — a
+	// Store is DeqUnkeyed after NUR031, and the code values (Word,
+	// Function) are keyed by canon since NUR031's second half (both
+	// covered by TestNUR031DeqKeyClassification).
 	for _, v := range []Value{
-		NewWord("w"),
 		NewClassInstance(TStore, ClassInstanceInfo{}),
-		// an instance whose field is a code/opaque value (never-equal)
-		// propagates DeqNeverEqual up from the field.
-		mkInst(TStore, "fn", NewWord("f")),
 	} {
 		if class(v) != DeqNeverEqual {
 			t.Fatalf("expected DeqNeverEqual for %v", v)
+		}
+	}
+	// …and an instance whose field is a Word is keyed THROUGH that
+	// field's key, no longer poisoned to never-equal by it.
+	if class(mkInst(TStore, "fn", NewWord("f"))) != DeqKeyed {
+		t.Fatal("an instance with a word field must be DeqKeyed")
+	}
+	// The poisoning itself still happens — an instance whose field is a
+	// never-equal value propagates that up. The subject moved from a Word
+	// to a field-less instance when NUR031 keyed the code values.
+	if class(mkInst(TStore, "inner", NewClassInstance(TStore, ClassInstanceInfo{}))) != DeqNeverEqual {
+		t.Fatal("a never-equal FIELD must make its instance never-equal")
+	}
+	// The terminal arm's own residents after NUR031: the internal shapes
+	// no user names — a forward-collection marker, a move marker.
+	for _, v := range []Value{
+		NewForward(ForwardInfo{FuncName: "f"}),
+		NewMove("x", "y"),
+	} {
+		if class(v) != DeqNeverEqual {
+			t.Fatalf("an internal marker (%T) must reach the terminal arm", v.Data)
 		}
 	}
 	// An instance whose field is a (now deq-comparable) store is
@@ -283,13 +301,25 @@ func TestDeqKeyTerminatesOnCycles(t *testing.T) {
 }
 
 // TestDeqIndexNeverEqualSkips pins the DeqNeverEqual fast path on both
-// sides: a code/opaque value (a Word) neither matches anything nor is
-// matched (NUR031 kept these as the argued equal-to-nothing remainder).
+// sides: a field-less instance neither matches anything nor is matched.
+// (The subject used to be a Word — NUR031's second half made words
+// value-like and keyed, leaving the field-less instance as the class's
+// remaining resident.)
 func TestDeqIndexNeverEqualSkips(t *testing.T) {
 	var idx DeqIndex
+	v := NewClassInstance(TStore, ClassInstanceInfo{})
+	idx.Add(v)
+	if got := idx.FirstMatch(v); got != -1 {
+		t.Fatalf("field-less instance FirstMatch = %d, want -1", got)
+	}
+	// The positive twin: a Word now DOES match itself through the index.
+	var widx DeqIndex
 	w := NewWord("f")
-	idx.Add(w)
-	if got := idx.FirstMatch(w); got != -1 {
-		t.Fatalf("word FirstMatch = %d, want -1", got)
+	widx.Add(w)
+	if got := widx.FirstMatch(w); got != 0 {
+		t.Fatalf("word FirstMatch = %d, want 0", got)
+	}
+	if got := widx.FirstMatch(NewWord("g")); got != -1 {
+		t.Fatalf("a different word must not match: got %d", got)
 	}
 }

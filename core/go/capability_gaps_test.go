@@ -319,11 +319,15 @@ func TestDeqIndexCapabilityFamiliesDoNotCross(t *testing.T) {
 }
 
 func TestDeqIndexNeverEqualPreservedWithoutCapability(t *testing.T) {
-	// The negative direction: with NO DeepEqualer in the chain the
-	// terminal classification stands, exactly as before the capability.
+	// With NO DeepEqualer in the chain the terminal classification stands.
+	// NUR031's sealed-payload arm does NOT rescue this fixture: its Body
+	// is a STRING, and reference identity needs a reference — a payload
+	// whose body is not a pointer has only contents, and comparing those
+	// would make two independently built payloads eq. So it declines, and
+	// the pre-capability answer is what remains.
 	a, b := capDeqPair(t, "PlainIndexIdeal", nil)
 	if _, class := DeqKey(a); class != DeqNeverEqual {
-		t.Errorf("DeqKey class = %v, want DeqNeverEqual for a plain host payload", class)
+		t.Errorf("DeqKey class = %v, want DeqNeverEqual for a non-pointer host payload", class)
 	}
 	var idx DeqIndex
 	idx.Add(a)

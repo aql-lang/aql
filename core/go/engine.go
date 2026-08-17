@@ -5885,6 +5885,8 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		Anonymous:      fnDef.Anonymous,
 		Captured:       fnDef.Captured,
 		MiniKind:       fnDef.MiniKind,
+		// Compiling a body does not make a different function (NUR031).
+		ident: fnDef.ident,
 	}
 }
 
@@ -6116,7 +6118,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	tokens = append(tokens, NewCloseParen())
 
 	// Report the application to an installed Recorder with an EMPTY name,
-	// which stackform.Replayable refuses (NUR074).
+	// which stackform.Replayable refuses (NUR076).
 	//
 	// This splice path bypasses execMatch entirely, so without any event a fn
 	// VALUE applied off a container or a param produced NO op at all and the

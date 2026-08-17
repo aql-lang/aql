@@ -101,7 +101,13 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   `elixir-types-in-boru-report.10.md`, `fsharp-units-in-boru-report.0.md`,
   `dynamic-modality-report.10.md`, `LISP-ANALYSIS.5.md`,
   `RACKET-ANALYSIS.5.md`, `RACKET-FEATURES-EXAMPLES.5.md`,
-  `PORT_OBSERVATIONS.5.md`, `verse-in-boru-report.0.md` (with
+  `PORT_OBSERVATIONS.5.md`, `unison-in-boru-report.0.md` (with
+  `unison-hash-identity-probe.0.md`, the proof-of-concept pass that
+  measured its central proposal and **corrected** it — the probe is
+  reproducible via `scripts/hash-identity-probe.sh`; both are
+  consolidated into the design note `CONTENT-ADDRESSING.0.md`, which
+  is the one to read first),
+  `verse-in-boru-report.0.md` (with
   `verse-report-defects-investigation.0.md`, the root-cause follow-up on
   the defects that report's verification pass turned up).
 

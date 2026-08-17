@@ -60,15 +60,16 @@ keep the two in sync in the same commit.
 |---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
-| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name — VERDICT 2026-08-14: resolve by fix, the full shape (Behavior-routed Ideal `eq`/`deq` + a name-independent function canon); REFINED 2026-08-15 — the halves are one root cause (the binding name in FnDefInfo.Name drives eq, canon and tcmp alike), so: BOX FnDefInfo for eq (reference) and compare signatures+body for deq (NUR011 as written), canon renders the ANONYMOUS fn literal, and PR #366's native-callback seam lands first. Design-unblocked, sequenced | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in — VERDICT 2026-08-14: resolve by fix (a `Maker` capability + the eighth `behave` slot) | 2026-08-02 NUR register review |
 | [NUR072](#nur072) | Three sugar kinds (mini, type-bound, lambda) still canon in DEBUG form after NUR059 — withdrawn there because the renders do not round-trip: SugarInfo does not retain the mini delimiter, and type-bound renders its Items rather than the bound's text; also carries the undecided bare-word question (`word(foo)` vs `foo`, 175 corpus rows) | NUR059's fix, 2026-08-15 |
+| [NUR075](#nur075) | `deq` is extensible per type (`DeepEqualer`), `eq` is not — the one part of the retired NUR031's verdict its fix did not take: the divergences closed by adding kernel arms rather than by routing through `Behavior`, so a type can define its own deep equality but not its own identity | NUR031's fix, 2026-08-16 |
 | [NUR060](#nur060) | The parser twins disagree on open-input sources beyond the corpus | PR #337 parity-probe sweep (flagged for NUR by Codex P1) |
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
 | [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled. Not pinnable in the spec corpus because the ORACLE is what the open `/r` clause-3 ruling decides — the frontier corpus needs the interpreter to be right, and here that is the question | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
-| [NUR074](#nur074) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
+| [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
+| [NUR076](#nur076) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -483,18 +484,31 @@ stroke): **for Scalars, `eq` and `deq` are the same and based on
 values; for Nodes and Ideals, `eq` is by reference, `deq` is by
 value.**
 
-The Ideal half carries argued carve-outs, recorded in NUR031 rather
-than here. NUR031's 2026-07-24 verdict minted two: `Error` is a
-*value-like* Ideal with no handle, so its `eq` is by VALUE (two
-independently raised errors with equal code/message/payload are `eq`);
-and `Timeout`/`Interval` are opaque handles whose identity IS their
-value, so their `deq` is by REFERENCE. The `Module` descriptor joined
-the second group on 2026-08-02 under the same rule (NUR031, "Descriptor
-half RESOLVED" — a bolded lead-in inside §"The remainder,
-reviewed"). All are
-the rule applied to Ideals that have no second level to offer, not
-departures from it — but the rule as quoted above does not say so, and
-this record is where a reader looks first.
+The Ideal half carries argued carve-outs, settled by the equality work
+of the retired NUR031 (`git log -S NUR031` for its reasoning) and
+recorded here now that it owns them. Two kinds have no second level to
+offer, so their `eq` and `deq` coincide from opposite directions:
+
+- **By VALUE, both** — a *value-like* Ideal with no handle behind it.
+  `Error` (two independently raised errors with equal code, message and
+  payload are `eq`) and `Word` (a name plus its `/`-modifiers), joined
+  by the declared **type values** — a `class` and refinements of one, a
+  disjunction/`enum`, a `fnsig`/`surface`, an uninstantiated `gen`
+  schema — which are immutable declarations compared nominally.
+- **By REFERENCE, both** — an opaque handle whose identity IS its value:
+  `Timeout`/`Interval`, the `Module` descriptor (2026-08-02), and a
+  sealed host `ExtensionPayload` (an `IO.open` file handle, a lock, a
+  watcher, an mmap), which the kernel compares as a box and never reads
+  into.
+
+`Store` and `Function` are the two that DO have both levels, and they
+take the rule as written: `eq` is reference identity — a Store's
+`*StoreInstanceInfo`, a function's identity token — and `deq` is deep
+value: a Store's own entry projection, a function's content as canon.
+
+All of these are the rule applied, not departures from it — but the rule
+as quoted above does not say so, and this record is where a reader looks
+first.
 
 Two equality levels are deliberate — reference identity
 answers "is this the same container?" (cheap, aliasing-aware), deep
@@ -513,11 +527,14 @@ remains the aliasing probe.
   is structural — by design**"); EXPLANATION.md §"Type ordering", the "**Two equalities, one rule.**"
   lead-in (added with this verdict); `design/LISP-ANALYSIS.5.md` (the original
   argument).
-- NUR031 §"What was resolved" — the `Error` and `Timeout`/`Interval`
-  carve-outs and their implementing arms; NUR031 "Descriptor half
-  RESOLVED" (2026-08-02) — the `Module` descriptor.
-- `lang/spec/module-array.tsv` — the collection words' `deq`-basis
-  battery pins the value side of the rule.
+- `core/go/compare.go` — the carve-out arms themselves
+  (`opaqueIdealExactEqual` / `opaqueIdealDeepEqual`, `storeDeepEqual`,
+  `errorInfoEqual`, `hostPayloadIdentity`, `sameFnIdentity` /
+  `fnStructurallyEqual`), and `core/go/compare_nur031_test.go`, which
+  pins each of them.
+- `lang/spec/compare-restrict.tsv` — the per-kind rows, including the
+  code and type values; `lang/spec/module-array.tsv` — the collection
+  words' `deq`-basis battery pins the value side of the rule.
 
 **Modification recorded (maintainer, 2026-07-31,
 `design/NUR-RESOLUTION-PLAN.0.md`):** the two-level model is to grow
@@ -528,8 +545,10 @@ convenience equality (`eq`), deep structural equality (`deq`), and
 reference identity (`req`). Performance note: Bytes `deq` may be
 O(n); `req` gives a constant-time identity probe. Documentation
 should compare the model with JavaScript, Python, Ruby, and the
-Lisp family. The `req` design travels with the equality work
-re-opened under NUR031; this record's allowance is unchanged.
+Lisp family. The `req` design travelled with the equality work of the
+retired NUR031 and is now unowned: it is a third WORD, not a
+non-uniformity, so no record tracks it. This record's allowance is
+unchanged.
 
 ---
 
@@ -1139,299 +1158,6 @@ accepted, with a spec row pinning the residual.
 
 ---
 
-## NUR031 — Function/Word values are not `deq` to themselves; `eq` and order key on the binding name {#nur031}
-
-**Status:** Pending · **Recorded:** 2026-07-23 · **Surfaced by:**
-PR #309 review (Codex P2) · **Re-opened in part:** 2026-07-31
-(maintainer review, `design/NUR-RESOLUTION-PLAN.0.md`; was Allowed
-2026-07-24 — the resolved handle equalities below stand) · **Narrowed:**
-2026-08-02
-
-The record's previous title, in force since 2026-07-24, was
-"Code/opaque values have no value equality" (it was first recorded as
-"Opaque Ideals: `eq` and `deq` are both always false, even
-self-compare"). That title is retired: Store, Error, Timeout, Interval
-and the Module descriptor now have equality, and a module namespace has
-`eq` (below). The re-opened part was the Module/Function/Word
-remainder; **the Module half is resolved** (namespace 2026-08-01 by the
-NUR038 facet refactor, descriptor 2026-08-02), so what remains open is
-**Function/Word identity**:
-
-- a fn value is never `deq` to itself, and
-- `eq` and `tcmp` key on the **binding name** a function was reached
-  through, so two references to one function agree only when they were
-  reached through the same name.
-
-Host `ExtensionPayload` values share the same `deq` fall-through, as do
-several kinds of type value — `class` types and refinements of one,
-disjunction/`enum` types, `fnsig` and `surface` types, and any
-uninstantiated `gen` schema (`P deq P` → false for a
-`def P class {…}`; likewise `def E enum ['a' 'b']`). None is separately
-recorded, and a fix here should cover them all.
-
-### The uniform rule
-
-NUR011: for Nodes and Ideals, `eq` is reference identity and `deq` is
-deep value equality. Every value should at least be equal to itself.
-
-### The divergence (as recorded)
-
-When surfaced (PR #309 review), the rule held only for the structural
-families (lists, maps, XML, class/resource instances). Every other
-Ideal — Store, Error, Timeout, Interval, Function, Module — fell through
-both `ExactEqual` and `DeepEqual` to `false`: not `eq` to itself, not
-`deq` to itself.
-
-### What was resolved
-
-The **stateful and value-like handles now follow the rule** (this PR):
-
-- **Store** — `eq` is reference identity (the `*StoreInstanceInfo`
-  pointer: a store IS its handle), `deq` is its deep entry value (the
-  same own-entry projection as `convert Map`, recursed).
-- **Error** — a value-like Ideal (an immutable `ErrorInfo`, no
-  reference), so `eq` and `deq` both compare its fields (code, message,
-  payload map), coinciding like a scalar leaf.
-- **Timeout / Interval** — opaque handles whose identity IS their value,
-  so `eq` and `deq` are both pointer identity.
-
-Implemented in `eng/go/compare.go` (`opaqueIdealExactEqual` /
-`opaqueIdealDeepEqual` / `storeDeepEqual` / `errorInfoEqual`), mirrored
-in `eng/go/compare_deqkey.go` (`isDeqComparableHandle` → `DeqUnkeyed`,
-scanned pairwise). Verified in `eng/go/compare_nur031_test.go`,
-`lang/spec/compare-restrict.tsv`, and `lang/spec/edge-containers-1.tsv`
-§8 (whose rows deliberately pinning "Stores have NO identity" were
-rewritten — this PR overturns that earlier design decision, exactly
-what the NUR process is for).
-
-### The remainder, reviewed (2026-07-31) — the re-opened part
-
-The **code / opaque values** — `Function`/`FnDef`, `Module`/
-`ModuleExport`, `Word` — kept the equal-to-nothing behaviour, which
-the 2026-07-24 record accepted wholesale. The review splits that
-acceptance:
-
-- **Accepted as current behaviour** (correction, 2026-07-31 audit):
-  the "rejected at dispatch" claim holds only for BARE operands
-  (which auto-invoke before comparison). `eq`/`deq`'s signatures are
-  `[Any Any]` and DO admit fn values arriving as **container data** —
-  but only for a fn that cannot auto-invoke at the read: a 0-arg fn
-  read out of a map (`m.run`) dispatches on the spot, so that spelling
-  compares call RESULTS, not functions. Using `f/r` directly — a shape
-  the compiler refuses ("function value reaches eq"), so the default
-  and `-no-compile` paths both run it interpreted and agree — the
-  current answers are:
-
-  ```
-  def f fn [[n:Integer] [Integer] [add n 1]]
-  def a (f/r)   def b (f/r)          # two BINDINGS of one function
-
-  f/r eq   f/r   →  true     # same binding name
-  f/r deq  f/r   →  false    # deq is never-equal for fn values
-  f/r tcmp f/r   →  0
-
-  a/r eq   b/r   →  false    # different binding names, one function
-  a/r tcmp b/r   →  -1       # …and b/r tcmp a/r → 1: a real order,
-  a/r deq  a/r   →  false    #    but keyed on the CANON, i.e. the name
-  ```
-
-  `ExactEqual`'s type-body arm (`compare.go:359`) requires Parent
-  equality, so before the ADR-011 collapse even the same-name `eq`
-  failed when Parents differed (`Word/__FN` vs `Type/Function`) — that
-  case is RETIRED (one Function type; NUR050 resolved), which is why
-  `f/r eq f/r` is true today. What remains is the rest: `deq` is
-  never-equal for fn values at all, and canon/render keys on the
-  BINDING NAME (`def a (f/r)` canons `fn a[…]`, `def b (f/r)` canons
-  `fn b[…]`), so two references to one function are `eq`-false and
-  order apart whenever the names differ — pre-existing, not a collapse
-  regression. Function identity — what makes two references "the same
-  function" — is exactly this record's open design work. Tolerable
-  while the deeper question below is open.
-- **Re-classified as an open defect (NOT a benign allowance):**
-  `Module`/`ModuleExport` values DO reach `eq`/`deq` and return
-  `false` **including against themselves** — a silent violation of
-  reflexive equality, the same half-handled-value-kind pattern as
-  NUR050 (and the since-resolved NUR051). A wrong answer, delivered
-  quietly.
-
-  **Namespace half RESOLVED by construction (2026-08-01, commit
-  `d8f93d3`):** the NUR038 facet refactor retired the
-  `Ideal/ModuleExport` wrapper — `import` now binds a plain export Map
-  (module-namespace facet), so a namespace takes the ordinary Node
-  equality arms with no module special-casing at all: `M eq M → true`
-  (shared `*OrderedMap` identity), and two namespaces of DIFFERENT
-  exports compare `eq → false`, exactly the Map contract.
-
-  The `deq` side inherits that contract *including its limits*. A
-  namespace is `deq`-reflexive only when every export is itself
-  `deq`-reflexive: `{x:1 y:"two"}`-style exports give `M deq M → true`
-  and content-equal-but-distinct namespaces `deq → true`, while a
-  module exporting a **function** gives `M deq M → false`
-  (`IO deq IO`, `Test deq Test`, `StringUtil deq StringUtil` are all
-  false today), because `DeepEqual`'s Map arm recurses into the export
-  values and fn values hit its terminal `false`. Exporting any other
-  value that reaches that fall-through does the same — a `class` type,
-  an `enum`, a `gen` schema (`export {P: P}` for `def P class {…}`
-  gives `M deq M → false`, since `P deq P` is false) — while exporting
-  a bare type literal does not: `export {L: List}` stays reflexive.
-  This is not a
-  module defect and not unlanded module work — a plain `{a:1 g:(f/r)}`
-  Map behaves identically — it is the Function/Word `deq`
-  fall-through below, seen through a namespace. Nothing in `lang/spec`
-  pins namespace `deq` either way (its only module eq/deq rows, in
-  `frontier/frontier-nur031-module-eq.tsv`, are all `.$module`
-  descriptor rows), which is why the over-claim survived.
-
-  **Descriptor half RESOLVED (2026-08-02):** `Ideal/Module` now
-  follows the opaque-handle rule the Timeout/Interval arms
-  established — an opaque handle's identity IS its value, so `eq` and
-  `deq` are both reference identity. `NewModuleInstance` boxes a
-  `*ModuleDesc` in its `ExtensionPayload` (the payload wrapper is
-  KEPT: four kernel arms key on `ExtensionPayload`, and `ModuleDesc`
-  holds a Go map so `==` on the bare struct would panic), and the
-  kernel compares that pointer. `M.$module eq M.$module → true`,
-  `deq` likewise; descriptors of different modules compare false.
-  The Sealed Payload rule is honoured — the kernel asserts the
-  payload to its own type for IDENTITY only and never reads a field.
-  The module defect this record raised is therefore closed; the
-  reflexivity requirement below is met for modules.
-
-### Verdict (maintainer, 2026-08-14 — resolve by fix, the full shape)
-
-Not the minimal reflexivity patch: **route `eq`/`deq` through the
-type's `Behavior` for Ideals** — replacing the kernel's hardcoded arms
-with the same capability dispatch every other operation uses — **and
-give functions a stable canon independent of the binding name**, so
-two references to one function compare equal and order together.
-
-That is the future ADR the 2026-07-24 record deferred to and this
-record proposed; the verdict takes it. Doing only the reflexive half
-(`f/r deq f/r` → true by identity) would satisfy the standing
-requirement below while leaving `a/r eq b/r` → false for two bindings
-of one function — a wrong answer that is *harder* to see once
-reflexivity stops signalling that fn equality is unfinished. The
-canon is the load-bearing half: `def a (f/r)` canons `fn a[…]` and
-`def b (f/r)` canons `fn b[…]`, which is why `eq` and `tcmp` disagree
-about one function reached two ways.
-
-The fix must cover the whole fall-through set, not just Function/Word:
-host `ExtensionPayload` values, `class` types and refinements of one,
-disjunction/`enum` types, `fnsig` and `surface` types, and any
-uninstantiated `gen` schema. A namespace's `deq`-reflexivity follows
-for free once its exports are reflexive (`IO deq IO`,
-`StringUtil deq StringUtil` are false today for exactly that reason),
-so that is the measurable acceptance signal alongside the direct rows.
-The Sealed Payload rule stands: identity compares a boxed pointer and
-never reads a field, as the descriptor fix already did.
-
-Stays **Pending** until the Behavior routing and the name-independent
-canon land.
-
-### Verdict refinement (maintainer, 2026-08-15) — the three questions the fix could not answer for itself
-
-Implementation recon established that the two "halves" this record
-names are **not separable**: `def a (f/r)` stamps the binding name into
-`FnDefInfo.Name`, and that ONE field is what `eq` reads (via
-`ExactEqual`'s type-body arm → `ValuesEqual` over the payload struct),
-what `canon` renders, and what `tcmp` orders on (`compare_types.go`
-sorts by `CanonValue`). Fixing equality alone would mean special-casing
-`eq` to ignore `Name` while canon still shows it — leaving `eq` and
-canon disagreeing, which is the "wrong answer that is *harder* to see"
-the verdict above warns about. `FnDefInfo` is a value struct with no
-stable reference, so identity has to come from somewhere new. Three
-decisions follow.
-
-**1. Identity model: box for `eq`, structural for `deq`.** Exactly what
-NUR011 already says for every other Ideal — `eq` is reference identity,
-`deq` is deep value equality — applied to functions for the first time.
-`FnDefInfo` is boxed behind a pointer (the shape `*ModuleDesc` already
-uses, and for the same reason: the struct holds a Go map, so `==` on the
-bare value would panic), so two bindings of one function share it and
-`a/r eq b/r` is true. `deq` compares signatures and body, so
-`f/r deq f/r` is true and a re-parsed canon is `deq` to its original.
-
-The alternatives were rejected on measurable grounds. Reference identity
-for BOTH would leave `parse(canon(f/r)) deq f/r` permanently false — a
-re-parsed function is a fresh box — so ADR-015's gate could never go
-green for functions, only ever carry them on its ledger. Structural for
-both would collapse the `eq`/`deq` distinction and make two
-independently-written identical functions `eq`, contradicting NUR011's
-reference rule.
-
-**2. Canon: the anonymous fn literal.** `canon (f/r)` renders
-`fn [[x:Any] [Any] [x]]` — the name is dropped entirely, not replaced.
-It is already valid source, it re-parses to a structurally identical
-function, and it is name-independent by construction rather than by a
-naming scheme. With structural `deq` that satisfies ADR-015 with no new
-syntax and no new record. (A stable DERIVED name was available and not
-taken: it keeps debug readability but needs a scheme, and the name is
-not part of what re-parses, so it would be decoration on the contract
-rather than part of it.)
-
-**3. Sequencing: PR #366's native-callback seam lands first.** That PR
-reports `installDef` → `buildFnBodyHandler` rebuilding a fn's handler
-closed over the INSTALLING registry, dropping `FnDefInfo.Registry` —
-the same code path that stamps the binding name. Its callback-seam half
-is a pure bug fix with no cross-engine divergence to migrate, so
-landing it first means this record edits `installDef` once, against
-settled behaviour, instead of twice with a rebase between.
-
-**This record is therefore DESIGN-UNBLOCKED but SEQUENCED**: it stays
-Pending, and its next action is gated on #366's callback-seam fix
-rather than on a further decision.
-
-**Standing requirement (maintainer, 2026-07-31; module half
-discharged 2026-08-02):** every value — functions and modules
-included — must eventually fall under equality, at minimum
-reflexively (a value is `eq`/`deq` to itself). **Modules satisfy it
-for `eq` unconditionally, and for `deq` on the descriptor
-unconditionally**; a namespace satisfies `deq`-reflexivity only when
-every export does, and the exports that do not (functions, and the
-type values that share their fall-through) are the general `deq` gap,
-not a module gap. The function-type-vs-value question is
-settled (ADR-011: one `Function` type; NUR050 resolved), so what this
-record still tracks is function IDENTITY — a stable canon independent
-of the binding name, since canon/render today keys on the name a
-function was reached through — plus the Behavior routing. The likely
-shape — routing `eq`/`deq` through the type's `Behavior` for Ideals
-rather than the kernel's hardcoded arms (the future ADR the
-2026-07-24 record deferred to) — is this record's own proposal for
-that work, not a commitment ADR-011 made. NUR050 is resolved and
-retired, so there is nothing left to track alongside; what ADR-011 did
-record in its Consequences is the deferral itself — "Two references to
-the same function still compare unstably … that is function IDENTITY,
-the NUR031 equality work, deliberately not solved here" (ADR.md,
-§Consequences; its parenthesised `(f/r) tcmp (f/r)` → -1 example
-predates the collapse and no longer runs — see the table above for the
-current spellings) — which is the work this record inherits. Note the
-Sealed Payload constraint
-stands and was honoured by the descriptor fix: module handles are
-backed by `ExtensionPayload`, which the kernel deliberately does not
-inspect (eng/go/CLAUDE.md "Sealed Payload") — reference identity
-compares the boxed pointer without reading a field.
-
-### Evidence
-
-- `eng/go/compare.go` — the resolved handle arms; the type-body arm at
-  :359 that answers `eq` true for a same-canon fn pair; the Map arm of
-  `DeepEqual` (:517, arm at :587-605) that recurses into export values
-  via `deqMapEntries` (:502); and
-  `DeepEqual`'s terminal `false`, which is what answers `f/r deq f/r`
-  and `IO deq IO`.
-- `eng/go/compare_deqkey.go:48` — `DeqNeverEqual`, which MIRRORS that
-  fall-through for the bucketed collection scans
-  (`unique`/`member`/`indices`/`group`, `native_array.go:939,1140,
-  1169,1195`). It is not on the `deq` word's own path.
-- `lang/go/native/native_module_types.go` — the plain export Map
-  carrying the module-namespace facet, and the `ExtensionPayload`-backed
-  descriptor handle.
-- `eng/go/compare_nur031_test.go` — `TestNUR031ModuleDescriptorEquality`
-  pins the descriptor half.
-- `lang/spec/compare-restrict.tsv`, `lang/spec/edge-containers-1.tsv`
-  §8, `lang/spec/edge-containers-2.tsv`, `lang/spec/edge-errors-2.tsv`.
-
----
-
 ## NUR039 — `slice` with a negative start silently ignores its end argument {#nur039}
 
 **Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `boru:cli`
@@ -1832,6 +1558,60 @@ than a formatting one — `word(foo)` denotes a word VALUE, while bare
 `foo` re-parses as a word that will be DISPATCHED. NUR059 scoped its word
 arm to modifier-bearing words for exactly this reason. Whoever takes this
 record decides that first.
+
+## NUR075 — `deq` is extensible per type, `eq` is not {#nur075}
+
+**Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** the
+retired NUR031's fix — the one part of its verdict the fix did not take
+
+**Rule:** a per-type operation is reached through the type's capability
+seam, so a type can answer for its own values. `Truther`, `Sizer`,
+`Comparer`, `DeepEqualer` and `Formatter` all work this way, exposed to
+boru code through `behave`.
+
+**Divergence:** `deq` has `DeepEqualer` — a type installs one and
+`DeepEqual` consults it (`core/go/deepequal_capability.go`, reached at the
+bottom of the walk so it can only turn the terminal `false` into a real
+answer). `eq` has no counterpart. `ExactEqual` is entirely hardcoded
+arms, so a host or boru type can define what "same value" means for its
+values but not what "same thing" means, and the two halves of one word
+family are extensible on different terms.
+
+**How it got here.** NUR031's verdict proposed routing `eq`/`deq` through
+the type's `Behavior` for all Ideals, replacing the kernel's hardcoded
+arms wholesale. Its fix did not do that: it closed every divergence the
+record measured — reflexivity for every kind, identity that survives
+rebinding, a name-independent function canon — by adding arms rather than
+removing them, and the proposed mechanism turned out to be a refactor of
+the most-exercised path in the kernel with no observable change to show
+for it. What the mechanism WOULD have bought, and the arms do not, is
+this one asymmetry. It is recorded here so the deviation from that
+verdict is visible rather than lost with the retired record.
+
+**Cost of the divergence:** narrow today. A type wanting reference
+identity for its values gets it already — every kernel-known payload
+kind has an arm, and a sealed host payload gets box identity by default
+— so nothing is currently *unable* to answer `eq`. The asymmetry bites
+when a type wants an `eq` that is neither box identity nor the kernel's
+guess: an interned value that should be `eq` across two constructions,
+or a handle whose identity lives one level below its payload box.
+
+**Proposed verdict:** none yet. The candidates are an `ExactEqualer`
+capability mirroring `DeepEqualer` (small, symmetric, and paid for only
+by types that install it); the full `Behavior` routing NUR031 proposed
+(uniform, but a large refactor of a hot path); or Allowed, on the
+argument that reference identity is a KERNEL property — what "the same
+thing" means is the runtime's answer, not a type's — in which case
+`DeepEqualer` is the sound asymmetry and the register should say so.
+The third reading is the strongest and is why this is not filed as a
+fix-by-default.
+
+**Evidence:** `core/go/deepequal_capability.go` (the `deq` capability and
+its LCA walk); `core/go/compare.go` — `ExactEqual`'s arms, which no
+capability can reach, against `DeepEqual`'s terminal
+`deepEqualCapability` call; `lang/go/native/native_behave.go` (the
+`behave` slots, `DeepEqualer` among them and no `eq` twin);
+`core/go/capability_gaps_test.go`.
 
 ## NUR060 — The parser twins disagree on open-input sources beyond the corpus {#nur060}
 
@@ -2267,7 +2047,88 @@ header says so in place, so the gap is not mistaken for coverage.
 
 ---
 
-## NUR074 — A StackForm can call a word but cannot apply a function value {#nur074}
+## NUR074 — `canon` renders a function's parameter names, so alpha-equivalent functions render differently {#nur074}
+
+**Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:**
+`design/unison-hash-identity-probe.0.md` P4, a proof-of-concept pass over the
+canon contract; flagged for this register by the PR #376 review (Codex P1).
+
+**Rule:** a value's canonical rendering should depend on the **value**, not on
+names incidental to how it happened to be written. NUR031 already applies that
+principle to one half of a function's incidental naming — its 2026-08-15
+refinement directs that "canon renders the ANONYMOUS fn literal", removing the
+*binding* name from the rendering. Parameter names are the same class of
+incidental naming and are not covered by that verdict.
+
+**Divergence:** two **unbound** anonymous functions differing only in a
+parameter name render differently, so no binding name is involved and this is
+independent of NUR031:
+
+```
+canon ([x:Number] => [mul x x])  ->  fn [[x:Number][Any][word(mul) word(x) word(x)]]
+canon ([y:Number] => [mul y y])  ->  fn [[y:Number][Any][word(mul) word(y) word(y)]]
+FAIL  alpha-equivalent fns canon identically
+```
+
+The two functions are behaviourally indistinguishable — same arity, same
+parameter type, same body modulo the bound name — and there is no source
+spelling either could have that the other could not. Landing NUR031 in full
+leaves this exactly as it is.
+
+**Why it matters beyond cosmetics:** any scheme deriving an *identity* from
+canon (`design/CONTENT-ADDRESSING.0.md`) inherits the divergence — two
+alpha-equivalent definitions get two identities, so a content-addressed cache
+or dedup would treat them as different code. That document does not propose
+changing `canon` to fix it; it lists alpha-normalisation as a step a hashing
+layer must perform for itself. This record exists so the choice between those
+two homes is made deliberately rather than by default.
+
+**Sharpened by NUR031's fix (2026-08-16):** that record resolved by making a
+function's `deq` its CONTENT compared *as canon*, so canon is no longer only a
+rendering — it is the equality. Alpha-equivalent functions are therefore not
+`deq`, and the bucketed collection scans inherit it: `unique` over
+`([x:Number] => [mul x x])` and `([y:Number] => [mul y y])` keeps both. The
+"beyond cosmetics" paragraph above is now a live language behaviour rather than
+a property of a hypothetical hashing layer, which raises the stakes on
+candidate 1 below. Nothing about NUR031's fix depends on the answer — it
+compares whatever canon renders — so this stays independently decidable.
+
+**Evidence:** `scripts/hash-identity-probe.boru` P4 and its wrapper
+`scripts/hash-identity-probe.sh`; `design/unison-hash-identity-probe.0.md` §4;
+`core/go/compare.go` `fnStructurallyEqual` (the canon-as-equality path);
+`NUR.md` §NUR031 (retired 2026-08-16 — `git log -S NUR031` for the
+binding-name half and its 2026-08-15 refinement).
+
+**Documentation status:** `boru describe canon` says canon renders "canonical,
+round-trippable boru source" and says nothing about naming. ADR-015 requires
+only that the rendering re-parse to a `deq` value, which the current output
+would satisfy for functions once NUR031 and NUR072 land — parameter names do
+not break the round-trip, only the canonicity of the rendering.
+
+**Proposed verdict:** none yet; three candidates, and they put the fix in
+different places.
+
+1. **De-name parameters in canon**, rendering them positionally the way Unison
+   rewrites variables. Makes canon genuinely canonical for functions, but the
+   output stops being readable source and the parser would have to accept the
+   positional form — a large change reaching `parser/spec`.
+2. **Allowed**, on the argument that `canon` renders *source* and source has
+   parameter names, so alpha-normalisation is not its job. Then any identity
+   scheme must normalise on top of canon, and that obligation should be
+   written down where the scheme is (`CONTENT-ADDRESSING.0.md` §4.2 already
+   lists it as step 3).
+3. **Split the two jobs** — keep `canon` readable and define a separate normal
+   form for identity, which is also the cleanest answer to NUR072's bare-word
+   question and to the map-ordering question `CONTENT-ADDRESSING.0.md` §4.4
+   Phase 0 raises. Most work, and it makes the identity story independent of
+   every rendering decision.
+
+Recorded now so the divergence is not silently baselined by NUR031 landing and
+appearing to close the function-canon story.
+
+---
+
+## NUR076 — A StackForm can call a word but cannot apply a function value {#nur076}
 
 **Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** fixing the
 `OnCall` frame-skeleton over-count — the round-trip contract held for every

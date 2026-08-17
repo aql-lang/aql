@@ -321,11 +321,17 @@ compiler refuses to put it in a Value.
 
 For plugin/host-supplied payloads, use `ExtensionPayload` — its
 `Body any` is the explicit escape hatch the kernel does NOT
-inspect. One recorded accommodation (NUR031): the eq/deq arms
-(`moduleDescIdentity` in compare.go, `handleKind` in
-compare_deqkey.go) assert `Body` to the kernel-owned `*ModuleDesc`
-for POINTER IDENTITY only — the Module descriptor is an
-identity-equal opaque handle; its fields are never read.
+inspect. Two accommodations, both identity-only and neither
+reading a field (from the retired NUR031's equality work):
+`moduleDescIdentity` asserts `Body` to the kernel-owned
+`*ModuleDesc` for POINTER IDENTITY — the Module descriptor is an
+identity-equal opaque handle — and `hostPayloadIdentity` compares
+two `Body` boxes with `==` so a sealed host payload is at least
+`eq`/`deq` to ITSELF (an uncomparable body answers false rather
+than panicking). Both live in `core/go/compare.go`; `handleKind`
+in `compare_deqkey.go` mirrors the descriptor half for the
+bucketed scans. A host type wanting a structural `deq` installs
+the `DeepEqualer` capability, which is consulted first.
 
 ## Type Behavior
 
