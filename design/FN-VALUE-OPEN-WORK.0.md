@@ -12,7 +12,7 @@
 
 | # | Item | State | Blocked on |
 |---|---|---|---|
-| A | **Clause 3** — "parens do not re-step" | Measured three ways. **RULED 2026-08-17: BROAD** (§1.1). | Nobody — unblocked (§2) |
+| A | **Clause 3** — "parens do not re-step" | Measured three ways. **RULED 2026-08-17: BROAD** (§1.1); fix not yet built. | Nobody — unblocked (§2) |
 | B | **Clause 2** — passing a function requires `/r` | Mechanism located (4 sites, ~56 lines). Blast radius **3 rows**, not 9. **ADR-011 amended 2026-08-17**; all four sites retire together (§1.1). | Nobody — unblocked (§3) |
 | C | **Break 2** — compiler refuses a 0-arg fn read from a plain container | Refusal is **sound**; it masks a confirmed miscompile. The mechanism to close it already exists and ships at arity 0. | Nobody — unblocked (§4) |
 | D | **NUR077** — a StackForm cannot apply a function value | Design sketch tested. **RULED 2026-08-17: a new dedicated Apply Op** (§1.1). Two holes to close first — see §5 before building. | Nobody — unblocked (§5) |
@@ -22,9 +22,11 @@
 Four decisions, taken together, close every "blocked on maintainer" line
 above:
 
-1. **Clause 3 is implemented BROAD.** A user paren never re-steps its
-   collapsed value — reference and inline fn literal alike — so
-   `(fn Integer [Integer] [10 add]) 7` becomes two values and the
+1. **Clause 3 is ruled BROAD** — the selected reading for the fix, not
+   yet the runtime state (both engines still apply
+   `(fn Integer [Integer] [10 add]) 7` today). Under broad, a user paren
+   never re-steps its collapsed value — reference and inline fn literal
+   alike — so that spelling becomes two values and the
    inline-application idiom is removed from the language. The
    narrow-by-`FnDefInfo.Name` alternative (§2.3) is rejected. The
    `ReachGroup` exclusion stays load-bearing (§2.1). Accepted costs: 30
@@ -45,8 +47,9 @@ above:
 4. **NUR077 gets a new dedicated Apply Op** (not a `DoEval` extension):
    arity-carrying, consumes the fn value, seamed at `execFnDefLiteral`
    (§5.1), serialised by `Flatten` via the existing `apply` word — after
-   the §5.2 over-count and the two §5 holes are fixed as their own
-   changes.
+   the THREE prerequisite defects are fixed as their own changes: the
+   §5.2 over-count, then §5's two holes (the ADR-016 0-arg anonymous
+   gate and `apply`'s double-recording).
 
 A and B were language decisions and are now taken. C and D are
 engineering, and C is the smaller and better-understood of the two; the
