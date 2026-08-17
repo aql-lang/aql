@@ -203,7 +203,13 @@ refusal is a bug. The emitter interns bare type nodes, nested included.
 
 ## ADR-011 — One Function type {#adr-011}
 
-**Status:** Accepted · **Date:** 2026-07-31 · with NUR050
+**Status:** Accepted · **Date:** 2026-07-31 · with NUR050 ·
+**Amended:** 2026-08-17 (maintainer): the final sentence's fourth clause
+("a bare fn name before a `Function`-typed slot resolves as a reference")
+is struck, per clause 2 of the 2026-08-16 `/r` ruling
+(`design/FUNCTION-VALUE-SCOPE.0.md` §12.4). Passing a function as an
+argument requires `/r`; the bare-name-calls rule now applies universally,
+with no slot-typed exception.
 
 There is exactly one function type, `Type/Function`. `Word/__FN`
 (FixedID 23) is retired, never recycled; the TS twin moved in lockstep.
@@ -212,8 +218,7 @@ A function value is always the inert, referenceable thing — **calling is
 an act of the use site**. The discriminators are the name/value
 distinction and the transient `Quoted` flag, never the Parent type. A bare
 name bound to a function calls; a value at the pointer dispatches; `/r`
-takes the reference and is no collection barrier; a bare fn name before a
-`Function`-typed slot resolves as a reference.
+takes the reference and is no collection barrier.
 
 ---
 
