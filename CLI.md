@@ -132,27 +132,36 @@ runaway sooner. See `design/TAPE-DATA-STRUCTURE.10.md`.
 
 ### Bytecode compilation
 
-> **Experimental.** boru ships an optional bytecode compiler that lowers the
+> **Experimental.** boru ships a bytecode compiler that lowers the
 > statically-typed subset of a program to a compact instruction stream and runs
-> it on a small VM. **Execution defaults to the interpreter** — the compiler is
-> opt-in and produces results identical to the interpreter, so the choice is
-> purely about performance (and about exercising the compiler).
+> it on a small VM. **Execution defaults to best-effort compilation** — a
+> program that is fully compilable runs on the VM, and anything the emitter
+> refuses falls back to the interpreter silently and soundly, producing
+> identical results. The choice is therefore purely about performance (and
+> about exercising the compiler); use `--no-compile` to pin the interpreter.
 
-There are two modes, selected per run by a flag or an environment variable:
+There are three modes, selected per run by a flag or an environment variable:
 
 | Flag | Env | Behaviour |
 |------|-----|-----------|
 | `--compile` | `BORU_COMPILE` | **Best-effort.** Compile and run on the VM when the whole program is compilable; **silently fall back** to the interpreter when any part is not. Never changes the result. |
 | `--force-compile` | `BORU_FORCE_COMPILE` | **Strict.** *Require* the bytecode path. If the program is not compilable, abort with the emitter's refusal reason instead of falling back. Use this to *guarantee* a run went through the compiler (verifying the compilable subset, benchmarking the VM, or catching a compiler regression the silent fallback would hide). |
-| *(none)* | `BORU_NO_COMPILE` | **Interpreter** — the default. `BORU_NO_COMPILE` is a forward-compatible kill switch that **overrides** both of the above (and the future default flip), so a deployment can pin the interpreter. |
+| `--no-compile` | `BORU_NO_COMPILE` | **Interpreter.** The kill switch: it **overrides** both of the above *and* the default, so a deployment (or a differential run) can pin the interpreter. |
 
-Precedence: `BORU_NO_COMPILE` wins over everything; otherwise `--force-compile` /
-`BORU_FORCE_COMPILE` wins over `--compile` / `BORU_COMPILE`.
+Note that `--compile` / `BORU_COMPILE` select the same best-effort mode the
+default already uses; they remain accepted, and are worth writing when a script
+wants the intent on the record.
+
+Precedence: `--no-compile` / `BORU_NO_COMPILE` wins over everything; otherwise
+`--force-compile` / `BORU_FORCE_COMPILE` wins over `--compile` /
+`BORU_COMPILE`; with none of them set, the mode is best-effort compilation
+(`cmd/go/internal/run/run.go`, `ResolveCompileMode`).
 
 ```bash
 boru --compile script.boru              # try the compiler, fall back silently
 boru --force-compile script.boru        # demand the compiler; fail loudly if it can't
 BORU_COMPILE=1 boru script.boru          # same as --compile, via the environment
+boru --no-compile script.boru           # pin the interpreter
 BORU_NO_COMPILE=1 boru --compile s.boru  # kill switch: runs the interpreter anyway
 boru do --force-compile 1 add 2        # the flags work on `boru do` too
 ```

@@ -1,5 +1,23 @@
 # Rust, Zig, Roc, Faber — Language Lessons Considered Against boru
 
+> **Superseded on the Roc axis (2026-08-18).** Roc replaced its effect
+> system, its polymorphism system, its error type and its default
+> execution lane after this report was written, so §1, §4 and the Roc
+> column of §6.1 are stale in mechanism, not merely thin.
+> **Read [`roc-in-boru-report.0.md`](roc-in-boru-report.0.md) instead**
+> for Roc; its §8 lists 22 corrections to this document, boru-side ones
+> included (`'cap_denied` is a phantom code, the `'atom` spellings are
+> syntax errors, `Value` is 104 bytes not 72, `boru build` is not AOT,
+> the spec is 7,421 rows not ~11K).
+>
+> The Rust, Zig and Faber **language comparisons** stand. Two claims inside
+> them do not: §2.1's "`describe` … is generated from the live engine, so it
+> cannot drift" and §5.1's "describe output *cannot drift* because it is the
+> runtime" are true of signatures, precedence and dispatch order but **false
+> of worked examples**, which are hand-authored or fall back to a Go-side
+> heuristic — `boru describe add` ships a literal `;# ...` placeholder
+> (new report §7.4).
+
 ## Scope
 
 This report answers two questions asked of the boru project in July 2026:
