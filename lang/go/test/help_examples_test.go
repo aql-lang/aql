@@ -238,13 +238,25 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		})
 	}
 
-	for site := range placeholderSites {
-		if !seenPlaceholders[site] {
-			t.Errorf("placeholderSites has a stale entry %q: that example no longer "+
-				"renders %q, so remove the entry — the ratchet only shrinks",
-				site, examplePlaceholder)
-		}
-	}
+	// NO staleness assertion here, deliberately. `help`'s dynamic example
+	// map is process-global and is populated as a side effect of any test
+	// that imports a module, so the placeholder set depends on what else
+	// ran first in this package: measured alone, the module words are
+	// undefined and render `...`; measured after another test imported
+	// `boru:string-util`, roughly half of them evaluate. An
+	// "entry no longer needed" check over that set therefore fails or
+	// passes by test order, which is worse than not having it —
+	// verified, not assumed: asserting it made `make test` fail while
+	// `go test -run TestHelpExamplesCorrect` passed.
+	//
+	// The direction that IS sound is kept above: placeholderSites is the
+	// set measured in the sparsest state, so a fuller state can only
+	// produce FEWER placeholders, never a site outside it. New
+	// placeholders are what the ratchet exists to catch.
+	//
+	// Making this two-directional needs the example state injectable
+	// rather than package-global; that is its own change.
+	_ = seenPlaceholders
 
 	t.Logf("validated %d examples across all words (%d placeholder sites tracked)",
 		testedCount, len(placeholderSites))
@@ -331,10 +343,11 @@ const examplePlaceholder = "..."
 const noValueMarker = "(no value)"
 
 // placeholderSites records every (word, expression) that still renders
-// the `...` placeholder, keyed "word | expr". It is a RATCHET in both
-// directions: a NEW placeholder fails the test, and a STALE entry — one
-// whose example has started evaluating — fails it too, so the map cannot
-// quietly become a list of things that used to be broken.
+// the `...` placeholder, keyed "word | expr". A NEW placeholder — any
+// site not listed here — fails the test. The reverse check (an entry
+// that no longer needs to be here) is NOT asserted, because the set
+// depends on process-global state other tests mutate; see the note at
+// the end of TestHelpExamplesCorrect.
 //
 // Keying by site rather than by word is deliberate: a word-keyed
 // allowlist accepts every future placeholder under an already-listed
