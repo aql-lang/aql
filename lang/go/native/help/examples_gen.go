@@ -106,6 +106,7 @@ func init() {
 		"flatten 2 ['a','b']":                 "['a' 'b']",
 		"flatten ['c','d']":                   "['c' 'd']",
 		"flex {a:1}":                          "{a:1}",
+		"fnsig ['a','b']":                     "FunctionSignature({[{[{ String 'a' false false}] [String]}]})",
 		"fold ['a','b'] {a:1,b:2} 2":          "'b'",
 		"fold ['a','b'] {c:3,d:4}":            "'b'",
 		"fold ['c','d'] ['e','f']":            "'d'",

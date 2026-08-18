@@ -202,6 +202,31 @@ func diagValue(v Value) string {
 	return v.String()
 }
 
+// diagValueList renders the run of values a diagnostic is about, for the
+// errors whose subject is a SEQUENCE rather than one value (ADR-017).
+// Abbreviated twice over: at most diagMaxListHead values, each through
+// diagValue — so one enormous list element cannot swamp the line, and
+// neither can a hundred of them.
+func diagValueList(vals []Value) string {
+	if len(vals) == 0 {
+		return "[]"
+	}
+	shown := vals
+	more := 0
+	if len(shown) > diagMaxListHead {
+		more = len(shown) - diagMaxListHead
+		shown = shown[:diagMaxListHead]
+	}
+	parts := make([]string, 0, len(shown)+1)
+	for _, v := range shown {
+		parts = append(parts, diagValue(v))
+	}
+	if more > 0 {
+		parts = append(parts, "… ("+strconv.Itoa(more)+" more)")
+	}
+	return "[" + strings.Join(parts, " ") + "]"
+}
+
 // describeStackTypes returns a human-readable description of the types
 // on the stack around a given position, for inclusion in error messages.
 func describeStackTypes(tape *Tape, pointer int) string {

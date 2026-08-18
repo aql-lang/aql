@@ -64,3 +64,27 @@ def f fn (quote [[x:Integer][Integer][x mul 2]])  (f/r) 4	8	a paren-spelled spec
 # §6  composition — closures, generics, higher-order use
 def make-adder fn x:Integer [Function] [fn y:Integer [Integer] [x add y]]  def add5 (make-adder 5)  add5 3	8	nested triple-form fns capture lexically
 def identity gen [T] fn x:T [T] [x]  identity 42	42	generic fn via the triple form
+#
+# §7  the OUTPUT slot — types, and only types
+#
+# The output slot is the sequence of types the returns must MATCH. It is
+# never a sequence of values to produce: nothing in it is appended to the
+# body. It reads a `name:Type` pair exactly as the input slot does, so the
+# two spellings of one declaration cannot mean different things — and a
+# literal is a literal TYPE, admitting exactly itself (a value is a type,
+# ADR-010). See design/FN-OUTPUT-SIG.0.md for the sugar this replaced.
+def si1 fn [s:String i:Integer [convert Integer s]]  si1 '1'	1	named return, spec-list form
+def si1 fn s:String i:Integer [convert Integer s]  si1 '1'	1	named return, triple form
+def w fn [[s:String] [i:Integer] [2]]  def t fn [s:String i:Integer [2]]  (w 'a') add (t 'a')	4	fn [x:A y:B [b]] ≡ fn [[x:A] [y:B] [b]] in the output slot too
+def f fn x:String 22 [22]  f 'a'	22	a literal output type admits exactly itself
+def f fn x:String 22 [33]  f 'a'	ERROR:type_error	a literal output type rejects a different value
+def f fn [[Integer] ['ok'] ['ok']]  f 1	'ok'	a String naming no type is a literal type, not a failed type-name lookup
+def f fn [[s:String] [{i: Integer}] [{i:1}]]  f 'a'	{i:1}	an EXPLICIT map still declares a Map-typed return
+def f fn [[Integer] ['Integr'] [1]]  f 1	ERROR:unknown type	a MISSPELLED type name has the shape of one, so it stays a loud unknown-type error, not a silent literal
+def mk fn [[] ['integr'] [1]]  mk	ERROR:type_error	…while a lowercase string could never be a type name, so it IS the literal, and 1 does not match it
+#
+# The Implicit flag is what separates the two readings, on BOTH slots: a
+# `name:Type` PAIR lowers to a map flagged Implicit and names a slot, an
+# explicit `{…}` map does not and IS the type.
+def f fn [[{x: Integer}] [Integer] [1]]  f {x:1}	1	an EXPLICIT map input declares one Map-typed param, not a named binding
+def f fn [[x:Integer] [Integer] [x]]  f 9	9	…while the pair spelling names the param and binds it in the body

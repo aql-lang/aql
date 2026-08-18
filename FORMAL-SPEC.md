@@ -470,7 +470,8 @@ InputSig     ::= "[" { Param | Barrier } "]"
 NonListInput ::= Param                       (* not a ListValue *)
 Param        ::= [ Name ":" ] TypeExpr [ "?" ]
 Barrier      ::= "|"
-OutputSig    ::= TypeExpr | "[" { TypeExpr } "]"
+OutputSig    ::= Ret | "[" { Ret } "]"
+Ret          ::= [ Name ":" ] TypeExpr
 Body         ::= ListValue | Expr
 ```
 
@@ -505,9 +506,19 @@ fn [[in1] [out1] [in2] [out2] ...]
 ```
 
 Named parameters are bound by name while evaluating a function body. Unnamed
-parameters are provided positionally. If an output signature consists entirely
-of concrete non-type values, it is return-by-value sugar: those values are
-appended to the body after an `end`, and the static return types are `Any`.
+parameters are provided positionally.
+
+An output signature is the sequence of types the returns must match. It is
+never a sequence of values to produce: nothing in an output signature is
+appended to the body, and no output signature degrades the static return
+types. Since a value is a type (ADR-010), a literal in an output signature
+is a literal type, admitting exactly itself — `fn x:String 22 [22]` is
+well-typed and `fn x:String 22 [33]` is not.
+
+A return may be NAMED, by the same `Name ":" TypeExpr` pair the parameters
+use, so that `fn [x:A y:B [body]]` and `fn [[x:A] [y:B] [body]]` are the
+same declaration read the same way. The name is documentation: a signature
+has no named-return concept, and the name binds nothing.
 
 ### 5.5 Forward/stack barrier in signatures
 

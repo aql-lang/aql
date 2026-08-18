@@ -23,9 +23,23 @@ func ReturnTypeErrorText(funcName string, index int, expected *Type, got Value) 
 }
 
 // returnCountErrorText is the detail for funcName leaving the wrong number of
-// return values (expected vs got).
-func ReturnCountErrorText(funcName string, expected, got int) string {
-	return fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
+// return values (expected vs got), followed by the values themselves.
+//
+// ADR-017: a diagnostic names the values it is about. "expected 1 return
+// value(s), got 2" states a disagreement over a COUNT and then withholds
+// the one thing that identifies which values are involved — leaving the
+// reader to work out what the second value even was. `got` and the
+// rendered list always describe the same values: callers pass exactly
+// the slice the count was taken over.
+//
+// values may be empty — a body that returned nothing has nothing to
+// show, and the count alone is the whole story there.
+func ReturnCountErrorText(funcName string, expected, got int, values []Value) string {
+	base := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
+	if len(values) == 0 {
+		return base
+	}
+	return base + " — " + diagValueList(values)
 }
 
 // buildReturnTypeError assembles the COMPLETE return-type diagnostic — the
@@ -52,8 +66,8 @@ func BuildReturnTypeError(source, funcName string, index int, expected *Type, go
 
 // buildReturnCountError assembles the COMPLETE return-count diagnostic — the
 // shared detail text plus the declaration span — so both engines match.
-func BuildReturnCountError(source, funcName string, expected, got int, primaryPos SrcPos, decl DeclSite) *BoruError {
-	ae := makeBoruErrorAt("type_error", ReturnCountErrorText(funcName, expected, got), funcName, source, "", primaryPos)
+func BuildReturnCountError(source, funcName string, expected, got int, values []Value, primaryPos SrcPos, decl DeclSite) *BoruError {
+	ae := makeBoruErrorAt("type_error", ReturnCountErrorText(funcName, expected, got, values), funcName, source, "", primaryPos)
 	attachDeclSpan(ae, decl,
 		fmt.Sprintf("the declaration of `%s` expects %d return value(s)", funcName, expected))
 	return ae

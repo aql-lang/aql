@@ -2128,12 +2128,12 @@ func vmReturnTypeErr(r *core.Registry, fn *compiler.CompiledFn, index int, expec
 	return core.BuildReturnTypeError(src, fn.Name, index, expected, got, core.SrcPos{}, fn.Decl)
 }
 
-func vmReturnCountErr(r *core.Registry, fn *compiler.CompiledFn, expected, got int) error {
+func vmReturnCountErr(r *core.Registry, fn *compiler.CompiledFn, expected, got int, values []core.Value) error {
 	src := ""
 	if r != nil {
 		src = r.Source
 	}
-	return core.BuildReturnCountError(src, fn.Name, expected, got, core.SrcPos{}, fn.Decl)
+	return core.BuildReturnCountError(src, fn.Name, expected, got, values, core.SrcPos{}, fn.Decl)
 }
 
 // vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
@@ -2345,17 +2345,20 @@ func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core
 	if hasFrame {
 		produced := len(stack) - stackBase
 		if produced < len(rets) {
-			return stack, vmReturnCountErr(r, fn, len(rets), produced)
+			return stack, vmReturnCountErr(r, fn, len(rets), produced, stack[stackBase:])
 		}
 		if extra := produced - len(rets); extra > 0 {
 			if extra > fn.NUnnamed {
-				return stack, vmReturnCountErr(r, fn, len(rets), produced-fn.NUnnamed)
+				// Allowance spent from the bottom — report the top values,
+				// the same slice the interpreter reports (ADR-017).
+				return stack, vmReturnCountErr(r, fn, len(rets), produced-fn.NUnnamed,
+					stack[stackBase+fn.NUnnamed:])
 			}
 			stack = append(stack[:stackBase], stack[stackBase+extra:]...)
 		}
 	} else {
 		if len(stack) < len(rets) {
-			return stack, vmReturnCountErr(r, fn, len(rets), len(stack))
+			return stack, vmReturnCountErr(r, fn, len(rets), len(stack), stack)
 		}
 		// Frameless (re-entrant closure / fn-root run): same trim over the
 		// whole residual — a closure unit has NUnnamed 0, so this is a

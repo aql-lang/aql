@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // This file owns the canonical fn-signature parser. Both the bare
@@ -429,7 +431,11 @@ func keywordParam(name, kw string) FnParam {
 // unenforced (its *Type degrades to Any, so the pattern IS the contract).
 func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 	if !outputSig.Parent.Equal(TList) || !IsConcrete(outputSig) {
-		t, pat, err := ResolveSigType(r, outputSig)
+		sig, err := unwrapNamedReturn(outputSig)
+		if err != nil {
+			return nil, nil, err
+		}
+		t, pat, err := ResolveSigType(r, sig)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -445,9 +451,12 @@ func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 	types := make([]*Type, elems.Len())
 	var pats []*Value
 	for i, e := range elems.Slice() {
-		var err error
+		sig, err := unwrapNamedReturn(e)
+		if err != nil {
+			return nil, nil, err
+		}
 		var pat *Value
-		types[i], pat, err = ResolveSigType(r, e)
+		types[i], pat, err = ResolveSigType(r, sig)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -459,6 +468,56 @@ func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 		}
 	}
 	return types, pats, nil
+}
+
+// unwrapNamedReturn resolves the `name:Type` spelling of a RETURN
+// declaration to the type on the pair's value side. Pair syntax lowers a
+// bare `i:Integer` to a single-entry map flagged Implicit
+// (parser/go/parse.go), so `fn [s:String i:Integer [body]]` hands this
+// slot the same shape `ParseFnParams` receives on the input side — and
+// the two slots must read it the same way, because
+// `fn [x:A y:B [body]]` IS `fn [[x:A] [y:B] [body]]`. The name is
+// documentation: FnSig has no named-return concept and nothing
+// downstream reads it, but accepting the spelling is what keeps the two
+// slots symmetric.
+//
+// An EXPLICIT map (`{i: Integer}`) is left alone — it declares a
+// Map-typed return, the same split ParseFnParams draws on Implicit for
+// a Map-typed param.
+func unwrapNamedReturn(v Value) (Value, error) {
+	if !v.Parent.Equal(TMap) || v.Data == nil {
+		return v, nil
+	}
+	m, err := AsMutableMap(v)
+	if err != nil || m == nil || !m.Implicit {
+		return v, nil
+	}
+	keys := m.Keys()
+	if len(keys) != 1 {
+		return Value{}, fmt.Errorf("function spec: return map must have exactly one key")
+	}
+	if err := ValidateWordName(keys[0]); err != nil {
+		return Value{}, fmt.Errorf("function spec: %w", err)
+	}
+	inner, _ := m.Get(keys[0])
+	return inner, nil
+}
+
+// looksLikeTypeName reports whether name has the SHAPE of a type name:
+// every `/`-separated part starting with an uppercase letter, the rule
+// NewType enforces. It is how ResolveSigType tells a misspelled type
+// name from a literal string — see the call site.
+func looksLikeTypeName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, part := range strings.Split(name, "/") {
+		r, _ := utf8.DecodeRuneInString(part)
+		if !unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // ResolveSigType converts a Value (from a pair's value side) to a *Type
@@ -524,7 +583,23 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 			return ResolveDefType(r, *defVal)
 		}
 		t, err := ResolveTypeName(name)
-		return t, nil, err
+		if err == nil {
+			return t, nil, nil
+		}
+		// A String or Atom that could not NAME a type is a literal VALUE,
+		// and a value is a type (ADR-010): it constrains the slot to
+		// itself, exactly as the Integer/Float/Boolean literals do in the
+		// scalar branch below — which `'ok'` and `red/q` could never reach
+		// while this returned the name-resolution error instead.
+		//
+		// SHAPE decides, not mere unboundness. `'Integr'` is a misspelled
+		// `Integer` and has to stay a loud unknown-type error; `'ok'`
+		// could never be a type name, so it is the string itself. And a
+		// WORD is always a name: a bare lowercase word in a type slot is
+		// a typo, not a literal (eng/go/standalone_tail_test.go pins it).
+		if IsWord(v) || looksLikeTypeName(name) {
+			return nil, nil, err
+		}
 	}
 	// Type VALUES arriving directly rather than by name — the paren
 	// annotation path (`x:(Box of [Integer])`) delivers the

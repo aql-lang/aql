@@ -309,3 +309,19 @@ fails to park a 0-arg fn bound to a param, yielding the call's result
 where the author asked for the function; and `execFnDefLiteral` treats a
 0-arg **anonymous** value as data where a named one dispatches.
 [FUNCTION-VALUE-SCOPE.0.md](design/FUNCTION-VALUE-SCOPE.0.md)
+
+---
+
+## ADR-017 — Diagnostics show the values {#adr-017}
+
+**Status:** Accepted · **Date:** 2026-08-18
+
+An error names the values it is about. `f: expected 1 return value(s),
+got 2` reports arithmetic and withholds the one thing that identifies
+the fault — which second value appeared. Show them:
+`got 2 — [1 {i:Integer}]`. Abbreviate long runs with an explicit
+elision; never drop the values to keep the line short. Where a message
+reports a count too, the rendered list carries exactly that many
+entries, and every engine builds the text once, so interpreter, VM and
+checker agree.
+[DIAGNOSTIC-VALUES.0.md](design/DIAGNOSTIC-VALUES.0.md)

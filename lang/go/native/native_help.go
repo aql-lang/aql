@@ -297,14 +297,36 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 		for j, t := range sig.ArgTypes() {
 			si.Args = append(si.Args, sigArgDisplay(&sig, j, t))
 		}
-		// Infer return types from the handler by running with zero values
-		// is not feasible, so we use the arg types as hints.
-		// For now, derive returns from common patterns.
-		si.Returns = inferReturns(fn.Name, sig)
+		si.Returns = SigReturnNames(fn.Name, sig)
 		info.Sigs = append(info.Sigs, si)
 	}
 
 	return info
+}
+
+// SigReturnNames names a signature's return types for the introspection
+// surfaces. Running the handler to observe its result is not feasible,
+// so the hand-tuned per-word table comes first: inferExact and the
+// category rules know more about a builtin than its declared slot type
+// does, and many builtins declare no Returns at all.
+//
+// Nothing inferred means the word is in no builtin table — which is
+// every USER-DEFINED fn. Its return types are not a guess: they are the
+// declaration. Falling back to them is what stops `describe` printing a
+// blank return column for `def g fn [[s:String] [Integer] […]]` while
+// the generated example line right below it says `;# Integer`.
+//
+// `describe` and `inspect` both call this, so the two introspection
+// surfaces cannot disagree about what a function returns.
+func SigReturnNames(name string, sig Signature) []string {
+	if ret := inferReturns(name, sig); len(ret) > 0 {
+		return ret
+	}
+	out := make([]string, 0, len(sig.Returns))
+	for _, t := range sig.Returns {
+		out = append(out, t.String())
+	}
+	return out
 }
 
 // inferReturns attempts to determine return types for a signature.

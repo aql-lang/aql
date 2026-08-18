@@ -31,11 +31,3 @@ func TestW8ParseFnUndefSpecBadParam(t *testing.T) {
 		t.Fatal("an unknown param type must error")
 	}
 }
-
-func TestW8IsSigTypeNameFullPath(t *testing.T) {
-	// A full lattice path is not in the short-name table, but resolves via
-	// ResolveTypePath.
-	if !isSigTypeName(nil, "Scalar/Number/Integer") {
-		t.Fatal("a full type path must be recognised as a sig type name")
-	}
-}

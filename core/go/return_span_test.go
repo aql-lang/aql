@@ -67,7 +67,8 @@ func TestReturnCountErrorDeclSpan(t *testing.T) {
 		Pos:      SrcPos{Row: 2, Col: 4},
 		Decl:     DeclSite{Pos: SrcPos{Row: 1, Col: 23}, Source: "src", File: "mod.boru"},
 	}
-	ae := e.returnCountError(rc, 2, 1)
+	vals := []Value{NewInteger(7)}
+	ae := e.returnCountError(rc, 2, 1, vals)
 	if len(ae.Spans) != 1 {
 		t.Fatalf("want the decl span, got %+v", ae.Spans)
 	}
@@ -76,9 +77,13 @@ func TestReturnCountErrorDeclSpan(t *testing.T) {
 		sp.Source != "src" || sp.File != "mod.boru" {
 		t.Errorf("decl span = %+v", sp)
 	}
+	// ADR-017: the detail names the values it is about.
+	if !strings.Contains(ae.Detail, "got 1 — [7]") {
+		t.Errorf("detail must show the values, got %q", ae.Detail)
+	}
 	// Zero declaration → no span.
 	rc.Decl = DeclSite{}
-	if ae := e.returnCountError(rc, 2, 1); len(ae.Spans) != 0 {
+	if ae := e.returnCountError(rc, 2, 1, vals); len(ae.Spans) != 0 {
 		t.Errorf("zero decl must attach nothing, got %+v", ae.Spans)
 	}
 }

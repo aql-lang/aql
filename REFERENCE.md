@@ -1366,7 +1366,8 @@ argument's elements.)
 A `fn` body is a flat list of `[input-sig] [output-sig] [body]`
 triples. Inputs may be plain types or `name:Type` pairs (the names
 become local bindings during the body); the output-sig declares the
-return type(s):
+return type(s), and takes the same two spellings — a name there is
+documentation only, since returns are positional and bind nothing:
 
 ```
 def inc fn [[n:Integer] [Integer] [add n 1]]
@@ -1386,8 +1387,27 @@ def bad fn [[] [Integer] ['hi']]
 bad                           # returns [boru/type_error] return value 1: expected Integer got ProperString
 ```
 
+```
+def si1 fn [[s:String] [i:Integer] [convert Integer s]]   # wrapped
+def si1 fn [s:String i:Integer [convert Integer s]]      # bare pairs — the same declaration
+si1 '1'                       # returns 1
+```
+
 Multiple triples declare overloads (the engine tries each in order);
 multiple output types declare multiple return values.
+
+**A literal in the output-sig is a literal type.** Types are values and
+values are types ([ADR-010](ADR.md#adr-010)), so a literal declares a
+return that must equal it — the output-sig is always what the returns
+must MATCH, never values to produce:
+
+```
+def f fn x:String 22 [22]
+f 'a'                         # returns 22
+
+def g fn x:String 22 [33]
+g 'a'                         # returns [boru/type_error] return value 1: expected 22, got Integer
+```
 
 **The 3-arg single-triple form.** For the common single-signature
 case, `fn` also accepts one triple directly, without the wrapping
@@ -1492,6 +1512,8 @@ The arrow produces exactly one signature with return type `Any`; for
 a declared return use the 3-arg triple form `fn input output body`
 (non-list input, see [`fn` shape](#fn-shape)), and for multiple
 overloads use the full `fn [[input] [output] [body] …]` form.
+
+#### `fn` type semantics {#fn-type-semantics}
 
 Parameter and return annotations may name **any** type — builtins,
 and user-defined types introduced with `def NAME refine …`. A value
