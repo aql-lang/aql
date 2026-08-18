@@ -2979,3 +2979,12 @@ disables.
 | `2` | `vault scan` only: findings were reported |
 
 A child process run under `vault exec` propagates its own exit code.
+
+`boru check` exits `1` on any Error-severity diagnostic. The advisory
+tiers (warning, info) never gate on their own — add `--pedantic` to make
+them exit `1` as well, which is how CI enforces an advisory that is
+deliberately quiet on a developer's machine. `--soft` overrides both,
+but only for **reported diagnostics**: a check that cannot produce a
+diagnostic list at all — unparseable source, an unreadable file, a
+failure inside the check pass, or a usage error — still exits `1` under
+`--soft`, because there is no clean result to downgrade.
