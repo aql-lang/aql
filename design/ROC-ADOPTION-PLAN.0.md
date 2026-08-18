@@ -216,12 +216,16 @@ re-opening that argument.
 
 ## 10. Status
 
+Current as of 2026-08-18.
+
 | Item | Phase | Status |
 |---|---|---|
-| NUR079 | 0 | Pending — recorded, not started |
-| NUR080 | 0 | Pending — recorded, not started |
-| A3 | 1 | **Landed** with this plan |
-| A4, A11, A14 | 1 | Not started |
+| NUR079 — policy escapes module bodies | 0 | **Pending** — recorded, not started. The mechanism is known (§3 P0.1) |
+| NUR080 — typed-def const-pool alias | 0 | **Pending** — recorded, not started |
+| A3 — `boru check --pedantic` | 1 | **Merged** (PR #386, commit ab3f555). `boru check -h` landed with it |
+| A4 — engine-verified `describe` examples | 1 | **In review** (PR #388) |
+| A14 — REPL piped-stream contract | 1 | Not started |
+| A11 — the outward layer | 1 | Not started |
 | A7, A9, A12 | 2 | Not started |
 | A6, A8, A13 | 3 | Not started |
 | A5 | 4 | Not started |
@@ -229,3 +233,69 @@ re-opening that argument.
 
 Keep this table current as items land; it is the one part of this note
 that is meant to change.
+
+
+## 11. Picking this up in a new session
+
+Where the work sits, so the next session does not have to reconstruct it.
+
+### Landed
+
+- **#384** — `design/roc-in-boru-report.0.md`, the eight-axis comparison,
+  plus **NUR079** and **NUR080** for the two defects its verification
+  pass reproduced, plus a supersession banner on
+  `rust-zig-roc-faber-in-boru-report.0.md` (§4 of that report is stale in
+  mechanism, not merely thin).
+- **#386** — this plan, and **A3**: `boru check --pedantic` promotes the
+  advisory tiers to a non-zero exit *inside* the existing `!soft` guard,
+  at both the JSON and text sites, via a single `Opts.gates`. Also
+  `boru check -h`, because `boru help check` pointed at a path that
+  answered `error: open -h: no such file or directory`.
+
+### In flight
+
+- **#388 (A4)** — branch `claude/boru-roc-comparison-edctm4`, head
+  `239311d`. CI green, `mergeable_state: clean`, all four Codex review
+  points fixed, threads resolved. Full local gates green including
+  `make cover-gate` at 100.0%. **Needs a human merge.**
+
+### Open decisions for a maintainer
+
+1. **Does a design note belong in the knowledge graph?** Asked on #384
+   and #386; declined both times on the measurement — the graph
+   registers 23 of 265 `design/*.md` as *evidence sources for
+   assertions*, and 42 of its 43 sources support at least one assertion.
+   Recommendation: keep the rule, but write it into `kg/README.md` (it
+   is stated nowhere today, which is why the request recurs), scope
+   AGENTS.md's wording to the *tracked* documentation set, and gate it —
+   every source must support ≥1 assertion. That needs the single current
+   orphan, `design/FN-VALUE-OPEN-WORK.0.md`, resolved first.
+2. **Phase 0 sequencing.** NUR079 is the only live compromise in the
+   report and outranks every adoption; nothing has started on it.
+
+### Traps found the hard way
+
+- **`make test` catches what targeted runs cannot.** A4's first ratchet
+  passed under `go test -run TestHelpExamplesCorrect` and failed the full
+  suite, because `help`'s dynamic example map is process-global and other
+  tests importing modules change which words render `...`. Any assertion
+  over that set is order-dependent. Run the full suite before trusting a
+  gate that reads global state.
+- **`kg verify` goes STALE on a root-manual edit.** CLI.md, REFERENCE.md
+  and AGENTS.md are graph inputs; editing one requires
+  `make -C kg graph`. Design notes are not inputs, so they do not.
+- **main moves often.** It advanced during #384 and again during #388.
+  On a conflict the three `kg/out/graph.*` files are the usual casualty —
+  regenerate them with `make -C kg graph` rather than hand-merging, and
+  check whether the incoming change touched anything the branch edits.
+- **NUR numbers are never reused.** A concurrent PR taking the same
+  number would merge cleanly and corrupt the register silently; check for
+  duplicates after any merge that touches `NUR.md`.
+
+### Next item
+
+**A14** is the smallest: `repl.Start` has no stderr writer, so in piped
+mode the banner and the whole diagnostic block land on stdout. Branch off
+the latest `main` (do not stack on the A4 branch — restart it from main
+once #388 merges), and follow the A3 shape: flag/behaviour change,
+paired positive/negative tests, CLI.md, then the full gate set.

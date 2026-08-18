@@ -14,8 +14,8 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '4312917725902843969');
-INSERT INTO input_files VALUES ('../AGENTS.md', '442733134828976200', 9714);
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '6739220811186190089');
+INSERT INTO input_files VALUES ('../AGENTS.md', '4486509826690851738', 10656);
 INSERT INTO input_files VALUES ('../CLI.md', '5241010162357906022', 80690);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
 INSERT INTO input_files VALUES ('../basic/go/go.mod', '592614718618454325', 457);
