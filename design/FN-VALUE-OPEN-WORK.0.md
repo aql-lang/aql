@@ -14,7 +14,7 @@
 |---|---|---|---|
 | A | **Clause 3** — "parens do not re-step" | Measured three ways. **RULED 2026-08-17: BROAD** (§1.1); fix not yet built. | Nobody — unblocked (§2) |
 | B | **Clause 2** — passing a function requires `/r` | Mechanism located (4 sites, ~56 lines). Blast radius **3 rows**, not 9. **ADR-011 amended 2026-08-17**; all four sites retire together (§1.1). | Nobody — unblocked (§3) |
-| C | **Break 2** — compiler refuses a 0-arg fn read from a plain container | Refusal is **sound**; it masks a confirmed miscompile. The mechanism to close it already exists and ships at arity 0. | Nobody — unblocked (§4) |
+| C | **Break 2** — compiler refuses a 0-arg fn read from a plain container | **CLOSED 2026-08-17**: the arrival model claims the empty-window arity-0 landing (`tryMemberFnArrivalDispatch`), the read guards skip a pinpointed genuine-0-arg member read (`zeroArgMemberFnLandingOut`), and a landing the model cannot claim re-refuses (guard-owned decline). Pinned in `lang/spec/ref.tsv` §3 (4 rows) and the graduated bytecode pins. | — done (§4) |
 | D | **NUR077** — a StackForm cannot apply a function value | Design sketch tested. **RULED 2026-08-17: a new dedicated Apply Op** (§1.1). Two holes to close first — see §5 before building. | Nobody — unblocked (§5) |
 
 ### 1.1 The 2026-08-17 maintainer rulings

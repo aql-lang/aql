@@ -8,6 +8,16 @@ live tree at `f4c56a1` (branch `claude/boru-local-reasoning-design-rb7elj`,
 committed tests, and a fresh 3,875-row `--force-compile` sweep — not against
 the June design docs, several of which are now materially stale (§1).
 
+> **Point-in-time snapshot — the refusal accounting below is superseded.**
+> The "fn value read from a container auto-dispatches" bucket (4 rows) and
+> the "container auto-dispatch — sound miscompile-E guard" line in the
+> stage table have since CLOSED: the arity-0 landing model shipped
+> (shapedMethodApplyWindow's all-0-arg path for shaped members;
+> tryMemberFnArrivalDispatch's empty-window claim for pinpointed plain
+> members — the break-2 closure, `design/FN-VALUE-OPEN-WORK.0.md` §4),
+> the read guards skip what the landing models own, and all four rows
+> compile. Read the tables as the 2026-07-04 baseline, not live state.
+
 Read first: `boru-bytecode-stage3-inlining-plan.0.md` (the June build record),
 `module-fn-checkstate-ownership.7.md` (the ownership project + its closing
 correction), `MODULE-FN-PARAM-SLOT-COMPILATION.0.md` (**the doc that actually

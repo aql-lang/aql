@@ -45,11 +45,15 @@ import core "github.com/boru-lang/boru/core/go"
 //     runtime value ever fails it (RunCompiled's runtimeShouldFallback —
 //     slow, not wrong).
 //
-// The miscompile-E auto-dispatch guard is NOT weakened: a member with a
-// genuine 0-arg overload (Span.finish, Rand.bool) is never annotated
-// (NoteMethodShape vets it), and the get-family read guards
-// (containerFnAutoDispatchRisk / zeroArgFnOut) still refuse those reads
-// outright before any model could run.
+// The miscompile-E auto-dispatch guard is NOT weakened — it is RE-HOMED
+// onto the landing. A shaped member with a genuine 0-arg overload
+// (Span.finish, Rand.bool) is annotated and modelled as an arity-0 apply
+// (shapedMethodApplyWindow's all-0-arg path), and a pinpointed PLAIN-fn
+// 0-arg member read (the break-2 closure) is claimed the same way by
+// tryMemberFnArrivalDispatch; in both cases the get-family read guards
+// (containerFnAutoDispatchRisk / zeroArgFnOut) skip the annotated /
+// pinpointed read and the landing model's guard-owned decline re-refuses
+// whatever it cannot claim.
 
 // evalFixedWindowToken reports whether a raw tape token is an INERT,
 // evaluation-fixed VALUE the shaped-method model may bake as a const
@@ -447,8 +451,20 @@ func TryRecordMethodApply(r *core.Registry, word string, args, out []core.Value,
 //     member with exactly ONE non-fallback signature of plain params (the
 //     model's CarrierResults and the arity claim assume plain value args —
 //     multi-sig first-match and captures are follow-on scope);
-//   - arity >= 1 (a 0-arg auto-fire is the read-guard's own class) and the
-//     full arity of evaluation-fixed tokens inside the statement.
+//   - the full arity of evaluation-fixed tokens inside the statement.
+//     Arity 0 is claimed too (the break-2 closure, FN-VALUE-OPEN-WORK §4):
+//     the interpreter's courtesy dispatch fires the moment the member
+//     lands, so the model is an empty-window arity-0 OpCallDynMethod —
+//     the VM islands [fn] and the interpreter's own courtesy dispatch
+//     runs inside the island, byte-identical.
+//
+// Because the get-family read guard SKIPS its auto-dispatch refusal for a
+// pinpointed genuine-0-arg member (zeroArgMemberFnLandingOut), a 0-arg
+// landing this model cannot claim must refuse HERE — the guard is
+// re-homed onto the landing, never weakened (TryShapedMethodDispatch's
+// guard-owned-decline precedent). Every decline below routes through
+// declineMemberFnArrival for exactly that reason; for an arity >= 1
+// member (no genuine 0-arg overload) it stays a plain decline.
 func tryMemberFnArrivalDispatch(e *core.Engine, valIdx int) bool {
 	r := e.Registry
 	es := r.Check.Recorder()
@@ -463,9 +479,10 @@ func tryMemberFnArrivalDispatch(e *core.Engine, valIdx int) bool {
 	if !ok {
 		return false
 	}
+	decline := func() bool { return declineMemberFnArrival(es, member) }
 	fnDef, _ := member.Data.(core.FnDefInfo) // validated by memberFnReadValue
 	if fnDef.Name == "" || fnDef.Anonymous || fnDef.Macro || len(fnDef.Captured) != 0 {
-		return false
+		return decline()
 	}
 	var sig *core.Signature
 	for i := range fnDef.Signatures {
@@ -474,27 +491,26 @@ func tryMemberFnArrivalDispatch(e *core.Engine, valIdx int) bool {
 			continue
 		}
 		if sig != nil {
-			return false // multi-overload: runtime first-match not modelled here
+			return decline() // multi-overload: runtime first-match not modelled here
 		}
 		sig = s
 	}
-	if sig == nil || sig.TotalArgs() < 1 || len(sig.Body()) == 0 {
-		return false
-	}
-	// Plain value params only (the model and the arity claim assume them).
-	// FnParam.Quote needs no separate probe: the body gate above proves a
-	// boru impl, whose normalizeSig derives QuoteArgs FROM the params.
-	if len(sig.QuoteArgs) != 0 || len(sig.TypeArgs) != 0 ||
+	// A boru body and plain value params only (the model and the arity
+	// claim assume them). FnParam.Quote needs no separate probe: the body
+	// gate proves a boru impl, whose normalizeSig derives QuoteArgs FROM
+	// the params.
+	if sig == nil || len(sig.Body()) == 0 ||
+		len(sig.QuoteArgs) != 0 || len(sig.TypeArgs) != 0 ||
 		len(sig.NoEvalArgs) != 0 || len(sig.NoEvalMapArgs) != 0 ||
 		len(sig.RawParens) != 0 || len(sig.FormArgs) != 0 {
-		return false
+		return decline()
 	}
 	if len(sig.Returns) != 1 {
-		return false // the arity/result claim assumes one downstream value
+		return decline() // the arity/result claim assumes one downstream value
 	}
 	n := sig.TotalArgs()
 	if valIdx+n >= e.Tape.Len() {
-		return false
+		return false // arity >= 1 only: a 0-arg member needs no window
 	}
 	args := make([]core.Value, n)
 	for i := 1; i <= n; i++ {
@@ -518,11 +534,26 @@ func tryMemberFnArrivalDispatch(e *core.Engine, valIdx int) bool {
 	outs := CarrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
 	resume()
 	if len(outs) != 1 {
-		return false
+		return decline()
 	}
 	if !es.RecordDynMethod(v, args, outs, fnDef.Name, v.Pos()) {
-		return false
+		return decline()
 	}
 	e.Tape.Splice(valIdx, 1+n, outs...)
 	return true
+}
+
+// declineMemberFnArrival is tryMemberFnArrivalDispatch's guard-owned
+// decline: the get-family read guard skipped its auto-dispatch refusal for
+// a pinpointed GENUINE-0-arg member on the promise that the arrival model
+// owns the landing, so a 0-arg landing the model cannot claim refuses here
+// with the guard's own reason — re-homed, never weakened. A member without
+// a genuine 0-arg overload was never exempted at the read, so its decline
+// stays silent and the carrier keeps today's paths.
+func declineMemberFnArrival(es core.EmitRecorder, member core.Value) bool {
+	if core.FnValueZeroArg(member) {
+		es.MarkUncompilable(
+			"fn value read from a container auto-dispatches (Stage 3): 0-arg landing not modelable at " + fnDefName(member))
+	}
+	return false
 }
