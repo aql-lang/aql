@@ -645,7 +645,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 					native.TList,    // property body (quoted)
 					native.TInteger, // runs
 					native.TInteger, // seed
-					native.TInteger, // max-shrinks (Stage 5; ignored here)
+					native.TInteger, // max-shrinks (consumed by both reducers)
 				},
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
@@ -696,7 +696,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 						native.TList,    // property body (quoted, ignored)
 						native.TInteger, // runs (ignored)
 						native.TInteger, // seed (ignored)
-						native.TInteger, // max-shrinks (ignored)
+						native.TInteger, // max-shrinks (consumed by both reducers)
 					},
 					NoEvalArgs: map[int]bool{1: true, 2: true},
 					Returns:    []*native.Type{native.TMap},
@@ -794,6 +794,34 @@ func storedBodyArg(arg native.Value, what string) (*native.FnSig, []native.Value
 	return nil, lst.Slice(), nil
 }
 
+// requirePropCount validates one of Test.check-prop's numeric arguments
+// against its legal range, raising `range_error` — the code REFERENCE.md
+// already defines as "a numeric argument outside a word's legal range" —
+// when the caller is outside it.
+//
+// `runs` has a floor of 1. A non-positive count runs the property loop
+// zero times, and the driver would then report `{ok: true, runs: 0}`,
+// which Test.report prints as a PASS — a vacuous success even when the
+// property body is literally `[false]`. That is a caller mistake, so it
+// is an ERROR rather than a silent clamp to 1: clamping would run the
+// property once and pass, hiding the wrong count instead of naming it.
+//
+// `max-shrinks` has a floor of 0, because 0 is the documented "do not
+// shrink" setting that both reducers already honour (see
+// shrinkFailingInput / shrinkFailingProgram); a NEGATIVE value is the
+// same class of caller mistake, silently behaving as 0 today.
+//
+// `seed` is deliberately unconstrained: every integer, negative
+// included, is a legal seed for the per-iteration rand instance.
+func requirePropCount(parent *native.Registry, name string, got, min int64) error {
+	if got < min {
+		return parent.BoruError("range_error",
+			fmt.Sprintf("Test.check-prop: %s must be %d or more (got %d)", name, min, got),
+			"Test.check-prop")
+	}
+	return nil
+}
+
 // runCheckProp is the PBT inner loop. Extracted for readability —
 // the check-prop native's handler delegates here.
 func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value, error) {
@@ -809,6 +837,12 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 	runs, _ := args[3].AsConcreteInteger()
 	seed, _ := args[4].AsConcreteInteger()
 	maxShrinks, _ := args[5].AsConcreteInteger()
+	if err := requirePropCount(parent, "runs", runs, 1); err != nil {
+		return nil, err
+	}
+	if err := requirePropCount(parent, "max-shrinks", maxShrinks, 0); err != nil {
+		return nil, err
+	}
 
 	var (
 		failed       bool

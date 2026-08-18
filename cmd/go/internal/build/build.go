@@ -30,6 +30,7 @@ import (
 	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
 	"github.com/boru-lang/boru/cmd/go/internal/check"
 	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/flagutil"
 	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
 	lang "github.com/boru-lang/boru/lang/go"
@@ -65,18 +66,11 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 
 	// flag.Parse stops at the first non-flag token, so flags placed after the
 	// script (the natural `boru build prog.boru -o prog` form) would be missed.
-	// Interleave: re-parse after each positional so flags work in any position.
-	var positionals []string
-	rest := args
-	for len(rest) > 0 {
-		if err := fs.Parse(rest); err != nil {
-			return 1
-		}
-		if fs.NArg() == 0 {
-			break
-		}
-		positionals = append(positionals, fs.Arg(0))
-		rest = fs.Args()[1:]
+	// flagutil.ParseInterleaved re-parses after each positional so flags work
+	// in any position; `boru check` reuses the same helper.
+	positionals, err := flagutil.ParseInterleaved(fs, args)
+	if err != nil {
+		return 1
 	}
 
 	if len(positionals) != 1 {
