@@ -101,7 +101,12 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   `elixir-types-in-boru-report.10.md`, `fsharp-units-in-boru-report.0.md`,
   `dynamic-modality-report.10.md`, `LISP-ANALYSIS.5.md`,
   `RACKET-ANALYSIS.5.md`, `RACKET-FEATURES-EXAMPLES.5.md`,
-  `PORT_OBSERVATIONS.5.md`, `unison-in-boru-report.0.md` (with
+  `PORT_OBSERVATIONS.5.md`,
+  `rust-zig-roc-faber-in-boru-report.0.md`,
+  `roc-in-boru-report.0.md` (the deep Roc pass; supersedes the
+  four-language report's §4, which the 2026 Roc rewrite made stale — and
+  whose verification pass recorded NUR079 and NUR080),
+  `unison-in-boru-report.0.md` (with
   `unison-hash-identity-probe.0.md`, the proof-of-concept pass that
   measured its central proposal and **corrected** it — the probe is
   reproducible via `scripts/hash-identity-probe.sh`; both are
