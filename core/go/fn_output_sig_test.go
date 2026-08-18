@@ -203,6 +203,19 @@ func TestDiagValueBoundsEveryShape(t *testing.T) {
 		t.Errorf("deep map nesting must bottom out in a shape marker, got %q", got)
 	}
 
+	// A TYPED container conforms to TList/TMap and is concrete, but
+	// carries a ChildTypeInfo payload rather than elements — so the
+	// container walk cannot read it, and it renders itself. Reachable,
+	// which is why neither guard is allowlisted.
+	typedList := NewValueRaw(TList, ChildTypeInfo{Child: NewTypeLiteral(TInteger)})
+	if got := diagValue(typedList); got != typedList.String() {
+		t.Errorf("typed list = %q, want its own rendering", got)
+	}
+	typedMap := NewValueRaw(TMap, ChildTypeInfo{Child: NewTypeLiteral(TInteger)})
+	if got := diagValue(typedMap); got != typedMap.String() {
+		t.Errorf("typed map = %q, want its own rendering", got)
+	}
+
 	// A non-concrete value (a bare type node) has no payload to walk and
 	// falls straight to its own rendering.
 	if got := diagValue(NewTypeLiteral(TList)); got != NewTypeLiteral(TList).String() {

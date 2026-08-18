@@ -248,7 +248,11 @@ func diagValueDepth(v Value, depth int) string {
 	}
 	if isList {
 		lst, err := AsList(v)
-		if err != nil { //covergate:allow payload presence established by IsConcrete + ConformsTo(TList) above (§payload-seal)
+		if err != nil {
+			// Conforming to TList and being concrete is not the same as
+			// carrying a ListPayload: a TYPED list (`List of [Integer]`)
+			// is Parent=TList with a ChildTypeInfo payload, so it lands
+			// here. It has no elements to walk and renders itself.
 			return v.String()
 		}
 		elems := lst.Slice()
@@ -258,7 +262,8 @@ func diagValueDepth(v Value, depth int) string {
 		return "[" + strings.Join(parts, " ") + "]"
 	}
 	m, err := AsMap(v)
-	if err != nil { //covergate:allow payload presence established by IsConcrete + ConformsTo(TMap) above (§payload-seal)
+	if err != nil {
+		// The typed-MAP twin of the branch above.
 		return v.String()
 	}
 	keys := m.Keys()
