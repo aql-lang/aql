@@ -47,6 +47,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	soft := false
 	emit := false
 	strict := false
+	pedantic := false
 	colorMode := "auto"
 	for len(args) > 0 {
 		switch args[0] {
@@ -65,6 +66,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			args = args[1:]
 		case "--strict", "-strict":
 			strict = true
+			args = args[1:]
+		case "--pedantic", "-pedantic":
+			pedantic = true
 			args = args[1:]
 		case "--emit", "-emit":
 			emit = true
@@ -103,7 +107,14 @@ done:
 		}
 		return 0
 	}
-	if err := RunColor(stdout, stderr, source, "", 0, jsonOut, soft, strict, lang.ResolveColor(nil, stderr, colorMode)); err != nil {
+	opts := Opts{
+		JSON:     jsonOut,
+		Soft:     soft,
+		Strict:   strict,
+		Pedantic: pedantic,
+		Color:    lang.ResolveColor(nil, stderr, colorMode),
+	}
+	if err := RunWith(stdout, stderr, source, opts); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}
@@ -183,7 +194,57 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 // (lang.ResolveColor); the rich per-diagnostic blocks render through
 // the shared diagnostic renderer either way.
 func RunColor(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft, strict, color bool) error {
-	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
+	return RunWith(stdout, stderr, source, Opts{
+		Registry: registry,
+		Seed:     seed,
+		JSON:     jsonOut,
+		Soft:     soft,
+		Strict:   strict,
+		Color:    color,
+	})
+}
+
+// Opts carries the check pass's options. It exists so new tiers can be
+// added without growing RunColor's positional parameter list; Run and
+// RunColor remain the fixed-shape wrappers their callers already use.
+type Opts struct {
+	Registry string
+	Seed     int64
+	JSON     bool
+	Soft     bool
+	Strict   bool
+	// Pedantic promotes the advisory tiers: with it set, warning- and
+	// info-severity diagnostics gate the exit code the way errors
+	// already do. It composes UNDER Soft — `--soft` still means "never
+	// gate", so `--soft --pedantic` exits 0 — which keeps each flag's
+	// documented meaning intact (design/ROC-ADOPTION-PLAN.0.md, A3).
+	Pedantic bool
+	Color    bool
+}
+
+// gates reports whether sum should drive a non-zero exit, returning the error
+// that names why. Soft short-circuits every tier; otherwise errors
+// always gate and the advisory tiers gate only under Pedantic. Shared by
+// the JSON and text paths so `--json --pedantic` cannot disagree with
+// `--pedantic`.
+func (o Opts) gates(sum lang.CheckSummary) error {
+	if o.Soft {
+		return nil
+	}
+	if sum.Errors > 0 {
+		return fmt.Errorf("check failed: %d error(s)", sum.Errors)
+	}
+	if o.Pedantic && sum.Warnings+sum.Infos > 0 {
+		return fmt.Errorf("check failed: %d warning(s), %d info (--pedantic)",
+			sum.Warnings, sum.Infos)
+	}
+	return nil
+}
+
+// RunWith is Run with every option carried in a struct.
+func RunWith(stdout, stderr io.Writer, source string, opts Opts) error {
+	jsonOut, strict, color := opts.JSON, opts.Strict, opts.Color
+	a, err := langNew(lang.Options{Registry: opts.Registry, Seed: opts.Seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
@@ -201,10 +262,7 @@ func RunColor(stdout, stderr io.Writer, source, registry string, seed int64, jso
 		if err != nil {
 			return fmt.Errorf("check error: %s", err)
 		}
-		if !soft && res.Summary.Errors > 0 {
-			return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
-		}
-		return nil
+		return opts.gates(res.Summary)
 	}
 
 	printDiagnostics(stderr, res.Diagnostics, source, color)
@@ -220,10 +278,7 @@ func RunColor(stdout, stderr io.Writer, source, registry string, seed int64, jso
 	} else {
 		fmt.Fprintln(stdout, "check: (empty stack)")
 	}
-	if !soft && res.Summary.Errors > 0 {
-		return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
-	}
-	return nil
+	return opts.gates(res.Summary)
 }
 
 // printDiagnostics writes each diagnostic to w in the `check: row:col:

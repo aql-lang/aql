@@ -339,7 +339,8 @@ expression: `boru do --force-compile 1 add 2`.
 Run the static type-checker without executing. It drives the same
 engine in carrier mode — so checking stays in lockstep with runtime
 dispatch — reports diagnostics to stderr, and exits non-zero when any
-Error-severity diagnostic is found (exit 0 with `--soft`).
+Error-severity diagnostic is found (exit 0 with `--soft`; add
+`--pedantic` to gate on the advisory tiers too).
 
 **One exception: imported module bodies do run** — with their effects
 modelled. The checker cannot type `Mod.value` without the module's real
@@ -377,6 +378,7 @@ boru check -e '1 add "x"'
 boru check --json script.boru        # machine-readable output
 boru check --soft script.boru        # exit 0 even on errors
 boru check --strict script.boru      # surface every dynamic dispatch
+boru check --pedantic script.boru    # exit non-zero on warnings and infos too
 ```
 
 Flags:
@@ -388,6 +390,13 @@ Flags:
   over a dynamic operand: the points where the checker matched
   optimistically and the runtime re-verifies. The gradual-typing
   migration surface — tighten these and the diagnostics disappear.
+* `--pedantic` — promote the advisory tiers: exit non-zero when any
+  warning- or info-severity diagnostic is reported, not only on errors.
+  Without it every non-error run exits 0, so a `warning` cannot fail a
+  build; with it, CI can gate on advisories while a local
+  `boru check` and `boru run` stay unchanged. It composes **under**
+  `--soft`: `--soft` still means "never gate", so `--soft --pedantic`
+  exits 0. Applies identically to `--json`.
 * `-r PATH`, `-s SEED` — same as `boru run`.
 
 **What it catches** (full list in the language reference's diagnostics
