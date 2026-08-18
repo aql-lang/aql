@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -405,7 +406,7 @@ func keywordParam(name, kw string) FnParam {
 // unenforced (its *Type degrades to Any, so the pattern IS the contract).
 func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 	if !outputSig.Parent.Equal(TList) || !IsConcrete(outputSig) {
-		sig, err := unwrapNamedReturn(r, outputSig)
+		sig, err := resolveReturnSlot(r, outputSig, 0)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -425,7 +426,7 @@ func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 	types := make([]*Type, elems.Len())
 	var pats []*Value
 	for i, e := range elems.Slice() {
-		sig, err := unwrapNamedReturn(r, e)
+		sig, err := resolveReturnSlot(r, e, i)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -542,11 +543,27 @@ func unwrapNamedReturn(r *Registry, v Value) (Value, error) {
 		return Value{}, fmt.Errorf("function spec: %w", err)
 	}
 	inner, _ := m.Get(keys[0])
-	// The value side needs the same reduction a named PARAM's does —
-	// otherwise `y:(Integer tor String)` reaches ResolveSigType as a raw
-	// ParenExpr, falls to its TAny tail, and the declared union return
-	// silently enforces nothing.
-	return EvalSigTypeExpr(r, inner, keys[0])
+	return inner, nil
+}
+
+// resolveReturnSlot reduces one declared return to the value
+// ResolveSigType reads: the `name:Type` unwrap, then the annotation
+// reduction EvalSigTypeExpr performs.
+//
+// Both steps apply to BOTH spellings, which is the whole point of doing
+// them here rather than inside the unwrap. A parenthesised annotation
+// has to be run whether or not the return is named — `[(Integer tor
+// String)]` and `[y:(Integer tor String)]` are one declaration written
+// two ways, and reducing only the named one left the unnamed spelling
+// falling to ResolveSigType's TAny tail, enforcing nothing. That split
+// is the exact defect this change exists to remove, so it must not be
+// reintroduced one slot down.
+func resolveReturnSlot(r *Registry, v Value, i int) (Value, error) {
+	sig, err := unwrapNamedReturn(r, v)
+	if err != nil {
+		return Value{}, err
+	}
+	return EvalSigTypeExpr(r, sig, "return value "+strconv.Itoa(i+1))
 }
 
 // looksLikeTypeName reports whether name has the SHAPE of a type name:

@@ -101,8 +101,16 @@ Consequences:
   (`NewWord("i:Integer")`) a whitespace-only lexer produces — the
   borueng and checker spec runners, for which `ParseFnParams` has always
   carried the same arm.
-- **The value side is reduced before it is resolved**, by one
-  `EvalSigTypeExpr` shared with `ParseFnParams`. A sugar marker expands
+- **The value side is reduced before it is resolved**, for BOTH
+  spellings, by one `EvalSigTypeExpr` shared with `ParseFnParams`.
+  `resolveReturnSlot` is where each declared return passes through the
+  unwrap and the reduction together, so a parenthesised annotation is
+  run whether or not the return carries a name. Reducing only the
+  *named* one — the first attempt — left `[(Integer tor String)]`
+  falling to the `TAny` tail while `[y:(Integer tor String)]` was
+  enforced: the same two-spellings-one-meaning split this note exists to
+  remove, reintroduced one slot down, and caught by the spec row written
+  to assert the two agree. A sugar marker expands
   and a parenthesised annotation is RUN, so `y:(Integer tor String)`
   reaches `ResolveSigType` as the disjunct it denotes. Skipping the step
   is a fresh instance of this note's own failure mode: the raw
