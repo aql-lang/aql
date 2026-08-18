@@ -63,6 +63,7 @@ boru                                 # start the REPL
 boru do 'add 1 2'                    # one-shot expression
 boru script.boru                      # run a file
 boru check script.boru                # type-check without running (but see below re: imports)
+boru check src/*.boru                 # …every named file, exit 1 if any fails
 boru fmt script.boru                  # format in place (always rewrites)
 ```
 
@@ -342,6 +343,33 @@ dispatch — reports diagnostics to stderr, and exits non-zero when any
 Error-severity diagnostic is found (exit 0 with `--soft`; add
 `--pedantic` to gate on the advisory tiers too).
 
+**Every target is checked.** `check` takes any number of file and
+directory targets: a file is checked as named, a directory contributes
+every `.boru` file beneath it (skipping `.boru/`, which holds fetched and
+generated package artifacts), and a path named twice is checked once.
+Diagnostics **accumulate** — a file that fails does not stop the files
+after it — and the command exits `1` when **any** target reported an
+error, so `boru check src/*.boru` is green only when every one of those
+files is clean. A target that expands to no `.boru` file is an error,
+not a quiet success: checking nothing must never report green. A
+mistyped or unreadable target fails the invocation before any file is
+checked, so a bad path can never be mistaken for a clean run.
+
+With several targets the report gains attribution — a `check: file
+<path>` banner on stderr ahead of each file's diagnostics, `check:
+<path>: <carriers>` on stdout, and a closing `check: total …
+across N file(s)` line. The one-target report is unchanged, as is the
+`check: row:col: [sev] code: detail` diagnostic one-liner that editors
+and CI scripts key on.
+
+**Relative imports anchor per file.** Each target's `import
+"./lib.boru"` resolves against **that file's own directory** — a
+multi-file run has no single working directory that could be right for
+every target — which is the same anchor a binary built by `boru build`
+uses. `boru run` and `boru debug` still resolve a script's relative
+imports against the process working directory, so a program checked from
+elsewhere can still be refused when run from there.
+
 **One exception: imported module bodies do run** — with their effects
 modelled. The checker cannot type `Mod.value` without the module's real
 exports, so `import` executes during the check pass, and module bodies
@@ -374,17 +402,26 @@ in. Use `--no-check` to skip the pre-flight pass entirely.
 
 ```bash
 boru check script.boru
+boru check src/*.boru                # every named file is checked
+boru check src                       # every .boru file under src/
 boru check -e '1 add "x"'
 boru check --json script.boru        # machine-readable output
+boru check script.boru --json        # flags may follow the targets
 boru check --soft script.boru        # exit 0 even on errors
 boru check --strict script.boru      # surface every dynamic dispatch
 boru check --pedantic script.boru    # exit non-zero on warnings and infos too
+boru check -- -odd-name.boru         # -- ends flag parsing for its segment
+boru check -h                        # the documented usage, exit 0
 ```
 
 Flags:
 
-* `-e EXPR` — type-check an inline expression.
-* `--json` — emit JSON diagnostics.
+* `-e EXPR` — type-check an inline expression. Mutually exclusive with
+  file targets.
+* `--json` — emit JSON diagnostics. One target emits the bare
+  `CheckResult` object; several emit an array of
+  `{"file": …, "result": …, "error": …}` entries, one per file, in the
+  order they were checked.
 * `--soft` — return exit code 0 even when diagnostics are reported.
 * `--strict` — additionally report (as non-gating info) every dispatch
   over a dynamic operand: the points where the checker matched
@@ -400,6 +437,8 @@ Flags:
   diagnostics* only — unparseable source or an unreadable file still
   exits 1, since there is no diagnostic summary to downgrade.
 * `-r PATH`, `-s SEED` — same as `boru run`.
+* `--color auto|always|never` — as for `run` and `do` (see **Color**
+  below).
 
 **What it catches** (full list in the language reference's diagnostics
 table):

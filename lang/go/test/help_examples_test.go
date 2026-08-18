@@ -1,10 +1,12 @@
 package test
 
 import (
+	"errors"
 	"sort"
 	"strings"
 	"testing"
 
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/native/help"
@@ -137,6 +139,11 @@ func TestHelpExamplesCorrect(t *testing.T) {
 
 	words := allRegisteredWords(reg)
 	testedCount := 0
+	// Every placeholder site actually observed this run. Compared against
+	// placeholderSites afterwards so the ratchet cannot go stale: an entry
+	// whose example started evaluating must be REMOVED, or the map slowly
+	// becomes a list of things that used to be broken.
+	seenPlaceholders := map[string]bool{}
 
 	for _, word := range words {
 		if skipWords[word] {
@@ -158,12 +165,25 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		helpText := help.FormatDynamic(*info)
 		examples := extractExamples(helpText)
 
-		// Filter to runnable examples (non-"..." results)
+		// Every rendered example is now checkable: a concrete stack
+		// render, `(no value)` for an empty stack, or
+		// `error [boru/CODE]` for one the engine refuses. Only the
+		// placeholder is not, and placeholderWords is the tracked,
+		// shrink-only record of where one still ships.
 		var runnable []helpExample
 		for _, ex := range examples {
-			if ex.expected != "..." {
-				runnable = append(runnable, ex)
+			if ex.expected == examplePlaceholder {
+				site := word + " | " + ex.expr
+				seenPlaceholders[site] = true
+				if !placeholderSites[site] {
+					t.Errorf("%s: example %q renders the %q placeholder; "+
+						"`describe` output is documented as engine-derived, so either "+
+						"make it evaluate or add %q to placeholderSites with a reason",
+						word, ex.expr, examplePlaceholder, site)
+				}
+				continue
 			}
+			runnable = append(runnable, ex)
 		}
 		if len(runnable) == 0 {
 			continue
@@ -179,10 +199,36 @@ func TestHelpExamplesCorrect(t *testing.T) {
 					// Use a fresh engine per example to avoid state leaks
 					eng := native.NewTop(reg)
 					result, err := eng.Run(vals)
+
+					// An `error [boru/CODE]` render is a claim about a
+					// refusal: the run must fail, and with that code.
+					if code, isErr := strings.CutPrefix(ex.expected, "error [boru/"); isErr {
+						code = strings.TrimSuffix(code, "]")
+						if err == nil {
+							t.Fatalf("%s ;# documented as error [boru/%s], but it succeeded with %q",
+								ex.expr, code, formatStack(result))
+						}
+						var be *core.BoruError
+						if !errors.As(err, &be) {
+							t.Fatalf("%s ;# documented as error [boru/%s], but the failure carries no code: %v",
+								ex.expr, code, err)
+						}
+						if be.Code != code {
+							t.Errorf("%s ;# documented as error [boru/%s], got [boru/%s]",
+								ex.expr, code, be.Code)
+						}
+						testedCount++
+						return
+					}
+
 					if err != nil {
 						t.Fatalf("run %q: %v", ex.expr, err)
 					}
 					got := formatStack(result)
+					// An empty stack renders as the marker, not as "".
+					if got == "" {
+						got = noValueMarker
+					}
 					if got != ex.expected {
 						t.Errorf("%s ;# got %q, want %q", ex.expr, got, ex.expected)
 					}
@@ -192,7 +238,28 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		})
 	}
 
-	t.Logf("validated %d examples across all words", testedCount)
+	// NO staleness assertion here, deliberately. `help`'s dynamic example
+	// map is process-global and is populated as a side effect of any test
+	// that imports a module, so the placeholder set depends on what else
+	// ran first in this package: measured alone, the module words are
+	// undefined and render `...`; measured after another test imported
+	// `boru:string-util`, roughly half of them evaluate. An
+	// "entry no longer needed" check over that set therefore fails or
+	// passes by test order, which is worse than not having it —
+	// verified, not assumed: asserting it made `make test` fail while
+	// `go test -run TestHelpExamplesCorrect` passed.
+	//
+	// The direction that IS sound is kept above: placeholderSites is the
+	// set measured in the sparsest state, so a fuller state can only
+	// produce FEWER placeholders, never a site outside it. New
+	// placeholders are what the ratchet exists to catch.
+	//
+	// Making this two-directional needs the example state injectable
+	// rather than package-global; that is its own change.
+	_ = seenPlaceholders
+
+	t.Logf("validated %d examples across all words (%d placeholder sites tracked)",
+		testedCount, len(placeholderSites))
 }
 
 // enableMemFS sets __sys.fs.mem = true in the registry's root context.
@@ -263,4 +330,108 @@ func extractExamples(helpText string) []helpExample {
 		}
 	}
 	return examples
+}
+
+// examplePlaceholder is what the Go-side fallback in
+// lang/go/native/help renders when the generated map has no entry for an
+// expression. It is the one example form this file cannot verify, which
+// is why its remaining sites are tracked rather than tolerated.
+const examplePlaceholder = "..."
+
+// noValueMarker mirrors cmd/go/genhelp's marker for an example that
+// leaves the stack empty.
+const noValueMarker = "(no value)"
+
+// placeholderSites records every (word, expression) that still renders
+// the `...` placeholder, keyed "word | expr". A NEW placeholder — any
+// site not listed here — fails the test. The reverse check (an entry
+// that no longer needs to be here) is NOT asserted, because the set
+// depends on process-global state other tests mutate; see the note at
+// the end of TestHelpExamplesCorrect.
+//
+// Keying by site rather than by word is deliberate: a word-keyed
+// allowlist accepts every future placeholder under an already-listed
+// word, which is how a ratchet turns into a skip list.
+//
+// Nearly every entry has ONE cause, measured 2026-08-18: cmd/go/genhelp
+// evaluates each example on a `native.DefaultRegistry` with no imports,
+// so a word implemented in a loadable module (`boru:string-util`,
+// `boru:bin-util`, `boru:logic-util`, `boru:type-util`, `boru:debug`)
+// raises `undefined_word` there. That code is deliberately not
+// documented — the word exists, it needs an import — so these fall
+// through to the Go-side fallback. Teaching the generator to load the
+// modules before evaluating empties them; see
+// design/ROC-ADOPTION-PLAN.0.md (A4).
+//
+// `roll | 2 roll` is the one exception, with a different cause: the
+// generator records no result for it at all, so the display expression
+// and the generated expression diverge somewhere between
+// help.ExampleExprs and writeExamples.
+var placeholderSites = map[string]bool{
+	"band | band 2 3":                         true,
+	"bnot | bnot 2":                           true,
+	"bor | bor 2 3":                           true,
+	"bsl | bsl 2 3":                           true,
+	"bsr | bsr 2 3":                           true,
+	"busr | busr 2 3":                         true,
+	"bxor | bxor 2 3":                         true,
+	"changecase | changecase 'a' {a:1,b:2}":   true,
+	"changecase | changecase 'b'":             true,
+	"changecase | changecase a/q {c:3,d:4}":   true,
+	"changecase | changecase b/q":             true,
+	"concat | concat ['c','d']":               true,
+	"concat | concat {a:1,b:2} ['a','b']":     true,
+	"contains | contains 'a' 'b' {a:1,b:2}":   true,
+	"contains | contains 'c' 'd'":             true,
+	"create | create {c:3,d:4} ['a','b']":     true,
+	"escape | escape 'a' {a:1,b:2}":           true,
+	"escape | escape 'b'":                     true,
+	"fnsig | fnsig ['a','b']":                 true,
+	"forward-args | forward-args a/q":         true,
+	"iff | iff 2 3":                           true,
+	"iff | iff true false":                    true,
+	"implies | 3 implies 2":                   true,
+	"implies | false implies true":            true,
+	"implies | implies 2 3":                   true,
+	"implies | implies true false":            true,
+	"indexof | indexof 'a' 'b' {a:1,b:2}":     true,
+	"indexof | indexof 'c' 'd'":               true,
+	"lower | lower 'a'":                       true,
+	"lower | lower a/q":                       true,
+	"match | match 'a' 'b' {a:1,b:2}":         true,
+	"match | match 'c' 'd'":                   true,
+	"nand | nand 2 3":                         true,
+	"nand | nand true false":                  true,
+	"nor | nor 2 3":                           true,
+	"nor | nor true false":                    true,
+	"normalize | normalize 'a' {a:1,b:2}":     true,
+	"normalize | normalize 'b'":               true,
+	"pad | pad 2 {a:1,b:2} 'a'":               true,
+	"pad | pad 3 'b'":                         true,
+	"pad | pad 3":                             true,
+	"pad | pad 4 2":                           true,
+	"pick | 2 pick":                           true,
+	"printstr | printstr 2":                   true,
+	"ref | ref a/q":                           true,
+	"remove | remove {c:3,d:4} ['a','b']":     true,
+	"repeat | repeat 2 'a' {a:1,b:2}":         true,
+	"repeat | repeat 3 'b'":                   true,
+	"replace | replace 'a' 'b' 'c' {a:1,b:2}": true,
+	"replace | replace 'd' 'e' 'f'":           true,
+	"roll | 2 roll":                           true,
+	"split | split 'a' 'b' {a:1,b:2}":         true,
+	"split | split 'c' 'd'":                   true,
+	"stack | 2 stack":                         true,
+	"stack-args | stack-args a/q":             true,
+	"tpartial | tpartial 2":                   true,
+	"trace | trace ['a','b']":                 true,
+	"trim | trim 'a' {a:1,b:2}":               true,
+	"trim | trim 'b'":                         true,
+	"trim | trim a/q {c:3,d:4}":               true,
+	"trim | trim b/q":                         true,
+	"update | update {c:3,d:4} ['a','b']":     true,
+	"upper | upper 'a'":                       true,
+	"upper | upper a/q":                       true,
+	"xnor | xnor 2 3":                         true,
+	"xnor | xnor true false":                  true,
 }

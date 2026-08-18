@@ -96,11 +96,17 @@ func run(outPath string, errw io.Writer) error {
 			if _, done := results[expr]; done {
 				continue
 			}
-			result, err := evalExpr(wordReg, expr)
-			if err != nil || result == "" {
-				continue // skip errors (side-effect-only words, etc.)
+			// One encoding for both paths (help.EncodeExampleResult):
+			// a refusal renders `error [boru/<code>]`, an empty stack
+			// renders `(no value)`, and anything not documentable —
+			// an uncoded failure, `undefined_word` from this
+			// import-less registry, or a run-specific identity — is
+			// left out. See design/ROC-ADOPTION-PLAN.0.md (A4).
+			encoded, ok := help.EncodeExampleResult(evalExpr(wordReg, expr))
+			if !ok {
+				continue
 			}
-			results[expr] = result
+			results[expr] = encoded
 		}
 	}
 

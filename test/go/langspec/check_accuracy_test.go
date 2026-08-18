@@ -155,6 +155,11 @@ var unflaggedPins = map[string]int{
 	"module-query.tsv":     1,
 	"module-sift.tsv":      24,
 	"module-struct.tsv":    2,
+	// module-test.tsv: 0 -> 3. The three check-prop count guards
+	// (runs < 1, max-shrinks < 0) are RUNTIME value checks — the
+	// signature slots are plain Integer, so the checker cannot see
+	// the domain statically.
+	"module-test.tsv":      3,
 	"module-time.tsv":      2,
 	"module-tui.tsv":       5,
 	"module-vault-tui.tsv": 1,
