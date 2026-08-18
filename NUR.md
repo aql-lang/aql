@@ -2267,3 +2267,107 @@ re-opens the NUR038 call-head question inside the implementing PR; the
 `unused_def` use-recording re-homes with the intercept, and
 `path-modifier.tsv:67` plus the two frontier rows are rewritten. This
 record retires when that fix lands.
+
+
+## NUR079 — Gated words inside an imported file-module body escape the policy that governs the same call at top level {#nur079}
+
+**Status:** Pending · **Recorded:** 2026-08-18 · **Surfaced by:** the
+Roc comparison study (`design/roc-in-boru-report.0.md` §7.1), while
+checking Roc's claim that `roc check`/`roc build` perform no dependency
+I/O
+
+**Rule:** one policy decision per gated operation, wherever it occurs.
+`CLI.md` §Permissions and `EXPLANATION.md` §Capabilities both present a
+profile as governing *the program*, and `boru policy explain` is
+documented as answering "why was this denied?" for any call.
+
+**Divergence:** the same gated call is refused at top level and permitted
+one file deeper. With `lib.boru` containing `import "boru:net"` plus a
+`Net.fetch`, and `main.boru` containing `import "./lib.boru"`, measured
+against a local listener:
+
+```
+boru run --no-check --perms read-only direct.boru   exit 1  requests 0
+boru run --no-check --perms read-only main.boru     exit 0  requests 1
+boru run            --perms read-only main.boru     exit 0  requests 2
+```
+
+Three separate divergences sit in that table. (a) `modules.import` is
+enforced for a top-level `import "boru:net"` and not for the identical
+import inside a file-module body, so a profile is bypassed by moving the
+import one file deeper; `--deny=network.connect` behaves the same way,
+refusing the top-level fetch and permitting the in-body one. (b) The
+pre-flight check pass executes the body a *second* time, so even a
+correctly-gating profile would already have leaked. (c) The analysis
+commands are unreachable by policy at all: `boru check` registers no
+`--perms` flag (`cmd/go/internal/check/check.go` contains the string
+`perms` zero times) and ignores `BORU_POLICY`, which `REFERENCE.md`
+documents as an environment fallback and which works on `boru do`. The
+same execution occurs under `boru describe ./lib.boru`, under a piped
+`boru repl`, and on LSP `didOpen`.
+
+**Evidence:** the `module_body_executed_in_check` info advisory already
+records half of it — "a network send and a stdin read are not modelled and
+still do" — so the *execution* is designed and known; what is not designed
+is that no policy can reach it. `design/MODULE-SECURITY.0.md`'s per-edge
+attenuation argument is written about boru-source dependencies, for which
+there is no per-import gate today. The natives path does gate: compare
+`modules.Resolve`'s `Installed` / `Check("modules","import",…)` /
+per-module `install:false` sequence with `loadFileModule`, which applies
+none of them.
+
+**Verdict:** resolve by fix — the file-module import path should apply the
+same three checks the natives path applies, keyed on the declared ref
+(`modules.scopes."./lib.boru"` is already a live policy key, as the NUR045
+per-export gate's blame string shows), and the analysis commands should
+accept the permission flags they already document. Ship the gate together
+with updated built-in profiles, since `sandbox`, `read-only` and `compute`
+all set `modules.words.default: deny` and would otherwise refuse every
+multi-file program. This record retires when a profile denies an in-body
+gated call and `boru check --perms <profile>` is honoured.
+
+
+## NUR080 — A typed def over an Integer literal loses its newtype brand under the compiler, and the bare literal gains one {#nur080}
+
+**Status:** Pending · **Recorded:** 2026-08-18 · **Surfaced by:** the
+Roc comparison study (`design/roc-in-boru-report.0.md` §7.2), while
+measuring boru's nominal-newtype guarantee against Roc's opaque types
+
+**Rule:** the two engines agree. A bare `refine` is a nominal newtype
+(`EXPLANATION.md`, "Function signatures and refinement types"): a raw
+`Integer` is not a `UserId`, and a value constructed as `def id:UserId 42`
+is one — symmetrically, at every boundary, on either engine.
+
+**Divergence:** with `def UserId (refine Integer)` and `def b:UserId 9`,
+the compiled path answers differently from the interpreter, in **both**
+directions depending on source order:
+
+| program order | engine | `typeof 9` | `typeof b` | `b is UserId` |
+|---|---|---|---|---|
+| `typeof 9` first | `--no-compile` | `Integer` | `UserId` | `true` |
+| `typeof 9` first | default / `--force-compile` | `Integer` | `Integer` | `false` |
+| `typeof b` first | `--no-compile` | `Integer` | `UserId` | — |
+| `typeof b` first | default | **`UserId`** | `UserId` | — |
+
+So a declared binding loses the brand it was given, and a bare literal
+acquires a brand it never had. `boru check` reports `0 error(s), 0
+warning(s), 0 info`, and `--force-compile` does not refuse — it compiles
+and answers wrongly, which puts this outside the
+`MarkUncompilable`-is-always-sound architecture. Compiled mode is the
+execution default since the P7 endgame, so this is the default answer.
+A String newtype (`def Name (refine String)`) did not reproduce it.
+
+**Evidence:** the shape — a literal's identity changing according to
+whether a typed def elsewhere in the program mentioned it — points at the
+const-pool entry for the literal being reparented rather than a fresh
+value being minted, i.e. the residual of
+`design/MISCOMPILE-HUNT-FINDINGS.0.md` §B, whose July-2026 update states
+"The static/concrete path is untouched." No `lang/spec/*.tsv` row covers
+`typeof` or `is` over a typed def of a literal in both source orders,
+which is why `make verify-bytecode` is blind to it.
+
+**Verdict:** resolve by fix — the static/concrete arm of `def name:T
+<literal>` must mint a fresh value rather than reparent the shared
+const-pool entry. Acceptance requires both source orderings, plus new
+spec rows so the differential corpus covers the class. This record retires
+when the two engines agree on the table above.
