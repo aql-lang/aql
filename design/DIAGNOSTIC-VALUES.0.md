@@ -64,21 +64,39 @@ Corollaries:
 - **Abbreviate, never truncate.** A bounded head with an explicit
   elision (`… (N more)`) is legible; a line cut off at a character
   budget is not, and a message that omits the values to stay short has
-  failed at its job rather than succeeded at brevity.
+  failed at its job rather than succeeded at brevity. A character budget
+  still has a place as a *backstop* for the shapes structure cannot
+  bound (§3), where the alternative is not a tidier message but an
+  unbounded one.
 
 ## 3. Abbreviation
 
-`diagValueList` (core/go/boru_error.go) renders a run of values and
-abbreviates twice over, because a diagnostic can be swamped from two
-directions independently:
+`diagValueList` (core/go/boru_error.go) renders a run of values, and
+`diagValue` renders each one. Both bound what they emit, because a
+diagnostic can be swamped from several directions independently:
 
-- at most `diagMaxListHead` (8) values, tail elided as `… (N more)`;
-- each value through the existing `diagValue`, which applies the same
-  head-and-elide to a long *list* value.
+- **Breadth** — at most `diagMaxListHead` (8) entries at any level, of a
+  list or a map alike, tail elided as `… (N more)`. One number, shared,
+  so the nesting reads consistently.
+- **Depth** — `diagMaxDepth` (4) levels, below which only the shape
+  (`[…]`, `{…}`) is kept.
+- **Total characters** — `diagMaxRendered` (400), applied once to the
+  finished string, cut on a rune boundary and marked with `…`.
 
-So neither a hundred small returns nor one enormous one can push the
-useful part off the line. The two limits share `diagMaxListHead`
-deliberately: one number to tune, and the nesting reads consistently.
+The breadth limit alone was not enough, and the reason is worth keeping:
+a head limit is per-LEVEL, so it bounds the value it is handed and
+nothing inside it. `[[0 1 … 10000]]` has an outer length of one, so no
+head limit fires anywhere and the whole nested run rendered. A map was
+not bounded at all. The renderer now applies the same rule at every
+level, so the bound holds whatever shape the value takes, rather than
+depending on where the big part happens to sit.
+
+The character budget is a backstop, not the mechanism. Cutting mid-value
+is not legible, which is why the structural limits do the work; but a
+single enormous *scalar* is no container, so no structural limit applies
+to it, and something has to. It fires only where breadth and depth have
+already failed to bound the value, and it marks the cut so a shortened
+rendering never reads as a complete one.
 
 Empty is a real answer, not a missing one. A body that returned nothing
 has no values to show, so `ReturnCountErrorText` emits the bare count —

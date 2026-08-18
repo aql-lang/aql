@@ -1,8 +1,10 @@
 package core
 
 import (
+	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // Unit pins for the output-slot rework (design/FN-OUTPUT-SIG.0.md): the
@@ -147,6 +149,85 @@ func TestReturnCountErrorTextShowsValues(t *testing.T) {
 	// No values is a real answer: the bare count, no empty brackets.
 	if got := ReturnCountErrorText("f", 1, 0, nil); !strings.HasSuffix(got, "got 0") {
 		t.Errorf("valueless detail = %q, want the bare count", got)
+	}
+}
+
+func TestDiagValueBoundsEveryShape(t *testing.T) {
+	// A head limit is per-LEVEL, so a SHORT list of enormous elements
+	// slips it entirely: this outer list has length 1. Before the
+	// renderer recursed, the whole nested run reached the message.
+	inner := make([]Value, 5000)
+	for i := range inner {
+		inner[i] = NewInteger(int64(i))
+	}
+	nested := diagValueList([]Value{NewList([]Value{NewList(inner)})})
+	if len(nested) > diagMaxRendered {
+		t.Errorf("nested list unbounded: %d chars", len(nested))
+	}
+	if !strings.Contains(nested, "… (4992 more)") {
+		t.Errorf("nested list must elide its tail, got %q", nested)
+	}
+
+	// A map was not bounded at all.
+	om := NewOrderedMap()
+	for i := 0; i < 3000; i++ {
+		om.Set(strconv.Itoa(i), NewInteger(int64(i)))
+	}
+	gotMap := diagValueList([]Value{NewMap(om)})
+	if len(gotMap) > diagMaxRendered {
+		t.Errorf("map unbounded: %d chars", len(gotMap))
+	}
+	if !strings.Contains(gotMap, "… (2992 more)") {
+		t.Errorf("map must elide its tail, got %q", gotMap)
+	}
+
+	// Past diagMaxDepth only the shape is kept — for either container.
+	deep := NewInteger(1)
+	for i := 0; i < 12; i++ {
+		deep = NewList([]Value{deep})
+	}
+	if got := diagValue(deep); !strings.Contains(got, "[…]") {
+		t.Errorf("deep list nesting must bottom out in a shape marker, got %q", got)
+	}
+	deepMap := NewInteger(1)
+	for i := 0; i < 12; i++ {
+		om := NewOrderedMap()
+		om.Set("k", deepMap)
+		deepMap = NewMap(om)
+	}
+	if got := diagValue(deepMap); !strings.Contains(got, "{…}") {
+		t.Errorf("deep map nesting must bottom out in a shape marker, got %q", got)
+	}
+
+	// A non-concrete value (a bare type node) has no payload to walk and
+	// falls straight to its own rendering.
+	if got := diagValue(NewTypeLiteral(TList)); got != NewTypeLiteral(TList).String() {
+		t.Errorf("a bare type node = %q, want its own rendering", got)
+	}
+
+	// A single enormous SCALAR is no container, so no structural limit
+	// applies — the character backstop is what bounds it, and it marks
+	// the cut so a shortened rendering never reads as a complete one.
+	big := strings.Repeat("x", 9000)
+	gotBig := diagValue(NewString(big))
+	if len(gotBig) > diagMaxRendered+8 {
+		t.Errorf("scalar unbounded: %d chars", len(gotBig))
+	}
+	if !strings.HasSuffix(gotBig, "…") {
+		t.Errorf("a clamped value must be marked, got the tail %q", gotBig[len(gotBig)-8:])
+	}
+
+	// The clamp cuts on a rune boundary, never mid-character.
+	if !utf8.ValidString(diagValue(NewString(strings.Repeat("é", 9000)))) {
+		t.Error("clamping must not split a multi-byte rune")
+	}
+
+	// And none of this disturbs values small enough to render exactly.
+	if got := diagValueList([]Value{NewInteger(1), NewString("x")}); got != "[1 'x']" {
+		t.Errorf("small values = %q, want them rendered exactly", got)
+	}
+	if got := diagValueList([]Value{NewList([]Value{NewInteger(1), NewInteger(2)})}); got != "[[1 2]]" {
+		t.Errorf("small nested list = %q, want it rendered exactly", got)
 	}
 }
 

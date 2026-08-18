@@ -3,6 +3,7 @@ package core
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // BoruError is the structured error type for boru engine errors.
@@ -173,33 +174,119 @@ func makeBoruErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *B
 }
 
 // diagMaxListHead is the number of leading elements diagValue shows from
-// a list before collapsing the rest into a `… (N more)` marker. Keeps a
-// large quoted fn body (often hundreds of tokens) from burying an error.
+// a container before collapsing the rest into a `… (N more)` marker.
+// Keeps a large quoted fn body (often hundreds of tokens) from burying
+// an error.
 const diagMaxListHead = 8
 
-// diagValue renders v for inclusion in an error message, truncating long
-// lists so a quoted code body or other big literal does not flood the
-// output. Only the diagnostic surface uses this — ValToString and the
-// normal value renderers are untouched, so it never alters real output
-// or round-tripping. A list longer than diagMaxListHead shows its first
-// few elements followed by `… (N more)`; everything else (including
-// function values, which already render compactly via formatFnDef) is
-// shown by its normal String().
+// diagMaxDepth is how far diagValue descends into nested containers
+// before rendering the rest as an elision. Depth needs its own bound
+// because a head limit is per-LEVEL: `[[0 1 … 10000]]` has an outer
+// length of one, so no head limit anywhere fires, and the whole nested
+// run renders. Three levels is enough to recognise a value while
+// keeping the worst case bounded. Every level is rendered by the same
+// rule, so the bound holds whatever shape the value takes rather than
+// depending on where the big part happens to sit.
+const diagMaxDepth = 4
+
+// diagMaxRendered is a total character backstop, applied once to the
+// finished string. The structural limits above bound the common cases
+// legibly, and this catches what they cannot: a single scalar (one
+// enormous string) is not a container, so no head or depth limit
+// applies to it. Cutting mid-value is not legible, which is why it is a
+// backstop rather than the mechanism — it fires only where the
+// structural limits have already failed to bound the value.
+const diagMaxRendered = 400
+
+// diagValue renders v for inclusion in an error message, bounding
+// containers so a quoted code body or other big literal does not flood
+// the output. Only the diagnostic surface uses this — ValToString and
+// the normal value renderers are untouched, so it never alters real
+// output or round-tripping.
+//
+// A container longer than diagMaxListHead shows its first few entries
+// followed by `… (N more)`, and each entry shown is rendered under the
+// same rule, down to diagMaxDepth. Bounding only the outer level was
+// the original defect: the limit fired on the LENGTH of the value
+// handed in, so one short list of enormous elements slipped every
+// check. Everything else (including function values, which already
+// render compactly via formatFnDef) is shown by its normal String().
 func diagValue(v Value) string {
-	if v.Parent != nil && v.Parent.ConformsTo(TList) && IsConcrete(v) {
-		lst, err := AsList(v)
-		if err == nil && lst.Len() > diagMaxListHead {
-			elems := lst.Slice()
-			parts := make([]string, 0, diagMaxListHead+1)
-			for i := 0; i < diagMaxListHead; i++ {
-				parts = append(parts, elems[i].String())
-			}
-			more := len(elems) - diagMaxListHead
-			parts = append(parts, "… ("+strconv.Itoa(more)+" more)")
-			return "[" + strings.Join(parts, " ") + "]"
-		}
+	return diagClamp(diagValueDepth(v, 0))
+}
+
+// diagClamp applies the character backstop, marking the cut so a
+// shortened rendering never reads as a complete one.
+func diagClamp(s string) string {
+	if len(s) <= diagMaxRendered {
+		return s
 	}
-	return v.String()
+	// Cut on a rune boundary so the marker cannot be preceded by half
+	// a multi-byte character.
+	cut := diagMaxRendered
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
+}
+
+func diagValueDepth(v Value, depth int) string {
+	if v.Parent == nil || !IsConcrete(v) {
+		return v.String()
+	}
+	isList := v.Parent.ConformsTo(TList)
+	isMap := v.Parent.ConformsTo(TMap)
+	if !isList && !isMap {
+		return v.String()
+	}
+	if depth >= diagMaxDepth {
+		// Deep enough that the shape is all that is still useful.
+		if isList {
+			return "[…]"
+		}
+		return "{…}"
+	}
+	if isList {
+		lst, err := AsList(v)
+		if err != nil { //covergate:allow payload presence established by IsConcrete + ConformsTo(TList) above (§payload-seal)
+			return v.String()
+		}
+		elems := lst.Slice()
+		parts, _ := diagHead(len(elems), func(i int) string {
+			return diagValueDepth(elems[i], depth+1)
+		})
+		return "[" + strings.Join(parts, " ") + "]"
+	}
+	m, err := AsMap(v)
+	if err != nil { //covergate:allow payload presence established by IsConcrete + ConformsTo(TMap) above (§payload-seal)
+		return v.String()
+	}
+	keys := m.Keys()
+	parts, _ := diagHead(len(keys), func(i int) string {
+		val, _ := m.Get(keys[i])
+		return keys[i] + ":" + diagValueDepth(val, depth+1)
+	})
+	return "{" + strings.Join(parts, " ") + "}"
+}
+
+// diagHead renders the first diagMaxListHead of n entries through render
+// and appends the elision marker, returning the parts and how many were
+// elided. Shared so a list and a map cannot drift apart on the limit.
+func diagHead(n int, render func(i int) string) ([]string, int) {
+	shown := n
+	more := 0
+	if shown > diagMaxListHead {
+		more = shown - diagMaxListHead
+		shown = diagMaxListHead
+	}
+	parts := make([]string, 0, shown+1)
+	for i := 0; i < shown; i++ {
+		parts = append(parts, render(i))
+	}
+	if more > 0 {
+		parts = append(parts, "… ("+strconv.Itoa(more)+" more)")
+	}
+	return parts, more
 }
 
 // diagValueList renders the run of values a diagnostic is about, for the
@@ -212,19 +299,9 @@ func diagValueList(vals []Value) string {
 	if len(vals) == 0 {
 		return "[]"
 	}
-	shown := vals
-	more := 0
-	if len(shown) > diagMaxListHead {
-		more = len(shown) - diagMaxListHead
-		shown = shown[:diagMaxListHead]
-	}
-	parts := make([]string, 0, len(shown)+1)
-	for _, v := range shown {
-		parts = append(parts, diagValue(v))
-	}
-	if more > 0 {
-		parts = append(parts, "… ("+strconv.Itoa(more)+" more)")
-	}
+	parts, _ := diagHead(len(vals), func(i int) string {
+		return diagValue(vals[i])
+	})
 	return "[" + strings.Join(parts, " ") + "]"
 }
 
