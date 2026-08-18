@@ -2,7 +2,10 @@ package core
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // This file owns the canonical fn-signature parser. Both the bare
@@ -132,36 +135,10 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					name = strings.TrimSuffix(name, "?")
 					optional = true
 				}
-				typeVal, _ := m.Get(keys[0])
-				// A sugar-marker annotation (`t:Map/t` — the type-bound
-				// sugar) lowers to its ParenExpr expansion first
-				// (ADR-012 rule 3 amendment), then evaluates below
-				// exactly as the pre-marker parser output did.
-				if sinfo, sok := AsSugar(typeVal); sok && r != nil {
-					if exp, serr := SugarExpansion(r, sinfo, typeVal, false); serr == nil && len(exp) == 1 {
-						typeVal = exp[0]
-					}
-				}
-				if IsParenExpr(typeVal) && r != nil {
-					items, _ := AsParenExpr(typeVal)
-					sub := New(r)
-					input := make([]Value, 0, len(items)+2)
-					input = append(input, NewOpenParen())
-					input = append(input, items...)
-					input = append(input, NewCloseParen())
-					result, rerr := sub.Run(input)
-					// A failed or multi-valued paren annotation is a
-					// def-time ERROR — previously it silently kept the
-					// raw ParenExpr, which fell to the TAny tail and
-					// made the slot a wildcard (`x:(Map|List)` accepted
-					// everything because `|` is not a word).
-					if rerr != nil {
-						return nil, 0, fmt.Errorf("function spec: invalid type for %q: %w", name, rerr)
-					}
-					if len(result) != 1 {
-						return nil, 0, fmt.Errorf("function spec: type annotation for %q must produce one type, got %d values", name, len(result))
-					}
-					typeVal = result[0]
+				rawType, _ := m.Get(keys[0])
+				typeVal, terr := EvalSigTypeExpr(r, rawType, name)
+				if terr != nil {
+					return nil, 0, terr
 				}
 				if IsDisjunct(typeVal) {
 					_as3, _ := AsDisjunct(typeVal)
@@ -429,7 +406,11 @@ func keywordParam(name, kw string) FnParam {
 // unenforced (its *Type degrades to Any, so the pattern IS the contract).
 func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 	if !outputSig.Parent.Equal(TList) || !IsConcrete(outputSig) {
-		t, pat, err := ResolveSigType(r, outputSig)
+		sig, err := resolveReturnSlot(r, outputSig, 0)
+		if err != nil {
+			return nil, nil, err
+		}
+		t, pat, err := ResolveSigType(r, sig)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -445,9 +426,12 @@ func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 	types := make([]*Type, elems.Len())
 	var pats []*Value
 	for i, e := range elems.Slice() {
-		var err error
+		sig, err := resolveReturnSlot(r, e, i)
+		if err != nil {
+			return nil, nil, err
+		}
 		var pat *Value
-		types[i], pat, err = ResolveSigType(r, e)
+		types[i], pat, err = ResolveSigType(r, sig)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -459,6 +443,144 @@ func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 		}
 	}
 	return types, pats, nil
+}
+
+// EvalSigTypeExpr reduces the VALUE side of a type annotation to the
+// value ResolveSigType can read, and is the single place either
+// signature slot does it.
+//
+// Two shapes need reducing before resolution:
+//
+//   - A sugar-marker annotation (`t:Map/t` — the type-bound sugar)
+//     lowers to its ParenExpr expansion first (ADR-012 rule 3
+//     amendment), then evaluates exactly as the pre-marker parser
+//     output did.
+//   - A parenthesised annotation (`x:(Integer tor String)`) arrives as
+//     a raw ParenExpr and must be RUN to become the disjunct value the
+//     resolver understands.
+//
+// A failed or multi-valued paren annotation is a def-time ERROR.
+// Keeping the raw ParenExpr instead falls to ResolveSigType's TAny
+// tail, which is a silent wildcard: `x:(Map|List)` accepted everything
+// because `|` is not a word. That failure mode is why this is shared —
+// ParseFnReturns skipped the step entirely, so a declared union return
+// (`y:(Integer tor String)`) degraded to Any and enforced nothing,
+// while the identical annotation on a param was enforced.
+//
+// what names the slot in the error, e.g. the param or return name.
+func EvalSigTypeExpr(r *Registry, typeVal Value, what string) (Value, error) {
+	if sinfo, sok := AsSugar(typeVal); sok && r != nil {
+		if exp, serr := SugarExpansion(r, sinfo, typeVal, false); serr == nil && len(exp) == 1 {
+			typeVal = exp[0]
+		}
+	}
+	if !IsParenExpr(typeVal) || r == nil {
+		return typeVal, nil
+	}
+	items, _ := AsParenExpr(typeVal)
+	sub := New(r)
+	input := make([]Value, 0, len(items)+2)
+	input = append(input, NewOpenParen())
+	input = append(input, items...)
+	input = append(input, NewCloseParen())
+	result, rerr := sub.Run(input)
+	if rerr != nil {
+		return Value{}, fmt.Errorf("function spec: invalid type for %q: %w", what, rerr)
+	}
+	if len(result) != 1 {
+		return Value{}, fmt.Errorf("function spec: type annotation for %q must produce one type, got %d values", what, len(result))
+	}
+	return result[0], nil
+}
+
+// unwrapNamedReturn resolves the `name:Type` spelling of a RETURN
+// declaration to the type on the pair's value side. Pair syntax lowers a
+// bare `i:Integer` to a single-entry map flagged Implicit
+// (parser/go/parse.go), so `fn [s:String i:Integer [body]]` hands this
+// slot the same shape `ParseFnParams` receives on the input side — and
+// the two slots must read it the same way, because
+// `fn [x:A y:B [body]]` IS `fn [[x:A] [y:B] [body]]`. The name is
+// documentation: FnSig has no named-return concept and nothing
+// downstream reads it, but accepting the spelling is what keeps the two
+// slots symmetric.
+//
+// An EXPLICIT map (`{i: Integer}`) is left alone — it declares a
+// Map-typed return, the same split ParseFnParams draws on Implicit for
+// a Map-typed param.
+func unwrapNamedReturn(r *Registry, v Value) (Value, error) {
+	// The single-Word colon form. A minimal tokenizer (the borueng and
+	// checker spec runners, whose whitespace-only lexers produce one
+	// Word for `i:Integer`) never builds the implicit map, so without
+	// this arm the promised input/output symmetry held only for
+	// consumers of the production parser: ParseFnParams accepts
+	// `[y:Integer]` as a param from either tokenizer, and the output
+	// slot would have rejected the same token as a type name.
+	if IsWord(v) {
+		w, _ := AsWord(v)
+		idx := strings.Index(w.Name, ":")
+		if idx <= 0 {
+			return v, nil
+		}
+		if err := ValidateWordName(w.Name[:idx]); err != nil {
+			return Value{}, fmt.Errorf("function spec: %w", err)
+		}
+		inner := NewWord(w.Name[idx+1:])
+		inner.SetPos(v.Pos())
+		return inner, nil
+	}
+	if !v.Parent.Equal(TMap) || v.Data == nil {
+		return v, nil
+	}
+	m, err := AsMutableMap(v)
+	if err != nil || m == nil || !m.Implicit {
+		return v, nil
+	}
+	keys := m.Keys()
+	if len(keys) != 1 {
+		return Value{}, fmt.Errorf("function spec: return map must have exactly one key")
+	}
+	if err := ValidateWordName(keys[0]); err != nil {
+		return Value{}, fmt.Errorf("function spec: %w", err)
+	}
+	inner, _ := m.Get(keys[0])
+	return inner, nil
+}
+
+// resolveReturnSlot reduces one declared return to the value
+// ResolveSigType reads: the `name:Type` unwrap, then the annotation
+// reduction EvalSigTypeExpr performs.
+//
+// Both steps apply to BOTH spellings, which is the whole point of doing
+// them here rather than inside the unwrap. A parenthesised annotation
+// has to be run whether or not the return is named — `[(Integer tor
+// String)]` and `[y:(Integer tor String)]` are one declaration written
+// two ways, and reducing only the named one left the unnamed spelling
+// falling to ResolveSigType's TAny tail, enforcing nothing. That split
+// is the exact defect this change exists to remove, so it must not be
+// reintroduced one slot down.
+func resolveReturnSlot(r *Registry, v Value, i int) (Value, error) {
+	sig, err := unwrapNamedReturn(r, v)
+	if err != nil {
+		return Value{}, err
+	}
+	return EvalSigTypeExpr(r, sig, "return value "+strconv.Itoa(i+1))
+}
+
+// looksLikeTypeName reports whether name has the SHAPE of a type name:
+// every `/`-separated part starting with an uppercase letter, the rule
+// NewType enforces. It is how ResolveSigType tells a misspelled type
+// name from a literal string — see the call site.
+func looksLikeTypeName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, part := range strings.Split(name, "/") {
+		r, _ := utf8.DecodeRuneInString(part)
+		if !unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // ResolveSigType converts a Value (from a pair's value side) to a *Type
@@ -481,10 +603,20 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	// (kind = the base type, pattern = the DepScalar Value).
 	if (IsWord(v) || v.Parent.ConformsTo(TString) || v.Parent.ConformsTo(TAtom)) && !v.IsDepScalar() {
 		var name string
-		if IsWord(v) {
+		switch {
+		case IsWord(v):
 			w, _ := AsWord(v)
 			name = w.Name
-		} else {
+		case v.Parent.ConformsTo(TAtom):
+			// An Atom carries AtomPayload, not StrPayload, so AsString
+			// answers ("", err) here and every lookup below then misses
+			// on the empty name. That was invisible while an
+			// unresolvable name was a hard error — the Atom arm errored
+			// either way — but the literal fallback added below turns a
+			// missed lookup into a literal, which would have made
+			// `Integer/q` an Atom pattern instead of TInteger.
+			name, _ = AsAtom(v)
+		default:
 			name, _ = AsString(v)
 		}
 		// Authoritative path: `r.LookupTypeName(name)` consults
@@ -524,7 +656,23 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 			return ResolveDefType(r, *defVal)
 		}
 		t, err := ResolveTypeName(name)
-		return t, nil, err
+		if err == nil {
+			return t, nil, nil
+		}
+		// A String or Atom that could not NAME a type is a literal VALUE,
+		// and a value is a type (ADR-010): it constrains the slot to
+		// itself, exactly as the Integer/Float/Boolean literals do in the
+		// scalar branch below — which `'ok'` and `red/q` could never reach
+		// while this returned the name-resolution error instead.
+		//
+		// SHAPE decides, not mere unboundness. `'Integr'` is a misspelled
+		// `Integer` and has to stay a loud unknown-type error; `'ok'`
+		// could never be a type name, so it is the string itself. And a
+		// WORD is always a name: a bare lowercase word in a type slot is
+		// a typo, not a literal (eng/go/standalone_tail_test.go pins it).
+		if IsWord(v) || looksLikeTypeName(name) {
+			return nil, nil, err
+		}
 	}
 	// Type VALUES arriving directly rather than by name — the paren
 	// annotation path (`x:(Box of [Integer])`) delivers the

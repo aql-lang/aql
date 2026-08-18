@@ -38,7 +38,11 @@ func init() {
 	register(&Entry{
 		Word:    "inspect",
 		Summary: "Return a detailed map describing a word, value, or type.",
-		Description: "For a word: a map with name, kind, and signatures. For a value or " +
+		Description: "For a word: a map with name, type, kind, and signatures — each " +
+			"signature carrying both its args and its returns, so the map is the " +
+			"whole contract rather than half of it. A word bound to a function " +
+			"reports type 'Function' (ADR-011); a word bound to a plain value " +
+			"reports that value's type leaf and the value itself. For a value or " +
 			"type: a map with type ('Type' for a type value, otherwise the value's " +
 			"type leaf), struct (the underlying-structure leaf, for types), kind, and " +
 			"kind-specific fields (fields / alternatives / child / signatures / …).",

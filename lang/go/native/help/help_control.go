@@ -197,19 +197,23 @@ func init() {
 			"single-signature case. The 3-arg form requires a NON-LIST input (a bare type, a " +
 			"named param like x:Integer, or a literal pattern) — a list input always selects " +
 			"the spec-list form, so multi-param triples need the list form. Usually used with " +
-			"def to bind the function to a name. Parameters can be named (x:Integer) or unnamed.",
+			"def to bind the function to a name. Parameters can be named (x:Integer) or unnamed, " +
+			"and so can returns — a name in the output slot is documentation, since returns are " +
+			"positional and bind nothing.",
 		Notes: []string{
 			"Spec-list form: fn takes a single list argument whose length is divisible by 3.",
 			"Each triple is: [input-params] [output-types] [body].",
 			"3-arg form: fn input output body — one triple; the input must be non-list and the body must be a […] list ([(tnot List) Any List] in the signature). fn x:Integer [Integer] [x mul 2] ≡ fn [[x:Integer] [Integer] [x mul 2]].",
 			"Named params use pair syntax: name:Type. Unnamed params are bare types. (An explicit map like {x: Integer} declares a single Map-typed param, not a named binding.)",
-			"Literal values (like 0) can be used as type constraints for pattern matching.",
+			"The output slot takes the same two spellings, so fn [x:A y:B [body]] is fn [[x:A] [y:B] [body]].",
+			"Literal values (like 0) can be used as type constraints for pattern matching — in the OUTPUT slot too, where a literal declares a return that must equal it: fn x:String 22 [22] is well-typed, fn x:String 22 [33] is not.",
 			"Use with def to bind: def name fn [...] or fn [...] def name.",
 		},
 		Examples: []string{
 			`def double fn x:Integer Integer [x mul 2] double 5 ; # => 10`,
 			`def triple fn x:Integer [Integer] [x mul 3] triple 5 ; # => 15 (3-arg form)`,
 			`def add10 fn Integer [Integer] [10 add] add10 5 ; # => 15 (unnamed param)`,
+			`def si1 fn [s:String i:Integer [convert Integer s]] si1 '1' ; # => 1 (named return)`,
 		},
 	})
 

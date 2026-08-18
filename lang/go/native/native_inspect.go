@@ -111,6 +111,7 @@ func buildInspection(r *Registry, name string) Value {
 			// A plain `def`-bound value (not a registered word): include
 			// the value itself, e.g. `def f 99; inspect f` → {…value:99…}.
 			if v, ok := r.Defs.Top(name); ok {
+				result.Set("type", NewString(v.Parent.Leaf()))
 				result.Set("value", v)
 			}
 			result.Set("signatures", NewList(nil))
@@ -120,6 +121,13 @@ func buildInspection(r *Registry, name string) Value {
 		result.Set("signatures", NewList(nil))
 		return NewValueRaw(TInspect, MapPayload{M: result})
 	}
+
+	// Every inspection reports a `type`: a word bound to a function is a
+	// value like any other, and by ADR-011 there is exactly one Function
+	// type for it to have. Without this the word form was the only
+	// inspection with no `type` key at all, so `inspect f` and
+	// `inspect 2` answered different questions.
+	result.Set("type", NewString(TFunction.Leaf()))
 
 	ownSigs := fn.OwnSigs()
 	isDefined := false
@@ -150,6 +158,16 @@ func buildInspection(r *Registry, name string) Value {
 			argVals = []Value{}
 		}
 		sm.Set("args", NewList(argVals))
+
+		// The RETURN types. Omitting them made `inspect` an incomplete
+		// answer to "what is this function's signature?" — half a
+		// contract, with no way to recover the other half. Shared with
+		// `describe` (SigReturnNames) so the two surfaces agree.
+		retVals := []Value{}
+		for _, retName := range SigReturnNames(name, sig) {
+			retVals = append(retVals, NewString(retName))
+		}
+		sm.Set("returns", NewList(retVals))
 
 		sigMaps = append(sigMaps, NewMap(sm))
 	}

@@ -1238,8 +1238,10 @@ func TestParseFnUndefSpecReturnError(t *testing.T) {
 // ========================
 
 func TestParseFnReturnsSingleError(t *testing.T) {
-	// A single non-list return type that is an invalid type name.
-	_, _, err := parseFnReturns(nil, NewString("nonexistent_type"))
+	// A single non-list return WORD that names no type. A word in a type
+	// slot must name a type — unlike a String or Atom, which falls back
+	// to being a literal type (see TestParseFnReturnsStringLiteral).
+	_, _, err := parseFnReturns(nil, NewWord("nonexistent_type"))
 	if err == nil {
 		t.Error("expected error for invalid return type name")
 	}
@@ -1247,9 +1249,27 @@ func TestParseFnReturnsSingleError(t *testing.T) {
 
 func TestParseFnReturnsListError(t *testing.T) {
 	// A list with an invalid return type element.
-	_, _, err := parseFnReturns(nil, NewList([]Value{NewString("nonexistent_type")}))
+	_, _, err := parseFnReturns(nil, NewList([]Value{NewWord("nonexistent_type")}))
 	if err == nil {
 		t.Error("expected error for invalid return type in list")
+	}
+}
+
+func TestParseFnReturnsStringLiteral(t *testing.T) {
+	// A String that names no type is a literal TYPE — it admits exactly
+	// itself — so it resolves to (String, pattern) instead of erroring.
+	types, pats, err := parseFnReturns(nil, NewString("nonexistent_type"))
+	if err != nil {
+		t.Fatalf("a non-type string must be a literal return type: %v", err)
+	}
+	if len(types) != 1 || !types[0].Equal(TString) {
+		t.Fatalf("types = %v, want [String]", types)
+	}
+	if len(pats) != 1 || pats[0] == nil {
+		t.Fatalf("pats = %v, want one literal pattern", pats)
+	}
+	if got, aerr := AsString(*pats[0]); aerr != nil || got != "nonexistent_type" {
+		t.Errorf("pattern = %v (%v)", *pats[0], aerr)
 	}
 }
 

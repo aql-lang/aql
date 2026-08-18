@@ -13,17 +13,22 @@ package core
 //        building one FnSig per triple. Returns the assembled
 //        FnDefInfo. An empty list yields an empty FnDefInfo.
 //
-//   OutputSigIsConcreteReturns(r, outputSig)  bool
-//      — true iff every element of an output sig is a concrete value
-//        (i.e. a return-by-value sig), not a type literal.
+// An output sig is ALWAYS the types the returns must match — never
+// values to splice. A value IS a type (ADR-010), so a literal there is a
+// literal type constraint: `fn x:String 22 [22]` declares one return
+// that must match 22, and `fn x:String 22 [33]` fails the return check.
 //
-//   IsSigTypeValue(r, v)  bool
-//      — true iff v looks like a type in a signature context
-//        (type literal, type-name word, options/record/table/typed-
-//        list/map etc.).
-//
-//   OutputSigValues(outputSig)  []Value
-//      — extracts the concrete values from a return-by-value sig.
+// This file used to CLASSIFY the sig first, and an all-concrete sig
+// became "return-by-value sugar" whose values were appended to the body
+// after an `end`, with the static return types degraded to Any. That
+// classification could not be made correct: every value shape it failed
+// to recognise as a type — a def'd type name, a Disjunct, a dotted
+// `Pkg.Type`, the single-entry map a `name:Type` pair lowers to — became
+// a spliced constant instead and surfaced as a phantom "expected N
+// return value(s), got N+1" at the first call. Three of those were
+// patched one shape at a time before the classification itself was
+// retired, along with the helpers that served it
+// (OutputSigIsConcreteReturns / IsSigTypeValue / OutputSigValues).
 
 // ParseFnDef parses a function specification list into FnDefInfo.
 // The list contains signature triples: [input-sig, output-sig, body],
@@ -58,15 +63,9 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			return FnDefInfo{}, err
 		}
 
-		concreteReturns := OutputSigIsConcreteReturns(r, outputSig)
-
-		var returns []*Type
-		var returnPatterns []*Value
-		if !concreteReturns {
-			returns, returnPatterns, err = ParseFnReturns(r, outputSig)
-			if err != nil {
-				return FnDefInfo{}, err
-			}
+		returns, returnPatterns, err := ParseFnReturns(r, outputSig)
+		if err != nil {
+			return FnDefInfo{}, err
 		}
 
 		var bodyElems []Value
@@ -77,19 +76,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			bodyElems = []Value{body}
 		}
 
-		if concreteReturns {
-			retVals := OutputSigValues(outputSig)
-			if len(retVals) > 0 {
-				bodyElems = append(bodyElems, NewEnd())
-				bodyElems = append(bodyElems, retVals...)
-				returns = make([]*Type, len(retVals))
-				for j := range retVals {
-					returns[j] = TAny
-				}
-			}
-		}
-
-		decl := DeclSite{Pos: outputSig.Pos()}
+		decl := DeclSite{Pos: sigDeclPos(outputSig)}
 		if r != nil {
 			decl.Source = r.Source
 			decl.File = r.BaseFile
@@ -148,103 +135,40 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 	return FnUndefInfo{Sigs: sigs}, nil
 }
 
-// OutputSigIsConcreteReturns reports whether all values in the
-// output signature are concrete (non-type) values — i.e. the sig
-// is a return-by-value form (`[42 "ok"]`) rather than a return-by-
-// type form (`[Integer String]`).
-func OutputSigIsConcreteReturns(r *Registry, outputSig Value) bool {
-	if outputSig.Parent.Equal(TList) && outputSig.Data != nil {
-		elems, _ := AsList(outputSig)
-		if elems.Len() == 0 {
-			return false
-		}
-		for _, e := range elems.Slice() {
-			if IsSigTypeValue(r, e) {
-				return false
+// sigDeclPos locates the declaration span for a signature slot. A slot
+// written as a LIST (`[Integer]`) carries its own source position, but a
+// bare `name:Type` pair does not: pair syntax lowers to a map, and the
+// parser stamps positions only on the nodes its `val` rule wraps, which
+// a list-interior pair never is (parser/go/parse.go). An unpositioned
+// slot used to drop the "the declaration of `f` expects N return
+// value(s)" span entirely (attachDeclSpan bails on Row <= 0), so the two
+// spellings of ONE declaration — `fn [x:A y:B [body]]` and
+// `fn [[x:A] [y:B] [body]]` — reported different diagnostics for the
+// same defect. The pair's own VALUE keeps its position, so descend to
+// the first positioned value inside and anchor the span on the declared
+// type itself.
+func sigDeclPos(sig Value) SrcPos {
+	if p := sig.Pos(); p.Row > 0 {
+		return p
+	}
+	if sig.Parent.Equal(TMap) && sig.Data != nil {
+		if m, err := AsMutableMap(sig); err == nil && m != nil {
+			for _, k := range m.Keys() {
+				v, _ := m.Get(k)
+				if p := sigDeclPos(v); p.Row > 0 {
+					return p
+				}
 			}
 		}
-		return true
 	}
-	return !IsSigTypeValue(r, outputSig)
-}
-
-// IsSigTypeValue reports whether v looks like a type in a signature
-// context — a type literal, a type-name word/atom/string, or a
-// structural type (Options/Record/Table/TypedList/TypedMap/ObjectType).
-//
-// The registry is consulted so a USER-DEFINED type name (a capitalised
-// `def Foo …`) is recognised, not just kernel builtins. Without it, a
-// def'd type name in a fn output sig (`fn [[…] [BloomFilter] […]]`) was
-// misclassified as a concrete return-by-value, which forced the static
-// return type to `Any` and spliced the type literal onto the body
-// stack — surfacing as a spurious "expected N return value(s)" error.
-// A nil registry degrades to builtin-only recognition (the historical
-// behaviour, kept for the registry-less callers).
-func IsSigTypeValue(r *Registry, v Value) bool {
-	if IsTypeLiteral(v) {
-		return true
-	}
-	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
-		IsTypedMap(v) || IsTableType(v) || IsClassType(v) {
-		return true
-	}
-	// A Disjunct is a TYPE too — `def IS (Integer tor String)` then
-	// `fn [[…] [IS] […]]`. When the name has already been evaluated to
-	// its body (a Disjunct VALUE rather than the Word), reading it as a
-	// concrete return-by-value forces the static return type to Any and
-	// splices the value onto the body stack — the same spurious
-	// "expected N return value(s)" the registry lookup above was added
-	// to stop, one value-shape further along.
-	if IsDisjunct(v) {
-		return true
-	}
-	if IsWord(v) {
-		_as0, _ := AsWord(v)
-		return isSigTypeName(r, _as0.Name)
-	}
-	if v.Parent.ConformsTo(TAtom) || v.Parent.ConformsTo(TString) {
-		name, _ := AsString(v)
-		return isSigTypeName(r, name)
-	}
-	// A DOTTED type reference (`MatrixUtil.Matrix` — a Reach) reaching a type
-	// literal through bound module exports: recognise it as a TYPE, exactly
-	// as dottedParamType resolves it for a param slot. Without this an output
-	// sig `[Pkg.Type]` was mis-read as a concrete return-by-value — the
-	// resolved type literal got spliced onto the body and surfaced as a
-	// spurious "expected N return value(s), got N+1" (a MatrixUtil tensor
-	// return type, the stats cov-matrix false positive). The Word-name case
-	// above already covers a plain `def`'d type name; this is its dotted twin.
-	if IsReach(v) {
-		if _, ok := dottedParamType(r, v); ok {
-			return true
+	if sig.Parent.Equal(TList) && sig.Data != nil {
+		if l, err := AsList(sig); err == nil {
+			for _, e := range l.Slice() {
+				if p := sigDeclPos(e); p.Row > 0 {
+					return p
+				}
+			}
 		}
 	}
-	return false
-}
-
-// isSigTypeName reports whether name denotes a type in signature
-// context: a kernel builtin name, a resolvable kernel type path, or —
-// when a registry is available — an active user-defined type binding
-// (`r.LookupTypeName`, the same authoritative TypeDef-backed lookup the
-// sig-type resolver uses).
-func isSigTypeName(r *Registry, name string) bool {
-	if _, ok := TypeNameTable()[name]; ok {
-		return true
-	}
-	if _, ok := ResolveTypePath(name); ok {
-		return true
-	}
-	return r != nil && r.LookupTypeName(name) != nil
-}
-
-// OutputSigValues extracts the concrete values from a return-by-value
-// output signature. For a list-form output sig, returns the elements;
-// for a single-value form, wraps the value in a one-element slice.
-func OutputSigValues(outputSig Value) []Value {
-	if outputSig.Parent.Equal(TList) && outputSig.Data != nil {
-		elems, _ := AsList(outputSig)
-		result := elems.Slice()
-		return result
-	}
-	return []Value{outputSig}
+	return SrcPos{}
 }

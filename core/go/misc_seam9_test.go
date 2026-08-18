@@ -38,13 +38,6 @@ func TestW9BoundNodeClassType(t *testing.T) {
 	}
 }
 
-func TestW9IsSigTypeValueClassType(t *testing.T) {
-	r := newTestRegistry(t)
-	if !IsSigTypeValue(r, w9ClassType("T_sig")) {
-		t.Error("a class type is a signature type value")
-	}
-}
-
 func TestW9CanonFnDefMultiReturn(t *testing.T) {
 	fd := FnDefInfo{
 		Name: "w9cf",

@@ -286,7 +286,7 @@ def Bar (class {}) def Foo (refine Bar {}) def mk fn [[] [Foo] [make Bar {}]] mk
 def Pos (refine Integer) def mk fn [[] [Pos] [7]] mk	ERROR:expected Pos, got Integer	bare scalar refine return rejects a plain base value (nominal, matches param side)
 def Foo (class {}) def mk fn [[] [Foo] [(make Foo {}) (make Foo {})]] mk	ERROR:return value(s)	arity check still fires for a user-typed return
 def Foo (class {}) def mk fn [[] [Integer Foo] [1 2]] mk	ERROR:return value 2	per-slot return typing rejects the wrong type in a later slot
-def mk fn [[] [Nope] [42]] mk	ERROR:undefined word	an unknown type name in the return slot errors, it does not silently become Any
+def mk fn [[] [Nope] [42]]	ERROR:unknown type	an unknown type name in the return slot errors AT THE DECLARATION — it does not silently become Any, and no longer waits for a call to surface as an undefined word
 
 # Sibling DepScalar refinements MEET implicitly under unify: the
 # interval algebra intersects the constraints (combineDepScalars),

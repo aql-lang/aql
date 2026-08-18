@@ -39,7 +39,10 @@ func TestReturnCountConformanceFlagsExcess(t *testing.T) {
 	stk := []core.Value{core.NewInteger(1), core.NewInteger(2)}
 	checkBodyReturnConformance(r, "r2", []*core.Type{core.TInteger}, nil, 0, true, stk, core.SrcPos{Row: 1, Col: 1}, core.SrcPos{})
 
-	want := core.ReturnCountErrorText("r2", 1, 2)
+	// The values ride in the detail, and the detail is the dedup
+	// key — so the slice passed here must be the same one the checker
+	// renders (stk minus the unnamed allowance, 0 here).
+	want := core.ReturnCountErrorText("r2", 1, 2, stk)
 	if countDiags(r, want) != 1 {
 		t.Fatalf("excess residual not flagged: diagnostics = %+v", r.Check.Diagnostics)
 	}
@@ -66,7 +69,7 @@ func TestReturnCountConformanceUnnamedAllowance(t *testing.T) {
 	// exactly the runtime's returnCountError arithmetic.
 	stk = []core.Value{core.NewInteger(7), core.NewInteger(8), core.NewInteger(42)}
 	checkBodyReturnConformance(r, "okun", []*core.Type{core.TInteger}, nil, 1, true, stk, core.SrcPos{}, core.SrcPos{})
-	if countDiags(r, core.ReturnCountErrorText("okun", 1, 2)) != 1 {
+	if countDiags(r, core.ReturnCountErrorText("okun", 1, 2, stk[1:])) != 1 {
 		t.Fatalf("beyond-allowance residual not flagged: %+v", r.Check.Diagnostics)
 	}
 }

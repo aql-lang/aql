@@ -323,10 +323,24 @@ func TestFnArgCleanup_ThreeArgs_ThreeReturns(t *testing.T) {
 
 // --- Concrete return values (non-type output sig appended to body) ---
 
-func TestFnArgCleanup_ConcreteReturn_Simple(t *testing.T) {
-	// Output 1 is not a type, so body becomes [print end 1].
+// --- Literal output types: a value IS a type (ADR-010) ---
+//
+// A literal in the output sig declares a return the body must MATCH. It
+// used to mean the opposite — an all-literal output sig was
+// "return-by-value sugar" and the literals were appended to the body,
+// so `fn [Atom 1 [print]]` returned 1 from a body that returned nothing.
+// That reading made an output sig mean two different things depending on
+// a classification that could not be made correct, and it silently
+// degraded every such declaration's static return type to Any. The sig
+// is now always types, and a literal type admits exactly itself.
+
+func TestFnArgCleanup_LiteralReturnType_Simple(t *testing.T) {
+	// Output `1` constrains the single return to the value 1; the body
+	// has to produce it. `end` stops `print` collecting the 1 forward,
+	// so it consumes the Atom argument instead — which is exactly the
+	// token the deleted sugar used to splice in for you.
 	result, err := runSteps(t, []string{
-		`def f fn [Atom 1 [print]]`,
+		`def f fn [Atom 1 [print end 1]]`,
 		`f (quote a)`,
 	})
 	if err != nil {
@@ -335,9 +349,22 @@ func TestFnArgCleanup_ConcreteReturn_Simple(t *testing.T) {
 	assertResult(t, result, "1")
 }
 
-func TestFnArgCleanup_ConcreteReturn_MultipleValues(t *testing.T) {
+func TestFnArgCleanup_LiteralReturnType_Violated(t *testing.T) {
+	// The body returns 2 where the declaration says 1 — the whole point
+	// of the change: this is now a type error instead of 1 being
+	// appended to the body and 2 becoming a phantom extra return.
+	_, err := runSteps(t, []string{
+		`def f fn [Atom 1 [print end 2]]`,
+		`f (quote a)`,
+	})
+	if err == nil {
+		t.Fatal("expected a return-type error for a body that violates its literal return type")
+	}
+}
+
+func TestFnArgCleanup_LiteralReturnType_MultipleValues(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def f fn [[Atom] [1 2] [print]]`,
+		`def f fn [[Atom] [1 2] [print end 1 2]]`,
 		`f (quote a)`,
 	})
 	if err != nil {
@@ -346,11 +373,11 @@ func TestFnArgCleanup_ConcreteReturn_MultipleValues(t *testing.T) {
 	assertResult(t, result, "1 2")
 }
 
-func TestFnArgCleanup_ConcreteReturn_Factorial(t *testing.T) {
-	// Base case uses [0] 1 [] — concrete return 1 for input 0.
-	// Recursive case uses named param and type return.
+func TestFnArgCleanup_LiteralReturnType_Factorial(t *testing.T) {
+	// The base case declares AND returns 1; the recursive case uses a
+	// named param and a type return.
 	result, err := runSteps(t, []string{
-		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`def fact fn [[0] 1 [1] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
 		`fact 5`,
 	})
 	if err != nil {
@@ -359,9 +386,9 @@ func TestFnArgCleanup_ConcreteReturn_Factorial(t *testing.T) {
 	assertResult(t, result, "120")
 }
 
-func TestFnArgCleanup_ConcreteReturn_FactorialZero(t *testing.T) {
+func TestFnArgCleanup_LiteralReturnType_FactorialZero(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`def fact fn [[0] 1 [1] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
 		`fact 0`,
 	})
 	if err != nil {
@@ -370,9 +397,9 @@ func TestFnArgCleanup_ConcreteReturn_FactorialZero(t *testing.T) {
 	assertResult(t, result, "1")
 }
 
-func TestFnArgCleanup_ConcreteReturn_FactorialOne(t *testing.T) {
+func TestFnArgCleanup_LiteralReturnType_FactorialOne(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`def fact fn [[0] 1 [1] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
 		`fact 1`,
 	})
 	if err != nil {
@@ -381,9 +408,9 @@ func TestFnArgCleanup_ConcreteReturn_FactorialOne(t *testing.T) {
 	assertResult(t, result, "1")
 }
 
-func TestFnArgCleanup_ConcreteReturn_FactorialTen(t *testing.T) {
+func TestFnArgCleanup_LiteralReturnType_FactorialTen(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`def fact fn [[0] 1 [1] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
 		`fact 10`,
 	})
 	if err != nil {
@@ -404,21 +431,26 @@ func TestFnArgCleanup_ConcreteReturn_TypeOutputUnchanged(t *testing.T) {
 	assertResult(t, result, "'HELLO'")
 }
 
-func TestFnArgCleanup_ConcreteReturn_EmptyBody(t *testing.T) {
-	// Body is empty, concrete return 42 appended after end.
-	result, err := runSteps(t, []string{
+func TestFnArgCleanup_LiteralReturnType_EmptyBodyIsAnError(t *testing.T) {
+	// The sugar's headline case: an EMPTY body against a literal output
+	// used to "succeed", returning the spliced 42. A body that produces
+	// nothing satisfies no declared return, so it is an error now — the
+	// silent wrong answer this shape used to give is the reason the
+	// sugar went.
+	_, err := runSteps(t, []string{
 		`def f fn [[Atom] 42 []]`,
 		`f (quote x)`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("expected an error for a body that produces no return value")
 	}
-	assertResult(t, result, "42")
 }
 
-func TestFnArgCleanup_ConcreteReturn_StringValue(t *testing.T) {
+func TestFnArgCleanup_LiteralReturnType_StringValue(t *testing.T) {
+	// A String literal names no type, so it is a literal type — the same
+	// rule the Integer literals above follow.
 	result, err := runSteps(t, []string{
-		`def f fn [[Integer] "done" [print]]`,
+		`def f fn [[Integer] "done" [print end "done"]]`,
 		`f 7`,
 	})
 	if err != nil {

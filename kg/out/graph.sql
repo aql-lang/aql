@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '676833755681428075');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '6709712317143500879');
 INSERT INTO input_files VALUES ('../AGENTS.md', '4486509826690851738', 10656);
 INSERT INTO input_files VALUES ('../CLI.md', '879693357166092360', 82989);
 INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
@@ -34,7 +34,9 @@ INSERT INTO input_files VALUES ('../design/CONTENT-ADDRESSING.0.md', '2493386413
 INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '7605485402373327537', 10411);
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
 INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
+INSERT INTO input_files VALUES ('../design/DIAGNOSTIC-VALUES.0.md', '4050607666584719300', 6665);
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
+INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '461252499723853380', 11344);
 INSERT INTO input_files VALUES ('../design/FN-VALUE-OPEN-WORK.0.md', '8479443366485179161', 26190);
 INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '4913722754517353679', 65012);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
@@ -58,7 +60,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5798490287673095801', 500);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '3902473583519536666', 46483);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '1875770070848160677', 49001);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -102,6 +104,12 @@ INSERT INTO sources VALUES ('src:coverage-parity', 'text', 'design/ENG-COVERAGE-
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:decl-grammar', 'text', 'design/DECLARATIVE-GRAMMAR.0.md', 'declarative grammar artifact for both parser twins', NULL, 'decl-grammar-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:diagnostic-values', 'text', 'design/DIAGNOSTIC-VALUES.0.md', 'diagnostic values: a diagnostic names the values it is about', NULL, 'diagnostic-values-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:fn-output-sig', 'text', 'design/FN-OUTPUT-SIG.0.md', 'fn output sig: the output slot is types, and only types', NULL, 'fn-output-sig-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:fn-value-open-work', 'text', 'design/FN-VALUE-OPEN-WORK.0.md', 'function values: the open work, re-measured', NULL, 'fn-value-open-work-2026-08', 'primary', '{
@@ -263,6 +271,10 @@ INSERT INTO entities VALUES ('ent:Document:6176355086953937469', 'Document', 'TU
 INSERT INTO entities VALUES ('ent:Document:6186742803977787158', 'Document', 'design/BORU-SCRY.0.md', 'design/boru-scry.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:6186742803977787158', 'role', 'the boru:scry proposal: the mechanism whereby a boru system gains knowledge of itself as plain data — census, per-word, graph, schema and trace words curated over existing engine seams, and the plan for resolving the overlap with boru:debug');
 INSERT INTO entities VALUES ('ent:Document:6369673620858945660', 'Document', 'eng/go/CLAUDE.md', 'eng/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:6779251111015546106', 'Document', 'design/DIAGNOSTIC-VALUES.0.md', 'design/diagnostic-values.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:6779251111015546106', 'role', 'the proposed rule that a diagnostic names the values it is about rather than describing them — recorded in design, not ADR.md, pending a maintainer ruling: the return-count error reported arithmetic and withheld the one thing identifying the fault, the count-and-values agreement corollary (callers pass exactly the slice the count was taken over), the single-builder byte-identity contract across interpreter, VM and checker, the abbreviate-never-truncate policy and its two nesting levels through diagMaxListHead, and the open sweep across no_signature, the arity errors and describeStackTypes');
+INSERT INTO entities VALUES ('ent:Document:7550033050871776514', 'Document', 'design/FN-OUTPUT-SIG.0.md', 'design/fn-output-sig.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:7550033050871776514', 'role', 'why an fn triple''s output slot is always the types the returns must match, never values to splice: the return-by-value sugar classified the slot before parsing it, so the implicit map a `name:Type` pair lowers to was read as a concrete return and appended to the body — a spurious return-count error, or a silently wrong answer with a clean `check --pedantic` when the body''s net stack effect was zero; why patching IsSigTypeValue a fourth time was the wrong fix (three prior arms record the identical symptom, and the predicate fails OPEN into a semantic change); the rule that a literal in the output slot is a literal TYPE admitting exactly itself (ADR-010); the String/Atom literal fallback gated on type-name SHAPE so a misspelled `Integr` stays a loud error; the one behaviour lost (the bodiless base case); the declaration-span fix that makes both spellings diagnose alike; the describe/inspect under-report; and the open interpreter-vs-VM divergence on an empty body''s frame residual that deleting the sugar made reachable');
 INSERT INTO entities VALUES ('ent:Document:7583878321315113890', 'Document', 'design/TABNAS-UPSTREAM-FIRST.0.md', 'design/tabnas-upstream-first.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:7583878321315113890', 'role', 'ADR-014''s case study: why a tabnas parser defect is fixed upstream and never behind a boru shim — the five shims the 2026-08-10 upgrade retired, the two-workarounds-deep episode that earned the rule, and the boundary against boru''s own grammar-layer divergences');
 INSERT INTO entities VALUES ('ent:Document:7594380001231677524', 'Document', 'design/FUNCTION-VALUE-SCOPE.0.md', 'design/function-value-scope.0.md', 'accepted');

@@ -103,7 +103,8 @@ func checkBodyReturnConformance(r *core.Registry, name string, declared []*core.
 	if extra > unnamedCount &&
 		!stackHasVariadic(stk) && !stackHasFnValue(stk) && !stackHasDynamic(stk) &&
 		!stackHasApproxAny(stk) {
-		detail := core.ReturnCountErrorText(name, len(declared), len(stk)-unnamedCount)
+		detail := core.ReturnCountErrorText(name, len(declared), len(stk)-unnamedCount,
+			stk[unnamedCount:])
 		if !hasCheckDiagnostic(r, "type_error", detail) {
 			r.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code:          "type_error",

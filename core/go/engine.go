@@ -1016,8 +1016,12 @@ func (e *Engine) stripTapeAscriptions(lo, hi int) {
 	}
 }
 
-func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *BoruError {
-	return BuildReturnCountError(e.effectiveSource(), rc.FuncName, expected, got, rc.Pos, rc.Decl)
+// values are the residual values the `got` count was taken over, shown in
+// the message (design/DIAGNOSTIC-VALUES.0.md) — the caller slices them
+// so the rendered list
+// and the count can never describe different things.
+func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int, values []Value) *BoruError {
+	return BuildReturnCountError(e.effectiveSource(), rc.FuncName, expected, got, values, rc.Pos, rc.Decl)
 }
 
 // validateReturnTypes checks the top nret residual values (results[extra:])
@@ -7710,11 +7714,14 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 			// number of unnamed params that were pushed before the body.
 			nret := len(rc.Returns)
 			if len(results) < nret {
-				return e.returnCountError(rc, nret, len(results))
+				return e.returnCountError(rc, nret, len(results), results)
 			}
 			extra := len(results) - nret
 			if extra > rc.UnnamedCount {
-				return e.returnCountError(rc, nret, len(results)-rc.UnnamedCount)
+				// The unnamed-arg allowance is spent from the BOTTOM, so
+				// the values the count is about are the top ones.
+				return e.returnCountError(rc, nret, len(results)-rc.UnnamedCount,
+					results[rc.UnnamedCount:])
 			}
 
 			// Validate the top nret values match declared return types.
