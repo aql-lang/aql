@@ -621,7 +621,7 @@ func TestS5BCloseParenTrailingApplyRecorded(t *testing.T) {
 		parenBody(NewWord("cadd"), NewWord("n"), NewWord("n")))
 	e.Tape = NewTape([]Value{NewOpenParen(), NewInteger(3), fnv, NewCloseParen()}, StackHeadroom)
 	e.Pointer = 3
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if es.dynApplies != 1 {
@@ -644,7 +644,7 @@ func TestS5BCloseParenTrailingApplyDeclined(t *testing.T) {
 		parenBody(NewWord("cadd"), NewWord("n"), NewWord("n")))
 	e.Tape = NewTape([]Value{NewOpenParen(), NewInteger(3), fnv, NewCloseParen()}, StackHeadroom)
 	e.Pointer = 3
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if len(es.trailing) != 1 {
@@ -664,7 +664,7 @@ func TestS5BCloseParenLeadFnApply(t *testing.T) {
 	lead := NewCarrier(TFunction)
 	e.Tape = NewTape([]Value{NewOpenParen(), lead, NewInteger(5), NewCloseParen()}, StackHeadroom)
 	e.Pointer = 3
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if es.dynApplies != 1 {
@@ -689,7 +689,7 @@ func TestS5BCloseParenLeadingDynamicApply(t *testing.T) {
 	dyn.Dynamic = true
 	e.Tape = NewTape([]Value{NewOpenParen(), dyn, NewInteger(7), NewCloseParen()}, StackHeadroom)
 	e.Pointer = 3
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if es.dynMethods != 1 {
@@ -712,7 +712,7 @@ func TestS5BCloseParenLeadingDynamicRefused(t *testing.T) {
 	dyn.Dynamic = true
 	e.Tape = NewTape([]Value{NewOpenParen(), dyn, NewInteger(7), NewCloseParen()}, StackHeadroom)
 	e.Pointer = 3
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if len(es.uncompilable) != 1 {
@@ -740,7 +740,7 @@ func TestS5BCloseParenSkipperHook(t *testing.T) {
 	e.SetRecorder(rec)
 	e.Tape = NewTape([]Value{NewOpenParen(), NewInteger(1), NewCloseParen()}, StackHeadroom)
 	e.Pointer = 2
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if rec.skipped != 1 {
@@ -755,7 +755,7 @@ func TestS5BCloseParenVoidGroupStopsAtOpenParen(t *testing.T) {
 	e := NewTop(r)
 	e.Tape = NewTape([]Value{NewOpenParen(), NewOpenParen(), NewCloseParen()}, StackHeadroom)
 	e.Pointer = 2
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if len(e.voidGroups) != 0 {
@@ -771,7 +771,7 @@ func TestS5BCloseParenReturnCountOverflow(t *testing.T) {
 	rc := NewReturnCheck(ReturnCheckInfo{FuncName: "f", Returns: []*Type{TInteger}})
 	e.Tape = NewTape([]Value{NewOpenParen(), rc, NewInteger(5), NewInteger(7), NewCloseParen()}, StackHeadroom)
 	e.Pointer = 4
-	err := e.stepCloseParen()
+	err := e.stepCloseParen(true)
 	if err == nil || !strings.Contains(err.Error(), "return") {
 		t.Fatalf("want a return-count error, got %v", err)
 	}
@@ -785,7 +785,7 @@ func TestS5BCloseParenDiscardsUnnamedArgs(t *testing.T) {
 	rc := NewReturnCheck(ReturnCheckInfo{FuncName: "f", Returns: []*Type{TInteger}, UnnamedCount: 1})
 	e.Tape = NewTape([]Value{NewOpenParen(), rc, NewInteger(5), NewInteger(7), NewCloseParen()}, StackHeadroom)
 	e.Pointer = 4
-	if err := e.stepCloseParen(); err != nil {
+	if err := e.stepCloseParen(true); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
 	if got := renderAll(e.Tape.Snapshot()); got != "7" {
