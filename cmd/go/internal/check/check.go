@@ -1,6 +1,14 @@
-// Package check implements `boru check [--json] [--soft] [--strict] [script.boru]`
-// — run the static type-checker over a boru source file or -e
-// expression and report diagnostics.
+// Package check implements
+// `boru check [flags] <file.boru|dir ...>` and `boru check [flags] -e EXPR`
+// — run the static type-checker over boru source and report diagnostics.
+//
+// EVERY target named on the command line is checked. A file target is
+// checked as named; a directory target contributes every `.boru` file
+// beneath it (skipping `.boru/`). Diagnostics accumulate across targets —
+// a file that fails does not stop the files after it — and the command
+// exits non-zero when ANY target reported an Error-severity diagnostic,
+// so `boru check src/*.boru` in CI is green only when every one of those
+// files is clean.
 //
 // Without --soft, the presence of any Error-severity diagnostic
 // causes the command to exit non-zero (the default mode used by
@@ -9,12 +17,17 @@ package check
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/flagutil"
 	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 	lang "github.com/boru-lang/boru/lang/go"
 )
@@ -29,85 +42,261 @@ var langNew = lang.New
 // plain CheckResult shape.
 var jsonMarshalIndent = json.MarshalIndent
 
+// osReadFile and walkDir are test seams (design/TEST-SEAMS.10.md): under
+// the suite's root uid a path os.Stat has just resolved cannot then fail
+// to read, and filepath.WalkDir never surfaces a per-entry error, so
+// tests swap these to drive the two I/O failure arms of target
+// resolution.
+var (
+	osReadFile = os.ReadFile
+	walkDir    = filepath.WalkDir
+)
+
 type cmd struct{}
 
 // New returns the check subcommand.
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "check" }
-func (*cmd) Synopsis() string { return "static type-check a script or expression" }
+func (*cmd) Synopsis() string { return "static type-check scripts or an expression" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return RunCLI(args, stdout, stderr)
+}
+
+// Options are the check knobs RunCLI resolves once and every checked
+// target shares.
+type Options struct {
+	Registry string
+	Seed     int64
+	JSON     bool
+	Soft     bool
+	Strict   bool
+	Color    bool
+}
+
+// Target is one unit of work: Source is the boru text and Path is the
+// file it was read from. Path is empty for an -e expression (and for a
+// library caller that only has the text), which is also what selects
+// the import anchor — see RunTargets.
+type Target struct {
+	Path   string
+	Source string
 }
 
 // RunCLI is the entry point for the check subcommand, parsing flags
 // from args.
 func RunCLI(args []string, stdout, stderr io.Writer) int {
-	jsonOut := false
-	soft := false
-	emit := false
-	strict := false
-	colorMode := "auto"
-	for len(args) > 0 {
-		switch args[0] {
-		case "--color", "-color":
-			if len(args) > 1 {
-				colorMode = args[1]
-				args = args[2:]
-				continue
-			}
-			args = args[1:]
-		case "--json", "-json":
-			jsonOut = true
-			args = args[1:]
-		case "--soft", "-soft":
-			soft = true
-			args = args[1:]
-		case "--strict", "-strict":
-			strict = true
-			args = args[1:]
-		case "--emit", "-emit":
-			emit = true
-			args = args[1:]
-		default:
-			goto done
-		}
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	expr := fs.String("e", "", "type-check this inline expression instead of file targets")
+	jsonOut := fs.Bool("json", false, "emit the CheckResult as JSON (an array keyed by file for several targets)")
+	soft := fs.Bool("soft", false, "report diagnostics but still exit 0")
+	strict := fs.Bool("strict", false, "additionally report every dispatch over a dynamic operand")
+	emit := fs.Bool("emit", false, "print the bytecode disassembly instead of the check report")
+	colorMode := fs.String("color", "auto", "colorize diagnostics: auto|always|never")
+	registry := fs.String("r", "", "registry path")
+	var seed int64
+	fs.Int64Var(&seed, "s", 0, "random seed")
+
+	args, ok := tolerateLegacyTail(args, stderr)
+	if !ok {
+		return 1
 	}
-done:
-	if len(args) == 0 {
+	// Interleaved parsing (flagutil.ParseInterleaved) so `check a.boru
+	// b.boru --json` reads two files and a flag, not three files.
+	targets, perr := flagutil.ParseInterleaved(fs, args)
+	if perr != nil {
+		// The FlagSet has already written the usage listing (-h) or the
+		// rejected-flag message to stderr; adding our own would double it.
+		return 1
+	}
+
+	// -e "" is a legal (empty) program, so presence — not emptiness —
+	// decides whether an expression was asked for.
+	sawExpr := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "e" {
+			sawExpr = true
+		}
+	})
+	switch {
+	case sawExpr && len(targets) > 0:
+		fmt.Fprintf(stderr, "error: boru check takes either -e EXPR or file targets, not both\n")
+		return 1
+	case !sawExpr && len(targets) == 0:
 		fmt.Fprintf(stderr, "error: boru check requires a script file or -e expression\n")
 		return 1
 	}
 
-	var source string
-	if args[0] == "-e" {
-		if len(args) < 2 {
-			fmt.Fprintf(stderr, "error: boru check -e requires an expression\n")
-			return 1
-		}
-		source = args[1]
-	} else {
-		// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
-		data, err := os.ReadFile(pathutil.Expand(args[0]))
+	work := []Target{{Source: *expr}}
+	if !sawExpr {
+		files, err := resolveTargets(targets)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		source = string(data)
-	}
-
-	if emit {
-		if err := Emit(stdout, stderr, source); err != nil {
-			fmt.Fprintf(stderr, "%s\n", err)
+		if len(files) == 0 {
+			// Checking nothing is the failure mode this command exists to
+			// prevent, so an empty expansion is an error, not a quiet 0.
+			fmt.Fprintf(stderr, "error: no .boru files under %s\n", strings.Join(targets, " "))
 			return 1
 		}
-		return 0
+		work = files
 	}
-	if err := RunColor(stdout, stderr, source, "", 0, jsonOut, soft, strict, lang.ResolveColor(nil, stderr, colorMode)); err != nil {
+
+	if *emit {
+		return runEmit(stdout, stderr, work, *registry, seed)
+	}
+	opts := Options{
+		Registry: *registry,
+		Seed:     seed,
+		JSON:     *jsonOut,
+		Soft:     *soft,
+		Strict:   *strict,
+		Color:    lang.ResolveColor(nil, stderr, *colorMode),
+	}
+	if err := RunTargets(stdout, stderr, work, opts); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}
 	return 0
+}
+
+// tolerateLegacyTail preserves the two tolerances the hand-rolled
+// pre-FlagSet argument loop had, which a bare FlagSet would answer with
+// a different message:
+//
+//   - a trailing bare `-e` reported "boru check -e requires an
+//     expression"; flag would say "flag needs an argument: -e";
+//   - a trailing bare `--color` was ignored (the mode stayed "auto") and
+//     the run then failed for the missing target; flag would reject it.
+//
+// It returns false when the command should exit 1 with the message it
+// has already written.
+func tolerateLegacyTail(args []string, stderr io.Writer) ([]string, bool) {
+	if len(args) == 0 {
+		return args, true
+	}
+	switch args[len(args)-1] {
+	case "-e", "--e":
+		fmt.Fprintf(stderr, "error: boru check -e requires an expression\n")
+		return nil, false
+	case "-color", "--color":
+		return args[:len(args)-1], true
+	}
+	return args, true
+}
+
+// resolveTargets expands the command-line targets into the files to
+// check and reads each one.
+//
+// A file target is taken as named. A directory target contributes every
+// `.boru` file beneath it, in sorted order, with `.boru/` never walked:
+// that directory holds fetched and generated package artifacts, so
+// checking it reports findings about code the user did not write and
+// cannot fix (`boru fmt` skips it for the same reason; `boru test`'s
+// discover does not — NUR082). A path named twice is checked once.
+//
+// Resolution completes BEFORE any file is checked, so a mistyped target
+// fails the invocation with nothing checked rather than surfacing
+// halfway through a report that already looks like a clean run.
+func resolveTargets(args []string) ([]Target, error) {
+	seen := map[string]bool{}
+	var paths []string
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	for _, a := range args {
+		// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
+		t := pathutil.Expand(a)
+		info, err := os.Stat(t)
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			add(t)
+			continue
+		}
+		var found []string
+		if err := walkDir(t, func(path string, d fs.DirEntry, werr error) error {
+			if werr != nil {
+				return werr
+			}
+			if d.IsDir() {
+				if d.Name() == ".boru" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(path, ".boru") {
+				found = append(found, path)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		sort.Strings(found)
+		for _, f := range found {
+			add(f)
+		}
+	}
+	out := make([]Target, 0, len(paths))
+	for _, p := range paths {
+		data, err := osReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Target{Path: p, Source: string(data)})
+	}
+	return out, nil
+}
+
+// runEmit prints the bytecode disassembly for every target. With more
+// than one target each block is introduced by a `; file:` comment line,
+// which the disassembly's own comment syntax makes harmless to a reader
+// or a downstream tool.
+func runEmit(stdout, stderr io.Writer, targets []Target, registry string, seed int64) int {
+	for _, t := range targets {
+		if len(targets) > 1 {
+			fmt.Fprintf(stdout, "; file: %s\n", t.Path)
+		}
+		if err := EmitAt(stdout, stderr, t.Source, registry, seed, anchorOf(t.Path)); err != nil {
+			fmt.Fprintf(stderr, "%s\n", err)
+			return 1
+		}
+	}
+	return 0
+}
+
+// anchorOf is the directory a target's relative file imports resolve
+// against: the file's own directory, or "" (the process cwd) for source
+// that did not come from a file.
+//
+// The result must be ABSOLUTE. It is assigned to the registry's BaseDir,
+// and `resolveBareModule` walks parents from there looking for a `.boru/`
+// package directory; that walk terminates when `filepath.Dir(dir) == dir`,
+// which a relative anchor reaches immediately. A relative anchor therefore
+// truncates the search and the checker reports fabricated `undefined_word`
+// errors against perfectly good code — the worst failure class for a gate
+// people run in CI. `build.go` anchors absolutely for the same reason.
+//
+// Falling back to the relative directory when Abs fails keeps the previous
+// behaviour rather than dropping the anchor entirely: Abs only fails when
+// the cwd is unavailable, in which case a relative anchor is no worse than
+// the empty one.
+func anchorOf(path string) string {
+	if path == "" {
+		return ""
+	}
+	dir := filepath.Dir(path)
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return dir
+	}
+	return abs
 }
 
 // Emit runs the bytecode recording pass over source and prints the
@@ -115,9 +304,20 @@ done:
 // the emitter cannot lower the program (debug/tooling surface —
 // design/boru-bytecode-plan.0.md, Stage 1 gate and the DX section).
 func Emit(stdout, stderr io.Writer, source string) error {
-	a, err := langNew()
+	return EmitAt(stdout, stderr, source, "", 0, "")
+}
+
+// EmitAt is Emit with the registry, seed, and relative-import anchor
+// resolved by the caller — the same anchoring PreflightColorAt does, so
+// `boru check --emit src/prog.boru` records the program its own
+// directory describes. An empty baseDir keeps the process cwd.
+func EmitAt(stdout, stderr io.Writer, source, registry string, seed int64, baseDir string) error {
+	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
+	}
+	if baseDir != "" {
+		a.NativeRegistry().BaseDir = baseDir
 	}
 	prog, reason, res, err := a.CompileCheck(source)
 	for i := range res.Diagnostics {
@@ -181,49 +381,163 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 
 // RunColor is Run with the color decision resolved by the caller
 // (lang.ResolveColor); the rich per-diagnostic blocks render through
-// the shared diagnostic renderer either way.
+// the shared diagnostic renderer either way. Source that did not come
+// from a named file resolves its relative imports against the process
+// cwd — RunTargets with a Target whose Path is set anchors instead.
 func RunColor(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft, strict, color bool) error {
-	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
-	if err != nil {
-		return fmt.Errorf("init error: %s", err)
-	}
+	return RunTargets(stdout, stderr, []Target{{Source: source}}, Options{
+		Registry: registry, Seed: seed, JSON: jsonOut, Soft: soft, Strict: strict, Color: color,
+	})
+}
 
-	if strict {
-		a.SetStrictCheck(true)
-	}
-	res, err := a.Check(source)
-	if jsonOut {
-		out, jerr := jsonMarshalIndent(res, "", "  ")
-		if jerr != nil {
-			return fmt.Errorf("json marshal: %s", jerr)
-		}
-		fmt.Fprintln(stdout, string(out))
-		if err != nil {
-			return fmt.Errorf("check error: %s", err)
-		}
-		if !soft && res.Summary.Errors > 0 {
-			return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
-		}
+// fileResult is one element of the JSON array a multi-target check
+// emits. The single-target form still emits the bare CheckResult object
+// tools already parse.
+type fileResult struct {
+	File   string           `json:"file"`
+	Result lang.CheckResult `json:"result"`
+	Error  string           `json:"error,omitempty"`
+}
+
+// RunTargets checks every target and writes the report.
+//
+// Each target is analysed on its OWN engine instance with its relative
+// file imports anchored to its own directory — the same anchoring
+// PreflightColorAt does for `boru build` (NUR044). A multi-file check
+// has no single cwd that could be right for every target, so the
+// question each file is asked is the one its own neighbours answer.
+//
+// Diagnostics accumulate: analysis continues past a failing target, and
+// the returned error reports how many targets failed. With one target
+// the output and the error text are exactly the single-file report the
+// command has always produced.
+func RunTargets(stdout, stderr io.Writer, targets []Target, o Options) error {
+	if len(targets) == 0 {
+		// Nothing to check is not a failure for a library caller; the CLI
+		// refuses an empty target expansion before it gets here.
 		return nil
 	}
+	multi := len(targets) > 1
+	var total lang.CheckSummary
+	var reports []fileResult
+	failed := 0
+	var firstFail error
 
-	printDiagnostics(stderr, res.Diagnostics, source, color)
-	if err != nil {
-		return fmt.Errorf("check error: %s", err)
+	for _, t := range targets {
+		a, err := langNew(lang.Options{Registry: o.Registry, Seed: o.Seed})
+		if err != nil {
+			return fmt.Errorf("init error: %s", err)
+		}
+		if dir := anchorOf(t.Path); dir != "" {
+			a.NativeRegistry().BaseDir = dir
+		}
+		if o.Strict {
+			a.SetStrictCheck(true)
+		}
+		res, cerr := a.Check(t.Source)
+		total.Errors += res.Summary.Errors
+		total.Warnings += res.Summary.Warnings
+		total.Infos += res.Summary.Infos
+
+		fail := failureOf(res, cerr, o.Soft)
+		if fail != nil {
+			failed++
+			if firstFail == nil {
+				firstFail = fail
+			}
+		}
+
+		if o.JSON {
+			reports = append(reports, fileResult{File: t.Path, Result: res, Error: errText(cerr)})
+			continue
+		}
+		if multi {
+			fmt.Fprintf(stderr, "check: file %s\n", t.Path)
+		}
+		printDiagnostics(stderr, res.Diagnostics, t.Source, o.Color)
+		if cerr != nil {
+			// A failed analysis has no trustworthy summary or carrier
+			// stack, so neither is printed. With one target the caller
+			// prints the returned error; with several it goes out here,
+			// under the file's own banner, and the run continues.
+			if multi {
+				fmt.Fprintf(stderr, "check: %s\n", fail)
+			}
+			continue
+		}
+		fmt.Fprintf(stderr, "check: %d error(s), %d warning(s), %d info\n",
+			res.Summary.Errors, res.Summary.Warnings, res.Summary.Infos)
+		printStack(stdout, t.Path, res.Stack, multi)
 	}
 
-	fmt.Fprintf(stderr, "check: %d error(s), %d warning(s), %d info\n",
-		res.Summary.Errors, res.Summary.Warnings, res.Summary.Infos)
+	if o.JSON {
+		if err := writeJSON(stdout, reports, multi); err != nil {
+			return err
+		}
+	} else if multi {
+		fmt.Fprintf(stderr, "check: total %d error(s), %d warning(s), %d info across %d file(s)\n",
+			total.Errors, total.Warnings, total.Infos, len(targets))
+	}
 
-	if len(res.Stack) > 0 {
-		fmt.Fprintln(stdout, "check: "+strings.Join(res.Stack, " "))
-	} else {
-		fmt.Fprintln(stdout, "check: (empty stack)")
+	if failed == 0 {
+		return nil
+	}
+	if multi {
+		return fmt.Errorf("check failed: %d of %d file(s)", failed, len(targets))
+	}
+	return firstFail
+}
+
+// failureOf reports the error that should fail a target's check, or nil
+// when the target is acceptable: an analysis error always fails, and
+// Error-severity diagnostics fail unless --soft downgraded them.
+func failureOf(res lang.CheckResult, cerr error, soft bool) error {
+	if cerr != nil {
+		return fmt.Errorf("check error: %s", cerr)
 	}
 	if !soft && res.Summary.Errors > 0 {
 		return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
 	}
 	return nil
+}
+
+// writeJSON emits the machine-readable report: the bare CheckResult
+// object for a single target (the shape editors and CI already parse),
+// an array of {file, result} objects when several were checked.
+func writeJSON(stdout io.Writer, reports []fileResult, multi bool) error {
+	var payload any = reports
+	if !multi {
+		payload = reports[0].Result
+	}
+	out, jerr := jsonMarshalIndent(payload, "", "  ")
+	if jerr != nil {
+		return fmt.Errorf("json marshal: %s", jerr)
+	}
+	fmt.Fprintln(stdout, string(out))
+	return nil
+}
+
+// printStack writes a target's residual carrier stack to stdout. With
+// several targets the line carries the file it belongs to; with one it
+// is the bare `check: ...` line the command has always printed.
+func printStack(stdout io.Writer, path string, stack []string, multi bool) {
+	prefix := "check: "
+	if multi {
+		prefix = "check: " + path + ": "
+	}
+	if len(stack) > 0 {
+		fmt.Fprintln(stdout, prefix+strings.Join(stack, " "))
+	} else {
+		fmt.Fprintln(stdout, prefix+"(empty stack)")
+	}
+}
+
+// errText renders err for the JSON report, or "" when there is none.
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // printDiagnostics writes each diagnostic to w in the `check: row:col:

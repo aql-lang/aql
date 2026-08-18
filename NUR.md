@@ -74,6 +74,9 @@ keep the two in sync in the same commit.
 | [NUR079](#nur079) | Gated words inside an imported file-module body escape the policy that governs the same call at top level — the module sub-registry inherited every capability seam except policy, so gates resolving `HostPolicy(r)` read nil as allow — VERDICT: resolve by fix in two halves; half (i) landed 2026-08-18 (the body now carries the parent's policy), half (ii) open | the Roc comparison study, 2026-08-18 |
 | [NUR080](#nur080) | A typed def over an Integer literal loses its newtype brand under the compiler, and the bare literal gains one — VERDICT: resolve by fix | the Roc comparison study, 2026-08-18 |
 | [NUR081](#nur081) | `Test.skip` is documented as a drop-in for `Test.check-prop`, but the two disagree on argument validity: `check-prop` now rejects `runs < 1` / `max-shrinks < 0` while `skip` accepts them silently | the Quint follow-up Wave 1, 2026-08-18 |
+| [NUR082](#nur082) | Three tree-walking subcommands, two rules for `.boru/`: `fmt` and (now) `check` skip the package directory, `boru test`'s `discover()` walks it — VERDICT 2026-08-18: resolve by fix, one shared walk helper carrying the skip | giving `boru check` directory targets, 2026-08-18 (W-CLI-CHECK) |
+| [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
+| [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2458,3 +2461,1267 @@ them. The second is arguably more honest, since the arguments exist only
 so the call stays a textual drop-in. Not urgent: no false PASS is reachable
 through `skip`.
 
+## NUR082 — Three tree-walking subcommands, two rules for `.boru/` {#nur082}
+
+**Status:** Pending · **Recorded:** 2026-08-18 · **Surfaced by:**
+giving `boru check` directory targets (W-CLI-CHECK), which forced a
+choice between the two rules already in the tree
+
+**Rule:** one rule decides which files a subcommand's directory walk
+considers. A user who learns what `boru fmt .` touches knows what `boru
+check .` and `boru test .` touch.
+
+**Divergence:** the walks disagree about `.boru/`, the package directory
+holding fetched and generated artifacts:
+
+| command | walk | `.boru/` |
+|---|---|---|
+| `boru fmt` (no args) | `filepath.Walk(".")`, `*.boru` | **skipped** (`cmd/go/internal/fmt/fmt.go`) |
+| `boru test [dir]` | `walkDir(t)`, `*_test.boru` | **walked** (`discover()`, `cmd/go/internal/test/test.go`) |
+| `boru check [dir]` | `walkDir(t)`, `*.boru` | **skipped** (`resolveTargets`, `cmd/go/internal/check/check.go`) |
+
+`check` was written to fmt's rule rather than test's: reporting type
+errors inside `.boru/` tells the user about code they did not write and
+cannot fix, and a CI gate that fails on a dependency's source is a gate
+people turn off. The same argument applies to `boru test` discovering and
+RUNNING a vendored suite, so the divergence is `test`'s to close, but a
+third rule was not invented to avoid deciding.
+
+The rules also differ in what a walk starts from — `fmt` walks only when
+given no arguments and never expands a directory operand, while `test`
+and `check` expand every directory target — and `fmt` alone treats
+`.md`/`.html` targets as embedded-boru carriers.
+
+**Evidence:** `cmd/go/internal/fmt/fmt.go` (the `.boru` `SkipDir` arm),
+`cmd/go/internal/test/test.go` `discover()` (no such arm),
+`cmd/go/internal/check/check.go` `resolveTargets` and its
+`TestRunCLIDirectoryTargetRecurses` case, which pins the skip.
+
+**Verdict proposed:** resolve by fix — one shared walk helper carrying
+the `.boru/` skip, adopted by all three, with per-command control only
+over the filename predicate. This record retires when `boru test`'s
+discover skips `.boru/` through that shared helper.
+
+
+## NUR083 — `check` and `build` anchor relative imports to the file, `run` and `debug` to the process cwd {#nur083}
+
+**Status:** Pending · **Recorded:** 2026-08-18 · **Surfaced by:**
+multi-file `boru check` (W-CLI-CHECK), which cannot use the cwd rule
+
+**Rule:** `import "./lib.boru"` names a file relative to the importer.
+Every command that reads a boru program should resolve it the same way,
+or a program's meaning depends on which command opened it and from where.
+
+**Divergence:** two anchors are in use.
+
+| command | anchor | site |
+|---|---|---|
+| `boru build` | the entry file's directory | `check.PreflightColorAt(..., cfg.EntryDir)`; `buildrt.Main` sets `NativeRegistry().BaseDir` to the same |
+| `boru check <file...>` | **each target file's own directory** | `check.RunTargets` |
+| `boru run` / `boru debug` | the process working directory | `check.PreflightColor` (empty baseDir), and the execution that follows |
+
+Verified live before the multi-file change: with `sub/lib.boru` and
+`sub/m.boru` importing `./lib.boru`, `boru run sub/m.boru` from the
+parent directory fails with `undefined word: Lib`, while a binary built
+by `boru build sub/m.boru` runs from anywhere. `boru check sub/m.boru`
+followed `run` before this change and now follows `build`.
+
+`check` could not stay on the cwd rule: `boru check a/x.boru b/y.boru`
+has no single working directory that is right for both targets, so the
+cwd rule cannot be applied uniformly to a multi-target invocation at all.
+Anchoring per target makes `check` agree with `build` and with the file's
+own text, at the cost of a NEW disagreement with `run`/`debug` — `check`
+can now accept a program `run` refuses from that cwd. That is recorded
+here rather than hidden: the anchor `run` uses is the one out of step
+with the language's own `./` spelling, and it is the remaining half of
+the fix.
+
+**Evidence:** `cmd/go/internal/check/check.go` (`RunTargets`'s anchor and
+`PreflightColorAt`'s NUR044 comment), `cmd/go/internal/build/build.go`
+(`cfg.EntryDir`), `cmd/go/internal/run/run.go:192` and
+`cmd/go/internal/debugcmd/debugcmd.go:132` (empty baseDir);
+`TestRunCLIAnchorsImportsPerFile` and `TestRunColorKeepsCwdAnchor` pin
+both sides. `CLI.md`'s `boru check` section documents the split.
+
+**Verdict proposed:** resolve by fix — `run` and `debug` anchor a
+script's relative imports to the script's directory (with the REPL and
+`-e`, which have no file, keeping the cwd), so one rule covers every
+command. This record retires when `boru run sub/m.boru` succeeds from the
+parent directory.
+
+
+## NUR084 — `-h` is not a uniform surface: some subcommands print usage, some read it as a filename, none exit 0 {#nur084}
+
+**Status:** Pending · **Recorded:** 2026-08-18 · **Surfaced by**
+`boru check -h` failing with `error: open -h: no such file or directory`
+(W-CLI-CHECK), which `boru help check` tells users to run
+
+**Rule:** `boru help <cmd>` ends with "Run 'boru <cmd> -h' for its
+options", so `-h` is a documented surface of every subcommand and should
+behave the same everywhere.
+
+**Divergence:** three behaviours.
+
+| command | `-h` |
+|---|---|
+| `build`, `test`, `check` (and every other `flag.FlagSet` user) | prints the flag listing to **stderr**, exits **1** |
+| `fmt` | `error: open -h: no such file or directory`, exits 1 — it has no FlagSet and reads `-h` as a path |
+| every command | never exits **0**, because `flag.ErrHelp` is reported through the same `return 1` as a rejected flag |
+
+`check` moved from fmt's behaviour to the majority's as part of the
+multi-target fix rather than inventing a fourth. The remaining
+non-uniformities are `fmt` (no FlagSet at all) and the exit code: an
+answered help request is a success, and a CI script that runs `boru fmt
+-h` to probe for a flag cannot tell "no such flag" from "help printed".
+
+**Evidence:** `cmd/go/internal/fmt/fmt.go` `Run` (positional loop, no
+FlagSet); `cmd/go/internal/build/build.go`, `cmd/go/internal/test/test.go`
+and `cmd/go/internal/check/check.go` (`fs.Parse` error → `return 1`);
+`cmd/go/internal/help/help.go` `helpCommand` (the instruction to run
+`-h`); `TestRunCLIHelpFlag` pins check's side.
+
+**Verdict proposed:** resolve by fix — `fmt` gains a FlagSet, and
+`flag.ErrHelp` is distinguished from a parse failure so a help request
+exits 0 across the CLI. This record retires when `boru fmt -h` and
+`boru check -h` both print their flags and exit 0.
+	"github.com/boru-lang/boru/cmd/go/internal/flagutil"
+	// flagutil.ParseInterleaved re-parses after each positional so flags work
+	// in any position; `boru check` reuses the same helper.
+	positionals, err := flagutil.ParseInterleaved(fs, args)
+	if err != nil {
+		return 1
+// Package check implements
+// `boru check [flags] <file.boru|dir ...>` and `boru check [flags] -e EXPR`
+// — run the static type-checker over boru source and report diagnostics.
+//
+// EVERY target named on the command line is checked. A file target is
+// checked as named; a directory target contributes every `.boru` file
+// beneath it (skipping `.boru/`). Diagnostics accumulate across targets —
+// a file that fails does not stop the files after it — and the command
+// exits non-zero when ANY target reported an Error-severity diagnostic,
+// so `boru check src/*.boru` in CI is green only when every one of those
+// files is clean.
+	"flag"
+	"io/fs"
+	"path/filepath"
+	"sort"
+	"github.com/boru-lang/boru/cmd/go/internal/flagutil"
+// osReadFile and walkDir are test seams (design/TEST-SEAMS.10.md): under
+// the suite's root uid a path os.Stat has just resolved cannot then fail
+// to read, and filepath.WalkDir never surfaces a per-entry error, so
+// tests swap these to drive the two I/O failure arms of target
+// resolution.
+var (
+	osReadFile = os.ReadFile
+	walkDir    = filepath.WalkDir
+)
+
+func (*cmd) Synopsis() string { return "static type-check scripts or an expression" }
+// Options are the check knobs RunCLI resolves once and every checked
+// target shares.
+type Options struct {
+	Registry string
+	Seed     int64
+	JSON     bool
+	Soft     bool
+	Strict   bool
+	Color    bool
+}
+
+// Target is one unit of work: Source is the boru text and Path is the
+// file it was read from. Path is empty for an -e expression (and for a
+// library caller that only has the text), which is also what selects
+// the import anchor — see RunTargets.
+type Target struct {
+	Path   string
+	Source string
+}
+
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	expr := fs.String("e", "", "type-check this inline expression instead of file targets")
+	jsonOut := fs.Bool("json", false, "emit the CheckResult as JSON (an array keyed by file for several targets)")
+	soft := fs.Bool("soft", false, "report diagnostics but still exit 0")
+	strict := fs.Bool("strict", false, "additionally report every dispatch over a dynamic operand")
+	emit := fs.Bool("emit", false, "print the bytecode disassembly instead of the check report")
+	colorMode := fs.String("color", "auto", "colorize diagnostics: auto|always|never")
+	registry := fs.String("r", "", "registry path")
+	var seed int64
+	fs.Int64Var(&seed, "s", 0, "random seed")
+
+	args, ok := tolerateLegacyTail(args, stderr)
+	if !ok {
+		return 1
+	// Interleaved parsing (flagutil.ParseInterleaved) so `check a.boru
+	// b.boru --json` reads two files and a flag, not three files.
+	targets, perr := flagutil.ParseInterleaved(fs, args)
+	if perr != nil {
+		// The FlagSet has already written the usage listing (-h) or the
+		// rejected-flag message to stderr; adding our own would double it.
+		return 1
+	}
+
+	// -e "" is a legal (empty) program, so presence — not emptiness —
+	// decides whether an expression was asked for.
+	sawExpr := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "e" {
+			sawExpr = true
+		}
+	})
+	switch {
+	case sawExpr && len(targets) > 0:
+		fmt.Fprintf(stderr, "error: boru check takes either -e EXPR or file targets, not both\n")
+		return 1
+	case !sawExpr && len(targets) == 0:
+	work := []Target{{Source: *expr}}
+	if !sawExpr {
+		files, err := resolveTargets(targets)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+		if len(files) == 0 {
+			// Checking nothing is the failure mode this command exists to
+			// prevent, so an empty expansion is an error, not a quiet 0.
+			fmt.Fprintf(stderr, "error: no .boru files under %s\n", strings.Join(targets, " "))
+			return 1
+		}
+		work = files
+	}
+
+	if *emit {
+		return runEmit(stdout, stderr, work, *registry, seed)
+	}
+	opts := Options{
+		Registry: *registry,
+		Seed:     seed,
+		JSON:     *jsonOut,
+		Soft:     *soft,
+		Strict:   *strict,
+		Color:    lang.ResolveColor(nil, stderr, *colorMode),
+	}
+	if err := RunTargets(stdout, stderr, work, opts); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err)
+		return 1
+	}
+	return 0
+}
+
+// tolerateLegacyTail preserves the two tolerances the hand-rolled
+// pre-FlagSet argument loop had, which a bare FlagSet would answer with
+// a different message:
+//
+//   - a trailing bare `-e` reported "boru check -e requires an
+//     expression"; flag would say "flag needs an argument: -e";
+//   - a trailing bare `--color` was ignored (the mode stayed "auto") and
+//     the run then failed for the missing target; flag would reject it.
+//
+// It returns false when the command should exit 1 with the message it
+// has already written.
+func tolerateLegacyTail(args []string, stderr io.Writer) ([]string, bool) {
+	if len(args) == 0 {
+		return args, true
+	}
+	switch args[len(args)-1] {
+	case "-e", "--e":
+		fmt.Fprintf(stderr, "error: boru check -e requires an expression\n")
+		return nil, false
+	case "-color", "--color":
+		return args[:len(args)-1], true
+	}
+	return args, true
+}
+
+// resolveTargets expands the command-line targets into the files to
+// check and reads each one.
+//
+// A file target is taken as named. A directory target contributes every
+// `.boru` file beneath it, in sorted order, with `.boru/` never walked:
+// that directory holds fetched and generated package artifacts, so
+// checking it reports findings about code the user did not write and
+// cannot fix (`boru fmt` skips it for the same reason; `boru test`'s
+// discover does not — NUR082). A path named twice is checked once.
+//
+// Resolution completes BEFORE any file is checked, so a mistyped target
+// fails the invocation with nothing checked rather than surfacing
+// halfway through a report that already looks like a clean run.
+func resolveTargets(args []string) ([]Target, error) {
+	seen := map[string]bool{}
+	var paths []string
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	for _, a := range args {
+		t := pathutil.Expand(a)
+		info, err := os.Stat(t)
+			return nil, err
+		}
+		if !info.IsDir() {
+			add(t)
+			continue
+		}
+		var found []string
+		if err := walkDir(t, func(path string, d fs.DirEntry, werr error) error {
+			if werr != nil {
+				return werr
+			}
+			if d.IsDir() {
+				if d.Name() == ".boru" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(path, ".boru") {
+				found = append(found, path)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		sort.Strings(found)
+		for _, f := range found {
+			add(f)
+	out := make([]Target, 0, len(paths))
+	for _, p := range paths {
+		data, err := osReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Target{Path: p, Source: string(data)})
+	}
+	return out, nil
+}
+// runEmit prints the bytecode disassembly for every target. With more
+// than one target each block is introduced by a `; file:` comment line,
+// which the disassembly's own comment syntax makes harmless to a reader
+// or a downstream tool.
+func runEmit(stdout, stderr io.Writer, targets []Target, registry string, seed int64) int {
+	for _, t := range targets {
+		if len(targets) > 1 {
+			fmt.Fprintf(stdout, "; file: %s\n", t.Path)
+		}
+		if err := EmitAt(stdout, stderr, t.Source, registry, seed, anchorOf(t.Path)); err != nil {
+// anchorOf is the directory a target's relative file imports resolve
+// against: the file's own directory, or "" (the process cwd) for source
+// that did not come from a file.
+func anchorOf(path string) string {
+	if path == "" {
+		return ""
+	}
+	return filepath.Dir(path)
+}
+
+	return EmitAt(stdout, stderr, source, "", 0, "")
+}
+
+// EmitAt is Emit with the registry, seed, and relative-import anchor
+// resolved by the caller — the same anchoring PreflightColorAt does, so
+// `boru check --emit src/prog.boru` records the program its own
+// directory describes. An empty baseDir keeps the process cwd.
+func EmitAt(stdout, stderr io.Writer, source, registry string, seed int64, baseDir string) error {
+	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
+	if baseDir != "" {
+		a.NativeRegistry().BaseDir = baseDir
+	}
+// the shared diagnostic renderer either way. Source that did not come
+// from a named file resolves its relative imports against the process
+// cwd — RunTargets with a Target whose Path is set anchors instead.
+	return RunTargets(stdout, stderr, []Target{{Source: source}}, Options{
+		Registry: registry, Seed: seed, JSON: jsonOut, Soft: soft, Strict: strict, Color: color,
+	})
+}
+// fileResult is one element of the JSON array a multi-target check
+// emits. The single-target form still emits the bare CheckResult object
+// tools already parse.
+type fileResult struct {
+	File   string           `json:"file"`
+	Result lang.CheckResult `json:"result"`
+	Error  string           `json:"error,omitempty"`
+}
+
+// RunTargets checks every target and writes the report.
+//
+// Each target is analysed on its OWN engine instance with its relative
+// file imports anchored to its own directory — the same anchoring
+// PreflightColorAt does for `boru build` (NUR044). A multi-file check
+// has no single cwd that could be right for every target, so the
+// question each file is asked is the one its own neighbours answer.
+//
+// Diagnostics accumulate: analysis continues past a failing target, and
+// the returned error reports how many targets failed. With one target
+// the output and the error text are exactly the single-file report the
+// command has always produced.
+func RunTargets(stdout, stderr io.Writer, targets []Target, o Options) error {
+	if len(targets) == 0 {
+		// Nothing to check is not a failure for a library caller; the CLI
+		// refuses an empty target expansion before it gets here.
+		return nil
+	multi := len(targets) > 1
+	var total lang.CheckSummary
+	var reports []fileResult
+	failed := 0
+	var firstFail error
+
+	for _, t := range targets {
+		a, err := langNew(lang.Options{Registry: o.Registry, Seed: o.Seed})
+			return fmt.Errorf("init error: %s", err)
+		if dir := anchorOf(t.Path); dir != "" {
+			a.NativeRegistry().BaseDir = dir
+		if o.Strict {
+			a.SetStrictCheck(true)
+		}
+		res, cerr := a.Check(t.Source)
+		total.Errors += res.Summary.Errors
+		total.Warnings += res.Summary.Warnings
+		total.Infos += res.Summary.Infos
+
+		fail := failureOf(res, cerr, o.Soft)
+		if fail != nil {
+			failed++
+			if firstFail == nil {
+				firstFail = fail
+			}
+		}
+
+		if o.JSON {
+			reports = append(reports, fileResult{File: t.Path, Result: res, Error: errText(cerr)})
+			continue
+		}
+		if multi {
+			fmt.Fprintf(stderr, "check: file %s\n", t.Path)
+		}
+		printDiagnostics(stderr, res.Diagnostics, t.Source, o.Color)
+		if cerr != nil {
+			// A failed analysis has no trustworthy summary or carrier
+			// stack, so neither is printed. With one target the caller
+			// prints the returned error; with several it goes out here,
+			// under the file's own banner, and the run continues.
+			if multi {
+				fmt.Fprintf(stderr, "check: %s\n", fail)
+			}
+			continue
+		}
+		fmt.Fprintf(stderr, "check: %d error(s), %d warning(s), %d info\n",
+			res.Summary.Errors, res.Summary.Warnings, res.Summary.Infos)
+		printStack(stdout, t.Path, res.Stack, multi)
+	if o.JSON {
+		if err := writeJSON(stdout, reports, multi); err != nil {
+			return err
+		}
+	} else if multi {
+		fmt.Fprintf(stderr, "check: total %d error(s), %d warning(s), %d info across %d file(s)\n",
+			total.Errors, total.Warnings, total.Infos, len(targets))
+	if failed == 0 {
+		return nil
+	}
+	if multi {
+		return fmt.Errorf("check failed: %d of %d file(s)", failed, len(targets))
+	}
+	return firstFail
+}
+// failureOf reports the error that should fail a target's check, or nil
+// when the target is acceptable: an analysis error always fails, and
+// Error-severity diagnostics fail unless --soft downgraded them.
+func failureOf(res lang.CheckResult, cerr error, soft bool) error {
+	if cerr != nil {
+		return fmt.Errorf("check error: %s", cerr)
+// writeJSON emits the machine-readable report: the bare CheckResult
+// object for a single target (the shape editors and CI already parse),
+// an array of {file, result} objects when several were checked.
+func writeJSON(stdout io.Writer, reports []fileResult, multi bool) error {
+	var payload any = reports
+	if !multi {
+		payload = reports[0].Result
+	}
+	out, jerr := jsonMarshalIndent(payload, "", "  ")
+	if jerr != nil {
+		return fmt.Errorf("json marshal: %s", jerr)
+	}
+	fmt.Fprintln(stdout, string(out))
+	return nil
+}
+
+// printStack writes a target's residual carrier stack to stdout. With
+// several targets the line carries the file it belongs to; with one it
+// is the bare `check: ...` line the command has always printed.
+func printStack(stdout io.Writer, path string, stack []string, multi bool) {
+	prefix := "check: "
+	if multi {
+		prefix = "check: " + path + ": "
+	}
+	if len(stack) > 0 {
+		fmt.Fprintln(stdout, prefix+strings.Join(stack, " "))
+	} else {
+		fmt.Fprintln(stdout, prefix+"(empty stack)")
+	}
+}
+
+// errText renders err for the JSON report, or "" when there is none.
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+package check
+
+// check_targets_test.go — `boru check` over MANY targets: the FlagSet,
+// multi-file and directory expansion, per-file import anchoring, and the
+// argument tolerances the hand-rolled parser used to provide.
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	lang "github.com/boru-lang/boru/lang/go"
+)
+
+// write creates dir/name (creating dir) and returns its path.
+func write(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// --- the defect: every named file is checked ------------------------------
+
+// Positive: several clean files all check, and every one of them is named
+// in the report.
+func TestRunCLIMultipleCleanFiles(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	b := write(t, dir, "b.boru", "3 mul 4")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a, b}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	for _, p := range []string{a, b} {
+		if !strings.Contains(stderr.String(), "check: file "+p) {
+			t.Errorf("stderr = %q, want a banner for %s", stderr.String(), p)
+		}
+		if !strings.Contains(stdout.String(), "check: "+p+": ") {
+			t.Errorf("stdout = %q, want a carrier line for %s", stdout.String(), p)
+		}
+	}
+	if !strings.Contains(stderr.String(), "across 2 file(s)") {
+		t.Errorf("stderr = %q, want the aggregate summary", stderr.String())
+	}
+}
+
+// Negative — the reported defect: an error in the SECOND file must be
+// reported and must fail the run. Before the FlagSet only args[0] was
+// ever read, so this invocation printed "0 error(s)" and exited 0.
+func TestRunCLISecondFileErrorFails(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	b := write(t, dir, "b.boru", "nosuchword 1")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a, b}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "undefined_word") {
+		t.Errorf("stderr = %q, want the second file's diagnostic", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "check failed: 1 of 2 file(s)") {
+		t.Errorf("stderr = %q, want the multi-file failure line", stderr.String())
+	}
+	// The clean file was still checked and reported: diagnostics
+	// accumulate, they do not stop at the first failure.
+	if !strings.Contains(stdout.String(), "check: "+a+": Integer") {
+		t.Errorf("stdout = %q, want the first file's carrier line", stdout.String())
+	}
+}
+
+// A failure in the FIRST file does not stop the second from being checked.
+func TestRunCLIFirstFileErrorStillChecksRest(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "nosuchword 1")
+	b := write(t, dir, "b.boru", "otherbadword 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a, b}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "otherbadword") {
+		t.Errorf("stderr = %q, want the second file checked too", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "check failed: 2 of 2 file(s)") {
+		t.Errorf("stderr = %q, want both files counted as failed", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "check: total 2 error(s)") {
+		t.Errorf("stderr = %q, want the accumulated error count", stderr.String())
+	}
+}
+
+// --soft downgrades across every file, so the run exits 0 with the
+// diagnostics still reported.
+func TestRunCLIMultiSoft(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	b := write(t, dir, "b.boru", "nosuchword 1")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--soft", a, b}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "undefined_word") {
+		t.Errorf("stderr = %q, want the diagnostic reported anyway", stderr.String())
+	}
+}
+
+// A file whose ANALYSIS fails (not merely a diagnostic) is reported under
+// its own banner and the remaining files are still checked.
+func TestRunCLIMultiCheckErrorContinues(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "gen [1]")
+	b := write(t, dir, "b.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a, b}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "check: check error:") {
+		t.Errorf("stderr = %q, want the per-file check error line", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "check: "+b+": Integer") {
+		t.Errorf("stdout = %q, want the second file still checked", stdout.String())
+	}
+}
+
+// A path named twice is checked once.
+func TestRunCLIDuplicateTargetCheckedOnce(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a, a}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "across 2 file(s)") {
+		t.Errorf("stderr = %q, want the duplicate collapsed", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "check: Integer") {
+		t.Errorf("stdout = %q, want the single-file report shape", stdout.String())
+	}
+}
+
+// --- flags -----------------------------------------------------------------
+
+// -h prints the usage listing instead of being read as a filename.
+func TestRunCLIHelpFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"-h"}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1 (the CLI-wide -h convention)", code)
+	}
+	out := stderr.String()
+	if strings.Contains(out, "no such file") {
+		t.Fatalf("-h was read as a filename: %q", out)
+	}
+	for _, want := range []string{"Usage of check:", "-json", "-soft", "-strict", "-e ", "-r ", "-s "} {
+		if !strings.Contains(out, want) {
+			t.Errorf("usage = %q, want it to mention %q", out, want)
+		}
+	}
+}
+
+// Negative: an unknown flag is REJECTED, not treated as a file.
+func TestRunCLIUnknownFlagRejected(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--nope", a}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "flag provided but not defined") {
+		t.Errorf("stderr = %q, want the undefined-flag message", stderr.String())
+	}
+}
+
+// The trap the interleaved parse exists to avoid: a flag AFTER the files
+// must be a flag, not a third (unreadable) file.
+func TestRunCLIFlagAfterFiles(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	b := write(t, dir, "b.boru", "3 add 4")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a, b, "--json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "no such file") {
+		t.Fatalf("--json was read as a file: %q", stderr.String())
+	}
+	var got []fileResult
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not a JSON array: %v\n%s", err, stdout.String())
+	}
+	if len(got) != 2 || got[0].File != a || got[1].File != b {
+		t.Errorf("json = %+v, want one entry per file", got)
+	}
+}
+
+// A single target keeps the bare-object JSON shape editors already parse.
+func TestRunCLISingleFileJSONShapeUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a, "--json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	var res lang.CheckResult
+	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+		t.Fatalf("stdout is not a bare CheckResult object: %v\n%s", err, stdout.String())
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Integer" {
+		t.Errorf("stack = %v, want [Integer]", res.Stack)
+	}
+}
+
+// A multi-file JSON run still fails, and names the failing file.
+func TestRunCLIMultiJSONReportsFailure(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	b := write(t, dir, "b.boru", "gen [1]")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--json", a, b}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr: %s", code, stderr.String())
+	}
+	var got []fileResult
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not a JSON array: %v\n%s", err, stdout.String())
+	}
+	if len(got) != 2 || got[1].Error == "" {
+		t.Errorf("json = %+v, want the analysis error on the second entry", got)
+	}
+}
+
+// `--` ends flag parsing for its segment, so a file whose name starts
+// with a dash can still be named.
+func TestRunCLIDashDashEscapesFilename(t *testing.T) {
+	dir := t.TempDir()
+	odd := write(t, dir, "-odd.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--", odd}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	// The absolute path from t.TempDir() does not start with a dash, so
+	// name the awkward form explicitly too, relative to its directory.
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	stdout.Reset()
+	stderr.Reset()
+	if code := RunCLI([]string{"--", "-odd.boru"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("relative dash name: exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+}
+
+// Negative: -e and file targets are mutually exclusive — silently
+// preferring one over the other is how the original defect hid.
+func TestRunCLIExprAndFilesRejected(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"-e", "1 add 2", a}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "either -e EXPR or file targets") {
+		t.Errorf("stderr = %q, want the mutual-exclusion message", stderr.String())
+	}
+}
+
+// -e "" is a legal (empty) program: presence of the flag, not emptiness
+// of its value, selects expression mode.
+func TestRunCLIEmptyExpression(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"-e", ""}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "(empty stack)") {
+		t.Errorf("stdout = %q, want the empty-stack marker", stdout.String())
+	}
+}
+
+// -r and -s are the flags CLI.md documents; they must reach lang.Options
+// rather than being dropped for hard-coded defaults.
+func TestRunCLIRegistryAndSeedReachOptions(t *testing.T) {
+	var got lang.Options
+	orig := langNew
+	langNew = func(opts ...lang.Options) (*lang.Boru, error) {
+		if len(opts) > 0 {
+			got = opts[0]
+		}
+		return orig(opts...)
+	}
+	t.Cleanup(func() { langNew = orig })
+
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"-r", "/reg/path", "-s", "42", a}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	if got.Registry != "/reg/path" || got.Seed != 42 {
+		t.Errorf("lang.Options = %+v, want Registry=/reg/path Seed=42", got)
+	}
+}
+
+// --- directory targets -----------------------------------------------------
+
+func TestRunCLIDirectoryTargetRecurses(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "a.boru", "1 add 2")
+	write(t, dir, "nested/b.boru", "3 add 4")
+	write(t, dir, "notes.md", "not boru")
+	// .boru/ holds fetched and generated package artifacts: never walked.
+	write(t, dir, ".boru/vendored.boru", "nosuchword 1")
+
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{dir}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "a.boru") || !strings.Contains(out, "b.boru") {
+		t.Errorf("stderr = %q, want both .boru files checked", out)
+	}
+	if strings.Contains(out, "vendored.boru") || strings.Contains(out, "undefined_word") {
+		t.Errorf("stderr = %q, want .boru/ skipped", out)
+	}
+	if strings.Contains(out, "notes.md") {
+		t.Errorf("stderr = %q, want non-.boru files ignored", out)
+	}
+	if !strings.Contains(out, "across 2 file(s)") {
+		t.Errorf("stderr = %q, want exactly two files checked", out)
+	}
+}
+
+// Negative: a target that expands to nothing is an error, not a quiet 0 —
+// "checked nothing, reported green" is the defect class this command is
+// being fixed for.
+func TestRunCLIDirectoryWithNoSourcesFails(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "notes.md", "not boru")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{dir}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "no .boru files under") {
+		t.Errorf("stderr = %q, want the empty-expansion error", stderr.String())
+	}
+}
+
+// Directory expansion is sorted, so the report is reproducible.
+func TestResolveTargetsSortsDirectoryContents(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "z.boru", "1")
+	write(t, dir, "a.boru", "2")
+	got, err := resolveTargets([]string{dir})
+	if err != nil {
+		t.Fatalf("resolveTargets: %v", err)
+	}
+	if len(got) != 2 || filepath.Base(got[0].Path) != "a.boru" || filepath.Base(got[1].Path) != "z.boru" {
+		t.Errorf("targets = %+v, want a.boru before z.boru", got)
+	}
+}
+
+// --- per-file import anchoring (the NUR044 question, per target) -----------
+
+func TestRunCLIAnchorsImportsPerFile(t *testing.T) {
+	// Two programs in DIFFERENT directories, each importing its own
+	// sibling: no single cwd can answer both, so each file's imports
+	// resolve against its own directory.
+	dir := t.TempDir()
+	write(t, dir, "one/lib.boru", `export "Lib" {x: 1}`+"\n")
+	one := write(t, dir, "one/m.boru", "import \"./lib.boru\"\nLib.x\n")
+	write(t, dir, "two/lib.boru", `export "Lib" {y: 2}`+"\n")
+	two := write(t, dir, "two/m.boru", "import \"./lib.boru\"\nLib.y\n")
+
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{one, two}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+}
+
+// The library entry points keep the cwd anchor `boru run`'s pre-flight
+// relies on: a Target with no Path is source text, not a file.
+func TestRunColorKeepsCwdAnchor(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "lib.boru", `export "Lib" {x: 1}`+"\n")
+	var stdout, stderr bytes.Buffer
+	err := RunColor(&stdout, &stderr, "import \"./lib.boru\"\nLib.x\n", "", 0, false, false, false, false)
+	if err == nil {
+		t.Fatal("expected the import to miss from a foreign cwd; want a refusal")
+	}
+}
+
+// --- --emit over several targets -------------------------------------------
+
+func TestRunCLIEmitMultipleFiles(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	b := write(t, dir, "b.boru", "3 add 4")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--emit", a, b}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "; file: "+a) || !strings.Contains(out, "; file: "+b) {
+		t.Errorf("stdout = %q, want a file banner per disassembly", out)
+	}
+	if strings.Count(out, "CALL_NATIVE") < 2 {
+		t.Errorf("stdout = %q, want both programs disassembled", out)
+	}
+}
+
+// Negative: --emit stops at the first file it cannot record.
+func TestRunCLIEmitStopsOnError(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", `"unterminated`)
+	b := write(t, dir, "b.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--emit", a, b}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if strings.Contains(stdout.String(), "; file: "+b) {
+		t.Errorf("stdout = %q, want the run stopped before the second file", stdout.String())
+	}
+}
+
+// EmitAt anchors relative imports like PreflightColorAt does.
+func TestEmitAtAnchorsImports(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "lib.boru", `export "Lib" {x: 1}`+"\n")
+	var stdout, stderr bytes.Buffer
+	if err := EmitAt(&stdout, &stderr, "import \"./lib.boru\"\nLib.x\n", "", 0, dir); err != nil {
+		t.Fatalf("EmitAt: %v; stderr: %s", err, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "undefined_word") {
+		t.Errorf("stderr = %q, want the anchored import to resolve", stderr.String())
+	}
+}
+
+// --- resolution failures ---------------------------------------------------
+
+func TestResolveTargetsMissingPath(t *testing.T) {
+	if _, err := resolveTargets([]string{filepath.Join(t.TempDir(), "nope.boru")}); err == nil {
+		t.Fatal("expected a stat error for a missing target")
+	}
+}
+
+// Seam: a file os.Stat resolved cannot then fail to read under the
+// suite's uid, so the read-failure arm is driven through osReadFile.
+func TestResolveTargetsReadError(t *testing.T) {
+	orig := osReadFile
+	osReadFile = func(string) ([]byte, error) { return nil, errors.New("read boom") }
+	t.Cleanup(func() { osReadFile = orig })
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{a}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "read boom") {
+		t.Errorf("stderr = %q, want the read error", stderr.String())
+	}
+}
+
+// Seam: filepath.WalkDir never surfaces a per-entry error under the
+// suite's uid, so the walk-failure arm is driven through walkDir.
+func TestResolveTargetsWalkError(t *testing.T) {
+	orig := walkDir
+	walkDir = func(root string, fn fs.WalkDirFunc) error {
+		return fn(root, nil, errors.New("walk boom"))
+	}
+	t.Cleanup(func() { walkDir = orig })
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{t.TempDir()}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "walk boom") {
+		t.Errorf("stderr = %q, want the walk error", stderr.String())
+	}
+}
+
+// --- RunTargets as a library entry point -----------------------------------
+
+func TestRunTargetsEmptyIsNoOp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := RunTargets(&stdout, &stderr, nil, Options{JSON: true}); err != nil {
+		t.Fatalf("RunTargets(nil): %v", err)
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Errorf("output = (%q, %q), want silence", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunTargetsMultiJSONMarshalError(t *testing.T) {
+	orig := jsonMarshalIndent
+	jsonMarshalIndent = func(any, string, string) ([]byte, error) { return nil, errors.New("marshal boom") }
+	t.Cleanup(func() { jsonMarshalIndent = orig })
+	var stdout, stderr bytes.Buffer
+	err := RunTargets(&stdout, &stderr, []Target{
+		{Path: "a.boru", Source: "1 add 2"},
+		{Path: "b.boru", Source: "3 add 4"},
+	}, Options{JSON: true})
+	if err == nil || !strings.Contains(err.Error(), "json marshal") {
+		t.Fatalf("err = %v, want json marshal error", err)
+	}
+}
+
+func TestRunTargetsInitError(t *testing.T) {
+	swapLangNewFail(t)
+	var stdout, stderr bytes.Buffer
+	err := RunTargets(&stdout, &stderr, []Target{{Path: "a.boru", Source: "1 add 2"}}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "init error") {
+		t.Fatalf("err = %v, want init error", err)
+	}
+}
+
+// Strict mode reaches every target, not just the first.
+func TestRunTargetsStrictAcrossFiles(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := RunTargets(&stdout, &stderr, []Target{
+		{Path: "a.boru", Source: "1 add 2"},
+		{Path: "b.boru", Source: "3 add 4"},
+	}, Options{Strict: true}); err != nil {
+		t.Fatalf("RunTargets strict: %v", err)
+	}
+}
+
+// A multi-target run prints the empty-stack marker under the file's name.
+func TestRunTargetsMultiEmptyStack(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := RunTargets(&stdout, &stderr, []Target{
+		{Path: "a.boru", Source: "def x 1"},
+		{Path: "b.boru", Source: "1 add 2"},
+	}, Options{Soft: true})
+	if err != nil {
+		t.Fatalf("RunTargets: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "check: a.boru: (empty stack)") {
+		t.Errorf("stdout = %q, want the named empty-stack line", stdout.String())
+	}
+}
+
+// --- tolerateLegacyTail ----------------------------------------------------
+
+func TestTolerateLegacyTail(t *testing.T) {
+	var stderr bytes.Buffer
+	// Untouched when there is nothing to tolerate.
+	got, ok := tolerateLegacyTail([]string{"a.boru"}, &stderr)
+	if !ok || len(got) != 1 || got[0] != "a.boru" {
+		t.Errorf("tolerateLegacyTail(a.boru) = (%v, %v), want it unchanged", got, ok)
+	}
+	got, ok = tolerateLegacyTail(nil, &stderr)
+	if !ok || got != nil {
+		t.Errorf("tolerateLegacyTail(nil) = (%v, %v), want (nil, true)", got, ok)
+	}
+	// A trailing bare --color is dropped, as the old parser dropped it.
+	for _, form := range []string{"--color", "-color"} {
+		got, ok = tolerateLegacyTail([]string{"a.boru", form}, &stderr)
+		if !ok || len(got) != 1 || got[0] != "a.boru" {
+			t.Errorf("%s: got (%v, %v), want the flag dropped", form, got, ok)
+		}
+	}
+	// A trailing bare -e keeps its own message.
+	for _, form := range []string{"-e", "--e"} {
+		stderr.Reset()
+		if _, ok := tolerateLegacyTail([]string{form}, &stderr); ok {
+			t.Errorf("%s: want a refusal", form)
+		}
+		if !strings.Contains(stderr.String(), "requires an expression") {
+			t.Errorf("%s: stderr = %q, want the legacy message", form, stderr.String())
+		}
+	}
+}
+
+// --color with a value still parses, and a trailing bare --color still
+// leaves the run to fail on the missing target rather than on the flag.
+func TestRunCLIColorTolerances(t *testing.T) {
+	dir := t.TempDir()
+	a := write(t, dir, "a.boru", "1 add 2")
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--color", "never", a}, &stdout, &stderr); code != 0 {
+		t.Fatalf("--color never: exit = %d; stderr: %s", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := RunCLI([]string{"--color"}, &stdout, &stderr); code != 1 {
+		t.Fatalf("bare --color: exit = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "requires a script file") {
+		t.Errorf("stderr = %q, want the missing-target message", stderr.String())
+	}
+}
+// Package flagutil holds the flag-parsing helper shared by the boru
+// subcommands that take both flags and file operands.
+package flagutil
+
+import "flag"
+
+// ParseInterleaved parses args with fs and returns the positional
+// operands, allowing flags and operands to appear in any order.
+//
+// Go's flag package stops parsing at the FIRST non-flag token, so a
+// single fs.Parse over `prog.boru --json` leaves `--json` sitting in
+// fs.Args() as if it were a second operand — the command then treats a
+// flag as a filename and reports a bogus read error. Re-parsing what is
+// left after each operand is consumed hands the remaining flags back to
+// the FlagSet, so `check a.boru b.boru --json` sees two files and one
+// flag rather than three files.
+//
+// A `--` terminator ends flag parsing for the segment it appears in, so
+// `check -- -weird.boru` names a file whose first character is a dash.
+//
+// Parse errors — an unknown flag, a missing flag value, or -h, which the
+// flag package reports as flag.ErrHelp — are returned unchanged after fs
+// has written its own message to fs.Output(); callers turn them into an
+// exit code and print nothing further.
+func ParseInterleaved(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positionals []string
+	rest := args
+	for len(rest) > 0 {
+		if err := fs.Parse(rest); err != nil {
+			return nil, err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		positionals = append(positionals, fs.Arg(0))
+		rest = fs.Args()[1:]
+	}
+	return positionals, nil
+}
+package flagutil
+
+import (
+	"bytes"
+	"flag"
+	"strings"
+	"testing"
+)
+
+// newFS builds a FlagSet with one bool and one string flag, writing its
+// own diagnostics into out instead of os.Stderr.
+func newFS(out *bytes.Buffer) (*flag.FlagSet, *bool, *string) {
+	fs := flag.NewFlagSet("probe", flag.ContinueOnError)
+	fs.SetOutput(out)
+	b := fs.Bool("json", false, "bool flag")
+	s := fs.String("color", "auto", "string flag")
+	return fs, b, s
+}
+
+func TestParseInterleavedFlagsBeforeOperands(t *testing.T) {
+	var out bytes.Buffer
+	fs, jsonOut, color := newFS(&out)
+	pos, err := ParseInterleaved(fs, []string{"--json", "--color", "never", "a.boru", "b.boru"})
+	if err != nil {
+		t.Fatalf("ParseInterleaved: %v", err)
+	}
+	if !*jsonOut || *color != "never" {
+		t.Errorf("flags = (%v, %q), want (true, never)", *jsonOut, *color)
+	}
+	if strings.Join(pos, " ") != "a.boru b.boru" {
+		t.Errorf("positionals = %v, want [a.boru b.boru]", pos)
+	}
+}
+
+// The whole reason this helper exists: a flag AFTER the operands is a
+// flag, not a third file. A plain fs.Parse fails this test.
+func TestParseInterleavedFlagsAfterOperands(t *testing.T) {
+	var out bytes.Buffer
+	fs, jsonOut, color := newFS(&out)
+	pos, err := ParseInterleaved(fs, []string{"a.boru", "b.boru", "--json", "--color", "always"})
+	if err != nil {
+		t.Fatalf("ParseInterleaved: %v", err)
+	}
+	if !*jsonOut || *color != "always" {
+		t.Errorf("flags = (%v, %q), want (true, always)", *jsonOut, *color)
+	}
+	if strings.Join(pos, " ") != "a.boru b.boru" {
+		t.Errorf("positionals = %v, want [a.boru b.boru]", pos)
+	}
+}
+
+func TestParseInterleavedFlagsBetweenOperands(t *testing.T) {
+	var out bytes.Buffer
+	fs, jsonOut, _ := newFS(&out)
+	pos, err := ParseInterleaved(fs, []string{"a.boru", "--json", "b.boru"})
+	if err != nil {
+		t.Fatalf("ParseInterleaved: %v", err)
+	}
+	if !*jsonOut {
+		t.Error("--json between operands was not parsed")
+	}
+	if strings.Join(pos, " ") != "a.boru b.boru" {
+		t.Errorf("positionals = %v, want [a.boru b.boru]", pos)
+	}
+}
+
+func TestParseInterleavedDashDashEscapesOperand(t *testing.T) {
+	var out bytes.Buffer
+	fs, _, _ := newFS(&out)
+	pos, err := ParseInterleaved(fs, []string{"--", "-weird.boru"})
+	if err != nil {
+		t.Fatalf("ParseInterleaved: %v", err)
+	}
+	if strings.Join(pos, " ") != "-weird.boru" {
+		t.Errorf("positionals = %v, want [-weird.boru]", pos)
+	}
+}
+
+func TestParseInterleavedEmptyArgs(t *testing.T) {
+	var out bytes.Buffer
+	fs, _, _ := newFS(&out)
+	pos, err := ParseInterleaved(fs, nil)
+	if err != nil {
+		t.Fatalf("ParseInterleaved: %v", err)
+	}
+	if len(pos) != 0 {
+		t.Errorf("positionals = %v, want none", pos)
+	}
+}
+
+// Negative: an unknown flag is REJECTED — it must not be silently
+// accumulated as a positional operand.
+func TestParseInterleavedUnknownFlagRejected(t *testing.T) {
+	var out bytes.Buffer
+	fs, _, _ := newFS(&out)
+	pos, err := ParseInterleaved(fs, []string{"a.boru", "--nope"})
+	if err == nil {
+		t.Fatalf("expected an error for an unknown flag; positionals = %v", pos)
+	}
+	if pos != nil {
+		t.Errorf("positionals = %v, want nil on error", pos)
+	}
+	if !strings.Contains(out.String(), "flag provided but not defined") {
+		t.Errorf("FlagSet output = %q, want the undefined-flag message", out.String())
+	}
+}
+
+// Negative: -h is reported as flag.ErrHelp, not swallowed.
+func TestParseInterleavedHelpIsErrHelp(t *testing.T) {
+	var out bytes.Buffer
+	fs, _, _ := newFS(&out)
+	if _, err := ParseInterleaved(fs, []string{"-h"}); err != flag.ErrHelp {
+		t.Fatalf("err = %v, want flag.ErrHelp", err)
+	}
+	if !strings.Contains(out.String(), "-json") {
+		t.Errorf("FlagSet output = %q, want the usage listing", out.String())
+	}
+}
