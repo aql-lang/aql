@@ -21,6 +21,20 @@ against a built `boru`, **[read it]** where it rests on a cited file, and
 claim, the refutation is kept rather than the claim — §6.4 lists two that
 did not reproduce, so the record is not silently tidy.
 
+**Revision note (post-review).** An automated review of the first draft
+found eleven real errors, and they are corrected in place rather than
+quietly dropped: a reversed operand order in the headline example (§5),
+an over-broad "refinements are dynamic only" claim (§2, §6.1), a
+"zero occurrences" claim contradicted by its own citation (§1), an
+overstated forward-collection totality claim (§3), spec-row and
+contributor counts that were artifacts of bad counting and of a shallow
+clone (§2, §7), a `Rand.uuid` export that does not exist (§8), a
+non-canonical call spelling (§8), and stale internal cross-references.
+Two lessons generalise: **numbers measured with an ad-hoc rule instead of
+the harness's own rule will be wrong**, and **a shallow clone will lie to
+you about repository history** — the same trap twice, since it also made
+an earlier draft believe the project had no tags.
+
 ---
 
 ## 1. The framing that has to come first
@@ -48,8 +62,10 @@ So: **boru should not adopt temporal logic, system-level invariants, or a
 model checker as language features.** `design/STATE-MACHINES.0.md:226`
 already declined full model checking on the right ground — for a boru
 machine "the definition IS the model", so there is no abstraction gap for a
-checker to exploit. The tree contains zero occurrences of LTL, CTL, TLA+,
-SPIN or Alloy, and that is a correct state of affairs, not a gap.
+checker to exploit. Nothing in the tree *implements* a temporal or
+model-checking surface — the only mentions of TLA+ and SPIN anywhere are
+the prior-art table in `design/STATE-MACHINES.0.md` that weighed them and
+chose otherwise — and that is a correct state of affairs, not a gap.
 
 The transferable material is almost entirely **method, tooling posture, and
 one strategic position** — not semantics.
@@ -62,20 +78,22 @@ one strategic position** — not semantics.
 |---|---|---|
 | Object of study | a model of a system | the program that runs |
 | Types | HM-style inference, row-typed records, sum types; types are a meta-level | open runtime lattice, types **are values** (ADR-010, `core/go/typetable.go:44-55`); types drive **dispatch**, not just verification |
-| Refinement types | none | `refine Integer gt 0` ships, closed under negation (`REFERENCE.md:625-632`) — enforced **dynamically only** (§6.1) |
+| Refinement types | none | `refine Integer gt 0` ships, closed under negation (`REFERENCE.md:625-632`); literal-level violations are caught statically, but there is **no symbolic discharge across expressions** (§6.1) |
 | Effects | static effect system: which `var`s an action reads/updates; orthogonal to types | **no static effect tracking**; instead a runtime object-capability system (scopes, profiles, `boru policy explain`, permissions baked into built binaries) |
 | Purity discipline | 6-mode lattice (Stateless → Temporal), checked | none user-visible; internal only (`CompileEffect` bitfield, `EffectLedger`) |
-| Surface convergence | UFCS dot-calls: `a.f(b)` ≡ `f(a,b)`, total, desugared at parse time | forward collection: `f a b c`, total by ADR-004, resolved **at runtime** over a token tape |
+| Surface convergence | UFCS dot-calls: `a.f(b)` ≡ `f(a,b)`, total, desugared at parse time | forward collection: `f a b c`, forward **by default** (ADR-004) with stack-only and mixed-barrier categories, resolved **at runtime** over a token tape |
 | State-space exploration | random simulator + Apalache (bounded symbolic) + TLC | none; PBT over values instead |
 | Counterexamples | ITF JSON traces, replayable, consumed by model-based testing | PBT counterexample **value** + shrunk generator source — never written to disk |
-| Conformance suite | 77 example specs, CI-run | 9,851 executable spec rows across 157 TSV files, run in both execution modes and both TCO settings |
+| Conformance suite | 77 example specs, CI-run | 9,186 executable spec rows across 157 TSV files; the 7,421 `lang/spec` rows run in both execution modes and both TCO settings |
 | Self-documentation | packaged LLM kit / docs site | `boru describe` generated from the **live engine** — cannot drift |
 | Coverage discipline | ordinary | ADR-008: 100% of reachable Go statements, gated, with proof-carrying exemptions |
 | Distribution | npm; Apalache needs a JVM | build from clone (no released binaries); wasm playground live |
 
 **Verified counts** [ran it]: 67 check diagnostic codes (47 Error / 8
-Warning / 12 Info) in `core/go/check_state.go:405`; 7,588 spec rows across
-121 `lang/spec/*.tsv` (9,851 including `eng/spec`); 87 entities and 153
+Warning / 12 Info) in `core/go/check_state.go:405`; 7,421 spec rows across
+121 `lang/spec/*.tsv` and 1,765 across 36 `eng/spec/*.tsv` (9,186 total,
+counted by `specfix.RunFile`'s own rule — skip blank and `#` lines — over
+top-level `.tsv` only, which is what `RunDir` selects); 87 entities and 153
 evidence-backed assertions in `kg/out/graph.json`; 275 lines of Lean with
 no `sorry` in `formal/lean/BoruCore.lean`; LSP advertises exactly
 `HoverProvider`, `CompletionProvider`, `DocumentFormattingProvider`
@@ -98,8 +116,15 @@ vector reaching the handler regardless of spelling — `10 3 sub`,
 Both projects independently arrived at the same four rules, and boru is
 **ahead on three of them**:
 
-1. *Make it total.* Quint applies UFCS to every operator; ADR-004 makes
-   every word forward-collecting and rejects per-word flips. ✅ both.
+1. *Make it total.* Quint's UFCS applies to every named operator. boru's
+   default is forward and per-word flips are rejected (ADR-004), but the
+   2026-08-15 amendment records **four** categories, not one exception:
+   forward-eligible, mixed-barrier, stack-only and quoting slots, with 16
+   all-stack signatures in the census
+   (`design/ADR-004-REFINEMENT.0.md:125`). So boru is *forward by
+   default*, not forward-total. ✅ Quint; ⚠️ boru — and the gap is
+   principled (`apply`'s `[Function]` row is stack-only by nature), not an
+   oversight.
 2. *Make the barrier strict.* `design/STRICT-FORWARD-BARRIER.0.md:11-17` —
    a bare function word beginning its own dispatch is a barrier regardless
    of arity, adopted at a measured ~181-row corpus cost, with an
@@ -165,15 +190,23 @@ question about your program before it runs.** That is what boru should take
 — not by importing a model checker, but by finishing the verification story
 it already started and already ranked.
 
-boru ships liquid-type *syntax* with purely dynamic enforcement. The
-following is a decidable, provably-false obligation in linear integer
-arithmetic — `n > 0 ⊢ n − 1 > 0` — and `boru check` passes it clean
-[ran it]:
+boru ships liquid-type *syntax* and already enforces part of it
+statically: a literal that cannot inhabit its declared refinement is an
+Error at check time [ran it] —
+
+```
+$ boru check -e 'def Pos (refine Integer gt 0)  def x:Pos 0'
+check: 1:42: [error] type_error: def x: value 0 does not unify with declared type Pos
+```
+
+What is missing is **discharge across an expression**. The following is a
+decidable, provably-false obligation in linear integer arithmetic —
+`n > 0 ⊢ n − 1 > 0` — and `boru check` passes it clean [ran it]:
 
 ```
 $ cat ref.boru
 def Pos (refine Integer gt 0)
-def f fn [[n:Pos] [Pos] [sub n 1]]
+def f fn [[n:Pos] [Pos] [sub 1 n]]
 print (f 1)
 
 $ boru check ref.boru
@@ -184,6 +217,13 @@ $ boru run ref.boru
 error: [boru/type_error]: f: return value 1: expected Pos, got Integer
   = value: 0                                            # rc=1
 ```
+
+(`sub x y` computes `y - x` — `boru describe sub`: "All three call forms
+compute a - b … args[0] is the rightmost source-position arg" — so `sub 1
+n` is the spelling that models `n − 1`. An earlier draft of this note
+wrote `sub n 1` and mislabelled the obligation; `n = 1` masks the
+reversal because both spellings return 0. Worth recording as its own
+data point about which spellings are easy to get wrong.)
 
 This is not a new discovery — it is boru's own top-ranked verification
 item, already written up. `design/FORMAL-VERIFICATION.0.md:63` places
@@ -210,10 +250,13 @@ has.**
 
 These were found while comparing, and stand independent of any proposal.
 
-### 6.1 `boru check` is silent on refinement obligations
-See §5. Not a defect — a documented boundary of the type-domain abstract
-interpreter — but it is the gap that most limits the claim "boru answers
-questions about your program before it runs".
+### 6.1 `boru check` discharges no refinement obligation across an expression
+See §5. Literal-level refinement violations *are* caught statically, so
+this is narrower than "refinements are dynamic only" — but no verification
+condition spanning an operation is discharged. Not a defect: it is a
+documented boundary of the type-domain abstract interpreter. It is,
+however, the gap that most limits the claim "boru answers questions about
+your program before it runs".
 
 ### 6.2 Declared-but-inert permission surfaces
 `lang/go/policy/policy.go:129` declares the `clock` scope and `:178-179`
@@ -228,8 +271,12 @@ table has **gone stale in the safe-looking direction**, still listing `env`
 and `process` as inert when both are now wired
 (`lang/go/native/capabilities.go:465`, `lang/go/native/native_process.go:127`).
 A hand-maintained inventory of enforcement rotted exactly as such
-inventories do. That is the argument for P1, and it is stronger than the
-gap itself.
+inventories do. That is the argument for the inventory gate discussed in
+§7's note on gate budget, and it is stronger than the gap itself. It is
+deliberately **not** in the ranked queue: the fixes are already specified
+at `design/MODULE-SECURITY.0.md` §8.2 and §10 Phase 0, so the only novel
+part is an automated staleness gate — and §7 argues gates should wait for
+a required status check to exist.
 
 ### 6.3 `boru check` silently ignores every file after the first [ran it]
 ```
@@ -264,7 +311,8 @@ and never recorded (`lang/go/modules/rand.go:40`). Determinism is available
 only in-language via `Rand.with-seed N`, which does work and is
 reproducible (`955`, `955`). This is a design choice, not a bug — but it
 means any "print the seed to reproduce" feature would advertise a repro
-line that does not repro, and it is the prerequisite for P4/P5.
+line that does not repro. P5 is the fix; any future replay or
+reproduce-line feature depends on it.
 
 ### 6.6 The design corpus is not mechanically filterable — and it cost us
 This is the most important structural finding. Of 261 design notes, only
@@ -299,19 +347,21 @@ three shipped verbs mislead today.
 
 | # | Proposal | Cost | Why here |
 |---|---|---|---|
-| P1 | **Reject unconsumed CLI positionals**; make `check`/`fmt` accept multiple files and directories | small | §6.3 — a green CI line that checked one file is the worst failure mode in the list |
+| P1 | **Reject unconsumed CLI positionals**; make `check` accept multiple files | small | §6.3 — a green CI line that checked one file is the worst failure mode in the list. Note `boru fmt` already consumes every positional and walks the tree with no args (`cmd/go/internal/fmt/fmt.go:51-99`, `CLI.md:553-565`); only an *explicit directory* argument is unsupported, and that is a separate, smaller change |
 | P2 | **`boru test -run` and `-json`** | small | the runner has no way to run one test and no machine-readable output (`-h` shows neither); every replay idea depends on it |
 | P3 | **Machine-readable front-matter on `design/*.md`** — `status:` from a closed enum, `supersedes:`, `landed:`, `code:` anchors; `make design-index`; a gate that fails when a `landed` doc has no code anchor | small | §6.6 — prerequisite for every other proposal being correctly scoped |
 | P4 | **`boru describe --json`** (and an MCP surface reusing the in-tree `boru vault mcp` stdio transport) | small | boru's live-engine documentation is better substrate than Quint's packaged LLM kit; only the packaging is missing |
 | P5 | **Route the default `boru:rand` seed through `lang.Options.Seed`**, record it, surface it | small | §6.5; the injection point already exists at `rand.go:40` |
 | P6 | **Print the resolved spelling** at ambiguous call sites — `reads as: if p [1] [2]` | small | Quint's rule 4, §3. Print the *normal form*, **not** a value vector: check mode has carriers, not values, and synthesized values carry no column |
-| P7 | **`boru describe <code>`** (per R4), built on the existing `core.LookupErrorCode` | small | the 252-code registry exists and has no non-test consumer; prose stays in `lang/go/native/help/`, not the kernel |
+| P7 | **`boru describe <code>`** (per R4), built on the existing `core.LookupErrorCode` | small | the code registry already exists (`kernelErrorCodes` + `langErrorCodes`) and has **no non-test consumer**; prose stays in `lang/go/native/help/`, not the kernel |
 | P8 | **Derived effect envelope** — opaque kernel facet, string alphabet owned by `lang/go/policy`, diff in `cmd/go`; derived half only, no annotation syntax | large | §4; finish what three design notes already converged on |
 | P9 | **SMT discharge of `refine` predicates**, with Quint's honest-scorecard discipline | large | §5 — the strategic item; a research track, not a ticket |
 
 **Gate budget.** Four proposals in the original set each wanted a new
 generated artifact plus a `git diff --exit-code`. In a repo with one human
-maintainer (`git log`: 58 commits Richard Rodger, 179 an agent), each such
+maintainer plus an agent (exact commit shares are not quotable from this
+working copy — it is a shallow clone, the same trap that made an earlier
+draft believe the project had no tags), each such
 gate is a recurring merge-conflict surface. And the *existing* staged CI
 patch at `ci/ci.yml:127-132` is still unapplied because the token lacks
 `workflow` scope, while `ci/README.md` records that `build-and-test` is not
@@ -326,16 +376,33 @@ Fix the required-check gap first, then add at most one gate.
 - **Temporal logic, system invariants, a model checker.** §1. Already
   declined on the right ground at `design/STATE-MACHINES.0.md:226`.
 - **Edge-biased default generators.** Proposed as boundary-biasing
-  `Rand.int`. Decline: `boru:rand` is `math/rand`
-  (`lang/go/modules/rand.go:118`) and the design corpus reaches for it as
-  an **identifier and token source** (`design/examples/todo/app.boru:15`
-  comments `# Rand.uuid (session tokens)`). Biasing that draw toward
-  `{lo, lo+1, 0, -1}` 15% of the time makes id collisions routine, silently,
-  for every existing caller. The effect is already achievable in-language
-  today — `if ((r.int 0 100) lt 15) [r.one-of [0 1 999]] [r.int 0 1000]` —
-  and found the seeded bug that the uniform draw missed. Add
-  `Rand.frequency` / `Rand.such-that` as ordinary composable exports if
-  desired; change nothing in the PRNG.
+  `Rand.int`. Decline on the contract, not on speculation: `Rand.int` is
+  documented and spec-pinned as a **uniform** half-open draw
+  (`lang/go/modules/rand.go:265-268`, matching `random.randrange` /
+  `rand.Intn`), and `boru:rand` is `math/rand`, not `crypto/rand`
+  (`rand.go:118`). Silently changing the distribution of the shared
+  default breaks every non-test caller that wanted a PRNG, and the sketch
+  contradicted itself — defaulting the bias to 0.15 while conceding it
+  "must be off by default for `Rand.*` used directly".
+
+  (An earlier draft argued this on the stronger ground that the corpus
+  mints session tokens from `Rand.uuid`. That argument is withdrawn:
+  `boru describe boru:rand` lists exactly `bool float int list-of
+  map-from one-of string with-seed` — there is **no** `uuid` export — and
+  the file cited for it, `design/examples/todo/app.boru`, is an
+  aspirational sketch that does not even pass `boru check`.)
+
+  The effect is in any case already achievable in-language, so no engine
+  change is needed:
+
+  ```boru
+  if (lt 15 (r.int 0 100)) [r.one-of [0 1 999]] [r.int 0 1000]
+  ```
+
+  (Note `lt x y` computes `y < x`, so `lt 15 …` is the spelling that
+  tests "below 15" — the same rightmost-arg-is-`args[0]` rule as `sub`.)
+  Add `Rand.frequency` / `Rand.such-that` as ordinary composable exports
+  if desired; change nothing in the PRNG.
 - **`State.explore` as a bounded-exhaustive walk "that beats `quint
   verify`".** Decline the framing outright:
   `design/STATE-MACHINES.0.md:870` already specifies state×event hole
@@ -381,8 +448,8 @@ identifies which of boru's assets are genuinely distinctive.
    *cannot* drift the way prose does. Quint's docs are prose plus a
    packaged LLM kit; boru's substrate is strictly better and only its
    packaging is behind (P4).
-3. **The TSV executable spec.** 9,851 rows across 157 files, run in both
-   execution modes and both TCO settings. "Your conformance suite is a text
+3. **The TSV executable spec.** 9,186 rows across 157 files; the 7,421
+   `lang/spec` rows run in both execution modes and both TCO settings. "Your conformance suite is a text
    file anyone can add a row to" is highly copyable.
 4. **ADR-008's coverage gate**, with proof-carrying `//covergate:allow`
    exemptions that fail in *both* directions — stale entries fail too, so
