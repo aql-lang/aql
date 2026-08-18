@@ -35,6 +35,14 @@ the harness's own rule will be wrong**, and **a shallow clone will lie to
 you about repository history** — the same trap twice, since it also made
 an earlier draft believe the project had no tags.
 
+The first lesson then recurred a third time, in §6.7 itself: a first pass
+counted placeholder examples with `grep 'true false'`, which matches the
+example's *expression* rather than its result, and so wrongly counted
+`and` (whose example computes `;# false`). Counting the actual marker
+`;# ...` gives `add`, `sub`, `mul`, `div`, `mod`. Three occurrences of one
+mistake in one document is the argument for measuring with the artefact's
+own rule rather than a pattern that merely looks close enough.
+
 ---
 
 ## 1. The framing that has to come first
@@ -85,7 +93,7 @@ one strategic position** — not semantics.
 | State-space exploration | random simulator + Apalache (bounded symbolic) + TLC | none; PBT over values instead |
 | Counterexamples | ITF JSON traces, replayable, consumed by model-based testing | PBT counterexample **value** + shrunk generator source — never written to disk |
 | Conformance suite | 77 example specs, CI-run | 9,186 executable spec rows across 157 TSV files; the 7,421 `lang/spec` rows run in both execution modes and both TCO settings |
-| Self-documentation | packaged LLM kit / docs site | `boru describe` generated from the **live engine** — signatures and precedence cannot drift; worked *examples* partly can (§6.7) |
+| Self-documentation | packaged LLM kit / docs site | `boru describe` generated from the **live engine** — input signature shapes and precedence cannot drift; the *return* column and some worked examples do (§6.7) |
 | Coverage discipline | ordinary | ADR-008: 100% of reachable Go statements, gated, with proof-carrying exemptions |
 | Distribution | npm; Apalache needs a JVM | build from clone (no released binaries); wasm playground live |
 
@@ -336,26 +344,41 @@ already scheduled, or already shipped** —
 A 36% rediscovery rate against a corpus that is candid, thorough, and
 unindexed. Any future agent or contributor pays the same tax. This is P3.
 
-### 6.7 `describe`'s worked examples are not all engine-verified
-Added after the fact, and it narrows this note's own claim. The sibling
-report `design/roc-in-boru-report.0.md` §7.4 found placeholder examples in
-`describe` output; reproduced here [ran it]:
+### 6.7 `describe` is less drift-proof than this note first claimed
+Added after the fact, and it narrows this note's own claim twice over.
+The sibling report `design/roc-in-boru-report.0.md` §7.4 found placeholder
+examples in `describe`; checking that turned up a second and worse defect
+underneath it. Both reproduced [ran it]:
+
+**(a) Placeholder examples.** `boru describe add` prints
+`add true false   ;# ...` — a placeholder, not a computed result. Scanning
+for a trailing `;# ...` finds it on `add`, `sub`, `mul`, `div` and `mod`.
+
+**(b) Return types are a hand-maintained heuristic, and have drifted.**
+This is the more serious one, because a placeholder is visibly missing
+while a wrong type looks authoritative:
 
 ```
-$ boru describe add
-Examples:
-  add 'a' 'a'      ;# 'aa'
-  add 2 3.5        ;# 5.5
-  add true false   ;# ...
+$ boru describe add          →  [ [String Scalar]    Float ]
+$ boru check -e "add 'a' 'a'"   →  String
 ```
 
-`add true false ;# ...` is a placeholder, not a computed result. Sampling
-ten core words found it on five (`add`, `sub`, `mul`, `div`, `and`). So
-the "cannot drift" property holds for signatures and precedence — which
-*are* read from the live registry — but not for every example line, and
-§2 and §9 are corrected accordingly. Roc's A4 is the fix: make the
-examples engine-verified, and narrow `AGENTS.md`'s no-drift wording until
-they are.
+`describe` advertises `Float` for a call the checker correctly types as
+`String`. The cause is `lang/go/native/native_help.go:302`, which sets
+`si.Returns = inferReturns(fn.Name, sig)` — a heuristic keyed on the word
+*name*, under a comment reading "For now, derive returns from common
+patterns" — instead of the signature's own `Returns` field
+(`core/go/value.go:249`, "declared return types (nil = unchecked)").
+
+So the drift-proof property covers **input signature shapes and
+precedence**, which are read from the live registry, and not the return
+column or every example line. §2 and §9 are corrected accordingly.
+
+The fix is larger than Roc's A4, which covers only the examples. Note the
+return half is not a simple swap: `Returns` is `nil` for many core words,
+which is presumably why the heuristic exists — so the honest repair is to
+render `sig.Returns` where it is populated and show nothing where it is
+not, rather than asserting a type the engine never declared.
 
 ---
 
@@ -464,12 +487,14 @@ identifies which of boru's assets are genuinely distinctive.
    does not block a merge. Quint has issues; it has no register whose job
    is that a divergence is never silently baselined. This is the single
    most portable artifact in the tree.
-2. **`boru describe`, generated from the live engine.** Signatures and
-   precedence come from the running registry, so they cannot drift the way
-   prose does. Quint's docs are prose plus a packaged LLM kit; boru's
-   substrate is better in kind. Two caveats, both added after this note
-   first landed: the *worked examples* are not uniformly engine-verified
-   (§6.7), and the packaging is behind (P4).
+2. **`boru describe`, generated from the live engine.** Input signature
+   shapes and precedence come from the running registry, so they cannot
+   drift the way prose does. Quint's docs are prose plus a packaged LLM
+   kit; boru's substrate is better *in kind* — but the advantage is
+   currently smaller than it looks: the return column is a hand-maintained
+   heuristic that has already drifted, and some worked examples are
+   placeholders (§6.7). Fixing those is what would make the claim true;
+   packaging it is P4.
 3. **The TSV executable spec.** 9,186 rows across 157 files; the 7,421
    `lang/spec` rows run in both execution modes and both TCO settings. "Your conformance suite is a text
    file anyone can add a row to" is highly copyable.
