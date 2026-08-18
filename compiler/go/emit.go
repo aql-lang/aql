@@ -4660,7 +4660,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 		// is exempt the same way: tryMemberFnArrivalDispatch owns its
 		// landing (the break-2 closure) and re-refuses what it cannot claim.
 		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3) [MONOPATH]")
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 	case word == "args" || word == "__pa":
 		// `args` reads the interpreter's per-call args stack, which the
 		// VM's CALL_USER frame does not maintain (it binds params to
@@ -5071,7 +5071,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []core.Value, pos co
 		// Annotated shaped-method reads and pinpointed genuine-0-arg member
 		// reads are exempt (see recordCallRefusal).
 		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3) [POLYPATH]")
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 		return true
 	}
 	ops := make([]EmitOperand, len(args))
