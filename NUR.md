@@ -71,6 +71,9 @@ keep the two in sync in the same commit.
 | [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
 | [NUR077](#nur077) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer — VERDICT 2026-08-17: resolve by fix, a NEW dedicated Apply Op (arity-carrying, consumes the value, seamed at `execFnDefLiteral`; `DoEval` stays reserved), after the three prerequisite recorder/gate defects are fixed | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
 | [NUR078](#nur078) | A bare fn name before a `Function`-typed slot still resolves as a reference, against amended ADR-011 — the engine's TFunction intercept implements the exception the 2026-08-17 amendment struck (`h zero` ≡ `h zero/r` when the slot is `Function`-typed; a call/barrier before any other slot) — VERDICT 2026-08-17: resolve by fix, open-work item B (all four sites retire together, re-opening the NUR038 call-head question in the implementing PR) | the ADR-011 amendment, 2026-08-17 (flagged by the PR #381 review, Codex P1) |
+| [NUR079](#nur079) | Gated words inside an imported file-module body escape the policy that governs the same call at top level — the module sub-registry inherited every capability seam except policy, so gates resolving `HostPolicy(r)` read nil as allow — VERDICT: resolve by fix in two halves; half (i) landed 2026-08-18 (the body now carries the parent's policy), half (ii) open | the Roc comparison study, 2026-08-18 |
+| [NUR080](#nur080) | A typed def over an Integer literal loses its newtype brand under the compiler, and the bare literal gains one — VERDICT: resolve by fix | the Roc comparison study, 2026-08-18 |
+| [NUR081](#nur081) | `Test.skip` is documented as a drop-in for `Test.check-prop`, but the two disagree on argument validity: `check-prop` now rejects `runs < 1` / `max-shrinks < 0` while `skip` accepts them silently | the Quint follow-up Wave 1, 2026-08-18 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2422,3 +2425,36 @@ which is why `make verify-bytecode` is blind to it.
 const-pool entry. Acceptance requires both source orderings, plus new
 spec rows so the differential corpus covers the class. This record retires
 when the two engines agree on the table above.
+
+## NUR081 — `Test.skip` accepts the counts `Test.check-prop` now rejects, though it is documented as a drop-in {#nur081}
+
+**Status:** Pending · **Recorded:** 2026-08-18 · **Surfaced by:** the
+Wave 1 vacuous-property fix (`design/QUINT-FOLLOWUP-PLAN.0.md`), in review
+
+**Rule:** one member of a word family does not get a different contract
+from its siblings. `HOWTO.md` presents `Test.skip` as "a drop-in for
+`Test.check-prop`" — same name, same generator, same property, same three
+counts — so a call that is legal for one should be legal for the other.
+
+**Divergence:** `Test.check-prop` now raises `range_error` on `runs < 1`
+or `max-shrinks < 0`, closing a hole where a zero-run property reported
+`{ok: true, runs: 0}` and printed as a PASS. `Test.skip` takes the same
+six arguments and validates none of them:
+
+```
+Test.check-prop "x" [1] [true] 0 1 -7   →  error: [boru/range_error]: runs must be 1 or more (got 0)
+Test.skip       "x" [1] [true] 0 1 -7   →  {name:'x' ok:true skipped:true runs:0}   skip: x
+```
+
+**Evidence:** `Test.skip` never reaches `runCheckProp` (it short-circuits
+to `runSkipProp`), which is why the guard does not cover it. That is also
+why the divergence is harmless today: a skipped property is *reported as
+skipped*, never as a pass, so the counts it ignores cannot manufacture a
+false green the way `check-prop`'s could.
+
+**Verdict:** pending. Two defensible resolutions — validate in `skip` for
+symmetry, or document that `skip` ignores the counts because it never runs
+them. The second is arguably more honest, since the arguments exist only
+so the call stays a textual drop-in. Not urgent: no false PASS is reachable
+through `skip`.
+

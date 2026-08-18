@@ -47,6 +47,10 @@ import "boru:test"  (Test.spec-with-subs [] [] double/q "outer") get "name"	'out
 import "boru:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"	100	`prop` builds a PropertySpec with default runs=100
 import "boru:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end (p Test.run-property) get "ok"	true	`run-property` dispatches a PropertySpec map
 import "boru:test"  (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"	true	`check-prop` runs the generator/property loop
+import "boru:test"  (Test.check-prop "floor" [r.int 0 100] [0 gte] 1 1 0) get "runs"	1	runs=1 is the floor — the property really runs once
+import "boru:test"  Test.check-prop "vacuous" [r.int 0 10] [false] 0 1 0	ERROR:range_error	runs=0 raises: a vacuous run must not report success
+import "boru:test"  Test.check-prop "vacuous" [r.int 0 10] [false] -3 1 0	ERROR:range_error	a negative `runs` is the same caller mistake
+import "boru:test"  Test.check-prop "bad-shrinks" [r.int 0 10] [false] 5 1 -7	ERROR:range_error	a negative `max-shrinks` raises (0 = the no-shrink setting)
 import "boru:test"  (Test.skip "wip" [r.int 0 9] [false] 10 1 0) get "skipped"	true	`skip` records a parked property without running it
 #
 # §7  record / table types — constructed via make, asserted via istype
