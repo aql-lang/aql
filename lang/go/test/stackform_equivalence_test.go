@@ -344,3 +344,111 @@ func TestStackFormRefusesFunctionValueApplication(t *testing.T) {
 		t.Errorf("a named fn call must stay replayable, got %v", err)
 	}
 }
+
+// TestStackFormLiteralAccountingExact pins the recorder's skip accounting
+// against a Function-valued paren survivor — design/FN-VALUE-OPEN-WORK.0.md
+// §5.2, the same class as the frame-skeleton over-count fixed in 9bffdd3.
+//
+// A survivor earns a skip credit only if the re-step would fire OnPushLit for
+// it. A Function value never does (execFnDefLiteral dispatches it, or the
+// ADR-016 0-arg gate steps past it), so crediting one left an unspendable
+// skip that silently SWALLOWED the next real literal: `(z/r) 777` recorded
+// without its 777 at all, and each extra paren level ate another.
+//
+// The assertion is on the LITERALS the form carries, not on Eval's stack:
+// these shapes still strand the function (NUR077's own defect, which only the
+// apply Op can close), so equivalentRun cannot be used yet. Literal
+// accounting, though, must already be exact — and a form that has silently
+// dropped operands is the thing the shrinker would trust.
+func TestStackFormLiteralAccountingExact(t *testing.T) {
+	const zdef = `def z fn [[] [Integer] [42]] `
+	const incdef = `def inc fn [[n:Integer] [Integer] [n add 1]] `
+	for _, c := range []struct {
+		src  string
+		want []int64 // the integer literals the form must carry, in order
+	}{
+		// CONTROL: a non-function paren result — the balance was always exact
+		// here, and must stay so.
+		{`(1 add 2) 777`, []int64{1, 2, 777}},
+		// One Function survivor. Before the fix this recorded NO integer at
+		// all: the surplus credit ate the 777.
+		{zdef + `(z/r) 777`, []int64{777}},
+		{zdef + `(z/r) 777 888`, []int64{777, 888}},
+		// Every extra paren level added another unspendable credit, so depth
+		// is the regression that matters most.
+		{zdef + `((z/r)) 777 888`, []int64{777, 888}},
+		{zdef + `(((z/r))) 777 888 999`, []int64{777, 888, 999}},
+		// The APPLIED shape: the function's own ARGUMENT literal was the one
+		// dropped here — the form kept 777 but lost the 5 it is called with.
+		{incdef + `(inc/r) 5 777`, []int64{5, 777}},
+	} {
+		t.Run(c.src, func(t *testing.T) {
+			r := stackformReg(t)
+			tokens, err := parser.Parse(c.src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, form, err := stackform.Compile(r, tokens)
+			if err != nil {
+				t.Fatalf("compile %q: %v", c.src, err)
+			}
+			got := formIntLiterals(form)
+			if len(got) != len(c.want) {
+				t.Fatalf("%q: integer literals = %v, want %v\n  form: %s",
+					c.src, got, c.want, stackform.Pretty(form))
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Fatalf("%q: integer literals = %v, want %v\n  form: %s",
+						c.src, got, c.want, stackform.Pretty(form))
+				}
+			}
+		})
+	}
+}
+
+// formIntLiterals collects the Integer PushLit payloads a form carries, in
+// order. Integers alone keep the expectations readable, and they isolate
+// exactly what the over-count destroyed: a fn definition pushes its body as
+// one LIST op, so `fn z`'s 42 and `inc`'s 1 are inside that payload and never
+// appear here — every integer below is a program literal.
+func formIntLiterals(form *stackform.StackForm) []int64 {
+	var out []int64
+	for _, op := range form.Ops {
+		pl, ok := op.(stackform.PushLit)
+		if !ok {
+			continue
+		}
+		if n, err := pl.V.AsConcreteInteger(); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// TestStackFormFunctionArgNotDoubleRecorded is the DUAL of the literal
+// accounting above, and guards the hazard that fix first walked into.
+//
+// A paren collapsed on behalf of a pending forward is not re-stepped by the
+// main loop: its survivor becomes the call's ARGUMENT. So a Function survivor
+// there is collected, not dispatched, and the collection hook fires OnPushLit
+// for it — meaning it DOES need its skip credit, where a main-loop survivor
+// does not. Withholding it recorded the function twice (`fn z … fn z g`) and
+// replay grew an extra operand.
+//
+// These round-trip exactly, so equivalentRun is the assertion: it fails on a
+// duplicated operand as surely as on a dropped one.
+func TestStackFormFunctionArgNotDoubleRecorded(t *testing.T) {
+	const zdef = `def z fn [[] [Integer] [42]] `
+	for _, src := range []string{
+		// A paren'd reference into a Function slot, with a literal following.
+		zdef + `def g fn [[f:Function] [Any] [7]] g (z/r) 777`,
+		// The same call with no trailing literal.
+		zdef + `def g fn [[f:Function] [Any] [7]] g (z/r)`,
+		// CONTROL: the unparenthesised spelling of the same call, which never
+		// went through stepCloseParen at all.
+		zdef + `def g fn [[f:Function] [Any] [7]] g z/r 777`,
+	} {
+		t.Run(src, func(t *testing.T) { equivalentRun(t, src) })
+	}
+}

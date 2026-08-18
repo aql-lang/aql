@@ -152,18 +152,30 @@ func TestRunCLIDuplicateTargetCheckedOnce(t *testing.T) {
 
 // -h prints the usage listing instead of being read as a filename.
 func TestRunCLIHelpFlag(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	if code := RunCLI([]string{"-h"}, &stdout, &stderr); code != 1 {
-		t.Fatalf("exit = %d, want 1 (the CLI-wide -h convention)", code)
-	}
-	out := stderr.String()
-	if strings.Contains(out, "no such file") {
-		t.Fatalf("-h was read as a filename: %q", out)
-	}
-	for _, want := range []string{"Usage of check:", "-json", "-soft", "-strict", "-e ", "-r ", "-s "} {
-		if !strings.Contains(out, want) {
-			t.Errorf("usage = %q, want it to mention %q", out, want)
+	// Asking for help is not an error: `boru help check` points the reader
+	// at `boru check -h`, so it prints the documented usage on STDOUT and
+	// exits 0. Before this surface existed, -h was read as a filename and
+	// failed with `open -h: no such file or directory`.
+	for _, arg := range []string{"-h", "--help", "help"} {
+		var stdout, stderr bytes.Buffer
+		if code := RunCLI([]string{arg}, &stdout, &stderr); code != 0 {
+			t.Fatalf("%s: exit = %d, want 0; stderr: %s", arg, code, stderr.String())
 		}
+		out := stdout.String()
+		if strings.Contains(out+stderr.String(), "no such file") {
+			t.Fatalf("%s was read as a filename: %q", arg, out+stderr.String())
+		}
+		for _, want := range []string{"Usage: boru check", "--json", "--soft", "--strict", "--pedantic", "-e EXPR", "-r PATH", "-s SEED"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s: usage = %q, want it to mention %q", arg, out, want)
+			}
+		}
+	}
+	// Negative half: a flag that does NOT exist is still an error, so the
+	// help path cannot be mistaken for "check accepts anything".
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--nope", "x.boru"}, &stdout, &stderr); code == 0 {
+		t.Fatalf("exit = 0 for an unknown flag, want non-zero; stderr: %s", stderr.String())
 	}
 }
 
@@ -291,7 +303,7 @@ func TestRunCLIEmptyExpression(t *testing.T) {
 
 // -r and -s are the flags CLI.md documents; they must reach lang.Options
 // rather than being dropped for hard-coded defaults.
-func TestRunCLIRegistryAndSeedReachOptions(t *testing.T) {
+func TestRunCLIRegistryAndSeedReachOpts(t *testing.T) {
 	var got lang.Options
 	orig := langNew
 	langNew = func(opts ...lang.Options) (*lang.Boru, error) {
@@ -536,7 +548,7 @@ func TestResolveTargetsWalkError(t *testing.T) {
 
 func TestRunTargetsEmptyIsNoOp(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if err := RunTargets(&stdout, &stderr, nil, Options{JSON: true}); err != nil {
+	if err := RunTargets(&stdout, &stderr, nil, Opts{JSON: true}); err != nil {
 		t.Fatalf("RunTargets(nil): %v", err)
 	}
 	if stdout.Len() != 0 || stderr.Len() != 0 {
@@ -552,7 +564,7 @@ func TestRunTargetsMultiJSONMarshalError(t *testing.T) {
 	err := RunTargets(&stdout, &stderr, []Target{
 		{Path: "a.boru", Source: "1 add 2"},
 		{Path: "b.boru", Source: "3 add 4"},
-	}, Options{JSON: true})
+	}, Opts{JSON: true})
 	if err == nil || !strings.Contains(err.Error(), "json marshal") {
 		t.Fatalf("err = %v, want json marshal error", err)
 	}
@@ -561,7 +573,7 @@ func TestRunTargetsMultiJSONMarshalError(t *testing.T) {
 func TestRunTargetsInitError(t *testing.T) {
 	swapLangNewFail(t)
 	var stdout, stderr bytes.Buffer
-	err := RunTargets(&stdout, &stderr, []Target{{Path: "a.boru", Source: "1 add 2"}}, Options{})
+	err := RunTargets(&stdout, &stderr, []Target{{Path: "a.boru", Source: "1 add 2"}}, Opts{})
 	if err == nil || !strings.Contains(err.Error(), "init error") {
 		t.Fatalf("err = %v, want init error", err)
 	}
@@ -573,7 +585,7 @@ func TestRunTargetsStrictAcrossFiles(t *testing.T) {
 	if err := RunTargets(&stdout, &stderr, []Target{
 		{Path: "a.boru", Source: "1 add 2"},
 		{Path: "b.boru", Source: "3 add 4"},
-	}, Options{Strict: true}); err != nil {
+	}, Opts{Strict: true}); err != nil {
 		t.Fatalf("RunTargets strict: %v", err)
 	}
 }
@@ -584,7 +596,7 @@ func TestRunTargetsMultiEmptyStack(t *testing.T) {
 	err := RunTargets(&stdout, &stderr, []Target{
 		{Path: "a.boru", Source: "def x 1"},
 		{Path: "b.boru", Source: "1 add 2"},
-	}, Options{Soft: true})
+	}, Opts{Soft: true})
 	if err != nil {
 		t.Fatalf("RunTargets: %v", err)
 	}

@@ -34,7 +34,7 @@ import (
 
 // langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
 // drive the init-error arms of Emit/Run/Preflight — lang.New only fails
-// on registry construction errors that no Options value can provoke.
+// on registry construction errors that no Opts value can provoke.
 var langNew = lang.New
 
 // jsonMarshalIndent is a test seam (design/TEST-SEAMS.10.md); tests swap
@@ -63,14 +63,20 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return RunCLI(args, stdout, stderr)
 }
 
-// Options are the check knobs RunCLI resolves once and every checked
+// Opts are the check knobs RunCLI resolves once and every checked
 // target shares.
-type Options struct {
+type Opts struct {
 	Registry string
 	Seed     int64
 	JSON     bool
 	Soft     bool
 	Strict   bool
+	// Pedantic promotes the advisory tiers: with it set, warning- and
+	// info-severity diagnostics gate the exit code the way errors
+	// already do. It composes UNDER Soft — `--soft` still means "never
+	// gate", so `--soft --pedantic` exits 0 — which keeps each flag's
+	// documented meaning intact (design/ROC-ADOPTION-PLAN.0.md, A3).
+	Pedantic bool
 	Color    bool
 }
 
@@ -92,11 +98,25 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	jsonOut := fs.Bool("json", false, "emit the CheckResult as JSON (an array keyed by file for several targets)")
 	soft := fs.Bool("soft", false, "report diagnostics but still exit 0")
 	strict := fs.Bool("strict", false, "additionally report every dispatch over a dynamic operand")
+	pedantic := fs.Bool("pedantic", false, "gate on the advisory tiers too, not only on errors (composes under --soft)")
 	emit := fs.Bool("emit", false, "print the bytecode disassembly instead of the check report")
 	colorMode := fs.String("color", "auto", "colorize diagnostics: auto|always|never")
 	registry := fs.String("r", "", "registry path")
 	var seed int64
 	fs.Int64Var(&seed, "s", 0, "random seed")
+
+	// -h is answered before parsing: flag.ContinueOnError would print its
+	// own flag dump and return ErrHelp, which this command then reports as
+	// exit 1 — the very defect NUR084 records. printUsage is the contract
+	// `boru help check` points the reader at, and asking for help is not
+	// an error, so it exits 0 (main's behaviour, preserved through the
+	// FlagSet rewrite).
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "help" {
+			printUsage(stdout)
+			return 0
+		}
+	}
 
 	args, ok := tolerateLegacyTail(args, stderr)
 	if !ok {
@@ -147,12 +167,13 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	if *emit {
 		return runEmit(stdout, stderr, work, *registry, seed)
 	}
-	opts := Options{
+	opts := Opts{
 		Registry: *registry,
 		Seed:     seed,
 		JSON:     *jsonOut,
 		Soft:     *soft,
 		Strict:   *strict,
+		Pedantic: *pedantic,
 		Color:    lang.ResolveColor(nil, stderr, *colorMode),
 	}
 	if err := RunTargets(stdout, stderr, work, opts); err != nil {
@@ -299,6 +320,35 @@ func anchorOf(path string) string {
 	return abs
 }
 
+// printUsage writes the subcommand's flag set. `boru help check` points
+// the reader at `boru check -h` for exactly this, so a flag that is not
+// listed here is not discoverable through the documented path — the
+// reason `--pedantic` arrived with it (design/ROC-ADOPTION-PLAN.0.md, A3).
+// `run`, `do`, `test` and `build` get this free from flag.FlagSet; check
+// parses argv by hand because `-e EXPR` stops the scan, so it spells the
+// same contract out. Keep in step with CLI.md's `boru check` flag list.
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: boru check [options] <script.boru>
+       boru check [options] -e EXPR
+
+Type-check without running. Exits non-zero when any Error-severity
+diagnostic is reported.
+
+Options:
+  -e EXPR        type-check an inline expression
+  --json         emit the full CheckResult as JSON on stdout
+  --soft         never gate: exit 0 even when diagnostics are reported
+  --strict       also report every dispatch over a dynamic operand (info)
+  --pedantic     gate on the advisory tiers too, not only on errors;
+                 composes under --soft, so --soft --pedantic exits 0
+  --emit         print the bytecode disassembly instead of checking
+  --color MODE   auto (default), always, or never
+  -r PATH        registry path
+  -s SEED        random seed
+  -h, --help     print this message
+`)
+}
+
 // Emit runs the bytecode recording pass over source and prints the
 // Program disassembly to stdout, or the precise refusal reason when
 // the emitter cannot lower the program (debug/tooling surface —
@@ -385,7 +435,7 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 // from a named file resolves its relative imports against the process
 // cwd — RunTargets with a Target whose Path is set anchors instead.
 func RunColor(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft, strict, color bool) error {
-	return RunTargets(stdout, stderr, []Target{{Source: source}}, Options{
+	return RunTargets(stdout, stderr, []Target{{Source: source}}, Opts{
 		Registry: registry, Seed: seed, JSON: jsonOut, Soft: soft, Strict: strict, Color: color,
 	})
 }
@@ -411,7 +461,7 @@ type fileResult struct {
 // the returned error reports how many targets failed. With one target
 // the output and the error text are exactly the single-file report the
 // command has always produced.
-func RunTargets(stdout, stderr io.Writer, targets []Target, o Options) error {
+func RunTargets(stdout, stderr io.Writer, targets []Target, o Opts) error {
 	if len(targets) == 0 {
 		// Nothing to check is not a failure for a library caller; the CLI
 		// refuses an empty target expansion before it gets here.
@@ -439,7 +489,7 @@ func RunTargets(stdout, stderr io.Writer, targets []Target, o Options) error {
 		total.Warnings += res.Summary.Warnings
 		total.Infos += res.Summary.Infos
 
-		fail := failureOf(res, cerr, o.Soft)
+		fail := failureOf(res, cerr, o)
 		if fail != nil {
 			failed++
 			if firstFail == nil {
@@ -491,14 +541,32 @@ func RunTargets(stdout, stderr io.Writer, targets []Target, o Options) error {
 // failureOf reports the error that should fail a target's check, or nil
 // when the target is acceptable: an analysis error always fails, and
 // Error-severity diagnostics fail unless --soft downgraded them.
-func failureOf(res lang.CheckResult, cerr error, soft bool) error {
+// gates reports whether sum should drive a non-zero exit, returning the error
+// that names why. Soft short-circuits every tier; otherwise errors
+// always gate and the advisory tiers gate only under Pedantic. Shared by
+// the JSON and text paths so `--json --pedantic` cannot disagree with
+// `--pedantic`.
+func (o Opts) gates(sum lang.CheckSummary) error {
+	if o.Soft {
+		return nil
+	}
+	if sum.Errors > 0 {
+		return fmt.Errorf("check failed: %d error(s)", sum.Errors)
+	}
+	if o.Pedantic && sum.Warnings+sum.Infos > 0 {
+		return fmt.Errorf("check failed: %d warning(s), %d info (--pedantic)",
+			sum.Warnings, sum.Infos)
+	}
+	return nil
+}
+
+// failureOf is gates plus the analysis-error arm, applied per target. It
+// delegates so the multi-file path and `gates` can never drift apart.
+func failureOf(res lang.CheckResult, cerr error, o Opts) error {
 	if cerr != nil {
 		return fmt.Errorf("check error: %s", cerr)
 	}
-	if !soft && res.Summary.Errors > 0 {
-		return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
-	}
-	return nil
+	return o.gates(res.Summary)
 }
 
 // writeJSON emits the machine-readable report: the bare CheckResult
@@ -560,6 +628,13 @@ func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic, source string, 
 			fmt.Fprintln(w, block)
 		}
 	}
+}
+
+// RunWith is Run with every option carried in a struct. It is the
+// single-source spelling of RunTargets, kept because it is the shape the
+// `--pedantic` suite drives.
+func RunWith(stdout, stderr io.Writer, source string, opts Opts) error {
+	return RunTargets(stdout, stderr, []Target{{Source: source}}, opts)
 }
 
 // Preflight runs the static checker as a pre-execution gate for

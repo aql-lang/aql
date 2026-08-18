@@ -2235,7 +2235,8 @@ callee arrived as a value — `design/FN-VALUE-OPEN-WORK.0.md` §5.1);
 `Flatten` serialises it via the existing `apply` word. `DoEval` stays
 reserved — it is payloadless and cannot carry the arity. Three prerequisite
 defects are fixed first, as their own changes: the argument-literal
-skip-accounting over-count (§5.2 — the silently-wrong half), then the
+skip-accounting over-count (§5.2 — the silently-wrong half; CLOSED
+2026-08-18, pinned by `TestStackFormLiteralAccountingExact`), then the
 ADR-016 0-arg anonymous-fn gate and `apply`'s own double-recording (§5's
 two holes), so the Op does not reintroduce quiet wrongness.
 
@@ -2568,22 +2569,31 @@ behave the same everywhere.
 | `fmt` | `error: open -h: no such file or directory`, exits 1 — it has no FlagSet and reads `-h` as a path |
 | every command | never exits **0**, because `flag.ErrHelp` is reported through the same `return 1` as a rejected flag |
 
-`check` moved from fmt's behaviour to the majority's as part of the
-multi-target fix rather than inventing a fourth. The remaining
-non-uniformities are `fmt` (no FlagSet at all) and the exit code: an
-answered help request is a success, and a CI script that runs `boru fmt
--h` to probe for a flag cannot tell "no such flag" from "help printed".
+**Updated on merge with `main`:** `check` now does the RIGHT thing rather
+than the majority thing. The `--pedantic` work (PR #386) gave it a
+hand-written `printUsage` and made `-h` print to **stdout** and exit
+**0**; the multi-target rewrite preserved that through the FlagSet
+conversion instead of regressing it to `flag.ErrHelp` → exit 1. So the
+table above now has a fourth row — `check`: usage on stdout, exit 0 —
+and it is the row the others should converge on, not an anomaly.
+
+The remaining non-uniformities are `fmt` (no FlagSet at all) and the
+exit code everywhere else: an answered help request is a success, and a
+CI script that runs `boru fmt -h` to probe for a flag cannot tell "no
+such flag" from "help printed".
 
 **Evidence:** `cmd/go/internal/fmt/fmt.go` `Run` (positional loop, no
 FlagSet); `cmd/go/internal/build/build.go`, `cmd/go/internal/test/test.go`
 and `cmd/go/internal/check/check.go` (`fs.Parse` error → `return 1`);
 `cmd/go/internal/help/help.go` `helpCommand` (the instruction to run
-`-h`); `TestRunCLIHelpFlag` pins check's side.
+`-h`); `TestRunCLIHelpFlag` pins check's side, asserting exit 0 for
+`-h`/`--help`/`help` and that an unknown flag still fails.
 
 **Verdict proposed:** resolve by fix — `fmt` gains a FlagSet, and
 `flag.ErrHelp` is distinguished from a parse failure so a help request
-exits 0 across the CLI. This record retires when `boru fmt -h` and
-`boru check -h` both print their flags and exit 0.
+exits 0 across the CLI, matching what `check` already does. This record
+retires when `boru fmt -h` also prints its flags and exits 0; `check`'s
+half is done.
 	"github.com/boru-lang/boru/cmd/go/internal/flagutil"
 	// flagutil.ParseInterleaved re-parses after each positional so flags work
 	// in any position; `boru check` reuses the same helper.
