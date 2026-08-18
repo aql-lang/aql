@@ -4644,7 +4644,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 	case sig.FullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
-	case isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs):
+	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) && !es.zeroArgMemberFnLandingOut(outs):
 		// A get/dot/getr/dotr read from a container HOLDING a function member
 		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
 		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
@@ -5064,7 +5064,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []core.Value, pos co
 	if !es.Active() {
 		return false
 	}
-	if isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs) {
+	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) && !es.zeroArgMemberFnLandingOut(outs) {
 		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
 		// the interpreter invokes a container-read fn value as it lands; the
 		// VM would push it as data. Refuse the program (sound fallback).
