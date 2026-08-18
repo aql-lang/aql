@@ -178,6 +178,28 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 			ce[ext] = n
 		}
 	}
+	// The policy rides into the module body (NUR079). Without this the
+	// sub-registry has no CapPolicy, and HostPolicy(modReg) returns nil —
+	// which every gate that resolves the policy itself reads as
+	// allow-everything. The result was a bypass by relocation: a gated
+	// call refused at top level was permitted one file deeper, defeating
+	// the shipped `sandbox` / `read-only` / `compute` profiles and an
+	// explicit `--deny`.
+	//
+	// The capability-wrapping gates (fileops, and anything else installed
+	// through a SetHostX hook) were never part of the hole: they inherit
+	// the parent's ALREADY-WRAPPED backend by pointer above, so their
+	// enforcement rode along. The hole was confined to the gates that call
+	// HostPolicy(r) at dispatch — `modules.import` and the network words
+	// among them — which is why moving an `import "boru:net"` into a file
+	// module let its fetch through while a file write in the same body
+	// stayed refused.
+	//
+	// Set AFTER the SetHostX inheritance above, deliberately: those hooks
+	// auto-wrap with HostPolicy(r) when one is present, so installing the
+	// policy first would wrap the parent's already-permissioned backend a
+	// second time. One wrap, one decision, one refusal message.
+	SetHostPolicy(modReg, HostPolicy(parent))
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.BaseFile = parent.BaseFile

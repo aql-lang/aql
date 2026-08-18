@@ -2341,6 +2341,42 @@ all set `modules.words.default: deny` and would otherwise refuse every
 multi-file program. This record retires when a profile denies an in-body
 gated call and `boru check --perms <profile>` is honoured.
 
+**Progress (2026-08-18): half (i) is landed.** `runModuleBodyCover` now
+carries the parent's policy into the module sub-registry
+(`SetHostPolicy(modReg, HostPolicy(parent))`), placed AFTER the `SetHostX`
+inheritance because those hooks auto-wrap with `HostPolicy(r)` and
+installing it first would wrap the parent's already-permissioned backend a
+second time. Same policy, not a widened one, which is what the verdict's
+"attenuated, never widened" requires here — the body declares no policy of
+its own, so there is nothing to compose against. Measured against a local
+listener, `read-only` before and after:
+
+```
+before   nested import "boru:net" + Net.fetch   exit 0, server logged the request
+after    nested import "boru:net" + Net.fetch   exit 1, permission denied: modules.import, 0 requests
+```
+
+Regression test: `lang/go/native/module_policy_nur079_test.go` — a positive
+(the body's sub-registry carries the policy AND a policy-resolving gate
+refuses through it) and a negative (an unconfigured parent leaves the body
+unrestricted, so inheriting never manufactures a policy). Verified to FAIL
+with the fix removed.
+
+**Correction to the Mechanism paragraph above.** "The body executes ungated
+no matter what the parent's profile says" is too broad, and the narrower
+truth is why this was easy to miss. The capability-wrapping gates were
+never in the hole: `HostFileOps` is inherited by pointer and the parent
+already wrapped it (`SetHostFileOps` applies `NewPermissionedFileOps` when
+a policy is present), so a file write inside a module body was refused
+correctly all along. The hole was confined to gates that resolve
+`HostPolicy(r)` at dispatch — `modules.import` and the network words among
+them. Measured on the pre-fix binary under `read-only`: an in-body
+`IO.write` was denied, while an in-body `Net.fetch` succeeded.
+
+**Still open:** half (ii) — the file-module import path applying the
+natives path's three checks, and the analysis commands accepting the
+permission flags they document. The record stays Pending until both land.
+
 
 ## NUR080 — A typed def over an Integer literal loses its newtype brand under the compiler, and the bare literal gains one {#nur080}
 
