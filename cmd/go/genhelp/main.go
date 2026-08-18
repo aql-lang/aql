@@ -6,15 +6,18 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go/format"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
 
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/native/help"
@@ -97,8 +100,42 @@ func run(outPath string, errw io.Writer) error {
 				continue
 			}
 			result, err := evalExpr(wordReg, expr)
-			if err != nil || result == "" {
-				continue // skip errors (side-effect-only words, etc.)
+			if err != nil {
+				// An expression the engine REFUSES is a real result and
+				// the most useful thing `describe` can say about it —
+				// `add true false ;# error [boru/signature_error]` beats
+				// the `;# ...` placeholder the Go-side fallback prints
+				// when the map has no entry (design/roc-in-boru-report.0.md
+				// §7.4, A4). Only coded refusals are recorded: an
+				// uncoded failure is a generator bug, not documentation.
+				// `undefined_word` is an artefact of THIS registry, not a
+				// property of the example: a module word (`upper`,
+				// `xnor`, `band`, …) is undefined here only because this
+				// generator evaluates on a default registry with no
+				// imports. Recording it would document a falsehood — the
+				// word exists, it needs `import "boru:string-util"`. Skip
+				// it and let the verifier's ratchet track the gap.
+				if code := errorCode(err); code != "" && code != "undefined_word" {
+					results[expr] = "error [boru/" + code + "]"
+				}
+				continue
+			}
+			if result == "" {
+				// An empty stack is a real, stable answer — `2 drop`
+				// consumes its operand and leaves nothing — so say so
+				// rather than falling through to the `;# ...` placeholder.
+				// Only an empty STACK renders "": an empty string VALUE
+				// renders as '' (quoted), so this cannot collide.
+				results[expr] = noValueMarker
+				continue
+			}
+			if nondeterministic(result) {
+				// Identity-bearing renders (class type IDs, Pids) differ
+				// on every run, so baking one ships a value that is wrong
+				// for every reader AND makes this generator irreproducible.
+				// Leave it out; the verifier's tracked allowlist is what
+				// permits the `...` these fall back to.
+				continue
 			}
 			results[expr] = result
 		}
@@ -160,6 +197,33 @@ func seedMemFS(reg *native.Registry) error {
 	eng := native.New(reg)
 	_, err := eng.Run(prog)
 	return err
+}
+
+// noValueMarker is what `describe` prints for an example that leaves the
+// stack empty. It is a documented render, not a placeholder: the
+// verifier in lang/go/test/help_examples_test.go maps it back to the
+// empty stack when it re-runs the example.
+const noValueMarker = "(no value)"
+
+// identityRender matches the run-specific identity boru embeds in a
+// class type name (`T_4f5a79d3674a`) or a process id (`P_fd4ec55d00a0`).
+// Both are minted per run, so a result containing one cannot be a stable
+// documented value.
+var identityRender = regexp.MustCompile(`\b[TP]_[0-9a-f]{12}\b`)
+
+// nondeterministic reports whether a result embeds run-specific identity.
+func nondeterministic(result string) bool {
+	return identityRender.MatchString(result)
+}
+
+// errorCode extracts the boru error code from an engine failure, or ""
+// when the failure carries none.
+func errorCode(err error) string {
+	var be *core.BoruError
+	if errors.As(err, &be) {
+		return be.Code
+	}
+	return ""
 }
 
 func evalExpr(reg *native.Registry, expr string) (string, error) {

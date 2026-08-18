@@ -220,8 +220,9 @@ re-opening that argument.
 |---|---|---|
 | NUR079 | 0 | Pending — recorded, not started |
 | NUR080 | 0 | Pending — recorded, not started |
-| A3 | 1 | **Landed** with this plan |
-| A4, A11, A14 | 1 | Not started |
+| A3 | 1 | **Landed** (PR #386) |
+| A4 | 1 | **Landed** — examples now carry the engine's answer (`(no value)`, `error [boru/<code>]`), the generator is reproducible, and a shrink-only ratchet tracks the 38 module words the generator cannot yet evaluate |
+| A11, A14 | 1 | Not started |
 | A7, A9, A12 | 2 | Not started |
 | A6, A8, A13 | 3 | Not started |
 | A5 | 4 | Not started |

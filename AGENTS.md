@@ -40,7 +40,16 @@ Before grepping source or guessing a word's signature, **ask the binary**.
 The `boru` CLI documents both the language and itself, and that output is
 generated from the *live engine* — signatures, precedence, type lattice,
 and worked examples are the real ones the runtime uses, so they cannot
-drift from the code the way prose can. For "what does this word do / what
+drift from the code the way prose can. Each worked example carries the
+engine's own answer: a stack render, `(no value)` when the example leaves
+the stack empty, or `error [boru/<code>]` when the engine refuses it.
+`lang/go/test/help_examples_test.go` re-runs every one of them against a
+fresh engine and fails on any mismatch, so the results are gated, not
+asserted. The one gap is tracked rather than tolerated: words whose
+implementation lives in a loadable module are evaluated by the generator
+on a registry that has not imported it, so they still render a `...`
+placeholder — that set is a shrink-only ratchet in the same test, and a
+NEW placeholder is a build failure. For "what does this word do / what
 are its signatures / which module is it in", `boru describe` is the source
 of truth; reach for it first.
 

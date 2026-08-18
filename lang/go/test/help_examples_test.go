@@ -1,10 +1,12 @@
 package test
 
 import (
+	"errors"
 	"sort"
 	"strings"
 	"testing"
 
+	core "github.com/boru-lang/boru/core/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/boru-lang/boru/lang/go/native/help"
@@ -158,12 +160,23 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		helpText := help.FormatDynamic(*info)
 		examples := extractExamples(helpText)
 
-		// Filter to runnable examples (non-"..." results)
+		// Every rendered example is now checkable: a concrete stack
+		// render, `(no value)` for an empty stack, or
+		// `error [boru/CODE]` for one the engine refuses. Only the
+		// placeholder is not, and placeholderWords is the tracked,
+		// shrink-only record of where one still ships.
 		var runnable []helpExample
 		for _, ex := range examples {
-			if ex.expected != "..." {
-				runnable = append(runnable, ex)
+			if ex.expected == examplePlaceholder {
+				if !placeholderWords[word] {
+					t.Errorf("%s: example %q renders the %q placeholder; "+
+						"`describe` output is documented as engine-derived, so either "+
+						"make it evaluate or add the word to placeholderWords with a reason",
+						word, ex.expr, examplePlaceholder)
+				}
+				continue
 			}
+			runnable = append(runnable, ex)
 		}
 		if len(runnable) == 0 {
 			continue
@@ -179,10 +192,36 @@ func TestHelpExamplesCorrect(t *testing.T) {
 					// Use a fresh engine per example to avoid state leaks
 					eng := native.NewTop(reg)
 					result, err := eng.Run(vals)
+
+					// An `error [boru/CODE]` render is a claim about a
+					// refusal: the run must fail, and with that code.
+					if code, isErr := strings.CutPrefix(ex.expected, "error [boru/"); isErr {
+						code = strings.TrimSuffix(code, "]")
+						if err == nil {
+							t.Fatalf("%s ;# documented as error [boru/%s], but it succeeded with %q",
+								ex.expr, code, formatStack(result))
+						}
+						var be *core.BoruError
+						if !errors.As(err, &be) {
+							t.Fatalf("%s ;# documented as error [boru/%s], but the failure carries no code: %v",
+								ex.expr, code, err)
+						}
+						if be.Code != code {
+							t.Errorf("%s ;# documented as error [boru/%s], got [boru/%s]",
+								ex.expr, code, be.Code)
+						}
+						testedCount++
+						return
+					}
+
 					if err != nil {
 						t.Fatalf("run %q: %v", ex.expr, err)
 					}
 					got := formatStack(result)
+					// An empty stack renders as the marker, not as "".
+					if got == "" {
+						got = noValueMarker
+					}
 					if got != ex.expected {
 						t.Errorf("%s ;# got %q, want %q", ex.expr, got, ex.expected)
 					}
@@ -263,4 +302,76 @@ func extractExamples(helpText string) []helpExample {
 		}
 	}
 	return examples
+}
+
+// examplePlaceholder is what the Go-side fallback in
+// lang/go/native/help renders when the generated map has no entry for an
+// expression. It is the one example form this file cannot verify, which
+// is why its remaining sites are tracked rather than tolerated.
+const examplePlaceholder = "..."
+
+// noValueMarker mirrors cmd/go/genhelp's marker for an example that
+// leaves the stack empty.
+const noValueMarker = "(no value)"
+
+// placeholderWords records every word that still ships an example
+// rendering the `...` placeholder. It is a RATCHET: entries may be
+// removed, never added — a new placeholder is a test failure, and the
+// fix is to make the example evaluate (see cmd/go/genhelp), not to widen
+// this map.
+//
+// Every entry below has ONE cause, measured 2026-08-18: cmd/go/genhelp
+// evaluates each example on a `native.DefaultRegistry` with no imports,
+// so a word that lives in a loadable module (`boru:string-util`,
+// `boru:bin-util`, `boru:logic-util`, `boru:type-util`, `boru:debug`)
+// raises `undefined_word` there and gets no recorded result. That code
+// is deliberately NOT documented — the word is defined, it just needs an
+// import — so these fall through to the Go-side fallback. Teaching the
+// generator to load the modules before evaluating empties this map; see
+// design/ROC-ADOPTION-PLAN.0.md (A4).
+//
+// `roll` is the one exception and has a different cause: `describe`
+// renders `2 roll`, but the generator records nothing for it, so the
+// display expression and the generated expression diverge somewhere
+// between help.ExampleExprs and writeExamples.
+var placeholderWords = map[string]bool{
+	"roll":         true,
+	"band":         true,
+	"bnot":         true,
+	"bor":          true,
+	"bsl":          true,
+	"bsr":          true,
+	"busr":         true,
+	"bxor":         true,
+	"changecase":   true,
+	"concat":       true,
+	"contains":     true,
+	"create":       true,
+	"escape":       true,
+	"fnsig":        true,
+	"forward-args": true,
+	"iff":          true,
+	"implies":      true,
+	"indexof":      true,
+	"lower":        true,
+	"match":        true,
+	"nand":         true,
+	"nor":          true,
+	"normalize":    true,
+	"pad":          true,
+	"pick":         true,
+	"printstr":     true,
+	"ref":          true,
+	"remove":       true,
+	"repeat":       true,
+	"replace":      true,
+	"split":        true,
+	"stack":        true,
+	"stack-args":   true,
+	"tpartial":     true,
+	"trace":        true,
+	"trim":         true,
+	"update":       true,
+	"upper":        true,
+	"xnor":         true,
 }
