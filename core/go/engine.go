@@ -6388,24 +6388,24 @@ func (e *Engine) creditParenSurvivorSkips(closeIdx int, reStepped bool) {
 	if end > e.Tape.Len() { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		end = e.Tape.Len()
 	}
+	// A Function forfeits its credit ONLY when the main loop will re-step it,
+	// because only there does stepLiteral hand it to execFnDefLiteral without
+	// a push. Collapsed off the main loop (reStepped false) the survivor is
+	// about to be COLLECTED as a forward argument — which is the whole point
+	// of a `Function`-typed slot — and the collection hook fires OnPushLit for
+	// it once the match completes, so the credit is owed. Raised by the PR
+	// #387 review: `g (z/r) 777` into a Function slot recorded `fn z` twice
+	// without this split.
+	//
+	// Kept as one boolean rather than guard clauses: an early `continue` is a
+	// statement of its own, and a non-recordable survivor in this span is not
+	// reachable from the suites, so the guard form cannot meet ADR-008.
 	survived := 0
 	for i := e.Pointer; i < end; i++ {
 		sv := e.Tape.At(i)
-		if !IsRecordableLiteral(sv) {
-			continue
+		if IsRecordableLiteral(sv) && !(reStepped && fnValueDispatchesAtPointer(sv)) {
+			survived++
 		}
-		// A Function forfeits its credit ONLY when the main loop will re-step
-		// it, because only there does stepLiteral hand it to execFnDefLiteral
-		// without a push. Collapsed off the main loop (reStepped false) the
-		// survivor is about to be COLLECTED as a forward argument — which is
-		// the whole point of a `Function`-typed slot — and the collection hook
-		// fires OnPushLit for it once the match completes, so the credit is
-		// owed. Raised by the PR #387 review: `g (z/r) 777` into a Function
-		// slot recorded `fn z` twice without this split.
-		if reStepped && fnValueDispatchesAtPointer(sv) {
-			continue
-		}
-		survived++
 	}
 	if survived > 0 {
 		skipper.Skip(survived)
