@@ -2229,7 +2229,8 @@ callee arrived as a value — `design/FN-VALUE-OPEN-WORK.0.md` §5.1);
 `Flatten` serialises it via the existing `apply` word. `DoEval` stays
 reserved — it is payloadless and cannot carry the arity. Three prerequisite
 defects are fixed first, as their own changes: the argument-literal
-skip-accounting over-count (§5.2 — the silently-wrong half), then the
+skip-accounting over-count (§5.2 — the silently-wrong half; CLOSED
+2026-08-18, pinned by `TestStackFormLiteralAccountingExact`), then the
 ADR-016 0-arg anonymous-fn gate and `apply`'s own double-recording (§5's
 two holes), so the Op does not reintroduce quiet wrongness.
 

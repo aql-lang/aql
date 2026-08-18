@@ -6327,16 +6327,77 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // have CALLED it". A looser test (dropping the TFunction check, so a Function
 // reparented to a refined function type also parks) would step past a value
 // stepLiteral would merely have pushed, silently losing its OnPushLit for any
-// installed Recorder. Keep the two in lockstep if either moves.
+// installed Recorder. That mirroring is why the test lives in the shared
+// fnValueDispatchesAtPointer rather than being spelled twice.
 func (e *Engine) fnReturnPark(idx, closeIdx int, wasFrameOpen bool) int {
 	if !wasFrameOpen || closeIdx != idx+2 || idx >= e.Tape.Len() {
 		return 0
 	}
-	v := e.Tape.At(idx)
-	if v.Parent.Equal(TFunction) && isFnDefValue(v) && !v.Quoted {
+	if fnValueDispatchesAtPointer(e.Tape.At(idx)) {
 		return 1
 	}
 	return 0
+}
+
+// fnValueDispatchesAtPointer reports whether the main loop, on re-encountering
+// v at the pointer, would hand it to execFnDefLiteral rather than PUSH it as a
+// literal. It is stepLiteral's dispatch guard verbatim — same three clauses,
+// same order — and is the single home of that test: fnReturnPark asks it to
+// decide whether a fn frame's return is a delivery, and stepCloseParen's
+// recorder accounting asks it to decide whether a survivor will fire OnPushLit.
+// Keep it in lockstep with stepLiteral if that guard ever moves.
+//
+// The recorder half matters because the two answers must agree: a value that
+// dispatches (or is stepped past) never fires OnPushLit, so crediting it a
+// skip leaves an unspendable credit that silently swallows the NEXT real
+// literal — design/FN-VALUE-OPEN-WORK.0.md §5.2.
+func fnValueDispatchesAtPointer(v Value) bool {
+	return v.Parent.Equal(TFunction) && isFnDefValue(v) && !v.Quoted
+}
+
+// creditParenSurvivorSkips tells an installed RecorderSkipper how many of the
+// just-collapsed paren's survivors it should ignore when the rewind makes the
+// main loop re-encounter them: they were already emitted to the recorder
+// during the in-paren execution (via stepLiteral, or via execMatch for handler
+// results). Free-function body of stepCloseParen's recorder hook, extracted
+// for that function's cyclomatic cap (NUR038).
+//
+// A survivor earns a credit only if the re-step would fire OnPushLit for it.
+// Two kinds never do, and crediting either leaves an unspendable skip that
+// silently swallows the NEXT real literal:
+//   - a FUNCTION VALUE, which execFnDefLiteral dispatches (or, for the
+//     ADR-016 0-arg anonymous gate, steps past) — never a push;
+//   - the PARKED return, the one survivor the rewind steps past.
+//
+// fnValueDispatchesAtPointer answers both: a park is by construction a value
+// that satisfies it, so excluding dispatchers covers the parked case too and
+// no `park` term is subtracted here. (The park half was raised on PR #375;
+// the function-value half is design/FN-VALUE-OPEN-WORK.0.md §5.2, same class
+// as the frame-skeleton over-count fixed in 9bffdd3.)
+//
+// closeIdx is the CloseParen's PRE-removal index, so the surviving contents
+// now sit at [openIdx .. closeIdx-2] inclusive — the same span as
+// [openIdx, closeIdx-1) in the original indices, minus 1 for the removed
+// OpenParen.
+func (e *Engine) creditParenSurvivorSkips(openIdx, closeIdx int) {
+	skipper, ok := e.recorder.(RecorderSkipper)
+	if !ok || e.recorder == nil {
+		return
+	}
+	end := closeIdx - 1
+	if end > e.Tape.Len() { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+		end = e.Tape.Len()
+	}
+	survived := 0
+	for i := openIdx; i < end; i++ {
+		sv := e.Tape.At(i)
+		if IsRecordableLiteral(sv) && !fnValueDispatchesAtPointer(sv) {
+			survived++
+		}
+	}
+	if survived > 0 {
+		skipper.Skip(survived)
+	}
 }
 
 // viableConsumesAt reports whether any still-viable signature collects a
@@ -7757,10 +7818,12 @@ func (e *Engine) stepCloseParen() error {
 	// stepCloseParen complexity cap (NUR038).
 	e.tagReachCollapsedFn(openIdx, closeIdx, wasReachGroup)
 
-	// Computed once: the park drives BOTH the rewind below and the recorder's
-	// skip count, and the two must agree. Read here — after the pair removals,
-	// with closeIdx still the pre-removal index CheckModeParenFnCollapse may
-	// have rewritten above.
+	// The park drives the REWIND below, and nothing else: the recorder's skip
+	// count asks fnValueDispatchesAtPointer about each survivor directly
+	// rather than subtracting this (§5.2), so the two no longer have to be
+	// kept in agreement. Read here — after the pair removals, with closeIdx
+	// still the pre-removal index CheckModeParenFnCollapse may have rewritten
+	// above.
 	park := e.fnReturnPark(openIdx, closeIdx, wasFrameOpen)
 
 	// Recorder hook: the values that survived inside the paren will
@@ -7768,34 +7831,10 @@ func (e *Engine) stepCloseParen() error {
 	// to openIdx (below). They were already emitted to the recorder
 	// during the in-paren execution (via stepLiteral or via execMatch
 	// for handler results), so tell a SkipRecorder to ignore the
-	// next round.
-	// A PARKED return is the one survivor the rewind steps PAST, so it is
-	// never re-encountered and must not be skipped — otherwise the pending
-	// skip swallows the next real literal instead. (Raised on PR #375; it was
-	// unobservable until the frame-skeleton over-count above was fixed,
-	// because that over-count kept the counter far from zero.)
-	if skipper, ok := e.recorder.(RecorderSkipper); ok && e.recorder != nil {
-		survived := -park
-		// Contents now sit at [openIdx .. closeIdx-2] inclusive.
-		// (closeIdx was the position of the CloseParen BEFORE the
-		// pair removals; both removals happened above so the
-		// surviving content occupies indices openIdx through
-		// closeIdx-2 in the new stack — same as [openIdx, closeIdx-1)
-		// in the original stack indices, minus 1 for the removed
-		// OpenParen.)
-		end := closeIdx - 1
-		if end > e.Tape.Len() { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-			end = e.Tape.Len()
-		}
-		for i := openIdx; i < end; i++ {
-			if IsRecordableLiteral(e.Tape.At(i)) {
-				survived++
-			}
-		}
-		if survived > 0 {
-			skipper.Skip(survived)
-		}
-	}
+	// next round. Extracted to creditParenSurvivorSkips for the
+	// stepCloseParen complexity cap (NUR038), same reason as
+	// fnReturnPark and tagReachCollapsedFn above.
+	e.creditParenSurvivorSkips(openIdx, closeIdx)
 
 	// Rewind onto the collapsed region so the main loop re-encounters what
 	// survived — stepping past a fn frame's Function return, which is a

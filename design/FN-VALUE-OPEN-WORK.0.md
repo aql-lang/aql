@@ -15,7 +15,7 @@
 | A | **Clause 3** — "parens do not re-step" | Measured three ways. **RULED 2026-08-17: BROAD** (§1.1); fix not yet built. | Nobody — unblocked (§2) |
 | B | **Clause 2** — passing a function requires `/r` | Mechanism located (4 sites, ~56 lines). Blast radius **3 rows**, not 9. **ADR-011 amended 2026-08-17**; all four sites retire together (§1.1). | Nobody — unblocked (§3) |
 | C | **Break 2** — compiler refuses a 0-arg fn read from a plain container | **CLOSED 2026-08-17**: the arrival model claims the empty-window arity-0 landing (`tryMemberFnArrivalDispatch`), the read guards skip a pinpointed genuine-0-arg member read (`zeroArgMemberFnLandingOut`), and a landing the model cannot claim re-refuses (guard-owned decline). Pinned in `lang/spec/ref.tsv` §3 (4 rows) and the graduated bytecode pins. | — done (§4) |
-| D | **NUR077** — a StackForm cannot apply a function value | Design sketch tested. **RULED 2026-08-17: a new dedicated Apply Op** (§1.1). Two holes to close first — see §5 before building. | Nobody — unblocked (§5) |
+| D | **NUR077** — a StackForm cannot apply a function value | Design sketch tested. **RULED 2026-08-17: a new dedicated Apply Op** (§1.1). Prerequisite 1 of 3 (§5.2's over-count) **CLOSED 2026-08-18**; the two §5 holes remain — see §5 before building. | Nobody — unblocked (§5) |
 
 ### 1.1 The 2026-08-17 maintainer rulings
 
@@ -78,13 +78,19 @@ The `ReachGroup` exclusion is still load-bearing. Without it `MathUtil.sqrt 16`
 fails, because dot access lowers to `( MathUtil dot sqrt )` and its re-step
 *is* the dispatch.
 
-**One hazard the earlier measurement could not see.** Since #378, `park` also
-feeds the recorder-skip accounting (`survived := -park`,
-`core/go/engine.go:7778`). Broadening the park therefore silently broadens that
-adjustment to every user paren — and `TestSpecProd` installs no recorder, so
-the corpus measurement below **does not exercise that half**. Whoever
-implements this must measure `TestSpecCompiledDifferential` and the stackform
-round-trip suite too.
+**One hazard the earlier measurement could not see — since RETIRED.** Between
+#378 and 2026-08-18 `park` also fed the recorder-skip accounting
+(`survived := -park`), so broadening the park would silently have broadened
+that adjustment to every user paren. The §5.2 fix removed that coupling: the
+skip loop now asks `fnValueDispatchesAtPointer` about each survivor directly
+and subtracts no `park` term, so `park` drives only the rewind. Broadening it
+for clause 3 therefore no longer perturbs the recorder.
+
+That does not retire the MEASUREMENT, only the coupling: `TestSpecProd`
+installs no recorder, so whoever implements clause 3 must still run
+`TestSpecCompiledDifferential` and the stackform round-trip suite — a broader
+park changes which survivors are stepped past, and the skip predicate is
+evaluated over exactly those survivors.
 
 ### 2.2 The corrected count: 30 rows, not 31
 
@@ -366,7 +372,18 @@ So an `OnApply` placed where the marker is today would leave the named shape
 exactly as broken. The event has to fire in **`execFnDefLiteral`**
 (`:5054`) — the only site that knows the callee arrived as a value and holds it.
 
-### 5.2 What the Apply Op does *not* fix
+### 5.2 What the Apply Op does *not* fix — CLOSED 2026-08-18
+
+> **Fixed.** `stepCloseParen`'s skip accounting now credits a survivor only
+> when the re-step would actually fire `OnPushLit`, via the shared
+> `fnValueDispatchesAtPointer` (which is `stepLiteral`'s dispatch guard, and
+> which `fnReturnPark` now also calls instead of spelling the test twice).
+> Excluding dispatchers subsumes the parked case — a park is by construction
+> such a value — so the separate `-park` subtraction is gone. Pinned by
+> `TestStackFormLiteralAccountingExact`
+> (`lang/go/test/stackform_equivalence_test.go`): 5 of its 6 cases fail
+> without the fix, and the non-function control passes either way. The
+> account below is the diagnosis, kept as the record of what was wrong.
 
 The applied function's **argument literals are dropped**, at every arity, in
 every application shape. That is a **skip-accounting over-count**, not a
@@ -376,9 +393,18 @@ both the producing call's `returns` count and `stepCloseParen`'s
 unspendable credit, and the surplus eats the next real literal. Control: with a
 non-function paren result the balance is exact at every depth.
 
+Measured before the fix: `(z/r) 777` recorded no `777` at all; `(z/r) 777 888`
+kept only `888`; `(inc/r) 5 777` lost the `5` it is called with. Measured
+after: every one of those literals is present, at every nesting depth tried.
+The `returns` half needed no separate change — with the paren credit exact,
+the bare `mk 777 888` shape (a call returning a Function) records and replays
+faithfully.
+
 Same class as the frame-skeleton over-count fixed in `9bffdd3`, different
-instance. **Fix this before or alongside the Op, not after** — the Op cannot
-make these forms faithful on its own.
+instance. **Fixing it first was required** — the Op cannot make these forms
+faithful on its own, and the strand that remains in these shapes
+(`eval` yields `[fn z 42 777]` where the direct run gives `[42 777]`) is
+NUR077's own defect, which only the Op closes.
 
 ### 5.3 Three shapes are still silently wrong
 
@@ -435,8 +461,9 @@ the code no longer does:
 
 1. **C (break 2)** — unblocked, smallest, best understood, and it starts by
    adding a frontier row that gives the shape a graduation target.
-2. **D's over-count half** (§5.2) — independent of the Op, same class as a fix
-   already landed, and it is the part that is silently wrong today.
+2. ~~**D's over-count half** (§5.2)~~ — **DONE 2026-08-18.** Independent of the
+   Op, same class as a fix already landed, and it was the part that was
+   silently wrong.
 3. **A (clause 3)** once ruled — and note §2.1's warning that `park` now feeds
    the recorder skip, so the compiled differential must be measured too.
 4. **B (clause 2)** once ADR-011 is amended — cheap in the corpus (3 rows), but
