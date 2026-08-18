@@ -4644,7 +4644,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 	case sig.FullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
-	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
+	case isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs):
 		// A get/dot/getr/dotr read from a container HOLDING a function member
 		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
 		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
@@ -4660,7 +4660,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 		// is exempt the same way: tryMemberFnArrivalDispatch owns its
 		// landing (the break-2 closure) and re-refuses what it cannot claim.
 		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3) [MONOPATH]")
 	case word == "args" || word == "__pa":
 		// `args` reads the interpreter's per-call args stack, which the
 		// VM's CALL_USER frame does not maintain (it binds params to
@@ -5064,14 +5064,14 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []core.Value, pos co
 	if !es.Active() {
 		return false
 	}
-	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
+	if isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs) {
 		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
 		// the interpreter invokes a container-read fn value as it lands; the
 		// VM would push it as data. Refuse the program (sound fallback).
 		// Annotated shaped-method reads and pinpointed genuine-0-arg member
 		// reads are exempt (see recordCallRefusal).
 		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3) [POLYPATH]")
 		return true
 	}
 	ops := make([]EmitOperand, len(args))

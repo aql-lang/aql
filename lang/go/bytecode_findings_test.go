@@ -3605,6 +3605,14 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	refusals := []struct{ name, src, want string }{
 		{"multi-overload 0-arg member", `def z fn [[] [Integer] [42] [n:Integer] [Integer] [n]]  def m {k: z/r}  (m.k)`, "auto-dispatches"},
+		// The read guard's OWN remaining territory after the break-2 closure:
+		// a tracked instance read whose KEY does not resolve statically. The
+		// risk is known per-instance (instanceFnFieldRisk's unresolvable-key
+		// arm reports any tracked field) but the member is not pinpointed
+		// (instanceFnMember reports nothing without a concrete key), so no
+		// landing model owns it and the guard refuses — the division of
+		// labour instanceFnMember's own comment states.
+		{"unpinpointable instance key", `def make42 fn [[] [Integer] [42]] def C class {fld:Function} def o (make C {fld:make42/r}) def keyof fn [[n:Integer] [Atom] [if (n gt 0) [fld/q] [other/q]]] (o get (keyof 1))`, "auto-dispatches"},
 		{"nested-factory curried chain", `def mk fn [[a:Integer] [Function] [([b:Integer] => [([c:Integer] => [a add b add c])])]]  (((mk 1) 2) 3)`, "arity mismatch"},
 	}
 	for _, c := range refusals {
