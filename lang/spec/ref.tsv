@@ -32,6 +32,10 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (ref sub2) 10 3	7	ref ≡
 # §3  Reference stored in a map slot dispatches via dot-access
 def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: inc/r}  ops.f 5	6	/r in a map slot dispatches
 def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: (ref inc)}  ops.f 5	6	ref in a map slot dispatches
+def z fn [[][Integer][42]]  def ops {f: z/r}  (ops.f)	42	a 0-arg /r in a map slot courtesy-dispatches on the read (break 2: compiled as an arity-0 dyn-method apply)
+def z fn [[][Integer][42]]  def ops {f: z/r}  ops.f	42	the bare 0-arg read courtesy-dispatches too
+def z fn [[][Integer][42]]  def ops {f: z/r}  (ops get f/q) add 1	43	the get spelling of the same 0-arg read, consumed downstream
+def z fn [[][Integer][42]]  def lst [z/r]  (lst get 0)	42	a 0-arg /r in a LIST slot courtesy-dispatches by concrete index
 #
 # §4  Reference handed to `apply` (stack form: args... fn/r apply)
 def inc fn [[n:Integer][Integer][n add 1]]  5 inc/r apply	6	apply invokes a referenced fn against stack args

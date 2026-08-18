@@ -330,8 +330,10 @@ func TestMemberFnArrivalDeclineFences(t *testing.T) {
 		{"list member", `def d fn [[n:Integer][Integer][n mul 2]] def lst [d/r] (lst get 0) 21 eq 42`, true, "[true]"},
 		// Anonymous lambda member: no name for the model — sound refusal.
 		{"anonymous member", `def m {double: ([n:Integer] => [n mul 2])} m.double 21 eq 42`, false, "[true]"},
-		// 0-arg member: the read-guard's auto-fire class — sound refusal.
-		{"zero-arg member", `def z fn [[][Integer][7]] def m {z: z/r} m.z eq 7`, false, "[true]"},
+		// 0-arg member: the arrival model claims the empty-window arity-0
+		// landing (the break-2 closure, FN-VALUE-OPEN-WORK §4) — the
+		// courtesy dispatch compiles as an arity-0 OpCallDynMethod.
+		{"zero-arg member", `def z fn [[][Integer][7]] def m {z: z/r} m.z eq 7`, true, "[true]"},
 		// Quoted-param member: the arrival model's plain-value-args
 		// assumption fails, so the COMPILE declines — but the interpreter
 		// now runs it right: the NUR038 arrival path converts the bare

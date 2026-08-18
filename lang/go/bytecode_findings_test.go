@@ -3590,19 +3590,21 @@ func TestFnBodyContainerLiteralIdentity(t *testing.T) {
 	}
 }
 
-// Mechanism E remainders (design/MISCOMPILE-HUNT-FINDINGS.0.md) — the
-// deferred-field auto-invoke and the nested-factory curried chain. Both
-// REFUSE (sound fallback): the interpreter auto-applies at the paren
-// collapse / per closure arity, which one OpCallDynamic cannot model.
+// Mechanism E remainders (design/MISCOMPILE-HUNT-FINDINGS.0.md). The
+// deferred-field auto-invoke family GRADUATED (the break-2 closure,
+// FN-VALUE-OPEN-WORK §4): a pinpointed genuine-0-arg member read compiles
+// as an arity-0 OpCallDynMethod — its rows moved to `preserved` below. A
+// 0-arg landing the arrival model cannot claim still REFUSES with the
+// guard's own reason (declineMemberFnArrival), and the nested-factory
+// curried chain refuses as before: the interpreter auto-applies per
+// closure arity, which one OpCallDynamic cannot model.
 func TestFnValueAutoApplyRefusals(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
 	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	refusals := []struct{ name, src, want string }{
-		{"deferred-field dot auto-invoke", `def make42 fn [[] [Integer] [42]]  {f:make42/r}.f`, "auto-dispatches"},
-		{"paren get auto-invoke", `def make42 fn [[] [Integer] [42]]  def m {f:make42/r}  (m get f/q)`, "auto-dispatches"},
-		{"bare read auto-invokes too", `def f fn [[] [Integer] [7]]  {b:f/r} dot b`, "auto-dispatches"},
+		{"multi-overload 0-arg member", `def z fn [[] [Integer] [42] [n:Integer] [Integer] [n]]  def m {k: z/r}  (m.k)`, "auto-dispatches"},
 		{"nested-factory curried chain", `def mk fn [[a:Integer] [Function] [([b:Integer] => [([c:Integer] => [a add b add c])])]]  (((mk 1) 2) 3)`, "arity mismatch"},
 	}
 	for _, c := range refusals {
@@ -3631,12 +3633,17 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 	// PRESERVED coverage: fn-free container reads (paren or bare), APPLIED
 	// member calls (a multi-param member fed its args — the method-through-map
 	// pattern, whose phantom parked 0-arg sig must NOT read as auto-dispatch
-	// risk), and the single-apply factory keep compiling.
+	// risk), the single-apply factory, and the GRADUATED break-2 family —
+	// pinpointed genuine-0-arg member reads whose courtesy dispatch now
+	// compiles as an arity-0 OpCallDynMethod — all keep compiling.
 	preserved := []string{
 		`({a:1 b:2} get b/q) add 1`,
 		`{a:1 b:2} dot b`,
 		`def add1 fn [[x:Integer] [Integer] [x add 1]]  {f:add1/r}.f 5`,
 		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  ((mk 5) 10)`,
+		`def make42 fn [[] [Integer] [42]]  {f:make42/r}.f`,
+		`def make42 fn [[] [Integer] [42]]  def m {f:make42/r}  (m get f/q)`,
+		`def f fn [[] [Integer] [7]]  {b:f/r} dot b`,
 	}
 	for _, src := range preserved {
 		gotC, compiled, errC := mustNew(t).RunCompiled(src)
@@ -4209,19 +4216,15 @@ func TestPR225P1Refusals(t *testing.T) {
 	// (2) A class-instance field holding a genuinely-0-param fn: the
 	// interpreter auto-dispatches the read (42); the instance receiver is a
 	// schema CARRIER at record time, so the hazard is tracked at make time
-	// by instance ID (noteFnRiskFields) — the read must refuse.
+	// by instance ID (noteFnRiskFields) and the member rides the
+	// construction-time note (instanceFnMember). GRADUATED (the break-2
+	// closure): the pinpointed genuine-0-arg member's landing compiles as
+	// an arity-0 OpCallDynMethod with parity.
 	const classFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function} def o (make C {f:make42/r}) o.f`
-	prog2, reason2, _, _ := mustNew(t).CompileCheck(classFn)
-	if prog2 != nil {
-		t.Fatalf("class fn-field read compiled; want refusal")
-	}
-	if !strings.Contains(reason2, "auto-dispatches") {
-		t.Errorf("refusal reason = %q; want the auto-dispatch reason", reason2)
-	}
 	gotC2, compiled2, errC2 := mustNew(t).RunCompiled(classFn)
 	gotI2, errI2 := mustNew(t).Run(classFn)
-	if compiled2 || errC2 != nil || errI2 != nil || fmt.Sprint(gotC2) != fmt.Sprint(gotI2) || fmt.Sprint(gotI2) != "[42]" {
-		t.Errorf("fallback parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want [42])",
+	if !compiled2 || errC2 != nil || errI2 != nil || fmt.Sprint(gotC2) != fmt.Sprint(gotI2) || fmt.Sprint(gotI2) != "[42]" {
+		t.Errorf("compiled parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want compiled [42])",
 			compiled2, errC2, errI2, gotC2, gotI2)
 	}
 

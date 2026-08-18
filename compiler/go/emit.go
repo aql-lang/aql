@@ -4644,7 +4644,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 	case sig.FullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
-	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
+	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
 		// A get/dot/getr/dotr read from a container HOLDING a function member
 		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
 		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
@@ -4655,7 +4655,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 		// RECEIVER signal: reads from fn-free containers are unaffected. An
 		// ANNOTATED shaped-method read (shapedReadOut) is exempt: its landing
 		// is modelled by tryShapedMethodDispatch, whose guard-owned decline
-		// re-refuses, so the guard is re-homed rather than weakened.
+		// re-refuses, so the guard is re-homed rather than weakened. A
+		// PINPOINTED genuine-0-arg member read (zeroArgMemberFnLandingOut)
+		// is exempt the same way: tryMemberFnArrivalDispatch owns its
+		// landing (the break-2 closure) and re-refuses what it cannot claim.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 	case word == "args" || word == "__pa":
@@ -5061,11 +5064,12 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []core.Value, pos co
 	if !es.Active() {
 		return false
 	}
-	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
+	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && !es.zeroArgMemberFnLandingOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
 		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
 		// the interpreter invokes a container-read fn value as it lands; the
 		// VM would push it as data. Refuse the program (sound fallback).
-		// Annotated shaped-method reads are exempt (see recordCallRefusal).
+		// Annotated shaped-method reads and pinpointed genuine-0-arg member
+		// reads are exempt (see recordCallRefusal).
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 		return true
@@ -5563,6 +5567,25 @@ func (es *EmitState) NoteShapedRead(id string) {
 		es.shapedReads = map[string]bool{}
 	}
 	es.shapedReads[id] = true
+}
+
+// zeroArgMemberFnLandingOut reports whether any dispatch out is a
+// PINPOINTED container-member fn read (noteMemberFnRead with the member
+// value) whose member carries a GENUINE 0-arg overload — the break-2
+// closure (design/FN-VALUE-OPEN-WORK.0.md §4). The read guard skips its
+// auto-dispatch refusal for such a read because the arrival model owns
+// the landing: tryMemberFnArrivalDispatch claims an empty-window arity-0
+// OpCallDynMethod, and its guard-owned decline re-refuses any 0-arg
+// landing it cannot claim — the guard is re-homed, never weakened. A tag
+// WITHOUT the member value (a computed-key scan) never exempts: the
+// landing model cannot pinpoint what it would apply.
+func (es *EmitState) zeroArgMemberFnLandingOut(outs []core.Value) bool {
+	for _, o := range outs {
+		if m, ok := es.MemberFnReadValue(o.ID); ok && core.FnValueZeroArg(m) {
+			return true
+		}
+	}
+	return false
 }
 
 // shapedReadOut reports whether any dispatch out is an annotated shaped
