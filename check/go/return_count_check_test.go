@@ -39,7 +39,7 @@ func TestReturnCountConformanceFlagsExcess(t *testing.T) {
 	stk := []core.Value{core.NewInteger(1), core.NewInteger(2)}
 	checkBodyReturnConformance(r, "r2", []*core.Type{core.TInteger}, nil, 0, true, stk, core.SrcPos{Row: 1, Col: 1}, core.SrcPos{})
 
-	// ADR-017: the values ride in the detail, and the detail is the dedup
+	// The values ride in the detail, and the detail is the dedup
 	// key — so the slice passed here must be the same one the checker
 	// renders (stk minus the unnamed allowance, 0 here).
 	want := core.ReturnCountErrorText("r2", 1, 2, stk)

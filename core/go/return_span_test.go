@@ -77,7 +77,7 @@ func TestReturnCountErrorDeclSpan(t *testing.T) {
 		sp.Source != "src" || sp.File != "mod.boru" {
 		t.Errorf("decl span = %+v", sp)
 	}
-	// ADR-017: the detail names the values it is about.
+	// The detail names the values it is about.
 	if !strings.Contains(ae.Detail, "got 1 — [7]") {
 		t.Errorf("detail must show the values, got %q", ae.Detail)
 	}

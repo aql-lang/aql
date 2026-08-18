@@ -25,7 +25,8 @@ func ReturnTypeErrorText(funcName string, index int, expected *Type, got Value) 
 // returnCountErrorText is the detail for funcName leaving the wrong number of
 // return values (expected vs got), followed by the values themselves.
 //
-// ADR-017: a diagnostic names the values it is about. "expected 1 return
+// A diagnostic names the values it is about
+// (design/DIAGNOSTIC-VALUES.0.md). "expected 1 return
 // value(s), got 2" states a disagreement over a COUNT and then withholds
 // the one thing that identifies which values are involved — leaving the
 // reader to work out what the second value even was. `got` and the

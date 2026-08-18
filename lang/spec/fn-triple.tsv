@@ -88,3 +88,10 @@ def mk fn [[] ['integr'] [1]]  mk	ERROR:type_error	…while a lowercase string c
 # explicit `{…}` map does not and IS the type.
 def f fn [[{x: Integer}] [Integer] [1]]  f {x:1}	1	an EXPLICIT map input declares one Map-typed param, not a named binding
 def f fn [[x:Integer] [Integer] [x]]  f 9	9	…while the pair spelling names the param and binds it in the body
+#
+# A named return reduces its annotation before resolving, exactly as a
+# named PARAM does. Left raw, a parenthesised annotation falls to the
+# TAny tail and the declared union enforces nothing.
+def f fn [x:Integer y:(Integer tor String) [x]]  f 1	1	a named union return admits a member of the union
+def f fn [x:Integer y:(Integer tor String) [true]]  f 1	ERROR:type_error	…and rejects a value outside it, rather than degrading to a wildcard
+def f fn [[Integer] [(Integer tor String)] [true]]  f 1	ERROR:type_error	the unnamed spelling of the same declaration reads alike

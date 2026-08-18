@@ -39,6 +39,11 @@ answer and printed the arithmetic instead.
 
 **A diagnostic names the values it is about.**
 
+This is a proposed general rule, recorded here rather than in `ADR.md`:
+only a maintainer promotes it to an ADR. What LANDED is the one
+diagnostic below; the rule is the reasoning behind it, and §5 lists what
+adopting it wholesale would touch.
+
 Not the count of them, not their types alone — the values, rendered.
 Types are already shown where they are the subject (`expected String,
 got Integer`); this rule is about the case where the message's subject

@@ -1017,7 +1017,8 @@ func (e *Engine) stripTapeAscriptions(lo, hi int) {
 }
 
 // values are the residual values the `got` count was taken over, shown in
-// the message per ADR-017 — the caller slices them so the rendered list
+// the message (design/DIAGNOSTIC-VALUES.0.md) — the caller slices them
+// so the rendered list
 // and the count can never describe different things.
 func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int, values []Value) *BoruError {
 	return BuildReturnCountError(e.effectiveSource(), rc.FuncName, expected, got, values, rc.Pos, rc.Decl)

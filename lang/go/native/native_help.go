@@ -305,28 +305,55 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 }
 
 // SigReturnNames names a signature's return types for the introspection
-// surfaces. Running the handler to observe its result is not feasible,
-// so the hand-tuned per-word table comes first: inferExact and the
-// category rules know more about a builtin than its declared slot type
-// does, and many builtins declare no Returns at all.
+// surfaces. `describe` and `inspect` both call it, so the two cannot
+// disagree about what a function returns.
 //
-// Nothing inferred means the word is in no builtin table — which is
-// every USER-DEFINED fn. Its return types are not a guess: they are the
-// declaration. Falling back to them is what stops `describe` printing a
-// blank return column for `def g fn [[s:String] [Integer] […]]` while
-// the generated example line right below it says `;# Integer`.
+// A DECLARED return wins. Running the handler to observe its result is
+// not feasible, so for a native the hand-tuned per-word table comes
+// first: inferExact and the category rules know more about a builtin
+// than its declared slot type does (`add` declares Number and infers
+// Integer for two Integers), and many builtins declare no Returns at
+// all. But that table is keyed on the NAME alone, so it answered for a
+// user fn that happens to shadow a builtin — `def upper fn x:Integer
+// [Integer] [x]` reported `Scalar/String`, a contract the function does
+// not have. sigIsDefined draws the line: a signature with a body is
+// boru-source, and its declaration is not a guess.
 //
-// `describe` and `inspect` both call this, so the two introspection
-// surfaces cannot disagree about what a function returns.
+// Where a return carries a PATTERN, the pattern is the contract and the
+// *Type is the weaker half. A literal return type admits exactly itself
+// (design/FN-OUTPUT-SIG.0.md), so `def f fn x:String 22 [22]` returns
+// `22`, not `Integer`; a declared union degrades its type to `Any` and
+// keeps the whole domain in the pattern. Reporting the type alone named
+// a contract wider than the one enforced.
 func SigReturnNames(name string, sig Signature) []string {
-	if ret := inferReturns(name, sig); len(ret) > 0 {
-		return ret
+	if !sigIsDefined(sig) {
+		if ret := inferReturns(name, sig); len(ret) > 0 {
+			return ret
+		}
 	}
 	out := make([]string, 0, len(sig.Returns))
-	for _, t := range sig.Returns {
+	for i, t := range sig.Returns {
+		if i < len(sig.ReturnPatterns) && sig.ReturnPatterns[i] != nil {
+			out = append(out, sig.ReturnPatterns[i].String())
+			continue
+		}
 		out = append(out, t.String())
 	}
 	return out
+}
+
+// sigIsDefined reports whether this signature belongs to a boru-defined
+// word rather than a Go-registered native — the test for whether the
+// name-keyed builtin table may speak for it.
+//
+// A body is what a native never has. The synthetic 0-arg fallback has
+// no body either, but `Fallback` is only ever set on the catch-all
+// injected for a boru word (Registry.fnFallbackSig), so it counts as
+// defined too: it declares no returns, and rendering none is right,
+// where letting the table answer would have it report the return type
+// of the builtin the word shadows.
+func sigIsDefined(sig Signature) bool {
+	return sig.Fallback || len(sig.Body()) > 0
 }
 
 // inferReturns attempts to determine return types for a signature.

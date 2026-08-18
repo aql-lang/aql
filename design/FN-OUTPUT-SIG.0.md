@@ -95,7 +95,21 @@ Consequences:
 - `name:Type` works in the output slot, because `fn [x:A y:B [body]]`
   IS `fn [[x:A] [y:B] [body]]` and the two slots must read one shape one
   way. The name is documentation: `FnSig` has no named-return concept
-  and nothing downstream reads it.
+  and nothing downstream reads it. Both spellings of the pair are
+  accepted, because both slots must serve both tokenizers: the implicit
+  map the production parser lowers to, and the single Word
+  (`NewWord("i:Integer")`) a whitespace-only lexer produces — the
+  borueng and checker spec runners, for which `ParseFnParams` has always
+  carried the same arm.
+- **The value side is reduced before it is resolved**, by one
+  `EvalSigTypeExpr` shared with `ParseFnParams`. A sugar marker expands
+  and a parenthesised annotation is RUN, so `y:(Integer tor String)`
+  reaches `ResolveSigType` as the disjunct it denotes. Skipping the step
+  is a fresh instance of this note's own failure mode: the raw
+  `ParenExpr` falls to the `TAny` tail, and a declared union return
+  enforces nothing while the identical annotation on a *param* is
+  enforced. A failed or multi-valued annotation is a declaration-time
+  error, never a silent wildcard.
 - An explicit map (`{i: Integer}`) still declares a Map-typed return —
   the same `Implicit` split `ParseFnParams` draws for a Map-typed param.
 - `OutputSigIsConcreteReturns`, `IsSigTypeValue`, `isSigTypeName` and
@@ -115,6 +129,13 @@ which declares the literal return type AND produces it. Explicit, and
 one token longer.
 
 ### A String literal is a literal type
+
+The name an Atom is resolved by comes from `AsAtom`. An Atom carries
+`AtomPayload`, not `StrPayload`, so the shared `AsString` extraction
+answered `""` and every lookup below missed — invisible while a missed
+lookup was a hard error either way, but the fallback below turns a miss
+into a literal, which would have made `Integer/q` an Atom pattern
+instead of `TInteger`.
 
 `ResolveSigType` resolved a String or Atom as a type NAME and errored if
 it named none — reachable only because the sugar caught non-type strings
@@ -147,14 +168,31 @@ value(s)" span that the list form got. The pair's own VALUE keeps its
 position (`Integer` at 1:22), so `sigDeclPos` descends to the first
 positioned value inside and anchors on the declared type itself.
 
-**`describe` and `inspect` under-reported.** `BuildFuncInfo` discarded
-the declared `sig.Returns` and asked `inferReturns`, whose tables cover
+**`describe` and `inspect` under-reported, three ways.** `BuildFuncInfo`
+discarded the declared `sig.Returns` and asked `inferReturns`, whose tables cover
 builtins only — so every user-defined fn rendered a blank return column
 while the generated example line right below it printed the answer.
 `inspect` reported no returns at all, for user fns and natives alike,
 and no `type` key for a word (by ADR-011 there is exactly one Function
 type for it to have). Both now go through one `SigReturnNames` helper,
 so the two introspection surfaces cannot disagree.
+
+A declared return wins there. The builtin table is keyed on the NAME
+alone, so it also answered for a user fn that happens to SHADOW a
+builtin — `def upper fn x:Integer [Integer] [x]` reported
+`Scalar/String`, a contract the function does not have. `sigIsDefined`
+draws the line on the signature: a body — or the `Fallback` flag, set
+only on the catch-all injected for a boru word — means boru source, and
+a declaration is not a guess. Inference stays first for genuine
+natives, where it knows more than the declared slot type does (`add`
+declares `Number` and infers `Integer` for two Integers).
+
+And where a return carries a PATTERN, the pattern is the contract and
+the `*Type` is the weaker half. Reporting the type alone named a
+contract wider than the one enforced — exactly the literal return types
+this change introduced: `def f fn x:String 22 [22]` returns `22`, not
+`Integer`, and a declared union degrades its type to `Any` while
+keeping the whole domain in the pattern.
 
 ## 6. Open: an engine divergence this uncovered
 

@@ -2350,7 +2350,8 @@ func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core
 		if extra := produced - len(rets); extra > 0 {
 			if extra > fn.NUnnamed {
 				// Allowance spent from the bottom — report the top values,
-				// the same slice the interpreter reports (ADR-017).
+				// the same slice the interpreter reports
+				// (design/DIAGNOSTIC-VALUES.0.md).
 				return stack, vmReturnCountErr(r, fn, len(rets), produced-fn.NUnnamed,
 					stack[stackBase+fn.NUnnamed:])
 			}

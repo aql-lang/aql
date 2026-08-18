@@ -203,7 +203,8 @@ func diagValue(v Value) string {
 }
 
 // diagValueList renders the run of values a diagnostic is about, for the
-// errors whose subject is a SEQUENCE rather than one value (ADR-017).
+// errors whose subject is a SEQUENCE rather than one value
+// (design/DIAGNOSTIC-VALUES.0.md).
 // Abbreviated twice over: at most diagMaxListHead values, each through
 // diagValue — so one enormous list element cannot swamp the line, and
 // neither can a hundred of them.

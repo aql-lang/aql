@@ -7,7 +7,7 @@ import (
 
 // Unit pins for the output-slot rework (design/FN-OUTPUT-SIG.0.md): the
 // `name:Type` return unwrap, the declaration-span fallback that makes the
-// two spellings of one declaration diagnose alike, and the ADR-017 value
+// two spellings of one declaration diagnose alike, and the value
 // renderer. The end-to-end behaviour lives in lang/spec/fn-triple.tsv §7;
 // these cover the arms a spec row cannot reach.
 
@@ -24,7 +24,7 @@ func implicitMap(pairs ...Value) Value {
 
 func TestUnwrapNamedReturnImplicitPair(t *testing.T) {
 	sig := implicitMap(NewString("i"), NewTypeLiteral(TInteger))
-	got, err := unwrapNamedReturn(sig)
+	got, err := unwrapNamedReturn(nil, sig)
 	if err != nil {
 		t.Fatalf("unwrap: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestUnwrapNamedReturnImplicitPair(t *testing.T) {
 func TestUnwrapNamedReturnLeavesEverythingElse(t *testing.T) {
 	// A non-map value is returned untouched.
 	word := NewWord("Integer")
-	if got, err := unwrapNamedReturn(word); err != nil || !IsWord(got) {
+	if got, err := unwrapNamedReturn(nil, word); err != nil || !IsWord(got) {
 		t.Errorf("a word must pass through: %v, %v", got, err)
 	}
 	// An EXPLICIT map declares a Map-typed return — not a named one — so
@@ -44,7 +44,7 @@ func TestUnwrapNamedReturnLeavesEverythingElse(t *testing.T) {
 	om := NewOrderedMap()
 	om.Set("i", NewTypeLiteral(TInteger))
 	explicit := NewMap(om)
-	got, err := unwrapNamedReturn(explicit)
+	got, err := unwrapNamedReturn(nil, explicit)
 	if err != nil {
 		t.Fatalf("explicit map: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestUnwrapNamedReturnLeavesEverythingElse(t *testing.T) {
 		t.Errorf("an explicit map must pass through, got %v", got)
 	}
 	// A Map-typed value with no payload takes the same early return.
-	if got, err := unwrapNamedReturn(NewTypeLiteral(TMap)); err != nil || !IsBareTypeNode(got) {
+	if got, err := unwrapNamedReturn(nil, NewTypeLiteral(TMap)); err != nil || !IsBareTypeNode(got) {
 		t.Errorf("a bare Map type node must pass through: %v, %v", got, err)
 	}
 }
@@ -62,13 +62,13 @@ func TestUnwrapNamedReturnErrors(t *testing.T) {
 		NewString("i"), NewTypeLiteral(TInteger),
 		NewString("j"), NewTypeLiteral(TString),
 	)
-	if _, err := unwrapNamedReturn(two); err == nil ||
+	if _, err := unwrapNamedReturn(nil, two); err == nil ||
 		!strings.Contains(err.Error(), "exactly one key") {
 		t.Errorf("a two-key return map must error, got %v", err)
 	}
 
 	bad := implicitMap(NewString("2bad"), NewTypeLiteral(TInteger))
-	if _, err := unwrapNamedReturn(bad); err == nil {
+	if _, err := unwrapNamedReturn(nil, bad); err == nil {
 		t.Error("an invalid return name must error")
 	}
 }
@@ -139,7 +139,7 @@ func TestSigDeclPos(t *testing.T) {
 }
 
 func TestReturnCountErrorTextShowsValues(t *testing.T) {
-	// ADR-017: the values ride in the detail.
+	// The values ride in the detail (design/DIAGNOSTIC-VALUES.0.md).
 	got := ReturnCountErrorText("f", 1, 2, []Value{NewInteger(1), NewString("x")})
 	if !strings.Contains(got, "got 2 — [1 'x']") {
 		t.Errorf("detail = %q, want the values shown", got)
@@ -211,5 +211,118 @@ func TestLooksLikeTypeName(t *testing.T) {
 		if got := looksLikeTypeName(c.name); got != c.want {
 			t.Errorf("looksLikeTypeName(%q) = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+func TestUnwrapNamedReturnColonWord(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The single-Word colon form a minimal tokenizer produces. Without
+	// this arm the input/output symmetry held only for consumers of the
+	// production parser — ParseFnParams accepts the same token as a param.
+	w := NewWord("i:Integer")
+	w.SetPos(SrcPos{Row: 4, Col: 9})
+	got, uerr := unwrapNamedReturn(r, w)
+	if uerr != nil {
+		t.Fatalf("unwrap: %v", uerr)
+	}
+	if !IsWord(got) {
+		t.Fatalf("unwrapped = %v, want a Word", got)
+	}
+	if gw, _ := AsWord(got); gw.Name != "Integer" {
+		t.Errorf("unwrapped word = %q, want Integer", gw.Name)
+	}
+	// The declaration span rides along, so the pair spelling still
+	// anchors the "declaration of f expects N return value(s)" note.
+	if p := got.Pos(); p.Row != 4 || p.Col != 9 {
+		t.Errorf("position = %+v, want 4:9", p)
+	}
+	// It reaches ParseFnReturns as the declared type.
+	types, _, perr := ParseFnReturns(r, NewList([]Value{w}))
+	if perr != nil || len(types) != 1 || !types[0].Equal(TInteger) {
+		t.Errorf("ParseFnReturns = %v/%v, want [Integer]", types, perr)
+	}
+	// A word with no colon is a plain type name, untouched.
+	if got, uerr := unwrapNamedReturn(r, NewWord("Integer")); uerr != nil || !IsWord(got) {
+		t.Errorf("a bare type word must pass through: %v, %v", got, uerr)
+	}
+	// A leading colon names nothing — idx 0 is not a name/type split.
+	if got, uerr := unwrapNamedReturn(r, NewWord(":Integer")); uerr != nil || !IsWord(got) {
+		t.Errorf("a leading colon must pass through: %v, %v", got, uerr)
+	}
+	// An invalid return NAME is rejected, as it is on the input side.
+	if _, uerr := unwrapNamedReturn(r, NewWord("2bad:Integer")); uerr == nil {
+		t.Error("an invalid name in the colon form must error")
+	}
+}
+
+func TestEvalSigTypeExprNamedReturn(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A parenthesised annotation must be RUN before it is resolved. Left
+	// raw it falls to ResolveSigType's TAny tail — a silent wildcard that
+	// makes a declared union return enforce nothing. The union itself
+	// needs `tor`, a lang word, so the enforced end-to-end contract is
+	// pinned by lang/spec/fn-triple.tsv §7; what is checked here is that
+	// the slot reduces its annotation at all, and errors rather than
+	// falling through when it cannot.
+	paren := NewParenExpr([]Value{NewWord("Integer")})
+	sig := implicitMap(NewString("y"), paren)
+	types, _, perr := ParseFnReturns(r, NewList([]Value{sig}))
+	if perr != nil {
+		t.Fatalf("ParseFnReturns: %v", perr)
+	}
+	if len(types) != 1 || !types[0].Equal(TInteger) {
+		t.Errorf("types = %v, want [Integer] — the annotation must be run", types)
+	}
+
+	// A non-paren value is returned untouched.
+	if got, eerr := EvalSigTypeExpr(r, NewWord("Integer"), "y"); eerr != nil || !IsWord(got) {
+		t.Errorf("a plain word must pass through: %v, %v", got, eerr)
+	}
+	// A nil registry cannot run anything, so the value passes through.
+	if got, eerr := EvalSigTypeExpr(nil, paren, "y"); eerr != nil || !IsParenExpr(got) {
+		t.Errorf("no registry must pass the ParenExpr through: %v, %v", got, eerr)
+	}
+	// A FAILING annotation is a def-time error, not a silent wildcard.
+	bad := NewParenExpr([]Value{NewWord("nosuchword")})
+	if _, eerr := EvalSigTypeExpr(r, bad, "y"); eerr == nil {
+		t.Error("an unrunnable annotation must error")
+	}
+	// So is one that produces more than a single type.
+	multi := NewParenExpr([]Value{NewWord("Integer"), NewWord("String")})
+	if _, eerr := EvalSigTypeExpr(r, multi, "y"); eerr == nil {
+		t.Error("a multi-valued annotation must error")
+	}
+}
+
+func TestResolveSigTypeAtomNames(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An Atom carries AtomPayload, so the name has to come from AsAtom:
+	// AsString answers "" and every lookup then misses, which the literal
+	// fallback would silently turn into an Atom pattern.
+	got, pat, rerr := ResolveSigType(r, NewAtom("Integer"))
+	if rerr != nil || pat != nil || !got.Equal(TInteger) {
+		t.Errorf("Integer/q = %v/%v/%v, want the Integer type", got, pat, rerr)
+	}
+	// An Atom that could never name a type is still the literal itself.
+	got, pat, rerr = ResolveSigType(r, NewAtom("ok"))
+	if rerr != nil || pat == nil || !got.Equal(TAtom) {
+		t.Fatalf("ok/q = %v/%v/%v, want an Atom literal pattern", got, pat, rerr)
+	}
+	if a, aerr := AsAtom(*pat); aerr != nil || a != "ok" {
+		t.Errorf("ok/q pattern = %v (%v)", *pat, aerr)
+	}
+	// And a MISSPELLED one keeps the shape of a type name, so it stays a
+	// loud error rather than a constraint matching one atom.
+	if _, _, rerr := ResolveSigType(r, NewAtom("Integr")); rerr == nil {
+		t.Error("Integr/q must stay an unknown-type error")
 	}
 }
