@@ -2316,8 +2316,23 @@ there is no per-import gate today. The natives path does gate: compare
 per-module `install:false` sequence with `loadFileModule`, which applies
 none of them.
 
-**Verdict:** resolve by fix — the file-module import path should apply the
-same three checks the natives path applies, keyed on the declared ref
+**Mechanism** (identified in the PR #384 review, then confirmed in the
+tree): `runModuleBodyCover` (`lang/go/native/native_module_module.go`)
+builds a fresh sub-registry for the body and deliberately inherits
+`Output`, `ErrOutput`, `Input`, the effect ledger, observe hooks, runtime
+stamping, `HostFileOps`, `CapMemFileOps`, every `ModuleInheritedCaps` seam,
+host formats and extensions, `ParseFunc`, `BaseDir`/`BaseFile` and the TCO
+switch — **and no policy**. Every gate then resolves `HostPolicy(r)` on the
+registry it is running on and treats a nil policy as allow
+(`checkFetchPolicy`: `if pol == nil { return nil }`), so the body executes
+ungated no matter what the parent's profile says. This is why gating the
+import alone would not discharge the record.
+
+**Verdict:** resolve by fix, in two halves. (i) The module sub-registry must
+carry the parent's policy — attenuated, never widened, the way
+`Vm.run-sandbox` already attenuates — or a gated word inside a body stays
+ungated. (ii) The file-module import path should apply the same three checks
+the natives path applies, keyed on the declared ref
 (`modules.scopes."./lib.boru"` is already a live policy key, as the NUR045
 per-export gate's blame string shows), and the analysis commands should
 accept the permission flags they already document. Ship the gate together

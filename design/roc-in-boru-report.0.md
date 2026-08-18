@@ -32,9 +32,25 @@ A note on Roc's own currency: Roc's site is mid-rewrite and its
 maintainers say so — the new-compiler mini-tutorial states that
 "everything on roc-lang.org is referring to the old compiler and the old
 design; we haven't updated any of it yet." Where the site and the
-repository disagree, this report follows
-`github.com/roc-lang/roc` (`README.md`,
-`docs/mini-tutorial-new-compiler.md`).
+repository disagree, this report follows the repository.
+
+**Primary sources** (fetched 2026-08-18; the Roc side of every claim below
+traces to one of these):
+
+| Source | Used for |
+|---|---|
+| `raw.githubusercontent.com/roc-lang/roc/main/docs/mini-tutorial-new-compiler.md` | The new-compiler syntax and semantics: `main!`/`|args|`, the `!` naming convention, `Try`/`Ok`/`Err`, `?`, `match`, `var $x`, `for … in`, `where` constraints, `expect`/`dbg`/`crash`, the app header, "sound, decidable, principal" inference, and the old→new table |
+| `raw.githubusercontent.com/roc-lang/roc/main/README.md` | Status ("not ready for a 0.1 release yet"), the compiler rewrite, funding and community |
+| `github.com/roc-lang/roc` — issue **#7458** ("Move to Static Dispatch in place of Abilities"), and `src/eval`, `llvm_compile/`, `machine_code_shim/` | The removal of abilities; the default execution lane |
+| `roc-lang.org/fast` | Reference counting with opportunistic in-place mutation, platform-chosen allocators, the async-IO state machine, the sub-1s/sub-100ms build target "through caching" |
+| `roc-lang.org/friendly` | Diagnostic style, zero-configuration `roc fmt`, `--allow-errors`, `expect`, the capitalisation convention |
+| `roc-lang.org/functional` | Immutability, `var $x`, managed effects — **note this page still teaches the removed `Task` model**, and is cited here only as the cautionary staleness example |
+| `roc-lang.org/different-names` | The stdlib naming policy (`fold`, `keep_if`, `drop_if`, `first`, `map2`, `?`) |
+| Roc's FAQ | The permanent exclusion of refinement, higher-kinded and rank-N types, and the compile-time reasoning behind it |
+| `rtfeldman.com` — the Rust→Zig retrospective | The rewrite rationale (already analysed in `rust-zig-roc-faber-in-boru-report.0.md` §1) |
+
+`roc-lang.org/tutorial`, `/platforms` and `/plans` returned **404** on
+2026-08-18, which is itself evidence for §3.8's staleness finding.
 
 
 ## 1. What Roc is now — the 2026 reset
@@ -158,8 +174,8 @@ through caching").
 **boru.** Interpreter plus bytecode VM with a *sound* refusal-and-fallback
 architecture — stronger than Roc's posture, and validated by
 `design/MISCOMPILE-HUNT-FINDINGS.0.md`. Compiled mode is on by default
-since the P7 endgame, while `CLI.md` still says the interpreter is the
-default.
+since the P7 endgame — `CLI.md` still said the interpreter was the default,
+and described the flip as *future*, until this report's PR corrected it.
 
 **Verdict.** Roc converged on boru's two-tier shape, so this is no longer
 codegen versus tree-walker — it is **front-end amortization**, and there
@@ -278,19 +294,37 @@ Two phases. **Phase 1 (small, do first):** register the existing
 and pass a resolved policy in `cmd/go/internal/lsp/diagnostics.go` instead
 of an empty `lang.Options{}`. Honour `BORU_POLICY`, which `REFERENCE.md`
 already documents as an environment fallback and which `check` ignores.
-**Phase 2 (medium, separate change):** gate the *file-module* import path
-the way `modules.Resolve` already gates natives, so a policy applies
-inside a module body; and compose a hard **egress floor** over whatever
-the user asked for during check, so an analysis pass can never reach the
-network. Add `boru check --no-exec-imports`, which is nearly free because
-`importFileHandler` already degrades gracefully when a module fails to
-load.
+**Phase 2 (medium, separate change):** two halves, and the second is the
+load-bearing one. *(a)* Gate the *file-module* import path the way
+`modules.Resolve` already gates natives — `Installed`,
+`Check("modules","import",…)`, per-module `install:false` — keyed on the
+declared ref. *(b)* **Install the parent's policy on the module
+sub-registry.** Gating the import alone is not sufficient:
+`runModuleBodyCover` (`lang/go/native/native_module_module.go`) builds a
+fresh sub-registry and deliberately inherits `Output`, `ErrOutput`,
+`Input`, the effect ledger, observe hooks, runtime stamping, `HostFileOps`,
+`CapMemFileOps`, the `ModuleInheritedCaps` seams, host formats and
+extensions, `ParseFunc`, `BaseDir` and the TCO switch — **and no policy at
+all**. Since every gate resolves `HostPolicy(r)` on the registry it runs
+on and treats `nil` as allow (`checkFetchPolicy`: `if pol == nil { return
+nil }`), a permitted `./lib.boru` still performs the denied network call.
+That is the mechanism behind §7.1's measurement, and it means the policy
+must ride into the child — attenuated, never widened, the way
+`Vm.run-sandbox` already attenuates. Separately, compose a hard **egress
+floor** over whatever the user asked for during check, so an analysis pass
+can never reach the network whatever the profile says. Add `boru check
+--no-exec-imports`, which is nearly free because `importFileHandler`
+already degrades gracefully when a module fails to load.
 
 ### A3 — `boru check --pedantic` (the cheapest item in this report)
 
 The exit decision in `cmd/go/internal/check/check.go` is
-`if !soft && res.Summary.Errors > 0`. Make it
-`Errors > 0 || (pedantic && Warnings+Infos > 0)`. That is the whole change.
+`if !soft && res.Summary.Errors > 0`. Promote *inside* the existing guard —
+`if !soft && (res.Summary.Errors > 0 || (pedantic && res.Summary.Warnings+res.Summary.Infos > 0))` —
+so `--soft` keeps meaning "never gate" and the two flags compose instead of
+fighting. The condition occurs **twice**, in the JSON branch and the text
+branch of `RunColor`; both must change together, or `--json --pedantic`
+disagrees with `--pedantic`.
 
 It matters out of proportion to its size because **boru currently ships a
 `warning` severity that nothing can ever act on** (§7.3), and every
