@@ -9,8 +9,11 @@ first, what gates what, and what "done" means for each item.
 
 It is a **plan**, not a decision record. Nothing here amends an ADR, and
 each item still needs its own design note where the report's sketch is
-not already sufficient. Items are named by their report IDs so the two
-documents stay cross-referenceable.
+not already sufficient. Items are named by their report IDs (**A1–A14**; the report defines no
+others) so the two documents stay cross-referenceable. Work this plan
+introduces that has no report ID is numbered by its phase — `P0.1(d)`,
+not a new A-number — so a reader can always tell which document owns a
+task.
 
 The report's own closing warning is the sequencing principle: *the
 failure mode is spending the novelty budget on ecosystem machinery while
@@ -47,11 +50,9 @@ supply chain → performance**, not the order of intellectual interest.
 ```
 NUR080 ─────────────────────────► (independent)
 
-NUR079 ──► A1 Phase 1 ──► A1 Phase 2 ──► A8 step 2 (check --perms shadow eval)
-                              │
-                              └────────► A11-policy (playground policy)
+NUR079 ──► P0.1(a) ──► P0.1(b) ──► P0.1(d) ──► A8 step 2 (check --perms shadow eval)
 
-A3 ──┬── A9/A16 (code catalogue + boru explain)
+A3 ──┬── A9 (code catalogue + boru explain)
      └── (unlocks every advisory boru has or will build)
 
 A12 (settle fmt, close NUR046) ──► A7 second half (```boru fence tagging)
@@ -95,6 +96,12 @@ Two halves, the second load-bearing:
   asked for so an analysis pass can never reach the network whatever the
   profile says, with a distinct diagnostic code when a module fails to
   load because of the floor. Add `boru check --no-exec-imports`.
+- **(d) Give the wasm playground a policy.** `wpg/wasm/main.go` has none,
+  so boru's flagship untrusted-code surface runs allow-everything on
+  engine words, module imports, network and sqlite, with only the
+  filesystem swapped. This is a sub-task defined *here*, not a report
+  recommendation with its own A-number; it rides with (b) because it
+  needs the same policy-into-sub-registry plumbing.
 
 **Done when:** a profile denies an in-body gated call; `boru check
 --perms <profile>` is honoured; and the `read-only` reproduction in
@@ -146,7 +153,7 @@ impossible rather than fixing instances of it.
   vice versa. Then fix what it finds — the `fileio` vs `fileops` case
   answers ALLOW with exit 0 today, which is the compounding failure the
   gate exists to stop.
-- **A9/A16 — `boru explain <code>` and a generated code table.** Ships
+- **A9 — `boru explain <code>` and a generated code table.** Ships
   with or immediately after A3, per principle 3.
 
 ## 6. Phase 3 — publish the answer at build time
@@ -215,7 +222,7 @@ re-opening that argument.
 | NUR080 | 0 | Pending — recorded, not started |
 | A3 | 1 | **Landed** with this plan |
 | A4, A11, A14 | 1 | Not started |
-| A7, A9/A16, A12 | 2 | Not started |
+| A7, A9, A12 | 2 | Not started |
 | A6, A8, A13 | 3 | Not started |
 | A5 | 4 | Not started |
 | A10 | 5 | Not started |

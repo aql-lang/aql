@@ -132,3 +132,33 @@ func TestRunColorDelegates(t *testing.T) {
 		t.Fatalf("RunColor = %v, want nil (advisories must not gate)", err)
 	}
 }
+
+// TestRunCLIHelp covers the -h path added so the flags this change
+// introduces are reachable through `boru help check` -> `boru check -h`.
+// Negative half: help must not be triggered by an ordinary argument, and
+// must not swallow a real check.
+func TestRunCLIHelp(t *testing.T) {
+	for _, flag := range []string{"-h", "--help", "help"} {
+		var stdout, stderr bytes.Buffer
+		if code := RunCLI([]string{flag}, &stdout, &stderr); code != 0 {
+			t.Fatalf("%s: exit = %d, want 0", flag, code)
+		}
+		out := stdout.String()
+		for _, want := range []string{"Usage: boru check", "--pedantic", "--soft", "-e EXPR"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%s: usage = %q, want it to mention %q", flag, out, want)
+			}
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("%s: stderr = %q, want usage on stdout only", flag, stderr.String())
+		}
+	}
+	// A script argument named like a flag is still a path, not help.
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"-e", "add 1 2"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("ordinary run: exit = %d, want 0", code)
+	}
+	if strings.Contains(stdout.String(), "Usage: boru check") {
+		t.Fatalf("ordinary run printed usage: %q", stdout.String())
+	}
+}

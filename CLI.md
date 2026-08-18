@@ -396,7 +396,9 @@ Flags:
   build; with it, CI can gate on advisories while a local
   `boru check` and `boru run` stay unchanged. It composes **under**
   `--soft`: `--soft` still means "never gate", so `--soft --pedantic`
-  exits 0. Applies identically to `--json`.
+  exits 0. Applies identically to `--json`. Both flags govern *reported
+  diagnostics* only — unparseable source or an unreadable file still
+  exits 1, since there is no diagnostic summary to downgrade.
 * `-r PATH`, `-s SEED` — same as `boru run`.
 
 **What it catches** (full list in the language reference's diagnostics

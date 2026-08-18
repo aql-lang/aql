@@ -70,6 +70,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		case "--pedantic", "-pedantic":
 			pedantic = true
 			args = args[1:]
+		case "-h", "--help", "help":
+			printUsage(stdout)
+			return 0
 		case "--emit", "-emit":
 			emit = true
 			args = args[1:]
@@ -119,6 +122,35 @@ done:
 		return 1
 	}
 	return 0
+}
+
+// printUsage writes the subcommand's flag set. `boru help check` points
+// the reader at `boru check -h` for exactly this, so a flag that is not
+// listed here is not discoverable through the documented path — the
+// reason `--pedantic` arrived with it (design/ROC-ADOPTION-PLAN.0.md, A3).
+// `run`, `do`, `test` and `build` get this free from flag.FlagSet; check
+// parses argv by hand because `-e EXPR` stops the scan, so it spells the
+// same contract out. Keep in step with CLI.md's `boru check` flag list.
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: boru check [options] <script.boru>
+       boru check [options] -e EXPR
+
+Type-check without running. Exits non-zero when any Error-severity
+diagnostic is reported.
+
+Options:
+  -e EXPR        type-check an inline expression
+  --json         emit the full CheckResult as JSON on stdout
+  --soft         never gate: exit 0 even when diagnostics are reported
+  --strict       also report every dispatch over a dynamic operand (info)
+  --pedantic     gate on the advisory tiers too, not only on errors;
+                 composes under --soft, so --soft --pedantic exits 0
+  --emit         print the bytecode disassembly instead of checking
+  --color MODE   auto (default), always, or never
+  -r PATH        registry path
+  -s SEED        random seed
+  -h, --help     print this message
+`)
 }
 
 // Emit runs the bytecode recording pass over source and prints the
