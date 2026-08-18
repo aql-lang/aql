@@ -85,7 +85,7 @@ one strategic position** — not semantics.
 | State-space exploration | random simulator + Apalache (bounded symbolic) + TLC | none; PBT over values instead |
 | Counterexamples | ITF JSON traces, replayable, consumed by model-based testing | PBT counterexample **value** + shrunk generator source — never written to disk |
 | Conformance suite | 77 example specs, CI-run | 9,186 executable spec rows across 157 TSV files; the 7,421 `lang/spec` rows run in both execution modes and both TCO settings |
-| Self-documentation | packaged LLM kit / docs site | `boru describe` generated from the **live engine** — cannot drift |
+| Self-documentation | packaged LLM kit / docs site | `boru describe` generated from the **live engine** — signatures and precedence cannot drift; worked *examples* partly can (§6.7) |
 | Coverage discipline | ordinary | ADR-008: 100% of reachable Go statements, gated, with proof-carrying exemptions |
 | Distribution | npm; Apalache needs a JVM | build from clone (no released binaries); wasm playground live |
 
@@ -336,6 +336,27 @@ already scheduled, or already shipped** —
 A 36% rediscovery rate against a corpus that is candid, thorough, and
 unindexed. Any future agent or contributor pays the same tax. This is P3.
 
+### 6.7 `describe`'s worked examples are not all engine-verified
+Added after the fact, and it narrows this note's own claim. The sibling
+report `design/roc-in-boru-report.0.md` §7.4 found placeholder examples in
+`describe` output; reproduced here [ran it]:
+
+```
+$ boru describe add
+Examples:
+  add 'a' 'a'      ;# 'aa'
+  add 2 3.5        ;# 5.5
+  add true false   ;# ...
+```
+
+`add true false ;# ...` is a placeholder, not a computed result. Sampling
+ten core words found it on five (`add`, `sub`, `mul`, `div`, `and`). So
+the "cannot drift" property holds for signatures and precedence — which
+*are* read from the live registry — but not for every example line, and
+§2 and §9 are corrected accordingly. Roc's A4 is the fix: make the
+examples engine-verified, and narrow `AGENTS.md`'s no-drift wording until
+they are.
+
 ---
 
 ## 7. The ranked queue
@@ -443,11 +464,12 @@ identifies which of boru's assets are genuinely distinctive.
    does not block a merge. Quint has issues; it has no register whose job
    is that a divergence is never silently baselined. This is the single
    most portable artifact in the tree.
-2. **`boru describe`, generated from the live engine.** Signatures,
-   precedence and worked examples come from the running registry, so they
-   *cannot* drift the way prose does. Quint's docs are prose plus a
-   packaged LLM kit; boru's substrate is strictly better and only its
-   packaging is behind (P4).
+2. **`boru describe`, generated from the live engine.** Signatures and
+   precedence come from the running registry, so they cannot drift the way
+   prose does. Quint's docs are prose plus a packaged LLM kit; boru's
+   substrate is better in kind. Two caveats, both added after this note
+   first landed: the *worked examples* are not uniformly engine-verified
+   (§6.7), and the packaging is behind (P4).
 3. **The TSV executable spec.** 9,186 rows across 157 files; the 7,421
    `lang/spec` rows run in both execution modes and both TCO settings. "Your conformance suite is a text
    file anyone can add a row to" is highly copyable.
