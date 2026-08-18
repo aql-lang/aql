@@ -425,3 +425,30 @@ func formIntLiterals(form *stackform.StackForm) []int64 {
 	}
 	return out
 }
+
+// TestStackFormFunctionArgNotDoubleRecorded is the DUAL of the literal
+// accounting above, and guards the hazard that fix first walked into.
+//
+// A paren collapsed on behalf of a pending forward is not re-stepped by the
+// main loop: its survivor becomes the call's ARGUMENT. So a Function survivor
+// there is collected, not dispatched, and the collection hook fires OnPushLit
+// for it — meaning it DOES need its skip credit, where a main-loop survivor
+// does not. Withholding it recorded the function twice (`fn z … fn z g`) and
+// replay grew an extra operand.
+//
+// These round-trip exactly, so equivalentRun is the assertion: it fails on a
+// duplicated operand as surely as on a dropped one.
+func TestStackFormFunctionArgNotDoubleRecorded(t *testing.T) {
+	const zdef = `def z fn [[] [Integer] [42]] `
+	for _, src := range []string{
+		// A paren'd reference into a Function slot, with a literal following.
+		zdef + `def g fn [[f:Function] [Any] [7]] g (z/r) 777`,
+		// The same call with no trailing literal.
+		zdef + `def g fn [[f:Function] [Any] [7]] g (z/r)`,
+		// CONTROL: the unparenthesised spelling of the same call, which never
+		// went through stepCloseParen at all.
+		zdef + `def g fn [[f:Function] [Any] [7]] g z/r 777`,
+	} {
+		t.Run(src, func(t *testing.T) { equivalentRun(t, src) })
+	}
+}

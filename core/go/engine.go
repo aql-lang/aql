@@ -1381,7 +1381,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			e.stepPastOpenParen(val)
 
 		case IsCloseParen(val):
-			if err := e.stepCloseParen(); err != nil {
+			if err := e.stepCloseParen(true); err != nil {
 				return nil, e.faultReturn(err)
 			}
 
@@ -1645,7 +1645,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 					return err
 				}
 			case IsCloseParen(val):
-				if err := e.stepCloseParen(); err != nil {
+				if err := e.stepCloseParen(false); err != nil {
 					return err
 				}
 			case IsEnd(val):
@@ -2358,7 +2358,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 		}
 		if IsCloseParen(v) {
 			depth--
-			if err := e.stepCloseParen(); err != nil {
+			if err := e.stepCloseParen(false); err != nil {
 				e.Pointer = savedPointer
 				return err
 			}
@@ -6379,7 +6379,7 @@ func fnValueDispatchesAtPointer(v Value) bool {
 // now sit at [openIdx .. closeIdx-2] inclusive — the same span as
 // [openIdx, closeIdx-1) in the original indices, minus 1 for the removed
 // OpenParen.
-func (e *Engine) creditParenSurvivorSkips(openIdx, closeIdx int) {
+func (e *Engine) creditParenSurvivorSkips(closeIdx int, reStepped bool) {
 	skipper, ok := e.recorder.(RecorderSkipper)
 	if !ok || e.recorder == nil {
 		return
@@ -6389,11 +6389,23 @@ func (e *Engine) creditParenSurvivorSkips(openIdx, closeIdx int) {
 		end = e.Tape.Len()
 	}
 	survived := 0
-	for i := openIdx; i < end; i++ {
+	for i := e.Pointer; i < end; i++ {
 		sv := e.Tape.At(i)
-		if IsRecordableLiteral(sv) && !fnValueDispatchesAtPointer(sv) {
-			survived++
+		if !IsRecordableLiteral(sv) {
+			continue
 		}
+		// A Function forfeits its credit ONLY when the main loop will re-step
+		// it, because only there does stepLiteral hand it to execFnDefLiteral
+		// without a push. Collapsed off the main loop (reStepped false) the
+		// survivor is about to be COLLECTED as a forward argument — which is
+		// the whole point of a `Function`-typed slot — and the collection hook
+		// fires OnPushLit for it once the match completes, so the credit is
+		// owed. Raised by the PR #387 review: `g (z/r) 777` into a Function
+		// slot recorded `fn z` twice without this split.
+		if reStepped && fnValueDispatchesAtPointer(sv) {
+			continue
+		}
+		survived++
 	}
 	if survived > 0 {
 		skipper.Skip(survived)
@@ -7509,7 +7521,12 @@ func (e *Engine) recordParenLeadFnApply(es EmitRecorder, leadFn, lastIdx, closeI
 	return closeIdx
 }
 
-func (e *Engine) stepCloseParen() error {
+// reStepped tells stepCloseParen whether the MAIN loop will re-encounter the
+// survivors at the pointer (true), or whether this collapse is happening off
+// the main loop on behalf of a pending forward collection (false), where the
+// survivors become ARGUMENTS instead. Only the recorder accounting reads it —
+// see creditParenSurvivorSkips.
+func (e *Engine) stepCloseParen(reStepped bool) error {
 	closeIdx := e.Pointer
 
 	openIdx := -1
@@ -7576,7 +7593,7 @@ func (e *Engine) stepCloseParen() error {
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
 					case IsCloseParen(val): //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-						if err := e.stepCloseParen(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+						if err := e.stepCloseParen(false); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return err
 						}
 						closeIdx = e.findCloseParenAfter(openIdx) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
@@ -7829,17 +7846,21 @@ func (e *Engine) stepCloseParen() error {
 	// Recorder hook: the values that survived inside the paren will
 	// be re-encountered by the main loop after we set pointer back
 	// to openIdx (below). They were already emitted to the recorder
-	// during the in-paren execution (via stepLiteral or via execMatch
-	// for handler results), so tell a SkipRecorder to ignore the
-	// next round. Extracted to creditParenSurvivorSkips for the
-	// stepCloseParen complexity cap (NUR038), same reason as
-	// fnReturnPark and tagReachCollapsedFn above.
-	e.creditParenSurvivorSkips(openIdx, closeIdx)
-
 	// Rewind onto the collapsed region so the main loop re-encounters what
 	// survived — stepping past a fn frame's Function return, which is a
 	// delivery rather than a fresh use (fnReturnPark).
 	e.Pointer = openIdx + park
+
+	// Recorder hook: the survivors the rewind is about to re-present were
+	// already emitted during the in-paren execution (via stepLiteral, or via
+	// execMatch for handler results), so tell a SkipRecorder to ignore that
+	// second round. Runs AFTER the rewind on purpose: it asks
+	// pendingForwardIdx what the re-step will see, and that answer is read
+	// from the pointer. Values before the pointer — a parked return — are
+	// never re-encountered and so are never credited. Extracted to
+	// creditParenSurvivorSkips for the stepCloseParen complexity cap
+	// (NUR038), same reason as fnReturnPark and tagReachCollapsedFn above.
+	e.creditParenSurvivorSkips(closeIdx, reStepped)
 	return nil
 }
 
