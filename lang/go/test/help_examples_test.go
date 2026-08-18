@@ -139,6 +139,11 @@ func TestHelpExamplesCorrect(t *testing.T) {
 
 	words := allRegisteredWords(reg)
 	testedCount := 0
+	// Every placeholder site actually observed this run. Compared against
+	// placeholderSites afterwards so the ratchet cannot go stale: an entry
+	// whose example started evaluating must be REMOVED, or the map slowly
+	// becomes a list of things that used to be broken.
+	seenPlaceholders := map[string]bool{}
 
 	for _, word := range words {
 		if skipWords[word] {
@@ -168,11 +173,13 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		var runnable []helpExample
 		for _, ex := range examples {
 			if ex.expected == examplePlaceholder {
-				if !placeholderWords[word] {
+				site := word + " | " + ex.expr
+				seenPlaceholders[site] = true
+				if !placeholderSites[site] {
 					t.Errorf("%s: example %q renders the %q placeholder; "+
 						"`describe` output is documented as engine-derived, so either "+
-						"make it evaluate or add the word to placeholderWords with a reason",
-						word, ex.expr, examplePlaceholder)
+						"make it evaluate or add %q to placeholderSites with a reason",
+						word, ex.expr, examplePlaceholder, site)
 				}
 				continue
 			}
@@ -231,7 +238,16 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		})
 	}
 
-	t.Logf("validated %d examples across all words", testedCount)
+	for site := range placeholderSites {
+		if !seenPlaceholders[site] {
+			t.Errorf("placeholderSites has a stale entry %q: that example no longer "+
+				"renders %q, so remove the entry — the ratchet only shrinks",
+				site, examplePlaceholder)
+		}
+	}
+
+	t.Logf("validated %d examples across all words (%d placeholder sites tracked)",
+		testedCount, len(placeholderSites))
 }
 
 // enableMemFS sets __sys.fs.mem = true in the registry's root context.
@@ -314,64 +330,95 @@ const examplePlaceholder = "..."
 // leaves the stack empty.
 const noValueMarker = "(no value)"
 
-// placeholderWords records every word that still ships an example
-// rendering the `...` placeholder. It is a RATCHET: entries may be
-// removed, never added — a new placeholder is a test failure, and the
-// fix is to make the example evaluate (see cmd/go/genhelp), not to widen
-// this map.
+// placeholderSites records every (word, expression) that still renders
+// the `...` placeholder, keyed "word | expr". It is a RATCHET in both
+// directions: a NEW placeholder fails the test, and a STALE entry — one
+// whose example has started evaluating — fails it too, so the map cannot
+// quietly become a list of things that used to be broken.
 //
-// Every entry below has ONE cause, measured 2026-08-18: cmd/go/genhelp
+// Keying by site rather than by word is deliberate: a word-keyed
+// allowlist accepts every future placeholder under an already-listed
+// word, which is how a ratchet turns into a skip list.
+//
+// Nearly every entry has ONE cause, measured 2026-08-18: cmd/go/genhelp
 // evaluates each example on a `native.DefaultRegistry` with no imports,
-// so a word that lives in a loadable module (`boru:string-util`,
+// so a word implemented in a loadable module (`boru:string-util`,
 // `boru:bin-util`, `boru:logic-util`, `boru:type-util`, `boru:debug`)
-// raises `undefined_word` there and gets no recorded result. That code
-// is deliberately NOT documented — the word is defined, it just needs an
-// import — so these fall through to the Go-side fallback. Teaching the
-// generator to load the modules before evaluating empties this map; see
+// raises `undefined_word` there. That code is deliberately not
+// documented — the word exists, it needs an import — so these fall
+// through to the Go-side fallback. Teaching the generator to load the
+// modules before evaluating empties them; see
 // design/ROC-ADOPTION-PLAN.0.md (A4).
 //
-// `roll` is the one exception and has a different cause: `describe`
-// renders `2 roll`, but the generator records nothing for it, so the
-// display expression and the generated expression diverge somewhere
-// between help.ExampleExprs and writeExamples.
-var placeholderWords = map[string]bool{
-	"roll":         true,
-	"band":         true,
-	"bnot":         true,
-	"bor":          true,
-	"bsl":          true,
-	"bsr":          true,
-	"busr":         true,
-	"bxor":         true,
-	"changecase":   true,
-	"concat":       true,
-	"contains":     true,
-	"create":       true,
-	"escape":       true,
-	"fnsig":        true,
-	"forward-args": true,
-	"iff":          true,
-	"implies":      true,
-	"indexof":      true,
-	"lower":        true,
-	"match":        true,
-	"nand":         true,
-	"nor":          true,
-	"normalize":    true,
-	"pad":          true,
-	"pick":         true,
-	"printstr":     true,
-	"ref":          true,
-	"remove":       true,
-	"repeat":       true,
-	"replace":      true,
-	"split":        true,
-	"stack":        true,
-	"stack-args":   true,
-	"tpartial":     true,
-	"trace":        true,
-	"trim":         true,
-	"update":       true,
-	"upper":        true,
-	"xnor":         true,
+// `roll | 2 roll` is the one exception, with a different cause: the
+// generator records no result for it at all, so the display expression
+// and the generated expression diverge somewhere between
+// help.ExampleExprs and writeExamples.
+var placeholderSites = map[string]bool{
+	"band | band 2 3":                         true,
+	"bnot | bnot 2":                           true,
+	"bor | bor 2 3":                           true,
+	"bsl | bsl 2 3":                           true,
+	"bsr | bsr 2 3":                           true,
+	"busr | busr 2 3":                         true,
+	"bxor | bxor 2 3":                         true,
+	"changecase | changecase 'a' {a:1,b:2}":   true,
+	"changecase | changecase 'b'":             true,
+	"changecase | changecase a/q {c:3,d:4}":   true,
+	"changecase | changecase b/q":             true,
+	"concat | concat ['c','d']":               true,
+	"concat | concat {a:1,b:2} ['a','b']":     true,
+	"contains | contains 'a' 'b' {a:1,b:2}":   true,
+	"contains | contains 'c' 'd'":             true,
+	"create | create {c:3,d:4} ['a','b']":     true,
+	"escape | escape 'a' {a:1,b:2}":           true,
+	"escape | escape 'b'":                     true,
+	"fnsig | fnsig ['a','b']":                 true,
+	"forward-args | forward-args a/q":         true,
+	"iff | iff 2 3":                           true,
+	"iff | iff true false":                    true,
+	"implies | 3 implies 2":                   true,
+	"implies | false implies true":            true,
+	"implies | implies 2 3":                   true,
+	"implies | implies true false":            true,
+	"indexof | indexof 'a' 'b' {a:1,b:2}":     true,
+	"indexof | indexof 'c' 'd'":               true,
+	"lower | lower 'a'":                       true,
+	"lower | lower a/q":                       true,
+	"match | match 'a' 'b' {a:1,b:2}":         true,
+	"match | match 'c' 'd'":                   true,
+	"nand | nand 2 3":                         true,
+	"nand | nand true false":                  true,
+	"nor | nor 2 3":                           true,
+	"nor | nor true false":                    true,
+	"normalize | normalize 'a' {a:1,b:2}":     true,
+	"normalize | normalize 'b'":               true,
+	"pad | pad 2 {a:1,b:2} 'a'":               true,
+	"pad | pad 3 'b'":                         true,
+	"pad | pad 3":                             true,
+	"pad | pad 4 2":                           true,
+	"pick | 2 pick":                           true,
+	"printstr | printstr 2":                   true,
+	"ref | ref a/q":                           true,
+	"remove | remove {c:3,d:4} ['a','b']":     true,
+	"repeat | repeat 2 'a' {a:1,b:2}":         true,
+	"repeat | repeat 3 'b'":                   true,
+	"replace | replace 'a' 'b' 'c' {a:1,b:2}": true,
+	"replace | replace 'd' 'e' 'f'":           true,
+	"roll | 2 roll":                           true,
+	"split | split 'a' 'b' {a:1,b:2}":         true,
+	"split | split 'c' 'd'":                   true,
+	"stack | 2 stack":                         true,
+	"stack-args | stack-args a/q":             true,
+	"tpartial | tpartial 2":                   true,
+	"trace | trace ['a','b']":                 true,
+	"trim | trim 'a' {a:1,b:2}":               true,
+	"trim | trim 'b'":                         true,
+	"trim | trim a/q {c:3,d:4}":               true,
+	"trim | trim b/q":                         true,
+	"update | update {c:3,d:4} ['a','b']":     true,
+	"upper | upper 'a'":                       true,
+	"upper | upper a/q":                       true,
+	"xnor | xnor 2 3":                         true,
+	"xnor | xnor true false":                  true,
 }

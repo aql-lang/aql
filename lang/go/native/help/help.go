@@ -123,17 +123,23 @@ func GenerateDynamicExamples(info FuncInfo, eval func(string) (string, error)) {
 		return
 	}
 	for _, expr := range ExampleExprs(info) {
-		if _, ok := exampleResults[expr]; ok {
-			continue // already in static map
+		// A static entry normally wins — it was computed by the same
+		// engine at build time. The exception is a RECORDED REFUSAL:
+		// this function runs precisely when a word gains a definition,
+		// and a new overload is exactly what turns
+		// `add true false ;# error [boru/type_error]` into a lie. Those
+		// are re-evaluated so the live engine can correct the snapshot.
+		if prior, ok := exampleResults[expr]; ok && !IsRefusalRender(prior) {
+			continue
 		}
 		if _, ok := dynamicExampleResults[expr]; ok {
 			continue
 		}
-		result, err := eval(expr)
-		if err != nil || result == "" {
+		encoded, ok := EncodeExampleResult(eval(expr))
+		if !ok {
 			continue
 		}
-		dynamicExampleResults[expr] = result
+		dynamicExampleResults[expr] = encoded
 	}
 }
 
@@ -684,13 +690,16 @@ func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
 }
 
 // evalExample looks up a pre-computed result for an expression,
-// checking the static map first, then the dynamic map, then falling
-// back to static computation.
+// checking the dynamic (live-engine) map first, then the static
+// build-time map, then falling back to static computation.
 func evalExample(expr, name string, sig SigInfo, vals []string) string {
-	if result, ok := exampleResults[expr]; ok {
+	// Dynamic first: it is computed by the LIVE engine, so where the two
+	// disagree the static map is a stale build-time snapshot — the case
+	// GenerateDynamicExamples re-evaluates a recorded refusal for.
+	if result, ok := dynamicExampleResults[expr]; ok {
 		return result
 	}
-	if result, ok := dynamicExampleResults[expr]; ok {
+	if result, ok := exampleResults[expr]; ok {
 		return result
 	}
 	sigArgs := buildSigArgs(vals, 0, len(vals))
