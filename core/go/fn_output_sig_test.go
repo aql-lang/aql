@@ -96,13 +96,17 @@ func TestParseFnReturnsNamedPair(t *testing.T) {
 		}
 	}
 
-	// The error arm propagates out of the list walk.
+	// The error arm propagates out of BOTH shapes: the list walk, and
+	// the bare single-return sig, which takes its own branch.
 	twoKey := implicitMap(
 		NewString("i"), NewWord("Integer"),
 		NewString("j"), NewWord("String"),
 	)
 	if _, _, perr := ParseFnReturns(r, NewList([]Value{twoKey})); perr == nil {
 		t.Error("a bad named return inside a list must propagate")
+	}
+	if _, _, perr := ParseFnReturns(r, twoKey); perr == nil {
+		t.Error("a bad named return as the bare output sig must propagate")
 	}
 }
 
