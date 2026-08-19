@@ -77,7 +77,7 @@ keep the two in sync in the same commit.
 | [NUR082](#nur082) | Three tree-walking subcommands, two rules for `.boru/`: `fmt` and (now) `check` skip the package directory, `boru test`'s `discover()` walks it — VERDICT 2026-08-18: resolve by fix, one shared walk helper carrying the skip | giving `boru check` directory targets, 2026-08-18 (W-CLI-CHECK) |
 | [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
 | [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
-| [NUR085](#nur085) | No spelling reads a parameter whose kind is not statically known: a bare name CALLS when the binding is a function, and `/r` REFUSES when it is not, so `λx.x` is unwritable in the obvious form — and the `x is Function` guard cannot be written either, because naming `x` starts the call | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2) |
+| [NUR085](#nur085) | No spelling THROUGH A PARAMETER'S BOUND NAME is total over both kinds: a bare name CALLS when the binding is a function, and `/r` REFUSES when it is not — and the `x is Function` guard cannot be written either, because naming `x` starts the call. `(args).N` is total but bypasses the name | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2) |
 | [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
 | [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 
@@ -3741,7 +3741,7 @@ func TestParseInterleavedHelpIsErrHelp(t *testing.T) {
 
 ---
 
-## NUR085 — No spelling reads a parameter whose kind is not statically known {#nur085}
+## NUR085 — No spelling through a parameter's bound name is total over both kinds {#nur085}
 
 **Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
 higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2),
@@ -3763,9 +3763,10 @@ def idf ([t:Any] => [t/r])  (idf 5)   → error illegal_ref: /r requires a funct
 ```
 
 So `[t]` is correct iff `t` is not bound to a function and `[t/r]` is
-correct iff it is — and the program cannot choose between them at run
-time, because the guard names `t` and so starts the call it was written
-to avoid:
+correct iff it is — **no read through the bound name is total over both
+domains** — and the program cannot choose between them at run time,
+because the guard names `t` and so starts the call it was written to
+avoid:
 
 ```
 def idf ([t:Any] => [if (t is Function) [t/r] [t]])
@@ -3774,9 +3775,12 @@ def idf ([t:Any] => [if (t is Function) [t/r] [t]])
 ```
 
 The identity function — the least interesting higher-order function there
-is — therefore has no spelling in the surface syntax. Every combinator
-that returns one of its own arguments (`I`, `K`, `const`, Church
-booleans, a generic container read) meets this.
+is — therefore cannot be written the way every other parameter is read.
+It IS expressible: `(args).N` (below) is total, and the audit's `ident`
+and `konst` are built on it. What is missing is a *name-based* read, so
+every combinator that returns one of its own arguments (`I`, `K`,
+`const`, Church booleans, a generic container read) must leave the
+ordinary spelling behind.
 
 **Evidence:** the three transcripts above, reproduced against this tree;
 `design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2. The escape hatch is
@@ -3794,6 +3798,19 @@ folklore. It is also only a partial one: `args` is the **innermost**
 fn's argument list, so a nested fn reading an ENCLOSING fn's parameter
 must box it first — `def bx [(args).0]` outside, `bx.0` inside — which
 is a second undocumented idiom layered on the first.
+
+**Documentation status:** the pieces are documented; the divergence is
+not. ADR-011 states the call/reference rule; `args` and the indexed read
+are documented in `REFERENCE.md` ("Current `fn` args list (inside body)",
+example `args . 0`), `HOWTO.md` ("You can also access the full slot list
+via `args`") and `TUTORIAL.md` (slots `args[0]`, `args[1]`). What no
+document states is that the two NAME-based reads are complementary rather
+than interchangeable — that `[t]` and `[t/r]` have disjoint domains and
+neither covers a slot of unknown kind — nor that `(args).N` is the read
+that does. The boxing step for an enclosing fn's parameter is documented
+nowhere at all. So a reader who meets `illegal_ref` learns only that the
+one spelling is wrong, with nothing pointing from there to the one that
+works.
 
 **Verdict proposed:** at minimum document `(args).N` in `REFERENCE.md`
 and `HOWTO.md` as the polymorphic read. The uniform fix would be a
@@ -3855,10 +3872,26 @@ adapter lambda (`each ([kv:Any] => [dbl (kv.v)]) m`).
 `lang/spec/higher-order.tsv` §5 documents `filter`'s Function form and no
 `each` counterpart. Not previously recorded.
 
+**Documentation status:** documented per word, nowhere as a family.
+`describe each` / `describe fold` / `describe scan` list the signatures
+faithfully, so the absence is discoverable one word at a time; but
+`lang/spec/higher-order.tsv`'s header presents the five together and
+`describe query` lists them together, and neither says the Function form
+is Map-only for four of them. The `{key,value}` / `KeyVal` callback
+shapes are documented (`lang/spec/higher-order.tsv` §5,
+`lang/go/native/filter.go`); what is undocumented is that no member of
+the family accepts a bare-element callback at all.
+
 **Verdict proposed:** resolve by fix — add `{TFunction, TList}` to
 `each` / `for-each` / `fold` / `scan`, handing the callback the element
-directly, so the Function form matches the quotation form's uniformity
-and `filter` stops being the exception.
+directly. Note this buys **signature availability**, not callback
+uniformity: `filter`'s list Function form passes a `{key,value}` pair
+(`lang/go/native/filter.go`), so after this change an
+`Integer -> Integer` function would work with `each` and still not with
+`filter`. Closing the family properly needs a matching `filter` decision
+— either an element-shaped list form or an explicit ruling that the pair
+wrapper is `filter`'s contract — and this record should not be discharged
+by the four additions alone.
 
 ---
 
@@ -3917,8 +3950,20 @@ made the audit's parser-combinator library fail `boru run` outright
 collateral — having lost `r2`, the checker cannot type `r2.ok`.
 
 **Evidence:** the transcripts above, against this tree.
-`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.4 and §5.5 carry the full
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.5 and §5.5 carry the full
 library and the reduction. Not previously recorded.
+
+**Documentation status:** undocumented as a class.
+`design/CHECK-FALSE-POSITIVES.0.md` and
+`design/CHECK-ACCURACY-RATCHET.10.md` record the known `undefined_word`
+false-positive classes in detail — dynamic-scope reads across a call
+chain, mini-redis's `expires`, the `zr` inline application, the
+closure-return `def f (mk 7)` rows — and this shape (a branch-local `def`
+lost after a `Function`-parameter call bound an earlier one in the same
+body) is not among them; no `lang/spec/*.tsv` or frontier row pins it
+either. `CLI.md` documents `--no-check` as a way to skip the pre-flight,
+but not as the remedy for a checker false positive, so a user meeting
+this has nothing that names their situation.
 
 **Verdict proposed:** resolve by fix — the branch-local `def` must be
 recorded whatever the provenance of an earlier binding in the same body.
