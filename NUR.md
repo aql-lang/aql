@@ -89,6 +89,7 @@ keep the two in sync in the same commit.
 | [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
+| [NUR090](#nur090) | One declaration, three spellings, two that work: an UNNAMED parameter typed by a named STRUCTURAL type is rejected by `fn`'s triple form and accepted by both the spec-list form and the named `x:T` form — and a `refine` newtype does not error but silently degrades to its BASE type | the function-type prototype, 2026-08-19 (issue #392, `design/FUNCTION-TYPES.0.md` §5.3) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -4049,3 +4050,76 @@ pointing the reader at the wrong thing.
 lambda argument to the same parameter the reference spelling binds it
 to. This record retires when the minimal pair above checks clean in both
 spellings, pinned as a spec row.
+
+---
+
+## NUR090 — an unnamed parameter typed by a named structural type works in the list form and not the triple form {#nur090}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+function-type prototype (`design/FUNCTION-TYPES.0.md`), which inherited
+the same defect in `fnsig`'s pair form · **Tracked as:** issue #392
+
+**Rule:** `fn`'s two forms are two spellings of one declaration —
+`lang/spec/fn-triple.tsv` §2 pins `fn x:T [O] [b]` ≡ `fn [[x:T] [O] [b]]`,
+and `STYLE-GUIDE.md` §S1 tells authors to prefer the spelling with the
+fewest brackets. A spelling the guide recommends must not be the one that
+fails.
+
+**Divergence:** for an UNNAMED parameter whose type is a named
+*structural* type, the triple form refuses what the list form accepts.
+
+```
+$ boru do 'def M (Integer tor none)  def f fn M [Any] [1]  f 5'
+error: function spec: invalid parameter: none tor Integer
+$ boru do 'def M (Integer tor none)  def f fn [[M] [Any] [1]]  f 5'
+1
+$ boru do 'def M (Integer tor none)  def f fn x:M Any [x]  f 5'
+5
+```
+
+| parameter type | unnamed triple | named `x:T` | spec list |
+|---|---|---|---|
+| builtin (`Integer`) | works | works | works |
+| `refine` newtype | **silently base-typed** | works | works |
+| `class` | `invalid parameter` | works | works |
+| disjunct (`tor`) | `invalid parameter` | works | works |
+| fn shape (`fnsig`) | `invalid parameter` | works | works |
+
+The `refine` row is the quiet one: it does not raise, it produces a
+parameter typed by the refinement's BASE, so the constraint is dropped
+without a diagnostic.
+
+**Cause:** a bare Word in the triple form's input slot is resolved by
+forward collection before the handler runs, so the slot receives the
+type's BODY. `NoEvalArgs` cannot suppress it — it is consulted only
+inside the `Parent.Equal(TList)` branch (`core/go/engine.go:3238`), i.e.
+it is list-only, which is exactly what `fn`'s own registration comment
+records for the mirror-image output slot ("a bare Word there is resolved
+by forward collection itself, which no NoEval can suppress"). The list
+form escapes it because `NoEvalArgs` DOES cover the spec list, so its
+elements stay Words and resolve by name; the named form escapes it
+because `x:T` is a Map covered by `NoEvalMapArgs`. Once substituted the
+name is generally unrecoverable — `typeof` of the evaluated word gives
+`C` for a class but `Integer` for a refine, `Disjunct` for a union and
+`FunctionSignature` for an fn shape.
+
+**A tempting fix that is WRONG, measured:** routing `ParseFnParams`'
+`default` arm through `ResolveSigType` (the named path's own resolver)
+makes every failing case build — but `ResolveSigType` degrades an
+already-evaluated body to `(Any, pattern)` where it would resolve a Word
+to the minted node, so the declaration silently weakens:
+
+```
+def H (fnsig [[T] [String]])   canon → …[{ T   …}]…   composition works
+def H fnsig T String           canon → …[{ Any …}]…   composition fails
+```
+
+That trades a loud refusal for a silent weakening. It was built, run,
+and backed out.
+
+**Verdict proposed:** resolve by fix, but the fix is an engine-level
+decision rather than a handler patch — see issue #392 for the three
+candidates (let the slot see the Word; make a type name evaluate to its
+minted node; or stamp the minted node onto the pushed body). This record
+retires when the three spellings agree for every row of the table above,
+pinned as spec rows in `lang/spec/fn-triple.tsv`.

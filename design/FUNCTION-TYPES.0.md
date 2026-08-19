@@ -263,15 +263,45 @@ parameter — the exact thing §1 says it could not do. With bare
    higher-order-over-higher-order case, which is much of the point, and
    it needs the bracketed spelling today.
 
-   **Cause.** `NoEvalArgs` is LIST-only, so the pair form's bare-word
-   slot is evaluated to the type's BODY before the handler sees it, and
-   the parameter parser rejects a structural body. `fn`'s triple form
-   escapes this because its input slot is a MAP (`x:T`), which
-   `NoEvalMapArgs` covers — and `fn`'s own registration comment records
-   the same problem for its *output* slot as "deliberately NOT fixed
-   here: a bare Word there is resolved by forward collection itself,
-   which no NoEval can suppress". So this is a known-hard class in the
-   codebase, not an oversight in one handler.
+   **This is not the sugar's bug — it is `fn`'s, inherited.** The same
+   declaration fails the same way in `fn`'s own triple form:
+
+   ```
+   $ boru do 'def M (Integer tor none)  def f fn M [Any] [1]  f 5'
+   error: function spec: invalid parameter: none tor Integer
+   $ boru do 'def M (Integer tor none)  def f fn [[M] [Any] [1]]  f 5'
+   1
+   ```
+
+   and a `refine` newtype in that position does not even error — it
+   silently produces a parameter typed by the refinement's BASE.
+   Recorded as **NUR090**, tracked as **issue #392**.
+
+   **Cause.** A bare Word in the input slot is resolved by forward
+   collection before the handler runs, so the slot receives the type's
+   BODY. `NoEvalArgs` cannot suppress it — it is consulted only inside
+   the `Parent.Equal(TList)` branch, i.e. it is list-only, which is what
+   `fn`'s own registration comment records for the mirror-image output
+   slot ("a bare Word there is resolved by forward collection itself,
+   which no NoEval can suppress"). The list form escapes it because
+   `NoEvalArgs` does cover the spec list; the named `x:T` form escapes it
+   because a pair is a Map covered by `NoEvalMapArgs`.
+
+   **A tempting fix that is wrong, and was measured.** Routing
+   `ParseFnParams`' `default` arm through `ResolveSigType` — the resolver
+   the *named* path already uses — makes every failing case build. But
+   `ResolveSigType` degrades an already-evaluated body to
+   `(Any, pattern)` where it would resolve a Word to the minted node, so
+   the declaration silently weakens:
+
+   ```
+   def H (fnsig [[T] [String]])   canon → …[{ T   …}]…   composition works
+   def H fnsig T String           canon → …[{ Any …}]…   composition fails
+   ```
+
+   A loud refusal traded for a silent weakening is a bad trade. It was
+   built, run, and backed out; issue #392 carries the three candidate
+   engine-level fixes.
 
    The list form is unaffected throughout and remains the general
    spelling. The sugar is a convenience for the common case, and §7 must
