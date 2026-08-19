@@ -263,19 +263,23 @@ parameter — the exact thing §1 says it could not do. With bare
    higher-order-over-higher-order case, which is much of the point, and
    it needs the bracketed spelling today.
 
-   **This is not the sugar's bug — it is `fn`'s, inherited.** The same
-   declaration fails the same way in `fn`'s own triple form:
+   **This is not the sugar's bug, nor even `fn`'s — it is one level
+   down.** A type name does not always denote its type: a builtin or
+   `refine` word evaluates to its minted lattice NODE, while a `class`,
+   disjunct or fn-shape word evaluates to its structural BODY, and the
+   minted node is never reached.
 
    ```
-   $ boru do 'def M (Integer tor none)  def f fn M [Any] [1]  f 5'
-   error: function spec: invalid parameter: none tor Integer
-   $ boru do 'def M (Integer tor none)  def f fn [[M] [Any] [1]]  f 5'
-   1
+   $ boru do 'canon Integer'                       → Integer
+   $ boru do 'def P refine Integer  canon P'       → P
+   $ boru do 'def M (Integer tor none)  canon M'   → none tor Integer   ← the body
    ```
 
-   and a `refine` newtype in that position does not even error — it
-   silently produces a parameter typed by the refinement's BASE.
-   Recorded as **NUR090**, tracked as **issue #392**.
+   So `fn M [Any] [1]` hands `ParseFnParams` a disjunct body where a
+   type belongs, and it lands in the parser's reject arm. Recorded as
+   **NUR090**, tracked as **issue #392**. `refine` is the proof the
+   target behaviour already exists — it survives evaluation precisely
+   because its binding holds a node.
 
    **Cause.** A bare Word in the input slot is resolved by forward
    collection before the handler runs, so the slot receives the type's
