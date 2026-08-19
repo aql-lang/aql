@@ -77,6 +77,9 @@ keep the two in sync in the same commit.
 | [NUR082](#nur082) | Three tree-walking subcommands, two rules for `.boru/`: `fmt` and (now) `check` skip the package directory, `boru test`'s `discover()` walks it — VERDICT 2026-08-18: resolve by fix, one shared walk helper carrying the skip | giving `boru check` directory targets, 2026-08-18 (W-CLI-CHECK) |
 | [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
 | [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
+| [NUR085](#nur085) | No spelling reads a parameter whose kind is not statically known: a bare name CALLS when the binding is a function, and `/r` REFUSES when it is not, so `λx.x` is unwritable in the obvious form — and the `x is Function` guard cannot be written either, because naming `x` starts the call | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2) |
+| [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
+| [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -3735,3 +3738,189 @@ func TestParseInterleavedHelpIsErrHelp(t *testing.T) {
 		t.Errorf("FlagSet output = %q, want the usage listing", out.String())
 	}
 }
+
+---
+
+## NUR085 — No spelling reads a parameter whose kind is not statically known {#nur085}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2),
+while writing Church booleans — `λt.λf.t` must return a parameter that is
+itself a Church boolean, i.e. a `Function`
+
+**Rule:** ADR-011 — "a function value is always the inert, referenceable
+thing … a bare name bound to a function calls; `/r` takes the reference."
+One rule, applied uniformly, so a program can always say which of the two
+it means.
+
+**Divergence:** the two spellings are each defined on the *complement* of
+the other's domain, and there is no third. For a parameter `t` of a type
+that admits both (`Any`, or `Function` in a generic position):
+
+```
+def idf ([t:Any] => [t])    (idf λ)   → error signature_error: cannot call `t`
+def idf ([t:Any] => [t/r])  (idf 5)   → error illegal_ref: /r requires a function word
+```
+
+So `[t]` is correct iff `t` is not bound to a function and `[t/r]` is
+correct iff it is — and the program cannot choose between them at run
+time, because the guard names `t` and so starts the call it was written
+to avoid:
+
+```
+def idf ([t:Any] => [if (t is Function) [t/r] [t]])
+  → error signature_error: t is still waiting for 1 argument(s) when `is`
+    begins its own dispatch — a function word is a barrier …
+```
+
+The identity function — the least interesting higher-order function there
+is — therefore has no spelling in the surface syntax. Every combinator
+that returns one of its own arguments (`I`, `K`, `const`, Church
+booleans, a generic container read) meets this.
+
+**Evidence:** the three transcripts above, reproduced against this tree;
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2. The escape hatch is
+`(args).N`, which reads the argument list rather than the name and so
+never dispatches:
+
+```
+def ident fn [[t:Any][Any][(args).0]]
+  (ident 5) → 5 · (ident "s") → 's' · def g (ident λ) (g 5) → 6
+```
+
+`args` is documented (`describe args`) but its role as *the* polymorphic
+parameter read appears in no user-facing document, so the workaround is
+folklore. It is also only a partial one: `args` is the **innermost**
+fn's argument list, so a nested fn reading an ENCLOSING fn's parameter
+must box it first — `def bx [(args).0]` outside, `bx.0` inside — which
+is a second undocumented idiom layered on the first.
+
+**Verdict proposed:** at minimum document `(args).N` in `REFERENCE.md`
+and `HOWTO.md` as the polymorphic read. The uniform fix would be a
+spelling that means "the binding's value, whatever kind it is" and is
+total over both domains — e.g. admitting `/r` on a non-function binding
+as an identity rather than an `illegal_ref`, which would make `[t/r]`
+the single answer. That choice is the maintainer's; this record stands
+until one of the two lands.
+
+---
+
+## NUR086 — The code-body iterators take a `Function` callback over a Map but not over a List {#nur086}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3),
+trying to hand a `Function` value to `each` the way `filter` accepts one
+
+**Rule:** one word family, one argument-positioning convention.
+`each` / `for-each` / `fold` / `scan` / `filter` are documented together
+as the higher-order iterators (`describe query`,
+`lang/spec/higher-order.tsv`), and all five accept a quotation body over
+either container shape.
+
+**Divergence:** for the *Function* form, four of the five register the
+Map shape only, and the fifth registers both.
+
+| word | `{TFunction, …}` signatures | source |
+|---|---|---|
+| `each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:326` |
+| `for-each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:348` |
+| `fold` | `{TFunction, TMap, TAny}`, `{TFunction, TMap}` | `lang/go/native/native_array.go:393-394` |
+| `scan` | `{TFunction, TMap}` | `lang/go/native/native_array.go:420` |
+| `filter` | **`{TFunction, TAny}`** — list and map alike | `lang/go/native/natives.go:260` |
+
+```
+$ boru do 'def dbl ([x:Integer] => [x mul 2]) end each dbl/r [1 2 3]'
+error: [boru/signature_error]: cannot call `each` — no signature matches the arguments
+  = note: candidate `each (Function, Map)` takes 2 arguments, but none were supplied
+  = note: candidate `each (Reach, List)`  takes 2 arguments, but none were supplied
+
+$ boru do 'filter ([p:Any] => [(p.value mod 2) eq 0]) [1 2 3 4]'
+[2 4]
+```
+
+Compounding it, the Map form is not a plain element callback either — it
+hands the lambda a `KeyVal` — so a unary `Integer -> Integer` function
+value has **no** iterator it can be passed to directly:
+
+```
+$ boru do 'def dbl ([x:Integer] => [x mul 2]) end each dbl/r {a:1 b:2}'
+error: each: key "a": no matching lambda signature for 1 argument(s)
+```
+
+The only route is to name it inside a quotation (`each [dbl] xs`), which
+NUR037 refuses to compile when the fn is fn-local, or to write an
+adapter lambda (`each ([kv:Any] => [dbl (kv.v)]) m`).
+
+**Evidence:** the registrations cited above; the transcripts above;
+`lang/spec/higher-order.tsv` §5 documents `filter`'s Function form and no
+`each` counterpart. Not previously recorded.
+
+**Verdict proposed:** resolve by fix — add `{TFunction, TList}` to
+`each` / `for-each` / `fold` / `scan`, handing the callback the element
+directly, so the Function form matches the quotation form's uniformity
+and `filter` stops being the exception.
+
+---
+
+## NUR087 — A `def` inside an `if` branch is lost to the checker after a `def` bound a call through a `Function` parameter {#nur087}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5)
+— a parser-combinator library that runs correctly is refused by the
+default `boru run`
+
+**Rule:** the checker is an *analysis* pass over a program the engine
+will run; a program the engine runs correctly must not be reported as an
+error (the check-accuracy discipline, `design/CHECK-ACCURACY-RATCHET.10.md`).
+`boru run` performs the check as a pre-flight and refuses on any Error,
+so a false positive is not advisory — it stops the program.
+
+**Divergence:** in a fn body, a `def` inside an `if` branch is not
+recorded once an **earlier** `def` in the same body bound the result of a
+call through a `Function` **parameter**. Minimal repro:
+
+```boru
+def mk fn [[a:Function b:Function][Function][
+  ( fn [[s:Integer][Map][
+      def r1 (a s)
+      if (r1.ok)
+        [ def r2 (b (r1.rest))
+          if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
+                     [ {ok:false rest:s val:None} ] ]
+        [ {ok:false rest:s val:None} ] ]] ) ]]
+def h (mk ([z:Integer] => [ {ok:true val:1 rest:8} ])
+          ([z:Integer] => [ {ok:true val:2 rest:9} ]))
+print (h 1)
+```
+
+```
+$ boru check m_checkfp4.boru
+check: 6:15: [error] undefined_word: undefined word: r2
+  = help: did you mean `r1`?
+check: [error] no_signature: cannot call `dot` — no signature matches the arguments; got (Atom, Word)
+  … 6 error(s)
+
+$ boru run -no-check m_checkfp4.boru
+{"ok": true, "val": [1, 2], "rest": 9}
+```
+
+`r2` is bound one line above its use, in the same branch. Replacing
+`def r1 (a s)` with a map literal — removing only the call through the
+`Function` parameter — makes the same file check clean, which isolates
+the trigger to that binding rather than to the nested `if`.
+
+**What it costs.** The shape is not exotic: it is the ordinary
+"run a parser, branch on success, run the next one" body, and it is what
+made the audit's parser-combinator library fail `boru run` outright
+(`check failed: 6 error(s)`, exit 1) while running correctly under
+`-no-check` on both engines. The follow-on `no_signature` on `dot` is
+collateral — having lost `r2`, the checker cannot type `r2.ok`.
+
+**Evidence:** the transcripts above, against this tree.
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.4 and §5.5 carry the full
+library and the reduction. Not previously recorded.
+
+**Verdict proposed:** resolve by fix — the branch-local `def` must be
+recorded whatever the provenance of an earlier binding in the same body.
+This record retires when the repro above checks clean, with the reduced
+file pinned as a negative test alongside it.
