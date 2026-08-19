@@ -57,7 +57,7 @@ func numHandler(op func(a, b float64) (float64, error), preferInt bool) core.Han
 func registerArith(r *core.Registry) {
 	// Args are [a b] in surface order ("a sub b" => sig=[b,a]); to match
 	// the engine convention every binary handler computes args[1] op args[0]
-	// so the swap form reads naturally. See lang/CLAUDE.md "Non-commutative
+	// so the infix form reads naturally. See lang/CLAUDE.md "Non-commutative
 	// two-arg sanity check" for the reasoning.
 	bin := func(name string, op func(a, b float64) (float64, error), preferInt bool) {
 		h := numHandler(op, preferInt)

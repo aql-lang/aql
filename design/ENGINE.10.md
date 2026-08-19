@@ -55,10 +55,14 @@ order is NOT preserved — the function word acts as a pivot, consuming
 outward symmetrically.
 
 The four placements above are *mirror-equivalent*: they all bind the same
-sig. Forward form `f a b c` is the recommended canonical spelling (written
-order matches declared param order). The one genuinely distinct two-arg
-arrangement is the **swap form** `a f b`, which binds the forward operand
-to sig[0] and the stack operand to sig[1] (`10 sub 3` → sig[0]=3, sig[1]=10).
+sig. Forward form `f a b c` is the recommended canonical spelling for
+words that are not read as operators (written order matches declared
+param order); the two-arg words convention reads as infix operators are
+written infix instead (`STYLE-GUIDE.md` §S2). Moving an operand across
+the word changes the split and therefore the binding — `a f b` puts the
+forward operand in sig[0] and the stack operand in sig[1]
+(`10 sub 3` → sig[0]=3, sig[1]=10). That is the one rule applied to a
+different split, not a two-arg special case or a "swap form".
 See `design/SIG-ORDER-REFACTOR.10.md` for the single-convention end state.
 
 Here are some examples ([|] indicates the state of the stack: [current|future]):

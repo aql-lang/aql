@@ -32,9 +32,9 @@ import "boru:math-util"  MathUtil.cbrt 27.0	3.0	cube root
 import "boru:math-util"  MathUtil.log2 8.0	3.0	base-2 log
 import "boru:math-util"  MathUtil.log10 1000.0	3.0	base-10 log
 #
-# §4  composition and swap form
+# §4  composition and stack form
 import "boru:math-util"  MathUtil.sqrt 16.0 add 1.0	5.0	results compose like any value
-import "boru:math-util"  16.0 MathUtil.sqrt	4.0	swap form also dispatches
+import "boru:math-util"  16.0 MathUtil.sqrt	4.0	stack form also dispatches
 #
 # §5  IEEE-754 classifiers & ops (see design/IEEE-754-COMPLIANCE.8.md)
 import "boru:math-util"  nan MathUtil.is-nan	true	NaN detected

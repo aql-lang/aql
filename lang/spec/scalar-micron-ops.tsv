@@ -4,7 +4,7 @@
 # Every scalar type and every Micron kind has WELL-DEFINED behaviour under
 # the binary arithmetic words add / sub / mul / div / mod / pow, applied
 # WITHIN a type (never across it — a cross-type pair is a type error).
-# Rows use the SWAP form `a op b`, which reads naturally (the handler
+# Rows use the infix form `a op b`, which reads naturally (the handler
 # computes `a OP b`); the pure forward form `op a b` reverses the operands,
 # exactly like the numeric words (see arithmetic.tsv).
 #

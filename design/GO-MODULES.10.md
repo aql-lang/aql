@@ -67,7 +67,7 @@ Reflected words behave exactly like native-module words (see
 [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md) "Calling Convention"): a
 `Namespace.word` dot-access is an auto-invoking `FnDef` wrapper that fires
 when it finds matching arguments **on the stack**. So arguments precede the
-dot expression — stack form (`a b Pkg.word`) and swap form (`a Pkg.word b`)
+dot expression — stack form (`a b Pkg.word`) and infix form (`a Pkg.word b`)
 both dispatch:
 
 ```
@@ -77,10 +77,12 @@ import "go:strings"
 ```
 
 > **Note on argument form.** boru's general guidance is to prefer *forward*
-> form `f a b c` (see `eng/go/CLAUDE.md` "Signature Ordering"). Imported
-> module words are the documented exception: the dot-access desugars to a
-> `get`-chain that resolves the namespace from the stack, so the wrapper can
-> only auto-invoke on stack/swap-form arguments. Pure forward form
+> form `f a b c` for words that are not read as operators (see
+> `eng/go/CLAUDE.md` "Signature Ordering"). Imported module words are the
+> documented exception: the dot-access desugars to a `get`-chain that
+> resolves the namespace from the stack, so the wrapper can only
+> auto-invoke when at least one argument is already on the stack — the
+> stack and infix forms. Pure forward form
 > `Pkg.word a b` does **not** dispatch — the bare `Namespace` token leads
 > with nothing on the stack and errors as an undefined word (verified
 > against `boru:math-util`: `3 7 MathUtil.min` → `3`, but `MathUtil.min 3 7`
@@ -91,8 +93,10 @@ import "go:strings"
 A Go function's parameters map to sig positions **in declared order**
 (top-first, sig order — the one kernel convention). For a Go
 `func F(a A, b B) R`, the stack-form call is `a b Pkg.f` (`a` is sig[0], the
-stack top). Inner sigs must use `BarrierPos: -1` so the swap form also
-dispatches (see the caveat under "Resolution path").
+stack top). Inner sigs must use `BarrierPos: -1` — all-forward, so a
+position the caller does not fill forward falls back to the stack, which
+is what lets the infix form dispatch too (see the caveat under
+"Resolution path").
 
 ## Host registration (the "arbitrary" surface)
 
@@ -194,7 +198,7 @@ wrap each as an `FnDef` carrying the sub-registry, and package them into a
 generated from `reflect.Type` instead of a hand-written `[]NativeFunc`.
 
 > **Sub-registry wrapper caveat:** module FnDef wrappers must register their
-> inner native with `BarrierPos: -1` so swap-form `a Pkg.f b` dispatches.
+> inner native with `BarrierPos: -1` so the infix form `a Pkg.f b` dispatches.
 > This is a known sharp edge documented in `lang/go/CLAUDE.md` "Module FnDef
 > Wrappers — inner sig BarrierPos (CRITICAL)" and pinned by
 > `wrapper_dispatch_test.go`. The reflected generator must honour it.

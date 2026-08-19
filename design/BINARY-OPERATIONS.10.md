@@ -17,9 +17,10 @@ live in the `boru:bin` module.
 
 ## Argument convention
 
-Two-operand binary ops follow boru's standard swap-form convention
-(`args[1] OP args[0]`). For shifts, the canonical surface reads as
-"value shifted by count":
+Two-operand binary ops follow boru's standard handler convention
+(`args[1] OP args[0]`), which is what makes the infix spelling read as
+written — house style for these words (`STYLE-GUIDE.md` §S2). For shifts
+the canonical surface reads as "value shifted by count":
 
 ```
 8 bsl 2       => 32     # 8 << 2

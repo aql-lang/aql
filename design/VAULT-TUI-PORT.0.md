@@ -420,7 +420,7 @@ Palette words (from `runPalette`): `secrets|secret|s`,
 1. **Lang unit tests** (ADR-008, positives paired with negatives):
    `modules/vault_test.go` drives every word against a scripted fake
    `VaultSpec` — validation, conversion, error mapping, `no_backend`,
-   policy denial, swap-form wrapper dispatch. tuikit mask rendering tests.
+   policy denial, infix-form wrapper dispatch. tuikit mask rendering tests.
 2. **TSV specs**: `lang/spec/module-vault.tsv` (usage + `no_backend`
    negatives, headless-safe because validation precedes backend lookup);
    `module-tui.tsv` mask rows.

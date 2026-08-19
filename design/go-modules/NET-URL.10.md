@@ -40,7 +40,7 @@ an existing module namespace), so **no `-util` suffix** is needed
 
 Signatures are **top-first, sig order** (position 0 = top of stack), per
 the README "Argument order & dispatch" rule. All inner natives use
-`BarrierPos: -1` so the swap form `a Url.word b` dispatches.
+`BarrierPos: -1` so the infix form `a Url.word b` dispatches.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|

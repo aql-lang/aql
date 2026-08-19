@@ -35,7 +35,7 @@ import "boru:mail"            # binds the Mail namespace
 ## 4. API
 
 Signatures are **top-first, sig order** (position 0 = top of stack). All
-inner natives use `BarrierPos: -1` so the swap form dispatches.
+inner natives use `BarrierPos: -1` so the infix form dispatches.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|

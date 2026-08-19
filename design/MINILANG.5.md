@@ -565,7 +565,7 @@ inside the module body, not inherited from the caller (pinned in
 `fn-value.tsv` §3).
 
 Proven ✓: kind→word dispatch by name atom; subject-from-stack through
-the standard signature (swap form); opts values as literals,
+the standard signature (infix form); opts values as literals,
 call-site expressions, and variables (deferred evaluation, evaluated
 once in the generated code); multi-value kinds; `macroexpand`
 introspection of mini calls; expansion caching; loud unknown-kind and
@@ -582,7 +582,7 @@ Empirical findings the design must respect:
   bind their own subjects).
 - **F2 — argument order in generated code.** Binary non-commutative
   handlers compute `args[1] op args[0]`; a kind compiler emitting boru
-  (the `math` kind) must emit swap-form / fully-parenthesized code —
+  (the `math` kind) must emit infix / fully-parenthesized code —
   `pow 10 2` is 2¹⁰, `10 pow 2` is 10². Every code-generating kind's
   battery needs a non-commutative case.
 - **F3 — string escaping.** Both `'…'` and `"…"` process backslashes

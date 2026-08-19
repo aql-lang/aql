@@ -215,7 +215,7 @@ func Compile(reg *eng.Registry, tokens []eng.Value) (*StackForm, []eng.CheckDiag
 - **Zero overhead when off.** `RecordForm == false` branches around every emit; runtime cost matches today's check pass.
 - **Re-uses existing carrier-mode forward-arg resolution.** Per `boru-bytecode-report.0.md:101-117`: by the time `execMatch` fires for a call site, forward args have already been pushed as carriers in sig order via `rearrangeForForward`. So `Call{Name, Arity}` correctly references the most recent N pushes regardless of surface form.
 
-**Tests**: `eng/go/stackform/stackform_test.go` exercises forward-arg / swap-form / stack-only / `/s` / `/f` / `BarrierPos`-mid cases (mirroring `lang/go/CLAUDE.md` "The unified algorithm" table) and asserts the recorded ops match expected golden forms.
+**Tests**: `eng/go/stackform/stackform_test.go` exercises forward-arg / infix-form / stack-only / `/s` / `/f` / `BarrierPos`-mid cases (mirroring `lang/go/CLAUDE.md` "The unified algorithm" table) and asserts the recorded ops match expected golden forms.
 
 ### 0c — Eval, pretty-print, and output-equivalence tests (~220 LOC)
 

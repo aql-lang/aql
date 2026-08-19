@@ -40,13 +40,13 @@ The bare package name `strconv` does not clash with any builtin type
 ## 4. API
 
 Signatures are **top-first, sig order** (position 0 is the top of the
-stack). All inner native sigs use `BarrierPos: -1` so the swap form
+stack). All inner native sigs use `BarrierPos: -1` so the infix form
 dispatches.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `Atoi(s) (int,err)` | `parse-int` | `[String] -> Integer` | Parse a base-10 integer string. | `Atoi` ≡ `ParseInt(s,10,64)`; `(int,err)` → value-or-error `parse-int`. |
-| `ParseInt(s,base,bitSize) (int64,err)` | `parse-int-base` | `[Integer base, String s] -> Integer` | Parse a signed integer in the given base. | Dropped `bitSize` (boru Integer is int64). base is the top arg so swap reads `s parse-int-base base`; `0` base means infer from prefix. `(int64,err)` → value-or-error. |
+| `ParseInt(s,base,bitSize) (int64,err)` | `parse-int-base` | `[Integer base, String s] -> Integer` | Parse a signed integer in the given base. | Dropped `bitSize` (boru Integer is int64). base is the top arg so infix reads `s parse-int-base base`; `0` base means infer from prefix. `(int64,err)` → value-or-error. |
 | `ParseUint(s,base,bitSize) (uint64,err)` | `parse-uint` | `[Integer base, String s] -> Integer` | Parse an unsigned integer in the given base. | Dropped `bitSize`. Result returned as Integer; overflow past int64 max errors `parse-uint`. |
 | `ParseFloat(s,bitSize) (float64,err)` | `parse-float` | `[String] -> Float` | Parse a floating-point string. | Dropped `bitSize` (boru Float is float64). `(float64,err)` → value-or-error `parse-float`. |
 | `ParseBool(s) (bool,err)` | `parse-bool` | `[String] -> Boolean` | Parse a boolean ("1","t","true","0","f","false",…). | `(bool,err)` → value-or-error `parse-bool`. |
@@ -109,7 +109,7 @@ values — `Strconv.format-*` is the scalar-specific, base-aware path.
 import "boru:strconv"
 
 "42" Strconv.parse-int                 # 42
-"ff" Strconv.parse-int-base 16         # 255   (swap form: s word base)
+"ff" Strconv.parse-int-base 16         # 255   (infix form: s word base)
 "3.14" Strconv.parse-float             # 3.14
 "true" Strconv.parse-bool              # true
 255 Strconv.format-int                 # "255"

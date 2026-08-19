@@ -393,7 +393,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// its subject param type from the wrapper sig, and a lone TAny param does
 	// not auto-apply to a preceding stack value (TAny cannot distinguish "a
 	// subject is present" from "none"). Concrete TMap / TList params make the
-	// swap-form `doc mini sp '…'` dispatch, like `xp`'s TXml subject.
+	// infix-form `doc mini sp '…'` dispatch, like `xp`'s TXml subject.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-sp",
 		Signatures: []native.Signature{

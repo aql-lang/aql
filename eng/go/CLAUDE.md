@@ -98,13 +98,27 @@ scope and the reference stays dynamic. See lang/go/CLAUDE.md
 ## Signature Ordering (CRITICAL)
 
 There is exactly **one** argument-positioning convention in this
-kernel: **top-first, sig order**. Position 0 is whatever sits on
-the top of the stack, position 1 is next-deeper, and so on. The
-single source of truth is `matchSignature`
-(`engine.go::matchSignature`). Args flow through every dispatch
-path in this order with **no reordering at any handoff** — never
-swap, reverse, or re-permute args between matchSignature and the
+kernel, and it holds at every arity:
+
+> A signature binds its args **in sig order**. Matching fills
+> positions from the **forward stack** — the tokens after the
+> word, in written order — up to that signature's barrier, then
+> fills every position still empty from the **value stack** in
+> reverse: the next position takes the top of the stack, the one
+> after it the next-deeper value, and so on.
+
+Two-arg words are **not** a special case; there is no "swap
+form". The single source of truth is `MatchSignature`
+(`core/go/engine.go`). Args flow through every dispatch path in
+this order with **no reordering at any handoff** — never swap,
+reverse, or re-permute args between MatchSignature and the
 handler.
+
+Two consequences worth naming, because they surprise readers:
+all args on the value stack yields **Forth order** (top is
+sig[0]); all args written forward yields **written order**, which
+for a non-commutative handler reads backwards — `sub 1 3` is `2`,
+since `sub` computes `args[1] - args[0]`.
 
 Concretely:
 
@@ -154,27 +168,36 @@ coordinated stop conditions that can drift apart — read
 
 ### Surface form recommendation
 
-**Always use forward form**: `f a b c`. It reads naturally
-(declared param order matches written argument order: sig[0]=a,
-sig[1]=b, …) and avoids the apparent inversion that stack form
-produces (`c b a f` is mirror-equivalent but reads backwards).
-The Phase-4 unified rule says `f a b ≡ b f a ≡ b a f`, so any of
-those work, but forward form is the recommended canonical form
-for new code, examples, and documentation.
+Every surface form is the SAME ONE split rule — collection moves
+forward until the barrier, then continues on the value stack in
+reverse. Forward args fill sig positions 0..k-1 in written order;
+the remaining positions fill from the stack prefix, top-down.
+There is **no "swap form"** and **no two-arg special case**: both
+phrasings are legacy misunderstandings and must not appear in
+code, comments, or docs.
 
-There is no separate "swap form" — every arrangement is the same
-ONE split rule: collection moves forward until the barrier, then
-backward. Forward args fill sig positions 0..k-1 in written
-order; the remaining positions fill backward from the stack
-prefix. For sig order (a, b, c) with barrier 3, all of
-`f a b c ≡ c f a b ≡ c b f a ≡ c b a f` are the same call. The
-mixed two-arg split `a f b` is just k=1: b → sig[0], a → sig[1]
-— so `a f b ≡ f b a ≡ a b f` (e.g. `10 sub 3 ≡ sub 3 10 ≡
-10 3 sub = 7`). What trips readers is that `a f b` and `f a b`
-are DIFFERENT assignments (different splits of the same
-operands): `sub 10 3 ≡ 3 sub 10 ≡ 3 10 sub = -7`. Mixed splits
-read naturally for non-commutative ops; the all-forward spelling
-of the same assignment just lists the operands in sig order.
+Where the split falls is the only thing a call form chooses. For
+sig order (a, b, c) with barrier 3, all of
+`f a b c ≡ c f a b ≡ c b f a ≡ c b a f` are the same call. At two
+args the same holds: `a f b` is just k=1 (b → sig[0], a → sig[1]),
+so `a f b ≡ f b a ≡ a b f` (e.g. `10 sub 3 ≡ sub 3 10 ≡
+10 3 sub = 7`). What trips readers is that `a f b` and `f a b` are
+DIFFERENT assignments — different splits of the same operands —
+so `sub 10 3 ≡ 3 sub 10 ≡ 3 10 sub = -7`. Nothing about that is
+specific to arity 2; it is the rule reading operands where
+they sit.
+
+Two surface conventions follow (STYLE-GUIDE.md §S2):
+
+- **Infix form for words read as infix operators** — `add`, `sub`,
+  `mul`, `div`, `mod`, `pow`, `and`, `or`, `lt`, `lte`, `gt`,
+  `gte`, `eq`, `neq`. Write `1 add 2`, `10 sub 3`, `n lte 1`: one
+  operand on the stack, one forward. Binary handlers compute
+  `args[1] OP args[0]` precisely so this split reads as written.
+- **Forward form `f a b c` for everything else** — declared param
+  order matches written argument order (sig[0]=a, sig[1]=b, …).
+  Reach for a stack-side split only where a pipeline has already
+  left the operands on the stack.
 
 ### Trivial-delegation wrapper short-circuit
 

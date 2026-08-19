@@ -15,7 +15,7 @@
 {a:(1 add 2)}	{a:3}	a paren map value evaluates inline
 {a:(1 add 2), b:(2 mul 3)}	{a:3 b:6}	sibling paren values evaluate independently
 {a:{b:(1 add 2)}}	{a:{b:3}}	nested map, nested paren
-{a:(10 sub 3)}	{a:7}	swap-form arithmetic inside a data slot
+{a:(10 sub 3)}	{a:7}	infix-form arithmetic inside a data slot
 def n 4 {a:(n add 1)}	{a:5}	a paren value reads live bindings at bind time
 def dbl fn [[x:Integer][Integer][x mul 2]] {a:(dbl 3)}	{a:6}	…and may call user fns
 {a:((1 add 2) mul 3)}	{a:9}	parens nest inside the value expression

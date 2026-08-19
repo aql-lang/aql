@@ -116,7 +116,7 @@ func init() {
 	// Two things trip callers here and neither shows in a signature: the
 	// INSTANT vs DATE split (a point on the timeline vs a calendar day —
 	// most calendar words take a Date, so an Instant needs `to-date`
-	// first), and the boru swap convention on the comparison words. Every
+	// first), and the boru handler convention on the comparison words. Every
 	// line below was run to get its result.
 	registerExamples("boru:time-util", map[string][]string{
 		"now":       {`TimeUtil.now                                    ;# an Instant — a point on the timeline, always UTC`},
@@ -155,7 +155,7 @@ func init() {
 			`def a (TimeUtil.to-date (TimeUtil.unix 1))`,
 			`def b (TimeUtil.to-date (TimeUtil.unix 90000))`,
 			`TimeUtil.is-before a b                           ;# false — reads "b is before a"`,
-			`a TimeUtil.is-before b                           ;# true — the swap form reads forwards`,
+			`a TimeUtil.is-before b                           ;# true — the infix form reads forwards`,
 		},
 		"earliest": {
 			`def a (TimeUtil.to-date (TimeUtil.unix 1))`,

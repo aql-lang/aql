@@ -267,12 +267,16 @@ because a forward-eligible position accepts a stack value too. That is
 why it is the spelling `writePrecedenceMixed` falls back to for a word
 whose overloads disagree.
 
-**The swap form is the lone non-equivalence.** `a f b` is `k=1`: `b`
+**Where the split falls decides the binding.** `a f b` is `k=1`: `b`
 fills `sig[0]`, `a` fills `sig[1]`. It is a *different split of the same
-operands*, not a different rule, which is why `10 sub 3 = 7` while
-`sub 10 3 = -7`. Non-commutative operators read naturally in swap form,
-and the handler convention (`args[1] OP args[0]`) exists to make that
-reading the natural one.
+operands*, not a different rule and not a two-arg special case, which is
+why `10 sub 3 = 7` while `sub 10 3 = -7` (and `sub 1 3 = 2`). The same
+thing happens at every arity — `c f a b` and `f c a b` differ for
+exactly this reason. Non-commutative operators read naturally when the
+split leaves one operand on each side of the word, and the handler
+convention (`args[1] OP args[0]`) exists to make that reading the
+natural one; that is why infix is house style for them
+(`STYLE-GUIDE.md` §S2).
 
 **Why the levers are per-call-site.** `/s` forces stack (limit 0) and
 `/f` forces forward (limit N) at a single call, and grouping `( … )`

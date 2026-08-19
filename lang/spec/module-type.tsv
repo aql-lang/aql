@@ -13,8 +13,8 @@ import "boru:type-util"  TypeUtil.parent Float	Number	Float's parent is Number
 import "boru:type-util"  TypeUtil.root Integer	Scalar	Integer's branch root is Scalar
 import "boru:type-util"  TypeUtil.root String	Scalar	String's branch root is Scalar
 #
-# §3  swap form
-import "boru:type-util"  Integer TypeUtil.parent	Number	swap form dispatches
+# §3  stack form
+import "boru:type-util"  Integer TypeUtil.parent	Number	stack form dispatches
 #
 # §4  tpartial — make every field of a Record/class type optional (moved here)
 import "boru:type-util"  (TypeUtil.tpartial (refine Record [x:Integer])) istype	true	tpartial yields a type
@@ -32,16 +32,16 @@ import "boru:type-util"  TypeUtil.paramsof (fn [[a:Integer b:String] [Integer] [
 import "boru:type-util"  TypeUtil.returnsof (fn [[a:Integer] [Integer] [a]])	Integer	the return type
 # brand — a nominal subtype tagged with an atom (swap-arg: tag then base)
 import "boru:type-util"  TypeUtil.brand userid/q Integer	brand:userid	tagged nominal subtype of Integer
-# exclude / extract — TypeScript-style set difference / intersection (swap form: target op what)
+# exclude / extract — TypeScript-style set difference / intersection (infix form: target op what)
 import "boru:type-util"  (Integer tor String) TypeUtil.exclude String	Integer	remove String from the disjunct
 import "boru:type-util"  (Integer tor String) TypeUtil.extract Integer	Integer	keep only the Integer alternative
 # lca — least common ancestor in the lattice
 import "boru:type-util"  TypeUtil.lca Integer Float	Number	common supertype of Integer and Float
-# merge — combine two record types (swap form: a op b)
+# merge — combine two record types (infix form: a op b)
 import "boru:type-util"  (refine Record [x:Integer]) TypeUtil.merge (refine Record [y:String])	record{x:Integer y:String}	union of fields
 # nominal — mint an anonymous nominal alias of a base type
 import "boru:type-util"  (TypeUtil.nominal Integer) istype	true	nominal yields a type
-# omit / pick — drop / retain named fields (swap form: record op [names])
+# omit / pick — drop / retain named fields (infix form: record op [names])
 import "boru:type-util"  (refine Record [x:Integer y:String]) TypeUtil.omit [x/q]	record{y:String}	drop field x
 import "boru:type-util"  (refine Record [x:Integer y:String]) TypeUtil.pick [x/q]	record{x:Integer}	keep only field x
 # required — strip the optional (None) alternative from every field

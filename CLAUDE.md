@@ -6,6 +6,33 @@ for the task at hand and explains how to discover the language and the CLI
 straight from the tool with **`boru describe`** (words, categories, modules)
 and **`boru help`** (the CLI's subcommands).
 
+## Argument order — one rule, no exceptions
+
+Read this before writing a line of boru. A call binds its arguments **in
+signature order**: matching fills positions from the **forward stack**
+(the tokens written after the word, in written order) up to that
+signature's barrier, then fills every remaining position from the **value
+stack** in reverse — top of stack first, then next-deeper.
+
+That is the whole rule, at every arity. **Two-argument words are not a
+special case, and there is no "swap form."** Both phrasings are legacy
+misunderstandings; if you meet one in a doc, a comment, or a review, fix
+it. A call form only chooses where the split falls.
+
+Two consequences follow, and they are the ones that surprise people:
+
+- Put every operand on the value stack and you get **Forth order** —
+  `10 3 sub` is `7`.
+- Write every operand after the word and you get **written order**, which
+  for a non-commutative word reads backwards — `sub 1 3` is `2`, because
+  `sub` computes `args[1] - args[0]`.
+
+Surface style ([STYLE-GUIDE.md](STYLE-GUIDE.md) §S2): **infix** for the
+two-argument words convention reads as operators — `add`, `sub`, `mul`,
+`div`, `mod`, `pow`, `and`, `or`, `lt`, `lte`, `gt`, `gte`, `eq`, `neq`
+(`1 add 2`, `10 sub 3`, `n lte 1`) — and **forward form `f a b c`** for
+everything else.
+
 For a fast, structured orientation, the repository also ships a
 **project knowledge graph** — modules, packages, docs, tools, and
 concepts with evidence-backed relations. **Read

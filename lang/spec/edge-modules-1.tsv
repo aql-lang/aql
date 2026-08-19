@@ -6,7 +6,7 @@
 # referent (`fn/v`) vs bare-name export rule, module namespaces
 # transparency and the $name/$module synthetics, import renaming,
 # module-vs-importer scope, and dispatch through module fn wrappers
-# (swap form, argument order, preamble fns with private helpers).
+# (split call forms, argument order, preamble fns with private helpers).
 # Companion to module-instance.tsv; nothing here duplicates its rows.
 #
 # ─────────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ import module [export "M" 42]	ERROR:no signature matches	a non-map export payloa
 #
 # §4  referent-form exports vs the bare-name gotcha
 import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/v}] M.double 21	42	`d/v` holds the fn as data — the export dispatches on use
-import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/v}] 21 M.double	42	…in swap form too
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/v}] 21 M.double	42	…in stack form too
 import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d}]	ERROR:no signature matches	GOTCHA: a BARE fn name in the export map auto-evaluates 0-arg and fails — use /v
 import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v	42	a 0-arg fn exported bare fires at export build — the VALUE is exported
 import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v typeof	Integer	…so the export is an Integer, not a Function
@@ -48,7 +48,7 @@ import module [def z fn [[] [Integer] [42]] export "M" {v: z/v}] M.v	42	with /v 
 # §5  argument order through module fn wrappers (top-first, sig order)
 import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/v}] M.sub2 10 3	7	all-forward: args bind in source order (a=10 b=3)
 import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/v}] 10 3 M.sub2	-7	GOTCHA all-stack: sig position 0 is TOP of stack — a=3 b=10
-import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/v}] 10 M.sub2 3	-7	swap form: the forward arg fills position 0 (a=3), the stack arg b=10
+import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/v}] 10 M.sub2 3	-7	infix form: the forward arg fills position 0 (a=3), the stack arg b=10
 #
 # §6  namespace transparency and the facet synthetics
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports	['A' 'B' 'C']	the descriptor lists every export, in declaration order
@@ -105,7 +105,7 @@ import "boru:math-util" MathUtil.sqrt -1.0	nan	IEEE domain error: NaN, not a rai
 import "boru:math-util" MathUtil.log 0.0	-inf	IEEE pole: -inf, not a raise
 import "boru:math-util" MathUtil.copysign 3.0 -1.0	1.0	GOTCHA sig order: the SECOND operand carries the magnitude (|-1.0| with 3.0's sign)
 import "boru:string-util" StringUtil.upper ""	''	empty-string subject is fine
-import "boru:string-util" "ab" StringUtil.upper	'AB'	swap form through a string wrapper
+import "boru:string-util" "ab" StringUtil.upper	'AB'	stack form through a string wrapper
 import "boru:string-util" StringUtil.trim "   "	''	an all-space string trims to empty
 import "boru:string-util" StringUtil.split "," ""	[]	splitting the empty string yields no fields
 import "boru:string-util" StringUtil.split "" "ab"	['a' 'b']	an empty separator splits into characters

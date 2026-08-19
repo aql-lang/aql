@@ -15,7 +15,7 @@ import "boru:string-util" StringUtil.concat []	''	empty list → empty string
 # §2  split — subject (input) LAST: `split sep input`
 import "boru:string-util" StringUtil.split ',' 'a,b,c'	['a' 'b' 'c']	split on a separator
 import "boru:string-util" StringUtil.split '' 'hello'	['h' 'e' 'l' 'l' 'o']	empty separator splits into characters
-import "boru:string-util" 'a,b,c' StringUtil.split ','	['a' 'b' 'c']	swap form: input flows from the stack
+import "boru:string-util" 'a,b,c' StringUtil.split ','	['a' 'b' 'c']	infix form: input flows from the stack
 #
 # §3  trim — drop surrounding whitespace, or a custom char set
 import "boru:string-util" StringUtil.trim '  hi  '	'hi'	default trims whitespace
@@ -24,11 +24,11 @@ import "boru:string-util" StringUtil.trim 'xxhixx' {chars: 'x'}	'hi'	{chars} opt
 # §4  contains / indexof — haystack LAST: `contains needle haystack`
 import "boru:string-util" StringUtil.contains 'ell' 'hello'	true	substring present
 import "boru:string-util" StringUtil.contains 'zzz' 'hello'	false	substring absent
-import "boru:string-util" 'hello' StringUtil.contains 'ell'	true	swap form: haystack flows from the stack
+import "boru:string-util" 'hello' StringUtil.contains 'ell'	true	infix form: haystack flows from the stack
 # indexof is HAYSTACK-LAST: `indexof needle haystack` (data-last grain).
 import "boru:string-util" StringUtil.indexof 'l' 'hello'	2	zero-based index of needle in haystack
 import "boru:string-util" StringUtil.indexof 'z' 'hello'	-1	-1 when the needle is absent
-import "boru:string-util" 'hello' StringUtil.indexof 'l'	2	swap form reads needle-in-haystack left-to-right
+import "boru:string-util" 'hello' StringUtil.indexof 'l'	2	infix form reads needle-in-haystack left-to-right
 import "boru:string-util" 'hello' 'l' StringUtil.indexof	2	pipeline form: haystack flows from the stack
 #
 # §5  replace — first occurrence only; subject (input) LAST: `replace search repl input`

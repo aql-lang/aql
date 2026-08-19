@@ -285,7 +285,7 @@ var MathNatives = func() []native.NativeFunc {
 	)
 
 	// IEEE-754 binary float ops. Both compute fn(args[1], args[0]) so the
-	// swap form reads naturally (`a remainder b` = remainder of a by b,
+	// infix form reads naturally (`a remainder b` = remainder of a by b,
 	// `a copysign b` = |a| with the sign of b), matching the b-op-a
 	// convention of the core arithmetic words. `remainder` is the IEEE
 	// round-to-nearest remainder — distinct from `mod` (truncated fmod).

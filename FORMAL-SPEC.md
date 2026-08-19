@@ -638,6 +638,11 @@ Forward collection scans future tokens left-to-right. It stops at:
 Collected forward values fill `args[0]`, then `args[1]`, and so on. Remaining
 slots are filled from the stack, top first, into the next unfilled slot.
 
+This is a single rule for every arity. There is no distinct treatment of
+two-parameter signatures, and no "swap" rule: a source-side spelling only
+determines how many slots the forward phase fills before the stack phase
+takes over.
+
 For `f` with selected signature `σ`:
 
 ```text
@@ -648,13 +653,22 @@ native_or_user_apply(f, args, S', R, Σ) = (S'', R', Σ')
 ⟨f E, S, R, Σ⟩ → ⟨E', S'', R', Σ'⟩
 ```
 
-For asymmetric operations, handlers receive the same argument vector regardless
-of source-side spelling. Example with two arguments:
+For asymmetric operations, handlers receive the same argument vector for every
+spelling that places the same operand in the same slot. Example with two
+arguments:
 
 ```text
 10 3 sub        args[0] = 3, args[1] = 10
 10 sub 3        args[0] = 3, args[1] = 10
 sub 3 10        args[0] = 3, args[1] = 10
+```
+
+Moving an operand across the word moves it to a different slot, so a different
+spelling of the same operands is a different call — not an exception to the
+rule, but the rule applied to a different split:
+
+```text
+sub 10 3        args[0] = 10, args[1] = 3
 ```
 
 ### 6.5 Word modifier dynamic rules

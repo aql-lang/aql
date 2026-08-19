@@ -407,7 +407,7 @@ func TestUsurpWrapperBoundByName(t *testing.T) {
 			`def fu (usurp sub2)`,
 			`fu 10 3`,
 		}, -7},
-		{"swap form against named wrapper", []string{
+		{"infix form against named wrapper", []string{
 			`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
 			`def fu (usurp sub2)`,
 			`10 fu 3`,

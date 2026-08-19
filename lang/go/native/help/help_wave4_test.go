@@ -73,7 +73,7 @@ func w4SigStack(args []string, rets []string) SigInfo {
 
 func TestW4FormatDynamicForwardNonCommutative(t *testing.T) {
 	// "sub" is in the non-commutative table: FormatDynamic must show the
-	// mirror configurations, the order-matters note, and the swap-form
+	// mirror configurations, the order-matters note, and the infix-form
 	// example alongside the forward form.
 	info := FuncInfo{
 		Name:        "sub",
@@ -87,7 +87,7 @@ func TestW4FormatDynamicForwardNonCommutative(t *testing.T) {
 	for _, want := range []string{
 		"Precedence: forward",
 		"sub x y  <=>  y sub x  <=>  y x sub",
-		"Order matters: the swap form `x sub y`",
+		"Order matters: the infix form `x sub y`",
 		"Signatures: (in match order)",
 		"[Integer Integer]",
 		"Docs: " + ReferenceURL,
@@ -237,7 +237,7 @@ func TestW4FormatDynamicZeroArgSig(t *testing.T) {
 // --- example machinery ------------------------------------------------------
 
 func TestW4ExampleExprs(t *testing.T) {
-	// Non-commutative forward 2-arg word: forward + swap forms.
+	// Non-commutative forward 2-arg word: forward + infix forms.
 	sub := FuncInfo{
 		Name:        "sub",
 		ForwardArgs: true,

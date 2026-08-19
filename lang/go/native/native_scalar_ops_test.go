@@ -527,7 +527,7 @@ func TestOpHandlersDirectErrors(t *testing.T) {
 	if _, err := bytesOpHandler("sub")([]Value{NewInteger(1), NewInteger(2)}, nil, nil, r); err == nil {
 		t.Errorf("bytesOpHandler with non-bytes: want error")
 	}
-	// happy paths through the handlers (swap form: args[1] OP args[0]).
+	// happy paths through the handlers (infix form: args[1] OP args[0]).
 	out, err := stringOpHandler("sub")([]Value{NewString("."), NewString("a.b")}, nil, nil, r)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("stringOpHandler happy: %v", err)

@@ -22,7 +22,7 @@ quote [add 1 2] typeof	List	a held list is still a real List
 [1 2 3] size	3	plain data size unchanged by auto-eval
 quote [1 2 3]	(quote [1 2 3])	quoting plain data only adds the held marker
 quote [1 2 3] size	3	held plain data: same three elements
-[10 sub 3]	[7]	swap-form arithmetic evaluates inside a list literal
+[10 sub 3]	[7]	infix-form arithmetic evaluates inside a list literal
 quote [10 sub 3] size	3	…but held it is three raw nodes
 quote [add 1 2] get 1	1	index 1 of the HELD list is the first operand (index 0 is the word)
 quote [add 1 2] get 0	ERROR:signature_error	the Word element re-fires at the pointer when pulled out bare
@@ -75,7 +75,7 @@ def h (quote [dup add]) 5 h	5 (quote [word(dup) word(add)])	referencing a stored
 # --- §5 do over held code ----------------------------------------------
 quote [add 1 2] do	3	hold, then run: do evaluates the held list
 do [add 2 3]	5	do's own body slot is implicit-quoted code
-quote [10 sub 3] do	7	held swap-form arithmetic runs under do
+quote [10 sub 3] do	7	held infix-form arithmetic runs under do
 quote [add 1 2] do mul 3	9	do's result feeds the surrounding program
 do [do [1 add 2] mul 2]	6	nested do: the inner result is the outer body's operand
 do [] 5	5	an empty body contributes nothing

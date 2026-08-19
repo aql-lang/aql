@@ -27,7 +27,7 @@ import (
 // [boru/signature_error] dispatch miss.
 //
 // All [TNumber, TNumber] handlers compute b op a (i.e.
-// args[1] op args[0]). Under §1.4 the swap form `a op b` is the
+// args[1] op args[0]). Under §1.4 the infix form `a op b` is the
 // preferred surface syntax, and binds args[0]=b, args[1]=a; the
 // b-op-a body therefore yields the natural reading (`10 sub 3` → 7,
 // `10 div 3` → 3). The mirror forms (`op a b`, `b op a`, `b a op`)
@@ -213,7 +213,7 @@ func divIntFault(a, b int64) error {
 // (native_scalar_ops.go), which drives the identical per-leaf semantics
 // on each numeric field through towerApply. Each closure follows the
 // kernel b-op-a convention (it receives (a, b) = (args[0], args[1]) and
-// computes `b OP a`), so the swap form reads naturally.
+// computes `b OP a`), so the infix form reads naturally.
 var (
 	addTowerOps = towerOps{
 		intFn: func(a, b int64) (Value, error) {

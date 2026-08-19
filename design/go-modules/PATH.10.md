@@ -39,7 +39,7 @@ also reads correctly — this *is* a utility library of pure helpers.
 ## 4. API
 
 Signatures are **top-first, sig order** (position 0 = top of stack). All
-inner natives use `BarrierPos: -1` so the swap form `a PathUtil.word b`
+inner natives use `BarrierPos: -1` so the infix form `a PathUtil.word b`
 dispatches.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
@@ -108,7 +108,7 @@ import "boru:path-util"
 "a/./b/../c" PathUtil.clean          # → "a/c"
 "/a/b" PathUtil.is-abs               # → true
 
-"*.txt" PathUtil.match "c.txt"       # → true   (swap form: pattern, name)
+"*.txt" PathUtil.match "c.txt"       # → true   (infix form: pattern, name)
 ```
 
 ## 10. Open questions / out of scope

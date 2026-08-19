@@ -14,12 +14,12 @@ import (
 // sub-registry (the standard `boru:math` / `boru:bin` / `boru:type`
 // pattern), the inner native's signature MUST allow forward
 // dispatch (BarrierPos != 0). Otherwise the wrapper FnDef's
-// swap-form auto-invoke fails to match because matchSignature
+// infix-form auto-invoke fails to match because matchSignature
 // consults the inner native's sig (via reg.Lookup(fnDef.Name)).
 //
 // See lang/go/CLAUDE.md "Module FnDef wrappers" for the design
 // note. Before the fix, a sub-registry native with BarrierPos=0
-// (stack-only) silently broke swap-form callers of the wrapper
+// (stack-only) silently broke infix-form callers of the wrapper
 // — the FnDef would just sit on the stack with the args around
 // it, never invoked. That residue is no longer silent: a failed
 // fn-value dispatch raises [boru/uncalled_function] at the
@@ -33,7 +33,7 @@ func TestModuleWrapperInnerSigBarrierPos(t *testing.T) {
 		wantInvoke bool
 	}{
 		{"inner BarrierPos=-1 (all-forward eligible) dispatches", -1, true},
-		{"inner BarrierPos=0 (stack-only) breaks swap-form dispatch", 0, false},
+		{"inner BarrierPos=0 (stack-only) breaks infix-form dispatch", 0, false},
 	}
 
 	for _, c := range cases {

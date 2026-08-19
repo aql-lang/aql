@@ -11,7 +11,7 @@ negq 5	Number	unary
 concatq 'a' 'b'	String	String+String -> String
 lengthq [1 2 3]	Integer	List -> Integer
 firstq [1 2 3]	dynamic(Any)	element type unknown -> dynamic Any
-2 pairq 1	String	swap form (sig[1] from stack, BarrierPos 1)
+2 pairq 1	String	infix form (sig[1] from stack, BarrierPos 1)
 1 2 pairq	String	stack form
 tripq 1 2 3	String	3-arg
 nilq	String	0-arg word

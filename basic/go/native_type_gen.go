@@ -36,7 +36,7 @@ var GenNatives = []NativeFunc{
 		}},
 	},
 	{
-		// `T extends C` — inside a gen list entry. Swap form: the
+		// `T extends C` — inside a gen list entry. Infix form: the
 		// bound C is collected forward, the placeholder literal T
 		// (bound by gen before the entry evaluates) comes from the
 		// stack.
@@ -81,7 +81,7 @@ var GenNatives = []NativeFunc{
 		},
 	},
 	{
-		// `Box of [Integer]` — swap form: the type-argument list is
+		// `Box of [Integer]` — infix form: the type-argument list is
 		// collected forward, the schema comes from the stack.
 		Name: "of",
 

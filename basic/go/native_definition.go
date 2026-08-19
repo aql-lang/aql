@@ -1636,7 +1636,7 @@ func FnSigArgList(s core.Signature) string {
 // inspect the type without invoking see `Any`; check-mode dispatch
 // reads the Anonymous flag and runs AnalyseFnBody for real propagation.
 func AfnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	// `afn` is normally encountered as the swap form `input afn body`
+	// `afn` is normally encountered as the infix form `input afn body`
 	// (because `input => body` desugars to this), which makes args[1]
 	// the source-left operand (input sig) and args[0] the source-right
 	// operand (body). Mirrors the boru `args[1] op args[0]` convention.
