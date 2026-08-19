@@ -90,6 +90,7 @@ keep the two in sync in the same commit.
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR090](#nur090) | A type name does not always denote its type: a builtin or `refine` word evaluates to its minted lattice NODE, while a `class`, disjunct or fn-shape word evaluates to its structural BODY — so wherever a type name is evaluated before being used as a type (e.g. `fn M [Any] [1]`), three kinds break where two work | the function-type prototype, 2026-08-19 (issue #392, `design/FUNCTION-TYPES.0.md` §5.3) |
+| [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -4088,13 +4089,32 @@ it as a type, those three kinds break. `ParseFnParams` is the clearest
 case: it has an `IsBareTypeNode` arm and a `default` arm that rejects
 everything else, so a structural body lands in `default`.
 
-| declaration | word evaluates to | unnamed `fn T [Any] […]` |
-|---|---|---|
-| builtin (`Integer`) | lattice node | works |
-| `refine` newtype | lattice node | works |
-| `class` | structural body | `invalid parameter` |
-| disjunct (`tor`) | structural body | `invalid parameter` |
-| fn shape (`fnsig`) | structural body | `invalid parameter` |
+| declaration | word evaluates to | bare `fn T Any […]` | wrapped `fn [T Any […]]` |
+|---|---|---|---|
+| builtin (`Integer`) | lattice node | works | works |
+| `refine` newtype | lattice node | works | works |
+| `class` | structural body | `invalid parameter` | works |
+| disjunct (`tor`) | structural body | `invalid parameter` | works |
+| fn shape (`fnsig`) | structural body | `invalid parameter` | works |
+| record shape (`{x:Integer}`) | structural body | **works, name LOST** | **name kept, dispatch FAILS** |
+
+The record-shape row is a third behaviour, not a variant of the second,
+and both of its cells are wrong in different directions:
+
+```
+def T {x:Integer}
+def f fn T Any [1]     canon f/v → fn [[:Map][Any][1]]   ← constraint kept as a pattern,
+                       f {x:1}   → 1                        but the NAME T is gone
+                       f {y:9}   → refused
+def f fn [T Any [1]]   canon f/v → fn [[:T][Any][1]]     ← the name IS kept…
+                       f {x:1}   → signature_error       ← …but dispatch refuses it,
+                       {x:1} is T → true                    while `is` accepts it
+```
+
+That last pair is the same `is`-vs-dispatch asymmetry `FnUndefUnifier`
+fixed for fn shapes on this branch (`core/go/unify_fnundef_named.go`):
+the minted node carries no membership `Behavior`, so the lattice walk
+rejects every value. Record-shape types need the same bridge.
 
 **Which spellings escape it, and why.** Not triple-vs-list —
 evaluated-vs-unevaluated. `fn` carries `NoEvalArgs: {0,1,2}`, honoured
@@ -4148,3 +4168,59 @@ minted node (`DisjunctUnifier`, the class unifier, `FnUndefUnifier`), so
 `5 is M` resolves through the node as it now does through the body. This
 record retires when all five rows of the table above agree, pinned as
 spec rows in `lang/spec/fn-triple.tsv`.
+
+---
+
+## NUR091 — a rejected `fn` declaration is loud or silent depending on its output slot {#nur091}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** probing
+`fn`'s `(tnot List)` input guard while investigating NUR090
+
+**Rule:** boru refuses loudly. `lang/spec/fn-triple.tsv` §4 pins the
+input guard's refusal as an ERROR row — *"a bare List type literal input
+is rejected by (tnot List) — a single List-typed param needs the
+spec-list form"* — and §4's neighbours make a truncated triple "fail
+loudly instead of absorbing a following value".
+
+**Divergence:** the same rejected declaration is loud or silent
+depending on what sits in the OUTPUT slot.
+
+```
+$ boru do 'def f fn List [Integer] [size]'
+error: [boru/signature_error]: cannot call `size` …          ← loud, as pinned
+
+$ boru do 'def f fn List Any [1]'
+[1] Any List
+$ echo $?
+0                                                             ← silent: 3 values stranded
+$ boru do 'def f fn List Any [1]  typeof f/v'
+[1] Any List Atom                                             ← and `f` was never bound
+```
+
+Both declarations are rejected for the same reason: `List` at slot 0
+fails the triple form's `(tnot List)` pattern, and the 1-arg spec-list
+sig cannot take a bare `List` type literal either. With a bracketed
+output the following word (`size`) is dispatched and raises; with a bare
+`Any` output nothing raises, `fn` never dispatches, `def` binds nothing,
+and the operands are left on the stack.
+
+**Consequence:** `def f fn List Any [1]` looks like a definition, exits
+0, and defines nothing — the §5.1 class of the higher-order audit (a
+statement that appears to work, exit 0, wrong stack). A reader gets no
+hint that the `(tnot List)` rule was the problem, or that the spec-list
+form is the remedy.
+
+**Not NUR090.** That record is about which type a NAME denotes; this one
+is about a declaration that is correctly refused failing quietly instead
+of loudly. They meet only in that both were found probing slot 0.
+
+**Evidence:** the transcripts above, reproduced against this tree. The
+documented remedy works and is loud about nothing:
+`boru do 'def f fn [[List] [Any] [1]]  f [1 2]'` → `1`.
+
+**Verdict proposed:** resolve by fix — a `def` whose value expression
+dispatched nothing should raise rather than strand, or `fn` should
+refuse a non-matching operand shape with a diagnostic naming the
+`(tnot List)` rule. This record retires when
+`def f fn List Any [1]` reports an error, pinned as a spec row beside
+`fn-triple.tsv` §4's existing loud twin.
