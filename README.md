@@ -138,6 +138,7 @@ learning need, plus a CLI reference and the architecture record:
 | **[Reference](REFERENCE.md)** | You need the precise behaviour of a syntax form, type, or word. |
 | **[Explanation](EXPLANATION.md)** | You want to understand *why* boru is the way it is. |
 | **[CLI Reference](CLI.md)** | You want to drive the `boru` binary from the shell. |
+| **[Style Guide](STYLE-GUIDE.md)** | You are writing boru and want the house style — which of several equivalent spellings to use, and which of those `boru fmt` enforces for you. |
 | **[Architecture Design Record](ADR.md)** | You want the key architectural decisions and the reasoning behind them. |
 | **[Non-Uniformity Register](NUR.md)** | You want the recorded deviations from the language's uniform rules, each pending, resolved, or explicitly allowed. |
 | **[Agent Guide](AGENTS.md)** | You are an AI agent (or new contributor) and want a map of the docs, the tooling, and how to discover the language with `boru describe`/`boru help`. |

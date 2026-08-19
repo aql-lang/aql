@@ -80,6 +80,7 @@ keep the two in sync in the same commit.
 | [NUR085](#nur085) | No spelling THROUGH A PARAMETER'S BOUND NAME is total over both kinds: a bare name CALLS when the binding is a function, and `/r` REFUSES when it is not — and the `x is Function` guard cannot be written either, because naming `x` starts the call. `(args).N` is total but bypasses the name | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2) |
 | [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
 | [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
+| [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -3788,7 +3789,7 @@ ordinary spelling behind.
 never dispatches:
 
 ```
-def ident fn [[t:Any][Any][(args).0]]
+def ident fn t:Any Any [(args).0]
   (ident 5) → 5 · (ident "s") → 's' · def g (ident λ) (g 5) → 6
 ```
 
@@ -3913,14 +3914,14 @@ recorded once an **earlier** `def` in the same body bound the result of a
 call through a `Function` **parameter**. Minimal repro:
 
 ```boru
-def mk fn [[a:Function b:Function][Function][
-  ( fn [[s:Integer][Map][
+def mk fn [[a:Function b:Function] [Function] [
+  ( fn s:Integer Map [
       def r1 (a s)
       if (r1.ok)
         [ def r2 (b (r1.rest))
           if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
                      [ {ok:false rest:s val:None} ] ]
-        [ {ok:false rest:s val:None} ] ]] ) ]]
+        [ {ok:false rest:s val:None} ] ] ) ]]
 def h (mk ([z:Integer] => [ {ok:true val:1 rest:8} ])
           ([z:Integer] => [ {ok:true val:2 rest:9} ]))
 print (h 1)
@@ -3969,3 +3970,74 @@ this has nothing that names their situation.
 recorded whatever the provenance of an earlier binding in the same body.
 This record retires when the repro above checks clean, with the reduced
 file pinned as a negative test alongside it.
+
+---
+
+## NUR088 — `boru fmt` collapses one of the six signature spellings, not the other five {#nur088}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** writing
+`STYLE-GUIDE.md` §S1 ("use the fewest square brackets") and measuring
+what `boru fmt` actually does with each spelling
+
+**Rule:** a formatter's job is to collapse equivalent spellings to one.
+`boru fmt` is documented as producing "canonical layout"
+(`describe`/`CLI.md`), and `AGENTS.md` makes forward call form canonical
+for new code — one spelling per idea, mechanically enforced.
+
+**Divergence:** a single-parameter, single-return signature has **six**
+valid spellings, all building a `canon`-identical value. `fmt` rewrites
+exactly one of them.
+
+| spelling | pairs | `boru fmt` |
+|---|---|---|
+| `fn x:Integer Integer [mul 2 x]` | 1 | — (already the target) |
+| `fn x:Integer [Integer] [mul 2 x]` | 2 | **unchanged** |
+| `fn [x:Integer Integer [mul 2 x]]` | 2 | **unchanged** |
+| `fn [[x:Integer] Integer [mul 2 x]]` | 3 | **unchanged** |
+| `fn [x:Integer [Integer] [mul 2 x]]` | 3 | **unchanged** |
+| `fn [[x:Integer] [Integer] [mul 2 x]]` | 4 | → `fn x:Integer Integer [mul 2 x]` ✅ |
+
+The unnamed-parameter twin behaves the same way:
+`fn [[Integer] [Integer] [add 1]]` → `fn Integer Integer [add 1]`, while
+the four intermediates pass through.
+
+That the six are one value, not merely one answer:
+
+```
+def s1 fn x:Integer Integer [mul 2 x]
+…
+def s6 fn [[x:Integer] [Integer] [mul 2 x]]
+print (deq (canon s1/r) (canon s6/r))   ;# true, and likewise s2…s5
+```
+
+**Consequence:** a file can be `fmt`-clean and still carry four spellings
+of one signature, so `fmt` cannot be the enforcement point for the house
+rule — a reviewer has to be. The gap is not in the rule (the target form
+is already chosen and already implemented) but in its reach: `fmt`
+normalises from the canonical form only, rather than canonicalising the
+intermediates first and then reducing.
+
+**Evidence:** the table above, measured against this tree by running
+`boru fmt` on each spelling; `design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2;
+`STYLE-GUIDE.md` §S1 carries the same table as the formatter-status note.
+`boru describe fn` documents the underlying two-form rule (*"a list input
+always selects the spec-list form"*), which is what makes
+`fn [x:Integer] [Integer] [mul 2 x]` an error rather than a seventh
+spelling. Not previously recorded.
+
+**Documentation status:** the equivalence is documented, the formatter's
+partial coverage is not. `boru describe fn` states the two forms and
+gives the equivalence explicitly (*"fn x:Integer [Integer] [x mul 2] ≡
+fn [[x:Integer] [Integer] [x mul 2]]"*) and notes that the output slot
+takes both spellings. Nothing states which spelling is preferred — that
+is new in `STYLE-GUIDE.md` §S1 — and nothing states that `fmt` implements
+the preference for only one input form. `CLI.md`'s `fmt` section
+describes canonical layout without enumerating what is and is not
+normalised.
+
+**Verdict proposed:** resolve by fix — `fmt` canonicalises a signature
+before reducing it, so all five non-target spellings converge on the
+one-pair form, leaving the irreducible shapes (2+ parameters, 0
+parameters, multi-overload spec lists) untouched as it already does. This
+record retires when each of the five rewrites to
+`fn x:Integer Integer [mul 2 x]`, pinned as a `fmt` round-trip test.

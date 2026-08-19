@@ -10,8 +10,12 @@ cross-read with `core/`, `lang/`, `NUR.md`, `ADR.md` and
 `lang/spec/*.tsv`. Every claim below is either a source citation or a
 command that was run and whose output is quoted verbatim. Examples are in
 the canonical **forward call form** (`AGENTS.md` §"Working in the code")
-and every one of them was re-run in that spelling — see §4.1 for why that
-re-run is not a formality.
+and use the **fewest square brackets** each signature admits
+([`STYLE-GUIDE.md`](../STYLE-GUIDE.md) §S1 / §S2); every one was re-run in
+its final spelling — see §4.1 and §4.2 for why those re-runs are not a
+formality. Where a `fn` here keeps the bracketed spec-list form, its
+signature cannot be reduced: two or more parameters, zero parameters, or
+overloads (§4.2).
 
 Companion to [`LISP-ANALYSIS.5.md`](LISP-ANALYSIS.5.md), which graded
 higher-order functions **A−** and combinators **B+** from a design
@@ -107,12 +111,12 @@ central hazard of this report (§5.2). They need **two** escape hatches.
 argument must first be boxed in a list and read back positionally:
 
 ```boru
-def ctrue  fn [[t:Any][Function][ def bx [(args).0] ( fn [[f:Any][Any][ bx.0 ]] ) ]]
-def cfalse fn [[t:Any][Function][ ( fn [[f:Any][Any][ (args).0 ]] ) ]]
+def ctrue  fn t:Any Function [ def bx [(args).0] ( fn f:Any Any [ bx.0 ] ) ]
+def cfalse fn t:Any Function [ ( fn f:Any Any [ (args).0 ] ) ]
 def cif    fn [[p:Function t:Any e:Any][Any][ def r (p t) (r e) ]]
-def cnot   fn [[p:Function][Function][ def bp [(args).0]
-  ( fn [[t:Any][Function][ def bt [(args).0]
-      ( fn [[f:Any][Any][ def qq ((bp.0) f) (qq (bt.0)) ]] ) ]] ) ]]
+def cnot   fn p:Function Function [ def bp [(args).0]
+  ( fn t:Any Function [ def bt [(args).0]
+      ( fn f:Any Any [ def qq ((bp.0) f) (qq (bt.0)) ] ) ] ) ]
 print (cif ctrue/r  "T" "F")          ;# T
 print (cif cfalse/r "T" "F")          ;# F
 print (cif (cnot ctrue/r)  "T" "F")   ;# F
@@ -136,7 +140,7 @@ CPS works cleanly, including the closure-per-frame that CPS implies:
 ```boru
 def factk fn [[n:Integer k:Function][Any][
   if (lte 1 n) [ (k 1) ]
-               [ def kk ( fn [[r:Integer][Any][ def m (mul n r) (k m) ]] )
+               [ def kk ( fn r:Integer Any [ def m (mul n r) (k m) ] )
                  (factk (sub 1 n) kk/r) ] ]]
 print (factk 5  ([v:Integer] => [v]))          ;# 120
 print (factk 10 ([v:Integer] => [add 0 v]))    ;# 3628800
@@ -147,8 +151,8 @@ print (factk 10 ([v:Integer] => [add 0 v]))    ;# 3628800
 The U-combinator form runs on **both** engines with a clean check:
 
 ```boru
-def fgen fn [[s:Function][Function][
-  ( fn [[n:Integer][Integer][ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ]] ) ]]
+def fgen fn s:Function Function [
+  ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ] ) ]
 def fact (fgen fgen/r)
 print (fact 5)       ;# 120
 ```
@@ -171,30 +175,30 @@ def pitem ([s:String] => [
   if (eq 0 (size s)) [ {ok:false rest:s val:None} ]
                      [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ])
 
-def psat fn [[p:Function][Function][
-  ( fn [[s:String][Map][
+def psat fn p:Function Function [
+  ( fn s:String Map [
       def r (pitem s)
       if (r.ok) [ if (p (r.val)) [ r ] [ {ok:false rest:s val:None} ] ]
-                [ r ] ]] ) ]]
+                [ r ] ] ) ]
 
 def palt fn [[a:Function b:Function][Function][
-  ( fn [[s:String][Map][ def r (a s)  if (r.ok) [ r ] [ (b s) ] ]] ) ]]
+  ( fn s:String Map [ def r (a s)  if (r.ok) [ r ] [ (b s) ] ] ) ]]
 
 def pseq fn [[a:Function b:Function][Function][
-  ( fn [[s:String][Map][
+  ( fn s:String Map [
       def r1 (a s)
       if (r1.ok)
         [ def r2 (b (r1.rest))
           if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
                      [ {ok:false rest:s val:None} ] ]
-        [ {ok:false rest:s val:None} ] ]] ) ]]
+        [ {ok:false rest:s val:None} ] ] ) ]]
 
 def manyloop fn [[a:Function s:String acc:List][Map][
   def r (a s)
   if (r.ok) [ (manyloop a/r (r.rest) (push (r.val) acc)) ]
             [ {ok:true val:acc rest:s} ] ]]
-def pmany fn [[a:Function][Function][
-  ( fn [[s:String][Map][ def z [] (manyloop a/r s z) ]] ) ]]
+def pmany fn a:Function Function [
+  ( fn s:String Map [ def z [] (manyloop a/r s z) ] ) ]
 
 def isdigit ([c:String] => [ and (gte "0" c) (lte "9" c) ])
 def digit  (psat isdigit/r)
@@ -221,7 +225,7 @@ Identical on both engines. It does **not** pass `boru check` — see §5.5.
 
 | Capability | Verdict |
 |---|---|
-| Closures capturing fn-locals, escaping their scope | ✅ `def mk fn [[k:Integer][Function][ def loc (mul 10 k) (fn [[x:Integer][Integer][add loc x]]) ]]`; `(mk 3)` then called with `1` → `31` |
+| Closures capturing fn-locals, escaping their scope | ✅ `def mk fn k:Integer Function [ def loc (mul 10 k) (fn x:Integer Integer [add loc x]) ]`; `(mk 3)` then called with `1` → `31` |
 | Two closures from one factory keep distinct captures | ✅ `(mk 1)` → `1`, `(mk 100)` → `100` |
 | Functions in a list, retrieved and called | ✅ `((fs get 1) 5)` → `10` |
 | Functions in a map; dynamic key dispatch | ✅ `((tbl get k) 5)` → `10` |
@@ -323,7 +327,7 @@ parameter read that is total over both function and non-function
 bindings, and it appears in no user-facing document:
 
 ```boru
-def ident fn [[t:Any][Any][(args).0]]
+def ident fn t:Any Any [(args).0]
 def konst fn [[t:Any u:Any][Any][(args).0]]
 print (ident 5)                                   ;# 5
 print (ident "s")                                 ;# s
@@ -352,6 +356,71 @@ for every input instead of recursing, exit 0. That is not hypothetical:
 it happened while converting this note's examples, which is why every one
 of them was re-run after conversion.
 
+### 4.2 Signature spellings — six ways to write one signature
+
+Every `fn` in this note uses the fewest square brackets that express its
+signature ([`STYLE-GUIDE.md`](../STYLE-GUIDE.md) §S1). For the common
+one-parameter, one-return case there are **six** valid spellings, and
+they are the same *value*, not merely the same answer:
+
+```boru
+def s1 fn x:Integer Integer [mul 2 x]        ;# 1 bracket pair  <- least
+def s2 fn x:Integer [Integer] [mul 2 x]      ;# 2
+def s3 fn [x:Integer Integer [mul 2 x]]      ;# 2
+def s4 fn [[x:Integer] Integer [mul 2 x]]    ;# 3
+def s5 fn [x:Integer [Integer] [mul 2 x]]    ;# 3
+def s6 fn [[x:Integer] [Integer] [mul 2 x]]  ;# 4  <- fully canonical
+
+print (s1 21) print (s2 21) print (s3 21)
+print (s4 21) print (s5 21) print (s6 21)
+print (deq (canon s1/r) (canon s6/r))
+print (deq (canon s2/r) (canon s6/r))
+print (deq (canon s3/r) (canon s6/r))
+print (deq (canon s4/r) (canon s6/r))
+print (deq (canon s5/r) (canon s6/r))
+```
+
+```
+42 42 42 42 42 42        (one per line)
+true true true true true (one per line)
+```
+
+`check: 0 error(s)`. The bodies' brackets are not optional — a body is
+always a list — so one pair is the floor.
+
+**A bracketed input is not a longer spelling; it is a different form.**
+
+```
+$ boru do 'def f fn [x:Integer] [Integer] [mul 2 x] end f 21'
+error: [boru/fn_error]: fn: list length must be a non-zero multiple of 3
+  (input output body triples); use `fnsig` for the type-only form, or the
+  3-arg form `fn input output body` for a single triple with a non-list input
+```
+
+`fn` has two signatures — `[(tnot List) Any List]` and `[List]`. A list
+in the input position selects the second, so `[x:Integer]` is read as a
+spec list of length 1 and the following `[Integer] [mul 2 x]` strand as
+separate arguments. `boru describe fn` states it: *"a list input always
+selects the spec-list form."*
+
+**What cannot be reduced**, and so is not a style violation:
+
+| shape | why the spec list is required |
+|---|---|
+| `fn [[a:Integer b:Integer] [Integer] [add a b]]` | 2+ parameters — the input is a list |
+| `fn [[] [Integer] [42]]` | 0 parameters — `[]` is a list |
+| `fn [[a:Integer] [Integer] […] [s:String] [String] […]]` | overloads need one list of triples |
+
+Overloads whose inputs are each a single parameter also take the flat
+triple spelling, which is shorter: `fn [a:Integer Integer [add 1 a]
+s:String String [s]]` builds the same two-overload function.
+
+**`boru fmt` implements this rule only from the fully canonical
+spelling** — `fn [[x:Integer] [Integer] [mul 2 x]]` becomes
+`fn x:Integer Integer [mul 2 x]`, while `s2`–`s5` above pass through it
+untouched. So a file can be `fmt`-clean and still carry four spellings of
+one signature. Recorded as **NUR088**.
+
 ---
 
 ## 5. Gotchas, ranked by how quietly they fail
@@ -371,7 +440,7 @@ $ echo $?
 type** — a real and useful feature:
 
 ```
-$ boru do 'def Even fn [[n:Integer][Boolean][eq 0 (mod 2 n)]] end 4 is Even'
+$ boru do 'def Even fn n:Integer Boolean [eq 0 (mod 2 n)] end 4 is Even'
 true
 ```
 
@@ -448,9 +517,9 @@ words. Recorded as **NUR086**.
 The same expression means two things:
 
 ```
-$ boru do 'def mk fn [[a:Integer][Function][(fn [[b:Integer][Integer][add a b]])]] end ((mk 1) 2)'
+$ boru do 'def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end ((mk 1) 2)'
 3
-$ boru do 'def mk fn [[a:Integer][Function][(fn [[b:Integer][Integer][add a b]])]] end print ((mk 1) 2)'
+$ boru do 'def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end print ((mk 1) 2)'
 fn (Integer)
 2
 $ echo $?
@@ -485,13 +554,13 @@ earlier `def` in the same body bound the result of a call **through a
 
 ```boru
 def mk fn [[a:Function b:Function][Function][
-  ( fn [[s:Integer][Map][
+  ( fn s:Integer Map [
       def r1 (a s)
       if (r1.ok)
         [ def r2 (b (r1.rest))
           if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
                      [ {ok:false rest:s val:None} ] ]
-        [ {ok:false rest:s val:None} ] ]] ) ]]
+        [ {ok:false rest:s val:None} ] ] ) ]]
 def h (mk ([z:Integer] => [ {ok:true val:1 rest:8} ])
           ([z:Integer] => [ {ok:true val:2 rest:9} ]))
 print (h 1)
@@ -535,7 +604,7 @@ a name it mentions is re-`def`ed.
 
 ```
 $ cat n73.boru
-def z fn [[][Integer][42]]  def h fn [[f:Function][Any][f/r]]  ((h z/r))
+def z fn [[][Integer][42]]  def h fn f:Function Any [f/r]  ((h z/r))
 
 $ boru run -no-check -no-compile n73.boru     # interpreter
 42
@@ -575,7 +644,7 @@ trade-off is a choice rather than a surprise.
 ### 5.9 Smaller edges met while writing the programs
 
 - **Quotations are not closures.** A `codequote`d body does not capture
-  fn-locals: `def mkq fn [[n:Integer][List][(codequote [add n])]]` then
+  fn-locals: `def mkq fn n:Integer List [(codequote [add n])]` then
   `each q [1 2 3]` → `cannot call add`. Only `Function` values close.
 - **User-defined words cannot take an unevaluated quotation.**
   `hof [mul 2] xs` evaluates the bracket at the call site;

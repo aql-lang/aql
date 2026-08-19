@@ -93,10 +93,12 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
 - `HIGHER-ORDER-FUNCTIONS.0.md` — an empirical audit of higher-order
   support and combinator expressibility (2026-08-19): what was built and
   run, a comparison against Haskell/Scheme/JS/Factor, and the
-  call-vs-value gotchas. **Point-in-time**, and deliberately so — it
-  records behaviour that NUR073, NUR078, NUR085, NUR086 and NUR087 are
-  each expected to change, so read its §5 against the register rather
-  than as current truth.
+  call-vs-value gotchas, plus §4.2 on the six spellings of one signature
+  and which of them `boru fmt` collapses. **Point-in-time**, and
+  deliberately so — it records behaviour that NUR073, NUR078, NUR085,
+  NUR086, NUR087 and NUR088 are each expected to change, so read its §4.2
+  and §5 against the register rather than as current truth. The house
+  rules it applies live in [`STYLE-GUIDE.md`](../STYLE-GUIDE.md).
 - `CLIENT-FIXES-2026-06-24.md`, `CLIENT-VERIFICATION-MAIN-2026-06-24.md`,
   `FORCE-COMPILE-CLIENT-COVERAGE.0.md` — dated client-library verification
   reports.
