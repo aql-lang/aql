@@ -90,6 +90,13 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   `jsonic-matcher-rule-access-report.10.md`, `data-last-audit.10.md`,
   `WAT-AUDIT.5.md`, `FORMAL-FINDINGS.0.md` — feature/feasibility/audit
   reports pinned to a point in time.
+- `FUNCTION-TYPES.0.md` — proposal + working prototype for a *declared*
+  function type (`fnsig Integer String`, `fn` minus its body), answering
+  the audit's "`Function` is opaque" finding. Measures what the change
+  buys (a wrong-shaped argument moves from a run-time refusal to a
+  check-time error) and what it does not (NUR089 is orthogonal and
+  survives it). **Proposal, not merged** — §7 lists what production
+  would still need.
 - `HIGHER-ORDER-FUNCTIONS.0.md` — an empirical audit of higher-order
   support and combinator expressibility (2026-08-19): what was built and
   run, a comparison against Haskell/Scheme/JS/Factor, and the

@@ -1,0 +1,263 @@
+# Function types in boru — syntax proposal and working prototype
+
+**Status: proposal + prototype (2026-08-19).** The syntax is a proposal;
+the implementation is a prototype that was built and run against this
+tree, and every result below is a command that was executed with its
+output quoted verbatim. It is **not** merged — see §7 for what
+production would still need.
+
+Answers the open item from
+[`HIGHER-ORDER-FUNCTIONS.0.md`](HIGHER-ORDER-FUNCTIONS.0.md) §2:
+
+> **`Function` is opaque.** There is no way to write "a function from
+> `Integer` to `String`".
+
+---
+
+## 0. Result
+
+| | |
+|---|---|
+| Is a syntax available that needs no new grammar? | **Yes** — `fnsig input output`, `fn` minus its body. |
+| Does the type system already support it? | **Mostly.** Structural subtyping with correct variance was already implemented and already drove `is`. |
+| What was actually missing? | **One `Behavior` hook**, so *dispatch* consults what `is` already consulted. |
+| Size of the prototype | ~70 new lines + a 12-line branch + a 16-line sugar handler. |
+| What it buys | A wrong-shaped function is caught at **check time** instead of run time. |
+
+The one-line summary: boru had almost all of a function-type system
+already — `FnSigSatisfiesSpec` implements contravariant-parameter,
+covariant-return subtyping, and `unify_fnsig.go` routes anonymous
+constraints through it. What was missing was the same bridge that
+`def Maybe (Integer tor none)` and `def NotStr (tnot String)` each
+install, and whose absence those branches document in comments. Named
+fn-shape types were the one metatype that never got one.
+
+---
+
+## 1. The problem, measured
+
+A `Function` parameter accepts any function whatsoever. The checker
+therefore passes a program the runtime then refuses:
+
+```
+$ cat opaque.boru
+def f fn x:String Integer [size x]            ;# String -> Integer
+def h fn g:Function String [(g 5)]            ;# wants Integer -> String
+print (h f/v)
+$ boru check opaque.boru
+check: 0 error(s), 0 warning(s), 0 info
+$ boru run opaque.boru
+error: [boru/signature_error]: cannot call `size` …
+```
+
+A clean check on a program that cannot run is the cost, and it is
+exactly the shape §2 of the audit describes.
+
+---
+
+## 2. Syntax proposal
+
+### 2.1 The proposal: `fnsig input output`
+
+**A function type is a function minus its body.** boru already spells a
+function three-slot; the type is the same shape one slot shorter:
+
+```boru
+fn    input output body      ;# a function
+fnsig input output           ;# its type          ← proposed
+```
+
+so:
+
+```boru
+def IntToStr fnsig Integer String
+def h fn g:IntToStr String [(g 5)]
+```
+
+This needs **no new grammar**. `fnsig` is an existing word (it builds
+the `FunctionSignature` value that targeted `undef` uses); the proposal
+adds one signature to it, mirroring the sugar `fn` already has. It
+inherits `fn`'s bracket rules exactly, so it satisfies
+[`STYLE-GUIDE.md`](../STYLE-GUIDE.md) §S1 without a special case:
+
+| spelling | when |
+|---|---|
+| `fnsig Integer String` | one parameter, one return — the common case |
+| `fnsig [[Integer Integer] [Integer]]` | 2+ parameters (a list input selects the list form, exactly as with `fn`) |
+| `fnsig [[] [Integer]]` | zero parameters |
+| `fnsig [[Integer] [String] [String] [Integer]]` | an overload set |
+
+Anonymous use needs no name and works today under the prototype:
+
+```boru
+def h fn g:(fnsig Integer String) String [(g 5)]
+```
+
+### 2.2 Alternatives considered
+
+**An arrow type, `Integer -> String`.** Reads best of any option and is
+what every ML-family reader expects. Rejected for this pass: `->` is new
+lexical surface, `=>` is already the lambda fold, and an arrow needs
+associativity rules that the bracket forms get for free. Worth
+revisiting — but it should be sugar *over* this, not instead of it,
+because the list form is still needed for overload sets and an arrow has
+no natural spelling for those.
+
+**A new word, `fntype` / `signature`.** Rejected: `fnsig` already builds
+exactly this value and is already documented as the fn-shape
+constraint. A second word for one concept is the non-uniformity this
+repo's register exists to prevent.
+
+**Reusing `fn` with an empty body — `fn Integer String []`.** Rejected:
+it reads as a function that returns nothing, and it would make the
+type/value distinction depend on whether a body happens to be empty.
+
+---
+
+## 3. What the prototype changes
+
+Three edits. The first is the whole semantic change.
+
+### 3.1 The missing Behavior (the actual fix)
+
+`def IntToStr (fnsig …)` already minted a lattice node — it fell to
+`InstallType`'s final `else`, which mints with **no unifier**. That is
+why `f/v is IntToStr` worked (it resolves the *body* value and Unify
+routes it through `unifyFnUndefShape`) while `g:IntToStr` never matched:
+dispatch walks the lattice, and no function's parent chain reaches the
+`IntToStr` node.
+
+This is the asymmetry the neighbouring branches already call out, in
+their own words:
+
+> `def Maybe (Integer tor none)` route: … attach a disjunctUnifier so
+> `42.Is(Maybe)` **and sig dispatch** consult the alternatives. **Without
+> this Unifier the lattice walk rejects every value because no value's
+> parent chain reaches the Maybe node.**
+
+`core/go/unify_fnundef_named.go` (new) adds `FnUndefUnifier`, and
+`InstallType` gains the matching branch:
+
+```go
+} else if fu, isFnUndef := body.Data.(FnUndefInfo); isFnUndef {
+    def := r.Types.MintType(name, body.Parent)
+    installFnUndefUnifier(def, fu.Sigs, name)
+    r.Defs.PushType(name, def, body)
+}
+```
+
+`Match` delegates to the existing `FnUndefMatchesFnDef`, so there is
+**one** structural rule and both `is` and dispatch consult it. Carriers
+(abstract values) are admitted when they could still be functions — the
+sound over-approximation the negation unifier makes for the same reason.
+
+### 3.2 The sugar
+
+`fnsig` gains a second signature `[Any Any]` with the same `tnot List`
+pattern guard `fn`'s triple form carries, so a list input still selects
+the list form. `FnsigPairHandler` wraps the pair into the one-triple
+spec list and delegates, so both spellings build an identical value and
+the generic (`gen`) path is shared rather than duplicated:
+
+```
+$ boru do 'deq (canon (fnsig Integer String)) (canon (fnsig [[Integer] [String]]))'
+true
+```
+
+---
+
+## 4. Evidence
+
+### 4.1 It moves the error from run time to check time
+
+The controlled comparison — one variable changed, the parameter's
+declared type:
+
+| parameter type | correct fn passed | **wrong** fn passed (`String → Integer`) |
+|---|---|---|
+| `Function` | check CLEAN, runs `5` | check **CLEAN**, refused at run time |
+| `fnsig Integer String` | check CLEAN, runs `5` | check **ERROR**, refused at run time |
+
+That single cell is the feature. The runtime already refused the wrong
+function; what was missing was catching it statically.
+
+### 4.2 It rejects the right things
+
+Every row run against the prototype:
+
+| case | result |
+|---|---|
+| `Integer → String` where `Integer → String` wanted | **5** — accepted |
+| `String → Integer` where `Integer → String` wanted | refused |
+| 2-parameter fn where 1-parameter wanted | refused |
+| a non-function (`42`) | refused |
+| 2-parameter fn where 2-parameter wanted (list form) | **5** — accepted |
+
+### 4.3 Variance is correct, and free
+
+Function subtyping is contravariant in parameters and covariant in
+returns. The prototype inherits this from `FnSigSatisfiesSpec` without
+adding a line:
+
+| candidate | declared type | expected | result |
+|---|---|---|---|
+| `Number → Integer` | `Integer → Number` | accept | **accepted** |
+| `Integer → Number` | `Number → Integer` | reject | **refused** |
+
+A function that accepts *more* and returns *less* is substitutable; the
+reverse is not. That is the textbook rule, and it already worked.
+
+---
+
+## 5. Limitations found while prototyping
+
+1. **A `=>` lambda can only ever satisfy an `Any` return.** A lambda
+   declares no return type — `n:Integer => [mul n 2]` has the signature
+   `[[n:Integer][Any][…]]` — so it never satisfies `Integer → Integer`.
+   This is *correct* refusal, but it means the ergonomic spelling and
+   the typed spelling do not meet. A lambda return annotation is the
+   obvious follow-on and is not in this prototype.
+
+2. **`fnsig [Integer Integer] Integer` silently builds the wrong type.**
+   A list input selects the list form (as with `fn`), so this parses as
+   a *one*-parameter `Integer → Integer` and strands the trailing
+   `Integer` on the stack. `fn`'s analogous mistake fails loudly, because
+   3 does not divide 2; here 2 divides 2 and the result is a valid but
+   wrong signature. This is a silent-wrong-answer hazard the sugar
+   introduces and it needs an arity guard before merge.
+
+3. **The generic pair form does not resolve placeholders.**
+   `def M gen [T U] fnsig T U` fails with `undefined word: T`, because
+   `NoEvalArgs` is list-only — the same limitation `fn` documents for its
+   own output slot. The list form `fnsig [[T] [U]]` works and is
+   unaffected.
+
+4. **It does not fix NUR089.** An inline lambda argument still fails the
+   check where a named `/v` reference passes, with or without a declared
+   function type. That defect is orthogonal to opacity.
+
+---
+
+## 6. What this does *not* claim
+
+It does not make higher-order boru statically typed. `Function` remains
+the top of the fn lattice and is still what an unannotated parameter
+gets; this adds the ability to *say more* when you want to, and to have
+dispatch enforce it. Inference is untouched: nothing propagates a
+function's shape into a call site that did not declare one.
+
+---
+
+## 7. To go from prototype to merged
+
+- An arity guard for §5.2 — the silent-wrong-shape hazard is the one
+  finding here that is worse than what it replaces.
+- Decide the generic pair form (§5.3): make it work, or refuse it loudly
+  and point at the list form.
+- `boru describe fnsig` and `REFERENCE.md`'s modifier/type tables.
+- Spec rows in `lang/spec/` for the variance and rejection tables in §4,
+  and the compiled-coverage question those rows raise (a `canon` over a
+  function value refuses to compile — see `fn-triple.tsv` §2b's note).
+- Go↔TypeScript twin parity: `core/ts` needs the same unifier.
+- The 100% coverage gate (ADR-008) over the new branch and Behavior.
+- A decision on whether `->` sugar (§2.2) lands on top.

@@ -68,7 +68,8 @@ print (ii 42)        ;# 42
 print (ii "hello")   ;# hello
 ```
 
-`check: 0 error(s)`, correct on both engines. **BCKW** likewise:
+`check: 0 error(s)`, correct on both engines. **BCKW** runs correctly on
+both engines too, but — unlike SKI — it does **not** check clean:
 
 ```boru
 def bb f:Function => [g:Function => [x:Any => [f (g x)]]]
@@ -81,6 +82,52 @@ print (((cc add2/v) 1) 10)                                             ;# 11
 print ((kk 7) 99)                                                      ;# 7
 print ((ww add2/v) 4)                                                  ;# 8
 ```
+
+`14 11 7 8` on both engines, but:
+
+```
+check: 1:51: [error] no_signature: cannot call `g` — no signature matches
+  the arguments; got (Integer); assuming best-fit candidate for analysis
+  1 | def bb f:Function => [g:Function => [x:Any => [f (g x)]]]
+                                                        ^
+check failed: 1 error(s)
+```
+
+**The combinator is not what decides this — the CALL SITE is.** The same
+`bb`, called with named fn references instead of inline lambdas, checks
+clean and returns the same `14`:
+
+```
+;# args are inline lambdas       → check failed: 1 error(s), runs to 14
+print (((bb (n:Integer => [mul n 2])) (n:Integer => [add n 3])) 4)
+
+;# args are named fn references  → check: 0 error(s),        runs to 14
+def d fn n:Integer Integer [mul n 2]
+def e fn n:Integer Integer [add n 3]
+print (((bb d/v) e/v) 4)
+```
+
+And `ss` — which §1.1 shows checking clean — fails identically when
+*it* is called with inline lambdas. So this is not S-versus-B and not a
+property of the body: **an inline lambda argument loses information a
+named `/v` reference keeps**, and only the lambda spelling makes the
+analysis mistake `g` for an `Integer`. The SKI block above escapes it
+solely because it applies `kk/v`, a reference.
+
+That is a checker defect, not the opacity cost of §2 — an inline lambda
+and a named reference to the same function should be equally
+checkable. Recorded as **NUR089**.
+
+**A declared function type does not fix it, and it is worth being exact
+about that.** Replacing `f:Function` with a declared `f:IntToInt`
+(`design/FUNCTION-TYPES.0.md`) leaves the lambda call site still failing
+the check — the shape it rejects is real (a `=>` lambda declares no
+return, so it is `Integer → Any`, not `Integer → Integer`), but widening
+the declared type to `Integer → Any` makes the program *run* while the
+check still errors. So NUR089 is orthogonal to opacity and survives the
+fn-type work. What function types do buy is stated in §2 and measured in
+`FUNCTION-TYPES.0.md`: **sound rejection** of a wrong-shaped argument
+that bare `Function` accepts.
 
 ### 1.2 Church encodings
 
@@ -475,6 +522,63 @@ spelling** — `fn [[x:Integer] [Integer] [mul 2 x]]` becomes
 `fn x:Integer Integer [mul 2 x]`, while `s2`–`s5` above pass through it
 untouched. So a file can be `fmt`-clean and still carry four spellings of
 one signature. Recorded as **NUR088**.
+
+### 4.3 Curried-lambda spellings — three ways to nest an arrow
+
+Every curried combinator in §1 nests one `=>` inside another, and there
+are three ways to write the nesting. They are **not** three spellings of
+one value:
+
+```boru
+def kk x:Any => [y:Any => [x]]    ;# A — inner lambda in a code list
+def kk x:Any => (y:Any => [x])    ;# B — inner lambda in a paren group
+def kk x:Any => y:Any => [x]      ;# C — chained arrows, no wrapper
+```
+
+All three answer `7` for `((kk 7) 99)`, on the interpreter and the
+compiler alike, and check identically. The difference is structural, and
+`canon` is what sees it:
+
+```
+A  fn [[x:Any][Any][({y:word(Any)} sugar(lambda) [word(x)])]]
+B  fn [[x:Any][Any][(({y:word(Any)} sugar(lambda) [word(x)]))]]
+C  fn [[x:Any][Any][({y:word(Any)} sugar(lambda) [word(x)])]]
+```
+
+**At two levels A and C are the same value** — `deq (canon a/v) (canon
+c/v)` is `true` — and **B is not**: its explicit parens are one group
+more than the arrow already supplies, so its body canons doubled,
+`[((…))]` against `[(…)]`.
+
+At three levels even A and C diverge:
+
+```
+A  …[({g:…} sugar(lambda) [({x:…} sugar(lambda) [word(f) (g x)])])]…
+C  …[({g:…} sugar(lambda)  ({x:…} sugar(lambda) [word(f) (g x)]) )]…
+```
+
+**A wraps each nested lambda in its own code list; C makes the inner
+lambda the enclosing body directly.** The two-level case coincides only
+because the OUTERMOST body is `fn`'s body slot, which auto-wraps a
+non-list body into a one-element list (`ParseFnDef`'s abbreviation rule,
+`lang/spec/fn-triple.tsv`). Inner lambda bodies get no such wrap — they
+keep whatever the source wrote. So the deeper the currying, the more the
+three spellings diverge as values while agreeing as programs.
+
+**Which to write.** C is the fewest brackets (§S1b) and, at two levels,
+literally the same value as A. But the equality does not survive a third
+level, so "A and C are interchangeable" is true only for the shallowest
+case — do not generalise it. This note keeps **A** throughout §1,
+because a nested combinator basis is exactly where the equality stops
+holding and the bracketed form is the one whose structure matches its
+indentation.
+
+**Where the difference bites.** Nowhere in evaluation — but `canon` is
+the input to content-addressed identity
+(`design/CONTENT-ADDRESSING.0.md`), so A, B and C hash as three
+different functions. That is the same class as **NUR074** (`canon`
+renders parameter names, so alpha-equivalent functions digest
+differently): a purely syntactic choice moving a content hash.
 
 ---
 

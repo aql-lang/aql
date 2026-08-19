@@ -137,7 +137,9 @@ WORD def
   [Scalar/String Scalar/Atom Node/List Scalar/Atom Any Any Node/List] barrier=7 runcheck noeval={2,4,5,6} noevalmap={4,5,6} quote={1,3}
   [Scalar/Atom Scalar/Atom Node/List Scalar/Atom Any Any Node/List] barrier=7 runcheck noeval={2,4,5,6} noevalmap={4,5,6} quote={0,1,3}
   [Scalar/String Scalar/Atom Node/List Scalar/Atom Any Node] barrier=6 runcheck noeval={2,4,5} noevalmap={4,5} quote={1,3}
+  [Scalar/String Scalar/Atom Node/List Scalar/Atom Any Any] barrier=6 runcheck noeval={2,4,5} noevalmap={4,5} quote={1,3}
   [Scalar/Atom Scalar/Atom Node/List Scalar/Atom Any Node] barrier=6 runcheck noeval={2,4,5} noevalmap={4,5} quote={0,1,3}
+  [Scalar/Atom Scalar/Atom Node/List Scalar/Atom Any Any] barrier=6 runcheck noeval={2,4,5} noevalmap={4,5} quote={0,1,3}
   [Scalar/String Scalar/Atom Node/List Scalar/Atom Any] barrier=5 runcheck noeval={2,4} noevalmap={4} quote={1,3}
   [Scalar/String Scalar/Atom Node/List Scalar/Atom Node/List] barrier=5 runcheck noeval={2,4} noevalmap={4} quote={1,3}
   [Scalar/String Scalar/Atom Node/List Scalar/Atom Node/List] barrier=5 runcheck noeval={2,4} noevalmap={4} quote={1,3}
@@ -149,7 +151,9 @@ WORD def
   [Scalar/Atom Scalar/Atom Node/List Scalar/Atom Node/Map] barrier=5 runcheck noeval={2,4} noevalmap={4} quote={0,1,3}
   [Scalar/Atom Scalar/Atom Any Any Node/List] barrier=5 runcheck noeval={2,3,4} noevalmap={2} quote={0,1}
   [Scalar/String Scalar/Atom Any Node] barrier=4 runcheck quote={1}
+  [Scalar/String Scalar/Atom Any Any] barrier=4 runcheck noeval={2,3} noevalmap={2} quote={1}
   [Scalar/Atom Scalar/Atom Any Node] barrier=4 runcheck quote={0,1}
+  [Scalar/Atom Scalar/Atom Any Any] barrier=4 runcheck noeval={2,3} noevalmap={2} quote={0,1}
   [Scalar/String Scalar/Atom Any] barrier=3 runcheck noeval={2} quote={1}
   [Scalar/String Scalar/Atom Node/Map] barrier=3 runcheck quote={1}
   [Scalar/String Scalar/Atom Any] barrier=3 runcheck quote={1}
@@ -315,6 +319,7 @@ WORD fn
   [Any Any Node/List] barrier=3 runcheck noeval={0,1,2} noevalmap={0} returns=[Type/Function]
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD fnsig
+  [Any Any] barrier=2 runcheck noeval={0,1} noevalmap={0} returns=[Type/FunctionSignature]
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/FunctionSignature]
 WORD fold
   [Type/Function Node/Map Any] barrier=3 +returnsfn

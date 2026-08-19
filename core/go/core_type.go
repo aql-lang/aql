@@ -501,6 +501,19 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, body.Parent)
 		installDisjunctUnifier(def, di.Alternatives, name)
 		r.Defs.PushType(name, def, body)
+	} else if fu, isFnUndef := body.Data.(FnUndefInfo); isFnUndef {
+		// `def IntToStr fnsig Integer String` route: mint a lattice node
+		// parented at the body's lattice (TFnUndef) and attach a
+		// fnUndefUnifier so `f/v is IntToStr` AND sig dispatch on a
+		// `g:IntToStr` parameter both consult the signature specs.
+		// Without this Unifier the lattice walk rejects every function,
+		// because no function's parent chain reaches the IntToStr node —
+		// the same dispatch-vs-`is` asymmetry as the disjunct, negation
+		// and DepScalar branches, and for the same reason. Install on
+		// `def`, not on `body`.
+		def := r.Types.MintType(name, body.Parent)
+		installFnUndefUnifier(def, fu.Sigs, name)
+		r.Defs.PushType(name, def, body)
 	} else if IsNegation(body) {
 		// `def NotStr (tnot String)` route: mint a lattice node parented
 		// at the body's lattice (TNegation) and attach a negationUnifier

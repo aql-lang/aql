@@ -88,6 +88,7 @@ keep the two in sync in the same commit.
 | [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
 | [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
+| [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -3970,3 +3971,81 @@ one-pair form, leaving the irreducible shapes (2+ parameters, 0
 parameters, multi-overload spec lists) untouched as it already does. This
 record retires when each of the five rewrites to
 `fn x:Integer Integer [mul 2 x]`, pinned as a `fmt` round-trip test.
+
+---
+
+## NUR089 — an inline lambda and a named reference to the same function are not equally checkable {#nur089}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+function-type prototype (`design/FUNCTION-TYPES.0.md`), while
+establishing which of the audit's combinator blocks check clean and why
+
+**Rule:** a function value is a function value. ADR-011's "calling is an
+act of the use site" makes the *call* the only thing that distinguishes
+a reference from a call; nothing in the model makes an anonymous
+function less analysable than a named one. `/v` and a `=>` lambda are
+two spellings of "this function, as data".
+
+**Divergence:** the same combinator, passed the same two functions,
+producing the same answer, checks clean in one spelling and errors in
+the other.
+
+```
+$ cat lam.boru
+def bb f:Function => [g:Function => [x:Any => [f (g x)]]]
+print (((bb (n:Integer => [mul n 2])) (n:Integer => [add n 3])) 4)
+$ boru check lam.boru
+check: 1:51: [error] no_signature: cannot call `g` — no signature matches
+  the arguments; got (Integer); assuming best-fit candidate for analysis
+check failed: 1 error(s)
+$ boru run -no-check lam.boru
+14
+
+$ cat ref.boru
+def d fn n:Integer Integer [mul n 2]
+def e fn n:Integer Integer [add n 3]
+def bb f:Function => [g:Function => [x:Any => [f (g x)]]]
+print (((bb d/v) e/v) 4)
+$ boru check ref.boru
+check: 0 error(s), 0 warning(s), 0 info
+$ boru run -no-check ref.boru
+14
+```
+
+`got (Integer)` is the tell: with the lambda spelling the analysis binds
+the **third** application's argument to `g`, the **second** parameter.
+Varying only that final argument moves the reported type with it, which
+pins the misbinding exactly:
+
+```
+… ) 4)     → no_signature: cannot call `g` … got (Integer)
+… ) 'zz')  → no_signature: cannot call `g` … got (ProperString)
+… ) 3.5)   → no_signature: cannot call `g` … got (Float)
+```
+
+The reference spelling tracks the same three applications correctly.
+
+**Not a property of the combinator.** `ss` (the `S` of §1.1, which the
+audit shows checking clean) fails identically when it is called with
+inline lambdas instead of `kk/v`; `bb` passes when called with
+references. Only the argument spelling moves the result. Defining either
+combinator without calling it is clean in both spellings, so the defect
+is in the analysis of the *call*, not the body.
+
+**Not fixed by declaring a function type.** Replacing `f:Function` with
+a declared `f:IntToInt` (`design/FUNCTION-TYPES.0.md`) leaves the lambda
+call site failing. Widening the declared return to `Any` — which the
+lambda genuinely has, since `=>` declares no return type — makes the
+program run while the check still errors. So this record is orthogonal
+to the opacity of `Function` and survives that work.
+
+**Consequence:** the ergonomic spelling is the one that fails. A reader
+converting an example to the shorter inline form gets a check failure on
+a program that runs correctly, and the diagnostic names a type
+(`Integer`) that appears nowhere in the parameter's declaration —
+pointing the reader at the wrong thing.
+
+**Verdict proposed:** resolve by fix — the analysis must bind an inline
+lambda argument to the same parameter the reference spelling binds it
+to. This record retires when the minimal pair above checks clean in both
+spellings, pinned as a spec row.
