@@ -90,6 +90,13 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   `jsonic-matcher-rule-access-report.10.md`, `data-last-audit.10.md`,
   `WAT-AUDIT.5.md`, `FORMAL-FINDINGS.0.md` — feature/feasibility/audit
   reports pinned to a point in time.
+- `TYPE-REPRESENTATION.0.md` — why a type NAME does not always denote its
+  type. One lattice (`*Type`), but `IsTypeBody` unions 18 value shapes and
+  `InstallType` has 11 branches using 3 strategies to bind a name to one.
+  Two strategies work everywhere; the catch-all branch leaves the name
+  usable in some positions and not others. Carries the branch table, the
+  measured surface consequences, two corrections this audit had to make to
+  its own earlier claims, and a staged fix. NUR090 / NUR091, issue #392.
 - `FUNCTION-TYPES.0.md` — proposal + working prototype for a *declared*
   function type (`fnsig Integer String`, `fn` minus its body), answering
   the audit's "`Function` is opaque" finding. Measures what the change
