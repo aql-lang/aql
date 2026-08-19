@@ -91,6 +91,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR090](#nur090) | A type name does not always denote its type: a builtin or `refine` word evaluates to its minted lattice NODE, while a `class`, disjunct or fn-shape word evaluates to its structural BODY — so wherever a type name is evaluated before being used as a type (e.g. `fn M [Any] [1]`), three kinds break where two work | the function-type prototype, 2026-08-19 (issue #392, `design/FUNCTION-TYPES.0.md` §5.3) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
+| [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -4218,9 +4219,75 @@ of loudly. They meet only in that both were found probing slot 0.
 documented remedy works and is loud about nothing:
 `boru do 'def f fn [[List] [Any] [1]]  f [1 2]'` → `1`.
 
+**Not pinned in the corpus, deliberately.** A spec row for this was added
+to `fn-triple.tsv` §4 and then withdrawn: its input displaced a seed from
+the variation sample and emptied an unrelated `varyRefusalLedger` bucket,
+which is NUR092. The transcripts above are the record; a documentation
+row should not cost an unrelated ratchet.
+
 **Verdict proposed:** resolve by fix — a `def` whose value expression
 dispatched nothing should raise rather than strand, or `fn` should
 refuse a non-matching operand shape with a diagnostic naming the
 `(tnot List)` rule. This record retires when
-`def f fn List Any [1]` reports an error, pinned as a spec row beside
-`fn-triple.tsv` §4's existing loud twin.
+`def f fn List Any [1]` reports an error, pinned beside
+`fn-triple.tsv` §4's existing loud twin (once NUR092 makes that safe).
+
+---
+
+## NUR092 — the variation ledger's stale arm is corpus-sensitive {#nur092}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** adding
+two rows to `lang/spec/fn-triple.tsv` for NUR091 and watching CI fail in
+an unrelated bucket
+
+**Rule:** `vary.Sample`'s own contract, in its doc comment: *"Samples
+NEST: `Sample(s, n)` is a prefix of `Sample(s, m)` for n < m, so cranking
+breadth strictly ADDS variants and a bucket observed at the default
+breadth stays observed at any larger one — **the property the CI ledger's
+stale arm relies on**."*
+
+**Divergence:** the nesting property holds across **n**, not across
+**corpus content**. `Sample` orders seeds by `fnv64(seed.Input)` and
+takes the first 32, so adding ANY spec row whose input hashes low enough
+displaces a seed that was previously in the sample. If the displaced seed
+was the only one exercising a refusal class, its `varyRefusalLedger`
+bucket empties and the stale arm fires:
+
+```
+vary_differential_test.go:83: stale varyRefusalLedger bucket
+  "other: capture ParseLang of calc unreachable at a call site"
+  — no variant refuses in it any more; graduate it (delete the entry).
+```
+
+**The instruction is wrong in this case, and destructively so.** The
+class is not fixed; it is merely unsampled. Re-running at greater breadth
+brings it straight back:
+
+```
+$ BORU_VARY_SEEDS=64 go test ./test/go/langspec -run TestVariationDifferential
+… refusal buckets: map[… other: capture ParseLang of calc unreachable at a call site:3 …]
+```
+
+Following the diagnostic would delete a ledger entry for a refusal class
+that still exists — losing the record and the frontier row it points at,
+for a reason (someone added an unrelated spec row) with no connection to
+the class at all.
+
+**Evidence:** the two rows were added in 6876dcd; `git checkout` of each
+preceding commit on the branch (ba311b6, ebf9d58, b835aa2, 204ba21) shows
+the stale arm silent, and `origin/main` is green. Removing the two rows
+restores it. The rows in question were documentation of NUR091's current
+behaviour and were withdrawn to the NUR record instead — a corpus row
+should not cost an unrelated ratchet.
+
+**Consequence:** a contributor adding a spec row can be told, by a
+passing-looking diagnostic, to delete a live record. The failure is
+remote from its cause (a `fn-triple.tsv` row emptied a `ParseLang`
+bucket), which makes it hard to attribute without bisecting.
+
+**Verdict proposed:** resolve by fix. Candidates: make the stale arm
+re-check an emptied bucket at greater breadth before reporting it;
+sample by a corpus-position-independent key so additions do not displace;
+or pin the seed set explicitly rather than deriving it by hash prefix.
+This record retires when adding an unrelated passing spec row cannot
+empty a ledger bucket, pinned as a test.
