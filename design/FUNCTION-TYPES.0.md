@@ -19,6 +19,7 @@ Answers the open item from
 | | |
 |---|---|
 | Is a syntax available that needs no new grammar? | **Yes** — `fnsig input output`, `fn` minus its body. |
+| Is `Function` still opaque? | **Less so, where you annotate.** A declared shape is enforced at dispatch AND checked inside the body (§4.4). Bare `Function` is unchanged, nothing is inferred, and the pair-form sugar does not yet compose (§5.3). |
 | Does the type system already support it? | **Mostly.** Structural subtyping with correct variance was already implemented and already drove `is`. |
 | What was actually missing? | **One `Behavior` hook**, so *dispatch* consults what `is` already consulted. |
 | Size of the prototype | ~70 new lines + a 12-line branch + a 16-line sugar handler. |
@@ -207,6 +208,23 @@ adding a line:
 A function that accepts *more* and returns *less* is substitutable; the
 reverse is not. That is the textbook rule, and it already worked.
 
+### 4.4 The declared type propagates INTO the body
+
+This is the part that most directly answers "is `Function` still
+opaque?", and it is stronger than §4.1 alone suggests. A parameter
+declared with an fn shape carries that shape into the body, in both
+directions:
+
+| body | `g:Function` | `g:IntToStr` |
+|---|---|---|
+| `(g 5)` — correct argument | check CLEAN | check CLEAN |
+| `(g "oops")` — **wrong argument type** | check **CLEAN** | check **ERROR** |
+| declaring the enclosing fn's return wrongly | — | check **ERROR** |
+
+So with a declared shape the checker verifies the call *through* the
+parameter — the exact thing §1 says it could not do. With bare
+`Function` the same wrong call passes the check and fails at run time.
+
 ---
 
 ## 5. Limitations found while prototyping
@@ -226,11 +244,38 @@ reverse is not. That is the textbook rule, and it already worked.
    wrong signature. This is a silent-wrong-answer hazard the sugar
    introduces and it needs an arity guard before merge.
 
-3. **The generic pair form does not resolve placeholders.**
-   `def M gen [T U] fnsig T U` fails with `undefined word: T`, because
-   `NoEvalArgs` is list-only — the same limitation `fn` documents for its
-   own output slot. The list form `fnsig [[T] [U]]` works and is
-   unaffected.
+3. **The pair form only accepts BUILTIN and `refine` types — this is the
+   prototype's real defect.** A named type whose *body* is a structural
+   value rather than a bare lattice node is rejected:
+
+   | parameter type | `fnsig T String` (pair) | `fnsig [[T] [String]]` (list) |
+   |---|---|---|
+   | builtin (`Integer`) | works | works |
+   | `refine` newtype | works | works |
+   | `class` type | **`invalid parameter`** | works |
+   | disjunct (`tor`) | **`invalid parameter`** | works |
+   | another **fn shape** | **`invalid parameter`** | works |
+   | generic placeholder (`gen [T U]`) | **`undefined word: T`** | works |
+
+   **Function types therefore do not compose in the pair form**:
+   `fnsig T String`, where `T` is itself a function type — "a function
+   that takes an `Integer → String`" — fails to build. That is the
+   higher-order-over-higher-order case, which is much of the point, and
+   it needs the bracketed spelling today.
+
+   **Cause.** `NoEvalArgs` is LIST-only, so the pair form's bare-word
+   slot is evaluated to the type's BODY before the handler sees it, and
+   the parameter parser rejects a structural body. `fn`'s triple form
+   escapes this because its input slot is a MAP (`x:T`), which
+   `NoEvalMapArgs` covers — and `fn`'s own registration comment records
+   the same problem for its *output* slot as "deliberately NOT fixed
+   here: a bare Word there is resolved by forward collection itself,
+   which no NoEval can suppress". So this is a known-hard class in the
+   codebase, not an oversight in one handler.
+
+   The list form is unaffected throughout and remains the general
+   spelling. The sugar is a convenience for the common case, and §7 must
+   either fix it or say so in `boru describe`.
 
 4. **It does not fix NUR089.** An inline lambda argument still fails the
    check where a named `/v` reference passes, with or without a declared
