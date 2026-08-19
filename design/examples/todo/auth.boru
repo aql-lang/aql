@@ -21,8 +21,8 @@
 import "boru:serve"
 
 export "Auth" {
-  gate:      gate/r          # wrap: blanket session gate for a whole service
-  own-guard: own-guard/r     # prior layer: owner-only guard for one pattern
+  gate:      gate/v          # wrap: blanket session gate for a whole service
+  own-guard: own-guard/v     # prior layer: owner-only guard for one pattern
 }
 
 # --- blanket gate (wrap) ----------------------------------------------------

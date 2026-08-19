@@ -31,15 +31,21 @@ through a parameter, and one live **engine disagreement**.
 | Question | Answer |
 |---|---|
 | Are functions first-class? | **Yes.** Storable in lists and maps, passable, returnable, closing over locals, recursive, introspectable. |
-| Can all combinators be implemented? | **Almost.** S, K, I, B, C, W, U, Church numerals and pairs, Church `true`/`false`/`if`/`not`, CPS, and a working parser-combinator library were all built and run. Church `and`/`or` — which must return one *named* boolean unchanged — resisted every spelling tried (§1.2). |
-| Is it *pleasant*? | **No.** The polymorphic ones need two escape hatches (`(args).N` and boxing) that no document names, and the naive spelling fails. |
+| Can all combinators be implemented? | **Yes**, since the `/v` change (2026-08-19). S, K, I, B, C, W, U, the full Church basis — booleans *including* `and`/`or`, numerals, pairs — CPS, and a working parser-combinator library were all built and run. The one construction the first pass could not finish now works in its naive spelling (§1.2, §5.2). |
+| Is it *pleasant*? | **Much more so.** `/v` is total over binding kinds, so the polymorphic combinators need no escape hatch — the two undocumented idioms (`(args).N` and boxing) are no longer required. |
 | Is it *safe*? | **Not yet.** Three silent-wrong-answer classes and one interpreter-vs-compiler divergence, listed in §5. |
 
-**One-line summary:** boru's function substrate is close to complete —
-every combinator in the audit except Church `and`/`or` was built and run —
-but the surface has a *call-vs-value* ambiguity that is resolved
-differently at four different sites, and the correctness of a higher-order
-program can depend on which engine runs it.
+**One-line summary:** boru's function substrate is complete — every
+combinator in the audit was built and run — and since `/v` became total
+over binding kinds the surface has one spelling for "the value, whatever
+kind it is". What remains is narrower: a *call-vs-value* ambiguity at the
+paren-application and capitalised-name sites, and the fact that the
+correctness of a higher-order program can still depend on which engine
+runs it (§5.7).
+
+> **Re-assessed 2026-08-19** after `/r`→`/v` / `ref`→`valof` landed with the
+> function-only gate removed. §5.2 is closed and NUR085 retired; §5.1,
+> §5.3–§5.9 were each re-run against the new binary and are unchanged.
 
 ---
 
@@ -55,9 +61,9 @@ produced the quoted output — so it can be re-run from the note itself.
 `I = S K K`, derived rather than assumed:
 
 ```boru
-def kk ([x:Any] => [([y:Any] => [x])])
-def ss ([f:Function] => [([g:Function] => [([x:Any] => [(f x) (g x)])])])
-def ii ((ss kk/r) kk/r)
+def kk x:Any => [y:Any => [x]]
+def ss f:Function => [g:Function => [x:Any => [(f x) (g x)]]]
+def ii ((ss kk/v) kk/v)
 print (ii 42)        ;# 42
 print (ii "hello")   ;# hello
 ```
@@ -65,15 +71,15 @@ print (ii "hello")   ;# hello
 `check: 0 error(s)`, correct on both engines. **BCKW** likewise:
 
 ```boru
-def bb ([f:Function] => [([g:Function] => [([x:Any] => [f (g x)])])])
-def cc ([f:Function] => [([x:Any] => [([y:Any] => [(f y) x])])])
-def kk ([x:Any] => [([y:Any] => [x])])
-def ww ([f:Function] => [([x:Any] => [(f x) x])])
-def add2 ([a:Integer] => [([b:Integer] => [add a b])])
-print (((bb ([n:Integer] => [mul n 2])) ([n:Integer] => [add n 3])) 4)  ;# 14
-print (((cc add2/r) 1) 10)                                             ;# 11
+def bb f:Function => [g:Function => [x:Any => [f (g x)]]]
+def cc f:Function => [x:Any => [y:Any => [(f y) x]]]
+def kk x:Any => [y:Any => [x]]
+def ww f:Function => [x:Any => [(f x) x]]
+def add2 a:Integer => [b:Integer => [add a b]]
+print (((bb (n:Integer => [mul n 2])) (n:Integer => [add n 3])) 4)  ;# 14
+print (((cc add2/v) 1) 10)                                             ;# 11
 print ((kk 7) 99)                                                      ;# 7
-print ((ww add2/r) 4)                                                  ;# 8
+print ((ww add2/v) 4)                                                  ;# 8
 ```
 
 ### 1.2 Church encodings
@@ -81,57 +87,67 @@ print ((ww add2/r) 4)                                                  ;# 8
 Numerals and pairs work unmodified:
 
 ```boru
-def czero ([f:Function] => [([x:Any] => [x])])
-def csucc ([n:Function] => [([f:Function] => [([x:Any] => [f ((n f/r) x)])])])
-def cplus ([m:Function] => [([n:Function] => [([f:Function] => [([x:Any] =>
-             [((m f/r) ((n f/r) x))])])])])
-def cmult ([m:Function] => [([n:Function] => [([f:Function] => [(m (n f/r))])])])
-def toint ([n:Function] => [((n ([k:Integer] => [add k 1])) 0)])
-def c1 (csucc czero/r)
-def c2 (csucc c1/r)
-def c3 (csucc c2/r)
-print (toint c3/r)                    ;# 3
-print (toint ((cplus c2/r) c3/r))     ;# 5
-print (toint ((cmult c2/r) c3/r))     ;# 6
+def czero f:Function => [x:Any => [x]]
+def csucc n:Function => [f:Function => [x:Any => [f ((n f/v) x)]]]
+def cplus m:Function => [n:Function => [f:Function => [x:Any =>
+             [((m f/v) ((n f/v) x))]]]]
+def cmult m:Function => [n:Function => [f:Function => [(m (n f/v))]]]
+def toint n:Function => [((n (k:Integer => [add k 1])) 0)]
+def c1 (csucc czero/v)
+def c2 (csucc c1/v)
+def c3 (csucc c2/v)
+print (toint c3/v)                    ;# 3
+print (toint ((cplus c2/v) c3/v))     ;# 5
+print (toint ((cmult c2/v) c3/v))     ;# 6
 ```
 
 ```boru
-def cpair ([a:Any] => [([b:Any] => [([s:Function] => [((s a) b)])])])
-def cfst  ([p:Function] => [(p ([a:Any] => [([b:Any] => [a])]))])
-def csnd  ([p:Function] => [(p ([a:Any] => [([b:Any] => [b])]))])
+def cpair a:Any => [b:Any => [s:Function => [((s a) b)]]]
+def cfst  p:Function => [(p (a:Any => [b:Any => [a]]))]
+def csnd  p:Function => [(p (a:Any => [b:Any => [b]]))]
 def p ((cpair 1) 2)
-print (cfst p/r)   ;# 1
-print (csnd p/r)   ;# 2
+print (cfst p/v)   ;# 1
+print (csnd p/v)   ;# 2
 ```
 
-Church **booleans** do *not* work in their naive spelling — `λt.λf.t`
-returns a parameter, and returning a `Function`-valued parameter is the
-central hazard of this report (§5.2). They need **two** escape hatches.
-`(args).N` reads the innermost fn's own argument list, so the *outer*
-argument must first be boxed in a list and read back positionally:
+Church **booleans** work in their naive spelling. `λt.λf.t` returns a
+parameter, and since `/v` is total over binding kinds that is just `t/v`
+— no boxing, no `(args).N`:
 
 ```boru
-def ctrue  fn t:Any Function [ def bx [(args).0] ( fn f:Any Any [ bx.0 ] ) ]
-def cfalse fn t:Any Function [ ( fn f:Any Any [ (args).0 ] ) ]
-def cif    fn [[p:Function t:Any e:Any][Any][ def r (p t) (r e) ]]
-def cnot   fn p:Function Function [ def bp [(args).0]
-  ( fn t:Any Function [ def bt [(args).0]
-      ( fn f:Any Any [ def qq ((bp.0) f) (qq (bt.0)) ] ) ] ) ]
-print (cif ctrue/r  "T" "F")          ;# T
-print (cif cfalse/r "T" "F")          ;# F
-print (cif (cnot ctrue/r)  "T" "F")   ;# F
-print (cif (cnot cfalse/r) "T" "F")   ;# T
+def ctrue  t:Any => [f:Any => [t/v]]
+def cfalse t:Any => [f:Any => [f/v]]
+def cif  p:Function => [t:Any => [e:Any => [((p t) e)]]]
+def cnot p:Function => [t:Any => [f:Any => [((p f) t)]]]
+def cand p:Function => [q:Function => [((p q/v) cfalse/v)]]
+def cor  p:Function => [q:Function => [((p ctrue/v) q/v)]]
+print ((((cif ctrue/v)  "T") "F"))
+print ((((cif cfalse/v) "T") "F"))
+print ((((cif (cnot ctrue/v))  "T") "F"))
+print ((((cif (cnot cfalse/v)) "T") "F"))
+print ((((cif ((cand ctrue/v)  cfalse/v)) "T") "F"))
+print ((((cif ((cand ctrue/v)  ctrue/v))  "T") "F"))
+print ((((cif ((cor  ctrue/v)  cfalse/v)) "T") "F"))
+print ((((cif ((cor  cfalse/v) cfalse/v)) "T") "F"))
 ```
 
-`cand` / `cor` were **not** completed. They must return one Church
-boolean *as itself*, and every spelling tried hit one of two walls: with
-named booleans, `lang/spec/fn-value.tsv` §5's loud-dispatch rule fires
-(`[boru/uncalled_function]: call to 'cfalse' matched no signature`,
-pointing back at the `cfalse/r` argument); holding them anonymously in a
-list to dodge that rule then ran into forward-collection barriers
-(`cand (bools.0) (bools.1)` → *"takes 2 arguments, but 1 was supplied"*).
-This is the one construction in the audit that was not finished, and it
-is a direct consequence of §5.2 rather than a separate defect.
+```
+T  F  F  T  F  T  T  F      (one per line)
+```
+
+`check: 0 error(s)`. That is `true`, `false`, `¬true`, `¬false`, `T∧F`,
+`T∧T`, `T∨F`, `F∨F` — the full basis.
+
+> **Before `/v` (kept as the record of what changed).** Under the old
+> `/r`, this did not work. `[t]` called a function-bound parameter and
+> `[t/r]` refused a non-function one, so `ctrue`/`cfalse` needed
+> `(args).N` plus a boxing step to reach the enclosing fn's argument —
+> and `cand`/`cor`, which must return one Church boolean *as itself*,
+> resisted every spelling tried: named booleans tripped
+> `lang/spec/valof.tsv` §5's loud-dispatch rule, and holding them
+> anonymously in a list then ran into forward-collection barriers. It
+> was the one construction the audit could not finish. Removing the
+> function-only gate closed it (§5.2, NUR085 retired).
 
 ### 1.3 Continuation-passing style
 
@@ -141,9 +157,9 @@ CPS works cleanly, including the closure-per-frame that CPS implies:
 def factk fn [[n:Integer k:Function][Any][
   if (lte 1 n) [ (k 1) ]
                [ def kk ( fn r:Integer Any [ def m (mul n r) (k m) ] )
-                 (factk (sub 1 n) kk/r) ] ]]
-print (factk 5  ([v:Integer] => [v]))          ;# 120
-print (factk 10 ([v:Integer] => [add 0 v]))    ;# 3628800
+                 (factk (sub 1 n) kk/v) ] ]]
+print (factk 5  (v:Integer => [v]))          ;# 120
+print (factk 10 (v:Integer => [add 0 v]))    ;# 3628800
 ```
 
 ### 1.4 Anonymous recursion
@@ -153,7 +169,7 @@ The U-combinator form runs on **both** engines with a clean check:
 ```boru
 def fgen fn s:Function Function [
   ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ] ) ]
-def fact (fgen fgen/r)
+def fact (fgen fgen/v)
 print (fact 5)       ;# 120
 ```
 
@@ -171,9 +187,9 @@ The standard stress test for higher-order support — `item`, `sat`, `alt`,
 `Function: String -> {ok val rest}`:
 
 ```boru
-def pitem ([s:String] => [
+def pitem s:String => [
   if (eq 0 (size s)) [ {ok:false rest:s val:None} ]
-                     [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ])
+                     [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ]
 
 def psat fn p:Function Function [
   ( fn s:String Map [
@@ -195,16 +211,16 @@ def pseq fn [[a:Function b:Function][Function][
 
 def manyloop fn [[a:Function s:String acc:List][Map][
   def r (a s)
-  if (r.ok) [ (manyloop a/r (r.rest) (push (r.val) acc)) ]
+  if (r.ok) [ (manyloop a/v (r.rest) (push (r.val) acc)) ]
             [ {ok:true val:acc rest:s} ] ]]
 def pmany fn a:Function Function [
-  ( fn s:String Map [ def z [] (manyloop a/r s z) ] ) ]
+  ( fn s:String Map [ def z [] (manyloop a/v s z) ] ) ]
 
-def isdigit ([c:String] => [ and (gte "0" c) (lte "9" c) ])
-def digit  (psat isdigit/r)
-def digits (pmany digit/r)
-def ab     (palt (psat ([c:String] => [eq "a" c])) (psat ([c:String] => [eq "b" c])))
-def two    (pseq digit/r digit/r)
+def isdigit c:String => [ and (gte "0" c) (lte "9" c) ]
+def digit  (psat isdigit/v)
+def digits (pmany digit/v)
+def ab     (palt (psat (c:String => [eq "a" c])) (psat (c:String => [eq "b" c])))
+def two    (pseq digit/v digit/v)
 
 print (digits "123ab")
 print (ab "bzz")
@@ -230,7 +246,7 @@ Identical on both engines. It does **not** pass `boru check` — see §5.5.
 | Functions in a list, retrieved and called | ✅ `((fs get 1) 5)` → `10` |
 | Functions in a map; dynamic key dispatch | ✅ `((tbl get k) 5)` → `10` |
 | Pipeline over a list of functions | ✅ `fold [apply] fs 5` → `12` |
-| Named `compose` returning a `Function` | ✅ `(compose ([a:Integer] => [add 1 a]) ([a:Integer] => [mul 2 a]))` applied to `5` → `11` |
+| Named `compose` returning a `Function` | ✅ `(compose (a:Integer => [add 1 a]) (a:Integer => [mul 2 a]))` applied to `5` → `11` |
 | `memoize` over a captured `flex` cache | ✅ MISS/hit/MISS |
 | Mutable capture (`flex` mutated through a closure) | ✅ `[1 2 3]` |
 | `usurp` (`/u`) wraps a fn and the wrapper is storable | ✅ `(sub2 10 3)` → `7`; `(sub2/u 10 3)` → `-7`; `def g (f2/u)` then `(g 10 3)` → `-7` |
@@ -250,14 +266,14 @@ concatenative peers (Factor, Joy):
 |---|---|---|---|---|---|
 | First-class functions | ✓ | ✓ | ✓ | ✓ (quotations) | **✓** |
 | Lexical closures | ✓ | ✓ | ✓ | ✓ | **✓ for fn-locals; non-locals resolve late (§5.6)** |
-| Anonymous lambda syntax | `\x ->` | `lambda` | `=>` | `[ ]` | **`([x:T] => [body])`** |
+| Anonymous lambda syntax | `\x ->` | `lambda` | `=>` | `[ ]` | **`x:T => [body]`** |
 | Returning a function | ✓ | ✓ | ✓ | ✓ | **✓** |
 | Auto-currying | ✓ | ✗ | ✗ | ✗ | **✗** (manual nesting) |
 | Partial application | ✓ | SRFI-26 | `.bind` | `curry` | **mechanism ✓, named combinator ✗** — see below |
 | Named `compose` / `pipe` | `.` `>>>` | `compose` | — | `compose` | **✗ — user-written** |
 | `flip` | ✓ | ✓ | — | `swap` | **≈ `usurp` / `/u`** (2-arg) |
 | Function type in the type system | `a -> b` | — | — | stack effects | **✗ — `Function` is opaque** |
-| Polymorphic identity `λx.x` | ✓ | ✓ | ✓ | ✓ | **⚠ only via `(args).0`, not through the parameter's name (§5.2)** |
+| Polymorphic identity `λx.x` | ✓ | ✓ | ✓ | ✓ | **✓ since `/v` — `t:Any => [t/v]` (§5.2)** |
 | Dataflow shufflers (`dip`/`keep`/`bi`) | n/a | n/a | n/a | ✓ | **✗** |
 | Laziness / infinite structures | ✓ | promises / SRFI-41 | generators | library | **✗ — strict, materialised** |
 | Callback uniformity across containers | ✓ | ✓ | ✓ | ✓ | **✗ (§5.3)** |
@@ -266,7 +282,7 @@ concatenative peers (Factor, Joy):
 Three entries deserve emphasis.
 
 **Partial application exists; the *word* does not.** `curryOrStack`
-(`core/go/engine.go:7965`) packages an under-supplied forward call — word
+(`core/go/engine.go:7927`) packages an under-supplied forward call — word
 plus collected args — into a value that completes when it is later
 expanded, and `lang/go/test/basic.tsv` exercises it across the arithmetic
 words (`def add5 word [add 5]` then `10 add5` → `15`). So the row is not
@@ -276,11 +292,26 @@ returning a `Function`.
 
 **`Function` is opaque.** There is no way to write "a function from
 `Integer` to `String`". `tpartial` is unrelated (it makes record fields
-optional). The cost is real: the checker cannot verify a call through a
-`Function` parameter, which is exactly why self-application draws
-`no_signature: cannot call x … got (Function)`. Compare Haskell's
-`(a -> b) -> [a] -> [b]`, which makes `map` both checkable and
-self-documenting. boru's `map`-equivalent can only say `Function`.
+optional). The cost is that a call *through* a `Function` parameter
+carries no static information at all — the checker passes it, and the
+mismatch surfaces only at run time:
+
+```
+$ cat sa.boru
+def sa fn x:Function Any [(x x)]  def i t:Any => [t/v]  print (sa i/v)
+$ boru check sa.boru
+check: 0 error(s), 0 warning(s), 0 info
+$ boru run sa.boru
+error: [boru/signature_error]: x is still waiting for 1 argument(s) when
+  `x` begins its own dispatch — a function word is a barrier and never
+  feeds forward collection (strict rule); group the call in parens so its
+  RESULT becomes the argument: x (x …)
+```
+
+A clean check on a program that cannot run is the shape of the cost.
+Compare Haskell's `(a -> b) -> [a] -> [b]`, which makes `map` both
+checkable and self-documenting. boru's `map`-equivalent can only say
+`Function`.
 
 **boru's real combinator strength is elsewhere.** The
 `usurp`/`stack-args`/`forward-args`/`force-arity` family adapts a
@@ -295,11 +326,11 @@ under-advertised relative to the missing `compose`/`curry` staples.
 
 ADR-011: *"A function value is always the inert, referenceable thing —
 **calling is an act of the use site**. … A bare name bound to a function
-calls; a value at the pointer dispatches; `/r` takes the reference."*
+calls; a value at the pointer dispatches; `/v` takes the reference."*
 
 That rule is coherent, and it is the source of every §5 hazard. In an
 applicative language `f` denotes the function and `f(x)` calls it. In
-boru `f` *calls*, and `f/r` denotes. Combinator code is precisely the
+boru `f` *calls*, and `f/v` denotes. Combinator code is precisely the
 code that mostly wants to **denote**.
 
 ---
@@ -311,29 +342,44 @@ currently in `REFERENCE.md` or `HOWTO.md`.
 
 | Intent | Write | Not |
 |---|---|---|
-| Pass a function as an argument | `hof f/r xs` | `hof f xs` (works today, but NUR078 will remove it) |
-| Return a `Function`-typed parameter | `[p/r]` | `[p]` — this **calls** `p` |
-| Return a parameter of *unknown* kind | `[(args).0]` | `[p]` or `[p/r]` — each fails for one kind |
-| Read an *enclosing* fn's parameter of unknown kind | box it: `def bx [(args).0]` outside, `bx.0` inside | `(args).N` inside — that is the *inner* fn's list |
-| Apply a computed function inside a body | `def h (g 1)` then `v h/r apply` | `((g 1) v)` — yields two values |
-| Callback for `each`/`fold`/`scan` over a **list** | `each [f] xs` (quotation) | `each f/r xs` — no such signature |
-| Callback for `filter` over either shape | `filter f/r xs` — the callback gets a `{key value}` pair over a list, a `KeyVal` over a map, never the bare element | — (`filter` is the only one of the five with a list `Function` form) |
+| Pass a function as an argument | `hof f/v xs` | `hof f xs` (works today, but NUR078 will remove it) |
+| Return a parameter — **any** kind | `[p/v]` | `[p]` — this **calls** `p` when `p` holds a function |
+| Read an *enclosing* fn's parameter | `[p/v]` — `/v` closes over like any name | `(args).N` — the *inner* fn's list, and no longer needed here |
+| Apply a computed function inside a body | `def h (g 1)` then `v h/v apply` | `((g 1) v)` — yields two values |
+| Callback for `each`/`fold`/`scan` over a **list** | `each [f] xs` (quotation) | `each f/v xs` — no such signature |
+| Callback for `filter` over either shape | `filter f/v xs` — the callback gets a `{key value}` pair over a list, a `KeyVal` over a map, never the bare element | — (`filter` is the only one of the five with a list `Function` form) |
 | Let a *user-defined* word take a quotation | `hof (codequote [body]) xs` | `hof [body] xs` — evaluated at the call site |
 | Computed key for a **quoting** accessor (`has`, `set`) | `m has (k)` | `m has k` — silently uses the literal `"k"` |
 | Computed key for `get` | `m get k` — `get` **evaluates** the key (`lang/spec/accessor.tsv`) | — this one needs no parens |
 
-The `(args).N` escape deserves its own line, because it is the only
-parameter read that is total over both function and non-function
-bindings, and it appears in no user-facing document:
+`/v` deserves its own line, because one spelling now covers every
+binding kind — a fn (call suppressed), a non-fn (identity), and a
+parameter whose kind is not known statically:
 
 ```boru
-def ident fn t:Any Any [(args).0]
-def konst fn [[t:Any u:Any][Any][(args).0]]
+def ident t:Any => [t/v]
 print (ident 5)                                   ;# 5
 print (ident "s")                                 ;# s
-def g (ident ([z:Integer] => [add 1 z]))
+def g (ident (z:Integer => [add 1 z]))
 print (g 5)                                       ;# 6
 ```
+
+It closes over an enclosing fn's parameter like any other name, so the
+boxing step the first pass needed is gone:
+
+```boru
+def mk fn t:Any Function [ ( fn f:Any Any [ t/v ] ) ]
+def c (mk 7)
+def d (mk (z:Integer => [add 1 z]))
+print (c 0)                                       ;# 7
+def g (d 0)
+print (g 5)                                       ;# 6
+```
+
+`(args).N` still reads a parameter positionally and is still the way to
+reach an argument that has no name, but it is no longer the *only* total
+read, and the two idioms this audit had to invent — `(args).N` for a
+polymorphic slot and boxing for an enclosing one — are both retired.
 
 ### 4.1 Forward form reverses the operands
 
@@ -373,11 +419,11 @@ def s6 fn [[x:Integer] [Integer] [mul 2 x]]  ;# 4  <- fully canonical
 
 print (s1 21) print (s2 21) print (s3 21)
 print (s4 21) print (s5 21) print (s6 21)
-print (deq (canon s1/r) (canon s6/r))
-print (deq (canon s2/r) (canon s6/r))
-print (deq (canon s3/r) (canon s6/r))
-print (deq (canon s4/r) (canon s6/r))
-print (deq (canon s5/r) (canon s6/r))
+print (deq (canon s1/v) (canon s6/v))
+print (deq (canon s2/v) (canon s6/v))
+print (deq (canon s3/v) (canon s6/v))
+print (deq (canon s4/v) (canon s6/v))
+print (deq (canon s5/v) (canon s6/v))
 ```
 
 ```
@@ -387,6 +433,15 @@ true true true true true (one per line)
 
 `check: 0 error(s)`. The bodies' brackets are not optional — a body is
 always a list — so one pair is the floor.
+
+These eleven rows are no longer only a transcript — both halves are
+pinned, so the equivalence is re-checked on every `make test` rather
+than only on the day this note was written: the six spellings computing
+`42` are spec rows at `lang/spec/fn-triple.tsv` §2b, and the five
+`canon` equalities are `TestFnSignatureSpellingsAreOneValue` in
+`lang/go/test/fn_triple_compiled_test.go`. They are split because
+`canon` of a function value refuses to compile (Stage 3, soundness) and
+the spec corpus holds `refusalCeiling = 0`.
 
 **A bracketed input is not a longer spelling; it is a different form.**
 
@@ -428,7 +483,7 @@ one signature. Recorded as **NUR088**.
 ### 5.1 A capitalised name bound to a function never calls — silently
 
 ```
-$ boru do 'def I ([x:Integer] => [add 1 x]) end I 5'
+$ boru do 'def I x:Integer => [add 1 x] end I 5'
 fn (Integer) 5
 $ echo $?
 0
@@ -448,49 +503,58 @@ The collision is with convention: the combinator literature is `S`, `K`,
 `I`, `B`, `C`, `W`, `Y` — all capitals. A reader transcribing them gets
 no error, exit 0, and a wrong stack.
 
-**Workaround:** lowercase names; or `5 I/r apply` → `5`.
+**Workaround:** lowercase names; or reach the value explicitly —
+`5 I/v apply` → `6`, the answer the bare `I 5` above dropped.
 **Severity:** silent wrong answer. **Not a bug** — but it costs a
 diagnostic. `I 5` leaving a `Function` and an `Integer` stranded is
 exactly the shape a hint could catch.
 
-### 5.2 Naming a `Function`-valued parameter calls it; `/r` cannot be used defensively
+### 5.2 ~~Naming a `Function`-valued parameter calls it~~ — RESOLVED
 
-The identity function is not writable through its parameter's name:
+**This finding is closed.** It was the audit's headline gap: a bare name
+CALLED a function-bound parameter, `/r` REFUSED a non-function one, and
+the `x is Function` guard could not be written either because naming `x`
+started the call — so no spelling through a parameter's bound name was
+total over both kinds, and the identity function had none.
 
-```
-$ boru do 'def idf ([t:Any] => [t]) end def g (idf ([z:Integer] => [add 1 z])) end (g 5)'
-error: [boru/signature_error]: cannot call `t` — no signature matches the arguments
-```
-
-`/r` fixes that case and breaks the other:
-
-```
-$ boru do 'def idf ([t:Any] => [t/r]) end (idf 5)'
-error: [boru/illegal_ref]: /r requires a function word: t is bound to Integer
-```
-
-So `[t]` works iff `t` is *not* a function and `[t/r]` works iff it *is*
-— **no spelling through the bound name is total over both.** Nor can the
-program branch on it, because the test itself names the parameter:
+The fix (2026-08-19, this branch): `/r` became **`/v`** and `ref` became
+**`valof`**, and the function-only gate was removed. `/v` now denotes the
+binding's VALUE whatever kind it is — for a fn binding it suppresses the
+call, for anything else it is the identity:
 
 ```
-$ boru do 'def idf ([t:Any] => [if (t is Function) [t/r] [t]]) end ...'
-error: [boru/signature_error]: t is still waiting for 1 argument(s) when `is`
-begins its own dispatch — a function word is a barrier …
+$ boru do 'def idf t:Any => [t/v] end (idf 5)'
+5
+$ boru do 'def idf t:Any => [t/v] end (idf "s")'
+s
+$ boru do 'def idf t:Any => [t/v] end def g (idf (z:Integer => [add 1 z])) end (g 5)'
+6
 ```
 
-This is what breaks naive Church booleans (`cand`/`cor` pass one Church
-boolean as another's argument, so `λt.λf.t` must return a `Function`).
+One body, three kinds. The guard is writable now too, because `t/v`
+takes the value instead of starting a call:
 
-**Workaround:** `(args).N` (§4), which bypasses name dispatch entirely,
-plus boxing to reach an enclosing fn's parameter.
-**Severity:** loud error, but with no discoverable remedy — this is the
-single biggest ergonomic gap for combinator work. Recorded as **NUR085**.
+```
+$ boru do 'def idf t:Any => [if (t/v is Function) ["fn"] ["not"]] end (idf 5)'
+not
+$ boru do 'def idf t:Any => [if (t/v is Function) ["fn"] ["not"]] end (idf (z:Integer => [z]))'
+fn
+```
+
+And the construction §1.2 could not finish — Church `and`/`or` — now
+works in the **naive** spelling, with no boxing and no `(args).N`
+(§1.2). NUR085 is retired; `(args).N` still works and is no longer
+needed for this.
+
+The remaining edge is unchanged and is not this rule's: a bare `[t]`
+still calls a function-bound parameter. That is ADR-011 working as
+designed ("calling is an act of the use site"); `/v` is how you say you
+meant the value.
 
 ### 5.3 `each`/`for-each`/`fold`/`scan` take a `Function` callback over a Map but not over a List
 
 ```
-$ boru do 'def dbl ([x:Integer] => [mul 2 x]) end each dbl/r [1 2 3]'
+$ boru do 'def dbl x:Integer => [mul 2 x] end each dbl/v [1 2 3]'
 error: [boru/signature_error]: cannot call `each` — no signature matches the arguments
   = note: candidate `each (Function, Map)` takes 2 arguments, but none were supplied
   = note: candidate `each (Reach, List)`  takes 2 arguments, but none were supplied
@@ -500,7 +564,7 @@ At source: `each` registers `{TFunction, TMap}` and no `{TFunction,
 TList}` (`lang/go/native/native_array.go:326`); same for `for-each`
 (`:348`), `fold` (`:393-394`) and `scan` (`:420`). `filter` — alone —
 registers `{TFunction, TAny}` and so has a list `Function` form
-(`lang/go/native/natives.go:260`).
+(`lang/go/native/natives.go:261`).
 
 Neither `Function` form is a plain element callback, though: `each`'s map
 form hands the lambda a `KeyVal`, and `filter`'s list form hands it a
@@ -508,7 +572,7 @@ form hands the lambda a `KeyVal`, and `filter`'s list form hands it a
 `Integer -> Integer` function value cannot be handed directly to *any* of
 the five — only a quotation naming it can.
 
-**Workaround:** `each [f] xs`, or `each ([kv:Any] => [f (kv.v)]) m`.
+**Workaround:** `each [f] xs`, or `each (kv:Any => [f (kv.v)]) m`.
 **Severity:** confusing error; a learnability tax on the most-reached-for
 words. Recorded as **NUR086**.
 
@@ -538,7 +602,7 @@ error: [boru/type_error]: ap: expected 1 return value(s), got 2 — [fn (Integer
 This is why the Z combinator diverges: `((x x) v)` never applies, so the
 `λv` guard is inert.
 
-**Workaround:** `def h (g 1)` then `v h/r apply` → `3`.
+**Workaround:** `def h (g 1)` then `v h/v apply` → `3`.
 **Forward hazard:** NUR073's accepted **BROAD** verdict removes inline
 application entirely — *"`(fn Integer [Integer] [10 add]) 7` becomes two
 values and the inline-application idiom is removed"*. That idiom
@@ -561,8 +625,8 @@ def mk fn [[a:Function b:Function][Function][
           if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
                      [ {ok:false rest:s val:None} ] ]
         [ {ok:false rest:s val:None} ] ] ) ]]
-def h (mk ([z:Integer] => [ {ok:true val:1 rest:8} ])
-          ([z:Integer] => [ {ok:true val:2 rest:9} ]))
+def h (mk (z:Integer => [ {ok:true val:1 rest:8} ])
+          (z:Integer => [ {ok:true val:2 rest:9} ]))
 print (h 1)
 ```
 
@@ -584,9 +648,9 @@ Recorded as **NUR087**.
 ### 5.6 Non-local names in a closure resolve late, through the def stack
 
 ```
-$ boru do 'def n 1 end def c ([x:Integer] => [add n x]) end def n 100 end (c 5)'
+$ boru do 'def n 1 end def c x:Integer => [add n x] end def n 100 end (c 5)'
 105
-$ boru do 'def n 1 end def c ([x:Integer] => [add n x]) end def n 100 end undef n end (c 5)'
+$ boru do 'def n 1 end def c x:Integer => [add n x] end def n 100 end undef n end (c 5)'
 6
 ```
 
@@ -604,7 +668,7 @@ a name it mentions is re-`def`ed.
 
 ```
 $ cat n73.boru
-def z fn [[][Integer][42]]  def h fn f:Function Any [f/r]  ((h z/r))
+def z fn [[][Integer][42]]  def h fn f:Function Any [f/v]  ((h z/v))
 
 $ boru run -no-check -no-compile n73.boru     # interpreter
 42
@@ -675,10 +739,11 @@ trade-off is a choice rather than a surprise.
 
 ## 6. Recommendations, cheapest first
 
-1. **Document the `(args).N` idiom** in `REFERENCE.md` and `HOWTO.md`. It
-   is the only parameter read that is total over both function and
-   non-function bindings, and it is currently folklore. One paragraph
-   closes §5.2's discoverability gap.
+1. ~~**Document the `(args).N` idiom.**~~ **Done differently, and
+   better:** `/r`→`/v` with the function-only gate removed makes `/v`
+   itself the total read, so there is no folklore idiom left to document
+   (§5.2). `boru describe valof` and `lang/spec/valof.tsv` §9 carry the
+   rule; `REFERENCE.md`/`HOWTO.md` were swept to the new spelling.
 2. **Add a diagnostic for §5.1.** A statement ending with an
    uncalled `Function` beside stranded operands, where the function came
    from a capitalised binding, is a near-certain typo. `undefined_word`
@@ -710,7 +775,9 @@ today. Its "Gaps" list (no `compose`/`curry`/`partial`/`const`/
 partial application itself does exist as a mechanism (§2). §4's call for
 Factor's `dip`/`keep`/`bi` still stands.
 
-The grade this audit would give: **substrate A−, surface C+**. Nothing is
-missing from the machine. What is missing is a spelling for "the value,
-whatever kind it is", a uniform callback convention, and the vocabulary
-that would make the first two rarely needed.
+The grade this audit would give: **substrate A−, surface B−** (was C+
+before `/v`). Nothing is missing from the machine, and the biggest
+surface gap — no spelling for "the value, whatever kind it is" — is now
+closed: `/v` is it. What is still missing is a uniform callback
+convention (§5.3) and the point-free vocabulary that would make
+hand-rolling `compose`/`curry`/`partial` unnecessary.

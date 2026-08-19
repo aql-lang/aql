@@ -247,12 +247,12 @@ def client-app fn opts:Map Map [
         ep:ep
         entry:(Tui.input "" {placeholder:"what needs doing?"})
       }
-      update:client-update/r
-      view:client-view/r
+      update:client-update/v
+      view:client-view/v
     }
     out
 ]
 
 def client-run fn opts:Map Map [Tui.run (client-app opts)]
 
-export "TodoTuiClient" {app:client-app/r run:client-run/r}
+export "TodoTuiClient" {app:client-app/v run:client-run/v}

@@ -44,7 +44,7 @@ import module [
     ]])
     (arr slice 0 (lst size))
   ]]
-  export "S" {by-number: by-number/r, srt: srt/r}
+  export "S" {by-number: by-number/v, srt: srt/v}
 ] end
 Test.check-prop "sort-dispatch"
   [ iota (r.int 0 5) each [ var [[i] r.int 0 12 ] ] ]

@@ -21,23 +21,23 @@ import "boru:serve" # service / add / call / wrap
 import "boru:string-util" # StringUtil.split (canon parsing)
 
 export "Entity" {
-  bus:bus-new/r
+  bus:bus-new/v
   # build a routing bus service
-  mount:mount/r
+  mount:mount/v
   # register a store at a canon specificity
-  make:make-ent/r
+  make:make-ent/v
   # construct a handle (the make$ analog)
-  field:field/r
+  field:field/v
   # set a field -> new handle (immutable)
-  data:data-of/r
+  data:data-of/v
   # the plain Map of fields
-  save:save/r
+  save:save/v
   # persist  -> handle with id
-  load:load/r
+  load:load/v
   # load by id -> handle | None
-  list:list-ents/r
+  list:list-ents/v
   # query    -> List of rows
-  remove:remove-ent/r
+  remove:remove-ent/v
   # delete by id
 }
 

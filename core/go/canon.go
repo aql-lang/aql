@@ -111,15 +111,15 @@ func CanonValue(v Value) string {
 		// parse error rather than a value.
 		return ")"
 	case IsDispatchMod(v):
-		// The `/r` / `/q` group modifier the parser emits AFTER a paren or
+		// The `/v` / `/q` group modifier the parser emits AFTER a paren or
 		// dotted-path group. Canon had no arm for it, so each engine fell
 		// through to a DIFFERENT debug spelling — Go to
 		// `word()({false true})` (the word arm reading a DispatchModInfo as
 		// a WordInfo) and TS to `word(undefined)`. Neither is source, and
 		// they disagreed, which is what the parity probe caught on `m.k/q`.
 		if info, ok := AsDispatchMod(v); ok {
-			if info.Ref {
-				return "/r"
+			if info.Val {
+				return "/v"
 			}
 			return "/q"
 		}
@@ -252,7 +252,7 @@ func CanonValue(v Value) string {
 	case IsWord(v) && hasWordModifiers(v):
 		// A word carries its `/`-modifiers in the payload, and dropping
 		// them made canon say something the source did not (NUR059): both
-		// `foo/r` and `foo/2` rendered `word(foo)`, so re-parsing the canon
+		// `foo/v` and `foo/2` rendered `word(foo)`, so re-parsing the canon
 		// yielded a different program.
 		//
 		// Scoped to words that HAVE a modifier. A bare word keeps its
@@ -320,7 +320,7 @@ func canonChild(v Value) string {
 func canonTypeTag(v Value) string {
 	if IsWord(v) {
 		// The modifier suffix rides along (NUR059): an angle argument can
-		// be a modifier-bearing word (`Box<a/r>`, `Box<a/2>`), and emitting
+		// be a modifier-bearing word (`Box<a/v>`, `Box<a/2>`), and emitting
 		// the bare name would drop it — the same silent loss this record
 		// exists to remove, reintroduced one level down. A tag that carries
 		// no modifier renders exactly as before.
@@ -340,7 +340,7 @@ func canonReachToken(v Value) string {
 		// never carries one — the parser peels a trailing `/mod` off the
 		// final key and applies it to the whole reach — so segments render
 		// exactly as before (`m.a`, not `m.a/q`). A word inside a PAREN
-		// body can carry one, and `(x/r)` losing its `/r` would be the
+		// body can carry one, and `(x/v)` losing its `/v` would be the
 		// same defect this record removes.
 		w, _ := AsWord(v)
 		return w.Name + canonWordModifiers(w)
@@ -416,8 +416,8 @@ func canonReach(v Value) string {
 // identically. It never touches FnDefInfo.Registry or .Captured.
 func canonFnDef(fd FnDefInfo) string {
 	// NO NAME (NUR031). Canon used to render `fn NAME[…]` keyed on the
-	// binding the function happened to be reached through, so `def a (f/r)`
-	// and `def b (f/r)` — two bindings of ONE function — canon'd
+	// binding the function happened to be reached through, so `def a (f/v)`
+	// and `def b (f/v)` — two bindings of ONE function — canon'd
 	// differently. That made canon name-DEPENDENT, which ADR-015 cannot
 	// live with: a canon keyed on a name cannot round-trip, because
 	// re-parsing it under a different binding yields a different rendering
@@ -426,7 +426,7 @@ func canonFnDef(fd FnDefInfo) string {
 	// The anonymous fn literal is already valid source, re-parses to a
 	// structurally identical function, and is name-independent by
 	// construction rather than by a naming scheme. With the structural deq
-	// below, `parse(canon(f/r)) deq f/r` holds.
+	// below, `parse(canon(f/v)) deq f/v` holds.
 	var b strings.Builder
 	b.WriteString("fn [")
 	sigs := fd.OwnSigs()
@@ -474,7 +474,7 @@ func canonFnDef(fd FnDefInfo) string {
 // Canon's contract is that its output re-parses to the same value, and
 // these modifiers used to break it SILENTLY rather than loudly: a word
 // with a modifier fell through to `Value.String`'s debug form, which
-// spells every word `word(foo)` — so `foo/r` and `foo/2` both canon'd as
+// spells every word `word(foo)` — so `foo/v` and `foo/2` both canon'd as
 // `word(foo)` and the modifier was not merely mis-spelled but DROPPED.
 // Re-parsing that canon yields a different program.
 //
@@ -507,8 +507,8 @@ func canonWordModifiers(w WordInfo) string {
 	if w.ForceUsurp {
 		b.WriteByte('u')
 	}
-	if w.ForceRef {
-		b.WriteByte('r')
+	if w.ForceVal {
+		b.WriteByte('v')
 	}
 	if b.Len() == 0 {
 		return ""

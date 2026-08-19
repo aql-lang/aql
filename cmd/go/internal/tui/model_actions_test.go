@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// TestModelActionKeys drives the p/r/x keys against a fake api and
+// TestModelActionKeys drives the p/v/x keys against a fake api and
 // executes the returned commands, covering actionCmd and selected.
 func TestModelActionKeys(t *testing.T) {
 	f := &fakeAPI{}

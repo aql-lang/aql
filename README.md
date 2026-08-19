@@ -222,7 +222,7 @@ mid-2026 snapshots most commonly need these renames:
   clock/async → `boru:time-util`; derived boolean connectives →
   `boru:logic-util`. Moved words are no longer available unqualified.
 - **Module fn exports use the referent form:**
-  `export "Mod" {double: double/r}` (a bare fn name in an export map
+  `export "Mod" {double: double/v}` (a bare fn name in an export map
   would be invoked, not referenced).
 - **`refine Object {…}` is removed — classes are defined with `class`:**
   `def Foo class {x:1}` (paren-free), subclass via `def Bar refine Foo

@@ -230,7 +230,7 @@ func TestTuiRunRuntimeShutdownMidRun(t *testing.T) {
 	reg := trcRegWithBackend(t, vb)
 	app := &tuiApp{init: native.NewInteger(9)}
 	src := `import "boru:tui"  def u ([s:Any e:Map] => [s])  def v ([s:Any] => [Tui.spacer])`
-	out, err := runTuiStepsOn(t, reg, []string{src, `[u/r v/r]`})
+	out, err := runTuiStepsOn(t, reg, []string{src, `[u/v v/v]`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestTuiStepAndChordArms(t *testing.T) {
 	reg := tcReg(t)
 	d := &tuiDriver{reg: reg, cols: 4, rows: 2}
 	appSrc := `def u ([s:Any e:Any] => [s])`
-	out, err := runTuiStepsOn(t, reg, []string{appSrc, `[u/r]`})
+	out, err := runTuiStepsOn(t, reg, []string{appSrc, `[u/v]`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +407,7 @@ func TestTuiWidgetResidualArms(t *testing.T) {
 func TestTuiRunViewerGoneArms(t *testing.T) {
 	reg := tcReg(t)
 	src := `def u ([s:Any e:Map] => [s])  def v ([s:Any] => [Tui.spacer])`
-	out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, src, `[u/r v/r]`})
+	out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, src, `[u/v v/v]`})
 	if err != nil {
 		t.Fatal(err)
 	}

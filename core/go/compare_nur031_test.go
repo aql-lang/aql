@@ -371,7 +371,7 @@ func TestNUR031DeqKeyClassification(t *testing.T) {
 		t.Error("equal words must be eq and deq — a word is value-like")
 	}
 	if ExactEqual(NewWord("f"), NewWordRef("f")) || DeepEqual(NewWord("f"), NewWordRef("f")) {
-		t.Error("`f` and `f/r` are different words")
+		t.Error("`f` and `f/v` are different words")
 	}
 	if ExactEqual(NewWord("f"), NewString("f")) || DeepEqual(NewWord("f"), NewString("f")) {
 		t.Error("a word is not its name as a String")
@@ -400,7 +400,7 @@ func TestNUR031DeqKeyClassification(t *testing.T) {
 	wk, _ := DeqKey(NewWord("f"))
 	rk, _ := DeqKey(NewWordRef("f"))
 	if wk == rk {
-		t.Error("`f` and `f/r` are different words and need different keys")
+		t.Error("`f` and `f/v` are different words and need different keys")
 	}
 	// What REMAINS never-equal: an instance with no readable fields.
 	if _, c := DeqKey(NewClassInstance(TStore, ClassInstanceInfo{})); c != DeqNeverEqual {

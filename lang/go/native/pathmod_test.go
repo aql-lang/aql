@@ -26,12 +26,12 @@ func TestPathModifiers(t *testing.T) {
 		return core.Canon(o)
 	}
 	cases := []struct{ src, want string }{
-		{`def m {a:add/r} end m.a/u 1 2`, "3"},   // usurp
-		{`def m {s:sub/r} end m.s/u 10 3`, "7"},  // usurp reversed
-		{`def m {s:sub/r} end m.s/f 10 3`, "-7"}, // force forward
-		{`def m {s:sub/r} end 10 3 m.s/s`, "7"},  // force stack
-		{`def m {a:add/r} end m.a/2 1 2`, "3"},   // argcount
-		{`def m {a:add/r} end (m.a)/u 1 2`, "3"}, // paren usurp
+		{`def m {a:add/v} end m.a/u 1 2`, "3"},   // usurp
+		{`def m {s:sub/v} end m.s/u 10 3`, "7"},  // usurp reversed
+		{`def m {s:sub/v} end m.s/f 10 3`, "-7"}, // force forward
+		{`def m {s:sub/v} end 10 3 m.s/s`, "7"},  // force stack
+		{`def m {a:add/v} end m.a/2 1 2`, "3"},   // argcount
+		{`def m {a:add/v} end (m.a)/u 1 2`, "3"}, // paren usurp
 		{`(1 add 2)/q`, "3"},                     // /q on non-fn: no-op
 	}
 	for _, c := range cases {
@@ -40,10 +40,10 @@ func TestPathModifiers(t *testing.T) {
 		}
 	}
 
-	// /r keeps the function as DATA: it is NOT invoked, so the trailing
+	// /v keeps the function as DATA: it is NOT invoked, so the trailing
 	// args remain separate on the stack (function value + 1 + 2).
-	if got := run(`def m {a:add/r} end m.a/r 1 2`); got[:2] != "fn" || got[len(got)-3:] != "1 2" {
-		t.Errorf("m.a/r 1 2 should leave the fn as data with 1 2 separate, got %s", got)
+	if got := run(`def m {a:add/v} end m.a/v 1 2`); got[:2] != "fn" || got[len(got)-3:] != "1 2" {
+		t.Errorf("m.a/v 1 2 should leave the fn as data with 1 2 separate, got %s", got)
 	}
 }
 
@@ -65,14 +65,14 @@ func TestForceFnComposition(t *testing.T) {
 		return core.Canon(o)
 	}
 	cases := []struct{ src, want string }{
-		{`def m {s:sub/r} end usurp (forward-args (m.s)) 10 3`, "7"},
-		{`def m {s:sub/r} end forward-args (usurp (m.s)) 10 3`, "7"},
-		{`def m {s:sub/r} end force-arity 2 (usurp (m.s)) 10 3`, "7"},
-		{`def m {s:sub/r} end usurp (force-arity 2 (m.s)) 10 3`, "7"},
-		{`def m {s:sub/r} end 10 3 stack-args (usurp (m.s))`, "-7"},
-		{`def m {s:sub/r} end 10 3 stack-args (force-arity 2 (m.s))`, "7"},
-		{`def m {s:sub/r} end force-arity 2 (stack-args (m.s)) 10 3`, "-7"},
-		{`def m {a:add/r} end force-arity 2 (usurp (forward-args (m.a))) 1 2`, "3"},
+		{`def m {s:sub/v} end usurp (forward-args (m.s)) 10 3`, "7"},
+		{`def m {s:sub/v} end forward-args (usurp (m.s)) 10 3`, "7"},
+		{`def m {s:sub/v} end force-arity 2 (usurp (m.s)) 10 3`, "7"},
+		{`def m {s:sub/v} end usurp (force-arity 2 (m.s)) 10 3`, "7"},
+		{`def m {s:sub/v} end 10 3 stack-args (usurp (m.s))`, "-7"},
+		{`def m {s:sub/v} end 10 3 stack-args (force-arity 2 (m.s))`, "7"},
+		{`def m {s:sub/v} end force-arity 2 (stack-args (m.s)) 10 3`, "-7"},
+		{`def m {a:add/v} end force-arity 2 (usurp (forward-args (m.a))) 1 2`, "3"},
 	}
 	for _, c := range cases {
 		if got := run(c.src); got != c.want {

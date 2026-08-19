@@ -1369,7 +1369,7 @@ type mapEntry struct {
 }
 
 // wordBaseName returns the base name of an unquoted word token, stripping
-// a valid `/...` modifier suffix (foo/r → foo, foo → foo). Mirrors the
+// a valid `/...` modifier suffix (foo/v → foo, foo → foo). Mirrors the
 // parser's wordBaseName so shorthand keys render the same on both sides.
 func wordBaseName(text string) string {
 	idx := strings.LastIndex(text, "/")
@@ -1377,7 +1377,7 @@ func wordBaseName(text string) string {
 		return text
 	}
 	mod := text[idx+1:]
-	seenDigits, forceSet, qrSet := false, false, false
+	seenDigits, forceSet, qvSet := false, false, false
 	i := 0
 	for i < len(mod) {
 		c := mod[i]
@@ -1396,11 +1396,11 @@ func wordBaseName(text string) string {
 				return text
 			}
 			forceSet = true
-		case c == 'q' || c == 'r':
-			if qrSet {
+		case c == 'q' || c == 'v':
+			if qvSet {
 				return text
 			}
-			qrSet = true
+			qvSet = true
 		default:
 			return text
 		}
@@ -1456,7 +1456,7 @@ func parseMapEntries(children []*Node) []mapEntry {
 			i += 2
 			continue
 		}
-		// Shorthand: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`.
+		// Shorthand: `{foo}` ≡ `{foo: foo}`, `{foo/v}` ≡ `{foo: foo/v}`.
 		// A lone identifier becomes a key:value pair whose key is the base
 		// name and value is the full token. Skip a word that is the type
 		// of a typed-map child (`{:Type}`) — it is preceded by a colon and

@@ -50,10 +50,10 @@ func TestReachWave3ForceArityModifier(t *testing.T) {
 	}
 }
 
-// TestReachWave3MarkerModifiers pins /r and /q: the Word/__DM marker is
-// emitted AFTER the group, both fused (`a.b/r`) and standalone (`m.k /r`).
+// TestReachWave3MarkerModifiers pins /v and /q: the Word/__DM marker is
+// emitted AFTER the group, both fused (`a.b/v`) and standalone (`m.k /v`).
 func TestReachWave3MarkerModifiers(t *testing.T) {
-	for _, src := range []string{"a.b/r", "a.b/q", "m.k /r"} {
+	for _, src := range []string{"a.b/v", "a.b/q", "m.k /v"} {
 		vals := mustParseWave3(t, src)
 		if len(vals) != 2 {
 			t.Fatalf("%q: got %d values, want 2: %v", src, len(vals), vals)
@@ -95,12 +95,12 @@ func TestParenWave3StandaloneModifier(t *testing.T) {
 		t.Errorf("(1 add 2)/s: second value is not a ParenExpr: %v", vals[1])
 	}
 	// Marker modifier suffixes the group.
-	vals = mustParseWave3(t, "(f)/r")
+	vals = mustParseWave3(t, "(f)/v")
 	if len(vals) != 2 {
-		t.Fatalf("(f)/r: got %d values, want 2: %v", len(vals), vals)
+		t.Fatalf("(f)/v: got %d values, want 2: %v", len(vals), vals)
 	}
 	if !core.IsParenExpr(vals[0]) || !core.IsDispatchMod(vals[1]) {
-		t.Errorf("(f)/r: want [ParenExpr, Word/__DM], got %v", vals)
+		t.Errorf("(f)/v: want [ParenExpr, Word/__DM], got %v", vals)
 	}
 }
 

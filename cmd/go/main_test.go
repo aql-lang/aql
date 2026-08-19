@@ -379,7 +379,7 @@ func TestExecuteDescribeLoadsFileModule(t *testing.T) {
 	dir := t.TempDir()
 	lib := filepath.Join(dir, "lib.boru")
 	src := "def double fn [[n:Integer] [Integer] [n mul 2]]\n" +
-		"export \"Lib\" {double: double/r}\n"
+		"export \"Lib\" {double: double/v}\n"
 	if err := os.WriteFile(lib, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}

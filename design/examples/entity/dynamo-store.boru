@@ -10,7 +10,7 @@ import "boru:serve"
 import "boru:net" # Net.fetch (HTTP client; the only transport boru has)
 import "boru:rand"
 
-export "DynamoStore" {New:New/r}
+export "DynamoStore" {New:New/v}
 
 # `New {table region}` -> Service
 def New fn opts:Map Service [

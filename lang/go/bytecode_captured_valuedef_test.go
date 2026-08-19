@@ -35,7 +35,7 @@ func TestCapturedUserCallValueDefPromote(t *testing.T) {
       (node arr)
     ]
   ]]
-  export "M" {srt: srt/r}
+  export "M" {srt: srt/v}
 ] end ([3 1 2] M.srt)`, "[[3 3 3]]"},
 		// the captured user-call value read TWICE inside the closure body (still one
 		// frame local, re-pushed per capture-read at run time).
@@ -48,7 +48,7 @@ func TestCapturedUserCallValueDefPromote(t *testing.T) {
     def _ (iota 3 each [ var [[i] if (i lt mx) [ arr set i (mx add mx) end 0 ] [0] ] ])
     (node arr)
   ]]
-  export "M" {srt: srt/r}
+  export "M" {srt: srt/v}
 ] end ([4 1 2] M.srt)`, "[[8 8 8]]"},
 	}
 	for _, c := range strict {

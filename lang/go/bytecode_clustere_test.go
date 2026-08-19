@@ -14,7 +14,7 @@ import (
 // finish now refuses a user-fn count mismatch whose residual carries a Function/
 // FnDef value → fall back → compile==interpret.
 //
-// The remaining cluster-E cases (a /r-deferred map field auto-invoked on `.field`,
+// The remaining cluster-E cases (a /v-deferred map field auto-invoked on `.field`,
 // and a nested-factory apply in the MAIN residual) are separate resolveDynamicApply
 // gaps — see design/MISCOMPILE-HUNT-FINDINGS.0.md.
 func TestFnValueApplyInBody(t *testing.T) {

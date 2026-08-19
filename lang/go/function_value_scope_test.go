@@ -55,7 +55,7 @@ func fnScopeCases() []fnScopeCase {
 			word: "filter",
 			mod: "def limit fn [[n:Integer] [Integer] [ 2 ]]\n" +
 				"def big fn [[e:Map] [Boolean] [ (e dot value) gt (limit 0) ]]\n" +
-				"export \"P\" { big: big/r }\n",
+				"export \"P\" { big: big/v }\n",
 			caller: "import \"%s\" end\n" +
 				"def limit fn [[n:Integer] [Integer] [ 100 ]]\n" +
 				"filter P.big [1 2 3 4]\n",
@@ -69,7 +69,7 @@ func fnScopeCases() []fnScopeCase {
 			word: "each",
 			mod: "def tag fn [[n:Integer] [String] [ \"P\" ]]\n" +
 				"def show fn [[kv:Map] [String] [ (tag 0) add (convert String (kv dot v)) ]]\n" +
-				"export \"Q\" { show: show/r }\n",
+				"export \"Q\" { show: show/v }\n",
 			caller: "import \"%s\" end\n" +
 				"def tag fn [[n:Integer] [String] [ \"CALLER\" ]]\n" +
 				"each Q.show {a:1 b:2}\n",
@@ -82,7 +82,7 @@ func fnScopeCases() []fnScopeCase {
 			word: "StructUtil.walk",
 			mod: "def mark fn [[n:Integer] [String] [ \"P\" ]]\n" +
 				"def hook fn [[m:Map] [Any] [ mark 0 ]]\n" +
-				"export \"W\" { hook: hook/r }\n",
+				"export \"W\" { hook: hook/v }\n",
 			caller: "import \"boru:struct-util\"\n" +
 				"import \"%s\" end\n" +
 				"def mark fn [[n:Integer] [String] [ \"CALLER\" ]]\n" +
@@ -103,7 +103,7 @@ func fnScopeCases() []fnScopeCase {
 				"def mark fn [[n:Integer] [String] [ \"P\" ]]\n" +
 				"def hook fn [[m:Map] [Any] [ acc append (mark 0) ]]\n" +
 				"def seen fn [[n:Integer] [List] [ acc ]]\n" +
-				"export \"C\" { hook: hook/r, seen: seen/r }\n",
+				"export \"C\" { hook: hook/v, seen: seen/v }\n",
 			caller: "import \"%s\" end\n" +
 				"def mark fn [[n:Integer] [String] [ \"CALLER\" ]]\n" +
 				"def _ (walk {mode:\"depth\"} {a:1} C.hook)\n" +
@@ -119,7 +119,7 @@ func fnScopeCases() []fnScopeCase {
 			word: "call",
 			mod: "def bonus fn [[n:Integer] [Integer] [ n add 1 ]]\n" +
 				"def handler fn [[req:Map state:Any] [Integer] [ bonus 5 ]]\n" +
-				"export \"H\" { handler: handler/r }\n",
+				"export \"H\" { handler: handler/v }\n",
 			caller: "import \"%s\" end\n" +
 				"def bonus fn [[n:Integer] [Integer] [ n mul 100 ]]\n" +
 				"def svc (service {})\n" +

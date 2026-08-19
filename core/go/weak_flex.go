@@ -320,7 +320,7 @@ func refuseWeak(v Value) *WeakRefusal {
 		}
 	case func() bool { _, ok := v.Data.(FnDefInfo); return ok }():
 		return &WeakRefusal{Kind: "a fn value", Note: weakDomainNote,
-			Help: "wrap the fn in a flex container to cache it: (flex [f/r])"}
+			Help: "wrap the fn in a flex container to cache it: (flex [f/v])"}
 	case func() bool { _, ok := v.Data.(ErrorInfo); return ok }():
 		return &WeakRefusal{Kind: "an Error value", Note: weakDomainNote,
 			Help: flexHelp}

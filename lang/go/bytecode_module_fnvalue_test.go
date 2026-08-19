@@ -25,7 +25,7 @@ func TestModuleFnValueAsArg(t *testing.T) {
   def by-num fn [[b:Any a:Any] [Integer] [(a cmp b)]]
   def mapcmp fn [[comp:Function xs:List] [List] [ xs each [ var [[x] (x 5 comp) ] ] ]]
   def cmp1 fn [[comp:Function p:Integer] [Integer] [ (p 5 comp) ]]
-  export "M" {by-num: by-num/r, mapcmp: mapcmp/r, cmp1: cmp1/r}
+  export "M" {by-num: by-num/v, mapcmp: mapcmp/v, cmp1: cmp1/v}
 ] end `
 	strict := []struct{ name, src, want string }{
 		// the module comparator threads into a fn that applies it under a closure

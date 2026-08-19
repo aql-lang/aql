@@ -44,7 +44,7 @@ module [
   def join-segs fn [ [xs:List] [String] [
     ("" xs [ var [[seg acc] (mid seg acc) ] ] fold)
   ] ]
-  export "M" { run: join-segs/r }
+  export "M" { run: join-segs/v }
 ] import
 def go fn [ [s:String] [String] [ (M.run [s "c,d"]) ] ]
 [ "/a,b/c,d" (go "a,b") Assert.equal end ] "t" Test.test

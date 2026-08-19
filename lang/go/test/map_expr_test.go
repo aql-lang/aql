@@ -186,8 +186,8 @@ func TestMapExprNestedWithParen(t *testing.T) {
 func TestMapExprModuleExportDef(t *testing.T) {
 	// Module exports a map whose values come from defs inside the module.
 	files := map[string]string{
-		"mod.boru": `def val 42
-export "M" {x:val}`,
+		"mod.boru": `def num 42
+export "M" {x:num}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.boru"`,
@@ -280,7 +280,7 @@ func TestMapExprModuleExportFnDef(t *testing.T) {
 	// Module exports a function; caller uses it to build a map with expressions.
 	files := map[string]string{
 		"mod.boru": `def double fn [[n:Integer] Integer [n add n]]
-export "M" {double:double/r}`,
+export "M" {double:double/v}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.boru"`,
@@ -459,7 +459,7 @@ func TestMapExprModuleComprehensive(t *testing.T) {
 	files := map[string]string{
 		"mod.boru": `def bval 100
 def incr fn [[n:Integer] Integer [n add 1]]
-export "M" {bval:bval, incr:incr/r}`,
+export "M" {bval:bval, incr:incr/v}`,
 	}
 
 	// Test 1: explicit map with module value
@@ -541,9 +541,9 @@ func TestMapExprShorthandNested(t *testing.T) {
 }
 
 func TestMapExprShorthandRefModifier(t *testing.T) {
-	// {f/r} captures the fn reference under key "f"; calling it dispatches.
+	// {f/v} captures the fn reference under key "f"; calling it dispatches.
 	result, err := runExpr(t,
-		`def f fn [[a:Integer b:Integer] [Integer] [a add b]] ({f/r}).f 2 3`)
+		`def f fn [[a:Integer b:Integer] [Integer] [a add b]] ({f/v}).f 2 3`)
 	if err != nil {
 		t.Fatal(err)
 	}

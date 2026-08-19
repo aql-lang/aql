@@ -65,7 +65,7 @@ func TestNur038PrintOrderPlainMap(t *testing.T) {
 	// The module-independent twin: a def-bound plain map holding a
 	// zero-return Any-param fn — proves the seal is not module machinery.
 	printed, res := runSealCase(t,
-		`import "boru:io" end def pr fn [[x:Any] [] [IO.printstr x]] end def m {p: pr/r} end m.p "A\n" m.p "B\n"`)
+		`import "boru:io" end def pr fn [[x:Any] [] [IO.printstr x]] end def m {p: pr/v} end m.p "A\n" m.p "B\n"`)
 	if printed != "A\nB\n" {
 		t.Errorf("printed %q, want \"A\\nB\\n\" (source order)", printed)
 	}
@@ -110,7 +110,7 @@ func TestNur038MidCollectionArrivalCommits(t *testing.T) {
 	// its own statement. Pre-fix the fn value was swallowed as w's
 	// second Any arg and `7` stranded.
 	_, res := runSealCase(t,
-		`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end `+
+		`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end `+
 			`def w fn [[a:Any] [Any] [a] [a:Any b:Any] [List] [[a b]]] end `+
 			`w 1 m.p 7`)
 	if len(res) != 2 {
@@ -128,7 +128,7 @@ func TestNur038MidCollectionPropertyReadDispatches(t *testing.T) {
 	// it dispatches in place (consuming nothing, it can never swallow a
 	// statement) and its RESULT fills the still-pending window.
 	_, res := runSealCase(t,
-		`def z fn [[] [Integer] [42]] end def m {z: z/r} end `+
+		`def z fn [[] [Integer] [42]] end def m {z: z/v} end `+
 			`def w2 fn [[a:Any b:Any] [List] [[a b]]] end `+
 			`w2 1 m.z`)
 	if len(res) != 1 {
@@ -155,7 +155,7 @@ func TestNur038MidCollectionMixedArityPropertyRead(t *testing.T) {
 	// fills the window.
 	_, res := runSealCase(t,
 		`def mx fn [[] [Integer] [42] [x:Integer] [Integer] [x add 1]] end `+
-			`def m {x: mx/r} end `+
+			`def m {x: mx/v} end `+
 			`def w2 fn [[a:Any b:Any] [List] [[a b]]] end `+
 			`w2 1 m.x`)
 	if len(res) != 1 {
@@ -173,18 +173,18 @@ func TestNur038MidCollectionMixedArityPropertyRead(t *testing.T) {
 }
 
 func TestNur038ZeroArgRefStaysData(t *testing.T) {
-	// The 0-arg property-call exception yields to an EXPLICIT /r: the
+	// The 0-arg property-call exception yields to an EXPLICIT /v: the
 	// dot-read stays a Function reference, it is not invoked (the
 	// PR-review finding — dispatching inside the group consumed the fn
-	// before the post-group marker peek could see the /r).
+	// before the post-group marker peek could see the /v).
 	_, res := runSealCase(t,
-		`def z fn [[] [Integer] [42]] end def m {z: z/r} end typeof m.z/r`)
+		`def z fn [[] [Integer] [42]] end def m {z: z/v} end typeof m.z/v`)
 	if len(res) != 1 || res[0].String() != "Function" {
-		t.Errorf("residual = %v, want [Function] (the /r read is a reference, not a call)", res)
+		t.Errorf("residual = %v, want [Function] (the /v read is a reference, not a call)", res)
 	}
 	// The unmarked twin stays a property CALL.
 	_, res = runSealCase(t,
-		`def z fn [[] [Integer] [42]] end def m {z: z/r} end m.z`)
+		`def z fn [[] [Integer] [42]] end def m {z: z/v} end m.z`)
 	if len(res) != 1 {
 		t.Fatalf("residual = %v, want [42]", res)
 	}
@@ -217,7 +217,7 @@ func TestNur038MidCollectionStrictStaysLoud(t *testing.T) {
 	// test rather than a TSV row: the compiled path models this window
 	// differently (the pre-existing check-vs-run class fn-value.tsv §5
 	// notes), so a row would read as a compile divergence.
-	tokens, err := parser.Parse(`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p typeof`)
+	tokens, err := parser.Parse(`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p typeof`)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

@@ -216,10 +216,10 @@ describe('Unicode source-position normalization', () => {
 
 describe('parseWord numeric classification', () => {
   it('refuses a word with no base name', () => {
-    // `/r` — the modifier scan strips everything and leaves nothing.
+    // `/v` — the modifier scan strips everything and leaves nothing.
     // Pinned as a row too; kept here because the row asserts the rendered
     // error and this asserts the throw site.
-    assert.throws(() => parseWord('/r'), /empty word/)
+    assert.throws(() => parseWord('/v'), /empty word/)
   })
 
   it('parses base-prefixed integers that reached it as words', () => {

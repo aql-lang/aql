@@ -32,7 +32,7 @@ module [
     def cr (join "" ["content-range: bytes 0-1/" (convert String total)])
     s2-send-resp conn 206 [cr] part
   ]]
-  export "DnT" { send: s2-send-resp/r get: s2-get/r }
+  export "DnT" { send: s2-send-resp/v get: s2-get/v }
 ] import
 `)
 	for _, name := range []string{"s2-send-resp", "s2-get"} {

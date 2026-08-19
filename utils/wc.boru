@@ -282,25 +282,25 @@ def run fn [[ctx:Map] [Integer] [
 # statement below it.
 #
 # ----------------------------------------------------------------------------
-# The imperative shell. This is `Cli.main (spec) (run/r)` UNROLLED into the
+# The imperative shell. This is `Cli.main (spec) (run/v)` UNROLLED into the
 # three statements cli-main-do performs — dispatch, print, exit — and the
 # unrolling is deliberate, not stylistic:
 #
 #   DEFECT (interpreter-only, reproduced today). A handler invoked from INSIDE
 #   a module body cannot see its own file's module-level bindings under
 #   `boru run -no-compile`; the default compiled mode resolves them fine. So
-#   `Cli.main (spec) (run/r)` — which applies the handler inside boru:cli —
+#   `Cli.main (spec) (run/v)` — which applies the handler inside boru:cli —
 #   dies with `undefined word: wc-columns` under the interpreter while working
 #   under the compiler. Minimal repro, with no boru:cli in it: put
 #
-#       def mm-call fn [[h:Function] [Any] [ def r ({} h/r apply)  r ]]
-#       export "MM" { call: mm-call/r }
+#       def mm-call fn [[h:Function] [Any] [ def r ({} h/v apply)  r ]]
+#       export "MM" { call: mm-call/v }
 #
 #   in mod.boru; then in a main file that imports it,
 #
 #       def konst 41
 #       def run fn [[ctx:Map] [Integer] [ def k (konst add 1)  k ]]
-#       print (MM.call (run/r))       # compiled: 42   -no-compile: undefined word: konst
+#       print (MM.call (run/v))       # compiled: 42   -no-compile: undefined word: konst
 #
 #   (The repro is written as prose because `boru build`'s bundler scans
 #   COMMENTS for relative imports and fails on a commented-out one.)

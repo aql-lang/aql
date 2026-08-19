@@ -547,7 +547,7 @@ function evalExpr(expr: string): string {
     case "closeparen":
       return canon([newCloseParen()]);
     case "dispatchmod":
-      return canon([newDispatchMod({ ref: "r" === arg, quote: "q" === arg })]);
+      return canon([newDispatchMod({ val: "v" === arg, quote: "q" === arg })]);
     case "typedlist": {
       const toks = fields(arg);
       return canon([newTypedList(token(toks[0]!), toks.slice(1).map(token))]);

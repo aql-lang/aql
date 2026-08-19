@@ -270,19 +270,19 @@ def sort-main fn [[argv:List] [Integer] [
 ]]
 
 export "Sort" {
-  bool:    sort-bool/r
-  worse:   sort-worse/r
-  inputs:  sort-inputs/r
-  lines:   sort-lines/r
-  key:     sort-key/r
-  fold:    sort-fold/r
-  pair:    sort-pair/r
-  apply:   sort-apply/r
-  render:  sort-render/r
-  nextChunk: sort-next-chunk/r
-  fail:    sort-fail/r
-  slurp:   sort-slurp/r
-  main:    sort-main/r
+  bool:    sort-bool/v
+  worse:   sort-worse/v
+  inputs:  sort-inputs/v
+  lines:   sort-lines/v
+  key:     sort-key/v
+  fold:    sort-fold/v
+  pair:    sort-pair/v
+  apply:   sort-apply/v
+  render:  sort-render/v
+  nextChunk: sort-next-chunk/v
+  fail:    sort-fail/v
+  slurp:   sort-slurp/v
+  main:    sort-main/v
   spec:    spec
 }
 

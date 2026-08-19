@@ -216,7 +216,7 @@ syntax-error slot is the hook XML fills.
 Generics live in the **close (suffix) position** — `<` *after* a complete
 capitalised value. XML lives in the **open (value) position** — `<` where
 the parser expects a *fresh value* to begin. These are different states
-of the same `val` rule, so the two consumers never compete for the same
+of the same `valof` rule, so the two consumers never compete for the same
 `<`:
 
 - Add `<` as a **`val.Open` alternate** that opens a new `xml` rule,
@@ -306,7 +306,7 @@ Backtick templates already do exactly this without a sub-parser
   clears the flag and bumps `dlist`/`dmap` so the inner expression
   parses normally); the matching `}` pops back.
 - Nesting works to any depth because each inner expression pushes to
-  `val`, which can open another template (or another XML literal).
+  `valof`, which can open another template (or another XML literal).
 
 XML reuses this verbatim with its own flag, `K["boru_xml"]`: the `xml`
 rule sets it while scanning element text, and a text-run matcher emits

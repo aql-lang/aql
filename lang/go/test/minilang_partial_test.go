@@ -8,9 +8,9 @@ package test
 // lang/spec/module-minilang.tsv §fn for the spec-level battery). The
 // two PARKED shapes below are pinned here as interpreter tests rather
 // than spec rows, because the compiled pipeline does not yet lower an
-// unconsumed / /r-parked spliced partial (the check-mode dispatch
+// unconsumed / /v-parked spliced partial (the check-mode dispatch
 // analysis consumes what the runtime parks — the same pre-existing
-// /r modeling gap a plain lambda shows: `"AbcD" ([x:String] => [x])/r
+// /v modeling gap a plain lambda shows: `"AbcD" ([x:String] => [x])/v
 // typeof` checks to [String] while the runtime leaves the string and
 // the Function). Lowering them is follow-up compiler work; when it
 // lands, these can graduate to spec rows.
@@ -24,7 +24,7 @@ import (
 )
 
 // TestMiniPartialParked pins the two parked shapes:
-//  1. /r parks the partial as data even with a matching subject on the
+//  1. /v parks the partial as data even with a matching subject on the
 //     stack — the subject is untouched;
 //  2. a bare partial with an empty stack is simply a Function value.
 func TestMiniPartialParked(t *testing.T) {
@@ -32,20 +32,20 @@ func TestMiniPartialParked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	got, err := a.Run(miniImp + `"AbcD" (+re/[a-z]+/)/r typeof`)
+	got, err := a.Run(miniImp + `"AbcD" (+re/[a-z]+/)/v typeof`)
 	if err != nil {
-		t.Fatalf("/r park: %v", err)
+		t.Fatalf("/v park: %v", err)
 	}
 	// Residual is [subject, typeof(partial)] — the subject survived
 	// the park and the parked value is a Function.
 	if len(got) != 2 {
-		t.Fatalf("/r park: expected [subject, Function], got %v", got)
+		t.Fatalf("/v park: expected [subject, Function], got %v", got)
 	}
 	if s, _ := got[0].(string); s != "AbcD" {
-		t.Fatalf("/r park: the subject must be untouched, got %v", got[0])
+		t.Fatalf("/v park: the subject must be untouched, got %v", got[0])
 	}
 	if s, _ := got[1].(string); s != "Function" {
-		t.Fatalf("/r park: expected a Function on top, got %v", got[1])
+		t.Fatalf("/v park: expected a Function on top, got %v", got[1])
 	}
 
 	b, _ := lang.New()

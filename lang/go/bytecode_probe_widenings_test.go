@@ -49,7 +49,7 @@ func TestProbeWideningZeroArgMethodLanding(t *testing.T) {
 
 func TestProbeWideningBehaveStoresFn(t *testing.T) {
 	mustCompileWithParity(t, `def Person class {age:Integer}
-behave "compare" ((fn [[a:Person b:Person] [Integer] [(a get "age") (b get "age") sub]])/r)
+behave "compare" ((fn [[a:Person b:Person] [Integer] [(a get "age") (b get "age") sub]])/v)
 def alice (make Person {age:30})
 def bob (make Person {age:25})
 alice bob lt`, "[false]")

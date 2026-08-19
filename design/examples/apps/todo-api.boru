@@ -86,4 +86,4 @@ def todo-serve fn opts:Map Any [
     api Net.listen {tcp:opts.port codec:Net.http} api
 ]
 
-export "TodoApi" {serve:todo-serve/r}
+export "TodoApi" {serve:todo-serve/v}

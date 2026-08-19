@@ -585,7 +585,7 @@ func evalCoreSpec(t *testing.T, r *Registry, expr string) string {
 	case "closeparen":
 		return CanonValue(NewCloseParen())
 	case "dispatchmod":
-		return CanonValue(NewDispatchMod(DispatchModInfo{Ref: arg == "r", Quote: arg == "q"}))
+		return CanonValue(NewDispatchMod(DispatchModInfo{Val: arg == "v", Quote: arg == "q"}))
 	case "typedlist":
 		toks := coreSpecFields(arg)
 		child := coreSpecToken(toks[0])

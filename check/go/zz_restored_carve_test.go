@@ -39,21 +39,25 @@ func TestUsurpCheckModeDiagnostics(t *testing.T) {
 	}
 }
 
-// TestWordRefCheckModeDiagnostics is restored from the pre-carve tree
-// (aa732c2:eng/go/zz_cut_residual_test.go). It is the `/r` twin of
+// TestWordValCheckModeDiagnostics is restored from the pre-carve tree
+// (aa732c2:eng/go/zz_cut_residual_test.go). It is the `/v` twin of
 // TestUsurpCheckModeDiagnostics above and lives in check for the same
 // reason: the undefined_word half of the assertion comes from the check
 // piece's CheckBraid registration, so a core-only build would produce an
 // empty-Code diagnostic instead.
-func TestWordRefCheckModeDiagnostics(t *testing.T) {
+//
+// `/v` is TOTAL over binding kinds, so a non-fn binding is no longer a
+// diagnostic — only an UNBOUND name is. The non-fn case stays here as
+// the negative: it must produce NO diagnostic at all.
+func TestWordValCheckModeDiagnostics(t *testing.T) {
 	r := covRegistry(t, nil)
 	core.InstallDef(r, "plainv", core.NewInteger(2))
 	done := r.Check.Begin()
 	if _, err := core.NewTop(r).Run([]core.Value{core.NewWordRef("no_such_word")}); err != nil {
-		t.Errorf("check-mode /r undefined errored hard: %v", err)
+		t.Errorf("check-mode /v undefined errored hard: %v", err)
 	}
 	if _, err := core.NewTop(r).Run([]core.Value{core.NewWordRef("plainv")}); err != nil {
-		t.Errorf("check-mode /r non-fn errored hard: %v", err)
+		t.Errorf("check-mode /v non-fn errored hard: %v", err)
 	}
 	var codes []string
 	for _, d := range r.Check.Diagnostics {
@@ -61,8 +65,11 @@ func TestWordRefCheckModeDiagnostics(t *testing.T) {
 	}
 	done()
 	joined := strings.Join(codes, ",")
-	if !strings.Contains(joined, "undefined_word") || !strings.Contains(joined, "illegal_ref") {
-		t.Errorf("check-mode /r diagnostics = %v", codes)
+	if !strings.Contains(joined, "undefined_word") {
+		t.Errorf("check-mode /v diagnostics = %v, want an undefined_word", codes)
+	}
+	if strings.Contains(joined, "illegal_ref") {
+		t.Errorf("check-mode /v diagnostics = %v, want NO illegal_ref for a non-fn binding", codes)
 	}
 }
 

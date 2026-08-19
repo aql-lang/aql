@@ -26,8 +26,8 @@ def starts-with fn [[prefix:String s:String] [Boolean] [
 def as-map fn m:Map Map [m]
 
 export "KgUtil" {
-  get-or:get-or/r
-  list-at:list-at/r
-  starts-with:starts-with/r
-  as-map:as-map/r
+  get-or:get-or/v
+  list-at:list-at/v
+  starts-with:starts-with/v
+  as-map:as-map/v
 }

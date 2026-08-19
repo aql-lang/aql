@@ -40,6 +40,29 @@ def w fn [[x:Integer] [Integer] [x mul 2]]  def t fn x:Integer [Integer] [x mul 
 def t ([x mul 2] [Integer] x:Integer fn)  t 8	16	full mirror (stack) form: body output input fn
 (fn Integer [Integer] [10 add]) 7	17	direct paren construction + forward invocation
 #
+# §2b  the SIX spellings of one single-param/single-return signature
+#
+# STYLE-GUIDE.md §S1 tells authors to use the spelling with the FEWEST
+# square brackets. These rows are why that is a style rule and not a
+# semantic one: all six build a `canon`-identical value, so the choice
+# among them carries no meaning at all. `boru fmt` collapses only the
+# last one (NUR088), which is why the rule needs stating.
+#
+def s1 fn x:Integer Integer [mul 2 x]  s1 21	42	1 pair — the target form: bare input, bare output
+def s fn x:Integer [Integer] [mul 2 x]  s 21	42	2 pairs — bracketed output
+def s fn [x:Integer Integer [mul 2 x]]  s 21	42	2 pairs — whole triple listed, bare in/out
+def s fn [[x:Integer] Integer [mul 2 x]]  s 21	42	3 pairs — listed triple, bracketed input
+def s fn [x:Integer [Integer] [mul 2 x]]  s 21	42	3 pairs — listed triple, bracketed output
+def s fn [[x:Integer] [Integer] [mul 2 x]]  s 21	42	4 pairs — the fully canonical spelling
+#
+# That the six are one VALUE, and not merely one answer, is pinned in
+# lang/go/test/fn_triple_compiled_test.go — see
+# TestFnSignatureSpellingsAreOneValue. It cannot live here: the assertion
+# `deq (canon a/v) (canon b/v)` passes a function VALUE to a word, which
+# the compiler refuses (Stage 3, soundness), and this corpus holds
+# refusalCeiling = 0. Same split this file's header describes for
+# computed operands.
+#
 # §3  literal value patterns as the input
 def z fn 0 [String] ['zero']  z 0	'zero'	literal value pattern admits the matching value
 def z fn 0 [String] ['zero']  z 1	ERROR:signature_error	literal value pattern rejects other values
@@ -56,10 +79,10 @@ def dbl fn x:Integer [Integer] [x mul 2]  dbl 'a'	ERROR:signature_error	declared
 1 2 3 (fn [[x:Integer][Integer][x mul 2]]) 4	1 2 3 8	a spec list following fn keeps the 1-arg form even with stack values present
 10 20 def f fn [[x:Integer][Integer][x]]  f 30	10 20 30	stack values before `def … fn [list]` are not stolen by the triple sig
 def f fn [[x:Integer] [Integer] [x mul 3]]  f 5	15	plain spec-list form still dispatches
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/r) 10 3	7	a paren group after the spec list is NOT pre-evaluated early (the triple sig's window closes on the list)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/v) 10 3	7	a paren group after the spec list is NOT pre-evaluated early (the triple sig's window closes on the list)
 def s quote [[x:Integer][Integer][x mul 2]]  99 s fn 7	99 14	mixed form: a stack spec list is NOT claimed as a triple body (99 fails the List body slot); the list form fires with 7 forward
-def sw quote [[x:Integer][Integer][x mul 2]]  def f fn sw  (f/r) 4	8	a word-spelled spec list closes the triple window too (pattern prune resolves the binding)
-def f fn (quote [[x:Integer][Integer][x mul 2]])  (f/r) 4	8	a paren-spelled spec list closes the triple window (pattern prune tests the collapsed result)
+def sw quote [[x:Integer][Integer][x mul 2]]  def f fn sw  (f/v) 4	8	a word-spelled spec list closes the triple window too (pattern prune resolves the binding)
+def f fn (quote [[x:Integer][Integer][x mul 2]])  (f/v) 4	8	a paren-spelled spec list closes the triple window (pattern prune tests the collapsed result)
 #
 # §6  composition — closures, generics, higher-order use
 def make-adder fn x:Integer [Function] [fn y:Integer [Integer] [x add y]]  def add5 (make-adder 5)  add5 3	8	nested triple-form fns capture lexically

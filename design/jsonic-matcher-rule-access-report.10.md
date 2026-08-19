@@ -135,7 +135,7 @@ boru's string interpolation now uses this API. A custom `LexMatcher`
 (priority 1M) checks `rule.K["boru_tpl"]` to produce template literal
 tokens (#TL) only inside backtick strings. The interp/ielem/iexpr/ieval
 grammar rules use K map propagation for state tracking, and nesting
-works to any depth since each `iexpr` pushes to `val` which can open
+works to any depth since each `iexpr` pushes to `valof` which can open
 a fresh `interp` rule.
 
 The closure workaround described above is no longer needed.

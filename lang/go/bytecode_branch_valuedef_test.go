@@ -45,7 +45,7 @@ def _ (bcount set bi ((bcount get bi) add 1)) end
     ] ])
     (node bcount)
   ]]
-  export "M" {srt: srt/r}
+  export "M" {srt: srt/v}
 ] end ([0 0 0 0] M.srt)`, "[[0 1 3]]"},
 	}
 	for _, c := range strict {

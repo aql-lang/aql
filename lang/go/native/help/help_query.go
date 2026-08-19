@@ -101,7 +101,7 @@ func init() {
 		Description: "Creates a named module. The list is evaluated in an isolated scope and " +
 			"exported words become available under the module name.",
 		Examples: []string{
-			`import module [export "Utils" {greet:greet/r}] end ; # inline module`,
+			`import module [export "Utils" {greet:greet/v}] end ; # inline module`,
 		},
 	})
 
@@ -125,11 +125,11 @@ func init() {
 		Summary: "Publish a namespace from a module.",
 		Description: "Inside a module body, `export \"Name\" {key: value …}` publishes " +
 			"a namespace reachable as Name.key after import. Export functions with the " +
-			"/r ref modifier so the map doesn't dispatch them. At the top level (running " +
+			"/v ref modifier so the map doesn't dispatch them. At the top level (running " +
 			"a file directly) export is a no-op, so one file can both run standalone and " +
 			"export when imported.",
 		Examples: []string{
-			`export "Utils" {pi:pi greet:greet/r} ; # value bare, fn with /r`,
+			`export "Utils" {pi:pi greet:greet/v} ; # value bare, fn with /v`,
 		},
 	})
 

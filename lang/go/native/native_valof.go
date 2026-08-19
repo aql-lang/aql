@@ -6,43 +6,46 @@ import (
 	core "github.com/boru-lang/boru/core/go"
 )
 
-// refNatives registers the two words that complete boru's first-class
+// valofNatives registers the two words that complete boru's first-class
 // function-value pipeline:
 //
-//   - `ref name`  — resolves a function word to its bound value
-//     without invoking; companion to the `/r` word suffix
-//     that lives in the parser+stepWord path. Both are legal
-//     only for function words — referencing a non-fn binding
-//     raises [boru/illegal_ref] (a bare value name already
-//     pushes its value, so there is nothing to reference).
+//   - `val name`  — resolves a name to its bound VALUE, disabling any
+//     call the name would otherwise induce; companion to
+//     the `/v` word suffix that lives in the
+//     parser+stepWord path. It is total over every binding
+//     kind: for a fn binding it suppresses the call, and
+//     for any other binding it is the identity. That
+//     totality is the point — it is the one spelling that
+//     reads a slot whose kind is not known statically
+//     (NUR085).
 //   - `apply fn`  — invokes a captured function value against the
 //     preceding stack args. The opposite-direction
-//     complement of `ref`: ref converts a call site
+//     complement of `valof`: val converts a call site
 //     into a value, apply converts a value back into a
 //     call site.
 //
 // Both words sit in lang because every other built-in does (eng
 // ships only kernel-level shapes and parser features). The actual
 // name-resolution algorithm lives in core.ResolveRef so that
-// stepWord's `/r` short-circuit and this `ref` handler share one
+// stepWord's `/v` short-circuit and this `valof` handler share one
 // definition.
-var refNatives = []NativeFunc{
+var valofNatives = []NativeFunc{
 	{
-		Name: "ref",
+		Name: "valof",
 
 		Signatures: []Signature{{
 			// /q on the name slot lets the parser capture the upcoming
-			// Word as an Atom rather than executing it. `ref add` then
+			// Word as an Atom rather than executing it. `valof add` then
 			// arrives here with args[0] = Atom(add).
 			Args:      []*Type{TAtom},
 			QuoteArgs: map[int]bool{0: true},
-			Impl:      Go(refHandler, RunInCheck(), Park()),
+			Impl:      Go(valofHandler, RunInCheck(), Park()),
 			Returns:   []*Type{TAny},
 			// ParkResult: leave the resolved Function value as inert data at
-			// the call site instead of re-stepping it — so `ref f` behaves
-			// exactly like `f/r`, never auto-invoking (not even a 0-arg fn).
+			// the call site instead of re-stepping it — so `valof f` behaves
+			// exactly like `f/v`, never auto-invoking (not even a 0-arg fn).
 			// The value still dispatches when re-stepped elsewhere (from a
-			// map, a paren), matching `(f/r)` / `ops.f a b`.
+			// map, a paren), matching `(f/v)` / `ops.f a b`.
 			BarrierPos: -1,
 		}},
 	},
@@ -92,10 +95,10 @@ var refNatives = []NativeFunc{
 		Name: "usurp",
 		// Forward-eligible: `usurp fn` reads as "wrap this fn". Returns a
 		// Function value, so it dispatches immediately when args follow
-		// (`usurp (ref f) a b`) and stays inert under quote.
+		// (`usurp (valof f) a b`) and stays inert under quote.
 		//
-		// Two overloads, mirroring how `ref` and `/u` accept a name:
-		//   - [Function]      `usurp (ref f)` / `usurp (f/r)` — a value.
+		// Two overloads, mirroring how `valof` and `/u` accept a name:
+		//   - [Function]      `usurp (valof f)` / `usurp (f/v)` — a value.
 		//   - [Atom] (/q)     `usurp f` — capture the word as a name and
 		//                     resolve it to its bound function (the
 		//                     function-form companion of the `/u` suffix).
@@ -143,7 +146,7 @@ var refNatives = []NativeFunc{
 		// The function-form companion of the `/N` modifier: wrap a function
 		// so it dispatches with exactly N args. `force-arity N fn` returns a
 		// new Function. Like usurp, accepts a function value or a name:
-		//   - [Integer, Function]  `force-arity 2 (f/r)`
+		//   - [Integer, Function]  `force-arity 2 (f/v)`
 		//   - [Integer, Atom] (/q) `force-arity 2 f`
 		Signatures: []Signature{
 			{
@@ -298,11 +301,12 @@ func rebarrierAtom(wrap func(Value) (Value, bool), args []Value, word string, re
 }
 
 // usurpAtomHandler is the by-name form `usurp foo`: it resolves the
-// captured atom to its bound function value (sharing `ref`'s rules — an
-// unbound name raises undefined_word, a non-fn binding raises
-// illegal_ref) and then returns the argument-reversed wrapper. It is the
-// function-form companion of the `/u` word suffix; `usurp (ref foo)` /
-// `usurp (foo/r)` pass the value directly via the [Function] overload.
+// captured atom to its bound function value. Unlike `valof`, which is
+// total over binding kinds, usurp still gates on fn-ness: an unbound name
+// raises undefined_word and a non-fn binding raises illegal_ref (there is
+// no reversed wrapper to build over a non-fn value) and then returns the argument-reversed wrapper. It is the
+// function-form companion of the `/u` word suffix; `usurp (valof foo)` /
+// `usurp (foo/v)` pass the value directly via the [Function] overload.
 func usurpAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	if len(args) < 1 {
 		return nil, fmt.Errorf("usurp: missing name")
@@ -331,30 +335,26 @@ func usurpAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry
 // returns it. Failure to bind raises an undefined_word error, the
 // same code stepWord raises for an unbound bare word — so the two
 // surfaces report identical errors.
-func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+func valofHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	if len(args) < 1 {
-		return nil, fmt.Errorf("ref: missing name")
+		return nil, fmt.Errorf("valof: missing name")
 	}
 	name, err := AsAtom(args[0])
 	if err != nil {
-		return nil, fmt.Errorf("ref: expected an atom name, got %s", args[0].Parent.String())
+		return nil, fmt.Errorf("valof: expected an atom name, got %s", args[0].Parent.String())
 	}
 	v, ok := core.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
-			return nil, unboundNameError(reg, "ref: name "+name+" is not bound", name)
+			return nil, unboundNameError(reg, "valof: name "+name+" is not bound", name)
 		}
-		return nil, fmt.Errorf("ref: name %s is not bound", name)
+		return nil, fmt.Errorf("valof: name %s is not bound", name)
 	}
-	// `ref` is the function-form companion of the `/r` suffix and shares
-	// its rule: only function words may be referenced. A non-fn binding
-	// (plain value, type body) is rejected so both surfaces behave alike.
-	if !core.IsFunctionRef(v) {
-		// reg is provably non-nil here (ResolveRef only returns ok for a
-		// non-nil registry); the former reg==nil arm was dead.
-		detail := "ref requires a function word: " + name + " is bound to " + v.Parent.String()
-		return nil, reg.BoruError("illegal_ref", detail, name)
-	}
+	// `valof` is the function-form companion of the `/v` suffix and shares
+	// its rule: it yields the binding's VALUE whatever kind it is. For a
+	// fn binding that suppresses the call; for any other binding it is
+	// the identity. No kind gate — that is what makes one spelling able
+	// to read a slot whose kind is not known statically (NUR085).
 	return []Value{v}, nil
 }
 
@@ -463,7 +463,7 @@ func recordGradualWrap(reg *Registry, word string, args, outs []Value) {
 // checkModeGradualFn handles a dispatch-modifier word (usurp / stack-args /
 // forward-args / force-arity) applied to a NON-CONCRETE function-value carrier
 // in check mode. A stored fn-ref read via dot-access (`m.a` where
-// `m = {a:add/r}`) is statically dynamic(Any) — getNodeReturns deliberately
+// `m = {a:add/v}`) is statically dynamic(Any) — getNodeReturns deliberately
 // cannot narrow a dispatch-bearing field — but a real Function at run time.
 // Rather than the strict handler rejecting the Any carrier (a false no_signature
 // / illegal_ref, path-modifier.tsv), return a gradual Function carrier so the

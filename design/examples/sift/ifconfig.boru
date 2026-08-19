@@ -152,7 +152,7 @@ def parse-ifconfig fn [[source:Any opts:Map] [List] [
   each [ifc-block strict] (StringUtil.split '\n\n' text)
 ]]
 
-Sift.define ifconfig parse-ifconfig/r end   # `end` stops forward collection
+Sift.define ifconfig parse-ifconfig/v end   # `end` stops forward collection
 
 # ---------------------------------------------------------------------------
 # Standalone demo (the export below is a no-op when run directly). Today the
@@ -184,6 +184,6 @@ def noisy (join '\n' [sample '        device interrupt 16'])
 do [parse ifconfig noisy] error [dot code]     # returns sift_parse_error/q — loud default
 
 export "Ifconfig" {
-  parse:  parse-ifconfig/r    # also registered as parse kind `ifconfig` at import
+  parse:  parse-ifconfig/v    # also registered as parse kind `ifconfig` at import
   sample: sample              # fixture for consumers' specs
 }

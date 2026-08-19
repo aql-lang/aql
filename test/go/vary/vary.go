@@ -159,7 +159,7 @@ func Transforms() []Transform {
 		{"each-body", func(s string) string { return "[10 20] each [drop " + s + "]" }},
 		// Module body + export + dot-dispatch: the cross-registry path.
 		{"module-body", func(s string) string {
-			return `import module [ def zzvmod fn [[] [] [` + s + `]] export "ZZV" {run: zzvmod/r} ] end ZZV.run`
+			return `import module [ def zzvmod fn [[] [] [` + s + `]] export "ZZV" {run: zzvmod/v} ] end ZZV.run`
 		}},
 		// Statement mixing: an unrelated def before / after the seed.
 		{"prefix-def", func(s string) string { return "def zzvpre 7 " + s }},

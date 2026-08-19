@@ -108,7 +108,7 @@ func isFn(v core.Value) bool {
 // its own terms — the flag is a transient marker, not part of a value's
 // identity. It makes deq the wrong SOLE test here all the same, because that
 // flag is precisely what the replay borrows to keep a Function inert and has
-// to give back: `/r` parks positionally and stamps nothing, so a mark left in
+// to give back: `/v` parks positionally and stamps nothing, so a mark left in
 // place returns a permanently-inert copy of a live value. Canon cannot stand
 // in either — its Function branch renders name, params, returns and body, and
 // never the flag.
@@ -267,17 +267,17 @@ func TestStackFormEquivalence_UserFunctions(t *testing.T) {
 		`def p fn [[] [Integer Integer] [1 2]] p`, // multi-return
 		`def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]] fact 4`,
 		// A fn handed to a fn as a Function param — the callback shape every
-		// boru library uses — with the returned reference held by /r.
-		inc + `def ap fn [[f:Function n:Integer] [Integer] [f n]] ap inc/r 5`,
-		z + `def h fn [[f:Function] [Any] [f/r]] h z/r 99`,
-		// A `/r` reference left as the RESIDUAL, not consumed by a later call.
+		// boru library uses — with the returned reference held by /v.
+		inc + `def ap fn [[f:Function n:Integer] [Integer] [f n]] ap inc/v 5`,
+		z + `def h fn [[f:Function] [Any] [f/v]] h z/v 99`,
+		// A `/v` reference left as the RESIDUAL, not consumed by a later call.
 		// Flatten has to mark a Function PushLit Quoted to stop the replay
-		// dispatching it, and Quoted is STICKY where `/r` is positional — so
+		// dispatching it, and Quoted is STICKY where `/v` is positional — so
 		// without Eval undoing the mark this row returns a permanently-inert
 		// copy of a value the direct run returns live. `canon` omits the flag,
 		// so only stacksEqual's explicit check sees it (PR #378 review, P1).
-		inc + `inc/r`,
-		z + `z/r`,
+		inc + `inc/v`,
+		z + `z/v`,
 		// A CLOSURE as the residual: same shape, but the value also carries a
 		// captured environment. canon deliberately omits Captured too, so this
 		// row is only meaningful because stacksEqual compares it (P2).
@@ -352,7 +352,7 @@ func TestStackFormRefusesFunctionValueApplication(t *testing.T) {
 // A survivor earns a skip credit only if the re-step would fire OnPushLit for
 // it. A Function value never does (execFnDefLiteral dispatches it, or the
 // ADR-016 0-arg gate steps past it), so crediting one left an unspendable
-// skip that silently SWALLOWED the next real literal: `(z/r) 777` recorded
+// skip that silently SWALLOWED the next real literal: `(z/v) 777` recorded
 // without its 777 at all, and each extra paren level ate another.
 //
 // The assertion is on the LITERALS the form carries, not on Eval's stack:
@@ -372,15 +372,15 @@ func TestStackFormLiteralAccountingExact(t *testing.T) {
 		{`(1 add 2) 777`, []int64{1, 2, 777}},
 		// One Function survivor. Before the fix this recorded NO integer at
 		// all: the surplus credit ate the 777.
-		{zdef + `(z/r) 777`, []int64{777}},
-		{zdef + `(z/r) 777 888`, []int64{777, 888}},
+		{zdef + `(z/v) 777`, []int64{777}},
+		{zdef + `(z/v) 777 888`, []int64{777, 888}},
 		// Every extra paren level added another unspendable credit, so depth
 		// is the regression that matters most.
-		{zdef + `((z/r)) 777 888`, []int64{777, 888}},
-		{zdef + `(((z/r))) 777 888 999`, []int64{777, 888, 999}},
+		{zdef + `((z/v)) 777 888`, []int64{777, 888}},
+		{zdef + `(((z/v))) 777 888 999`, []int64{777, 888, 999}},
 		// The APPLIED shape: the function's own ARGUMENT literal was the one
 		// dropped here — the form kept 777 but lost the 5 it is called with.
-		{incdef + `(inc/r) 5 777`, []int64{5, 777}},
+		{incdef + `(inc/v) 5 777`, []int64{5, 777}},
 	} {
 		t.Run(c.src, func(t *testing.T) {
 			r := stackformReg(t)
@@ -442,12 +442,12 @@ func TestStackFormFunctionArgNotDoubleRecorded(t *testing.T) {
 	const zdef = `def z fn [[] [Integer] [42]] `
 	for _, src := range []string{
 		// A paren'd reference into a Function slot, with a literal following.
-		zdef + `def g fn [[f:Function] [Any] [7]] g (z/r) 777`,
+		zdef + `def g fn [[f:Function] [Any] [7]] g (z/v) 777`,
 		// The same call with no trailing literal.
-		zdef + `def g fn [[f:Function] [Any] [7]] g (z/r)`,
+		zdef + `def g fn [[f:Function] [Any] [7]] g (z/v)`,
 		// CONTROL: the unparenthesised spelling of the same call, which never
 		// went through stepCloseParen at all.
-		zdef + `def g fn [[f:Function] [Any] [7]] g z/r 777`,
+		zdef + `def g fn [[f:Function] [Any] [7]] g z/v 777`,
 	} {
 		t.Run(src, func(t *testing.T) { equivalentRun(t, src) })
 	}

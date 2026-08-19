@@ -8,15 +8,15 @@
 #   /s   force-stack   : collect ALL args from the prefix stack
 #   /N   arg-count     : a digit run; select the overload with N total args
 #   /q   quote         : parse the word as an Atom (data, not a call)
-#   /r   ref           : resolve a fn word to its Function value, uninvoked
+#   /v   valof           : resolve a fn word to its Function value, uninvoked
 #   /u   usurp         : wrap a fn with its argument order reversed
 #
 # Stacking rules (parser: scanWordModifier):
-#   - letters may appear in ANY order  (foo/sq ≡ foo/qs, foo/ur ≡ foo/ru)
-#   - each letter appears AT MOST once  (no /ff, /ss, /qq, /rr, /uu)
+#   - letters may appear in ANY order  (foo/sq ≡ foo/qs, foo/uv ≡ foo/vu)
+#   - each letter appears AT MOST once  (no /ff, /ss, /qq, /vv, /uu)
 #   - f and s are MUTUALLY EXCLUSIVE
 #   - q is MUTUALLY EXCLUSIVE with r and with u
-#   - u MAY combine with r  (/ur ≡ /ru)
+#   - u MAY combine with r  (/uv ≡ /vu)
 #   - digits form a SINGLE contiguous run
 #   - any other letter, or a forbidden pairing, is INVALID
 #
@@ -36,7 +36,7 @@
 #     paths (`Scalar/Number/Integer`) parsing; unbound ones raise
 #     [boru/undefined_word] at run time.
 #
-# Full coverage of /r and /u lives in ref.tsv and usurp.tsv; this file is
+# Full coverage of /v and /u lives in valof.tsv and usurp.tsv; this file is
 # the modifier matrix — every variation and combination, including errors.
 #
 # ─────────────────────────────────────────────────────────────────────
@@ -66,13 +66,13 @@ add/0	ERROR:signature_error	/0 — add has no 0-arg sig
 add/q	add/q	/q turns a word into an Atom (data, not a call)
 foo/q	foo/q	/q works on ANY name, bound or not — it is pure data
 #
-# §6  /r  ref (full coverage in ref.tsv)
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  typeof (sub2/r)	Function	/r references a fn value without invoking it
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/r) 10 3	7	grouped reference dispatches
+# §6  /v  valof (full coverage in valof.tsv)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  typeof (sub2/v)	Function	/v references a fn value without invoking it
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/v) 10 3	7	grouped reference dispatches
 #
-# §7  /u, /ur  usurp (full coverage in usurp.tsv)
+# §7  /u, /uv  usurp (full coverage in usurp.tsv)
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3	-7	/u reverses argument order
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ur) 10 3	-7	/ur holds the reversed wrapper; grouped → dispatch
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/uv) 10 3	-7	/uv holds the reversed wrapper; grouped → dispatch
 #
 # §8  VALID combinations — letters stack in any order
 add/qs	add/q	q dominates: s accepted but ignored
@@ -80,8 +80,8 @@ add/sq	add/q	/sq ≡ /qs
 add/q2	add/q	q dominates: digit ignored
 add/2q	add/q	/2q ≡ /q2
 foo/qf	foo/q	q dominates: f ignored
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ru) 10 3	-7	/ru ≡ /ur (usurp + ref)
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/rs) 10 3	7	/rs = ref (+ s ignored): plain dispatch, NOT reversed
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/vu) 10 3	-7	/vu ≡ /uv (usurp + valof)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/vs) 10 3	7	/vs = valof (+ s ignored): plain dispatch, NOT reversed
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/us) 10 3	-7	/us = usurp (+ s ignored): reversed
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/u2) 10 3	-7	/u2 = usurp (+ digit ignored)
 #
@@ -90,26 +90,26 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/u2) 10 3	-7	/u2 = u
 #     reading and surface as undefined_word only if unbound
 add/fs	ERROR:invalid word modifier	f and s are mutually exclusive
 add/sf	ERROR:invalid word modifier	same pairing, other order
-add/qr	ERROR:invalid word modifier	q cannot combine with r
+add/qv	ERROR:invalid word modifier	q cannot combine with r
 add/qu	ERROR:invalid word modifier	q cannot combine with u
 add/ff	ERROR:invalid word modifier	a letter may appear at most once
 add/ss	ERROR:invalid word modifier	repeated s
 add/qq	ERROR:invalid word modifier	repeated q
-add/rr	ERROR:invalid word modifier	repeated r
+add/vv	ERROR:invalid word modifier	repeated r
 add/uu	ERROR:invalid word modifier	repeated u
 add/1f2	ERROR:invalid word modifier	digits must be a single contiguous run
 add/x	ERROR:undefined_word	a NON-alphabet letter is a plain slash-name, unbound here
 add/z	ERROR:undefined_word	…same for z
 ({} set add/x/q 1) get 'add/x'	1	a non-alphabet slash token still works as a quoted atom key (`def` names reject `/` separately: invalid_word_name)
 #
-# §10  On functions — combined with ref / usurp / apply
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/r apply	-7	/r + apply
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/ur apply	7	/ur + apply (reversed)
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {f: sub2/r}  ops.f 10 3	7	/r in a map slot, dispatched via dot-access
+# §10  On functions — combined with valof / usurp / apply
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/v apply	-7	/v + apply
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/uv apply	7	/uv + apply (reversed)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {f: sub2/v}  ops.f 10 3	7	/v in a map slot, dispatched via dot-access
 #
 # §11  On anonymous functions
 ([n:Integer] => [n add 1]) 5	6	bare lambda invocation (no modifier)
-def f ([n:Integer] => [n add 1])  (f/r) 5	6	/r on a bound lambda, grouped → dispatch
+def f ([n:Integer] => [n add 1])  (f/v) 5	6	/v on a bound lambda, grouped → dispatch
 def f ([a:Integer b:Integer] => [a sub b])  f/u 10 3	-7	/u on a bound lambda
-def f ([a:Integer b:Integer] => [a sub b])  (f/ur) 10 3	-7	/ur on a bound lambda
-def f ([n:Integer] => [n add 1])  5 f/r apply	6	/r + apply on a lambda
+def f ([a:Integer b:Integer] => [a sub b])  (f/uv) 10 3	-7	/uv on a bound lambda
+def f ([n:Integer] => [n add 1])  5 f/v apply	6	/v + apply on a lambda

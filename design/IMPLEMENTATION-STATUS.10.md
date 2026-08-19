@@ -103,7 +103,7 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 | TYPE-OPERATIONS.8 | `native_compare.go`, `native_type.go`. |
 | GENERICS.10 | `lang/spec/generics.tsv` (39 rows), `generics-class.tsv`. |
 | IDEAL.10 | Ideal kinds throughout `class.tsv`/`generics-class.tsv`. |
-| REACH.10 | `native_ref.go` (`ApplyReach`/`rebind`), `getpath.go`/`setpath.go`. |
+| REACH.10 | `native_valof.go` (`ApplyReach`/`rebind`), `getpath.go`/`setpath.go`. |
 | SURFACES.10 | `eng/go/surface.go`, `native_surface.go`, `surface.tsv`. |
 | REFINE-NEWTYPE-VS-SUBSET.10 | `eng/go/unify_refine.go`. |
 | FLEX-NODES.10 | `native_flex.go`, `flex.tsv` (129 rows). |
@@ -115,7 +115,7 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 | CLASS-OBJECT.10 | `native_object_record.go`, `class.tsv` (64 rows). |
 | MACROS.8 / MACROS-PHASE1.10 / MACROS-PHASE5.5 | `native_macro.go`, `macro.tsv` (34 rows). |
 | ERRORS.8 | `native_error_raise.go`, `error.tsv` (26 rows). |
-| USURP.10 | `native_ref.go`, `usurp.tsv` (52 rows). |
+| USURP.10 | `native_valof.go`, `usurp.tsv` (52 rows). |
 | FOR-LOOP-REVIEW.10 | for-loop sentinels, lazy ForCont. |
 | PAREN-REPRESENTATION.9 | `ParenExpr` handling, `paren_expr_step_test.go`. |
 | BIGNUM-0D.10 / NUMERIC-TOWER.0 (superseded) | `TBigInteger`/`TBigDecimal`, `bignum.tsv`. |

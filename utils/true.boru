@@ -63,9 +63,9 @@ def tr-main fn [[argv:List status:Integer] [Integer] [
 ]]
 
 export "True" {
-  sole: tr-sole/r
-  out:  tr-out/r
-  main: tr-main/r
+  sole: tr-sole/v
+  out:  tr-out/v
+  main: tr-main/v
   spec: spec
 }
 

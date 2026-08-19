@@ -648,8 +648,6 @@ WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD receive
   [Node/List] barrier=1 noeval={0} returns=[Any]
-WORD ref
-  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
 WORD referent
   [Scalar/Atom] barrier=1 returns=[Any]
 WORD refine
@@ -875,6 +873,8 @@ WORD usurp
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD validate
   [Node/Map Any] barrier=2 returns=[Any] +returnsfn
+WORD valof
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
 WORD vals
   [Node/Map] barrier=1 returns=[Node/List] +returnsfn
 WORD var

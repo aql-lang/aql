@@ -313,7 +313,7 @@ func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 	// the second store site sees the stamped impl and skips (first stamp
 	// wins), so the shared value never carries duplicate refs.
 	prog3, reason3, _, err3 := a.CompileCheck(
-		`def f (fn [[x:Integer] [Integer] [x add 1]]) (stash {a: 1} f/r) (stash {b: 2} f/r)`)
+		`def f (fn [[x:Integer] [Integer] [x add 1]]) (stash {a: 1} f/v) (stash {b: 2} f/v)`)
 	if err3 != nil || prog3 == nil {
 		t.Fatalf("compile: reason=%q err=%v", reason3, err3)
 	}

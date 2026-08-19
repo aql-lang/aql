@@ -190,13 +190,13 @@ separate strict reader and recursive renderer.
 This is the deliberately non-canonical half of the parser oracle. Canonical
 source is retained as a compact payload label, but every rendered value also
 records its source position, `Eval` and `Quoted` flags, and word payload
-(`ArgCount`, `/s`, `/f`, `/r`, and `/u`). Lists, maps, parentheses, and reach
+(`ArgCount`, `/s`, `/f`, `/v`, and `/u`). Lists, maps, parentheses, and reach
 nodes are traversed so nested and operator-generated positions cannot hide
 inside an equal outer canon. Map rendering also records the implicit-pair bit
 and computed-key set; typed containers expose their child constraint plus
 concrete elements/entries; sugar exposes every `SugarInfo` field, including
 the angle head and deferred head error. The modifier rows cover `/N`, `/f`,
-`/s`, `/r`, `/u`, `/ur`, and `/q`; the last is represented by the Atom payload
+`/s`, `/v`, `/u`, `/uv`, and `/q`; the last is represented by the Atom payload
 it is specified to emit. Parser-authored values do not set `Quoted` — quoted
 source becomes a String or Atom — so the corpus pins that flag false while
 pinning both false and true states of `Eval`. Unicode rows pin columns after a

@@ -632,25 +632,25 @@ Test.cover [
   # exhaustively above.
   Test.describe "main" [
     Test.test "the run arm exits when the handler returns 0" [
-      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-ok/r) ]
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-ok/v) ]
     ]
     Test.test "the run arm exits with the handler's own code" [
-      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-code/r) ]
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-code/v) ]
     ]
     Test.test "a handler returning a non-Integer still exits" [
-      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-nonint/r) ]
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-nonint/v) ]
     ]
     Test.test "the help arm exits" [
-      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--help"] (t-ok/r) ]
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--help"] (t-ok/v) ]
     ]
     Test.test "the version arm exits" [
-      Assert.throws [ Cli.main {name:"t" version:"1" args:{name:"f" min:0}} ["--version"] (t-ok/r) ]
+      Assert.throws [ Cli.main {name:"t" version:"1" args:{name:"f" min:0}} ["--version"] (t-ok/v) ]
     ]
     Test.test "the usage-error arm exits" [
-      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--nope"] (t-ok/r) ]
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--nope"] (t-ok/v) ]
     ]
     Test.test "the argv-less signature reads IO.args (empty here) and exits" [
-      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} (t-ok/r) ]
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} (t-ok/v) ]
     ]
   ]
 ]

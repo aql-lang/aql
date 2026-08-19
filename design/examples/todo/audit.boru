@@ -10,7 +10,7 @@
 import "boru:serve"
 
 export "Audit" {
-  log: log/r
+  log: log/v
 }
 
 # `log <svc>` -> Service   (same value, now audited)

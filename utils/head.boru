@@ -310,7 +310,7 @@ def head-run fn [[ctx:Map] [Integer] [
 # than handed to `Cli.main`. `Cli.main` invokes its handler from inside the
 # boru:cli module, and under the tree-walking interpreter the handler body
 # cannot see this file's module-level defs at all — `Cli.main (spec)
-# (head-run/r)` dies "undefined word: head-nflag" under -no-compile, though the
+# (head-run/v)` dies "undefined word: head-nflag" under -no-compile, though the
 # bytecode compiler resolves it. Calling head-run here, at file scope, sidesteps
 # it; the user-visible contract is unchanged.
 # ----------------------------------------------------------------------------
@@ -326,24 +326,24 @@ def head-main fn [[argv:List] [Integer] [
 # module's private defs are NOT visible to an importer, so anything a test
 # touches has to be exported.
 export "Head" {
-  bool: head-bool/r
-  count: head-count/r
-  done: head-done/r
-  reads: head-reads/r
-  shown: head-shown/r
-  worse: head-worse/r
-  inputs: head-inputs/r
-  line: head-line/r
-  label: head-label/r
-  header: head-header/r
-  headers: head-show-headers/r
-  parseN: head-parse-n/r
-  nflag: head-nflag/r
-  chunkSize: head-chunk-size/r
-  fail: head-fail/r
-  badN: head-bad-n/r
-  one: head-one/r
-  main: head-main/r
+  bool: head-bool/v
+  count: head-count/v
+  done: head-done/v
+  reads: head-reads/v
+  shown: head-shown/v
+  worse: head-worse/v
+  inputs: head-inputs/v
+  line: head-line/v
+  label: head-label/v
+  header: head-header/v
+  headers: head-show-headers/v
+  parseN: head-parse-n/v
+  nflag: head-nflag/v
+  chunkSize: head-chunk-size/v
+  fail: head-fail/v
+  badN: head-bad-n/v
+  one: head-one/v
+  main: head-main/v
   spec: spec
 }
 

@@ -130,7 +130,7 @@ func TestModuleWrapperSigBodyPairing(t *testing.T) {
 		   def Comparable surface {cmp: (fnsig [[Self Self] [Integer]])}
 		   Integer exposes Comparable
 		   def aop gen [(T extends Comparable)] fn [[rhs:T op:String lhs:T] [String] ["bounded"] [rhs:Any op:String lhs:Any] [String] ["catchall"]]
-		   export "M" {aop: aop/r}
+		   export "M" {aop: aop/v}
 		 ]`,
 		`[(M.aop 3 "x" 5) (M.aop {a:1} "x" 5)]`,
 	})

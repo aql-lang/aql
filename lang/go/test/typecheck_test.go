@@ -194,17 +194,17 @@ func TestCheckUncalledFunction(t *testing.T) {
 		{`import "boru:math-util" end  MathUtil.sqrt`, 0, "bare module reference, no args"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) "hello"`, 1, "local fn value, wrong-typed arg"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) 5`, 0, "local fn value, correct arg"},
-		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/r "hello"`, 0, "genuinely inert /r ref (no paren) is not a call"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/v "hello"`, 0, "genuinely inert /v ref (no paren) is not a call"},
 		// A failed dispatch whose value a FOLLOWING word then consumes is
 		// flagged too, and that is the point of the loud contract
 		// (design/FN-VALUE-DISPATCH.0.md): what happens to the value
 		// afterwards is not evidence about whether the CALL was meant.
 		// Deferring to end-of-run made every Any-typed consumer — `print`,
 		// `def`, a Function param — silence a real dispatch failure.
-		// Composition that wants the function as data says so with `/r`,
+		// Composition that wants the function as data says so with `/v`,
 		// which is the row below.
 		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  ((usurp f) g)`, 1, "a consumed failed dispatch is still a failed dispatch"},
-		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  (g f/r)`, 0, "the same composition spelled with /r is a value, not a call"},
+		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  (g f/v)`, 0, "the same composition spelled with /v is a value, not a call"},
 	}
 	for _, c := range cases {
 		if got := count(c.src); got != c.want {

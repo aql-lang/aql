@@ -1129,14 +1129,14 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		})
 	})
 
-	// --- Shorthand field syntax: {foo} ≡ {foo: foo}, {foo/r} ≡ {foo: foo/r} ---
+	// --- Shorthand field syntax: {foo} ≡ {foo: foo}, {foo/v} ≡ {foo: foo/v} ---
 
 	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddOpen(&jsonic.AltSpec{
 			// A lone unquoted-text key with no following colon. Appended
 			// LAST so it never shadows a real `key:value` pair: the base
 			// KEY CL alt (and the prepended qm/ck alts) are tried first,
-			// and only `{foo}` / `{foo/r}` — where no colon, `?`, or `[`
+			// and only `{foo}` / `{foo/v}` — where no colon, `?`, or `[`
 			// follows — fall through to here. The optional shorthand
 			// `{foo?}` is handled by the qm path above (it consumes
 			// `foo ?` and records Meta["qm"]); the value is synthesized in

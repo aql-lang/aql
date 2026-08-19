@@ -349,7 +349,7 @@ settled.)
 
 The Pony comparison matters here: boru's existing taxonomy — immutable
 scalars/nodes vs mutable Ideals — is structurally much closer to Pony's
-`val`/`ref` reference capabilities than to Rust ownership. The
+`valof`/`ref` reference capabilities than to Rust ownership. The
 design-consistent fix is a **value-class rule at the fork boundary**,
 not an ownership system:
 

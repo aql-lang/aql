@@ -266,7 +266,7 @@ import module [
   import "boru:io"
   def m-home fn [[] [Any] [ IO.env "HOME" ]]
   def m-argv fn [[] [List] [ IO.args ]]
-  export "M" {home: m-home/r, argv: m-argv/r}
+  export "M" {home: m-home/v, argv: m-argv/v}
 ] end
 print (M.home)
 print (M.argv)
@@ -284,7 +284,7 @@ IO.env "HOME"`)
   import "boru:io"
   def m-home fn [[] [Any] [ IO.env "HOME" ]]
   def m-argv fn [[] [List] [ IO.args ]]
-  export "M" {home: m-home/r, argv: m-argv/r}
+  export "M" {home: m-home/v, argv: m-argv/v}
 ] end
 print (M.home)
 print (M.argv)`); err != nil {
@@ -311,7 +311,7 @@ func TestModuleBodyEnvStaysPolicyWrapped(t *testing.T) {
 	if _, err := a.Run(`import module [
   import "boru:io"
   def m-home fn [[] [Any] [ IO.env "HOME" ]]
-  export "M" {home: m-home/r}
+  export "M" {home: m-home/v}
 ] end
 print (M.home)`); err != nil {
 		t.Fatal(err)

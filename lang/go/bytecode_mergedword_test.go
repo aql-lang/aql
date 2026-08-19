@@ -62,7 +62,7 @@ const mergedFlagModule = `import module [` +
 	`def Flag (refine Boolean) ` +
 	`def add fn [[a:Flag b:Flag] [Boolean] [a and b]] ` +
 	`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
-	`export "M" {add: add/r mk: mk/r Flag: Flag}]  `
+	`export "M" {add: add/v mk: mk/v Flag: Flag}]  `
 
 // open-words.tsv:72 — a MIXED tuple (one builtin + one user-minted type)
 // anchors the transplanted signature; the module-minted Flag param rides
@@ -72,7 +72,7 @@ func TestMergedWordSeam_MixedTuple(t *testing.T) {
 		`import module [def Flag (refine Boolean) `+
 			`def add fn [[a:Integer b:Flag] [Boolean] [true]] `+
 			`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] `+
-			`export "M" {add: add/r mk: mk/r}]  add 1 (M.mk true)`)
+			`export "M" {add: add/v mk: mk/v}]  add 1 (M.mk true)`)
 }
 
 // open-words.tsv:77/78 — the transplanted BODY runs (module-closure
@@ -97,9 +97,9 @@ func TestMergedWordSeam_ReExportTransitivity(t *testing.T) {
 			`import module [def Flag (refine Boolean) `+
 			`def add fn [[a:Flag b:Flag] [Boolean] [a and b]] `+
 			`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] `+
-			`export "I" {add: add/r mk: mk/r Flag: Flag}] `+
+			`export "I" {add: add/v mk: mk/v Flag: Flag}] `+
 			`def Flag I.Flag def omk fn [[b:Boolean] [Flag] [def v:Flag b v]] `+
-			`export "O" {mk: omk/r add: add/r}]  add (O.mk true) (O.mk true)`)
+			`export "O" {mk: omk/v add: add/v}]  add (O.mk true) (O.mk true)`)
 }
 
 // open-words.tsv:86/87 — two modules' same-shaped extensions COEXIST, each
@@ -109,11 +109,11 @@ func TestMergedWordSeam_TwoModulesCoexist(t *testing.T) {
 	const twoModules = `import module [def Flag (refine Boolean) ` +
 		`def add fn [[a:Flag b:Flag] [Boolean] [true]] ` +
 		`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
-		`export "M" {add: add/r mk: mk/r}]  ` +
+		`export "M" {add: add/v mk: mk/v}]  ` +
 		`import module [def Flag (refine Boolean) ` +
 		`def add fn [[a:Flag b:Flag] [Boolean] [false]] ` +
 		`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
-		`export "N" {add: add/r mk: mk/r}]  `
+		`export "N" {add: add/v mk: mk/v}]  `
 	mergedWordCompilesNative(t, twoModules+`add (M.mk true) (M.mk true)`) // → true
 	mergedWordCompilesNative(t, twoModules+`add (N.mk true) (N.mk true)`) // → false
 }
@@ -123,7 +123,7 @@ func TestMergedWordSeam_TwoModulesCoexist(t *testing.T) {
 func TestMergedWordSeam_ClassTuple(t *testing.T) {
 	const pointModule = `import module [def Point class {x:Integer y:Integer} ` +
 		`def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] ` +
-		`export "Pointer" {Point: Point add: add/r}]  ` +
+		`export "Pointer" {Point: Point add: add/v}]  ` +
 		`def p0 (make Pointer.Point {x:1 y:2})  def p1 (make Pointer.Point {x:4 y:6})  `
 	mergedWordCompilesNative(t, pointModule+`def p2 (p0 add p1)  p2.x`)
 	mergedWordCompilesNative(t, pointModule+`def p2 (p0 add p1)  p2 is Pointer.Point`)
@@ -136,7 +136,7 @@ func TestMergedWordSeam_MicronTuple(t *testing.T) {
 		`import module [def Baron refine Micron {v:Integer} `+
 			`def add fn [[a:Baron b:Baron] [Integer] [(a.v) add (b.v)]] `+
 			`def mk fn [[n:Integer] [Baron] [make Baron {v:n}]] `+
-			`export "M" {add: add/r mk: mk/r}]  (M.mk 2) add (M.mk 3)`)
+			`export "M" {add: add/v mk: mk/v}]  (M.mk 2) add (M.mk 3)`)
 }
 
 // NEGATIVE TWINS — the error taxonomy of every non-crossing shape stays
@@ -150,7 +150,7 @@ func TestMergedWordSeam_NegativeTwins(t *testing.T) {
 			`import module [def Flag (refine Boolean) ` +
 				`def add fn [[a:Flag b:Flag] [Boolean] [a and b]] ` +
 				`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
-				`export "M" {mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk true)`,
+				`export "M" {mk: mk/v Flag: Flag}]  add (M.mk true) (M.mk true)`,
 		},
 		{
 			// open-words.tsv:90 — undef pops the transplant.
@@ -163,7 +163,7 @@ func TestMergedWordSeam_NegativeTwins(t *testing.T) {
 			"class tuple rejects a mixed call",
 			`import module [def Point class {x:Integer y:Integer} ` +
 				`def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] ` +
-				`export "Pointer" {Point: Point add: add/r}]  ` +
+				`export "Pointer" {Point: Point add: add/v}]  ` +
 				`def p0 (make Pointer.Point {x:1 y:2})  add p0 1`,
 		},
 		{
@@ -206,7 +206,7 @@ func TestMergedWordSeam_BodyDiagnosticsSurface(t *testing.T) {
 	const src = `import module [def Flag (refine Boolean) ` +
 		`def add fn [[a:Flag b:Flag] [Boolean] [a zzz-typo b]] ` +
 		`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
-		`export "M" {add: add/r mk: mk/r}]  add (M.mk true) (M.mk true)`
+		`export "M" {add: add/v mk: mk/v}]  add (M.mk true) (M.mk true)`
 	a, _ := New()
 	res, _ := a.Check(src)
 	found := false

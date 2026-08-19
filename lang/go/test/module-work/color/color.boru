@@ -38,11 +38,11 @@ def make-color fn [[hex:String] [Map] [
 export "color" {
   Color:Color
   ColorHex:ColorHex
-  hex2rgb:hex2rgb/r
-  rgb2hex:rgb2hex/r
-  hex2int:hex2int/r
-  int2hex:int2hex/r
-  clamp:clamp/r
-  clamp-rgb:clamp-rgb/r
-  make-color:make-color/r
+  hex2rgb:hex2rgb/v
+  rgb2hex:rgb2hex/v
+  hex2int:hex2int/v
+  int2hex:int2hex/v
+  clamp:clamp/v
+  clamp-rgb:clamp-rgb/v
+  make-color:make-color/v
 }

@@ -14,7 +14,7 @@ import (
 // positive on the single most common way a boru library takes a function:
 // `Sort.quick mycmp xs`, `filter pred xs`, every comparator and predicate API
 // in the ecosystem. The sibling ResolveRef path has recorded the use since the
-// `export "X" { f: impl/r }` form was fixed; this brings the slot intercept
+// `export "X" { f: impl/v }` form was fixed; this brings the slot intercept
 // into line with it.
 //
 // The negative half is the real contract: the note fires only on a SUCCESSFUL
@@ -35,12 +35,12 @@ func TestFunctionSlotArgIsNotUnused(t *testing.T) {
 			why:        "mycmp IS used — it is the Function argument",
 		},
 		{
-			name: "explicit /r reference",
+			name: "explicit /v reference",
 			src: "def mycmp fn [[b:Any a:Any] [Integer] [ a b cmp ]]\n" +
 				"def use fn [[f:Function xs:List] [List] [ xs ]]\n" +
-				"use mycmp/r [3 1 2]\n",
+				"use mycmp/v [3 1 2]\n",
 			wantUnused: false,
-			why:        "the /r spelling was already correct; it must stay correct",
+			why:        "the /v spelling was already correct; it must stay correct",
 		},
 		{
 			name: "a genuinely unused def still warns",

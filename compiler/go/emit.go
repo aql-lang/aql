@@ -828,7 +828,7 @@ type emitUnit struct {
 	enclosingBindNames map[string]bool
 	// pendingApply lists the value IDs of Function-typed CARRIERS this
 	// unit's body dispatched through the `apply` word (a param/captured
-	// comparator: `v comp/r apply`). The check engine cannot re-step a carrier
+	// comparator: `v comp/v apply`). The check engine cannot re-step a carrier
 	// the way it re-steps a concrete fn, so the dispatch is elided and the
 	// carrier flows to the body residual; StartFnCompile's finish must either
 	// lower the ONE pending apply as the whole-residual OpCallDynTrailTop
@@ -3449,7 +3449,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 					}
 					if argsOK {
 						dynTrail = len(bodyStk) - 1
-						// applyHandler unquotes: a /r-parked fn value still
+						// applyHandler unquotes: a /v-parked fn value still
 						// applies (OpCallDynApplyTop), unlike the paren case.
 						rec.dynTrailApply = true
 					}
@@ -3505,7 +3505,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 			// compiled [fn,fn]). This mirrors resolveDynamicApply's main-residual
 			// fn-carrier / fn-precedes-args refusals (the fn-body path refuses the same
 			// shape via the !rec.closure unapplied-fn-value check above). A SOLE inert
-			// fn-reference body (`each [cmp/r]`, mapping every element to the reference)
+			// fn-reference body (`each [cmp/v]`, mapping every element to the reference)
 			// is a CONCRETE const — not a carrier and not preceded by args — so it still
 			// compiles; only an unapplied dynamic apply refuses. (Lowering the trailing
 			// apply via OpCallDynamicTrailing in a closure body is the follow-on feature.)
@@ -3817,8 +3817,8 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	}
 	// The lowered apply (OpCallDynTrailTop) nets EXACTLY ONE value (nout: 1
 	// below). boru fns can return 0 or multiple values, so refuse the lowering
-	// for a CONCRETE callee (a baked `/r` reference) that is not provably
-	// single-valued: a multi-return callee miscompiles (`(1 2 pair/r)` with
+	// for a CONCRETE callee (a baked `/v` reference) that is not provably
+	// single-valued: a multi-return callee miscompiles (`(1 2 pair/v)` with
 	// pair → [Integer Integer] compiled to [2 1] vs the interpreter's [1 2])
 	// and a zero-return callee underflows the following STORE_LOCAL/DROP. A
 	// fn-typed CARRIER (a `comp:Function` param/captured value) carries no
@@ -3844,7 +3844,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 		ops = append(ops, op)
 	}
 	// A paren-bounded apply that ALSO dispatched through the `apply` word
-	// (`(v comp/r apply)`) registered a pending unit apply before this event
+	// (`(v comp/v apply)`) registered a pending unit apply before this event
 	// collapsed the tape — the event now owns the apply, so consume the
 	// pending entry rather than leaving it to refuse the unit at finish, and
 	// lower with the apply word's UNQUOTE semantics (OpCallDynApplyTop).
@@ -4076,7 +4076,7 @@ func (es *EmitState) RecordLoop(start, end, step core.Value, bodyRef core.EmitFr
 // iteration. Returns true when the shape was recognised and seated.
 //
 // Soundness: bodyStk[0] must be a Function-typed CARRIER (always callable —
-// the one inert fn shape, an `f/r` reference, is a concrete const, not a carrier)
+// the one inert fn shape, an `f/v` reference, is a concrete const, not a carrier)
 // produced by an event (so it lands on the sim top after the body events lower),
 // and every trailing arg must be a non-fn, non-dynamic value resolving to a
 // RE-PUSHABLE operand (const / local / type). A computed (event) arg is already
@@ -4586,7 +4586,7 @@ func (es *EmitState) recordCallElided(word string, sig *core.Signature, args, ou
 			return true
 		}
 		// `apply` of a Function-typed CARRIER (a `comp:Function` param or
-		// captured comparator inside a fn body — `v comp/r apply`, Stage M2a):
+		// captured comparator inside a fn body — `v comp/v apply`, Stage M2a):
 		// the check engine cannot re-step a carrier, so the identity result
 		// flows to the body residual as an fn value. Elide the dispatch and
 		// register the PENDING apply on the enclosing unit; the unit's finish
@@ -4647,8 +4647,8 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) && !es.zeroArgMemberFnLandingOut(outs):
 		// A get/dot/getr/dotr read from a container HOLDING a function member
 		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
-		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
-		// → 42; bare `{b:f/r} dot b` → 7; `… dot b add 1` → 8 — it even
+		// fn value in every delivery context (probe-verified: `{f:make42/v}.f`
+		// → 42; bare `{b:f/v} dot b` → 7; `… dot b add 1` → 8 — it even
 		// collects forward args). The VM would push it as inert data — a
 		// silent wrong value (miscompile mechanism E, the deferred-field
 		// auto-invoke, design/MISCOMPILE-HUNT-FINDINGS.0.md). Refuse on the
@@ -5089,7 +5089,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []core.Value, pos co
 		// the unresolvable-operand decline below.
 		if core.IsWord(a) && es.reg != nil {
 			if w, wErr := core.AsWord(a); wErr == nil &&
-				w.ArgCount == -1 && !w.ForceStack && !w.ForceForward && !w.ForceRef && !w.ForceUsurp {
+				w.ArgCount == -1 && !w.ForceStack && !w.ForceForward && !w.ForceVal && !w.ForceUsurp {
 				// Mirror stepWord's type-name cascade exactly — the
 				// builtin arm of the canonical resolver (resolve.go).
 				if t, tOK := core.ResolveBuiltinTypeName(w.Name); tOK {
@@ -5180,8 +5180,8 @@ func (es *EmitState) RecordDynMethod(fn core.Value, args, outs []core.Value, wor
 // containerFnAutoDispatchRisk reports whether a get-family dispatch may
 // surface a container member the interpreter could AUTO-DISPATCH after it
 // lands: a function value carrying a 0-arg-satisfiable signature. Probe-
-// verified divergences: `{f:make42/r}.f` → 42, bare `{b:f/r} dot b` → 7,
-// and `{f:add1/r}.f 5` → 6 (a landed fn even collects forward args), while
+// verified divergences: `{f:make42/v}.f` → 42, bare `{b:f/v} dot b` → 7,
+// and `{f:add1/v}.f 5` → 6 (a landed fn even collects forward args), while
 // the VM would push the fn as inert data (miscompile mechanism E). NOTE:
 // parked user-fn values structurally carry a 0-arg Signature alongside
 // their declared overloads, so in practice every user-fn member READ
@@ -5198,7 +5198,7 @@ func (es *EmitState) RecordDynMethod(fn core.Value, args, outs []core.Value, wor
 // auto-dispatch-on-read hazard containerFnAutoDispatchRisk cannot see when
 // the later get-family receiver is the instance CARRIER (schema only, no
 // field values; probe: `def C class {f:Function} def o (make C
-// {f:make42/r}) o.f` → 42 interpreted vs the fn value compiled — PR #225
+// {f:make42/v}) o.f` → 42 interpreted vs the fn value compiled — PR #225
 // P1). The construction MAP is concrete at record time, so the hazard is
 // decidable here and consulted by ID at the get-family guard sites. A field
 // later overwritten with a non-fn value over-refuses (sound, rare —
@@ -5308,7 +5308,7 @@ func (es *EmitState) instanceFnMember(args []core.Value) (core.Value, bool) {
 // genuine 0-param overload, the read demonstrably surfaced an
 // auto-dispatchable member regardless of how the receiver was represented
 // (a class-instance CARRIER receiver dodges the payload inspection —
-// probe: `def C class {f:Function} def o (make C {f:make42/r}) o.f` → 42
+// probe: `def C class {f:Function} def o (make C {f:make42/v}) o.f` → 42
 // interpreted vs the fn value compiled; PR #225 P1). Zero FP risk: the out
 // is the very value whose landing diverges.
 func zeroArgFnOut(outs []core.Value) bool {
@@ -5788,7 +5788,7 @@ func containerFnAutoDispatchRisk(args []core.Value) bool {
 			// Flat instances (class / Resource) expose FIELD reads through
 			// the same get family, and the interpreter auto-dispatches a
 			// landed fn field exactly like a map member (probe-verified:
-			// `def C class {f:Function} def o (make C {f:make42/r}) o.f`
+			// `def C class {f:Function} def o (make C {f:make42/v}) o.f`
 			// -> 42 interpreted, `fn make42` compiled — PR #225 P1).
 			// Same key-precision rule as MapPayload.
 			fields, _, isInst := core.FlatInstanceParts(a)
@@ -6815,7 +6815,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	}
 	// Leading Function CARRIER (the factory pattern: a returned closure now
 	// on the stack) with no dynamic / fn value after it. A carrier always applies
-	// — the one non-applied shape (an inert `f/r`) is a CONCRETE const, not a
+	// — the one non-applied shape (an inert `f/v`) is a CONCRETE const, not a
 	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
 	if !applyDynamic && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
@@ -7735,7 +7735,7 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []core.Value) (int, bool) 
 //     isFnTypedCarrier misses because Any does not conform DOWN to Function;
 //   - a concrete fn value not in the sole position (isFnValueresidual).
 //
-// A SOLE inert fn-reference body (`each [cmp/r]`) is a concrete const — not a
+// A SOLE inert fn-reference body (`each [cmp/v]`) is a concrete const — not a
 // carrier, not preceded by args — so it still compiles.
 func closureResidualHasUnappliedFn(bodyStk []core.Value) bool {
 	for i, v := range bodyStk {

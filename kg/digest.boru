@@ -186,13 +186,13 @@ def compare fn [[stored:Map current:Map] [Map] [
 
 export "KgDigest" {
   algorithm:algorithm
-  digest-text:digest-text/r
-  read-text:read-text/r
-  distinct:distinct/r
-  file-digests:file-digests/r
-  synthetic-rows:synthetic-rows/r
-  combine:combine/r
-  mk-input-digest:mk-input-digest/r
-  project-inputs:project-inputs/r
-  compare:compare/r
+  digest-text:digest-text/v
+  read-text:read-text/v
+  distinct:distinct/v
+  file-digests:file-digests/v
+  synthetic-rows:synthetic-rows/v
+  combine:combine/v
+  mk-input-digest:mk-input-digest/v
+  project-inputs:project-inputs/v
+  compare:compare/v
 }

@@ -337,9 +337,9 @@ def resolve-entities fn [[entities:List assertions:List] [Map] [
 ]]
 
 export "KgResolve" {
-  shared-schemes:shared-schemes/r
-  shared-attributes:shared-attributes/r
-  decide-pair:decide-pair/r
-  same-as-links:same-as-links/r
-  resolve-entities:resolve-entities/r
+  shared-schemes:shared-schemes/v
+  shared-attributes:shared-attributes/v
+  decide-pair:decide-pair/v
+  same-as-links:same-as-links/v
+  resolve-entities:resolve-entities/v
 }

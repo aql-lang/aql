@@ -3,4 +3,4 @@
 def decorate fn [[s:String] [String] [">> " add (s Formatter.format)]]
 def label-it fn [[s:String] [String] [">> " add (s Formatter.mark)]]
 
-export "Decorator" {decorate:decorate/r label-it:label-it/r}
+export "Decorator" {decorate:decorate/v label-it:label-it/v}

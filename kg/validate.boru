@@ -814,15 +814,15 @@ def validate-bundle fn bundle:Map List [
 ]
 
 export "KgValidate" {
-  iss:iss/r
-  dup-ids:dup-ids/r
-  in-range:in-range/r
-  check-sources:check-sources/r
-  check-entities:check-entities/r
-  check-assertions:check-assertions/r
-  check-identities:check-identities/r
-  check-proposals:check-proposals/r
-  check-collisions:check-collisions/r
-  check-code-units:check-code-units/r
-  validate-bundle:validate-bundle/r
+  iss:iss/v
+  dup-ids:dup-ids/v
+  in-range:in-range/v
+  check-sources:check-sources/v
+  check-entities:check-entities/v
+  check-assertions:check-assertions/v
+  check-identities:check-identities/v
+  check-proposals:check-proposals/v
+  check-collisions:check-collisions/v
+  check-code-units:check-code-units/v
+  validate-bundle:validate-bundle/v
 }

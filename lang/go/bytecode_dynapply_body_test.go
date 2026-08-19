@@ -26,29 +26,29 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 	// interpreter's paren). want is the program RESIDUAL (a slice), single wrapped.
 	strict := []struct{ name, src, want string }{
 		{"each captured comparator apply",
-			`def f fn [[comp:Function][List][ [1 2] each [ var [[x] (x x comp) ] ] ]] cmp/r f`, "[[0 0]]"},
+			`def f fn [[comp:Function][List][ [1 2] each [ var [[x] (x x comp) ] ] ]] cmp/v f`, "[[0 0]]"},
 		{"fold captured comparator apply",
-			`def f fn [[comp:Function][Integer][ 0 fold [ var [[acc x] (x x comp) ] ] [1 2] ]] cmp/r f`, "[0]"},
+			`def f fn [[comp:Function][Integer][ 0 fold [ var [[acc x] (x x comp) ] ] [1 2] ]] cmp/v f`, "[0]"},
 		{"scan captured comparator apply",
-			`def f fn [[comp:Function][List][ scan [ var [[acc x] (acc x comp) ] ] [3 1 2] ]] cmp/r f`, "[[3 -1 1]]"},
+			`def f fn [[comp:Function][List][ scan [ var [[acc x] (acc x comp) ] ] [3 1 2] ]] cmp/v f`, "[[3 -1 1]]"},
 		{"each comparator apply, asymmetric args (arg-order gate)",
-			`def f fn [[comp:Function][List][ [3 1] each [ var [[x] (x 2 comp) ] ] ]] cmp/r f`, "[[1 -1]]"},
+			`def f fn [[comp:Function][List][ [3 1] each [ var [[x] (x 2 comp) ] ] ]] cmp/v f`, "[[1 -1]]"},
 		{"fn-body comparator apply",
-			`def f fn [[comp:Function a:Integer b:Integer][Integer][ (a b comp) ]] 5 3 cmp/r f`, "[-1]"},
+			`def f fn [[comp:Function a:Integer b:Integer][Integer][ (a b comp) ]] 5 3 cmp/v f`, "[-1]"},
 		{"3-arg trailing apply",
-			`def g fn [[f:Function][Integer][ def a 1 def b 2 def c 3 (a b c f) ]] def add3 fn [[x:Integer y:Integer z:Integer][Integer][(x add (y add z))]] add3/r g`, "[6]"},
+			`def g fn [[f:Function][Integer][ def a 1 def b 2 def c 3 (a b c f) ]] def add3 fn [[x:Integer y:Integer z:Integer][Integer][(x add (y add z))]] add3/v g`, "[6]"},
 		{"lambda (compiled-closure) comparator apply",
 			`def f fn [[comp:Function][List][ [3 1] each [ var [[x] (x 2 comp) ] ] ]] ([b:Any a:Any] => [(a cmp b)]) f`, "[[1 -1]]"},
 		{"trailing apply with a DYNAMIC arg (comp still the fn, not the leading dynamic)",
-			`def f fn [[comp:Function][List][ def arr (flex [5 3]) [0 1] each [ var [[x] ((arr get x) 4 comp) ] ] ]] cmp/r f`, "[[1 -1]]"},
+			`def f fn [[comp:Function][List][ def arr (flex [5 3]) [0 1] each [ var [[x] ((arr get x) 4 comp) ] ] ]] cmp/v f`, "[[1 -1]]"},
 		// The comparator apply BOUND TO A DEF-LOCAL (`def c (a b comp)`) then consumed
 		// by `if (c gt 0)` — an INTERMEDIATE apply, not the body's trailing residual.
 		// Recorded as a RecordDynApply EVENT so it seats like any computed result; this
 		// is the def-bound-dynamic-apply leaf that gates 8/11 comparison sorts.
 		{"def-bound comparator apply feeding an if (2 dynamic args)",
-			`def f fn [[comp:Function][List][ def arr (flex [3 1 2]) [0 1] each [ var [[i] def c ((arr get i) (arr get (i add 1)) comp) if (c gt 0) [9] [0] ] ] ]] cmp/r f`, "[[9 0]]"},
+			`def f fn [[comp:Function][List][ def arr (flex [3 1 2]) [0 1] each [ var [[i] def c ((arr get i) (arr get (i add 1)) comp) if (c gt 0) [9] [0] ] ] ]] cmp/v f`, "[[9 0]]"},
 		{"def-bound comparator apply, result used twice",
-			`def f fn [[comp:Function][Integer][ def c (5 3 comp) (c add c) ]] cmp/r f`, "[2]"},
+			`def f fn [[comp:Function][Integer][ def c (5 3 comp) (c add c) ]] cmp/v f`, "[2]"},
 		// A branch ARM whose result is an ENCLOSING-scope value-def (`[g]` / `[c]`) — the
 		// value lives on the PARENT sim, unreachable from the arm's own fragment sim, so
 		// planValueDefLocals must PROMOTE it (a fragResult that is not fragInternal) and
@@ -57,7 +57,7 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 		{"branch arm result is an enclosing computed value-def",
 			`def f fn [[n:Integer][Integer][ def g (n add 5) def gg (if (g lt 1) [1] [g]) gg ]] 3 f`, "[8]"},
 		{"branch arm result is an enclosing dynApply value-def",
-			`def f fn [[comp:Function][Integer][ def c (5 3 comp) if (c gt 0) [c] [0] ]] cmp/r f`, "[1]"},
+			`def f fn [[comp:Function][Integer][ def c (5 3 comp) if (c gt 0) [c] [0] ]] cmp/v f`, "[1]"},
 	}
 	for _, c := range strict {
 		t.Run("strict/"+c.name, func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 	// concrete const, NOT an unapplied apply — it must NOT be over-refused into a
 	// wrong result; compile == interpret (fallback allowed).
 	t.Run("sound/sole inert fn-ref body", func(t *testing.T) {
-		src := `[1 2] each [cmp/r]`
+		src := `[1 2] each [cmp/v]`
 		a, _ := New()
 		got, _, err := a.RunCompiled(src)
 		b, _ := New()
@@ -104,17 +104,17 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 
 // The trailing-apply QUOTE discipline (probe-found off-corpus divergence,
 // 2026-07-17): a compiled LOCAL push carries the stored value VERBATIM —
-// including the construction-time quote of a `/r` reference — while the
+// including the construction-time quote of a `/v` reference — while the
 // interpreter's per-read word substitution strips one quote level before the
 // paren auto-apply. callDynTrailTop now strips Quoted from the applied copy
 // (the op stands for a READ-substituted arrival), and RecordDynApply fences
 // an INLINE-quoted fn (the interpreter keeps that paren un-collapsed).
 func TestTrailingApplyQuoteDiscipline(t *testing.T) {
-	// The miscompile shape: a captured `/r` comparator applied in an each
+	// The miscompile shape: a captured `/v` comparator applied in an each
 	// body compiled [[1 1]] (the still-quoted fn islanded as inert) vs the
 	// interpreter's [[3 3]].
 	mustCompileWithParity(t,
-		`def g fn [[c:Function][List][[1 2] each [(1 2 c)]]] g (([a:Integer b:Integer]=>[a add b])/r)`,
+		`def g fn [[c:Function][List][[1 2] each [(1 2 c)]]] g (([a:Integer b:Integer]=>[a add b])/v)`,
 		"[[3 3]]")
 	// A quote-wrapped ARGUMENT: the param read strips one level, so it
 	// applies identically.

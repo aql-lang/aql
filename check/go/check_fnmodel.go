@@ -436,7 +436,7 @@ func residualProvablyDisjoint(got core.Value, exp *core.Type) bool {
 	// An OPAQUE union residual (Parent=Disjunct with no readable
 	// alternatives — the payload was stripped upstream) denotes "one of
 	// several types" — nothing is provable about it. And a Function
-	// residual sits on the fn-value-call frontier: `v f/r apply` leaves an
+	// residual sits on the fn-value-call frontier: `v f/v apply` leaves an
 	// UNAPPLIED Function in the abstract residual where the runtime calls
 	// it (the "fn-value-call boundary" imprecision class), so a Function
 	// residual routinely means "not modeled", not "returns a function".

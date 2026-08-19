@@ -479,8 +479,8 @@ func (e *Engine) polyReachBound() (int, bool) {
 			}
 			if top, ok := e.Registry.Defs.Top(wi.Name); ok {
 				if _, isFn := top.Data.(FnDefInfo); isFn {
-					if wi.ForceRef {
-						// `/r`: the word denotes its REFERENCE value —
+					if wi.ForceVal {
+						// `/v`: the word denotes its REFERENCE value —
 						// one claimable datum, not a call (NUR050/G12).
 						n++
 						continue
@@ -2225,15 +2225,15 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 
 // fnWordBarrierAt reports whether a scan token is a bare function word
 // acting as a forward-collection barrier: registered as a function and
-// NOT `/r`-marked. An `/r`-marked word is NO barrier — it denotes its
+// NOT `/v`-marked. An `/v`-marked word is NO barrier — it denotes its
 // REFERENCE value (inert data), never a call; the call-site marker is
 // explicit intent (NUR050/G12). The scan then counts it as an ordinary
-// optimistic position, and stepWordRef resolves and DELIVERS the
+// optimistic position, and stepWordVal resolves and DELIVERS the
 // Function value to the parked forward at arrival (the phase-2 half of
 // this rule — keep in sync per design/FORWARD-COLLECTION-PHASES.10.md).
 func (e *Engine) fnWordBarrierAt(tok Value) bool {
 	wi, werr := AsWord(tok)
-	return werr == nil && e.Registry.Lookup(wi.Name) != nil && !wi.ForceRef
+	return werr == nil && e.Registry.Lookup(wi.Name) != nil && !wi.ForceVal
 }
 
 // sigRawSlot reports whether signature sig captures position pos structurally
@@ -2477,9 +2477,11 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 // therefore deals only with regular named words.
 // stepWordUsurp handles the /u (ForceUsurp) word modifier: resolve the
 // name to its bound Function value and wrap it so its signature
-// argument order is reversed (usurped a b c ≡ f c b a). Like /r, /u is
-// legal only for function words. /u alone dispatches the wrapper
-// immediately (like a bare word); /ur (combined with /r) leaves the
+// argument order is reversed (usurped a b c ≡ f c b a). Unlike /v — which
+// is total over binding kinds — /u is legal only for function words:
+// there is no reversed wrapper to build over a non-fn value, so a non-fn
+// binding raises illegal_ref. /u alone dispatches the wrapper
+// immediately (like a bare word); /uv (combined with /v) leaves the
 // wrapper on the stack as inert data.
 func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	v, ok := ResolveUsurp(e.Registry, w.Name)
@@ -2530,8 +2532,8 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 		}
 	}
 	v.pos = val.pos
-	if w.ForceRef {
-		// /ur: leave the usurped wrapper as inert data (mirrors /r) — it
+	if w.ForceVal {
+		// /uv: leave the usurped wrapper as inert data (mirrors /v) — it
 		// still dispatches if args follow or it is later stepped. As
 		// DATA it is a legitimate arrival for a pending forward, so no
 		// barrier commit here.
@@ -2563,12 +2565,12 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	return e.stepLiteral()
 }
 
-// stepWordRef handles the /r modifier (the ForceRef branch of stepWord):
+// stepWordVal handles the /v modifier (the ForceVal branch of stepWord):
 // resolve the name to its bound Function value as data, with no argument
 // collection or dispatch. Extracted from stepWord (mirroring stepWordUsurp)
 // so the dispatch hub stays under the cyclomatic-complexity bound; the body
 // is a verbatim move — behaviour is unchanged.
-func (e *Engine) stepWordRef(val Value, w WordInfo) error {
+func (e *Engine) stepWordVal(val Value, w WordInfo) error {
 	v, ok := ResolveRef(e.Registry, w.Name)
 	if !ok {
 		if e.Registry != nil && e.Registry.analysisActive() {
@@ -2581,64 +2583,16 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 		}
 		return e.undefinedWordError(w.Name, val.Pos())
 	}
-	// /r may reference only function words. A non-fn binding (plain
-	// value, type body) has no call/value asymmetry for /r to break,
-	// so referencing it is illegal.
-	if !IsFunctionRef(v) {
-		// Check-mode dynamic binding: a CARRIER whose type admits a
-		// Function (an Any-typed local, e.g. `def f (unwrap fw)` then
-		// `x f/r apply`) may well hold a real Function at runtime — the
-		// interpreter's IsFunctionRef sees the concrete value and
-		// passes. Surface the ref as a dynamic Function carrier and
-		// keep going; the illegal_ref diagnostic + terminal trap below
-		// are reserved for bindings that PROVABLY cannot be functions
-		// (a concrete plain value, a carrier of a disjoint type), where
-		// the runtime error is guaranteed.
-		if e.Registry != nil && e.Registry.analysisActive() &&
-			v.Carrier && TFunction.ConformsTo(v.Parent) {
-			fv := NewCarrier(TFunction)
-			fv.ID = v.ID
-			fv.pos = val.pos
-			e.Tape.Set(e.Pointer, fv)
-			return e.stepLiteral()
-		}
-		detail := "/r requires a function word: " + w.Name + " is bound to " + v.Parent.String()
-		if e.Registry != nil && e.Registry.analysisActive() {
-			e.Registry.noteAnalysisDiagnostic(CheckDiagnostic{
-				Code:   "illegal_ref",
-				Detail: detail,
-				Word:   w.Name,
-				Row:    val.Pos().Row,
-				Col:    val.Pos().Col,
-			})
-			// Check mode is lenient (the illegal_ref diagnostic is advisory), but
-			// the interpreter raises illegal_ref here at runtime. Record a TERMINAL
-			// trap so a compiled program raises the byte-identical error in place
-			// instead of refusing on the downstream Undefined placeholder. Only a
-			// top-level trap is recordable; a nested /r keeps the placeholder path
-			// and refuses (falls back) as before.
-			e.Registry.analysisRecorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
-			placeholder := NewAtom(w.Name)
-			placeholder.pos = val.pos
-			placeholder.Undefined = true
-			e.Tape.Set(e.Pointer, placeholder)
-			return e.stepLiteral()
-		}
-		return &BoruError{
-			Code:       "illegal_ref",
-			Detail:     detail,
-			Src:        w.Name,
-			Row:        val.Pos().Row,
-			Col:        val.Pos().Col,
-			FullSource: e.effectiveSource(),
-		}
-	}
+	// `/v` denotes the binding's VALUE, whatever kind it is. There is no
+	// function-only gate: for a fn binding it suppresses the call, and for
+	// any other binding it is the identity — the same spelling reads a slot
+	// whose kind is not known statically (NUR085).
 	v.pos = val.pos
 	// A reference denotes DATA. When a parked forward in this paren
 	// scope is still collecting, deliver the reference through the
 	// normal literal step so it ARRIVES like any value and fills the
-	// waiting slot (`wa {x:1} some-fn/r` — NUR050/G12; the phase-1 scan
-	// counts the /r-marked word as an ordinary position, this is the
+	// waiting slot (`wa {x:1} some-fn/v` — NUR050/G12; the phase-1 scan
+	// counts the /v-marked word as an ordinary position, this is the
 	// phase-2 half). Delivered UNQUOTED, exactly like the
 	// expecting-Function arrival path below — a Quoted delivery binds a
 	// quoted param, which the VM honours as data while the interpreter
@@ -2650,9 +2604,9 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 		return e.stepLiteral()
 	}
 	e.Tape.Set(e.Pointer, v)
-	// (The use is recorded inside ResolveRef, covering this `/r` path, the
+	// (The use is recorded inside ResolveRef, covering this `/v` path, the
 	// `ref` word, and export-map reference values alike.)
-	// `/r` resolves the name to its bound value and ADVANCES the
+	// `/v` resolves the name to its bound value and ADVANCES the
 	// pointer, exactly like pushing a literal — it does NOT dispatch a
 	// resolved function (that is what a bare word does). The value
 	// stays a plain Function, so it still dispatches when later stepped
@@ -2666,8 +2620,8 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 
 // hasPendingForwardCollecting reports whether a parked Forward in the
 // current paren scope is still collecting arguments — the generic twin
-// of hasPendingForwardExpectingFunction, used by stepWordRef to decide
-// whether a `/r` reference should ARRIVE (feed the forward) rather than
+// of hasPendingForwardExpectingFunction, used by stepWordVal to decide
+// whether a `/v` reference should ARRIVE (feed the forward) rather than
 // be pushed behind the pointer.
 func (e *Engine) hasPendingForwardCollecting() bool {
 	for i := e.Pointer - 1; i >= 0; i-- {
@@ -2685,19 +2639,21 @@ func (e *Engine) hasPendingForwardCollecting() bool {
 func (e *Engine) stepWord(val Value) error {
 	w, _ := AsWord(val)
 
-	// /u modifier — see stepWordUsurp. Handled before the /r branch
-	// so the /ur combo usurps rather than plain-referencing.
+	// /u modifier — see stepWordUsurp. Handled before the /v branch
+	// so the /uv combo usurps rather than plain-referencing.
 	if w.ForceUsurp {
 		return e.stepWordUsurp(val, w)
 	}
 
-	// /r modifier: resolve the name to its bound Function value as data,
+	// /v modifier: resolve the name to its bound Function value as data,
 	// with no argument collection or dispatch. The FnDef binding comes
 	// back as an (unquoted) Function value that sits on the stack like any
-	// other piece of data — exactly the case `ref` exists to enable. /r is
-	// legal only for function words; a non-fn binding raises illegal_ref.
-	if w.ForceRef {
-		return e.stepWordRef(val, w)
+	// other piece of data — exactly the case `valof` exists to enable. /v
+	// is TOTAL over binding kinds: for a fn it suppresses the call, for
+	// anything else it is the identity, so one spelling reads a slot whose
+	// kind is not known statically. Only an unbound name refuses (NUR085).
+	if w.ForceVal {
+		return e.stepWordVal(val, w)
 	}
 
 	// If there is a pending forward whose next slot is /q-marked
@@ -3184,10 +3140,10 @@ func (e *Engine) dynShuffleConsumerAt(idx int) bool {
 	if err != nil || !DynStackShuffleWords[w.Name] {
 		return false
 	}
-	// A modifier (/N, /f, /s, /q, /r, /u) changes the collection shape —
+	// A modifier (/N, /f, /s, /q, /v, /u) changes the collection shape —
 	// stay conservative and treat the modified word as an ordinary
 	// statement-position consumer.
-	if w.ArgCount != -1 || w.ForceForward || w.ForceStack || w.ForceRef || w.ForceUsurp {
+	if w.ArgCount != -1 || w.ForceForward || w.ForceStack || w.ForceVal || w.ForceUsurp {
 		return false
 	}
 	fn := e.Registry.Lookup(w.Name)
@@ -3207,7 +3163,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Per-export module policy gate (NUR045): every named- and value-
 	// dispatch route funnels its matched signature through here — the
 	// direct wrapper call (`TimeUtil.sleep 800`), the module-preamble
-	// fn call, AND the rebound laundering path (`def s TimeUtil.sleep/r
+	// fn call, AND the rebound laundering path (`def s TimeUtil.sleep/v
 	// s 300`, whose rebinding copied the stamped inner sigs) — so ONE
 	// gate covers them all. Nil ModuleCall (any non-module signature)
 	// costs one pointer test; check mode is skipped inside the helper.
@@ -3547,10 +3503,10 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	if err := e.spliceMatchResults(match, sortedIndices, n, results); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return err
 	}
-	// ParkResult words (notably `ref`) leave their result as inert data at
+	// ParkResult words (notably `valof`) leave their result as inert data at
 	// the call site rather than re-stepping it: advance the pointer past the
 	// spliced result so an unquoted Function value does NOT auto-dispatch
-	// here (matching the `/r` word-suffix). The value still dispatches when
+	// here (matching the `/v` word-suffix). The value still dispatches when
 	// re-stepped elsewhere — retrieved from a map, unwrapped from a paren.
 	if match.Sig.ParkResult() {
 		e.Pointer += len(results)
@@ -4006,11 +3962,11 @@ func (e *Engine) stepLiteral() error {
 		// stays data (`typeof IO.stdin`, `def sqrt MathUtil.sqrt` — the
 		// pinned reference idioms). A slot that SPECIFICALLY expects a
 		// Function always admits (the designed reference intercept,
-		// e.g. `each`); explicit data intent spells `/r` — either
+		// e.g. `each`); explicit data intent spells `/v` — either
 		// already Quoted, or the group's trailing Word/__DM marker
 		// consumed here exactly as execFnDefLiteral's peek does
-		// (`def g M.w/r`: the fn arrives mid-collection before that
-		// peek can run); user-written reference expressions ((inc/r),
+		// (`def g M.w/v`: the fn arrives mid-collection before that
+		// peek can run); user-written reference expressions ((inc/v),
 		// (usurp sub2)) carry no tag.
 		if matches && val.ReachGroup && !val.Quoted &&
 			!SigArgType(fwd.Sig, nextIdx).ConformsTo(TFunction) {
@@ -4025,7 +3981,7 @@ func (e *Engine) stepLiteral() error {
 			}
 			switch {
 			case marked:
-				// `/r` data intent — collected below as the reference.
+				// `/v` data intent — collected below as the reference.
 			case fnValueHasZeroArgSig(val):
 				// A 0-arg overload makes the dot-read a PROPERTY call
 				// (`typeof IO.stdin` → the stream, `def g Parse.grammar`
@@ -5118,7 +5074,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// whole environment, NUR035 — which cannot happen when there are no
 	// arg-taking signatures to eclipse.) The exception itself yields to
 	// an EXPLICIT modifier: a Word/__DM marker after the group's close
-	// paren (`m.z/r`, `m.z/q`) states data intent, and dispatching here
+	// paren (`m.z/v`, `m.z/q`) states data intent, and dispatching here
 	// would consume the fn before the post-collapse marker peek could
 	// see it — so a marked 0-arg read defers like any other fn.
 	if valIdx > 0 && valIdx+1 < e.Tape.Len() &&
@@ -5189,7 +5145,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		w.ForceStack = true
 	}
 
-	// A `/r` or `/q` modifier on a paren / dotted-path result is emitted by
+	// A `/v` or `/q` modifier on a paren / dotted-path result is emitted by
 	// the parser as a Word/__DM marker right after the group (/u /s /f /N
 	// are the usurp / stack-args / forward-args / force-arity words). Peek
 	// and consume it: it leaves the function inert (data).
@@ -5343,7 +5299,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		var arityPick *FnSig
 		for i := range ownSigs {
 			if len(ownSigs[i].Body()) == 0 {
-				continue // native ref sig — not a wrapper/preamble body
+				continue // native valof sig — not a wrapper/preamble body
 			}
 			if wrapperSig == nil {
 				wrapperSig = &ownSigs[i] // last resort: first body-bearing sig
@@ -5408,7 +5364,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Pure-stack match: dispatch via execMatch the same way a bare
 	// word with no forward args would. A NATIVE REFERENCE into a module
-	// sub-registry (`assert-equal/r` in an export map — body-less sigs, a
+	// sub-registry (`assert-equal/v` in an export map — body-less sigs, a
 	// real Go handler, so the wrapper branch above deliberately skips it)
 	// still carries its owning registry on match.Reg, exactly like the
 	// trivial-delegation dispatch: the recorder's poly re-match
@@ -5744,7 +5700,7 @@ func (e *Engine) ExecFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// (swap/prefix form) or upcoming forward tokens (`Pkg.fn a b`) — that
 	// matched no signature is an ERROR HERE, at the dispatch site
 	// (design/FN-VALUE-DISPATCH.0.md). Guards keep the detection precise:
-	// named (not an anonymous lambda value), not explicitly inert (`/r` /
+	// named (not an anonymous lambda value), not explicitly inert (`/v` /
 	// `quote` set Quoted), and at least one candidate arg available — so a
 	// bare function-as-value reference with no args is left alone, which is
 	// how a function is passed as data.
@@ -5755,7 +5711,7 @@ func (e *Engine) ExecFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// word": any Any-typed slot cleared the residue, so `print (IO.read
 	// "/nonexistent")` printed the FUNCTION and exited 0, and `boru check`
 	// reported it clean. Composition that wants the value as data now says
-	// so — `f/r` — and the judgement no longer depends on what happens to
+	// so — `f/v` — and the judgement no longer depends on what happens to
 	// the value afterwards.
 	//
 	// Check mode reports the same finding as a diagnostic instead, under the
@@ -5809,7 +5765,7 @@ func (e *Engine) ExecFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 			} else {
 				return makeBoruErrorAt("uncalled_function", detail,
 					fnDef.Name, e.effectiveSource(),
-					"hint: check the call's argument types and arity — or use "+fnDef.Name+"/r to push the function as a value deliberately",
+					"hint: check the call's argument types and arity — or use "+fnDef.Name+"/v to push the function as a value deliberately",
 					pos)
 			}
 		}
@@ -6252,7 +6208,7 @@ func (e *Engine) fnValueWouldWiden(fnVal Value, completed, idx int) bool {
 }
 
 // dispatchModAt reports whether a dispatch-modifier marker (Word/__DM —
-// the parser's `/r` / `/q` emission) sits at tape index idx. Used by the
+// the parser's `/v` / `/q` emission) sits at tape index idx. Used by the
 // 0-arg property-call exception above to yield to explicit data intent.
 func (e *Engine) dispatchModAt(idx int) bool {
 	if idx >= e.Tape.Len() {
@@ -6288,7 +6244,7 @@ func fnHasForwardSigPast(fd FnDefInfo, floor int) bool {
 // intercept), and execFnDefLiteral clears it the moment the
 // call-vs-data decision is made, so it never rides into a binding or a
 // container. User-written parens carry no ReachGroup and tag nothing;
-// `/r` data intent arrives Quoted and is never refused.
+// `/v` data intent arrives Quoted and is never refused.
 func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 	if !wasReachGroup || closeIdx != idx+2 || idx >= e.Tape.Len() {
 		return
@@ -6306,18 +6262,18 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // value as its RETURN, 0 otherwise. Returning a function is not a fresh use of
 // it, so stepCloseParen's rewind must step PAST that value rather than re-step
 // it into a call (design/FUNCTION-VALUE-SCOPE.0.md §12.6; `def h fn
-// [[f:Function] [Any] [f/r]]` returned 7 where it must return the fn value).
+// [[f:Function] [Any] [f/v]]` returned 7 where it must return the fn value).
 //
-// This is the ParkResult idiom (see spliceMatchResults), which `ref` already
+// This is the ParkResult idiom (see spliceMatchResults), which `valof` already
 // uses, and it is deliberately POSITIONAL: inertness is a property of the
 // pointer at one index at one moment, and nothing is stamped on the value.
-// That matters because `/r` is NOT sticky — the parked value must still
+// That matters because `/v` is NOT sticky — the parked value must still
 // dispatch at its next use, read back from a map or handed to `apply`. The two
 // value-borne markers nearby are both wrong here: `Quoted` travels with the
 // value and would make it permanently inert, and `ReachGroup` is a barrier
 // hint of the opposite polarity.
 //
-// A USER paren still re-steps (lang/spec/ref.tsv §2) because it carries no
+// A USER paren still re-steps (lang/spec/valof.tsv §2) because it carries no
 // FrameOpenInfo — that payload is machine-generated only (NewFrameOpen /
 // NewFrameOpenSpan are its sole constructors), so no source text can forge it,
 // and it is the ONLY thing distinguishing the two collapses. Callers snapshot
@@ -6398,7 +6354,7 @@ func (e *Engine) creditParenSurvivorSkips(closeIdx int, reStepped bool) {
 	// about to be COLLECTED as a forward argument — which is the whole point
 	// of a `Function`-typed slot — and the collection hook fires OnPushLit for
 	// it once the match completes, so the credit is owed. Raised by the PR
-	// #387 review: `g (z/r) 777` into a Function slot recorded `fn z` twice
+	// #387 review: `g (z/v) 777` into a Function slot recorded `fn z` twice
 	// without this split.
 	//
 	// Kept as one boolean rather than guard clauses: an early `continue` is a
@@ -6535,7 +6491,7 @@ const (
 // nothing there — no claim is provable), probeOptimistic (a group /
 // reach / interp expression whose result type is unknowable — the
 // runtime collects it optimistically), or probeValue with the value the
-// token would contribute (a literal, a binding's value, a `/r`
+// token would contribute (a literal, a binding's value, a `/v`
 // reference).
 func (e *Engine) forwardClaimProbe(idx int) (Value, int) {
 	if idx >= e.Tape.Len() {
@@ -6552,8 +6508,8 @@ func (e *Engine) forwardClaimProbe(idx int) (Value, int) {
 		if werr != nil { //covergate:allow AsWord cannot fail after an IsWord guard — the payload IS a WordInfo (§engine)
 			return Value{}, probeNone
 		}
-		if wi.ForceRef {
-			// `/r`: one Function reference datum
+		if wi.ForceVal {
+			// `/v`: one Function reference datum
 			return Value{Parent: TFunction, Data: FnDefInfo{}}, probeValue
 		}
 		top, bound := e.Registry.Defs.Top(wi.Name)
@@ -8425,13 +8381,13 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break // named-type value doesn't fit this slot
 					}
 
-					// 1.4: function word — boundary, stop. A `/r`-marked
+					// 1.4: function word — boundary, stop. A `/v`-marked
 					// word is NO boundary in principle (it denotes its
 					// REFERENCE value, NUR050/G12) — but since the ADR-011
 					// collapse its Defs binding IS a Function value, so
 					// every slot that can admit the reference (a Function
 					// slot, an Any slot) already claimed it in the
-					// def-binding branch above; a /r word reaching here
+					// def-binding branch above; a /v word reaching here
 					// faces a slot no Function can fill and stops the scan
 					// exactly like its unmarked twin. (Lookup and Defs.Top
 					// read the same store, so this arm is only reached on

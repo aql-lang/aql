@@ -102,7 +102,7 @@ func TestStampModuleBindingValueRead(t *testing.T) {
 module [
   def crlf (convert Bytes "\r\n")
   def read-modbind fn [[b:Bytes] [Any] [ size (b add crlf) ]]
-  export "SockT" { read-modbind: read-modbind/r }
+  export "SockT" { read-modbind: read-modbind/v }
 ] import
 `)
 	reason, ok := stampOutcome(evs, "read-modbind")
@@ -119,7 +119,7 @@ func TestStampLocalDelimStillStamps(t *testing.T) {
 module [
   def read-local fn [[b:Bytes] [Any] [ def d (convert Bytes "\r\n") size (b add d) ]]
   def read-param fn [[b:Bytes d:Bytes] [Any] [ size (b add d) ]]
-  export "SockT" { read-local: read-local/r read-param: read-param/r }
+  export "SockT" { read-local: read-local/v read-param: read-param/v }
 ] import
 `)
 	for _, name := range []string{"read-local", "read-param"} {
@@ -141,7 +141,7 @@ func TestStampModuleFlexReadStampsViaDynScope(t *testing.T) {
 module [
   def shared (flex {n: 1})
   def read-flex fn [[k:String] [Any] [ shared get k ]]
-  export "SockT" { read-flex: read-flex/r }
+  export "SockT" { read-flex: read-flex/v }
 ] import
 `)
 	// Stage-2 (detached-stamp flex delivery): a module-scope mutable-reference
@@ -165,7 +165,7 @@ module [
   def shared (flex [])
   def push-flex fn [[s:String] [Integer] [ def _ (shared push {v: s})  shared size ]]
   def read-flex fn [[i:Integer] [Any] [ shared get i ]]
-  export "SockT" { push-flex: push-flex/r read-flex: read-flex/r }
+  export "SockT" { push-flex: push-flex/v read-flex: read-flex/v }
 ] import
 `
 	prog := `[ (SockT.push-flex "a") (SockT.push-flex "b") (SockT.read-flex 0) (SockT.read-flex 1) ]`
@@ -199,7 +199,7 @@ module [
     def _ (parse p src)
     slice st (acc size) acc
   ] ]
-  export "Lex" { lex: lex-it/r }
+  export "Lex" { lex: lex-it/v }
 ] import
 `
 

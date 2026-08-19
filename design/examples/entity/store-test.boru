@@ -12,7 +12,7 @@
 import "boru:entity"
 import "boru:test" # Test.eq (illustrative assertion)
 
-export "StoreTest" {conformance:conformance/r}
+export "StoreTest" {conformance:conformance/v}
 
 def conformance fn store:Service None [
   def bus (Entity.bus) Entity.mount {} store bus

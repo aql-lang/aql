@@ -9,7 +9,7 @@ import (
 // whose signatures DISAGREED about argument sourcing advertised the forward
 // equivalence chain for all of them — including spellings it refuses.
 // `apply` is the recorded case (NUR023): its `[Function]` row is stack-only,
-// so `apply f/r 5` raises a signature error while the help promised
+// so `apply f/v 5` raises a signature error while the help promised
 // `apply x y <=> y apply x <=> y x apply`. `dot` (NUR049's subject) has
 // sixteen mixed-barrier rows with the same problem.
 //

@@ -16,7 +16,7 @@ def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]] 
 # (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
 
 ## shallow snapshot: reassignment vs pointer sharing
-# (omitted) 0-arg inner fn auto-fires as a value — the 'sharp edge' documented in lang/go/CLAUDE.md; needs /r to park
+# (omitted) 0-arg inner fn auto-fires as a value — the 'sharp edge' documented in lang/go/CLAUDE.md; needs /v to park
 # (omitted) shared-flex-pointer counter needs a more careful lambda-parking construction
 
 ## lambda gotchas
@@ -38,8 +38,8 @@ def sum fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [sum (n sub 1)
 def z fn [[] [] []] z 77	77	a [] -declared fn nets zero values, the 77 survives
 
 ## fn values as data / introspection
-def f fn [[x:Integer] [Integer] [add x 1]] def m {b: f/r} m.b 2	3	an applied member fn (arg supplied) dispatches
-def inc fn [[n:Integer] [Integer] [n add 1]] def ops {f: inc/r} ops.f 5	6	same via dot sugar
+def f fn [[x:Integer] [Integer] [add x 1]] def m {b: f/v} m.b 2	3	an applied member fn (arg supplied) dispatches
+def inc fn [[n:Integer] [Integer] [n add 1]] def ops {f: inc/v} ops.f 5	6	same via dot sugar
 # (omitted) introspection-word name varies; covered by fn-value.tsv
 def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]] ((mk 5) 10)	15	single-apply factory: the returned closure applied once
 

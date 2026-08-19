@@ -40,6 +40,14 @@ All six are the *same value*, not merely the same answer — `canon` of
 each is `deq` to `canon` of any other. The body's brackets are not
 optional: the body is always a list.
 
+Both halves are pinned, so this section cannot drift from the engine
+without a test failing: the six spellings each computing `42` are spec
+rows in [`lang/spec/fn-triple.tsv`](lang/spec/fn-triple.tsv) §2b, and
+the five `canon` equalities against the target form are
+`TestFnSignatureSpellingsAreOneValue` in
+`lang/go/test/fn_triple_compiled_test.go` (a `canon` of a function value
+does not compile, and the spec corpus admits no compile refusals).
+
 ### The one spelling that is not valid
 
 A **bracketed input** is not a longer way of writing a bare one. It
@@ -119,6 +127,57 @@ several spellings of one signature. Recorded as **NUR088**. Until that
 lands, apply S1 by hand — running `fmt` is necessary but not sufficient.
 
 
+## S1b — Lambdas: no outer parens, bare input for one parameter
+
+**Rule.** The same fewest-brackets rule applies to `=>` lambdas. The outer
+parens around a lambda are **never** required in a `def` operand position,
+and a single typed parameter needs no brackets either:
+
+```boru
+def i t:Any => [t/v]                        ;# YES — 1 pair (the body)
+def s [a:Integer b:Integer] => [add a b]    ;# YES — 2+ params bracket the input
+```
+
+Not these, which are the same lambdas written longer:
+
+```boru
+def i ([t:Any] => [t/v])                     ;# no — 2 bracket pairs + parens
+def s ([a:Integer b:Integer] => [add a b])   ;# no — the parens add nothing
+```
+
+**Calls take no parens at statement level.** Write `i 5`, not `(i 5)`.
+Parenthesise a call only when its *result* is an argument to something
+else — `print (i 5)`, `add 1 (i 5)` — or to bound a group.
+
+**Why the outer parens are redundant.** `def` has no `afn`/`=>` keyword
+slot — `boru describe def` lists 35 signatures and the lambda lands on
+the catch-all `[Atom Any]`. `=>` is a *grammar-level* fold: `A => B`
+parses as the paren group `(A afn B)` (`lang/go/CLAUDE.md`, "Lambda
+Syntax"), so the arrow binds tighter than `def`'s forward collection and
+the lambda arrives already whole. Writing your own parens around it just
+repeats a grouping the parser has already done.
+
+**The bare form takes exactly ONE parameter, and overrunning it fails
+silently.** In `x:Integer y:Integer => body` each pair closes separately,
+so the first strands (`lang/go/CLAUDE.md`, "Syntactic gotchas") — and
+nothing says so:
+
+```
+$ boru do 'def s x:Integer y:Integer => [add x y] end s 2 3'
+fn (Integer) {x:Integer} 2 3
+$ echo $?
+0
+```
+
+The stranded `{x:Integer}`, the uncalled fn, and both operands are just
+left on the stack. Two or more parameters therefore bracket the input
+list, as above — that is not a violation of this rule, it is the
+shortest spelling that parses.
+
+`boru fmt` does not normalise any of this either — same gap as S1
+(**NUR088**), so it is on the author.
+
+
 ## S2 — Forward call form is canonical
 
 Write `f a b c`, not the mirror-equivalent stack forms, in new code and
@@ -142,41 +201,54 @@ diagnostic. **Re-run examples after converting them** — this is not a
 formatting change, it is an edit to the expression.
 
 
-## S3 — Passing a function: use `/r`
+## S3 — Passing a function: use `/v`
 
 A bare name bound to a function **calls** it (ADR-011). To pass the
-function itself, write `/r`:
+function itself, write `/v`:
 
 ```boru
 each [f] xs        ;# a quotation naming f
-hof f/r xs         ;# f as an argument
+hof f/v xs         ;# f as an argument
 ```
 
 A bare `f` before a `Function`-typed slot happens to resolve as a
 reference today, but that exception is struck from ADR-011 and is
-scheduled for removal (**NUR078**). Write `/r` now.
+scheduled for removal (**NUR078**). Write `/v` now.
+
+S3 and S4 are the same operator seen from two sides: `/v` always means
+"the binding's value, not a call". Passing a function is the case where
+that matters most, because a bare name would call it instead.
+
+> **Renamed 2026-08-19.** `/v` was `/r`, and the word `ref` became
+> `valof` — deliberately not `val`, which is far too common a local name
+> to reserve (it broke four shipped sources in a first pass). The old
+> spellings are gone, not deprecated, and both fail loudly: `r` left the
+> modifier alphabet, so `f/r` is no longer a modifier at all — it parses
+> as an ordinary slash-bearing name and raises
+> `[boru/undefined_word]: undefined word: f/r`, exactly as `ref` does.
+> `def val …` stays legal.
 
 
-## S4 — Reading a parameter whose kind you do not know
+## S4 — Reading a value: `/v`
 
-`[p]` calls a function-bound parameter; `p/r` refuses a non-function one.
-Neither is total. When a parameter may hold either, read it positionally:
+A bare name bound to a function **calls** it. `/v` takes the binding's
+**value** instead, disabling the call — and it is total over every
+binding kind, so it is also how you read a parameter whose kind you do
+not know statically:
 
 ```boru
-def ident fn t:Any Any [(args).0]
+def ident t:Any => [t/v]   ;# 5 → 5, "s" → "s", a lambda → the lambda
 ```
 
-For an *enclosing* function's parameter, box it first — `args` is the
-innermost function's own argument list:
+For a non-function binding `/v` is simply the identity (`def n 5` then
+`n/v` is `5`), so you never have to know which case you are in. The word
+form is `valof`: `valof add` ≡ `add/v`.
 
-```boru
-def ctrue fn t:Any Function [ def bx [(args).0] ( fn f:Any Any [ bx.0 ] ) ]
-```
+The only refusal left is an **unbound** name — there is no value to take.
 
-Recorded as **NUR085**; see
-[`design/HIGHER-ORDER-FUNCTIONS.0.md`](design/HIGHER-ORDER-FUNCTIONS.0.md)
-§4 for the full idiom sheet.
-
+`(args).N` still reads a parameter positionally (and is the only way to
+reach an argument with no name), but it is no longer needed just to get
+a value out of a name.
 
 ## S5 — Computed keys: parenthesise for the quoting accessors
 

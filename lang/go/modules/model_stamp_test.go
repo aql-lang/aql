@@ -37,7 +37,7 @@ func TestModelActionStampsAtBuild(t *testing.T) {
 	r.EnableRuntimeStamping()
 	if !mw4OkFlag(t, r, mw4Imp+
 		`def myfn fn [[mod:Any] [Boolean] [true]]
-		 def spec {src:'a: 1', actions:{gen:([mod:Any] => [true]), named: myfn/r}}
+		 def spec {src:'a: 1', actions:{gen:([mod:Any] => [true]), named: myfn/v}}
 		 def m (Model.new spec) (Model.run m) get 'ok'`) {
 		t.Fatal("stamped-actions run ok = false, want true")
 	}
@@ -91,7 +91,7 @@ func TestModelActionCaptureDeclinesAndInterprets(t *testing.T) {
 	// flip the build's ok flag with NO action error, exactly as the
 	// interpreter ran it before the landing.
 	out := mcovRun(t, r, mw4Imp+
-		`def mk fn [[flag:Boolean] [Map] [ def act ([mod:Any] => [flag]) {src:'a: 1', actions:{gen: act/r}} ]]
+		`def mk fn [[flag:Boolean] [Map] [ def act ([mod:Any] => [flag]) {src:'a: 1', actions:{gen: act/v}} ]]
 		 def m (Model.new (mk false)) def res (Model.run m) (res get 'ok') ((res get 'errs') size)`)
 	if n, err := out[len(out)-1].AsConcreteInteger(); err != nil || n != 0 {
 		t.Fatalf("capturing action errs size = %v (%v), want 0 (the capture must reach the body)", out[len(out)-1], err)

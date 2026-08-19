@@ -17,7 +17,7 @@
 # NOTE: the count/binding-as-state idiom mirrors PROCESSES.0 §10 verbatim.
 
 export "Presence" {
-  loop: loop/r
+  loop: loop/v
 }
 
 # `loop <user>` — never returns until told to stop (a process body).

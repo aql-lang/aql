@@ -60,7 +60,7 @@ import module [
       (iota k) each [var [[j] j]]
     ]
   ]
-  export "M" { f: f/r }
+  export "M" { f: f/v }
 ]
 import "boru:matrix-util"
 (M.f (MatrixUtil.create [[1 2] [3 4]]) end)`, "[0 1]")
@@ -75,7 +75,7 @@ import module [
       (iota (MatrixUtil.rows mat)) each [var [[j] MatrixUtil.elem mat j j]]
     ]
   ]
-  export "M" { diag: diag/r }
+  export "M" { diag: diag/v }
 ]
 import "boru:matrix-util"
 (M.diag (MatrixUtil.create [[1 2] [3 4]]) end)`, "[1.0 4.0]")
@@ -84,7 +84,7 @@ import "boru:matrix-util"
 import module [
   import "boru:matrix-util"
   def r0 fn [ [mat:Any] [List] [ MatrixUtil.row mat 0 ] ]
-  export "M" { r0: r0/r }
+  export "M" { r0: r0/v }
 ]
 import "boru:matrix-util"
 (M.r0 (MatrixUtil.create [[1 2] [3 4]]) end)`, "[1.0 2.0]")
@@ -96,7 +96,7 @@ import module [
   import "boru:matrix-util"
   def t1 fn [ [mat:Any] [Boolean] [ mat is MatrixUtil.Matrix ] ]
   def t2 fn [ [mat:Any] [Boolean] [ mat is MatrixUtil.Vector ] ]
-  export "M" { t1: t1/r t2: t2/r }
+  export "M" { t1: t1/v t2: t2/v }
 ]
 import "boru:matrix-util"
 def m (MatrixUtil.create [[1 2] [3 4]])
@@ -137,7 +137,7 @@ def f fn [ [mat:MatrixUtil.Matrix] [Integer] [ MatrixUtil.cols mat ] ]
 import module [
   import "boru:matrix-util"
   def f fn [ [mat:MatrixUtil.Matrix] [Integer] [ MatrixUtil.cols mat ] ]
-  export "MA" { f: f/r }
+  export "MA" { f: f/v }
 ]
 import "boru:matrix-util"
 (MA.f (MatrixUtil.create [[1 2] [3 4]]) end)`, "2")

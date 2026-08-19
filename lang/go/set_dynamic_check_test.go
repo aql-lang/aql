@@ -36,7 +36,7 @@ func TestSetOverDynamicReceiverChecksClean(t *testing.T) {
 
 	// The trie put-kid/mk-node shape: a set over a dynamic node, result consumed.
 	clean := `
-def mk fn [[fin:Any val:Any kids:Any] [Map] [do {e: [fin], v: [val], k: [kids]}]] end
+def mk fn [[fin:Any vv:Any kids:Any] [Map] [do {e: [fin], v: [vv], k: [kids]}]] end
 def pk fn [[child:Map ch:String nd:Map] [Map] [
   ((nd "kids" get) set (ch) child) (nd "val" get) (nd "end" get) mk
 ]] end`

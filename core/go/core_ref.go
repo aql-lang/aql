@@ -18,20 +18,20 @@ package core
 //
 // The second return is false when the name is not bound at all. The
 // caller decides how to report the failure — the `ref` word raises
-// an undefined_word error, the /r short-circuit in stepWord does the
+// an undefined_word error, the /v short-circuit in stepWord does the
 // same.
 //
-// Lives in eng because stepWord's /r path needs it during the run
+// Lives in eng because stepWord's /v path needs it during the run
 // loop; the `ref` word itself is registered in the language layer.
 func ResolveRef(r *Registry, name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false
 	}
 	if tv, ok := r.TopTypeBody(name); ok {
-		// Resolving a name through a reference (`name/r`, the `ref` word, an
+		// Resolving a name through a reference (`name/v`, the `ref` word, an
 		// export-map value) IS a use of that def — record it so unused-def
 		// analysis in check mode does not falsely flag reference-exported
-		// public words (the canonical `export "X" { f: impl/r }` form).
+		// public words (the canonical `export "X" { f: impl/v }` form).
 		r.noteAnalysisUse(name)
 		return tv, true
 	}
@@ -51,7 +51,7 @@ func ResolveRef(r *Registry, name string) (Value, bool) {
 }
 
 // IsFunctionRef reports whether a value resolved by ResolveRef is a
-// function word — the only binding kind `/r` and `ref` are permitted to
+// function word — the only binding kind `/v` and `ref` are permitted to
 // reference. The reference surfaces exist to break the asymmetry between
 // value bindings (a bare name already pushes the value) and fn bindings
 // (a bare name invokes); for a non-fn binding there is no asymmetry to
@@ -115,7 +115,7 @@ func UsurpFunction(v Value) (Value, bool) {
 		// A Go re-dispatch wrapper: it re-dispatches the ORIGINAL (which carries
 		// its own frame) via a Go handler, so it is a GoImpl — replacing any
 		// inherited boru impl. RunInCheck lets the carrier compiler step the
-		// re-dispatch and compile the original call directly — `usurp (ref f) a
+		// re-dispatch and compile the original call directly — `usurp (valof f) a
 		// b` lowers exactly like `f b a` — instead of refusing the opaque
 		// wrapper dispatch. Soundness rides the differential (the compiled
 		// re-dispatch is byte-identical to the runtime one).

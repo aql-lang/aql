@@ -26,7 +26,7 @@ import "boru:serve"          # send (fire-and-forget) into the notify sink
 # returning a `Service` (§2). `import` is the only loader; no plugin mechanism.
 # ---------------------------------------------------------------------------
 export "TodoStore" {
-  New: New/r
+  New: New/v
 }
 
 # `New {notify: <Service>}` -> Service

@@ -280,7 +280,7 @@ func TestW4FileModuleFallback(t *testing.T) {
 	// the file-module load path.
 	dir := t.TempDir()
 	mod := filepath.Join(dir, "w4mod.boru")
-	src := "def w4double fn [[n:Integer] [Integer] [(n 2 mul)]]\n\nexport \"W4\" {double:w4double/r}\n"
+	src := "def w4double fn [[n:Integer] [Integer] [(n 2 mul)]]\n\nexport \"W4\" {double:w4double/v}\n"
 	if err := os.WriteFile(mod, []byte(src), 0644); err != nil {
 		t.Fatal(err)
 	}

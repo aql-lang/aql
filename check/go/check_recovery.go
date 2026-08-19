@@ -290,7 +290,7 @@ func refuseStrandedMemberFn(e *core.Engine, positions []int) {
 		// read is the hazard this guard owns (design/EDGE-SPEC-FINDINGS.0.md §2):
 		// its result is a checker-typed dynamic(Any) whose PROVENANCE (memberFnRead)
 		// marks it as a fn-valued member surfaced by a get-family read. A bare
-		// Function value here (a `c/r` param ref, a factory closure) is a
+		// Function value here (a `c/v` param ref, a factory closure) is a
 		// DIFFERENT boundary (M2a `apply`, the residual leading/trailing apply) with
 		// its own handling — do NOT claim it, or those refuse with the wrong reason.
 		if es.MemberFnRead(v.ID) {

@@ -53,7 +53,7 @@ module [
     ]) store
     store
   ]]
-  export "M" { mk-store: mk-store/r }
+  export "M" { mk-store: mk-store/v }
 ] import`,
 		`def s (M.mk-store)
 call {op:"put" key:"b/x" val:"1"} s drop

@@ -1176,7 +1176,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		MiniKind:       top.MiniKind,
 		// A word-extension clone's provenance marker rides the aggregate:
 		// when the newest entry is a clone the walk stopped there, so the
-		// aggregate IS the clone's view — a `name/r` reference (ResolveRef
+		// aggregate IS the clone's view — a `name/v` reference (ResolveRef
 		// wraps the aggregate) must stay recognisable at export transplant.
 		Extends: top.Extends,
 		// The aggregate carries the newest entry's identity token (NUR031)

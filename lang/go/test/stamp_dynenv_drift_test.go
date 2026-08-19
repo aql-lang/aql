@@ -81,7 +81,7 @@ module [
   def srv3 fn [[opts:Map] [Any] [
     spawn [ risky [ 0 ] 0 ]
   ]]
-  export "DrfT" { mk: mk-store/r srv: srv/r srv2: srv2/r srv3: srv3/r }
+  export "DrfT" { mk: mk-store/v srv: srv/v srv2: srv2/v srv3: srv3/v }
 ] import
 `)
 	// The store factory and the do-bearing helper stamped before the fix
@@ -137,7 +137,7 @@ module [
     risky [ call {op:"append" key: "k" chunk: "c"} store drop true ] store
     call {op:"size" key: "k"} store
   ]]
-  export "DrfT" { srv: srv/r }
+  export "DrfT" { srv: srv/v }
 ] import
 `, `DrfT.srv {}`)
 	// Two risky calls (1 each: handled-ok flags) then the size read: 2

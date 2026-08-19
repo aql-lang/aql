@@ -28,8 +28,8 @@ import (
 //   - M2d fn-value-as-operand (module-minilang.tsv:306-315, corpus-core:134):
 //     `is`'s VALUE slot treats a fn operand as DATA (FnInertArgs — positional,
 //     because a Function in its TYPE slot is a predicate the handler INVOKES
-//     and must keep refusing), and a `/r` dispatch-mod marker survives the
-//     check pass's carrier strip so an inline `(lambda)/r` parks exactly as
+//     and must keep refusing), and a `/v` dispatch-mod marker survives the
+//     check pass's carrier strip so an inline `(lambda)/v` parks exactly as
 //     the runtime does. The two-lambda walk positives live in
 //     TestWalkHookClosureCompiles.
 
@@ -94,20 +94,20 @@ func TestApplyOverParamFnCompiles(t *testing.T) {
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"recursion.tsv:91 — apply over a Function param",
-			`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/r) 5`,
+			`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/v apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/v) 5`,
 			"[10]"},
 		{"recursion.tsv:90 — nested: param fn threaded through two units",
-			`def g ([x:Integer] => [x add 1]) def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply]] def t fn [[comp:Function] [Integer] [def a (5 comp/r h) def b (7 comp/r h) a add b]] (g/r t)`,
+			`def g ([x:Integer] => [x add 1]) def h fn [[comp:Function v:Integer] [Integer] [v comp/v apply]] def t fn [[comp:Function] [Integer] [def a (5 comp/v h) def b (7 comp/v h) a add b]] (g/v t)`,
 			"[14]"},
 		{"recursion.tsv:92 — outer binding untouched by the param shadow",
-			`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) def _ (runner (doubler/r) 5) myfn 5`,
+			`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/v apply]] def doubler ([x:Integer] => [x mul 2]) def _ (runner (doubler/v) 5) myfn 5`,
 			"[1005]"},
-		// Two args below the fn + a QUOTED (inline-lambda /r) callee: the
+		// Two args below the fn + a QUOTED (inline-lambda /v) callee: the
 		// operand-ORDER pin (top arg → first param: x=3, y=10 → 3*2+10=16) and
 		// the OpCallDynApplyTop unquote pin in one — OpCallDynTrailTop would
 		// leave the parked value as data and raise a return-count error.
 		{"2-arg apply, quoted callee: order + unquote pin",
-			`def h fn [[comp:Function a:Integer b:Integer] [Integer] [a b comp/r apply]] h (([x:Integer y:Integer] => [x mul 2 add y])/r) 10 3`,
+			`def h fn [[comp:Function a:Integer b:Integer] [Integer] [a b comp/v apply]] h (([x:Integer y:Integer] => [x mul 2 add y])/v) 10 3`,
 			"[16]"},
 	} {
 		fnValueM2Native(t, c.name, c.src, c.want)
@@ -117,10 +117,10 @@ func TestApplyOverParamFnCompiles(t *testing.T) {
 	// REFUSE (never compile the fn+args as unapplied data, never drop an apply
 	// the interpreter performed), with faithful fallback.
 	fnValueM2Refusal(t, "mid-body apply (result dropped, tail is a literal)",
-		`def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply drop 42]] h (([x:Integer] => [x add 1])/r) 5`,
+		`def h fn [[comp:Function v:Integer] [Integer] [v comp/v apply drop 42]] h (([x:Integer] => [x add 1])/v) 5`,
 		"apply of a dynamic fn value not at the body tail")
 	fnValueM2Refusal(t, "double apply (two pendings, one window)",
-		`def h fn [[c1:Function c2:Function v:Integer] [Integer] [v c1/r apply c2/r apply]] h (([x:Integer] => [x add 1])/r) (([x:Integer] => [x mul 3])/r) 5`,
+		`def h fn [[c1:Function c2:Function v:Integer] [Integer] [v c1/v apply c2/v apply]] h (([x:Integer] => [x add 1])/v) (([x:Integer] => [x mul 3])/v) 5`,
 		"apply of a dynamic fn value not at the body tail")
 }
 
@@ -133,26 +133,26 @@ func TestPathModifierMapFnCompiles(t *testing.T) {
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"path-modifier.tsv:17 — /u leading apply",
-			`def m {a:add/r} end m.a/u 1 2`, "[3]"},
+			`def m {a:add/v} end m.a/u 1 2`, "[3]"},
 		{"path-modifier.tsv:18 — /u non-commutative (usurp order pin)",
-			`def m {s:sub/r} end m.s/u 10 3`, "[7]"},
+			`def m {s:sub/v} end m.s/u 10 3`, "[7]"},
 		{"path-modifier.tsv:19 — nested map path",
-			`def o {m:{a:add/r}} end o.m.a/u 1 2`, "[3]"},
+			`def o {m:{a:add/v}} end o.m.a/u 1 2`, "[3]"},
 		{"path-modifier.tsv:23 — /f forward-args (order pin: -7, not 7)",
-			`def m {s:sub/r} end m.s/f 10 3`, "[-7]"},
+			`def m {s:sub/v} end m.s/f 10 3`, "[-7]"},
 		{"path-modifier.tsv:28 — /2 force-arity",
-			`def m {a:add/r} end m.a/2 1 2`, "[3]"},
+			`def m {a:add/v} end m.a/2 1 2`, "[3]"},
 		{"path-modifier.tsv:24 — /s TRAILING window (stack-args wrapper is BarrierPos 0)",
-			`def m {s:sub/r} end 10 3 m.s/s`, "[7]"},
+			`def m {s:sub/v} end 10 3 m.s/s`, "[7]"},
 		{"path-modifier.tsv:54 — /s over a composed wrapper chain",
-			`def m {s:sub/r} end 10 3 stack-args (force-arity 2 (m.s))`, "[7]"},
+			`def m {s:sub/v} end 10 3 stack-args (force-arity 2 (m.s))`, "[7]"},
 		{"path-modifier.tsv:55 — word-form chain of three wrappers",
-			`def m {a:add/r} end force-arity 2 (usurp (forward-args (m.a))) 1 2`, "[3]"},
+			`def m {a:add/v} end force-arity 2 (usurp (forward-args (m.a))) 1 2`, "[3]"},
 		// An inert trailing concrete fn value is DATA in both engines — the
 		// trailing-window shape must not fire for a non-event fn (it requires
 		// an event-produced fn value on top).
 		{"inert parked fn stays data (no phantom apply)",
-			`def f ([x:Integer] => [x add 1]) 10 3 f/r`, "[10 3 fn f(Integer)]"},
+			`def f ([x:Integer] => [x add 1]) 10 3 f/v`, "[10 3 fn f(Integer)]"},
 		// The reverted-shape pin (design §6 M2 revert criteria): the
 		// dispatch-recovery operand-order shape must keep the interpreter's
 		// operand order — 'x1', never the poly-lowered '1x' of the reverted
@@ -220,13 +220,13 @@ func TestIsFnValueOperandCompiles(t *testing.T) {
 			`import "boru:minilang"  (+re/[a-z]+/) is Function`, "[true]"},
 		{"module-minilang.tsv:315 — def-aliased member type",
 			`import "boru:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex`, "[true]"},
-		// Inline `(lambda)/r` — the dispatch-mod marker must survive the check
+		// Inline `(lambda)/v` — the dispatch-mod marker must survive the check
 		// pass's carrier strip (toCarrier) so it parks the lambda exactly as
 		// the runtime does, instead of leaking into the residual as a phantom.
 		{"module-minilang.tsv:314 — inline parked lambda as the is-value",
-			`import "boru:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)`, "[false]"},
-		{"marker-drop parity: /r on a non-fn paren result is a no-op",
-			`(1 add 2)/r`, "[3]"},
+			`import "boru:minilang"  ([x:Any] => [x])/v is (MiniLang.Re)`, "[false]"},
+		{"marker-drop parity: /v on a non-fn paren result is a no-op",
+			`(1 add 2)/v`, "[3]"},
 	} {
 		fnValueM2Native(t, c.name, c.src, c.want)
 	}

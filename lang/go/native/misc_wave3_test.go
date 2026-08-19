@@ -9,7 +9,7 @@ import (
 
 // Wave-3 coverage for native_control.go (case / for / do / error / clause-
 // list if), conditional.go, forloop.go, listops.go, native_accessor.go
-// (has / getr / dotr), native_ref.go (ref / apply / rebind / usurp /
+// (has / getr / dotr), native_valof.go (valof / apply / rebind / usurp /
 // stack-args / forward-args / force-arity), getpath.go, and istype.
 
 func w3Misc(t *testing.T, src string) (string, error) {
@@ -353,13 +353,15 @@ func TestW3GetrCheckMode(t *testing.T) {
 // ---- ref / apply / rebind / usurp / stack-args / forward-args / force-arity ----
 
 func TestW3RefApply(t *testing.T) {
-	// /r keeps the paren-produced Function as data — without it the
+	// /v keeps the paren-produced Function as data — without it the
 	// named Function auto-dispatches against the stack before apply.
-	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  5 ((ref inc)/r) apply`, `6`)
-	w3MiscWant(t, `def inc2 fn [[n:Integer][Integer][n add 1]]  5 inc2/r apply`, `6`)
-	w3MiscWant(t, `def z fn [[][Integer][42]]  z/r apply`, `42`)
-	w3MiscErr(t, `ref no-such-w3`, "not bound")
-	w3MiscErr(t, `def x 5 ref x`, "requires a function word")
+	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  5 ((valof inc)/v) apply`, `6`)
+	w3MiscWant(t, `def inc2 fn [[n:Integer][Integer][n add 1]]  5 inc2/v apply`, `6`)
+	w3MiscWant(t, `def z fn [[][Integer][42]]  z/v apply`, `42`)
+	w3MiscErr(t, `valof no-such-w3`, "not bound")
+	// `valof` is TOTAL over binding kinds: a non-fn binding is the identity,
+	// not a rejection. Only an unbound name refuses (the row above).
+	w3MiscWant(t, `def x 5  valof x`, `5`)
 	// apply rejections (direct calls).
 	if _, err := applyHandler([]Value{NewInteger(5)}, nil, nil, nil); err == nil ||
 		!strings.Contains(err.Error(), "expected Function") {
@@ -396,7 +398,7 @@ func TestW3ApplyRebindReach(t *testing.T) {
 func TestW3Usurp(t *testing.T) {
 	// Value form and by-name form.
 	w3MiscWant(t, `def f fn [[x:Integer] [Integer] [mul x 2]]  3 (usurp f)`, `6`)
-	w3MiscWant(t, `def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/ur apply`, `7`)
+	w3MiscWant(t, `def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/uv apply`, `7`)
 	w3MiscErr(t, `usurp no-such-w3`, "not bound")
 	w3MiscErr(t, `def x 5 usurp x`, "requires a function word")
 	// A non-fn VALUE is rejected by the value form (direct call).
@@ -408,7 +410,7 @@ func TestW3Usurp(t *testing.T) {
 }
 
 func TestW3StackForwardArgs(t *testing.T) {
-	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  5 (stack-args inc)/r apply`, `6`)
+	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  5 (stack-args inc)/v apply`, `6`)
 	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  (forward-args inc) 5`, `6`)
 	w3MiscErr(t, `stack-args no-such-w3`, "not bound")
 	w3MiscErr(t, `def x 5 stack-args x`, "requires a function word")
@@ -427,7 +429,7 @@ func TestW3StackForwardArgs(t *testing.T) {
 }
 
 func TestW3ForceArity(t *testing.T) {
-	w3MiscWant(t, `def add2 fn [[a:Integer b:Integer][Integer][a add b]]  1 2 (force-arity 2 add2)/r apply`, `3`)
+	w3MiscWant(t, `def add2 fn [[a:Integer b:Integer][Integer][a add b]]  1 2 (force-arity 2 add2)/v apply`, `3`)
 	w3MiscErr(t, `force-arity 2 no-such-w3`, "not bound")
 	w3MiscErr(t, `def x 5 force-arity 2 x`, "requires a function word")
 	// A negative arity / non-fn value is rejected (direct).
@@ -441,7 +443,7 @@ func TestW3ForceArity(t *testing.T) {
 func TestW3RefCheckModeGradual(t *testing.T) {
 	// A dispatch modifier over a statically-dynamic fn (a stored fn-ref read
 	// via dot-access) rides as a gradual Function carrier in check mode.
-	out, _ := w3MiscCheck(t, `def m {a:add/r}  usurp (m dot a)`)
+	out, _ := w3MiscCheck(t, `def m {a:add/v}  usurp (m dot a)`)
 	if len(out) == 0 {
 		t.Error("check usurp over dynamic field: expected a carrier")
 	}

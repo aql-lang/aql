@@ -47,6 +47,14 @@ reference to a deleted `NURnnn` stays unambiguous forever.
   this file as Pending or Allowed; `git log -S NURnnn` recovers a
   retired number's history.
 
+> **Spelling note (2026-08-19).** The modifier `/r` was renamed **`/v`**
+> and the word `ref` became **`valof`** (see [ADR.md](ADR.md), ADR-011).
+> Records dated before that day quote the old spellings verbatim, because
+> that is what was observed and argued at the time; `/r` no longer parses,
+> so read `/r` as `/v` and `ref` as `valof` when replaying their
+> transcripts. The behaviour those records describe is unchanged by the
+> rename — except where a record says otherwise.
+
 ---
 
 ## Pending non-uniformities (the open list)
@@ -77,7 +85,6 @@ keep the two in sync in the same commit.
 | [NUR082](#nur082) | Three tree-walking subcommands, two rules for `.boru/`: `fmt` and (now) `check` skip the package directory, `boru test`'s `discover()` walks it — VERDICT 2026-08-18: resolve by fix, one shared walk helper carrying the skip | giving `boru check` directory targets, 2026-08-18 (W-CLI-CHECK) |
 | [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
 | [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
-| [NUR085](#nur085) | No spelling THROUGH A PARAMETER'S BOUND NAME is total over both kinds: a bare name CALLS when the binding is a function, and `/r` REFUSES when it is not — and the `x is Function` guard cannot be written either, because naming `x` starts the call. `(args).N` is total but bypasses the name | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2) |
 | [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
 | [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
@@ -3742,84 +3749,6 @@ func TestParseInterleavedHelpIsErrHelp(t *testing.T) {
 
 ---
 
-## NUR085 — No spelling through a parameter's bound name is total over both kinds {#nur085}
-
-**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
-higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2),
-while writing Church booleans — `λt.λf.t` must return a parameter that is
-itself a Church boolean, i.e. a `Function`
-
-**Rule:** ADR-011 — "a function value is always the inert, referenceable
-thing … a bare name bound to a function calls; `/r` takes the reference."
-One rule, applied uniformly, so a program can always say which of the two
-it means.
-
-**Divergence:** the two spellings are each defined on the *complement* of
-the other's domain, and there is no third. For a parameter `t` of a type
-that admits both (`Any`, or `Function` in a generic position):
-
-```
-def idf ([t:Any] => [t])    (idf λ)   → error signature_error: cannot call `t`
-def idf ([t:Any] => [t/r])  (idf 5)   → error illegal_ref: /r requires a function word
-```
-
-So `[t]` is correct iff `t` is not bound to a function and `[t/r]` is
-correct iff it is — **no read through the bound name is total over both
-domains** — and the program cannot choose between them at run time,
-because the guard names `t` and so starts the call it was written to
-avoid:
-
-```
-def idf ([t:Any] => [if (t is Function) [t/r] [t]])
-  → error signature_error: t is still waiting for 1 argument(s) when `is`
-    begins its own dispatch — a function word is a barrier …
-```
-
-The identity function — the least interesting higher-order function there
-is — therefore cannot be written the way every other parameter is read.
-It IS expressible: `(args).N` (below) is total, and the audit's `ident`
-and `konst` are built on it. What is missing is a *name-based* read, so
-every combinator that returns one of its own arguments (`I`, `K`,
-`const`, Church booleans, a generic container read) must leave the
-ordinary spelling behind.
-
-**Evidence:** the three transcripts above, reproduced against this tree;
-`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.2. The escape hatch is
-`(args).N`, which reads the argument list rather than the name and so
-never dispatches:
-
-```
-def ident fn t:Any Any [(args).0]
-  (ident 5) → 5 · (ident "s") → 's' · def g (ident λ) (g 5) → 6
-```
-
-`args` is documented (`describe args`) but its role as *the* polymorphic
-parameter read appears in no user-facing document, so the workaround is
-folklore. It is also only a partial one: `args` is the **innermost**
-fn's argument list, so a nested fn reading an ENCLOSING fn's parameter
-must box it first — `def bx [(args).0]` outside, `bx.0` inside — which
-is a second undocumented idiom layered on the first.
-
-**Documentation status:** the pieces are documented; the divergence is
-not. ADR-011 states the call/reference rule; `args` and the indexed read
-are documented in `REFERENCE.md` ("Current `fn` args list (inside body)",
-example `args . 0`), `HOWTO.md` ("You can also access the full slot list
-via `args`") and `TUTORIAL.md` (slots `args[0]`, `args[1]`). What no
-document states is that the two NAME-based reads are complementary rather
-than interchangeable — that `[t]` and `[t/r]` have disjoint domains and
-neither covers a slot of unknown kind — nor that `(args).N` is the read
-that does. The boxing step for an enclosing fn's parameter is documented
-nowhere at all. So a reader who meets `illegal_ref` learns only that the
-one spelling is wrong, with nothing pointing from there to the one that
-works.
-
-**Verdict proposed:** at minimum document `(args).N` in `REFERENCE.md`
-and `HOWTO.md` as the polymorphic read. The uniform fix would be a
-spelling that means "the binding's value, whatever kind it is" and is
-total over both domains — e.g. admitting `/r` on a non-function binding
-as an identity rather than an `illegal_ref`, which would make `[t/r]`
-the single answer. That choice is the maintainer's; this record stands
-until one of the two lands.
 
 ---
 
@@ -3847,12 +3776,12 @@ Map shape only, and the fifth registers both.
 | `filter` | **`{TFunction, TAny}`** — list and map alike | `lang/go/native/natives.go:260` |
 
 ```
-$ boru do 'def dbl ([x:Integer] => [x mul 2]) end each dbl/r [1 2 3]'
+$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v [1 2 3]'
 error: [boru/signature_error]: cannot call `each` — no signature matches the arguments
   = note: candidate `each (Function, Map)` takes 2 arguments, but none were supplied
   = note: candidate `each (Reach, List)`  takes 2 arguments, but none were supplied
 
-$ boru do 'filter ([p:Any] => [(p.value mod 2) eq 0]) [1 2 3 4]'
+$ boru do 'filter (p:Any => [(p.value mod 2) eq 0]) [1 2 3 4]'
 [2 4]
 ```
 
@@ -3861,7 +3790,7 @@ hands the lambda a `KeyVal` — so a unary `Integer -> Integer` function
 value has **no** iterator it can be passed to directly:
 
 ```
-$ boru do 'def dbl ([x:Integer] => [x mul 2]) end each dbl/r {a:1 b:2}'
+$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v {a:1 b:2}'
 error: each: key "a": no matching lambda signature for 1 argument(s)
 ```
 
@@ -4007,7 +3936,7 @@ That the six are one value, not merely one answer:
 def s1 fn x:Integer Integer [mul 2 x]
 …
 def s6 fn [[x:Integer] [Integer] [mul 2 x]]
-print (deq (canon s1/r) (canon s6/r))   ;# true, and likewise s2…s5
+print (deq (canon s1/v) (canon s6/v))   ;# true, and likewise s2…s5
 ```
 
 **Consequence:** a file can be `fmt`-clean and still carry four spellings

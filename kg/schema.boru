@@ -175,7 +175,7 @@ export "KgSchema" {
   issue-severities:issue-severities
   extraction-methods:extraction-methods
   proposal-term-kinds:proposal-term-kinds
-  term-approved:term-approved/r
+  term-approved:term-approved/v
   KgSource:KgSource
   KgEntity:KgEntity
   KgEvidence:KgEvidence
@@ -185,15 +185,15 @@ export "KgSchema" {
   KgIdentity:KgIdentity
   KgIssue:KgIssue
   KgProposal:KgProposal
-  mk-source:mk-source/r
-  mk-entity:mk-entity/r
-  mk-evidence:mk-evidence/r
-  mk-assertion:mk-assertion/r
-  mk-identity:mk-identity/r
-  mk-issue:mk-issue/r
-  mk-proposal:mk-proposal/r
-  mk-entity-ref:mk-entity-ref/r
-  mk-literal:mk-literal/r
-  is-entity-ref:is-entity-ref/r
-  is-literal:is-literal/r
+  mk-source:mk-source/v
+  mk-entity:mk-entity/v
+  mk-evidence:mk-evidence/v
+  mk-assertion:mk-assertion/v
+  mk-identity:mk-identity/v
+  mk-issue:mk-issue/v
+  mk-proposal:mk-proposal/v
+  mk-entity-ref:mk-entity-ref/v
+  mk-literal:mk-literal/v
+  is-entity-ref:is-entity-ref/v
+  is-literal:is-literal/v
 }

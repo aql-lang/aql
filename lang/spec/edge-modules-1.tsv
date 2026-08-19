@@ -3,7 +3,7 @@
 #
 # Edge-case battery over the module system: the inline `module […]`
 # body as a FRESH evaluation context, export map shapes and the
-# referent (`fn/r`) vs bare-name export rule, module namespaces
+# referent (`fn/v`) vs bare-name export rule, module namespaces
 # transparency and the $name/$module synthetics, import renaming,
 # module-vs-importer scope, and dispatch through module fn wrappers
 # (swap form, argument order, preamble fns with private helpers).
@@ -13,7 +13,7 @@
 # §1  the module body is a fresh evaluation context
 import module [def h 5 export "M" {a: h}] M.a	5	a body def feeds the export map…
 import module [def h 5 export "M" {a: h}] h	ERROR:undefined_word	…but is INVISIBLE outside the module
-import module [def h fn [[x:Integer] [Integer] [x add 1]] export "M" {inc: h/r}] h 4	ERROR:undefined_word	a body fn is invisible outside too — only exports cross
+import module [def h fn [[x:Integer] [Integer] [x add 1]] export "M" {inc: h/v}] h 4	ERROR:undefined_word	a body fn is invisible outside too — only exports cross
 def z 9 import module [export "M" {v: z}]	ERROR:undefined_word	the body cannot see importer bindings — the context starts empty
 def T Integer import module [def x:T 5 export "M" {x: x}]	ERROR:type annotation must be a type value	…including importer TYPE bindings
 import module [def h 1 export "A" {h: h}] import module [def h 2 export "B" {h: h}] A.h add B.h	3	each module body is its own context — same-named defs never collide
@@ -37,18 +37,18 @@ import module [export Foo {a:1}]	ERROR:undefined_word	the export name must be a 
 import module [export "M" 42]	ERROR:no signature matches	a non-map export payload has no export sig
 #
 # §4  referent-form exports vs the bare-name gotcha
-import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/r}] M.double 21	42	`d/r` holds the fn as data — the export dispatches on use
-import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/r}] 21 M.double	42	…in swap form too
-import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d}]	ERROR:no signature matches	GOTCHA: a BARE fn name in the export map auto-evaluates 0-arg and fails — use /r
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/v}] M.double 21	42	`d/v` holds the fn as data — the export dispatches on use
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/v}] 21 M.double	42	…in swap form too
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d}]	ERROR:no signature matches	GOTCHA: a BARE fn name in the export map auto-evaluates 0-arg and fails — use /v
 import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v	42	a 0-arg fn exported bare fires at export build — the VALUE is exported
 import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v typeof	Integer	…so the export is an Integer, not a Function
-import module [def z fn [[] [Integer] [42]] export "M" {v: z/r}] M.v	42	with /r the 0-arg fn is held and fires on access — same value, later
-# (dropped) FOUND MISCOMPILE — `def d fn [[n:Integer][Integer][n mul 2]] def m {double:d/r} m.double 21 eq 42`: compiled leaves the fn unapplied (`fn d(Integer) false`) vs interpreted `true` (applied member-fn boundary with a trailing arg). Reproducer in design/EDGE-SPEC-FINDINGS.0.md.
+import module [def z fn [[] [Integer] [42]] export "M" {v: z/v}] M.v	42	with /v the 0-arg fn is held and fires on access — same value, later
+# (dropped) FOUND MISCOMPILE — `def d fn [[n:Integer][Integer][n mul 2]] def m {double:d/v} m.double 21 eq 42`: compiled leaves the fn unapplied (`fn d(Integer) false`) vs interpreted `true` (applied member-fn boundary with a trailing arg). Reproducer in design/EDGE-SPEC-FINDINGS.0.md.
 #
 # §5  argument order through module fn wrappers (top-first, sig order)
-import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] M.sub2 10 3	7	all-forward: args bind in source order (a=10 b=3)
-import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] 10 3 M.sub2	-7	GOTCHA all-stack: sig position 0 is TOP of stack — a=3 b=10
-import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] 10 M.sub2 3	-7	swap form: the forward arg fills position 0 (a=3), the stack arg b=10
+import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/v}] M.sub2 10 3	7	all-forward: args bind in source order (a=10 b=3)
+import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/v}] 10 3 M.sub2	-7	GOTCHA all-stack: sig position 0 is TOP of stack — a=3 b=10
+import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/v}] 10 M.sub2 3	-7	swap form: the forward arg fills position 0 (a=3), the stack arg b=10
 #
 # §6  namespace transparency and the facet synthetics
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports	['A' 'B' 'C']	the descriptor lists every export, in declaration order
@@ -78,18 +78,18 @@ def x 5 import module [def x 7 export "M" {x: x}] x	5	the importer's binding is 
 def x 5 import module [def x 7 export "M" {x: x}] M.x	7	…the module's own value crosses only through the export
 import module [def helper 5 export "M" {helper: helper}] M.helper	5	an export may carry a body binding out under its own name
 import module [def helper 5 export "M" {helper: helper}] helper	ERROR:undefined_word	…without ever binding the bare name in the importer
-import module [def k 10 def f fn [[x:Integer] [Integer] [x add k]] export "M" {f: f/r}] def k 99 M.f 1	11	an exported fn body runs in MODULE scope — the importer's same-named def does not shadow it
-import module [def h fn [[x:Integer] [Integer] [x mul 3]] def g fn [[x:Integer] [Integer] [(h x) add 1]] export "M" {g: g/r}] M.g 2	7	a module fn may call a PRIVATE helper through the captured module scope
-import module [def h fn [[x:Integer] [Integer] [x mul 3]] def g fn [[x:Integer] [Integer] [(h x) add 1]] export "M" {g: g/r}] M.g 2 add (M.g 0)	8	…on every call
+import module [def k 10 def f fn [[x:Integer] [Integer] [x add k]] export "M" {f: f/v}] def k 99 M.f 1	11	an exported fn body runs in MODULE scope — the importer's same-named def does not shadow it
+import module [def h fn [[x:Integer] [Integer] [x mul 3]] def g fn [[x:Integer] [Integer] [(h x) add 1]] export "M" {g: g/v}] M.g 2	7	a module fn may call a PRIVATE helper through the captured module scope
+import module [def h fn [[x:Integer] [Integer] [x mul 3]] def g fn [[x:Integer] [Integer] [(h x) add 1]] export "M" {g: g/v}] M.g 2 add (M.g 0)	8	…on every call
 #
 # §9  coexistence and re-export
 import module [export "A" {x:1}] import module [export "A" {x:2}] A.x	2	a second import of the same export name shadows the first
-import module [def f fn [[x:Integer] [Integer] [x add 1]] export "A" {f: f/r}] import module [def f fn [[x:Integer] [Integer] [x mul 2]] export "B" {f: f/r}] (A.f 4) add (B.f 4)	13	two modules' same-named fns coexist under their namespaces
+import module [def f fn [[x:Integer] [Integer] [x add 1]] export "A" {f: f/v}] import module [def f fn [[x:Integer] [Integer] [x mul 2]] export "B" {f: f/v}] (A.f 4) add (B.f 4)	13	two modules' same-named fns coexist under their namespaces
 import "boru:math-util" import "boru:string-util" (StringUtil.upper "ab" size) add (MathUtil.abs -3)	5	builtin modules coexist the same way
-import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/r}] export "O" {inc: I.inc}] O.inc 4	5	re-export: an outer module re-exposes an inner module's fn
-import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/r}] export "O" {inc: I.inc}] I.inc 4	ERROR:undefined_word	…but the INNER namespace never crosses the outer boundary
+import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/v}] export "O" {inc: I.inc}] O.inc 4	5	re-export: an outer module re-exposes an inner module's fn
+import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/v}] export "O" {inc: I.inc}] I.inc 4	ERROR:undefined_word	…but the INNER namespace never crosses the outer boundary
 import module [import module [export "I" {v: 40}] export "O" {v: I.v}] O.v add 2	42	plain values re-export the same way
-import module [import "boru:math-util" def s fn [[x:Float] [Float] [MathUtil.sqrt x]] export "M" {s: s/r}] M.s 81.0	9.0	a module-PRIVATE builtin import serves the exported fn's body
+import module [import "boru:math-util" def s fn [[x:Float] [Float] [MathUtil.sqrt x]] export "M" {s: s/v}] M.s 81.0	9.0	a module-PRIVATE builtin import serves the exported fn's body
 #
 # §10  import misc
 import "boru:math-util" import "boru:math-util" MathUtil.sqrt 4.0	2.0	a duplicate import is idempotent

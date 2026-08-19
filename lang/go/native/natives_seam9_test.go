@@ -164,9 +164,9 @@ func TestW9CancelHandlersWrongType(t *testing.T) {
 		!strings.Contains(err.Error(), "not a Timeout") {
 		t.Fatalf("cancelTimeoutHandler wrong type: %v", err)
 	}
-	// cancelIntervalHandler: non-Interval (692.9,694.3).
-	if _, err := cancelIntervalHandler([]Value{NewInteger(1)}, nil, nil, r); err == nil ||
+	// cancelIntervalofHandler: non-Interval (692.9,694.3).
+	if _, err := cancelIntervalofHandler([]Value{NewInteger(1)}, nil, nil, r); err == nil ||
 		!strings.Contains(err.Error(), "not an Interval") {
-		t.Fatalf("cancelIntervalHandler wrong type: %v", err)
+		t.Fatalf("cancelIntervalofHandler wrong type: %v", err)
 	}
 }

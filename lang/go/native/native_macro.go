@@ -547,7 +547,7 @@ standardCall:
 	// Standard anonymous-function semantics then do the rest — the fn
 	// auto-dispatches when a matching subject is on the stack (today's
 	// filter behaviour, unchanged) and stays DATA when not, so it can
-	// be bound with def or parked with /r and applied later. Value
+	// be bound with def or parked with /v and applied later. Value
 	// kinds (hb / bb / math / micron — no input beyond the prefix) and
 	// mixed kinds (bf, whose generator form must run bare) keep the
 	// immediate call splice: conceptually every mini expansion is a

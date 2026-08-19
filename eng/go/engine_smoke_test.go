@@ -89,7 +89,7 @@ func TestSmokeRegistryStartsBare(t *testing.T) {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	// A fresh registry has no bindings — proves the engine ships zero
-	// words by itself. The /r suffix is a parser+stepWord feature
+	// words by itself. The /v suffix is a parser+stepWord feature
 	// that needs no registration; `ref` itself lives in the language
 	// layer.
 	if names := r.Defs.Names(); len(names) != 0 {

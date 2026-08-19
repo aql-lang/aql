@@ -71,12 +71,12 @@ Box<>	Box<>	-
 [true false]	[word(true) word(false)]	-
 {b: none}	{b:none}	-
 {x}	{x:word(x)}	-
-{x/r}	{x:x/r}	-
+{x/v}	{x:x/v}	-
 {x/2}	{x:x/2}	-
 {x/s}	{x:x/s}	-
 {x/q}	{x:x/q}	-
 {x/zz}	{x/zz:word(x/zz)}	-
-{a x/r}	{a:word(a) x:x/r}	-
+{a x/v}	{a:word(a) x:x/v}	-
 <a>&amp;&lt;&gt;</a>	<a>&amp;&lt;&gt;</a>	-
 <a b='&amp;'/>	<a b="&amp;"/>	-
 <a>&#65;</a>	<a>&amp;#65;</a>	-
@@ -240,13 +240,13 @@ a/s	a/s	-
 a/f	a/f	-
 a/2	a/2	-
 a/q	a/q	-
-a/r	a/r	-
+a/v	a/v	-
 a/t	sugar(type-bound [[a]])	-
 a/qq	ERR [boru/syntax_error]: invalid word modifier /qq on "a"	-
 a/fs	ERR [boru/syntax_error]: invalid word modifier /fs on "a"	-
-a/ur	a/ur	-
+a/uv	a/uv	-
 a/uq	ERR [boru/syntax_error]: invalid word modifier /uq on "a"	-
-a/rq	ERR [boru/syntax_error]: invalid word modifier /rq on "a"	-
+a/vq	ERR [boru/syntax_error]: invalid word modifier /vq on "a"	-
 a/tt	ERR [boru/syntax_error]: invalid word modifier /tt on "a"	-
 a/0	a/0	-
 a/1f	a/1f	-
@@ -495,12 +495,12 @@ _1	word(_1)	not digit-led, so an ordinary word — the separator rule is numeric
 
 # --- dispatch modifiers ---------------------------------------------------
 # `m.k/q` rendered two DIFFERENT debug spellings before canon grew an arm for
-# the marker: go word()({false true}), ts word(undefined). The /r and /2
+# the marker: go word()({false true}), ts word(undefined). The /v and /2
 # rows below pin renders that are still WRONG (the modifier is dropped) but
 # on which both engines agree — NUR059, not a parity defect.
 foo/q	foo/q	the modifier survives on a plain word
 m.k/q	m.k /q	the marker after a dotted path renders in source form
-foo/r	foo/r	NUR059: the /r is dropped by canon
+foo/v	foo/v	NUR059: the /v is dropped by canon
 foo/2	foo/2	NUR059: the /N arity modifier is dropped by canon
 (1 add 2)/q	(1 add 2) /q	NUR059: the paren group leaks its debug spelling
 
@@ -669,7 +669,7 @@ a!b	word(a) word(!) word(b)	-
 {a:1}.a	{a:1}.a	-
 
 # --- word and group modifiers --------------------------------------------
-# `/f` `/s` `/N` `/q` `/r` `/u` `/t` stack in any order, with f/s mutually
+# `/f` `/s` `/N` `/q` `/v` `/u` `/t` stack in any order, with f/s mutually
 # exclusive and q exclusive with both r and u. An out-of-int64 digit run and
 # a repeated letter are REJECTED, while a non-modifier tail (`/1x`) leaves
 # the whole text as one word — three different outcomes that are easy to
@@ -683,7 +683,7 @@ Map/t	sugar(type-bound [[Map]])	-
 a/9223372036854775808	ERR [boru/syntax_error]: invalid word modifier /9223372036854775808 on "a"	-
 a/1x	word(a/1x)	-
 a/ff	ERR [boru/syntax_error]: invalid word modifier /ff on "a"	-
-a/qr	ERR [boru/syntax_error]: invalid word modifier /qr on "a"	-
+a/qv	ERR [boru/syntax_error]: invalid word modifier /qv on "a"	-
 a/	word(a/)	-
 (1 2)/2	sugar(force-arity 2) (1 2)	-
 (1 2)/s	sugar(stack-args) (1 2)	-
@@ -692,18 +692,18 @@ a/	word(a/)	-
 
 # --- optional keys, shorthand entries, and modifiers on keys --------------
 # `a?:` desugars to a disjunct with None and Absent. The shorthand forms
-# (`{a/r}`, `{a/t}`) take the base name as the key and keep the FULL token
+# (`{a/v}`, `{a/t}`) take the base name as the key and keep the FULL token
 # as the value, so the modifier qualifies the value; spelling one on the
-# key itself (`{a/r: 1}`) is illegal_key. `{a/}` has no valid modifier at
+# key itself (`{a/v: 1}`) is illegal_key. `{a/}` has no valid modifier at
 # all, so the slash stays part of both key and value.
 {a?: 1}	{a:(None tor Absent tor 1)}	-
 {'a'?: 1}	{a:(None tor Absent tor 1)}	-
 [a?: 1]	[{a:(1 tor None tor Absent)}]	-
 {a? }	{a:(word(a) tor None tor Absent)}	-
-{a/r}	{a:a/r}	-
+{a/v}	{a:a/v}	-
 {a/q}	{a:a/q}	-
 {a/}	{a/:word(a/)}	-
-{a/r: 1}	ERR [boru/illegal_key]: word modifier not allowed on map key "a/r" (modifiers qualify values, not keys; quote the key as 'a/r' for a literal slash)	-
+{a/v: 1}	ERR [boru/illegal_key]: word modifier not allowed on map key "a/v" (modifiers qualify values, not keys; quote the key as 'a/v' for a literal slash)	-
 {a/s}	{a:a/s}	-
 {a/u}	{a:a/u}	-
 {a/t}	{a:sugar(type-bound [[a]])}	-
@@ -728,14 +728,14 @@ a/	word(a/)	-
 # modifier at all, so the whole text stays the word.
 a/ss	ERR [boru/syntax_error]: invalid word modifier /ss on "a"	-
 a/uu	ERR [boru/syntax_error]: invalid word modifier /uu on "a"	-
-a/rr	ERR [boru/syntax_error]: invalid word modifier /rr on "a"	-
+a/vv	ERR [boru/syntax_error]: invalid word modifier /vv on "a"	-
 a/tq	ERR [boru/syntax_error]: invalid word modifier /tq on "a"	-
 a/22	a/22	-
-a/ru	a/ur	-
+a/vu	a/uv	-
 a/2f	a/2f	-
 {a/ss}	ERR [boru/syntax_error]: invalid word modifier /ss on "a"	-
 {a/qq}	ERR [boru/syntax_error]: invalid word modifier /qq on "a"	-
-{a/rr}	ERR [boru/syntax_error]: invalid word modifier /rr on "a"	-
+{a/vv}	ERR [boru/syntax_error]: invalid word modifier /vv on "a"	-
 {a/uu}	ERR [boru/syntax_error]: invalid word modifier /uu on "a"	-
 {a/tt}	ERR [boru/syntax_error]: invalid word modifier /tt on "a"	-
 {a/tq}	ERR [boru/syntax_error]: invalid word modifier /tq on "a"	-
@@ -862,13 +862,13 @@ Map<Integer><String>	ERR xml: unterminated element <String>	-
 # `_` separators are allowed singly and rejected doubled; the value is
 # parsed from the EXACT digits (a float64 round-trip would corrupt
 # anything past 2^53), and an out-of-int64 magnitude is integer_overflow
-# rather than a wrapped value. A bare `/r` has no base name at all.
+# rather than a wrapped value. A bare `/v` has no base name at all.
 0o7_7	63	-
 +0x10	16	-
 +0d10	0d10	-
 0i	ERR [boru/syntax_error]: invalid numeric literal: 0i	-
 0i1_0	ERR [boru/syntax_error]: invalid numeric literal: 0i1_0	-
-/r	ERR empty word	-
+/v	ERR empty word	-
 /q	ERR empty word	-
 a/2f2	ERR [boru/syntax_error]: invalid word modifier /2f2 on "a"	-
 
@@ -993,7 +993,7 @@ b=${x	ERR [boru/syntax_error]: unexpected `${` — nothing valid can appear here
 #   position is not a literal and behaves identically in both cases — these
 #   rows pin that boundary, so neither side of it can move silently.
 0XFF/q	0XFF/q	a quoted atom is a name: case-symmetric with 0xFF/q
-0XFF/r	0XFF/r	…as is a /r word reference
+0XFF/v	0XFF/v	…as is a /v word reference
 0XFF/t	sugar(type-bound [[0XFF]])	…and a type-bound
 {0XFF:a}	{0XFF:word(a)}	…and a bare map key (the lowercase {0xFF:a} is likewise a key, not 255)
 [0XFF:Integer]	[{0XFF:word(Integer)}]	…including the implicit parameter-map form

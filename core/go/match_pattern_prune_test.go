@@ -7,7 +7,7 @@ import "testing"
 // rules. The integration-level consequence (fn's tnot-List triple sig
 // releasing its 3-token window on a spec-list call so a following paren
 // group is NOT pre-evaluated) is pinned by lang/spec/fn-triple.tsv §5
-// and the pre-existing modifiers.tsv/ref.tsv `(name/r)` rows; these
+// and the pre-existing modifiers.tsv/ref.tsv `(name/v)` rows; these
 // tests pin the helper's branch table.
 
 func TestForwardPatternRejectsBranches(t *testing.T) {

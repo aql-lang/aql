@@ -4,7 +4,7 @@ import "testing"
 
 // NUR031: a function's `deq` is CONTENT equality — parameters, returns and
 // body — while `eq` stays reference identity per NUR011. Before this,
-// `f/r deq f/r` was false: a function was not deq to ITSELF, which made
+// `f/v deq f/v` was false: a function was not deq to ITSELF, which made
 // ADR-015's round-trip unsatisfiable for the kind, since a value that is
 // not deq to itself cannot be deq to anything re-parsed from its canon.
 
@@ -92,7 +92,7 @@ func TestNUR031EqStaysReferenceIdentity(t *testing.T) {
 }
 
 // The record's own case: one function reached through two names. `def a
-// (f/r)` and `def b (f/r)` name one function, so `a/r eq b/r` is true —
+// (f/v)` and `def b (f/v)` name one function, so `a/v eq b/v` is true —
 // and getting there means surviving the reach, which rebuilds the dispatch
 // aggregate (and its Signatures slice) separately for each name.
 func TestNUR031IdentitySurvivesRebinding(t *testing.T) {
@@ -109,7 +109,7 @@ func TestNUR031IdentitySurvivesRebinding(t *testing.T) {
 	if !ok {
 		t.Fatal("ResolveRef f")
 	}
-	// What `def a (f/r)` / `def b (f/r)` leave behind: the reached value
+	// What `def a (f/v)` / `def b (f/v)` leave behind: the reached value
 	// bound under two further names.
 	r.Defs.Push("a", fr)
 	r.Defs.Push("b", fr)

@@ -19,7 +19,7 @@ import (
 // positive. The divergence predates this contract (verified against the
 // previous binary) and is recorded in the design note's §6.
 
-const loudMod = `import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  `
+const loudMod = `import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/v} ] end  `
 
 // A do-catch around the failing call yields the error's code as a value, and
 // the program completes.
@@ -52,7 +52,7 @@ func TestFailedFnValueDispatchRaisesUncaught(t *testing.T) {
 	}
 	// The hint names the escape hatch, because the other reading of a failed
 	// dispatch is "I meant to pass the function itself".
-	if !strings.Contains(err.Error(), "w/r") {
-		t.Errorf("err = %v, want the /r hint", err)
+	if !strings.Contains(err.Error(), "w/v") {
+		t.Errorf("err = %v, want the /v hint", err)
 	}
 }

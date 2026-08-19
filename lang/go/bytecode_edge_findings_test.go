@@ -156,21 +156,21 @@ func TestEdgeFindingForwardAcrossErrorResidual(t *testing.T) {
 // graduates with it (the model fires inside the paren).
 func TestEdgeFindingMemberFnApplyMidExpression(t *testing.T) {
 	mustCompileWithParity(t,
-		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} m.double 21 eq 42`, "[true]")
+		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/v} m.double 21 eq 42`, "[true]")
 	mustCompileWithParity(t,
-		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} (m.double 21) eq 42`, "[true]")
+		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/v} (m.double 21) eq 42`, "[true]")
 	// The String-typed twin: the arrival window binds the member's own sig.
 	mustCompileWithParity(t,
-		`def s fn [[x:String] [String] [x]] def m {id: s/r} m.id 'v' eq 'v'`, "[true]")
+		`def s fn [[x:String] [String] [x]] def m {id: s/v} m.id 'v' eq 'v'`, "[true]")
 	// The arity-2 window (the adversarial review's requested pin): the model
 	// claims the member sig's FULL arity of inert tokens.
 	mustCompileWithParity(t,
-		`def d fn [[a:Integer b:Integer] [Integer] [a add b]] def m {add2: d/r} m.add2 1 2 eq 3`, "[true]")
+		`def d fn [[a:Integer b:Integer] [Integer] [a add b]] def m {add2: d/v} m.add2 1 2 eq 3`, "[true]")
 
 	// Negatives: the bare statement-tail apply keeps compiling; unapplied
 	// member reads stay data; a non-fn member read never auto-applies.
 	mustCompileWithParity(t,
-		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} m.double 21`, "[42]")
+		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/v} m.double 21`, "[42]")
 	mustCompileWithParity(t, `def m {x: 5} m.x eq 5`, "[true]")
 	mustCompileWithParity(t, `def m {a: [1 2 3]} m.a get 0 eq 1`, "[true]")
 
@@ -178,7 +178,7 @@ func TestEdgeFindingMemberFnApplyMidExpression(t *testing.T) {
 	// arity window (runtime first-match not modelled) — the shape keeps a
 	// sound whole-program refusal with interpreter parity via the hatch-free
 	// Stage-J contract (RunCompiled refuses; RunInterp owns it).
-	multi := `def d fn [[n:Integer] [Integer] [n mul 2] [x:String] [Integer] [9]] def m {double: d/r} m.double 21 eq 42`
+	multi := `def d fn [[n:Integer] [Integer] [n mul 2] [x:String] [Integer] [9]] def m {double: d/v} m.double 21 eq 42`
 	a, _ := New()
 	if prog, _, _, _ := a.CompileCheck(multi); prog != nil {
 		t.Errorf("multi-overload member arrival must keep refusing (sound fence)")
@@ -325,26 +325,26 @@ func TestMemberFnArrivalDeclineFences(t *testing.T) {
 		// A computed key cannot pinpoint the member: the tag rides bool-only,
 		// the model declines — and with no static fn evidence the shape
 		// compiles through the ordinary dynamic paths with parity.
-		{"computed key", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/r} def k (do [double/q]) (m get k) 21 eq 42`, true, "[true]"},
+		{"computed key", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/v} def k (do [double/q]) (m get k) 21 eq 42`, true, "[true]"},
 		// A LIST member pinpoints by concrete index — the arrival model fires.
-		{"list member", `def d fn [[n:Integer][Integer][n mul 2]] def lst [d/r] (lst get 0) 21 eq 42`, true, "[true]"},
+		{"list member", `def d fn [[n:Integer][Integer][n mul 2]] def lst [d/v] (lst get 0) 21 eq 42`, true, "[true]"},
 		// Anonymous lambda member: no name for the model — sound refusal.
 		{"anonymous member", `def m {double: ([n:Integer] => [n mul 2])} m.double 21 eq 42`, false, "[true]"},
 		// 0-arg member: the arrival model claims the empty-window arity-0
 		// landing (the break-2 closure, FN-VALUE-OPEN-WORK §4) — the
 		// courtesy dispatch compiles as an arity-0 OpCallDynMethod.
-		{"zero-arg member", `def z fn [[][Integer][7]] def m {z: z/r} m.z eq 7`, true, "[true]"},
+		{"zero-arg member", `def z fn [[][Integer][7]] def m {z: z/v} m.z eq 7`, true, "[true]"},
 		// Quoted-param member: the arrival model's plain-value-args
 		// assumption fails, so the COMPILE declines — but the interpreter
 		// now runs it right: the NUR038 arrival path converts the bare
 		// word through the /q slot (`m.q foo` ≡ `q foo` → 9, then 9 eq 9).
-		{"quoted param member", `def q fn [[k:Atom/q][Integer][9]] def m {q: q/r} m.q foo eq 9`, false, "[true]"},
+		{"quoted param member", `def q fn [[k:Atom/q][Integer][9]] def m {q: q/v} m.q foo eq 9`, false, "[true]"},
 		// Two-return member: the single-result claim fails — sound refusal.
-		{"two-return member", `def t fn [[n:Integer][Integer Integer][n n]] def m {t: t/r} m.t 3 eq 3`, false, "[3 true]"},
+		{"two-return member", `def t fn [[n:Integer][Integer Integer][n n]] def m {t: t/v} m.t 3 eq 3`, false, "[3 true]"},
 		// The member read ends the tape: no window — the fn stays data.
-		{"read at tape end", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/r} m.double`, true, "[fn d(Integer)]"},
+		{"read at tape end", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/v} m.double`, true, "[fn d(Integer)]"},
 		// A word right after the carrier: the window is not inert.
-		{"non-inert window", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/r} def x 21 m.double x eq 42`, false, "[true]"},
+		{"non-inert window", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/v} def x 21 m.double x eq 42`, false, "[true]"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -382,13 +382,13 @@ func TestMemberFnArrivalDeclineFences(t *testing.T) {
 func TestInstanceMemberFnArrival(t *testing.T) {
 	// The miscompile shape compiles with parity now (the arrival model).
 	mustCompileWithParity(t,
-		`def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/r}) o.f 21 eq 42`, "[true]")
+		`def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/v}) o.f 21 eq 42`, "[true]")
 	// The statement-tail apply and the bare (unapplied) read keep compiling.
 	mustCompileWithParity(t,
-		`def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/r}) o.f 21`, "[42]")
+		`def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/v}) o.f 21`, "[42]")
 	// A shape the arrival model declines — a WORD right after the carrier —
 	// must now REFUSE via the stranded-fn guard (sound), never miscompile.
-	declined := `def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/r}) def x 21 o.f x eq 42`
+	declined := `def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/v}) def x 21 o.f x eq 42`
 	a, _ := New()
 	if prog, reason, _, _ := a.CompileCheck(declined); prog != nil {
 		t.Errorf("the declined instance landing must refuse (reason=%q):\n%s", reason, prog.Disassemble())

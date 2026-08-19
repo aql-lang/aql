@@ -14,11 +14,11 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '316884201340404542');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '7474962064150301634');
 INSERT INTO input_files VALUES ('../AGENTS.md', '9011969850467027120', 11174);
-INSERT INTO input_files VALUES ('../CLI.md', '879693357166092360', 82989);
-INSERT INTO input_files VALUES ('../README.md', '5978445941219287107', 12398);
-INSERT INTO input_files VALUES ('../STYLE-GUIDE.md', '7453012533707037132', 6973);
+INSERT INTO input_files VALUES ('../CLI.md', '4243301829870383948', 82989);
+INSERT INTO input_files VALUES ('../README.md', '3900868491047678767', 12398);
+INSERT INTO input_files VALUES ('../STYLE-GUIDE.md', '383652445936156987', 10339);
 INSERT INTO input_files VALUES ('../basic/go/go.mod', '592614718618454325', 457);
 INSERT INTO input_files VALUES ('../calc/go/go.mod', '6164707914494689882', 605);
 INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221);
@@ -34,15 +34,15 @@ INSERT INTO input_files VALUES ('../design/CANON-ROUNDTRIP.0.md', '1353161920241
 INSERT INTO input_files VALUES ('../design/CONTENT-ADDRESSING.0.md', '2493386413761043225', 18345);
 INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '7605485402373327537', 10411);
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
-INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
+INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '3946353376704890703', 3246);
 INSERT INTO input_files VALUES ('../design/DIAGNOSTIC-VALUES.0.md', '4050607666584719300', 6665);
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
-INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '461252499723853380', 11344);
+INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '5680123931664569575', 11346);
 INSERT INTO input_files VALUES ('../design/FN-VALUE-OPEN-WORK.0.md', '8479443366485179161', 26190);
 INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '4913722754517353679', 65012);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
 INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '3044536311677551962', 23460);
-INSERT INTO input_files VALUES ('../design/HIGHER-ORDER-FUNCTIONS.0.md', '1933813596036682908', 31681);
+INSERT INTO input_files VALUES ('../design/HIGHER-ORDER-FUNCTIONS.0.md', '8241294341256835572', 34084);
 INSERT INTO input_files VALUES ('../design/HOT-CODE-LOADING.0.md', '27384681369847472', 19039);
 INSERT INTO input_files VALUES ('../design/LANG-ENG-CONTENT-AUDIT.0.md', '9151136880658015899', 42992);
 INSERT INTO input_files VALUES ('../design/MODULE-VIEWS.0.md', '570466612363092696', 22324);
@@ -62,7 +62,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5798490287673095801', 500);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '2102351093150957141', 52161);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '7373311478507477235', 52243);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -283,7 +283,7 @@ INSERT INTO entities VALUES ('ent:Document:6399157315994008191', 'Document', 'ST
 INSERT INTO entities VALUES ('ent:Document:6779251111015546106', 'Document', 'design/DIAGNOSTIC-VALUES.0.md', 'design/diagnostic-values.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:6779251111015546106', 'role', 'the proposed rule that a diagnostic names the values it is about rather than describing them — recorded in design, not ADR.md, pending a maintainer ruling: the return-count error reported arithmetic and withheld the one thing identifying the fault, the count-and-values agreement corollary (callers pass exactly the slice the count was taken over), the single-builder byte-identity contract across interpreter, VM and checker, the abbreviate-never-truncate policy and its two nesting levels through diagMaxListHead, and the open sweep across no_signature, the arity errors and describeStackTypes');
 INSERT INTO entities VALUES ('ent:Document:7150928906920308588', 'Document', 'design/HIGHER-ORDER-FUNCTIONS.0.md', 'design/higher-order-functions.0.md', 'accepted');
-INSERT INTO entity_attributes VALUES ('ent:Document:7150928906920308588', 'role', 'the empirical audit of higher-order support and combinator expressibility, run against a built binary rather than read from the design notes (a POINT-IN-TIME report, 2026-08-19): what was actually built and run — SKI with I derived as S K K, BCKW, U-combinator anonymous recursion, Church numerals and pairs, CPS, a parser-combinator library, closures over fn-locals that outlive their scope — and the one construction that resisted every spelling, Church and/or; a capability comparison against Haskell, Scheme, JavaScript and Factor; and the call-vs-value gotcha cluster that only surfaces once a function value flows through a PARAMETER: a bare name calls where /r refuses so no name-based read is total over both kinds (NUR085), the four code-body iterators taking a Function callback over a Map but not a List where filter takes both (NUR086), a branch-local def lost to the checker after a Function-parameter call so boru run refuses a working program (NUR087), the capitalised-name predicate-type collision, the context-dependent application of a paren-collapsed function, and the confirmation that NUR073 reproduces with the PLAIN default invocation siding with the compiler while -no-compile disagrees, exit 0 both ways');
+INSERT INTO entity_attributes VALUES ('ent:Document:7150928906920308588', 'role', 'the empirical audit of higher-order support and combinator expressibility, run against a built binary rather than read from the design notes (a POINT-IN-TIME report, 2026-08-19): what was actually built and run — SKI with I derived as S K K, BCKW, U-combinator anonymous recursion, Church numerals and pairs, CPS, a parser-combinator library, closures over fn-locals that outlive their scope — and the one construction that resisted every spelling, Church and/or; a capability comparison against Haskell, Scheme, JavaScript and Factor; and the call-vs-value gotcha cluster that only surfaces once a function value flows through a PARAMETER: a bare name calls where /r refused so no name-based read was total over both kinds — CLOSED by the 2026-08-19 /r->/v rename that made the value read total (NUR085, retired), the four code-body iterators taking a Function callback over a Map but not a List where filter takes both (NUR086), a branch-local def lost to the checker after a Function-parameter call so boru run refuses a working program (NUR087), the capitalised-name predicate-type collision, the context-dependent application of a paren-collapsed function, and the confirmation that NUR073 reproduces with the PLAIN default invocation siding with the compiler while -no-compile disagrees, exit 0 both ways');
 INSERT INTO entities VALUES ('ent:Document:7550033050871776514', 'Document', 'design/FN-OUTPUT-SIG.0.md', 'design/fn-output-sig.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:7550033050871776514', 'role', 'why an fn triple''s output slot is always the types the returns must match, never values to splice: the return-by-value sugar classified the slot before parsing it, so the implicit map a `name:Type` pair lowers to was read as a concrete return and appended to the body — a spurious return-count error, or a silently wrong answer with a clean `check --pedantic` when the body''s net stack effect was zero; why patching IsSigTypeValue a fourth time was the wrong fix (three prior arms record the identical symptom, and the predicate fails OPEN into a semantic change); the rule that a literal in the output slot is a literal TYPE admitting exactly itself (ADR-010); the String/Atom literal fallback gated on type-name SHAPE so a misspelled `Integr` stays a loud error; the one behaviour lost (the bodiless base case); the declaration-span fix that makes both spellings diagnose alike; the describe/inspect under-report; and the open interpreter-vs-VM divergence on an empty body''s frame residual that deleting the sugar made reachable');
 INSERT INTO entities VALUES ('ent:Document:7583878321315113890', 'Document', 'design/TABNAS-UPSTREAM-FIRST.0.md', 'design/tabnas-upstream-first.0.md', 'accepted');

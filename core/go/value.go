@@ -466,7 +466,7 @@ const (
 	// resolves to an inert const: the VM runs the SAME handler over the SAME baked
 	// value as the interpreter. It is the opt-in for the QuoteArgs refusal, the
 	// declared analogue of the get/getr/set exemption. Do NOT set it on a
-	// dispatch-manipulating meta word (usurp / force-arity / ref) whose quoted
+	// dispatch-manipulating meta word (usurp / force-arity / valof) whose quoted
 	// operand drives a RE-STEPPING result the VM cannot reproduce by re-running
 	// the handler.
 	CompileQuoteInert
@@ -816,7 +816,7 @@ type FnDefInfo struct {
 	// A token is needed because the payload has no other stable
 	// reference. The Signatures backing array looks like one and is
 	// not: aggregateDispatch rebuilds the slice for every boru-bodied
-	// word, per NAME, so `def a (f/r)` and `def b (f/r)` — one function
+	// word, per NAME, so `def a (f/v)` and `def b (f/v)` — one function
 	// under two names — landed on two arrays and read as two functions.
 	// The token is what survives the rebuild.
 	//
@@ -1319,7 +1319,7 @@ type WordInfo struct {
 	ArgCount     int  // -1 = unspecified
 	ForceStack   bool // lower/s
 	ForceForward bool // lower/f
-	ForceRef     bool // lower/r — resolve to the bound value without invoking
+	ForceVal     bool // lower/v — resolve to the bound value without invoking
 	ForceUsurp   bool // lower/u — wrap the bound fn so its sig arg order is reversed
 }
 
@@ -2352,32 +2352,32 @@ func NewWordModified(name string, argCount int, forceStack, forceForward bool) V
 	})
 }
 
-// NewWordRef creates a word value marked with the /r modifier: when
+// NewWordRef creates a word value marked with the /v modifier: when
 // reached at the pointer it resolves the name to its bound Function
-// value without entering function dispatch. /r is legal ONLY for
+// value without entering function dispatch. /v is legal ONLY for
 // function words — a name bound to a non-fn value (plain value, type
 // body) raises [boru/illegal_ref] (see eng.IsFunctionRef). ArgCount
-// stays unspecified because /r short-circuits argument collection.
+// stays unspecified because /v short-circuits argument collection.
 func NewWordRef(name string) Value {
 	return NewValueRaw(TWord, WordInfo{
 		Name:     name,
 		ArgCount: -1,
-		ForceRef: true,
+		ForceVal: true,
 	})
 }
 
 // NewWordUsurp creates a word value marked with the /u modifier: when
 // reached at the pointer it resolves the name to its bound Function value
 // and wraps it so its signature argument order is reversed (usurped a b c
-// ≡ f c b a). Like /r, /u is legal ONLY for function words. The usurped
+// ≡ f c b a). Like /v, /u is legal ONLY for function words. The usurped
 // wrapper is left UNQUOTED, so it dispatches immediately when args are
-// available; combine with /r (name/ur) to leave it as inert data instead.
-func NewWordUsurp(name string, ref bool) Value {
+// available; combine with /v (name/uv) to leave it as inert data instead.
+func NewWordUsurp(name string, forceVal bool) Value {
 	return NewValueRaw(TWord, WordInfo{
 		Name:       name,
 		ArgCount:   -1,
 		ForceUsurp: true,
-		ForceRef:   ref,
+		ForceVal:   forceVal,
 	})
 }
 
@@ -2929,14 +2929,14 @@ func AsSplice(v Value) (SpliceInfo, error) {
 }
 
 // DispatchModInfo carries a `/`-modifier applied to a paren / dotted-path
-// RESULT (a value), e.g. `(m.f)/s`, `path/3`, `m.a/r`. The parser emits a
+// RESULT (a value), e.g. `(m.f)/s`, `path/3`, `m.a/v`. The parser emits a
 // Word/__DM marker right after the group; execFnDefLiteral peeks and
 // consumes it to dispatch the result function with these flags (or, for
 // Ref/Quote, to leave it as inert data). ArgCount is -1 when unset. The
 // `/u` (usurp) modifier is NOT carried here — it is emitted as the `usurp`
 // word.
 type DispatchModInfo struct {
-	Ref   bool // /r — leave the function as data (do not invoke)
+	Val   bool // /v — take the binding's VALUE, disabling any call
 	Quote bool // /q — treat the result as data
 }
 

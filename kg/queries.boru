@@ -411,28 +411,28 @@ def human-review-items fn bundle:Map List [
 ]
 
 export "KgQuery" {
-  entity-by-id:entity-by-id/r
-  entities-by-type:entities-by-type/r
-  entities-by-label:entities-by-label/r
-  assertions-for-subject:assertions-for-subject/r
-  assertions-for-object:assertions-for-object/r
-  assertions-by-predicate:assertions-by-predicate/r
-  assertions-by-source:assertions-by-source/r
-  assertions-in-range:assertions-in-range/r
-  evidence-for-assertion:evidence-for-assertion/r
-  edge-list:edge-list/r
-  neighbors:neighbors/r
-  unit-of:unit-of/r
-  code-units:code-units/r
-  modules:modules/r
-  packages:packages/r
-  code-unit-by-path:code-unit-by-path/r
-  dependencies-of:dependencies-of/r
-  dependents-of:dependents-of/r
-  one-hop-paths:one-hop-paths/r
-  two-hop-paths:two-hop-paths/r
-  unresolved-identities:unresolved-identities/r
-  conflicting-assertions:conflicting-assertions/r
-  validation-errors:validation-errors/r
-  human-review-items:human-review-items/r
+  entity-by-id:entity-by-id/v
+  entities-by-type:entities-by-type/v
+  entities-by-label:entities-by-label/v
+  assertions-for-subject:assertions-for-subject/v
+  assertions-for-object:assertions-for-object/v
+  assertions-by-predicate:assertions-by-predicate/v
+  assertions-by-source:assertions-by-source/v
+  assertions-in-range:assertions-in-range/v
+  evidence-for-assertion:evidence-for-assertion/v
+  edge-list:edge-list/v
+  neighbors:neighbors/v
+  unit-of:unit-of/v
+  code-units:code-units/v
+  modules:modules/v
+  packages:packages/v
+  code-unit-by-path:code-unit-by-path/v
+  dependencies-of:dependencies-of/v
+  dependents-of:dependents-of/v
+  one-hop-paths:one-hop-paths/v
+  two-hop-paths:two-hop-paths/v
+  unresolved-identities:unresolved-identities/v
+  conflicting-assertions:conflicting-assertions/v
+  validation-errors:validation-errors/v
+  human-review-items:human-review-items/v
 }

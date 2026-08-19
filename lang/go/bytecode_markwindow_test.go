@@ -13,7 +13,7 @@ import (
 // OpCallDynMixedFromMark re-steps stack[mark:] through the island exactly as
 // the interpreter — auto-apply hazard included.
 
-const mwDocMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end `
+const mwDocMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/v, boom: boom/v} ] end `
 
 // mwParityCompiled asserts the row force-compiles and runs COMPILED with
 // value/error parity against the interpreter.
@@ -72,7 +72,7 @@ func TestMarkWindowDoCatchCompiles(t *testing.T) {
 		// The branch-arm nesting: the raise sits inside a taken if arm.
 		mwDocMod + `do [(if true [M.boom 5] [7]) 8] error [dot code]`,
 		// The dry-pass-proven raising constant (the StructUtil chained leaf).
-		`import "boru:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]`,
+		`import "boru:struct-util"  def g StructUtil.parse/v  do [(g "") 2] error [dot code]`,
 	}
 	for i, src := range rows {
 		t.Run(fmt.Sprintf("row-%d", i), func(t *testing.T) {

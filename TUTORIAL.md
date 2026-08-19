@@ -295,7 +295,7 @@ boru> {x y}                           # returns {x:1 y:2}
 ```
 
 (See [Reference: Map field shorthand](REFERENCE.md#map-field-shorthand)
-for the `/r` and `?` variants.)
+for the `/v` and `?` variants.)
 
 The dot operator accesses fields by name or by index:
 

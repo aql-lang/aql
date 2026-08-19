@@ -172,7 +172,7 @@ def mysort fn [[lst:List] [List] [
   def n (lst size)
   if (n eq 0) [ [] ] [ lst ]
 ]]
-export "Ns" { sort: mysort/r }`
+export "Ns" { sort: mysort/v }`
 	a := loadImportedLib(t, lib)
 	src := `import "/lib.boru"
 print ((([5 3 1] Ns.sort end))) end`
@@ -193,7 +193,7 @@ func TestCheckCrossModuleGenuineOverReturnStillReports(t *testing.T) {
   [7]
   lst
 ]]
-export "Ns" { sort: mysort/r }`
+export "Ns" { sort: mysort/v }`
 	a := loadImportedLib(t, lib)
 	src := `import "/lib.boru"
 print ((([5 3 1] Ns.sort end))) end`

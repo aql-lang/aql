@@ -320,8 +320,8 @@ func ExactEqual(a, b Value) bool {
 	// needed boxing: a full box would change the representation every kernel
 	// arm keying on `FnDefInfo` reads, for an identity a single unexported
 	// pointer supplies. Before this, eq fell to the type-body arm below,
-	// which compares the payload STRUCT — including Name — so `def a (f/r)`
-	// and `def b (f/r)` were not eq though they name one function.
+	// which compares the payload STRUCT — including Name — so `def a (f/v)`
+	// and `def b (f/v)` were not eq though they name one function.
 	if af, aok := a.Data.(FnDefInfo); aok {
 		if bf, bok := b.Data.(FnDefInfo); bok {
 			return sameFnIdentity(af, bf)
@@ -672,8 +672,8 @@ func DeepEqual(a, b Value) bool {
 	//
 	// The NAME is deliberately excluded. It is the binding a function was
 	// reached through, not part of the function: including it is exactly
-	// what made `a/r deq b/r` false for two bindings of one function, and
-	// what kept `f/r deq f/r` false at all.
+	// what made `a/v deq b/v` false for two bindings of one function, and
+	// what kept `f/v deq f/v` false at all.
 	if af, aok := a.Data.(FnDefInfo); aok {
 		if bf, bok := b.Data.(FnDefInfo); bok {
 			return fnStructurallyEqual(af, bf)
@@ -758,7 +758,7 @@ func opaqueIdealExactEqual(a, b Value) (bool, bool) {
 		// A word is the other value-like code value (NUR031): an
 		// immutable name-plus-modifiers with no reference behind it, so
 		// eq ≡ deq and both compare the whole struct — the modifiers
-		// included, since `f/r` and `f/s` are different words. It is
+		// included, since `f/v` and `f/s` are different words. It is
 		// comparable by construction (only string/int/bool fields), the
 		// same property that lets Error compare by fields.
 		return ok && a.Parent.Equal(b.Parent) && av == bv, true
@@ -1098,7 +1098,7 @@ func DeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 // The token exists because the payload offers no other stable reference.
 // The Signatures backing array is the obvious candidate and is wrong: for a
 // boru-bodied word aggregateDispatch rebuilds that slice per NAME, so two
-// bindings of one function (`def a (f/r)` / `def b (f/r)`) land on two
+// bindings of one function (`def a (f/v)` / `def b (f/v)`) land on two
 // arrays and read as two functions — the record's complaint exactly.
 //
 // A payload with no token — a FnDefInfo literal built outside NewFunction,

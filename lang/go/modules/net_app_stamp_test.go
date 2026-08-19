@@ -68,7 +68,7 @@ func miniRedisSession(t *testing.T, armed bool, cmds []string) ([]string, *nativ
 	}
 
 	// The module registry, reached through an export wrapper.
-	run(`def w9 MiniRedis.cmd/r`)
+	run(`def w9 MiniRedis.cmd/v`)
 	w, ok := reg.Defs.Top("w9")
 	if !ok {
 		t.Fatal("wrapper not bound")

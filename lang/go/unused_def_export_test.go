@@ -7,7 +7,7 @@ import (
 )
 
 // A reference-exported word is a USE of its def. The canonical public-API
-// binding form is `export "X" { name: impl/r }` (a /r reference), and a direct
+// binding form is `export "X" { name: impl/v }` (a /v reference), and a direct
 // `{ name: impl }` of a fn value is equivalent. The use-tracker must count
 // those as uses, or every public word is falsely flagged unused_def precisely
 // because it is public — the dominant `unused_def` false positive on the
@@ -34,11 +34,11 @@ func TestUnusedDefReferenceExport(t *testing.T) {
 
 	// Positive: each export form counts as a use — no unused_def.
 	clean := []struct{ name, src string }{
-		{"/r reference at top level", `def mk fn [[] [Map] [{e: false}]] end mk/r`},
-		{"/r reference-export", `def add1 fn [[n:Integer] [Integer] [n add 1]] end export "Demo" { inc: add1/r }`},
-		{"multiple reference-exports", `def add1 fn [[n:Integer] [Integer] [n add 1]] end def dbl fn [[n:Integer] [Integer] [n mul 2]] end export "Demo" { inc: add1/r, dbl: dbl/r }`},
+		{"/v reference at top level", `def mk fn [[] [Map] [{e: false}]] end mk/v`},
+		{"/v reference-export", `def add1 fn [[n:Integer] [Integer] [n add 1]] end export "Demo" { inc: add1/v }`},
+		{"multiple reference-exports", `def add1 fn [[n:Integer] [Integer] [n add 1]] end def dbl fn [[n:Integer] [Integer] [n mul 2]] end export "Demo" { inc: add1/v, dbl: dbl/v }`},
 		{"type export", `def Color Integer end export "Demo" { Color: Color }`},
-		{"ref word", `def mk fn [[] [Map] [{}]] end def r (ref mk) end r`},
+		{"ref word", `def mk fn [[] [Map] [{}]] end def r (valof mk) end r`},
 	}
 	for _, c := range clean {
 		if got := unusedDefs(t, c.src); len(got) != 0 {
@@ -47,7 +47,7 @@ func TestUnusedDefReferenceExport(t *testing.T) {
 	}
 
 	// Negative: a def referenced nowhere is still flagged (no false negative).
-	got := unusedDefs(t, `def used fn [[n:Integer] [Integer] [n]] end def dead fn [[] [Integer] [1]] end export "Demo" { f: used/r }`)
+	got := unusedDefs(t, `def used fn [[n:Integer] [Integer] [n]] end def dead fn [[] [Integer] [1]] end export "Demo" { f: used/v }`)
 	if len(got) != 1 || got[0] != "dead" {
 		t.Errorf("expected only 'dead' flagged unused, got %v", got)
 	}

@@ -52,9 +52,9 @@ def fa-main fn [[argv:List status:Integer] [Integer] [
 ]]
 
 export "False" {
-  sole: fa-sole/r
-  out:  fa-out/r
-  main: fa-main/r
+  sole: fa-sole/v
+  out:  fa-out/v
+  main: fa-main/v
   spec: spec
 }
 

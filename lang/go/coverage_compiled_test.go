@@ -34,7 +34,7 @@ func TestCompiledCoverage(t *testing.T) {
 		"  def r (x mul 3)\n" +
 		"  r\n" +
 		"]]\n" +
-		"export \"Calc\" { add2: add2/r  triple: triple/r }\n"
+		"export \"Calc\" { add2: add2/v  triple: triple/v }\n"
 	if err := os.WriteFile(mod, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -524,12 +524,12 @@ def bundle-to-candidates fn bundle:Map Map [
 ]
 
 export "KgIngest" {
-  prune-external-ids:prune-external-ids/r
-  ingest-source:ingest-source/r
-  ingest-entity:ingest-entity/r
-  ingest-object:ingest-object/r
-  ingest-evidence:ingest-evidence/r
-  ingest-bundle:ingest-bundle/r
-  rows-to-candidates:rows-to-candidates/r
-  bundle-to-candidates:bundle-to-candidates/r
+  prune-external-ids:prune-external-ids/v
+  ingest-source:ingest-source/v
+  ingest-entity:ingest-entity/v
+  ingest-object:ingest-object/v
+  ingest-evidence:ingest-evidence/v
+  ingest-bundle:ingest-bundle/v
+  rows-to-candidates:rows-to-candidates/v
+  bundle-to-candidates:bundle-to-candidates/v
 }

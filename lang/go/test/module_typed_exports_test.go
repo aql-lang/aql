@@ -17,7 +17,7 @@ import (
 //   - manhattan : (Point)   -> Integer
 //   - freezing  : (Celsius) -> Boolean
 //
-// The exported functions are referenced as data with `/r`; the types are
+// The exported functions are referenced as data with `/v`; the types are
 // exported as their type literals. After import the namespace `Geo` makes
 // both the types (`Geo.Point`, `Geo.Celsius`) and the functions
 // (`Geo.manhattan`, `Geo.freezing`) available to the caller.
@@ -26,7 +26,7 @@ const geoModule = `import module [
   def Celsius refine Integer
   def manhattan fn [[p:Point]   [Integer] [(p.x) add (p.y)]]
   def freezing  fn [[c:Celsius] [Boolean] [(c) lte 0]]
-  export "Geo" {Point: Point  Celsius: Celsius  manhattan: manhattan/r  freezing: freezing/r}
+  export "Geo" {Point: Point  Celsius: Celsius  manhattan: manhattan/v  freezing: freezing/v}
 ]
 `
 

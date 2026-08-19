@@ -144,13 +144,13 @@ def pe-main fn [[argv:List env:Map] [Integer] [
 ]]
 
 export "Printenv" {
-  bool:    pe-bool/r
-  sep:     pe-sep/r
-  line:    pe-line/r
-  listing: pe-listing/r
-  lookup:  pe-lookup/r
-  named:   pe-named/r
-  main:    pe-main/r
+  bool:    pe-bool/v
+  sep:     pe-sep/v
+  line:    pe-line/v
+  listing: pe-listing/v
+  lookup:  pe-lookup/v
+  named:   pe-named/v
+  main:    pe-main/v
   spec:    spec
 }
 

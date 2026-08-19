@@ -158,15 +158,15 @@ function markEval(v: Value): Value {
 
 // newWordUsurp mirrors eng.NewWordUsurp: a word value marked with the /u
 // modifier — resolve the name to its bound Function and wrap it with
-// reversed signature arg order; combine with /r to leave it as data. The
-function newWordUsurp(name: string, ref: boolean): Value {
-  return new Value(TWord, { name, forceUsurp: true, forceRef: ref } satisfies WordInfo)
+// reversed signature arg order; combine with /v to leave it as data. The
+function newWordUsurp(name: string, forceVal: boolean): Value {
+  return new Value(TWord, { name, forceUsurp: true, forceVal } satisfies WordInfo)
 }
 
-// newWordRef mirrors eng.NewWordRef: a word value marked with the /r
+// newWordRef mirrors eng.NewWordRef: a word value marked with the /v
 // modifier — resolve the name to its bound Function without invoking.
 function newWordRef(name: string): Value {
-  return new Value(TWord, { name, forceRef: true } satisfies WordInfo)
+  return new Value(TWord, { name, forceVal: true } satisfies WordInfo)
 }
 
 // newWordModified mirrors eng.NewWordModified: a word with explicit
@@ -670,7 +670,7 @@ export function convertTopLevelItems(items: unknown[], d: ParseDepth): Value[] {
         // `/`-modifier can be placed correctly: a WORD modifier
         // (usurp / stack-args / forward-args) is emitted BEFORE the
         // group so it forward-collects the result (the result must not
-        // auto-dispatch first), while the Word/__DM marker (/N /r /q)
+        // auto-dispatch first), while the Word/__DM marker (/N /v /q)
         // is emitted AFTER for execFnDefLiteral to peek.
         // Build a first-class Reach node (design/REACH.10.md Phase B):
         // receiver tokens + per-segment {op, literal-or-computed key}.
@@ -778,7 +778,7 @@ export function convertTopLevelItems(items: unknown[], d: ParseDepth): Value[] {
       // A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
       // applies the modifier to that primary's result. Word modifiers are
       // emitted BEFORE the primary (so they forward-collect the result
-      // before any auto-dispatch); the /r /q marker is emitted AFTER.
+      // before any auto-dispatch); the /v /q marker is emitted AFTER.
       if (i + 1 < items.length) {
         const gm = groupModifier(items[i + 1])
         if (gm !== null && gm.base === '') {
@@ -845,7 +845,7 @@ function isChainReceiver(item: unknown): boolean {
 //
 //	/u  → prefix `usurp`            /s  → prefix `stack-args`
 //	/f  → prefix `forward-args`     /N  → prefix `force-arity N`
-//	/r /q → suffix Word/__DM marker (leave the result inert/data)
+//	/v /q → suffix Word/__DM marker (leave the result inert/data)
 //
 // Word modifiers are PREFIXED (emitted before the group) so they
 // forward-collect the result before it can auto-dispatch; the marker is
@@ -881,11 +881,11 @@ export function groupModifier(
       suffix: null,
     }
   }
-  if (m.refFlag || m.quoteFlag) {
+  if (m.valFlag || m.quoteFlag) {
     return {
       base: m.base,
       prefix: null,
-      suffix: [newDispatchMod({ ref: m.refFlag, quote: m.quoteFlag })],
+      suffix: [newDispatchMod({ val: m.valFlag, quote: m.quoteFlag })],
     }
   }
   return null
@@ -1113,16 +1113,16 @@ function convertMapData(
     const qmSet = metaStrSet(meta, 'qm') // optional keys (? syntax)
     const ckSet = metaStrSet(meta, 'ck') // computed keys ([key] syntax)
     const qkSet = metaStrSet(meta, 'qk') // quoted keys ({'k': v} syntax)
-    const shList = metaStrList(meta, 'sh') // shorthand keys ({foo} / {foo/r} syntax)
+    const shList = metaStrList(meta, 'sh') // shorthand keys ({foo} / {foo/v} syntax)
     const ko = metaStrList(meta, 'ko') // source key order (D1: Meta["ko"] channel)
 
-    // Word modifiers (`/r`, `/q`, `/f`, `/s`, `/N`) are legal only on
-    // shorthand entries — `{foo/r}` ≡ `{foo: foo/r}` — where the token is
+    // Word modifiers (`/v`, `/q`, `/f`, `/s`, `/N`) are legal only on
+    // shorthand entries — `{foo/v}` ≡ `{foo: foo/v}` — where the token is
     // also the value, so the modifier qualifies that value. On a bare
     // `key: value` pair the modifier would only ever land on the KEY,
     // which is meaningless (a map key is a plain name). Reject it rather
-    // than silently keeping `f/r` as a literal key. A quoted key
-    // (`{'f/r': …}`) or computed key (`{[f/r]: …}`) is an explicit string
+    // than silently keeping `f/v` as a literal key. A quoted key
+    // (`{'f/v': …}`) or computed key (`{[f/v]: …}`) is an explicit string
     // literal — the slash is data, not a modifier — so those are exempt.
     // Bare explicit keys (with and without an optional `?`) arrive in m;
     // shorthand (sh) and value-less optional (qm) tokens are handled below
@@ -1139,8 +1139,8 @@ function convertMapData(
       }
     }
 
-    // Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`,
-    // `{foo?}` ≡ `{foo?: foo}`, `{foo/r?}` ≡ `{foo?: foo/r}`. The key is
+    // Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/v}` ≡ `{foo: foo/v}`,
+    // `{foo?}` ≡ `{foo?: foo}`, `{foo/v?}` ≡ `{foo?: foo/v}`. The key is
     // always the base name (modifiers stay on the value only); the value
     // is the full word token. synth maps each synthesized base key to that
     // token. Two sources: explicit shorthand tokens (Meta["sh"]) and
@@ -1148,7 +1148,7 @@ function convertMapData(
     //
     // optBase collects the base name of every optional key so optionality
     // is looked up by base name below — qmSet is keyed by the raw token
-    // (e.g. `f/r`), which no longer matches the synthesized base key.
+    // (e.g. `f/v`), which no longer matches the synthesized base key.
     const synth = new Map<string, string>()
     const optBase = new Set<string>()
     for (const raw of shList) {
@@ -1632,7 +1632,7 @@ interface WordMod {
   forceStack: boolean
   forceForward: boolean
   quoteFlag: boolean
-  refFlag: boolean
+  valFlag: boolean
   usurpFlag: boolean
   typeFlag: boolean
   valid: boolean
@@ -1640,7 +1640,7 @@ interface WordMod {
 
 // scanWordModifier parses the optional `/...` modifier suffix of an
 // unquoted word token: name/f (forceForward), name/s (forceStack),
-// name/N (argCount), name/q (quote → Atom), name/r (ref → bound value),
+// name/N (argCount), name/q (quote → Atom), name/v (val → bound value),
 // name/u (usurp → reversed-sig wrapper), and combinations like name/1f,
 // name/qs, name/f2, name/ur. Modifiers stack in any order; f and s are
 // mutually exclusive; q is mutually exclusive with both r and u (an atom
@@ -1655,7 +1655,7 @@ export function scanWordModifier(text: string): WordMod {
     forceStack: false,
     forceForward: false,
     quoteFlag: false,
-    refFlag: false,
+    valFlag: false,
     usurpFlag: false,
     typeFlag: false,
     valid: false,
@@ -1668,7 +1668,7 @@ export function scanWordModifier(text: string): WordMod {
   const mod = text.slice(idx + 1)
   const baseName = text.slice(0, idx)
 
-  // Scan modifier chars in any order: digits, 'f', 's', 'q', 'r', 'u',
+  // Scan modifier chars in any order: digits, 'f', 's', 'q', 'v', 'u',
   // 't'. Each letter appears at most once; f/s are mutually exclusive;
   // q is mutually exclusive with r and u; t (the type-bound sugar,
   // `Map/t` ≡ `(Type of [Map])`) combines with nothing — it produces a
@@ -1680,7 +1680,7 @@ export function scanWordModifier(text: string): WordMod {
   let forceStack = false
   let forceForward = false
   let quoteFlag = false
-  let refFlag = false
+  let valFlag = false
   let usurpFlag = false
   let typeFlag = false
   let i = 0
@@ -1722,16 +1722,16 @@ export function scanWordModifier(text: string): WordMod {
         forceStack = true
       }
     } else if (c === 'q') {
-      if (quoteFlag || refFlag || usurpFlag) {
+      if (quoteFlag || valFlag || usurpFlag) {
         valid = false
       } else {
         quoteFlag = true
       }
-    } else if (c === 'r') {
-      if (refFlag || quoteFlag) {
+    } else if (c === 'v') {
+      if (valFlag || quoteFlag) {
         valid = false
       } else {
-        refFlag = true
+        valFlag = true
       }
     } else if (c === 'u') {
       if (usurpFlag || quoteFlag) {
@@ -1756,7 +1756,7 @@ export function scanWordModifier(text: string): WordMod {
 
   // /t combines with nothing — any companion flag invalidates, in
   // either order.
-  if (typeFlag && (quoteFlag || refFlag || usurpFlag || forceStack || forceForward || argCount >= 0)) {
+  if (typeFlag && (quoteFlag || valFlag || usurpFlag || forceStack || forceForward || argCount >= 0)) {
     valid = false
   }
   if (!valid) {
@@ -1772,7 +1772,7 @@ export function scanWordModifier(text: string): WordMod {
     forceStack,
     forceForward,
     quoteFlag,
-    refFlag,
+    valFlag,
     usurpFlag,
     typeFlag,
     valid: true,
@@ -1781,8 +1781,8 @@ export function scanWordModifier(text: string): WordMod {
 
 // isModifierAlphabet reports whether every character of a candidate
 // modifier suffix is drawn from the modifier alphabet (digits plus
-// f s q r u t). It is the line between a BOTCHED MODIFIER (`foo/fs`,
-// `foo/qr`, `foo/1f2` — all-alphabet but an invalid combination),
+// f s q v u t). It is the line between a BOTCHED MODIFIER (`foo/fs`,
+// `foo/qv`, `foo/1f2` — all-alphabet but an invalid combination),
 // which errors loudly, and a slash-bearing plain name (`foo/bar`,
 // `add/x`, the builtin type paths `Scalar/Number/Integer` — the
 // suffix contains a non-modifier character, uppercase included),
@@ -1792,14 +1792,14 @@ function isModifierAlphabet(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     const c = s[i]!
     if (c >= '0' && c <= '9') continue
-    if (c === 'f' || c === 's' || c === 'q' || c === 'r' || c === 'u' || c === 't') continue
+    if (c === 'f' || c === 's' || c === 'q' || c === 'v' || c === 'u' || c === 't') continue
     return false
   }
   return true
 }
 
 // wordBaseName returns the base name of an unquoted word token, stripping
-// a valid `/...` modifier suffix (foo/r → foo, foo → foo). Used to derive
+// a valid `/...` modifier suffix (foo/v → foo, foo → foo). Used to derive
 // the key of a shorthand map entry, whose value keeps the full token.
 function wordBaseName(text: string): string {
   return scanWordModifier(text).base
@@ -1808,7 +1808,7 @@ function wordBaseName(text: string): string {
 // parseWord interprets an unquoted text token as a boru word, handling
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
-// ref-word, both of which short-circuit the rest.
+// val-word, both of which short-circuit the rest.
 // BARE_WORD_NAME mirrors core.ValidateWordName's character rule on the Go
 // side (that rule is not ported to core/ts): first character [a-z_-$], the
 // rest [a-z0-9_-$]. ValidateWordName additionally rejects the all-`$` and
@@ -1879,7 +1879,7 @@ export function parseWord(text: string): Value {
         `invalid word modifier /${text.slice(idx + 1)} on ${goQuote(text.slice(0, idx))}`,
         text,
         {
-          hint: 'modifier letters stack in any order, each at most once; f|s are exclusive; q excludes r and u; t combines with nothing; digits form one contiguous run within int range',
+          hint: 'modifier letters stack in any order, each at most once; f|s are exclusive; q excludes v and u; t combines with nothing; digits form one contiguous run within int range',
         },
       )
     }
@@ -1919,20 +1919,20 @@ export function parseWord(text: string): Value {
   // /u emits a usurp-word that resolves the name to its bound Function
   // value and wraps it with reversed signature arg order. Legal only for
   // function words (illegal_ref at run time otherwise). It may combine
-  // with /r: /u alone dispatches the wrapper, /ur leaves it as data.
+  // with /v: /u alone dispatches the wrapper, /uv leaves it as data.
   // Argument-shape modifiers don't apply (the wrapper supplies its own).
   if (m.usurpFlag) {
-    return newWordUsurp(name, m.refFlag)
+    return newWordUsurp(name, m.valFlag)
   }
 
-  // /r emits a ref-word that, when reached at the pointer, resolves the
-  // name to its bound Function value without invoking. /r is legal only
+  // /v emits a val-word that, when reached at the pointer, resolves the
+  // name to its bound Function value without invoking. /v is legal only
   // for function words; a non-fn binding raises illegal_ref at run time
   // (the parser accepts the syntax — the binding kind isn't known until
-  // resolution). Argument-shape modifiers don't apply because ref
+  // resolution). Argument-shape modifiers don't apply because val
   // bypasses dispatch entirely; they're accepted syntactically but
   // ignored.
-  if (m.refFlag) {
+  if (m.valFlag) {
     return newWordRef(name)
   }
 

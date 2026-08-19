@@ -191,7 +191,7 @@ func coverageFixture(t *testing.T, dir string) (mod, suite string) {
 	mod = write(t, filepath.Join(dir, "calc.boru"),
 		"def add2 fn [[x:Integer] [Integer] [\n  x add 2\n]]\n"+
 			"def triple fn [[x:Integer] [Integer] [\n  x mul 3\n]]\n"+
-			"export \"Calc\" { add2: add2/r  triple: triple/r }\n")
+			"export \"Calc\" { add2: add2/v  triple: triple/v }\n")
 	suite = write(t, filepath.Join(dir, "calc_test.boru"),
 		"import \"boru:test\"\nimport \""+mod+"\"\nTest.test \"add2\" [(Calc.add2 3) 5 Assert.equal]\n")
 	return mod, suite

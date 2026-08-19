@@ -30,7 +30,7 @@ var customCodecSteps = []string{
 		] [ {need: 1} ]
 	]])`,
 	`def my-encode (fn [[reply:Any] [Any] [ convert Bytes (join "" [reply.line "\n"]) ]])`,
-	`def cdc {decode: my-decode/r encode: my-encode/r}`,
+	`def cdc {decode: my-decode/v encode: my-encode/v}`,
 }
 
 // stampNetReg builds the net-test registry, optionally armed for runtime
@@ -114,7 +114,7 @@ func TestResolveCodecStampsCustomBoruFns(t *testing.T) {
 	// An ASYMMETRIC codec (explicit encode-req / decode-resp keys) stamps its
 	// client-side fns independently of the server pair.
 	asym := stampNetReg(t, true, append(customCodecSteps,
-		`def cdc4 {decode: my-decode/r encode: my-encode/r encode-req: my-encode/r decode-resp: my-decode/r}`))
+		`def cdc4 {decode: my-decode/v encode: my-encode/v encode-req: my-encode/v decode-resp: my-decode/v}`))
 	cdc4Val, _ := asym.Defs.Top("cdc4")
 	cf4, err := resolveCodec(asym, cdc4Val, "connect")
 	if err != nil {

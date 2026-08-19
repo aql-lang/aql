@@ -34,29 +34,33 @@ func TestSeam7RefHandler(t *testing.T) {
 	r := seam7RegWithBindings(t)
 
 	// Positive: resolve a bound fn.
-	out, err := refHandler([]Value{NewAtom("f")}, nil, nil, r)
+	out, err := valofHandler([]Value{NewAtom("f")}, nil, nil, r)
 	if err != nil || len(out) != 1 || !out[0].Parent.Equal(TFunction) {
-		t.Fatalf("refHandler positive: %v / %v", out, err)
+		t.Fatalf("valofHandler positive: %v / %v", out, err)
 	}
 	// Missing name.
-	if _, err := refHandler(nil, nil, nil, r); err == nil ||
+	if _, err := valofHandler(nil, nil, nil, r); err == nil ||
 		!strings.Contains(err.Error(), "missing name") {
 		t.Fatalf("expected missing-name error, got %v", err)
 	}
 	// Non-atom argument.
-	if _, err := refHandler([]Value{NewInteger(1)}, nil, nil, r); err == nil ||
+	if _, err := valofHandler([]Value{NewInteger(1)}, nil, nil, r); err == nil ||
 		!strings.Contains(err.Error(), "expected an atom") {
 		t.Fatalf("expected atom error, got %v", err)
 	}
 	// Unbound name with a nil registry (ResolveRef(nil) → not bound).
-	if _, err := refHandler([]Value{NewAtom("nope")}, nil, nil, nil); err == nil ||
+	if _, err := valofHandler([]Value{NewAtom("nope")}, nil, nil, nil); err == nil ||
 		!strings.Contains(err.Error(), "not bound") {
 		t.Fatalf("expected unbound error, got %v", err)
 	}
-	// A bound non-fn value is rejected.
-	if _, err := refHandler([]Value{NewAtom("v5")}, nil, nil, r); err == nil ||
-		!strings.Contains(err.Error(), "function word") {
-		t.Fatalf("expected illegal_ref, got %v", err)
+	// A bound non-fn value comes back AS ITSELF — `valof` is total over
+	// binding kinds, so there is no function-only rejection any more.
+	out, verr := valofHandler([]Value{NewAtom("v5")}, nil, nil, r)
+	if verr != nil {
+		t.Fatalf("non-fn binding: unexpected error: %v", verr)
+	}
+	if len(out) != 1 {
+		t.Fatalf("non-fn binding: got %v, want exactly one value", out)
 	}
 }
 

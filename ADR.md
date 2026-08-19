@@ -208,8 +208,15 @@ refusal is a bug. The emitter interns bare type nodes, nested included.
 ("a bare fn name before a `Function`-typed slot resolves as a reference")
 is struck, per clause 2 of the 2026-08-16 `/r` ruling
 (`design/FUNCTION-VALUE-SCOPE.0.md` §12.4). Passing a function as an
-argument requires `/r`; the bare-name-calls rule now applies universally,
+argument requires `/v`; the bare-name-calls rule now applies universally,
 with no slot-typed exception.
+**Renamed 2026-08-19:** the modifier `/r` became **`/v`** and the word
+`ref` became **`valof`**, and the function-only gate was dropped — `/v`
+yields the binding's VALUE whatever kind it is (for a fn, the call is
+suppressed; for anything else it is the identity). The rule this record
+states is unchanged; only its spelling and its domain are. Historical
+references above to "the `/r` ruling" keep that name, since that is what
+the ruling was called.
 
 There is exactly one function type, `Type/Function`. `Word/__FN`
 (FixedID 23) is retired, never recycled; the TS twin moved in lockstep.
@@ -217,7 +224,7 @@ There is exactly one function type, `Type/Function`. `Word/__FN`
 A function value is always the inert, referenceable thing — **calling is
 an act of the use site**. The discriminators are the name/value
 distinction and the transient `Quoted` flag, never the Parent type. A bare
-name bound to a function calls; a value at the pointer dispatches; `/r`
+name bound to a function calls; a value at the pointer dispatches; `/v`
 takes the reference and is no collection barrier.
 
 ---
@@ -304,7 +311,7 @@ prerequisite.
 Every function behaves the same way whatever its arity and wherever it
 came from — named or anonymous, module or local, boru or native.
 ADR-011 fixes the rules; this record forbids *exceptions* keyed on arity
-or origin. Two exist today, and are defects rather than design: `/r`
+or origin. Two exist today, and are defects rather than design: `/v`
 fails to park a 0-arg fn bound to a param, yielding the call's result
 where the author asked for the function; and `execFnDefLiteral` treats a
 0-arg **anonymous** value as data where a named one dispatches.

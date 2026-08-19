@@ -20,12 +20,12 @@ func TestDeadValueDefDrop(t *testing.T) {
 		// dead USER-call value-def: go mutates the array (side effect), its returned
 		// array is bound to a never-read name.
 		{"dead user-call value-def (ignored return)",
-			`import module [ def go fn [[a:FlexList] [FlexList] [ def _ (a set 0 99) a ]] def srt fn [[xs:List] [List] [ def arr (flex xs) def _ (arr go) (node arr) ]] export "M" {srt: srt/r} ] end ([1 2 3] M.srt)`,
+			`import module [ def go fn [[a:FlexList] [FlexList] [ def _ (a set 0 99) a ]] def srt fn [[xs:List] [List] [ def arr (flex xs) def _ (arr go) (node arr) ]] export "M" {srt: srt/v} ] end ([1 2 3] M.srt)`,
 			"[[99 2 3]]"},
 		// dead BRANCH value-def: the if's merge is bound to a never-read name; the then
 		// arm mutates via a (recursive-style) helper.
 		{"dead branch value-def (if merge ignored)",
-			`import module [ def go fn [[a:FlexList] [FlexList] [ def _ (a set 1 88) a ]] def srt fn [[xs:List] [List] [ def arr (flex xs) def n (xs size) def _ (if (n gt 1) [ arr go ] [ arr ]) (node arr) ]] export "M" {srt: srt/r} ] end ([1 2 3] M.srt)`,
+			`import module [ def go fn [[a:FlexList] [FlexList] [ def _ (a set 1 88) a ]] def srt fn [[xs:List] [List] [ def arr (flex xs) def n (xs size) def _ (if (n gt 1) [ arr go ] [ arr ]) (node arr) ]] export "M" {srt: srt/v} ] end ([1 2 3] M.srt)`,
 			"[[1 88 3]]"},
 		// the same at TOP LEVEL (a dead branch value-def over a native call) must also compile.
 		{"dead branch value-def, native then-arm",

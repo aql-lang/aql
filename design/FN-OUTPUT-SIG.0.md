@@ -170,7 +170,7 @@ and is rejected; a loud wrong guess beats a silent one.
 **The declaration span went missing for one spelling.** `ParseFnDef`
 took `DeclSite{Pos: outputSig.Pos()}`, and `attachDeclSpan` drops the
 span when `Row <= 0`. The parser stamps positions only on nodes its
-`val` rule wraps in a `sited`, which a list-interior pair never is — so
+`valof` rule wraps in a `sited`, which a list-interior pair never is — so
 the pair form silently lost the "the declaration of `f` expects N return
 value(s)" span that the list form got. The pair's own VALUE keeps its
 position (`Integer` at 1:22), so `sigDeclPos` descends to the first

@@ -358,7 +358,7 @@ func TestW3IsBranches(t *testing.T) {
 	// Predicate RHS runs the function (direct call: forward collection
 	// treats a Function token as a boundary, so the arm is pinned here).
 	r := w3TypeReg()
-	toks, perr := parser.Parse(`def positive fn [[n:Integer] [Boolean] [n gt 0]]  positive/r`)
+	toks, perr := parser.Parse(`def positive fn [[n:Integer] [Boolean] [n gt 0]]  positive/v`)
 	if perr != nil {
 		t.Fatal(perr)
 	}

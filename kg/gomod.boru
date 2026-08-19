@@ -504,31 +504,31 @@ def input-paths fn [[work-path:String extra-modules:List] [List] [
 
 export "KgGoMod" {
   boru-prefix:boru-prefix
-  read-text:read-text/r
-  lines-of:lines-of/r
-  strip-prefix:strip-prefix/r
-  strip-comment:strip-comment/r
-  key-of:key-of/r
-  module-label:module-label/r
-  package-label:package-label/r
-  parse-work-uses:parse-work-uses/r
-  parse-module-path:parse-module-path/r
-  require-entry:require-entry/r
-  parse-requires:parse-requires/r
-  sibling-deps:sibling-deps/r
-  subdirs:subdirs/r
-  has-go-files:has-go-files/r
-  packages-of:packages-of/r
+  read-text:read-text/v
+  lines-of:lines-of/v
+  strip-prefix:strip-prefix/v
+  strip-comment:strip-comment/v
+  key-of:key-of/v
+  module-label:module-label/v
+  package-label:package-label/v
+  parse-work-uses:parse-work-uses/v
+  parse-module-path:parse-module-path/v
+  require-entry:require-entry/v
+  parse-requires:parse-requires/v
+  sibling-deps:sibling-deps/v
+  subdirs:subdirs/v
+  has-go-files:has-go-files/v
+  packages-of:packages-of/v
   gowork-source-id:gowork-source-id
   gotree-source-id:gotree-source-id
-  gomod-source-id:gomod-source-id/r
-  mk-sources:mk-sources/r
-  read-member:read-member/r
-  member-entity:member-entity/r
-  package-entities:package-entities/r
-  member-assertions:member-assertions/r
-  candidate-bundle:candidate-bundle/r
-  tree-manifest-text:tree-manifest-text/r
-  tree-manifest:tree-manifest/r
-  input-paths:input-paths/r
+  gomod-source-id:gomod-source-id/v
+  mk-sources:mk-sources/v
+  read-member:read-member/v
+  member-entity:member-entity/v
+  package-entities:package-entities/v
+  member-assertions:member-assertions/v
+  candidate-bundle:candidate-bundle/v
+  tree-manifest-text:tree-manifest-text/v
+  tree-manifest:tree-manifest/v
+  input-paths:input-paths/v
 }

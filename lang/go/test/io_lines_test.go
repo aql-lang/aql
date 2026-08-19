@@ -291,7 +291,7 @@ func TestReadLineSharedAcrossModuleBody(t *testing.T) {
 	}
 	a.NativeRegistry().Input = strings.NewReader("first\nsecond\nthird\n")
 	res, err := a.Run(`import "boru:io"
-import module [ import "boru:io"  def take fn [[] [Any] [IO.read-line (IO.stdin)]]  export "M" {take: take/r} ] end
+import module [ import "boru:io"  def take fn [[] [Any] [IO.read-line (IO.stdin)]]  export "M" {take: take/v} ] end
 M.take drop
 IO.read-line (IO.stdin)`)
 	if err != nil {
@@ -362,7 +362,7 @@ func TestStreamProbeReachesModuleBodies(t *testing.T) {
 	if _, err := a.Run(`import module [
   import "boru:io"
   def m-tty fn [[] [Boolean] [ IO.is-tty (IO.stdout) ]]
-  export "M" {tty: m-tty/r}
+  export "M" {tty: m-tty/v}
 ] end
 print (M.tty)`); err != nil {
 		t.Fatal(err)

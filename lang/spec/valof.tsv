@@ -1,0 +1,120 @@
+# boru Language Specification: Value reads (valof / /v)
+# Format: input<TAB>expected<TAB>description
+#
+# valof name → resolve a name to its bound VALUE, disabling any call the
+#              name would induce. Companion to the `/v` word suffix.
+# name/v     → the same operation as a suffix.
+#
+# `valof` and `/v` are ONE operation and must behave identically in every
+# position. A bare reference is INERT at the reference site: it is left on
+# the stack as an (unquoted) Function value and is never auto-invoked —
+# not even a 0-arg fn. The SAME value dispatches normally when it is
+# re-stepped elsewhere: unwrapped from a paren, retrieved from a map slot,
+# or handed to `apply`.
+#
+# `valof` is TOTAL over every binding kind: for a fn binding it suppresses
+# the call, and for any other binding it is the identity. There is no
+# function-only gate — that totality is the point, because it is what
+# lets ONE spelling read a slot whose kind is not known statically
+# (NUR085, resolved by this rule). The only refusal left is an UNBOUND
+# name, which has no value to take: [boru/undefined_word].
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  Bare reference is inert (held) — `valof` ≡ `/v`, no auto-fire
+def z fn [[][Integer][42]]  z/v	fn [[][Integer][42]]	bare /v holds a 0-arg fn — NOT fired
+def z fn [[][Integer][42]]  valof z	fn [[][Integer][42]]	bare valof holds identically (no re-step)
+def inc fn [[n:Integer][Integer][n add 1]]  typeof (inc/v)	Function	a held reference is a Function value
+def inc fn [[n:Integer][Integer][n add 1]]  typeof (valof inc)	Function	valof yields a Function value
+#
+# §2  The held value dispatches when RE-STEPPED (paren unwrap)
+def z fn [[][Integer][42]]  (z/v)	42	paren re-steps the 0-arg fn → fires
+def z fn [[][Integer][42]]  (valof z)	42	valof fires when re-stepped — same as /v
+def inc fn [[n:Integer][Integer][n add 1]]  (inc/v) 5	6	grouped 1-arg reference dispatches
+def inc fn [[n:Integer][Integer][n add 1]]  (valof inc) 5	6	valof dispatches when re-stepped
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/v) 10 3	7	grouped 2-arg reference dispatches
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (valof sub2) 10 3	7	valof ≡ /v for a 2-arg fn
+#
+# §3  Reference stored in a map slot dispatches via dot-access
+def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: inc/v}  ops.f 5	6	/v in a map slot dispatches
+def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: (valof inc)}  ops.f 5	6	valof in a map slot dispatches
+def z fn [[][Integer][42]]  def ops {f: z/v}  (ops.f)	42	a 0-arg /v in a map slot courtesy-dispatches on the read (break 2: compiled as an arity-0 dyn-method apply)
+def z fn [[][Integer][42]]  def ops {f: z/v}  ops.f	42	the bare 0-arg read courtesy-dispatches too
+def z fn [[][Integer][42]]  def ops {f: z/v}  (ops get f/q) add 1	43	the get spelling of the same 0-arg read, consumed downstream
+def z fn [[][Integer][42]]  def lst [z/v]  (lst get 0)	42	a 0-arg /v in a LIST slot courtesy-dispatches by concrete index
+#
+# §4  Reference handed to `apply` (stack form: args... fn/v apply)
+def inc fn [[n:Integer][Integer][n add 1]]  5 inc/v apply	6	apply invokes a referenced fn against stack args
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/v apply	-7	apply on a 2-arg referenced fn (stack order)
+def z fn [[][Integer][42]]  z/v apply	42	apply fires a referenced 0-arg fn
+#
+# §5  Anonymous-function references behave identically
+def f [a:Integer b:Integer] => [a sub b]  typeof (f/v)	Function	/v holds a bound lambda
+def f n:Integer => [n add 1]  (f/v) 5	6	grouped lambda reference dispatches
+def f n:Integer => [n add 1]  5 f/v apply	6	apply a referenced lambda
+[([] => [42])]	[fn [[][Any][42]]]	a lambda inside a list is held, never fired in place
+#
+# §6  Negatives — the ONLY refusal is a name with nothing bound to it.
+#     There is no function-only gate: on a non-fn binding both surfaces
+#     are the identity, which §9 pins in full.
+def x 5  x/v	5	/v on a non-fn binding is the value itself
+def x 5  valof x	5	valof on a non-fn binding, likewise
+nope/v	ERROR:undefined_word	/v on an unbound name
+valof nope	ERROR:undefined_word	valof on an unbound name
+#
+# §7  A `/v`-marked word feeds forward collection as its REFERENCE
+#     value (NUR050 fix): it is not a function-word barrier, so it
+#     resolves directly as another word's forward argument. (This
+#     retired the historical gotcha where `typeof inc/v` stranded with
+#     a signature_error and had to be grouped as `typeof (inc/v)`.)
+def inc fn [[n:Integer][Integer][n add 1]]  typeof inc/v	Function	bare /v resolves as a forward arg (was the grouping gotcha)
+def inc fn [[n:Integer][Integer][n add 1]]  typeof (inc/v)	Function	…and the paren spelling still agrees
+#
+# §8  A fn body's RETURN is delivered, not re-used
+#     A frame collapsing to a single Function value hands it back; the
+#     frame's own collapse is not a fresh use of it, so it is not invoked
+#     there. This is the ParkResult idiom (`valof`'s own mechanism) applied
+#     to the frame result, and it is POSITIONAL — nothing is stamped on
+#     the value, so the returned reference still dispatches at its next
+#     use (§3 map slot, §4 apply both still hold).
+#     Before this, `[f/v]` returned the CALL'S RESULT (7) rather than the
+#     function — /v silently doing the opposite of what it says.
+#
+#     The argument is handed over with `/v` because passing a function as an
+#     argument requires it; a bare name is a call.
+#
+#     NOT pinned here: what a USER paren does to such a return. `((h z/v))`
+#     is an open interpreter/compiler divergence (interp 42, compiled the fn
+#     value) — the §2 re-step rule it turns on is itself under revision, so
+#     there is no oracle to pin it against, in this corpus or the frontier
+#     one. Recorded as NUR073 (Pending) so the gap is not mistaken for
+#     coverage; reasoning in design/FUNCTION-VALUE-SCOPE.0.md §12.6. Do not
+#     add a row for it until clause 3 is ruled.
+def z fn [[][Integer][42]]  def h fn [[f:Function][Any][f/v]]  typeof (h z/v)	Function	a /v'd param returned from a body is the fn, not its result
+def z fn [[][Integer][42]]  def h fn [[][Any][z/v]]  typeof (h)	Function	same for a module-scope name — not param-specific
+def inc fn [[n:Integer][Integer][n add 1]]  def h fn [[f:Function][Any][f/v]]  typeof (h inc/v)	Function	arity does not change it (ADR-016)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §9  valof is TOTAL — every binding kind, not just functions (NUR085)
+#     The negative twin is §10: an unbound name still refuses.
+def answer 42  answer/v	42	/v on an Integer binding is the value itself
+def answer 42  valof answer	42	valof on an Integer binding, likewise
+def greet 'hi'  greet/v	'hi'	/v on a String binding
+def xs [1 2 3]  xs/v	[1 2 3]	/v on a List binding
+def m {a:1}  m/v	{a:1}	/v on a Map binding
+def t true  t/v	true	/v on a Boolean binding
+def answer 42  typeof (answer/v)	Integer	the value keeps its own type — /v does not wrap it
+def answer 42  add 1 (answer/v)	43	and it composes as an ordinary value
+#
+# §9b the polymorphic read: ONE body spelling serves both kinds. This is
+#     the shape that had no spelling before — `[t]` calls a fn-bound
+#     param and `[t/v]` used to refuse a non-fn one.
+def idf t:Any => [t/v]  (idf 5)	5	a param holding an Integer
+def idf t:Any => [t/v]  (idf 'x')	'x'	the same body, a String
+def idf t:Any => [t/v]  def g (idf (z:Integer => [add 1 z]))  (g 5)	6	the same body, a Function — returned uncalled, then applied
+def idf t:Any => [t/v]  typeof (idf (z:Integer => [z]))	Function	and it is the Function itself, not its result
+#
+# §10  negatives — totality over KINDS is not totality over everything
+def answer 42  nope/v	ERROR:undefined_word	an unbound name has no value to take
+def answer 42  valof nope	ERROR:undefined_word	the word form refuses identically
+add/vq	ERROR:invalid word modifier	q still cannot combine with v
+add/vv	ERROR:invalid word modifier	repeated v is still rejected

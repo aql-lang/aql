@@ -105,7 +105,7 @@ func TestIsCaseOpenCallHeadGuards(t *testing.T) {
 		t.Error("def'd fn not flagged as open-call head")
 	}
 	// A parked Function binding IS a head.
-	if _, err := seam5Run(r, `def hr (h/r)`); err != nil {
+	if _, err := seam5Run(r, `def hr (h/v)`); err != nil {
 		t.Fatal(err)
 	}
 	if !isCaseOpenCallHead(r, NewWord("hr")) {

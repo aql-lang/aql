@@ -69,7 +69,7 @@ func init() {
 		Description: "Conceptually every mini expansion produces a FUNCTION in place with src and opts bound. " +
 			"A value kind's function is called on the spot (+hb, math, micron, bf's generator form); a FILTER " +
 			"kind's function auto-dispatches when a matching subject is on the stack — and stays a storable " +
-			"VALUE when not, so `def f (+re/[a-z]+/)` binds a reusable matcher (`\"AbcD\" f`), and /r parks it " +
+			"VALUE when not, so `def f (+re/[a-z]+/)` binds a reusable matcher (`\"AbcD\" f`), and /v parks it " +
 			"deliberately. Each built-in filter kind's partial has a NAMED member type (MiniLang.Re, " +
 			"MiniLang.Gex, MiniLang.Jp, MiniLang.Jq, MiniLang.Xp, MiniLang.Sp) for `is` checks and typed fn params " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`); typeof still reports Function. " +

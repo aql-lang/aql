@@ -23,26 +23,26 @@
 # NUR031 opaque-Ideal section) and lang/spec/fn-value.tsv.
 
 # --- reflexivity: the defect this record closed --------------------------
-def f fn x:Integer [Integer] [x add 1] f/r eq f/r	true	a function is reflexively eq — the identity token survives the reach
-def f fn x:Integer [Integer] [x add 1] f/r deq f/r	true	…and reflexively deq, which is what ADR-015's round-trip needs of the kind
+def f fn x:Integer [Integer] [x add 1] f/v eq f/v	true	a function is reflexively eq — the identity token survives the reach
+def f fn x:Integer [Integer] [x add 1] f/v deq f/v	true	…and reflexively deq, which is what ADR-015's round-trip needs of the kind
 
 # --- eq is reference identity, and identity survives rebinding -----------
-def f fn x:Integer [Integer] [x add 1] def a (f/r) def b (f/r) a/r eq b/r	true	two names for ONE function are eq — identity survives rebinding
-def f fn x:Integer [Integer] [x add 1] def a (f/r) a/r eq f/r	true	…and the rebound name is eq to the function it was reached from
-def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r eq g/r	false	GOTCHA: two independently-written functions with identical content are NOT eq — eq is identity, not content
+def f fn x:Integer [Integer] [x add 1] def a (f/v) def b (f/v) a/v eq b/v	true	two names for ONE function are eq — identity survives rebinding
+def f fn x:Integer [Integer] [x add 1] def a (f/v) a/v eq f/v	true	…and the rebound name is eq to the function it was reached from
+def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v eq g/v	false	GOTCHA: two independently-written functions with identical content are NOT eq — eq is identity, not content
 
 # --- deq is content equality --------------------------------------------
-def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r deq g/r	true	…but they ARE deq: same params, same returns, same body
-def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/r deq h/r	false	a different BODY is a different value — deq discriminates it
-def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/r deq s/r	false	…as does a different signature
+def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v deq g/v	true	…but they ARE deq: same params, same returns, same body
+def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/v deq h/v	false	a different BODY is a different value — deq discriminates it
+def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/v deq s/v	false	…as does a different signature
 
 # --- content is canon, and canon carries no binding name -----------------
-def f fn x:Integer [Integer] [x add 1] canon (f/r)	'fn [[x:Integer][Integer][word(x) word(add) 1]]'	canon renders the anonymous fn literal — no `fn f`, because the name is how it was reached
-def f fn x:Integer [Integer] [x add 1] def a (f/r) (canon (a/r)) eq (canon (f/r))	true	so one function under two names has ONE canon — the name-independence deq rides on
+def f fn x:Integer [Integer] [x add 1] canon (f/v)	'fn [[x:Integer][Integer][word(x) word(add) 1]]'	canon renders the anonymous fn literal — no `fn f`, because the name is how it was reached
+def f fn x:Integer [Integer] [x add 1] def a (f/v) (canon (a/v)) eq (canon (f/v))	true	so one function under two names has ONE canon — the name-independence deq rides on
 
 # --- cross-kind: a function against a non-function -----------------------
-def f fn x:Integer [Integer] [x add 1] f/r eq 1	false	cross-type eq is false, never an error
-def f fn x:Integer [Integer] [x add 1] f/r deq 1	false	deq likewise
+def f fn x:Integer [Integer] [x add 1] f/v eq 1	false	cross-type eq is false, never an error
+def f fn x:Integer [Integer] [x add 1] f/v deq 1	false	deq likewise
 
 # --- the record's measurable acceptance signal ---------------------------
 # A namespace is deq-reflexive only when every export is. A module

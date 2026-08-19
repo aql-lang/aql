@@ -26,7 +26,7 @@ func TestDoCatchMultiValueArity(t *testing.T) {
 	const mod = `import module [
   def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]]
   def boom fn [[x:Any] [Any] [ raise bad_input "always" ]]
-  export "M" {dec: dec/r, boom: boom/r}
+  export "M" {dec: dec/v, boom: boom/v}
 ] end `
 
 	// The COMPILES-natively half (pure/infallible multi-value bodies keeping
@@ -53,7 +53,7 @@ func TestDoCatchMultiValueArity(t *testing.T) {
 		`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]`,
 		// A NATIVE module fn bound to a NAME (Module set, no boru body) — the
 		// fnDefMayRaise Module!="" path. StructUtil.parse can raise on bad input.
-		`import "boru:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]`,
+		`import "boru:struct-util"  def g StructUtil.parse/v  do [(g "x") 2] error [dot code]`,
 		// A bare module-NAMESPACE VALUE in the body — the wordMayRaise facet-map path.
 		mod + `do [M 3] error [dot code]`,
 		// A fallible call nested inside a branch-arm LIST within a paren — the
