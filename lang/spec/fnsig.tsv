@@ -26,6 +26,15 @@ typeof (fnsig Integer String)	FunctionSignature	the pair form builds a FunctionS
 deq (canon (fnsig Integer String)) (canon (fnsig [[Integer] [String]]))	true	pair form and spec-list form build the SAME value
 deq (canon (fnsig Integer Integer)) (canon (fnsig [[Integer] [Integer]]))	true	…likewise when input and output coincide
 #
+# The OUTPUT slot follows fn's abbreviation rule: a bare type and a
+# one-element list mean the same thing, so `fnsig Integer [String]` is
+# the same value as `fnsig Integer String`. (The INPUT slot cannot be
+# bracketed — a list there always selects the spec-list form, §2.)
+typeof (fnsig Integer [String])	FunctionSignature	a bracketed OUTPUT stays in the pair form
+deq (canon (fnsig Integer [String])) (canon (fnsig Integer String))	true	…and is the same value as the bare output
+deq (canon (fnsig Integer [String])) (canon (fnsig [[Integer] [String]]))	true	…and as the full spec-list spelling
+def T fnsig Integer [String]  def f fn x:Integer String [convert String x]  def h fn g:T String [(g 5)]  h f/v	'5'	…and it dispatches identically
+#
 # §2  the spec-list form is undisturbed by the pair sugar
 typeof (fnsig [[Integer] [String]])	FunctionSignature	1-triple spec list
 typeof (fnsig [[Integer Integer] [Integer]])	FunctionSignature	2-parameter input needs the spec-list form
