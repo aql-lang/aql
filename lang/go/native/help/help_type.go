@@ -354,9 +354,20 @@ func init() {
 		},
 	})
 	register(&Entry{
-		Word:        "fnsig",
-		Summary:     "Build a function-signature selector from a [[args] [returns]] shape.",
-		Description: "Constructs the signature value used by targeted undef to remove one overload of a multi-signature fn: undef name fnsig [[Number] [Number]].",
+		Word:    "fnsig",
+		Summary: "A function TYPE — a function minus its body.",
+		Description: "Two forms, mirroring fn one slot shorter: the 2-arg pair form `fnsig Integer String`, " +
+			"and the spec-list form `fnsig [[Integer] [String]]` for 2+ parameters, zero parameters, or an " +
+			"overload set (a LIST input always selects the spec-list form, exactly as with fn). Bound to a " +
+			"capitalised name it is a type dispatch ENFORCES: a parameter declared `g:IntToStr` admits only " +
+			"functions whose shape satisfies it — parameters contravariant, returns covariant — where a bare " +
+			"`Function` parameter admits any function at all. Also the selector targeted undef uses to remove " +
+			"one overload: `undef name fnsig [[Number] [Number]]`.",
+		Examples: []string{
+			`typeof (fnsig Integer String) ; # => FunctionSignature`,
+			`def T fnsig Integer String def f fn x:Integer String [convert String x] f/v is T ; # => true`,
+			`def T fnsig Integer String def f fn x:String Integer [size x] f/v is T ; # => false — shape decides`,
+		},
 	})
 	register(&Entry{
 		Word:        "tnot",

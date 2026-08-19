@@ -254,10 +254,26 @@ function's shape into a call site that did not declare one.
   finding here that is worse than what it replaces.
 - Decide the generic pair form (§5.3): make it work, or refuse it loudly
   and point at the list form.
-- `boru describe fnsig` and `REFERENCE.md`'s modifier/type tables.
-- Spec rows in `lang/spec/` for the variance and rejection tables in §4,
-  and the compiled-coverage question those rows raise (a `canon` over a
-  function value refuses to compile — see `fn-triple.tsv` §2b's note).
+- `REFERENCE.md`'s type tables (`boru describe fnsig` is updated).
 - Go↔TypeScript twin parity: `core/ts` needs the same unifier.
-- The 100% coverage gate (ADR-008) over the new branch and Behavior.
 - A decision on whether `->` sugar (§2.2) lands on top.
+
+Four items from the first draft of this list are **done**, and are what
+the prototype now ships with:
+
+- **`boru describe fnsig`** — it described only the targeted-undef
+  selector role and the list form, which the pair form and the
+  type-enforcement role made incomplete.
+
+- **Spec rows** — `lang/spec/fnsig.tsv`, 24 rows covering the pair/list
+  identity, admission, refusal, variance, and the `is`/dispatch
+  agreement. The compiled-coverage question they raised is answered:
+  every row compiles, so the corpus's `refusalCeiling = 0` is untouched
+  (unlike `fn-triple.tsv` §2b, whose `canon`-over-a-function rows had to
+  move to a Go test).
+- **The check-accuracy ratchet** needs no entry for the new file: the
+  checker statically flags all five of its `ERROR:` rows, so it carries
+  zero unflagged rows.
+- **The 100% coverage gate** (ADR-008) over the new Behavior and the
+  `InstallType` branch — `core/go/unify_fnundef_named_test.go`, driving
+  the unifier directly because the surface spelling is a `basic` word.
