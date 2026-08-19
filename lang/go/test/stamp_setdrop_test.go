@@ -20,7 +20,7 @@ module [
   def w-any fn [[hs:Any k:String v:String] [Any] [ hs set (k) v drop 0 ]]
   def w-grouped fn [[hs:Any k:String v:String] [Any] [ (hs set (k) v) drop 0 ]]
   def w-typed fn [[hs:Map k:String v:String] [Any] [ hs set (k) v drop 0 ]]
-  export "M" { w-any: w-any/r w-grouped: w-grouped/r w-typed: w-typed/r }
+  export "M" { w-any: w-any/v w-grouped: w-grouped/v w-typed: w-typed/v }
 ] import
 `)
 	for _, name := range []string{"w-any", "w-grouped", "w-typed"} {
@@ -38,7 +38,7 @@ func TestStampSetDropNegativeShapes(t *testing.T) {
 	evs := stampEventsFor(t, `
 module [
   def w-mod fn [[hs:Any k:String v:String] [Any] [ hs set (k) v drop/s 0 ]]
-  export "M" { w-mod: w-mod/r }
+  export "M" { w-mod: w-mod/v }
 ] import
 `)
 	reason, ok := stampOutcome(evs, "w-mod")
@@ -62,7 +62,7 @@ func TestSetDropClaimMismatchFallsBack(t *testing.T) {
 	out := runStampedModule(t, `
 module [
   def w-fwd fn [[hs:Any k:String v:String] [Any] [ hs set (k) v print 0 ]]
-  export "M" { w-fwd: w-fwd/r }
+  export "M" { w-fwd: w-fwd/v }
 ] import
 `, `def hs (flex {}) M.w-fwd hs "greeting" "hello" drop hs get "greeting"`)
 	if len(out) != 1 {
@@ -81,7 +81,7 @@ func TestSetDropCompiledRuntimeParity(t *testing.T) {
 	out := runStampedModule(t, `
 module [
   def w-any fn [[hs:Any k:String v:String] [Any] [ hs set (k) v drop 0 ]]
-  export "M" { w-any: w-any/r }
+  export "M" { w-any: w-any/v }
 ] import
 `, `def hs (flex {}) M.w-any hs "greeting" "hello" drop hs get "greeting"`)
 	if len(out) != 1 {

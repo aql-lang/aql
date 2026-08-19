@@ -8,7 +8,7 @@ import (
 	parser "github.com/boru-lang/boru/parser/go"
 )
 
-const stage5Mod = `import module [def fact fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fact (n sub 1) (acc add n)]]] export "MU" {fact: fact/r}] `
+const stage5Mod = `import module [def fact fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fact (n sub 1) (acc add n)]]] export "MU" {fact: fact/v}] `
 
 // TestModuleRecursionGetsTCO pins the Stage-5 reality discovered by
 // tracing: module preamble fns are InstallFnDef'd in the MODULE
@@ -22,7 +22,7 @@ func TestModuleRecursionGetsTCO(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	values, err := parser.Parse(stage5Mod + `MU.fact 50 0 MU.fact/r`)
+	values, err := parser.Parse(stage5Mod + `MU.fact 50 0 MU.fact/v`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestModuleRecursionGetsTCO(t *testing.T) {
 	}
 	fd, ok := res[1].Data.(core.FnDefInfo)
 	if !ok || fd.Registry == nil {
-		t.Fatalf("MU.fact/r did not return a module fn value: %T", res[1].Data)
+		t.Fatalf("MU.fact/v did not return a module fn value: %T", res[1].Data)
 	}
 	if reg.TCO.Detected != 0 {
 		t.Errorf("main registry detected %d; module recursion runs on the module registry", reg.TCO.Detected)
@@ -60,7 +60,7 @@ func TestModuleRecursionDeepConstantSpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	values, err := parser.Parse(stage5Mod + `MU.fact 10000 0 MU.fact/r`)
+	values, err := parser.Parse(stage5Mod + `MU.fact 10000 0 MU.fact/v`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestModuleKillSwitchPropagates(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg.TCO.Disable = true
-	values, err := parser.Parse(stage5Mod + `MU.fact 50 0 MU.fact/r`)
+	values, err := parser.Parse(stage5Mod + `MU.fact 50 0 MU.fact/v`)
 	if err != nil {
 		t.Fatal(err)
 	}

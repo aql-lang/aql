@@ -219,17 +219,39 @@ var DefinitionNatives = []NativeFunc{
 	{
 		Name: "fnsig",
 
-		Signatures: []Signature{{
-			Args:       []*Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Impl:       Go(FnsigHandler, RunInCheck()),
-			// Pure construction — runs in check mode too, so surface
-			// schemas carry REAL shapes statically and `exposes` is
-			// fully static-checkable (design/SURFACES.10.md S2). A
-			// pending gen spec turns the result into a generic
-			// fn-shape schema (see the handler).
-			Returns: []*Type{TFnUndef}, BarrierPos: -1,
-		}},
+		// Two forms, matched longest-first, exactly mirroring `fn` one
+		// slot shorter — a function TYPE is a function minus its body:
+		//
+		//	fn    input output body   →  fnsig input output
+		//	fn    [[in] [out] [body]] →  fnsig [[in] [out]]
+		//
+		// The 2-arg pair form's input slot carries the same `tnot List`
+		// Pattern as fn's triple: a list input ALWAYS means the
+		// spec-list form, so `fnsig [[Integer] [String]]` keeps its
+		// meaning even with extra values on the stack. NoEvalArgs /
+		// NoEvalMapArgs on both slots for the reasons fn documents —
+		// these are spec, not data.
+		Signatures: []Signature{
+			{
+				Args:          []*Type{TAny, TAny},
+				Patterns:      map[int]Value{0: NewNegation(NewTypeLiteral(TList))},
+				NoEvalArgs:    map[int]bool{0: true, 1: true},
+				NoEvalMapArgs: map[int]bool{0: true},
+				Impl:          Go(FnsigPairHandler, RunInCheck()),
+				Returns:       []*Type{TFnUndef}, BarrierPos: -1,
+			},
+			{
+				Args:       []*Type{TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Impl:       Go(FnsigHandler, RunInCheck()),
+				// Pure construction — runs in check mode too, so surface
+				// schemas carry REAL shapes statically and `exposes` is
+				// fully static-checkable (design/SURFACES.10.md S2). A
+				// pending gen spec turns the result into a generic
+				// fn-shape schema (see the handler).
+				Returns: []*Type{TFnUndef}, BarrierPos: -1,
+			},
+		},
 	},
 	{
 		Name: "args",
@@ -1682,6 +1704,24 @@ func AfnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // FnUndef is structural: any function value whose registered
 // signatures satisfy every pair in the FnUndef matches. See
 // eng/go/fnsig.go::FnUndefMatchesFnDef.
+// FnsigPairHandler is the 2-arg sugar `fnsig input output`, the exact
+// analogue of fn's 3-arg triple form with the body slot removed — a
+// function TYPE is a function minus its body. It wraps the pair into
+// the one-triple spec list the list form already parses and delegates,
+// so the two spellings build an identical FnUndef and the generic
+// (`gen`) path is shared rather than duplicated. Non-list input/output
+// follow the same auto-wrap abbreviation rule as fn.
+func FnsigPairHandler(args []Value, names map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	wrap := func(v Value) Value {
+		if _, err := AsList(v); err == nil {
+			return v
+		}
+		return NewList([]Value{v})
+	}
+	spec := NewList([]Value{wrap(args[0]), wrap(args[1])})
+	return FnsigHandler([]Value{spec}, names, stack, r)
+}
+
 func FnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, &BoruError{

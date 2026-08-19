@@ -50,8 +50,8 @@ every batch:
 
 | Batch | Content | State |
 |---|---|---|
-| 1 | Token table; `val` prependOpen marker batch (ML/OP/LA/BT pushes, the 7 marker tokens, arrowTag); `val` prependClose dot-chain (inPairValue gate) | **landed** |
-| next | the remaining `val` edits, `pair` (8 edits), `elem`, `paren`/`pelem`, `interp`/`ielem`/`iexpr`/`ieval`, `angle`/`aelem`, `arrowfold`/`arrowfoldelem`, `dotchain`, `map` | pending |
+| 1 | Token table; `valof` prependOpen marker batch (ML/OP/LA/BT pushes, the 7 marker tokens, arrowTag); `valof` prependClose dot-chain (inPairValue gate) | **landed** |
+| next | the remaining `valof` edits, `pair` (8 edits), `elem`, `paren`/`pelem`, `interp`/`ielem`/`iexpr`/`ieval`, `angle`/`aelem`, `arrowfold`/`arrowfoldelem`, `dotchain`, `map` | pending |
 
 Batch 2+ needs three schema additions the paren/interp rules use:
 named BO/BC/AC/AO action LISTS per edit, alternate `u` maps (pure

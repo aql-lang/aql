@@ -77,7 +77,7 @@ func TestModuleCallGateParityCompiledVsInterpreted(t *testing.T) {
 // signature, so the rebound word gates too.
 func TestModuleCallGateResistsFnValueLaundering(t *testing.T) {
 	pol := denySleepPolicy(t)
-	const src = `import "boru:time-util"  def s TimeUtil.sleep/r  s 1`
+	const src = `import "boru:time-util"  def s TimeUtil.sleep/v  s 1`
 
 	a, _ := New(Options{Policy: pol})
 	_, errI := a.RunInterp(src)

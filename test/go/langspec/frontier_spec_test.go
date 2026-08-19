@@ -136,7 +136,7 @@ func TestFrontierSpecInterp(t *testing.T) {
 // docMod is the shared module preamble of the do-catch rows (a value-
 // dependently-raising fn and an always-raising one, reached as M.dec/M.boom).
 // Must match the TSV rows byte-for-byte — the orphan arm catches drift.
-const docMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end `
+const docMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/v, boom: boom/v} ] end `
 
 // frontierCompileLedger pins the frontier rows the compiler REFUSES today,
 // keyed by exact input (the knownRefusals convention). failsWith pins the
@@ -243,7 +243,7 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// the bound param in the body is what diverges: the interpreter treats a
 	// bare name as a CALL (arity 0 applies, arity >=1 raises), the compiler
 	// treats a param as a VALUE slot (RegisterLocal) and yields the Function.
-	// RULED 2026-08-15 (maintainer): a bare name is a CALL; `/r` is how you ask
+	// RULED 2026-08-15 (maintainer): a bare name is a CALL; `/v` is how you ask
 	// for the value, and arity discrimination is explicitly rejected. So the
 	// INTERPRETER is correct in both rows and the compiler is wrong. The middle
 	// case (arity >=1 WITH arguments) already agrees on both engines and is
@@ -282,7 +282,7 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// fd.Registry. The context bracket is a second, smaller asymmetry:
 	// enterBodyUnit pushes/pops on the CALLING registry (vm.go:294-300) while
 	// curReg would be fd.Registry.
-	`import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/r}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]`: {why: "a fn value from another module reaches a higher-order word's closure slot; the lowering would resolve its free words in the CALLING module, so it declines and the callback-seam island owns it", failsWith: "islanded"},
+	`import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]`: {why: "a fn value from another module reaches a higher-order word's closure slot; the lowering would resolve its free words in the CALLING module, so it declines and the callback-seam island owns it", failsWith: "islanded"},
 
 	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns —
 	// the P1.3 target — GRADUATED 2026-08-03 (completeness-review §8.2(3)/
@@ -313,17 +313,17 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// results in one program residual exceed the Stage-1 lowering. Sound
 	// interpreter fallback. Graduation = multi-dynamic-result residual
 	// lowering; the rows then move to lang/spec/fn-value.tsv §6.
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 m.p 7`:                                {why: "NUR038 seal: twin value-call residual", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 1 m.p 2 m.p 3`:                          {why: "NUR038 seal: triple value-call residual", failsWith: "fn-value-call boundary"},
-	`def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/r} end m.g 1 2 m.g 3 4`:      {why: "NUR038 seal: two-arg twin windows", failsWith: "fn-value-call boundary"},
-	`import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/r}] end M.p 5 M.p 7`:               {why: "NUR038 seal: module-export twins (the original shape)", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end 5 m.p m.p 7`:                                {why: "NUR038 seal: stack form then forward form", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p (1 add 2) m.p 7`:                        {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 m.p 7`:                                {why: "NUR038 seal: twin value-call residual", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 1 m.p 2 m.p 3`:                          {why: "NUR038 seal: triple value-call residual", failsWith: "fn-value-call boundary"},
+	`def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/v} end m.g 1 2 m.g 3 4`:      {why: "NUR038 seal: two-arg twin windows", failsWith: "fn-value-call boundary"},
+	`import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/v}] end M.p 5 M.p 7`:               {why: "NUR038 seal: module-export twins (the original shape)", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end 5 m.p m.p 7`:                                {why: "NUR038 seal: stack form then forward form", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7`:                        {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
 	`def m {l: ([x:Any] => [x])} end m.l 5 m.l 7`:                                                    {why: "NUR038 seal: lambda twins", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/r} end m.p 5 h 7`: {why: "NUR038 seal: value call then bare-word call", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end (m.p 5) (m.p 7)`:                            {why: "NUR038 seal: explicit paren seals", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 end m.p 7`:                            {why: "NUR038 seal: explicit end seals", failsWith: "fn-value-call boundary"},
-	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/r} end m.e 5 m.e 7`:              {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
+	`def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/v} end m.p 5 h 7`: {why: "NUR038 seal: value call then bare-word call", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end (m.p 5) (m.p 7)`:                            {why: "NUR038 seal: explicit paren seals", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 end m.p 7`:                            {why: "NUR038 seal: explicit end seals", failsWith: "fn-value-call boundary"},
+	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7`:              {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
 
 	// Namespace capture at a macro-expanded call site (the NUR038 wrapper
 	// retirement's re-bucketed refusal — see frontier-capture-namespace.tsv):
@@ -376,18 +376,18 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// EmitState.RecordCallOperands. Graduation = a compiled representation
 	// for a function value as an operand (the Stage-3 fn-value work); the
 	// rows then move to compare-restrict.tsv and fn-value.tsv.
-	`def f fn x:Integer [Integer] [x add 1] f/r eq f/r`:                                         {why: "NUR031: a function is reflexively eq", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/r deq f/r`:                                        {why: "NUR031: …and reflexively deq — ADR-015's prerequisite for the kind", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/r) def b (f/r) a/r eq b/r`:                 {why: "NUR031: two names for one function are eq — identity survives rebinding", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/r) a/r eq f/r`:                             {why: "NUR031: …and eq to the function they were reached from", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r eq g/r`:  {why: "NUR031: identical content is NOT eq — eq is identity", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/r deq g/r`: {why: "NUR031: …but it IS deq — deq is content", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/r deq h/r`: {why: "NUR031: a different body is a different value", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/r deq s/r`:         {why: "NUR031: a different signature likewise", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] canon (f/r)`:                                        {why: "NUR031: canon renders the anonymous fn literal — no binding name", failsWith: "function value reaches canon (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/r) (canon (a/r)) eq (canon (f/r))`:         {why: "NUR031: one function under two names has ONE canon", failsWith: "function value reaches canon (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/r eq 1`:                                           {why: "NUR031: cross-type eq is false, never an error", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/r deq 1`:                                          {why: "NUR031: cross-type deq likewise", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] f/v eq f/v`:                                         {why: "NUR031: a function is reflexively eq", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] f/v deq f/v`:                                        {why: "NUR031: …and reflexively deq — ADR-015's prerequisite for the kind", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def a (f/v) def b (f/v) a/v eq b/v`:                 {why: "NUR031: two names for one function are eq — identity survives rebinding", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def a (f/v) a/v eq f/v`:                             {why: "NUR031: …and eq to the function they were reached from", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v eq g/v`:  {why: "NUR031: identical content is NOT eq — eq is identity", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v deq g/v`: {why: "NUR031: …but it IS deq — deq is content", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/v deq h/v`: {why: "NUR031: a different body is a different value", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/v deq s/v`:         {why: "NUR031: a different signature likewise", failsWith: "function value reaches deq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] canon (f/v)`:                                        {why: "NUR031: canon renders the anonymous fn literal — no binding name", failsWith: "function value reaches canon (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] def a (f/v) (canon (a/v)) eq (canon (f/v))`:         {why: "NUR031: one function under two names has ONE canon", failsWith: "function value reaches canon (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] f/v eq 1`:                                           {why: "NUR031: cross-type eq is false, never an error", failsWith: "function value reaches eq (Stage 3)"},
+	`def f fn x:Integer [Integer] [x add 1] f/v deq 1`:                                          {why: "NUR031: cross-type deq likewise", failsWith: "function value reaches deq (Stage 3)"},
 	// The namespace rows refuse for the MODULE-synthetic reason above, not
 	// the fn-value one: a namespace binding has no bakeable operand home.
 	`import "boru:io" IO deq IO`:                          {why: "NUR031: a function-exporting namespace is deq-reflexive — the record's acceptance signal", failsWith: "operand of unknown provenance"},

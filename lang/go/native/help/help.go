@@ -852,7 +852,7 @@ func writeWrapped(b *strings.Builder, text string, width int, indent string) {
 // ANY signature is forward-eligible. Every word with a MIXED barrier
 // therefore advertised the full forward equivalence chain — including
 // spellings it refuses. `apply` is the recorded case (NUR023): its
-// `[Function]` row is stack-only, so `apply f/r 5` raises a signature
+// `[Function]` row is stack-only, so `apply f/v 5` raises a signature
 // error while the help says `apply x y <=> y apply x <=> y x apply`. It is
 // not alone — `dot` (NUR049's subject) has sixteen `BarrierPos: 1` rows
 // that take their receiver from the stack, and advertised the same false

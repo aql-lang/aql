@@ -286,7 +286,7 @@ const (
 	// OpCallDynApplyTop is OpCallDynTrailTop with the `apply` WORD's semantics
 	// (Stage M2a): the fn value on top came through `…args fn apply`, whose
 	// interpreter handler (applyHandler) UNQUOTES the value before re-stepping
-	// it — so a /r-parked (Quoted) fn value STILL applies here, where the
+	// it — so a /v-parked (Quoted) fn value STILL applies here, where the
 	// paren-bounded OpCallDynTrailTop would leave it as data. The fn is popped,
 	// unquoted, and applied to the Arg args beneath it (top arg → first param,
 	// the same reversed-window forward bind as OpCallDynTrailTop); a compiled

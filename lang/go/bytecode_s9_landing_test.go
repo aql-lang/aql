@@ -10,7 +10,7 @@ import (
 // behavior of one §9 item and fails until its landing flips it. The `want`
 // values are the interpreter's (probe-pinned before any implementation).
 
-const s9DocMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end `
+const s9DocMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/v, boom: boom/v} ] end `
 
 func TestS9LoopCarriedVariadicStore(t *testing.T) { // §9.2a — LANDED
 	// A loop-carried def of a variadic loop region is the §5 first-value

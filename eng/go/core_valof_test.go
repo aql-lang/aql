@@ -9,10 +9,10 @@ import (
 )
 
 // freshRegistry builds an eng-only Registry plus a small set of probe
-// natives. The /r suffix is a parser+kernel feature, so these tests
+// natives. The /v suffix is a parser+kernel feature, so these tests
 // stay in eng and only need the kernel surface — no `ref` word, no
 // `apply` word, neither of which lives here. They test stepWord's
-// ForceRef branch, core.ResolveRef directly, and the dispatch of
+// ForceVal branch, core.ResolveRef directly, and the dispatch of
 // unquoted Function values via execFnDefLiteral.
 func freshRegistry(t *testing.T) *core.Registry {
 	t.Helper()
@@ -77,7 +77,7 @@ func runSrcErr(t *testing.T, r *core.Registry, src string) error {
 	return err
 }
 
-// --- the asymmetry the /r suffix exists to address --------------------
+// --- the asymmetry the /v suffix exists to address --------------------
 
 // TestBareWordInvokesFnBinding pins existing behavior: a bare word
 // for an fn binding fires dispatch.
@@ -93,15 +93,15 @@ func TestBareWordInvokesFnBinding(t *testing.T) {
 	}
 }
 
-// TestRefSuffixReturnsFunctionValue: /r resolves to an UNQUOTED
+// TestRefSuffixReturnsFunctionValue: /v resolves to an UNQUOTED
 // Function value carrying the FnDefInfo. Unquoted is the new
 // default — call site, not data.
 func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 	r := freshRegistry(t)
-	// `add/r` standalone: no following args, no preceding stack args,
+	// `add/v` standalone: no following args, no preceding stack args,
 	// so the unquoted Function value's sig doesn't match anything —
 	// it sits as data at the end of Run.
-	out := runSrc(t, r, "add/r")
+	out := runSrc(t, r, "add/v")
 	if len(out) != 1 {
 		t.Fatalf("got %d values, want 1", len(out))
 	}
@@ -110,7 +110,7 @@ func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 		t.Errorf("top.Parent=%s, want Function", v.Parent.String())
 	}
 	if v.Quoted {
-		t.Errorf("function value is Quoted — /r should produce unquoted in the new dispatch model")
+		t.Errorf("function value is Quoted — /v should produce unquoted in the new dispatch model")
 	}
 	fnDef, ok := v.Data.(core.FnDefInfo)
 	if !ok {
@@ -121,14 +121,14 @@ func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 	}
 }
 
-// TestRefSuffixHoldsForwardArgsUndispatched: `/r` is a pure reference —
+// TestRefSuffixHoldsForwardArgsUndispatched: `/v` is a pure reference —
 // it advances the pointer, leaving the resolved Function on the stack as
 // data, and does NOT dispatch. So tokens that follow are not consumed as
-// args: `add/r 2 3` yields [Function, 2, 3]. (To call, use the bare word
+// args: `add/v 2 3` yields [Function, 2, 3]. (To call, use the bare word
 // `add 2 3`, or `apply` on the ref.)
 func TestRefSuffixHoldsForwardArgsUndispatched(t *testing.T) {
 	r := freshRegistry(t)
-	out := runSrc(t, r, "add/r 2 3")
+	out := runSrc(t, r, "add/v 2 3")
 	if len(out) != 3 {
 		t.Fatalf("got %d values, want 3 [Function 2 3]: %v", len(out), out)
 	}
@@ -149,11 +149,11 @@ func TestRefSuffixHoldsForwardArgsUndispatched(t *testing.T) {
 }
 
 // TestRefSuffixHoldsStackArgsUndispatched: stack-side — args already on
-// the stack are likewise not consumed; `/r` just pushes the Function and
-// advances. `2 3 add/r` yields [2, 3, Function].
+// the stack are likewise not consumed; `/v` just pushes the Function and
+// advances. `2 3 add/v` yields [2, 3, Function].
 func TestRefSuffixHoldsStackArgsUndispatched(t *testing.T) {
 	r := freshRegistry(t)
-	out := runSrc(t, r, "2 3 add/r")
+	out := runSrc(t, r, "2 3 add/v")
 	if len(out) != 3 {
 		t.Fatalf("got %d values, want 3 [2 3 Function]: %v", len(out), out)
 	}
@@ -168,24 +168,26 @@ func TestRefSuffixHoldsStackArgsUndispatched(t *testing.T) {
 	}
 }
 
-// TestRefSuffixOnSimpleValueBindingIsIllegal: /r is legal ONLY for
-// function words. A simple-value binding (`answer` = 42) has no
-// call/value asymmetry for /r to break, so `answer/r` raises
-// illegal_ref rather than passing the value through.
-func TestRefSuffixOnSimpleValueBindingIsIllegal(t *testing.T) {
+// TestValSuffixOnSimpleValueBindingIsTheValue: /v is TOTAL over binding
+// kinds. A simple-value binding (`answer` = 42) has no call to suppress,
+// so `answer/v` is the identity and passes 42 straight through. The
+// negative twin is TestRefSuffixUndefinedNameErrors below: an UNBOUND
+// name still refuses, because there is no value to take.
+func TestValSuffixOnSimpleValueBindingIsTheValue(t *testing.T) {
 	r := freshRegistry(t)
-	err := runSrcErr(t, r, "answer/r")
-	if err == nil {
-		t.Fatal("answer/r: expected illegal_ref error, got nil")
+	out := runSrc(t, r, "answer/v")
+	if len(out) != 1 {
+		t.Fatalf("answer/v: got %v, want exactly one value", out)
 	}
-	if !strings.Contains(err.Error(), "function word") {
-		t.Errorf("error=%q, want mention of 'function word'", err.Error())
+	got, err := core.AsInteger(out[0])
+	if err != nil || got != 42 {
+		t.Errorf("answer/v = %v (err %v), want 42", out[0], err)
 	}
 }
 
 func TestRefSuffixUndefinedNameErrors(t *testing.T) {
 	r := freshRegistry(t)
-	err := runSrcErr(t, r, "nope/r")
+	err := runSrcErr(t, r, "nope/v")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -250,7 +252,7 @@ func TestRefStableInMap(t *testing.T) {
 	}
 
 	// Hard-stability check: even after popping the underlying binding
-	// entirely (so `add/r` would now fail), the previously captured
+	// entirely (so `add/v` would now fail), the previously captured
 	// value still carries the full FnDef payload.
 	if !r.Defs.Pop("add") {
 		t.Fatal("Defs.Pop(shadow) returned false")
@@ -268,13 +270,13 @@ func TestRefStableInMap(t *testing.T) {
 	}
 }
 
-// resolveViaSlashR runs `<name>/r` through the engine and returns the
-// resulting value. The /r expression sits at end-of-program; with no
+// resolveViaSlashR runs `<name>/v` through the engine and returns the
+// resulting value. The /v expression sits at end-of-program; with no
 // following args its sig doesn't match anything and it falls through
 // as data — that's how we get the captured value out.
 func resolveViaSlashR(t *testing.T, r *core.Registry, name string) (core.Value, bool) {
 	t.Helper()
-	out := runSrc(t, r, name+"/r")
+	out := runSrc(t, r, name+"/v")
 	if len(out) != 1 {
 		return core.Value{}, false
 	}
@@ -283,7 +285,7 @@ func resolveViaSlashR(t *testing.T, r *core.Registry, name string) (core.Value, 
 
 // TestResolveRefDirect exercises the exported helper independently of
 // the parser. The returned Function is unquoted — same contract as
-// the /r suffix path.
+// the /v suffix path.
 func TestResolveRefDirect(t *testing.T) {
 	r := freshRegistry(t)
 	v, ok := core.ResolveRef(r, "mul")

@@ -424,49 +424,49 @@ func TestParseStackSuffixBeforeDigits(t *testing.T) {
 	})
 }
 
-// --- /r ref-suffix modifier ---
+// --- /v ref-suffix modifier ---
 
 func TestParseRefSuffix(t *testing.T) {
-	// foo/r → ref-word, short form of (ref foo). The kernel resolves
+	// foo/v → ref-word, short form of (valof foo). The kernel resolves
 	// the binding at execution time without invoking it.
-	assertParse(t, "foo/r", []core.Value{
+	assertParse(t, "foo/v", []core.Value{
 		core.NewWordRef("foo"),
 	})
 }
 
 func TestParseRefSuffixInExpression(t *testing.T) {
 	// Multiple ref-words on one line round-trip independently.
-	assertParse(t, "add/r mul/r", []core.Value{
+	assertParse(t, "add/v mul/v", []core.Value{
 		core.NewWordRef("add"),
 		core.NewWordRef("mul"),
 	})
 }
 
 func TestParseRefAndQuoteMutuallyExclusive(t *testing.T) {
-	// /q and /r express different intents (data vs. resolved value),
+	// /q and /v express different intents (data vs. resolved value),
 	// so combining them is a LOUD parse error (NUR027 — previously the
-	// whole token silently became the word "foo/qr", surfacing later
+	// whole token silently became the word "foo/qv", surfacing later
 	// as an obscure undefined_word).
-	assertParseError(t, "foo/qr")
-	assertParseError(t, "foo/rq")
+	assertParseError(t, "foo/qv")
+	assertParseError(t, "foo/vq")
 }
 
 func TestParseRefIgnoresShapeModifiers(t *testing.T) {
-	// /r short-circuits dispatch, so /s, /f, and digit modifiers are
+	// /v short-circuits dispatch, so /s, /f, and digit modifiers are
 	// accepted syntactically but have no effect on the emitted value.
-	assertParse(t, "foo/rs", []core.Value{
+	assertParse(t, "foo/vs", []core.Value{
 		core.NewWordRef("foo"),
 	})
-	assertParse(t, "foo/rf", []core.Value{
+	assertParse(t, "foo/vf", []core.Value{
 		core.NewWordRef("foo"),
 	})
-	assertParse(t, "foo/2r", []core.Value{
+	assertParse(t, "foo/2v", []core.Value{
 		core.NewWordRef("foo"),
 	})
 }
 
 func TestParseRefDuplicateRejected(t *testing.T) {
-	assertParseError(t, "foo/rr")
+	assertParseError(t, "foo/vv")
 }
 
 func TestParseModifiersForwardAndStackMutuallyExclusive(t *testing.T) {
@@ -2446,10 +2446,10 @@ func TestParseMapShorthand(t *testing.T) {
 	// explicit `key:value` equivalent.
 	cases := []struct{ shorthand, explicit string }{
 		{"{foo}", "{foo:foo}"},                     // plain shorthand
-		{"{foo/r}", "{foo:foo/r}"},                 // word modifier stays on the value
+		{"{foo/v}", "{foo:foo/v}"},                 // word modifier stays on the value
 		{"{foo/q}", "{foo:foo/q}"},                 // /q → atom value
 		{"{foo?}", "{foo?:foo}"},                   // optional shorthand
-		{"{foo/r?}", "{foo?:foo/r}"},               // optional shorthand + modifier: key is base, modifier stays on value
+		{"{foo/v?}", "{foo?:foo/v}"},               // optional shorthand + modifier: key is base, modifier stays on value
 		{"{foo/q?}", "{foo?:foo/q}"},               // optional shorthand + /q
 		{"{foo a:1 bar}", "{foo:foo a:1 bar:bar}"}, // mixed, keys sorted
 		{"{a:{foo}}", "{a:{foo:foo}}"},             // nested
@@ -2483,15 +2483,15 @@ func TestParseMapShorthandRejects(t *testing.T) {
 }
 
 func TestParseMapKeyModifierRejected(t *testing.T) {
-	// A word modifier (/r /q /f /s /N) on a bare explicit key is illegal:
+	// A word modifier (/v /q /f /s /N) on a bare explicit key is illegal:
 	// the modifier could only qualify the key, which is meaningless. (On a
 	// shorthand entry it qualifies the value — see TestParseMapShorthand.)
 	for _, src := range []string{
-		"{f/r: 99}",    // /r on bare key
-		"{f/r?: 99}",   // /r on bare optional key
+		"{f/v: 99}",    // /v on bare key
+		"{f/v?: 99}",   // /v on bare optional key
 		"{f/q: 1}",     // /q
 		"{m/2: 1}",     // arg-count modifier
-		"{a:1 b/r: 2}", // mixed with a clean pair
+		"{a:1 b/v: 2}", // mixed with a clean pair
 	} {
 		_, err := Parse(src)
 		if err == nil {
@@ -2784,7 +2784,7 @@ func TestNoSitedLeak(t *testing.T) {
 		"`hello ${1 add 2} world`",
 		`[x:Integer] => [x]`,
 		`a ; b`,
-		`{foo/r}`,
+		`{foo/v}`,
 		`[:String]`,
 		`{:Integer}`,
 		`def f fn [[n:Integer] Integer [n add 1]]`,

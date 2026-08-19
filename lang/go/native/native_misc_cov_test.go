@@ -268,7 +268,7 @@ func TestMiscCovExportNoopCheckModeRecordsUses(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A real fn value (FnDefInfo payload) for the reference-export branch.
-	toks, err := parser.Parse(`def fcov fn [[x:Integer] [Integer] [x]] fcov/r`)
+	toks, err := parser.Parse(`def fcov fn [[x:Integer] [Integer] [x]] fcov/v`)
 	if err != nil {
 		t.Fatal(err)
 	}

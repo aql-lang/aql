@@ -750,7 +750,7 @@ func TestLaunchModuleFnDescent(t *testing.T) {
 	dir := t.TempDir()
 	lib := filepath.Join(dir, "lib.boru")
 	if err := os.WriteFile(lib,
-		[]byte("def twice fn [[x:Integer] [Integer] [\nx add x\n]]\nexport \"Lib\" {twice: twice/r}\n"), 0o600); err != nil {
+		[]byte("def twice fn [[x:Integer] [Integer] [\nx add x\n]]\nexport \"Lib\" {twice: twice/v}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	main := filepath.Join(dir, "main.boru")

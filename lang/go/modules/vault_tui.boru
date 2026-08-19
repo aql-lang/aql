@@ -276,14 +276,14 @@ def vt-pass-fail fn [[state:Map why:String] [Map] [
 ]]
 
 def vt-with-auth fn [[state:Map act:Map] [Map] [
-  # act is a continuation MAP {run: <fn/r>}: an /r-parked fn does not
+  # act is a continuation MAP {run: <fn/v>}: an /v-parked fn does not
   # match a Function-typed param (gap G12, BORU-SHARP-EDGES.0.md),
   # so continuations travel inside maps and dispatch via dot-access
   def gate (do [ (Vault.needs-passphrase) and ((Vault.authed) not) ]
             error [ drop false ])
   if gate [
     def fields [ (vt-field "pass" "vault passphrase" true "") ]
-    def scr ((vt-form "passphrase" "Passphrase" fields {run: vt-pass-run/r} "") set then act)
+    def scr ((vt-form "passphrase" "Passphrase" fields {run: vt-pass-run/v} "") set then act)
     vt-push state scr
   ] [ act.run state ]
 ]]
@@ -356,7 +356,7 @@ def vt-open-add fn [[state:Map] [Map] [
                (vt-field "provider" "provider" false (vt-str d.provider))
                (vt-field "namespace" "namespace" false (vt-str d.namespace))
                (vt-field "expiry" "expiry (optional)" false (vt-str d.expiry)) ]
-  vt-push state (vt-form "add" "Add secret" fields {run: vt-add-submit/r} "")
+  vt-push state (vt-form "add" "Add secret" fields {run: vt-add-submit/v} "")
 ]]
 
 def vt-add-submit fn [[state:Map] [Map] [
@@ -394,7 +394,7 @@ def vt-table-key fn [[state:Map ev:Map] [Map] [
       "up"    [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor sub 1) n)) ]
       "down"  [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor add 1) n)) ]
       "/"     [ drop vt-set-top state (scr set filtering true) ]
-      "a"     [ drop vt-with-auth state {run: vt-open-add/r} ]
+      "a"     [ drop vt-with-auth state {run: vt-open-add/v} ]
       "enter" [ drop
         if (n eq 0) [ state ] [
           vt-push state (vt-detail ((vt-visible scr.items scr.filter) get scr.cursor).name) ] ]
@@ -425,7 +425,7 @@ def vt-copy-recipe fn [[state:Map] [Map] [
 def vt-open-rotate fn [[state:Map] [Map] [
   def alias (vt-top state).name
   def fields [ (vt-field "value" "new secret value" true "") ]
-  vt-push state (vt-form "rotate" (join "" ["Rotate " alias]) fields {run: vt-rotate-submit/r} alias)
+  vt-push state (vt-form "rotate" (join "" ["Rotate " alias]) fields {run: vt-rotate-submit/v} alias)
 ]]
 
 def vt-rotate-submit fn [[state:Map] [Map] [
@@ -441,7 +441,7 @@ def vt-rotate-submit fn [[state:Map] [Map] [
 def vt-open-rename fn [[state:Map] [Map] [
   def alias (vt-top state).name
   def fields [ (vt-field "to" "new alias" false "") ]
-  vt-push state (vt-form "rename" (join "" ["Rename " alias]) fields {run: vt-rename-submit/r} alias)
+  vt-push state (vt-form "rename" (join "" ["Rename " alias]) fields {run: vt-rename-submit/v} alias)
 ]]
 
 def vt-rename-submit fn [[state:Map] [Map] [
@@ -460,7 +460,7 @@ def vt-rename-submit fn [[state:Map] [Map] [
 def vt-open-expiry fn [[state:Map] [Map] [
   def alias (vt-top state).name
   def fields [ (vt-field "when" "expiry (empty clears)" false "") ]
-  vt-push state (vt-form "expiry" (join "" ["Expiry for " alias]) fields {run: vt-expiry-submit/r} alias)
+  vt-push state (vt-form "expiry" (join "" ["Expiry for " alias]) fields {run: vt-expiry-submit/v} alias)
 ]]
 
 def vt-expiry-submit fn [[state:Map] [Map] [
@@ -476,7 +476,7 @@ def vt-expiry-submit fn [[state:Map] [Map] [
 def vt-open-delete fn [[state:Map] [Map] [
   def alias (vt-top state).name
   def fields [ (vt-field "confirm" (join "" ["type " alias " to confirm"]) false "") ]
-  vt-push state (vt-form "delete" (join "" ["Delete " alias]) fields {run: vt-delete-submit/r} alias)
+  vt-push state (vt-form "delete" (join "" ["Delete " alias]) fields {run: vt-delete-submit/v} alias)
 ]]
 
 def vt-delete-submit fn [[state:Map] [Map] [
@@ -493,7 +493,7 @@ def vt-open-grant fn [[state:Map] [Map] [
   def alias (vt-top state).name
   def fields [ (vt-field "agent" "agent (optional)" false "")
                (vt-field "ttl" "ttl (e.g. 2h, optional)" false "") ]
-  vt-push state (vt-form "grant" (join "" ["Grant for " alias]) fields {run: vt-grant-submit/r} alias)
+  vt-push state (vt-form "grant" (join "" ["Grant for " alias]) fields {run: vt-grant-submit/v} alias)
 ]]
 
 def vt-grant-submit fn [[state:Map] [Map] [
@@ -518,7 +518,7 @@ def vt-verify-pager fn [[state:Map prune:Boolean] [Map] [
 
 def vt-open-scan fn [[state:Map] [Map] [
   def fields [ (vt-field "paths" "paths to scan (space-separated, . default)" false ".") ]
-  vt-push state (vt-form "scan" "Scan for leaks" fields {run: vt-scan-submit/r} "")
+  vt-push state (vt-form "scan" "Scan for leaks" fields {run: vt-scan-submit/v} "")
 ]]
 
 def vt-scan-submit fn [[state:Map] [Map] [
@@ -535,7 +535,7 @@ def vt-scan-submit fn [[state:Map] [Map] [
 def vt-open-config-set fn [[state:Map] [Map] [
   def fields [ (vt-field "key" "config key (e.g. namespace.default)" false "")
                (vt-field "value" "value" false "") ]
-  vt-push state (vt-form "config-set" "Set config" fields {run: vt-config-set-submit/r} "")
+  vt-push state (vt-form "config-set" "Set config" fields {run: vt-config-set-submit/v} "")
 ]]
 
 def vt-config-set-submit fn [[state:Map] [Map] [
@@ -552,7 +552,7 @@ def vt-config-set-submit fn [[state:Map] [Map] [
 
 def vt-open-config-unset fn [[state:Map] [Map] [
   def fields [ (vt-field "key" "config key to unset" false "") ]
-  vt-push state (vt-form "config-unset" "Unset config" fields {run: vt-config-unset-submit/r} "")
+  vt-push state (vt-form "config-unset" "Unset config" fields {run: vt-config-unset-submit/v} "")
 ]]
 
 def vt-config-unset-submit fn [[state:Map] [Map] [
@@ -569,8 +569,8 @@ def vt-config-unset-submit fn [[state:Map] [Map] [
 def vt-config-key fn [[state:Map ev:Map] [Map] [
   # the config pager gains set/unset action keys
   case ev.key [
-    "s" [ drop vt-with-auth state {run: vt-open-config-set/r} ]
-    "x" [ drop vt-with-auth state {run: vt-open-config-unset/r} ]
+    "s" [ drop vt-with-auth state {run: vt-open-config-set/v} ]
+    "x" [ drop vt-with-auth state {run: vt-open-config-unset/v} ]
     (vt-pager-key state ev)
   ]
 ]]
@@ -581,7 +581,7 @@ def vt-open-access-grant fn [[state:Map] [Map] [
   def fields [ (vt-field "alias" "secret alias" false "")
                (vt-field "agent" "agent (optional)" false "")
                (vt-field "ttl" "ttl (e.g. 2h, optional)" false "") ]
-  vt-push state (vt-form "grant" "Grant capability" fields {run: vt-access-grant-submit/r} "")
+  vt-push state (vt-form "grant" "Grant capability" fields {run: vt-access-grant-submit/v} "")
 ]]
 
 def vt-access-grant-submit fn [[state:Map] [Map] [
@@ -603,7 +603,7 @@ def vt-open-revoke fn [[state:Map] [Map] [
   if ((size scr.rows) eq 0) [ vt-fail state "no capabilities to revoke" ] [
     def id ((scr.rows get scr.cursor).id)
     def fields [ (vt-field "confirm" (join "" ["type " id " to revoke"]) false "") ]
-    vt-push state (vt-form "revoke" (join "" ["Revoke " id]) fields {run: vt-revoke-submit/r} id)
+    vt-push state (vt-form "revoke" (join "" ["Revoke " id]) fields {run: vt-revoke-submit/v} id)
   ]
 ]]
 
@@ -623,7 +623,7 @@ def vt-open-pw-add fn [[state:Map] [Map] [
                (vt-field "pass" "password" true "")
                (vt-field "scope" "scope (admin/read/write/move)" false "read")
                (vt-field "ttl" "ttl (optional, e.g. 8h)" false "") ]
-  vt-push state (vt-form "pw-add" "Add password slot" fields {run: vt-pw-add-submit/r} "")
+  vt-push state (vt-form "pw-add" "Add password slot" fields {run: vt-pw-add-submit/v} "")
 ]]
 
 def vt-pw-add-submit fn [[state:Map] [Map] [
@@ -646,7 +646,7 @@ def vt-open-pw-remove fn [[state:Map] [Map] [
   if ((size scr.rows) eq 0) [ vt-fail state "no slots to remove" ] [
     def name ((scr.rows get scr.cursor).name)
     def fields [ (vt-field "confirm" (join "" ["type " name " to remove"]) false "") ]
-    vt-push state (vt-form "pw-remove" (join "" ["Remove " name]) fields {run: vt-pw-remove-submit/r} name)
+    vt-push state (vt-form "pw-remove" (join "" ["Remove " name]) fields {run: vt-pw-remove-submit/v} name)
   ]
 ]]
 
@@ -701,7 +701,7 @@ def vt-open-new-vault fn [[state:Map] [Map] [
   def fields [ (vt-field "folder" "new vault folder" false "")
                (vt-field "backend" "backend (file/keychain/…)" false "file")
                (vt-field "pass" "passphrase (optional)" true "") ]
-  vt-push state (vt-form "new-vault" "New vault" fields {run: vt-new-vault-submit/r} "")
+  vt-push state (vt-form "new-vault" "New vault" fields {run: vt-new-vault-submit/v} "")
 ]]
 
 def vt-new-vault-submit fn [[state:Map] [Map] [
@@ -723,7 +723,7 @@ def vt-open-prune fn [[state:Map] [Map] [
   if ((size scr.rows) eq 0) [ vt-fail state "no vaults" ] [
     def row (scr.rows get scr.cursor)
     def fields [ (vt-field "confirm" (join "" ["type " row.folder " to prune"]) false "") ]
-    def sc2 (vt-form "prune" (join "" ["Prune " row.folder]) fields {run: vt-prune-submit/r} row.folder)
+    def sc2 (vt-form "prune" (join "" ["Prune " row.folder]) fields {run: vt-prune-submit/v} row.folder)
     vt-push state (sc2 set psuffix row.suffix)
   ]
 ]]
@@ -755,17 +755,17 @@ def vt-picker-key fn [[state:Map ev:Map] [Map] [
 
 def vt-access-key fn [[state:Map ev:Map] [Map] [
   case ev.key [
-    "g" [ drop vt-with-auth state {run: vt-open-access-grant/r} ]
-    "D" [ drop vt-with-auth state {run: vt-open-revoke/r} ]
+    "g" [ drop vt-with-auth state {run: vt-open-access-grant/v} ]
+    "D" [ drop vt-with-auth state {run: vt-open-revoke/v} ]
     state
   ]
 ]]
 
 def vt-password-key fn [[state:Map ev:Map] [Map] [
   case ev.key [
-    "a" [ drop vt-with-auth state {run: vt-open-pw-add/r} ]
-    "D" [ drop vt-with-auth state {run: vt-open-pw-remove/r} ]
-    "t" [ drop vt-with-auth state {run: vt-pw-revoke-temp/r} ]
+    "a" [ drop vt-with-auth state {run: vt-open-pw-add/v} ]
+    "D" [ drop vt-with-auth state {run: vt-open-pw-remove/v} ]
+    "t" [ drop vt-with-auth state {run: vt-pw-revoke-temp/v} ]
     state
   ]
 ]]
@@ -789,13 +789,13 @@ def vt-detail-key fn [[state:Map ev:Map] [Map] [
     "c"    [ drop vt-copy-recipe state ]
     "r"    [ drop
       if ((scr.revealed) eq none)
-        [ vt-with-auth state {run: vt-do-reveal/r} ]
+        [ vt-with-auth state {run: vt-do-reveal/v} ]
         [ vt-set-top state (scr set revealed none) ] ]
-    "R"    [ drop vt-with-auth state {run: vt-open-rotate/r} ]
-    "m"    [ drop vt-with-auth state {run: vt-open-rename/r} ]
-    "e"    [ drop vt-with-auth state {run: vt-open-expiry/r} ]
-    "D"    [ drop vt-with-auth state {run: vt-open-delete/r} ]
-    "g"    [ drop vt-with-auth state {run: vt-open-grant/r} ]
+    "R"    [ drop vt-with-auth state {run: vt-open-rotate/v} ]
+    "m"    [ drop vt-with-auth state {run: vt-open-rename/v} ]
+    "e"    [ drop vt-with-auth state {run: vt-open-expiry/v} ]
+    "D"    [ drop vt-with-auth state {run: vt-open-delete/v} ]
+    "g"    [ drop vt-with-auth state {run: vt-open-grant/v} ]
     state
   ]
 ]]
@@ -925,8 +925,8 @@ def vt-run-palette fn [[state:Map cmd:String] [Map] [
     "history"      [ drop vt-push state (vt-info-pager "history" "History") ]
     "providers"    [ drop vt-push state (vt-info-pager "providers" "Providers") ]
     "config"       [ drop vt-push state (vt-info-pager "config" "Config") ]
-    "add"          [ drop vt-with-auth state {run: vt-open-add/r} ]
-    "grant"        [ drop vt-with-auth state {run: vt-open-access-grant/r} ]
+    "add"          [ drop vt-with-auth state {run: vt-open-add/v} ]
+    "grant"        [ drop vt-with-auth state {run: vt-open-access-grant/v} ]
     "lock"         [ drop vt-lock-op state true ]
     "unlock"       [ drop vt-lock-op state false ]
     "home"         [ drop vt-pop-to-root state ]
@@ -1182,8 +1182,8 @@ def vault-app fn [[opts:Map] [Map] [
                     palette: (vt-palette-closed)
                     help: {open: false  scroll: 0}
                     add-defaults: {provider: ""  namespace: ""  expiry: ""} }
-            update: vt-update/r
-            view: vt-view/r }
+            update: vt-update/v
+            view: vt-view/v }
   out
 ]]
 
@@ -1192,6 +1192,6 @@ def vault-run fn [[opts:Map] [Map] [
 ]]
 
 export "VaultTui" {
-  app: vault-app/r
-  run: vault-run/r
+  app: vault-app/v
+  run: vault-run/v
 }

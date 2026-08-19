@@ -95,7 +95,7 @@ every named type you define with `def`.
   `0xFF` are the same value, and an `e`/`E` exponent takes either case.
   The rule governs numeric *literals*, so a run in a NAME position is
   unaffected and behaves identically in both cases: a quoted atom
-  (`0xFF/q`), a `/r` word reference (`0XFF/r` → `word(0XFF)`), a
+  (`0xFF/q`), a `/v` word reference (`0XFF/v` → `word(0XFF)`), a
   type-bound (`0XFF/t`), and a bare map key (`{0XFF: 1}`) are all names,
   never numbers — exactly as their lowercase spellings are.
 - `_` may be used as a **single** digit-separator **between** digits
@@ -289,7 +289,7 @@ A trailing `/...` suffix overrides a word's default argument shape:
 | `/Nf` | N arguments, forward only |
 | `/Ns` | N arguments, stack only |
 | `/q` | The name as an atom — `foo/q` ≡ `(quote foo)` |
-| `/r` | A reference — the function as inert data, not a call |
+| `/v` | The binding's **value**, not a call — `foo/v` ≡ `(valof foo)`; total over every binding kind |
 | `/u` | Usurp — `f/u` ≡ `usurp f` |
 | `/t` | A type bound — `Map/t` ≡ `Type<Map>` ≡ `(Type of [Map])`; combines with no other modifier |
 
@@ -298,7 +298,7 @@ Letters stack in any order (`foo/sq` ≡ `foo/qs`), each at most once;
 with nothing, and digits form one contiguous run. When `q` is present
 the result is an atom and any companion shape letters are ignored. An
 **invalid combination spelled from the modifier letters** (`add/fs`,
-`foo/qr`, `add/1f2`) is a loud `[boru/syntax_error]` — never a silent
+`foo/qv`, `add/1f2`) is a loud `[boru/syntax_error]` — never a silent
 fall-through. A suffix containing any other character is not a modifier
 at all: the whole token is one plain word, which is how the full type
 paths (`Scalar/Number/Integer`) parse.
@@ -318,12 +318,12 @@ for binding that name to itself, mirroring JavaScript's `{ foo }`:
 | Shorthand | Expands to | Notes |
 |-----------|------------|-------|
 | `{foo}` | `{foo: foo}` | value is the same auto-evaluated word |
-| `{foo/r}` | `{foo: foo/r}` | a word modifier stays on the **value**; the key is the base name |
+| `{foo/v}` | `{foo: foo/v}` | a word modifier stays on the **value**; the key is the base name |
 | `{foo?}` | `{foo?: foo}` | a trailing `?` keeps the field **optional**; the value is the bare word |
 
 The rule in one line: **the key is the base name and the value is the
 whole token.** So `{foo}` looks up the binding `foo` and stores it under
-key `foo`; `{foo/r}` stores it under key `foo` but keeps the `/r` on the
+key `foo`; `{foo/v}` stores it under key `foo` but keeps the `/v` on the
 value.
 
 ```
@@ -339,12 +339,12 @@ Because a shorthand value is auto-evaluated exactly like any bare map
 value, the same rules apply (see
 [Maps and access](#maps-and-access)): a plain binding resolves, a 0-arg
 function dispatches, and a function that needs arguments must be held as
-data with `/r` (or stored as an atom with `/q`):
+data with `/v` (or stored as an atom with `/q`):
 
 ```
 def inc fn [[n:Integer] [Integer] [add n 1]]
 {inc}                         # returns build error — inc dispatched 0-arg, fails its signature
-{inc/r} . inc 5               # returns 6 — /r holds the function as data
+{inc/v} . inc 5               # returns 6 — /v holds the function as data
 {inc/q} . inc is Atom         # returns true — /q stores the bare name as an atom
 ```
 
@@ -356,13 +356,13 @@ desugars to `{foo?: foo}`, i.e. the value becomes
 (`{'foo'}`, `{"foo"}`) or a non-identifier (`{123}`) is a parse error —
 write the explicit `key: value` form for those. The pretty-printer
 (`boru fmt`) normalises every shorthand back to its explicit form
-(`{foo}` → `{foo:foo}`, `{foo/r}` → `{foo:foo/r}`, `{foo?}` →
+(`{foo}` → `{foo:foo}`, `{foo/v}` → `{foo:foo/v}`, `{foo?}` →
 `{foo?:foo}`).
 
 **A word modifier belongs on a value, never on a bare key.** It is
-legal on a shorthand entry (`{foo/r}` — the token is the value) but an
-error on an explicit pair: `{foo/r: 1}` raises `[boru/illegal_key]`,
-because the `/r` could only attach to the key `foo`, which is just a
+legal on a shorthand entry (`{foo/v}` — the token is the value) but an
+error on an explicit pair: `{foo/v: 1}` raises `[boru/illegal_key]`,
+because the `/v` could only attach to the key `foo`, which is just a
 name. If you genuinely need a `/` in a key, make it a literal with a
 quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
 
@@ -1000,7 +1000,7 @@ justification weight as a new init-time panic — NUR023):
   the function off the stack and apply it to the preceding values";
   forward collection would force callers to put the fn's arguments
   after it, fighting the left-to-right stack flow the word exists to
-  serve. (`apply f/r 5` therefore raises — spell it `5 f/r apply`.)
+  serve. (`apply f/v 5` therefore raises — spell it `5 f/v apply`.)
 - `__casematch` — the `case` desugar's internal match probe (each
   clause lowers to `if (v match __casematch) …`), always fed by the
   synthesized chain's stack discipline. The `__` prefix marks it
@@ -1307,7 +1307,7 @@ restricted words refuse. See
 > a locked signature raises `[boru/locked_signature]`; `undef <word>`
 > pops the extension. The sealed words `def` / `make` / `word` cannot
 > be extended at all. A module exports its merged word like any fn
-> (`export "M" {add: add/r}`) and importing the module transplants the
+> (`export "M" {add: add/v}`) and importing the module transplants the
 > extension one level into the importer. A **module** may extend a core
 > word only with at least one **user-minted** argument type per
 > signature — a type the module creates with `refine` or `class`.
@@ -2251,31 +2251,36 @@ consequences:
 - **Access the result of a call** by parenthesising the call:
   `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
   `make … {} .x` would feed `.x`'s result *into* `make`.
-- **`/r` is a pure reference to a *function word*: it resolves the name to
-  the bound function and *advances the pointer* — it never calls the
-  function in place.** `/r` is legal **only** for function words; a name
-  bound to a non-function value (a plain value, a type) raises
-  `[boru/illegal_ref]`, because a bare value name already pushes its value
-  — there is no call/value asymmetry for `/r` to break. The same rule
-  applies to the `ref` word. The reference holds at any arity and in any
-  position (top level, list element, paren, `do`-block, map value): `g/r`
-  yields the function as data, `add/r 2 3` leaves `[Function, 2, 3]` on
-  the stack (the args are *not* consumed), and `[zero/r]` is
+- **`/v` takes a name's bound VALUE, disabling any call it would induce:
+  it resolves the name and *advances the pointer* — it never calls in
+  place.** `/v` is **total over every binding kind**: for a function it
+  suppresses the call, and for anything else (a plain value, a list, a
+  map, a type) it is the identity — `def n 5` then `n/v` is `5`. That
+  totality is what lets ONE spelling read a slot whose kind is not known
+  statically, e.g. a parameter typed `Any` that may hold either. The only
+  refusal is an **unbound** name, which has no value to take
+  (`[boru/undefined_word]`). The same rule applies to the `valof` word.
+  The reference holds at any arity and in any
+  position (top level, list element, paren, `do`-block, map value): `g/v`
+  yields the function as data, `add/v 2 3` leaves `[Function, 2, 3]` on
+  the stack (the args are *not* consumed), and `[zero/v]` is
   `[<function>]` even for a 0-arg `zero` (it is **not** fired). To
   **call** a referenced function, use the bare word (`add 2 3`), `apply`
-  it (`2 3 (quote (f/r)) apply`), or access it as a member (below), where
+  it (`2 3 f/v apply` — the bare `/v` word, *not* parenthesised and *not*
+  quoted: both of those reach `apply` as inert data and it refuses them),
+  or access it as a member (below), where
   `get` brings the value live.
 
 - **A function stored in a plain map** is callable via dot. Store it with
-  `/r` — `{fn: myfn/r}` — which holds the function as data; then
+  `/v` — `{fn: myfn/v}` — which holds the function as data; then
   `m.fn arg` retrieves it (via `get`) and the arg calls it. Stored *bare*
   (`{fn: myfn}`) the map value is auto-evaluated: `myfn` is dispatched
   0-arg, which fails if it needs arguments — so a bare entry like
   `{fn: myfn}` is a **build error** (bare words never degrade to data;
-  use `/r` for a callable data value, or `/q` for an atom). **Module
-  functions are exported the same way** — `export "m" {fn: fn/r}` (a
+  use `/v` for a callable data value, or `/q` for an atom). **Module
+  functions are exported the same way** — `export "m" {fn: fn/v}` (a
   bare `{fn: fn}` export errors for the same reason). The distinction is
-  whether the value is *brought live*: `/r` itself holds; member access
+  whether the value is *brought live*: `/v` itself holds; member access
   (`get`) and bare words dispatch.
 
 ### Flex nodes — FlexMap and FlexList
@@ -2786,7 +2791,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `user_error` | Default code for `raise "message"`. |
 | `def_error` | `def`'s value expression produced no value to bind. |
 | `no_value_error` | A parenthesised argument expression produced no value for a call. |
-| `uncalled_function` | A call on a named function VALUE (a module export, a `def`ed fn, a `usurp`ed value) matched no signature. Raised at the call; pass the function as data with `name/r` if that was the intent. |
+| `uncalled_function` | A call on a named function VALUE (a module export, a `def`ed fn, a `usurp`ed value) matched no signature. Raised at the call; pass the function as data with `name/v` if that was the intent. |
 | `reserved_word` | `def`/`undef` targeted a built-in word's value binding, a sealed word (`def`/`make`/`word`), or the literal `true`/`false`/`none`. |
 | `locked_signature` | A word extension's signature tuple exactly matches a locked (built-in) signature — locked signatures can never be replaced. |
 | `extend_conflict` | Two different modules transplanted the same signature tuple onto one word at import. |

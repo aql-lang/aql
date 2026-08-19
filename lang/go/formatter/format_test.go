@@ -135,7 +135,7 @@ func TestFormatMapShorthand(t *testing.T) {
 		want string
 	}{
 		{"plain shorthand", "{foo}\n", "{foo:foo}\n"},
-		{"modifier shorthand", "{foo/r}\n", "{foo:foo/r}\n"},
+		{"modifier shorthand", "{foo/v}\n", "{foo:foo/v}\n"},
 		{"optional shorthand", "{foo?}\n", "{foo?:foo}\n"},
 		{"two shorthands", "{foo bar}\n", "{foo:foo bar:bar}\n"},
 		{"mixed shorthand and pair", "{foo a:1}\n", "{foo:foo a:1}\n"},

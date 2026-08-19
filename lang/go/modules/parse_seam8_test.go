@@ -211,7 +211,7 @@ func TestW8RuleMapToSpecArms(t *testing.T) {
 	rule := native.NewOrderedMap()
 	rule.Set("open", native.NewList([]native.Value{native.NewMap(alt)}))
 	if _, err := ruleMapToSpec(g, "val", native.NewMap(rule), r); err != nil {
-		t.Errorf("ruleMapToSpec: p/r fields should be accepted, got %v", err)
+		t.Errorf("ruleMapToSpec: p/v fields should be accepted, got %v", err)
 	}
 }
 

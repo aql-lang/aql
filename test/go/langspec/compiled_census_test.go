@@ -161,7 +161,7 @@ func computeCensus() (*census, error) {
 			// interpreter raises the matching taxonomy, and the full-corpus gate
 			// confirms parity. The spec's ERROR: marker is the authoritative
 			// signal — it distinguishes these from value rows that happen to share
-			// a refusal reason (`x/r` illegal_ref vs `mini re` dynamic output both
+			// a refusal reason (`x/v` illegal_ref vs `mini re` dynamic output both
 			// refuse "...unknown provenance"). errorRowReason stays as a secondary
 			// signal for the few error reasons that are intrinsically diagnostic.
 			//

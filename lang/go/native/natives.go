@@ -756,9 +756,9 @@ func cancelTimeoutHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 	return nil, nil
 }
 
-// cancelIntervalHandler stops a running Interval ticker and signals its
+// cancelIntervalofHandler stops a running Interval ticker and signals its
 // goroutine to exit.
-func cancelIntervalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func cancelIntervalofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ii, ok := args[0].Data.(*IntervalInfo)
 	if !ok {
 		return nil, r.BoruError("cancel-interval_error", fmt.Sprintf("cancel-interval: not an Interval value (got %s)", args[0].Parent), "cancel-interval")

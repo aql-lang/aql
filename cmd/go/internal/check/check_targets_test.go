@@ -413,7 +413,7 @@ func TestRunCLIAnchorsImportsPerFile(t *testing.T) {
 func TestRunCLIRelativeTargetResolvesAncestorPackage(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, ".boru/mylib/index.boru",
-		"def helper fn x:Number Number [mul x 3]\nexport \"My\" {helper: helper/r}\n")
+		"def helper fn x:Number Number [mul x 3]\nexport \"My\" {helper: helper/v}\n")
 	write(t, dir, "src/m.boru", "import \"mylib\"\nMy.helper 7\n")
 
 	cwd, err := os.Getwd()

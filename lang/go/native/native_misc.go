@@ -617,9 +617,9 @@ func referentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 // In CHECK mode it does one thing before discarding: it records every export
 // value as a use of its def. A standalone module file (`boru check trie.boru`)
 // reaches this no-op, not the collecting handler — so without this, every
-// reference-exported public word (`export "X" { make: impl/r }`) is falsely
+// reference-exported public word (`export "X" { make: impl/v }`) is falsely
 // flagged unused_def precisely because it is public. The map arrives already
-// auto-evaluated, so `name/r` values are fn data whose name is read off the
+// auto-evaluated, so `name/v` values are fn data whose name is read off the
 // FnDefInfo; a bare name resolves through ResolveRef (which also records it).
 func exportNoopHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if r == nil || !r.Check.IsActive() || len(args) < 2 || !IsConcrete(args[1]) {

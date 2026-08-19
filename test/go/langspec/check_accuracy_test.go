@@ -175,10 +175,15 @@ var unflaggedPins = map[string]int{
 	// cannot resolve to a concrete return value stays the runtime's job.
 	"record.tsv":            3,
 	"scalar-micron-ops.tsv": 1,
-	"ref.tsv":               1,
 	"storage.tsv":           1,
 	"usurp.tsv":             1,
 	"user-types.tsv":        1,
+	// valof.tsv (was ref.tsv, pinned at 1): 1 → 2 with the /v totality
+	// rows. Dropping the function-only gate removed the old
+	// illegal_ref refusal, so what is left unflagged is the pair of
+	// unbound-name rows in §10 — whether a NAME is bound is a runtime
+	// scope question, not one the static pass resolves.
+	"valof.tsv": 2,
 	// The weak set/append refusals and typed weak writes are check-
 	// mirrored (weakValueMirror + d2CheckWrite, native_storage.go). The
 	// residue is make's own errors — source-family mismatch and a

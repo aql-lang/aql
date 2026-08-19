@@ -5,17 +5,17 @@ import (
 	"testing"
 )
 
-// A fn body whose residual is a `/r` reference must RETURN that reference, not
+// A fn body whose residual is a `/v` reference must RETURN that reference, not
 // the result of calling it (design/FUNCTION-VALUE-SCOPE.0.md §12.6, ADR-016).
 //
-// `def h fn [[f:Function] [Any] [f/r]]` used to return `7` interpreted — the
+// `def h fn [[f:Function] [Any] [f/v]]` used to return `7` interpreted — the
 // call's result — where the compiler correctly returned the function value.
-// The `/r` was doing its job at the word step; the call came later, when the
+// The `/v` was doing its job at the word step; the call came later, when the
 // fn frame's collapse re-stepped the body's residual. A frame collapse
 // delivers a RETURN, which is not a fresh use of the value, so it must not
 // invoke it (core/go/engine.go's fnReturnPark).
 //
-// The maintainer ruling this pins: `/r` is not sticky — it deactivates the ONE
+// The maintainer ruling this pins: `/v` is not sticky — it deactivates the ONE
 // use it is attached to — and arity never changes the answer. Both directions
 // matter, so the negatives are here too: a USER paren still re-steps, and a
 // frame returning a non-Function is untouched.
@@ -34,32 +34,32 @@ type fnReturnParkCase struct {
 func fnReturnParkCases() []fnReturnParkCase {
 	const zero = "def z fn [[] [Integer] [ 42 ]]\n"
 	const inc = "def inc fn [[n:Integer] [Integer] [ n add 1 ]]\n"
-	const hold = "def h fn [[f:Function] [Any] [ f/r ]]\n"
+	const hold = "def h fn [[f:Function] [Any] [ f/v ]]\n"
 
 	return []fnReturnParkCase{
 		{
 			// The break itself: a 0-arg fn reached through a Function param.
-			// Pre-fix this was `[42]` interpreted — /r silently doing the
+			// Pre-fix this was `[42]` interpreted — /v silently doing the
 			// opposite of what it says.
-			name: "0-arg param returned by /r",
-			src:  zero + hold + "typeof (h z/r)",
+			name: "0-arg param returned by /v",
+			src:  zero + hold + "typeof (h z/v)",
 			want: "[Function]",
-			why:  "a /r'd param returned from a body is the fn, not its result",
+			why:  "a /v'd param returned from a body is the fn, not its result",
 		},
 		{
 			// Not param-specific: the same body shape over a module-scope
 			// name. If the fix had keyed on the frame's parameter binding
 			// rather than on the frame, this row would still be `[42]`.
-			name: "module-scope name returned by /r",
-			src:  zero + "def h fn [[] [Any] [ z/r ]]\n" + "typeof (h)",
+			name: "module-scope name returned by /v",
+			src:  zero + "def h fn [[] [Any] [ z/v ]]\n" + "typeof (h)",
 			want: "[Function]",
 			why:  "the park is a property of the frame, not of a param binding",
 		},
 		{
 			// ADR-016: arity and origin never change how a function behaves.
 			// Arity >= 1 already parked before the fix; it must still park.
-			name: "1-arg param returned by /r",
-			src:  inc + hold + "typeof (h inc/r)",
+			name: "1-arg param returned by /v",
+			src:  inc + hold + "typeof (h inc/v)",
 			want: "[Function]",
 			why:  "ADR-016: arity does not change the answer",
 		},
@@ -69,17 +69,17 @@ func fnReturnParkCases() []fnReturnParkCase {
 			// are told apart by FrameOpenInfo; had the fix keyed on anything
 			// forgeable from source text, this would be `[Function]`.
 			name: "user paren still re-steps",
-			src:  zero + "(z/r)",
+			src:  zero + "(z/v)",
 			want: "[42]",
 			why:  "only a fn FRAME parks; a user paren is a fresh use",
 		},
 		{
 			// NEGATIVE — `ref` is the same operation spelled long, and it must
-			// agree with `/r` in both directions.
+			// agree with `/v` in both directions.
 			name: "user paren re-steps a ref",
-			src:  zero + "(ref z)",
+			src:  zero + "(valof z)",
 			want: "[42]",
-			why:  "`ref` and `/r` are one operation in every position",
+			why:  "`ref` and `/v` are one operation in every position",
 		},
 		{
 			// NEGATIVE — a frame returning a NON-Function is untouched. This is

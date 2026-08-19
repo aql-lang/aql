@@ -164,9 +164,9 @@ def repl-eval fn [[ep:Any src:String] [String] [
 def repl-close fn [[h:Any] [] [ Net.close h ]]
 
 export "Repl" {
-  serve:   repl-serve/r
-  connect: repl-connect/r
-  eval:    repl-eval/r
-  close:   repl-close/r
+  serve:   repl-serve/v
+  connect: repl-connect/v
+  eval:    repl-eval/v
+  close:   repl-close/v
 }
 `

@@ -15,7 +15,7 @@ package core
 //     ExecFnDefSigStackMatch, VM tryNativeFnApply), and copied into any
 //     `def w Pkg.word` rebinding (installDef's module-wrapper branch
 //     copies the INNER sigs — see below — so the laundering path
-//     `def s TimeUtil.sleep/r  s 300` stays gated);
+//     `def s TimeUtil.sleep/v  s 300` stays gated);
 //   - the module sub-registry's STORED sigs for each export's dispatch
 //     target (the trivial-delegation inner native, or the preamble fn
 //     itself) — the sigs reg.Lookup aggregates, matchSignature returns,

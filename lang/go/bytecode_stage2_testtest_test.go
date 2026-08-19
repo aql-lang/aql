@@ -8,7 +8,7 @@ import "testing"
 // VM through InvokeBody, but every corpus body still refused as "code-body
 // word test-test (Stage 2)". The masked inner leaf: an assertion arg of
 // DYNAMIC modality (a user-poly / declared-Any fn result) reaching a module
-// native referenced by `/r` in an export map (`equal: assert-equal/r`).
+// native referenced by `/v` in an export map (`equal: assert-equal/v`).
 // Such a reference carries body-less sigs and a real Go handler, so
 // execFnDefLiteral's wrapper branch deliberately skips it — and the final
 // pure-stack dispatch built its MatchResult WITHOUT Reg. tryRecordPoly then

@@ -220,7 +220,7 @@ func resolveExport(modReg *native.Registry, exports map[string]*native.OrderedMa
 // resolveTestExport mirrors native.resolveModuleExport but is local
 // to this package — the kernel helper is unexported.
 func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
-	// A function value (from `name/r`) must carry the module registry
+	// A function value (from `name/v`) must carry the module registry
 	// so it executes in module scope when called after import.
 	if fnDef, ok := v.Data.(native.FnDefInfo); ok {
 		if fnDef.Registry == nil {
@@ -1652,41 +1652,41 @@ export "Test" {
   PropertyResult:  PropertyResult
 
   # spec constructors
-  case:           test-case/r
-  spec:           spec/r
-  spec-with-subs: spec-with-subs/r
-  prop:           test-prop/r
+  case:           test-case/v
+  spec:           spec/v
+  spec-with-subs: spec-with-subs/v
+  prop:           test-prop/v
 
   # imperative API (Go)
-  describe:    test-describe/r
-  test:        test-test/r
-  it:          test-test/r
-  check-prop:  test-check-prop/r
-  skip:        test-skip/r
+  describe:    test-describe/v
+  test:        test-test/v
+  it:          test-test/v
+  check-prop:  test-check-prop/v
+  skip:        test-skip/v
 
   # accumulated results
-  results:    test-results/r
-  summary:    test-summary/r
-  report:     test-report/r
-  reset:      test-reset/r
-  fail-count: test-fail-count/r
+  results:    test-results/v
+  summary:    test-summary/v
+  report:     test-report/v
+  reset:      test-reset/v
+  fail-count: test-fail-count/v
 
   # line coverage of a module-under-test
-  cover:      test-cover/r
-  coverage:   test-coverage/r
+  cover:      test-cover/v
+  coverage:   test-coverage/v
 
   # spec runner
-  run-spec:     run-spec/r
-  run-property: run-property/r
-  invoke:       test-invoke/r
+  run-spec:     run-spec/v
+  run-property: run-property/v
+  invoke:       test-invoke/v
 }
 
 export "Assert" {
-  equal:      assert-equal/r
-  not-equal:  assert-not-equal/r
-  ok:         assert-ok/r
-  throws:     assert-throws/r
-  match:      assert-match/r
+  equal:      assert-equal/v
+  not-equal:  assert-not-equal/v
+  ok:         assert-ok/v
+  throws:     assert-throws/v
+  match:      assert-match/v
 }
 
 `

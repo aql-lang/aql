@@ -1,0 +1,264 @@
+# boru Style Guide
+
+House style for boru source. Where a rule is enforced by `boru fmt`, this
+guide says so; where it is not (yet), it says that too, and the guide is
+the authority until the formatter catches up.
+
+Style is not taste here. boru's surface deliberately admits several
+spellings of the same thing — that is what makes forward arguments and
+the signature sugar possible — so a house style is what keeps a codebase
+from carrying five spellings of one idea.
+
+Related: [AGENTS.md](AGENTS.md) for the doc map and the tooling,
+[REFERENCE.md](REFERENCE.md) for what each form *means*,
+[NUR.md](NUR.md) for the recorded non-uniformities.
+
+
+## S1 — Function signatures: use the fewest square brackets
+
+**Rule.** Write a signature in the spelling with the fewest square
+brackets that expresses it. `boru fmt` normalises toward this form.
+
+For the common case — **one parameter, one return** — that is the
+three-argument form with a bare input and a bare output:
+
+```boru
+def double fn x:Integer Integer [mul 2 x]        ;# YES — 1 bracket pair
+```
+
+Not any of these, which are the same function written longer:
+
+```boru
+def double fn x:Integer [Integer] [mul 2 x]      ;# no — 2
+def double fn [x:Integer Integer [mul 2 x]]      ;# no — 2
+def double fn [[x:Integer] Integer [mul 2 x]]    ;# no — 3
+def double fn [x:Integer [Integer] [mul 2 x]]    ;# no — 3
+def double fn [[x:Integer] [Integer] [mul 2 x]]  ;# no — 4
+```
+
+All six are the *same value*, not merely the same answer — `canon` of
+each is `deq` to `canon` of any other. The body's brackets are not
+optional: the body is always a list.
+
+Both halves are pinned, so this section cannot drift from the engine
+without a test failing: the six spellings each computing `42` are spec
+rows in [`lang/spec/fn-triple.tsv`](lang/spec/fn-triple.tsv) §2b, and
+the five `canon` equalities against the target form are
+`TestFnSignatureSpellingsAreOneValue` in
+`lang/go/test/fn_triple_compiled_test.go` (a `canon` of a function value
+does not compile, and the spec corpus admits no compile refusals).
+
+### The one spelling that is not valid
+
+A **bracketed input** is not a longer way of writing a bare one. It
+selects the other form entirely:
+
+```boru
+def double fn [x:Integer] [Integer] [mul 2 x]
+;# error: [boru/fn_error]: fn: list length must be a non-zero multiple of 3
+```
+
+`fn` has two signatures — `fn <input> <output> <body>` (three arguments)
+and `fn [ …triples… ]` (one list). A **list** in the input position
+always selects the second, so `[x:Integer]` is read as a spec list of
+length 1, and `[Integer]` and `[mul 2 x]` are left stranded as separate
+arguments. `boru describe fn` states the rule: *"The 3-arg form requires
+a NON-LIST input … a list input always selects the spec-list form."*
+
+So the input is bare or the whole signature is a list. Never one bracket
+pair around the input alone.
+
+### When you cannot reduce it
+
+The three-argument form takes exactly one input item, so these keep the
+spec-list form — that is correct style, not a violation:
+
+```boru
+def add2 fn [[a:Integer b:Integer] [Integer] [add a b]]   ;# 2+ parameters
+def zero fn [[] [Integer] [42]]                            ;# 0 parameters — [] is a list
+def m fn [[a:Integer] [Integer] [add 1 a]
+          [s:String]  [String]  [s]]                       ;# overloads
+```
+
+For overloads, the flat triple spelling is available and shorter when
+every input is a single parameter:
+
+```boru
+def m fn [a:Integer Integer [add 1 a] s:String String [s]]  ;# same function
+```
+
+Prefer whichever of those two reads better for the arity you have: flat
+for a few one-parameter overloads, bracketed when the inputs are wide
+enough that the triple boundaries stop being obvious.
+
+### Why fewest brackets
+
+Three reasons, in order of weight:
+
+1. **One spelling per idea.** Six ways to write one signature is six
+   things a reader has to recognise as the same thing.
+2. **The brackets carry no information here.** `[x:Integer]` and
+   `x:Integer` in the input slot denote the same single parameter; the
+   extra pair is noise that looks like structure.
+3. **It matches the formatter.** `boru fmt` already rewrites the fully
+   canonical form to the short one, so the short form is the fixed point
+   the tool is heading toward.
+
+### Formatter status (as of 2026-08-19)
+
+`boru fmt` implements this rule **only from the fully canonical
+spelling**:
+
+| input | `boru fmt` output |
+|---|---|
+| `fn [[x:Integer] [Integer] [mul 2 x]]` | `fn x:Integer Integer [mul 2 x]` ✅ |
+| `fn [[Integer] [Integer] [add 1]]` | `fn Integer Integer [add 1]` ✅ |
+| `fn x:Integer [Integer] [mul 2 x]` | unchanged ❌ |
+| `fn [x:Integer Integer [mul 2 x]]` | unchanged ❌ |
+| `fn [[x:Integer] Integer [mul 2 x]]` | unchanged ❌ |
+| `fn [x:Integer [Integer] [mul 2 x]]` | unchanged ❌ |
+
+It correctly leaves the irreducible forms alone (2+ parameters, zero
+parameters, multi-overload spec lists).
+
+So `boru fmt` does not yet make this rule self-enforcing: four of the six
+spellings survive it untouched, and a file can pass `fmt` while carrying
+several spellings of one signature. Recorded as **NUR088**. Until that
+lands, apply S1 by hand — running `fmt` is necessary but not sufficient.
+
+
+## S1b — Lambdas: no outer parens, bare input for one parameter
+
+**Rule.** The same fewest-brackets rule applies to `=>` lambdas. The outer
+parens around a lambda are **never** required in a `def` operand position,
+and a single typed parameter needs no brackets either:
+
+```boru
+def i t:Any => [t/v]                        ;# YES — 1 pair (the body)
+def s [a:Integer b:Integer] => [add a b]    ;# YES — 2+ params bracket the input
+```
+
+Not these, which are the same lambdas written longer:
+
+```boru
+def i ([t:Any] => [t/v])                     ;# no — 2 bracket pairs + parens
+def s ([a:Integer b:Integer] => [add a b])   ;# no — the parens add nothing
+```
+
+**Calls take no parens at statement level.** Write `i 5`, not `(i 5)`.
+Parenthesise a call only when its *result* is an argument to something
+else — `print (i 5)`, `add 1 (i 5)` — or to bound a group.
+
+**Why the outer parens are redundant.** `def` has no `afn`/`=>` keyword
+slot — `boru describe def` lists 35 signatures and the lambda lands on
+the catch-all `[Atom Any]`. `=>` is a *grammar-level* fold: `A => B`
+parses as the paren group `(A afn B)` (`lang/go/CLAUDE.md`, "Lambda
+Syntax"), so the arrow binds tighter than `def`'s forward collection and
+the lambda arrives already whole. Writing your own parens around it just
+repeats a grouping the parser has already done.
+
+**The bare form takes exactly ONE parameter, and overrunning it fails
+silently.** In `x:Integer y:Integer => body` each pair closes separately,
+so the first strands (`lang/go/CLAUDE.md`, "Syntactic gotchas") — and
+nothing says so:
+
+```
+$ boru do 'def s x:Integer y:Integer => [add x y] end s 2 3'
+fn (Integer) {x:Integer} 2 3
+$ echo $?
+0
+```
+
+The stranded `{x:Integer}`, the uncalled fn, and both operands are just
+left on the stack. Two or more parameters therefore bracket the input
+list, as above — that is not a violation of this rule, it is the
+shortest spelling that parses.
+
+`boru fmt` does not normalise any of this either — same gap as S1
+(**NUR088**), so it is on the author.
+
+
+## S2 — Forward call form is canonical
+
+Write `f a b c`, not the mirror-equivalent stack forms, in new code and
+examples (`AGENTS.md`).
+
+**Mind the operand order when you convert.** Forward and swap are *not*
+the same expression for a non-commutative word:
+
+```
+$ boru do 'sub 10 3'    →   -7        $ boru do '10 sub 3'   →    7
+$ boru do 'lte 5 1'     →   true      $ boru do '5 lte 1'    →   false
+```
+
+`lte x y` means `y <= x`; `sub a b` means `b - a`. The all-stack form
+`10 3 sub` is the one that agrees with `10 sub 3` (README.md). So the
+forward spelling of "n ≤ 1" is `lte 1 n`, and of "n − 1" is `sub 1 n`.
+
+Transcribing a guard from infix habit inverts it silently: a factorial
+written `if (lte n 1) [1] [...]` returns `1` for every input, exit 0, no
+diagnostic. **Re-run examples after converting them** — this is not a
+formatting change, it is an edit to the expression.
+
+
+## S3 — Passing a function: use `/v`
+
+A bare name bound to a function **calls** it (ADR-011). To pass the
+function itself, write `/v`:
+
+```boru
+each [f] xs        ;# a quotation naming f
+hof f/v xs         ;# f as an argument
+```
+
+A bare `f` before a `Function`-typed slot happens to resolve as a
+reference today, but that exception is struck from ADR-011 and is
+scheduled for removal (**NUR078**). Write `/v` now.
+
+S3 and S4 are the same operator seen from two sides: `/v` always means
+"the binding's value, not a call". Passing a function is the case where
+that matters most, because a bare name would call it instead.
+
+> **Renamed 2026-08-19.** `/v` was `/r`, and the word `ref` became
+> `valof` — deliberately not `val`, which is far too common a local name
+> to reserve (it broke four shipped sources in a first pass). The old
+> spellings are gone, not deprecated, and both fail loudly: `r` left the
+> modifier alphabet, so `f/r` is no longer a modifier at all — it parses
+> as an ordinary slash-bearing name and raises
+> `[boru/undefined_word]: undefined word: f/r`, exactly as `ref` does.
+> `def val …` stays legal.
+
+
+## S4 — Reading a value: `/v`
+
+A bare name bound to a function **calls** it. `/v` takes the binding's
+**value** instead, disabling the call — and it is total over every
+binding kind, so it is also how you read a parameter whose kind you do
+not know statically:
+
+```boru
+def ident t:Any => [t/v]   ;# 5 → 5, "s" → "s", a lambda → the lambda
+```
+
+For a non-function binding `/v` is simply the identity (`def n 5` then
+`n/v` is `5`), so you never have to know which case you are in. The word
+form is `valof`: `valof add` ≡ `add/v`.
+
+The only refusal left is an **unbound** name — there is no value to take.
+
+`(args).N` still reads a parameter positionally (and is the only way to
+reach an argument with no name), but it is no longer needed just to get
+a value out of a name.
+
+## S5 — Computed keys: parenthesise for the quoting accessors
+
+`get` evaluates a bare bound key; `has` and `set` quote it. So:
+
+```boru
+m get k          ;# fine — get evaluates k
+m has (k)        ;# needed — a bare k looks up the literal "k"
+m set (k) v      ;# needed
+```
+
+A bare key to `has`/`set` is a silent wrong answer, not an error
+(NUR040's class).

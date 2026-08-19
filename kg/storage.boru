@@ -507,22 +507,22 @@ def write-markdown fn [[bundle:Map path:String] [Any] [
 ]]
 
 export "KgStore" {
-  sort-by-id:sort-by-id/r
-  write-bundle:write-bundle/r
-  read-bundle:read-bundle/r
-  roundtrip-ok:roundtrip-ok/r
-  sql-escape:sql-escape/r
-  sql-lit:sql-lit/r
-  sql-row:sql-row/r
-  meta-rows:meta-rows/r
-  emit-sql:emit-sql/r
-  write-sql:write-sql/r
-  attr-of:attr-of/r
-  name-of:name-of/r
-  join-or-none:join-or-none/r
-  md-modules:md-modules/r
-  md-entities:md-entities/r
-  md-assertions:md-assertions/r
-  emit-markdown:emit-markdown/r
-  write-markdown:write-markdown/r
+  sort-by-id:sort-by-id/v
+  write-bundle:write-bundle/v
+  read-bundle:read-bundle/v
+  roundtrip-ok:roundtrip-ok/v
+  sql-escape:sql-escape/v
+  sql-lit:sql-lit/v
+  sql-row:sql-row/v
+  meta-rows:meta-rows/v
+  emit-sql:emit-sql/v
+  write-sql:write-sql/v
+  attr-of:attr-of/v
+  name-of:name-of/v
+  join-or-none:join-or-none/v
+  md-modules:md-modules/v
+  md-entities:md-entities/v
+  md-assertions:md-assertions/v
+  emit-markdown:emit-markdown/v
+  write-markdown:write-markdown/v
 }

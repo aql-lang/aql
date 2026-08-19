@@ -308,11 +308,11 @@ func TestEmitApplyFnValue(t *testing.T) {
 		src  string
 		want []any
 	}{
-		{`def inc fn [[n:Integer][Integer][n add 1]] 5 inc/r apply`, []any{int64(6)}},
+		{`def inc fn [[n:Integer][Integer][n add 1]] 5 inc/v apply`, []any{int64(6)}},
 		// Stack form: a=top=3, b=10 → a sub b = 3-10 = -7 (NOT forward sub2 10 3 = 7).
-		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] 10 3 sub2/r apply`, []any{int64(-7)}},
-		{`def z fn [[][Integer][42]] z/r apply`, []any{int64(42)}},
-		{`def f ([n:Integer] => [n add 1]) 5 f/r apply`, []any{int64(6)}},
+		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] 10 3 sub2/v apply`, []any{int64(-7)}},
+		{`def z fn [[][Integer][42]] z/v apply`, []any{int64(42)}},
+		{`def f ([n:Integer] => [n add 1]) 5 f/v apply`, []any{int64(6)}},
 	}
 	for _, c := range cases {
 		a, err := New()
@@ -605,17 +605,17 @@ func TestEmitDeadValueDef(t *testing.T) {
 }
 
 // TestEmitFnValueData: a no-capture function VALUE used as data — a residual
-// (`f/r`), a map member (`{b:f/r}`), or an arity/param introspection operand —
+// (`f/v`), a map member (`{b:f/v}`), or an arity/param introspection operand —
 // bakes as a const, so these compile. The auto-dispatch boundary splits on the
 // CARRIER bit: a [Function]-typed CARRIER leading the residual (`(mk2 5) 10` —
 // the factory pattern) is always the interpreter's auto-apply case and now
 // compiles VM-native (see TestFactoryApplyCompiles); an inert CONCRETE fn value
-// ahead of args (`f/r 2`) is left as a stranded [fn args] residual and stays
+// ahead of args (`f/v 2`) is left as a stranded [fn args] residual and stays
 // refused so it falls back faithfully.
 func TestEmitFnValueData(t *testing.T) {
 	const inc = `def f fn [[x:Integer] [Integer] [x add 1]] `
 	for _, c := range []struct{ src, want string }{
-		{inc + `f/r`, "[fn f(Integer)]"},
+		{inc + `f/v`, "[fn f(Integer)]"},
 		{`import "boru:type-util"  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a]])`, "[2]"},
 	} {
 		dis, r := compile(t, c.src)
@@ -639,7 +639,7 @@ func TestEmitFnValueData(t *testing.T) {
 	// residual (NOT an apply), and a concrete fn is not a [Function]-typed
 	// CARRIER, so it stays refused. (The factory-apply `(mk2 5) 10` — a CARRIER
 	// lead — now compiles VM-native; see TestFactoryApplyCompiles.)
-	if _, r := compile(t, inc+`f/r 2`); r == "" {
+	if _, r := compile(t, inc+`f/v 2`); r == "" {
 		t.Error("a concrete fn value ahead of residual args compiled but must fall back")
 	}
 }
@@ -810,7 +810,7 @@ func TestEmitSpillSeat(t *testing.T) {
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
 // const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
 // the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field map
-// (`{b: f/r}`) now const-bakes too (the no-capture fn value is inert data), but
+// (`{b: f/v}`) now const-bakes too (the no-capture fn value is inert data), but
 // the `m.b 2` CALL through it still falls back at the get-then-dispatch — value
 // parity holds either way, asserted here.
 func TestEmitMethodField(t *testing.T) {
@@ -821,7 +821,7 @@ func TestEmitMethodField(t *testing.T) {
 		{`def m {f: (fn [[a:Integer][Integer][a add 1]])} m.f 5`, []any{int64(6)}},
 		{`def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])} m.f 2 3`, []any{int64(203)}},
 		// Named-ref field: falls back, but must still match the interpreter.
-		{`def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f/r} m.b 2`, []any{int64(3)}},
+		{`def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f/v} m.b 2`, []any{int64(3)}},
 	}
 	for _, c := range cases {
 		got, _, rerr := mustRun(t, c.src)
@@ -1463,7 +1463,7 @@ func TestEmitMinilangCompiles(t *testing.T) {
 
 // A method field whose value is an UNNAMED inline fn now COMPILES (the map
 // const-bakes the fn member, a poly get returns it, CALL_DYNAMIC applies it —
-// see TestEmitMethodField). A NAMED ref field (`{b: f/r}`) still falls back to
+// see TestEmitMethodField). A NAMED ref field (`{b: f/v}`) still falls back to
 // the interpreter (it would diverge through the island), with the correct
 // result — the remaining sanctioned fn-value-from-map fallback.
 // A fn-VALUE held in a baked map/object field and APPLIED (`m.b 2`) compiles:
@@ -1473,16 +1473,16 @@ func TestEmitMinilangCompiles(t *testing.T) {
 // callDynamic's VM-native fast path fire ONLY for a `[Word(inner)]` delegation
 // method (isDelegationFnDef) — a USER fn (real body) routes through the island,
 // which runs its body exactly as the interpreter would. Both an unnamed inline
-// fn and a named `/r` ref work.
+// fn and a named `/v` ref work.
 func TestEmitFnValueFieldCallCompiles(t *testing.T) {
 	for _, c := range []struct {
 		src  string
 		want int64
 	}{
 		{`def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`, 6},           // unnamed inline
-		{`def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/r}  m.b 2`, 3}, // named ref
-		{`def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: inc/r}  ops.f 5`, 6},
-		{`def m {a:add/r} end m.a 1 2`, 3}, // builtin ref
+		{`def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/v}  m.b 2`, 3}, // named ref
+		{`def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: inc/v}  ops.f 5`, 6},
+		{`def m {a:add/v} end m.a 1 2`, 3}, // builtin ref
 	} {
 		got, compiled, err := mustRun(t, c.src)
 		if !compiled || err != nil {
@@ -1493,11 +1493,11 @@ func TestEmitFnValueFieldCallCompiles(t *testing.T) {
 			t.Errorf("%q = %v, want %d", c.src, got, c.want)
 		}
 	}
-	// NEGATIVE: a BARE inert ref directly followed by an arg (`f/r 2`) is NOT
-	// applied by the interpreter — the /r leaves it inert data, residual [f, 2] —
+	// NEGATIVE: a BARE inert ref directly followed by an arg (`f/v 2`) is NOT
+	// applied by the interpreter — the /v leaves it inert data, residual [f, 2] —
 	// so the compiler must refuse rather than auto-apply it (which would diverge).
-	if _, r := compile(t, `def f fn [[x:Integer] [Integer] [add x 1]]  f/r 2`); r == "" {
-		t.Error("bare inert ref `f/r 2` compiled but must refuse (interpreter leaves it inert)")
+	if _, r := compile(t, `def f fn [[x:Integer] [Integer] [add x 1]]  f/v 2`); r == "" {
+		t.Error("bare inert ref `f/v 2` compiled but must refuse (interpreter leaves it inert)")
 	}
 }
 

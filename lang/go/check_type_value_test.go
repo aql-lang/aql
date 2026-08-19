@@ -105,18 +105,18 @@ func TestPredicateRefineReturnCheck(t *testing.T) {
 
 // A dispatch modifier (usurp / stack-args / forward-args / force-arity, the
 // `/u` `/s` `/f` `/N` desugarings) over a stored fn-ref read via dot-access
-// (`m.a` where `m = {a:add/r}`) sees a dynamic(Any) carrier — getNodeReturns
+// (`m.a` where `m = {a:add/v}`) sees a dynamic(Any) carrier — getNodeReturns
 // cannot narrow a dispatch-bearing field — and must yield a gradual Function
 // carrier in check mode rather than an illegal_ref. path-modifier.tsv regressed
 // 12 of these.
 func TestStoredFnRefModifierCheck(t *testing.T) {
 	clean := []string{
-		`def m {a:add/r} end m.a/u 1 2`,
-		`def m {s:sub/r} end m.s/f 10 3`,
-		`def m {s:sub/r} end 10 3 m.s/s`,
-		`def m {a:add/r} end m.a/2 1 2`,
-		`def o {m:{a:add/r}} end o.m.a/u 1 2`,
-		`def m {s:sub/r} end force-arity 2 (usurp (m.s)) 10 3`,
+		`def m {a:add/v} end m.a/u 1 2`,
+		`def m {s:sub/v} end m.s/f 10 3`,
+		`def m {s:sub/v} end 10 3 m.s/s`,
+		`def m {a:add/v} end m.a/2 1 2`,
+		`def o {m:{a:add/v}} end o.m.a/u 1 2`,
+		`def m {s:sub/v} end force-arity 2 (usurp (m.s)) 10 3`,
 	}
 	for _, src := range clean {
 		if n := checkErrs(t, src); n != 0 {
@@ -228,7 +228,7 @@ func TestDeclaredReturnBodyConformance(t *testing.T) {
 		// analysis; the memoized residual is not evidence.
 		`def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 10`,
 		// fn-value frontier: apply leaves an unapplied Function residual.
-		`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/r) 5`,
+		`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/v apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/v) 5`,
 	}
 	for _, src := range clean {
 		if n := checkErrs(t, src); n != 0 {

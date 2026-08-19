@@ -90,6 +90,30 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   `jsonic-matcher-rule-access-report.10.md`, `data-last-audit.10.md`,
   `WAT-AUDIT.5.md`, `FORMAL-FINDINGS.0.md` — feature/feasibility/audit
   reports pinned to a point in time.
+- `TYPE-REPRESENTATION.0.md` — why a type NAME does not always denote its
+  type. One lattice (`*Type`), but `IsTypeBody` unions 18 value shapes and
+  `InstallType` has 11 branches using 3 strategies to bind a name to one.
+  Two strategies work everywhere; the catch-all branch leaves the name
+  usable in some positions and not others. Carries the branch table, the
+  measured surface consequences, two corrections this audit had to make to
+  its own earlier claims, and a staged fix. NUR090 / NUR091, issue #392.
+- `FUNCTION-TYPES.0.md` — proposal + working prototype for a *declared*
+  function type (`fnsig Integer String`, `fn` minus its body), answering
+  the audit's "`Function` is opaque" finding. Measures what the change
+  buys (a wrong-shaped argument moves from a run-time refusal to a
+  check-time error) and what it does not (NUR089 is orthogonal and
+  survives it). **Proposal, not merged** — §7 lists what production
+  would still need.
+- `HIGHER-ORDER-FUNCTIONS.0.md` — an empirical audit of higher-order
+  support and combinator expressibility (2026-08-19): what was built and
+  run, a comparison against Haskell/Scheme/JS/Factor, and the
+  call-vs-value gotchas, plus §4.2 on the six spellings of one signature
+  and which of them `boru fmt` collapses. **Point-in-time**, and
+  deliberately so — it records behaviour that NUR073, NUR078, NUR086,
+  NUR087 and NUR088 are each expected to change (NUR085 already landed:
+  §5.2 is closed by the `/v` totality rule), so read its §4.2
+  and §5 against the register rather than as current truth. The house
+  rules it applies live in [`STYLE-GUIDE.md`](../STYLE-GUIDE.md).
 - `CLIENT-FIXES-2026-06-24.md`, `CLIENT-VERIFICATION-MAIN-2026-06-24.md`,
   `FORCE-COMPILE-CLIENT-COVERAGE.0.md` — dated client-library verification
   reports.

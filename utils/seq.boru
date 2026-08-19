@@ -419,7 +419,7 @@ def seq-run fn [[ctx:Map] [Integer] [
 # It takes argv as a PARAMETER, which is what lets tests/seq_test.boru drive
 # the whole program, and it never calls IO.exit.
 #
-# `Cli.main (spec) (seq-run/r)` is NOT used, and cannot be: Cli.main invokes
+# `Cli.main (spec) (seq-run/v)` is NOT used, and cannot be: Cli.main invokes
 # its handler from inside the boru:cli module, and under the tree-walking
 # interpreter the handler body then cannot see this file's module-level defs
 # at all — a five-line probe reduces to
@@ -455,29 +455,29 @@ def seq-main fn [[argv:List] [Integer] [
 # module's private defs are NOT visible to an importer, so anything a test
 # touches has to be exported.
 export "Seq" {
-  starts:     seq-starts/r
-  zeros:      seq-zeros/r
-  pow10:      seq-pow10/r
-  parseNum:   seq-parse-num/r
-  numeric:    seq-numeric/r
-  scale:      seq-scale/r
-  takesValue: seq-takes-value/r
-  argv:       seq-argv/r
-  firstBad:   seq-first-bad/r
-  count:      seq-count/r
-  numWidth:   seq-num-width/r
-  fieldWidth: seq-field-width/r
-  plan:       seq-plan/r
-  fmt:        seq-fmt/r
-  pad:        seq-pad/r
-  term:       seq-term/r
-  chunk:      seq-chunk/r
-  out:        seq-out/r
-  render:     seq-render/r
-  bool:       seq-bool/r
-  sep:        seq-sep/r
-  fail:       seq-fail/r
-  main:       seq-main/r
+  starts:     seq-starts/v
+  zeros:      seq-zeros/v
+  pow10:      seq-pow10/v
+  parseNum:   seq-parse-num/v
+  numeric:    seq-numeric/v
+  scale:      seq-scale/v
+  takesValue: seq-takes-value/v
+  argv:       seq-argv/v
+  firstBad:   seq-first-bad/v
+  count:      seq-count/v
+  numWidth:   seq-num-width/v
+  fieldWidth: seq-field-width/v
+  plan:       seq-plan/v
+  fmt:        seq-fmt/v
+  pad:        seq-pad/v
+  term:       seq-term/v
+  chunk:      seq-chunk/v
+  out:        seq-out/v
+  render:     seq-render/v
+  bool:       seq-bool/v
+  sep:        seq-sep/v
+  fail:       seq-fail/v
+  main:       seq-main/v
   spec:       spec
 }
 

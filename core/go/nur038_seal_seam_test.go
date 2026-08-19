@@ -39,7 +39,7 @@ func TestNur038ReachFnWouldClaim(t *testing.T) {
 		{"plain value binding claims", anyFn, NewWord("nsval"), true},
 		{"typed slot tests the binding", intFn, NewWord("nsval"), true},
 		{"fn word is a barrier", anyFn, NewWord("nsfn"), false},
-		{"/r word claims at a Function slot", fnFn, NewWordRef("nsfn"), true},
+		{"/v word claims at a Function slot", fnFn, NewWordRef("nsfn"), true},
 		{"reserved literal claims", anyFn, NewWord("true"), true},
 		{"unbound word is no claim", anyFn, NewWord("ns-no-such"), false},
 		{"a group is an optimistic claim", intFn, NewOpenParen(), true},

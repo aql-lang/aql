@@ -29,7 +29,7 @@ func BenchmarkTuiKeystrokeStorm(b *testing.B) {
 		`import "boru:tui"`,
 		`def u ([s:Any e:Map] => [ if (e.key eq "q") [ Tui.quit s ] [ (s add 1) ] ])`,
 		`def v ([s:Any] => [ Tui.text (convert String s) ])`,
-		`[u/r v/r]`,
+		`[u/v v/v]`,
 	} {
 		vals, pErr := parser.Parse(step)
 		if pErr != nil {

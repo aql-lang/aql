@@ -343,7 +343,7 @@ func w4ModEnv(t *testing.T) (*Registry, *capabilities.MemFileOps) {
 	write("/mods/util/index.boru", `
 def twice fn [[x:Integer] [Integer] [x mul 2]]
 def Color refine Integer
-export "Util" {twice: twice/r Color: Color msg: "hello"}
+export "Util" {twice: twice/v Color: Color msg: "hello"}
 `)
 	// A module whose entry point is declared in .boru/boru.json, with a
 	// data resource.
@@ -371,10 +371,10 @@ func w4InstallFakeResolver(t *testing.T, r *Registry) {
 		switch name {
 		case "fake":
 			src = `def fnx fn [[x:Integer] [Integer] [x add 1]]
-export "Fk" {v: 7 fnx: fnx/r}`
+export "Fk" {v: 7 fnx: fnx/v}`
 		case "type-util":
 			src = `def tp fn [[x:Any] [Any] [x]]
-export "TypeUtil" {tpartial: tp/r}`
+export "TypeUtil" {tpartial: tp/v}`
 		default:
 			return ModuleDesc{}, fmt.Errorf("no such native module %q", name)
 		}

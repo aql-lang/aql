@@ -12,7 +12,7 @@
 import "boru:serve"
 import "boru:rand" # Rand.uuid for id generation
 
-export "MemStore" {New:New/r}
+export "MemStore" {New:New/v}
 
 # `New {}` -> Service  (mount it on an entity bus; see usage.boru)
 def New fn opts:Map Service [

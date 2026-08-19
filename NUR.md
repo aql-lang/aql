@@ -47,6 +47,14 @@ reference to a deleted `NURnnn` stays unambiguous forever.
   this file as Pending or Allowed; `git log -S NURnnn` recovers a
   retired number's history.
 
+> **Spelling note (2026-08-19).** The modifier `/r` was renamed **`/v`**
+> and the word `ref` became **`valof`** (see [ADR.md](ADR.md), ADR-011).
+> Records dated before that day quote the old spellings verbatim, because
+> that is what was observed and argued at the time; `/r` no longer parses,
+> so read `/r` as `/v` and `ref` as `valof` when replaying their
+> transcripts. The behaviour those records describe is unchanged by the
+> rename — except where a record says otherwise.
+
 ---
 
 ## Pending non-uniformities (the open list)
@@ -77,6 +85,13 @@ keep the two in sync in the same commit.
 | [NUR082](#nur082) | Three tree-walking subcommands, two rules for `.boru/`: `fmt` and (now) `check` skip the package directory, `boru test`'s `discover()` walks it — VERDICT 2026-08-18: resolve by fix, one shared walk helper carrying the skip | giving `boru check` directory targets, 2026-08-18 (W-CLI-CHECK) |
 | [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
 | [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
+| [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
+| [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
+| [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
+| [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
+| [NUR090](#nur090) | A type name does not always denote its type: a builtin or `refine` word evaluates to its minted lattice NODE, while a `class`, disjunct or fn-shape word evaluates to its structural BODY — so wherever a type name is evaluated before being used as a type (e.g. `fn M [Any] [1]`), three kinds break where two work | the function-type prototype, 2026-08-19 (issue #392, `design/FUNCTION-TYPES.0.md` §5.3) |
+| [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
+| [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -3735,3 +3750,544 @@ func TestParseInterleavedHelpIsErrHelp(t *testing.T) {
 		t.Errorf("FlagSet output = %q, want the usage listing", out.String())
 	}
 }
+
+---
+
+
+---
+
+## NUR086 — The code-body iterators take a `Function` callback over a Map but not over a List {#nur086}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3),
+trying to hand a `Function` value to `each` the way `filter` accepts one
+
+**Rule:** one word family, one argument-positioning convention.
+`each` / `for-each` / `fold` / `scan` / `filter` are documented together
+as the higher-order iterators (`describe query`,
+`lang/spec/higher-order.tsv`), and all five accept a quotation body over
+either container shape.
+
+**Divergence:** for the *Function* form, four of the five register the
+Map shape only, and the fifth registers both.
+
+| word | `{TFunction, …}` signatures | source |
+|---|---|---|
+| `each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:326` |
+| `for-each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:348` |
+| `fold` | `{TFunction, TMap, TAny}`, `{TFunction, TMap}` | `lang/go/native/native_array.go:393-394` |
+| `scan` | `{TFunction, TMap}` | `lang/go/native/native_array.go:420` |
+| `filter` | **`{TFunction, TAny}`** — list and map alike | `lang/go/native/natives.go:260` |
+
+```
+$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v [1 2 3]'
+error: [boru/signature_error]: cannot call `each` — no signature matches the arguments
+  = note: candidate `each (Function, Map)` takes 2 arguments, but none were supplied
+  = note: candidate `each (Reach, List)`  takes 2 arguments, but none were supplied
+
+$ boru do 'filter (p:Any => [(p.value mod 2) eq 0]) [1 2 3 4]'
+[2 4]
+```
+
+Compounding it, the Map form is not a plain element callback either — it
+hands the lambda a `KeyVal` — so a unary `Integer -> Integer` function
+value has **no** iterator it can be passed to directly:
+
+```
+$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v {a:1 b:2}'
+error: each: key "a": no matching lambda signature for 1 argument(s)
+```
+
+The only route is to name it inside a quotation (`each [dbl] xs`), which
+NUR037 refuses to compile when the fn is fn-local, or to write an
+adapter lambda (`each ([kv:Any] => [dbl (kv.v)]) m`).
+
+**Evidence:** the registrations cited above; the transcripts above;
+`lang/spec/higher-order.tsv` §5 documents `filter`'s Function form and no
+`each` counterpart. Not previously recorded.
+
+**Documentation status:** documented per word, nowhere as a family.
+`describe each` / `describe fold` / `describe scan` list the signatures
+faithfully, so the absence is discoverable one word at a time; but
+`lang/spec/higher-order.tsv`'s header presents the five together and
+`describe query` lists them together, and neither says the Function form
+is Map-only for four of them. The `{key,value}` / `KeyVal` callback
+shapes are documented (`lang/spec/higher-order.tsv` §5,
+`lang/go/native/filter.go`); what is undocumented is that no member of
+the family accepts a bare-element callback at all.
+
+**Verdict proposed:** resolve by fix — add `{TFunction, TList}` to
+`each` / `for-each` / `fold` / `scan`, handing the callback the element
+directly. Note this buys **signature availability**, not callback
+uniformity: `filter`'s list Function form passes a `{key,value}` pair
+(`lang/go/native/filter.go`), so after this change an
+`Integer -> Integer` function would work with `each` and still not with
+`filter`. Closing the family properly needs a matching `filter` decision
+— either an element-shaped list form or an explicit ruling that the pair
+wrapper is `filter`'s contract — and this record should not be discharged
+by the four additions alone.
+
+---
+
+## NUR087 — A `def` inside an `if` branch is lost to the checker after a `def` bound a call through a `Function` parameter {#nur087}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5)
+— a parser-combinator library that runs correctly is refused by the
+default `boru run`
+
+**Rule:** the checker is an *analysis* pass over a program the engine
+will run; a program the engine runs correctly must not be reported as an
+error (the check-accuracy discipline, `design/CHECK-ACCURACY-RATCHET.10.md`).
+`boru run` performs the check as a pre-flight and refuses on any Error,
+so a false positive is not advisory — it stops the program.
+
+**Divergence:** in a fn body, a `def` inside an `if` branch is not
+recorded once an **earlier** `def` in the same body bound the result of a
+call through a `Function` **parameter**. Minimal repro:
+
+```boru
+def mk fn [[a:Function b:Function] [Function] [
+  ( fn s:Integer Map [
+      def r1 (a s)
+      if (r1.ok)
+        [ def r2 (b (r1.rest))
+          if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
+                     [ {ok:false rest:s val:None} ] ]
+        [ {ok:false rest:s val:None} ] ] ) ]]
+def h (mk ([z:Integer] => [ {ok:true val:1 rest:8} ])
+          ([z:Integer] => [ {ok:true val:2 rest:9} ]))
+print (h 1)
+```
+
+```
+$ boru check m_checkfp4.boru
+check: 6:15: [error] undefined_word: undefined word: r2
+  = help: did you mean `r1`?
+check: [error] no_signature: cannot call `dot` — no signature matches the arguments; got (Atom, Word)
+  … 6 error(s)
+
+$ boru run -no-check m_checkfp4.boru
+{"ok": true, "val": [1, 2], "rest": 9}
+```
+
+`r2` is bound one line above its use, in the same branch. Replacing
+`def r1 (a s)` with a map literal — removing only the call through the
+`Function` parameter — makes the same file check clean, which isolates
+the trigger to that binding rather than to the nested `if`.
+
+**What it costs.** The shape is not exotic: it is the ordinary
+"run a parser, branch on success, run the next one" body, and it is what
+made the audit's parser-combinator library fail `boru run` outright
+(`check failed: 6 error(s)`, exit 1) while running correctly under
+`-no-check` on both engines. The follow-on `no_signature` on `dot` is
+collateral — having lost `r2`, the checker cannot type `r2.ok`.
+
+**Evidence:** the transcripts above, against this tree.
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.5 and §5.5 carry the full
+library and the reduction. Not previously recorded.
+
+**Documentation status:** undocumented as a class.
+`design/CHECK-FALSE-POSITIVES.0.md` and
+`design/CHECK-ACCURACY-RATCHET.10.md` record the known `undefined_word`
+false-positive classes in detail — dynamic-scope reads across a call
+chain, mini-redis's `expires`, the `zr` inline application, the
+closure-return `def f (mk 7)` rows — and this shape (a branch-local `def`
+lost after a `Function`-parameter call bound an earlier one in the same
+body) is not among them; no `lang/spec/*.tsv` or frontier row pins it
+either. `CLI.md` documents `--no-check` as a way to skip the pre-flight,
+but not as the remedy for a checker false positive, so a user meeting
+this has nothing that names their situation.
+
+**Verdict proposed:** resolve by fix — the branch-local `def` must be
+recorded whatever the provenance of an earlier binding in the same body.
+This record retires when the repro above checks clean, with the reduced
+file pinned as a negative test alongside it.
+
+---
+
+## NUR088 — `boru fmt` collapses one of the six signature spellings, not the other five {#nur088}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** writing
+`STYLE-GUIDE.md` §S1 ("use the fewest square brackets") and measuring
+what `boru fmt` actually does with each spelling
+
+**Rule:** a formatter's job is to collapse equivalent spellings to one.
+`boru fmt` is documented as producing "canonical layout"
+(`describe`/`CLI.md`), and `AGENTS.md` makes forward call form canonical
+for new code — one spelling per idea, mechanically enforced.
+
+**Divergence:** a single-parameter, single-return signature has **six**
+valid spellings, all building a `canon`-identical value. `fmt` rewrites
+exactly one of them.
+
+| spelling | pairs | `boru fmt` |
+|---|---|---|
+| `fn x:Integer Integer [mul 2 x]` | 1 | — (already the target) |
+| `fn x:Integer [Integer] [mul 2 x]` | 2 | **unchanged** |
+| `fn [x:Integer Integer [mul 2 x]]` | 2 | **unchanged** |
+| `fn [[x:Integer] Integer [mul 2 x]]` | 3 | **unchanged** |
+| `fn [x:Integer [Integer] [mul 2 x]]` | 3 | **unchanged** |
+| `fn [[x:Integer] [Integer] [mul 2 x]]` | 4 | → `fn x:Integer Integer [mul 2 x]` ✅ |
+
+The unnamed-parameter twin behaves the same way:
+`fn [[Integer] [Integer] [add 1]]` → `fn Integer Integer [add 1]`, while
+the four intermediates pass through.
+
+That the six are one value, not merely one answer:
+
+```
+def s1 fn x:Integer Integer [mul 2 x]
+…
+def s6 fn [[x:Integer] [Integer] [mul 2 x]]
+print (deq (canon s1/v) (canon s6/v))   ;# true, and likewise s2…s5
+```
+
+**Consequence:** a file can be `fmt`-clean and still carry four spellings
+of one signature, so `fmt` cannot be the enforcement point for the house
+rule — a reviewer has to be. The gap is not in the rule (the target form
+is already chosen and already implemented) but in its reach: `fmt`
+normalises from the canonical form only, rather than canonicalising the
+intermediates first and then reducing.
+
+**Evidence:** the table above, measured against this tree by running
+`boru fmt` on each spelling; `design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2;
+`STYLE-GUIDE.md` §S1 carries the same table as the formatter-status note.
+`boru describe fn` documents the underlying two-form rule (*"a list input
+always selects the spec-list form"*), which is what makes
+`fn [x:Integer] [Integer] [mul 2 x]` an error rather than a seventh
+spelling. Not previously recorded.
+
+**Documentation status:** the equivalence is documented, the formatter's
+partial coverage is not. `boru describe fn` states the two forms and
+gives the equivalence explicitly (*"fn x:Integer [Integer] [x mul 2] ≡
+fn [[x:Integer] [Integer] [x mul 2]]"*) and notes that the output slot
+takes both spellings. Nothing states which spelling is preferred — that
+is new in `STYLE-GUIDE.md` §S1 — and nothing states that `fmt` implements
+the preference for only one input form. `CLI.md`'s `fmt` section
+describes canonical layout without enumerating what is and is not
+normalised.
+
+**Verdict proposed:** resolve by fix — `fmt` canonicalises a signature
+before reducing it, so all five non-target spellings converge on the
+one-pair form, leaving the irreducible shapes (2+ parameters, 0
+parameters, multi-overload spec lists) untouched as it already does. This
+record retires when each of the five rewrites to
+`fn x:Integer Integer [mul 2 x]`, pinned as a `fmt` round-trip test.
+
+---
+
+## NUR089 — an inline lambda and a named reference to the same function are not equally checkable {#nur089}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+function-type prototype (`design/FUNCTION-TYPES.0.md`), while
+establishing which of the audit's combinator blocks check clean and why
+
+**Rule:** a function value is a function value. ADR-011's "calling is an
+act of the use site" makes the *call* the only thing that distinguishes
+a reference from a call; nothing in the model makes an anonymous
+function less analysable than a named one. `/v` and a `=>` lambda are
+two spellings of "this function, as data".
+
+**Divergence:** the same combinator, passed the same two functions,
+producing the same answer, checks clean in one spelling and errors in
+the other.
+
+```
+$ cat lam.boru
+def bb f:Function => [g:Function => [x:Any => [f (g x)]]]
+print (((bb (n:Integer => [mul n 2])) (n:Integer => [add n 3])) 4)
+$ boru check lam.boru
+check: 1:51: [error] no_signature: cannot call `g` — no signature matches
+  the arguments; got (Integer); assuming best-fit candidate for analysis
+check failed: 1 error(s)
+$ boru run -no-check lam.boru
+14
+
+$ cat ref.boru
+def d fn n:Integer Integer [mul n 2]
+def e fn n:Integer Integer [add n 3]
+def bb f:Function => [g:Function => [x:Any => [f (g x)]]]
+print (((bb d/v) e/v) 4)
+$ boru check ref.boru
+check: 0 error(s), 0 warning(s), 0 info
+$ boru run -no-check ref.boru
+14
+```
+
+`got (Integer)` is the tell: with the lambda spelling the analysis binds
+the **third** application's argument to `g`, the **second** parameter.
+Varying only that final argument moves the reported type with it, which
+pins the misbinding exactly:
+
+```
+… ) 4)     → no_signature: cannot call `g` … got (Integer)
+… ) 'zz')  → no_signature: cannot call `g` … got (ProperString)
+… ) 3.5)   → no_signature: cannot call `g` … got (Float)
+```
+
+The reference spelling tracks the same three applications correctly.
+
+**Not a property of the combinator.** `ss` (the `S` of §1.1, which the
+audit shows checking clean) fails identically when it is called with
+inline lambdas instead of `kk/v`; `bb` passes when called with
+references. Only the argument spelling moves the result. Defining either
+combinator without calling it is clean in both spellings, so the defect
+is in the analysis of the *call*, not the body.
+
+**Not fixed by declaring a function type.** Replacing `f:Function` with
+a declared `f:IntToInt` (`design/FUNCTION-TYPES.0.md`) leaves the lambda
+call site failing. Widening the declared return to `Any` — which the
+lambda genuinely has, since `=>` declares no return type — makes the
+program run while the check still errors. So this record is orthogonal
+to the opacity of `Function` and survives that work.
+
+**Consequence:** the ergonomic spelling is the one that fails. A reader
+converting an example to the shorter inline form gets a check failure on
+a program that runs correctly, and the diagnostic names a type
+(`Integer`) that appears nowhere in the parameter's declaration —
+pointing the reader at the wrong thing.
+
+**Verdict proposed:** resolve by fix — the analysis must bind an inline
+lambda argument to the same parameter the reference spelling binds it
+to. This record retires when the minimal pair above checks clean in both
+spellings, pinned as a spec row.
+
+---
+
+## NUR090 — a type name does not always denote its type {#nur090}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
+function-type prototype (`design/FUNCTION-TYPES.0.md`), which inherited
+the same defect in `fnsig`'s pair form · **Tracked as:** issue #392
+
+> **Restated 2026-08-19** (twice). The first version framed this as
+> "`fn`'s triple form disagrees with the list form"; the second as
+> "evaluated vs unevaluated". Both described symptoms. The defect is
+> stated below, and one claim in the first version was WRONG — see the
+> correction.
+
+**Rule:** a type is a type regardless of how it was declared. Evaluating
+a type's name should denote that type.
+
+**Divergence:** it denotes the minted lattice NODE for two declaration
+kinds and the structural BODY for three.
+
+```
+$ boru do 'canon Integer'                          → Integer
+$ boru do 'def P refine Integer  canon P'          → P
+$ boru do 'def M (Integer tor none)  canon M'      → none tor Integer      ← the body
+$ boru do 'def C class {a:Integer}  canon C'       → object<Class/C>{…}
+$ boru do 'def T fnsig Integer String  canon T'    → FunctionSignature({…})
+```
+
+The minted node exists for all five — `InstallType` mints it and
+`PushType` stores it on the `DefEntry` as `TypeDef` — but for the three
+body-valued kinds nothing reaches it by evaluating the word.
+
+**Consequence:** anywhere a type name is evaluated before something uses
+it as a type, those three kinds break. `ParseFnParams` is the clearest
+case: it has an `IsBareTypeNode` arm and a `default` arm that rejects
+everything else, so a structural body lands in `default`.
+
+| declaration | word evaluates to | bare `fn T Any […]` | wrapped `fn [T Any […]]` |
+|---|---|---|---|
+| builtin (`Integer`) | lattice node | works | works |
+| `refine` newtype | lattice node | works | works |
+| `class` | structural body | `invalid parameter` | works |
+| disjunct (`tor`) | structural body | `invalid parameter` | works |
+| fn shape (`fnsig`) | structural body | `invalid parameter` | works |
+| record shape (`{x:Integer}`) | structural body | **works, name LOST** | **name kept, dispatch FAILS** |
+
+The record-shape row is a third behaviour, not a variant of the second,
+and both of its cells are wrong in different directions:
+
+```
+def T {x:Integer}
+def f fn T Any [1]     canon f/v → fn [[:Map][Any][1]]   ← constraint kept as a pattern,
+                       f {x:1}   → 1                        but the NAME T is gone
+                       f {y:9}   → refused
+def f fn [T Any [1]]   canon f/v → fn [[:T][Any][1]]     ← the name IS kept…
+                       f {x:1}   → signature_error       ← …but dispatch refuses it,
+                       {x:1} is T → true                    while `is` accepts it
+```
+
+That last pair is the same `is`-vs-dispatch asymmetry `FnUndefUnifier`
+fixed for fn shapes on this branch (`core/go/unify_fnundef_named.go`):
+the minted node carries no membership `Behavior`, so the lattice walk
+rejects every value. Record-shape types need the same bridge.
+
+**Which spellings escape it, and why.** Not triple-vs-list —
+evaluated-vs-unevaluated. `fn` carries `NoEvalArgs: {0,1,2}`, honoured
+only inside the `Parent.Equal(TList)` branch of auto-eval
+(`core/go/engine.go:3238`), so a literal LIST at slot 0 keeps its
+elements as Words while a bare Word at slot 0 has already been resolved
+by forward collection:
+
+| spelling | pairs | result |
+|---|---|---|
+| `fn [[M] [Any] [1]]` | 4 | works |
+| `fn [[M] Any [1]]` / `fn [M [Any] [1]]` | 3 | works |
+| `fn [M Any [1]]` | 2 | works |
+| `fn M [Any] [1]` | 2 | **fails** |
+| `fn M Any [1]` | 1 | **fails** |
+
+The two that fail are exactly the two `STYLE-GUIDE.md` §S1 tells authors
+to prefer. And the list must be LITERAL — routed through a binding it
+fails too, because the binding's value was evaluated at `def` time:
+`def S [M Any [1]]` holds `[[(none tor Integer)] [Any] [1]]`.
+
+**CORRECTION — `refine` does NOT silently degrade.** This record's first
+version claimed a `refine` newtype in that position produced a parameter
+typed by the refinement's BASE. That was wrong, inferred from `typeof P`
+reporting `Integer` — which is P's PARENT in the lattice, correct for a
+refinement of Integer, not a loss of identity:
+
+```
+def P refine Integer  def f fn P [Any] [1]  canon f/v   → fn [[:P][Any][1]]
+  f 5                                                   → refused (an Integer is not a P)
+  def x:P 5  f x                                        → 1
+```
+
+Identical to the named twin `fn y:P Any [y]`. `refine` is the PROOF that
+the target behaviour already exists: it survives evaluation precisely
+because its binding holds a lattice node.
+
+**A fix that was built, measured and BACKED OUT:** routing
+`ParseFnParams`' `default` arm through `ResolveSigType` (the named
+path's own resolver) makes every failing case build, but degrades an
+evaluated body to `(Any, pattern)` where a Word resolves to the minted
+node — `fnsig T String` then canons as `Any` where the list form canons
+as `T`, so composition silently weakens. A loud refusal traded for a
+silent weakening is a bad trade.
+
+**Verdict proposed:** resolve by fix — make a type-bound word evaluate
+to its minted node for the three kinds that do not, bringing three in
+line with two rather than inventing a rule. Membership should be
+unaffected: each already installs a content-deciding `Behavior` on the
+minted node (`DisjunctUnifier`, the class unifier, `FnUndefUnifier`), so
+`5 is M` resolves through the node as it now does through the body. This
+record retires when all five rows of the table above agree, pinned as
+spec rows in `lang/spec/fn-triple.tsv`.
+
+---
+
+## NUR091 — a rejected `fn` declaration is loud or silent depending on its output slot {#nur091}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** probing
+`fn`'s `(tnot List)` input guard while investigating NUR090
+
+**Rule:** boru refuses loudly. `lang/spec/fn-triple.tsv` §4 pins the
+input guard's refusal as an ERROR row — *"a bare List type literal input
+is rejected by (tnot List) — a single List-typed param needs the
+spec-list form"* — and §4's neighbours make a truncated triple "fail
+loudly instead of absorbing a following value".
+
+**Divergence:** the same rejected declaration is loud or silent
+depending on what sits in the OUTPUT slot.
+
+```
+$ boru do 'def f fn List [Integer] [size]'
+error: [boru/signature_error]: cannot call `size` …          ← loud, as pinned
+
+$ boru do 'def f fn List Any [1]'
+[1] Any List
+$ echo $?
+0                                                             ← silent: 3 values stranded
+$ boru do 'def f fn List Any [1]  typeof f/v'
+[1] Any List Atom                                             ← and `f` was never bound
+```
+
+Both declarations are rejected for the same reason: `List` at slot 0
+fails the triple form's `(tnot List)` pattern, and the 1-arg spec-list
+sig cannot take a bare `List` type literal either. With a bracketed
+output the following word (`size`) is dispatched and raises; with a bare
+`Any` output nothing raises, `fn` never dispatches, `def` binds nothing,
+and the operands are left on the stack.
+
+**Consequence:** `def f fn List Any [1]` looks like a definition, exits
+0, and defines nothing — the §5.1 class of the higher-order audit (a
+statement that appears to work, exit 0, wrong stack). A reader gets no
+hint that the `(tnot List)` rule was the problem, or that the spec-list
+form is the remedy.
+
+**Not NUR090.** That record is about which type a NAME denotes; this one
+is about a declaration that is correctly refused failing quietly instead
+of loudly. They meet only in that both were found probing slot 0.
+
+**Evidence:** the transcripts above, reproduced against this tree. The
+documented remedy works and is loud about nothing:
+`boru do 'def f fn [[List] [Any] [1]]  f [1 2]'` → `1`.
+
+**Not pinned in the corpus, deliberately.** A spec row for this was added
+to `fn-triple.tsv` §4 and then withdrawn: its input displaced a seed from
+the variation sample and emptied an unrelated `varyRefusalLedger` bucket,
+which is NUR092. The transcripts above are the record; a documentation
+row should not cost an unrelated ratchet.
+
+**Verdict proposed:** resolve by fix — a `def` whose value expression
+dispatched nothing should raise rather than strand, or `fn` should
+refuse a non-matching operand shape with a diagnostic naming the
+`(tnot List)` rule. This record retires when
+`def f fn List Any [1]` reports an error, pinned beside
+`fn-triple.tsv` §4's existing loud twin (once NUR092 makes that safe).
+
+---
+
+## NUR092 — the variation ledger's stale arm is corpus-sensitive {#nur092}
+
+**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** adding
+two rows to `lang/spec/fn-triple.tsv` for NUR091 and watching CI fail in
+an unrelated bucket
+
+**Rule:** `vary.Sample`'s own contract, in its doc comment: *"Samples
+NEST: `Sample(s, n)` is a prefix of `Sample(s, m)` for n < m, so cranking
+breadth strictly ADDS variants and a bucket observed at the default
+breadth stays observed at any larger one — **the property the CI ledger's
+stale arm relies on**."*
+
+**Divergence:** the nesting property holds across **n**, not across
+**corpus content**. `Sample` orders seeds by `fnv64(seed.Input)` and
+takes the first 32, so adding ANY spec row whose input hashes low enough
+displaces a seed that was previously in the sample. If the displaced seed
+was the only one exercising a refusal class, its `varyRefusalLedger`
+bucket empties and the stale arm fires:
+
+```
+vary_differential_test.go:83: stale varyRefusalLedger bucket
+  "other: capture ParseLang of calc unreachable at a call site"
+  — no variant refuses in it any more; graduate it (delete the entry).
+```
+
+**The instruction is wrong in this case, and destructively so.** The
+class is not fixed; it is merely unsampled. Re-running at greater breadth
+brings it straight back:
+
+```
+$ BORU_VARY_SEEDS=64 go test ./test/go/langspec -run TestVariationDifferential
+… refusal buckets: map[… other: capture ParseLang of calc unreachable at a call site:3 …]
+```
+
+Following the diagnostic would delete a ledger entry for a refusal class
+that still exists — losing the record and the frontier row it points at,
+for a reason (someone added an unrelated spec row) with no connection to
+the class at all.
+
+**Evidence:** the two rows were added in 6876dcd; `git checkout` of each
+preceding commit on the branch (ba311b6, ebf9d58, b835aa2, 204ba21) shows
+the stale arm silent, and `origin/main` is green. Removing the two rows
+restores it. The rows in question were documentation of NUR091's current
+behaviour and were withdrawn to the NUR record instead — a corpus row
+should not cost an unrelated ratchet.
+
+**Consequence:** a contributor adding a spec row can be told, by a
+passing-looking diagnostic, to delete a live record. The failure is
+remote from its cause (a `fn-triple.tsv` row emptied a `ParseLang`
+bucket), which makes it hard to attribute without bisecting.
+
+**Verdict proposed:** resolve by fix. Candidates: make the stale arm
+re-check an emptied bucket at greater breadth before reporting it;
+sample by a corpus-position-independent key so additions do not displace;
+or pin the seed set explicitly rather than deriving it by hash prefix.
+This record retires when adding an unrelated passing spec row cannot
+empty a ledger bucket, pinned as a test.

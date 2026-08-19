@@ -170,9 +170,9 @@ None unify Any	None true	the unify word agrees: the intersection is none
 # the interpreter while a compiled unit's RET raised — the same
 # annotation enforced on one dispatch path and not the other. It now runs
 # the frame path's own check (validateReturnTypesIn), so the two agree.
-import module [def ok fn [[] [Integer] [1]] export "M" {ok: ok/r}] end M.ok	1	a conforming module-fn return passes, as before
-import module [def bad fn [[] [Integer] ['nope']] export "M" {bad: bad/r}] end M.bad	ERROR:expected Integer	the violation the interpreter used to wave through (NUR069)
-import module [def bad2 fn [[] [String] [42]] export "M" {bad2: bad2/r}] end M.bad2	ERROR:expected String	…in the other direction too
-import module [def free fn [[] [] ['anything']] export "M" {free: free/r}] end M.free	'anything'	an UNDECLARED return keeps the historical flow-through — the residual IS the return
+import module [def ok fn [[] [Integer] [1]] export "M" {ok: ok/v}] end M.ok	1	a conforming module-fn return passes, as before
+import module [def bad fn [[] [Integer] ['nope']] export "M" {bad: bad/v}] end M.bad	ERROR:expected Integer	the violation the interpreter used to wave through (NUR069)
+import module [def bad2 fn [[] [String] [42]] export "M" {bad2: bad2/v}] end M.bad2	ERROR:expected String	…in the other direction too
+import module [def free fn [[] [] ['anything']] export "M" {free: free/v}] end M.free	'anything'	an UNDECLARED return keeps the historical flow-through — the residual IS the return
 def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] end def p:Positive 5 end p	5	a predicate's None-on-failure residual is its PROTOCOL, not a return violation — enforcement is suppressed for the predicate call
 def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] end def q:Positive 0 end q	ERROR:does not satisfy	…and the failing branch still reports the predicate verdict, not a type_error

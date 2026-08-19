@@ -75,7 +75,7 @@ func TimeAsyncModuleNatives(tt TemporalModuleTypes) []NativeFunc {
 			Name: "cancel",
 			Signatures: []Signature{
 				{Args: []*Type{tt.Timeout}, Impl: Go(cancelTimeoutHandler), Returns: []*Type{}, BarrierPos: -1},
-				{Args: []*Type{tt.Interval}, Impl: Go(cancelIntervalHandler), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{tt.Interval}, Impl: Go(cancelIntervalofHandler), Returns: []*Type{}, BarrierPos: -1},
 			},
 		},
 	}

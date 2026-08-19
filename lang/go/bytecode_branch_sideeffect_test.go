@@ -19,7 +19,7 @@ func TestBranchArmSideEffectLeftover(t *testing.T) {
 	const swapMod = `import module [
   def sw fn [[j:Integer i:Integer a:FlexList] [] [ def t (a get i) a set i (a get j) end a set j t end ]]
   def srt fn [[xs:List] [List] [ def arr (flex xs) def _ (iota 3 each [ var [[i] if ((arr get i) gt (arr get (i add 1))) [ arr (i add 1) i sw end 0 ] [0] ] ]) (node arr) ]]
-  export "M" {srt: srt/r}
+  export "M" {srt: srt/v}
 ] end `
 	strict := []struct{ name, src, want string }{
 		// one bubble pass: the swap-arm's ignored helper result is dropped, the arm nets

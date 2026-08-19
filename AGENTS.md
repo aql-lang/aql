@@ -120,6 +120,7 @@ Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
 | Learn boru step by step | [TUTORIAL.md](TUTORIAL.md) |
 | A recipe for a specific task | [HOWTO.md](HOWTO.md) |
 | The precise behaviour of a syntax form, type, or word | [REFERENCE.md](REFERENCE.md) — or `boru describe <word>` for one word |
+| Know which of several equivalent spellings to write | [STYLE-GUIDE.md](STYLE-GUIDE.md) — house style, and what `boru fmt` does and does not enforce |
 | Understand *why* boru is designed the way it is | [EXPLANATION.md](EXPLANATION.md) |
 | Drive the `boru` binary (every subcommand, REPL) | [CLI.md](CLI.md) |
 | The key architectural decisions and their rationale | [ADR.md](ADR.md) |
@@ -174,7 +175,13 @@ A few rules from those guides that bite hardest when missed:
 - **Panics are forbidden** outside annotated init-time type registration;
   return errors instead.
 - **Forward call form is canonical**: write `f a b c`, not the
-  mirror-equivalent stack forms, in new code and examples.
+  mirror-equivalent stack forms, in new code and examples. Mind the
+  operand order — `sub 10 3` is `-7` while `10 sub 3` is `7`
+  ([STYLE-GUIDE.md](STYLE-GUIDE.md) §S2).
+- **Fewest square brackets in a signature**: `fn x:Integer Integer [body]`,
+  not the five longer spellings of the same thing
+  ([STYLE-GUIDE.md](STYLE-GUIDE.md) §S1). `boru fmt` only collapses the
+  fully canonical form, so this one is on you (NUR088).
 
 
 ## Repository layout

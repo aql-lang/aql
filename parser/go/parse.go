@@ -356,7 +356,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]core.Value, error) {
 			// `/`-modifier can be placed correctly: a WORD modifier
 			// (usurp / stack-args / forward-args) is emitted BEFORE the
 			// group so it forward-collects the result (the result must not
-			// auto-dispatch first), while the Word/__DM marker (/N /r /q)
+			// auto-dispatch first), while the Word/__DM marker (/N /v /q)
 			// is emitted AFTER for execFnDefLiteral to peek.
 			// Build a first-class Reach node (design/REACH.10.md Phase B):
 			// receiver tokens + per-segment {op, literal-or-computed key}.
@@ -459,7 +459,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]core.Value, error) {
 		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
 		// applies the modifier to that primary's result. Word modifiers are
 		// emitted BEFORE the primary (so they forward-collect the result
-		// before any auto-dispatch); the /r /q marker is emitted AFTER.
+		// before any auto-dispatch); the /v /q marker is emitted AFTER.
 		if i+1 < len(items) {
 			if base, pre, suf, ok := groupModifier(items[i+1]); ok && base == "" {
 				for _, p := range pre {
@@ -532,7 +532,7 @@ func isChainReceiver(item any) bool {
 //
 //	/u  → prefix `usurp`            /s  → prefix `stack-args`
 //	/f  → prefix `forward-args`     /N  → prefix `force-arity N`
-//	/r /q → suffix Word/__DM marker (leave the result inert/data)
+//	/v /q → suffix Word/__DM marker (leave the result inert/data)
 //
 // Word modifiers are PREFIXED (emitted before the group) so they
 // forward-collect the result before it can auto-dispatch; the marker is
@@ -545,7 +545,7 @@ func groupModifier(item any) (base string, prefix, suffix []core.Value, ok bool)
 	if !isText || t.Quote != "" {
 		return "", nil, nil, false
 	}
-	b, argCount, fs, ff, q, r, u, _, valid := scanWordModifier(t.Str)
+	b, argCount, fs, ff, q, v, u, _, valid := scanWordModifier(t.Str)
 	if !valid {
 		return "", nil, nil, false
 	}
@@ -558,8 +558,8 @@ func groupModifier(item any) (base string, prefix, suffix []core.Value, ok bool)
 		return b, []core.Value{core.NewSugar(core.SugarInfo{Kind: core.SugarForwardArgs})}, nil, true
 	case argCount >= 0:
 		return b, []core.Value{core.NewSugar(core.SugarInfo{Kind: core.SugarForceArity, N: int64(argCount)})}, nil, true
-	case r || q:
-		return b, nil, []core.Value{core.NewDispatchMod(core.DispatchModInfo{Ref: r, Quote: q})}, true
+	case v || q:
+		return b, nil, []core.Value{core.NewDispatchMod(core.DispatchModInfo{Val: v, Quote: q})}, true
 	}
 	return "", nil, nil, false
 }
@@ -805,7 +805,7 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 	var qmSet map[string]bool // optional keys (? syntax)
 	var ckSet map[string]bool // computed keys ([key] syntax)
 	var qkSet map[string]bool // quoted keys ({'k': v} syntax)
-	var shList []string       // shorthand keys ({foo} / {foo/r} syntax)
+	var shList []string       // shorthand keys ({foo} / {foo/v} syntax)
 	var ko []string           // source key order (D1: Meta["ko"] channel)
 	if len(meta) > 0 && meta[0] != nil {
 		qmSet, _ = meta[0]["qm"].(map[string]bool)
@@ -815,13 +815,13 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 		ko, _ = meta[0]["ko"].([]string)
 	}
 
-	// Word modifiers (`/r`, `/q`, `/f`, `/s`, `/N`) are legal only on
-	// shorthand entries — `{foo/r}` ≡ `{foo: foo/r}` — where the token is
+	// Word modifiers (`/v`, `/q`, `/f`, `/s`, `/N`) are legal only on
+	// shorthand entries — `{foo/v}` ≡ `{foo: foo/v}` — where the token is
 	// also the value, so the modifier qualifies that value. On a bare
 	// `key: value` pair the modifier would only ever land on the KEY,
 	// which is meaningless (a map key is a plain name). Reject it rather
-	// than silently keeping `f/r` as a literal key. A quoted key
-	// (`{'f/r': …}`) or computed key (`{[f/r]: …}`) is an explicit string
+	// than silently keeping `f/v` as a literal key. A quoted key
+	// (`{'f/v': …}`) or computed key (`{[f/v]: …}`) is an explicit string
 	// literal — the slash is data, not a modifier — so those are exempt.
 	// Bare explicit keys (with and without an optional `?`) arrive in m;
 	// shorthand (sh) and value-less optional (qm) tokens are handled below
@@ -840,8 +840,8 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 		}
 	}
 
-	// Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`,
-	// `{foo?}` ≡ `{foo?: foo}`, `{foo/r?}` ≡ `{foo?: foo/r}`. The key is
+	// Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/v}` ≡ `{foo: foo/v}`,
+	// `{foo?}` ≡ `{foo?: foo}`, `{foo/v?}` ≡ `{foo?: foo/v}`. The key is
 	// always the base name (modifiers stay on the value only); the value
 	// is the full word token. synth maps each synthesized base key to that
 	// token. Two sources: explicit shorthand tokens (Meta["sh"]) and
@@ -849,7 +849,7 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 	//
 	// optBase collects the base name of every optional key so optionality
 	// is looked up by base name below — qmSet is keyed by the raw token
-	// (e.g. `f/r`), which no longer matches the synthesized base key.
+	// (e.g. `f/v`), which no longer matches the synthesized base key.
 	synth := make(map[string]string)
 	optBase := make(map[string]bool, len(qmSet))
 	for _, raw := range shList {
@@ -1322,15 +1322,15 @@ func orderedKeys(union map[string]any, ko []string) []string {
 
 // scanWordModifier parses the optional `/...` modifier suffix of an
 // unquoted word token: name/f (forceForward), name/s (forceStack),
-// name/N (argCount), name/q (quote → Atom), name/r (ref → bound value),
+// name/N (argCount), name/q (quote → Atom), name/v (ref → bound value),
 // name/u (usurp → reversed-sig wrapper), and combinations like name/1f,
-// name/qs, name/f2, name/ur. Modifiers stack in any order; f and s are
+// name/qs, name/f2, name/uv. Modifiers stack in any order; f and s are
 // mutually exclusive; q is mutually exclusive with both r and u (an atom
-// has no binding to reference or usurp); u may combine with r (name/ur);
+// has no binding to reference or usurp); u may combine with r (name/uv);
 // the argCount digits form a single number. When the token has no `/` or a
 // malformed modifier suffix, valid is false, base is the whole text, and
 // every flag is at its zero value (argCount -1).
-func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, valid bool) {
+func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, valFlag, usurpFlag, typeFlag, valid bool) {
 	argCount = -1
 
 	idx := strings.LastIndex(text, "/")
@@ -1340,9 +1340,9 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 	mod := text[idx+1:]
 	baseName := text[:idx]
 
-	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'r', 'u',
+	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'v', 'u',
 	// 't'. Each letter appears at most once; f/s are mutually exclusive;
-	// q is mutually exclusive with r and u; t (the type-bound sugar,
+	// q is mutually exclusive with v and u; t (the type-bound sugar,
 	// `Map/t` ≡ `(Type of [Map])`) combines with nothing — it produces a
 	// type expression, not a word; digits run contiguously and form a
 	// single argCount value.
@@ -1383,16 +1383,16 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 				forceStack = true
 			}
 		case c == 'q':
-			if quoteFlag || refFlag || usurpFlag {
+			if quoteFlag || valFlag || usurpFlag {
 				valid = false
 			} else {
 				quoteFlag = true
 			}
-		case c == 'r':
-			if refFlag || quoteFlag {
+		case c == 'v':
+			if valFlag || quoteFlag {
 				valid = false
 			} else {
-				refFlag = true
+				valFlag = true
 			}
 		case c == 'u':
 			if usurpFlag || quoteFlag {
@@ -1417,7 +1417,7 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 
 	// /t combines with nothing — any companion flag invalidates, in
 	// either order.
-	if typeFlag && (quoteFlag || refFlag || usurpFlag || forceStack || forceForward || argCount >= 0) {
+	if typeFlag && (quoteFlag || valFlag || usurpFlag || forceStack || forceForward || argCount >= 0) {
 		valid = false
 	}
 	if !valid {
@@ -1427,13 +1427,13 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 		// loud parse error — see isModifierAlphabet (NUR027).
 		return text, -1, false, false, false, false, false, false, false
 	}
-	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, true
+	return baseName, argCount, forceStack, forceForward, quoteFlag, valFlag, usurpFlag, typeFlag, true
 }
 
 // isModifierAlphabet reports whether every character of a candidate
 // modifier suffix is drawn from the modifier alphabet (digits plus
-// f s q r u t). It is the line between a BOTCHED MODIFIER (`foo/fs`,
-// `foo/qr`, `foo/1f2` — all-alphabet but an invalid combination),
+// f s q v u t). It is the line between a BOTCHED MODIFIER (`foo/fs`,
+// `foo/qv`, `foo/1f2` — all-alphabet but an invalid combination),
 // which errors loudly, and a slash-bearing plain name (`foo/bar`,
 // `add/x`, the builtin type paths `Scalar/Number/Integer` — the
 // suffix contains a non-modifier character, uppercase included),
@@ -1443,7 +1443,7 @@ func isModifierAlphabet(s string) bool {
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
 		case c >= '0' && c <= '9':
-		case c == 'f', c == 's', c == 'q', c == 'r', c == 'u', c == 't':
+		case c == 'f', c == 's', c == 'q', c == 'v', c == 'u', c == 't':
 		default:
 			return false
 		}
@@ -1452,7 +1452,7 @@ func isModifierAlphabet(s string) bool {
 }
 
 // wordBaseName returns the base name of an unquoted word token, stripping
-// a valid `/...` modifier suffix (foo/r → foo, foo → foo). Used to derive
+// a valid `/...` modifier suffix (foo/v → foo, foo → foo). Used to derive
 // the key of a shorthand map entry, whose value keeps the full token.
 func wordBaseName(text string) string {
 	base, _, _, _, _, _, _, _, _ := scanWordModifier(text)
@@ -1502,7 +1502,7 @@ func reachSegmentName(keyItem any, key core.Value, pos core.SrcPos) core.Value {
 }
 
 func parseWord(text string) (core.Value, error) {
-	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, valid := scanWordModifier(text)
+	name, argCount, forceStack, forceForward, quoteFlag, valFlag, usurpFlag, typeFlag, valid := scanWordModifier(text)
 
 	if name == "" {
 		return core.Value{}, fmt.Errorf("empty word")
@@ -1520,7 +1520,7 @@ func parseWord(text string) (core.Value, error) {
 				Code:   "syntax_error",
 				Detail: fmt.Sprintf("invalid word modifier /%s on %q", text[idx+1:], text[:idx]),
 				Src:    text,
-				Hint:   "modifier letters stack in any order, each at most once; f|s are exclusive; q excludes r and u; t combines with nothing; digits form one contiguous run within int range",
+				Hint:   "modifier letters stack in any order, each at most once; f|s are exclusive; q excludes v and u; t combines with nothing; digits form one contiguous run within int range",
 			}
 		}
 	}
@@ -1559,20 +1559,20 @@ func parseWord(text string) (core.Value, error) {
 	// /u emits a usurp-word that resolves the name to its bound Function
 	// value and wraps it with reversed signature arg order. Legal only for
 	// function words (illegal_ref at run time otherwise). It may combine
-	// with /r: /u alone dispatches the wrapper, /ur leaves it as data.
+	// with /v: /u alone dispatches the wrapper, /uv leaves it as data.
 	// Argument-shape modifiers don't apply (the wrapper supplies its own).
 	if usurpFlag {
-		return core.NewWordUsurp(name, refFlag), nil
+		return core.NewWordUsurp(name, valFlag), nil
 	}
 
-	// /r emits a ref-word that, when reached at the pointer, resolves the
-	// name to its bound Function value without invoking. /r is legal only
+	// /v emits a ref-word that, when reached at the pointer, resolves the
+	// name to its bound Function value without invoking. /v is legal only
 	// for function words; a non-fn binding raises illegal_ref at run time
 	// (the parser accepts the syntax — the binding kind isn't known until
 	// resolution). Argument-shape modifiers don't apply because ref
 	// bypasses dispatch entirely; they're accepted syntactically but
 	// ignored.
-	if refFlag {
+	if valFlag {
 		return core.NewWordRef(name), nil
 	}
 

@@ -461,7 +461,7 @@ func genObjRead(r *rand.Rand, fields []string) *gnode {
 
 // genFnProg builds a fn-VALUE INDIRECTION program: define a fn (a named `fn` or
 // a `=>` lambda) over 0-2 Integer params with an Integer body, then CALL it
-// THROUGH a value — `apply` (`<args> f0/r apply`, or `/ur` usurp) or stored-
+// THROUGH a value — `apply` (`<args> f0/v apply`, or `/uv` usurp) or stored-
 // field dispatch (`def m {f: <fnval>} m.f <args>`). This is dispatch machinery
 // nothing else the generator emits exercises: every other call is direct. The
 // body is a full Integer expression over the params (if / case / fold / for …),
@@ -493,7 +493,7 @@ func genFnProg(r *rand.Rand) *gnode {
 	if apply {
 		op = "fnapply"
 		if r.Intn(3) == 0 {
-			op = "fnapplyu" // usurp (/ur): argument-reversed wrapper
+			op = "fnapplyu" // usurp (/uv): argument-reversed wrapper
 		}
 	}
 	body := gen(r, cInt, 3, bodyScope)
@@ -595,7 +595,7 @@ func genInterpProg(r *rand.Rand) *gnode {
 // none of which the prior families could spell:
 //
 //   - apply SPELLING: the forward call `f (g x)`, the `apply` word over a
-//     `/r` reference, and the def-split `def r (f x) f r`;
+//     `/v` reference, and the def-split `def r (f x) f r`;
 //   - apply DEPTH: 1–3 chained applications of Function-typed params;
 //   - lambda param POLARITY: value-typed (Integer) vs quote-typed (Atom —
 //     a /q capture slot the runtime never binds from a delivered value);
@@ -650,10 +650,10 @@ func renderHofProg(n *gnode) string {
 			lamAdd + " " + lamMul + " " + k3
 	case 1:
 		if n.cmp == "two" {
-			return "def zh fn [[c1:Function c2:Function v:Integer] [Integer] [v c1/r apply c2/r apply]] zh (" +
-				lamAdd + "/r) (" + lamMul + "/r) " + k3
+			return "def zh fn [[c1:Function c2:Function v:Integer] [Integer] [v c1/v apply c2/v apply]] zh (" +
+				lamAdd + "/v) (" + lamMul + "/v) " + k3
 		}
-		return "def zh fn [[c1:Function v:Integer] [Integer] [v c1/r apply]] zh (" + lamAdd + "/r) " + k3
+		return "def zh fn [[c1:Function v:Integer] [Integer] [v c1/v apply]] zh (" + lamAdd + "/v) " + k3
 	case 2:
 		return "def zh fn [[f:Function x:Integer] [Integer] [def zr (f x) f zr]] zh " + lamAdd + " " + k3
 	case 3:
@@ -1090,9 +1090,9 @@ func render(n *gnode, scope []string) string {
 		for _, k := range n.kids[1:] {
 			args += render(k, scope) + " "
 		}
-		suffix := "/r"
+		suffix := "/v"
 		if n.op == "fnapplyu" {
-			suffix = "/ur"
+			suffix = "/uv"
 		}
 		return "def f0 " + fndef + " " + args + "f0" + suffix + " apply"
 	case "fnstored":

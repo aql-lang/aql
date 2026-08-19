@@ -151,7 +151,7 @@ func TestShapedMethodZeroArgLandingsCompile(t *testing.T) {
 // and the fallback stays faithful.
 func TestShapedMethodCapturingMemberStaysRefused(t *testing.T) {
 	fnValueM2Refusal(t, "capturing member fn in statement position",
-		`def mk fn [[x:Integer] [Map] [{f: (([y:Integer] => [x add y]))/r}]] def m (mk 5) m.f 1 ; 42`,
+		`def mk fn [[x:Integer] [Map] [{f: (([y:Integer] => [x add y]))/v}]] def m (mk 5) m.f 1 ; 42`,
 		"")
 }
 

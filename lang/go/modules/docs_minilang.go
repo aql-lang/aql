@@ -61,7 +61,7 @@ func init() {
 			"one with NewMiniLangFn.",
 		"Re": "The named type of a `re` partial — the Function a parked `+re/…/` (or " +
 			"`def f (+re/…/)`) produces. `typeof` still reports Function (a member type is a " +
-			"constraint, like a DepScalar); use `is` (`f/r is (MiniLang.Re)`) or a typed fn param " +
+			"constraint, like a DepScalar); use `is` (`f/v is (MiniLang.Re)`) or a typed fn param " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`) to require specifically a regexp matcher. " +
 			"Every built-in filter kind has one: Re, Gex, Jp, Jq, Xp, Sp.",
 		"Gex": "The named type of a `gex` partial (a stored glob-expression matcher) — " +

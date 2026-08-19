@@ -98,7 +98,7 @@ var categories = []Category{
 	}, nil},
 	{"storage", "Variables, value access, references, and lenses.", []string{
 		"set", "del", "get", "getr", "dot", "dotr", "has", "context", "keys", "vals",
-		"reach", "apply", "rebind", "ref", "referent",
+		"reach", "apply", "rebind", "valof", "referent",
 		"patrun", "find", "patterns",
 	}, nil},
 	{"control", "Control flow, definitions, and functions.", []string{

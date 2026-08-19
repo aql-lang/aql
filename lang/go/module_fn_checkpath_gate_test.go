@@ -85,7 +85,7 @@ func TestModuleFnCheckPathGate(t *testing.T) {
 			`import module [def Flag (refine Boolean) ` +
 				`def add fn [[a:Flag b:Flag] [Boolean] [a and b]] ` +
 				`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
-				`export "M" {add: add/r mk: mk/r Flag: Flag}] end ` +
+				`export "M" {add: add/v mk: mk/v Flag: Flag}] end ` +
 				`add (M.mk true) (M.mk false)`,
 		},
 		{
@@ -96,7 +96,7 @@ func TestModuleFnCheckPathGate(t *testing.T) {
 			`import module [def Flag (refine Boolean) ` +
 				`def add fn [[a:Flag b:Flag] [Boolean] [a and b]] ` +
 				`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
-				`export "M" {add: add/r mk: mk/r Flag: Flag}] end ` +
+				`export "M" {add: add/v mk: mk/v Flag: Flag}] end ` +
 				`(add 1 2) end add (M.mk true) (M.mk true)`,
 		},
 	}

@@ -59,7 +59,7 @@ def redis-encode fn reply:Any Any [
     convert Bytes (join "" [txt "\n"])
 ]
 
-def redis-codec {decode:redis-decode/r encode:redis-encode/r}
+def redis-codec {decode:redis-decode/v encode:redis-encode/v}
 
 # ---- helpers over the service state ----
 # state: {kv: {} expires: {} lists: {} hashes: {}}
@@ -251,7 +251,7 @@ def redis-cmd fn [[ep:Service line:String] [String] [
 ]]
 
 export "MiniRedis" {
-  serve:redis-serve/r
-  connect:redis-connect/r
-  cmd:redis-cmd/r
+  serve:redis-serve/v
+  connect:redis-connect/v
+  cmd:redis-cmd/v
 }

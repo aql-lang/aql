@@ -1,0 +1,68 @@
+# boru Language Specification: fnsig — the function TYPE
+# Format: input<TAB>expected<TAB>description
+#
+# `fnsig` builds a FunctionSignature: a structural function shape with
+# no body. Two forms, mirroring `fn` exactly one slot shorter — a
+# function TYPE is a function minus its body:
+#
+#   fn    input output body        a function
+#   fnsig input output             its type            (§1)
+#   fn    [[in] [out] [body] …]    spec-list form
+#   fnsig [[in] [out] …]           spec-list form      (§2)
+#
+# The pair form's input slot carries the same `tnot List` Pattern as
+# fn's triple: a LIST input always selects the spec-list form, so 2+
+# parameters, zero parameters and overload sets keep the bracketed
+# spelling. See design/FUNCTION-TYPES.0.md.
+#
+# Bound to a capitalised name, a FunctionSignature is a TYPE that
+# dispatch enforces (core/go/unify_fnundef_named.go): a parameter
+# declared `g:IntToStr` admits only functions whose shape satisfies it,
+# where a bare `Function` parameter admits any function at all.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the pair form, and its identity with the spec-list form
+typeof (fnsig Integer String)	FunctionSignature	the pair form builds a FunctionSignature
+deq (canon (fnsig Integer String)) (canon (fnsig [[Integer] [String]]))	true	pair form and spec-list form build the SAME value
+deq (canon (fnsig Integer Integer)) (canon (fnsig [[Integer] [Integer]]))	true	…likewise when input and output coincide
+#
+# The OUTPUT slot follows fn's abbreviation rule: a bare type and a
+# one-element list mean the same thing, so `fnsig Integer [String]` is
+# the same value as `fnsig Integer String`. (The INPUT slot cannot be
+# bracketed — a list there always selects the spec-list form, §2.)
+typeof (fnsig Integer [String])	FunctionSignature	a bracketed OUTPUT stays in the pair form
+deq (canon (fnsig Integer [String])) (canon (fnsig Integer String))	true	…and is the same value as the bare output
+deq (canon (fnsig Integer [String])) (canon (fnsig [[Integer] [String]]))	true	…and as the full spec-list spelling
+def T fnsig Integer [String]  def f fn x:Integer String [convert String x]  def h fn g:T String [(g 5)]  h f/v	'5'	…and it dispatches identically
+#
+# §2  the spec-list form is undisturbed by the pair sugar
+typeof (fnsig [[Integer] [String]])	FunctionSignature	1-triple spec list
+typeof (fnsig [[Integer Integer] [Integer]])	FunctionSignature	2-parameter input needs the spec-list form
+typeof (fnsig [[] [Integer]])	FunctionSignature	zero-parameter shape
+typeof (fnsig [[Integer] [String] [String] [Integer]])	FunctionSignature	an overload set is one list of pairs
+fnsig [[Integer]]	ERROR:fnsig_invalid_spec	an odd-length spec list is refused
+fnsig []	ERROR:fnsig_invalid_spec	an empty spec list is refused
+#
+# §3  a named fn-shape type ADMITS a function whose shape satisfies it
+def T fnsig Integer String  def f fn x:Integer String [convert String x]  def h fn g:T String [(g 5)]  h f/v	'5'	the declared shape admits a matching function
+def T (fnsig [[Integer] [String]])  def f fn x:Integer String [convert String x]  def h fn g:T String [(g 5)]  h f/v	'5'	…and the spec-list spelling of the same type behaves identically
+def f fn x:Integer String [convert String x]  def h fn g:(fnsig Integer String) String [(g 5)]  h f/v	'5'	an ANONYMOUS fn-shape annotation needs no name
+def T (fnsig [[Integer Integer] [Integer]])  def f fn [[a:Integer b:Integer][Integer][add a b]]  def h fn g:T Integer [(g 2 3)]  h f/v	5	a 2-parameter shape admits a 2-parameter function
+#
+# §4  …and REFUSES one that does not. This is what a bare `Function`
+#     parameter cannot do: it admits every function and defers the
+#     failure to run time.
+def T fnsig Integer String  def f fn x:String Integer [size x]  def h fn g:T String [(g 5)]  h f/v	ERROR:signature_error	String->Integer does not satisfy Integer->String
+def T fnsig Integer String  def f fn [[a:Integer b:Integer][String][convert String a]]  def h fn g:T String [(g 5)]  h f/v	ERROR:signature_error	arity mismatch is refused
+def T fnsig Integer String  def h fn g:T String [(g 5)]  h 42	ERROR:signature_error	a non-function is refused
+#
+# §5  variance — parameters contravariant, returns covariant. A
+#     function that accepts MORE and returns LESS is substitutable;
+#     the reverse is not.
+def T fnsig Integer Number  def f fn x:Number Integer [1]  def h fn g:T Integer [(g 5)]  h f/v	1	Number->Integer satisfies Integer->Number
+def T fnsig Number Integer  def f fn x:Integer Number [1]  def h fn g:T Integer [(g 5)]  h f/v	ERROR:signature_error	…and Integer->Number does NOT satisfy Number->Integer
+#
+# §6  `is` and dispatch agree — one structural rule, two call sites
+def T fnsig Integer String  def f fn x:Integer String [convert String x]  f/v is T	true	`is` admits the same function dispatch admits
+def T fnsig Integer String  def f fn x:String Integer [size x]  f/v is T	false	…and refuses the same one dispatch refuses
+def T fnsig Integer String  5 is T	false	a non-function is not an inhabitant of an fn shape

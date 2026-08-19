@@ -540,7 +540,7 @@ def cut-run fn [[ctx:Map] [Integer] [
 # The handler is called from HERE rather than handed to `Cli.main` because
 # `Cli.main` invokes its handler from inside the boru:cli module, and under the
 # tree-walking interpreter (-no-compile) the handler body cannot see this
-# file's module-level defs at all: `Cli.main (spec) (cut-run/r)` dies
+# file's module-level defs at all: `Cli.main (spec) (cut-run/v)` dies
 # "undefined word: cut-opts" under -no-compile even though the bytecode
 # compiler resolves it. (The same defect is recorded in cat.boru, grep.boru and
 # head.boru.)
@@ -557,27 +557,27 @@ def cut-main fn [[argv:List] [Integer] [
 # a module's private defs are NOT visible to an importer, so anything a test
 # touches has to be exported.
 export "Cut" {
-  bool:       cut-bool/r
-  count:      cut-count/r
-  worse:      cut-worse/r
-  inputs:     cut-inputs/r
-  nextChunk:  cut-next-chunk/r
-  specStr:    cut-spec-str/r
-  cat:        cut-cat/r
-  digits:     cut-digits/r
-  strip0:     cut-strip0/r
-  num:        cut-num/r
-  part:       cut-part/r
-  list:       cut-list/r
-  norm:       cut-norm/r
-  inRanges:   cut-in/r
-  pick:       cut-pick/r
-  chars:      cut-chars/r
-  fields:     cut-fields/r
-  line:       cut-line/r
-  opts:       cut-opts/r
-  one:        cut-one/r
-  main:       cut-main/r
+  bool:       cut-bool/v
+  count:      cut-count/v
+  worse:      cut-worse/v
+  inputs:     cut-inputs/v
+  nextChunk:  cut-next-chunk/v
+  specStr:    cut-spec-str/v
+  cat:        cut-cat/v
+  digits:     cut-digits/v
+  strip0:     cut-strip0/v
+  num:        cut-num/v
+  part:       cut-part/v
+  list:       cut-list/v
+  norm:       cut-norm/v
+  inRanges:   cut-in/v
+  pick:       cut-pick/v
+  chars:      cut-chars/v
+  fields:     cut-fields/v
+  line:       cut-line/v
+  opts:       cut-opts/v
+  one:        cut-one/v
+  main:       cut-main/v
   spec:       spec
 }
 

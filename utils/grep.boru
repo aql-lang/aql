@@ -407,7 +407,7 @@ def grep-run fn [[ctx:Map] [Integer] [
 # The handler is called from HERE rather than handed to `Cli.main` because
 # `Cli.main` invokes its handler from inside the boru:cli module, and under the
 # tree-walking interpreter the handler body then cannot see this file's
-# module-level defs at all: `Cli.main (spec) (grep-run/r)` dies "undefined
+# module-level defs at all: `Cli.main (spec) (grep-run/v)` dies "undefined
 # word: grep-bool" under -no-compile while the bytecode compiler resolves it
 # — a run-mode difference, re-verified today with a three-line probe. cat.boru
 # records the same defect and the same workaround.
@@ -424,26 +424,26 @@ def grep-main fn [[argv:List] [Integer] [
 # module's private defs are NOT visible to an importer, so anything a test
 # touches has to be exported.
 export "Grep" {
-  bool:      grep-bool/r
-  num:       grep-num/r
-  pattern:   grep-pattern/r
-  check:     grep-check/r
-  select:    grep-select/r
-  label:     grep-label/r
-  format:    grep-format/r
-  countLine: grep-count-line/r
-  files:     grep-files/r
-  opts:      grep-opts/r
-  code:      grep-code/r
-  when:      grep-when/r
-  colorOn:   grep-color-on/r
-  colorOk:   grep-color-ok/r
-  paint:     grep-paint/r
-  nextChunk: grep-next-chunk/r
-  fail:      grep-fail/r
-  bad:       grep-bad/r
-  one:       grep-one/r
-  main:      grep-main/r
+  bool:      grep-bool/v
+  num:       grep-num/v
+  pattern:   grep-pattern/v
+  check:     grep-check/v
+  select:    grep-select/v
+  label:     grep-label/v
+  format:    grep-format/v
+  countLine: grep-count-line/v
+  files:     grep-files/v
+  opts:      grep-opts/v
+  code:      grep-code/v
+  when:      grep-when/v
+  colorOn:   grep-color-on/v
+  colorOk:   grep-color-ok/v
+  paint:     grep-paint/v
+  nextChunk: grep-next-chunk/v
+  fail:      grep-fail/v
+  bad:       grep-bad/v
+  one:       grep-one/v
+  main:      grep-main/v
   spec:      spec
 }
 

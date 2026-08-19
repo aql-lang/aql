@@ -112,14 +112,14 @@ def collisions fn claims:List List [
 ]
 
 export "KgId" {
-  fingerprint:fingerprint/r
-  canon-of:canon-of/r
-  canon-opt:canon-opt/r
-  source-id:source-id/r
-  entity-id:entity-id/r
-  assertion-id:assertion-id/r
-  identity-id:identity-id/r
-  issue-id:issue-id/r
-  proposal-id:proposal-id/r
-  collisions:collisions/r
+  fingerprint:fingerprint/v
+  canon-of:canon-of/v
+  canon-opt:canon-opt/v
+  source-id:source-id/v
+  entity-id:entity-id/v
+  assertion-id:assertion-id/v
+  identity-id:identity-id/v
+  issue-id:issue-id/v
+  proposal-id:proposal-id/v
+  collisions:collisions/v
 }

@@ -48,7 +48,7 @@ var behaveNative = NativeFunc{
 		// Behavior wrapper (never re-stepped on the VM tape) — the store-fn
 		// pattern log/patrun/service already carry, so a capture-free fn
 		// operand bakes as an inert const instead of refusing "function-
-		// valued operand" (probe-verified: `behave "compare" (… /r)`).
+		// valued operand" (probe-verified: `behave "compare" (… /v)`).
 		{
 			Args:      []*Type{TAtom, TFunction},
 			QuoteArgs: map[int]bool{0: true},

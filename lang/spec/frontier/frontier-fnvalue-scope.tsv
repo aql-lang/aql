@@ -14,4 +14,4 @@
 # here rather than in lang/spec/module-fnvalue-boundary.tsv §4 because it is the
 # one row of that section the compiler cannot yet model, and the main corpus
 # ratchets islands to zero.
-import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/r}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]	[3 4]	a cross-module predicate resolves `lim` in its OWN module (2), not the caller's (100)
+import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]	[3 4]	a cross-module predicate resolves `lim` in its OWN module (2), not the caller's (100)

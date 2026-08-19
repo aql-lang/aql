@@ -896,7 +896,7 @@ func TestUsurpCompilesNative(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (ref sub2) 10 3`, "[-7]"},
+		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (valof sub2) 10 3`, "[-7]"},
 		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3`, "[-7]"},
 		{`def inc fn [[n:Integer][Integer][n add 1]]  inc/u 5`, "[6]"}, // 1-arg usurp is a no-op on order
 		{`def cat3 fn [[a:String b:String c:String][String][a add b add c]]  cat3/u 'x' 'y' 'z'`, "[zyx]"},
@@ -2139,14 +2139,18 @@ func TestInterpStringOpInterpParity(t *testing.T) {
 	}
 }
 
-// Completion item 1 — illegal_ref trap programs. A ref-family modifier (`/r`,
-// `/u`) applied to a NON-fn binding refused at the downstream Undefined
-// placeholder ("operand provenance"), because the checker is lenient (the
-// illegal_ref diagnostic is advisory) while the interpreter raises illegal_ref.
-// A top-level RecordTrap now compiles a terminal OpTrap raising the
-// byte-identical error, so the row produces a Program instead of refusing.
+// Completion item 1 — illegal_ref trap programs. `/u` applied to a NON-fn
+// binding refused at the downstream Undefined placeholder ("operand
+// provenance"), because the checker is lenient (the illegal_ref diagnostic
+// is advisory) while the interpreter raises illegal_ref. A top-level
+// RecordTrap now compiles a terminal OpTrap raising the byte-identical
+// error, so the row produces a Program instead of refusing.
+//
+// `/v` is NOT in this set any more: it is total over binding kinds, so
+// `def x 5  x/v` is 5, not a trap. Its positive twin is
+// TestValOnNonFnBindingCompilesToTheValue below.
 func TestIllegalRefTrapCompiles(t *testing.T) {
-	for _, src := range []string{`def x 5  x/r`, `def x 5  x/u`} {
+	for _, src := range []string{`def x 5  x/u`} {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
 		if cerr != nil {
 			t.Fatalf("%q: check error %v", src, cerr)
@@ -2171,21 +2175,39 @@ func TestIllegalRefTrapCompiles(t *testing.T) {
 
 	// NEGATIVE: a LEGAL ref to a real fn binding must NOT trap — it still
 	// compiles to a value-producing program (the held fn fires when grouped).
-	const ok = `def z fn [[][Integer][42]]  (z/r)`
+	const ok = `def z fn [[][Integer][42]]  (z/v)`
 	prog, reason, _, cerr := mustNew(t).CompileCheck(ok)
 	if cerr != nil || prog == nil {
-		t.Fatalf("legal /r row did not compile: reason=%q err=%v", reason, cerr)
+		t.Fatalf("legal /v row did not compile: reason=%q err=%v", reason, cerr)
 	}
 	if strings.Contains(prog.Disassemble(), "TRAP") {
-		t.Errorf("a legal /r must not emit an illegal_ref TRAP:\n%s", prog.Disassemble())
+		t.Errorf("a legal /v must not emit an illegal_ref TRAP:\n%s", prog.Disassemble())
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(ok)
 	if !compiled || errC != nil {
-		t.Fatalf("legal /r compiled run: compiled=%v err=%v", compiled, errC)
+		t.Fatalf("legal /v compiled run: compiled=%v err=%v", compiled, errC)
 	}
 	gotI, _ := mustNew(t).Run(ok)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("legal /r parity: compiled=%v interp=%v", gotC, gotI)
+		t.Errorf("legal /v parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// TestValOnNonFnBindingCompilesToTheValue is the `/v` half that used to be
+// a trap: with the function-only gate gone, `def x 5  x/v` is an ordinary
+// value both compiled and interpreted, and the engines agree.
+func TestValOnNonFnBindingCompilesToTheValue(t *testing.T) {
+	const src = `def x 5  x/v`
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	gotI, errI := mustNew(t).Run(src)
+	if errC != nil || errI != nil {
+		t.Fatalf("%q: errC=%v errI=%v", src, errC, errI)
+	}
+	if !compiled {
+		t.Errorf("%q: expected it to run compiled, it fell back", src)
+	}
+	if fmt.Sprint(gotC) != "[5]" || fmt.Sprint(gotI) != "[5]" {
+		t.Errorf("%q: compiled=%v interp=%v, want [5] from both", src, gotC, gotI)
 	}
 }
 
@@ -3604,7 +3626,7 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 	// to compile_refused; migrate this contract or retire it with the hatch).
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	refusals := []struct{ name, src, want string }{
-		{"multi-overload 0-arg member", `def z fn [[] [Integer] [42] [n:Integer] [Integer] [n]]  def m {k: z/r}  (m.k)`, "auto-dispatches"},
+		{"multi-overload 0-arg member", `def z fn [[] [Integer] [42] [n:Integer] [Integer] [n]]  def m {k: z/v}  (m.k)`, "auto-dispatches"},
 		// The read guard's OWN remaining territory after the break-2 closure:
 		// a tracked instance read whose KEY does not resolve statically. The
 		// risk is known per-instance (instanceFnFieldRisk's unresolvable-key
@@ -3612,7 +3634,7 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 		// (instanceFnMember reports nothing without a concrete key), so no
 		// landing model owns it and the guard refuses — the division of
 		// labour instanceFnMember's own comment states.
-		{"unpinpointable instance key", `def make42 fn [[] [Integer] [42]] def C class {fld:Function} def o (make C {fld:make42/r}) def keyof fn [[n:Integer] [Atom] [if (n gt 0) [fld/q] [other/q]]] (o get (keyof 1))`, "auto-dispatches"},
+		{"unpinpointable instance key", `def make42 fn [[] [Integer] [42]] def C class {fld:Function} def o (make C {fld:make42/v}) def keyof fn [[n:Integer] [Atom] [if (n gt 0) [fld/q] [other/q]]] (o get (keyof 1))`, "auto-dispatches"},
 		{"nested-factory curried chain", `def mk fn [[a:Integer] [Function] [([b:Integer] => [([c:Integer] => [a add b add c])])]]  (((mk 1) 2) 3)`, "arity mismatch"},
 	}
 	for _, c := range refusals {
@@ -3647,11 +3669,11 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 	preserved := []string{
 		`({a:1 b:2} get b/q) add 1`,
 		`{a:1 b:2} dot b`,
-		`def add1 fn [[x:Integer] [Integer] [x add 1]]  {f:add1/r}.f 5`,
+		`def add1 fn [[x:Integer] [Integer] [x add 1]]  {f:add1/v}.f 5`,
 		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  ((mk 5) 10)`,
-		`def make42 fn [[] [Integer] [42]]  {f:make42/r}.f`,
-		`def make42 fn [[] [Integer] [42]]  def m {f:make42/r}  (m get f/q)`,
-		`def f fn [[] [Integer] [7]]  {b:f/r} dot b`,
+		`def make42 fn [[] [Integer] [42]]  {f:make42/v}.f`,
+		`def make42 fn [[] [Integer] [42]]  def m {f:make42/v}  (m get f/q)`,
+		`def f fn [[] [Integer] [7]]  {b:f/v} dot b`,
 	}
 	for _, src := range preserved {
 		gotC, compiled, errC := mustNew(t).RunCompiled(src)
@@ -3912,7 +3934,7 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 	// dispatch-recovery rematch; the interpreter owns the program and both
 	// paths agree on `true`.
 	{
-		src := `import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`
+		src := `import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/v mk: mk/v mkb: mkb/v}]  add (M.mkb true) (M.mk true)`
 		prog, reason, _, _ := mustNew(t).CompileCheck(src)
 		if prog != nil || !strings.Contains(reason, "core-default dispatch over a carrier operand") {
 			t.Errorf("refinement escape: want the core-default refusal, got prog=%v reason=%q", prog != nil, reason)
@@ -4228,7 +4250,7 @@ func TestPR225P1Refusals(t *testing.T) {
 	// construction-time note (instanceFnMember). GRADUATED (the break-2
 	// closure): the pinpointed genuine-0-arg member's landing compiles as
 	// an arity-0 OpCallDynMethod with parity.
-	const classFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function} def o (make C {f:make42/r}) o.f`
+	const classFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function} def o (make C {f:make42/v}) o.f`
 	gotC2, compiled2, errC2 := mustNew(t).RunCompiled(classFn)
 	gotI2, errI2 := mustNew(t).Run(classFn)
 	if !compiled2 || errC2 != nil || errI2 != nil || fmt.Sprint(gotC2) != fmt.Sprint(gotI2) || fmt.Sprint(gotI2) != "[42]" {
@@ -4239,7 +4261,7 @@ func TestPR225P1Refusals(t *testing.T) {
 	// NEGATIVES: a NON-fn field of the same instance keeps compiling with
 	// parity (key precision), and the applied multi-param member-call
 	// pattern is untouched.
-	const nonFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function x:0} def o (make C {f:make42/r x:5}) o.x`
+	const nonFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function x:0} def o (make C {f:make42/v x:5}) o.x`
 	gotC3, compiled3, errC3 := mustNew(t).RunCompiled(nonFn)
 	if !compiled3 || errC3 != nil || fmt.Sprint(gotC3) != "[5]" {
 		t.Errorf("non-fn field read: compiled=%v err=%v got=%v (want compiled [5])", compiled3, errC3, gotC3)

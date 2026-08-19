@@ -9,8 +9,8 @@
 #                                     |  {ok:false err usage}
 #   Cli.dispatch (spec) (argv)        -> {action code out err flags args command}
 #   Cli.usage    (spec)               -> the rendered help text (no trailing \n)
-#   Cli.main     (spec) (handler/r)   -> the imperative shell (prints, exits)
-#   Cli.main     (spec) (argv) (h/r)  -> ditto, with an explicit argv
+#   Cli.main     (spec) (handler/v)   -> the imperative shell (prints, exits)
+#   Cli.main     (spec) (argv) (h/v)  -> ditto, with an explicit argv
 #
 # THREE of the four words are PURE: parse / dispatch / usage take argv as an
 # explicit parameter, never read IO, never raise, never exit. Errors are DATA
@@ -826,14 +826,14 @@ def cli-main-do fn [[spec:Map argv:List h:Function] [Any] [
   def _e (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
   if ((d.action) neq "run") [ IO.exit (d.code) ] [
     def ctx ({} set (quote flags) (d.flags) set (quote args) (d.args) set (quote command) (d.command))
-    def rv (ctx h/r apply)
+    def rv (ctx h/v apply)
     if (rv is Integer) [ IO.exit rv ] [ IO.exit 0 ]
   ]
 ]]
 
 def cli-w-main fn [
-  [spec:Map h:Function] [Any] [ def r (cli-main-do spec (IO.args) (h/r))  r ]
-  [spec:Map argv:List h:Function] [Any] [ def r (cli-main-do spec argv (h/r))  r ]
+  [spec:Map h:Function] [Any] [ def r (cli-main-do spec (IO.args) (h/v))  r ]
+  [spec:Map argv:List h:Function] [Any] [ def r (cli-main-do spec argv (h/v))  r ]
 ]
 
 def cli-w-term-opts fn [[cols:Any nocolor:Any tty:Boolean] [Map] [
@@ -842,9 +842,9 @@ def cli-w-term-opts fn [[cols:Any nocolor:Any tty:Boolean] [Map] [
 ]]
 
 export "Cli" {
-  parse:     cli-w-parse/r
-  dispatch:  cli-w-dispatch/r
-  usage:     cli-w-usage/r
-  term-opts: cli-w-term-opts/r
-  main:      cli-w-main/r
+  parse:     cli-w-parse/v
+  dispatch:  cli-w-dispatch/v
+  usage:     cli-w-usage/v
+  term-opts: cli-w-term-opts/v
+  main:      cli-w-main/v
 }

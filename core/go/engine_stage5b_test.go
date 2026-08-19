@@ -344,7 +344,7 @@ func TestS5BExecFnDefSigForeignAnalysisError(t *testing.T) {
 func TestS5BDispatchModAt(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.Tape = NewTape([]Value{NewDispatchMod(DispatchModInfo{Ref: true}), NewInteger(1)}, StackHeadroom)
+	e.Tape = NewTape([]Value{NewDispatchMod(DispatchModInfo{Val: true}), NewInteger(1)}, StackHeadroom)
 	if !e.dispatchModAt(0) {
 		t.Error("DM marker at 0 must report true")
 	}

@@ -38,8 +38,8 @@ def norm-display fn s:String String [
 def norm-label fn s:String String [StringUtil.lower (norm-display s)]
 
 export "KgNorm" {
-  spaces-only:spaces-only/r
-  collapse-ws:collapse-ws/r
-  norm-display:norm-display/r
-  norm-label:norm-label/r
+  spaces-only:spaces-only/v
+  collapse-ws:collapse-ws/v
+  norm-display:norm-display/v
+  norm-label:norm-label/v
 }

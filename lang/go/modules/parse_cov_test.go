@@ -82,11 +82,11 @@ parse sfull '+'`)
 func TestParseCovSpecRefListAndAbnfForms(t *testing.T) {
 	r := pcovReg(t)
 	// Two actions on one ref run in order — the second wins the node.
-	// (/r keeps the lambdas inert inside the evaluated list literal.)
+	// (/v keeps the lambdas inert inside the evaluated list literal.)
 	out := pcovRun(t, r, pcovImports+`
 def g Parse.grammar
 Parse.spec g {
-  ref: {'@two': [([nd:Any] => [1])/r ([nd:Any] => [2])/r]}
+  ref: {'@two': [([nd:Any] => [1])/v ([nd:Any] => [2])/v]}
   rule: {val:{open:[{s:'#NR' a:'@two'}]}}
 }
 def stwo (Parse.parser g)
@@ -165,7 +165,7 @@ func TestParseCovSpecNegatives(t *testing.T) {
 
 // TestParseCovRuleAltFields drives altMapToSpec's field arms: b (Integer),
 // g, n counters, c/u/k data maps with nested values, plus the
-// list-of-actions form (an inline /r-parked fn followed by a '@ref').
+// list-of-actions form (an inline /v-parked fn followed by a '@ref').
 //
 // The `c` condition key is a DOTTED PATH onto a rule property, so a counter
 // condition is `c:{'n.k1':0}`, not `c:{k1:0}`. The bare-name form parsed
@@ -179,7 +179,7 @@ def g Parse.grammar
 Parse.action g '@hit' ([nd:Any] => [nd])
 Parse.rule g val {open:[
   {s:'#NR' b:1 g:'gg' n:{k1:1} c:{'n.k1':0} u:{ux:1 deep:{d:2} lx:[1 'a' 2.5]} k:{kx:'s'}}
-  {s:'#TX' a:[([nd:Any] => [5])/r '@hit']}
+  {s:'#TX' a:[([nd:Any] => [5])/v '@hit']}
 ]}
 def ralt (Parse.parser g)
 end

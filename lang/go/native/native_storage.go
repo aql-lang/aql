@@ -1474,7 +1474,7 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)} // statically-absent key reads as None
 	}
 	// Only narrow plain DATA fields. A field bearing dispatch — a stored
-	// Function / FnDef, a /r ref (Reach), or a word-splice — keeps the
+	// Function / FnDef, a /v ref (Reach), or a word-splice — keeps the
 	// dynamic Any the poly / island path already handles: returning its
 	// concrete value would push the compiler to lower a fn-value call or a
 	// modifier re-dispatch and refuse to compile (fn-value.tsv `m.f 2 3`,

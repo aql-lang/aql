@@ -497,7 +497,7 @@ error.
 ### 7.3 Predicate body boilerplate — RESOLVED
 
 `guard` (`internal/engine/native_type_guard.go`) is the predicate-
-body workhorse: `cond guard val` returns `val` when `cond` is true,
+body workhorse: `cond guard val` returns `valof` when `cond` is true,
 `None` otherwise. Sig is `[Any, Boolean]` in mirror order with
 `BarrierPos=1` so it composes with `and`/`or` chains without
 greedily consuming a chained second forward arg.

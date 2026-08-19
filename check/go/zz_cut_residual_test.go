@@ -286,11 +286,11 @@ func TestCheckMakeConstructionInactiveNoOp(t *testing.T) {
 func TestPayloadMarkersCallable(t *testing.T) {
 	// The sealed-payload markers are no-ops; calling them directly pins
 	// that the types satisfy eng.Payload.
-	mod := core.NewDispatchMod(core.DispatchModInfo{Ref: true})
+	mod := core.NewDispatchMod(core.DispatchModInfo{Val: true})
 	if !core.IsDispatchMod(mod) {
 		t.Error("dispatch-mod marker not recognised")
 	}
-	if info, ok := core.AsDispatchMod(mod); !ok || !info.Ref {
+	if info, ok := core.AsDispatchMod(mod); !ok || !info.Val {
 		t.Errorf("AsDispatchMod = %+v, %v", info, ok)
 	}
 }

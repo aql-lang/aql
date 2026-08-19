@@ -34,7 +34,7 @@ func TestRecursionThroughClosure(t *testing.T) {
     ]
   ]]
   def srt fn [[xs:List] [List] [ def arr (flex xs) def _s (arr 0 ((xs size) sub 1) go) (node arr) ]]
-  export "M" {srt: srt/r}
+  export "M" {srt: srt/v}
 ] end ([5 3 1 2] M.srt)`, "[[5 3 1 2]]"},
 		// recursion inside a FOLD body (different higher-order word, same closure path).
 		{"fold-body recursion",
@@ -46,7 +46,7 @@ func TestRecursionThroughClosure(t *testing.T) {
     ]
   ]]
   def srt fn [[xs:List] [List] [ def arr (flex xs) def _s (arr 2 go) (node arr) ]]
-  export "M" {srt: srt/r}
+  export "M" {srt: srt/v}
 ] end ([7 8 9] M.srt)`, "[[7 8 9]]"},
 	}
 	for _, c := range strict {

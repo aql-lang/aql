@@ -259,15 +259,15 @@ import "boru:minilang"  def home (macro [[u] [quote [+m:192.168.0.1]]])  home 0	
 #      kind's function is called on the spot (+hb, +bb, math, micron, bf's
 #      generator form), while a FILTER kind's function auto-dispatches when
 #      a matching subject is on the stack — and stays a VALUE when not, so
-#      it can be bound with def (or parked with /r) and applied later.
+#      it can be bound with def (or parked with /v) and applied later.
 import "boru:minilang"  +re/[a-z]+/ typeof	Function	a bare filter literal IS a function value
 import "boru:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m	'bc'	store the partial, apply it later — the pattern rides inside
 import "boru:minilang"  def f (+re/[a-z]+/)  ("zQr" f).n	2	the stored partial is reusable across subjects ('z' and 'r' both match)
 import "boru:minilang"  def sel (mini gex 'a*')  ['aa' 'b' 'ab'] sel	['aa' 'ab']	the explicit mini form produces the same storable partial (gex select)
 import "boru:minilang"  def q (mini jp '$.a')  ({a:7} q) get 0	7	a stored JSONPath query
-# (/r parks the partial even with a subject on the stack — pinned in lang/go/test as
+# (/v parks the partial even with a subject on the stack — pinned in lang/go/test as
 # TestMiniPartialParked, not as a spec row: the compiled pipeline does not model a
-# /r-parked spliced partial yet)
+# /v-parked spliced partial yet)
 import "boru:minilang"  import "boru:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  def c (mini count 'an')  "banana" c	2	a def-bound filter value gets the same storable-partial semantics
 import "boru:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is called in place — the literal is the value, not a Function
 #
@@ -282,15 +282,15 @@ import "boru:minilang"  (+re/[a-z]+/) is (MiniLang.Re)	true	a re partial inhabit
 import "boru:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)	false	…and NOT a sibling kind's type
 import "boru:minilang"  (+gex/a*/) is (MiniLang.Gex)	true	each filter kind has its own
 import "boru:minilang"  (+re/[a-z]+/) is Function	true	the partial is still a plain Function to every existing check
-import "boru:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Re)	true	a def-bound partial keeps its kind tag through the binding
-import "boru:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Jq)	false	…and still refuses the wrong kind
+import "boru:minilang"  def p (+re/[a-z]+/)  p/v is (MiniLang.Re)	true	a def-bound partial keeps its kind tag through the binding
+import "boru:minilang"  def p (+re/[a-z]+/)  p/v is (MiniLang.Jq)	false	…and still refuses the wrong kind
 import "boru:minilang"  +jp/$.a/ is (MiniLang.Jp)	true	a stored JSONPath query has its named type
 import "boru:minilang"  +xp|//book/title| is (MiniLang.Xp)	true	an XPath partial too (| delimiter: the path contains /)
-import "boru:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)	false	an ordinary lambda is a Function but NOT a re partial
+import "boru:minilang"  ([x:Any] => [x])/v is (MiniLang.Re)	false	an ordinary lambda is a Function but NOT a re partial
 import "boru:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex	true	the exported type literal works as a def'd name too
 import "boru:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+re/[a-z]+/) "AbcD"	'AbcD'	the point: a typed fn param that requires specifically a regexp matcher (calling the partial inside the body is pinned in lang/go/test TestMiniPartialTypedParam — the checker's fn-value-call frontier)
 import "boru:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+gex/a*/) "AbcD"	ERROR:signature_error	a gex partial is refused by the m:(MiniLang.Re) slot
-import "boru:minilang"  def cnt (fn [[src:String opts:Map subject:String] [Integer] [1]])  def c (mini cnt 'a')  c/r is (MiniLang.Re)	false	a fn-value partial carries no kind tag — never a builtin kind's member type
+import "boru:minilang"  def cnt (fn [[src:String opts:Map subject:String] [Integer] [1]])  def c (mini cnt 'a')  c/v is (MiniLang.Re)	false	a fn-value partial carries no kind tag — never a builtin kind's member type
 import "boru:minilang"  MiniLang.Gen	None	a missing export reads as None — the export map is fixed post-build
 #
 # §fnv  a mini-language VALUE as the transducer — `mini <fn> <src> <opts?>`.

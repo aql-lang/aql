@@ -10,9 +10,9 @@ import (
 
 // The `usurp` word and `/u` suffix wrap a function so its signature
 // argument order is reversed: a usurped fn called `usurped a b c`
-// dispatches the original as `f c b a`. Like `ref`/`/r`, the wrapper is an
+// dispatches the original as `f c b a`. Like `ref`/`/v`, the wrapper is an
 // unquoted Function value — it dispatches when args follow, and stays inert
-// under `quote` or when reffed (`/ur`).
+// under `quote` or when reffed (`/uv`).
 
 // lastInt returns the integer value of the final stack entry.
 func lastInt(t *testing.T, res []native.Value) int64 {
@@ -45,13 +45,13 @@ func lastString(t *testing.T, res []native.Value) string {
 func TestUsurpWordReversesArgs(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-		`usurp (ref sub2) 10 3`,
+		`usurp (valof sub2) 10 3`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := lastInt(t, res); got != -7 {
-		t.Errorf("usurp (ref sub2) 10 3 = %d, want -7", got)
+		t.Errorf("usurp (valof sub2) 10 3 = %d, want -7", got)
 	}
 }
 
@@ -113,40 +113,40 @@ func TestUsurpOneArgIsNoOp(t *testing.T) {
 	}
 }
 
-// TestUsurpReffedIsInertData checks `/ur` (usurp + ref) with no following
+// TestUsurpReffedIsInertData checks `/uv` (usurp + ref) with no following
 // args leaves the wrapper on the stack as a Function value rather than
 // dispatching it.
 func TestUsurpReffedIsInertData(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def inc fn [[n:Integer] [Integer] [n add 1]]`,
-		`inc/ur`,
+		`inc/uv`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if len(res) != 1 {
-		t.Fatalf("inc/ur left %d values, want 1 (the wrapper)", len(res))
+		t.Fatalf("inc/uv left %d values, want 1 (the wrapper)", len(res))
 	}
 	if !res[0].Parent.Equal(core.TFunction) {
-		t.Errorf("inc/ur top is %s, want Function", res[0].Parent.String())
+		t.Errorf("inc/uv top is %s, want Function", res[0].Parent.String())
 	}
 }
 
-// TestUsurpReffedStaysInertWithTrailingArgs checks `/ur` mirrors `/r`: the
+// TestUsurpReffedStaysInertWithTrailingArgs checks `/uv` mirrors `/v`: the
 // reffed wrapper is left on the stack as data and bare trailing values just
 // pile up beside it (no auto-dispatch). To invoke a reffed wrapper, wrap it
-// in a paren — `(usurp (ref f)) a b` — or store and dot-dispatch it.
+// in a paren — `(usurp (valof f)) a b` — or store and dot-dispatch it.
 func TestUsurpReffedStaysInertWithTrailingArgs(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-		`sub2/ur 10 3`,
+		`sub2/uv 10 3`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	// [wrapper 10 3] — the wrapper sits inert below the two literals.
 	if len(res) != 3 {
-		t.Fatalf("sub2/ur 10 3 left %d values, want 3 (wrapper + 2 literals)", len(res))
+		t.Fatalf("sub2/uv 10 3 left %d values, want 3 (wrapper + 2 literals)", len(res))
 	}
 	if !res[0].Parent.Equal(core.TFunction) {
 		t.Errorf("bottom value is %s, want the inert Function wrapper", res[0].Parent.String())
@@ -159,13 +159,13 @@ func TestUsurpReffedStaysInertWithTrailingArgs(t *testing.T) {
 func TestUsurpReffedInvokesViaParen(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-		`(usurp (ref sub2)) 10 3`,
+		`(usurp (valof sub2)) 10 3`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := lastInt(t, res); got != -7 {
-		t.Errorf("(usurp (ref sub2)) 10 3 = %d, want -7", got)
+		t.Errorf("(usurp (valof sub2)) 10 3 = %d, want -7", got)
 	}
 }
 
@@ -174,7 +174,7 @@ func TestUsurpReffedInvokesViaParen(t *testing.T) {
 func TestUsurpQuotedIsInertData(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def inc fn [[n:Integer] [Integer] [n add 1]]`,
-		`quote (usurp (ref inc))`,
+		`quote (usurp (valof inc))`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -194,7 +194,7 @@ func TestUsurpQuotedIsInertData(t *testing.T) {
 func TestUsurpSurvivesRedefinition(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-		`def ops {rev: (usurp (ref sub2))}`,
+		`def ops {rev: (usurp (valof sub2))}`,
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a add b]]`,
 		`ops.rev 10 3`,
 	})
@@ -211,7 +211,7 @@ func TestUsurpSurvivesRedefinition(t *testing.T) {
 func TestUsurpStoredInMapDispatches(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-		`def ops {rev: (usurp (ref sub2))}`,
+		`def ops {rev: (usurp (valof sub2))}`,
 		`ops.rev 10 3`,
 	})
 	if err != nil {
@@ -246,7 +246,7 @@ func TestUsurpWordOnNonFunctionIsIllegal(t *testing.T) {
 
 // TestUsurpCheckModeClean verifies the /u modifier flows through static
 // check mode without an error-severity diagnostic (the /u stepWord branch
-// mirrors /r's check-mode handling). Like the whole ref family, /u does not
+// mirrors /v's check-mode handling). Like the whole ref family, /u does not
 // itself count as a "use" of the name, so an unused_def *warning* for the
 // defined fn is expected and tolerated — we only reject errors.
 func TestUsurpCheckModeClean(t *testing.T) {
@@ -288,7 +288,7 @@ func TestUsurpCheckModeUndefined(t *testing.T) {
 
 // TestUsurpByNameReversesArgs checks the [Atom] overload: `usurp f`
 // captures the bare word, resolves it to its bound function, and returns
-// the argument-reversed wrapper — equivalent to `usurp (ref f)` and to
+// the argument-reversed wrapper — equivalent to `usurp (valof f)` and to
 // the `f/u` suffix, without needing a paren-grouped value.
 func TestUsurpByNameReversesArgs(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
@@ -316,11 +316,11 @@ func TestUsurpByNameMatchesValueForm(t *testing.T) {
 		wantStr string
 	}{
 		{"2-arg", `def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-			`usurp sub2 10 3`, `usurp (ref sub2) 10 3`, -7, false, ""},
+			`usurp sub2 10 3`, `usurp (valof sub2) 10 3`, -7, false, ""},
 		{"3-arg str", `def cat3 fn [[a:String b:String c:String] [String] [a add b add c]]`,
-			`usurp cat3 'x' 'y' 'z'`, `usurp (ref cat3) 'x' 'y' 'z'`, 0, true, "zyx"},
+			`usurp cat3 'x' 'y' 'z'`, `usurp (valof cat3) 'x' 'y' 'z'`, 0, true, "zyx"},
 		{"1-arg noop", `def inc fn [[n:Integer] [Integer] [n add 1]]`,
-			`usurp inc 5`, `usurp (ref inc) 5`, 6, false, ""},
+			`usurp inc 5`, `usurp (valof inc) 5`, 6, false, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -399,7 +399,7 @@ func TestUsurpWrapperBoundByName(t *testing.T) {
 	}{
 		{"by value", []string{
 			`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-			`def fu (usurp (ref sub2))`,
+			`def fu (usurp (valof sub2))`,
 			`fu 10 3`,
 		}, -7},
 		{"by name", []string{
@@ -437,12 +437,12 @@ func TestUsurpWrapperBoundByName(t *testing.T) {
 // fn bound to a name dispatches the native (InstallFnDef preserves the
 // body-less native handler rather than running an empty boru body).
 func TestRefNativeBoundByName(t *testing.T) {
-	res, err := runNativeSteps(t, nil, []string{`def myadd (ref add)`, `myadd 2 3`})
+	res, err := runNativeSteps(t, nil, []string{`def myadd (valof add)`, `myadd 2 3`})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := lastInt(t, res); got != 5 {
-		t.Errorf("def myadd (ref add); myadd 2 3 = %d, want 5", got)
+		t.Errorf("def myadd (valof add); myadd 2 3 = %d, want 5", got)
 	}
 }
 
@@ -452,14 +452,14 @@ func TestRefNativeBoundByName(t *testing.T) {
 func TestNamedBoruFnUnaffected(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-		`def fu (ref sub2)`,
+		`def fu (valof sub2)`,
 		`fu 10 3`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := lastInt(t, res); got != 7 {
-		t.Errorf("def fu (ref sub2); fu 10 3 = %d, want 7 (body-runner preserved)", got)
+		t.Errorf("def fu (valof sub2); fu 10 3 = %d, want 7 (body-runner preserved)", got)
 	}
 }
 

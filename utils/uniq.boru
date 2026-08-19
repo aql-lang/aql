@@ -251,20 +251,20 @@ def uniq-main fn [[argv:List] [Integer] [
 ]]
 
 export "Uniq" {
-  bool:      uniq-bool/r
-  key:       uniq-key/r
-  emit:      uniq-emit/r
-  pad:       uniq-pad/r
-  line:      uniq-line/r
-  start:     uniq-start/r
-  close:     uniq-close/r
-  step:      uniq-step/r
-  apply:     uniq-apply/r
-  opts:      uniq-opts/r
-  fail:      uniq-fail/r
-  nextChunk: uniq-next-chunk/r
-  one:       uniq-one/r
-  main:      uniq-main/r
+  bool:      uniq-bool/v
+  key:       uniq-key/v
+  emit:      uniq-emit/v
+  pad:       uniq-pad/v
+  line:      uniq-line/v
+  start:     uniq-start/v
+  close:     uniq-close/v
+  step:      uniq-step/v
+  apply:     uniq-apply/v
+  opts:      uniq-opts/v
+  fail:      uniq-fail/v
+  nextChunk: uniq-next-chunk/v
+  one:       uniq-one/v
+  main:      uniq-main/v
   spec:      spec
 }
 

@@ -809,13 +809,13 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 // def stacks. If the value is a string, atom, or word that names a def'd word,
 // the def body is returned. Otherwise the value is returned as-is.
 func resolveModuleExport(modReg *Registry, v Value) Value {
-	// A function value — typically produced by `name/r` in the export
+	// A function value — typically produced by `name/v` in the export
 	// map, which auto-evaluates to the bound fn as data — must carry the
 	// module registry so it executes in module scope (resolving module-
 	// private words) when called after import.
 	if fnDef, ok := v.Data.(FnDefInfo); ok {
 		// An exported word (the public API) IS used — record it so check mode
-		// does not falsely flag every exported impl as unused_def. The `name/r`
+		// does not falsely flag every exported impl as unused_def. The `name/v`
 		// reference form auto-evaluates to the bound fn HERE (as data), so the
 		// name was never stepped through the normal dispatch/ResolveRef use path.
 		modReg.Check.RecordUse(fnDef.Name)

@@ -391,7 +391,7 @@ def build-graph fn [[candidates:List opts:Map] [Map] [
 ]]
 
 export "KgReport" {
-  mk-summary:mk-summary/r
-  competency-report:competency-report/r
-  build-graph:build-graph/r
+  mk-summary:mk-summary/v
+  competency-report:competency-report/v
+  build-graph:build-graph/v
 }

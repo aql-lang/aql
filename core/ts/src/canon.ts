@@ -209,14 +209,14 @@ export function canonValue(v: Value): string {
   if (v.data === null) {
     return v.vType.leaf();
   }
-  // The `/r` / `/q` group modifier the parser emits AFTER a paren or
+  // The `/v` / `/q` group modifier the parser emits AFTER a paren or
   // dotted-path group. Canon had no arm for it, so each engine fell through
   // to a DIFFERENT debug spelling — TS to `word(undefined)` (the word arm
   // reading a DispatchModInfo as a WordInfo) and Go to
   // `word()({false true})`. Neither is source, and they disagreed, which is
   // what the parity probe caught on `m.k/q`.
   if (v.vType.equal(TDispatchMod)) {
-    return (v.data as DispatchModInfo).ref ? "/r" : "/q";
+    return (v.data as DispatchModInfo).val ? "/v" : "/q";
   }
   // A caught-error VALUE (the do escape hatch) — mirrors Go's render.
   if (v.data instanceof ErrorInfo) {
@@ -314,7 +314,7 @@ export function canonValue(v: Value): string {
   }
   if (v.isWord()) {
     // A word carries its `/`-modifiers in the payload, and dropping them
-    // made canon say something the source did not (NUR059): both `foo/r`
+    // made canon say something the source did not (NUR059): both `foo/v`
     // and `foo/2` rendered `word(foo)`, so re-parsing the canon yielded a
     // different program.
     //
@@ -386,7 +386,7 @@ function canonChild(v: Value): string {
 // Mirrors core/go/canon.go canonTypeTag.
 function canonTypeTag(v: Value): string {
   // The modifier suffix rides along (NUR059): an angle argument can be a
-  // modifier-bearing word (`Box<a/r>`), and emitting the bare name would
+  // modifier-bearing word (`Box<a/v>`), and emitting the bare name would
   // drop it — the same silent loss one level down.
   if (v.isWord()) {
     const w = v.asWord();
@@ -421,7 +421,7 @@ function canonReachToken(v: Value): string {
   // Bare NAME plus any modifier suffix (NUR059). A reach SEGMENT never
   // carries one — the parser peels a trailing `/mod` off the final key and
   // applies it to the whole reach — so segments render exactly as before.
-  // A word inside a PAREN body can carry one, and `(x/r)` losing its `/r`
+  // A word inside a PAREN body can carry one, and `(x/v)` losing its `/v`
   // would be the same defect this record removes.
   if (v.isWord()) {
     const w = v.asWord();
@@ -486,7 +486,7 @@ export function valToString(v: Value): string {
 // Canon's contract is that its output re-parses to the same value, and
 // these modifiers used to break it SILENTLY rather than loudly: a word with
 // a modifier fell through to the debug form, which spells every word
-// `word(foo)` — so `foo/r` and `foo/2` both canon'd as `word(foo)` and the
+// `word(foo)` — so `foo/v` and `foo/2` both canon'd as `word(foo)` and the
 // modifier was not merely mis-spelled but DROPPED.
 //
 // The letters may be written in any order at the call site, so canon picks
@@ -501,7 +501,7 @@ function canonWordModifiers(w: WordInfo): string {
   if (w.forceForward) out += "f";
   else if (w.forceStack) out += "s";
   if (w.forceUsurp) out += "u";
-  if (w.forceRef) out += "r";
+  if (w.forceVal) out += "v";
   return out === "" ? "" : "/" + out;
 }
 

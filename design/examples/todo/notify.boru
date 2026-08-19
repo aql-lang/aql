@@ -15,7 +15,7 @@ import "boru:serve"
 import "sessions.boru"          # for the shared presence-name convention
 
 export "Notify" {
-  New: New/r
+  New: New/v
 }
 
 # `New {}` -> Service.  Place this in a server with `overflow: 'drop` (app.boru).

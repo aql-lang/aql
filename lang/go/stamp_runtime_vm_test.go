@@ -220,7 +220,7 @@ func TestDetachedStampSubUnitFinalizeRefusalDeclines(t *testing.T) {
 	// the three-value loop residual interpreter-valid. `M.run` returns the inner
 	// fn value, which — a 0-arg fn at the top level — auto-invokes and yields
 	// the loop's three 1s, proving the graceful fallback runs unchanged.
-	out, err := a.RunInterp(`import module [ def zzouter fn [[] [] [def zzinner fn [[] [] [size (for 3 [1])]] zzinner]] export "M" {run: zzouter/r} ] end M.run`)
+	out, err := a.RunInterp(`import module [ def zzouter fn [[] [] [def zzinner fn [[] [] [size (for 3 [1])]] zzinner]] export "M" {run: zzouter/v} ] end M.run`)
 	if err != nil {
 		t.Fatalf("belt is a graceful fallback — the module must load and run, got: %v", err)
 	}
@@ -281,7 +281,7 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 // stampModuleSrc constructs a module whose helper fn stamps in place at load
 // when the importing registry is armed — the observable that proves runtime
 // stamping was active during a request.
-const stampModuleSrc = `module [ def helper (fn [[x:Integer] [Integer] [x add 1]]) export "M" {helper: helper/r} ]`
+const stampModuleSrc = `module [ def helper (fn [[x:Integer] [Integer] [x add 1]]) export "M" {helper: helper/v} ]`
 
 // countStamped returns how many report events stamped a fn of the given name.
 func countStamped(events []core.StampEvent, name string) int {
@@ -402,13 +402,13 @@ func TestRunCompiledFallbackNoDuplicateStampReport(t *testing.T) {
 // bodies — where the real apps construct their callbacks — can stamp; and
 // they do NOT inherit it when the parent is unarmed.
 func TestModuleRegistryInheritsRuntimeStamping(t *testing.T) {
-	src := `module [ def helper (fn [[x:Integer] [Integer] [x add 1]]) export "M" {helper: helper/r} ]`
+	src := `module [ def helper (fn [[x:Integer] [Integer] [x add 1]]) export "M" {helper: helper/v} ]`
 
 	a, _ := New()
 	a.registry.EnableRuntimeStamping()
 	// Rebind the export's fn to a top-level name so the test reads it from
 	// the def table without unwrapping the ModuleExport payload Go-side.
-	if _, err := a.RunInterp(`import ` + src + ` def hh M.helper/r`); err != nil {
+	if _, err := a.RunInterp(`import ` + src + ` def hh M.helper/v`); err != nil {
 		t.Fatalf("armed import: %v", err)
 	}
 	helper, ok := a.registry.Defs.Top("hh")
@@ -424,7 +424,7 @@ func TestModuleRegistryInheritsRuntimeStamping(t *testing.T) {
 	}
 
 	b, _ := New()
-	if _, err := b.RunInterp(`import ` + src + ` def hh M.helper/r`); err != nil {
+	if _, err := b.RunInterp(`import ` + src + ` def hh M.helper/v`); err != nil {
 		t.Fatalf("unarmed import: %v", err)
 	}
 	h2, ok := b.registry.Defs.Top("hh")
@@ -481,16 +481,16 @@ def h (fn [[req:Map state:Any] [Any] [ helper state "a" ]])
 func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 	src := `module [
   def helper (fn [[x:Integer] [Integer] [x add 1]])
-  def alias (helper/r)
+  def alias (helper/v)
   def refuser (fn [[x:Integer] [Integer] [ (((fn [[a:Integer] [Function] [(fn [[b:Integer] [Function] [(fn [[c:Integer] [Integer] [x add a add b add c]])]])]]) 1) 2) 3 ]])
   def fact (fn [[n:Integer] [Integer] [ if (n lte 1) [1] [n mul (fact (n sub 1))] ]])
   def tbl {k: 1}
-  export "M" {helper: helper/r fact: fact/r refuser: refuser/r}
+  export "M" {helper: helper/v fact: fact/v refuser: refuser/v}
 ]`
 
 	fetch := func(a *Boru, name string) Value {
 		t.Helper()
-		if _, err := a.RunInterp(`def got M.` + name + `/r`); err != nil {
+		if _, err := a.RunInterp(`def got M.` + name + `/v`); err != nil {
 			t.Fatalf("fetch %s: %v", name, err)
 		}
 		v, ok := a.registry.Defs.Top("got")

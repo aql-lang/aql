@@ -195,17 +195,17 @@ def tee-main fn [[argv:List] [Integer] [
 ]]
 
 export "Tee" {
-  bool:      tee-bool/r
-  count:     tee-count/r
-  worse:     tee-worse/r
-  mode:      tee-mode/r
-  nextChunk: tee-next-chunk/r
-  record:    tee-record/r
-  fail:      tee-fail/r
-  openAt:    tee-open-at/r
-  fan:       tee-fan/r
-  closeAt:   tee-close-at/r
-  main:      tee-main/r
+  bool:      tee-bool/v
+  count:     tee-count/v
+  worse:     tee-worse/v
+  mode:      tee-mode/v
+  nextChunk: tee-next-chunk/v
+  record:    tee-record/v
+  fail:      tee-fail/v
+  openAt:    tee-open-at/v
+  fan:       tee-fan/v
+  closeAt:   tee-close-at/v
+  main:      tee-main/v
   spec:      spec
 }
 

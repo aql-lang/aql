@@ -35,7 +35,7 @@ func TestFnParamApplyDefCheckClean(t *testing.T) {
 			`def zt fn [[g:Function x:Integer] [Integer] [def zr (x g) g zr]] zt ([za:Integer] => [za add 1]) 5`,
 			"7"},
 		{"construction alone (no call) stays clean of the FP",
-			`def zh fn [[f:Function x:Integer] [Integer] [def zr (f x) f zr]] zh/r drop`,
+			`def zh fn [[f:Function x:Integer] [Integer] [def zr (f x) f zr]] zh/v drop`,
 			""},
 	} {
 		// 1. No error-severity diagnostic — the FP class is dead.

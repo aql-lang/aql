@@ -139,8 +139,8 @@ func init() {
 	register(&Entry{
 		Word:        "apply",
 		Summary:     "Apply a referenced function or a reach lens to stack arguments.",
-		Description: "x inc/r apply calls the referenced fn inc on x; xs apply $.1 reads index 1 via a reach lens. The general invoke-this-fn-or-lens word.",
-		Examples:    []string{`def inc fn n:Integer Integer [n add 1] 5 inc/r apply ; # => 6`},
+		Description: "x inc/v apply calls the referenced fn inc on x; xs apply $.1 reads index 1 via a reach lens. The general invoke-this-fn-or-lens word.",
+		Examples:    []string{`def inc fn n:Integer Integer [n add 1] 5 inc/v apply ; # => 6`},
 	})
 	register(&Entry{
 		Word:        "rebind",
@@ -148,9 +148,14 @@ func init() {
 		Description: "`rebind $.name p` returns a Reach anchored at p — the writeable counterpart of apply/get. typeof of the result is Reach.",
 	})
 	register(&Entry{
-		Word:        "ref",
-		Summary:     "Reference a word's function value without invoking it.",
-		Description: "`ref add` yields add's fn value as data (like the /r suffix), so it can be passed around and later applied.",
+		Word:        "valof",
+		Summary:     "Take a name's bound value, disabling any call it would induce.",
+		Description: "`valof add` yields add's fn value as data (like the /v suffix), so it can be passed around and later applied. Total over every binding kind: for a fn it suppresses the call, for anything else it is the identity — `valof n` where n is 5 is 5. That is what lets one spelling read a slot whose kind is not known statically. Only an UNBOUND name refuses.",
+		Examples: []string{
+			`def n 5 valof n ; # => 5 — a non-fn binding is the identity`,
+			`def inc fn x:Integer Integer [add 1 x] 5 inc/v apply ; # => 6`,
+			`def i t:Any => [t/v] i 5 ; # => 5 — and i inc/v is inc, uncalled`,
+		},
 	})
 	register(&Entry{
 		Word:        "referent",

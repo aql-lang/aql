@@ -1102,11 +1102,11 @@ def sift-seed-families fn [[items:List i:Integer] [Any] [
 def _seed (sift-seed-families sift-families-list 0)
 
 export "Sift" {
-  parse:    sift-w-parse/r
-  define:   sift-w-define/r
-  kinds:    sift-w-kinds/r
-  families: sift-w-families/r
-  spec:     sift-w-spec/r
-  detect:   sift-w-detect/r
-  check:    sift-w-check/r
+  parse:    sift-w-parse/v
+  define:   sift-w-define/v
+  kinds:    sift-w-kinds/v
+  families: sift-w-families/v
+  spec:     sift-w-spec/v
+  detect:   sift-w-detect/v
+  check:    sift-w-check/v
 }

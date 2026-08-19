@@ -64,7 +64,7 @@ func ModuleScopeBinding(r *Registry, name string) bool {
 //   - the DIRECT-literal spelling `{x: (fn …)}` compiles and agrees
 //     (7/7): the check pass runs the interpreter loop over the concrete
 //     member, and the recorded events model the fire;
-//   - the PARKED spelling `{x: mx/r}` (an aggregate view, recognisable
+//   - the PARKED spelling `{x: mx/v}` (an aggregate view, recognisable
 //     by its synthetic Fallback sig) compiled to the raw fn value —
 //     a silent divergence — so it must refuse until the landing model
 //     covers parked mixed-overload members (the tracked graduation;
@@ -160,15 +160,15 @@ func IsInertConst(v Value) bool {
 		// could embed non-const data, so it refuses conservatively.
 		return fnSigConstOK(d)
 	case FnDefInfo:
-		// A function VALUE used as DATA — a residual (`f/r`), a map/list member
-		// (`{b:f/r}`), or an introspection operand (`arityof (fn …)`) — NOT a
+		// A function VALUE used as DATA — a residual (`f/v`), a map/list member
+		// (`{b:f/v}`), or an introspection operand (`arityof (fn …)`) — NOT a
 		// call site. It bakes as a const only with no closure state: no captured
 		// bindings (which would snapshot check-pass values, divergent from the VM
 		// pass) and no module sub-registry. The body tokens ride inside the
 		// payload and are never re-stepped while the value is data; a CALL of the
 		// value is a separate dispatch path (a bare `(fn …) args` auto-dispatch
-		// records the fn-body splice and refuses; a `/r`-referenced fn does not
-		// auto-dispatch, so `f/r` / `{b:f/r}` are pure data).
+		// records the fn-body splice and refuses; a `/v`-referenced fn does not
+		// auto-dispatch, so `f/v` / `{b:f/v}` are pure data).
 		if len(d.Captured) > 0 {
 			return false
 		}
@@ -280,7 +280,7 @@ func IsInertConst(v Value) bool {
 // isFnTypedCarrier reports whether v is a Function-typed CARRIER — a
 // [Function]-returning call result on the simulated stack (e.g. `(mk2 5)`), as
 // distinct from a CONCRETE baked fn value (Carrier false, the introspection /
-// inert-`/r` case). The carrier bit is what resolves the apply-vs-inert
+// inert-`/v` case). The carrier bit is what resolves the apply-vs-inert
 // ambiguity in Finalize: a carrier lead auto-applies, a concrete fn does not.
 func IsFnTypedCarrier(v Value) bool {
 	return v.Carrier && v.Parent != nil &&
@@ -288,7 +288,7 @@ func IsFnTypedCarrier(v Value) bool {
 }
 
 // isFnValueResidual reports whether v is ANY fn value — a concrete FnDefInfo (a
-// baked /r reference) or a Function-typed value (carrier or not). Used to
+// baked /v reference) or a Function-typed value (carrier or not). Used to
 // keep a fn value out of the trailing-arg positions of a leading-fn apply.
 func IsFnValueResidual(v Value) bool {
 	// One body with the VM's runtime test (isAppliableFn, vm.go): the

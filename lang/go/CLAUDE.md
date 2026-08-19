@@ -128,11 +128,11 @@ Re-verified 2026-07-30: G8 (recovered-`raise` binding teardown), G11
 (returned-list-literal laziness) and G13a (single-token bare-map body)
 **no longer reproduce** — fixed by unrelated work. G9 (`case`-default
 collection, NUR048), G13b (type-literal map values refusing to
-compile, NUR051) and G12 (an `/r`-parked fn not satisfying a
+compile, NUR051) and G12 (an `/v`-parked fn not satisfying a
 `Function` param, NUR050) were **resolved 2026-07-31** — an open-call
 `case` default runs isolated like a matched arm, nested bare type
 nodes intern as type operands (ADR-010), and there is exactly one
-function type (`Word/__FN` collapsed into `Type/Function`; `/r`-marked
+function type (`Word/__FN` collapsed into `Type/Function`; `/v`-marked
 words feed forward collection as references — ADR-011). G10
 (`(dot message)` receiverless in an `error` handler) was **resolved
 2026-08-03**, retiring NUR049: `error` handler bodies are checked on
@@ -351,7 +351,7 @@ Key conversion functions in `parse.go`:
   **words** `usurp` / `stack-args` / `forward-args` / `force-arity N`
   (each returns a NEW function, like `usurp`); they are emitted BEFORE
   the group so they forward-collect the result before it can
-  auto-dispatch (critical for `/s`, whose args sit on the stack). `/r`
+  auto-dispatch (critical for `/s`, whose args sit on the stack). `/v`
   and `/q` emit an `eng.NewDispatchMod` marker (`Word/__DM`) AFTER the
   group; `execFnDefLiteral` peeks+consumes it to leave the function as
   inert data, and `stepLiteral` drops an unconsumed marker (a modifier
@@ -675,7 +675,7 @@ lambdas. Don't expect to capture caller args; pass them explicitly.
   DefStack level) where `InstallDef` (the `def` word) runs the same-
   scope overlap-redefinition filter: a callee param whose name and
   signature collide with a live caller binding (the classic comparator
-  threaded through a `/r`-parked Function arg) must stack on top and
+  threaded through a `/v`-parked Function arg) must stack on top and
   tear back down to the caller's level, not destroy it at install time.
   Cleanup is the existing `DefCleanup` + `undef` tail in the
   synthesized body; capture names are appended to the cleanup list at

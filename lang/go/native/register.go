@@ -64,7 +64,7 @@ func Register(r *Registry) {
 	}
 
 	// Ref / apply — first-class function value pipeline.
-	for _, n := range refNatives {
+	for _, n := range valofNatives {
 		r.RegisterNativeFunc(n)
 	}
 

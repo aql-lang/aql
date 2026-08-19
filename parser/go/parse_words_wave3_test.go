@@ -140,8 +140,8 @@ func TestParseWave3UsurpAndRefWords(t *testing.T) {
 		usurp, ref bool
 	}{
 		{"foo/u", true, false},
-		{"foo/ur", true, true},
-		{"foo/r", false, true},
+		{"foo/uv", true, true},
+		{"foo/v", false, true},
 	}
 	for _, c := range cases {
 		vals := mustParseWave3(t, c.src)
@@ -149,9 +149,9 @@ func TestParseWave3UsurpAndRefWords(t *testing.T) {
 			t.Fatalf("%q: got %d values, want 1", c.src, len(vals))
 		}
 		w := wordNameWave3(t, vals[0], c.src)
-		if w.Name != "foo" || w.ForceUsurp != c.usurp || w.ForceRef != c.ref {
+		if w.Name != "foo" || w.ForceUsurp != c.usurp || w.ForceVal != c.ref {
 			t.Errorf("%q: got name=%q usurp=%v ref=%v, want foo/%v/%v",
-				c.src, w.Name, w.ForceUsurp, w.ForceRef, c.usurp, c.ref)
+				c.src, w.Name, w.ForceUsurp, w.ForceVal, c.usurp, c.ref)
 		}
 	}
 }
@@ -164,8 +164,8 @@ func TestParseWave3UsurpAndRefWords(t *testing.T) {
 func TestParseWave3InvalidModifierCombos(t *testing.T) {
 	for _, src := range []string{
 		"a/1f2", // second digit run
-		"a/rr",  // repeated r
-		"a/qr",  // q + r are mutually exclusive
+		"a/vv",  // repeated r
+		"a/qv",  // q + r are mutually exclusive
 		"a/qu",  // q + u are mutually exclusive
 		"a/uu",  // repeated u
 		"a/uq",  // u + q (other order)
@@ -189,7 +189,7 @@ func TestParseWave3InvalidModifierCombos(t *testing.T) {
 		if w.Name != src {
 			t.Errorf("%q: a non-alphabet suffix must keep the whole token as the word name, got %q", src, w.Name)
 		}
-		if w.ForceUsurp || w.ForceRef || w.ForceStack || w.ForceForward {
+		if w.ForceUsurp || w.ForceVal || w.ForceStack || w.ForceForward {
 			t.Errorf("%q: a non-alphabet suffix must not set any flag: %+v", src, w)
 		}
 	}

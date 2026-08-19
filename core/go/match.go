@@ -129,7 +129,7 @@ func patternsOk(sig *Signature, positions []int, tape *Tape, fwd int, r *Registr
 // pruning keeps evaluation gating in lockstep with dispatch — without
 // it, fn's `tnot List` triple sig kept a spec-list call's 3-token
 // window open and pre-evaluated the NEXT statement's paren group
-// (`def sub2 fn [list] (sub2/r) …` failed on the not-yet-installed
+// (`def sub2 fn [list] (sub2/v) …` failed on the not-yet-installed
 // name). Keep the skip rules here mirrored with patternsOk: structural
 // map patterns and non-concrete patterns are NOT enforced on forward
 // positions.

@@ -63,8 +63,8 @@ export interface WordInfo {
   argCount?: number;
   forceStack?: boolean;
   forceForward?: boolean;
-  /** Resolve the binding without invoking it (`/r`). */
-  forceRef?: boolean;
+  /** Resolve the binding without invoking it (`/v`). */
+  forceVal?: boolean;
   /** Wrap the bound function with reversed signature argument order (`/u`). */
   forceUsurp?: boolean;
   /**
@@ -1097,12 +1097,12 @@ export function newSplice(payload: Value): Value {
 }
 
 /**
- * Dispatch-mod marker (`Word/__DM`): `/r` (leave the function as
- * data) / `/q` (treat the result as data) group modifiers, emitted
- * AFTER the group. Mirrors Go DispatchModInfo.
+ * Dispatch-mod marker (`Word/__DM`): `/v` (take the binding's value,
+ * disabling any call) / `/q` (treat the result as data) group
+ * modifiers, emitted AFTER the group. Mirrors Go DispatchModInfo.
  */
 export interface DispatchModInfo {
-  ref: boolean;
+  val: boolean;
   quote: boolean;
 }
 

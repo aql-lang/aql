@@ -53,7 +53,7 @@ print
 print ""
 print "== P2: a fn's canon must re-parse to the same function =="
 def sq fn x:Number Number [mul x x]
-print (StringUtil.concat ["   named canon = " (canon (sq/r))])
+print (StringUtil.concat ["   named canon = " (canon (sq/v))])
 print
 (StringUtil.concat
       ["   anon  canon = " (canon (fn x:Number Number [mul x x]))]
@@ -75,11 +75,11 @@ print ""
 print
 "== P3: name-independence — a fn's canon must not carry its binding =="
 def sq2 fn x:Number Number [mul x x]
-print (StringUtil.concat ["   canon (sq/r)  = " (canon (sq/r))])
-print (StringUtil.concat ["   canon (sq2/r) = " (canon (sq2/r))])
+print (StringUtil.concat ["   canon (sq/v)  = " (canon (sq/v))])
+print (StringUtil.concat ["   canon (sq2/v) = " (canon (sq2/v))])
 print
 (StringUtil.concat
-      [(if (eq (canon (sq/r)) (canon (sq2/r))) ["PASS  "] ["FAIL  "])
+      [(if (eq (canon (sq/v)) (canon (sq2/v))) ["PASS  "] ["FAIL  "])
           "identical bodies canon identically"
       ]
   )
@@ -118,10 +118,10 @@ print
 "   what the caller means while leaving the caller's canon untouched."
 def dbl fn n:Number Number [mul n 2]
 def usedbl fn n:Number Number [dbl n]
-def h-before (BinUtil.fnv64 (canon (usedbl/r)))
+def h-before (BinUtil.fnv64 (canon (usedbl/v)))
 def v-before (usedbl 5)
 def dbl fn n:Number Number [mul n 100]
-def h-after (BinUtil.fnv64 (canon (usedbl/r)))
+def h-after (BinUtil.fnv64 (canon (usedbl/v)))
 def v-after (usedbl 5)
 print
 (StringUtil.concat
@@ -145,12 +145,12 @@ print ""
 print "== P6: macros are a dependency the hash cannot see =="
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
 def usem fn n:Number Any [unless (n eq 0) [n]]
-print (StringUtil.concat ["   canon (usem/r) = " (canon (usem/r))])
+print (StringUtil.concat ["   canon (usem/v) = " (canon (usem/v))])
 print
 "   the macro call survives unexpanded, so a macro edit is invisible"
 print
 (StringUtil.concat
-      [(if (StringUtil.contains "unless" (canon (usem/r)))
+      [(if (StringUtil.contains "unless" (canon (usem/v)))
               ["FAIL  "] ["PASS  "]
           )
           "canon shows the expansion rather than the macro call"
@@ -162,7 +162,7 @@ print
 "== P7: cycles — mutual recursion renders by name, so canon terminates =="
 def isodd fn n:Number Any [if (n eq 0) [false] [iseven (sub n 1)]]
 def iseven fn n:Number Any [if (n eq 0) [true] [isodd (sub n 1)]]
-print (StringUtil.concat ["   canon (isodd/r) = " (canon (isodd/r))])
+print (StringUtil.concat ["   canon (isodd/v) = " (canon (isodd/v))])
 print "PASS  canon terminates on a cycle"
 print
 "   NOTE: passes only because canon does NOT follow references — the"

@@ -271,13 +271,13 @@ func toCarrier(v core.Value) core.Value {
 	if core.IsWord(v) || core.IsForward(v) || core.IsMark(v) || core.IsMove(v) ||
 		core.IsOpenParen(v) || core.IsParenExpr(v) || core.IsInterpString(v) || core.IsXmlInterp(v) ||
 		core.IsReturnCheck(v) || core.IsDefCleanup(v) || core.IsDispatchMod(v) {
-		// A `/r`/`/q` dispatch-modifier marker (Word/__DM, parser-emitted right
+		// A `/v`/`/q` dispatch-modifier marker (Word/__DM, parser-emitted right
 		// after a paren / dotted-path group) is a control token too: stripping
 		// it to a payload-less carrier made check mode UNABLE to consume it
 		// (execFnDefLiteral's peek reads the DispatchModInfo) or drop it
 		// standalone (stepLiteral's IsDispatchMod drop) — the marker then
 		// leaked into the check stack as a phantom value the runtime never
-		// has (`([x:Any] => [x])/r is T` bound `is` to the marker instead of
+		// has (`([x:Any] => [x])/v is T` bound `is` to the marker instead of
 		// the lambda). Kept verbatim, check mode parks/drops it exactly as
 		// the interpreter does (Stage M2d).
 		return v

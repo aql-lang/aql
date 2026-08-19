@@ -179,11 +179,11 @@ func TestW8MatchSignatureForwardTypePathMismatch(t *testing.T) {
 }
 
 func TestW8MatchSignatureForwardRefWordTypeGate(t *testing.T) {
-	// A `/r`-marked fn word in the forward window (NUR050/G12): a slot
+	// A `/v`-marked fn word in the forward window (NUR050/G12): a slot
 	// that admits its reference value claims it via the def-binding
 	// branch (post-ADR-011 the binding IS a Function), while a slot no
 	// Function can fill falls through to the 1.4 function-word stop —
-	// the /r claim is type-gated.
+	// the /v claim is type-gated.
 	r := covRegistry(t, nil)
 	r.RegisterNativeFunc(NativeFunc{Name: "w8refnat", Signatures: []Signature{
 		{Args: []*Type{TInteger}, BarrierPos: -1, Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -199,16 +199,16 @@ func TestW8MatchSignatureForwardRefWordTypeGate(t *testing.T) {
 	fn := mkFn(Signature{Args: []*Type{TFunction}, BarrierPos: 1})
 	sig, positions, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, nil)
 	if sig == nil || positions[0] != 1 {
-		t.Errorf("a /r word should claim the forward Function slot; sig=%v pos=%v", sig, positions)
+		t.Errorf("a /v word should claim the forward Function slot; sig=%v pos=%v", sig, positions)
 	}
-	// Negative pair: a String slot refuses the reference datum — the /r
+	// Negative pair: a String slot refuses the reference datum — the /v
 	// word stays a barrier and the sig goes unmatched.
 	e2 := NewTop(r)
 	e2.Tape = NewTape([]Value{NewInteger(0), NewWordRef("w8refnat")}, StackHeadroom)
 	e2.Pointer = 0
 	strFn := mkFn(Signature{Args: []*Type{TString}, BarrierPos: 1})
 	if sig, _, _ := e2.MatchSignature(strFn, WordInfo{ArgCount: -1}, nil); sig != nil {
-		t.Errorf("a /r word must not claim a String slot, got %v", sig)
+		t.Errorf("a /v word must not claim a String slot, got %v", sig)
 	}
 }
 
@@ -740,30 +740,30 @@ func TestW8ExecMatchEmptyPositions(t *testing.T) {
 	}
 }
 
-// --- /r and /u recorder push arms (direct) --------------------------------
+// --- /v and /u recorder push arms (direct) --------------------------------
 
 func TestW8StepWordRefRecorder(t *testing.T) {
-	// The /r path pushes the resolved Function as data and reports it to an
+	// The /v path pushes the resolved Function as data and reports it to an
 	// installed recorder via OnPushLit.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	e.SetRecorder(&w4CountRecorder{})
 	e.Tape = NewTape([]Value{NewWord("cadd")}, StackHeadroom)
 	e.Pointer = 0
-	if err := e.stepWordRef(NewWord("cadd"), WordInfo{Name: "cadd", ArgCount: -1, ForceRef: true}); err != nil {
-		t.Fatalf("stepWordRef: %v", err)
+	if err := e.stepWordVal(NewWord("cadd"), WordInfo{Name: "cadd", ArgCount: -1, ForceVal: true}); err != nil {
+		t.Fatalf("stepWordVal: %v", err)
 	}
 }
 
 func TestW8StepWordUsurpRefRecorder(t *testing.T) {
-	// The /ur path leaves the usurped wrapper as data and reports it to the
+	// The /uv path leaves the usurped wrapper as data and reports it to the
 	// recorder via OnPushLit.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	e.SetRecorder(&w4CountRecorder{})
 	e.Tape = NewTape([]Value{NewWord("cadd")}, StackHeadroom)
 	e.Pointer = 0
-	if err := e.stepWordUsurp(NewWord("cadd"), WordInfo{Name: "cadd", ArgCount: -1, ForceUsurp: true, ForceRef: true}); err != nil {
+	if err := e.stepWordUsurp(NewWord("cadd"), WordInfo{Name: "cadd", ArgCount: -1, ForceUsurp: true, ForceVal: true}); err != nil {
 		t.Fatalf("stepWordUsurp: %v", err)
 	}
 }

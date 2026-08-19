@@ -380,7 +380,7 @@ func TestFormatMapEntryForms(t *testing.T) {
 		{"digit+force shorthand", "{foo/2s}\n", "{foo:foo/2s}\n"},
 		{"qs shorthand", "{foo/qs}\n", "{foo:foo/qs}\n"},
 		{"double force not a modifier", "{foo/ff}\n", "{foo/ff:foo/ff}\n"},
-		{"double qr not a modifier", "{foo/qr}\n", "{foo/qr:foo/qr}\n"},
+		{"double qr not a modifier", "{foo/qv}\n", "{foo/qv:foo/qv}\n"},
 		{"double q not a modifier", "{foo/qq}\n", "{foo/qq:foo/qq}\n"},
 		{"split digit runs not a modifier", "{foo/1s2}\n", "{foo/1s2:foo/1s2}\n"},
 		{"unknown modifier char not stripped", "{foo/x}\n", "{foo/x:foo/x}\n"},
@@ -401,7 +401,7 @@ func TestFormatMapEntryForms(t *testing.T) {
 func TestWordBaseNameDirect(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"foo", "foo"},
-		{"foo/r", "foo"},
+		{"foo/v", "foo"},
 		{"foo/q", "foo"},
 		{"foo/s", "foo"},
 		{"foo/f", "foo"},
@@ -412,7 +412,7 @@ func TestWordBaseNameDirect(t *testing.T) {
 		{"foo/", "foo/"},
 		{"foo/x", "foo/x"},
 		{"foo/ff", "foo/ff"},
-		{"foo/rr", "foo/rr"},
+		{"foo/vv", "foo/vv"},
 		{"foo/1s2", "foo/1s2"},
 		{"a/b/q", "a/b"},
 	}

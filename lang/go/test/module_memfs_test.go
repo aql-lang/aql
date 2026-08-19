@@ -102,7 +102,7 @@ func TestMemFSModuleStringExport(t *testing.T) {
 func TestMemFSModuleFunctionExport(t *testing.T) {
 	files := map[string]string{
 		"math.boru": `def double fn [[n:Integer] [Integer] [n add n]]
-export "Math" {double:double/r}`,
+export "Math" {double:double/v}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./math.boru"`,
@@ -114,15 +114,15 @@ export "Math" {double:double/r}`,
 	assertResult(t, result, "10")
 }
 
-// A 0-arg function exported via /r is stored as the function (not fired
+// A 0-arg function exported via /v is stored as the function (not fired
 // while the export map is built) and dispatches when accessed as
 // `pkg.fn`. The export map auto-evaluates, so a bare `zero` would fire
 // its 0-arg signature there and freeze the export to zero's result; the
-// /r ref is resolved to the fn value directly instead.
+// /v ref is resolved to the fn value directly instead.
 func TestMemFSModuleZeroArgFunctionExport(t *testing.T) {
 	files := map[string]string{
 		"z.boru": `def zero fn [[] [Integer] [42]]
-export "Z" {zero:zero/r}`,
+export "Z" {zero:zero/v}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./z.boru"`,
@@ -134,10 +134,10 @@ export "Z" {zero:zero/r}`,
 	assertResult(t, result, "42")
 }
 
-// Negative: a bare function export (no /r) is auto-evaluated and
+// Negative: a bare function export (no /v) is auto-evaluated and
 // dispatched while the export map is built — a fn needing args has no
 // matching 0-arg signature, so it errors rather than silently exporting
-// a reference. Functions must be exported with /r.
+// a reference. Functions must be exported with /v.
 func TestMemFSModuleBareFunctionExportErrors(t *testing.T) {
 	files := map[string]string{
 		"math.boru": `def double fn [[n:Integer] [Integer] [n add n]]
@@ -147,7 +147,7 @@ export "Math" {double:double}`,
 		`import "./math.boru"`,
 	})
 	if err == nil {
-		t.Fatal("expected error: a bare fn export dispatches at build time; use /r")
+		t.Fatal("expected error: a bare fn export dispatches at build time; use /v")
 	}
 }
 
@@ -190,9 +190,9 @@ func TestMemFSModuleCustomMain(t *testing.T) {
 func TestMemFSModuleTwoImports(t *testing.T) {
 	files := map[string]string{
 		"math.boru": `def add1 fn [[n:Integer] [Integer] [n add 1]]
-export "Math" {add1:add1/r}`,
+export "Math" {add1:add1/v}`,
 		"strings.boru": `def greet fn [[s:String] [String] ["hello " add s]]
-export "Strings" {greet:greet/r}`,
+export "Strings" {greet:greet/v}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./math.boru"`,

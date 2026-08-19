@@ -4,7 +4,7 @@ import "testing"
 
 // NUR059: canon gains SOURCE-form renderers for kinds that previously fell
 // through to Value.String's debug spelling. The `/`-modifier half is the
-// worst of them — `foo/r` and `foo/2` both rendered `word(foo)`, so the
+// worst of them — `foo/v` and `foo/2` both rendered `word(foo)`, so the
 // modifier was not mis-spelled but DROPPED, and re-parsing the canon
 // yielded a different program.
 //
@@ -18,15 +18,15 @@ func TestNUR059WordModifierRenders(t *testing.T) {
 	}{
 		{WordInfo{Name: "foo", ArgCount: -1}, "foo"},
 		{WordInfo{Name: "foo", ArgCount: 2}, "foo/2"},
-		{WordInfo{Name: "foo", ArgCount: -1, ForceRef: true}, "foo/r"},
+		{WordInfo{Name: "foo", ArgCount: -1, ForceVal: true}, "foo/v"},
 		{WordInfo{Name: "foo", ArgCount: -1, ForceUsurp: true}, "foo/u"},
 		{WordInfo{Name: "foo", ArgCount: -1, ForceStack: true}, "foo/s"},
 		{WordInfo{Name: "foo", ArgCount: -1, ForceForward: true}, "foo/f"},
 		// Combinations render in the canonical order — digits, f|s, u, r —
 		// whatever order they were written in, so the render re-parses and
 		// canon stays a usable sort key.
-		{WordInfo{Name: "foo", ArgCount: -1, ForceUsurp: true, ForceRef: true}, "foo/ur"},
-		{WordInfo{Name: "foo", ArgCount: 3, ForceStack: true, ForceRef: true}, "foo/3sr"},
+		{WordInfo{Name: "foo", ArgCount: -1, ForceUsurp: true, ForceVal: true}, "foo/uv"},
+		{WordInfo{Name: "foo", ArgCount: 3, ForceStack: true, ForceVal: true}, "foo/3sv"},
 		// f and s are exclusive; f wins the switch, which is the arm order
 		// scanWordModifier's own validation makes unreachable from source.
 		{WordInfo{Name: "foo", ArgCount: -1, ForceForward: true, ForceStack: true}, "foo/f"},

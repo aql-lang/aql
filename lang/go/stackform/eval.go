@@ -55,10 +55,10 @@ func flattenStamped(form *StackForm) ([]core.Value, map[string]bool) {
 			// (core's stepLiteral); only a Quoted one stays data. In a
 			// strict-stack form a function that should be called is a
 			// Call op, so a PushLit of one is by construction data —
-			// the `/r`-held reference the recorder saw. Marking it
+			// the `/v`-held reference the recorder saw. Marking it
 			// Quoted is what keeps it inert through the replay.
 			//
-			// But Quoted is STICKY where `/r` is positional
+			// But Quoted is STICKY where `/v` is positional
 			// (design/FUNCTION-VALUE-SCOPE.0.md §12.6), so the mark is
 			// not free: left in place it travels out on the result and
 			// the replayed value is permanently inert where the

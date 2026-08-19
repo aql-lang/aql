@@ -67,4 +67,4 @@ def s3c-req fn
 
 def s3c-dial fn addr:String Any [Net.connect-raw {tcp:addr}]
 
-export "MiniS3Client" {dial:s3c-dial/r req:s3c-req/r}
+export "MiniS3Client" {dial:s3c-dial/v req:s3c-req/v}

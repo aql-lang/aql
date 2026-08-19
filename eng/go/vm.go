@@ -829,10 +829,10 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 	// at the paren collapse of a WORD-read arrival, where the interpreter's
 	// substitution strips one quote level before the auto-apply). A compiled
 	// LOCAL push carries the STORED value verbatim — including the
-	// construction-time quote of a `/r` reference or a `quote (fn …)` arg —
+	// construction-time quote of a `/v` reference or a `quote (fn …)` arg —
 	// so mirror the read here: strip Quoted from the applied copy (probe-
 	// found off-corpus divergence: `[1 2] each [(1 2 c)]` with c bound from
-	// `(…)/r` islanded the still-quoted fn as INERT and compiled [[1 1]] vs
+	// `(…)/v` islanded the still-quoted fn as INERT and compiled [[1 1]] vs
 	// the interpreter's [[3 3]]). The strip is sound ONLY for a substituted
 	// arrival: RecordDynApply declines an EVENT-provenance fn (a direct call
 	// result, which the interpreter does NOT substitute and whose runtime
@@ -883,7 +883,7 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 
 // callDynApplyTop is callDynTrailTop under the `apply` WORD's semantics
 // (Stage M2a, OpCallDynApplyTop): the interpreter's applyHandler UNQUOTES the
-// fn value and re-steps it against the preceding stack, so a /r-parked
+// fn value and re-steps it against the preceding stack, so a /v-parked
 // (Quoted) fn value applies here where the paren-bounded trailing apply would
 // leave it as data. The n args below the fn bind top-down (top arg → first
 // param), identical to callDynTrailTop's reversed-window forward bind. A
@@ -944,7 +944,7 @@ func (vc *vmContext) callDynApplyTop(reg *core.Registry, n int, stack []core.Val
 // with spec.NOut results committed downstream. So unlike callDynamic —
 // where a non-callable value soundly stays as the residual — EVERY
 // shape-claim failure here defers to the interpreter via internal_error
-// (runtimeShouldFallback): a non-callable or /r-parked (Quoted) value, or
+// (runtimeShouldFallback): a non-callable or /v-parked (Quoted) value, or
 // a result count differing from the claim. The apply itself is the proven
 // boundary machinery: a compiled closure runs VM-native, a
 // trivial-delegation method dispatches its inner native directly, and any
@@ -1129,7 +1129,7 @@ func (vc *vmContext) tryNativeFnApply(fnDef core.FnDefInfo, args []core.Value) (
 		return nil, false, nil
 	}
 	// A BORU-BODIED overload resolved in a FOREIGN sub-registry (a module-
-	// preamble fn reached through its /r delegation export, e.g. Repl.serve)
+	// preamble fn reached through its /v delegation export, e.g. Repl.serve)
 	// must not run its body-splicing handler against the dispatching
 	// registry: the body's words resolve in the module's own scope
 	// (module-private helpers), which only the interpreter's foreign-wrapper
@@ -1634,7 +1634,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			// Per-export module policy gate (NUR045): a baked module
 			// native (`TimeUtil.sleep 800` — the direct compiled route)
 			// carries the stamped identity on its recorded sig; the
-			// rebound laundering path (`def s TimeUtil.sleep/r  s 300`)
+			// rebound laundering path (`def s TimeUtil.sleep/v  s 300`)
 			// baked a stamped copy too, whatever s.Word says.
 			if err := vc.gateModuleCall(curReg, s.Sig.ModuleCall); err != nil {
 				return nil, err

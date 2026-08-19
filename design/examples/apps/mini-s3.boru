@@ -322,4 +322,4 @@ def s3-serve fn opts:Map Any [
     ([conn:Any] => [s3-conn conn store])
 ]
 
-export "MiniS3" {serve:s3-serve/r}
+export "MiniS3" {serve:s3-serve/v}

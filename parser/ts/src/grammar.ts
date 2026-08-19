@@ -697,7 +697,7 @@ export function setupValRule(j: any, t: ParserTokens): void {
   // context (top level, lists, parens) the dot tokens are already
   // folded into `get`/`getr` calls by convertTopLevelItems, because
   // those contexts collect a flat item sequence. But a MAP VALUE is a
-  // single `val`: once `bf` is parsed jsonic has no rule for the
+  // single `valof`: once `bf` is parsed jsonic has no rule for the
   // trailing `.`, so `{n: bf.n}` errored with `unexpected character`.
   //
   // This Close alternate folds the receiver value plus the trailing

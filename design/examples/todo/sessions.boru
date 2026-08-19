@@ -17,8 +17,8 @@ import "boru:serve"
 import "presence.boru"          # the raw-process presence actor
 
 export "Sessions" {
-  New:           New/r
-  presence-name: presence-name/r    # shared so notify.boru can `whereis` a user
+  New:           New/v
+  presence-name: presence-name/v    # shared so notify.boru can `whereis` a user
 }
 
 # `New {}` -> Service

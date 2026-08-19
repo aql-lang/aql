@@ -6,11 +6,11 @@ import (
 )
 
 // Coverage for the Function-value dispatch paths in engine.go:
-// execFnDefLiteral (fn values at the pointer: forward collection, /r
+// execFnDefLiteral (fn values at the pointer: forward collection, /v
 // dispatch mods, anonymous vs named, foreign sub-registry wrappers),
 // ExecFnDefSigStackMatch, execFnDefSig (body splice + CallBoru arms),
 // compileFnDef, sigParamsCorrespond, trivialDelegationTarget,
-// upcomingArgs, and the /u (stepWordUsurp) and /r (stepWordRef)
+// upcomingArgs, and the /u (stepWordUsurp) and /v (stepWordVal)
 // modifier paths. Reuses covRegistry/runDifferential from
 // compile_pipeline_cov_test.go.
 
@@ -141,7 +141,7 @@ func TestFnValueDispatchModLeavesInert(t *testing.T) {
 		parenBody(NewWord("a")),
 	)
 	out, err := NewTop(r).Run([]Value{
-		fnv, NewDispatchMod(DispatchModInfo{Ref: true}), NewInteger(5),
+		fnv, NewDispatchMod(DispatchModInfo{Val: true}), NewInteger(5),
 	})
 	if err != nil {
 		t.Fatalf("dispatch mod: %v", err)
@@ -155,7 +155,7 @@ func TestDanglingDispatchModDropped(t *testing.T) {
 	// A __DM marker after a NON-function value is a no-op: dropped.
 	r := covRegistry(t, nil)
 	out, err := NewTop(r).Run([]Value{
-		NewInteger(7), NewDispatchMod(DispatchModInfo{Ref: true}),
+		NewInteger(7), NewDispatchMod(DispatchModInfo{Val: true}),
 	})
 	if err != nil {
 		t.Fatalf("dangling mod: %v", err)
@@ -549,7 +549,7 @@ func TestCompileFnDefIdempotent(t *testing.T) {
 	}
 }
 
-// --- /u usurp and /r ref modifier paths -----------------------------------------
+// --- /u usurp and /v ref modifier paths -----------------------------------------
 
 func registerCsub(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
@@ -588,14 +588,14 @@ func TestUsurpReversesArgOrder(t *testing.T) {
 }
 
 func TestUsurpRefLeavesData(t *testing.T) {
-	// /ur: the usurped wrapper stays inert data.
+	// /uv: the usurped wrapper stays inert data.
 	r := covRegistry(t, registerCsub)
 	out, err := NewTop(r).Run([]Value{NewWordUsurp("csub", true)})
 	if err != nil {
-		t.Fatalf("/ur: %v", err)
+		t.Fatalf("/uv: %v", err)
 	}
 	if len(out) != 1 || !IsFunctionRef(out[0]) {
-		t.Errorf("/ur did not leave a function value: %s", renderAll(out))
+		t.Errorf("/uv did not leave a function value: %s", renderAll(out))
 	}
 }
 
@@ -620,10 +620,10 @@ func TestWordRefResolvesFunction(t *testing.T) {
 	r := covRegistry(t, nil)
 	out, err := NewTop(r).Run([]Value{NewWordRef("cadd")})
 	if err != nil {
-		t.Fatalf("/r: %v", err)
+		t.Fatalf("/v: %v", err)
 	}
 	if len(out) != 1 || !IsFunctionRef(out[0]) {
-		t.Errorf("/r did not push a function value: %s", renderAll(out))
+		t.Errorf("/v did not push a function value: %s", renderAll(out))
 	}
 }
 
@@ -631,16 +631,26 @@ func TestWordRefUndefinedErrors(t *testing.T) {
 	r := covRegistry(t, nil)
 	_, err := NewTop(r).Run([]Value{NewWordRef("no_such_word")})
 	if err == nil || !strings.Contains(err.Error(), "undefined_word") {
-		t.Errorf("/r undefined: err = %v", err)
+		t.Errorf("/v undefined: err = %v", err)
 	}
 }
 
-func TestWordRefNonFunctionErrors(t *testing.T) {
+// TestWordValNonFunctionIsTheValue: `/v` is TOTAL over binding kinds —
+// for a non-fn binding it is the identity, not an error. The negative
+// twin is TestWordRefUndefinedErrors above: an UNBOUND name still
+// refuses, because there is no value to take.
+func TestWordValNonFunctionIsTheValue(t *testing.T) {
 	r := covRegistry(t, nil)
 	InstallDef(r, "plainv", NewInteger(2))
-	_, err := NewTop(r).Run([]Value{NewWordRef("plainv")})
-	if err == nil || !strings.Contains(err.Error(), "illegal_ref") {
-		t.Errorf("/r non-fn: err = %v", err)
+	out, err := NewTop(r).Run([]Value{NewWordRef("plainv")})
+	if err != nil {
+		t.Fatalf("/v non-fn: unexpected error: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("/v non-fn: got %v, want exactly one value", out)
+	}
+	if got, gerr := AsInteger(out[0]); gerr != nil || got != 2 {
+		t.Errorf("/v non-fn: got %v (err %v), want 2", out[0], gerr)
 	}
 }
 

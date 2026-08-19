@@ -29,7 +29,7 @@ func TestServeRawHandlerResolvesDefiningModule(t *testing.T) {
 			"def onconn fn [[conn:Any] [Any] [\n"+
 			"  Net.send-bytes (convert Bytes (greet 0)) conn\n"+
 			"]]\n"+
-			"export \"G\" { onconn: onconn/r }\n"), 0o600); err != nil {
+			"export \"G\" { onconn: onconn/v }\n"), 0o600); err != nil {
 		t.Fatalf("write module: %v", err)
 	}
 

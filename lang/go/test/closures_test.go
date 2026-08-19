@@ -396,41 +396,41 @@ func TestClosureArgsStaysDynamic(t *testing.T) {
 // L — Frame param shadows a colliding caller binding (per-call cleanup
 // over-pop fix). A callee whose Function parameter name collides with the
 // caller's same-named parameter — the classic comparator threaded through a
-// `/r`-parked arg — must SHADOW the caller's binding (push depth+1) and tear
+// `/v`-parked arg — must SHADOW the caller's binding (push depth+1) and tear
 // back down to exactly the caller's level on frame exit, not destroy it at
 // install time. Pre-fix, installing the callee's `comp` ran the same-scope
 // overlap-redefinition filter, which DROPPED the caller's `comp`; the undef
 // cleanup tail then over-popped the survivor to depth 0, so the SECOND
-// `comp/r h` errored `undefined word: comp`. See
+// `comp/v h` errored `undefined word: comp`. See
 // design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md and InstallFrameBinding.
 func TestFrameParamShadowsCollidingFunctionParam(t *testing.T) {
 	// buildFnBodyHandler path: a named-param fn (h) invoked via a helper,
 	// whose Function param `comp` collides with caller t's `comp`, reused twice.
 	out, err := runNativeSteps(t, nil, []string{
 		`def g ([x:Integer] => [x add 1])`,
-		`def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply]]`,
-		`def t fn [[comp:Function] [Integer] [ def a (5 comp/r h)  def b (7 comp/r h)  a add b ]]`,
-		`g/r t`,
+		`def h fn [[comp:Function v:Integer] [Integer] [v comp/v apply]]`,
+		`def t fn [[comp:Function] [Integer] [ def a (5 comp/v h)  def b (7 comp/v h)  a add b ]]`,
+		`g/v t`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := intResult(t, out); got != 14 {
-		t.Errorf("g/r t → %d, want 14 (g(5)+g(7)=6+8); pre-fix errored `undefined word: comp` on the 2nd use", got)
+		t.Errorf("g/v t → %d, want 14 (g(5)+g(7)=6+8); pre-fix errored `undefined word: comp` on the 2nd use", got)
 	}
 
-	// Direct comp/r apply (execFnDefSig path) reusing the colliding param twice
+	// Direct comp/v apply (execFnDefSig path) reusing the colliding param twice
 	// in one frame.
 	out, err = runNativeSteps(t, nil, []string{
 		`def g ([x:Integer] => [x add 1])`,
-		`def t fn [[comp:Function] [Integer] [ (5 comp/r apply) add (7 comp/r apply) ]]`,
-		`g/r t`,
+		`def t fn [[comp:Function] [Integer] [ (5 comp/v apply) add (7 comp/v apply) ]]`,
+		`g/v t`,
 	})
 	if err != nil {
 		t.Fatalf("run (apply path): %v", err)
 	}
 	if got := intResult(t, out); got != 14 {
-		t.Errorf("apply path g/r t → %d, want 14", got)
+		t.Errorf("apply path g/v t → %d, want 14", got)
 	}
 }
 

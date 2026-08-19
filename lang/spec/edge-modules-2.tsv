@@ -62,10 +62,10 @@ import "boru:logic-util" LogicUtil.xnor true true	true	two trues agree
 import "boru:logic-util" LogicUtil.iff false false	true	iff of two falses holds
 #
 # §8  module fns — arity, templates, and higher-order use
-import module [def f3 fn [[a:Integer b:Integer c:Integer] [Integer] [((a mul 100) add (b mul 10)) add c]] export "M" {f3: f3/r}] M.f3 1 2 3	123	three forward args bind in source order
-import module [def f3 fn [[a:Integer b:Integer c:Integer] [Integer] [((a mul 100) add (b mul 10)) add c]] export "M" {f3: f3/r}] 1 2 3 M.f3	321	GOTCHA all-stack: sig position 0 is top of stack — the order reverses
-import module [def greet fn [[nm:String] [String] [`hi ${nm}`]] export "M" {greet: greet/r}] M.greet "bob"	'hi bob'	a template string in a module fn body interpolates module-side
-import module [def inc fn [[x:Integer] [Integer] [x add 1]] export "M" {inc: inc/r}] [1 2 3] each [M.inc]	[2 3 4]	a module fn drives a higher-order body
+import module [def f3 fn [[a:Integer b:Integer c:Integer] [Integer] [((a mul 100) add (b mul 10)) add c]] export "M" {f3: f3/v}] M.f3 1 2 3	123	three forward args bind in source order
+import module [def f3 fn [[a:Integer b:Integer c:Integer] [Integer] [((a mul 100) add (b mul 10)) add c]] export "M" {f3: f3/v}] 1 2 3 M.f3	321	GOTCHA all-stack: sig position 0 is top of stack — the order reverses
+import module [def greet fn [[nm:String] [String] [`hi ${nm}`]] export "M" {greet: greet/v}] M.greet "bob"	'hi bob'	a template string in a module fn body interpolates module-side
+import module [def inc fn [[x:Integer] [Integer] [x add 1]] export "M" {inc: inc/v}] [1 2 3] each [M.inc]	[2 3 4]	a module fn drives a higher-order body
 #
 # §9  export payload shapes II
 import module [export "M" {flag: true, nothing: none}] M.flag	true	Boolean exports are plain values
@@ -84,7 +84,7 @@ import "boru:math-util" MathUtil.min 2 1.5	1.5	mixed-type min promotes and compa
 import "boru:string-util" StringUtil.pad 5 "ab"	'ab   '	pad right-fills with spaces to the width
 #
 # §11  wrapper composition and collisions
-import module [def sq fn [[x:Integer] [Integer] [x mul x]] export "M" {sq: sq/r}] M.sq (M.sq 3)	81	a module fn nests inside its own argument position
+import module [def sq fn [[x:Integer] [Integer] [x mul x]] export "M" {sq: sq/v}] M.sq (M.sq 3)	81	a module fn nests inside its own argument position
 import module [export "MathUtil" {sqrt: 1}] import "boru:math-util" MathUtil.sqrt 16.0	4.0	a later builtin import shadows an inline export of the same namespace
 import module [def v 1 export "M" {v: v} def v 2] M.v	1	an export captures the value AT EXPORT TIME — a later body rebind is invisible
 import [[foo bar]] module [export "foo" {a:1}] bar.$name	'foo'	pair-renamed lowercase exports keep their declared $name

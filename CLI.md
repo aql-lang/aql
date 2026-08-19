@@ -448,7 +448,7 @@ table):
   function reached as a call (e.g. an imported `Pkg.fn`) with arguments
   that match none of its signatures. It errors at runtime too — the check
   reports the same finding at the same place, without running the
-  program. Write `Pkg.fn/r` when you mean to pass the function itself.
+  program. Write `Pkg.fn/v` when you mean to pass the function itself.
 * `unreachable_signature` — an `fn` overload that an earlier, more
   general overload already subsumes, so first-match dispatch can never
   reach it.

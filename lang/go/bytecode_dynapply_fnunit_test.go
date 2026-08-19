@@ -45,12 +45,12 @@ func TestFnUnitDynFrameApplyCompiles(t *testing.T) {
 	rows := []struct{ src, want string }{
 		// row 24: the bare read — the fn value is DATA both sides (a 1-arg
 		// callee cannot fire on the Function param below it).
-		{`import module [def keep fn [[Function] [Function] [args.0]] export "L" {keep: keep/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end typeof (L.keep L.mk)`, "[Function]"},
+		{`import module [def keep fn [[Function] [Function] [args.0]] export "L" {keep: keep/v, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end typeof (L.keep L.mk)`, "[Function]"},
 		// row 25: the paren apply fires exactly once.
-		{`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.useanon L.mk 14`, "[42]"},
+		{`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/v, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.useanon L.mk 14`, "[42]"},
 		// off-corpus: a 2-arg callee collects the frame's OTHER unnamed param
 		// from BELOW the apply window (14+14) — the replay's resolved prefix.
-		{`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, m2: (fn [[a:Integer b:Integer] [Integer] [a add b]])}] end L.useanon L.m2 14`, "[28]"},
+		{`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/v, m2: (fn [[a:Integer b:Integer] [Integer] [a add b]])}] end L.useanon L.m2 14`, "[28]"},
 	}
 	for _, c := range rows {
 		a, err := New()
@@ -78,7 +78,7 @@ func TestFnUnitDynFrameApplyCompiles(t *testing.T) {
 // row 31: a raise inside the value-dispatched body propagates out of the
 // replay as the same error.
 func TestFnUnitDynFrameApplyErrorPropagates(t *testing.T) {
-	src := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, bm: (fn [[x:Integer] [Integer] [raise oops_e "bang"]])}] end L.useanon L.bm 1`
+	src := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/v, bm: (fn [[x:Integer] [Integer] [raise oops_e "bang"]])}] end L.useanon L.bm 1`
 	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
 	if !compiled {
 		t.Fatalf("expected the compiled path, got fallback (errC=%v)", errC)
@@ -94,8 +94,8 @@ func TestFnUnitDynFrameApplyErrorPropagates(t *testing.T) {
 // interpreter (RetReplay count enforcement) with full parity.
 func TestFnUnitDynFrameRuntimeCountDefers(t *testing.T) {
 	rows := []string{
-		`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, ms: (fn [[s:String] [Integer] [5]])}] end L.useanon L.ms 14`,
-		`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, mp: (fn [[x:Integer] [Integer Integer] [x x]])}] end L.useanon L.mp 14`,
+		`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/v, ms: (fn [[s:String] [Integer] [5]])}] end L.useanon L.ms 14`,
+		`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/v, mp: (fn [[x:Integer] [Integer Integer] [x x]])}] end L.useanon L.mp 14`,
 	}
 	for _, src := range rows {
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
@@ -110,10 +110,10 @@ func TestFnUnitLoopApplyFlowCrossesIsland(t *testing.T) {
 	rows := []struct{ src, want string }{
 		// row 32: apply-LAST hoist; break in the applied body terminates the
 		// enclosing compiled loop (acc stops at 1).
-		{`import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/r, brk: (fn [[x:Integer] [Any] [break]])}] end L.looper L.brk`, "[1]"},
+		{`import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/v, brk: (fn [[x:Integer] [Any] [break]])}] end L.looper L.brk`, "[1]"},
 		// row 33: apply-FIRST source order; continue skips the statements
 		// after the apply on every iteration (acc stays 0).
-		{`import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [(args.0 1) def acc (acc add 1)] acc]] export "L" {looper: looper/r, skp: (fn [[x:Integer] [Any] [continue]])}] end L.looper L.skp`, "[0]"},
+		{`import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [(args.0 1) def acc (acc add 1)] acc]] export "L" {looper: looper/v, skp: (fn [[x:Integer] [Any] [continue]])}] end L.looper L.skp`, "[0]"},
 	}
 	for _, c := range rows {
 		a, err := New()
@@ -142,7 +142,7 @@ func TestFnUnitLoopApplyFlowCrossesIsland(t *testing.T) {
 // value per iteration — a runtime residual the static model cannot absorb,
 // deferring soundly.
 func TestFnUnitLoopApplyValueCalleeDefers(t *testing.T) {
-	src := `import module [def looper fn [[Function] [Integer] [def acc 0 for 3 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.looper L.mk`
+	src := `import module [def looper fn [[Function] [Integer] [def acc 0 for 3 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/v, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.looper L.mk`
 	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
 	if compiled {
 		t.Errorf("expected the runtime deferral (sound fallback), got a compiled run")
@@ -154,7 +154,7 @@ func TestFnUnitLoopApplyValueCalleeDefers(t *testing.T) {
 // translates the escaped signal, finds no open loop, and defers to the
 // interpreter, which raises the canonical flow_error — parity on the error.
 func TestFnUnitDynFrameBreakWithoutLoopDefers(t *testing.T) {
-	src := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, brk: (fn [[x:Integer] [Any] [break]])}] end L.useanon L.brk 1`
+	src := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/v, brk: (fn [[x:Integer] [Any] [break]])}] end L.useanon L.brk 1`
 	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
 	if compiled {
 		t.Errorf("expected the runtime deferral (no enclosing loop), got a compiled run")
@@ -194,7 +194,7 @@ func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 	}
 
 	// Effectful callee over the pure corpus body: compiles, fires once.
-	once := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, pk: (fn [[x:Integer] [Integer] [print "callee" x mul 2]])}] end L.useanon L.pk 14`
+	once := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/v, pk: (fn [[x:Integer] [Integer] [print "callee" x mul 2]])}] end L.useanon L.pk 14`
 	gotC, printedC, took, errC := runOut(once, true)
 	gotI, printedI, _, errI := runOut(once, false)
 	if !took || errC != nil {
@@ -207,7 +207,7 @@ func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 
 	// A statement AFTER the apply: the replay would reorder its effect ahead
 	// of the callee's — must refuse and fall back with identical output.
-	after := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1) print "after" drop]] export "L" {useanon: useanon/r, pk: (fn [[x:Integer] [Integer] [print "callee" x]])}] end L.useanon L.pk 14`
+	after := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1) print "after" drop]] export "L" {useanon: useanon/v, pk: (fn [[x:Integer] [Integer] [print "callee" x]])}] end L.useanon L.pk 14`
 	a, _ := New()
 	if prog, reason, _, _ := a.CompileCheck(after); prog != nil {
 		t.Errorf("a post-apply statement must refuse the replay (reason=%q):\n%s", reason, prog.Disassemble())
@@ -345,7 +345,7 @@ func TestUserPolyFramePreservesCallerDynBinds(t *testing.T) {
 }
 
 func TestModulePrivateTypeResolvesInUnitRegistry(t *testing.T) {
-	src := `import module [def Pos (refine Integer) def f fn [[x:Integer] [Boolean] [x is Pos]] export "L" {f: f/r}] end L.f 3`
+	src := `import module [def Pos (refine Integer) def f fn [[x:Integer] [Boolean] [x is Pos]] export "L" {f: f/v}] end L.f 3`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)

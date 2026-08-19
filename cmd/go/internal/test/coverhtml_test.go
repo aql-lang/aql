@@ -125,7 +125,7 @@ func TestRunCoverageWriteWarning(t *testing.T) {
 
 	dir := t.TempDir()
 	mod := write(t, filepath.Join(dir, "calc.boru"),
-		"def one fn [[] [Integer] [1]]\nexport \"Calc\" { one: one/r }\n")
+		"def one fn [[] [Integer] [1]]\nexport \"Calc\" { one: one/v }\n")
 	f := write(t, filepath.Join(dir, "calc_test.boru"),
 		"import \"boru:test\"\nimport \""+mod+"\"\nTest.test \"one\" [(Calc.one) 1 Assert.equal]\n")
 	code, _, stderr := runCmd("--coverage", "--coverage-dir", filepath.Join(dir, "cov"), "--no-compile", f)

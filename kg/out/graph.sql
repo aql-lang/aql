@@ -14,10 +14,11 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '6709712317143500879');
-INSERT INTO input_files VALUES ('../AGENTS.md', '4486509826690851738', 10656);
-INSERT INTO input_files VALUES ('../CLI.md', '879693357166092360', 82989);
-INSERT INTO input_files VALUES ('../README.md', '7037787103551177539', 12216);
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '6272116408757640488');
+INSERT INTO input_files VALUES ('../AGENTS.md', '9011969850467027120', 11174);
+INSERT INTO input_files VALUES ('../CLI.md', '4243301829870383948', 82989);
+INSERT INTO input_files VALUES ('../README.md', '3900868491047678767', 12398);
+INSERT INTO input_files VALUES ('../STYLE-GUIDE.md', '383652445936156987', 10339);
 INSERT INTO input_files VALUES ('../basic/go/go.mod', '592614718618454325', 457);
 INSERT INTO input_files VALUES ('../calc/go/go.mod', '6164707914494689882', 605);
 INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221);
@@ -33,14 +34,15 @@ INSERT INTO input_files VALUES ('../design/CANON-ROUNDTRIP.0.md', '1353161920241
 INSERT INTO input_files VALUES ('../design/CONTENT-ADDRESSING.0.md', '2493386413761043225', 18345);
 INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '7605485402373327537', 10411);
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
-INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '4337381568175830188', 3240);
+INSERT INTO input_files VALUES ('../design/DECLARATIVE-GRAMMAR.0.md', '3946353376704890703', 3246);
 INSERT INTO input_files VALUES ('../design/DIAGNOSTIC-VALUES.0.md', '4050607666584719300', 6665);
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
-INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '461252499723853380', 11344);
+INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '5680123931664569575', 11346);
 INSERT INTO input_files VALUES ('../design/FN-VALUE-OPEN-WORK.0.md', '8479443366485179161', 26190);
 INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '4913722754517353679', 65012);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
 INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '3044536311677551962', 23460);
+INSERT INTO input_files VALUES ('../design/HIGHER-ORDER-FUNCTIONS.0.md', '6040981997988514843', 38750);
 INSERT INTO input_files VALUES ('../design/HOT-CODE-LOADING.0.md', '27384681369847472', 19039);
 INSERT INTO input_files VALUES ('../design/LANG-ENG-CONTENT-AUDIT.0.md', '9151136880658015899', 42992);
 INSERT INTO input_files VALUES ('../design/MODULE-VIEWS.0.md', '570466612363092696', 22324);
@@ -60,7 +62,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '5798490287673095801', 500);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '1875770070848160677', 49001);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '7373311478507477235', 52243);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -192,6 +194,9 @@ INSERT INTO sources VALUES ('src:gomod:wpg', 'text', 'wpg/go.mod', 'wpg go.mod',
   "derived_from": "code",
   "repository": "boru-lang/boru"
 }');
+INSERT INTO sources VALUES ('src:higher-order-functions', 'text', 'design/HIGHER-ORDER-FUNCTIONS.0.md', 'higher-order functions: an empirical capability audit', NULL, 'higher-order-functions-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
 INSERT INTO sources VALUES ('src:hot-code-loading', 'text', 'design/HOT-CODE-LOADING.0.md', 'hot code loading: the mechanism report and reload design', NULL, 'hot-code-loading-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -208,6 +213,9 @@ INSERT INTO sources VALUES ('src:root-module', 'text', 'design/ROOT-MODULE-FEASI
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:state-machines', 'text', 'design/STATE-MACHINES.0.md', 'general-purpose state machines: the boru:state module', NULL, 'state-machines-2026-08-14', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:style-guide', 'text', 'STYLE-GUIDE.md', 'boru style guide: house style for boru source', NULL, 'style-guide-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:ts-parity-audit', 'text', 'design/TS-PARITY-AUDIT.0.md', 'parser twin parity audit', NULL, 'ts-parity-audit-2026-08', 'primary', '{
@@ -271,8 +279,11 @@ INSERT INTO entities VALUES ('ent:Document:6176355086953937469', 'Document', 'TU
 INSERT INTO entities VALUES ('ent:Document:6186742803977787158', 'Document', 'design/BORU-SCRY.0.md', 'design/boru-scry.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:6186742803977787158', 'role', 'the boru:scry proposal: the mechanism whereby a boru system gains knowledge of itself as plain data — census, per-word, graph, schema and trace words curated over existing engine seams, and the plan for resolving the overlap with boru:debug');
 INSERT INTO entities VALUES ('ent:Document:6369673620858945660', 'Document', 'eng/go/CLAUDE.md', 'eng/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:6399157315994008191', 'Document', 'STYLE-GUIDE.md', 'style-guide.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:6779251111015546106', 'Document', 'design/DIAGNOSTIC-VALUES.0.md', 'design/diagnostic-values.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:6779251111015546106', 'role', 'the proposed rule that a diagnostic names the values it is about rather than describing them — recorded in design, not ADR.md, pending a maintainer ruling: the return-count error reported arithmetic and withheld the one thing identifying the fault, the count-and-values agreement corollary (callers pass exactly the slice the count was taken over), the single-builder byte-identity contract across interpreter, VM and checker, the abbreviate-never-truncate policy and its two nesting levels through diagMaxListHead, and the open sweep across no_signature, the arity errors and describeStackTypes');
+INSERT INTO entities VALUES ('ent:Document:7150928906920308588', 'Document', 'design/HIGHER-ORDER-FUNCTIONS.0.md', 'design/higher-order-functions.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:7150928906920308588', 'role', 'the empirical audit of higher-order support and combinator expressibility, run against a built binary rather than read from the design notes (a POINT-IN-TIME report, 2026-08-19): what was actually built and run — SKI with I derived as S K K, BCKW, U-combinator anonymous recursion, Church numerals and pairs, CPS, a parser-combinator library, closures over fn-locals that outlive their scope — and the one construction that resisted every spelling, Church and/or; a capability comparison against Haskell, Scheme, JavaScript and Factor; and the call-vs-value gotcha cluster that only surfaces once a function value flows through a PARAMETER: a bare name calls where /r refused so no name-based read was total over both kinds — CLOSED by the 2026-08-19 /r->/v rename that made the value read total (NUR085, retired), the four code-body iterators taking a Function callback over a Map but not a List where filter takes both (NUR086), a branch-local def lost to the checker after a Function-parameter call so boru run refuses a working program (NUR087), the capitalised-name predicate-type collision, the context-dependent application of a paren-collapsed function, and the confirmation that NUR073 reproduces with the PLAIN default invocation siding with the compiler while -no-compile disagrees, exit 0 both ways');
 INSERT INTO entities VALUES ('ent:Document:7550033050871776514', 'Document', 'design/FN-OUTPUT-SIG.0.md', 'design/fn-output-sig.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:7550033050871776514', 'role', 'why an fn triple''s output slot is always the types the returns must match, never values to splice: the return-by-value sugar classified the slot before parsing it, so the implicit map a `name:Type` pair lowers to was read as a concrete return and appended to the body — a spurious return-count error, or a silently wrong answer with a clean `check --pedantic` when the body''s net stack effect was zero; why patching IsSigTypeValue a fourth time was the wrong fix (three prior arms record the identical symptom, and the predicate fails OPEN into a semantic change); the rule that a literal in the output slot is a literal TYPE admitting exactly itself (ADR-010); the String/Atom literal fallback gated on type-name SHAPE so a misspelled `Integr` stays a loud error; the one behaviour lost (the bodiless base case); the declaration-span fix that makes both spellings diagnose alike; the describe/inspect under-report; and the open interpreter-vs-VM divergence on an empty body''s frame residual that deleting the sugar made reachable');
 INSERT INTO entities VALUES ('ent:Document:7583878321315113890', 'Document', 'design/TABNAS-UPSTREAM-FIRST.0.md', 'design/tabnas-upstream-first.0.md', 'accepted');
@@ -512,6 +523,8 @@ INSERT INTO assertions VALUES ('ast:1870579735210236434', 'ent:Document:21684488
 INSERT INTO assertion_evidence VALUES ('ast:1870579735210236434', 'src:boru-viz', 'title', 'boru:viz — diagram source generation from arbitrary data structures', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1910960561653111690', 'ent:SoftwareModule:4765954660468613608', 'part_of', 'entity', 'ent:SoftwareModule:5138375578915662736', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1910960561653111690', 'src:go-tree', 'test/go/cliexamples', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:2070835762610911946', 'ent:Document:6399157315994008191', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:2070835762610911946', 'src:readme', 'Documentation', 'Style Guide', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2099674608751247787', 'ent:SoftwareModule:5138375578915662736', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2099674608751247787', 'src:go-work', 'use block', './test/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:2132946225724718620', 'ent:SoftwareModule:7327774866203707838', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/tools/piecetool"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -634,6 +647,8 @@ INSERT INTO assertions VALUES ('ast:4932254227310747047', 'ent:SoftwareModule:68
 INSERT INTO assertion_evidence VALUES ('ast:4932254227310747047', 'src:gomod:compiler-go', 'module directive', 'module github.com/boru-lang/boru/compiler/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4950098273738144333', 'ent:SoftwareModule:4598127138166596702', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/test/solardemo"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4950098273738144333', 'src:gomod:test-solardemo', 'module directive', 'module github.com/boru-lang/boru/test/solardemo', 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:495477549671021218', 'ent:Document:7150928906920308588', 'supports', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:495477549671021218', 'src:higher-order-functions', '3. The one rule that explains most of the surprises', 'That rule is coherent, and it is the source of every', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5127918679616522004', 'ent:Document:8799605016341004740', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5127918679616522004', 'src:ts-parity-audit', 'title', 'TS-PARITY-AUDIT.0 — the parser battery does not agree with parser/go', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5214003688923155039', 'ent:SoftwareModule:6706536563979604982', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -676,6 +691,8 @@ INSERT INTO assertions VALUES ('ast:6112159793123999904', 'ent:Document:45296818
 INSERT INTO assertion_evidence VALUES ('ast:6112159793123999904', 'src:module-views', 'title', 'Design for **module-provided views and widgets** in boru', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:6197320912878839009', 'ent:Document:3534903004749141856', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:6197320912878839009', 'src:content-addressing', 'title', 'CONTENT-ADDRESSING.0 — identity by hash, and what it would actually take', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:6285382390607556889', 'ent:Document:7150928906920308588', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:6285382390607556889', 'src:higher-order-functions', 'title', 'Higher-Order Functions in boru', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:6294168041362264130', 'ent:SoftwareModule:2013670336276694550', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/core/go"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:6294168041362264130', 'src:gomod:core-go', 'module directive', 'module github.com/boru-lang/boru/core/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:6299681106539820881', 'ent:Document:6186742803977787158', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -776,6 +793,8 @@ INSERT INTO assertions VALUES ('ast:8989313594377163134', 'ent:SoftwareModule:22
 INSERT INTO assertion_evidence VALUES ('ast:8989313594377163134', 'src:go-tree', 'lang/go/test', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:9059850742711593788', 'ent:SoftwareModule:6706536563979604982', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/parser/go"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:9059850742711593788', 'src:gomod:parser-go', 'module directive', 'module github.com/boru-lang/boru/parser/go', 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:9094837459500650416', 'ent:Document:6399157315994008191', 'supports', 'entity', 'ent:Product:9122085017676103232', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:9094837459500650416', 'src:style-guide', 'S1', 'boru fmt does not yet make this rule self-enforcing', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:9138469699059997665', 'ent:SoftwareModule:4559967244660037230', 'has_attribute', 'literal', NULL, '"github.com/boru-lang/boru/basic/go"', 'String', 'go-module-path', NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:9138469699059997665', 'src:gomod:basic-go', 'module directive', 'module github.com/boru-lang/boru/basic/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:914658451831503592', 'ent:Document:6176355086953937469', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);

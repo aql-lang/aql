@@ -415,7 +415,7 @@ function renderShapeValue(v: Value): string {
     shapeBit(v.quoted)
 
   if (v.isWord()) {
-    const word = v.asWord() as WordInfo & { forceRef?: boolean; forceUsurp?: boolean }
+    const word = v.asWord() as WordInfo & { forceVal?: boolean; forceUsurp?: boolean }
     out +=
       ',w={name=' +
       shapeQuote(word.name) +
@@ -425,8 +425,8 @@ function renderShapeValue(v: Value): string {
       shapeBit(word.forceStack) +
       ',forward=' +
       shapeBit(word.forceForward) +
-      ',ref=' +
-      shapeBit(word.forceRef) +
+      ',val=' +
+      shapeBit(word.forceVal) +
       ',usurp=' +
       shapeBit(word.forceUsurp) +
       '}'

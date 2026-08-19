@@ -230,7 +230,7 @@ def x 1  def y 2
 ```
 
 The key is the base name and the value is the whole token, so word
-modifiers ride along on the value: `{f/r}` ≡ `{f: f/r}` (hold a function
+modifiers ride along on the value: `{f/v}` ≡ `{f: f/v}` (hold a function
 as data) and `{f?}` ≡ `{f?: f}` (an optional field). Only unquoted
 identifiers qualify; quoted keys like `{'foo'}` stay errors. See
 [Reference: Map field shorthand](REFERENCE.md#map-field-shorthand).
@@ -242,17 +242,17 @@ do {x: [add 1 2], y: [mul 3 4]}        # returns {x:3 y:12}
 ```
 
 A function stored in a map is callable through the dotted accessor when
-you store it with the `/r` ref modifier, which keeps it as a data value:
+you store it with the `/v` modifier, which keeps it as a data value:
 
 ```
 def inc fn [[n:Integer] [Integer] [add n 1]]
-def m {inc: inc/r}
+def m {inc: inc/v}
 m.inc 5                                # returns 6
 ```
 
 Stored bare (`{inc: inc}`), the map value is auto-evaluated and `inc` is
 invoked with no argument — which fails its signature, so `def m {inc: inc}`
-is a build error (bare words never degrade to data). Store it with `/r`,
+is a build error (bare words never degrade to data). Store it with `/v`,
 or call it by resolving the name at call time with bare `m get inc 5`.
 
 
@@ -741,7 +741,7 @@ boru check script.boru
 This is almost always an argument-order or arity bug, and it is an error
 at runtime as well — raised at the call, so a `do […] error […]` around
 it traps it like any other failure. If you meant to pass the function
-itself rather than call it, say so with `my-get/r`. Running `boru check`
+itself rather than call it, say so with `my-get/v`. Running `boru check`
 as a matter of course — in CI, and before committing — still pays,
 because it finds the bug without executing anything up to it.
 
@@ -759,7 +759,7 @@ meta-command (`:help` for the full list).
 
 Define an inline module with the `module` form. The body must call
 `export "namespace" {...}` to publish bindings. Export **functions**
-with the `/r` ref modifier — the export map auto-evaluates, so a bare
+with the `/v` modifier — the export map auto-evaluates, so a bare
 `greet` would be dispatched there (0-arg) rather than exported as the
 function. Values and types export bare:
 
@@ -768,13 +768,13 @@ function. Values and types export bare:
 import module [
   def base 10
   def greet fn [[name:String] [String] [`hello ${name}`]]
-  export "utils" {base: base, greet: greet/r}
+  export "utils" {base: base, greet: greet/v}
 ]
 "Ada" utils.greet                     # returns 'hello Ada'
 ```
 
 Here `base` (a value) exports bare, while `greet` (a function) exports
-with `/r`.
+with `/v`.
 
 Import from a file (relative paths must start with `./`, `../`, or
 `/`):
@@ -1386,7 +1386,7 @@ def spec {
 
 def run fn ctx:Map Integer [print (ctx.args) 0]
 
-Cli.main (spec) (run/r)
+Cli.main (spec) (run/v)
 ```
 
 `Cli.main` gives you the conventions for free: `--help` and `--version` print

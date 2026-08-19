@@ -273,9 +273,9 @@ func TestSpliceAndDispatchMod(t *testing.T) {
 		t.Error("IsSplice(1) = true")
 	}
 
-	dm := core.NewDispatchMod(core.DispatchModInfo{Ref: true})
+	dm := core.NewDispatchMod(core.DispatchModInfo{Val: true})
 	got, ok := core.AsDispatchMod(dm)
-	if !ok || !got.Ref || got.Quote {
+	if !ok || !got.Val || got.Quote {
 		t.Errorf("AsDispatchMod = %+v, %v", got, ok)
 	}
 	if _, ok := core.AsDispatchMod(core.NewInteger(1)); ok {
@@ -476,13 +476,13 @@ func TestWordUsurpConstructor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AsWord: %v", err)
 	}
-	if !wi.ForceUsurp || !wi.ForceRef || wi.Name != "target" {
+	if !wi.ForceUsurp || !wi.ForceVal || wi.Name != "target" {
 		t.Errorf("usurp word info = %+v", wi)
 	}
 	plain := core.NewWordUsurp("other", false)
 	pi, _ := core.AsWord(plain)
-	if pi.ForceRef {
-		t.Error("non-ref usurp gained ForceRef")
+	if pi.ForceVal {
+		t.Error("non-ref usurp gained ForceVal")
 	}
 }
 

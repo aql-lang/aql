@@ -21,15 +21,15 @@ import "boru:serve"          # service / add / call / wrap
 import "boru:string-util"          # StringUtil.split (canon parsing)
 
 export "Entity" {
-  bus:    bus-new/r         # build a routing bus service
-  mount:  mount/r           # register a store at a canon specificity
-  make:   make-ent/r        # construct a handle (the make$ analog)
-  field:  field/r           # set a field -> new handle (immutable)
-  data:   data-of/r         # the plain Map of fields
-  save:   save/r            # persist  -> handle with id
-  load:   load/r            # load by id -> handle | None
-  list:   list-ents/r       # query    -> List of rows
-  remove: remove-ent/r      # delete by id
+  bus:    bus-new/v         # build a routing bus service
+  mount:  mount/v           # register a store at a canon specificity
+  make:   make-ent/v        # construct a handle (the make$ analog)
+  field:  field/v           # set a field -> new handle (immutable)
+  data:   data-of/v         # the plain Map of fields
+  save:   save/v            # persist  -> handle with id
+  load:   load/v            # load by id -> handle | None
+  list:   list-ents/v       # query    -> List of rows
+  remove: remove-ent/v      # delete by id
 }
 
 # ---------------------------------------------------------------------------

@@ -746,7 +746,7 @@ func TestS5AEvalParenGroupLiteralError(t *testing.T) {
 	}
 }
 
-// --- stepWordUsurp / stepWordRef arms -------------------------------------
+// --- stepWordUsurp / stepWordVal arms -------------------------------------
 
 func TestS5AUsurpUndefinedCheckMode(t *testing.T) {
 	r := covRegistry(t, nil)
@@ -803,7 +803,12 @@ func TestS5ARefUndefinedCheckMode(t *testing.T) {
 	}
 }
 
-func TestS5ARefDynamicCarrierCheckMode(t *testing.T) {
+// TestS5AValDynamicCarrierCheckMode: with the function-only gate gone,
+// `/v` on a dynamic Any-typed binding surfaces THAT carrier unchanged.
+// It used to be narrowed to a Function carrier, which was the gate's
+// escape hatch for "this might hold a fn at run time"; totality removes
+// the need to guess, and the carrier keeps its own (wider) type.
+func TestS5AValDynamicCarrierCheckMode(t *testing.T) {
 	r := covRegistry(t, nil)
 	c := NewCarrier(TAny)
 	InstallDef(r, "s5adyn", c)
@@ -813,8 +818,8 @@ func TestS5ARefDynamicCarrierCheckMode(t *testing.T) {
 		t.Fatalf("stepWord: %v", err)
 	}
 	got := e.Tape.At(0)
-	if !got.Carrier || !got.Parent.Equal(TFunction) {
-		t.Errorf("ref did not surface a Function carrier: %v", got)
+	if !got.Carrier || !got.Parent.Equal(TAny) {
+		t.Errorf("/v did not surface the binding's own carrier: %v", got)
 	}
 }
 
@@ -1358,7 +1363,7 @@ func TestS5AReachFnDispatchModMarksData(t *testing.T) {
 		{Args: []*Type{TInteger}, BarrierPos: 1},
 	}})
 	fnVal.ReachGroup = true
-	dm := NewDispatchMod(DispatchModInfo{Ref: true})
+	dm := NewDispatchMod(DispatchModInfo{Val: true})
 	e := s5aEng(t, r, []Value{NewWord("s5ahost"), fwd, fnVal, dm}, 2)
 	if err := e.stepLiteral(); err != nil {
 		t.Fatalf("stepLiteral: %v", err)

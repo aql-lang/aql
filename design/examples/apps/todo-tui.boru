@@ -159,8 +159,8 @@ def todo-app fn opts:Map Map [
         focus:"entry"
         entry:(Tui.input "" {placeholder:"what needs doing?"})
       }
-      update:todo-update/r
-      view:todo-view/r
+      update:todo-update/v
+      view:todo-view/v
     }
 ]
 
@@ -170,4 +170,4 @@ def todo-serve fn opts:Map Map [
   Tui.serve {tcp:(opts.tcp) token:(opts.token)} (todo-app opts)
 ]
 
-export "TodoTui" {app:todo-app/r run:todo-run/r serve:todo-serve/r}
+export "TodoTui" {app:todo-app/v run:todo-run/v serve:todo-serve/v}

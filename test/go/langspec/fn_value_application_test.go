@@ -26,10 +26,10 @@ func TestFnValueApplicationCompiles(t *testing.T) {
 		name string
 		src  string
 	}{
-		// M2a — apply over a Function-typed param (`/r` ref + `apply`, and a
+		// M2a — apply over a Function-typed param (`/v` ref + `apply`, and a
 		// param-fn threaded through a helper). recursion.tsv:90.
 		{"apply-over-function-param",
-			`def g ([x:Integer] => [x add 1]) def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply]] def t fn [[comp:Function] [Integer] [def a (5 comp/r h) def b (7 comp/r h) a add b]] (g/r t)`},
+			`def g ([x:Integer] => [x add 1]) def h fn [[comp:Function v:Integer] [Integer] [v comp/v apply]] def t fn [[comp:Function] [Integer] [def a (5 comp/v h) def b (7 comp/v h) a add b]] (g/v t)`},
 		// M2c — shaped instance-method dispatch (l.info) + typed list-of-record
 		// element reads. module-log.tsv:53.
 		{"instance-method-dispatch",

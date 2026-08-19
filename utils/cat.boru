@@ -209,7 +209,7 @@ def cat-run fn [[ctx:Map] [Integer] [
 # handed to `Cli.main`. `Cli.main` invokes its handler from inside the boru:cli
 # module, and that costs twice:
 #   * under the tree-walking interpreter the handler body cannot see this
-#     file's module-level defs at all — `Cli.main (spec) (cat-run/r)` dies
+#     file's module-level defs at all — `Cli.main (spec) (cat-run/v)` dies
 #     "undefined word: cat-bool" under -no-compile, though the bytecode
 #     compiler resolves it;
 #   * and it puts the whole program in interpreter mode, which for a program
@@ -228,16 +228,16 @@ def cat-main fn [[argv:List] [Integer] [
 # a module's private defs are NOT visible to an importer, so anything a test
 # touches has to be exported.
 export "Cat" {
-  bool:       cat-bool/r
-  count:      cat-count/r
-  worse:      cat-worse/r
-  padLeft:    cat-pad-left/r
-  inputs:     cat-inputs/r
-  format:     cat-format/r
-  nextChunk:  cat-next-chunk/r
-  fail:       cat-fail/r
-  one:        cat-one/r
-  main:       cat-main/r
+  bool:       cat-bool/v
+  count:      cat-count/v
+  worse:      cat-worse/v
+  padLeft:    cat-pad-left/v
+  inputs:     cat-inputs/v
+  format:     cat-format/v
+  nextChunk:  cat-next-chunk/v
+  fail:       cat-fail/v
+  one:        cat-one/v
+  main:       cat-main/v
   spec:       spec
 }
 

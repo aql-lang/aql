@@ -1,7 +1,7 @@
 # Bare deref of a Function-typed PARAM
 # (design/FUNCTION-VALUE-SCOPE.0.md §11 rule 3, §12.4).
 #
-# RULED 2026-08-15 (maintainer): A BARE NAME IS A CALL; `/r` is how you ask for
+# RULED 2026-08-15 (maintainer): A BARE NAME IS A CALL; `/v` is how you ask for
 # the value. Arity discrimination was considered and explicitly rejected.
 #
 # Under that rule the INTERPRETER is correct in both rows below and the COMPILER
@@ -21,10 +21,10 @@
 # hasPendingForwardExpectingFunction reading SigArgType off the pending forward.
 #
 # A SEPARATE bug, tracked in §12.4 and not represented here because it is an
-# interpreter fault rather than a divergence the compiler can graduate: `/r`
-# fails to park a 0-arg fn bound to a PARAM. `typeof nought/r` at module level
-# is Function on both engines and `[c/r]` at arity >=1 is Function on both, but
-# `[f/r]` at arity 0 yields 7 on the interpreter. The documented way to pass a
+# interpreter fault rather than a divergence the compiler can graduate: `/v`
+# fails to park a 0-arg fn bound to a PARAM. `typeof nought/v` at module level
+# is Function on both engines and `[c/v]` at arity >=1 is Function on both, but
+# `[f/v]` at arity 0 yields 7 on the interpreter. The documented way to pass a
 # function as a value silently does the opposite in that one shape.
 def nought fn [[] [Integer] [7]] def grab fn [[f:Function] [Any] [f]] typeof (grab nought)	Integer	arity-0 Function param read bare: the interpreter APPLIES it (7 -> Integer), the compiler yields the Function
 def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)	ERROR:no signature matches	arity-1 Function param read bare with no argument: the interpreter RAISES, the compiler yields the Function

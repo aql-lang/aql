@@ -60,7 +60,7 @@ func TestUnnamedFnArgInertViaValue(t *testing.T) {
 	defineFn(t, r, "useai2", unnamedFnBody([]string{"Function", "Integer"}, "Integer"))
 
 	// The paren group resolves the fn value first so forward collection
-	// takes it as the Function arg — the token twin of source `(mk/r)`.
+	// takes it as the Function arg — the token twin of source `(mk/v)`.
 	res := runBoru(t, r, []Value{NewWord("useai2"), NewOpenParen(), fnVal, NewCloseParen(), NewInteger(14), NewEnd()})
 	if len(res) != 1 {
 		t.Fatalf("residual = %v, want one value", res)

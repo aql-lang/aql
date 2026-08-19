@@ -151,8 +151,8 @@ def mark-conflicts fn assertions:List Map [
 ]
 
 export "KgAst" {
-  build-assertion:build-assertion/r
-  claim-key:claim-key/r
-  same-object:same-object/r
-  mark-conflicts:mark-conflicts/r
+  build-assertion:build-assertion/v
+  claim-key:claim-key/v
+  same-object:same-object/v
+  mark-conflicts:mark-conflicts/v
 }

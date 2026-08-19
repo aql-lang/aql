@@ -138,11 +138,11 @@ def dedupe-identical fn xs:List List [
 ]
 
 export "KgEnt" {
-  index-by-id:index-by-id/r
-  find-by-id:find-by-id/r
-  canonical-id:canonical-id/r
-  unify-by-id:unify-by-id/r
-  dedupe-identical:dedupe-identical/r
-  distinct-sorted:distinct-sorted/r
-  merge-pair:merge-pair/r
+  index-by-id:index-by-id/v
+  find-by-id:find-by-id/v
+  canonical-id:canonical-id/v
+  unify-by-id:unify-by-id/v
+  dedupe-identical:dedupe-identical/v
+  distinct-sorted:distinct-sorted/v
+  merge-pair:merge-pair/v
 }

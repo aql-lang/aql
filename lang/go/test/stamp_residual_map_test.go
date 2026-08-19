@@ -22,7 +22,7 @@ module [
     def r (pr rv 10)
     r.from add r.upto
   ]]
-  export "PrT" { pr: pr/r use: use-pr/r }
+  export "PrT" { pr: pr/v use: use-pr/v }
 ] import
 `)
 	for _, name := range []string{"pr", "use-pr"} {
@@ -46,7 +46,7 @@ module [
     def r (pr rv 10)
     r.from add r.upto
   ]]
-  export "PrT" { use: use-pr/r }
+  export "PrT" { use: use-pr/v }
 ] import
 `, `PrT.use "3"`)
 	if len(out) != 1 {
@@ -74,7 +74,7 @@ func TestSingleLiteralBodyTransparencyHolds(t *testing.T) {
 module [
   def c1 1
   def mk fn [[c1:Integer] [Map] [{a: c1}]]
-  export "TrT" { mk: mk/r }
+  export "TrT" { mk: mk/v }
 ] import
 `, `def r (TrT.mk 9) r.a`)
 	if len(out) != 1 {

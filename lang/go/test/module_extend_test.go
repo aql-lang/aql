@@ -23,7 +23,7 @@ const flagExtModule = `def Flag (refine Boolean)
 def flip fn [[b:Boolean] [Boolean] [b not]]
 def add fn [[a:Flag b:Flag] [Boolean] [flip ((flip a) and (flip b))]]
 def mk fn [[b:Boolean] [Flag] [def v:Flag b v]]
-export "FlagExt" {add: add/r mk: mk/r Flag: Flag}`
+export "FlagExt" {add: add/v mk: mk/v Flag: Flag}`
 
 // TestModuleExtendFileTransplant pins the positive transplant through a
 // real file: the importer's bare `add` gains the [Flag Flag] overload,
@@ -134,7 +134,7 @@ func TestModuleExtendFileOneLevel(t *testing.T) {
 		"mid.boru": `import "./ext.boru"
 def Flag FlagExt.Flag
 def omk fn [[b:Boolean] [Flag] [def v:Flag b v]]
-export "Mid" {mk: omk/r}`,
+export "Mid" {mk: omk/v}`,
 	}
 	_, err := runMemFSModuleSteps(t, files, []string{
 		`import "./mid.boru"`,
@@ -163,7 +163,7 @@ func TestModuleExtendFileReExport(t *testing.T) {
 		"mid.boru": `import "./ext.boru"
 def Flag FlagExt.Flag
 def omk fn [[b:Boolean] [Flag] [def v:Flag b v]]
-export "Mid" {mk: omk/r add: add/r}`,
+export "Mid" {mk: omk/v add: add/v}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./mid.boru"`,
@@ -183,7 +183,7 @@ export "Mid" {mk: omk/r add: add/r}`,
 func TestModuleExtendFileUserTypeRule(t *testing.T) {
 	files := map[string]string{
 		"bad.boru": `def add fn [[a:Integer b:Map] [Integer] [1]]
-export "Bad" {add: add/r}`,
+export "Bad" {add: add/v}`,
 	}
 	_, err := runMemFSModuleSteps(t, files, []string{
 		`import "./bad.boru"`,
@@ -208,7 +208,7 @@ func TestModuleExtendPointClass(t *testing.T) {
 	files := map[string]string{
 		"pointer.boru": `def Point class {x:Integer y:Integer}
 def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]]
-export "Pointer" {Point: Point add: add/r}`,
+export "Pointer" {Point: Point add: add/v}`,
 	}
 	steps := []string{
 		`import "./pointer.boru"`,
