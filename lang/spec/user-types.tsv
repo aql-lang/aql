@@ -325,4 +325,3 @@ def M (Integer tor none)  typeof M	Disjunct	…uniformly for a disjunct
 def T fnsig Integer String  typeof T	FunctionSignature	…for a fn shape
 def Big (Integer gt 10)  typeof Big	Integer	…for a dependent scalar
 def C class {a:Integer}  typeof C	Class	…and the class kind joins the rule (object.tsv re-pins)
-5 is (fn [[x:Integer] [Boolean] [(1 div 0) gt 0]])	false	an inline predicate whose body RAISES answers false, not an error

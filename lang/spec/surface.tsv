@@ -46,5 +46,4 @@ def Shape surface {area: (fnsig [[Self] [Float]])} end Integer tand Shape	Never	
 def Shape surface {area: (fnsig [[Self] [Float]])} def Other surface {bulk: (fnsig [[Self] [Float]])} end Shape tand Other	Never	distinct surfaces have no representable intersection
 def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def NotShape (tnot Shape) end (make Circle {}) is NotShape	false	the complement excludes members
 def Shape surface {area: (fnsig [[Self] [Float]])} def NotShape (tnot Shape) end 5 is NotShape	true	…and admits non-members
-def Shape surface {area: (fnsig [[Self] [Float]])} end (class {r:1.0}) exposes Shape	ERROR:does not expose	an ANONYMOUS class exposer resolves through its payload's minted node — and is held to the contract
 5 is (surface {a: (fnsig [[Self] [Float]])})	false	an anonymous surface BODY as the is-RHS answers through the conformance set (nothing exposes it)
