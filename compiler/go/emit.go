@@ -4895,14 +4895,21 @@ func (es *EmitState) RecordCallOperands(word string, sig *core.Signature, args [
 		}
 	}
 	for i, a := range args {
-		if _, ok := a.Data.(core.FnDefInfo); ok {
-			if inertFn || sig.FnInertArgs[i] {
-				continue
-			}
-			es.SiteCounts[SiteMeta]++
-			es.MarkUncompilable("function value reaches " + word + " (Stage 3)")
-			return nil, false
+		// A PREDICATE-TYPE NODE is the fn operand in node clothing: the
+		// name evaluates to its minted node (the Stage 2 flip), and a
+		// fn-invoking word (`5 is Positive`) runs the node's predicate
+		// body through CallBoru — exactly the re-step the VM cannot
+		// honour. Same refusal, same inert-slot exemptions.
+		_, isFnVal := a.Data.(core.FnDefInfo)
+		if !isFnVal && !core.IsPredicateTypeNode(a) {
+			continue
 		}
+		if inertFn || sig.FnInertArgs[i] {
+			continue
+		}
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("function value reaches " + word + " (Stage 3)")
+		return nil, false
 	}
 	ops := make([]EmitOperand, len(args))
 	for i, a := range args {

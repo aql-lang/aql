@@ -193,6 +193,12 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 
 	return native.ModuleDesc{
+		// Src lets import transport escaped type machinery — the
+		// preamble-minted record/table type NODES the exports now carry
+		// (TestSet, TestCase, …) are adopted into the importing
+		// registry's TypeTable so the compiled OpPushType path resolves
+		// them (adoptEscapedTypes).
+		Src:     modReg,
 		ID:      parent.Modules.NextID(),
 		Exports: exports,
 	}, nil

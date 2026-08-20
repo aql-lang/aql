@@ -480,8 +480,12 @@ func TestFnValueIntrospectionLowers(t *testing.T) {
 	}{
 		{`typeof (fn [[a:Integer][Integer][a add 1]])`, "[Function]"},
 		{setup + `Positive tcmp Positive`, "[0]"}, // equal
-		{setup + `Positive tcmp Function`, "[1]"},
-		{setup + `Function tcmp Positive`, "[-1]"},
+		// Stage 2 flip (design/TYPE-REPRESENTATION.1.md §6, tcmp row): the
+		// name denotes its minted node, so a named predicate type orders as
+		// a TYPE (lattice band: the subtype below its base), not as a
+		// concrete fn value above the Function literal.
+		{setup + `Positive tcmp Function`, "[-1]"},
+		{setup + `Function tcmp Positive`, "[1]"},
 	} {
 		a, _ := New()
 		prog, reason, _, cerr := a.CompileCheck(c.src)

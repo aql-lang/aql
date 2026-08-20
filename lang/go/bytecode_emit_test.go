@@ -1273,8 +1273,12 @@ func TestEmitTypeOperands(t *testing.T) {
 	if errG != nil || !compiledG {
 		t.Fatalf("scalar-default generic body: compiled=%v err=%v", compiledG, errG)
 	}
-	if len(outG) != 1 || !strings.Contains(fmt.Sprint(outG[0]), "r:1.0") {
-		t.Fatalf("generic body baked %v, want a faithful r:1.0", outG)
+	// Stage 2 flip (design/TYPE-REPRESENTATION.1.md §6): the type
+	// argument denotes its minted NODE, so the instantiated body renders
+	// the field's type by NAME (`item:Circle`), not as the class body.
+	// The differential gate above still confirms compiled/interp parity.
+	if len(outG) != 1 || !strings.Contains(fmt.Sprint(outG[0]), "item:Circle") {
+		t.Fatalf("generic body baked %v, want item:Circle", outG)
 	}
 
 	// A mutable-INSTANCE default (`items:(flex [])`) inside a class body now bakes
@@ -1283,7 +1287,8 @@ func TestEmitTypeOperands(t *testing.T) {
 	// a class therefore compiles and matches the interpreter's per-instance
 	// rebuild. (The mutation-safety NEGATIVE — a mutable instance must NOT bake
 	// STANDALONE — lives in eng/go/bytecode_constbake_test.go.)
-	if outF, cF, eF := mustRun(t, `def C class {items:(flex [])} def Holder gen [T] refine Record [item:T] end Holder of [C]`); !cF || eF != nil || !strings.Contains(fmt.Sprint(outF), "items:[]") {
+	// Stage 2 flip (§6): the class type argument renders by NAME here too.
+	if outF, cF, eF := mustRun(t, `def C class {items:(flex [])} def Holder gen [T] refine Record [item:T] end Holder of [C]`); !cF || eF != nil || !strings.Contains(fmt.Sprint(outF), "item:C") {
 		t.Errorf("flex-default generic body: compiled=%v err=%v out=%v", cF, eF, outF)
 	}
 }

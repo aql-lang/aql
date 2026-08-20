@@ -1052,6 +1052,20 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return constraint.String()
 	}
 	body := args[1]
+	// A SCHEMA-kind NAME (generic schema / class / record / table /
+	// options / typed-map / Micron) evaluates to its minted node after
+	// the Stage 2 flip; the typed-def branches below dispatch on the
+	// declared structural content, which the node records
+	// (design/TYPE-REPRESENTATION.1.md §N2). Kinds that enforce
+	// membership through a kernel constraint Unifier
+	// (HasConstraintUnify — predicate / DepScalar / disjunct /
+	// negation / FnUndef) keep the node: the predicate arm and the
+	// general UnifyR below consult the node's Behavior directly.
+	if IsBareTypeNode(constraint) && !core.HasConstraintUnify(&constraint) {
+		if content, ok := core.TypeContentOf(constraint); ok {
+			constraint = content
+		}
+	}
 	// A generic SCHEMA annotation — `def b:Box {value:42}` — infers
 	// its type arguments from the body and instantiates (Phase 7 /
 	// D12); the instantiation then flows through the ordinary typed-def
@@ -1089,19 +1103,6 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 
-	// A SCHEMA-kind NAME (class / record / table / options / typed-map /
-	// Micron) evaluates to its minted node after the Stage 2 flip; the
-	// typed-def branches below dispatch on the declared structural
-	// content, which the node records (design/TYPE-REPRESENTATION.1.md
-	// §N2). Kinds that enforce membership through a kernel constraint
-	// Unifier (predicate / DepScalar / disjunct / negation / FnUndef —
-	// HasConstraintUnify) keep the node: the general UnifyR below
-	// consults the node's Behavior directly.
-	if IsBareTypeNode(constraint) && !core.HasConstraintUnify(&constraint) {
-		if content, ok := core.TypeContentOf(constraint); ok {
-			constraint = content
-		}
-	}
 	// ObjectType constraint (`def x:Person {map}` where Person is
 	// `type Person object {…}`): build a Person-typed ObjectInstance
 	// from the body map via make-style construction. This closes the

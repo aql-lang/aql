@@ -176,13 +176,33 @@ func (s *surfaceUnifier) Match(v Value, t *Type) bool {
 // now denotes, where it used to unify against the body via the
 // surface fold.
 func (s *surfaceUnifier) Unify(a, b Value) (Value, *UnifyError) {
-	aNode, bNode := IsBareTypeNode(a), IsBareTypeNode(b)
-	if aNode == bNode {
+	// The conformance rule decides whenever exactly one side IS this
+	// surface's node — the candidate may be a concrete value, a
+	// carrier, or a TYPE-level operand (a generic bound check:
+	// `gen [(T extends Shape)] … of [Circle]` pairs the Shape node
+	// with the Circle node), exactly the cases the surface fold
+	// decided for the body. A same-node (or node-free) pair settles
+	// structurally.
+	aSelf := IsBareTypeNode(a) && a.Behavior() == TypeBehavior(s)
+	bSelf := IsBareTypeNode(b) && b.Behavior() == TypeBehavior(s)
+	if aSelf == bSelf {
 		return unifySameOrSubtype(a, b)
 	}
 	node, candidate := a, b
-	if bNode {
+	if bSelf {
 		node, candidate = b, a
+	}
+	if IsBareTypeNode(candidate) {
+		// Type-level containment: the candidate NODE (or an ancestor)
+		// must be in the conformance set — the literal-vs-literal walk
+		// unifySurface runs for the body.
+		cn := &candidate
+		for p := cn; p != nil; p = p.Parent {
+			if s.info.Conform[p.ID] {
+				return candidate, nil
+			}
+		}
+		return Value{}, unifyFail("type does not expose surface "+s.typeName, a, b)
 	}
 	if s.Match(candidate, &node) {
 		return candidate, nil
