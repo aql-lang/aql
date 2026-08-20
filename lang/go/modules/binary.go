@@ -100,7 +100,7 @@ func intArg(v native.Value) (int64, error) {
 }
 
 // binaryModuleNatives holds the NativeFunc registrations for the
-// module's words. Note the swap convention for binary ops:
+// module's words. Note the handler convention for binary ops:
 // `value rotl count` → args[1]=value, args[0]=count.
 var binaryModuleNatives = []native.NativeFunc{
 	// --- bit counting (unary) ---

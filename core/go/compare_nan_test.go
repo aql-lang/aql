@@ -66,11 +66,11 @@ func TestNaNRelationalUnordered(t *testing.T) {
 	// Sanity: with NO NaN, the same handlers still order normally.
 	res, _ := LtHandler([]Value{five, fv(9)}, nil, nil, nil) // args[0]=b=5, args[1]=a=9 → 9<5 → false
 	if b, _ := AsBoolean(res[0]); b {
-		t.Errorf("lt(5,9) swap-form = true, want false (9<5)")
+		t.Errorf("lt(5,9) infix-form = true, want false (9<5)")
 	}
 	res, _ = GtHandler([]Value{five, fv(9)}, nil, nil, nil) // 9>5 → true
 	if b, _ := AsBoolean(res[0]); !b {
-		t.Errorf("gt(5,9) swap-form = false, want true (9>5)")
+		t.Errorf("gt(5,9) infix-form = false, want true (9>5)")
 	}
 }
 

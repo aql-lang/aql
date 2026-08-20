@@ -376,8 +376,13 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   are taken in source order into `args[0]`, `args[1]`, … until a
   barrier (`end`, `)`, another function word, type mismatch). Any
   remaining slots are filled from the stack, top of stack into the
-  next-to-fill slot first. See
-  **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
+  next-to-fill slot first, then the next-deeper value, and so on.
+  This is one rule at every arity: two-argument words are **not** a
+  special case, and there is no "swap form". Two consequences —
+  every operand on the stack gives Forth order (`10 3 sub` is `7`),
+  and every operand written after the word gives written order,
+  which for an asymmetric word reads backwards (`sub 1 3` is `2`).
+  See **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
 * **Type-directed collection.** A forward token is only consumed if
   it matches the next expected type; mismatches stop collection and
   the word executes with what it has (or fails if it doesn't have
@@ -1008,17 +1013,20 @@ justification weight as a new init-time panic — NUR023):
 
 ### Arithmetic
 
-Forward-collecting, Integer/Float with auto-promotion. The
-asymmetric ops (`sub`, `div`, `mod`, `pow`) follow the
-**argument-order rule** — see
-[Tutorial §3](TUTORIAL.md#the-argument-order-rule). All three call
-forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
+Forward-collecting, Integer/Float with auto-promotion. All six follow
+the **argument-order rule** — see
+[Tutorial §3](TUTORIAL.md#the-argument-order-rule) — and all six are
+written **infix** in house style, which is the spelling that reads the
+way it computes ([STYLE-GUIDE.md §S2](STYLE-GUIDE.md)). For the
+asymmetric ops (`sub`, `div`, `mod`, `pow`) the call forms `a b sub`,
+`a sub b` and `sub b a` all compute `a - b`; `sub a b` is a different
+expression, binding `a` to `args[0]`, so `sub 1 3` is `2`.
 
 | Word | Operation | Example |
 |------|-----------|---------|
-| `add` | `a + b` (commutative) | `add 1 2` returns `3` |
+| `add` | `a + b` (commutative) | `1 add 2` returns `3` |
 | `sub` | `a - b` | `10 sub 3` returns `7` |
-| `mul` | `a * b` (commutative) | `mul 4 5` returns `20` |
+| `mul` | `a * b` (commutative) | `4 mul 5` returns `20` |
 | `div` | `a / b` | `10 div 2` returns `5` |
 | `mod` | `a % b` | `10 mod 3` returns `1` |
 | `pow` | `a ^ b` | `2 pow 10` returns `1024` |

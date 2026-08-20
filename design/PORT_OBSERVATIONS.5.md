@@ -172,14 +172,15 @@ keeping `Data` as a fallback), it can ship over multiple PRs.
 
 Two recommendations, taken together:
 
-**(a) More TSV rows.** The mirror rule (`f a b` ≡ `b f a` ≡ `b a f`,
-but `a f b` is the swap form) is documented prose in CLAUDE.md and
-tested by *some* rows in `arithmetic.tsv`/`strings.tsv`. Adding a
-canonical row for every (arity, position-of-`f`) pair across each
-non-commutative test word would lock the rule into the regression
-suite. The TS port hit a real authoring bug
-(`"hello" concat " world"` was assumed to be a mirror form; it's
-actually the swap form) that more rows would have caught immediately.
+**(a) More TSV rows.** The one argument-ordering rule puts
+`f a b` ≡ `b f a` ≡ `b a f` in one split-class and `a f b` ≡ `a b f` in
+the other; it is documented prose in CLAUDE.md and tested by *some* rows
+in `arithmetic.tsv`/`strings.tsv`. Adding a canonical row for every
+(arity, position-of-`f`) pair across each non-commutative test word
+would lock the rule into the regression suite. The TS port hit a real
+authoring bug (`"hello" concat " world"` was assumed to be in the first
+class; it is in the second) that more rows would have caught
+immediately.
 
 **(b) Consolidate the implementation into one function.** Today the
 mirror rule is split:
@@ -367,12 +368,12 @@ Migration scope:
 - lang/go/internal/engine native stack ops: swap, over, rot, nip, tuck,
   dup2, swap2, over2 rewritten to top-down indexing.
 - boru/test rows: a small number of test rows assumed the legacy
-  swap-form binding (`a f b → F(b, a)`) was the only mirror-violator;
-  under the unified rule, the four equivalent forms (`f a b`,
-  `b a f`, `b f a` (now also equivalent), `a f b` (still the swap
-  form)) are pinned by the same rule. Several test rows that
-  documented the legacy mirror rule have to be updated to match the
-  new, simpler rule.
+  reading in which `a f b → F(b, a)` was a lone exception; under the
+  unified rule all four arrangements (`f a b`, `b a f`, `b f a`, and
+  `a f b`) are pinned by the same rule, which simply splits them into
+  two classes by where the operands sit. Several test rows that
+  documented the legacy reading have to be updated to match the new,
+  simpler rule.
 
 Open follow-ups (not yet migrated):
 
@@ -383,7 +384,7 @@ Open follow-ups (not yet migrated):
   `(Integer, Integer, Matrix)`, with handler index access shifted
   to match. Same for the other multi-arg sigs.
 - A handful of `lang/go/test/*.tsv` rows that document the OLD
-  swap-form footgun need updating.
+  two-arg-exception footgun need updating.
 
 ### 1.5 `SetCapability(name, nil)` overloaded as delete — fixed
 

@@ -103,18 +103,22 @@ args by walking the **forward limit** for that sig:
 There is no per-word "ForwardArgs" flag any more — every sig
 carries its dispatch policy in its own `BarrierPos` field.
 
-The unified rule means **any non-trivial layout works**. For a
-2-arg forward-eligible word:
+The unified rule means **any layout works**, and it is the same
+rule at every arity — two-argument words are not a special case,
+and there is no "swap form". For a 2-arg forward-eligible word:
 
 ```
 sub 10 3     forward [10,3]                  → sig=[10,3]
 3 sub 10     forward [10], stack top=3       → sig=[10,3]
 3 10 sub     forward [],   stack top=10…3    → sig=[10,3]
-10 sub 3     forward [3],  stack top=10      → sig=[3,10]  ← swap form
+10 sub 3     forward [3],  stack top=10      → sig=[3,10]  ← infix
+10 3 sub     forward [],   stack top=3…10    → sig=[3,10]
 ```
 
-Three of those produce the same sig binding; the fourth is the
-"swap form" that reads naturally as `10 minus 3 = 7`.
+The first three put `10` in sig[0]; the last two put `3` there.
+Nothing distinguishes them but where the split between the
+forward phase and the stack phase falls. The infix spelling
+`10 sub 3` is the one that reads as `10 minus 3 = 7`.
 
 ## Why `args[1] op args[0]`, not `args[0] op args[1]`
 
@@ -128,11 +132,11 @@ res := op(b, a)              // b op a, not a op b
 `words.go` even names the closure parameters as `a` and `b`
 explicitly: `func(a, b float64) (float64, error) { return b - a, nil }`.
 
-This is the "swap form" convention from the previous section.
-The dispatcher binds `args` in signature order; with a 2-arg
+This is the infix convention from the previous section. The
+dispatcher binds `args` in signature order; with a 2-arg
 forward-eligible word, args[0] is the value seen first after the
-word and args[1] is the value seen second. Reading `10 sub 3` as
-"10 minus 3":
+word and args[1] is whatever fills the remaining slot. Reading
+`10 sub 3` as "10 minus 3":
 
 - The reader sees `10` first, then `sub`, then `3`.
 - `sub` forward-collects `3` (args[0]). For the second arg,
@@ -141,11 +145,12 @@ word and args[1] is the value seen second. Reading `10 sub 3` as
 - For `10 sub 3 = 7` to read naturally the handler must compute
   `args[1] - args[0]`.
 
-The convention costs the prefix form (`sub 10 3` becomes `3-10 =
--7`) but is the most common surface form a user types is infix,
-so calc — like every other boru host — picks the swap form as
-canonical. Test cases in `calc_test.go` document this with both
-the infix `10 sub 3 = 7` and the RPN `10 3 sub = 7` rows.
+The convention costs the all-forward spelling (`sub 10 3` becomes
+`3-10 = -7`, and `sub 1 3` is `2`), but infix is the most common
+surface form a user types, so calc — like every other boru host —
+picks it as canonical. Test cases in `calc_test.go` document this
+with both the infix `10 sub 3 = 7` and the RPN `10 3 sub = 7`
+rows.
 
 ## Why the stack persists across `Eval` and `Run` does not
 

@@ -5220,7 +5220,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Anonymous lambdas (afn / =>) are VALUES that auto-dispatch only
 	// when args are actually available (forward tokens, or stack args
-	// for the swap form). A 0-arg lambda sitting alone on the stack
+	// for the infix form). A 0-arg lambda sitting alone on the stack
 	// has positions=[] AND no forward — it's just data, let downstream
 	// consumers (def, a stored map entry, call) take it as-is rather
 	// than auto-invoking. This is what makes `def f ([] => [body])`

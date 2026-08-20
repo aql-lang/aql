@@ -10,6 +10,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Entry holds the help documentation for a single boru word.
@@ -178,6 +180,25 @@ func isNonCommutative2Arg(info FuncInfo) bool {
 	switch info.Name {
 	case "sub", "div", "mod", "pow", "atan2",
 		"lt", "gt", "lte", "gte", "implies":
+		return true
+	}
+	return false
+}
+
+// isHouseStyleInfix reports whether a word is one of the two-argument
+// words common convention reads as an infix operator, which house style
+// therefore writes infix — `1 add 2`, `10 sub 3` (STYLE-GUIDE.md §S2).
+//
+// This is deliberately a NAME list, not a property of the signature:
+// "reads as an operator" is a fact about convention, not about arity or
+// commutativity. It overlaps isNonCommutative2Arg without either
+// containing the other — `add` is house-style infix and commutative,
+// `atan2` is non-commutative and not an operator anyone writes infix.
+// Keep it in step with the operator list in STYLE-GUIDE.md §S2.
+func isHouseStyleInfix(name string) bool {
+	switch name {
+	case "add", "sub", "mul", "div", "mod", "pow",
+		"and", "or", "lt", "lte", "gt", "gte", "eq", "neq":
 		return true
 	}
 	return false
@@ -355,11 +376,22 @@ func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 
 	// For non-commutative binary words, argument order changes the
 	// result, so spell out which form reads naturally rather than
-	// leaving a cryptic inline note on the examples.
+	// leaving a cryptic inline note on the examples. There is no
+	// two-arg special case behind this: the two spellings are just
+	// two splits of the one argument-order rule.
+	//
+	// The note stays FACTUAL. "Infix is house style" is a claim about
+	// one enumerated set of operator words (STYLE-GUIDE.md §S2), which
+	// is NOT the same set this predicate admits — so it belongs in
+	// those words' own Entry Descriptions, not in a line rendered for
+	// every non-commutative binary word.
 	if isNonCommutative2Arg(info) {
-		b.WriteString("  Order matters: the swap form `x ")
+		b.WriteString("  Order matters: the infix form `x ")
 		b.WriteString(name)
-		b.WriteString(" y` reads left-to-right — see Description.\n")
+		b.WriteString(" y` reads left-to-right;\n")
+		b.WriteString("  `")
+		b.WriteString(name)
+		b.WriteString(" x y` is the other split — see Description.\n")
 	}
 }
 
@@ -481,11 +513,16 @@ func exampleVal(typeName string, counter *int) string {
 //
 //   - Stack-only words (no forward sigs) must put every arg on the
 //     stack, so the only valid form is prefix == nArgs.
-//   - Forward words lead with the canonical forward form (prefix 0):
-//     `word a b`, which reads in declared argument order.
-//   - Non-commutative binary words additionally show the swap form
-//     (prefix 1): `a word b`, the arrangement that reads left-to-right
-//     for operations like subtraction and comparison.
+//   - House-style infix operators lead with the INFIX form (prefix 1):
+//     `a word b`. That is the spelling STYLE-GUIDE.md §S2 requires for
+//     them, and `describe` is documentation — it must not open with the
+//     form the style guide rejects. The non-commutative ones keep the
+//     forward form as a second example: the pair binds the SAME
+//     arguments (`3.5 sub 2` and `sub 2 3.5` both give 1.5), which
+//     shows that writing a call all-forward reverses the order the
+//     operands appear in — the step readers get wrong.
+//   - Every other forward word leads with the canonical forward form
+//     (prefix 0): `word a b`, which reads in declared argument order.
 //
 // Both ExampleExprs (generator) and writeExamples (renderer) call this
 // so the pre-computed result map always lines up with what is shown.
@@ -512,8 +549,11 @@ func examplePrefixes(info FuncInfo, sig SigInfo) []int {
 		barrier = nArgs
 	}
 	minPrefix := nArgs - barrier
-	if nArgs == 2 && isNonCommutative2Arg(info) && minPrefix == 0 {
-		return []int{0, 1}
+	if nArgs == 2 && minPrefix <= 1 && isHouseStyleInfix(info.Name) {
+		if minPrefix == 0 && isNonCommutative2Arg(info) {
+			return []int{1, 0}
+		}
+		return []int{1}
 	}
 	return []int{minPrefix}
 }
@@ -572,7 +612,7 @@ func ExampleExprs(info FuncInfo) []string {
 }
 
 // writeExamples renders column-aligned examples for a word: the
-// canonical forward form per signature (plus the swap form for
+// canonical forward form per signature (plus the infix form for
 // non-commutative binary words). Identical expressions across
 // signatures are shown once.
 func writeExamples(b *strings.Builder, info FuncInfo) {
@@ -787,8 +827,16 @@ func formatResult(result float64, sig SigInfo) string {
 	if retLeaf == "Integer" {
 		return fmt.Sprintf("%d", int64(result))
 	}
-	// Match engine: strconv.FormatFloat with 'f', -1, 64
-	return strconv.FormatFloat(result, 'f', -1, 64)
+	// Render through the ENGINE's own float formatter rather than a local
+	// approximation of it. The hand-rolled
+	// `strconv.FormatFloat(result, 'f', -1, 64)` this replaces claimed to
+	// "match engine" and did not: it drops the decimal point on a whole
+	// value, so a Float 7 rendered as `7` — an Integer literal — where the
+	// engine renders `7.0`. That difference is type-visible in boru, so
+	// the fallback was documenting the wrong type. core.FormatFloat is the
+	// same function `describe` output is compared against, so the two
+	// cannot drift apart again.
+	return core.FormatFloat(result)
 }
 
 func computeUnaryResult(name string, sig SigInfo, a string) string {

@@ -148,7 +148,7 @@ var behaviorCorpus = []struct {
 	name string
 	src  string
 }{
-	// --- native words, forward + stack + swap forms ---
+	// --- native words, forward + stack + infix forms ---
 	{"add-forward", `add 2 3`},
 	{"sub-swap", `10 sub 3`},
 	{"sub-forward", `sub 10 3`},

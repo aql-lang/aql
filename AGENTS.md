@@ -174,10 +174,24 @@ A few rules from those guides that bite hardest when missed:
   *rejected*, not just what passes.
 - **Panics are forbidden** outside annotated init-time type registration;
   return errors instead.
-- **Forward call form is canonical**: write `f a b c`, not the
-  mirror-equivalent stack forms, in new code and examples. Mind the
-  operand order — `sub 10 3` is `-7` while `10 sub 3` is `7`
-  ([STYLE-GUIDE.md](STYLE-GUIDE.md) §S2).
+- **Argument order is ONE rule, at every arity.** A call binds its
+  arguments in signature order: matching fills positions from the
+  **forward stack** (the tokens after the word, in written order) up to
+  the signature's barrier, then fills the rest from the **value stack**
+  in reverse (top of stack first). Two-argument words are **not** a
+  special case and there is **no "swap form"** — that phrasing is a
+  legacy misunderstanding; if you find it in a doc, fix the doc. Two
+  consequences: all operands on the value stack gives Forth order, and
+  all operands written forward gives written order — which for a
+  non-commutative word reads backwards (`sub 1 3` is `2`, because `sub`
+  computes `args[1] - args[0]`).
+- **Infix form is the idiom for infix operators**: write `1 add 2`,
+  `10 sub 3`, `n lte 1` — one operand on the stack, one forward — for
+  every two-argument word common convention reads as an operator (`add`,
+  `sub`, `mul`, `div`, `mod`, `pow`, `and`, `or`, `lt`, `lte`, `gt`,
+  `gte`, `eq`, `neq`). Everything else takes forward form `f a b c`.
+  Mind the operand order when converting: `sub 10 3` is `-7` while
+  `10 sub 3` is `7` ([STYLE-GUIDE.md](STYLE-GUIDE.md) §S2).
 - **Fewest square brackets in a signature**: `fn x:Integer Integer [body]`,
   not the five longer spellings of the same thing
   ([STYLE-GUIDE.md](STYLE-GUIDE.md) §S1). `boru fmt` only collapses the

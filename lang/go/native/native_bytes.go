@@ -237,7 +237,7 @@ func bytesSliceAll(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // ---- add overload ----------------------------------------------------------
 
 // addBytesHandler concatenates two byte strings. Like addConcatHandler it
-// joins args[1] ++ args[0], so the swap form `a add b` yields a ++ b.
+// joins args[1] ++ args[0], so the infix form `a add b` yields a ++ b.
 func addBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	b0, _ := asBytes(args[0])
 	b1, _ := asBytes(args[1])

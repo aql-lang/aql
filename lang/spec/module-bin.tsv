@@ -17,8 +17,8 @@ import "boru:bin-util"  BinUtil.ctz 8	3	count trailing zeros (0b1000)
 import "boru:bin-util"  BinUtil.ord 'A'	65	code point of a character
 import "boru:bin-util"  BinUtil.chr 65	'A'	character from a code point
 #
-# §4  swap form
-import "boru:bin-util"  3 BinUtil.popcount	2	swap form dispatches (0b11 → 2)
+# §4  stack form
+import "boru:bin-util"  3 BinUtil.popcount	2	stack form dispatches (0b11 → 2)
 #
 # §5  bitwise operators (moved here from core)
 import "boru:bin-util"  BinUtil.band 12 10	8	bitwise AND (0b1100 & 0b1010)

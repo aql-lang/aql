@@ -39,7 +39,7 @@ the **bare namespace is used (no `-util` suffix)**. Contrast its sibling
 ## 4. API
 
 Signatures are **top-first, sig order** (position 0 = top of stack). All
-inner natives use `BarrierPos: -1` so the swap form `a FilePath.word b`
+inner natives use `BarrierPos: -1` so the infix form `a FilePath.word b`
 dispatches.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
@@ -114,7 +114,7 @@ import "boru:filepath"
 "a/b/c.txt" FilePath.split           # → {dir:"a/b/" file:"c.txt"}
 "a/b/c.txt" FilePath.ext             # → ".txt"
 
-"/a/b" FilePath.rel "/a/b/c/d"       # → "c/d"  (swap form: base, target)
+"/a/b" FilePath.rel "/a/b/c/d"       # → "c/d"  (infix form: base, target)
 "a/b" FilePath.to-slash              # → "a/b"  (identity on Unix)
 "*.txt" FilePath.match "c.txt"       # → true
 

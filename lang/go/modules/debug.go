@@ -61,7 +61,7 @@ func debugExportName(internal string) string {
 }
 
 // debugNatives builds every Go-implemented debug primitive. Each uses
-// BarrierPos: -1 so the dotted swap form (`value Debug.tap`) dispatches
+// BarrierPos: -1 so the dotted infix form (`value Debug.tap`) dispatches
 // (the module-wrapper rule, lang/go/CLAUDE.md). Body-taking words mark
 // NoEvalArgs so the quoted code body reaches the handler unevaluated.
 // debugParseHandler is NAMED so the sig wires the same function as both

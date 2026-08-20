@@ -12,7 +12,7 @@
 add 1 2	3	forward form
 1 add 2	3	mixed split form
 1 2 add	3	stack form
-10 sub 3	7	swap form (10-3)
+10 sub 3	7	infix form (10-3)
 3 10 sub	-7	stack form (3-10)
 add (mul 2 3) 4	10	paren group as operand
 mul 2.5 4	10.0	int/float contagion → Float

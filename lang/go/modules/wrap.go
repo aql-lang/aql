@@ -34,7 +34,7 @@ import (
 //   - The wrapper sig is all-forward (BarrierPos -1) unless a caller
 //     explicitly opts into stack-only, because the INNER native's sig
 //     governs dispatch and the wrapper's own sig must not veto the
-//     swap form (`a pkg.word b`). Inner natives registered into a
+//     infix form (`a pkg.word b`). Inner natives registered into a
 //     module sub-registry MUST themselves use BarrierPos: -1 (the
 //     rule pinned by wrapper_dispatch_test.go).
 //

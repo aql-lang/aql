@@ -92,7 +92,7 @@ pi pi	3 3	repeated reference produces two copies on the stack
 pi tau	3 6	multiple defs interleave with literals fine
 		
 # Def-substituted value flows through forward collection.		
-pi addq 1	4	pi resolves to 3 first; then 3 addq 1 = 4 (the swap form on integers — see mirror.tsv)
+pi addq 1	4	pi resolves to 3 first; then 3 addq 1 = 4 (the infix form on integers — see mirror.tsv)
 1 addq pi	4	1 addq 3 = 4 (mirror form)
 		
 # 4-vs-5: def shadows function. `def addq` would override the		

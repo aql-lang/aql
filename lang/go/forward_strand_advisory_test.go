@@ -71,7 +71,7 @@ func TestForwardStrandAdvisory_QuietInBody(t *testing.T) {
 
 func TestForwardStrandAdvisory_QuietOnIdiomatic(t *testing.T) {
 	for _, src := range []string{
-		"10 sub 3",       // swap form: nothing stranded
+		"10 sub 3",       // infix form: nothing stranded
 		"1 2 3",          // bare values, no word
 		"1 2 3 add",      // no forward collection (add takes top two)
 		"1 2 add",        // exact arity, nothing left

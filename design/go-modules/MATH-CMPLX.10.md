@@ -47,11 +47,11 @@ design decision; state it up front.
 
 Signatures are **top-first, sig order** (position 0 = top of stack), per
 the README "Argument order & dispatch" rule. All inner natives use
-`BarrierPos: -1` so the swap form `a Cmplx.word b` dispatches.
+`BarrierPos: -1` so the infix form `a Cmplx.word b` dispatches.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
-| `complex(re, im)` | `rect` | `[Float im, Float re] -> Map` | Build a complex number from real and imaginary parts. | Constructor: `re Cmplx.rect im` (swap) → `{re, im}` Map. There is no Go `cmplx` function for this (it is the `complex` builtin); curated as the canonical way to mint the Map. |
+| `complex(re, im)` | `rect` | `[Float im, Float re] -> Map` | Build a complex number from real and imaginary parts. | Constructor: `re Cmplx.rect im` (infix) → `{re, im}` Map. There is no Go `cmplx` function for this (it is the `complex` builtin); curated as the canonical way to mint the Map. |
 | `cmplx.Polar` | `polar` | `[Map] -> Map` | Decompose a complex number into magnitude and phase. | `cmplx.Polar` returns `(r, theta)`; collapsed to a `Map {r, theta}` (`Map → Map`). |
 | `cmplx.Rect` | `from-polar` | `[Float theta, Float r] -> Map` | Build a complex number from magnitude and phase. | Inverse of `polar`: `r Cmplx.from-polar theta` → `{re, im}` Map. Renamed from `Rect` to avoid confusion with the `rect` constructor (Go's `Rect` *is* the polar→rect builder). |
 | `cmplx.Abs` | `abs` | `[Map] -> Float` | Magnitude (modulus) of a complex number. | `Map → Float`; `√(re²+im²)`. |
@@ -60,7 +60,7 @@ the README "Argument order & dispatch" rule. All inner natives use
 | `cmplx.Exp` | `exp` | `[Map] -> Map` | Complex exponential `e^z`. | `Map → Map`. |
 | `cmplx.Log` | `log` | `[Map] -> Map` | Principal complex natural logarithm. | `Map → Map`. |
 | `cmplx.Sqrt` | `sqrt` | `[Map] -> Map` | Principal complex square root. | `Map → Map`. |
-| `cmplx.Pow` | `pow` | `[Map exp, Map base] -> Map` | Complex power `base^exp`. | `base Cmplx.pow exp` (swap), both operands `{re, im}` Maps → `Map`. |
+| `cmplx.Pow` | `pow` | `[Map exp, Map base] -> Map` | Complex power `base^exp`. | `base Cmplx.pow exp` (infix), both operands `{re, im}` Maps → `Map`. |
 
 Every `Map`-typed argument is reconstructed into a Go `complex128` as
 `complex(re, im)` after reading the two Float keys via the value bridge;

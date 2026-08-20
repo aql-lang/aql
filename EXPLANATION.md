@@ -128,10 +128,15 @@ the stack *is* what those words mean.
 
 Two practical consequences:
 
-- **Write the forward form first.** `word arg1 arg2` is the canonical
-  call shape in code, docs, and examples; the pipeline form
-  (`arg2 arg1 word`) is an equivalent you reach for when a value is
-  already flowing on the stack.
+- **Write the forward form first — except for the operators.**
+  `word arg1 arg2` is the canonical call shape in code, docs, and
+  examples; the pipeline form (`arg2 arg1 word`) is an equivalent you
+  reach for when a value is already flowing on the stack. The one
+  standing exception is the set of two-argument words common
+  convention reads as infix operators (`add`, `sub`, `mul`, `div`,
+  `mod`, `pow`, `and`, `or`, `lt`, `lte`, `gt`, `gte`, `eq`, `neq`),
+  which house style writes infix: `1 add 2`, `10 sub 3`
+  ([STYLE-GUIDE.md §S2](STYLE-GUIDE.md)).
 - **Don't ask for a word to be flipped.** When forward collection is
   awkward at one call site, the per-call levers are grouping
   (`(…)`, `end`, `;`) and the modifiers `/s` (stack-only here),
@@ -150,7 +155,21 @@ When a word executes, boru fills its argument slots in this order:
    continues. If the type doesn't match, or the walk hits a barrier
    (`end`, `)`, another function word), forward collection stops.
 2. **Stack second.** Any slots still empty are filled from the
-   stack, top of stack into the next-to-fill slot first.
+   stack, top of stack into the next-to-fill slot first, then the
+   next-deeper value, and so on.
+
+That is the entire rule, and it is the same rule for every word at
+every arity. Two-argument words are **not** a special case, and there
+is no "swap form" — both are legacy misreadings that made a single
+rule look like a family of them. A call form chooses only where the
+split between the two phases falls.
+
+The two phases explain the two orders a newcomer notices. Put every
+argument on the stack and step 2 does all the work, reading top-down,
+so you get Forth order (`10 3 sub`). Write every argument after the
+word and step 1 does all the work, in the order you wrote them — so
+for an asymmetric word the reading inverts: `sub 1 3` binds
+`args[0]=1, args[1]=3` and returns `2`.
 
 So `args[0]` is whichever argument is closest to the word in source
 position (or the deepest forward arg if all came from the right);
@@ -223,7 +242,7 @@ check: [info] forward_strands_operand: add collected a forward argument
 
 It fires only when a word both reaches forward *and* takes a stack argument
 while leaving a **sibling** operand (a value of the same type it just
-consumed) behind — so the idiomatic swap form `10 sub 3` and a deliberately
+consumed) behind — so the idiomatic infix form `10 sub 3` and a deliberately
 deeper stack such as `1 2 3 add` stay quiet.
 
 

@@ -195,7 +195,7 @@ func TestSigMatch_ClaimedParenEvaluatedExactlyOnce(t *testing.T) {
 // --- Pathological footguns the matcher exposes (stable, by-design). ---
 
 func TestSigMatch_BarrierStackOnlyArgFootgun(t *testing.T) {
-	// With a barrier `[a | b]`, b is stack-only. The swap form supplies b
+	// With a barrier `[a | b]`, b is stack-only. The infix form supplies b
 	// from the stack and works; the all-forward form leaves b starved and
 	// fails — a genuine footgun worth pinning.
 	def := "def sl fn [[a:Integer | b:Integer][Integer][b sub a]]\n"

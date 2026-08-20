@@ -43,8 +43,8 @@ The bare package name `csv` does not clash with any builtin type
 ## 4. API
 
 Signatures are **top-first, sig order** (position 0 is the top of the
-stack). All inner native sigs use `BarrierPos: -1` so the swap form
-dispatches. The options Map is the **top** arg so the swap form reads
+stack). All inner native sigs use `BarrierPos: -1` so the infix form
+dispatches. The options Map is the **top** arg so the infix form reads
 `source Csv.parse opts`; passing no opts uses RFC-4180 defaults.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
@@ -131,7 +131,7 @@ flag (§10). Promote it only if real dialect-control demand appears.
 import "boru:csv"
 
 "a,b\n1,2" Csv.parse {}                         # [["a","b"],["1","2"]]
-"a;b\n1;2" Csv.parse {delimiter:";"}            # [["a","b"],["1","2"]]  (swap form: src word opts)
+"a;b\n1;2" Csv.parse {delimiter:";"}            # [["a","b"],["1","2"]]  (infix form: src word opts)
 "name,age\nAda,36" Csv.parse-records {}         # [{name:"Ada", age:"36"}]
 [["a","b"],["1","2"]] Csv.format {}             # "a,b\r\n1,2\r\n"
 "\"unterminated" Csv.parse {}                   # ERROR:parse

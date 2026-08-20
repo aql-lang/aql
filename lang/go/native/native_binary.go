@@ -18,7 +18,7 @@ import "fmt"
 //	8 bsr 2   => 2      # 8 >> 2  (sign-extending)
 //	-1 busr 60 => 15    # logical right-shift, zero-fill
 //
-// The handler convention `args[1] OP args[0]` (swap form) matches
+// The handler convention `args[1] OP args[0]` (infix form) matches
 // every other binary word in Boru.
 var BitwiseModuleNatives = []NativeFunc{
 	{

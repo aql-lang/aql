@@ -430,10 +430,13 @@ polymorphic slot and boxing for an enclosing one — are both retired.
 
 ### 4.1 Forward form reverses the operands
 
-`AGENTS.md` makes forward call form canonical for new code, and
-`design/README.md` notes that `a f b` is "the lone non-equivalent two-arg
-(swap) form". For a non-commutative binary word the two spellings compute
-**different values**, and nothing in the expression says which you got:
+Forward call form is canonical for new code except for the two-argument
+words convention reads as infix operators, which house style writes infix
+(`AGENTS.md`, `STYLE-GUIDE.md` §S2). The two spellings are not
+interchangeable: moving an operand across the word moves it to a
+different signature position, so for a non-commutative binary word they
+compute **different values**, and nothing in the expression says which
+you got:
 
 ```
 $ boru do 'sub 10 3'    →   -7
@@ -442,10 +445,11 @@ $ boru do 'lte 5 1'     →   true
 $ boru do '5 lte 1'     →   false
 ```
 
-`lte x y` is `y ≤ x`; `sub a b` is `b − a`. So "n ≤ 1" is `lte 1 n` and
-"n − 1" is `sub 1 n`. Transcribing a guard from infix habit into forward
-form silently inverts it — a factorial written with `lte n 1` returns `1`
-for every input instead of recursing, exit 0. That is not hypothetical:
+`lte x y` is `y ≤ x`; `sub a b` is `b − a`. So "n ≤ 1" is `n lte 1`
+infix, or `lte 1 n` written all-forward; "n − 1" is `n sub 1` infix, or
+`sub 1 n` all-forward. Transcribing a guard from infix habit into
+forward form silently inverts it — a factorial written with `lte n 1`
+returns `1` for every input instead of recursing, exit 0. That is not hypothetical:
 it happened while converting this note's examples, which is why every one
 of them was re-run after conversion.
 

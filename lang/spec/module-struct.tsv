@@ -41,7 +41,7 @@ import "boru:struct-util" StructUtil.transform {x:99} {a:'1'}	{x:99}	literal spe
 #      projection behavior is registered for the type)
 import "boru:struct-util" StructUtil.nodify {a:1 b:2}	{a:1 b:2}	plain Map passes through
 #
-# §9  swap form dispatches through the namespace
+# §9  infix form dispatches through the namespace
 import "boru:struct-util" {a:1} StructUtil.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
 #
 # §10  negative — unbound without import

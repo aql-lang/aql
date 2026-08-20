@@ -253,20 +253,20 @@ func TestVaultParamsFlatten(t *testing.T) {
 	}
 }
 
-// The swap form dispatches through the wrapper (the BarrierPos -1
+// The infix form dispatches through the wrapper (the BarrierPos -1
 // contract): sig[0] binds from the forward side, sig[1] from the stack.
-func TestVaultWrapperSwapForm(t *testing.T) {
+func TestVaultWrapperInfixForm(t *testing.T) {
 	fv := &fakeVault{}
 	_, err := runVaultSteps(t, fv, []string{
 		`import "boru:vault"`,
 		`"w" Vault.set-expiry "a"`,
 	})
 	if err != nil {
-		t.Fatalf("swap form: %v", err)
+		t.Fatalf("infix form: %v", err)
 	}
 	call := fv.lastCall(t)
 	if call.params["alias"] != "a" || call.params["when"] != "w" {
-		t.Fatalf("swap form params = %+v", call.params)
+		t.Fatalf("infix form params = %+v", call.params)
 	}
 }
 

@@ -278,7 +278,7 @@ Non-negotiable, from `lang/go/CLAUDE.md`, `design/go-modules/README.10.md`
 and ADR-008:
 
 - **`BarrierPos: -1`** on any inner native sig of a module FnDef wrapper,
-  or swap form stops dispatching (pinned by `wrapper_dispatch_test.go`).
+  or the infix form stops dispatching (pinned by `wrapper_dispatch_test.go`).
   `fetch`'s three sigs already do this (`net_module.go:31-33`) — new sigs
   must match.
 - **Every export needs a `registerDocs` line** (`docs_net.go`) or

@@ -384,10 +384,21 @@ to every signature, regardless of whether the word was historically
 `0 < B < N` mixes the two: forward fills the leading B positions then
 stack fills the rest.
 
-### Strong recommendation: prefer FORWARD form
+### Surface conventions (STYLE-GUIDE.md §S2)
 
-`f a b c` is the canonical call form. Always reach for it in new
-code, examples, REPL transcripts, and documentation:
+Where the split falls is the only thing a call form chooses. Two
+conventions:
+
+**Infix form for words read as infix operators** — `add`, `sub`,
+`mul`, `div`, `mod`, `pow`, `and`, `or`, `lt`, `lte`, `gt`, `gte`,
+`eq`, `neq`. Write `1 add 2`, `10 sub 3`, `n lte 1`: the left
+operand comes off the stack, the right one is written forward.
+Binary handlers compute `args[1] OP args[0]` precisely so this
+split reads as written.
+
+**Forward form `f a b c` for everything else** — every other word,
+at every arity. Reach for it in new code, examples, REPL
+transcripts, and documentation:
 
 - It reads naturally — written argument order matches declared
   param order. `def f fn [[a:Integer b:String] …] f 1 "x"` binds
@@ -398,18 +409,19 @@ code, examples, REPL transcripts, and documentation:
 - It composes cleanly with paren grouping: `(f a b) other-thing`
   contains the call.
 
-The Phase-4 unified rule guarantees `f a b ≡ b f a ≡ b a f` (mirror
-equivalence of three forms). Stack form (`c b a f`) and partial
-forms (`c b f a`, `c f a b`) all dispatch to the same `sig=[a,b,c]`
-— but they read backwards because the last-pushed value lands on
-`sig[0]`. Use them only when an enclosing pipeline naturally leaves
-arguments on the stack already; otherwise forward form is clearer.
+Stack form (`c b a f`) and the intermediate splits (`c b f a`,
+`c f a b`) all dispatch to the same `sig=[a,b,c]` — but written out
+they read back-to-front, because the stack is consumed top-down.
+Use them where an enclosing pipeline has already left the arguments
+on the stack.
 
-The **swap form** `a f b` is the only non-equivalent two-arg
-arrangement. It binds `sig[0]` from the forward side and `sig[1]`
-from the prefix stack. Some non-commutative ops (`10 sub 3 = 7`)
-read better in swap form, but forward form (`sub 10 3 = 3 sub 10
-≡ 3 10 sub`) is always safe and equivalent.
+`a f b` is **not** a special two-arg form and is **not** a "swap
+form" — both phrasings are legacy misunderstandings and must not
+reappear in code, comments, or docs. It is the ordinary rule with
+the split at k=1: `b` → sig[0] (the single forward arg), `a` →
+sig[1] (the stack top). It differs from `f a b` for exactly the
+reason `c f a b` differs from `f c a b`: moving an operand across
+the word moves it to a different sig position.
 
 ### One arg-flow convention everywhere
 
@@ -487,25 +499,27 @@ c b a h     → forward [], stack top=a, deeper=b, deepest=c → sig=[a,b,c]
 
 With `sub` declared as a 2-arg forward-eligible word — handler computes
 `args[1] - args[0]` (post-§1.4 phase 4: every binary math handler
-computes `b op a` so the swap form reads naturally):
+computes `b op a` so the infix split reads as written):
 
 ```
 sub 10 3    → forward [10,3]                  → sig=[10,3] → 3-10 = -7
 3 sub 10    → forward [10], stack top=3       → sig=[10,3] → 3-10 = -7
 3 10 sub    → forward [],   stack top=10…3    → sig=[10,3] → 3-10 = -7
-10 sub 3    → forward [3],  stack top=10      → sig=[3,10] → 10-3 =  7  (swap form)
+10 sub 3    → forward [3],  stack top=10      → sig=[3,10] → 10-3 =  7  (infix — house style)
+10 3 sub    → forward [],   stack top=3…10    → sig=[3,10] → 10-3 =  7
 ```
 
-`a f b` is the **swap form**: it binds sig[0] from the forward side
-(b) and sig[1] from the prefix (a). The mirror equivalence
-`f a b ≡ b f a ≡ b a f` holds; `a f b` is the only non-equivalent
-two-arg arrangement. The phase-4 handler convention picks the swap
-form as the canonical syntax: `10 sub 3 = 7` matches how
-a reader scans left-to-right.
+The first three are one split-set (`f a b ≡ b f a ≡ b a f`); the last
+two are the other (`a f b ≡ a b f`). They differ because they put a
+different operand in sig[0] — not because two-arg calls follow a
+different rule. The phase-4 handler convention is chosen so that the
+infix spelling is the one scanning left-to-right, `10 sub 3 = 7`,
+which is why infix form is house style for these words
+(STYLE-GUIDE.md §S2).
 
 ### Implementation
 
-The matcher in `eng/go/match.go::matchSignature` runs a single
+The matcher in `core/go/engine.go::MatchSignature` runs a single
 loop over sig positions. Forward limit comes from `sig.BarrierPos`,
 overridable per call site by `/s` (force stack: limit=0) or `/f`
 (force forward: limit=N). When forward args have to be collected
@@ -529,9 +543,9 @@ old flat (ungrouped) behaviour.
 
 `afn` has signature `[Any Any |]` (both args forward-eligible, both
 typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
-call form is the swap `input afn body` (i.e. `input => body`),
+call form is the infix split `input afn body` (i.e. `input => body`),
 mirroring the boru `args[1] op args[0]` reading convention — afn
-collects the body as the forward arg and the input sig from the
+collects the body as its forward arg and the input sig from the
 stack.
 
 The handler:
@@ -835,16 +849,16 @@ through `eng/go/engine.go::execFnDefLiteral`, which calls
 `Signatures`.
 
 **Consequence:** the inner native's `BarrierPos` controls whether
-the wrapper's swap-form `a pkg.word b` dispatches.
+the wrapper dispatches under the infix split `a pkg.word b`.
 
 - If the inner sig has `BarrierPos: 0` (stack-only),
-  matchSignature requires every arg on the stack. The swap form
+  matchSignature requires every arg on the stack. `a pkg.word b`
   has 1 stack + 1 forward, so dispatch fails silently — the
   FnDef just sits on the stack with the args around it.
 - If the inner sig has `BarrierPos: -1` (all-forward eligible) or
-  any positive boundary, matchSignature accepts the swap-form
-  forward+stack split, runs insertForward, completes collection,
-  and dispatches normally.
+  any positive boundary, matchSignature accepts that forward+stack
+  split, runs insertForward, completes collection, and dispatches
+  normally.
 
 **Rule:** inner natives registered into a module sub-registry
 MUST use `BarrierPos: -1` (or a positive value that includes

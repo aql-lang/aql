@@ -67,7 +67,7 @@ it, in declared order, exactly like a conventional function call.
 
 ```boru
 add 1 2 # returns 3 — the word comes first
-def square fn x:Number Number [mul x x]
+def square fn x:Number Number [x mul x]
 square 4 # returns 16 — your own words read the same way
 import "boru:math-util" # imports read forward, too
 3 7 MathUtil.min # returns 3 — module words are then in scope
@@ -82,14 +82,32 @@ order, and you never have to track what is sitting on the stack:
 - `f a b c` binds `a`, `b`, `c` to the first, second, third parameters.
 - Calls compose by parenthesising: `(f a b) g c`.
 - The same rule covers built-ins, your own `def fn`s, and `import`.
-- One exception: a dotted module word (`MathUtil.min`) auto-invokes from
-  what's already on the stack, so call it args-first (`3 7 MathUtil.min`).
+- Dotted module words follow it too: `MathUtil.min 3 7` and the args-first
+  `3 7 MathUtil.min` both dispatch.
 
-The stack forms (`c b a f`, `10 3 sub`) remain fully equivalent and are
-there for point-free pipelines, but forward form is what you reach for
-first. See the **[Tutorial](TUTORIAL.md)** to start writing it and the
-**[Explanation](EXPLANATION.md)** for how forward collection works
-underneath.
+**Except for the operators.** The two-argument words common convention
+reads as infix operators — `add`, `sub`, `mul`, `div`, `mod`, `pow`,
+`and`, `or`, `lt`, `lte`, `gt`, `gte`, `eq`, `neq` — are written
+**infix**: `1 add 2`, `10 sub 3`, `n lte 1`. They are ordinary
+two-argument functions, not operators the grammar knows about; infix is
+simply the spelling that reads the way it computes
+([STYLE-GUIDE.md §S2](STYLE-GUIDE.md)).
+
+### One rule behind both
+
+Arguments bind in signature order. Matching takes them from the tokens
+after the word, in written order, up to that signature's barrier, and
+fills whatever positions remain from the value stack in reverse — top of
+stack first. That is the whole of it, at every arity: two-argument words
+are **not** a special case and there is no "swap form".
+
+Two consequences fall out. Put every operand on the stack and you get
+Forth order, so `10 3 sub` is `7`. Write every operand after the word
+and you get the order you wrote them, which for an asymmetric word reads
+backwards: `sub 1 3` is `2`, and `sub 10 3` is `-7`. The stack forms are
+there for point-free pipelines; see the **[Tutorial](TUTORIAL.md)** to
+start writing boru and the **[Explanation](EXPLANATION.md)** for how
+forward collection works underneath.
 
 
 ## Install

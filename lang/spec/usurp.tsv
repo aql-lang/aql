@@ -80,7 +80,7 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2/v 10 3	ERROR:s
 # handler (it has no boru body), so the call re-dispatches the original.
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp (valof sub2))  fu 10 3	-7	named-bound wrapper (by value) dispatches as a word
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  fu 10 3	-7	named-bound wrapper (by name) dispatches as a word
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  10 fu 3	7	swap form against the named wrapper
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  10 fu 3	7	infix form against the named wrapper
 #
 # ─── the cond-first `if` alias — usurp's motivating idiom ───
 def ifu (usurp if)  true ifu 88 99	99	def ifu (usurp if): reversed `if`, cond on the stack

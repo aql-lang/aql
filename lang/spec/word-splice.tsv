@@ -103,7 +103,7 @@ def vs word [2,3] def add3 fn [[x:Integer y:Integer z:Integer][Integer][x add y 
 def n word 42 add n 3	45	scalar data splice as a native word's forward arg
 def e word [] def add2 fn [[x:Integer y:Integer][Integer][x add y]] add2 1 e 5	6	empty splice contributes nothing; scan reaches the 5
 def kv word [{a:1},{b:2}] def both fn [[x:Map y:Map][Integer][(size x) add (size y)]] both kv	2	non-scalar elements spread too (maps fill Map slots)
-def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] 1 add2 vs	1 5	swap form: both args from the spread; prefix 1 untouched (= 1 add2 (vs))
+def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] 1 add2 vs	1 5	all-forward: both args from the spread; prefix 1 untouched (= 1 add2 (vs))
 def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] vs add2	5	stack form unchanged: splice fires standalone, add2 collects
 def vs word [2,3] def g fn [[x:Any][Any][x]] g vs 9	2 3 9	one-slot fn takes the first value; the rest spill (= g (vs) 9)
 def xs word [1,2,3] def y xs [y]	[1 2 3]	rebinding ALIASES: def collects the marker itself; y is the same splice

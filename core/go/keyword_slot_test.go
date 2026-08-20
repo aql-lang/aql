@@ -166,7 +166,7 @@ func TestScanMacroOperandsUnbalancedGroupIsBoundary(t *testing.T) {
 	}
 }
 
-// --- matchSignature: swap-form-inside-forward with a mismatched stack arg ---
+// --- matchSignature: infix-form-inside-forward with a mismatched stack arg ---
 
 // TestMatchSignatureInsideForwardStackMismatch drives the arm where a
 // word dispatching INSIDE a pending forward has forward-collected some
@@ -196,7 +196,7 @@ func TestMatchSignatureInsideForwardStackMismatch(t *testing.T) {
 }
 
 // TestMatchSignatureInsideForwardPatternReject drives the pattern GATE of
-// that same swap-form-inside-forward arm: the remaining stack operand
+// that same infix-form-inside-forward arm: the remaining stack operand
 // type-matches (canStack=true), so the split is filled — but the sig
 // carries a value Pattern that the forward-collected position VIOLATES,
 // so patternsOk rejects the selection exactly like the full-forward and
@@ -233,6 +233,6 @@ func TestMatchSignatureInsideForwardPatternReject(t *testing.T) {
 }
 
 // The positive twin (canStack=true, pattern satisfied → fill the
-// remaining slots from the stack) is exercised by ordinary swap-form
+// remaining slots from the stack) is exercised by ordinary infix-form
 // dispatch in the spec suite (e.g. `5 sub 2 add 1`); it needs the real
 // resolvedIdx tape mapping a hand-built matchSignature call cannot supply.

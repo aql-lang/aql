@@ -3,9 +3,9 @@
 # Format: input<TAB>expected<TAB>description
 #
 # Comparison words gt/lt/gte/lte are non-commutative like the math words:
-# the handler computes `args[1] OP args[0]`, so the SWAP form `a gt b`
+# the handler computes `args[1] OP args[0]`, so the infix form `a gt b`
 # reads naturally (`5 gt 3 = true`). `or`/`otherwise`/`guard` are
-# short-circuit and use the swap form (BarrierPos 1): the left operand is
+# short-circuit and use the infix form (BarrierPos 1): the left operand is
 # taken from the stack, the right from the forward token.
 #
 # ─────────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ any [false false]	false	none truthy
 3 and 0	0	and returns the falsy operand (value semantics)
 and 'x' 1	'x'	and of two truthy values returns an operand
 #
-# §2  or / otherwise — short-circuit, swap form `a or b`
+# §2  or / otherwise — short-circuit, infix form `a or b`
 false or true	true	or returns the first truthy operand
 'x' or 'default'	'x'	non-empty left wins
 '' or 'fallback'	'fallback'	empty string is falsy → right operand
@@ -39,7 +39,7 @@ neq 1 2	true	not-equal
 eq 1 1.0	true	cross-leaf numeric magnitude compares equal
 eq 'a' 'a'	true	string equality
 #
-# §5  ordering — non-commutative (swap form reads naturally)
+# §5  ordering — non-commutative (infix form reads naturally)
 5 gt 3	true	`5 gt 3` = 5>3
 gt 5 3	false	forward `gt 5 3` = 3>5 = false
 5 lt 3	false	`5 lt 3` = 5<3
@@ -56,4 +56,4 @@ import "boru:logic-util" LogicUtil.nor false false	true	not-or
 import "boru:logic-util" LogicUtil.iff true true	true	if-and-only-if
 #
 # §7  errors
-or true	ERROR:signature_error	or needs two operands (swap form: a or b)
+or true	ERROR:signature_error	or needs two operands (infix form: a or b)

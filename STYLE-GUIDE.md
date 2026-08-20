@@ -178,27 +178,114 @@ shortest spelling that parses.
 (**NUR088**), so it is on the author.
 
 
-## S2 — Forward call form is canonical
+## S2 — Argument order: one rule, and the infix idiom
 
-Write `f a b c`, not the mirror-equivalent stack forms, in new code and
-examples (`AGENTS.md`).
+### The rule
 
-**Mind the operand order when you convert.** Forward and swap are *not*
-the same expression for a non-commutative word:
+A call binds its arguments **in signature order**. Matching walks the
+signature from position 0 and fills each position from the **forward
+stack** — the tokens written after the word, in written order — until it
+reaches that signature's **barrier**; every position still unfilled is
+then taken from the **value stack**, in reverse: the next position gets
+the top of the stack, the one after it the next-deeper value, and so on.
+(The barrier is the `|` in a parameter list — the last position that may
+be filled forward. Most words have none, which means every position is
+forward-eligible; collection still stops early at `end`, `)`, another
+function word, or a type mismatch, and the stack takes over there.)
+
+That is the whole rule. It is the same rule at every arity: **two-argument
+words are not a special case, and there is no "swap form"**. A call form
+is only a choice of *where the split falls*. Move the split and you move
+operands across the word; write them so each one still lands in the same
+signature position and you have written the same call:
+
+```boru
+def f fn [[a:Integer b:Integer c:Integer] Integer [...]]
+
+f 1 2 3     ;# forward [1,2,3]                     → a=1  b=2  c=3
+3 f 1 2     ;# forward [1,2], stack top 3          → a=1  b=2  c=3
+3 2 f 1     ;# forward [1],   stack 2 then 3       → a=1  b=2  c=3
+3 2 1 f     ;# forward [],    stack 1, 2, then 3   → a=1  b=2  c=3
+```
+
+Two consequences fall out of it, and both are worth naming:
+
+- **Put every argument on the value stack and you get Forth order.** The
+  stack is read top-down, so `3 2 1 f` lists the operands back-to-front,
+  exactly as a Forth programmer expects.
+- **Write every argument forward and you get written order — which, for a
+  non-commutative word, reads backwards.** `sub` returns
+  `args[1] - args[0]`, so two forward operands bind `args[0]=1,
+  args[1]=3` and the call computes `3 - 1`:
+
+```
+$ boru do 'sub 1 3'    →   2
+```
+
+That is not a quirk of `sub` and not a two-argument exception — it is the
+one rule binding the operands in the order they were written.
+
+### The idiom: infix form for infix operators
+
+boru has no operators. `add`, `sub`, `mul`, `div`, `mod`, `pow`, `and`,
+`or`, `lt`, `lte`, `gt`, `gte`, `eq` and `neq` are ordinary two-argument
+functions, matched by the rule above like every other word. But readers
+carry infix habits for exactly these words, and the rule makes the infix
+spelling mean what it looks like: the left operand comes off the value
+stack, the right operand is written forward.
+
+**Rule.** For a two-argument word that common convention reads as an
+infix operator, write it **infix**:
+
+```boru
+1 add 2          ;# YES — 3
+10 sub 3         ;# YES — 7
+n lte 1          ;# YES — "n ≤ 1"
+a and b          ;# YES
+```
+
+```boru
+add 1 2          ;# no — right answer, wrong idiom
+sub 10 3         ;# no — and it is -7, not 7
+lte 1 n          ;# no — the forward spelling of "n ≤ 1", and nobody reads it that way
+```
+
+All three spellings below are legal, and they differ only in where the
+operands sit. The first is house style:
+
+```
+1 sub 3     ;# infix — forward [3], stack top 1 → args=[3,1] → 1-3 = -2
+1 3 sub     ;# Forth order — forward [], stack 3 then 1 → args=[3,1] → 1-3 = -2
+sub 1 3     ;# all forward — args=[1,3] → 3-1 = 2, the reversed reading
+```
+
+The first two agree because the operands land in the same signature
+positions — the split falls in a different place, but `3` reaches
+`args[0]` either way. The third differs because writing both operands
+forward binds them in written order instead.
+
+Everything else — words that are not read as operators, and every word of
+one or three-or-more arguments — takes **forward form**: `f a b c`, with
+the arguments in declared parameter order. Reach for a stack-side split
+only when an enclosing pipeline has already left the operands on the
+stack.
+
+### Converting a call is an edit, not a reformatting
+
+Moving an operand across the word changes which signature position it
+lands in, so for a non-commutative word it changes the answer:
 
 ```
 $ boru do 'sub 10 3'    →   -7        $ boru do '10 sub 3'   →    7
 $ boru do 'lte 5 1'     →   true      $ boru do '5 lte 1'    →   false
 ```
 
-`lte x y` means `y <= x`; `sub a b` means `b - a`. The all-stack form
-`10 3 sub` is the one that agrees with `10 sub 3` (README.md). So the
-forward spelling of "n ≤ 1" is `lte 1 n`, and of "n − 1" is `sub 1 n`.
-
-Transcribing a guard from infix habit inverts it silently: a factorial
-written `if (lte n 1) [1] [...]` returns `1` for every input, exit 0, no
-diagnostic. **Re-run examples after converting them** — this is not a
-formatting change, it is an edit to the expression.
+Transcribing a guard from infix habit into forward form inverts it
+silently: a factorial written `if (lte n 1) [1] [...]` returns `1` for
+every input, exit 0, no diagnostic — the infix `if (n lte 1) [1] [...]`
+is the one that means what it says. **Re-run every example you
+convert.** `boru fmt` does not touch call form, so this one is entirely
+on the author.
 
 
 ## S3 — Passing a function: use `/v`

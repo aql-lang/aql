@@ -26,8 +26,8 @@ this block recording the outcomes.
 - **CLI `--` audit (finding 3, action n/a)** — audited; the only
   leading-negative example already demonstrates the `--` guard.
 - **Cognitive load 1 (call-style)** — maintainer decision: examples
-  default to the **forward form** (per ADR-004), with the swap form
-  kept for predicates (`n gt 0`) and non-commutative operations
+  default to the **forward form** (per ADR-004), with the **infix
+  form** kept for predicates (`n gt 0`) and non-commutative operations
   (`10 sub 3`, `7 div 2`, string concat), data-first pipelines kept,
   Forth stack words kept, and the sections that teach the three call
   forms untouched. Applied across README/TUTORIAL/HOWTO/REFERENCE/

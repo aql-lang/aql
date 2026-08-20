@@ -64,7 +64,7 @@ bug than any loud error.
 > **§6.2 `mixed_form_call`** — check-mode advisory (info severity,
 > never gating) on calls of ≥3 args that mix stack and forward
 > collection (the T9.4 `(cond) if [a] [b]` shape); two-arg mixed
-> calls are the documented swap form and stay clean.
+> calls are the documented infix form and stay clean.
 > **§6.1 sibling-group source order** — NOT landed: the fix belongs
 > to the structure-first lazy-resolution rework per the design text;
 > until then B2a's mitigations are §6.2's advisory cousin + the

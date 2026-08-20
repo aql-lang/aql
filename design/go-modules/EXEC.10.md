@@ -55,7 +55,7 @@ roster and core words). Words are reached args-before-dot:
 ## 4. API
 
 Signatures are **top-first, sig order**; every word's inner native uses
-`BarrierPos: -1` so the swap form dispatches (no zero-arg words in this
+`BarrierPos: -1` so the infix form dispatches (no zero-arg words in this
 module); see `README.10.md` "Argument order & dispatch".
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |

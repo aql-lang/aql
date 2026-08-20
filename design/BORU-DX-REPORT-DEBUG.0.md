@@ -95,9 +95,10 @@ value label Debug.label      # stack: [value, label]; sig[0]=label (top) → (St
 Debug.label value label      # forward: sig[0]=value, sig[1]=label
 ```
 
-The mirror-equivalence rule (`f a b ≡ b f a ≡ b a f`) and the
-non-equivalent swap form are documented thoroughly in
-`lang/go/CLAUDE.md`, and the error message even suggests the swap — but
+The one argument-ordering rule and its two split-classes
+(`f a b ≡ b f a ≡ b a f` in one, `a f b ≡ a b f` in the other) are
+documented thoroughly in `lang/go/CLAUDE.md`, and the error message even
+suggests the other split — but
 the cognitive load of holding "which split am I writing?" for *every*
 multi-arg module call is real, especially because the same word reads
 correctly in two different orders with two different bindings.

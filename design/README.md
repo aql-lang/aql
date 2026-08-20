@@ -27,8 +27,13 @@ pass and carry no implied status either way.
 > below. The single rule: each signature's `BarrierPos` marks the `|`;
 > positions before it are forward-eligible (filled from forward tokens in
 > source order, else the stack), positions after it are stack-only; the
-> stack is consumed top-down (sig[0] = top). Forward form `f a b c` is
-> canonical; `a f b` is the lone non-equivalent two-arg (swap) form.
+> stack is consumed top-down (sig[0] = top). This is ONE rule at every
+> arity — two-arg words are **not** a special case and there is no
+> "swap form"; a call form only chooses where the split falls, so
+> `a f b` binds a different pair than `f a b` for exactly the reason
+> `c f a b` and `f c a b` bind differently at three args. Surface style: **infix** for the two-arg words
+> convention reads as operators (`1 add 2`, `10 sub 3`), **forward
+> form `f a b c`** for everything else (`STYLE-GUIDE.md` §S2).
 
 ## Living references — argument ordering & dispatch
 
@@ -44,13 +49,13 @@ pass and carry no implied status either way.
 - `SIG-ORDER-REFACTOR.10.md` — the §1.4 top-first unification (end state).
 - `FORWARD-COLLECTION-PHASES.10.md` — the two-phase collection model.
 - `FORWARD-COLLECTION-TRAPS.0.md` — collection edge cases.
-- `FORWARD-STRAND-ADVISORY.10.md` — mixed-dispatch / swap-form advisory.
+- `FORWARD-STRAND-ADVISORY.10.md` — mixed-dispatch / infix-split advisory.
 - `FUNCTION-MODEL.10.md` — unified `Signature`/`FnSig`, single dispatch path.
 - `USURP.10.md` — `/u` wrapper and `BarrierPos` interplay.
 - `REACH.10.md` — dot-access lowering to `get`/`getr` chains.
 - `ENGINE.10.md` — core engine model (argument-equivalence principle).
   *Corrected in the latest audit (removed the stale "prefix tried first,
-  forward as fallback" framing; added the swap-form note).*
+  forward as fallback" framing; added the split-classes note).*
 - `LANGREF.10.md` — language reference. *Corrected in the latest audit
   (same forward-args phrasing; anchored `sub` to `args[1] - args[0]`).*
 

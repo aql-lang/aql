@@ -83,7 +83,7 @@ func TestResponseGetComputedKey(t *testing.T) {
 	}
 }
 
-// has answers presence without reading. Swap form, as for a Map.
+// has answers presence without reading. Infix form, as for a Map.
 func TestResponseHas(t *testing.T) {
 	url := accessorServer(t)
 	out, err := netRun(t, `def r (Net.fetch "`+url+`")  [(r has status/q) (r has nope/q)]`)
