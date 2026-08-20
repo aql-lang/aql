@@ -549,25 +549,39 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, body.Parent)
 		installDepScalarUnifier(def, body.Parent, di, name)
 		r.Defs.PushType(name, def, body)
-	} else {
-		// A bare type-literal body IS the parent type after the
-		// type/value merge; structural/singleton bodies parent at
-		// their container type (Map / List / Integer / …). For a
-		// bare type-literal body, route through CanonicalType so the
-		// minted subtype's lattice Parent is the canonical *Type and
-		// not a non-canonical copy.
-		parent := body.Parent
-		if IsBareTypeNode(body) {
-			parent = CanonicalType(r, &body)
+	} else if IsBareTypeNode(body) {
+		// ALIAS: `def Foo Integer`. The name ADOPTS the canonical
+		// aliased node instead of minting an unbridged child — a fresh
+		// mint under the aliased type carried DefaultBehavior, nothing
+		// was ever tagged with it, and dispatch on an `x:Foo` parameter
+		// rejected every value while `42 is Foo` (which consults the
+		// body) accepted (NUR093). An alias claims the SAME type, so it
+		// binds the same node; the newtype/alias distinction stands —
+		// a newtype (`refine`) mints, an alias adopts. Route through
+		// CanonicalType so the adopted pointer is the canonical *Type
+		// and not a stack copy. The aliased family's SubtypeNamer rule
+		// still applies (`def Mail Emailon` still refuses), keeping the
+		// naming surface unchanged.
+		canon := CanonicalType(r, &body)
+		if err := validateSubtypeNameFor(canon, name); err != nil {
+			return err
 		}
-		// Aliases mint a node under the aliased type, so `def Mail
-		// Emailon` would put Mail inside the Micron family — the
-		// family's SubtypeNamer rule applies (`def Mailon Emailon`
-		// passes).
+		r.Defs.PushTypeAdopted(name, canon, body)
+	} else {
+		// Structural / singleton bodies (record shape, `def One 1`,
+		// typed-container literals, refine Record/Options/Table bodies,
+		// host shaped types, …) parent at their container type (Map /
+		// List / Integer / …) and get a content-deciding
+		// BindingBodyUnifier on the minted node, so dispatch and `is`
+		// consult one structural rule — the DisjunctUnifier /
+		// FnUndefUnifier discipline extended to the catch-all kinds
+		// (NUR090's record-shape row, NUR093's singleton row).
+		parent := body.Parent
 		if err := validateSubtypeNameFor(parent, name); err != nil {
 			return err
 		}
 		def := r.Types.MintType(name, parent)
+		installBindingBodyUnifier(def, body, name)
 		r.Defs.PushType(name, def, body)
 	}
 	for _, p := range strings.Split(name, "/") {

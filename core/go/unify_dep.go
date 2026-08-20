@@ -49,6 +49,25 @@ func (d *DepScalarUnifier) Match(v Value, t *Type) bool {
 	return depScalarCheck(d.depInfo, v)
 }
 
+// Unify runs the bounds check against a concrete operand via the shared
+// membership contract: gate 1 (base-type conformance) then gate 2
+// (depScalarCheck), admitting the candidate itself — never the node
+// literal — and failing DEFINITIVELY on a concrete non-member so the
+// structural fallback cannot re-admit it by lattice subtyping alone.
+// This is the Unify capability PredicateUnifier already carries; without
+// it a typed bind against the bare minted node (`def x:Big 5` once
+// evaluation yields nodes — design/TYPE-REPRESENTATION.1.md §N3) would
+// fall to unifySameOrSubtype's narrower-literal arm and bind without
+// ever running the constraint.
+func (d *DepScalarUnifier) Unify(a, b Value) (Value, *UnifyError) {
+	return unifyMembership(a, b, "dependent scalar "+d.typeName, func(v Value) (Value, bool, error) {
+		if !v.Parent.ConformsTo(d.baseType) {
+			return Value{}, false, nil
+		}
+		return v, depScalarCheck(d.depInfo, v), nil
+	})
+}
+
 // installDepScalarUnifier attaches a depScalarUnifier to def. Called
 // by InstallType when minting a DepScalar-bodied user type so the
 // constraint runs at every Is/Match call site (sig dispatch, the `is`

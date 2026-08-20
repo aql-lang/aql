@@ -37,10 +37,15 @@ func TestFnSpecParamMatrix(t *testing.T) {
 		{input: "def f fn [[x:[:Integer]] [Integer] [6]] f [1 2]", want: "6"},
 		{input: "def f fn [[x:[]] [Integer] [7]] f []", want: "7"},
 
-		// Named types: a def-installed alias is nominal — the raw base
-		// value does not dispatch into it.
+		// Named types: a def-installed alias ADOPTS the canonical
+		// aliased node (core.InstallType's alias arm — NUR093), so it
+		// is TRANSPARENT: the raw base value dispatches into it exactly
+		// as `42 is Foo` always accepted it. The old "alias is nominal"
+		// reading minted an unbridged child no value could ever inhabit
+		// (typed-defs did not tag either) — a nominal category with no
+		// members. Nominal identity is `refine`'s job, not `def`'s.
 		{input: "def Big Integer def f fn [[x:Big] [Integer] [8]] f 3",
-			wantErr: "no signature matches"},
+			want: "8"},
 		{input: "def Rec (refine Record [{a:Integer}]) def f fn [[x:Rec] [Integer] [9]] f {a:1}",
 			want: "9"},
 		{input: "def f fn [[x:P] [Integer] [10]] f p", want: "10"},

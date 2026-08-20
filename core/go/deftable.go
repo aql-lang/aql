@@ -3,9 +3,15 @@ package core
 // DefEntry is one binding on a name's stack. Body is the bound value.
 // TypeDef is the minted lattice type when the binding is a *type*
 // binding (a capitalised `def`), or nil for an ordinary value binding.
+// Minted records that the binding MINTED its TypeDef (the normal
+// InstallType path) rather than ADOPTING an existing canonical node
+// (a type alias — `def Foo Integer`): `undef` retires the lattice node
+// only for minted bindings, since retiring an adopted node would
+// delete another binding's (or a builtin's) identity from the ID index.
 type DefEntry struct {
 	Body    Value
 	TypeDef *Type
+	Minted  bool
 }
 
 // DefTable holds the stacked bindings for every name. Post the
@@ -105,6 +111,20 @@ func (dt *DefTable) Push(name string, v Value) {
 // PushType pushes a new type binding for name: the body plus the
 // minted lattice type that carries this declaration's identity.
 func (dt *DefTable) PushType(name string, def *Type, body Value) {
+	if dt == nil {
+		return
+	}
+	dt.mutations++
+	dt.touch(name)
+	dt.stacks[name] = append(dt.stacks[name], DefEntry{Body: body, TypeDef: def, Minted: true})
+}
+
+// PushTypeAdopted pushes a type binding whose TypeDef is an EXISTING
+// canonical node the binding adopts rather than mints — the alias path
+// (`def Foo Integer` binds the canonical Integer node itself). The
+// entry's Minted flag stays false so `undef` never retires the adopted
+// node.
+func (dt *DefTable) PushTypeAdopted(name string, def *Type, body Value) {
 	if dt == nil {
 		return
 	}

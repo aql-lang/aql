@@ -98,13 +98,18 @@ func TestW8OfTypeWrongArity(t *testing.T) {
 
 func TestW8OfTypeBoundNominalNamed(t *testing.T) {
 	// A nominal named type (whose body is a bare node) instantiates via
-	// NewBoundedType(def) rather than NewBoundedTypeBody.
+	// NewBoundedType(def) rather than NewBoundedTypeBody. An ALIAS
+	// binding ADOPTS the canonical aliased node (core.InstallType's
+	// alias arm — NUR093: a minted alias child was dispatch-dead), so
+	// `def Foo Integer` makes Foo transparent: the bound resolves to
+	// the Integer node itself and Foo/t IS Integer/t. Only minting
+	// kinds (refine, class, …) put their own name on the node.
 	out, err := w8Run(t, `def Foo Integer  Foo/t`)
 	if err != nil {
 		t.Fatalf("Foo/t: %v", err)
 	}
-	if len(out) != 1 || !strings.Contains(out[0].String(), "Foo") {
-		t.Errorf("Foo/t should render a Type<Foo>, got %v", Canon(out))
+	if len(out) != 1 || !strings.Contains(out[0].String(), "Integer") {
+		t.Errorf("Foo/t adopts the canonical Integer node, got %v", Canon(out))
 	}
 }
 

@@ -174,6 +174,41 @@ type Unifier interface {
 	Unify(a, b Value) (Value, *UnifyError)
 }
 
+// HasConstraintUnify reports whether t's Behavior chain carries a
+// KERNEL membership-constraint Unifier — a Behavior that is both
+// ContentMembership (membership decided from content) and a Unifier
+// (predicate, dependent scalar, binding-body, host member). Callers
+// with a generic nominal bare-node fallback (the typed-def
+// refine-reparent arm) consult it to keep their hands off nodes whose
+// kind enforces membership through Unify — reparenting there would bind
+// without running the constraint. A user `behave unify/q` wrapper on a
+// nominal refine is a Unifier but NOT ContentMembership, so nominal
+// newtypes keep the reparent arm; the walk unwraps Match-delegating
+// wrappers and behaviorWrapper chains so a kernel constraint hidden
+// beneath a `behave` layer is still found.
+func HasConstraintUnify(t *Type) bool {
+	if t == nil {
+		return false
+	}
+	for b := t.Behavior(); b != nil; {
+		_, isUnifier := b.(Unifier)
+		_, isContent := b.(ContentMembership)
+		if isUnifier && isContent {
+			return true
+		}
+		if d, ok := b.(MatchDelegating); ok {
+			b = d.DelegatesMatchTo()
+			continue
+		}
+		if p, ok := PrevBehavior(b); ok {
+			b = p
+			continue
+		}
+		break
+	}
+	return false
+}
+
 // defaultBehavior provides the canonical Match / Format / Equal
 // implementations every *Type starts with. Each delegates to the
 // existing kernel paths so introducing the Behavior seam is

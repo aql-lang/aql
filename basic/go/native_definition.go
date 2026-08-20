@@ -1192,7 +1192,20 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// Foo-tagged type literal, not the integer 1.
 	if IsBareTypeNode(constraint) && constraint.Origin == core.OriginUserDef &&
 		typeName != "" && constraint.Parent != nil {
-		if def := r.LookupTypeName(typeName); def != nil && def.Origin == core.OriginUserDef {
+		// Behavior-keyed guard: a bare user node whose kind enforces
+		// membership through a kernel constraint Unifier (dependent
+		// scalar, predicate, binding-body — core.HasConstraintUnify)
+		// must NOT take this nominal reparent arm: the arm unifies
+		// against the BUILTIN ancestor only, so it would bind without
+		// ever running the constraint (`def x:Big 5` succeeding once
+		// evaluation yields nodes — design/TYPE-REPRESENTATION.1.md
+		// §N3). Such constraints fall through to the general UnifyR
+		// below, where dispatchUnifier finds the kind's Unify. A user
+		// `behave unify/q` wrapper on a nominal refine is NOT a
+		// constraint (Unifier but not ContentMembership), so newtypes
+		// keep this arm.
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin == core.OriginUserDef &&
+			!core.HasConstraintUnify(def) {
 			// Walk up the lattice past any intervening user refines
 			// (e.g. `Foo refine Item refine String`) to the nearest
 			// builtin ancestor and unify against THAT. A sibling-of-
@@ -1322,7 +1335,12 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			return nil, r.BoruError("undef_error",
 				fmt.Sprintf("undef %s: no such type binding", name), "undef")
 		}
-		if entry.TypeDef != nil {
+		// Retire only a node THIS binding minted. An alias binding
+		// ADOPTS an existing canonical node (`def Foo Integer` binds
+		// the Integer node itself — core.InstallType's alias arm), so
+		// retiring it here would delete a builtin's or another
+		// binding's identity from the ID index.
+		if entry.TypeDef != nil && entry.Minted {
 			r.Types.Retire(entry.TypeDef)
 		}
 		return nil, nil
