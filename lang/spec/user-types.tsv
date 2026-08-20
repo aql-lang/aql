@@ -241,6 +241,16 @@ def Pos refine Integer def y:Pos 2 y tis Integer	true	Pos ≤ Integer — tag wi
 def Foo class {} (make Foo {}) tis Foo	true	instance carries the Foo tag
 def Foo class {} (make Foo {}) tis Class	true	a class instance is below Class
 def Foo class {} 42 tis Foo	false	Integer's tag is not below Foo
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) tis Point	true	the subclass tag widens up the nominal chain
+
+# The remaining kinds, tag-only across the board: content-carried
+# membership (`is`) never fakes a tag. The alias is the one TRUE row —
+# it ADOPTS the canonical node, so the tag genuinely matches.
+def M (Integer tor none)  5 tis M	false	disjunct: 5 carries no M tag — alternatives admit via `is`
+def Foo Integer  42 tis Foo	true	alias: Foo IS the adopted Integer node, so the tag matches
+def One 1  1 tis One	false	singleton: 1 carries no One tag — membership is `is`
+def T fnsig Integer String  (fn [[x:Integer] [String] ['s']]) tis T	false	fn shape: a fn's tag is Function, never below a declared shape
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape end (make Circle {}) tis Shape	false	surface: exposes grants `is` membership, not a tag
 
 
 # ====================================================================
