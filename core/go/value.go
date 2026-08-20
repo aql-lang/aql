@@ -1538,6 +1538,18 @@ type typeMeta struct {
 	// Empty means UNOWNED (ad-hoc / test-fixture types) — an unowned
 	// type never anchors an extension and is never redefinable-by-owner.
 	Owner string
+	// Body is the structural CONTENT the type was declared with — the
+	// value InstallType bound alongside the minted node (the disjunct's
+	// alternatives, the class schema, the record shape, the singleton
+	// inhabitant, …), nil for kinds with no structure (builtins, bare
+	// refine newtypes) and for adopted aliases (their content is the
+	// adopted node's own). It makes the declaration's structure
+	// recoverable FROM the node (design/TYPE-REPRESENTATION.1.md §N2),
+	// generalizing the per-kind recoveries (SurfaceInfoOf, SchemaInfoOf,
+	// UnionCarrierForType, ResolveTypeLiteralDef) into one accessor,
+	// TypeBody. Stamped once at install; shared through the tmeta
+	// pointer like every other field here.
+	Body *Value
 }
 
 // ensureTMeta returns v's typeMeta, allocating it if absent. Writers of
@@ -1567,6 +1579,27 @@ func (v Value) Behavior() TypeBehavior {
 		return nil
 	}
 	return v.tmeta.Behavior
+}
+
+// TypeBody returns the structural content the type node was declared
+// with, and whether one was recorded — the node-side recovery of the
+// declaration's structure (design/TYPE-REPRESENTATION.1.md §N2). A
+// kind with no structure (a builtin, a bare refine newtype) and an
+// ordinary value both answer false. The returned Value is a copy; the
+// stored content is written once at install and never mutated.
+func (v Value) TypeBody() (Value, bool) {
+	if v.tmeta == nil || v.tmeta.Body == nil {
+		return Value{}, false
+	}
+	return *v.tmeta.Body, true
+}
+
+// SetTypeBody records the node's declared structural content. Called
+// by InstallType (and kind installers) at mint time; the stamp is
+// visible through every copy of the node via the shared typeMeta.
+func (v *Value) SetTypeBody(body Value) {
+	b := body
+	v.ensureTMeta().Body = &b
 }
 
 // SetBehavior installs the type node's Behavior, allocating the typeMeta
