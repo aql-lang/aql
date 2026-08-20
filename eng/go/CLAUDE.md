@@ -291,8 +291,17 @@ as `IsTypeLiteral`. State the intent with a named predicate (all in
 | --- | --- |
 | v is its own lattice node (naming, ordering, identity dispatch) | `IsBareTypeNode(v)` — exactly `Data == nil && !Carrier`; INCLUDES None/Any/Never |
 | v may be used as a type **constraint** (None excluded) | `IsTypeLiteral(v)` |
+| recover a type's declared structure | `core.TypeContentOf(v)` — a bare node's `TypeBody` stamp, or v itself when it already IS type content |
 | v carries a real, readable payload | `IsConcrete(v)` |
 | handler needs a concrete list/map | `RequireConcreteList/Map(v, op)` |
+
+Since the Stage 2 flip every NAMED type evaluates to a bare node, so
+node-ness alone is NOT a constraint key: a kind that enforces
+membership through a Unifier (DepScalar, predicate, disjunct,
+negation, FnUndef, binding-body) must be routed by
+`core.HasConstraintUnify`, or the constraint is never run
+(design/TYPE-REPRESENTATION.1.md §N3 — the typed-def reparent arm's
+gate is the model).
 
 The regression gate `data_nil_gate_test.go::TestNoRawDataNilProbes`
 forbids `.Data == nil` outside a small allowlist of files that
@@ -306,7 +315,10 @@ every value mode.
 
 `Value.Data` is a sealed interface: `eng.Payload`. Only types
 with the unexported `payloadMarker()` method satisfy it, and the
-method is only definable in this package. The seal closes the
+method is only definable in this package. The interface also
+requires `IsTypeContent(owner *Value) bool` — the ONE
+type-recognition seam (design/TYPE-REPRESENTATION.1.md §N4):
+`IsTypeBody` asks the payload instead of enumerating shapes. The seal closes the
 historical `Data interface{}` hole — `Value{Parent: TInteger,
 Data: "hello"}` is a **compile error**.
 
@@ -339,8 +351,11 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
 
 When adding a new kernel-known payload shape, register the
 marker in `payload.go` (either as a wrapper struct or with a
-`func (Foo) payloadMarker() {}` line). Without the marker the
-compiler refuses to put it in a Value.
+`func (Foo) payloadMarker() {}` line) AND add its `IsTypeContent`
+arm in `payload_typecontent.go` — constant for type-only payloads,
+value-state-derived for the shared variants (`MapPayload` reads the
+Implicit flag, `ExtensionPayload` its nested host-type-body marker).
+Without both the compiler refuses to put it in a Value.
 
 For plugin/host-supplied payloads, use `ExtensionPayload` — its
 `Body any` is the explicit escape hatch the kernel does NOT
@@ -611,13 +626,19 @@ magnitude (`1 cmp 1.0 → 0`). Full design at
 `design/TYPE-ORDERING.10.md`; verification at
 `lang/spec/compare.tsv`.
 
-## Value Has Two Methods
+## Value's Method Surface Is Deliberately Tiny
 
-`Value` exposes exactly two methods:
+`Value` exposes these methods (plus the `AsConcreteX` handler
+accessors):
 
 - `Is(t *Type) bool` — canonical dispatch. Routes through
   `t.Behavior.Match(v, t)`.
 - `String() string` — `fmt.Stringer` interface.
+- `TypeBody() (Value, bool)` / `SetTypeBody(body Value)` — the type
+  NODE's declaration stamp (the Stage 2 flip,
+  design/TYPE-REPRESENTATION.1.md §N2): `installTypeBinding` stamps
+  the declared content at mint time, and consumers recover it through
+  `core.TypeContentOf`.
 
 Every former `IsX` / `AsX` accessor is now a free function in
 this package. `Value.AsInteger()` → `eng.AsInteger(v)`. The
@@ -639,12 +660,16 @@ constructor was renamed to `refine`).
 
 The single source of truth is `eng/go/core_type.go::InstallType`. It
 validates `body` is a valid type body, mints the lattice identity
-via `TypeTable.MintType`, and binds it in the single `DefTable`
-(`PushType`, carrying the minted `*Type`). `def`'s handler delegates
-here for capitalised names regardless of which layer (eng or lang)
-registered `def` — do not fork the logic. `undef` of a capitalised
-name pops the binding and retires the minted type
-(`TypeTable.Retire`).
+via `TypeTable.MintType` for every declaration kind EXCEPT an alias
+(`def Foo Integer`), which ADOPTS the canonical aliased node via
+`PushTypeAdopted` (`Minted=false`), binds it in the single `DefTable`
+(`PushType`, carrying the minted `*Type`), and stamps the declared
+content onto the node (`installTypeBinding` → `SetTypeBody`).
+`def`'s handler delegates here for capitalised names regardless of
+which layer (eng or lang) registered `def` — do not fork the logic.
+`undef` of a capitalised name pops the binding and retires the type
+only when the binding MINTED it (`DefEntry.Minted`); an adopted
+alias node is left in the lattice.
 
 If you need to extend the installation policy (a new name shape, an
 extra validation rule), modify `InstallType` so every layer picks
@@ -752,16 +777,22 @@ asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.10.md` removed.
   (Unify/reparent — a separate path from Match). Symmetric-strict, like
   Haskell/Rust/Go newtypes.
 - **Predicate refine** (`def Big (Integer gt 10)` — body carries
-  `DepScalarInfo`, `body.IsDepScalar()`): a **subset type**.
+  `DepScalarInfo`, `body.IsDepScalar()`; that probe keys the INSTALL
+  branch only — the NAME now evaluates to the node, where the test is
+  `core.HasConstraintUnify` and the bounds are the node's recorded
+  content): a **subset type**.
   `depScalarUnifier.Match` is value-sensitive — base-family membership
   AND the self-contained predicate (`depScalarCheck`, no registry).
   Admitted at params and returns iff the predicate holds; the value
   keeps its base tag (no reparent). Symmetric, like Ada subtypes /
   refinement types.
 
-Builtins and objects keep `DefaultBehavior` / nominal object matching,
-where `v.Is(t)` coincides with `v.Parent.ConformsTo(t)` on concrete
-values — so routing returns through `v.Is` left them unchanged.
+Builtins and classes keep `DefaultBehavior` / nominal matching, where
+`v.Is(t)` coincides with `v.Parent.ConformsTo(t)` on concrete values
+— so routing returns through `v.Is` left them unchanged. The
+catch-all structural/singleton kinds (record shapes, `def One 1`,
+typed-container literals) carry `BindingBodyUnifier` since the Stage 0
+fix, so `is` and dispatch consult one structural rule there too.
 
 ## Standalone coverage parity with eng/ts
 

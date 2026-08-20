@@ -641,13 +641,18 @@ Integer tand (tnot (between 5 10 Integer))  # returns (Integer gt 10) tor (Integ
 Every type has a unified integer rank. `tcmp` and `sort` expose a
 single LCA-Comparer-then-Rank cascade, so cross-type comparisons are
 well-defined and total (`cmp` / `lt` / `gt` run the same cascade but
-are restricted to same-family pairs). Type literals sort strictly
-below their concrete inhabitants of the same family:
+are restricted to same-family pairs). Kernel type literals sort
+strictly below their concrete inhabitants of the same family; a
+USER-NAMED type denotes its minted node and orders the same way —
+as a type of its family, just after its parent and strictly below
+the concrete inhabitants:
 
 ```
 Integer tcmp 0                # returns -1
 0 gt Integer                  # returns true
 sort [Integer 0 5 -3]         # returns [Integer -3 0 5]
+def Positive (Integer gt 0)
+sort [Positive Integer 0 5 -3]  # returns [Integer Positive -3 0 5]
 [1,2] cmp [1,3]               # returns -1
 ```
 
@@ -1266,10 +1271,12 @@ restricted words refuse. See
 > handle**: `eq` and `deq` are both true exactly for the same descriptor
 > instance (all of one import's namespaces share it), never across
 > distinct instances. Values with no `deq` equality — not `deq` even to
-> themselves — include **code values** (functions and words), several
-> kinds of type value (`class` and refinements of one, `tor`/`enum`,
-> `fnsig`, `surface`, and uninstantiated `gen` schemas), host payloads,
-> and any container holding one. The reliable test is `x deq x`.
+> themselves — are `nan` (the IEEE rule), host payloads, and any
+> container holding one. A declared TYPE is `deq` (and `eq`) to itself
+> and never to a same-bodied sibling — identity is the declaration
+> (`P deq Q` for two identical `class {a:Integer}` declarations is
+> `false`) — and words and functions compare by content. The reliable
+> test is `x deq x`.
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
@@ -2061,9 +2068,9 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 > and two distinct values can render alike. `group` used to do exactly
 > that, which folded `deq`-distinct look-alikes (the type literal
 > `Integer` and the atom `Integer/q`) into one entry, and swept up every
-> value that is not `deq` to itself besides — `nan`, function and word
-> values, `class`/`tor`/`enum`/`fnsig`/`surface` and generic-schema type
-> values, host payloads, and any container holding one.
+> value that is not `deq` to itself besides — `nan`, host payloads, and
+> any container holding one (function, word and declared-type values
+> have since gained `deq` identities).
 >
 > Restricting the key domain removes the lossy step instead of judging
 > it benign: a String key **is** its render, so the collision cannot

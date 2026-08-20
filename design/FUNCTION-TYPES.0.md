@@ -244,6 +244,13 @@ parameter — the exact thing §1 says it could not do. With bare
    wrong signature. This is a silent-wrong-answer hazard the sugar
    introduces and it needs an arity guard before merge.
 
+   *(Addendum, 2026-08-20: item 3 below is RETIRED — superseded by the
+   type-node fusion, [TYPE-REPRESENTATION.1.md](TYPE-REPRESENTATION.1.md)
+   §9. Every named type now evaluates to its minted lattice node, so the
+   pair form accepts all declaration kinds uniformly; the full matrix is
+   pinned in `lang/spec/fn-triple.tsv` per that design's §8, and §7's
+   corresponding action item is closed.)*
+
 3. **The pair form only accepts BUILTIN and `refine` types — this is the
    prototype's real defect.** A named type whose *body* is a structural
    value rather than a bare lattice node is rejected:

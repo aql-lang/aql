@@ -1,8 +1,13 @@
 # What a type name denotes — a representation audit
 
-**Status: analysis (2026-08-19).** Every claim below is either a source
-citation with a line reference, or a command that was run against a
-binary built from this tree with its output quoted verbatim.
+**Status: analysis (2026-08-19); superseded (2026-08-20).** The
+follow-up design [TYPE-REPRESENTATION.1.md](TYPE-REPRESENTATION.1.md)
+landed via PR #394: every named type now evaluates to its minted
+lattice node, so the kind-split this audit measures no longer exists on
+the current tree. Kept as the historical record of the pre-fusion
+representation. Every claim below is either a source citation with a
+line reference, or a command that was run against a binary built from
+the tree of 2026-08-19 with its output quoted verbatim.
 
 Answers a question that the higher-order work kept running into and
 never stated plainly:

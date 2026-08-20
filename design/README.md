@@ -102,13 +102,23 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   usable in some positions and not others. Carries the branch table, the
   measured surface consequences, two corrections this audit had to make to
   its own earlier claims, and a staged fix. NUR090 / NUR091, issue #392.
+  **Superseded 2026-08-20** by `TYPE-REPRESENTATION.1.md` (landed): the
+  kind-split it measures no longer exists on the current tree.
+- `TYPE-REPRESENTATION.1.md` — the type-node fusion: every named type
+  evaluates to its minted lattice node; structure is recorded content
+  (`TypeContentOf`), membership is Match + Unify on node Behaviors.
+  **LANDED 2026-08-20 (PR #394)** — all five stages implemented; §9 is
+  the implementation record, §6 the pinned semantic deltas. Resolved
+  NUR090/093/094, issues #391/#392. Sections 0-8 are the design as
+  proposed and measure the pre-flip tree.
 - `FUNCTION-TYPES.0.md` — proposal + working prototype for a *declared*
   function type (`fnsig Integer String`, `fn` minus its body), answering
   the audit's "`Function` is opaque" finding. Measures what the change
   buys (a wrong-shaped argument moves from a run-time refusal to a
   check-time error) and what it does not (NUR089 is orthogonal and
   survives it). **Proposal, not merged** — §7 lists what production
-  would still need.
+  would still need. *(§5 item 3 — the pair form rejecting structural
+  named types — retired 2026-08-20 by the type-node fusion.)*
 - `HIGHER-ORDER-FUNCTIONS.0.md` — an empirical audit of higher-order
   support and combinator expressibility (2026-08-19): what was built and
   run, a comparison against Haskell/Scheme/JS/Factor, and the

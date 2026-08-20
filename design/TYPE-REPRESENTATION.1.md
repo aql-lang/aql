@@ -1,11 +1,15 @@
 # One object, one seam — the type-node fusion design
 
-**Status: design proposal (2026-08-20).** Follow-up to the audit in
-[TYPE-REPRESENTATION.0.md](TYPE-REPRESENTATION.0.md); tracks issue
-**#392** / **NUR090**, and records **NUR093** and **NUR094**, which
-surfaced during this pass. Evidence standard as in the audit: every
-claim is a source citation with a line reference, or a command run
-against a binary built from this tree with its output quoted verbatim.
+**Status: LANDED (2026-08-20).** All five stages implemented and merged
+via **PR #394**; §9 is the implementation record. Follow-up to the audit
+in [TYPE-REPRESENTATION.0.md](TYPE-REPRESENTATION.0.md); tracked issue
+**#392** / **NUR090**, and recorded **NUR093** and **NUR094**, which
+surfaced during this pass — all three NURs are now retired (resolved by
+this work). Sections 0-8 are the design as proposed and are kept as
+written; measurements in them describe the tree *before* the flip.
+Evidence standard as in the audit: every claim is a source citation with
+a line reference, or a command run against a binary built from this tree
+with its output quoted verbatim.
 
 The audit answered *what a type name denotes*. This document answers
 the question one level up — the one the issue asks to be settled for
@@ -151,7 +155,8 @@ kinds (5-10) — and disagree loudly for branch 11 (§2.1).
 
 ### 2.3 `typeof` of a named type is kind-split
 
-Measured on this tree:
+Measured before the flip (§9 landed the uniform Parent hop — every
+named type now answers its Parent, so `typeof C → Class`):
 
 ```
 $ boru do 'typeof Integer'                            → Number
@@ -380,7 +385,11 @@ touching any consumer.
 - The checker's `toCarrier` payload-preservation ladder
   (`check/go/carrier.go:270-416`), the duplicated `inspect` switch,
   and the `is` handler's body-redirect arms
-  (`native_type.go:793-831`) become deletable.
+  (`native_type.go:793-831`) become deletable. *(Landed note,
+  2026-08-20: none were deleted in the implementation pass — the
+  checker ladder still serves anonymous carriers, and the redirect
+  arms now route node content; deletion remains available follow-up
+  work, not a prerequisite of the flip.)*
 - The compiled encoding unifies on `OpPushType` (canonical-ID,
   run-time resolution) for named-type operands — which also removes
   the frozen-body staleness hazard (`behave` after bake; the NUR080
@@ -471,7 +480,7 @@ verdicts — and branch 11's would-be flips are prevented by Stage 0.
 The issue's "membership should be unaffected" holds with exactly those
 two qualifications. What does move:
 
-| surface | today | after | assessment |
+| surface | before the flip | landed (2026-08-20, §9) | assessment |
 |---|---|---|---|
 | `canon M` / `canon C` / `canon T` / `canon R` | the body | the name | the desired change; `canon P → P` is the precedent, and ADR-015's value-roundtrip already accepts name rendering under a live def |
 | `typeof` of a named type | kind-split (§2.3) | uniformly the supertype: class → parent class or `Class`; predicate → its input base; others unchanged | recommend the uniform Parent-hop rule (`TypeOf`'s contract; `CLASS-OBJECT.10.md` §5b's own doctrine); `object.tsv:58-59` flip — NUR094's resolution |

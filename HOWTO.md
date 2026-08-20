@@ -541,10 +541,10 @@ inst.bits                             # returns Class/Bits{flag:1}
 ```
 
 The `field: NestedType` form looks reasonable (it reads like a type
-declaration) but only names the type; `inst.bits` is then the bare type
-literal (`Class/Bits`), not a usable instance. Reach for
-`(make NestedType {})` whenever a field should default to a fresh nested
-instance.
+declaration) and IS one: it declares a REQUIRED typed field with no
+default, so `make Foo {}` refuses loudly with `missing field "bits"`.
+Reach for `(make NestedType {})` whenever a field should default to a
+fresh nested instance.
 
 ### Methods are free functions over the instance
 

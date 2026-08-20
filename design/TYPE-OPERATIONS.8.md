@@ -117,6 +117,13 @@ Loaded via `import "boru:type"`; words accessed as `type.<verb>`.
 Bare type literals compare by `*Type.Equal` (ID identity); structural
 bodies (record types, disjuncts) compare via `ValuesEqual`.
 
+*(Addendum, 2026-08-20: after the type-node fusion
+([TYPE-REPRESENTATION.1.md](TYPE-REPRESENTATION.1.md) §6), a NAMED type
+evaluates to its minted lattice node, so `teq` on named types is
+nominal — ID identity: reflexive to itself, false across two same-bodied
+declarations. Structural `ValuesEqual` comparison still applies to
+anonymous type bodies.)*
+
 ## Notes on `tpartial` semantics
 
 `tpartial` is idempotent: a field whose value type already includes

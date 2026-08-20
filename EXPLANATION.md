@@ -511,21 +511,17 @@ opaque handle: `eq` and `deq` are both its instance identity (every
 namespace one import binds shares the instance; distinct imports are
 distinct instances). Words that operate on values use `deq`: the
 collection words (`ArrayUtil.unique`/`member`/`indices`/`group`)
-dedup, test, and group by the `deq` class. Some values have no settled
-equality — they are not `deq` even to themselves. **Code values**
-(functions and words) are the headline case: a function's "value" is
-opaque code with no stable identity canon. Several kinds of type value
-behave the same way (`class` types and refinements of one, `tor`/`enum`
-disjunctions, `fnsig`, `surface`, and uninstantiated `gen` schemas), as
-do host payloads. That is an OPEN remainder recorded as NUR031 in
-[NUR.md](NUR.md), where it is Pending, not allowed. One consequence to
-expect: a container holding any of them is not `deq` to itself either,
-which includes the export map of any module that exports a function —
-every module in the standard library. (`nan` is separately
-non-reflexive, by the IEEE rule.)
+dedup, test, and group by the `deq` class. A few values have no
+settled equality — they are not `deq` even to themselves: host
+payloads, and any container holding one. (`nan` is separately
+non-reflexive, by the IEEE rule.) Functions and words compare by
+content, and a declared TYPE is `deq` (and `eq`) to itself but never
+to a same-bodied sibling — identity is the declaration, so two
+`class {a:Integer}` definitions under different names are not `deq`.
 
-A bare type literal sorts strictly below every concrete inhabitant
-of its family (same-family, so the restricted words allow it — but
+A KERNEL type literal sorts strictly below every concrete inhabitant
+of its family; a user-named type denotes its minted node and orders
+in the type band (same-family, so the restricted words allow it — but
 write the literal on the *right*: a type literal on the **left** of
 `lt`/`gt`/`lte`/`gte` constructs a predicate refinement instead, so
 `Integer lt 0` returns the subset type `(Integer lt 0)`, not a
