@@ -754,9 +754,14 @@ func TestColorExportedTypeUsableDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The exported name denotes its NODE; the schema is its content.
 	got := formatStack(result)
-	if got != "record{r:Integer g:Integer b:Integer}" {
+	if got != "Color" {
 		t.Errorf("Color type = %s", got)
+	}
+	if schema, ok := native.TypeContentOf(result[0]); !ok ||
+		schema.String() != "record{r:Integer g:Integer b:Integer}" {
+		t.Errorf("Color schema = %v ok=%v", schema, ok)
 	}
 }
 
@@ -770,8 +775,14 @@ func TestColorExportedColorHexType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The exported name denotes its NODE (the Stage 2 flip); the
+	// record schema stays recoverable from it.
 	got := formatStack(result)
-	if got != "record{hex:String r:Integer g:Integer b:Integer}" {
+	if got != "ColorHex" {
 		t.Errorf("ColorHex type = %s", got)
+	}
+	if schema, ok := native.TypeContentOf(result[0]); !ok ||
+		schema.String() != "record{hex:String r:Integer g:Integer b:Integer}" {
+		t.Errorf("ColorHex schema = %v ok=%v", schema, ok)
 	}
 }

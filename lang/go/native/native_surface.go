@@ -61,6 +61,11 @@ func exposesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	surfVal := ResolveWordValue(args[0])
 	candVal := ResolveWordValue(args[1])
 
+	// A NAMED surface evaluates to its node (the Stage 2 flip); the
+	// shared payload is the node's recorded content.
+	if body, ok := TypeContentOf(surfVal); ok && IsBareTypeNode(surfVal) {
+		surfVal = body
+	}
 	sinfo, err := AsSurfaceType(surfVal)
 	if err != nil {
 		return nil, r.BoruError("exposes_error",

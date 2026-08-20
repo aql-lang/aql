@@ -954,6 +954,12 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 // MakeScalarHandler converts a scalar value to a target scalar type.
 func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
+	// A NAMED structural target evaluates to its node (the Stage 2
+	// flip); the Ideal dispatch and conversions below operate on the
+	// recorded content, exactly as MakeHandler resolves through
+	// ResolveTypeLiteralDef. Nominal nodes (builtins, refines) have no
+	// content and pass through for the newtype arm below.
+	targetVal = ResolveTypeLiteralDef(targetVal, reg)
 	// The target type's own constructor outranks every kernel path
 	// (NUR056) — including the user-refinement newtype arm below, which
 	// rewrites the target to its builtin BASE before reaching
@@ -1133,6 +1139,19 @@ func MakeFieldValueR(val Value, constraint Value, r *Registry) (Value, error) {
 
 	if IsBareTypeNode(constraint) {
 		constraintType := ValueType(constraint)
+		// A constraint node whose kind enforces membership through a
+		// Unify capability (predicate, dependent scalar, binding-body —
+		// the evaluated NAME of such a type, post the Stage 2 flip)
+		// runs its rule: nominal conformance below would admit a base
+		// value without ever running the constraint, and MakeConvert
+		// would launder it into the newtype.
+		if HasConstraintUnify(constraintType) {
+			out, uerr := UnifyExplainR(constraint, val, r)
+			if uerr != nil {
+				return Value{}, fmt.Errorf("%s", uerr.Error())
+			}
+			return out, nil
+		}
 		if val.Parent.ConformsTo(constraintType) {
 			return val, nil
 		}

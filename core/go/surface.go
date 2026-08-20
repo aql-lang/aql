@@ -166,6 +166,30 @@ func (s *surfaceUnifier) Match(v Value, t *Type) bool {
 	return false
 }
 
+// Unify admits a candidate — concrete value or check-mode carrier —
+// against the surface node by the same conformance-set walk Match
+// runs, yielding the CANDIDATE. The membership question applies when
+// exactly one operand is the bare surface node; two type-level or two
+// value-level operands defer to the structural rule. The §N3 Unify
+// capability (design/TYPE-REPRESENTATION.1.md): a surface-typed def
+// (`def x:Shape (make Circle …)`) unifies against the NODE the name
+// now denotes, where it used to unify against the body via the
+// surface fold.
+func (s *surfaceUnifier) Unify(a, b Value) (Value, *UnifyError) {
+	aNode, bNode := IsBareTypeNode(a), IsBareTypeNode(b)
+	if aNode == bNode {
+		return unifySameOrSubtype(a, b)
+	}
+	node, candidate := a, b
+	if bNode {
+		node, candidate = b, a
+	}
+	if s.Match(candidate, &node) {
+		return candidate, nil
+	}
+	return Value{}, unifyFail("value does not expose surface "+s.typeName, a, b)
+}
+
 func (s *surfaceUnifier) Format(v Value) string {
 	// The surface body renders as its contract: name + operation set.
 	if info, err := AsSurfaceType(v); err == nil {

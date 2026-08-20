@@ -3005,11 +3005,17 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1", len(result))
 	}
-	if !IsRecordType(result[0]) {
-		t.Fatalf("result is not a record type: %s", result[0].String())
+	// The name denotes its NODE (design/TYPE-REPRESENTATION.1.md
+	// Stage 2); the record schema stays recoverable from it.
+	if result[0].String() != "Point" {
+		t.Errorf("Point must denote its node, got %s", result[0].String())
 	}
-	if result[0].String() != "record{x:Number y:Number}" {
-		t.Errorf("got %s, want record{x:Number y:Number}", result[0].String())
+	schema, sok := TypeContentOf(result[0])
+	if !sok || !IsRecordType(schema) {
+		t.Fatalf("the node must record its schema, got %s ok=%v", schema.String(), sok)
+	}
+	if schema.String() != "record{x:Number y:Number}" {
+		t.Errorf("got %s, want record{x:Number y:Number}", schema.String())
 	}
 }
 
