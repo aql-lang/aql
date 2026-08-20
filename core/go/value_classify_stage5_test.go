@@ -291,3 +291,33 @@ func TestS5CIsDelegationFnDef(t *testing.T) {
 		t.Error("a real body is not a delegation")
 	}
 }
+
+// --- TypeIsFnShape / fn-shape-typed carriers --------------------------------
+
+func TestTypeIsFnShapeAndFnShapeCarrier(t *testing.T) {
+	if TypeIsFnShape(nil) {
+		t.Error("nil type is not a fn shape")
+	}
+	if !TypeIsFnShape(TFnUndef) {
+		t.Error("the anonymous fnsig type is a fn shape")
+	}
+	if TypeIsFnShape(TInteger) || TypeIsFnShape(TFunction) {
+		t.Error("Integer and Function itself are not fn SHAPES")
+	}
+	// A carrier typed by a fn shape is a maybe-callable carrier — its
+	// runtime inhabitant is a function (the NUR095 compiled half).
+	shapeCarrier := NewCarrier(TFnUndef)
+	if !IsFnTypedCarrier(shapeCarrier) {
+		t.Error("a fn-shape-typed carrier must read as an fn-typed carrier")
+	}
+	fnCarrier := NewCarrier(TFunction)
+	if !IsFnTypedCarrier(fnCarrier) {
+		t.Error("a Function-typed carrier still reads as an fn-typed carrier")
+	}
+	if IsFnTypedCarrier(NewCarrier(TInteger)) {
+		t.Error("an Integer carrier is not fn-typed")
+	}
+	if IsFnTypedCarrier(NewTypeLiteral(TFnUndef)) {
+		t.Error("a CONCRETE fnsig type literal is not a carrier")
+	}
+}
