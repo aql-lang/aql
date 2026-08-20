@@ -84,12 +84,12 @@ func TestRegisterDefKeywordFormsGuards(t *testing.T) {
 	}
 }
 
-func TestInsideForwardSwapFormMismatch(t *testing.T) {
-	// A swap-form dispatch INSIDE a pending forward (print is parked)
+func TestInsideForwardInfixFormMismatch(t *testing.T) {
+	// A infix-form dispatch INSIDE a pending forward (print is parked)
 	// whose stack operand mismatches the signature must reject the
 	// mixed forward+stack split rather than mis-bind.
 	if _, err := runDefForm(t, "print true div 3"); err == nil {
-		t.Fatal("mismatched swap-form inside a pending forward must fail")
+		t.Fatal("mismatched infix-form inside a pending forward must fail")
 	}
 }
 

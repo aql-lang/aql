@@ -33,7 +33,7 @@ import (
 // (apply-templates' node list).
 
 // fmtRuleNatives are the two rule-vocabulary words. Both are pure and
-// all-forward eligible (BarrierPos -1) so the swap form `node Fmt.kind`
+// all-forward eligible (BarrierPos -1) so the infix form `node Fmt.kind`
 // dispatches like the other module wrappers (lang/go/CLAUDE.md, "Module
 // FnDef Wrappers").
 var fmtRuleNatives = []native.NativeFunc{

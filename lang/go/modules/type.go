@@ -246,7 +246,7 @@ func fieldNames(list native.Value, opName string, r *native.Registry) ([]string,
 
 // ---- Inner native handlers ----
 //
-// All binary handlers below read args using the standard swap-form
+// All binary handlers below read args using the standard infix-form
 // convention: args[0] = forward arg (surface-RIGHT), args[1] = stack
 // arg (surface-LEFT). For `target TypeUtil.exclude what`, args[0]=what,
 // args[1]=target.

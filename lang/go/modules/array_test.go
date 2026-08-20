@@ -84,7 +84,7 @@ func TestArrayModuleExports(t *testing.T) {
 	}
 }
 
-// --- Dispatch through the module (forward and swap forms) ---
+// --- Dispatch through the module (forward and infix forms) ---
 
 func TestArrayModuleWords(t *testing.T) {
 	r := arrayRegistry(t)

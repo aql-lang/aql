@@ -106,16 +106,21 @@ separating setup from the expression that uses it.
 
 ## 3. Three ways to call a word
 
-You've been writing the **forward** form — arguments after the word —
-which is the recommended style for new code. The same `add` also
-works **infix** and, because boru is concatenative under the hood,
-**all-stack**:
+You've been writing the **forward** form — arguments after the word.
+The same `add` also works **infix** and, because boru is concatenative
+under the hood, **all-stack**:
 
 ```
 boru> add 1 2        # returns 3 — forward: both args after the word
 boru> 1 add 2        # returns 3 — infix: one before, one after
 boru> 1 2 add        # returns 3 — all-stack: both args before the word
 ```
+
+House style picks between them by the word, not by the call site:
+**infix for the words convention reads as operators** (`add`, `sub`,
+`mul`, `div`, `mod`, `pow`, `and`, `or`, `lt`, `lte`, `gt`, `gte`,
+`eq`, `neq` — so `1 add 2`), and **forward for everything else**
+(`f a b c`). See [STYLE-GUIDE.md §S2](STYLE-GUIDE.md).
 
 The all-stack form is the *stack machine* showing through: a literal
 pushes itself onto a value stack, and a word pops what it needs.
@@ -130,22 +135,38 @@ boru> 1 2 3
 
 Pipelines lean on this (a value left by one word is picked up by the
 next), and §6 covers the words that rearrange the stack directly.
-Until then, forward form does everything you need.
+Until then, the forward and infix forms do everything you need.
 
 ### The argument-order rule
 
-When a word runs, boru fills its parameter slots `args[0]`, `args[1]`,
-… in this order:
+There is **one** rule, and it is the same for every word at every
+number of arguments. When a word runs, boru fills its parameter slots
+`args[0]`, `args[1]`, … in this order:
 
 1. **Take tokens after the word, in source order**, into `args[0]`,
    `args[1]`, …, until either the signature is full or a barrier is
    hit (`end`, `)`, another function word, type mismatch).
 2. **Fill any slots still empty from the stack, top-first** — the
-   top of stack goes into the next-to-fill slot.
+   top of stack goes into the next-to-fill slot, the next-deeper
+   value into the one after that, and so on.
 
-So for an asymmetric operation like `sub` (whose handler computes
-`args[1] - args[0]` — deeper minus top — to read naturally as
-"a minus b"), all three call forms compute the same thing:
+Two-argument words are **not** a special case, and there is no
+"swap form" — those are old misreadings of this one rule. A call
+form only chooses *where the split falls*.
+
+Two things follow directly. Put every argument on the stack and you
+get Forth order (`10 3 sub`), because the stack is read top-down.
+Write every argument after the word and you get the order you wrote
+them — which for an asymmetric word reads backwards:
+
+```
+boru> sub 1 3        # returns 2 — args[0]=1, args[1]=3 → 3 - 1
+```
+
+Line the operands up the same way round, though, and every form
+agrees. `sub`'s handler computes `args[1] - args[0]` — deeper minus
+top — so that `a sub b` reads as "a minus b", and all three of these
+compute exactly that:
 
 ```
 boru> 10 sub 3       # returns 7 — infix: args[0]=3 (forward), args[1]=10 (stack) → 10 - 3
@@ -156,8 +177,9 @@ boru> 10 3 sub       # returns 7 — all-stack: args[0]=top=3, args[1]=10 → 10
 The pattern: `a sub b` always means `a - b`, no matter where `a` and
 `b` are written. The three forms above all encode `a=10, b=3`. Note
 that `sub 10 3` is *not* the same expression — it encodes `a=3,
-b=10`, giving `-7`. For non-commutative operations, the infix form
-(`10 sub 3`) is the one that reads the way it computes.
+b=10`, giving `-7`, for the same reason `sub 1 3` gives `2`. For
+non-commutative operations the infix form (`10 sub 3`) is the one
+that reads the way it computes, which is why it is house style.
 
 User-defined functions follow the same rule. For
 `def show fn [[a:Number b:Number] [String] [`${a} and ${b}`]]`:

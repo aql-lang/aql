@@ -39,12 +39,12 @@ layout"). Words are dot-accessed: `Fmt.format`, `Fmt.sprint`,
 ## 4. API
 
 Signatures are **top-first, sig order** (position 0 = top of stack).
-Inner native sigs use `BarrierPos: -1` so the swap form dispatches. Go's
+Inner native sigs use `BarrierPos: -1` so the infix form dispatches. Go's
 variadic `...any` becomes a single **List** argument.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
-| `Sprintf(format,a...) string` | `format` | `[List args, String format] -> String` | Format args against a printf format string. | Variadic `...any` → a `List`; each element bridged via `eng.ToNative`. format is the top arg so swap reads `format Fmt.format args`. |
+| `Sprintf(format,a...) string` | `format` | `[List args, String format] -> String` | Format args against a printf format string. | Variadic `...any` → a `List`; each element bridged via `eng.ToNative`. format is the top arg so infix reads `format Fmt.format args`. |
 | `Sprint(a...) string` | `sprint` | `[List] -> String` | Concatenate args, spaces only between non-string operands. | Variadic → `List`; no format string. |
 | `Sprintln(a...) string` | `sprintln` | `[List] -> String` | Concatenate args with spaces, append a newline. | Variadic → `List`; always spaces between operands, trailing `\n`. |
 | `Errorf(format,a...) error` | (folded) | — | — | Not a separate word: an `error` value has no boru counterpart. Use `Fmt.format` to build the message, then raise it via the engine's normal error path (`r.BoruError`) at the call site. |

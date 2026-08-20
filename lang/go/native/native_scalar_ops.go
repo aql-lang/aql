@@ -513,7 +513,7 @@ func listElementwiseOp(r *Registry, op string, left, right Value) (Value, error)
 // ---- signature handlers ----
 
 // binaryValueOp builds a sig handler that computes the natural
-// `args[1] OP args[0]` (swap-form reading) from a Value-level op fn.
+// `args[1] OP args[0]` (infix-form reading) from a Value-level op fn.
 func binaryValueOp(fn func(r *Registry, left, right Value) (Value, error)) Handler {
 	return func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 		v, err := fn(r, args[1], args[0])

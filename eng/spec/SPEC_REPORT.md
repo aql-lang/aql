@@ -21,7 +21,7 @@ both inline (in the row's `note` column) and below.
 |---|---|
 | `numbers.tsv` | Integer + Decimal arithmetic, contagion, three op kinds (commutative/non-commutative/unary), parens, end, custom fns. Replaces the old separate `arithmetic.tsv` and `decimals.tsv`. |
 | `none.tsv` | `null` / None bottom-type round-trip and sig rejection |
-| `mirror.tsv` | The four-form mirror equivalence rule for 2-arg words |
+| `mirror.tsv` | Both split-classes of a 2-arg call, pinned against sig-orientation regressions |
 | `multivalue.tsv` | Multiple values residual on the stack are the result |
 | `nested-forward.tsv` | Function words are structural boundaries; parens nest |
 | `empty.tsv` | Empty list / empty string handling without panics |
@@ -247,22 +247,25 @@ explicit intent.
 **Pinned by**: `resolution.tsv` rows L62–L66, `shadow.tsv` rows
 L43–L48.
 
-### 2.7 Mirror form vs swap form for 2-arg infix (mirror.tsv)
+### 2.7 The two split-classes of a 2-arg call (mirror.tsv)
 
-**Doc claim** (CLAUDE.md "Argument Ordering"): for a 2-arg
-forward-prec word `f`, three forms `f a b`, `b f a`, `b a f` are
-equivalent (sig=[a,b]); `a f b` is the swap form (sig=[b,a]).
-Phase-4 handler convention has every binary math handler compute
-`args[1] - args[0]` (for sub) so the swap form reads naturally:
-`10 sub 3 = 7`.
+**Doc claim** (CLAUDE.md "Argument Ordering"): one rule at every
+arity — the forward phase fills sig positions in written order up
+to the barrier, the stack phase fills the rest top-down. For a
+2-arg forward-prec word `f` that yields two classes: `f a b`,
+`b f a` and `b a f` all bind sig=[a,b], while `a f b` and `a b f`
+bind sig=[b,a]. Neither class is a special case or a "swap form" —
+they differ only in which operand the split leaves in sig[0]. The
+phase-4 handler convention has every binary math handler compute
+`args[1] - args[0]` (for sub) so the infix spelling reads as
+written: `10 sub 3 = 7`.
 
 **Observed**: This works as documented; the deviation is
-*social*, not engine-level. The four-form table is documented in
-prose in CLAUDE.md, but spec rows for it were spread across
-`numbers.tsv` and `strings.tsv` and easy to miss. `mirror.tsv`
-now collects the canonical four-row table for both `sub` (integer)
-and `concat` (string) so a regression in sig orientation is caught
-immediately.
+*social*, not engine-level. The classes are documented in prose in
+CLAUDE.md, but spec rows for them were spread across `numbers.tsv`
+and `strings.tsv` and easy to miss. `mirror.tsv` now collects both
+classes for `sub` (integer) and `concat` (string) so a regression
+in sig orientation is caught immediately.
 
 **Pinned by**: `mirror.tsv` rows L34–L43 (no behavioural
 deviation; documentation regression-test only).
@@ -293,19 +296,18 @@ unobservable from the current spec set.
 
 **Pinned by**: nothing — would need a registered `type` word.
 
-### 2.10 Empty-string concat with the swap form is collapsed (empty.tsv)
+### 2.10 Empty-string concat collapses the two split-classes (empty.tsv)
 
-**Doc claim**: The swap form `a f b` reverses sig binding (sig[0]=b,
-sig[1]=a). For non-commutative `f`, this gives a different result
-than the mirror forms.
+**Doc claim**: the two split-classes of a 2-arg call bind the
+operands to opposite sig positions (§2.7). For non-commutative `f`
+the two classes therefore give different results.
 
-**Observed**: For `concat`, the mirror form and the swap form
-*both* give `"x"` when one of the args is `""`. The reason is
-that `""` is the identity for string concatenation, so swap
-collapses to the same result. Other rows in `mirror.tsv`
-(non-empty strings, `"ab" "cd"`) preserve the mirror-vs-swap
-distinction. This is a degenerate-input observation, not an engine
-deviation.
+**Observed**: For `concat`, both classes give `"x"` when one of the
+args is `""`. The reason is that `""` is the identity for string
+concatenation, so the orientation stops mattering. Other rows in
+`mirror.tsv` (non-empty strings, `"ab" "cd"`) keep the two classes
+distinguishable. This is a degenerate-input observation, not an
+engine deviation.
 
 **Pinned by**: `empty.tsv` rows L74–L77.
 

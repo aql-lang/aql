@@ -16,12 +16,19 @@
 //      order, consuming stack values from the TOP DOWN. sig[fwd] =
 //      top-of-stack, sig[fwd+1] = next-deeper, etc.
 //
-// Examples (sub: subtract; not commutative):
+// This is ONE rule at every arity — two-arg words are not a special
+// case, and there is no "swap form". A call form only chooses where
+// the split between the two phases falls; the handler convention
+// (args[1] OP args[0]) then makes the infix spelling read as written.
 //
-//   sub 10 3   → fwd=2 [10,3]                  → sig[0]=10, sig[1]=3   → 7
-//   3 sub 10   → fwd=1 [10], stack top=3       → sig[0]=10, sig[1]=3   → 7
-//   3 10 sub   → fwd=0, stack top=10, next=3   → sig[0]=10, sig[1]=3   → 7
-//   10 sub 3   → fwd=1 [3],  stack top=10      → sig[0]=3,  sig[1]=10  → -7  (swap form)
+// Examples (sub: subtract; not commutative, handler returns
+// args[1] - args[0]):
+//
+//   sub 10 3   → fwd=2 [10,3]                  → sig[0]=10, sig[1]=3   → -7
+//   3 sub 10   → fwd=1 [10], stack top=3       → sig[0]=10, sig[1]=3   → -7
+//   3 10 sub   → fwd=0, stack top=10, next=3   → sig[0]=10, sig[1]=3   → -7
+//   10 sub 3   → fwd=1 [3],  stack top=10      → sig[0]=3,  sig[1]=10  → 7  (infix)
+//   10 3 sub   → fwd=0, stack top=3, next=10   → sig[0]=3,  sig[1]=10  → 7
 
 import type { FunctionEntry, Registry } from "./registry.ts";
 import type { Signature } from "./signature.ts";

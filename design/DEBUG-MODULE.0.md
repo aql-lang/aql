@@ -90,7 +90,8 @@ granted nothing.
 3. **Forward-form canonical.** Every example is written `Debug.word a b`
    (see `eng/go/CLAUDE.md` "Surface form recommendation"). Inner natives
    registered into the sub-registry use `BarrierPos: -1` so the dotted
-   swap form dispatches (the module-wrapper rule in `lang/go/CLAUDE.md`).
+   infix form dispatches too (the module-wrapper rule in
+   `lang/go/CLAUDE.md`).
 4. **Build on existing seams, add none gratuitously.** The engine already
    exposes a per-step `TraceCallback` (`Engine.trace`), a `Recorder`
    (StackForm), `EffectiveClock`, the `inspect`/`typeof` algorithms, and

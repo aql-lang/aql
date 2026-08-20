@@ -3,7 +3,7 @@
 #
 # Branch/body arguments are unevaluated code lists (NoEvalArgs): `if`
 # runs exactly one branch, `do` runs a body as a sub-program, `for`
-# repeats a body. `guard` is the short-circuit value gate (swap form).
+# repeats a body. `guard` is the short-circuit value gate (infix form).
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  if cond then else — runs exactly one branch

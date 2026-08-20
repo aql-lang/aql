@@ -605,7 +605,7 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Register "divmod" that returns quotient and remainder.
-	// Forward-first swap convention: args[1]=left(stack), args[0]=right(forward).
+	// Handler convention: args[1]=left(stack), args[0]=right(forward).
 	a.Register("divmod", lang.Signature{
 		Args: []*lang.Type{lang.TInteger, lang.TInteger},
 		Impl: native.Go(func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {

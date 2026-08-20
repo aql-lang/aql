@@ -13,7 +13,7 @@
 each [mul 2] [1 2 3]	[2 4 6]	double each element
 each [add 1] [10 20 30]	[11 21 31]	increment each element
 each [dup add] [1 2 3]	[2 4 6]	the body may use stack ops
-[1 2 3] each [mul 2]	[2 4 6]	swap form (collection on the stack)
+[1 2 3] each [mul 2]	[2 4 6]	mixed split (collection on the stack)
 #
 # §2  fold — reduce a list with a binary body
 fold [add] [1 2 3 4] 0	10	sum with explicit initial accumulator

@@ -61,7 +61,7 @@ reached args-before-dot: `"PATH" Os.getenv`.
 
 Signatures are **top-first, sig order** (position 0 = top of stack).
 `→` separates args from result. Every word's inner native uses
-`BarrierPos: -1` so the swap form dispatches (zero-arg words note their
+`BarrierPos: -1` so the infix form dispatches (zero-arg words note their
 `BarrierPos: 0` in §4 notes); see `README.10.md` "Argument order &
 dispatch".
 
@@ -84,8 +84,8 @@ Zero-arg words (`environ`, `args`, `hostname`, `pid`) read nothing from
 the stack; their inner native sigs declare `BarrierPos: 0`
 (constant-style, like `math.pi` in `math.go`). The
 arg-taking words (`getenv`, `setenv`, `unsetenv`, `exit`) declare
-`BarrierPos: -1` so both the stack form `"K" Os.getenv` and the swap
-form `Os.getenv "K"`-style dispatch resolve.
+`BarrierPos: -1` so both the stack form `"K" Os.getenv` and the
+forward `Os.getenv "K"`-style dispatch resolve.
 
 ### Refinement notes
 

@@ -115,7 +115,7 @@ import "boru:time-util"  TimeUtil.dur-sign (TimeUtil.elapsed (TimeUtil.unix 1700
 #
 # §16  comparison & ordering (Date Date)
 import "boru:time-util"  TimeUtil.compare (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	1	-1/0/1 ordering
-import "boru:time-util"  TimeUtil.is-before (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	before? (swap reads later<earlier)
+import "boru:time-util"  TimeUtil.is-before (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	before? (infix reads later<earlier)
 import "boru:time-util"  TimeUtil.is-after (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	true	after?
 import "boru:time-util"  TimeUtil.is-equal (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 0))	true	equal?
 import "boru:time-util"  TimeUtil.is-between (TimeUtil.to-date (TimeUtil.unix 850000000)) (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	within [start,end]? (date start end)

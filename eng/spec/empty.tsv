@@ -21,7 +21,8 @@
 #    `NewTypeLiteral(TNone)` for this case.		
 # 5. `concatq '' ''` returns `''` — empty + empty stays empty.		
 # 6. `concatq '' 'x'` returns `'x'` — empty is the identity for		
-#    string concatenation. (Same in the swap form.)		
+#    string concatenation. (Same whichever side each operand		
+#    is written on — the identity collapses the distinction.)		
 # 7. Nested empties — a list containing an empty string `[ '' ]` has		
 #    length 1 (the empty string is still a value); a list containing		
 #    an empty list `[ [ ] ]` has length 1 (the empty list is one		
@@ -78,8 +79,8 @@ firstq [ [ ] ]	[]	first element when head is the empty list
 # String concatq with empties.		
 concatq '' ''	''	empty + empty = empty
 concatq '' 'x'	'x'	left-empty: forward sig = [a='', b='x'] → '' + 'x' = 'x'
-concatq 'x' ''	'x'	in mirror form: 1 prefix '' + 1 forward 'x' → sig[0]='x', sig[1]='' → 'x' + '' = 'x'. WAIT — this is the swap form. See arithmetic/strings: swap form reverses sig. So this concrete row tests the swap form on empties.
-'' concatq 'x'	'x'	mirror form (1 prefix + 1 forward): sig[0]='x', sig[1]='' → 'x'
+concatq 'x' ''	'x'	all-forward: fwd=['x',''] → sig[0]='x', sig[1]='' → '' + 'x' = 'x'. The other split of these operands ('' concatq 'x', next row) binds the same pair, because '' is the concat identity.
+'' concatq 'x'	'x'	infix: 1 stack '' + 1 forward 'x' → sig[0]='x', sig[1]='' → 'x'
 'a' '' concatq	'a'	all-prefix: top is '' → sig[0], deeper 'a' → sig[1] → '' + 'a' = 'a'
 		
 # Stack manipulation on empties.		

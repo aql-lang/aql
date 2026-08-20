@@ -38,7 +38,7 @@ The bare package name `html` does not clash with any builtin type
 ## 4. API
 
 Signatures are **top-first, sig order** (position 0 is the top of the
-stack). All inner native sigs use `BarrierPos: -1` so the swap form
+stack). All inner native sigs use `BarrierPos: -1` so the infix form
 dispatches.
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |

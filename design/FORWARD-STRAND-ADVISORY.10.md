@@ -19,7 +19,7 @@ This feature implements a **sharpened** predicate instead.
 ## The predicate
 
 In check mode, when a word dispatch is **mixed** (forward-collected ≥1 arg AND
-took ≥1 stack arg — i.e. a swap-form dispatch), flag it iff a **sibling
+took ≥1 stack arg — i.e. the split falls inside the signature), flag it iff a **sibling
 operand** is stranded: a value sitting on the stack just below the deepest stack
 arg the word consumed, **in the same scope**, **whose type matches that consumed
 slot**. The sibling-type test is what separates the genuine gotcha (a stranded
@@ -30,7 +30,7 @@ Discrimination:
 | Source | Dispatch | Flag? |
 |---|---|---|
 | `1 2 add 3` | add: fwd `3` + stack `2`, `1` (Number) stranded | ⚠️ yes |
-| `10 sub 3` | sub: fwd `3` + stack `10`, nothing below | no (swap form) |
+| `10 sub 3` | sub: fwd `3` + stack `10`, nothing below | no (infix form) |
 | `1 2 3 add` | add takes top two from stack, no forward | no |
 | `"hi" 2 add 3` | add: fwd `3` + stack `2`, `"hi"` (String ≠ Number) below | no |
 | `(1 2 add) 3 mul` | grouped | no |
@@ -79,7 +79,7 @@ error) is the right level.
 ## Tests
 
 - `lang/go/forward_strand_advisory_test.go` — fires on the gotcha at the
-  top level, quiet on swap/stack/idiomatic forms and on the grouped fix,
+  top level, quiet on infix/stack/idiomatic forms and on the grouped fix,
   and asserts it is non-gating (0 errors). **In-body detection was
   deliberately dropped** (`TestForwardStrandAdvisory_QuietInBody`):
   bodies analyse against carriers, and running with concrete example

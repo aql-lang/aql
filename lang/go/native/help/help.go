@@ -355,11 +355,22 @@ func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 
 	// For non-commutative binary words, argument order changes the
 	// result, so spell out which form reads naturally rather than
-	// leaving a cryptic inline note on the examples.
+	// leaving a cryptic inline note on the examples. There is no
+	// two-arg special case behind this: the two spellings are just
+	// two splits of the one argument-order rule.
+	//
+	// The note stays FACTUAL. "Infix is house style" is a claim about
+	// one enumerated set of operator words (STYLE-GUIDE.md §S2), which
+	// is NOT the same set this predicate admits — so it belongs in
+	// those words' own Entry Descriptions, not in a line rendered for
+	// every non-commutative binary word.
 	if isNonCommutative2Arg(info) {
-		b.WriteString("  Order matters: the swap form `x ")
+		b.WriteString("  Order matters: the infix form `x ")
 		b.WriteString(name)
-		b.WriteString(" y` reads left-to-right — see Description.\n")
+		b.WriteString(" y` reads left-to-right;\n")
+		b.WriteString("  `")
+		b.WriteString(name)
+		b.WriteString(" x y` is the other split — see Description.\n")
 	}
 }
 
@@ -483,7 +494,7 @@ func exampleVal(typeName string, counter *int) string {
 //     stack, so the only valid form is prefix == nArgs.
 //   - Forward words lead with the canonical forward form (prefix 0):
 //     `word a b`, which reads in declared argument order.
-//   - Non-commutative binary words additionally show the swap form
+//   - Non-commutative binary words additionally show the infix form
 //     (prefix 1): `a word b`, the arrangement that reads left-to-right
 //     for operations like subtraction and comparison.
 //
@@ -572,7 +583,7 @@ func ExampleExprs(info FuncInfo) []string {
 }
 
 // writeExamples renders column-aligned examples for a word: the
-// canonical forward form per signature (plus the swap form for
+// canonical forward form per signature (plus the infix form for
 // non-commutative binary words). Identical expressions across
 // signatures are shown once.
 func writeExamples(b *strings.Builder, info FuncInfo) {

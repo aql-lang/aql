@@ -152,7 +152,7 @@ String tor None	None tor String
 
 # --- Suffix with all args from future (no prefix args) ---
 
-# Fully forward: forward args fill sigArgs[0] first, swap convention applies
+# Fully forward: forward args fill sigArgs[0] first, handler convention applies
 add 1 2	3
 sub 10 3	-7
 lt 1 2	false

@@ -2,7 +2,7 @@
 # Format: input<TAB>expected<TAB>description
 #
 # The binary math words follow the kernel's ONE convention: the handler
-# computes `args[1] OP args[0]`, so the SWAP form `a op b` reads naturally
+# computes `args[1] OP args[0]`, so the infix form `a op b` reads naturally
 # (`10 sub 3 = 7`, `20 div 4 = 5`, `2 pow 10 = 1024`) while the pure
 # forward form `op a b` computes `b OP a` (`sub 10 3 = 3-10 = -7`). add and
 # mul are commutative so both forms agree. Integer/Integer stays Integer
@@ -11,7 +11,7 @@
 # ─────────────────────────────────────────────────────────────────────
 # §1  add / mul — commutative
 add 2 3	5	addition
-2 add 3	5	swap form agrees (commutative)
+2 add 3	5	infix form agrees (commutative)
 add -3 8	5	negative operand
 mul 4 5	20	multiplication
 mul -2 -3	6	negative × negative

@@ -126,7 +126,7 @@ def ifc-line fn [[line:String acc:Map] [Map] [
 # KEYWORDS only ('error' raises, 'skip' drops) — the §5.1 vocabulary honoured
 # BY HAND, since fn kinds get none of the family preprocessing (§16).
 # Param order [strict block]: a quotation body `[ifc-block strict]` is the
-# swap form — the forward token binds sig[0], the stack element sig[1].
+# infix form — the forward token binds sig[0], the stack element sig[1].
 def ifc-block fn [[strict:String block:String] [Map] [
   def lines (filter ([p:Any] => [(size p.value) gt 0])
                     (each [StringUtil.trim] (StringUtil.split '\n' block)))

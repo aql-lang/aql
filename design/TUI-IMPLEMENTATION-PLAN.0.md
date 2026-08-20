@@ -243,7 +243,7 @@ the §2.2 render-on-change claim with a number. Specifics:
   findings; the probe-vs-landed spelling delta is recorded there
   (guard-list `case` → zone `if` + value-dispatch `case`, `append` →
   `push`, `MathUtil.min/max`, quotation-form `filter`/`each`, atom
-  `parse json` / `emit json`, swap-form arithmetic, statement-residue
+  `parse json` / `emit json`, infix arithmetic, statement-residue
   drops and the `Net.close …;` terminator, the trailing-map-literal
   teardown gotcha, a `help` local colliding with the built-in).
 - **One production change**: module sub-registries now inherit

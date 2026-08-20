@@ -44,14 +44,14 @@ layout"). Words are dot-accessed: `Template.render`, `Template.compile`, …
 
 Signatures are **top-first, sig order** (position 0 = top of stack), per
 the README "Argument order & dispatch" rule. All inner natives use
-`BarrierPos: -1` so the swap form `a Template.word b` dispatches (this is
+`BarrierPos: -1` so the infix form `a Template.word b` dispatches (this is
 the dispatch requirement pinned by `wrapper_dispatch_test.go`).
 
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
-| `template.New(name).Parse(text)` + `(*Template).Execute` | `render` | `[Map data, String template] -> String` | Parse a template and execute it against data in one call. | **PRIMARY — recommended.** Parses + executes in a single call; **no opaque handle**, fully idiomatic. `data` is the top arg so swap form reads `template Template.render data`. Internally writes to a `bytes.Buffer` and returns its String. A parse failure errors `parse`; an execution failure errors `exec`. |
+| `template.New(name).Parse(text)` + `(*Template).Execute` | `render` | `[Map data, String template] -> String` | Parse a template and execute it against data in one call. | **PRIMARY — recommended.** Parses + executes in a single call; **no opaque handle**, fully idiomatic. `data` is the top arg so infix form reads `template Template.render data`. Internally writes to a `bytes.Buffer` and returns its String. A parse failure errors `parse`; an execution failure errors `exec`. |
 | `template.New(name).Parse(text)` | `compile` | `[String] -> Template` | Parse a template string into a reusable compiled handle. | **REUSABLE — for hot loops.** Returns an opaque `Template` external-type handle holding the parsed `*template.Template`. Parse failure errors `parse`. |
-| `(*Template).Execute` | `exec` | `[Map data, Template tmpl] -> String` | Execute a compiled template against data, returning the result String. | Pairs with `compile`: `data` top arg so swap reads `tmpl Template.exec data`. Re-uses the parsed template, avoiding re-parse per render. Execution failure errors `exec`. |
+| `(*Template).Execute` | `exec` | `[Map data, Template tmpl] -> String` | Execute a compiled template against data, returning the result String. | Pairs with `compile`: `data` top arg so infix reads `tmpl Template.exec data`. Re-uses the parsed template, avoiding re-parse per render. Execution failure errors `exec`. |
 
 ### One-shot vs reusable — the key design choice
 
@@ -164,7 +164,7 @@ import "boru:template"
 "{{range .xs}}[{{.}}]{{end}}" {xs:[1 2 3]} Template.render
 # → "[1][2][3]"
 
-# swap form also dispatches
+# infix form also dispatches
 {name:"Ada"} Template.render "Hi {{.name}}"        # → "Hi Ada"
 
 # reusable: compile once, exec per row (hot loop)

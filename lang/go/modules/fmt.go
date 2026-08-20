@@ -51,7 +51,7 @@ func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
 //
 // Registered into the module's isolated sub-registry by BuildFmtModule;
 // every signature is BarrierPos -1 (all-forward eligible), the rule module
-// wrappers must follow so the swap form `src Fmt.format` still dispatches
+// wrappers must follow so the infix form `src Fmt.format` still dispatches
 // (lang/go/CLAUDE.md, "Module FnDef Wrappers").
 var FmtNatives = append([]native.NativeFunc{
 	stringFormatterNative("format", formatter.Format),

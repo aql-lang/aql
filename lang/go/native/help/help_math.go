@@ -29,8 +29,11 @@ func init() {
 		Word:    "sub",
 		Summary: "Subtract: a sub b ≡ a - b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b sub`, `a sub b`, and `sub b a` " +
-			"compute a - b. The handler returns args[1] - args[0]; under the " +
-			"argument-order rule args[0] is the rightmost source-position arg. " +
+			"compute a - b — house style is the infix `a sub b`. The handler " +
+			"returns args[1] - args[0], and the argument-order rule fills args[0] " +
+			"from the first forward token (else the top of the stack), which puts " +
+			"b there in all three. `sub a b` is a different split of the same " +
+			"operands, so it computes b - a: `sub 1 3` is 2. " +
 			"Within-type: String/Atom/Bytes sub removes every occurrence of the right " +
 			"operand ('hello.txt' sub '.txt' → 'hello'), Pathon sub strips a matching " +
 			"trailing run of segments, Qion sub subtracts same-currency amounts, and a " +
@@ -56,7 +59,8 @@ func init() {
 		Word:    "div",
 		Summary: "Divide: a div b ≡ a / b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b div`, `a div b`, and `div b a` " +
-			"compute a / b. Integer division truncates toward zero. Within-type: " +
+			"compute a / b — house style is the infix `a div b`. Integer division " +
+			"truncates toward zero. Within-type: " +
 			"String/Atom/Bytes div counts non-overlapping occurrences of the right " +
 			"operand ('a,b,c' div ',' → 2), and a same-kind Micron pair divides " +
 			"field-wise.",
@@ -70,7 +74,8 @@ func init() {
 		Word:    "mod",
 		Summary: "Remainder: a mod b ≡ a %% b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b mod`, `a mod b`, and `mod b a` " +
-			"compute a %% b (the truncated remainder). For the IEEE round-to-nearest remainder, use `MathUtil.remainder`. " +
+			"compute a %% b (the truncated remainder) — house style is the infix " +
+			"`a mod b`. For the IEEE round-to-nearest remainder, use `MathUtil.remainder`. " +
 			"Within-type: String/Atom/Bytes mod is the tail after the LAST occurrence " +
 			"of the right operand ('path/to/f' mod '/' → 'f'; the whole value when " +
 			"absent), and a same-kind Micron pair mods field-wise.",
@@ -83,7 +88,8 @@ func init() {
 		Word:    "pow",
 		Summary: "Power: a pow b ≡ a^b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b pow`, `a pow b`, and `pow b a` " +
-			"compute a^b. Within-type: String/Atom/Bytes pow repeats the left operand " +
+			"compute a^b — house style is the infix `a pow b`. Within-type: " +
+			"String/Atom/Bytes pow repeats the left operand " +
 			"once per element of the right ('ab' pow 'xy' → 'abab'), and a same-kind " +
 			"Micron pair pows field-wise.",
 		Notes: []string{

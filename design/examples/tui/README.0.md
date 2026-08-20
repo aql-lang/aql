@@ -23,7 +23,7 @@
 > `MathUtil.*` (`boru:math-util`); `filter`/`each` take quotation bodies
 > (`filter [ dot done ] xs`); `parse "json"` / `emit "json"` became
 > `parse json` / `emit json` (atom kinds, `boru:parselang` /
-> `boru:emitlang`); `sub a b` forward-form arithmetic became swap form
+> `boru:emitlang`); `sub a b` forward-form arithmetic became infix
 > (`a sub 1`); a `help` local collided with the built-in help system;
 > the app map is bound with `def` before returning (body locals tear
 > down before a trailing literal evaluates); statement-position `spawn`

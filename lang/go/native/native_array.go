@@ -367,7 +367,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []Signature{
 			{
 				// With initial value: init fold body data → result.
-				// Sig is body-first (matching each/scan) so the swap form
+				// Sig is body-first (matching each/scan) so the infix form
 				// `init fold body data` collects body+data forward and
 				// init from the stack.
 				Args:       []*Type{TList, TList, TAny},

@@ -53,7 +53,7 @@ whole-string form is the primary, and recommended, surface.)
 
 `String -> Boolean`, true iff non-empty and every rune is in the class.
 Top-first sig order; inner native sigs `BarrierPos: -1`; invoked
-args-before-dot (single-arg words dispatch in forward and swap form).
+args-before-dot (single-arg words dispatch in forward and stack form).
 
 | Go per-rune symbol | boru word | one-line doc | refinement |
 |---|---|---|---|

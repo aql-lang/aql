@@ -150,22 +150,26 @@ references. Register the builder in the `modules` map in
 
 ### Argument order & dispatch (CRITICAL)
 
-- Inner native sigs MUST use `BarrierPos: -1` so the swap form
-  `a Ns.word b` dispatches. This is the sharp edge in `lang/go/CLAUDE.md`
-  "Module FnDef Wrappers — inner sig BarrierPos", pinned by
-  `wrapper_dispatch_test.go`. For ZERO-ARG constants the two spellings
-  are byte-identical after registration (`-1` normalizes to
+- Inner native sigs MUST use `BarrierPos: -1` — all-forward, so every
+  position is forward-eligible and any position the caller does not fill
+  forward falls back to the value stack. That fallback is what lets the
+  infix form `a Ns.word b` dispatch; a `BarrierPos: 0` inner sig demands
+  every arg from the stack and refuses it. This is the sharp edge in
+  `lang/go/CLAUDE.md` "Module FnDef Wrappers — inner sig BarrierPos",
+  pinned by `wrapper_dispatch_test.go`. For ZERO-ARG constants the two
+  spellings are byte-identical after registration (`-1` normalizes to
   `TotalArgs()`, which is 0 at zero args — NUR023): `-1` is the ADR-004
   uniform default, `0` an accepted constant-style idiom; existing
   registrations use both and neither is wrong.
 - `FnSig.Params` and `NativeSig.Args` are **top-first, sig order**:
   position 0 is the top of the stack. Document signatures in this order.
-- Module words are invoked **args-before-dot**: `a b Ns.word` (stack
-  form) and `a Ns.word b` (swap form) dispatch; pure forward
-  `Ns.word a b` does not (the bare namespace leads with an empty stack).
-  Every example in these notes uses the args-before form, matching
-  `../NATIVE-MODULES.10.md` "Calling Convention" and the caveat in
-  `../GO-MODULES.10.md`.
+- Every layout dispatches: `a b Ns.word` (stack form), `a Ns.word b`
+  (infix form) and pure forward `Ns.word a b` alike — module words
+  forward-collect like built-ins since `6687638`, pinned by
+  `lang/spec/edge-modules-1.tsv`. Every example in these notes is
+  written **args-before-dot** by convention, matching
+  `../NATIVE-MODULES.10.md` "Calling Convention"; that is a house
+  choice for these notes, not a dispatch constraint.
 
 ### Type mapping & the value bridge
 

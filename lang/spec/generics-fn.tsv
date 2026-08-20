@@ -22,7 +22,7 @@ def second gen [K V] fn [[k:K v:V] [V] [v]] end typeof (second a/q 42)	Integer	�
 #
 # §2  mirror call forms — forward / stack / mixed dispatch identically
 def pick2 gen [T] fn [[a:T b:T] [T] [a]] end pick2 1 2	1	forward form
-def pick2 gen [T] fn [[a:T b:T] [T] [a]] end 2 pick2 1	1	swap form binds sig[0] forward, sig[1] from the stack
+def pick2 gen [T] fn [[a:T b:T] [T] [a]] end 2 pick2 1	1	infix form binds sig[0] forward, sig[1] from the stack
 def pick2 gen [T] fn [[a:T b:T] [T] [a]] end 2 1 pick2	1	stack form is mirror-equivalent
 #
 # §3  element binding — [:T] and {:T} patterns
