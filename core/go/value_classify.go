@@ -282,9 +282,28 @@ func IsInertConst(v Value) bool {
 // distinct from a CONCRETE baked fn value (Carrier false, the introspection /
 // inert-`/v` case). The carrier bit is what resolves the apply-vs-inert
 // ambiguity in Finalize: a carrier lead auto-applies, a concrete fn does not.
+//
+// A carrier typed by a fn-SHAPE type counts too: a value the checker types as
+// `T` (`def T fnsig Integer Integer`, then a T-typed class field read) IS a
+// function at run time — the shape's membership admits nothing else — so the
+// recorder's maybe-callable questions must answer for it exactly as for a
+// Function-typed carrier, or the compiled program leaves the fn inert where
+// the interpreter applies it (NUR095, retired by this rule; pinned in
+// class.tsv's fn-members rows). The VM's dynamic-call
+// ops stay faithful either way: a value that turns out not to be callable is
+// left as data (callDynamic's IsAppliableFn arm).
 func IsFnTypedCarrier(v Value) bool {
 	return v.Carrier && v.Parent != nil &&
-		v.Parent.ConformsTo(TFunction)
+		(v.Parent.ConformsTo(TFunction) || TypeIsFnShape(v.Parent))
+}
+
+// TypeIsFnShape reports whether t is a function-SHAPE type — a type whose
+// concrete inhabitants are function values: the anonymous fn-shape type
+// itself (`fnsig …`, FunctionSignature) or a named fn-shape node minted
+// under it (InstallType parents named shapes at FunctionSignature and
+// attaches FnUndefUnifier membership).
+func TypeIsFnShape(t *Type) bool {
+	return t != nil && t.ConformsTo(TFnUndef)
 }
 
 // isFnValueResidual reports whether v is ANY fn value — a concrete FnDefInfo (a
