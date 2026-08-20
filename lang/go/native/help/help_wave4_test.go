@@ -237,7 +237,9 @@ func TestW4FormatDynamicZeroArgSig(t *testing.T) {
 // --- example machinery ------------------------------------------------------
 
 func TestW4ExampleExprs(t *testing.T) {
-	// Non-commutative forward 2-arg word: forward + infix forms.
+	// House-style infix operator, non-commutative: the INFIX form leads
+	// (STYLE-GUIDE.md §S2) and the forward form follows, so the contrast
+	// readers get wrong stays visible.
 	sub := FuncInfo{
 		Name:        "sub",
 		ForwardArgs: true,
@@ -247,11 +249,22 @@ func TestW4ExampleExprs(t *testing.T) {
 	if len(exprs) != 2 {
 		t.Fatalf("ExampleExprs(sub) = %v, want 2 exprs", exprs)
 	}
-	if exprs[0] != "sub 2 3" || exprs[1] != "3 sub 2" {
-		t.Errorf("ExampleExprs(sub) = %v, want [sub 2 3, 3 sub 2]", exprs)
+	if exprs[0] != "3 sub 2" || exprs[1] != "sub 2 3" {
+		t.Errorf("ExampleExprs(sub) = %v, want [3 sub 2, sub 2 3]", exprs)
 	}
 
-	// Commutative forward word: forward form only.
+	// House-style infix operator, commutative: the infix form alone —
+	// there is no second reading to contrast against.
+	if exprs := ExampleExprs(FuncInfo{
+		Name:        "add",
+		ForwardArgs: true,
+		Sigs:        []SigInfo{w4Sig([]string{"Integer", "Integer"}, []string{"Integer"})},
+	}); len(exprs) != 1 || exprs[0] != "3 add 2" {
+		t.Errorf("ExampleExprs(add) = %v, want [3 add 2]", exprs)
+	}
+
+	// A forward word that is NOT read as an operator keeps the canonical
+	// forward form.
 	add := FuncInfo{
 		Name:        "w4-plus",
 		ForwardArgs: true,
@@ -433,6 +446,17 @@ func TestW4FormatResult(t *testing.T) {
 	if got := formatResult(7.5, floatSig); got != "7.5" {
 		t.Errorf("formatResult float = %q", got)
 	}
+	// The regression this pins: a WHOLE Float must keep its decimal
+	// point. The old hand-rolled formatter rendered it as `7`, an
+	// Integer literal, so `describe` documented the wrong type — the
+	// mismatch that surfaced as `3.5 mul 2 ;# 7` against the engine's
+	// `7.0`. formatResult now defers to core.FormatFloat.
+	if got := formatResult(7, floatSig); got != "7.0" {
+		t.Errorf("formatResult whole float = %q, want \"7.0\"", got)
+	}
+	if got := formatResult(-2, floatSig); got != "-2.0" {
+		t.Errorf("formatResult negative whole float = %q, want \"-2.0\"", got)
+	}
 	if got := formatResult(7, w4Sig(nil, nil)); got != "..." {
 		t.Errorf("formatResult no returns = %q", got)
 	}
@@ -498,6 +522,26 @@ func TestW4IsNonCommutative2Arg(t *testing.T) {
 	}
 	if isNonCommutative2Arg(FuncInfo{Name: "sub", Sigs: one}) {
 		t.Error("1-arg-only word cannot be non-commutative-2arg")
+	}
+}
+
+// isHouseStyleInfix is a name list, not a signature property, so it must
+// admit the commutative operators isNonCommutative2Arg rejects and reject
+// the non-commutative words nobody writes infix. Paired negatives keep the
+// two sets from silently collapsing into one.
+func TestW4IsHouseStyleInfix(t *testing.T) {
+	for _, name := range []string{"add", "sub", "mul", "div", "mod", "pow",
+		"and", "or", "lt", "lte", "gt", "gte", "eq", "neq"} {
+		if !isHouseStyleInfix(name) {
+			t.Errorf("%s should be house-style infix", name)
+		}
+	}
+	// atan2 and implies are non-commutative but not operators anyone
+	// writes infix; bsl/concat/print are not two-arg operators at all.
+	for _, name := range []string{"atan2", "implies", "bsl", "concat", "print"} {
+		if isHouseStyleInfix(name) {
+			t.Errorf("%s should not be house-style infix", name)
+		}
 	}
 }
 
