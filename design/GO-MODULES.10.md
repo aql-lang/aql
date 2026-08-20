@@ -66,9 +66,10 @@ package via `boru describe` (below).
 Reflected words behave exactly like native-module words (see
 [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md) "Calling Convention"): a
 `Namespace.word` dot-access is an auto-invoking `FnDef` wrapper that fires
-when it finds matching arguments **on the stack**. So arguments precede the
-dot expression — stack form (`a b Pkg.word`) and infix form (`a Pkg.word b`)
-both dispatch:
+as soon as it finds matching arguments, on the stack or forward. Every
+layout dispatches — stack form (`a b Pkg.word`), infix form
+(`a Pkg.word b`) and forward form (`Pkg.word a b`) — and these notes
+write their examples args-before-dot by convention:
 
 ```
 import "go:strings"
@@ -78,17 +79,16 @@ import "go:strings"
 
 > **Note on argument form.** boru's general guidance is to prefer *forward*
 > form `f a b c` for words that are not read as operators (see
-> `eng/go/CLAUDE.md` "Signature Ordering"). Imported module words are the
-> documented exception: the dot-access desugars to a `get`-chain that
-> resolves the namespace from the stack, so the wrapper can only
-> auto-invoke when at least one argument is already on the stack — the
-> stack and infix forms. Pure forward form
-> `Pkg.word a b` does **not** dispatch — the bare `Namespace` token leads
-> with nothing on the stack and errors as an undefined word (verified
-> against `boru:math-util`: `3 7 MathUtil.min` → `3`, but `MathUtil.min 3 7`
-> faults). `go:` words inherit this from the shared module machinery; the
-> args-before spelling above is the canonical form for them, exactly as for
-> `boru:` modules.
+> `eng/go/CLAUDE.md` "Signature Ordering"), and module words are no
+> exception: since the structure-first lazy forward-argument resolution
+> (`6687638`) they forward-collect like built-ins, so `Pkg.word a b`
+> dispatches alongside `a b Pkg.word` and `a Pkg.word b`. Pinned for
+> `boru:` modules by `lang/spec/edge-modules-1.tsv` (`MathUtil.min 3 7`
+> → `3`, "forward form agrees"; `MathUtil.hypot 3.0 4.0` → `5.0`).
+> `go:` words inherit this from the shared module machinery. The
+> args-before spelling stays the convention these notes write their
+> examples in, because it is the form the wrapper was designed around —
+> not because the forward one fails.
 
 A Go function's parameters map to sig positions **in declared order**
 (top-first, sig order — the one kernel convention). For a Go

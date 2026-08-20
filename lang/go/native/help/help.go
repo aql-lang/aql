@@ -357,12 +357,17 @@ func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 	// result, so spell out which form reads naturally rather than
 	// leaving a cryptic inline note on the examples. There is no
 	// two-arg special case behind this: the two spellings are just
-	// two splits of the one argument-order rule, and house style
-	// picks the infix one (STYLE-GUIDE.md §S2).
+	// two splits of the one argument-order rule.
+	//
+	// The note stays FACTUAL. "Infix is house style" is a claim about
+	// one enumerated set of operator words (STYLE-GUIDE.md §S2), which
+	// is NOT the same set this predicate admits — so it belongs in
+	// those words' own Entry Descriptions, not in a line rendered for
+	// every non-commutative binary word.
 	if isNonCommutative2Arg(info) {
 		b.WriteString("  Order matters: the infix form `x ")
 		b.WriteString(name)
-		b.WriteString(" y` reads left-to-right and is house style;\n")
+		b.WriteString(" y` reads left-to-right;\n")
 		b.WriteString("  `")
 		b.WriteString(name)
 		b.WriteString(" x y` is the other split — see Description.\n")

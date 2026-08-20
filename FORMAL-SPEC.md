@@ -663,9 +663,11 @@ arguments:
 sub 3 10        args[0] = 3, args[1] = 10
 ```
 
-Moving an operand across the word moves it to a different slot, so a different
-spelling of the same operands is a different call — not an exception to the
-rule, but the rule applied to a different split:
+A rearrangement that changes how many slots the forward phase fills, without
+changing which operand each slot receives, is the same call — that is what the
+three spellings above show. A rearrangement that changes which operand reaches
+which slot is a different call. Neither is an exception to the rule; both are
+the rule applied to a different layout:
 
 ```text
 sub 10 3        args[0] = 10, args[1] = 3

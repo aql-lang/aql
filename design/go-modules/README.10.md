@@ -163,12 +163,13 @@ references. Register the builder in the `modules` map in
   registrations use both and neither is wrong.
 - `FnSig.Params` and `NativeSig.Args` are **top-first, sig order**:
   position 0 is the top of the stack. Document signatures in this order.
-- Module words are invoked **args-before-dot**: `a b Ns.word` (stack
-  form) and `a Ns.word b` (infix form) dispatch; pure forward
-  `Ns.word a b` does not (the bare namespace leads with an empty stack).
-  Every example in these notes uses the args-before form, matching
-  `../NATIVE-MODULES.10.md` "Calling Convention" and the caveat in
-  `../GO-MODULES.10.md`.
+- Every layout dispatches: `a b Ns.word` (stack form), `a Ns.word b`
+  (infix form) and pure forward `Ns.word a b` alike — module words
+  forward-collect like built-ins since `6687638`, pinned by
+  `lang/spec/edge-modules-1.tsv`. Every example in these notes is
+  written **args-before-dot** by convention, matching
+  `../NATIVE-MODULES.10.md` "Calling Convention"; that is a house
+  choice for these notes, not a dispatch constraint.
 
 ### Type mapping & the value bridge
 

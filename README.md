@@ -82,8 +82,8 @@ order, and you never have to track what is sitting on the stack:
 - `f a b c` binds `a`, `b`, `c` to the first, second, third parameters.
 - Calls compose by parenthesising: `(f a b) g c`.
 - The same rule covers built-ins, your own `def fn`s, and `import`.
-- One exception: a dotted module word (`MathUtil.min`) auto-invokes from
-  what's already on the stack, so call it args-first (`3 7 MathUtil.min`).
+- Dotted module words follow it too: `MathUtil.min 3 7` and the args-first
+  `3 7 MathUtil.min` both dispatch.
 
 **Except for the operators.** The two-argument words common convention
 reads as infix operators — `add`, `sub`, `mul`, `div`, `mod`, `pow`,

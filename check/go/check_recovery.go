@@ -83,7 +83,7 @@ func tagCheckModeDefRead(e *core.Engine, top *core.Value, name string) {
 
 // checkMixedFormAdvisories emits the two check-mode forward-greediness
 // advisories when a word forward-collects an argument AND also takes a stack
-// argument (an infix-form dispatch): the forward-strand advisory (the
+// argument (a mixed-form dispatch, at any arity): the forward-strand advisory (the
 // `1 2 add 3 mul → 5` surprise — `add` grabs the forward `3` and strands the
 // `1`) and the mixed-form-call advisory (a 3+-arg call taking operand(s) from a
 // PRECEDING expression while forward-collecting binds differently from the
