@@ -32,8 +32,59 @@ func (d *DisjunctUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(d.prev).Match(v, t)
 	}
+	// Deliberately LOOSE on the newtype-alternative swap: `42` against
+	// `(P tor String)` admits via the subtype rule even though
+	// `42 is M` is false — dispatch decomposes the union to base
+	// families, the one pinned boundary where a newtype alternative is
+	// looser than `is` (edge-types-2's DIVERGENCE PIN). The `is` word
+	// applies its post-unify value-identity check on top of this Match
+	// (IsDisjunctTypeNode routes it past the short-circuit).
 	_, err := unifyDisjunct(DisjunctInfo{Alternatives: d.Alternatives}, v)
 	return err == nil
+}
+
+// IsDisjunctTypeNode reports whether v is a bare lattice node whose
+// Behavior chain carries a DisjunctUnifier — the evaluated NAME of a
+// disjunct type after the Stage 2 flip. The `is` handler uses it to
+// route a concrete candidate through the full Unify + value-identity
+// path (where the newtype-alternative swap is refused) instead of the
+// Match short-circuit (which stays deliberately loose for dispatch).
+func IsDisjunctTypeNode(v Value) bool {
+	if !IsBareTypeNode(v) {
+		return false
+	}
+	u, ok := unifierOf(v.Behavior())
+	if !ok {
+		return false
+	}
+	_, ok = u.(*DisjunctUnifier)
+	return ok
+}
+
+// Unify admits a concrete candidate iff some alternative unifies with
+// it, yielding the alternative-unified result — never the node literal
+// (the typed-def swap hazard). A concrete non-member fails
+// definitively; a type-level pair defers to the structural rule. The
+// Unify capability every membership kind carries
+// (design/TYPE-REPRESENTATION.1.md §N3), so `def x:Maybe 5` against the
+// node constraint runs the alternatives.
+func (d *DisjunctUnifier) Unify(a, b Value) (Value, *UnifyError) {
+	// The alternatives rule decides whenever exactly one side IS this
+	// disjunct's node; the candidate may be concrete, a carrier, or a
+	// TYPE-level operand (`OptNum unify None` — None is an
+	// alternative), all of which the payload fold decided identically
+	// for the body the node replaced. A same-node (or node-free) pair
+	// settles structurally.
+	aSelf := IsBareTypeNode(a) && a.Behavior() == TypeBehavior(d)
+	bSelf := IsBareTypeNode(b) && b.Behavior() == TypeBehavior(d)
+	if aSelf == bSelf {
+		return unifySameOrSubtype(a, b)
+	}
+	candidate := a
+	if aSelf {
+		candidate = b
+	}
+	return unifyDisjunct(DisjunctInfo{Alternatives: d.Alternatives}, candidate)
 }
 
 // installDisjunctUnifier attaches a disjunctUnifier to def, wrapping

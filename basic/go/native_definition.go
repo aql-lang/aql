@@ -1052,6 +1052,8 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return constraint.String()
 	}
 	body := args[1]
+	var depScalarCons Value
+	constraint, depScalarCons = resolveTypedDefConstraint(constraint)
 	// A generic SCHEMA annotation — `def b:Box {value:42}` — infers
 	// its type arguments from the body and instantiates (Phase 7 /
 	// D12); the instantiation then flows through the ordinary typed-def
@@ -1072,8 +1074,21 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 		}
 	}
-	if constraint.Parent.Equal(TFunction) {
-		return defFnPredicateBind(r, name, typeName, constraint, body, describeType, args[0].Pos())
+	// A PREDICATE constraint: an inline fn value (Parent Function), or —
+	// after the Stage 2 flip — the NAME of a predicate type, which
+	// evaluates to its minted node carrying a PredicateUnifier. The
+	// predicate BODY to run is the node's recorded content
+	// (design/TYPE-REPRESENTATION.1.md §N2); defFnPredicateBind keeps
+	// its historical run-then-reparent semantics (typeof x → Pos for an
+	// input-typed predicate) in both spellings.
+	if constraint.Parent.Equal(TFunction) || core.IsPredicateTypeNode(constraint) {
+		pred := constraint
+		if pb, ok := core.TypeContentOf(constraint); ok {
+			pred = pb
+		}
+		if pred.Data != nil {
+			return defFnPredicateBind(r, name, typeName, pred, body, describeType, args[0].Pos())
+		}
 	}
 
 	// ObjectType constraint (`def x:Person {map}` where Person is
@@ -1147,8 +1162,8 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 		}
 	}
-	if r.Check.IsActive() && constraint.IsDepScalar() && !IsConcrete(body) {
-		if body.Parent.ConformsTo(constraint.Parent) {
+	if r.Check.IsActive() && depScalarCons.IsDepScalar() && !IsConcrete(body) {
+		if body.Parent.ConformsTo(depScalarCons.Parent) {
 			// An ABSTRACT (carrier) body admits on base conformance only —
 			// the predicate is value-level and the value is unknown here, so
 			// validation stays at RUNTIME via v.Is. A compiled `def
@@ -1169,7 +1184,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// byte-identical unify error on failure and binding Unify's result
 			// (base tag kept, no reparent) on success.
 			bound := RecordTypedBindOrRefuse(r, func() core.TypedBindSpec {
-				depCons := constraint
+				depCons := depScalarCons
 				return core.TypedBindSpec{
 					Kind: core.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
 				}
@@ -1192,7 +1207,20 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// Foo-tagged type literal, not the integer 1.
 	if IsBareTypeNode(constraint) && constraint.Origin == core.OriginUserDef &&
 		typeName != "" && constraint.Parent != nil {
-		if def := r.LookupTypeName(typeName); def != nil && def.Origin == core.OriginUserDef {
+		// Behavior-keyed guard: a bare user node whose kind enforces
+		// membership through a kernel constraint Unifier (dependent
+		// scalar, predicate, binding-body — core.HasConstraintUnify)
+		// must NOT take this nominal reparent arm: the arm unifies
+		// against the BUILTIN ancestor only, so it would bind without
+		// ever running the constraint (`def x:Big 5` succeeding once
+		// evaluation yields nodes — design/TYPE-REPRESENTATION.1.md
+		// §N3). Such constraints fall through to the general UnifyR
+		// below, where dispatchUnifier finds the kind's Unify. A user
+		// `behave unify/q` wrapper on a nominal refine is NOT a
+		// constraint (Unifier but not ContentMembership), so newtypes
+		// keep this arm.
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin == core.OriginUserDef &&
+			!core.HasConstraintUnify(def) {
 			// Walk up the lattice past any intervening user refines
 			// (e.g. `Foo refine Item refine String`) to the nearest
 			// builtin ancestor and unify against THAT. A sibling-of-
@@ -1322,7 +1350,12 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			return nil, r.BoruError("undef_error",
 				fmt.Sprintf("undef %s: no such type binding", name), "undef")
 		}
-		if entry.TypeDef != nil {
+		// Retire only a node THIS binding minted. An alias binding
+		// ADOPTS an existing canonical node (`def Foo Integer` binds
+		// the Integer node itself — core.InstallType's alias arm), so
+		// retiring it here would delete a builtin's or another
+		// binding's identity from the ID index.
+		if entry.TypeDef != nil && entry.Minted {
 			r.Types.Retire(entry.TypeDef)
 		}
 		return nil, nil
@@ -1775,4 +1808,31 @@ func PopArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		return nil, err
 	}
 	return nil, nil
+}
+
+// resolveTypedDefConstraint applies the name→node recoveries a
+// typed-def constraint needs ahead of branch dispatch (the Stage 2
+// flip, design/TYPE-REPRESENTATION.1.md §N2): a SCHEMA-kind NAME
+// (generic schema / class / record / table / options / typed-map /
+// Micron) evaluates to its minted node, and the branches dispatch on
+// the declared structural content the node records; kinds that enforce
+// membership through a kernel constraint Unifier (HasConstraintUnify —
+// predicate / DepScalar / disjunct / negation / FnUndef) keep the
+// node, whose Behavior the predicate arm and the general UnifyR
+// consult directly. The second result recovers a DepScalar's bounds —
+// spelt inline (`(Integer gt 10)`) or behind a name — for the
+// check-mode typed-bind arm, which re-runs them at OpBindTyped.
+func resolveTypedDefConstraint(constraint Value) (Value, Value) {
+	if IsBareTypeNode(constraint) && !core.HasConstraintUnify(&constraint) {
+		if content, ok := core.TypeContentOf(constraint); ok {
+			constraint = content
+		}
+	}
+	dep := constraint
+	if !dep.IsDepScalar() {
+		if content, ok := core.TypeContentOf(constraint); ok && content.IsDepScalar() {
+			dep = content
+		}
+	}
+	return constraint, dep
 }

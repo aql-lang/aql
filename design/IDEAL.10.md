@@ -575,6 +575,8 @@ concrete: identity is global, *capability* is registry-scoped.
 
 **`def` / `make` resolution is generic.** A host kind installed
 through `InstallType` reuses the resolution records already use —
-`stepWord` resolves a type-bound name to its stored body,
-`MakeHandler` dispatches on it. Beyond the `HostTypeBody` marker, no
-per-kind kernel plumbing was needed.
+`stepWord` resolves a type-bound name (since the type-node fusion,
+[TYPE-REPRESENTATION.1.md](TYPE-REPRESENTATION.1.md) §6, to the minted
+lattice NODE; `make` recovers the stored body via
+`core.TypeContentOf`), `MakeHandler` dispatches on it. Beyond the
+`HostTypeBody` marker, no per-kind kernel plumbing was needed.

@@ -375,7 +375,12 @@ The change is additive-first so the test suite stays green throughout.
     singleton type bodies (`def Foo 1`), and all type-installation
     validation are reused verbatim — no logic duplication, no
     divergence risk. The canonical `def Account (maketype Object
-    {…})` now works and `typeof` reports `Account`.
+    {…})` now works and `typeof` reports `Account`. *(Update,
+    2026-08-20: under the type-node fusion
+    ([TYPE-REPRESENTATION.1.md](TYPE-REPRESENTATION.1.md) §6), `typeof`
+    of a named type uniformly answers its Parent — `typeof Account`
+    is now `Class`, not `Account`; the instance direction
+    `typeof (make Account {…}) → Account` is unchanged.)*
   - `defTypedHandler` (`def name:T value`) still rejects capitalised
     names: a typed-def is a *value* binding with a type constraint;
     type-annotating a type binding is contradictory.

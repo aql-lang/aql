@@ -115,12 +115,15 @@ func expandCaseAlt(r *Registry, a Value, depth int, out *[]Value) bool {
 			*out = append(*out, NewBoolean(true), NewBoolean(false))
 			return true
 		}
-		if dv, ok := core.UnionCarrierForType(t); ok { //covergate:allow defensive arm — kernel paths deliver union-typed domains as DISTRIBUTING disjunct carriers (ParamInputCarrier / UnionCarrierForType at param+return sites), never as a bare union NODE; the arm keeps a future carrier shape sound instead of silently uncovered
+		if dv, ok := core.UnionCarrierForType(t); ok {
 			// A named union/enum type: its members are the alternatives.
+			// Live since the Stage 2 flip — a union NAME in scrutinee or
+			// match position denotes its bare node, and the node's
+			// members expand here.
 			if depth <= 0 { //covergate:allow a union node recurses exactly once into its (flattened) distributing disjunct, so the bound cannot exhaust here
 				return false
 			}
-			return expandCaseAlt(r, dv, depth-1, out) //covergate:allow same defensive arm — see the guard above
+			return expandCaseAlt(r, dv, depth-1, out)
 		}
 		*out = append(*out, a)
 		return true
@@ -245,9 +248,17 @@ func resolveCaseMatch(r *Registry, m Value) caseClauseMatch {
 	cm.resolved = normalizeCaseNone(cm.resolved)
 	// A DepScalar refinement type used directly as the match (`Big` for
 	// `def Big (Integer gt 10)`) keeps its value-level unify semantics
-	// AND contributes its bounds to interval-union coverage.
-	if cm.resolved.IsDepScalar() {
-		if iv, ok := depScalarIval(cm.resolved); ok {
+	// AND contributes its bounds to interval-union coverage. The name
+	// resolves to the refinement's NODE; its structure is recovered from
+	// the node (TypeContentOf) for the interval extraction.
+	dep := cm.resolved
+	if !dep.IsDepScalar() {
+		if body, ok := core.TypeContentOf(dep); ok {
+			dep = body
+		}
+	}
+	if dep.IsDepScalar() {
+		if iv, ok := depScalarIval(dep); ok {
 			cm.ival = &iv
 		}
 	}
@@ -324,12 +335,20 @@ func parseCaseIsPred(r *Registry, m Value) (Value, bool) {
 		}
 	}
 	if IsBareTypeNode(tgt) && !IsNoneShape(tgt) {
-		return tgt, true
-	}
-	if tgt.IsDepScalar() {
-		if _, ok := depScalarIval(tgt); ok {
-			return tgt, true
+		// A refinement NAME resolves to its node; a DepScalar body behind
+		// it contributes interval coverage exactly as the body did when
+		// the name denoted the body directly. A non-numeric refinement
+		// (`String gte 'a'`) has no representable interval and stays
+		// opaque. (The name path is the ONLY route here since the Stage 2
+		// flip — ResolveTypedName yields nodes, never raw DepScalar
+		// bodies, so no separate body arm remains.)
+		if body, ok := core.TypeContentOf(tgt); ok && body.IsDepScalar() {
+			if _, ok := depScalarIval(body); ok {
+				return body, true
+			}
+			return Value{}, false
 		}
+		return tgt, true
 	}
 	return Value{}, false
 }
@@ -466,8 +485,11 @@ func caseMatchCovers(r *Registry, m, alt Value, depth int) bool {
 	}
 	if IsBareTypeNode(m) {
 		t := CanonicalType(r, &m)
-		if dv, ok := core.UnionCarrierForType(t); ok { //covergate:allow defensive arm — ResolveTypedName yields a union's BODY (a payload-carrying disjunct value, the IsDisjunct branch above), never its minted node; the arm keeps a future node-resolving path sound
-			// A named union/enum type as a match covers what its members cover.
+		if dv, ok := core.UnionCarrierForType(t); ok {
+			// A named union/enum/disjunct type as a match covers what its
+			// members cover — the alternatives are recovered from the
+			// node's DisjunctUnifier (UnionCarrierForType), so no separate
+			// TypeContentOf arm is needed.
 			return caseMatchCovers(r, dv, alt, depth-1)
 		}
 		if IsBareTypeNode(alt) {

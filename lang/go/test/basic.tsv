@@ -88,7 +88,8 @@ def Bar refine Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]
 refine Table (refine Record [x:Number y:String])	table{x:Number y:String}
 
 # Table type - with type Def
-def Foo refine Record [x:Integer y:String] def Bar refine Table Foo Bar	table{x:Integer y:String}
+# Stage 2 flip (design/TYPE-REPRESENTATION.1.md §6): a name denotes its minted node and renders as the name.
+def Foo refine Record [x:Integer y:String] def Bar refine Table Foo Bar	Bar
 
 # Make - table type (positional)
 def Foo refine Record [x:Integer y:String] def Bar refine Table Foo make Bar [[1 a/q] [2 b/q]]	[{x:1 y:'a'} {x:2 y:'b'}]
@@ -118,7 +119,8 @@ def Foo refine Record [x:Number y:[String tor None]] make Foo [42 None]	{x:42 y:
 def Foo refine Record [x:Number y:[String tor None]] make Foo [42 "hello"]	{x:42 y:'hello'}
 
 # Record with user-defined type Field (disjunct for optional)
-def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo	record{x:Number y:None tor String}
+# Stage 2 flip (§6): a name denotes its minted node and renders as the name, not the body.
+def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo	Foo
 
 # Record with user-defined type - unification narrows disjunct
 def OptStr (String tor None) def Foo (refine Record [x:Number y:OptStr]) Foo unify (refine Record [x:Number y:String])	record{x:Number y:String} true
@@ -250,7 +252,8 @@ def flag fn [[v?:Boolean] [Boolean] [v]] flag true	true
 def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] def Bar refine Table Foo make Bar [[1 "a"] [2 None]]	[{x:1 y:'a'} {x:2 y:None}]
 
 # Record with nested user-defined record type
-def Inner refine Record [z:String] def Outer refine Record [a:Number b:Inner] Outer	record{a:Number b:record{z:String}}
+# Stage 2 flip (§6): a name denotes its minted node and renders as the name, not the body.
+def Inner refine Record [z:String] def Outer refine Record [a:Number b:Inner] Outer	Outer
 
 # Do - evaluate list contents
 do [1 add 2]	3
@@ -442,7 +445,8 @@ def R refine Record [x:Number] (refine Table R) eq (refine Table R)	true
 (String tor None) neq (Number tor None)	true
 
 # eq/neq - user-defined types
-def Foo [:Number] def Bar [:Number] Foo eq Bar	true
+# Stage 2 flip (design/TYPE-REPRESENTATION.1.md §6): named types are nominal — two names minted from equal bodies are distinct nodes.
+def Foo [:Number] def Bar [:Number] Foo eq Bar	false
 def Foo [:Number] def Bar [:String] Foo neq Bar	true
 
 # eq/neq - nested complex types

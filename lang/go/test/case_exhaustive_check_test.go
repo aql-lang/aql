@@ -223,6 +223,12 @@ func TestCaseExhaustivePredicates(t *testing.T) {
 	wantCase(t,
 		`def f fn [[x:Integer][Integer][case x [[gt 3 1] 1 [lte 3] 2]]] f 5`,
 		"case_not_exhaustive", true, "uncovered", "Integer")
+	// A NON-NUMERIC named refinement in [is T] has no representable
+	// interval and stays opaque too — the name resolves to its node,
+	// the recorded String-based bounds contribute nothing.
+	wantCase(t,
+		`def S (String gte "a") def f fn [[x:Integer][String][case x [[is S] "yes" [gt 0] "pos"]]] f 1`,
+		"case_not_exhaustive", true, "uncovered", "Integer")
 }
 
 func TestCaseExhaustiveDynamic(t *testing.T) {

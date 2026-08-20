@@ -655,3 +655,28 @@ func TestRunCLIColorTolerances(t *testing.T) {
 		t.Errorf("stderr = %q, want the missing-target message", stderr.String())
 	}
 }
+
+// anchorOf's fallback: when the cwd is unavailable, Abs on a relative
+// directory fails and the RELATIVE dir anchors — no worse than an empty
+// anchor, and deterministic to drive (delete the cwd out from under the
+// process).
+func TestAnchorOfFallsBackWhenCwdUnavailable(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(t.TempDir(), "gone")
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(gone); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if got := anchorOf(filepath.Join("x", "m.boru")); got != "x" {
+		t.Fatalf("anchorOf must fall back to the relative dir when Abs fails, got %q", got)
+	}
+}

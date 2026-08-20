@@ -199,6 +199,11 @@ types aren't values. Cross-type comparison is `teq`.
 Interpreter, checker and compiler honour this identically; a compiler
 refusal is a bug. The emitter interns bare type nodes, nested included.
 
+> **Amendment (2026-08-20).** One refusal is by design, not a bug:
+> after the Stage 2 flip a PREDICATE-TYPE node at a fn-invoking word
+> refuses compilation exactly as the fn value it replaced
+> (`design/TYPE-REPRESENTATION.1.md` §9).
+
 ---
 
 ## ADR-011 — One Function type {#adr-011}
@@ -301,6 +306,11 @@ ports, landing with a shrinking ledger of failing kinds. NUR031
 (fn/host `deq` reflexivity, name-independent fn canon) is a
 prerequisite.
 [CANON-ROUNDTRIP.0.md](design/CANON-ROUNDTRIP.0.md)
+
+> **Amendment (2026-08-20).** A named type canons as its NAME for
+> every declaration kind now (`design/TYPE-REPRESENTATION.1.md` §6),
+> so its round-trip is under a live def — the `canon P → P`
+> precedent, generalised.
 
 ---
 

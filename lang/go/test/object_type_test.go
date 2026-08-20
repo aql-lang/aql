@@ -7,6 +7,16 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
+// objSchema resolves an evaluated class NAME — its NODE, post the
+// Stage 2 flip of design/TYPE-REPRESENTATION.1.md — to the class
+// schema the node records.
+func objSchema(v native.Value) native.Value {
+	if body, ok := native.TypeContentOf(v); ok {
+		return body
+	}
+	return v
+}
+
 // TestObjectTypeDefine defines a named object type and verifies its structure.
 // def Foo type Object {a:String,b:Boolean} → Class/Foo with fields a and b
 func TestObjectTypeDefine(t *testing.T) {
@@ -20,7 +30,17 @@ func TestObjectTypeDefine(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	s := result[0].String()
+	// The name DENOTES its node (design/TYPE-REPRESENTATION.1.md
+	// Stage 2): evaluating `Foo` yields the Foo node, and the schema
+	// stays recoverable from it.
+	if s := result[0].String(); s != "Foo" {
+		t.Errorf("expected the Foo node, got %s", s)
+	}
+	body, ok := native.TypeContentOf(result[0])
+	if !ok {
+		t.Fatal("the node must record its class schema")
+	}
+	s := body.String()
 	if !strings.Contains(s, "Class/Foo") {
 		t.Errorf("expected type name to contain 'Class/Foo', got %s", s)
 	}
@@ -67,7 +87,15 @@ func TestObjectTypeInheritance(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	s := result[0].String()
+	// The name denotes its node; the schema is the node's content.
+	if s := result[0].String(); s != "Bar" {
+		t.Errorf("expected the Bar node, got %s", s)
+	}
+	body, ok := native.TypeContentOf(result[0])
+	if !ok {
+		t.Fatal("the node must record its class schema")
+	}
+	s := body.String()
 	if !strings.Contains(s, "Class/Foo/Bar") {
 		t.Errorf("expected type name to contain 'Class/Foo/Bar', got %s", s)
 	}
@@ -94,7 +122,8 @@ func TestObjectTypeParentFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsClassType(result[0])
+	schema, _ := native.TypeContentOf(result[0])
+	ot, _ := native.AsClassType(schema)
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 total fields (a,b,d), got %d", all.Len())
@@ -116,7 +145,8 @@ func TestObjectTypeOwnFieldsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsClassType(result[0])
+	schema, _ := native.TypeContentOf(result[0])
+	ot, _ := native.AsClassType(schema)
 	if ot.Fields.Len() != 1 {
 		t.Fatalf("expected 1 own field (d), got %d", ot.Fields.Len())
 	}
@@ -140,11 +170,16 @@ func TestObjectTypeDeepInheritance(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	s := result[0].String()
+	// The name denotes its node; the schema is the node's content.
+	schema, ok := native.TypeContentOf(result[0])
+	if !ok {
+		t.Fatal("the node must record its class schema")
+	}
+	s := schema.String()
 	if !strings.Contains(s, "Class/Foo/Bar/Baz") {
 		t.Errorf("expected type name 'Class/Foo/Bar/Baz', got %s", s)
 	}
-	ot, _ := native.AsClassType(result[0])
+	ot, _ := native.AsClassType(schema)
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 fields (a,b,c), got %d", all.Len())
@@ -165,7 +200,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp1, _ := native.AsClassType(result[0])
+	_tmp1, _ := native.AsClassType(objSchema(result[0]))
 	fooID := _tmp1.ID
 
 	result2, err := runNativeSteps(t, nil, []string{
@@ -176,7 +211,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp2, _ := native.AsClassType(result2[0])
+	_tmp2, _ := native.AsClassType(objSchema(result2[0]))
 	barID := _tmp2.ID
 
 	if fooID == barID {
@@ -199,7 +234,7 @@ func TestObjectTypeParentIsNilForRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsClassType(result[0])
+	ot, _ := native.AsClassType(objSchema(result[0]))
 	if ot.Parent != nil {
 		t.Errorf("expected nil parent for root object type, got %+v", ot.Parent)
 	}
@@ -218,7 +253,7 @@ func TestObjectTypeParentReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsClassType(result[0])
+	ot, _ := native.AsClassType(objSchema(result[0]))
 	if ot.Parent == nil {
 		t.Fatal("expected non-nil parent for child object type")
 	}
@@ -237,7 +272,7 @@ func TestObjectTypeFieldOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsClassType(result[0])
+	ot, _ := native.AsClassType(objSchema(result[0]))
 	all := ot.AllFields()
 	// a should be narrowed to Integer, b inherited as Boolean
 	if all.Len() != 2 {

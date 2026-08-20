@@ -27,7 +27,23 @@ package core
 //
 // Exported so lang's tor registration (lang/go/engine/native_type.go)
 // can wire dispatch into it without forking the algorithm.
+
+// resolveTypeOperand resolves a NAMED type operand — a bare node,
+// which is what a type name evaluates to after the Stage 2 flip
+// (design/TYPE-REPRESENTATION.1.md §5) — to its declared content for
+// the type-algebra words, which operate on STRUCTURE: `M tor String`
+// flattens M's alternatives exactly as it did when the name evaluated
+// to its body. Builtin and refine nodes record no content and stay
+// nominal operands.
+func resolveTypeOperand(v Value) Value {
+	if b, ok := TypeContentOf(v); ok && IsBareTypeNode(v) {
+		return b
+	}
+	return v
+}
+
 func TorHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	args = []Value{resolveTypeOperand(args[0]), resolveTypeOperand(args[1])}
 	// De Morgan: (tnot A) tor (tnot B) = tnot (A tand B). Fold the two
 	// negations into the negation of their inners' intersection rather
 	// than leaving a disjunct of negations that denotes the same set.
@@ -122,6 +138,7 @@ func TandHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 // list of values via this same intersection. Future higher-order
 // type combinators may want it too.
 func TandValues(a, b Value) Value {
+	a, b = resolveTypeOperand(a), resolveTypeOperand(b)
 	// Either operand is Never (sentinel or bare type literal) →
 	// intersection is Never.
 	if IsNeverShape(a) || IsNeverShape(b) {
@@ -208,6 +225,16 @@ func isAnyShape(v Value) bool {
 // `tnot (A tor B)` already admits exactly the values matching neither A
 // nor B.
 func NegateType(inner Value) Value {
+	return negateTypeResolved(resolveTypeOperand(inner))
+}
+
+// negateTypeResolved is NegateType after operand resolution. The guard
+// complement (ApplyComplementNarrowing) calls it DIRECTLY with the
+// minted node so a refinement guard's else-arm complement stays the
+// nominal `tnot Node` it always was — resolving the node to its
+// DepScalar content there would swap in the interval complement, a
+// different (stronger) claim than the guard licenses.
+func negateTypeResolved(inner Value) Value {
 	if IsNeverShape(inner) {
 		return NewTypeLiteral(TAny)
 	}

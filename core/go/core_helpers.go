@@ -960,83 +960,23 @@ func IsHostTypeBody(v Value) bool {
 // to discriminate code-bodies / fn-bodies / data-defs from explicit
 // type shapes (e.g. `inspect`) keep using IsTypeBody and stay sharp.
 func IsTypeBody(v Value) bool {
-	// Type literal (Data==nil): number, string, boolean, any, etc.
-	// Excludes the value `none` (Data != nil sentinel).
+	// A bare lattice node IS a type; everything else asks its sealed
+	// payload through the one recognition seam (Payload.IsTypeContent,
+	// design/TYPE-REPRESENTATION.1.md §N4). The 18-arm shape
+	// enumeration this replaced is pinned as the equivalence oracle in
+	// TestIsTypeContentMirrorsLegacy.
 	if IsBareTypeNode(v) {
 		return true
 	}
-	// Implicit-map record shape (`{x:Integer}`): a Map whose backing
-	// OrderedMap is flagged Implicit. Used as a structural Node-type
-	// declaration body.
-	if IsImplicitMap(v) {
+	// The fn-shape and predicate arms are DISPATCH-IDENTITY facts, not
+	// payload facts: any value at the FunctionSignature or Function
+	// identity is a type body (a fn shape / predicate candidate),
+	// Data-bearing or check-mode carrier alike — exactly the legacy
+	// enumeration's parent-keyed arms.
+	if v.Parent != nil && (v.Parent.Equal(TFnUndef) || v.Parent.Equal(TFunction)) {
 		return true
 	}
-	// Record type
-	if IsRecordType(v) {
-		return true
-	}
-	// Options type
-	if IsOptionsType(v) {
-		return true
-	}
-	// Table type
-	if IsTableType(v) {
-		return true
-	}
-	// Disjunct
-	if IsDisjunct(v) {
-		return true
-	}
-	// Negation (complement) type
-	if IsNegation(v) {
-		return true
-	}
-	// Typed list [:type]
-	if IsTypedList(v) {
-		return true
-	}
-	// Typed map {:type}
-	if IsTypedMap(v) {
-		return true
-	}
-	// Bounded Type (`Type of [B]` / `B/t`)
-	if IsBoundedType(v) {
-		return true
-	}
-	// Object type
-	if IsClassType(v) {
-		return true
-	}
-	// Surface type (pure operation contract)
-	if IsSurfaceType(v) {
-		return true
-	}
-	// Generic type schema (gen [...] + constructor)
-	if IsTypeSchema(v) {
-		return true
-	}
-	// Dependent scalar type (Integer gt 10, String lt "z", …)
-	if v.IsDepScalar() {
-		return true
-	}
-	// Function-signature type: a FnUndef carrying input + output sig
-	// patterns and no body.
-	if v.Parent.Equal(TFnUndef) {
-		return true
-	}
-	// Predicate type: a Function whose body returns a Boolean.
-	if v.Parent.Equal(TFunction) {
-		return true
-	}
-	// Micron type body (`refine Micron {fields}`)
-	if IsMicronType(v) {
-		return true
-	}
-	// Host-Ideal constructed type (ExtensionPayload + HostTypeBody).
-	if IsHostTypeBody(v) {
-		return true
-	}
-	return false
+	return v.Data != nil && v.Data.IsTypeContent(&v)
 }
 
 // PredicateInputType returns the concrete input type of a

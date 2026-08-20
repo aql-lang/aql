@@ -95,6 +95,7 @@ func TestContentMembershipInventory(t *testing.T) {
 		&schemaUnifier{},
 		typeMembershipBehavior{},
 		&surfaceUnifier{},
+		&BindingBodyUnifier{},
 	}
 	for i, b := range content {
 		if _, ok := b.(ContentMembership); !ok {

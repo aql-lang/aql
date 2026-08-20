@@ -14,7 +14,7 @@
 # its body builds). See design/GENERICS.10.md.
 #
 # §1  record schemas — declare + instantiate
-def Box gen [T] refine Record [value:T] end Box	schema<Record/Box>[T]	a schema renders with its parameter list
+def Box gen [T] refine Record [value:T] end Box	Box	a schema NAME denotes its minted node and renders as the name (§6)
 def Box gen [T] refine Record [value:T] end Box of [Integer]	record{value:Integer}	instantiation substitutes the parameter
 def Box gen [T] refine Record [value:T] end Box of [String]	record{value:String}	…independently per argument
 def Pair gen [K V] refine Record [key:K value:V] end Pair of [String Integer]	record{key:String value:Integer}	two parameters substitute positionally
@@ -29,9 +29,9 @@ def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mappe
 # §3  bounds (extends) — Is-membership, uniformly
 def Sorted gen [(T extends Number)] refine Record [items:[:T]] end Sorted of [Integer]	record{items:[:Integer]}	a lattice bound admits a subtype
 def Sorted gen [(T extends Number)] refine Record [items:[:T]] end Sorted of [String]	ERROR:constraint_violation	…and rejects a non-member loudly
-def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Circle]	record{item:object<Class/Circle>{r:1.0}}	a SURFACE bound admits an exposer (S4: same membership machinery)
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Circle]	record{item:Circle}	a SURFACE bound admits an exposer (S4: same membership machinery); the class argument renders by NAME (§6)
 def Shape surface {area: (fnsig [[Self] [Float]])} def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Integer]	ERROR:constraint_violation	…and rejects a non-exposer
-def Pos (Integer gt 0) def H gen [(T extends Pos)] refine Record [x:T] end H of [Pos]	record{x:(Integer gt 0)}	a predicate-refinement bound admits itself
+def Pos (Integer gt 0) def H gen [(T extends Pos)] refine Record [x:T] end H of [Pos]	record{x:Pos}	a predicate-refinement bound admits itself; the named argument renders as the name (§6)
 #
 # §4  defaults — lazy, may reference earlier parameters
 def Result gen [T (E default Error)] refine Record [ok:T err:E] end Result of [Integer]	record{ok:Integer err:Error}	a defaulted parameter fills when omitted
@@ -80,3 +80,5 @@ def Box gen [T] class {value:T} def Outer gen [T] class {inner:T} end (make Oute
 def Box gen [T] class {value:T} def b:(Box of [Number]) {value:1} end b typeof	Box of [Number]	an EXPLICIT instantiation always wins over inference
 def Q gen [T U] class {a:T} end make Q {a:1}	ERROR:unbound_param	an uninferable, undefaulted parameter is loud — never silent Any
 def Sorted gen [(T extends Number)] class {items:[:T]} end make Sorted {items:['x']}	ERROR:constraint_violation	inferred arguments still run the bound check
+def P refine Integer  P of [Integer]	ERROR:not a generic schema	a plain named type's NODE is not instantiable (the bare-node head arm)
+(gen [T] refine Record [value:T]) of [Integer]	record{value:Integer}	an UN-def'd inline schema instantiates directly — the schema-VALUE head arm (a def'd name arrives as its node)

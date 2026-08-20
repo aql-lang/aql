@@ -43,7 +43,12 @@ func specfixProbeRegistry(t *testing.T) *core.Registry {
 	fields := core.NewOrderedMap()
 	fields.Set("x", core.NewTypeLiteral(core.TInteger))
 	pinfo := core.ClassTypeInfo{Fields: fields, ID: "P1", Name: "Class/P"}
-	r.Defs.PushType("P", def, core.NewClassType(def, pinfo))
+	pbody := core.NewClassType(def, pinfo)
+	// Mirror installTypeBinding: the node records its declared content
+	// (design/TYPE-REPRESENTATION.1.md §N2) so the probes that evaluate
+	// `P` — which now denotes the node — recover the class schema.
+	def.SetTypeBody(pbody)
+	r.Defs.PushType("P", def, pbody)
 
 	ifields := core.NewOrderedMap()
 	ifields.Set("x", core.NewInteger(1))
@@ -73,7 +78,9 @@ func specfixProbeRegistry(t *testing.T) *core.Registry {
 	def0 := r.Types.MintType("Class/P0", core.TClass)
 	f0 := core.NewOrderedMap()
 	f0.Set("x", core.NewTypeLiteral(core.TInteger))
-	r.Defs.PushType("P0", def0, core.NewValueRaw(def0, core.ClassTypeInfo{Fields: f0, ID: "P0", Name: "Class/P0"}))
+	p0body := core.NewValueRaw(def0, core.ClassTypeInfo{Fields: f0, ID: "P0", Name: "Class/P0"})
+	def0.SetTypeBody(p0body)
+	r.Defs.PushType("P0", def0, p0body)
 
 	// nosig: a Function binding whose FnDefInfo declares no signatures,
 	// so buildInspection's empty-signature normalisation is exercised.
@@ -122,10 +129,19 @@ func TestSpecfixGuardProbes(t *testing.T) {
 
 		// set — object-instance mutation and its guards.
 		{input: "set x 5 p p get x", want: "5"},
-		{input: "set x 5 P", wantErr: "expected an Object instance"},
+		// Stage 2 flip: `P` denotes its minted node, so the type-literal
+		// guard fires ahead of the instance-shape assert — matching the
+		// production storage word's post-flip refusal.
+		{input: "set x 5 P", wantErr: "cannot set field on type literal"},
+		// …while a concrete non-instance at the Class slot still reaches
+		// the instance-shape assert (pm is P-typed but map-shaped).
+		{input: "set x 5 pm", wantErr: "expected an Object instance"},
 
 		// refine — the object/record constructor arms.
 		{input: "refine P {y:String}", wantSub: []string{"object<", "x:Integer y:String}"}},
+		// A NAMED argument (the Stage 2 flip): M2's node records the
+		// field map, and refine's arg-resolution recovers it.
+		{input: "def M2 {y:String} refine P M2", wantSub: []string{"object<", "x:Integer y:String}"}},
 		{input: "refine P0 {y:String}", wantSub: []string{"object<", "x:Integer y:String}"}},
 		{input: "refine P {x:String}", wantErr: "cannot expand parent type"},
 		{input: "refine P [1]", wantErr: "must be a map of field definitions"},

@@ -511,6 +511,16 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 		// membership was already verified by typeMembershipBehavior.
 		return false
 	}
+	if _, ok := v.TypeBody(); ok {
+		// A node carrying recorded type CONTENT is the evaluated name
+		// of a structural type (the Stage 2 flip of
+		// design/TYPE-REPRESENTATION.1.md): it is admissible exactly
+		// where its declared body was — `refine Table R` collects R at
+		// the TNode arg slot precisely as it collected R's record body
+		// before the flip. Pure nominal literals (builtins, refine
+		// newtypes) record no content and keep the rejection.
+		return false
+	}
 	return true
 }
 

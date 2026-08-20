@@ -86,10 +86,10 @@ def t Integer { rows:[ { id:t } { id:t } ] }	{rows:[{id:Integer} {id:Integer}]}
 firstq [ ( enum [ a b ] ) ( enum [ c d ] ) ]	a tor b	
 		
 # type-named enum referenced at depth.		
-def Color (enum [ red green blue ]) { c:Color }	{c:(red tor green tor blue)}	
-def Color (enum [ red green blue ]) { palette:[ Color Color ] }	{palette:[(red tor green tor blue) (red tor green tor blue)]}	
-def Color (enum [ red green blue ]) { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:(red tor green tor blue)}}}	
-def Color (enum [ red green blue ]) firstq [ Color ]	red tor green tor blue
+def Color (enum [ red green blue ]) { c:Color }	{c:Color}	Stage 2 flip (design/TYPE-REPRESENTATION.1.md §6): the name denotes its minted node and renders as the name
+def Color (enum [ red green blue ]) { palette:[ Color Color ] }	{palette:[Color Color]}	Stage 2 flip (§6): renders as the name
+def Color (enum [ red green blue ]) { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:Color}}}	Stage 2 flip (§6): renders as the name
+def Color (enum [ red green blue ]) firstq [ Color ]	Color	Stage 2 flip (§6): the name denotes its minted node
 
 # `tor` orders its alternatives by the value (tcmp) order, not lattice rank
 # alone: concrete numbers by magnitude across Integer/Float, and within a
@@ -152,13 +152,13 @@ def t Integer { a:{ b:{ c:t } } }	{a:{b:{c:Integer}}}	three maps deep
 def t Integer { a:[ { b:[ { c:t } ] } ] }	{a:[{b:[{c:Integer}]}]}	map → list → map → list → map
 def t Integer [ [ [ t ] ] ]	[[[Integer]]]	three lists deep
 def t Integer { rows:[ { cols:[ t t ] } { cols:[ t ] } ] }	{rows:[{cols:[Integer Integer]} {cols:[Integer]}]}	
-def Color (enum [ a b c ]) { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:(a tor b tor c) base:(a tor b tor c)}}}	type-named disjunct, three deep, twice
+def Color (enum [ a b c ]) { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:Color base:Color}}}	type-named disjunct, three deep, twice — the name denotes its node (§6)
 def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:red/q}]}}}	atom, four deep
 		
 # Mixed: a config-shaped structure combining a type, a disjunct, an		
 # atom, and a paren-evaluated number, all at depth, plus a def		
 # reference resolving inside it.		
-def n 2 def Color (enum [ red green blue ]) { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{schema:{id:Integer kind:(red tor green tor blue)} defaults:{count:3 tag:red/q}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+def n 2 def Color (enum [ red green blue ]) { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{schema:{id:Integer kind:Color} defaults:{count:3 tag:red/q}}	`n` resolves; `Color` resolves to its minted node (§6); Integer stays a type literal; quote stays an atom
 		
 # Auto-eval still mixes freely with these: a paren-evaluated scalar		
 # value alongside a type-literal value in the same nested map.		

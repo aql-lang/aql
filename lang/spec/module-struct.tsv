@@ -129,3 +129,4 @@ import "boru:struct-util"  import "boru:string-util"  StringUtil.contains '"x": 
 import "boru:struct-util"  import "boru:string-util"  StringUtil.contains '"1.5"' (StructUtil.jsonify {x:1.5})	false	and never as a quoted string
 def P class {x:0.0} import "boru:struct-util"  (StructUtil.reify P "{\"x\": 1.5}").x	1.5	reify keeps the fraction (was truncated to Integer 1)
 def P class {n:0} import "boru:struct-util"  (StructUtil.reify P "{\"n\": 2}").n typeof	Integer	whole-valued JSON numbers still reify as Integers
+import "boru:struct-util"  def C class {v:(Float gte 0.0)}  (StructUtil.reify C {v:5}) dot v	5.0	an inline DepScalar field constraint recovers toward its BASE type (a JSON integer becomes the Float the predicate wants)

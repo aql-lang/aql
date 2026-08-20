@@ -821,7 +821,10 @@ func registerEngSpecMake(r *core.Registry) {
 func registerEngSpecStorage(r *core.Registry) {
 	setObjectH := func(args []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 		container := args[2]
-		if !core.IsConcrete(container) { //covergate:allow runtime-only handler: dispatch never binds a bare type node into a value slot and runtime values are never carriers; mirrors the production storage word where check mode can reach this
+		// Reachable since the Stage 2 flip: a class NAME in the value
+		// slot dispatches as its minted node (`set x 5 P`), and the
+		// type-literal guard refuses it — mirroring production.
+		if !core.IsConcrete(container) {
 			return nil, fmt.Errorf("set: cannot set field on type literal")
 		}
 		key := core.StoreKey(args[0])
@@ -991,6 +994,15 @@ func registerEngSpecObjectRecord(r *core.Registry) {
 	refineCtorH := func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
 		base := args[0]
 		arg := args[1]
+		// A NAMED base/argument evaluates to its minted node (the Stage 2
+		// flip); the kind dispatch operates on the declared structural
+		// content the node records — mirroring refinePlain.
+		if body, ok := core.TypeContentOf(base); ok && core.IsBareTypeNode(base) {
+			base = body
+		}
+		if body, ok := core.TypeContentOf(arg); ok && core.IsBareTypeNode(arg) {
+			arg = body
+		}
 		if core.IsClassType(base) {
 			return objectWithParentH([]core.Value{arg, base}, nil, nil, reg)
 		}

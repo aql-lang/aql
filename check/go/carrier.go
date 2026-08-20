@@ -1999,6 +1999,15 @@ func ReturnsFreshInstance(mapping ...int) core.ReturnsFunc {
 				// made *Type in both cases (the node itself, or the body's
 				// Parent); a fresh carrier of it is the per-call instance.
 				//
+				// A NAMED target evaluates to its minted node (the Stage 2
+				// flip); the structural content the branches below inspect —
+				// a generic schema, a record body — is the node's recorded
+				// declaration (design/TYPE-REPRESENTATION.1.md §N2).
+				target := args[m]
+				if content, ok := core.TypeContentOf(target); ok && core.IsBareTypeNode(target) {
+					target = content
+				}
+				//
 				// EXCEPTION — a GENERIC RECORD SCHEMA target (`make Rule {…}`
 				// where Rule is `gen [R] refine Record […]`): the schema node
 				// is minted in the Ideal branch (parent Ideal/Record), but the
@@ -2010,7 +2019,7 @@ func ReturnsFreshInstance(mapping ...int) core.ReturnsFunc {
 				// concrete (the instantiated record body's ValueType sits in
 				// the Map branch and keeps the field schema reachable), else
 				// fall back to a plain TMap carrier.
-				if info, serr := core.AsTypeSchema(args[m]); serr == nil && info.Kind == core.SchemaRecord {
+				if info, serr := core.AsTypeSchema(target); serr == nil && info.Kind == core.SchemaRecord {
 					if r != nil && len(args) == 2 && core.IsConcrete(args[1-m]) && !valueTreeHasCarriers(args[1-m]) {
 						// CONCRETE construction data: validate statically, exactly as the
 						// runtime will — infer + instantiate, then run the record
@@ -2023,7 +2032,7 @@ func ReturnsFreshInstance(mapping ...int) core.ReturnsFunc {
 						// silent TMap carrier here read clean where the runtime raises;
 						// pinned by lang/spec/generics.tsv:81 and the stage0 pins).
 						validated := false
-						if inst, ierr := core.InferAndInstantiateSchema(r, args[m], args[1-m]); ierr == nil {
+						if inst, ierr := core.InferAndInstantiateSchema(r, target, args[1-m]); ierr == nil {
 							if rt, rerr := core.AsRecordType(inst); rerr == nil {
 								if _, mkErr := core.MakeRecordR(rt, args[1-m], false, r); mkErr == nil {
 									c := core.NewCarrier(core.CanonicalType(r, core.ValueType(inst)))
@@ -2071,7 +2080,7 @@ func ReturnsFreshInstance(mapping ...int) core.ReturnsFunc {
 						continue
 					}
 				}
-				t := core.ValueType(args[m])
+				t := core.ValueType(target)
 				if r != nil {
 					t = core.CanonicalType(r, t)
 				}
@@ -2081,7 +2090,7 @@ func ReturnsFreshInstance(mapping ...int) core.ReturnsFunc {
 				// payload): ride the declared field schema on the instance
 				// carrier so downstream field reads narrow (same shape and
 				// rationale as the schema-record branches above).
-				if rt, ok := args[m].Data.(core.RecordTypeInfo); ok && rt.Fields != nil {
+				if rt, ok := target.Data.(core.RecordTypeInfo); ok && rt.Fields != nil {
 					c.Data = rt
 					c.Dynamic = true
 				}

@@ -421,6 +421,17 @@ func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 }
 
 func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
+	// A NAMED base or argument evaluates to its minted node (the Stage
+	// 2 flip); the kind dispatch and the constructors operate on the
+	// declared structural content, which the node records
+	// (design/TYPE-REPRESENTATION.1.md §N2). Bare bases with no content
+	// (refine Integer, refine P) pass through unchanged.
+	if body, ok := TypeContentOf(base); ok && IsBareTypeNode(base) {
+		base = body
+	}
+	if body, ok := TypeContentOf(arg); ok && IsBareTypeNode(arg) {
+		arg = body
+	}
 	ideal := r.Ideals.For(base)
 	if ideal == nil {
 		// Distinguish a disabled kind from an unknown base.
@@ -463,6 +474,15 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// input type literal verbatim) — without this differentiation the
 	// two surfaces would be indistinguishable downstream.
 	if IsBareTypeNode(base) {
+		// A NAMED base evaluates to its node (the Stage 2 flip). When
+		// the node records declared content (a Micron/record schema, a
+		// predicate constraint), return that content verbatim so the
+		// paired `def` re-enters its branch dispatch exactly as it did
+		// when the name denoted the body — the newtype inherits the
+		// schema (design/TYPE-REPRESENTATION.1.md §N2).
+		if content, ok := TypeContentOf(base); ok {
+			return []Value{content}, nil
+		}
 		// Mint the refine prefab against the canonical lattice node
 		// for base, so any user-installed Behavior on base (via
 		// `behave`) propagates to the LCA walk for sibling subtypes
@@ -776,6 +796,24 @@ func asReturns(args []Value, r *Registry) []Value {
 
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
+	// A NAMED structural type RHS evaluates to its minted node (the
+	// Stage 2 flip); recover the declared content so the redirect and
+	// Unify arms below see the body shapes they have always answered
+	// (design/TYPE-REPRESENTATION.1.md §N2). The Object/Table/Micron
+	// redirect kinds resolve unconditionally — their `is` verdict is
+	// the tag-identity redirect below, which only their content shape
+	// selects. Other nodes whose kind enforces membership through the
+	// Behavior (HasConstraintUnify — predicate / DepScalar / disjunct /
+	// negation / FnUndef / surface) keep the node: the bare-node branch
+	// consults the Behavior directly (the one-predicate doctrine).
+	if IsBareTypeNode(b) {
+		if content, ok := TypeContentOf(b); ok {
+			if IsClassType(content) || IsTableType(content) || core.IsMicronType(content) ||
+				!core.HasConstraintUnify(&b) {
+				b = content
+			}
+		}
+	}
 	// Object/Table refinement RHS: the body is a populated type value
 	// (Data carries ClassTypeInfo/TableTypeInfo), but its denoted
 	// lattice node is at b.Parent. For tag-identity ("does a carry
@@ -856,7 +894,16 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			// subtype check (DefaultBehavior.Match delegates there),
 			// and a MEMBER type under the branch (the boru:minilang
 			// partial kinds, MiniLang.Re / …) runs its predicate.
-			return []Value{NewBoolean(a.Is(bNode))}, nil
+			//
+			// EXCEPT a user DISJUNCT node with a concrete candidate: its
+			// Match is deliberately loose on the newtype-alternative
+			// swap (dispatch decomposes the union to base families —
+			// edge-types-2's DIVERGENCE PIN), so `is` keeps its stricter
+			// answer through the Unify + value-identity path below:
+			// `42 is (P tor String)` is false while `42 g` dispatches.
+			if !core.IsDisjunctTypeNode(b) || !IsConcrete(a) {
+				return []Value{NewBoolean(a.Is(bNode))}, nil
+			}
 		}
 		// A const singleton RHS (and every other membership type) answers
 		// `is` through the shared Unify path below — `1 is (const 1)` →
@@ -890,7 +937,17 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		// DepScalar construction), so this only ADDS agreement, never
 		// removes an admission.
 		if bNode.Behavior() != nil && bNode.Behavior() != DefaultBehavior && a.Is(bNode) {
-			return []Value{NewBoolean(true)}, nil
+			// A DISJUNCT node's Match is deliberately loose on the
+			// newtype-alternative swap (dispatch decomposes the union to
+			// base families — edge-types-2's DIVERGENCE PIN). `is` keeps
+			// its stricter answer by sending a concrete candidate through
+			// the Unify + value-identity path below, where a swap
+			// admission (the unified result being the alternative's bare
+			// node, not the value) is refused: `42 is (P tor String)` is
+			// false while `42 g` dispatches.
+			if !core.IsDisjunctTypeNode(b) || !IsConcrete(a) {
+				return []Value{NewBoolean(true)}, nil
+			}
 		}
 	}
 	unified, ok := core.UnifyR(a, b, r)
@@ -992,6 +1049,11 @@ var TPartialModuleNatives = []NativeFunc{
 // the other way (a child requires more, not less).
 func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	t := args[0]
+	// A NAMED type evaluates to its node (the Stage 2 flip); the
+	// fields to partialize are the node's recorded content.
+	if body, ok := TypeContentOf(t); ok && IsBareTypeNode(t) {
+		t = body
+	}
 	switch {
 	case IsRecordType(t):
 		rec, _ := AsRecordType(t)

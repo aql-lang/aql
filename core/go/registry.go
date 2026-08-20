@@ -1460,6 +1460,13 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if v.Data != nil || reg == nil || v.Carrier {
 		return v
 	}
+	// The node records its declared content (Value.TypeBody —
+	// design/TYPE-REPRESENTATION.1.md §N2), so a class / resource /
+	// record / micron name — which EVALUATES to its node after the
+	// Stage 2 flip — resolves to its schema directly from the node.
+	if body, ok := v.TypeBody(); ok {
+		return body
+	}
 	// A type literal IS its lattice node (by-value copy), so the
 	// canonical identity is the value's own ID, not v.Parent.ID (the
 	// supertype's ID).
@@ -1467,8 +1474,12 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if name == "" {
 		return v
 	}
-	if top, ok := reg.Defs.Top(name); ok && (IsClassType(top) || IsResourceType(top)) {
-		return top
+	if top, ok := reg.Defs.TopEntry(name); ok && top.TypeDef == nil &&
+		(IsClassType(top.Body) || IsResourceType(top.Body)) {
+		// Value-side ObjectType installations from outside the type
+		// word (legacy RegisterResource paths) — a VALUE binding whose
+		// body is the schema.
+		return top.Body
 	}
 	// Builtin Resource-family schemas live under the hidden key
 	// (ResourceDefKey): the bare name resolves to the literal via the
@@ -1810,6 +1821,18 @@ func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 // binding is a *type* binding (installed by a capitalised `def`), and
 // (zero Value, false) otherwise — including when name is unbound or
 // bound only as a value.
+//
+// Post the Stage 2 flip the node records the same declared content
+// (Value.TypeBody, stamped by installTypeBinding), and consumers that
+// operate on a type's STRUCTURE read it from the node via TypeContentOf
+// (design/TYPE-REPRESENTATION.1.md §N2). The entry's stored Body stays
+// authoritative HERE because three binding shapes carry a body that is
+// deliberately not the node's content: a generic type-PARAM bound to
+// its argument value (the node is the ARGUMENT's — possibly a builtin,
+// possibly another binding's stamped node), an instantiation memo's
+// structural body, and an alias's adopted-node literal. For minted
+// declarations the two are the same value, stamped and stored by
+// installTypeBinding in one step.
 func (r *Registry) TopTypeBody(name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false

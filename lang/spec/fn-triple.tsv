@@ -123,3 +123,16 @@ def f fn [[x:Integer] [Integer] [x]]  f 9	9	…while the pair spelling names the
 def f fn [x:Integer y:(Integer tor String) [x]]  f 1	1	a named union return admits a member of the union
 def f fn [x:Integer y:(Integer tor String) [true]]  f 1	ERROR:type_error	…and rejects a value outside it, rather than degrading to a wildcard
 def f fn [[Integer] [(Integer tor String)] [true]]  f 1	ERROR:type_error	the unnamed spelling of the same declaration reads alike
+#
+# ─────────────────────────────────────────────────────────────────────
+# §8  named-type params — every declaration kind agrees (NUR090 retired)
+#
+# A type NAME evaluates to its minted node (design/TYPE-REPRESENTATION.1.md
+# §N1), so the bare triple form binds the same constraint the wrapped
+# spec-list form always did — for every declaration kind in NUR090's table.
+def P refine Integer  def x:P 5  def f fn P Any [1]  f x	1	refine newtype param, bare triple form
+def M (Integer tor none)  def f fn M Any [1]  f 5	1	disjunct param, bare triple form
+def M (Integer tor none)  def f fn M Any [1]  f 'x'	ERROR:signature_error	…and a non-member is refused naming M
+def C class {a:Integer}  def f fn C Any [2]  f (make C {a:1})	2	class param, bare triple form
+def T fnsig Integer String  def f fn T Any [3]  f (fn [[x:Integer] [String] ['s']])	3	fn-shape param, bare triple form
+def R {x:Integer}  def f fn R Any [4]  f {x:1}	4	record-shape param, bare triple form — the NAME is kept and dispatch admits

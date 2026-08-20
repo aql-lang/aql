@@ -138,7 +138,13 @@ the interpreter then owns the whole program:
   ledgered in `frontier-full-stack.tsv`.
 - **Fn-INVOKING word** — `apply` of a non-re-stepped value, `is` over a
   predicate fn: their handlers re-step the fn on the tape, which the VM cannot
-  honour. (Fn-INTROSPECTION words are exempt — they only read the value.) A
+  honour. Since the type-node fusion
+  ([TYPE-REPRESENTATION.1.md](TYPE-REPRESENTATION.1.md) §9) a named
+  PREDICATE TYPE evaluates to its minted node rather than the fn value, and
+  the recorder refuses that node at the same words via `IsPredicateTypeNode`
+  ("function value reaches <word> (Stage 3)") — the refusal surface is
+  unchanged, only the carrier moved. (Fn-INTROSPECTION words are exempt —
+  they only read the value.) A
   higher-order form over a LAMBDA value (filter/each/fold/scan, and walk's
   hook slots) compiles to a closure unit via `tryRecordLambdaClosure` when the
   lambda has a single own sig and the word has a callback convention; the BODY

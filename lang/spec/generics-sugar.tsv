@@ -15,8 +15,8 @@
 # See design/GENERICS.10.md §6 + the Phase 6 landed-state note.
 #
 # §1  declarations — sugar/canonical twins
-def Box<T> class {value:T} end Box	schema<Class/Box>[T]	a sugared class-schema head
-def Box gen [T] class {value:T} end Box	schema<Class/Box>[T]	…identical to its canonical twin
+def Box<T> class {value:T} end Box	Box	a sugared class-schema head — the name renders (§6)
+def Box gen [T] class {value:T} end Box	Box	…identical to its canonical twin
 def Pair<K, V> refine Record [key:K value:V] end Pair of [String Integer]	record{key:String value:Integer}	two parameters, comma-separated
 def Pair<K V> refine Record [key:K value:V] end Pair of [String Integer]	record{key:String value:Integer}	…commas are optional, like list elements
 def Sorted<T extends Number> refine Record [items:[:T]] end Sorted of [Integer]	record{items:[:Integer]}	a bound rides the entry

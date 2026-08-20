@@ -55,8 +55,8 @@ lengthq [ class { } ]	1	empty-field is allowed
 # `def NAME class {…}` binds the named class type; once bound		
 # the bare name resolves to the Type value at that name.		
 		
-def Foo (class { a:String }) typeof Foo	Foo	named Type reports its own name
-def Foo (class { a:String b:Boolean }) typeof Foo	Foo	multi-field named type
+def Foo (class { a:String }) typeof Foo	Class	typeof is one Parent hop uniformly (§6; NUR094 retired): a root class answers Class; the self-name question is `canon Foo`
+def Foo (class { a:String b:Boolean }) typeof Foo	Class	multi-field named type — same uniform hop
 		
 # ====================================================================		
 # 3. Instantiation via `make`		
@@ -90,7 +90,7 @@ def Inner (class { v:Integer }) def Outer (class { i:Inner }) ( make Outer { i:(
 # instances carry both sets of fields.		
 		
 # Path / structure inspection — typeof reports the most-specific name.		
-def Foo (class { a:String }) def Bar (refine Foo { b:Integer }) typeof Bar	Bar	
+def Foo (class { a:String }) def Bar (refine Foo { b:Integer }) typeof Bar	Foo	typeof of a subclass is its parent class (§6 uniform hop)
 		
 # A Bar instance satisfies Foo (parent) via `is`.		
 def Foo (class { a:String }) def Bar (refine Foo { b:Integer }) make Bar { a:'x' b:9 } is Foo	true	Bar inherits Foo's contract

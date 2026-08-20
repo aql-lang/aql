@@ -143,6 +143,11 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 // a direct class target (with $class cross-checked when present), or
 // a member selected by $class from a tor union of classes.
 func resolveReifyTarget(target Value, className string, r *Registry) (*core.ClassTypeInfo, error) {
+	// A NAMED target evaluates to its minted node (the Stage 2 flip);
+	// its declared schema is the node's recorded content.
+	if body, ok := core.TypeContentOf(target); ok {
+		target = body
+	}
 	if IsClassType(target) {
 		info, _ := AsClassType(target)
 		if className != "" && className != classShortName(&info) {
@@ -158,6 +163,11 @@ func resolveReifyTarget(target Value, className string, r *Registry) (*core.Clas
 		}
 		var names []string
 		for _, alt := range di.Alternatives {
+			// A named member arrives as its NODE; its schema is the
+			// node's recorded content.
+			if body, ok := TypeContentOf(alt); ok && IsBareTypeNode(alt) {
+				alt = body
+			}
 			if !IsClassType(alt) {
 				continue
 			}
@@ -190,6 +200,13 @@ func classShortName(info *core.ClassTypeInfo) string {
 // re-validated strictly by the make path, so recovery never bypasses
 // the field contract.
 func reifyFieldValue(raw any, constraint Value, r *Registry) (Value, error) {
+	// A NAMED field constraint holds the class NODE (the Stage 2 flip);
+	// hydration needs the schema recorded on it.
+	if IsBareTypeNode(constraint) {
+		if body, ok := constraint.TypeBody(); ok && IsClassType(body) {
+			constraint = body
+		}
+	}
 	// Nested class field + map input → recursive hydration.
 	if IsClassType(constraint) {
 		switch m := raw.(type) {

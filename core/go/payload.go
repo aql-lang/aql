@@ -40,6 +40,21 @@ import (
 // design/TYPE-DECOUPLING.10.md.
 type Payload interface {
 	payloadMarker()
+	// IsTypeContent reports whether this payload is a TYPE's content —
+	// the structural body of a type declaration — as opposed to an
+	// ordinary value's data. It is the sealed-payload half of the ONE
+	// type-recognition seam (design/TYPE-REPRESENTATION.1.md §N4):
+	// IsTypeBody asks the payload instead of enumerating shapes, so a
+	// new kind declares itself by answering here rather than by
+	// growing an arm at every consumer. Most payloads answer with a
+	// constant; the two variants shared between types and ordinary
+	// values answer from value state — MapPayload from its OrderedMap's
+	// Implicit flag (a record shape vs a concrete map), ExtensionPayload
+	// from its nested hostTypeBody marker (a host type body vs a host
+	// instance) — and the two function payloads from the owner's
+	// dispatch identity (owner carries the Value whose Data this is;
+	// implementations that don't need it ignore it).
+	IsTypeContent(owner *Value) bool
 }
 
 // =================================================================

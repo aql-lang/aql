@@ -902,8 +902,10 @@ kinds of binding:
 - **value bindings** — `def x 1`, fn bodies, fn-body parameters,
   carrier-merge join points, module imports.
 - **type bindings** — `def Foo Integer` (a capitalised name). The
-  `DefEntry` additionally carries the minted lattice `*Type` in
-  `DefEntry.TypeDef`.
+  `DefEntry` additionally carries the declaration's lattice `*Type` in
+  `DefEntry.TypeDef` plus `Minted bool` — true when this binding
+  minted the node, false when it ADOPTED an existing canonical one
+  (the alias `def Foo Integer` adopts the Integer node itself).
 
 The capitalisation convention keeps the two kinds of name disjoint
 (`Foo` is a type, `foo` a value), so one map suffices. Each name maps
@@ -916,11 +918,17 @@ is 1.
 name index (`LookupBuiltinByName`).
 
 **DefTable methods** (`r.Defs.*`):
-- reads — `Top(name) (Value, bool)`, `TopEntry(name) (DefEntry, bool)`,
+- reads — `Top(name) (Value, bool)` (what the binding DENOTES: a
+  value binding's Body, a **type** binding's lattice NODE — the Stage
+  2 flip of design/TYPE-REPRESENTATION.1.md), `TopEntry(name)
+  (DefEntry, bool)` (the raw entry: Body + TypeDef + Minted),
   `Has(name)`, `IsType(name)`, `Depth(name)`, `Stack(name) []Value`,
   `Names()`.
 - writes — `Push(name, v)` (value binding),
-  `PushType(name, def, body)` (type binding), `Pop(name) bool`,
+  `PushType(name, def, body)` (type binding),
+  `PushTypeAdopted(name, def, body)` (a type binding that ADOPTS an
+  existing canonical node — the alias path; `undef` never retires
+  it), `Pop(name) bool`,
   `PopEntry(name) (DefEntry, bool)`, `Replace`, `Truncate`, `Delete`,
   `Set`.
 - snapshot/restore — `Snapshot() map[string]int` / `Restore(snap)`,
@@ -930,14 +938,18 @@ name index (`LookupBuiltinByName`).
 
 **Registry resolution helpers**:
 - `r.ResolveTypedName(name) (Value, bool)` — single-store lookup; the
-  canonical way to resolve a type-context name.
+  canonical way to resolve a type-context name. For a type binding it
+  yields the lattice NODE (never the declared body — every kind, the
+  Stage 2 flip); read the structure with `core.TypeContentOf` or
+  `r.TopTypeBody`.
 - `r.TopTypeBody(name) (Value, bool)` — the body when name's active
   binding is a *type* binding (false otherwise).
 - `r.LookupTypeName(name) *Type` — the active lattice type for name:
   a dynamic binding's minted def, or an external builtin.
 
 `undef` is the universal unbinder: a capitalised name pops the type
-binding and retires its minted type from the lattice; a lowercase
+binding and retires its lattice node ONLY if this binding minted it
+(`DefEntry.Minted` — an adopted alias node survives); a lowercase
 name pops a value binding.
 
 ## Helper API discipline
@@ -953,7 +965,17 @@ consolidation and will be flagged in code review.
   its own lattice node). INCLUDES None/Any/Never; use for naming,
   ordering, and lattice-identity dispatch.
 - `IsTypeLiteral(v)` — `IsBareTypeNode` minus None; use when v may be a
-  type **constraint** (None is treated as a value, not a type).
+  type **constraint** (None is treated as a value, not a type). Never
+  key constraint HANDLING on node-bareness alone: since the Stage 2
+  flip every named type evaluates to a bare node, and a kind that
+  enforces membership through a Unifier (DepScalar, predicate,
+  disjunct, negation, FnUndef, binding-body) must be routed by
+  `core.HasConstraintUnify`, or the constraint is never run.
+- `TypeContentOf(v) (Value, bool)` — the type's declared structure: a
+  bare node's `TypeBody` stamp, or v itself when it already IS type
+  content. Call at entry in any handler that operates on a type's
+  STRUCTURE (`make`, refine bases, describe/inspect schema views, the
+  type-algebra words) so a name and an inline body are one case.
 - `IsConcrete(v)` — true if `Data != nil` and not a carrier. NOT the
   negation of `Data == nil`: a list/map carrier has `Data != nil` yet
   is not concrete. Never write the raw `v.Data == nil` probe in
@@ -966,7 +988,9 @@ Handlers that take `TList`/`TMap`/`TAny` args should guard with
 `!IsConcrete(args[i])` (or use the `RequireConcreteX` helpers) before
 calling `AsList(v)`/`AsMap(v)` — otherwise carriers and type literals
 panic on `.Len()`. (`AsList` / `AsMap` are free functions in eng, not
-methods on `Value`; only `Is(t)` and `String()` remain as methods.)
+methods on `Value`; the method surface is `Is`, `String`, the node-
+content pair `TypeBody`/`SetTypeBody`, and the `AsConcreteX` handler
+accessors below.)
 
 **DepScalar-rejecting accessors**:
 - `v.AsConcreteString()`, `v.AsConcreteInteger()`, `v.AsConcreteFloat()`,

@@ -44,29 +44,68 @@ func dispatchUnifier(a, b Value) (Value, *UnifyError, bool) {
 		return Value{}, nil, false
 	}
 
-	var start *Type
+	var starts []*Type
 	switch {
 	case bType.IsSubtypeOf(aType):
-		start = bType
+		starts = []*Type{bType}
 	case aType.IsSubtypeOf(bType):
-		start = aType
+		starts = []*Type{aType}
+	// A membership question — one side is a bare TYPE NODE, the other a
+	// candidate — walks from the NODE's denotation even when the two
+	// sit in unrelated lattice branches: `Unify(fn-value, Mapper-node)`
+	// pairs a Function-branch value with a FunctionSignature-branch
+	// node, whose LCA (Type) knows no membership rule, yet Mapper's
+	// FnUndefUnifier is exactly the rule to consult.
+	case IsBareTypeNode(b) && !IsBareTypeNode(a):
+		starts = []*Type{bType}
+	case IsBareTypeNode(a) && !IsBareTypeNode(b):
+		starts = []*Type{aType}
+	case IsBareTypeNode(a) && IsBareTypeNode(b):
+		// TWO bare nodes: a type-level pair. Either side's kind may
+		// own the rule (`OptNum unify None` — the disjunct node's
+		// alternatives admit the None literal), and their LCA may not
+		// even exist (None is a degenerate root), so walk from each
+		// denotation in turn.
+		starts = []*Type{aType, bType}
 	default:
-		start = lowestCommonAncestor(aType, bType)
+		starts = []*Type{lowestCommonAncestor(aType, bType)}
 	}
 
-	for t := start; t != nil; t = t.Parent {
-		if t.Behavior() == nil {
-			continue
+	for _, start := range starts {
+		for t := start; t != nil; t = t.Parent {
+			u, ok := unifierOf(t.Behavior())
+			if !ok {
+				continue
+			}
+			v, err := u.Unify(a, b)
+			if err == ErrNoUnifier {
+				continue
+			}
+			return v, err, true
 		}
-		u, ok := t.Behavior().(Unifier)
-		if !ok {
-			continue
-		}
-		v, err := u.Unify(a, b)
-		if err == ErrNoUnifier {
-			continue
-		}
-		return v, err, true
 	}
 	return Value{}, nil, false
+}
+
+// unifierOf resolves a Unifier from a Behavior CHAIN: the behavior
+// itself, or one beneath a `behave` wrapper (MatchDelegating) or a
+// kernel wrapper chain (Prev). A behave compare/canon install over a
+// predicate/depscalar type must not hide the kind's constraint from
+// the walk.
+func unifierOf(b TypeBehavior) (Unifier, bool) {
+	for b != nil {
+		if u, ok := b.(Unifier); ok {
+			return u, true
+		}
+		if d, ok := b.(MatchDelegating); ok {
+			b = d.DelegatesMatchTo()
+			continue
+		}
+		if p, ok := PrevBehavior(b); ok {
+			b = p
+			continue
+		}
+		break
+	}
+	return nil, false
 }

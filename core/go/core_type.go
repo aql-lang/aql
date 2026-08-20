@@ -165,6 +165,29 @@ func IsRecordShape(v Value) bool {
 //     over for user-defined refinements.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
+	// A NAMED type in the type slot evaluates to its minted node (the
+	// Stage 2 flip); this predicate has always decided membership
+	// against the declared content, which the node records
+	// (design/TYPE-REPRESENTATION.1.md §N2). Catch-all bindings
+	// (BindingBodyUnifier — record shapes, singletons, typed-container
+	// literals) resolve to their body so the shape branches below keep
+	// their subset semantics; kinds whose membership lives in a kernel
+	// constraint Unifier (predicate / DepScalar / disjunct / negation /
+	// FnUndef / surface) keep the node — the Unify fallback consults
+	// the node's Behavior.
+	if IsBareTypeNode(t) {
+		resolve := !HasConstraintUnify(&t)
+		if !resolve {
+			if u, ok := unifierOf(t.Behavior()); ok {
+				_, resolve = u.(*BindingBodyUnifier)
+			}
+		}
+		if resolve {
+			if content, ok := TypeContentOf(t); ok {
+				t = content
+			}
+		}
+	}
 	if IsTypedList(t) {
 		if !v.Parent.Equal(TList) || !IsConcrete(v) {
 			return false
@@ -312,6 +335,21 @@ func validateTypeName(r *Registry, name string) error {
 }
 
 // when it inherits) so `typeof` / `is` report the nominal name.
+
+// installTypeBinding stamps the declared content onto the minted node
+// (Value.TypeBody — design/TYPE-REPRESENTATION.1.md §N2's node-side
+// recovery) and pushes the type binding. Every MINTING branch of
+// InstallType funnels through here; the alias arm adopts an existing
+// node instead and never stamps. A bare-node pushed value (the refine
+// newtype's renamed literal) carries no structure, so nothing is
+// recorded for it.
+func installTypeBinding(r *Registry, name string, def *Type, pushed Value) {
+	if !IsBareTypeNode(pushed) {
+		def.SetTypeBody(pushed)
+	}
+	r.Defs.PushType(name, def, pushed)
+}
+
 func InstallType(r *Registry, name string, body Value) error {
 	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
 		return &BoruError{
@@ -343,7 +381,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			bhv = m.MintSubtypeBehavior(def, &info)
 		}
 		def.ensureTMeta().Behavior = bhv
-		r.Defs.PushType(name, def, NewValueRaw(def, info))
+		installTypeBinding(r, name, def, NewValueRaw(def, info))
 	} else if IsClassType(body) {
 		info, _ := AsClassType(body)
 		// Object types are class types now — sealed nominal records rooted
@@ -364,7 +402,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		}
 		def := r.Types.MintType(name, parentDef)
 		body = NewClassType(def, info)
-		r.Defs.PushType(name, def, body)
+		installTypeBinding(r, name, def, body)
 	} else if IsTypeSchema(body) {
 		// `def Box gen [T] class {…}` route: mint the SCHEMA node where
 		// the non-generic equivalent would mint (D3 — class schemas
@@ -390,7 +428,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		info.Type = def
 		InstallSchemaUnifier(def, info)
 		r.RegisterPart(name)
-		r.Defs.PushType(name, def, NewValueRaw(def, info))
+		installTypeBinding(r, name, def, NewValueRaw(def, info))
 	} else if IsSurfaceType(body) {
 		// `def Shape surface {…}` route: mint a lattice node under
 		// Ideal/Surface and attach a surfaceUnifier so dispatch / `is`
@@ -404,8 +442,8 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, TSurface)
 		info.Type = def
 		installSurfaceUnifier(def, info, name)
-		r.Defs.PushType(name, def, NewValueRaw(def, info))
-	} else if inputT := PredicateInputType(body); inputT != nil {
+		installTypeBinding(r, name, def, NewValueRaw(def, info))
+	} else if inputT, isPred := PredicateInputType(body), isPredicateFnValue(body); inputT != nil || isPred {
 		// Predicate type with a concrete input type: mint the *Type
 		// parented at the input rather than at TFunction so values
 		// rewrapped by the typed-bind path inherit input-side
@@ -414,7 +452,18 @@ func InstallType(r *Registry, name string, body Value) error {
 		// `Any` input (the historical `fn [x:Any Any […]]` pattern)
 		// fall through to the regular PushType path — they remain
 		// gates, not dispatch categories.
-		def := r.Types.MintType(name, inputT)
+		// An Any-input (or unannotated) predicate mints under Function
+		// itself: it has no concrete base to inherit capabilities from,
+		// but it is a DISPATCH CATEGORY like every other membership
+		// kind — the pre-flip regime left it an unbridged catch-all
+		// node ("a gate, not a dispatch category"), which is the same
+		// dead-dispatch class NUR093 records for aliases. One rule for
+		// every kind (design/TYPE-REPRESENTATION.1.md §N3).
+		parent := inputT
+		if parent == nil {
+			parent = TFunction
+		}
+		def := r.Types.MintType(name, parent)
 		// NOTE: the FnDef payload's Name is deliberately NOT stamped here
 		// — canon renders predicate bodies, and a stamped name would
 		// change their canonical ordering (compare.tsv §predicate-kind).
@@ -444,7 +493,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			}
 		}
 		installPredicateUnifier(def, body, r, name)
-		r.Defs.PushType(name, def, body)
+		installTypeBinding(r, name, def, body)
 	} else if IsRefinePrefab(body) {
 		// `def Foo refine Integer` route: `refineBareHandler` minted
 		// an anonymous refine prefab (MintRefinePrefab) and returned
@@ -488,7 +537,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		if def.Parent != nil {
 			installBareRefineUnifier(def, name)
 		}
-		r.Defs.PushType(name, def, body)
+		installTypeBinding(r, name, def, body)
 	} else if IsDisjunct(body) {
 		// `def Maybe (Integer tor none)` route: mint a lattice node
 		// parented at the body's lattice (TDisjunct) and attach a
@@ -500,7 +549,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		di, _ := AsDisjunct(body)
 		def := r.Types.MintType(name, body.Parent)
 		installDisjunctUnifier(def, di.Alternatives, name)
-		r.Defs.PushType(name, def, body)
+		installTypeBinding(r, name, def, body)
 	} else if fu, isFnUndef := body.Data.(FnUndefInfo); isFnUndef {
 		// `def IntToStr fnsig Integer String` route: mint a lattice node
 		// parented at the body's lattice (TFnUndef) and attach a
@@ -513,7 +562,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		// `def`, not on `body`.
 		def := r.Types.MintType(name, body.Parent)
 		installFnUndefUnifier(def, fu.Sigs, name)
-		r.Defs.PushType(name, def, body)
+		installTypeBinding(r, name, def, body)
 	} else if IsNegation(body) {
 		// `def NotStr (tnot String)` route: mint a lattice node parented
 		// at the body's lattice (TNegation) and attach a negationUnifier
@@ -524,7 +573,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		ni, _ := AsNegation(body)
 		def := r.Types.MintType(name, body.Parent)
 		installNegationUnifier(def, ni.Inner, name)
-		r.Defs.PushType(name, def, body)
+		installTypeBinding(r, name, def, body)
 	} else if body.IsDepScalar() {
 		// `def Big (Integer gt 10)` route: mint a lattice node
 		// parented at the base scalar (the DepScalar's Parent — e.g.
@@ -548,27 +597,41 @@ func InstallType(r *Registry, name string, body Value) error {
 		}
 		def := r.Types.MintType(name, body.Parent)
 		installDepScalarUnifier(def, body.Parent, di, name)
-		r.Defs.PushType(name, def, body)
-	} else {
-		// A bare type-literal body IS the parent type after the
-		// type/value merge; structural/singleton bodies parent at
-		// their container type (Map / List / Integer / …). For a
-		// bare type-literal body, route through CanonicalType so the
-		// minted subtype's lattice Parent is the canonical *Type and
-		// not a non-canonical copy.
-		parent := body.Parent
-		if IsBareTypeNode(body) {
-			parent = CanonicalType(r, &body)
+		installTypeBinding(r, name, def, body)
+	} else if IsBareTypeNode(body) {
+		// ALIAS: `def Foo Integer`. The name ADOPTS the canonical
+		// aliased node instead of minting an unbridged child — a fresh
+		// mint under the aliased type carried DefaultBehavior, nothing
+		// was ever tagged with it, and dispatch on an `x:Foo` parameter
+		// rejected every value while `42 is Foo` (which consults the
+		// body) accepted (NUR093). An alias claims the SAME type, so it
+		// binds the same node; the newtype/alias distinction stands —
+		// a newtype (`refine`) mints, an alias adopts. Route through
+		// CanonicalType so the adopted pointer is the canonical *Type
+		// and not a stack copy. The aliased family's SubtypeNamer rule
+		// still applies (`def Mail Emailon` still refuses), keeping the
+		// naming surface unchanged.
+		canon := CanonicalType(r, &body)
+		if err := validateSubtypeNameFor(canon, name); err != nil {
+			return err
 		}
-		// Aliases mint a node under the aliased type, so `def Mail
-		// Emailon` would put Mail inside the Micron family — the
-		// family's SubtypeNamer rule applies (`def Mailon Emailon`
-		// passes).
+		r.Defs.PushTypeAdopted(name, canon, body)
+	} else {
+		// Structural / singleton bodies (record shape, `def One 1`,
+		// typed-container literals, refine Record/Options/Table bodies,
+		// host shaped types, …) parent at their container type (Map /
+		// List / Integer / …) and get a content-deciding
+		// BindingBodyUnifier on the minted node, so dispatch and `is`
+		// consult one structural rule — the DisjunctUnifier /
+		// FnUndefUnifier discipline extended to the catch-all kinds
+		// (NUR090's record-shape row, NUR093's singleton row).
+		parent := body.Parent
 		if err := validateSubtypeNameFor(parent, name); err != nil {
 			return err
 		}
 		def := r.Types.MintType(name, parent)
-		r.Defs.PushType(name, def, body)
+		installBindingBodyUnifier(def, body, name)
+		installTypeBinding(r, name, def, body)
 	}
 	for _, p := range strings.Split(name, "/") {
 		r.RegisterPart(p)

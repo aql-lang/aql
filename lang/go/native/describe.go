@@ -70,13 +70,20 @@ func DescribeName(r *Registry, w io.Writer, name string) {
 		}
 		// A name bound to a class/object or surface type is not a word; show
 		// its schema/contract instead of the empty word view.
-		if bound, ok := r.Defs.Top(name); ok && IsClassType(bound) {
-			fmt.Fprint(w, formatTypeSchema(name, bound))
-			return
-		}
-		if bound, ok := r.Defs.Top(name); ok && IsSurfaceType(bound) {
-			fmt.Fprint(w, formatSurfaceSchema(name, bound))
-			return
+		if bound, ok := r.Defs.Top(name); ok {
+			// A type name denotes its node (the Stage 2 flip); the
+			// schema/contract to show is the node's recorded content.
+			if body, bok := TypeContentOf(bound); bok {
+				bound = body
+			}
+			if IsClassType(bound) {
+				fmt.Fprint(w, formatTypeSchema(name, bound))
+				return
+			}
+			if IsSurfaceType(bound) {
+				fmt.Fprint(w, formatSurfaceSchema(name, bound))
+				return
+			}
 		}
 		// A registered word renders from live signature data.
 		if info := BuildFuncInfo(r, name); info != nil {

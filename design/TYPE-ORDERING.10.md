@@ -134,8 +134,17 @@ RANK             TYPE PATH                  REPRESENTATIVE LITERAL          NOTE
 60_310_000_000   Type/Disjunct/Enum         enum [red green blue]
 
 ─── external/user Type band (6.1·10¹⁰) ──────────────────────────────────────────────────────
-61_000_000_000   Type/<user>                def Positive (Integer gt 0)      DepScalar values
+61_000_000_000   Type/<user>                def M (Integer tor String)       user types parented in the Type band
 ```
+
+*(Update, 2026-08-20: the type-node fusion
+([TYPE-REPRESENTATION.1.md](TYPE-REPRESENTATION.1.md) §6, the `tcmp`
+flip) changed the user-band exemplar. `def Positive (Integer gt 0)` now
+mints a node parented at `Integer`, so it orders in the SCALAR band —
+just after `Integer`, strictly below the concrete integers:
+`sort [Positive Integer 0 5 -3]` → `[Integer Positive -3 0 5]`. Only
+user-named types whose parent is itself in the Type band — named
+disjuncts, named function signatures — rank here at 6.1·10¹⁰.)*
 
 ## In boru, literals are types
 

@@ -84,6 +84,32 @@ func (p *PredicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
 	})
 }
 
+// IsPredicateTypeNode reports whether v is a bare lattice node whose
+// Behavior is a PredicateUnifier — the evaluated NAME of a predicate
+// type after the Stage 2 flip. The typed-def handler uses it to route
+// node-valued predicate constraints through the same run-then-reparent
+// path an inline fn constraint takes.
+func IsPredicateTypeNode(v Value) bool {
+	if !IsBareTypeNode(v) {
+		return false
+	}
+	for b := v.Behavior(); b != nil; {
+		if _, ok := b.(*PredicateUnifier); ok {
+			return true
+		}
+		if d, ok := b.(MatchDelegating); ok {
+			b = d.DelegatesMatchTo()
+			continue
+		}
+		if p, ok := PrevBehavior(b); ok {
+			b = p
+			continue
+		}
+		break
+	}
+	return false
+}
+
 // installPredicateUnifier attaches a predicateUnifier to def, wrapping
 // any existing Behavior. Called by InstallType when minting a predicate
 // type so the constraint runs at every Unify call site.

@@ -49,6 +49,60 @@ func (d *DepScalarUnifier) Match(v Value, t *Type) bool {
 	return depScalarCheck(d.depInfo, v)
 }
 
+// Unify runs the bounds check against a concrete operand via the shared
+// membership contract: gate 1 (base-type conformance) then gate 2
+// (depScalarCheck), admitting the candidate itself — never the node
+// literal — and failing DEFINITIVELY on a concrete non-member so the
+// structural fallback cannot re-admit it by lattice subtyping alone.
+// This is the Unify capability PredicateUnifier already carries; without
+// it a typed bind against the bare minted node (`def x:Big 5` once
+// evaluation yields nodes — design/TYPE-REPRESENTATION.1.md §N3) would
+// fall to unifySameOrSubtype's narrower-literal arm and bind without
+// ever running the constraint.
+func (d *DepScalarUnifier) Unify(a, b Value) (Value, *UnifyError) {
+	// TWO refinement sides — the other operand is itself DepScalar
+	// content (an inline body, or a sibling NAME's node recording one):
+	// the pair meets to the interval intersection, exactly as the
+	// payload fold combined the two bodies (`A unify B` →
+	// `(Integer gt 10 lt 20)`, pinned in user-types.tsv; the generic
+	// bound check `(T extends Pos)` over an inline refinement rides the
+	// same rule).
+	if ad, ok := depScalarContent(a); ok {
+		if bd, ok := depScalarContent(b); ok {
+			return unifyDepScalar(ad, ShapeDepScalar, bd, ShapeDepScalar)
+		}
+	}
+	out, uerr := unifyMembership(a, b, d.typeName, func(v Value) (Value, bool, error) {
+		if !v.Parent.ConformsTo(d.baseType) {
+			return Value{}, false, nil
+		}
+		return v, depScalarCheck(d.depInfo, v), nil
+	})
+	if uerr != nil && uerr != ErrNoUnifier {
+		// Keep the fold's established failure text (unifyDepScalar) so
+		// the named-node path reports byte-identically to the inline
+		// DepScalar body it replaced.
+		return Value{}, unifyFail("value does not satisfy DepScalar bounds", a, b)
+	}
+	return out, uerr
+}
+
+// depScalarContent returns the DepScalar VALUE a unify operand stands
+// for: the operand itself when it carries the payload, or a bare
+// node's recorded refinement body (the named spelling after the Stage
+// 2 flip — design/TYPE-REPRESENTATION.1.md §N2).
+func depScalarContent(v Value) (Value, bool) {
+	if v.IsDepScalar() {
+		return v, true
+	}
+	if IsBareTypeNode(v) {
+		if body, ok := v.TypeBody(); ok && body.IsDepScalar() {
+			return body, true
+		}
+	}
+	return Value{}, false
+}
+
 // installDepScalarUnifier attaches a depScalarUnifier to def. Called
 // by InstallType when minting a DepScalar-bodied user type so the
 // constraint runs at every Is/Match call site (sig dispatch, the `is`

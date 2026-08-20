@@ -35,6 +35,11 @@ import (
 // binarySpecLayout returns the wire layout carried by a binary-frame SPEC type
 // (a class value with BinaryLayout set), and whether v is such a type.
 func binarySpecLayout(v Value) (Value, bool) {
+	// Both callers deliver CONTENT, never a node: frameInstance resolves
+	// a named spec's node before probing, and the BinarySpec member
+	// predicate only ever sees concrete candidates (matchMembership
+	// defers bare nodes to the lattice walk) — so no node-resolution
+	// prelude is needed here.
 	if !IsClassType(v) {
 		return Value{}, false
 	}
@@ -761,6 +766,12 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 // fields. Returns the instance, the leftover bytes, and any error (a needMore
 // for a short buffer when streaming).
 func frameInstance(specVal Value, b []byte, r *Registry, word string) (Value, []byte, error) {
+	// A NAMED spec evaluates to its node (the Stage 2 flip); both the
+	// layout probe and the AsClassType read below need the recorded
+	// class content.
+	if body, ok := TypeContentOf(specVal); ok && IsBareTypeNode(specVal) {
+		specVal = body
+	}
 	rawLayout, ok := binarySpecLayout(specVal)
 	if !ok {
 		return Value{}, nil, frameTypeErr(r, specVal, word)
