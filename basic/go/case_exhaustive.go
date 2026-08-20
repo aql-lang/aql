@@ -115,12 +115,15 @@ func expandCaseAlt(r *Registry, a Value, depth int, out *[]Value) bool {
 			*out = append(*out, NewBoolean(true), NewBoolean(false))
 			return true
 		}
-		if dv, ok := core.UnionCarrierForType(t); ok { //covergate:allow defensive arm — kernel paths deliver union-typed domains as DISTRIBUTING disjunct carriers (ParamInputCarrier / UnionCarrierForType at param+return sites), never as a bare union NODE; the arm keeps a future carrier shape sound instead of silently uncovered
+		if dv, ok := core.UnionCarrierForType(t); ok {
 			// A named union/enum type: its members are the alternatives.
+			// Live since the Stage 2 flip — a union NAME in scrutinee or
+			// match position denotes its bare node, and the node's
+			// members expand here.
 			if depth <= 0 { //covergate:allow a union node recurses exactly once into its (flattened) distributing disjunct, so the bound cannot exhaust here
 				return false
 			}
-			return expandCaseAlt(r, dv, depth-1, out) //covergate:allow same defensive arm — see the guard above
+			return expandCaseAlt(r, dv, depth-1, out)
 		}
 		*out = append(*out, a)
 		return true

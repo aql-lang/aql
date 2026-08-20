@@ -136,6 +136,9 @@ func TestSpecfixGuardProbes(t *testing.T) {
 
 		// refine — the object/record constructor arms.
 		{input: "refine P {y:String}", wantSub: []string{"object<", "x:Integer y:String}"}},
+		// A NAMED argument (the Stage 2 flip): M2's node records the
+		// field map, and refine's arg-resolution recovers it.
+		{input: "def M2 {y:String} refine P M2", wantSub: []string{"object<", "x:Integer y:String}"}},
 		{input: "refine P0 {y:String}", wantSub: []string{"object<", "x:Integer y:String}"}},
 		{input: "refine P {x:String}", wantErr: "cannot expand parent type"},
 		{input: "refine P [1]", wantErr: "must be a map of field definitions"},
