@@ -126,3 +126,14 @@ def C class {op:(fnsig Integer Integer)} ((make C {op:(fn [[x:Integer] [Integer]
 def T fnsig Integer Integer def C class {op:T} def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) (c dot op) 5	6	…and through a def-bound instance (the trailing stack-arg spelling is an interpreter-only pin — fnshape_member_interp_test.go)
 def R {op:(fnsig Integer Integer)} def r:R {op:(fn [[x:Integer] [Integer] [x add 9]])} (r dot op) 1	10	a record-shape's fnsig-typed member, provided at bind, is callable
 def T fnsig Integer Integer def C class {op:T} make C {op:(fn [[x:String] [Integer] [1]])}	ERROR:does not satisfy fn shape	a wrong-shaped fn is refused at make — member typing is enforced
+#
+#     MULTI-RETURN shapes ride the same rule. A fn-shape carrier is
+#     maybe-callable by SHAPE, not by declared result count: the VM's
+#     dynamic-call ops append every result the fn returns (callDynamic's
+#     `append(stack[:base], results...)`), so the compiled lane nets the
+#     same values the interpreter does. The `one result` wording in
+#     lower.go is the emitter's compile-time SLOT bookkeeping, not a
+#     runtime truncation — pinned here so a future arity gate on the
+#     carrier predicate cannot silently narrow it back.
+def T fnsig [[Integer] [Integer Integer]] def C class {op:T} ((make C {op:(fn [[x:Integer] [Integer Integer] [x x]])}) dot op) 10	10 10	a 2-return fn shape nets BOTH values through a class member
+def T fnsig [[Integer] [Integer Integer]] def mk fn [[i:Integer] [T] [fn [[x:Integer] [Integer Integer] [x x]]]] for 2 [(mk 1) 7]	7 7 7 7	…and per iteration through the loop-body dynamic apply (setLoopBodyApply)
