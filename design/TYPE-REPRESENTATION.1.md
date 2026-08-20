@@ -71,10 +71,12 @@ kinds locally**. The call-site sweep found **~514 non-test sites in
   (`native_type.go:804-811`: subset vs strict-exact, "Real
   consolidation requires choosing one shape semantic and migrating
   the loser");
-- `ResolveSigType`'s 12-arm ladder with **two silent `TAny` tails**
-  (`core/go/fn_params.go:766`, `:826-834`) — the inline-disjunct
-  parameter degrades to `(TAny, pattern)`, the exact silent weakening
-  the audit's §5 refused;
+- `ResolveSigType`'s 12-arm ladder with **two silent `(TAny, nil)`
+  tails** (`core/go/fn_params.go:766`, `:826-834`) — true wildcards —
+  plus the NAMED-type degradation to `(Any, pattern)` the audit's §5
+  measured (distinct from the *anonymous* inline-disjunct
+  `(TAny, pattern)` arm at `:707-714`, which is deliberate and
+  pattern-enforced — see §3, "What collapses");
 - ~24-arm and ~30-arm render switches (`core/go/canon.go:74-297`,
   `core/go/value.go:3612-3814`); a 10-arm `inspect` switch duplicated
   byte-for-byte in the spec runner (`lang/go/native/native_inspect.go:183-307`,
@@ -283,22 +285,58 @@ arm (`basic/go/native_definition.go:1193-1241`, gated on
 plus keying the typed-def arm on the Behavior rather than on
 node-bareness — must land *before* the evaluation flip (Stage 0).
 
-### N4 — one type-recognition predicate, via the sealed payload
+### N4 — one type-recognition seam, via the sealed payload
 
-Replace the four predicates and the 18-arm enumeration with:
+Replace the shape *enumerations* with one recognizer:
 
 ```
-IsType(v) := IsBareTypeNode(v) || v.Data is a TypePayload
+IsType(v) := IsBareTypeNode(v) || v.Data.IsTypeContent()
 ```
 
-— a marker method on the sealed `Payload` interface, the
-`HostTypeBody` protocol (`core/go/payload.go:284-294`,
-`design/IDEAL.10.md` §13) generalized to every structural payload.
-`IsTypeBody`, `isTypeLike` (`core/go/core_make.go:31-37`), the
-`Shape()` type arms and `sigTypeMatchesAsType`'s family-root special
-case collapse onto it. ADR-012 rule 3 (intent by structural marker,
-never enumeration) satisfied by construction; this is also the NUR009
-verdict's direction (capability declaration over hand-listed bases).
+— where `IsTypeContent() bool` is a **method** on the sealed `Payload`
+interface, not a bare marker-interface assertion. The distinction
+matters because two payload variants are shared between types and
+ordinary values, so a Go-type-level marker cannot discriminate them:
+
+- `MapPayload` carries both concrete maps and implicit-map record
+  shapes, told apart only by the `OrderedMap` Implicit flag and the
+  recursive field inspection (`core/go/core_type.go:101-133`
+  `IsRecordShape`); its `IsTypeContent` answers from that value state.
+- `ExtensionPayload` carries both host type bodies and host
+  *instances*, told apart by the nested `Body` implementing the
+  `hostTypeBody()` marker (`core/go/core_helpers.go:941-948`); its
+  `IsTypeContent` delegates to that nested check — which is exactly
+  the `HostTypeBody` protocol (`design/IDEAL.10.md` §13) already in
+  place, kept as is.
+
+Every exclusively-type-shaped payload (`DisjunctInfo`, `FnUndefInfo`,
+`NegationInfo`, `DepScalarInfo`, `ClassTypeInfo`, `RecordTypeInfo`,
+`OptionsTypeInfo`, `TableTypeInfo`, `ChildTypeInfo`, `*TypeSchemaInfo`,
+`*SurfaceInfo`, `MicronTypeInfo`) answers constantly; the two shared
+variants answer from value state. One call site, no enumeration —
+ADR-012 rule 3 (intent by structural marker) and the NUR009 verdict's
+capability-over-enumeration direction, satisfied by the method rather
+than by the assertion.
+
+**The consumer-specific admission rules stay, expressed over the
+seam.** The four predicates are not pure duplicates — two carry
+deliberate policy on top of shape recognition, which `IsType` must not
+absorb:
+
+- `IsTypeValue` recursively accepts a concrete list/map *containing* a
+  type (`core/go/value.go:3856-3896` — `istype [Integer]` is true);
+  that recursion is its caller's rule and remains local, re-expressed
+  as a walk whose leaf test is `IsType`.
+- `sigTypeMatchesAsType` deliberately **rejects** DepScalar bodies at
+  TypeArgs slots (`core/go/signature.go:432-438` — the dep-sig
+  fallthrough would loop on `(Integer gt 10) lt (Integer gt 20)`);
+  that rejection remains at the slot, over the shared recognizer.
+
+What collapses is the redundant *recognition* — `IsTypeBody`'s 18
+arms, `isTypeLike` (`core/go/core_make.go:31-37`), the `Shape()` type
+arms, `TypeMembership`'s shape half — not the per-consumer admission
+policy, which becomes small and visible instead of entangled with
+enumeration.
 
 ### N5 — anonymous type values use the same seam, without minting
 
@@ -323,10 +361,22 @@ touching any consumer.
 
 - `ParseFnParams` element arms → name-to-node (already
   `TypeDef`-first) / `IsType(v)` / literal-singleton.
-- `ResolveSigType`'s two silent `TAny` tails disappear; an inline
-  disjunct parameter keeps its family node + payload and dispatches
-  through the family Behavior — no more `(Any, pattern)` weakening.
-- `FnParam.Pattern` becomes derivable from the node (`Structure`).
+- `ResolveSigType`'s two silent `(TAny, nil)` tails disappear, and the
+  NAMED-type `(Any, pattern)` degradation (audit §5) disappears
+  because the name resolves to its minted node. The *anonymous* inline
+  `(TAny, pattern)` arm (`core/go/fn_params.go:707-714`, enforced
+  through Unify by `core/go/signature.go:198-226`, pinned by
+  `core/go/fnparams_stage5_test.go:282-285`) is NOT a weakening — the
+  pattern is the only copy of an anonymous constraint and must be
+  preserved.
+- `FnParam{Type, Pattern}` collapses to **one type-VALUE field**: the
+  node literal for a named type, the payload-carrying value itself for
+  an anonymous one — matching asks the seam either way. The pattern is
+  *carried*, never reconstructed: an anonymous disjunct's family root
+  holds no alternatives, so deriving the constraint from the node is
+  only possible for named types (`Structure(t)`), and the collapse
+  must keep the anonymous value whole or it would admit `Boolean`
+  through `x:(Integer tor String)`.
 - The checker's `toCarrier` payload-preservation ladder
   (`check/go/carrier.go:270-416`), the duplicated `inspect` switch,
   and the `is` handler's body-redirect arms
@@ -382,20 +432,34 @@ call sites mechanically, module by module, under the merged ADR-008
 gate. Pure refactoring; the spec corpus is the safety net.
 
 **Stage 2 — the flip.** Evaluation (`stepWord`, the forward planner,
-`resolve.go`) pushes `NewTypeLiteral(entry.TypeDef)`. Full spec sweep
-per kind over `canon` / `typeof` / `is` / `tis` / `teq` / dispatch /
-`make` / `of` / `inspect` / def-then-use; pin every flip (§6); run
-both engines' differential. All six rows of NUR090's table agree;
-NUR090 retires with the `fn-triple.tsv` pins its verdict names.
+`resolve.go`) pushes `NewTypeLiteral(entry.TypeDef)`. The compiled
+encoding of name-denoted operands shifts **in this same stage**, not
+later: the emitter's existing bare-node arm
+(`compiler/go/emit.go:1723-1729`) interns any `IsBareTypeNode` operand
+with an ID as an `OpPushType` type-table entry, so once evaluation
+yields nodes, those operands stop reaching the `PUSH_CONST` body-bake
+arm automatically — but the emit goldens, `make verify-bytecode`, and
+the interpreter/compiler differential must therefore be re-baselined
+HERE, atomically with the flip, or the two engines would render
+`canon M` differently. Full spec sweep per kind over `canon` /
+`typeof` / `is` / `tis` / `teq` / dispatch / `make` / `of` /
+`inspect` / def-then-use; pin every flip (§6); run both engines'
+differential green before merge. All six rows of NUR090's table
+agree; NUR090 retires with the `fn-triple.tsv` pins its verdict
+names.
 
 **Stage 3 — collapse.** Payload-keyed unify folds move into kind
 Behaviors; `FnParam.Pattern` derived; `DefEntry.Body` reads deleted
 and the entry collapsed; `IsTypeBody`'s enumeration, the duplicate
 inspect switch and the redundant predicates retired.
 
-**Stage 4 — compiled path.** Named-type operands migrate
-`PUSH_CONST` → `OpPushType`; emit goldens, `make verify-bytecode`
-and the frontier ledgers re-baselined.
+**Stage 4 — compiled-path cleanup.** The named-operand encoding
+already moved in Stage 2 (above); what remains is deletion and the
+residue: retire the now-unreachable structural-type-body arms of
+`IsInertConst` / `typeBodyConstOK` (`core/go/value_classify.go:129-161`,
+`:369`) with their pinned coverage tests, sweep the remaining
+body-shaped compiled occurrences (anonymous patterns, baked members),
+and re-baseline the frontier ledgers.
 
 ---
 
