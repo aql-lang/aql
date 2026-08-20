@@ -1,0 +1,57 @@
+diff --git a/compiler/go/emit.go b/compiler/go/emit.go
+index 37917b7..307d2ab 100644
+--- a/compiler/go/emit.go
++++ b/compiler/go/emit.go
+@@ -6928,10 +6928,13 @@ func anyDynamicTail(residual []core.Value) bool {
+ }
+ 
+ // anyFnOrDynamicTail reports whether any residual entry after the first is a
+-// dynamic or fn value (so a leading carrier's args are not all static).
++// dynamic or fn value (so a leading carrier's args are not all static). An
++// fn-SHAPE-typed carrier counts as an fn value here and in the shape
++// detectors below — its runtime inhabitant is a function (IsFnTypedCarrier).
+ func anyFnOrDynamicTail(residual []core.Value) bool {
+ 	for i := 1; i < len(residual); i++ {
+-		if residual[i].Dynamic || core.IsFnValueResidual(residual[i]) {
++		if residual[i].Dynamic || core.IsFnValueResidual(residual[i]) ||
++			core.IsFnTypedCarrier(residual[i]) {
+ 			return true
+ 		}
+ 	}
+@@ -6952,14 +6955,16 @@ func (es *EmitState) trailingApply(lw *lowerer, residual []core.Value) ([]core.V
+ 	}
+ 	fnv := residual[1]
+ 	pr, isEvent := es.producedBy[fnv.ID]
+-	if !isEvent || pr.idx != 0 || !(fnv.Dynamic || core.IsFnValueResidual(fnv)) {
++	if !isEvent || pr.idx != 0 ||
++		!(fnv.Dynamic || core.IsFnValueResidual(fnv) || core.IsFnTypedCarrier(fnv)) {
+ 		return residual, false
+ 	}
+ 	if len(lw.vm) < 1 || lw.vm[len(lw.vm)-1].seq != pr.seq || lw.vm[len(lw.vm)-1].idx != 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+ 		return residual, false
+ 	}
+ 	arg := residual[0]
+-	if _, argIsEvent := es.producedBy[arg.ID]; argIsEvent || arg.Dynamic || core.IsFnValueResidual(arg) {
++	if _, argIsEvent := es.producedBy[arg.ID]; argIsEvent || arg.Dynamic ||
++		core.IsFnValueResidual(arg) || core.IsFnTypedCarrier(arg) {
+ 		return residual, false
+ 	}
+ 	return []core.Value{fnv, arg}, true
+@@ -6977,7 +6982,7 @@ func (es *EmitState) trailingWindowApplyShape(residual []core.Value) bool {
+ 	}
+ 	last := len(residual) - 1
+ 	for i, rv := range residual {
+-		if (rv.Dynamic || core.IsFnValueResidual(rv)) != (i == last) {
++		if (rv.Dynamic || core.IsFnValueResidual(rv) || core.IsFnTypedCarrier(rv)) != (i == last) {
+ 			return false
+ 		}
+ 	}
+@@ -6998,7 +7003,7 @@ func (es *EmitState) mixedDynamicApplyShape(residual []core.Value) (int, bool) {
+ 	}
+ 	dynIdx := -1
+ 	for i, rv := range residual {
+-		if rv.Dynamic || core.IsFnValueResidual(rv) {
++		if rv.Dynamic || core.IsFnValueResidual(rv) || core.IsFnTypedCarrier(rv) {
+ 			if dynIdx != -1 {
+ 				return 0, false // more than one dynamic / fn value
+ 			}
