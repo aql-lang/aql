@@ -39,9 +39,11 @@ func TestTypeRecordRejectsMap(t *testing.T) {
 
 // A type-built record renders as a record type.
 func TestTypeRecordRenders(t *testing.T) {
+	// The name denotes its NODE (the Stage 2 flip); the record schema
+	// is the node's recorded content.
 	got := runOne(t, "def Pt (refine Record [x:Integer y:String])\nPt")
-	if len(got) != 1 || got[0] != "record{x:Integer y:String}" {
-		t.Errorf("got %v, want [record{x:Integer y:String}]", got)
+	if len(got) != 1 || got[0] != "Pt" {
+		t.Errorf("got %v, want [Pt]", got)
 	}
 }
 

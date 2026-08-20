@@ -18,8 +18,16 @@ func TestResourceTypeDefine(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	s := result[0].String()
-	if s != "record{name:String kind:String meta:Map}" {
+	// The name denotes its NODE (the Stage 2 flip); the schema is the
+	// node's recorded content.
+	if s := result[0].String(); s != "Resrc" {
+		t.Errorf("unexpected denotation: %s", s)
+	}
+	schema, ok := native.TypeContentOf(result[0])
+	if !ok {
+		t.Fatal("the node must record its schema")
+	}
+	if s := schema.String(); s != "record{name:String kind:String meta:Map}" {
 		t.Errorf("unexpected type string: %s", s)
 	}
 }
@@ -157,7 +165,14 @@ func TestEntityTypeDefine(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	s := result[0].String()
+	if s := result[0].String(); s != "Ent" {
+		t.Errorf("unexpected denotation: %s", s)
+	}
+	sch, sok := native.TypeContentOf(result[0])
+	if !sok {
+		t.Fatal("the node must record its schema")
+	}
+	s := sch.String()
 	if s != "record{name:String kind:'entity' meta:Map entity:Map model:Map}" {
 		t.Errorf("unexpected type string: %s", s)
 	}
@@ -462,8 +477,13 @@ func TestResourceTypeAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].String()
-	if s != "record{name:String kind:String meta:Map}" {
-		t.Errorf("unexpected alias type string: %s", s)
+	// The stored reference denotes the Resrc NODE (the Stage 2 flip);
+	// the schema stays recoverable from it.
+	if s := result[0].String(); s != "Resrc" {
+		t.Errorf("unexpected alias denotation: %s", s)
+	}
+	sch, sok := native.TypeContentOf(result[0])
+	if !sok || sch.String() != "record{name:String kind:String meta:Map}" {
+		t.Errorf("unexpected alias type string: %v ok=%v", sch, sok)
 	}
 }

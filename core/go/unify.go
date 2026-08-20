@@ -306,6 +306,21 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 	// Behavior-driven LCA walk below; the bounded-type rule leads because
 	// its ChildTypeInfo payload would otherwise be misread by a family
 	// handler.
+	// A membership NODE outranks the shape folds, mirroring the fold
+	// precedence its BODY had: `OptNum unify None` must consult the
+	// disjunct node's alternatives before None's self-only rule, exactly
+	// as the disjunct fold preceded the None fold when the name
+	// evaluated to the DisjunctInfo body (the Stage 2 flip,
+	// design/TYPE-REPRESENTATION.1.md). One side only — a pair of
+	// constraint nodes keeps the table order.
+	aCons := IsBareTypeNode(a) && HasConstraintUnify(&a)
+	bCons := IsBareTypeNode(b) && HasConstraintUnify(&b)
+	if aCons != bCons {
+		if v, err, hit := dispatchUnifier(a, b); hit {
+			return v, err
+		}
+	}
+
 	for i := range unifyFolds {
 		f := &unifyFolds[i]
 		if f.ruling(a, sa) {

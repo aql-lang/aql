@@ -44,13 +44,22 @@ func (d *DisjunctUnifier) Match(v Value, t *Type) bool {
 // (design/TYPE-REPRESENTATION.1.md §N3), so `def x:Maybe 5` against the
 // node constraint runs the alternatives.
 func (d *DisjunctUnifier) Unify(a, b Value) (Value, *UnifyError) {
-	return unifyMembership(a, b, "disjunct "+d.typeName, func(v Value) (Value, bool, error) {
-		out, err := unifyDisjunct(DisjunctInfo{Alternatives: d.Alternatives}, v)
-		if err != nil {
-			return Value{}, false, nil
-		}
-		return out, true, nil
-	})
+	// The alternatives rule decides whenever exactly one side IS this
+	// disjunct's node; the candidate may be concrete, a carrier, or a
+	// TYPE-level operand (`OptNum unify None` — None is an
+	// alternative), all of which the payload fold decided identically
+	// for the body the node replaced. A same-node (or node-free) pair
+	// settles structurally.
+	aSelf := IsBareTypeNode(a) && a.Behavior() == TypeBehavior(d)
+	bSelf := IsBareTypeNode(b) && b.Behavior() == TypeBehavior(d)
+	if aSelf == bSelf {
+		return unifySameOrSubtype(a, b)
+	}
+	candidate := a
+	if aSelf {
+		candidate = b
+	}
+	return unifyDisjunct(DisjunctInfo{Alternatives: d.Alternatives}, candidate)
 }
 
 // installDisjunctUnifier attaches a disjunctUnifier to def, wrapping

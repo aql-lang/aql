@@ -44,40 +44,48 @@ func dispatchUnifier(a, b Value) (Value, *UnifyError, bool) {
 		return Value{}, nil, false
 	}
 
-	var start *Type
+	var starts []*Type
 	switch {
 	case bType.IsSubtypeOf(aType):
-		start = bType
+		starts = []*Type{bType}
 	case aType.IsSubtypeOf(bType):
-		start = aType
+		starts = []*Type{aType}
 	// A membership question — one side is a bare TYPE NODE, the other a
 	// candidate — walks from the NODE's denotation even when the two
 	// sit in unrelated lattice branches: `Unify(fn-value, Mapper-node)`
 	// pairs a Function-branch value with a FunctionSignature-branch
 	// node, whose LCA (Type) knows no membership rule, yet Mapper's
-	// FnUndefUnifier is exactly the rule to consult. One side only —
-	// two bare nodes (a type-level pair) keep the LCA walk.
+	// FnUndefUnifier is exactly the rule to consult.
 	case IsBareTypeNode(b) && !IsBareTypeNode(a):
-		start = bType
+		starts = []*Type{bType}
 	case IsBareTypeNode(a) && !IsBareTypeNode(b):
-		start = aType
+		starts = []*Type{aType}
+	case IsBareTypeNode(a) && IsBareTypeNode(b):
+		// TWO bare nodes: a type-level pair. Either side's kind may
+		// own the rule (`OptNum unify None` — the disjunct node's
+		// alternatives admit the None literal), and their LCA may not
+		// even exist (None is a degenerate root), so walk from each
+		// denotation in turn.
+		starts = []*Type{aType, bType}
 	default:
-		start = lowestCommonAncestor(aType, bType)
+		starts = []*Type{lowestCommonAncestor(aType, bType)}
 	}
 
-	for t := start; t != nil; t = t.Parent {
-		if t.Behavior() == nil {
-			continue
+	for _, start := range starts {
+		for t := start; t != nil; t = t.Parent {
+			if t.Behavior() == nil {
+				continue
+			}
+			u, ok := t.Behavior().(Unifier)
+			if !ok {
+				continue
+			}
+			v, err := u.Unify(a, b)
+			if err == ErrNoUnifier {
+				continue
+			}
+			return v, err, true
 		}
-		u, ok := t.Behavior().(Unifier)
-		if !ok {
-			continue
-		}
-		v, err := u.Unify(a, b)
-		if err == ErrNoUnifier {
-			continue
-		}
-		return v, err, true
 	}
 	return Value{}, nil, false
 }

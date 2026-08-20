@@ -67,9 +67,31 @@ func (f *FnUndefUnifier) Match(v Value, t *Type) bool {
 // fn […]` against the node constraint would fall to unifySameOrSubtype's
 // narrower-literal arm and bind the literal instead of the function.
 func (f *FnUndefUnifier) Unify(a, b Value) (Value, *UnifyError) {
-	return unifyMembership(a, b, "fn shape "+f.typeName, func(v Value) (Value, bool, error) {
-		return v, FnUndefMatchesFnDef(NewValueRaw(TFnUndef, FnUndefInfo{Sigs: f.sigs}), v), nil
-	})
+	// The signature rule decides whenever exactly one side IS this
+	// shape's node; the fn-shape structural unifier handles the
+	// candidate (function value, carrier, or another fn shape) exactly
+	// as the ShapeFnUndef fold handled it for the body.
+	aSelf := IsBareTypeNode(a) && a.Behavior() == TypeBehavior(f)
+	bSelf := IsBareTypeNode(b) && b.Behavior() == TypeBehavior(f)
+	if aSelf == bSelf {
+		return unifySameOrSubtype(a, b)
+	}
+	candidate := a
+	if aSelf {
+		candidate = b
+	}
+	if candidate.Carrier || !IsConcrete(candidate) {
+		// Sound over-approximation, mirroring Match's carrier arm.
+		if candidate.Parent != nil && (candidate.Parent.ConformsTo(TFunction) ||
+			candidate.Parent.Equal(TAny) || candidate.Parent.Equal(TFnUndef)) {
+			return candidate, nil
+		}
+		return Value{}, unifyFail("value is not a "+f.typeName+" function", a, b)
+	}
+	if FnUndefMatchesFnDef(NewValueRaw(TFnUndef, FnUndefInfo{Sigs: f.sigs}), candidate) {
+		return candidate, nil
+	}
+	return Value{}, unifyFail("function does not satisfy fn shape "+f.typeName, a, b)
 }
 
 // installFnUndefUnifier attaches a FnUndefUnifier to def, wrapping any

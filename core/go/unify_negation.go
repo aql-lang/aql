@@ -96,13 +96,19 @@ func (n *NegationUnifier) Match(v Value, t *Type) bool {
 // rule — the Unify capability every membership kind carries
 // (design/TYPE-REPRESENTATION.1.md §N3).
 func (n *NegationUnifier) Unify(a, b Value) (Value, *UnifyError) {
-	return unifyMembership(a, b, "negation "+n.typeName, func(v Value) (Value, bool, error) {
-		out, err := unifyNegation(NegationInfo{Inner: n.inner}, v)
-		if err != nil {
-			return Value{}, false, nil
-		}
-		return out, true, nil
-	})
+	// The complement rule decides whenever exactly one side IS this
+	// negation's node — concrete, carrier, or type-level candidate
+	// alike, exactly as the payload fold decided them for the body.
+	aSelf := IsBareTypeNode(a) && a.Behavior() == TypeBehavior(n)
+	bSelf := IsBareTypeNode(b) && b.Behavior() == TypeBehavior(n)
+	if aSelf == bSelf {
+		return unifySameOrSubtype(a, b)
+	}
+	candidate := a
+	if aSelf {
+		candidate = b
+	}
+	return unifyNegation(NegationInfo{Inner: n.inner}, candidate)
 }
 
 // installNegationUnifier attaches a negationUnifier to def, wrapping any
