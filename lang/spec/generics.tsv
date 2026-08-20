@@ -80,3 +80,4 @@ def Box gen [T] class {value:T} def Outer gen [T] class {inner:T} end (make Oute
 def Box gen [T] class {value:T} def b:(Box of [Number]) {value:1} end b typeof	Box of [Number]	an EXPLICIT instantiation always wins over inference
 def Q gen [T U] class {a:T} end make Q {a:1}	ERROR:unbound_param	an uninferable, undefaulted parameter is loud — never silent Any
 def Sorted gen [(T extends Number)] class {items:[:T]} end make Sorted {items:['x']}	ERROR:constraint_violation	inferred arguments still run the bound check
+def P refine Integer  P of [Integer]	ERROR:not a generic schema	a plain named type's NODE is not instantiable (the bare-node head arm)

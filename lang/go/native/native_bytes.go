@@ -35,11 +35,11 @@ import (
 // binarySpecLayout returns the wire layout carried by a binary-frame SPEC type
 // (a class value with BinaryLayout set), and whether v is such a type.
 func binarySpecLayout(v Value) (Value, bool) {
-	// A NAMED spec type evaluates to its node (the Stage 2 flip); the
-	// layout-bearing class value is the node's recorded content.
-	if body, ok := TypeContentOf(v); ok && IsBareTypeNode(v) {
-		v = body
-	}
+	// Both callers deliver CONTENT, never a node: frameInstance resolves
+	// a named spec's node before probing, and the BinarySpec member
+	// predicate only ever sees concrete candidates (matchMembership
+	// defers bare nodes to the lattice walk) — so no node-resolution
+	// prelude is needed here.
 	if !IsClassType(v) {
 		return Value{}, false
 	}

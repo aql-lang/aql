@@ -46,3 +46,4 @@ import "boru:type-util"  (refine Record [x:Integer y:String]) TypeUtil.omit [x/q
 import "boru:type-util"  (refine Record [x:Integer y:String]) TypeUtil.pick [x/q]	record{x:Integer}	keep only field x
 # required — strip the optional (None) alternative from every field
 import "boru:type-util"  TypeUtil.required (refine Record [x:(Integer tor None)])	record{x:Integer}	make every field required
+import "boru:type-util"  TypeUtil.parent (Integer gt 10)	Number	an ANONYMOUS refinement body's lattice node is its base family's node

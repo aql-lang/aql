@@ -133,6 +133,9 @@ func TestSpecfixGuardProbes(t *testing.T) {
 		// guard fires ahead of the instance-shape assert — matching the
 		// production storage word's post-flip refusal.
 		{input: "set x 5 P", wantErr: "cannot set field on type literal"},
+		// …while a concrete non-instance at the Class slot still reaches
+		// the instance-shape assert (pm is P-typed but map-shaped).
+		{input: "set x 5 pm", wantErr: "expected an Object instance"},
 
 		// refine — the object/record constructor arms.
 		{input: "refine P {y:String}", wantSub: []string{"object<", "x:Integer y:String}"}},

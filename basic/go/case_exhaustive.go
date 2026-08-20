@@ -337,7 +337,11 @@ func parseCaseIsPred(r *Registry, m Value) (Value, bool) {
 	if IsBareTypeNode(tgt) && !IsNoneShape(tgt) {
 		// A refinement NAME resolves to its node; a DepScalar body behind
 		// it contributes interval coverage exactly as the body did when
-		// the name denoted the body directly.
+		// the name denoted the body directly. A non-numeric refinement
+		// (`String gte 'a'`) has no representable interval and stays
+		// opaque. (The name path is the ONLY route here since the Stage 2
+		// flip — ResolveTypedName yields nodes, never raw DepScalar
+		// bodies, so no separate body arm remains.)
 		if body, ok := core.TypeContentOf(tgt); ok && body.IsDepScalar() {
 			if _, ok := depScalarIval(body); ok {
 				return body, true
@@ -345,11 +349,6 @@ func parseCaseIsPred(r *Registry, m Value) (Value, bool) {
 			return Value{}, false
 		}
 		return tgt, true
-	}
-	if tgt.IsDepScalar() {
-		if _, ok := depScalarIval(tgt); ok {
-			return tgt, true
-		}
 	}
 	return Value{}, false
 }
@@ -487,13 +486,11 @@ func caseMatchCovers(r *Registry, m, alt Value, depth int) bool {
 	if IsBareTypeNode(m) {
 		t := CanonicalType(r, &m)
 		if dv, ok := core.UnionCarrierForType(t); ok {
-			// A named union/enum type as a match covers what its members cover.
+			// A named union/enum/disjunct type as a match covers what its
+			// members cover — the alternatives are recovered from the
+			// node's DisjunctUnifier (UnionCarrierForType), so no separate
+			// TypeContentOf arm is needed.
 			return caseMatchCovers(r, dv, alt, depth-1)
-		}
-		if body, ok := core.TypeContentOf(m); ok && IsDisjunct(body) {
-			// A named disjunct type's name denotes its node; its
-			// alternatives are recovered from the node for coverage.
-			return caseMatchCovers(r, body, alt, depth-1)
 		}
 		if IsBareTypeNode(alt) {
 			return caseTypeCovers(CanonicalType(r, &alt), t)
