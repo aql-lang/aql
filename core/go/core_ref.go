@@ -27,18 +27,19 @@ func ResolveRef(r *Registry, name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false
 	}
-	if tv, ok := r.TopTypeBody(name); ok {
-		// Resolving a name through a reference (`name/v`, the `ref` word, an
-		// export-map value) IS a use of that def — record it so unused-def
-		// analysis in check mode does not falsely flag reference-exported
-		// public words (the canonical `export "X" { f: impl/v }` form).
-		r.noteAnalysisUse(name)
-		return tv, true
-	}
 	top, ok := r.Defs.Top(name)
 	if !ok {
 		return Value{}, false
 	}
+	// Resolving a name through a reference (`name/v`, the `ref` word, an
+	// export-map value) IS a use of that def — record it so unused-def
+	// analysis in check mode does not falsely flag reference-exported
+	// public words (the canonical `export "X" { f: impl/v }` form).
+	// A type binding resolves through Top like every other binding, so it
+	// yields what the name DENOTES — the minted lattice node, the same
+	// value the bare name evaluates to (design/TYPE-REPRESENTATION.1.md
+	// §6); the declared body is the node's CONTENT (`TypeContentOf`), not
+	// the binding's value.
 	r.noteAnalysisUse(name)
 	if _, ok := top.Data.(FnDefInfo); ok {
 		// Wrap the aggregate dispatch view so the reference carries every
