@@ -9,8 +9,12 @@ func init() {
 		Description: "Adds two numeric values. When both are integers the result is an integer; " +
 			"if either is a float the result is a float. When at least one operand is a " +
 			"String, the other Scalar is coerced to its string form and the two are " +
-			"concatenated. Beyond those, add is defined WITHIN every scalar type and " +
-			"Micron kind: Atom add Atom concatenates the names, Bytes add Bytes " +
+			"concatenated. Concatenation is ORDER-SENSITIVE and follows the infix " +
+			"reading: `a add b` puts a first, so `'x' add 'y'` is 'xy' and `'x' add 1` " +
+			"is 'x1'. Written all-forward the operands bind the other way round, so " +
+			"`add 'x' 'y'` is 'yx'. Beyond those, add is defined WITHIN every scalar " +
+			"type and Micron kind: Atom add Atom concatenates the names (`b/q add a/q` " +
+			"is ba), Bytes add Bytes " +
 			"concatenates, a same-kind Micron pair combines field-wise (rebuilt through " +
 			"the kind's make validator; Qion adds same-currency amounts, Pathon joins " +
 			"paths), and Boolean add Boolean is a deliberate [boru/type_error] (use the " +
