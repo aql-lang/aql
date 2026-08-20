@@ -37,18 +37,18 @@ import (
 
 // kindPredicates are the node-kind probes whose call sites are ratcheted.
 // core.HasConstraintUnify is deliberately NOT listed — it is the sanctioned
-// router, and the helpers' own defining files are excluded below because a
-// definition is not a routing decision.
+// router.
+//
+// The predicates' own defining files (core/go/unify_predicate.go,
+// core/go/unify_disjunct.go) are NOT excluded: a func DECLARATION is not a
+// CallExpr, so the walk below never counts one, and excluding those files
+// wholesale would blind the ratchet to a consumer call added inside them —
+// precisely the files most likely to grow one. They hold zero calls today,
+// so they carry no pin; a call appearing there fails the gate as an
+// unpinned site, exactly as it would anywhere else.
 var kindPredicates = map[string]bool{
 	"IsPredicateTypeNode": true,
 	"IsDisjunctTypeNode":  true,
-}
-
-// definingFiles hold the predicates themselves (and their chain-walkers);
-// calls inside them are the implementation, not consumers.
-var definingFiles = map[string]bool{
-	"core/go/unify_predicate.go": true,
-	"core/go/unify_disjunct.go":  true,
 }
 
 // pinnedKindRoutingSites is the exhaustive allowlist of consumer call
@@ -99,9 +99,6 @@ func TestKindPredicateCallSitesArePinned(t *testing.T) {
 			return relErr
 		}
 		rel = filepath.ToSlash(rel)
-		if definingFiles[rel] {
-			return nil
-		}
 		file, parseErr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 		if parseErr != nil {
 			// A file the Go toolchain itself would reject is someone
