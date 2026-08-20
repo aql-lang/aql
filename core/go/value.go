@@ -1602,6 +1602,24 @@ func (v *Value) SetTypeBody(body Value) {
 	v.ensureTMeta().Body = &b
 }
 
+// TypeContentOf returns the structural content a type value stands
+// for: a bare node's recorded declaration body (TypeBody), or the
+// value itself when it already IS type content (a payload-shaped type
+// body). Consumers that operate on a type's STRUCTURE — make, refine
+// bases, describe/inspect schema views, the type-algebra words — call
+// this at entry so a name (which evaluates to its node after the
+// Stage 2 flip) and an inline body are one case
+// (design/TYPE-REPRESENTATION.1.md §N2).
+func TypeContentOf(v Value) (Value, bool) {
+	if IsBareTypeNode(v) {
+		return v.TypeBody()
+	}
+	if v.Data != nil && v.Data.IsTypeContent(&v) {
+		return v, true
+	}
+	return Value{}, false
+}
+
 // SetBehavior installs the type node's Behavior, allocating the typeMeta
 // if needed. Exported because Behavior now lives behind the unexported
 // tmeta pointer (the `behave` word and behavior-registering init code set

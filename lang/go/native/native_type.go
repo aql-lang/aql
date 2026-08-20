@@ -421,6 +421,17 @@ func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 }
 
 func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
+	// A NAMED base or argument evaluates to its minted node (the Stage
+	// 2 flip); the kind dispatch and the constructors operate on the
+	// declared structural content, which the node records
+	// (design/TYPE-REPRESENTATION.1.md §N2). Bare bases with no content
+	// (refine Integer, refine P) pass through unchanged.
+	if body, ok := TypeContentOf(base); ok && IsBareTypeNode(base) {
+		base = body
+	}
+	if body, ok := TypeContentOf(arg); ok && IsBareTypeNode(arg) {
+		arg = body
+	}
 	ideal := r.Ideals.For(base)
 	if ideal == nil {
 		// Distinguish a disabled kind from an unknown base.
@@ -992,6 +1003,11 @@ var TPartialModuleNatives = []NativeFunc{
 // the other way (a child requires more, not less).
 func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	t := args[0]
+	// A NAMED type evaluates to its node (the Stage 2 flip); the
+	// fields to partialize are the node's recorded content.
+	if body, ok := TypeContentOf(t); ok && IsBareTypeNode(t) {
+		t = body
+	}
 	switch {
 	case IsRecordType(t):
 		rec, _ := AsRecordType(t)

@@ -2715,22 +2715,18 @@ func (e *Engine) stepWord(val Value) error {
 	// forward can still consume it (e.g. `Color` as the value side
 	// of an export map entry).
 	if e.Registry != nil {
-		if tv, ok := e.Registry.TopTypeBody(w.Name); ok {
-			push := tv
+		if entry, ok := e.Registry.Defs.TopEntry(w.Name); ok && entry.TypeDef != nil {
+			// A type name DENOTES its minted (or adopted) lattice node
+			// (the Stage 2 flip, design/TYPE-REPRESENTATION.1.md §5):
+			// evaluating `M` pushes the M node for every declaration
+			// kind, exactly as `P` always pushed the refine node. The
+			// declared structure stays reachable from the node
+			// (Value.TypeBody); nothing on the evaluation path reads
+			// the stored body any more. A bare node never dispatches,
+			// so the fn-shape Quoted special case the body push needed
+			// is gone with the body.
+			push := NewTypeLiteral(entry.TypeDef)
 			push.pos = val.pos
-			// A fn-shape type body (a predicate type, e.g. `def Bbd
-			// fn […]`) is pushed Quoted so stepLiteral's Function gate
-			// leaves it as DATA: type-defining functions participate
-			// in type operations (`def p:Bbd v`, `v is Bbd`, `inspect
-			// Bbd`) and are never free-standing calls. Without the
-			// mark, value dispatch — which collects forward args like
-			// a word — would run the predicate on whatever follows
-			// (`Bbd "c"`). Collection-time consumers are unaffected:
-			// the forward planner resolves type names itself (see the
-			// TopTypeBody block in the matchSignature scan).
-			if _, isFn := push.Data.(FnDefInfo); isFn {
-				push.Quoted = true
-			}
 			e.Tape.Set(e.Pointer, push)
 			return e.stepLiteral()
 		}
@@ -8337,6 +8333,18 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						// compile mode: there the dispatch must remain UNMATCHED so
 						// the emitter refuses (force-compile) instead of baking a
 						// wrong direct call — preserving compile==interpret.
+						// A TYPE binding denotes its lattice node (the Stage 2
+						// flip — deftable.Top), so the same plan-time guard the
+						// builtin-name arm below carries applies here: a type
+						// literal is refused at a concrete-payload slot, so the
+						// plan never claims what the commit re-match would
+						// reject.
+						if IsBareTypeNode(top) {
+							isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
+							if !isTypeArg && rejectsTypeLiteral(top, expectedType) {
+								break
+							}
+						}
 						gradualAny := checkActive && !e.Registry.analysisCompiling() &&
 							top.Parent != nil && top.Parent.Equal(TAny)
 						if SigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) || gradualAny {
@@ -8365,21 +8373,11 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						}
 					}
 
-					// Named type from r.Types: resolves to the type
-					// value (mirror of stepWord's r.Types lookup so the
-					// planner's expected type matches what stepWord
-					// will actually push at runtime). Predicate types
-					// arrive as TFunction values; plan against
-					// that Parent for sig matching.
-					if tv, ok := e.Registry.TopTypeBody(ww.Name); ok {
-						if SigArgMatches(sig, fwd, tv) || expectedType.Equal(TAny) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
-						break // named-type value doesn't fit this slot
-					}
+					// (A def-bound TYPE name is fully handled by the
+					// Defs.Top arm above — post the Stage 2 flip the
+					// binding denotes its bare node, which that arm
+					// either claims or rejects terminally, so no
+					// separate TopTypeBody mirror remains.)
 
 					// 1.4: function word — boundary, stop. A `/v`-marked
 					// word is NO boundary in principle (it denotes its

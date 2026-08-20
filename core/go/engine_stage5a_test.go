@@ -878,6 +878,10 @@ func TestS5AStepWordTypeBodyPlain(t *testing.T) {
 }
 
 func TestS5AStepWordTypeBodyFnShape(t *testing.T) {
+	// A type name denotes its lattice NODE (the Stage 2 flip of
+	// design/TYPE-REPRESENTATION.1.md), so a predicate-type name pushes
+	// the bare node — inert by nature, no Quoted mark needed (the body
+	// push this replaced had to be Quoted so the fn would not dispatch).
 	r := covRegistry(t, nil)
 	pred := NewFunction(FnDefInfo{Name: "S5aPred", Signatures: []Signature{{
 		Args: []*Type{TAny}, BarrierPos: -1,
@@ -887,8 +891,8 @@ func TestS5AStepWordTypeBodyFnShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if len(out) != 1 || !out[0].Quoted {
-		t.Errorf("fn-shape type body must arrive Quoted: %v", out)
+	if len(out) != 1 || !IsBareTypeNode(out[0]) || !out[0].Equal(TFunction) {
+		t.Errorf("a type name must denote its node: %v", out)
 	}
 }
 

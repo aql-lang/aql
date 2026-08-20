@@ -20,7 +20,17 @@ func TestObjectTypeDefine(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	s := result[0].String()
+	// The name DENOTES its node (design/TYPE-REPRESENTATION.1.md
+	// Stage 2): evaluating `Foo` yields the Foo node, and the schema
+	// stays recoverable from it.
+	if s := result[0].String(); s != "Foo" {
+		t.Errorf("expected the Foo node, got %s", s)
+	}
+	body, ok := native.TypeContentOf(result[0])
+	if !ok {
+		t.Fatal("the node must record its class schema")
+	}
+	s := body.String()
 	if !strings.Contains(s, "Class/Foo") {
 		t.Errorf("expected type name to contain 'Class/Foo', got %s", s)
 	}
@@ -67,7 +77,15 @@ func TestObjectTypeInheritance(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	s := result[0].String()
+	// The name denotes its node; the schema is the node's content.
+	if s := result[0].String(); s != "Bar" {
+		t.Errorf("expected the Bar node, got %s", s)
+	}
+	body, ok := native.TypeContentOf(result[0])
+	if !ok {
+		t.Fatal("the node must record its class schema")
+	}
+	s := body.String()
 	if !strings.Contains(s, "Class/Foo/Bar") {
 		t.Errorf("expected type name to contain 'Class/Foo/Bar', got %s", s)
 	}
@@ -94,7 +112,8 @@ func TestObjectTypeParentFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsClassType(result[0])
+	schema, _ := native.TypeContentOf(result[0])
+	ot, _ := native.AsClassType(schema)
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 total fields (a,b,d), got %d", all.Len())
@@ -116,7 +135,8 @@ func TestObjectTypeOwnFieldsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsClassType(result[0])
+	schema, _ := native.TypeContentOf(result[0])
+	ot, _ := native.AsClassType(schema)
 	if ot.Fields.Len() != 1 {
 		t.Fatalf("expected 1 own field (d), got %d", ot.Fields.Len())
 	}

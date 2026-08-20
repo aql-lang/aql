@@ -460,6 +460,18 @@ func freshenAttrMap(m *OrderedMap) *OrderedMap {
 func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error) {
 	val = ResolveWordValue(val)
 
+	// A NAMED field constraint ({i:Inner}) was evaluated to its NODE at
+	// class-declaration time (the Stage 2 flip); the nested-class probe
+	// below needs the schema, which the node records (§N2). Constraint
+	// kinds whose membership runs through the node's Behavior (dep
+	// scalars, predicates, disjuncts) keep the NODE — UnifyExplainR
+	// consults the Behavior — so only class-content nodes resolve.
+	if IsBareTypeNode(constraint) {
+		if body, ok := constraint.TypeBody(); ok && IsClassType(body) {
+			constraint = body
+		}
+	}
+
 	// Concrete default — the field's type is the default value's own
 	// type (its Parent), so {x:1} accepts Integers and rejects the
 	// rest, a default carrying a refined type enforces it, and a

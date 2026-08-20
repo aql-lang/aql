@@ -90,6 +90,21 @@ func (n *NegationUnifier) Match(v Value, t *Type) bool {
 	return err == nil
 }
 
+// Unify admits a concrete candidate iff it does NOT satisfy the inner
+// type, yielding the candidate; a concrete member of the inner type
+// fails definitively, and a type-level pair defers to the structural
+// rule — the Unify capability every membership kind carries
+// (design/TYPE-REPRESENTATION.1.md §N3).
+func (n *NegationUnifier) Unify(a, b Value) (Value, *UnifyError) {
+	return unifyMembership(a, b, "negation "+n.typeName, func(v Value) (Value, bool, error) {
+		out, err := unifyNegation(NegationInfo{Inner: n.inner}, v)
+		if err != nil {
+			return Value{}, false, nil
+		}
+		return out, true, nil
+	})
+}
+
 // installNegationUnifier attaches a negationUnifier to def, wrapping any
 // existing Behavior. Called by InstallType when minting a negation type
 // so the complement drives every Is/Match call site.

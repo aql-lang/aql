@@ -50,6 +50,17 @@ func dispatchUnifier(a, b Value) (Value, *UnifyError, bool) {
 		start = bType
 	case aType.IsSubtypeOf(bType):
 		start = aType
+	// A membership question — one side is a bare TYPE NODE, the other a
+	// candidate — walks from the NODE's denotation even when the two
+	// sit in unrelated lattice branches: `Unify(fn-value, Mapper-node)`
+	// pairs a Function-branch value with a FunctionSignature-branch
+	// node, whose LCA (Type) knows no membership rule, yet Mapper's
+	// FnUndefUnifier is exactly the rule to consult. One side only —
+	// two bare nodes (a type-level pair) keep the LCA walk.
+	case IsBareTypeNode(b) && !IsBareTypeNode(a):
+		start = bType
+	case IsBareTypeNode(a) && !IsBareTypeNode(b):
+		start = aType
 	default:
 		start = lowestCommonAncestor(aType, bType)
 	}

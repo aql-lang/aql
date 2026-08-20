@@ -60,12 +60,19 @@ func (d *DepScalarUnifier) Match(v Value, t *Type) bool {
 // fall to unifySameOrSubtype's narrower-literal arm and bind without
 // ever running the constraint.
 func (d *DepScalarUnifier) Unify(a, b Value) (Value, *UnifyError) {
-	return unifyMembership(a, b, "dependent scalar "+d.typeName, func(v Value) (Value, bool, error) {
+	out, uerr := unifyMembership(a, b, d.typeName, func(v Value) (Value, bool, error) {
 		if !v.Parent.ConformsTo(d.baseType) {
 			return Value{}, false, nil
 		}
 		return v, depScalarCheck(d.depInfo, v), nil
 	})
+	if uerr != nil && uerr != ErrNoUnifier {
+		// Keep the fold's established failure text (unifyDepScalar) so
+		// the named-node path reports byte-identically to the inline
+		// DepScalar body it replaced.
+		return Value{}, unifyFail("value does not satisfy DepScalar bounds", a, b)
+	}
+	return out, uerr
 }
 
 // installDepScalarUnifier attaches a depScalarUnifier to def. Called

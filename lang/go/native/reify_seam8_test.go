@@ -15,7 +15,15 @@ func w8ClassReg(t *testing.T, def string, name string) (*Registry, Value) {
 		t.Fatalf("define %s: %v", name, err)
 	}
 	tv, ok := r.ResolveTypedName(name)
-	if !ok || !IsClassType(tv) {
+	if !ok {
+		t.Fatalf("%s did not resolve", name)
+	}
+	// The name denotes its NODE (the Stage 2 flip); the schema is the
+	// node's recorded content.
+	if body, bok := TypeContentOf(tv); bok {
+		tv = body
+	}
+	if !IsClassType(tv) {
 		t.Fatalf("%s did not resolve to a class type", name)
 	}
 	return r, tv

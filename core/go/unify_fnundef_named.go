@@ -58,6 +58,20 @@ func (f *FnUndefUnifier) Match(v Value, t *Type) bool {
 	return FnUndefMatchesFnDef(NewValueRaw(TFnUndef, FnUndefInfo{Sigs: f.sigs}), v)
 }
 
+// Unify admits a concrete function candidate by the same structural
+// signature check Match runs, yielding the CANDIDATE (never the node
+// literal — the typed-def swap hazard), and failing definitively on a
+// concrete non-member; a type-level pair defers to the structural rule.
+// The Unify capability every membership kind carries
+// (design/TYPE-REPRESENTATION.1.md §N3): without it, `def f:IntToStr
+// fn […]` against the node constraint would fall to unifySameOrSubtype's
+// narrower-literal arm and bind the literal instead of the function.
+func (f *FnUndefUnifier) Unify(a, b Value) (Value, *UnifyError) {
+	return unifyMembership(a, b, "fn shape "+f.typeName, func(v Value) (Value, bool, error) {
+		return v, FnUndefMatchesFnDef(NewValueRaw(TFnUndef, FnUndefInfo{Sigs: f.sigs}), v), nil
+	})
+}
+
 // installFnUndefUnifier attaches a FnUndefUnifier to def, wrapping any
 // existing Behavior. Called by InstallType when minting a named
 // fn-shape type so the signature specs drive every Is/Match call site.

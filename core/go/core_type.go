@@ -420,7 +420,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		info.Type = def
 		installSurfaceUnifier(def, info, name)
 		installTypeBinding(r, name, def, NewValueRaw(def, info))
-	} else if inputT := PredicateInputType(body); inputT != nil {
+	} else if inputT, isPred := PredicateInputType(body), isPredicateFnValue(body); inputT != nil || isPred {
 		// Predicate type with a concrete input type: mint the *Type
 		// parented at the input rather than at TFunction so values
 		// rewrapped by the typed-bind path inherit input-side
@@ -429,7 +429,18 @@ func InstallType(r *Registry, name string, body Value) error {
 		// `Any` input (the historical `fn [x:Any Any […]]` pattern)
 		// fall through to the regular PushType path — they remain
 		// gates, not dispatch categories.
-		def := r.Types.MintType(name, inputT)
+		// An Any-input (or unannotated) predicate mints under Function
+		// itself: it has no concrete base to inherit capabilities from,
+		// but it is a DISPATCH CATEGORY like every other membership
+		// kind — the pre-flip regime left it an unbridged catch-all
+		// node ("a gate, not a dispatch category"), which is the same
+		// dead-dispatch class NUR093 records for aliases. One rule for
+		// every kind (design/TYPE-REPRESENTATION.1.md §N3).
+		parent := inputT
+		if parent == nil {
+			parent = TFunction
+		}
+		def := r.Types.MintType(name, parent)
 		// NOTE: the FnDef payload's Name is deliberately NOT stamped here
 		// — canon renders predicate bodies, and a stamped name would
 		// change their canonical ordering (compare.tsv §predicate-kind).

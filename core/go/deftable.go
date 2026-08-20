@@ -71,9 +71,16 @@ func (dt *DefTable) Gen(name string) int64 {
 	return dt.gen[name]
 }
 
-// Top returns the body of the most recent binding for name, or
+// Top returns what the most recent binding for name DENOTES, or
 // (zero Value, false) if name is unbound. Canonical read for "what
-// does this name resolve to right now".
+// does this name resolve to right now". A value binding denotes its
+// Body; a TYPE binding denotes its minted (or adopted) lattice node —
+// the Stage 2 flip of design/TYPE-REPRESENTATION.1.md §5: a type name
+// evaluates to its type, for every declaration kind, so `canon M`
+// prints M and `fn M Any […]` sees a type where it used to see the
+// declaration's structural body (NUR090). Consumers that need the
+// declared STRUCTURE read it from the node (Value.TypeBody) or from
+// the stored entry (TopTypeBody), never from evaluation.
 func (dt *DefTable) Top(name string) (Value, bool) {
 	if dt == nil {
 		return Value{}, false
@@ -82,7 +89,11 @@ func (dt *DefTable) Top(name string) (Value, bool) {
 	if len(ds) == 0 {
 		return Value{}, false
 	}
-	return ds[len(ds)-1].Body, true
+	e := ds[len(ds)-1]
+	if e.TypeDef != nil {
+		return NewTypeLiteral(e.TypeDef), true
+	}
+	return e.Body, true
 }
 
 // TopEntry returns the most recent binding (body plus the type def, if

@@ -36,6 +36,23 @@ func (d *DisjunctUnifier) Match(v Value, t *Type) bool {
 	return err == nil
 }
 
+// Unify admits a concrete candidate iff some alternative unifies with
+// it, yielding the alternative-unified result — never the node literal
+// (the typed-def swap hazard). A concrete non-member fails
+// definitively; a type-level pair defers to the structural rule. The
+// Unify capability every membership kind carries
+// (design/TYPE-REPRESENTATION.1.md §N3), so `def x:Maybe 5` against the
+// node constraint runs the alternatives.
+func (d *DisjunctUnifier) Unify(a, b Value) (Value, *UnifyError) {
+	return unifyMembership(a, b, "disjunct "+d.typeName, func(v Value) (Value, bool, error) {
+		out, err := unifyDisjunct(DisjunctInfo{Alternatives: d.Alternatives}, v)
+		if err != nil {
+			return Value{}, false, nil
+		}
+		return out, true, nil
+	})
+}
+
 // installDisjunctUnifier attaches a disjunctUnifier to def, wrapping
 // any existing Behavior. Called by InstallType when minting a disjunct
 // type so the alternatives drive every Is/Match call site.

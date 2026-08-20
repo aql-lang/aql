@@ -452,6 +452,7 @@ var (
 	OwnerProgram             = core.OwnerProgram
 	NewPathonFromString      = core.NewPathonFromString
 	IsBareTypeNode           = core.IsBareTypeNode
+	TypeContentOf            = core.TypeContentOf
 	IsCapitalisedName        = core.IsCapitalisedName
 	IsConcrete               = core.IsConcrete
 	DeepConcrete             = core.DeepConcrete

@@ -1072,8 +1072,21 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 		}
 	}
-	if constraint.Parent.Equal(TFunction) {
-		return defFnPredicateBind(r, name, typeName, constraint, body, describeType, args[0].Pos())
+	// A PREDICATE constraint: an inline fn value (Parent Function), or —
+	// after the Stage 2 flip — the NAME of a predicate type, which
+	// evaluates to its minted node carrying a PredicateUnifier. The
+	// predicate BODY to run is the node's recorded content
+	// (design/TYPE-REPRESENTATION.1.md §N2); defFnPredicateBind keeps
+	// its historical run-then-reparent semantics (typeof x → Pos for an
+	// input-typed predicate) in both spellings.
+	if constraint.Parent.Equal(TFunction) || core.IsPredicateTypeNode(constraint) {
+		pred := constraint
+		if pb, ok := core.TypeContentOf(constraint); ok {
+			pred = pb
+		}
+		if pred.Data != nil {
+			return defFnPredicateBind(r, name, typeName, pred, body, describeType, args[0].Pos())
+		}
 	}
 
 	// ObjectType constraint (`def x:Person {map}` where Person is
