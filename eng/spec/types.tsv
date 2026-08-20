@@ -232,7 +232,7 @@ def Foo Integer def Bar String Foo Bar	Integer String
 # directly. Then `is` checks shape conformance.		
 		
 def R { x:Integer y:String } typeof R	Map	an implicit map is a Map; metatype is Type
-def R { x:Integer } R	{x:Integer}	the bound type literal renders as the implicit-map syntax
+def R { x:Integer } R	R	Stage 2 flip (§6): the name denotes its minted node and renders as the name
 		
 # Single-field record.		
 def Point { x:Integer y:Integer } typeof Point	Map	
@@ -522,7 +522,7 @@ def Vec { x:Integer y:Integer } Vec is Type	true	a type-namedrecord shape
 def Color (enum [ red green blue ]) Color is Type	true	a type-namedenum
 def Mapper (fnsig [ [ Integer ] [ Integer ] ]) Mapper is Type	true	a type-namedfunction-shape
 def Ints [ :Integer ] Ints is Type	true	a type-namedtyped list
-def N 5 N is Type	false	but a SINGLETON type from a scalar literal resolves to the scalar value `5` — and `5` is not a type
+def N 5 N is Type	true	Stage 2 flip (§6): the name denotes its minted node — a TYPE — so `N is Type` holds; the singleton's members are still just 5
 		
 # --- concrete VALUES are NOT types ---		
 5 is Type	false	an Integer value is not a type

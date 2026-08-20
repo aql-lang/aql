@@ -199,8 +199,11 @@ func TestControlEdgeBattery(t *testing.T) {
 		// a body-constructed enum and a def'd one the model resolves.
 		{input: "for 2 [enum [a b]]", want: "a tor b a tor b"},
 		{input: "for [2] [enum [a b]]", want: "a tor b a tor b"},
-		{input: "def E (enum [a b]) for 2 [E]", want: "a tor b a tor b"},
-		{input: "def E (enum [a b]) for [2] [E]", want: "a tor b a tor b"},
+		// Stage 2 flip (design/TYPE-REPRESENTATION.1.md §6): the NAME
+		// denotes its minted node and renders as the name (the inline
+		// enum rows above keep the body rendering).
+		{input: "def E (enum [a b]) for 2 [E]", want: "E E"},
+		{input: "def E (enum [a b]) for [2] [E]", want: "E E"},
 		// A List param as an arm under a DYNAMIC cond: the computed-list
 		// refusal (the literal-cond twin of the row above).
 		{input: "def f fn [[x:List] [Integer] [if (0 addq 1) x [9]]] f [7]", want: "7"},

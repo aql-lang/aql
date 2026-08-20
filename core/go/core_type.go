@@ -165,6 +165,29 @@ func IsRecordShape(v Value) bool {
 //     over for user-defined refinements.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
+	// A NAMED type in the type slot evaluates to its minted node (the
+	// Stage 2 flip); this predicate has always decided membership
+	// against the declared content, which the node records
+	// (design/TYPE-REPRESENTATION.1.md §N2). Catch-all bindings
+	// (BindingBodyUnifier — record shapes, singletons, typed-container
+	// literals) resolve to their body so the shape branches below keep
+	// their subset semantics; kinds whose membership lives in a kernel
+	// constraint Unifier (predicate / DepScalar / disjunct / negation /
+	// FnUndef / surface) keep the node — the Unify fallback consults
+	// the node's Behavior.
+	if IsBareTypeNode(t) {
+		resolve := !HasConstraintUnify(&t)
+		if !resolve {
+			if u, ok := unifierOf(t.Behavior()); ok {
+				_, resolve = u.(*BindingBodyUnifier)
+			}
+		}
+		if resolve {
+			if content, ok := TypeContentOf(t); ok {
+				t = content
+			}
+		}
+	}
 	if IsTypedList(t) {
 		if !v.Parent.Equal(TList) || !IsConcrete(v) {
 			return false
