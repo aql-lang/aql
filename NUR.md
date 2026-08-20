@@ -3036,3 +3036,53 @@ or pin the seed set explicitly rather than deriving it by hash prefix.
 This record retires when adding an unrelated passing spec row cannot
 empty a ledger bucket, pinned as a test.
 
+
+
+## NUR096 — the checker still models a fn-shape-typed member apply as the inert fn it was before NUR095 {#nur096}
+
+**Status:** Pending · **Recorded:** 2026-08-20 · **Surfaced by:** adding
+two multi-return rows to `lang/spec/class.tsv` to pin the NUR095
+retirement and watching `TestCheckTypeSoundness` fail on both
+
+**Rule:** the interpreter, the compiled lane and the check pass model one
+language. NUR095 retired the split where a fn stored through a fn-SHAPE-typed
+member was applied by the interpreter but left inert by the recorder;
+`core.TypeIsFnShape` / `core.IsFnTypedCarrier` closed it for *execution*.
+
+**Divergence:** the check pass did not move with them. For a fn-shape
+carrier followed by its argument at the top level, `check` still reports the
+PRE-NUR095 stack — the carrier and the argument, un-applied:
+
+```
+def T fnsig [[Integer] [Integer Integer]] def C class {op:T}
+((make C {op:(fn [[x:Integer] [Integer Integer] [x x]])}) dot op) 10
+
+check   : T Integer      ← the fn is inert, 10 sits above it
+runtime : 10 10          ← the fn is applied and returns two values
+```
+
+Before the NUR095 fix these agreed: the runtime really did leave the fn
+inert (`fn (Integer) 10`). Fixing execution without fixing analysis turned
+agreement into divergence.
+
+**Why it went unnoticed:** a SINGLE-return shape hides it. `stackTypeCovered`
+compares top-aligned and returns early when `len(actual) <= len(checked)`, so
+a 1-return apply (`checked=[T, Integer]`, `actual=[6]`) only ever compares the
+top slot, which matches. A 2-return apply makes the counts equal, the bottom
+slot is compared, and `T` does not admit an `Integer` — a type-soundness
+violation against the corpus-wide pin of 0. Every fn-members row already in
+`class.tsv` is single-return, which is why the section landed green.
+
+**Scope:** analysis only. The compiled and interpreted lanes agree for these
+shapes — pinned as a differential in `lang/go/fnshape_multireturn_test.go`
+across the class-member leading apply and the loop-body dynamic apply
+(`setLoopBodyApply` → `OpCallDynamic`); the VM appends every result the fn
+returns, so no value is lost or truncated. It is the checker's picture that
+is stale.
+
+**Resolution direction:** teach the check pass the same maybe-callable rule
+execution now uses — a fn-shape-typed carrier followed by a materialisable
+argument auto-applies, so the modelled stack is the applied result, not the
+carrier. The gradual fallback stays available where the shape's result count
+is not statically known. This record retires when the multi-return rows above
+can live in `class.tsv` with the soundness pin still at 0.
