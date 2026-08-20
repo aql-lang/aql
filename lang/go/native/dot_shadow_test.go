@@ -56,11 +56,10 @@ func TestDotNotationModuleExportShadow(t *testing.T) {
 	moduleMap := NewOrderedMap()
 	moduleMap.Set("trace", NewString("my-trace-fn"))
 
-	// def matrix {trace:"my-trace-fn"}
-	// MatrixUtil.trace → "my-trace-fn" (not the debug trace word)
-	runBoru(t, r, []Value{
-		NewWord("def"), NewWord("Matrix"), NewMap(moduleMap), NewEnd(),
-	})
+	// Bind the namespace the way `import` does: a VALUE binding under
+	// the CamelCase name (a capitalised `def` is a TYPE binding and,
+	// post the Stage 2 flip, denotes its node — not the export map).
+	r.Defs.Push("Matrix", NewMap(moduleMap))
 
 	// matrix get trace — should do map lookup, not execute trace word
 	result := runBoru(t, r, []Value{

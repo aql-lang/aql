@@ -474,6 +474,15 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// input type literal verbatim) — without this differentiation the
 	// two surfaces would be indistinguishable downstream.
 	if IsBareTypeNode(base) {
+		// A NAMED base evaluates to its node (the Stage 2 flip). When
+		// the node records declared content (a Micron/record schema, a
+		// predicate constraint), return that content verbatim so the
+		// paired `def` re-enters its branch dispatch exactly as it did
+		// when the name denoted the body — the newtype inherits the
+		// schema (design/TYPE-REPRESENTATION.1.md §N2).
+		if content, ok := TypeContentOf(base); ok {
+			return []Value{content}, nil
+		}
 		// Mint the refine prefab against the canonical lattice node
 		// for base, so any user-installed Behavior on base (via
 		// `behave`) propagates to the LCA walk for sibling subtypes
@@ -787,6 +796,24 @@ func asReturns(args []Value, r *Registry) []Value {
 
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
+	// A NAMED structural type RHS evaluates to its minted node (the
+	// Stage 2 flip); recover the declared content so the redirect and
+	// Unify arms below see the body shapes they have always answered
+	// (design/TYPE-REPRESENTATION.1.md §N2). The Object/Table/Micron
+	// redirect kinds resolve unconditionally — their `is` verdict is
+	// the tag-identity redirect below, which only their content shape
+	// selects. Other nodes whose kind enforces membership through the
+	// Behavior (HasConstraintUnify — predicate / DepScalar / disjunct /
+	// negation / FnUndef / surface) keep the node: the bare-node branch
+	// consults the Behavior directly (the one-predicate doctrine).
+	if IsBareTypeNode(b) {
+		if content, ok := TypeContentOf(b); ok {
+			if IsClassType(content) || IsTableType(content) || core.IsMicronType(content) ||
+				!core.HasConstraintUnify(&b) {
+				b = content
+			}
+		}
+	}
 	// Object/Table refinement RHS: the body is a populated type value
 	// (Data carries ClassTypeInfo/TableTypeInfo), but its denoted
 	// lattice node is at b.Parent. For tag-identity ("does a carry

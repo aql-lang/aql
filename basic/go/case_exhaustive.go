@@ -245,9 +245,17 @@ func resolveCaseMatch(r *Registry, m Value) caseClauseMatch {
 	cm.resolved = normalizeCaseNone(cm.resolved)
 	// A DepScalar refinement type used directly as the match (`Big` for
 	// `def Big (Integer gt 10)`) keeps its value-level unify semantics
-	// AND contributes its bounds to interval-union coverage.
-	if cm.resolved.IsDepScalar() {
-		if iv, ok := depScalarIval(cm.resolved); ok {
+	// AND contributes its bounds to interval-union coverage. The name
+	// resolves to the refinement's NODE; its structure is recovered from
+	// the node (TypeContentOf) for the interval extraction.
+	dep := cm.resolved
+	if !dep.IsDepScalar() {
+		if body, ok := core.TypeContentOf(dep); ok {
+			dep = body
+		}
+	}
+	if dep.IsDepScalar() {
+		if iv, ok := depScalarIval(dep); ok {
 			cm.ival = &iv
 		}
 	}
@@ -324,6 +332,15 @@ func parseCaseIsPred(r *Registry, m Value) (Value, bool) {
 		}
 	}
 	if IsBareTypeNode(tgt) && !IsNoneShape(tgt) {
+		// A refinement NAME resolves to its node; a DepScalar body behind
+		// it contributes interval coverage exactly as the body did when
+		// the name denoted the body directly.
+		if body, ok := core.TypeContentOf(tgt); ok && body.IsDepScalar() {
+			if _, ok := depScalarIval(body); ok {
+				return body, true
+			}
+			return Value{}, false
+		}
 		return tgt, true
 	}
 	if tgt.IsDepScalar() {
@@ -466,9 +483,14 @@ func caseMatchCovers(r *Registry, m, alt Value, depth int) bool {
 	}
 	if IsBareTypeNode(m) {
 		t := CanonicalType(r, &m)
-		if dv, ok := core.UnionCarrierForType(t); ok { //covergate:allow defensive arm — ResolveTypedName yields a union's BODY (a payload-carrying disjunct value, the IsDisjunct branch above), never its minted node; the arm keeps a future node-resolving path sound
+		if dv, ok := core.UnionCarrierForType(t); ok {
 			// A named union/enum type as a match covers what its members cover.
 			return caseMatchCovers(r, dv, alt, depth-1)
+		}
+		if body, ok := core.TypeContentOf(m); ok && IsDisjunct(body) {
+			// A named disjunct type's name denotes its node; its
+			// alternatives are recovered from the node for coverage.
+			return caseMatchCovers(r, body, alt, depth-1)
 		}
 		if IsBareTypeNode(alt) {
 			return caseTypeCovers(CanonicalType(r, &alt), t)

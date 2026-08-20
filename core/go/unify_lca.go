@@ -73,10 +73,7 @@ func dispatchUnifier(a, b Value) (Value, *UnifyError, bool) {
 
 	for _, start := range starts {
 		for t := start; t != nil; t = t.Parent {
-			if t.Behavior() == nil {
-				continue
-			}
-			u, ok := t.Behavior().(Unifier)
+			u, ok := unifierOf(t.Behavior())
 			if !ok {
 				continue
 			}
@@ -88,4 +85,27 @@ func dispatchUnifier(a, b Value) (Value, *UnifyError, bool) {
 		}
 	}
 	return Value{}, nil, false
+}
+
+// unifierOf resolves a Unifier from a Behavior CHAIN: the behavior
+// itself, or one beneath a `behave` wrapper (MatchDelegating) or a
+// kernel wrapper chain (Prev). A behave compare/canon install over a
+// predicate/depscalar type must not hide the kind's constraint from
+// the walk.
+func unifierOf(b TypeBehavior) (Unifier, bool) {
+	for b != nil {
+		if u, ok := b.(Unifier); ok {
+			return u, true
+		}
+		if d, ok := b.(MatchDelegating); ok {
+			b = d.DelegatesMatchTo()
+			continue
+		}
+		if p, ok := PrevBehavior(b); ok {
+			b = p
+			continue
+		}
+		break
+	}
+	return nil, false
 }

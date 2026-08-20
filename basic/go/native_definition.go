@@ -1089,6 +1089,19 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 
+	// A SCHEMA-kind NAME (class / record / table / options / typed-map /
+	// Micron) evaluates to its minted node after the Stage 2 flip; the
+	// typed-def branches below dispatch on the declared structural
+	// content, which the node records (design/TYPE-REPRESENTATION.1.md
+	// §N2). Kinds that enforce membership through a kernel constraint
+	// Unifier (predicate / DepScalar / disjunct / negation / FnUndef —
+	// HasConstraintUnify) keep the node: the general UnifyR below
+	// consults the node's Behavior directly.
+	if IsBareTypeNode(constraint) && !core.HasConstraintUnify(&constraint) {
+		if content, ok := core.TypeContentOf(constraint); ok {
+			constraint = content
+		}
+	}
 	// ObjectType constraint (`def x:Person {map}` where Person is
 	// `type Person object {…}`): build a Person-typed ObjectInstance
 	// from the body map via make-style construction. This closes the
@@ -1160,8 +1173,18 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 		}
 	}
-	if r.Check.IsActive() && constraint.IsDepScalar() && !IsConcrete(body) {
-		if body.Parent.ConformsTo(constraint.Parent) {
+	// The DepScalar constraint may be spelt inline (`(Integer gt 10)`) or
+	// as a NAME, which evaluates to its minted node after the Stage 2
+	// flip; the bounds to re-run at OpBindTyped are the node's recorded
+	// content (design/TYPE-REPRESENTATION.1.md §N2).
+	depScalarCons := constraint
+	if !depScalarCons.IsDepScalar() {
+		if content, ok := core.TypeContentOf(constraint); ok && content.IsDepScalar() {
+			depScalarCons = content
+		}
+	}
+	if r.Check.IsActive() && depScalarCons.IsDepScalar() && !IsConcrete(body) {
+		if body.Parent.ConformsTo(depScalarCons.Parent) {
 			// An ABSTRACT (carrier) body admits on base conformance only —
 			// the predicate is value-level and the value is unknown here, so
 			// validation stays at RUNTIME via v.Is. A compiled `def
@@ -1182,7 +1205,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// byte-identical unify error on failure and binding Unify's result
 			// (base tag kept, no reparent) on success.
 			bound := RecordTypedBindOrRefuse(r, func() core.TypedBindSpec {
-				depCons := constraint
+				depCons := depScalarCons
 				return core.TypedBindSpec{
 					Kind: core.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
 				}

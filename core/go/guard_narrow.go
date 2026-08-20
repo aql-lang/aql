@@ -362,7 +362,12 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		//     String) tand tnot Number → String);
 		//   - a plain type disjoint from T is unchanged (no-op);
 		//   - a type wholly inside T collapses to Never (unreachable else).
-		complement := NegateType(NewTypeLiteral(c.Type))
+		// Negate the minted NODE itself (not its recorded content): the
+		// guard's else-fact is nominal — "x is not a T" — and resolving
+		// a refinement node to its DepScalar body here would substitute
+		// the interval complement, changing what this arm has always
+		// claimed (see negateTypeResolved).
+		complement := negateTypeResolved(NewTypeLiteral(c.Type))
 		narrowed := TandValues(cur, complement)
 		if IsNeverShape(narrowed) {
 			// Else branch is unreachable for x — the guard held for every value

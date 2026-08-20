@@ -1466,8 +1466,14 @@ func TestEngineTypeRecord(t *testing.T) {
 		NewWord("def"), NewWord("Point"), NewWord("refine"), NewWord("Record"), fields, NewEnd(),
 		NewWord("Point"),
 	})
-	if len(result) != 1 || !IsRecordType(result[0]) {
-		t.Errorf("expected record type, got %v", result)
+	// The name evaluates to its minted NODE (the Stage 2 flip); the
+	// record schema is the node's recorded content.
+	if len(result) != 1 {
+		t.Fatalf("expected one value, got %v", result)
+	}
+	content, ok := TypeContentOf(result[0])
+	if !ok || !IsRecordType(content) {
+		t.Errorf("expected record type content, got %v", result)
 	}
 }
 

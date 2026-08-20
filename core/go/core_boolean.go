@@ -225,7 +225,16 @@ func isAnyShape(v Value) bool {
 // `tnot (A tor B)` already admits exactly the values matching neither A
 // nor B.
 func NegateType(inner Value) Value {
-	inner = resolveTypeOperand(inner)
+	return negateTypeResolved(resolveTypeOperand(inner))
+}
+
+// negateTypeResolved is NegateType after operand resolution. The guard
+// complement (ApplyComplementNarrowing) calls it DIRECTLY with the
+// minted node so a refinement guard's else-arm complement stays the
+// nominal `tnot Node` it always was — resolving the node to its
+// DepScalar content there would swap in the interval complement, a
+// different (stronger) claim than the guard licenses.
+func negateTypeResolved(inner Value) Value {
 	if IsNeverShape(inner) {
 		return NewTypeLiteral(TAny)
 	}
