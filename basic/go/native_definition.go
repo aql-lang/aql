@@ -1052,20 +1052,8 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return constraint.String()
 	}
 	body := args[1]
-	// A SCHEMA-kind NAME (generic schema / class / record / table /
-	// options / typed-map / Micron) evaluates to its minted node after
-	// the Stage 2 flip; the typed-def branches below dispatch on the
-	// declared structural content, which the node records
-	// (design/TYPE-REPRESENTATION.1.md §N2). Kinds that enforce
-	// membership through a kernel constraint Unifier
-	// (HasConstraintUnify — predicate / DepScalar / disjunct /
-	// negation / FnUndef) keep the node: the predicate arm and the
-	// general UnifyR below consult the node's Behavior directly.
-	if IsBareTypeNode(constraint) && !core.HasConstraintUnify(&constraint) {
-		if content, ok := core.TypeContentOf(constraint); ok {
-			constraint = content
-		}
-	}
+	var depScalarCons Value
+	constraint, depScalarCons = resolveTypedDefConstraint(constraint)
 	// A generic SCHEMA annotation — `def b:Box {value:42}` — infers
 	// its type arguments from the body and instantiates (Phase 7 /
 	// D12); the instantiation then flows through the ordinary typed-def
@@ -1172,16 +1160,6 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			if ri.TypeRef != nil && ri.TypeRef.ID == resInfo.ID {
 				return InstallAndRecordDef(r, name, body, args[0].Pos())
 			}
-		}
-	}
-	// The DepScalar constraint may be spelt inline (`(Integer gt 10)`) or
-	// as a NAME, which evaluates to its minted node after the Stage 2
-	// flip; the bounds to re-run at OpBindTyped are the node's recorded
-	// content (design/TYPE-REPRESENTATION.1.md §N2).
-	depScalarCons := constraint
-	if !depScalarCons.IsDepScalar() {
-		if content, ok := core.TypeContentOf(constraint); ok && content.IsDepScalar() {
-			depScalarCons = content
 		}
 	}
 	if r.Check.IsActive() && depScalarCons.IsDepScalar() && !IsConcrete(body) {
@@ -1830,4 +1808,31 @@ func PopArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		return nil, err
 	}
 	return nil, nil
+}
+
+// resolveTypedDefConstraint applies the name→node recoveries a
+// typed-def constraint needs ahead of branch dispatch (the Stage 2
+// flip, design/TYPE-REPRESENTATION.1.md §N2): a SCHEMA-kind NAME
+// (generic schema / class / record / table / options / typed-map /
+// Micron) evaluates to its minted node, and the branches dispatch on
+// the declared structural content the node records; kinds that enforce
+// membership through a kernel constraint Unifier (HasConstraintUnify —
+// predicate / DepScalar / disjunct / negation / FnUndef) keep the
+// node, whose Behavior the predicate arm and the general UnifyR
+// consult directly. The second result recovers a DepScalar's bounds —
+// spelt inline (`(Integer gt 10)`) or behind a name — for the
+// check-mode typed-bind arm, which re-runs them at OpBindTyped.
+func resolveTypedDefConstraint(constraint Value) (Value, Value) {
+	if IsBareTypeNode(constraint) && !core.HasConstraintUnify(&constraint) {
+		if content, ok := core.TypeContentOf(constraint); ok {
+			constraint = content
+		}
+	}
+	dep := constraint
+	if !dep.IsDepScalar() {
+		if content, ok := core.TypeContentOf(constraint); ok && content.IsDepScalar() {
+			dep = content
+		}
+	}
+	return constraint, dep
 }

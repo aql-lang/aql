@@ -468,7 +468,7 @@ typeof Semveron	Micron
 #     is allowed of the ROOT only; bare nominal refinement (newtype) of
 #     any Micron kind. Every bound name must end in "on" (case-
 #     sensitive, at least 3 chars).
-def Baron refine Micron {foo:String} end typeof Baron	Baron	a schema kind reports its nominal name (class-type precedent)
+def Baron refine Micron {foo:String} end typeof Baron	Micron	typeof is one Parent hop uniformly (§6; NUR094 retired) — the kind answers its base
 def Baron refine Micron {foo:String} end pathof Baron	[Scalar Micron Baron]
 def Baron refine Micron {foo:String} end (make Baron {foo:'hi'}).foo	'hi'
 def Baron refine Micron {foo:String} end typeof (make Baron {foo:'hi'})	Baron

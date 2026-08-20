@@ -89,11 +89,8 @@ keep the two in sync in the same commit.
 | [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
-| [NUR090](#nur090) | A type name does not always denote its type: a builtin or `refine` word evaluates to its minted lattice NODE, while a `class`, disjunct or fn-shape word evaluates to its structural BODY — so wherever a type name is evaluated before being used as a type (e.g. `fn M [Any] [1]`), three kinds break where two work | the function-type prototype, 2026-08-19 (issue #392, `design/FUNCTION-TYPES.0.md` §5.3) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
-| [NUR093](#nur093) | A type alias (`def Foo Integer`) and a singleton (`def One 1`) are `is`-true but dispatch-DEAD: `42 is Foo → true` while an `x:Foo` parameter refuses every value — and for the alias no value can ever pass, since the typed-def route does not tag either (`def x:Foo 42  typeof x → Integer`) | the type-representation design pass, 2026-08-20 (`design/TYPE-REPRESENTATION.1.md` §2.1) |
-| [NUR094](#nur094) | `typeof` of a user-named type is kind-split: five kinds answer the SUPERTYPE (`typeof P → Integer`, `typeof M → Disjunct`, …) while `class` answers ITSELF (`typeof C → C`) — and both answers are separately pinned in the spec corpus | the type-representation design pass, 2026-08-20 (`design/TYPE-REPRESENTATION.1.md` §2.3) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -4057,127 +4054,11 @@ spellings, pinned as a spec row.
 
 ---
 
-## NUR090 — a type name does not always denote its type {#nur090}
-
-**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
-function-type prototype (`design/FUNCTION-TYPES.0.md`), which inherited
-the same defect in `fnsig`'s pair form · **Tracked as:** issue #392
-
-> **Restated 2026-08-19** (twice). The first version framed this as
-> "`fn`'s triple form disagrees with the list form"; the second as
-> "evaluated vs unevaluated". Both described symptoms. The defect is
-> stated below, and one claim in the first version was WRONG — see the
-> correction.
-
-**Rule:** a type is a type regardless of how it was declared. Evaluating
-a type's name should denote that type.
-
-**Divergence:** it denotes the minted lattice NODE for two declaration
-kinds and the structural BODY for three.
-
-```
-$ boru do 'canon Integer'                          → Integer
-$ boru do 'def P refine Integer  canon P'          → P
-$ boru do 'def M (Integer tor none)  canon M'      → none tor Integer      ← the body
-$ boru do 'def C class {a:Integer}  canon C'       → object<Class/C>{…}
-$ boru do 'def T fnsig Integer String  canon T'    → FunctionSignature({…})
-```
-
-The minted node exists for all five — `InstallType` mints it and
-`PushType` stores it on the `DefEntry` as `TypeDef` — but for the three
-body-valued kinds nothing reaches it by evaluating the word.
-
-**Consequence:** anywhere a type name is evaluated before something uses
-it as a type, those three kinds break. `ParseFnParams` is the clearest
-case: it has an `IsBareTypeNode` arm and a `default` arm that rejects
-everything else, so a structural body lands in `default`.
-
-| declaration | word evaluates to | bare `fn T Any […]` | wrapped `fn [T Any […]]` |
-|---|---|---|---|
-| builtin (`Integer`) | lattice node | works | works |
-| `refine` newtype | lattice node | works | works |
-| `class` | structural body | `invalid parameter` | works |
-| disjunct (`tor`) | structural body | `invalid parameter` | works |
-| fn shape (`fnsig`) | structural body | `invalid parameter` | works |
-| record shape (`{x:Integer}`) | structural body | **works, name LOST** | **name kept, dispatch FAILS** |
-
-The record-shape row is a third behaviour, not a variant of the second,
-and both of its cells are wrong in different directions:
-
-```
-def T {x:Integer}
-def f fn T Any [1]     canon f/v → fn [[:Map][Any][1]]   ← constraint kept as a pattern,
-                       f {x:1}   → 1                        but the NAME T is gone
-                       f {y:9}   → refused
-def f fn [T Any [1]]   canon f/v → fn [[:T][Any][1]]     ← the name IS kept…
-                       f {x:1}   → signature_error       ← …but dispatch refuses it,
-                       {x:1} is T → true                    while `is` accepts it
-```
-
-That last pair is the same `is`-vs-dispatch asymmetry `FnUndefUnifier`
-fixed for fn shapes on this branch (`core/go/unify_fnundef_named.go`):
-the minted node carries no membership `Behavior`, so the lattice walk
-rejects every value. Record-shape types need the same bridge.
-
-**Which spellings escape it, and why.** Not triple-vs-list —
-evaluated-vs-unevaluated. `fn` carries `NoEvalArgs: {0,1,2}`, honoured
-only inside the `Parent.Equal(TList)` branch of auto-eval
-(`core/go/engine.go:3238`), so a literal LIST at slot 0 keeps its
-elements as Words while a bare Word at slot 0 has already been resolved
-by forward collection:
-
-| spelling | pairs | result |
-|---|---|---|
-| `fn [[M] [Any] [1]]` | 4 | works |
-| `fn [[M] Any [1]]` / `fn [M [Any] [1]]` | 3 | works |
-| `fn [M Any [1]]` | 2 | works |
-| `fn M [Any] [1]` | 2 | **fails** |
-| `fn M Any [1]` | 1 | **fails** |
-
-The two that fail are exactly the two `STYLE-GUIDE.md` §S1 tells authors
-to prefer. And the list must be LITERAL — routed through a binding it
-fails too, because the binding's value was evaluated at `def` time:
-`def S [M Any [1]]` holds `[[(none tor Integer)] [Any] [1]]`.
-
-**CORRECTION — `refine` does NOT silently degrade.** This record's first
-version claimed a `refine` newtype in that position produced a parameter
-typed by the refinement's BASE. That was wrong, inferred from `typeof P`
-reporting `Integer` — which is P's PARENT in the lattice, correct for a
-refinement of Integer, not a loss of identity:
-
-```
-def P refine Integer  def f fn P [Any] [1]  canon f/v   → fn [[:P][Any][1]]
-  f 5                                                   → refused (an Integer is not a P)
-  def x:P 5  f x                                        → 1
-```
-
-Identical to the named twin `fn y:P Any [y]`. `refine` is the PROOF that
-the target behaviour already exists: it survives evaluation precisely
-because its binding holds a lattice node.
-
-**A fix that was built, measured and BACKED OUT:** routing
-`ParseFnParams`' `default` arm through `ResolveSigType` (the named
-path's own resolver) makes every failing case build, but degrades an
-evaluated body to `(Any, pattern)` where a Word resolves to the minted
-node — `fnsig T String` then canons as `Any` where the list form canons
-as `T`, so composition silently weakens. A loud refusal traded for a
-silent weakening is a bad trade.
-
-**Verdict proposed:** resolve by fix — make a type-bound word evaluate
-to its minted node for the three kinds that do not, bringing three in
-line with two rather than inventing a rule. Membership should be
-unaffected: each already installs a content-deciding `Behavior` on the
-minted node (`DisjunctUnifier`, the class unifier, `FnUndefUnifier`), so
-`5 is M` resolves through the node as it now does through the body. This
-record retires when all five rows of the table above agree, pinned as
-spec rows in `lang/spec/fn-triple.tsv`.
-
----
-
 ## NUR091 — a rejected `fn` declaration is loud or silent depending on its output slot {#nur091}
 
 **Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** probing
-`fn`'s `(tnot List)` input guard while investigating NUR090
+`fn`'s `(tnot List)` input guard while investigating NUR090 (retired
+2026-08-20 — the name→node flip, `design/TYPE-REPRESENTATION.1.md`)
 
 **Rule:** boru refuses loudly. `lang/spec/fn-triple.tsv` §4 pins the
 input guard's refusal as an ERROR row — *"a bare List type literal input
@@ -4213,9 +4094,10 @@ statement that appears to work, exit 0, wrong stack). A reader gets no
 hint that the `(tnot List)` rule was the problem, or that the spec-list
 form is the remedy.
 
-**Not NUR090.** That record is about which type a NAME denotes; this one
-is about a declaration that is correctly refused failing quietly instead
-of loudly. They meet only in that both were found probing slot 0.
+**Not NUR090** (retired 2026-08-20). That record was about which type a
+NAME denotes — resolved by the name→node flip; this one is about a
+declaration that is correctly refused failing quietly instead of
+loudly. They met only in that both were found probing slot 0.
 
 **Evidence:** the transcripts above, reproduced against this tree. The
 documented remedy works and is loud about nothing:
@@ -4294,122 +4176,3 @@ or pin the seed set explicitly rather than deriving it by hash prefix.
 This record retires when adding an unrelated passing spec row cannot
 empty a ledger bucket, pinned as a test.
 
-## NUR093 — a type alias and a singleton are `is`-true but dispatch-dead {#nur093}
-
-**Status:** Pending · **Recorded:** 2026-08-20 · **Surfaced by:** the
-type-representation design pass (`design/TYPE-REPRESENTATION.1.md`
-§2.1), probing `InstallType`'s catch-all branch while designing the
-issue #392 fix
-
-**Rule:** `is`, dispatch, and return checks ask ONE membership
-question, `v.Is(T)` (`lang/spec/user-types.tsv:129-151`; the
-one-predicate collapse of `design/REFINE-NEWTYPE-VS-SUBSET.10.md` §5).
-A value that `is` a type must be passable where that type is expected.
-
-**Divergence:** for the two remaining inhabitants of `InstallType`'s
-catch-all branch (`core/go/core_type.go:552-571`) — the alias and the
-singleton — `is` accepts while dispatch refuses, measured:
-
-```
-$ boru do 'def Foo Integer  42 is Foo'                          → true
-$ boru do 'def Foo Integer  def f fn x:Foo Any [1]  f 42'
-error: … candidate `f (Foo)` — argument 1: expected Foo, got 42 (an Integer)
-
-$ boru do 'def One 1  1 is One'                                 → true
-$ boru do 'def One 1  def f fn x:One Any [7]  f 1'
-error: … candidate `f (One)` — argument 1: expected One, got 1 (an Integer)
-```
-
-For the alias the parameter is not merely strict — it is
-**uninhabitable**. The typed-def route does not tag a value with the
-alias node either, so no value whatsoever can pass an `x:Foo` slot:
-
-```
-$ boru do 'def Foo Integer  def x:Foo 42  typeof x'             → Integer
-```
-
-**Cause:** the catch-all mints a fresh child node with
-`DefaultBehavior` and installs no membership `Behavior`
-(`core_type.go:552-571`); nothing is ever tagged with the node, so the
-lattice walk rejects everything — the same missing-bridge class
-`FnUndefUnifier` fixed for fn shapes (#390) and NUR090's record-shape
-row documents for `{x:Integer}` bodies. `is` meanwhile consumes the
-evaluated BODY (the aliased node / the literal), which answers loosely.
-
-**Not NUR090.** That record is about which object a NAME denotes when
-evaluated. This one bites through the **named** `x:T` signature path —
-no evaluation of the name involved — and is the reverse direction:
-`is` works, dispatch is dead.
-
-**Consequence:** `def Foo Integer` looks like an alias and works
-everywhere except as a signature type, where it silently defines an
-empty dispatch category; `def One 1` (the documented literals-as-types
-admission, `IsLiteralTypeBody`) is likewise unusable as a parameter
-type. Both refusals name the type the user just defined, pointing away
-from the cause.
-
-**Evidence:** the transcripts above, reproduced against this tree.
-Not previously recorded; not pinned in the corpus.
-
-**Verdict proposed:** resolve by fix, in two halves
-(`design/TYPE-REPRESENTATION.1.md` Stage 0): an alias binding ADOPTS
-the canonical aliased node instead of minting an unbridged child (with
-an `undef` guard so popping the binding never retires a node it did
-not mint), and a singleton binding installs a value-equality `Match`
-Behavior on its minted node. This record retires when `f 42` / `f 1`
-above dispatch, pinned beside the `is` rows.
-
-## NUR094 — `typeof` of a user-named type is kind-split {#nur094}
-
-**Status:** Pending · **Recorded:** 2026-08-20 · **Surfaced by:** the
-type-representation design pass (`design/TYPE-REPRESENTATION.1.md`
-§2.3), enumerating what a name-to-node change would alter per kind
-
-**Rule:** `TypeOf` is documented as ONE Parent hop, uniformly — "the
-type of v — uniformly its Parent… typeof is a single Parent hop"
-(`core/go/core_type.go:81-99`); `typeof Integer → Number`,
-`typeof Scalar → Any`.
-
-**Divergence:** user-named types answer the supertype for five
-declaration kinds and THEMSELVES for `class`, measured:
-
-```
-$ boru do 'typeof Integer'                            → Number
-$ boru do 'def P refine Integer  typeof P'            → Integer
-$ boru do 'def M (Integer tor none)  typeof M'        → Disjunct
-$ boru do 'def T fnsig Integer String  typeof T'      → FunctionSignature
-$ boru do 'def Big (Integer gt 10)  typeof Big'       → Integer
-$ boru do 'def C class {a:Integer}  typeof C'         → C          ← itself
-```
-
-Both behaviours are separately pinned: `lang/spec/object.tsv:58-59`
-pins `typeof Foo → Foo` ("named Type reports its own name") for class,
-while the refine parent-hop answer is relied on by NUR090's correction
-("`typeof P` reporting `Integer` — which is just P's parent in the
-lattice, correct for a refinement of Integer").
-
-**Cause:** the two-object representation
-(`design/TYPE-REPRESENTATION.0.md` §2). A class binding's BODY is
-parented AT its minted node (`body = NewClassType(def, info)`,
-`core/go/core_type.go:366`), so the Parent hop lands on the node
-itself; a refine binding IS the node, so the hop lands on the
-supertype; disjunct / fnsig / DepScalar bodies are parented at their
-metatype or base, so the hop lands there.
-
-**Consequence:** `typeof` cannot be described uniformly to users — the
-answer for "what is this type's type" depends on how the type was
-declared, and `CLASS-OBJECT.10.md` §5b's own doctrine ("`typeof
-Point3 →` parent class or `Class`") disagrees with the pinned row.
-
-**Evidence:** the transcripts above, reproduced against this tree.
-The split is a consequence of NUR090's subject but is an independent
-observable with its own pins, so it is recorded separately.
-
-**Verdict proposed:** resolve by fix with the uniform Parent-hop rule
-(`design/TYPE-REPRESENTATION.1.md` §6): after a name evaluates to its
-minted node for every kind, `typeof <Name>` answers the node's lattice
-parent — parent class or `Class` for a class, the input base for a
-predicate type, unchanged for refine / disjunct / fnsig / DepScalar.
-`object.tsv:58-59` re-pins to the new answer; the self-name question
-remains answered by `canon`. This record retires when all six probes
-above answer the supertype, pinned via `canon`/`typeof` rows per kind.

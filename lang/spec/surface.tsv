@@ -13,8 +13,8 @@
 # structural duck typing. See design/SURFACES.10.md.
 #
 # §1  declaration
-def Shape surface {area: (fnsig [[Self] [Float]])} end Shape	surface<Surface/Shape>{area}	a surface renders as its contract
-def Shape surface {area: (fnsig [[Self] [Float]])} end typeof Shape	Shape	the def'd name is the type
+def Shape surface {area: (fnsig [[Self] [Float]])} end Shape	Shape	the name denotes its minted node and renders as the name (§6); the contract is the node's recorded content
+def Shape surface {area: (fnsig [[Self] [Float]])} end typeof Shape	Surface	typeof is one Parent hop uniformly (§6; NUR094 retired)
 surface {}	ERROR:at least one operation	an empty schema is rejected
 surface {area: 1.0}	ERROR:must be an fnsig shape	operations must be fnsig shapes, not values
 surface [1 2]	ERROR:no signature matches	the schema must be a map (a list has no surface sig)

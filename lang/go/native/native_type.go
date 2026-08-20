@@ -894,7 +894,16 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			// subtype check (DefaultBehavior.Match delegates there),
 			// and a MEMBER type under the branch (the boru:minilang
 			// partial kinds, MiniLang.Re / …) runs its predicate.
-			return []Value{NewBoolean(a.Is(bNode))}, nil
+			//
+			// EXCEPT a user DISJUNCT node with a concrete candidate: its
+			// Match is deliberately loose on the newtype-alternative
+			// swap (dispatch decomposes the union to base families —
+			// edge-types-2's DIVERGENCE PIN), so `is` keeps its stricter
+			// answer through the Unify + value-identity path below:
+			// `42 is (P tor String)` is false while `42 g` dispatches.
+			if !core.IsDisjunctTypeNode(b) || !IsConcrete(a) {
+				return []Value{NewBoolean(a.Is(bNode))}, nil
+			}
 		}
 		// A const singleton RHS (and every other membership type) answers
 		// `is` through the shared Unify path below — `1 is (const 1)` →
@@ -928,7 +937,17 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		// DepScalar construction), so this only ADDS agreement, never
 		// removes an admission.
 		if bNode.Behavior() != nil && bNode.Behavior() != DefaultBehavior && a.Is(bNode) {
-			return []Value{NewBoolean(true)}, nil
+			// A DISJUNCT node's Match is deliberately loose on the
+			// newtype-alternative swap (dispatch decomposes the union to
+			// base families — edge-types-2's DIVERGENCE PIN). `is` keeps
+			// its stricter answer by sending a concrete candidate through
+			// the Unify + value-identity path below, where a swap
+			// admission (the unified result being the alternative's bare
+			// node, not the value) is refused: `42 is (P tor String)` is
+			// false while `42 g` dispatches.
+			if !core.IsDisjunctTypeNode(b) || !IsConcrete(a) {
+				return []Value{NewBoolean(true)}, nil
+			}
 		}
 	}
 	unified, ok := core.UnifyR(a, b, r)

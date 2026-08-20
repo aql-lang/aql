@@ -160,7 +160,7 @@ def R (Integer between 10 20) def b:R 21	ERROR:does not unify	…and rejects jus
 # §8  conjunctive refinement — the meet (tand / unify) intersects
 #     interval predicates; BOTH bounds always apply
 # ====================================================================
-def Big (Integer gt 10) def W (Big tand (Integer lt 20)) W	(Integer gt 10 lt 20)	tand on a named refinement meets to the interval intersection
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) W	W	tand on a named refinement meets to the interval intersection, recorded as W's content — the NAME renders (§6); the bounds are pinned by `def w:W 15` rows
 def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 11 is W	true	interior value, low side
 def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 19 is W	true	interior value, high side
 def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 10 is W	false	Big's strict low bound still applies

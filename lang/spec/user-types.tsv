@@ -228,8 +228,8 @@ Integer tis Integer	true	identity conforms
 
 # DepScalar (predicate refine): `tis` ignores the predicate, `is` honours it.
 def Big (Integer gt 10) 5 is Big	false	is: predicate run, 5 not > 10
-def Big (Integer gt 10) 5 tis Big	true	tis: tag-only, base tag Integer ≤ Integer
-def Big (Integer gt 10) 100 tis Big	true	tis: base tag Integer ≤ Integer (predicate not run)
+def Big (Integer gt 10) 5 tis Big	false	tis is TAG-only and 5 carries no Big tag (§6 tis row; aligns with `2 tis Pos` → false)
+def Big (Integer gt 10) 100 tis Big	false	tis: same tag-only rule — satisfaction of the predicate is `is`, not `tis`
 
 # Bare refine (newtype): an untagged Integer is below neither — tag-only,
 # and Integer is not below the minted Pos node, so both `is` and `tis` are false.
@@ -306,3 +306,22 @@ def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 25 x	ERROR:does not
 # those elements; the child constraint has done its work by then.
 def R class {xs:[:Integer 1 2]} def r (make R {}) (r dot xs)	[:Integer 1 2]	a populated typed-list default reaches the instance with its elements
 def R class {xs:[:Integer 1 2]} def r (make R {xs:[9]}) (r dot xs)	[9]	an explicit field value still overrides the populated default
+
+# ====================================================================
+# NUR093/NUR094 retirement pins (design/TYPE-REPRESENTATION.1.md §5)
+# ====================================================================
+# NUR093: an alias and a singleton are `is`-true AND dispatchable — the
+# alias binding ADOPTS the canonical aliased node (an `x:Foo` param is
+# an Integer param), and a singleton's minted node carries a
+# value-equality Match.
+def Foo Integer  42 is Foo	true	alias membership
+def Foo Integer  def f fn x:Foo Any [1]  f 42	1	…and the alias param DISPATCHES (NUR093 retired)
+def One 1  1 is One	true	singleton membership
+def One 1  def f fn x:One Any [7]  f 1	7	…and the singleton param dispatches (NUR093 retired)
+def One 1  def f fn x:One Any [7]  f 2	ERROR:signature_error	…while a non-member of the singleton is refused
+# NUR094: `typeof` of a user-named type is ONE Parent hop, uniformly.
+def P refine Integer  typeof P	Integer	typeof of a named type is one Parent hop (NUR094 retired)
+def M (Integer tor none)  typeof M	Disjunct	…uniformly for a disjunct
+def T fnsig Integer String  typeof T	FunctionSignature	…for a fn shape
+def Big (Integer gt 10)  typeof Big	Integer	…for a dependent scalar
+def C class {a:Integer}  typeof C	Class	…and the class kind joins the rule (object.tsv re-pins)

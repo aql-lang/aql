@@ -91,8 +91,8 @@ def P (refine Integer) P teq P	true	a newtype is itself
 def P (refine Integer) P teq Integer	false	…but never its base (distinct minted node)
 def A Integer A teq Integer	true	an ALIAS is exactly its base (contrast the refine row above)
 def P (refine Integer) def Q (refine Integer) P teq Q	false	sibling newtypes mint distinct identities
-def Big (Integer gt 10) Big teq (Integer gt 10)	true	a predicate refinement is INTERNED structurally — the name is a window onto the node
-def Big (Integer gt 10) def Big2 (Integer gt 10) Big teq Big2	true	two names over the same bounds share ONE node (contrast sibling newtypes)
+def Big (Integer gt 10) Big teq (Integer gt 10)	false	a NAMED refinement is nominal (§6 teq row): the name denotes its minted node, distinct from the anonymous bounds value
+def Big (Integer gt 10) def Big2 (Integer gt 10) Big teq Big2	false	two declarations mint two nodes — nominal identity (§6); `Big teq Big` stays true by node identity
 (Integer gt 10) teq (Integer gt 11)	false	different bounds, different nodes
 (Integer tor String) teq (Integer tor String)	true	same-order disjuncts intern together
 (Integer tor String) teq (String tor Integer)	true	…but identity is order-sensitive — the reversed spelling is a different node

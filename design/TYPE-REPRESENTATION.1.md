@@ -517,3 +517,82 @@ two qualifications. What does move:
 - Issue **#392** — the tracking issue.
 - [TYPE-REPRESENTATION.0.md](TYPE-REPRESENTATION.0.md) — the audit
   this builds on; its §6 plan is Stages 0-2 here.
+
+---
+
+## 9. Implementation record (2026-08-20)
+
+All five stages landed on the `claude/go-type-representation-z3alhe`
+branch (PR #394). What each stage delivered, and where the landed shape
+deliberately differs from the §5 sketch:
+
+**Stages 0-2** landed as designed. Evaluation pushes the minted node at
+every consumption point (`DefTable.Top`, `stepWord`, the forward
+planner); the node records its declared content
+(`Value.TypeBody`/`SetTypeBody`, stamped by `installTypeBinding`);
+structure consumers recover it through `TypeContentOf`; membership
+kinds carry `Match` + `Unify` on the node Behavior (predicate,
+DepScalar, disjunct, negation, FnUndef, surface, and the catch-all's
+`BindingBodyUnifier`), consulted by `dispatchUnifier`'s
+subtype-first/dual-denotation walk and `unifyInner`'s constraint-node
+pre-step. The §6 deltas were pinned as predicted: name rendering
+(`canon`/render rows across basic/boolean/structure/types/record/
+surface/generics), the uniform `typeof` Parent hop (object.tsv,
+micron.tsv — NUR094), tag-only `tis` (user-types.tsv:231-232), nominal
+`teq` for named types (edge-types-2), the tcmp type-band flip
+(compare.tsv), and the compiled `OpPushType` encoding (with
+`adoptEscapedTypes` extended to module preambles — `ModuleDesc.Src` on
+`boru:test` — so import-minted nodes resolve by ID in the importer).
+
+Two deltas were settled during the sweep beyond the §6 table:
+
+- **`teq` named-vs-named is NOMINAL** (the table's "lean nominal"
+  option): two declarations mint two nodes even over equal bounds;
+  anonymous-vs-anonymous stays structural (`ValuesEqual`).
+- **The disjunct DIVERGENCE PIN survives representation**
+  (edge-types-2): dispatch through a union param stays loose on the
+  newtype-alternative swap (`42 g` admits through `m:(P tor String)`)
+  while `42 is M` is false — the node's `Match` carries the loose
+  half, and the `is` word routes concrete candidates through the
+  Unify + value-identity path (`IsDisjunctTypeNode`).
+
+**Stage 3** landed as the *one-rule* collapse rather than the full
+struct collapse:
+
+- Each kind's membership/combination logic exists ONCE
+  (`unifyDisjunct`, `unifyNegation`, `unifySurface`, `unifyDepScalar` +
+  `combineDepScalars`, `FnUndefMatchesFnDef`, the class/record folds),
+  consulted from both routers — the node Behavior for named types and
+  the payload fold table for anonymous values. The fold table stays as
+  §N5 requires (anonymous values never mint), and its entries are thin
+  delegations to the per-kind rules; named DepScalar pairs meet
+  through the same intersection (`DepScalarUnifier.Unify` two-content
+  arm), and generic memo keys canonicalise a named argument by its
+  recorded content (`canonTypeArg`), so the named and inline spellings
+  instantiate identically.
+- `DefEntry` keeps its `Body` field: beyond value bindings, three
+  binding shapes carry a body that is NOT the node's declared content
+  — a generic type-PARAM bound to its argument, an instantiation
+  memo's structural body, and an alias's adopted-node literal
+  (`registry.go` `TopTypeBody` documents this). For minted
+  declarations the stored body and the node stamp are the same value,
+  written together by `installTypeBinding`.
+- `FnParam{Type, Pattern}` stays two fields with the Stage-2 meaning:
+  a NAMED type resolves to its node in `Type` (no `(Any, pattern)`
+  degradation), and `Pattern` carries exactly the anonymous
+  constraints §N5 says must be carried, never reconstructed. The
+  single-field re-spelling remains available later without semantic
+  change; it was not taken here because ~18 module-wrapper files
+  construct `FnParam` literals and the two-field spelling now encodes
+  precisely the named/anonymous split the design wants.
+- The consumer-side admission policies named in §N4 (`isTypeLike`'s
+  make-target set, `IsTypeValue`'s container recursion, the DepScalar
+  TypeArgs rejection) remain local per the design's own carve-out.
+
+**Stage 4** landed as the compiled-path residue: named operands emit
+`OpPushType` (Stage 2); a PREDICATE-TYPE node operand at a fn-invoking
+word refuses compilation exactly as the fn value it replaced
+(`RecordCallOperands`); the structural-type-body const arms stay for
+the anonymous bodies that still ride the const pool. NUR090, NUR093
+and NUR094 retire with pins (fn-triple.tsv §8; user-types.tsv's
+retirement section; the typeof re-pins above).

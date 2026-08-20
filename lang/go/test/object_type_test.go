@@ -7,7 +7,6 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-
 // objSchema resolves an evaluated class NAME — its NODE, post the
 // Stage 2 flip of design/TYPE-REPRESENTATION.1.md — to the class
 // schema the node records.

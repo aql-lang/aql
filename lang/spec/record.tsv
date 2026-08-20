@@ -71,11 +71,11 @@ typeof (refine Record [ { a:Integer } ])	Map	records are Map-typed under the hoo
 # making NAME usable as a type literal. The bound type is the same		
 # RecordType the body produced.		
 		
-def R (refine Record [ { a:Integer } ]) R	record{a:Integer}	bare R resolves to the RecordType
+def R (refine Record [ { a:Integer } ]) R	R	the name denotes its minted node and renders as the name (§6); the field schema is the node's recorded content
 def R (refine Record [ { a:Integer } ]) typeof R	Map	the RecordType's metatype is Map
 		
 # Defining and re-querying.		
-def R (refine Record [ { a:Integer } { b:String } ]) R	record{a:Integer b:String}	
+def R (refine Record [ { a:Integer } { b:String } ]) R	R
 		
 # ====================================================================		
 # 4. Instantiation via `make NAME …`		

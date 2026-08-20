@@ -1821,6 +1821,18 @@ func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 // binding is a *type* binding (installed by a capitalised `def`), and
 // (zero Value, false) otherwise — including when name is unbound or
 // bound only as a value.
+//
+// Post the Stage 2 flip the node records the same declared content
+// (Value.TypeBody, stamped by installTypeBinding), and consumers that
+// operate on a type's STRUCTURE read it from the node via TypeContentOf
+// (design/TYPE-REPRESENTATION.1.md §N2). The entry's stored Body stays
+// authoritative HERE because three binding shapes carry a body that is
+// deliberately not the node's content: a generic type-PARAM bound to
+// its argument value (the node is the ARGUMENT's — possibly a builtin,
+// possibly another binding's stamped node), an instantiation memo's
+// structural body, and an alias's adopted-node literal. For minted
+// declarations the two are the same value, stamped and stored by
+// installTypeBinding in one step.
 func (r *Registry) TopTypeBody(name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false

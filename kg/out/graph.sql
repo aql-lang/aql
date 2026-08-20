@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '494858497248053711');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '2015714989324848523');
 INSERT INTO input_files VALUES ('../AGENTS.md', '9011969850467027120', 11174);
 INSERT INTO input_files VALUES ('../CLI.md', '4243301829870383948', 82989);
 INSERT INTO input_files VALUES ('../README.md', '3900868491047678767', 12398);
@@ -51,7 +51,7 @@ INSERT INTO input_files VALUES ('../design/ROOT-MODULE-FEASIBILITY.0.md', '62353
 INSERT INTO input_files VALUES ('../design/STATE-MACHINES.0.md', '7873846898373868814', 88994);
 INSERT INTO input_files VALUES ('../design/TS-PARITY-AUDIT.0.md', '2607459948929922084', 6455);
 INSERT INTO input_files VALUES ('../design/TYPE-REPRESENTATION.0.md', '8814678040370627282', 10969);
-INSERT INTO input_files VALUES ('../design/TYPE-REPRESENTATION.1.md', '635797638991246683', 26182);
+INSERT INTO input_files VALUES ('../design/TYPE-REPRESENTATION.1.md', '4978074690403167661', 30562);
 INSERT INTO input_files VALUES ('../design/checker-compiler-completeness-review.0.md', '5862232790816677050', 39943);
 INSERT INTO input_files VALUES ('../editors/tree-sitter/bindings/go/go.mod', '8359550297204300245', 134);
 INSERT INTO input_files VALUES ('../eng/go/go.mod', '1395838019470277805', 800);

@@ -45,6 +45,17 @@ func genMemoKey(schemaID string, canon string) string {
 // memo key and the instantiation node's display name. A named node
 // renders by name; everything else by CanonValue.
 func canonTypeArg(arg Value) string {
+	// A NAMED argument evaluates to its minted node (the Stage 2 flip);
+	// canonicalise by its recorded declaration content so the named
+	// refinement and its inline spelling instantiate identically —
+	// `(H of [Pos]) teq (H of [(Integer gt 0)])` (edge-types-3). Class
+	// and surface content re-reaches the node-name arm below through
+	// its payload back-pointer, exactly as the body value always did.
+	if IsBareTypeNode(arg) {
+		if body, ok := arg.TypeBody(); ok {
+			arg = body
+		}
+	}
 	if node := typeArgNode(arg); node != nil && node.Name() != "" {
 		return node.Name()
 	}

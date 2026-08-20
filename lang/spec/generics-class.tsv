@@ -13,7 +13,7 @@
 # plain classes. See design/GENERICS.10.md + design/CLASS-OBJECT.10.md.
 #
 # §1  declare + make + identity
-def Box gen [T] class {value:T} end Box	schema<Class/Box>[T]	a class schema renders with its parameter list
+def Box gen [T] class {value:T} end Box	Box	a schema NAME denotes its minted node and renders as the name (§6)
 def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:42}) typeof	Box of [Integer]	instances carry the instantiation as their nominal type
 def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:42}) dot value	42	field reads work
 def Box gen [T] class {value:T count:0} end (make (Box of [Integer]) {value:1}) dot count	0	defaults mix with parameterised fields
