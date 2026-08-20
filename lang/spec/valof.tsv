@@ -118,3 +118,20 @@ def answer 42  nope/v	ERROR:undefined_word	an unbound name has no value to take
 def answer 42  valof nope	ERROR:undefined_word	the word form refuses identically
 add/vq	ERROR:invalid word modifier	q still cannot combine with v
 add/vv	ERROR:invalid word modifier	repeated v is still rejected
+#
+# §11  type bindings — valof/`/v` yield what the name DENOTES: the minted
+#      lattice NODE, identical to bare evaluation (the Stage 2 flip,
+#      design/TYPE-REPRESENTATION.1.md §6). One rule for every declaration
+#      kind; the recorded body is content (`TypeContentOf`), never the
+#      reference's value.
+def P refine Integer  valof P	P	bare refine: the node, rendered as the name
+def Big (Integer gt 10)  valof Big	Big	predicate: the node — NOT the recorded predicate body
+def M (Integer tor none)  valof M	M	disjunct: the node
+def C class {a:Integer}  valof C	C	class: the node
+def T fnsig Integer String  valof T	T	fn-shape: the node
+def One 1  valof One	One	singleton: the node
+def R {x:Integer}  valof R	R	record-shape: the node
+def Foo Integer  valof Foo	Integer	alias: the ADOPTED canonical node
+def Big (Integer gt 10)  Big/v	Big	/v spells the same rule
+def Big (Integer gt 10)  5 is (valof Big)	false	the node keeps predicate membership through the reference
+def Big (Integer gt 10)  50 is (valof Big)	true	…and admits a satisfying value
