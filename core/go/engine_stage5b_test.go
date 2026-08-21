@@ -773,6 +773,39 @@ func TestS5BParenLeadFnApplyIdxGradualArgDeclines(t *testing.T) {
 	}
 }
 
+// TestS5BParenLeadFnApplyIdxNestedBodyDeclines pins the classifier's
+// NESTING gate (§9f). Inside a branch / loop / quotation body the
+// compiled body does not carry the bindings the trailing-event model
+// needs, so the window must decline there however eligible it looks:
+// `def mkg g:Function => [v:Integer => [(g v)]]  def h (mkg …)
+// do [(h 1)]` compiled to an island that raised `undefined word: g` —
+// the factory's captured param — where the interpreter answers 8.
+//
+// Pinned HERE, in core's own suite, deliberately: the merged ADR-008
+// profile credits this branch from the cmd / lang / test suites, so
+// only `make cover-gate-core` — core measured by core alone — catches
+// it going unexercised, and that is the gate CI runs.
+func TestS5BParenLeadFnApplyIdxNestedBodyDeclines(t *testing.T) {
+	r := covRegistry(t, nil)
+	es := newS5BEmit()
+	es.dynApplyOK = true
+	es.leadEligible = true
+	e := NewTop(r)
+	lead := NewCarrier(TFunction)
+	e.Tape = NewTape([]Value{NewOpenParen(), lead, NewInteger(5), NewCloseParen()}, StackHeadroom)
+
+	// At top level the window is admitted (the contrast arm).
+	if got := e.parenLeadFnApplyIdx(es, 0, 3, 2, 2); got != 1 {
+		t.Fatalf("an unnested window must admit, got %d", got)
+	}
+	// Inside ANY nested body it declines.
+	r.Check.NestedBodyDepth = 1
+	if got := e.parenLeadFnApplyIdx(es, 0, 3, 2, 2); got != -1 {
+		t.Errorf("a nested-body window must decline, got %d", got)
+	}
+	r.Check.NestedBodyDepth = 0
+}
+
 func TestS5BCloseParenSkipperHook(t *testing.T) {
 	// Surviving paren content tells a RecorderSkipper to ignore the
 	// re-visit (lines 7538-7558).
