@@ -1133,6 +1133,52 @@ guards were written against the shapes its probe battery reached; this
 one it did not reach, because the chain needs two def-bound levels
 before the aliasing becomes visible.
 
+**Three more, from a differential sweep (2026-08-21, §9f).** Acting on
+that lesson, a thirty-shape sweep — every def-bound-computed-fn program
+the surrounding vocabulary can spell, each run on both engines and
+diffed — found three further divergences, all in ONE context: a **code
+body**. A code body is re-run by its native through the INTERPRETER,
+and neither of this branch's admissions survives that:
+
+| Program | Compiled | Interpreted |
+|---|---|---|
+| `def f (mk 1)  each [1 2 3] [(f 1)]` | `[3 3]` | `[3]` |
+| `def f (mk 1)  do [(f 2)]` | raises `undefined word: f` | `3` |
+| `def h (mkg …)  do [(h 1)]` | raises `undefined word: g` | `8` |
+
+The first two are Stage 1's read substitution reaching a body TOKEN
+rather than an operand: `each`'s body assembled as the DATA list
+`[f, 5]` (an `OpMakeList`), taking each's own input list with it. The
+third is Stage 2's lead-apply admission (`3d914ad`) leaving a compiled
+`ClosurePayload` where `do`'s re-run must apply it — and a
+ClosurePayload is invokable only through the VM's re-entrant runner,
+never the interpreter (`payload.go`'s own contract, plan P2), so the
+re-run reached the closure's token body with no captures installed.
+
+Three guards, each at the narrowest point that catches its shape
+without costing a graduation:
+
+- the substitution declines inside a nested body
+  (`CheckState.NestedBodyDepth > 0`) — restoring this class's
+  pre-Stage-1 silent refusal;
+- `RecordMakeListInner` refuses a list whose member is a table
+  carrier — the corruption's list-assembly twin, which no nesting
+  counter sees because `each`'s body analyses at depth 0;
+- `recordDispatchOutcome` refuses a code-body argument that READS a
+  name dyn-bound to a compiled closure. Scoped to the read, not the
+  bind: a blanket refusal at `RecordDynBind` was tried first and
+  unwound the whole §9b family, which applies exactly such closures
+  from compiled code quite happily.
+
+All four sweeps and the full frontier corpus are clean, and §9b, §9c
+and the Stage 1 graduations all still compile. `frontier-hof-audit.tsv`
+§9f ledgers the three shapes.
+
+The wider point for whoever picks this up: **every admission in this
+campaign needs a code-body probe.** All three failures, and §9e's,
+share one signature — an admission that is sound where the value is an
+operand, applied where the value is a token.
+
 Remaining stages, each its own probe-driven increment:
 
 1. **The gradual-argument lead window** (§9d, above) — the Church

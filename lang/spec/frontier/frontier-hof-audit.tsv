@@ -136,3 +136,16 @@ def app fn [[g:Function][Function][( fn [[x:Any][Any][(g x)]] )]] end def h (app
 #     read raised undefined_word and the program refused. Now the
 #     def site detects the dropped apply and refuses. Ledgered.
 def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn [[c:Integer][Integer][add a (add b c)]] )]] )]] end def f1 (mk2 1) end def f2 (f1 2) end (f2 3)	6	the three-level curried chain through def bindings (refuses; ledgered)
+#
+# §9f code BODIES over def-bound computed fns (2026-08-21): three
+#     divergences found by a differential sweep, each a regression
+#     from this branch's own Stage 1 / Stage 2 admissions, each now
+#     a sound refusal. A code body is re-run by its native through
+#     the INTERPRETER, and neither admission survives that: the read
+#     substitution turns a body TOKEN into a value (so `each`'s body
+#     assembled as the data list [f, 5] and its input list vanished),
+#     and a compiled ClosurePayload is invokable only through the
+#     VM's re-entrant runner, never the interpreter. Ledgered.
+def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end each [1 2 3] [(f 1)]	[3]	an each body reading a def-bound computed fn (compiled [3 3]; refuses now)
+def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end do [(f 2)]	3	a do body reading a def-bound computed fn (compiled raised undefined_word: f; refuses now)
+def mkg g:Function => [v:Integer => [(g v)]] end def h (mkg (z:Integer => [add 7 z])) end do [(h 1)]	8	a do body reading a def-bound COMPILED CLOSURE (compiled raised undefined_word: g; refuses now)

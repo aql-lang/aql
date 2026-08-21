@@ -2926,7 +2926,19 @@ func (e *Engine) stepWord(val Value) error {
 		// constructs the concrete fn on this path (fn's handler runs in
 		// check), so its diagnostic surface never reaches here with a
 		// table entry — the gate keeps that contract explicit.
-		if e.Registry.analysisCompiling() {
+		// A NESTED BODY declines. Stage 1 substitutes the carrier for a
+		// read of the name, which is right where the read is an OPERAND
+		// and wrong inside a branch / loop / quotation body, where the
+		// name is a body TOKEN whose binding the compiled body does not
+		// carry: `def f (mk 1)  do [(f 2)]` compiled to an island that
+		// raised `undefined word: f` where the interpreter answers 3.
+		// Declining restores this program class's pre-Stage-1 refusal
+		// (the read raises the check-diagnostics sentinel, so the
+		// interpreter fallback owns it, quietly) and leaves the proven
+		// operand contexts — where the graduations and §9b/§9c live —
+		// untouched. The list-member twin of this corruption is caught in
+		// the compiler (RecordMakeListInner).
+		if e.Registry.analysisCompiling() && e.Registry.Check.NestedBodyDepth == 0 {
 			if cv, hit := CheckFnCarrierBind(e.Registry, w.Name); hit {
 				e.Registry.noteAnalysisUse(w.Name)
 				e.Registry.analysisRecorder().NoteDefRead(cv.ID, w.Name)
@@ -7549,6 +7561,18 @@ func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeI
 // while a CHAINED one (`f (g x y)`) refuses on the two-applicable window.
 func (e *Engine) parenLeadFnApplyIdx(es EmitRecorder, openIdx, closeIdx, count, lastIdx int) int {
 	if count != 2 {
+		return -1
+	}
+	// A NESTED BODY declines, for the same reason the fn-carrier read
+	// substitution does (stepWord): the admission models the window as
+	// the trailing spelling's event, and inside a branch / loop /
+	// quotation body the compiled body does not carry the bindings that
+	// model needs — `def mkg g:Function => [v:Integer => [(g v)]]  def h
+	// (mkg …)  do [(h 1)]` compiled to an island that raised `undefined
+	// word: g` (the factory's captured param) where the interpreter
+	// answers 8. The proven operand contexts, where §9/§9b live, are
+	// unaffected.
+	if e.Registry != nil && e.Registry.Check.NestedBodyDepth > 0 {
 		return -1
 	}
 	last := e.Tape.At(lastIdx)

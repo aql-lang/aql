@@ -539,7 +539,16 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// introduced (before it, the read raised undefined_word and the
 	// program refused); the def site now detects the dropped apply.
 	`def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn [[c:Integer][Integer][add a (add b c)]] )]] )]] end def f1 (mk2 1) end def f2 (f1 2) end (f2 3)`: {why: "audit §5.8/§9e: a def-bound curried chain whose intermediate apply the analysis drops", failsWith: "apply the analysis dropped"},
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                                                                   {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
+	// §9f — code BODIES over def-bound computed fns. A code body is re-run
+	// by its native through the INTERPRETER, and neither of this branch's
+	// admissions survives that: the read substitution turns a body TOKEN
+	// into a value, and a compiled ClosurePayload is invokable only through
+	// the VM's re-entrant runner. All three were regressions found by a
+	// differential sweep and are now sound refusals.
+	`def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end each [1 2 3] [(f 1)]`: {why: "audit §5.8/§9f: an each body reading a def-bound computed fn — the substitution assembled the body as a data list", failsWith: "computed fn read inside an unevaluated body"},
+	`def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end do [(f 2)]`:           {why: "audit §5.8/§9f: a do body reading a def-bound computed fn — the substitution declines in a nested body, restoring the pre-Stage-1 refusal", failsWith: "check diagnostics"},
+	`def mkg g:Function => [v:Integer => [(g v)]] end def h (mkg (z:Integer => [add 7 z])) end do [(h 1)]`:                {why: "audit §5.8/§9f: a do body reading a def-bound COMPILED CLOSURE — an interpreter re-run cannot apply one", failsWith: "code body reads a def-bound compiled closure"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                    {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
 
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4

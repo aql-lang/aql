@@ -642,6 +642,13 @@ type EmitState struct {
 	// binder/call-graph reachability model (dynamicScopeReachable). See
 	// NoteDefRead.
 	defReads map[string]string
+	// dynBoundClosures names the dyn-scope binds whose value is a COMPILED
+	// closure (a ClosurePayload). Applying one from compiled code is fine —
+	// §9b's factory family does exactly that — but an interpreter RE-RUN
+	// cannot apply it (payload.go's contract, plan P2), so a code body handed
+	// to a token-re-running native must not READ one. See
+	// recordCodeBodyClosureRead.
+	dynBoundClosures map[string]bool
 	// rootComputedBindIDs holds the value IDs of TOP-LEVEL computed fn-value
 	// defs (`def op (Parse.parser g)` and the sibling mini/emit value forms)
 	// that installDef DECLINED to install in Defs (the compiled-closure
@@ -5522,9 +5529,62 @@ func (es *EmitState) residualReadStable(v core.Value) bool {
 // registry-visible OpBindDynScope ONLY for names in dynScopeNames (some
 // OpLookupDynScope reads them) and skips the event otherwise. Engine-internal
 // and capitalised (type) names never bind dynamically.
+// recordCodeBodyClosureRead refuses when a token BODY argument reads a name
+// dyn-bound to a compiled closure. Such a body is re-run by its native
+// through the INTERPRETER (`do [(h 1)]`, and every other NoEvalArgs code
+// slot), and a ClosurePayload is invokable only through the VM's re-entrant
+// runner — the re-run reaches the closure's TOKEN body with no captures
+// installed and raises (`undefined word: g` where the interpreter answers
+// 8). Scanning every concrete LIST argument is deliberately conservative:
+// a DATA list mentioning the name carries it as an Atom, not a Word, so it
+// does not match, and a body that never reads such a name is untouched —
+// which is what keeps §9b's family compiling.
+func (es *EmitState) recordCodeBodyClosureRead(args []core.Value) bool {
+	if len(es.dynBoundClosures) == 0 {
+		return false
+	}
+	for i := range args {
+		// AsList is the single screen: it declines every non-list value
+		// AND every List-parented one with no readable payload (a carrier,
+		// a typed-list shape), which is exactly "no tokens to read here".
+		lst, aerr := core.AsList(args[i])
+		if aerr != nil {
+			continue
+		}
+		body := make([]core.Value, 0, lst.Len())
+		for j := 0; j < lst.Len(); j++ {
+			body = append(body, lst.Get(j))
+		}
+		found := false
+		core.WalkBodyWords(body, func(w core.WordInfo, _ core.Value) {
+			if es.dynBoundClosures[w.Name] {
+				found = true
+			}
+		})
+		if found {
+			es.MarkUncompilable(
+				"code body reads a def-bound compiled closure (an interpreter re-run cannot apply it — Stage 2)")
+			return true
+		}
+	}
+	return false
+}
+
 func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 	if !es.Active() || name == "" || name[0] == '_' || name[0] == '$' || core.IsCapitalisedName(name) {
 		return
+	}
+	// NOTE a name bound to a COMPILED CLOSURE. The value is invokable only
+	// through the VM's re-entrant runner, never the interpreter
+	// (payload.go's contract, plan P2) — so it is fine to apply from
+	// compiled code (that is what §9b's factory family does) and NOT fine
+	// for an interpreter RE-RUN to reach. recordCodeBodyClosureRead below
+	// catches the latter at the word that re-runs tokens.
+	if _, closure := es.producerReturnedClosureArity(v.ID); closure {
+		if es.dynBoundClosures == nil {
+			es.dynBoundClosures = map[string]bool{}
+		}
+		es.dynBoundClosures[name] = true
 	}
 	src, srcSeq := EmitOperand{}, -1
 	cur := es.units[len(es.units)-1]
@@ -6091,6 +6151,27 @@ func (es *EmitState) RecordMakeListInner(r *core.Registry, ins []core.Value, out
 	// check stays reachable — its isTop caller still reaches it under suspend.
 	if !es.Active() {
 		return false
+	}
+	// A CODE BODY the read substitution corrupted. Stage 1 substitutes a
+	// def-bound computed fn's carrier for a read of its name, which is
+	// right where the read is an operand — and wrong inside an
+	// UNEVALUATED body, where the name is a body TOKEN. `each [1 2 3]
+	// [(f 5)]` assembled the body as the DATA list [f, 5] (this record),
+	// dropping each's own input list, and compiled `[3 3]` for the
+	// interpreter's `[3]`; `do [(f 2)]` compiled to an island that
+	// raised `undefined word: f` where the interpreter answers 3. A
+	// table carrier reaching a list MEMBER is exactly that corruption and
+	// nothing else — a genuine data list of a computed fn spells the
+	// member `f/v`, and stepWordVal deliberately never consults the
+	// table — so refuse and let the interpreter fallback own it.
+	if r != nil {
+		for i := range ins {
+			if _, tabled := core.CheckFnCarrierBoundName(r, ins[i].ID); tabled {
+				es.MarkUncompilable(
+					"computed fn read inside an unevaluated body (the read substitution cannot model a code body — Stage 1)")
+				return false
+			}
+		}
 	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
