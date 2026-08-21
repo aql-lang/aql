@@ -1,9 +1,10 @@
 # Higher-Order Functions in boru — capability audit
 
-**Status: point-in-time report (2026-08-19).** A dated empirical snapshot,
-not a living reference — see `design/README.md`. Its claims describe the
-engine as built from this tree on that date; several of them are pinned to
-NUR records whose fixes will change the answers.
+**Status: point-in-time report (2026-08-19; re-assessed 2026-08-21).**
+A dated empirical snapshot, not a living reference — see
+`design/README.md`. Its claims describe the engine as built from this
+tree on that date; several of them are pinned to NUR records whose fixes
+will change the answers.
 
 **Method:** empirical, against `cmd/go/bin/boru` built from this tree,
 cross-read with `core/`, `lang/`, `NUR.md`, `ADR.md` and
@@ -46,6 +47,27 @@ runs it (§5.7).
 > **Re-assessed 2026-08-19** after `/r`→`/v` / `ref`→`valof` landed with the
 > function-only gate removed. §5.2 is closed and NUR085 retired; §5.1,
 > §5.3–§5.9 were each re-run against the new binary and are unchanged.
+
+> **Re-assessed 2026-08-21** after the type-node fusion (PR #394) and
+> the valof-flip / NUR095 work (PR #396). Every §1 program, §4 spelling
+> and §5 hazard was re-run against a binary built from that tree. The
+> substrate verdict stands — every §1 program still produces its quoted
+> output on both engines — and §5.2 stays closed (no valof-flip
+> regression on non-type bindings). Four claims moved, each corrected in
+> place: §5.1's `I/v apply` escape hatch is **gone** (`/v` on a type
+> binding now denotes the minted node — `lang/spec/valof.tsv` §11 — so
+> lowercase names are the only remedy) and its stranded pair prints
+> differently; §2's "`Function` is opaque" now holds for *bare*
+> `Function` only (`fnsig` shipped, and fn-shape class members apply on
+> both engines — NUR095 retired, NUR096 records the checker lag);
+> §1.6's non-tail 100 000-deep row holds only on the compiled lane (the
+> interpreter now trips the tape ceiling near depth 40 000); and §5.4's
+> fn-body return-arity error lost its `ap:` prefix (it now names the
+> enclosing fn). NUR073 (§5.7) was re-run and is live, unchanged, the
+> default still siding with the compiler; NUR086–NUR089 all still
+> reproduce byte-for-byte. New records NUR091 and NUR096 join §5.1's
+> and §5.5's defect classes respectively. Stale citations fixed in
+> place.
 
 ---
 
@@ -191,7 +213,9 @@ T  F  F  T  F  T  T  F      (one per line)
 > `(args).N` plus a boxing step to reach the enclosing fn's argument —
 > and `cand`/`cor`, which must return one Church boolean *as itself*,
 > resisted every spelling tried: named booleans tripped
-> `lang/spec/valof.tsv` §5's loud-dispatch rule, and holding them
+> `lang/spec/fn-value.tsv` §5's loud-dispatch rule ("a failed dispatch
+> is LOUD, wherever the value would have gone" — the original text
+> mis-cited `valof.tsv` §5 for this; fixed 2026-08-21), and holding them
 > anonymously in a list then ran into forward-collection barriers. It
 > was the one construction the audit could not finish. Removing the
 > function-only gate closed it (§5.2, NUR085 retired).
@@ -298,7 +322,7 @@ Identical on both engines. It does **not** pass `boru check` — see §5.5.
 | Mutable capture (`flex` mutated through a closure) | ✅ `[1 2 3]` |
 | `usurp` (`/u`) wraps a fn and the wrapper is storable | ✅ `(sub2 10 3)` → `7`; `(sub2/u 10 3)` → `-7`; `def g (f2/u)` then `(g 10 3)` → `-7` |
 | Tail recursion, 1 000 000 deep | ✅ constant space; bounded by the 10M **step** limit, not the tape |
-| Non-tail recursion, 100 000 deep | ✅ `sum 100000` → `5000050000` |
+| Non-tail recursion, 100 000 deep | ✅ compiled lane: `sum 100000` → `5000050000`. **Re-assessed 2026-08-21:** the interpreter (`-no-compile`) now trips the 396 718-entry tape ceiling near depth 40 000, so this depth passes only under the default lane |
 | Non-tail recursion, 1 000 000 deep | ✅ *clean* refusal naming the tape ceiling and the remedy |
 | `gensym` | ✅ exists (`LISP-ANALYSIS.5.md` grading it **D** is stale) |
 
@@ -319,7 +343,7 @@ concatenative peers (Factor, Joy):
 | Partial application | ✓ | SRFI-26 | `.bind` | `curry` | **mechanism ✓, named combinator ✗** — see below |
 | Named `compose` / `pipe` | `.` `>>>` | `compose` | — | `compose` | **✗ — user-written** |
 | `flip` | ✓ | ✓ | — | `swap` | **≈ `usurp` / `/u`** (2-arg) |
-| Function type in the type system | `a -> b` | — | — | stack effects | **✗ — `Function` is opaque** |
+| Function type in the type system | `a -> b` | — | — | stack effects | **✓ where annotated — `fnsig` (see below); bare `Function` opaque** |
 | Polymorphic identity `λx.x` | ✓ | ✓ | ✓ | ✓ | **✓ since `/v` — `t:Any => [t/v]` (§5.2)** |
 | Dataflow shufflers (`dip`/`keep`/`bi`) | n/a | n/a | n/a | ✓ | **✗** |
 | Laziness / infinite structures | ✓ | promises / SRFI-41 | generators | library | **✗ — strict, materialised** |
@@ -329,7 +353,7 @@ concatenative peers (Factor, Joy):
 Three entries deserve emphasis.
 
 **Partial application exists; the *word* does not.** `curryOrStack`
-(`core/go/engine.go:7927`) packages an under-supplied forward call — word
+(`core/go/engine.go:7923`) packages an under-supplied forward call — word
 plus collected args — into a value that completes when it is later
 expanded, and `lang/go/test/basic.tsv` exercises it across the arithmetic
 words (`def add5 word [add 5]` then `10 add5` → `15`). So the row is not
@@ -337,11 +361,13 @@ words (`def add5 word [add 5]` then `10 add5` → `15`). So the row is not
 `partial`/`curry` word taking a `Function` and some arguments and
 returning a `Function`.
 
-**`Function` is opaque.** There is no way to write "a function from
-`Integer` to `String`". `tpartial` is unrelated (it makes record fields
-optional). The cost is that a call *through* a `Function` parameter
-carries no static information at all — the checker passes it, and the
-mismatch surfaces only at run time:
+**`Function` is opaque — where left bare.** At the audit's writing this
+read "there is no way to write a function from `Integer` to `String`";
+`fnsig` has since closed that where you annotate (see the re-assessment
+below). `tpartial` is unrelated (it makes record fields optional). The
+cost of a *bare* `Function` is unchanged: a call through it carries no
+static information at all — the checker passes it, and the mismatch
+surfaces only at run time:
 
 ```
 $ cat sa.boru
@@ -358,7 +384,23 @@ error: [boru/signature_error]: x is still waiting for 1 argument(s) when
 A clean check on a program that cannot run is the shape of the cost.
 Compare Haskell's `(a -> b) -> [a] -> [b]`, which makes `map` both
 checkable and self-documenting. boru's `map`-equivalent can only say
-`Function`.
+`Function` — or, now, a named `fnsig` type.
+
+> **Re-assessed 2026-08-21.** `fnsig` merged with the same branch that
+> merged this audit (2026-08-19) — the prototype
+> `design/FUNCTION-TYPES.0.md` described as unmerged shipped with it,
+> so this row was stale on arrival. `def IntToStr fnsig Integer String`
+> mints an enforceable fn-shape type: a wrong-shaped argument is
+> refused by the checker AND by dispatch (verified under `-no-check`,
+> contravariant parameters / covariant return), and the `sa` program
+> above, rewritten with `x:AA` for `def AA fnsig Any Any`, is caught at
+> CHECK time — the exact clean-check-cannot-run failure this paragraph
+> records moves to check time where you annotate. Since NUR095's fix
+> (2026-08-20) a fn stored through a named class's fnsig-typed field
+> applies on both engines (`lang/spec/class.tsv` §fn-members), with the
+> checker still modelling that member apply as inert — NUR096. The
+> transcript above still reproduces verbatim: a bare `Function`
+> parameter stays opaque, but that is now a choice, not a limit.
 
 **boru's real combinator strength is elsewhere.** The
 `usurp`/`stack-args`/`forward-args`/`force-arity` family adapts a
@@ -592,14 +634,20 @@ differently): a purely syntactic choice moving a content hash.
 
 ```
 $ boru do 'def I x:Integer => [add 1 x] end I 5'
-fn (Integer) 5
+I 5
 $ echo $?
 0
 ```
 
+> **Re-assessed 2026-08-21.** This stranded pair printed
+> `fn (Integer) 5` when the audit was written. Since the type-node
+> fusion the bare capitalised name evaluates to the minted lattice
+> node, which renders as its own name — so the wrong stack now looks
+> like an unevaluated echo of the input, which is quieter still.
+
 `def <Capitalised>` installs a **type** binding, not a value binding
-(`eng/go/CLAUDE.md:611`, `eng/go/core_type.go::InstallType`,
-`lang/go/CLAUDE.md:890`). Given a function body this mints a **predicate
+(`eng/go/CLAUDE.md:655`, `core/go/core_type.go::InstallType`,
+`lang/go/CLAUDE.md:904`). Given a function body this mints a **predicate
 type** — a real and useful feature:
 
 ```
@@ -611,11 +659,23 @@ The collision is with convention: the combinator literature is `S`, `K`,
 `I`, `B`, `C`, `W`, `Y` — all capitals. A reader transcribing them gets
 no error, exit 0, and a wrong stack.
 
-**Workaround:** lowercase names; or reach the value explicitly —
-`5 I/v apply` → `6`, the answer the bare `I 5` above dropped.
+**Workaround:** lowercase names — now the only one. The escape hatch
+this audit originally recorded, `5 I/v apply` → `6`, no longer exists:
+the valof flip pinned `/v` on a type binding to the minted node for
+every declaration kind (`lang/spec/valof.tsv` §11), identical to bare
+evaluation, so the same spelling now refuses with
+`[boru/signature_error]` — "cannot call `apply` … expected Reach, got
+I (an I)" — exit 1, on both engines. The recorded fn body stays reachable
+only as the node's *content* (`TypeContentOf`), which has no surface
+spelling.
 **Severity:** silent wrong answer. **Not a bug** — but it costs a
-diagnostic. `I 5` leaving a `Function` and an `Integer` stranded is
-exactly the shape a hint could catch.
+diagnostic, and the case for one is stronger now that no `/v` spelling
+recovers the value. `I 5` leaving a type node and an `Integer` stranded
+is exactly the shape a hint could catch. The same silent-stranding
+class has since been caught at declaration time too: a malformed `fn`
+whose output slot is bare (`def f fn List Any [1]`) strands its
+operands and binds nothing, exit 0, where its bracketed-output twin
+raises — recorded as **NUR091**.
 
 ### 5.2 ~~Naming a `Function`-valued parameter calls it~~ — RESOLVED
 
@@ -704,13 +764,18 @@ statement applies it; under `print` the argument window merely collects
 both. Inside a fn body the same shape yields a return-arity error:
 
 ```
-error: [boru/type_error]: ap: expected 1 return value(s), got 2 — [fn (Integer) 2]
+error: [boru/type_error]: g: expected 1 return value(s), got 2 — [fn (Integer) 2]
 ```
+
+(The prefix names the enclosing fn — `g` here, empty for an anonymous
+one — and the message now carries a source span pointing at the group
+and the declaration, `core/go/return_check_msg.go`. It read `ap:` when
+the audit was written; same class, same payload.)
 
 This is why the Z combinator diverges: `((x x) v)` never applies, so the
 `λv` guard is inert.
 
-**Workaround:** `def h (g 1)` then `v h/v apply` → `3`.
+**Workaround:** `def h (mk 1)` then `2 h/v apply` → `3`.
 **Forward hazard:** NUR073's accepted **BROAD** verdict removes inline
 application entirely — *"`(fn Integer [Integer] [10 add]) 7` becomes two
 values and the inline-application idiom is removed"*. That idiom
@@ -751,7 +816,11 @@ runs it correctly.
 
 **Workaround:** `-no-check`, or hoist the binding.
 **Severity:** a correct program is refused by the default invocation.
-Recorded as **NUR087**.
+Recorded as **NUR087**. Post-audit, the checker-vs-runtime family
+gained a member one layer up: NUR095's fix (2026-08-20) made a fn
+stored through a fn-shape-typed class member apply in compiled
+execution, but the check pass still models that member apply as the
+inert pre-fix stack — recorded as **NUR096**.
 
 ### 5.6 Non-local names in a closure resolve late, through the def stack
 
@@ -852,10 +921,12 @@ trade-off is a choice rather than a surprise.
    itself the total read, so there is no folklore idiom left to document
    (§5.2). `boru describe valof` and `lang/spec/valof.tsv` §9 carry the
    rule; `REFERENCE.md`/`HOWTO.md` were swept to the new spelling.
-2. **Add a diagnostic for §5.1.** A statement ending with an
-   uncalled `Function` beside stranded operands, where the function came
-   from a capitalised binding, is a near-certain typo. `undefined_word`
-   already offers "did you mean"; this deserves the same.
+2. **Add a diagnostic for §5.1.** A statement ending with a stranded
+   minted type node beside unconsumed operands — §5.1's shape since the
+   type-node fusion — is a near-certain typo, and since the valof flip
+   removed the `I/v apply` escape hatch a hint is the only help left.
+   `undefined_word` already offers "did you mean"; this deserves the
+   same.
 3. **Give `each`/`for-each`/`fold`/`scan` a `{TFunction, TList}`
    signature** (NUR086). Note this buys *signature availability*, not
    callback uniformity: `filter`'s list `Function` form passes a

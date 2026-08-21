@@ -2632,7 +2632,7 @@ Map shape only, and the fifth registers both.
 | `for-each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:348` |
 | `fold` | `{TFunction, TMap, TAny}`, `{TFunction, TMap}` | `lang/go/native/native_array.go:393-394` |
 | `scan` | `{TFunction, TMap}` | `lang/go/native/native_array.go:420` |
-| `filter` | **`{TFunction, TAny}`** — list and map alike | `lang/go/native/natives.go:260` |
+| `filter` | **`{TFunction, TAny}`** — list and map alike | `lang/go/native/natives.go:261` |
 
 ```
 $ boru do 'def dbl x:Integer => [x mul 2] each dbl/v [1 2 3]'
@@ -2899,7 +2899,11 @@ real FnUndef membership, and the inline-lambda misbinding persists
 through it). Widening the declared return to `Any` — which the
 lambda genuinely has, since `=>` declares no return type — makes the
 program run while the check still errors. So this record is orthogonal
-to the opacity of `Function` and survives that work.
+to the opacity of `Function` and survives that work. (Re-run
+2026-08-21: under the widened `fnsig Integer Any` type the surviving
+diagnostic lands on `f` and renders the got-type as the internal
+placeholder `(__PE)` — the misbinding persists, and the renderer now
+leaks a synthetic type name into a user-facing message.)
 
 **Consequence:** the ergonomic spelling is the one that fails. A reader
 converting an example to the shorter inline form gets a check failure on
