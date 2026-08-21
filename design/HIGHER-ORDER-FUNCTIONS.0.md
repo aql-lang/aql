@@ -858,7 +858,15 @@ push*, not an assignment, so an ML/Haskell reader expecting `6` gets
 `105`.
 
 **Severity:** confusing; matters whenever a combinator is defined before
-a name it mentions is re-`def`ed.
+a name it mentions is re-`def`ed. Recorded as **NUR097** (2026-08-21),
+with the proposed verdict *Allowed plus an in-file diagnostic* — the
+late half is the top-level liveness contract, not a defect. The
+freezing idiom is parameter capture:
+`def mkc fn nn:Integer Function [(fn x:Integer Integer [add nn x])]`
+then `def c (mkc n)` → `6` however `n` is later re-`def`ed. All three
+behaviours (105, the post-`undef` 6, and the frozen 6) are pinned as
+`lang/spec/frontier/frontier-hof-audit.tsv` §8, and the contract is
+documented in `REFERENCE.md` §"Definition and scoping".
 
 ### 5.7 The engines disagree — NUR073, live today
 
@@ -951,11 +959,13 @@ trade-off is a choice rather than a surprise.
    callback uniformity: `filter`'s list `Function` form passes a
    `{key,value}` pair, so a matching `filter` change is needed before an
    element-shaped callback works across the whole family.
-4. **Ship the missing vocabulary as a module** — `compose`, `pipe`,
-   `curry`, `partial`, `const`, `identity`, `flip`, `on`, `memoize`. Every
-   one was writable here in a handful of lines; `boru:fn-util` next to
-   `boru:type-util` would remove most of the friction this audit found
-   without touching the kernel.
+4. ~~**Ship the missing vocabulary as a module**~~ — **Done
+   (2026-08-21):** `boru:fn-util` ships `compose`, `pipe`, `curry`,
+   `partial`, `const`, `identity`, `flip`, `on`, `memoize` as native
+   words next to `boru:type-util` (`lang/go/modules/fn.go`;
+   `REFERENCE.md` §"The `boru:fn-util` module"; behaviour rows in
+   `lang/spec/frontier/frontier-fn-util.tsv`, ledgered under the
+   def-bound-computed-fn refusal until that family graduates).
 5. **Fix NUR087** — the checker refusing a correct closure is the only
    finding that stops a working program from running at all.
 6. **Land NUR073.** Until it lands, `-no-compile` and the default are two

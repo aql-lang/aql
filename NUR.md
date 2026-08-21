@@ -91,6 +91,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -3090,3 +3091,61 @@ argument auto-applies, so the modelled stack is the applied result, not the
 carrier. The gradual fallback stays available where the shape's result count
 is not statically known. This record retires when the multi-return rows above
 can live in `class.tsv` with the soundness pin still at 0.
+
+---
+
+## NUR097 — one syntax, two binding regimes: fn-locals are captured, module-scope names resolve late {#nur097}
+
+**Status:** Pending · **Recorded:** 2026-08-21 · **Surfaced by:** the
+higher-order capability audit's §5.6
+(`design/HIGHER-ORDER-FUNCTIONS.0.md`), re-assessed and pinned 2026-08-21
+
+**Rule:** one binding store, one resolution rule. A name in a fn body
+should mean the same kind of thing wherever it was bound.
+
+**Divergence:** what a closure's body name denotes depends on WHERE the
+name was bound, with no marking at the use site. A parameter or body-local
+`def` is *captured* — the closure keeps it after the defining scope exits,
+and two closures from one factory hold distinct copies. A module-scope
+name is *not* captured: it resolves at call time through the def shadow
+stack, so a later `def` of the same name changes what an existing closure
+computes, and `undef` changes it back.
+
+```
+$ boru do 'def n 1 end def c x:Integer => [add n x] end def n 100 end (c 5)'
+105                                          ← the later shadow push wins
+$ boru do 'def n 1 end def c x:Integer => [add n x] end def n 100 end undef n end (c 5)'
+6                                            ← undef pops back to the original
+$ boru do 'def n 1 end def mkc fn nn:Integer Function [(fn x:Integer Integer [add nn x])] end def c (mkc n) end def n 100 end (c 5)'
+6                                            ← routed through a parameter, the value is frozen
+```
+
+**Consequence:** a combinator defined before a name it mentions is
+re-`def`ed silently changes meaning — exit 0, no diagnostic, and the use
+site gives no hint which regime the name is under. An ML/Haskell reader
+expects the second answer everywhere (a new binding never reaches an
+existing closure); an Emacs Lisp or Python-globals reader expects the
+first. Both are internally consistent conventions; carrying BOTH behind
+one syntax is the non-uniformity.
+
+**Evidence:** the transcripts above, reproduced against this tree; pinned
+as `lang/spec/frontier/frontier-hof-audit.tsv` §8 (all three rows). The
+contract is documented in `REFERENCE.md` §"Definition and scoping" and
+argued, with the cross-language positioning, in
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.6.
+
+**Verdict proposed:** **Allowed, plus a diagnostic.** The late half is
+load-bearing: top-level liveness — redefinition reaching existing words —
+is what makes the def stack, `undef`, and REPL-driven development
+coherent, and the capture half is what makes closures usable at all; the
+mainstream compromise (Python globals vs locals, Racket's late REPL vs
+early modules) has the same shape. The freezing idiom (route the name
+through a parameter, third transcript) covers the cases that want the
+other regime. What the divergence costs is a *diagnostic*: the in-file
+case — a fn body reads a module-scope name that a LATER `def` in the same
+file re-binds — is statically visible and is exactly the transcription
+hazard; an info-severity check hint there ("`c` reads `n`, re-`def`ed at
+line N; module names resolve late") would catch it without touching
+semantics. This record is discharged by an Allowed verdict naming that
+hint as the mitigation (or by a maintainer ruling the hint unnecessary,
+with the §8 rows and the REFERENCE.md contract as the pinned acceptance).

@@ -1336,6 +1336,21 @@ restricted words refuse. See
 > x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
 > already unusable as a `def` target.
 
+> **Closures: parameters and fn-locals are captured; module-scope names
+> are live.** A fn's parameters and body-local `def`s are *captured* —
+> the closure keeps them after the defining scope exits, and two
+> closures from one factory hold distinct copies. A name from the
+> enclosing **module** scope is *not* captured: it resolves at call
+> time through the def shadow stack, so a later `def n 100` changes
+> what an existing closure computes, and `undef n` pops back to the
+> earlier binding — redefinition reaches existing code, as at a REPL.
+> To freeze a value instead, route it through a parameter (parameters
+> are captured): `def mkc fn nn:Integer Function [(fn x:Integer
+> Integer [add nn x])]` then `def c (mkc n)` snapshots today's `n`
+> permanently. Pinned in `lang/spec/frontier/frontier-hof-audit.tsv`
+> §8; recorded as NUR097, and discussed with the cross-language
+> positioning in `design/HIGHER-ORDER-FUNCTIONS.0.md` §5.6.
+
 #### Splices and spread — `word`
 
 `word v` wraps its (unevaluated) argument in a splice marker. When the
@@ -2085,6 +2100,33 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 > keys, so they keep full `deq` semantics over any value.
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
+
+### The `boru:fn-util` module
+
+The point-free function vocabulary
+(`design/HIGHER-ORDER-FUNCTIONS.0.md` §6.4). Every word takes function
+VALUES — pass a named fn as `name/v` (or a bare name into the
+`Function`-typed slots) — and the constructors return ordinary
+first-class `Function` values: storable, passable, applied like any fn.
+
+| Word | Description | Example |
+|------|-------------|---------|
+| `FnUtil.identity` | The argument unchanged, any kind — functions included | `FnUtil.identity 42` returns `42` |
+| `FnUtil.const` | A 1-arg fn that always returns the captured value | `def k (FnUtil.const 7)` then `(k 99)` returns `7` |
+| `FnUtil.compose` | `(compose f g) x = f (g x)` — mathematical order | `def h (FnUtil.compose addone/v double/v)` then `(h 5)` returns `11` |
+| `FnUtil.pipe` | `(pipe f g) x = g (f x)` — pipeline order | `def h (FnUtil.pipe addone/v double/v)` then `(h 5)` returns `12` |
+| `FnUtil.flip` | The signature argument order reversed (`/u` as a word) | `def fs (FnUtil.flip sub2/v)` then `(fs 3 10)` returns `7` |
+| `FnUtil.curry` | A single-signature n-ary fn as a chain of unary fns | `def c (FnUtil.curry sub2/v)` then `def c10 (c 10)` and `(c10 3)` returns `7` |
+| `FnUtil.partial` | Bind signature slot 0, returning a fn of the rest | `def p (FnUtil.partial sub2/v 10)` then `(p 3)` returns `7` |
+| `FnUtil.on` | `(on b u) x y = b (u x) (u y)` | `def bigger (FnUtil.on gt2/v sq/v)` then `(bigger 3 5)` returns `false` |
+| `FnUtil.memoize` | The fn behind a canon-keyed result cache | `def m (FnUtil.memoize slow/v)` — a repeat call answers from the cache |
+
+`curry`, `partial`, `flip` and `memoize` require a fn with exactly ONE
+signature (reshaping a multi-overload fn would silently pick one).
+Programs that `def`-bind a FnUtil result currently run on the
+interpreter — the strict compile lane's def-bound-computed-fn model is
+an open item, pinned with the rows in
+`lang/spec/frontier/frontier-fn-util.tsv`.
 
 ### Higher-order array words
 

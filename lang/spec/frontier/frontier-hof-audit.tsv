@@ -74,3 +74,10 @@ def f2 fn [[a:Integer b:Integer][Integer][a sub b]] end def g (f2/u) end (g 10 3
 # §7  the §5.4 application-context rule (audit §5.4; why Z diverges)
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end ((mk 1) 2)	3	at statement level the statement applies the collapsed fn value
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end def h (mk 1) end 2 h/v apply	3	the audit's workaround: bind the computed fn, then apply through /v
+#
+# §8  the §5.6 binding contract (audit §5.6, NUR097): parameters and
+#     fn-locals are CAPTURED; module-scope names are LIVE — resolved at
+#     call time through the def stack. Row 3 is the freezing idiom.
+def n 1 end def c x:Integer => [add n x] end def n 100 end (c 5)	105	a later shadow push changes what an existing closure computes
+def n 1 end def c x:Integer => [add n x] end def n 100 end undef n end (c 5)	6	undef pops back to the original binding
+def n 1 end def mkc fn nn:Integer Function [(fn x:Integer Integer [add nn x])] end def c (mkc n) end def n 100 end (c 5)	6	routed through a parameter, the value is frozen at construction
