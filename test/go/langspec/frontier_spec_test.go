@@ -513,6 +513,11 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	hofPalt + `(ab 'zzz')`: {why: "with the `ab` read resolved (Stage 1), palt's own unit refuses: its returned closure captures the alternation's parsers", failsWith: "body result of unknown provenance"},
 	hofPitem + `def pseq fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r1 (a s) if (r1.ok) [ def r2 (b (r1.rest)) if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ] [ {ok:false rest:s val:None} ] ] [ {ok:false rest:s val:None} ] ] ) ]] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def two (pseq digit/v digit/v) end (two '42x')`: {why: "`digit/v` at pseq's Function slots is check-invisible (digit is table-bound) — the same trap decline as the pmany row", failsWith: "unmatched dispatch recovered at pseq"},
 
+	// The §9 Stage-2 refusal rows: the lead-apply admission's witnesses
+	// compile (unledgered), while these two spellings stay sound refusals.
+	`def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 5) (h2 10)`: {why: "repeated reads of the bound closure put a fn value before residual args (the make-adder's repeated-read shape; graduation = the multi-read closure lowering)", failsWith: "fn value precedes residual args"},
+	`def mk0 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g)]] )]] end def h0 (mk0 (z:Integer => [add 7 z])) end (h0 5)`:             {why: "a 0-arg apply of a 1-arg capture nets [g] and the interpreter raises inside the lambda; the fnval unit refuses instead of modeling the raise (sound: the fallback raises the identical error)", failsWith: "body result of unknown provenance"},
+
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4
 	// shipped 2026-08-21). Post the Stage 1 check-model fix the def-binding

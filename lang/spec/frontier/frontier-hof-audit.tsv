@@ -81,3 +81,13 @@ def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end def h (mk 1)
 def n 1 end def c x:Integer => [add n x] end def n 100 end (c 5)	105	a later shadow push changes what an existing closure computes
 def n 1 end def c x:Integer => [add n x] end def n 100 end undef n end (c 5)	6	undef pops back to the original binding
 def n 1 end def mkc fn nn:Integer Function [(fn x:Integer Integer [add nn x])] end def c (mkc n) end def n 100 end (c 5)	6	routed through a parameter, the value is frozen at construction
+#
+# §9  Stage 2's lead-apply admission (2026-08-21): a returned lambda's
+#     body may APPLY its captured Function — the fnval unit's own
+#     capture slot is DynApplyLeadEligible, so the apply-the-capture
+#     factory compiles natively. Repeated/multi-instance reads and the
+#     mismatched-arity spelling stay sound refusals (ledgered).
+def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h2 (mkc2 (z:Integer => [add 7 z])) end (h2 5)	12	the admission's witness: the returned lambda applies its captured g
+def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][add 1 (g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 4)	13	the applied capture's result feeds further computation
+def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 5) (h2 10)	15 30	repeated reads of the bound closure (refuses today; ledgered)
+def mk0 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g)]] )]] end def h0 (mk0 (z:Integer => [add 7 z])) end (h0 5)	ERROR:signature_error	a 0-arg apply of a 1-arg capture raises in the lambda body

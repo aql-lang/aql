@@ -966,29 +966,43 @@ combinator rows), the Stage 2 single-result-branch rule (the
 U-combinator), capture-bearing `body result of unknown provenance`
 (compose, palt), and the guards above.
 
-**Stage 2 probe (2026-08-21) — the closure-flag split's bookkeeping
-half landed; the admissions need witnesses.** `fnUnitRec.lambdaUnit`
-now distinguishes a returned lambda's own unit (word `"fnval"`, a real
-named-param frame) from a native code-body unit (each/do$body, a
-CallableSpec-input frame) — the split the campaign brief identified.
-But probing the admission it was meant to unlock
-(`DynApplyLeadEligible` inside lambda bodies) showed every candidate
-witness in the corpus blocked EARLIER, so the admission was reverted as
-unwitnessed (the Stage-G discipline: each exclusion lifted needs its
-own probe evidence). The concrete blockers, in dependency order:
+**Stage 2 (2026-08-21) — the closure-flag split, landed with its
+witness.** `fnUnitRec.lambdaUnit` distinguishes a returned lambda's own
+unit (word `"fnval"`, a real named-param frame with capture slots) from
+a native code-body unit (each/do$body, a CallableSpec-input frame) —
+the split the campaign brief identified — and `DynApplyLeadEligible`
+now admits a lambda unit's own slots. The end-to-end witness (pinned in
+`frontier-hof-audit.tsv` §9): the **apply-the-capture factory**
+
+```
+def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]]
+def h2 (mkc2 (z:Integer => [add 7 z]))
+(h2 5)                                # → 12, compiled natively
+```
+
+compiles with parity — without the admission the inner `[g, v]`
+residual count-refused the fnval probe and the whole factory refused
+`body result of unknown provenance`. The probe battery around it:
+repeated reads (`(h2 5) (h2 10)`) and multi-instance factories stay
+sound refusals (`fn value precedes residual args`, ledgered); the
+0-arg-apply-of-a-1-arg-capture spelling refuses where the interpreter
+raises (the fallback raises the identical error); a `g:Any` data
+capture never reaches the admission (not a Function carrier).
+
+Remaining stages, each its own probe-driven increment:
 
 1. **Chained applies** — the Church/cif body `((b x) y)`: the inner
-   `(b x)` lead is a param slot (admissible), but the outer apply's
-   lead is the inner's EVENT result, which `RecordDynApply` hard-
-   refuses (runtime quote state unknown) — so the lambda body nets 2
-   values and count-refuses. Lifting this means proving the
-   event-lead apply faithful (the quote-state problem is real:
-   PR #280's probe).
-2. **Capture reachability at call sites** — the single-apply factory
-   `def h (mkap g/v)  (h 5)` refuses at `capture g of h unreachable at
-   a call site` before any lead apply is reached.
+   `(b x)` lead is now admitted, but the outer apply's lead is the
+   inner's EVENT result, which `RecordDynApply` hard-refuses (runtime
+   quote state unknown — the problem is real: PR #280's probe), so the
+   body still count-refuses.
+2. **Capture reachability at call sites** — a CONCRETELY-installed
+   factory closure (`def h (mkap …)  (h 5)` where the analysis yields
+   a concrete FnDefInfo) compiles unit "h" whose captures are
+   construction-scope carriers, unreachable at outer call sites; the
+   sound route is the closure-VALUE apply (OpPushClosure's baked
+   captures), which the carrier-bound flavour already takes.
 
-Neither is a flag question; both are their own probe-driven stages.
 After them: `tryReturnedClosure` for nested curried residuals
 (2-level-plus factories), and CPS (the factk rows). Stage 0
 prerequisites (NUR077's Apply Op, NUR073's BROAD verdict) remain

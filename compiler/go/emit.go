@@ -3786,10 +3786,24 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *core.Registry, si
 // in both spellings (probe-pinned across arities in
 // lang/go/bytecode_chained_apply_test.go).
 func (es *EmitState) DynApplyLeadEligible(v core.Value) bool {
-	if !es.Active() || len(es.openUnitRecs) == 0 || es.InClosureUnit() {
+	if !es.Active() || len(es.openUnitRecs) == 0 {
 		return false
 	}
-	if es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]].nUnnamed > 0 {
+	// The Stage 2 closure-flag split's consumer half: a native code-body
+	// closure unit (each/do$body — its analysis frame is the CallableSpec
+	// inputs) still declines, but a LAMBDA unit ("fnval" — a returned
+	// lambda's own body, a real named-param frame with capture slots) is
+	// admitted: the witness is the factory's inner apply-the-capture body
+	// (`def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer]
+	// [(g v)]] )]]` — without the admission the [g, v] residual
+	// count-refuses the fnval probe and the whole factory refuses "body
+	// result of unknown provenance"). The nUnnamed guard below still
+	// excludes bare-type params.
+	innermost := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+	if innermost.closure && !innermost.lambdaUnit {
+		return false
+	}
+	if innermost.nUnnamed > 0 {
 		return false
 	}
 	u := es.units[len(es.units)-1]
