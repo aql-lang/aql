@@ -295,6 +295,16 @@ const (
 	// Function-typed carrier (StartFnCompile's pendingApply) and for the
 	// paren-bounded RecordDynApply event when the apply word drove it.
 	OpCallDynApplyTop
+	// OpCallDynTrailKeepQ is OpCallDynTrailTop for an EVENT-provenance fn (a
+	// direct call result — `(1 2 (mk))`): the value arrives WITHOUT the
+	// interpreter's read substitution, so its runtime quote state must
+	// SURVIVE — a callee returning `quote (fn …)` stays inert in the
+	// interpreter ([args, fn] is the residual) while an unquoted anonymous
+	// result auto-applies. No strip: a Quoted runtime value leaves the
+	// window untouched (both engines' data case); an unquoted one applies
+	// exactly as OpCallDynTrailTop. This is what retires RecordDynApply's
+	// event-lead hard-refusal (PR #280's probe is the quoted witness).
+	OpCallDynTrailKeepQ
 
 	// OpCallDynFrame replays a fn body's ENTIRE end-of-body residual — the
 	// whole-frame dynamic-apply window. A fn body that leaves an unapplied
@@ -497,6 +507,7 @@ var opcodeNames = [...]string{
 	OpCallUserPoly:         "CALL_USER_POLY",
 	OpCallDynTrailTop:      "CALL_DYN_TRAIL_TOP",
 	OpCallDynApplyTop:      "CALL_DYN_APPLY_TOP",
+	OpCallDynTrailKeepQ:    "CALL_DYN_TRAIL_KEEPQ",
 	OpCallDynFrame:         "CALL_DYN_FRAME",
 	OpPushConstFresh:       "PUSH_CONST_FRESH",
 	OpPushConstFreshLocal:  "PUSH_CONST_FRESH_LOCAL",

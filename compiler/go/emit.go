@@ -186,26 +186,27 @@ type eventFlags struct {
 }
 
 type emitCall struct {
-	word            string
-	sig             *core.Signature
-	ops             []EmitOperand
-	nout            int // number of results the call pushes (0 for a side-effect word, N for multi-result)
-	pos             core.SrcPos
-	poly            bool                  // dispatch via OpCallNativePoly (runtime MatchSignature)
-	polyReg         *core.Registry        // the sub-registry to re-match a module poly word in (nil = main registry)
-	polyNoMatch     *core.PolyNoMatchSpec // faithful-raise plan for the poly's runtime no-match arm (nil = defer)
-	makeList        bool                  // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	dynApply        int                   // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
-	dynApplyUnquote bool                  // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
-	dynMixed        bool                  // forward-drift window (REFUSAL-CLOSURE §1): island the len(ops) laid-out window [residual(s), dynamic value, word const, forward literal] verbatim via OpCallDynamicMixed — the island's own dispatch performs the interpreter's forward collection over the LIVE top value
-	makeMap         bool                  // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
-	mapKeys         []string
-	mapImpl         bool // the source map's Implicit flag
-	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
-	interpSegs      []InterpSeg
-	xmlTmpl         *core.XmlTmpl // assemble len(ops) hole operands into an XML element (OpInterpXml, §9.2c)
-	spliceDyn       bool          // spread the ONE laid-out payload operand at run time (OpSpliceDyn, §9.2b)
-	diverges        bool          // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	word              string
+	sig               *core.Signature
+	ops               []EmitOperand
+	nout              int // number of results the call pushes (0 for a side-effect word, N for multi-result)
+	pos               core.SrcPos
+	poly              bool                  // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg           *core.Registry        // the sub-registry to re-match a module poly word in (nil = main registry)
+	polyNoMatch       *core.PolyNoMatchSpec // faithful-raise plan for the poly's runtime no-match arm (nil = defer)
+	makeList          bool                  // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	dynApply          int                   // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
+	dynApplyUnquote   bool                  // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
+	dynApplyKeepQuote bool                  // the dynApply fn is EVENT-provenance (a direct call result, no read substitution): lower to OpCallDynTrailKeepQ, which preserves the runtime quote state (quoted stays data)
+	dynMixed          bool                  // forward-drift window (REFUSAL-CLOSURE §1): island the len(ops) laid-out window [residual(s), dynamic value, word const, forward literal] verbatim via OpCallDynamicMixed — the island's own dispatch performs the interpreter's forward collection over the LIVE top value
+	makeMap           bool                  // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	mapKeys           []string
+	mapImpl           bool // the source map's Implicit flag
+	interp            bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
+	interpSegs        []InterpSeg
+	xmlTmpl           *core.XmlTmpl // assemble len(ops) hole operands into an XML element (OpInterpXml, §9.2c)
+	spliceDyn         bool          // spread the ONE laid-out payload operand at run time (OpSpliceDyn, §9.2b)
+	diverges          bool          // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 	// typedBind, when non-nil, marks this event as a typed value-def's runtime
 	// validate/reparent step (OpBindTyped over the single operand) instead of a
 	// word dispatch — recorded by RecordTypedBind from the def handler's
@@ -3888,24 +3889,38 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 		}
 	}
 	// An EVENT-provenance fn — the direct result of a compiled call — arrives
-	// WITHOUT the interpreter's read substitution, so its runtime quote state
-	// is unknowable here: a callee returning `quote (fn …)` stays INERT in
-	// the interpreter while OpCallDynTrailTop's read-mirror strip would apply
-	// it (probe-pinned: `def choose fn [[][Function][quote (fn …)]]
-	// (1 2 choose)` compiled 3 vs the interpreter's [1 2 fn] residual — PR
-	// #280 review). REFUSE, never plain-decline: on a decline the caller
-	// leaves the un-collapsed [args, fn] residual as the model, which
-	// miscompiles the mirror case (an UNQUOTED call result the interpreter
-	// DOES apply — `(1 2 (mk))` modelled [1 2 fn] vs the interpreter's 3).
-	// Only the apply WORD may own an event-provenance fn: applyHandler
-	// unquotes the VALUE regardless of arrival, which OpCallDynApplyTop
-	// mirrors. A local / const / dyn-scope arrival keeps the lowering — a
-	// stored read IS substituted (the strip's contract) — and a
-	// returned-closure operand pushes construction-fresh (never quoted), so
-	// the strip is a no-op there.
+	// WITHOUT the interpreter's read substitution, so its runtime quote
+	// state must SURVIVE: a callee returning `quote (fn …)` stays INERT in
+	// the interpreter ([args, fn] is the residual — probe-pinned: `def
+	// choose fn [[][Function][quote (fn …)]]  (1 2 choose)`, PR #280
+	// review) while an unquoted anonymous result auto-applies (`(1 2
+	// (mk))` → 3). OpCallDynTrailKeepQ preserves exactly that: no strip, a
+	// Quoted runtime value leaves the window untouched. (This retires the
+	// former hard-refusal here — "runtime quote state unknown" — which
+	// held while the only ops were the read-mirror strip and the apply
+	// word's unquote.) A local / const / dyn-scope arrival keeps the
+	// stripping op — a stored read IS substituted (the strip's contract).
+	keepQuote := false
 	if fnOp.kind == opEvent && applyIdx < 0 {
-		es.MarkUncompilable("trailing fn-value apply over a call result (runtime quote state unknown)")
-		return false
+		// The KeepQ lowering consumes EXACTLY len(args) window values on
+		// the unquoted path, so it is faithful only when the callee's own
+		// arity equals the window: a wider window under-applies in the
+		// interpreter (`(1 2 (mk 4))` nets [1, 6] — the 1-arg adder leaves
+		// the deeper value) where the op would consume both. A concrete
+		// single-sig callee proves its arity; anything else keeps the
+		// refusal (sound interpreter fallback).
+		proven := false
+		if arity, known := es.producerReturnedClosureArity(fn.ID); known {
+			proven = arity == len(args)
+		} else if fd, isFn := fn.Data.(core.FnDefInfo); isFn {
+			own := fd.OwnSigs()
+			proven = len(own) == 1 && own[0].TotalArgs() == len(args)
+		}
+		if !proven {
+			es.MarkUncompilable("trailing fn-value apply over a call result (runtime quote state unknown)")
+			return false
+		}
+		keepQuote = true
 	}
 	unquote := false
 	if applyIdx >= 0 {
@@ -3914,7 +3929,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 		unquote = true
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote, dynApplyKeepQuote: keepQuote}})
 	es.setProduced(out, seq)
 	return true
 }

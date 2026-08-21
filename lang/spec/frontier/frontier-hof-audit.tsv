@@ -103,3 +103,10 @@ def mkap g:Function => [v:Integer => [(g v)]] end def h (mkap (z:Integer => [add
 def mkap g:Function => [v:Integer => [(g v)]] end def h (mkap (z:Integer => [add 7 z])) end (h 5) (h 10)	12 17	repeated calls freshen their outs per site
 def mkap g:Function => [v:Integer => [(g v)]] end def h (mkap (z:Integer => [add 1 z])) end (h 5) def h (mkap (z:Integer => [mul 2 z])) end (h 5)	6 10	a rebind between calls: each apply reads its own def site's operand
 def mkap g:Function => [v:Integer => [(g v)]] end def a (mkap (z:Integer => [add 1 z])) end def b (mkap (z:Integer => [mul 2 z])) end (a 5) (b 5)	6 10	two instances of one factory stay distinct
+#
+# §9c the event-lead trailing apply (2026-08-21): OpCallDynTrailKeepQ
+#     preserves an event-provenance fn's runtime quote state (no read
+#     substitution to mirror), retiring RecordDynApply's hard-refusal
+#     when the producer proves the closure arity equals the window.
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (2 (mk 4))	6	an event-provenance trailing apply with producer-proven arity compiles
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))	1 6	a wider window than the closure's arity under-applies in the interpreter (refuses; ledgered)

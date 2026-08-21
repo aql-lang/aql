@@ -1022,13 +1022,27 @@ calls, rebind-between-calls ordering, and two factory instances all
 compile with parity; `((kk 7) 99)` (no def binding — no def-site
 operand) stays the ledgered §4.3 refusal.
 
+**The event-lead trailing apply — landed for proven arities
+(2026-08-21, §9c).** `RecordDynApply`'s event-provenance hard-refusal
+("runtime quote state unknown") is retired where the window is proven:
+a new op, `OpCallDynTrailKeepQ`, preserves the runtime quote state (no
+read-substitution strip — a callee returning `quote (fn …)` stays
+inert in BOTH engines, an unquoted anonymous result applies in both),
+and the record admits it only when the callee's arity provably equals
+the window (`producerReturnedClosureArity`, or a concrete single-sig
+proof). `(2 (mk 4))` compiles natively (frontier §9c); the wider
+window `(1 2 (mk 4))` — where the interpreter under-applies and the
+deeper value survives — keeps the refusal (ledgered), as do quoted
+and carrier-lead spellings without an arity proof.
+
 Remaining stages, each its own probe-driven increment:
 
-1. **Chained applies** — the Church/cif body `((b x) y)`: the inner
-   `(b x)` lead is now admitted, but the outer apply's lead is the
-   inner's EVENT result, which `RecordDynApply` hard-refuses (runtime
-   quote state unknown — the problem is real: PR #280's probe), so the
-   body still count-refuses.
+1. **The Church chain's inner lead** — `((b x) y)` inside cif's lambda:
+   `(b x)`'s lead is a PARAM carrier (no producer, no concrete sig), so
+   the inner apply records but the OUTER apply's window stays
+   arity-unprovable and the body still count-refuses. The lever is an
+   arity channel for param-typed fn carriers (a declared `fnsig` bound,
+   or the §8.2 call-shape memo).
 2. `tryReturnedClosure` for nested curried residuals (2-level-plus
    factories), and CPS (the factk rows). Stage 0 prerequisites
    (NUR077's Apply Op, NUR073's BROAD verdict) remain maintainer-ruled.

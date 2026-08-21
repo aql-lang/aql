@@ -788,6 +788,15 @@ func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, 
 	switch op {
 	case compiler.OpCallDynTrailTop:
 		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
+	case compiler.OpCallDynTrailKeepQ:
+		// The event-provenance flavour: the runtime quote state survives
+		// (no read substitution to mirror). A Quoted fn stays data — the
+		// [args, fn] window IS the interpreter's residual for a quoted
+		// call result — and an unquoted one applies via the shared body.
+		if top := len(stack) - 1; top >= 0 && stack[top].Quoted {
+			return stack, nil
+		}
+		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
 	case compiler.OpCallDynApplyTop:
 		return vc.callDynApplyTop(reg, arg, stack, curDebug, pc)
 	case compiler.OpCallDynFrame:
@@ -1736,7 +1745,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			}
 			stack = ns
 		case compiler.OpCallDynamic, compiler.OpCallDynamicTrailing, compiler.OpCallDynamicMixed,
-			compiler.OpCallDynTrailTop, compiler.OpCallDynApplyTop, compiler.OpCallDynFrame, compiler.OpCallDynMethod:
+			compiler.OpCallDynTrailTop, compiler.OpCallDynApplyTop, compiler.OpCallDynTrailKeepQ, compiler.OpCallDynFrame, compiler.OpCallDynMethod:
 			// The fn-value-call boundary family: leading / trailing-1
 			// (callDynamic), interior-window (callDynamicMixed), fn-on-top
 			// (callDynTrailTop / callDynApplyTop) and the whole-frame replay

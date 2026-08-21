@@ -517,6 +517,7 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// compile (unledgered), while these two spellings stay sound refusals.
 	`def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 5) (h2 10)`: {why: "repeated reads of the bound closure put a fn value before residual args (the make-adder's repeated-read shape; graduation = the multi-read closure lowering)", failsWith: "fn value precedes residual args"},
 	`def mk0 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g)]] )]] end def h0 (mk0 (z:Integer => [add 7 z])) end (h0 5)`:             {why: "a 0-arg apply of a 1-arg capture nets [g] and the interpreter raises inside the lambda; the fnval unit refuses instead of modeling the raise (sound: the fallback raises the identical error)", failsWith: "body result of unknown provenance"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                                         {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
 
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4

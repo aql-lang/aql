@@ -114,3 +114,63 @@ func TestRecordDynApplyNameArms(t *testing.T) {
 	}
 	_ = bound
 }
+
+// TestRecordDynApplyEventLeadKeepQ pins the §9c event-lead gate's refusal
+// arm: an event-provenance fn CARRIER with neither a compiled-factory
+// producer nor a concrete single-sig arity proof marks the program
+// uncompilable (the quote-state refusal). The PROVEN path — a
+// producer-arity match recording the KeepQ apply — is pinned end-to-end by
+// frontier-hof-audit.tsv §9c's `(2 (mk 4))` row, and the quoted runtime
+// arm by the eng-side TestCallDynTrailKeepQQuotedStaysData.
+func TestRecordDynApplyEventLeadKeepQ(t *testing.T) {
+	es := NewEmitState()
+	carrier := core.NewCarrier(core.TFunction)
+	// Dynamic: the operand resolver's type-body screen exempts the
+	// checker's gradual stand-ins, which is what a real event out is.
+	carrier.Dynamic = true
+	es.frames[0] = append(es.frames[0], EmitEvent{kind: evCall})
+	es.producedBy[carrier.ID] = producer{seq: 0}
+	out := core.NewCarrier(core.TInteger)
+	if es.RecordDynApply([]core.Value{core.NewInteger(5)}, carrier, out, core.SrcPos{}) {
+		t.Fatal("an unprovable event-provenance carrier lead must refuse")
+	}
+	if es.Compilable || es.Reason == "" {
+		t.Errorf("the refusal must mark the program (compilable=%v reason=%q)", es.Compilable, es.Reason)
+	}
+
+	// The concrete single-sig arity proof: a capture-bearing (unbakeable)
+	// anonymous fn resolved through its producing event records the KeepQ
+	// apply when the window matches its declared arity, and refuses a
+	// wider window. Dynamic exempts the operand resolver's type-body
+	// screen, as a real event out is.
+	mkFn := func() core.Value {
+		v := core.NewFunction(core.FnDefInfo{Anonymous: true,
+			Captured: []core.CapturedBinding{{Name: "c", Value: core.NewCarrier(core.TInteger)}},
+			Signatures: []core.Signature{{
+				Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+			}}})
+		v.Dynamic = true
+		return v
+	}
+	es2 := NewEmitState()
+	fn := mkFn()
+	es2.frames[0] = append(es2.frames[0], EmitEvent{kind: evCall})
+	es2.producedBy[fn.ID] = producer{seq: 0}
+	if !es2.RecordDynApply([]core.Value{core.NewInteger(5)}, fn, core.NewCarrier(core.TInteger), core.SrcPos{}) {
+		t.Fatalf("a sig-proven event lead must record (reason %q)", es2.Reason)
+	}
+	rec := es2.frames[0][len(es2.frames[0])-1]
+	if rec.kind != evCall || !rec.call.dynApplyKeepQuote {
+		t.Error("the sig-proven event-lead apply must carry dynApplyKeepQuote")
+	}
+	es3 := NewEmitState()
+	fn3 := mkFn()
+	es3.frames[0] = append(es3.frames[0], EmitEvent{kind: evCall})
+	es3.producedBy[fn3.ID] = producer{seq: 0}
+	if es3.RecordDynApply([]core.Value{core.NewInteger(1), core.NewInteger(2)}, fn3, core.NewCarrier(core.TInteger), core.SrcPos{}) {
+		t.Fatal("a wider window than the sig arity must refuse")
+	}
+	if es3.Compilable {
+		t.Error("the wider window must mark the program uncompilable")
+	}
+}
