@@ -214,6 +214,17 @@ type CheckState struct {
 	// gated to !Compiling. Set by the compile entry points after Begin.
 	Compiling bool
 
+	// FnCarrierReadSubstituted marks that this compile pass resolved at
+	// least one read of a name def-bound to a computed fn through the
+	// fn-carrier side table (stepWord's Stage 1 consult). Before Stage 1
+	// such a read raised a false undefined_word, so every program in this
+	// class refused with the SILENT check-diagnostics sentinel; when the
+	// pass ends in a refusal anyway, the compile entry points consult this
+	// flag to keep that silent interpreter fallback — a working program
+	// must not trade its quiet slow path for a loud compile_refused just
+	// because the diagnostic became honest. Reset by Begin.
+	FnCarrierReadSubstituted bool
+
 	// FnAnalysisCounts tracks distinct body analyses (memo misses)
 	// per fn DEFINITION SITE (fnQuotaKey: scope + name + body position,
 	// NOT bare name — every higher-order closure shares a synthetic
@@ -791,6 +802,7 @@ func (c *CheckState) Begin() func() {
 	// a proper per-pass flag — a later plain check on a reused registry
 	// must not inherit a prior compile's true.
 	c.Compiling = false
+	c.FnCarrierReadSubstituted = false
 	// Arm process-wide ID minting for the pass's lifetime: the emit
 	// recorder keys provenance on Value.IDs minted at creation, so every
 	// value created while ANY pass is live must carry one (see

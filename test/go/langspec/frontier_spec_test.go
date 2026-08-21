@@ -491,39 +491,49 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	//     the same refusal the audit's §4.3 kkA/B/C spellings draw.
 	`def kk x:Any => [y:Any => [x]] end ((kk 7) 99)`: {why: "audit §4.3's capture family: the inner lambda's capture of x is unreachable at the call site", failsWith: "unreachable at a call site"},
 
-	// (3) check-diagnostics refusals, one stage before emit: the compile
-	//     lane's strict check cannot resolve a name def-bound to a
-	//     COMPUTED fn (`def fact (fgen fgen/v)`, `def h (compose …)` —
-	//     undefined_word on the bound name, where the CLI's check passes
-	//     both, audit §1.4/§1.6), and the four parser rows draw NUR087's
-	//     branch-local-def false positive (undefined_word: r2 after
-	//     `def r1 (a s)` through a Function parameter). Graduation =
-	//     NUR087's retirement for the parser rows; the def-bound
-	//     computed-fn model for the U-combinator and compose rows.
-	`def fgen fn s:Function Function [ ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ] ) ] end def fact (fgen fgen/v) end (fact 5)`:                      {why: "strict-lane check: `fact` is def-bound to a computed fn and unresolved (the CLI check passes it — audit §1.4)", failsWith: "check diagnostics"},
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end def h (mk 1) end 2 h/v apply`:                                                                           {why: "strict-lane check: `h` is def-bound to a computed fn and unresolved (audit §5.4's workaround row; its ((mk 1) 2) sibling compiles natively as the unledgered control)", failsWith: "check diagnostics"},
-	`def n 1 end def mkc fn nn:Integer Function [(fn x:Integer Integer [add nn x])] end def c (mkc n) end def n 100 end (c 5)`:                                                   {why: "strict-lane check: `c` is def-bound to a computed fn and unresolved (the §5.6/NUR097 freezing idiom; its live/undef §8 siblings compile natively as unledgered controls)", failsWith: "check diagnostics"},
-	`def compose fn [[f:Function g:Function][Function][ ( fn x:Integer Integer [ f (g x) ] ) ]] end def h (compose (a:Integer => [add 1 a]) (a:Integer => [mul 2 a])) end (h 5)`: {why: "strict-lane check: `h` is def-bound to a computed fn and unresolved (audit §1.6's compose row)", failsWith: "check diagnostics"},
-	hofPitem + `def manyloop fn [[a:Function s:String acc:List][Map][ def r (a s) if (r.ok) [ (manyloop a/v (r.rest) (push (r.val) acc)) ] [ {ok:true val:acc rest:s} ] ]] end def pmany fn a:Function Function [ ( fn s:String Map [ def z [] (manyloop a/v s z) ] ) ] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def digits (pmany digit/v) end (digits '123ab')`: {why: "NUR087's class: branch-local defs after calls through Function params flag undefined_word at check", failsWith: "check diagnostics"},
-	hofPalt + `(ab 'bzz')`: {why: "NUR087's class over the alternation rows", failsWith: "check diagnostics"},
-	hofPalt + `(ab 'zzz')`: {why: "NUR087's class over the alternation rows", failsWith: "check diagnostics"},
-	hofPitem + `def pseq fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r1 (a s) if (r1.ok) [ def r2 (b (r1.rest)) if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ] [ {ok:false rest:s val:None} ] ] [ {ok:false rest:s val:None} ] ] ) ]] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def two (pseq digit/v digit/v) end (two '42x')`: {why: "NUR087 verbatim: def r2 inside the if branch after def r1 (a s) — the audit's §5.5 minimal repro is this row's pseq body", failsWith: "check diagnostics"},
+	// (3) the def-bound computed-fn family, post the Stage 1 check-model
+	//     fix (2026-08-21): a PLAIN read of a name def-bound to a computed
+	//     fn now resolves through the per-pass fn-carrier side table on the
+	//     compile lane (stepWord's consult — the false undefined_word is
+	//     gone), so these rows refuse one or two stages LATER, each at a
+	//     sound emit-land gate. The §5.6 freeze-idiom row graduated
+	//     outright (deleted here — TestFrontierSpecCompiled now requires it
+	//     to compile with parity). A `/v` read of such a name deliberately
+	//     KEEPS the undefined_word diagnostic (stepWordVal declines the
+	//     table): substituting there green-lights lowerings that drop the
+	//     operand (the pmany/pseq shape below refused at the unmatched-
+	//     dispatch recovery for the same reason — the trap declines a
+	//     window naming a table-bound word, engine.go's
+	//     TryRecordUnmatchedDispatchTrap).
+	`def fgen fn s:Function Function [ ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ] ) ] end def fact (fgen fgen/v) end (fact 5)`:                      {why: "the U-combinator's fn unit refuses at the Stage 2 single-result-branch rule once the `fact` read resolves (Stage 1 landed)", failsWith: "branch leaves extra values"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end def h (mk 1) end 2 h/v apply`:                                                                           {why: "the `/v` read of def-bound computed `h` keeps its undefined_word diagnostic (the deliberate Stage 1 /v hold; audit §5.4's workaround row — its ((mk 1) 2) sibling compiles natively as the unledgered control)", failsWith: "check diagnostics"},
+	`def compose fn [[f:Function g:Function][Function][ ( fn x:Integer Integer [ f (g x) ] ) ]] end def h (compose (a:Integer => [add 1 a]) (a:Integer => [mul 2 a])) end (h 5)`: {why: "with the `h` read resolved (Stage 1), compose's own unit refuses: the returned closure captures f and g — audit §1.6's compose row", failsWith: "body result of unknown provenance"},
+	hofPitem + `def manyloop fn [[a:Function s:String acc:List][Map][ def r (a s) if (r.ok) [ (manyloop a/v (r.rest) (push (r.val) acc)) ] [ {ok:true val:acc rest:s} ] ]] end def pmany fn a:Function Function [ ( fn s:String Map [ def z [] (manyloop a/v s z) ] ) ] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def digits (pmany digit/v) end (digits '123ab')`: {why: "`digit/v` at pmany's Function slot is check-invisible (digit is table-bound), so the dispatch no-match declines the trap and refuses (the sound Stage 1 outcome; a trap here raised signature_error where the interpreter succeeds)", failsWith: "unmatched dispatch recovered at pmany"},
+	hofPalt + `(ab 'bzz')`: {why: "with the `ab` read resolved (Stage 1), palt's own unit refuses: its returned closure captures the alternation's parsers", failsWith: "body result of unknown provenance"},
+	hofPalt + `(ab 'zzz')`: {why: "with the `ab` read resolved (Stage 1), palt's own unit refuses: its returned closure captures the alternation's parsers", failsWith: "body result of unknown provenance"},
+	hofPitem + `def pseq fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r1 (a s) if (r1.ok) [ def r2 (b (r1.rest)) if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ] [ {ok:false rest:s val:None} ] ] [ {ok:false rest:s val:None} ] ] ) ]] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def two (pseq digit/v digit/v) end (two '42x')`: {why: "`digit/v` at pseq's Function slots is check-invisible (digit is table-bound) — the same trap decline as the pmany row", failsWith: "unmatched dispatch recovered at pseq"},
 
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4
-	// shipped 2026-08-21). Every def-binding row is the same strict-lane
-	// def-bound-computed-fn refusal as the hof-audit fact/compose rows and
-	// graduates with them; the two curry-error rows skip the def and refuse
-	// one stage later at the Stage 3 function-valued-operand gate.
-	`import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.compose addone/v double/v) end (h 5)`: {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.pipe addone/v double/v) end (h 5)`:    {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def k (FnUtil.const 7) end (k 99)`:                                                                                                            {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def fs (FnUtil.flip sub2/v) end (fs 3 10)`:                                          {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def c (FnUtil.curry sub2/v) end def c10 (c 10) end (c10 3)`:                         {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def p (FnUtil.partial sub2/v 10) end (p 3)`:                                         {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 3 5)`: {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 5 3)`: {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
-	`import "boru:fn-util"  def f fn x:Integer Integer [add 1 x] end def m (FnUtil.memoize f/v) end (m 4)`:                                                                {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
+	// shipped 2026-08-21). Post the Stage 1 check-model fix the def-binding
+	// rows refuse at emit-land gates instead of the retired false
+	// undefined_word: the FnUtil combinators take `xx/v` Function operands,
+	// so most rows hit the Stage 3 function-valued-operand gate at the
+	// combinator call itself; the const row (an Integer operand — no Stage
+	// 3 gate) reaches the leading-apply classifier, where a read-
+	// substituted lead with no statically-known closure shape refuses
+	// (resolveDynamicApply — a Go-impl fn value's island apply is not
+	// provably the interpreter's word dispatch). The two curry-error rows
+	// were always the Stage 3 shape.
+	`import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.compose addone/v double/v) end (h 5)`: {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at compose"},
+	`import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.pipe addone/v double/v) end (h 5)`:    {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at pipe"},
+	`import "boru:fn-util"  def k (FnUtil.const 7) end (k 99)`:                                                                                                            {why: "Stage 1 guard: `k` is a read-substituted Go-impl fn value with no statically-known closure shape — the island apply is not provably the interpreter's word dispatch (a lowered apply here returned 99 for 7)", failsWith: "def-bound computed fn apply"},
+	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def fs (FnUtil.flip sub2/v) end (fs 3 10)`:                                          {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at flip"},
+	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def c (FnUtil.curry sub2/v) end def c10 (c 10) end (c10 3)`:                         {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at curry"},
+	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def p (FnUtil.partial sub2/v 10) end (p 3)`:                                         {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at partial"},
+	`import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 3 5)`: {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at on"},
+	`import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 5 3)`: {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at on"},
+	`import "boru:fn-util"  def f fn x:Integer Integer [add 1 x] end def m (FnUtil.memoize f/v) end (m 4)`:                                                                {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at memoize"},
 	`import "boru:fn-util"  def f fn [a:Integer Integer [a] s:String String [s]] end def c (FnUtil.curry f/v)`:                                                            {why: "Stage 3: a function-valued operand at a native's slot (the curry error rows pass f/v without def-binding the result)", failsWith: "function-valued operand at curry"},
 	`import "boru:fn-util"  def f fn x:Integer Integer [x] end def c (FnUtil.curry f/v)`:                                                                                  {why: "Stage 3: a function-valued operand at a native's slot (the curry error rows pass f/v without def-binding the result)", failsWith: "function-valued operand at curry"},
 	`import "boru:fn-util"  FnUtil.flip 5`:  {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},

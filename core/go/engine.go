@@ -2574,6 +2574,17 @@ func (e *Engine) stepWordVal(val Value, w WordInfo) error {
 	v, ok := ResolveRef(e.Registry, w.Name)
 	if !ok {
 		if e.Registry != nil && e.Registry.analysisActive() {
+			// Deliberately NO fn-carrier side-table consult here, unlike
+			// stepWord's twin branch: substituting the carrier for a `/v`
+			// read of a carrier-bound name lets the check pass green-light
+			// a unit whose lowering DROPS the operand — the top-level read
+			// has no producing event and no fn-unit home for the dyn-scope
+			// rescue, so `(pmany digit/v)` compiled to a 0-arg call and
+			// raised signature_error where the interpreter succeeds
+			// (frontier-hof-audit.tsv's pmany/pseq rows). Until the
+			// residual re-push machinery can lower such a read, the
+			// undefined_word diagnostic below keeps those units refused —
+			// slow, never wrong.
 			e.Registry.noteAnalysisDiagnostic(CheckBraid.UndefinedWordCheckDiag(e, w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
@@ -2903,6 +2914,31 @@ func (e *Engine) stepWord(val Value) error {
 		// every undefined word produces exactly one diagnostic.
 		if !e.Registry.analysisActive() {
 			return e.undefinedWordError(w.Name, val.Pos())
+		}
+		// A COMPILE pass first resolves a name def-bound to a
+		// Function-family CARRIER (a computed fn — installDef installs no
+		// Defs binding for those; core_helpers.go's fn arm) through the
+		// per-pass side table: the read substitutes the carrier exactly as
+		// a def-value read would, with the same use + NoteDefRead
+		// provenance, so `def h (mk 1)  (h 2)` feeds the carrier-lead
+		// apply machinery (IsFnTypedCarrier) instead of refusing the unit
+		// with a false undefined_word. Compile-pass-scoped: a PLAIN check
+		// constructs the concrete fn on this path (fn's handler runs in
+		// check), so its diagnostic surface never reaches here with a
+		// table entry — the gate keeps that contract explicit.
+		if e.Registry.analysisCompiling() {
+			if cv, hit := CheckFnCarrierBind(e.Registry, w.Name); hit {
+				e.Registry.noteAnalysisUse(w.Name)
+				e.Registry.analysisRecorder().NoteDefRead(cv.ID, w.Name)
+				// Mark the pass: if it ends in a refusal anyway, the
+				// compile entry points keep the SILENT interpreter
+				// fallback this program class had before Stage 1 (the
+				// read used to raise the check-diagnostics sentinel).
+				e.Registry.Check.FnCarrierReadSubstituted = true
+				cv = WithPos(cv, val)
+				e.Tape.Set(e.Pointer, cv)
+				return e.stepLiteral()
+			}
 		}
 		e.Registry.noteAnalysisDiagnostic(CheckBraid.UndefinedWordCheckDiag(e, w.Name, val.Pos()))
 		v := NewAtom(w.Name)
@@ -8979,6 +9015,19 @@ func (e *Engine) TryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 				if top, ok := e.Registry.Defs.Top(wi.Name); ok {
 					v = top // the binding is what matchSignature examined
 				} else {
+					// A name def-bound to a COMPUTED fn (the fn-carrier side
+					// table — installDef installs no Defs binding for those)
+					// is check-invisible but BOUND at run time: `a/v` there
+					// delivers the real Function value the runtime match
+					// examines, so this static no-match is a modeling
+					// artifact, not a definite runtime failure (the pmany /
+					// pseq shape: `def digits (pmany digit/v)` trapped
+					// signature_error where the interpreter succeeds).
+					// Decline; the caller's refusal stands and the program
+					// falls back faithfully.
+					if _, hit := CheckFnCarrierBind(e.Registry, wi.Name); hit {
+						return false
+					}
 					// Known literals resolve exactly as the match's forward
 					// walk resolved them (true/false → Boolean) — the value
 					// the runtime dispatch examines.

@@ -1,0 +1,145 @@
+package core
+
+import (
+	"testing"
+)
+
+// compileCheckRegistry arms a registry as a COMPILE pass: check mode on
+// (Begin) plus the Compiling flag the compile entry points set.
+func compileCheckRegistry(t *testing.T) *Registry {
+	t.Helper()
+	r := covRegistry(t, nil)
+	end := r.Check.Begin()
+	r.Check.Compiling = true
+	t.Cleanup(func() {
+		r.Check.Compiling = false
+		end()
+	})
+	return r
+}
+
+// TestCheckFnCarrierBindTable drives the side table's arms directly: the
+// nil-registry reset, the absent-table reset, the create and reuse write
+// arms, a miss, and the pass-scoped clearing. (The lang-level twin
+// exercises the shim aliases; this one keeps core's own coverage whole
+// after the move down from basic.)
+func TestCheckFnCarrierBindTable(t *testing.T) {
+	ResetCheckFnCarrierBinds(nil) // nil-registry arm
+	r := covRegistry(t, nil)
+	ResetCheckFnCarrierBinds(r) // absent table: no-op
+	if _, hit := CheckFnCarrierBind(r, "x"); hit {
+		t.Error("empty table must miss")
+	}
+	NoteCheckFnCarrierBind(r, "a", NewCarrier(TFunction)) // create arm
+	NoteCheckFnCarrierBind(r, "b", NewCarrier(TFunction)) // reuse arm
+	if _, hit := CheckFnCarrierBind(r, "a"); !hit {
+		t.Error("noted name must resolve")
+	}
+	if _, hit := CheckFnCarrierBind(r, "zz"); hit {
+		t.Error("unnoted name must miss")
+	}
+	ResetCheckFnCarrierBinds(r)
+	if _, hit := CheckFnCarrierBind(r, "a"); hit {
+		t.Error("reset must clear the pass-scoped table")
+	}
+}
+
+// TestStepWordCompileCarrierSubstitute — a COMPILE pass resolves a plain
+// read of a name def-bound to a Function carrier through the side table:
+// stepWord substitutes the carrier with no undefined_word diagnostic.
+func TestStepWordCompileCarrierSubstitute(t *testing.T) {
+	r := compileCheckRegistry(t)
+	NoteCheckFnCarrierBind(r, "h", NewCarrier(TFunction))
+
+	e := NewTop(r)
+	e.Tape = NewTape([]Value{NewWord("h")}, StackHeadroom)
+	if err := e.stepWord(e.Tape.At(0)); err != nil {
+		t.Fatalf("substituting stepWord errored: %v", err)
+	}
+	got := e.Tape.At(0)
+	if !got.Carrier || got.Parent == nil || !got.Parent.ConformsTo(TFunction) {
+		t.Errorf("stepWord did not substitute the carrier: %v", got)
+	}
+	if len(r.Check.Diagnostics) != 0 {
+		t.Errorf("no diagnostics expected, got %v", r.Check.Diagnostics)
+	}
+	if !r.Check.FnCarrierReadSubstituted {
+		t.Error("the substitution must mark the pass (the silent-fallback flag)")
+	}
+}
+
+// TestStepWordValCarrierKeepsUndefinedDiag — the `/v` read path must NOT
+// consult the side table, even on a compile pass with the name noted:
+// substituting there green-lights units whose lowering drops the operand
+// (the pmany/pseq miscompile — see stepWordVal). The diagnostic keeps
+// those units refused.
+func TestStepWordValCarrierKeepsUndefinedDiag(t *testing.T) {
+	r := compileCheckRegistry(t)
+	NoteCheckFnCarrierBind(r, "hv", NewCarrier(TFunction))
+
+	e := NewTop(r)
+	e.Tape = NewTape([]Value{NewWord("hv")}, StackHeadroom)
+	if err := e.stepWordVal(e.Tape.At(0), WordInfo{Name: "hv", ArgCount: -1, ForceVal: true}); err != nil {
+		t.Fatalf("/v step errored: %v", err)
+	}
+	if got := e.Tape.At(0); !got.Undefined {
+		t.Errorf("a /v read of a carrier-bound name must keep the Undefined placeholder: %v", got)
+	}
+	if len(r.Check.Diagnostics) != 1 {
+		t.Errorf("expected the one undefined_word diagnostic, got %v", r.Check.Diagnostics)
+	}
+}
+
+// TestStepWordPlainCheckKeepsUndefinedDiag — without the Compiling flag the
+// substitution must not fire: a plain check pass keeps its diagnostic
+// surface (undefined_word + the Undefined placeholder) even for a name in
+// the side table.
+func TestStepWordPlainCheckKeepsUndefinedDiag(t *testing.T) {
+	r := covRegistry(t, nil)
+	defer r.Check.Begin()()
+	NoteCheckFnCarrierBind(r, "h", NewCarrier(TFunction))
+
+	e := NewTop(r)
+	e.Tape = NewTape([]Value{NewWord("h")}, StackHeadroom)
+	if err := e.stepWord(e.Tape.At(0)); err != nil {
+		t.Fatalf("plain-check stepWord errored: %v", err)
+	}
+	if got := e.Tape.At(0); !got.Undefined {
+		t.Errorf("plain check must keep the Undefined placeholder: %v", got)
+	}
+	if len(r.Check.Diagnostics) != 1 {
+		t.Errorf("expected the one undefined_word diagnostic, got %v", r.Check.Diagnostics)
+	}
+}
+
+// TestTrapDeclinesFnCarrierBoundWord — a fallback window naming a
+// fn-carrier-bound word declines the unmatched-dispatch trap: the name IS
+// bound at run time (stepWordVal delivers the real Function value there),
+// so the static no-match is a modeling artifact, not a definite runtime
+// failure — a trap here raised signature_error where the interpreter
+// succeeds (the pmany/pseq shape).
+func TestTrapDeclinesFnCarrierBoundWord(t *testing.T) {
+	e, _ := trapEngine(t, []Value{NewWord("trapw"), NewWord("cb")}, 0, []int{1})
+	NoteCheckFnCarrierBind(e.Registry, "cb", NewCarrier(TFunction))
+	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "trapw"}, trapFn(), SrcPos{}) {
+		t.Error("a table-bound word in the window must decline the trap")
+	}
+}
+
+// TestStepWordCompileCarrierMissStaysUndefined — the Compiling gate open
+// but the name absent from the table: the diagnostic path is unchanged.
+func TestStepWordCompileCarrierMissStaysUndefined(t *testing.T) {
+	r := compileCheckRegistry(t)
+
+	e := NewTop(r)
+	e.Tape = NewTape([]Value{NewWord("nope")}, StackHeadroom)
+	if err := e.stepWord(e.Tape.At(0)); err != nil {
+		t.Fatalf("miss-arm stepWord errored: %v", err)
+	}
+	if got := e.Tape.At(0); !got.Undefined {
+		t.Errorf("a table miss must keep the Undefined placeholder: %v", got)
+	}
+	if len(r.Check.Diagnostics) != 1 {
+		t.Errorf("expected the one undefined_word diagnostic, got %v", r.Check.Diagnostics)
+	}
+}

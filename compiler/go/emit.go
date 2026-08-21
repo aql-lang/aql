@@ -4345,6 +4345,21 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []core.Value,
 	}
 	ops := make([]EmitOperand, len(vals))
 	for i, v := range vals {
+		// A READ-substituted fn-carrier window value (Stage 1's fn-carrier
+		// side table — defReads carries its ID, no FnDefInfo payload)
+		// poisons the window: the interpreter WORD-dispatches that read
+		// before this word ever collects, so the static window this
+		// rematch would replay never exists at run time (`def q (if c
+		// [fn-arm] [fn-arm])  add 1 (q 5)` re-matched add over [1, fn, 5]
+		// and raised signature_error where the interpreter computes 7).
+		// Decline; the caller's refusal stands and the program falls back.
+		if core.IsFnTypedCarrier(v) {
+			if _, isFn := v.Data.(core.FnDefInfo); !isFn {
+				if _, read := es.defReads[v.ID]; read {
+					return false
+				}
+			}
+		}
 		op, ok := es.resolveOperand(v)
 		if !ok {
 			return false
@@ -6833,8 +6848,25 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 		// closure (miscompile mechanism E). Refuse; the interpreter applies
 		// the chain faithfully.
 		if applyDynamic {
-			if arity, known := es.producerReturnedClosureArity(residual[0].ID); known && arity != len(residual)-1 {
+			arity, known := es.producerReturnedClosureArity(residual[0].ID)
+			if known && arity != len(residual)-1 {
 				return residual, 0, "fn-value apply arity mismatch — curried chain or partial apply (Stage 3)"
+			}
+			// A READ-substituted lead (the fn-carrier side table: `def k
+			// (FnUtil.const 7)  (k 99)` — the read carries NoteDefRead
+			// provenance) is a WORD dispatch in the interpreter: the runtime
+			// binding always applies. OpCallDynamic's island instead runs
+			// anonymous-VALUE semantics, which leave a named Go-impl fn
+			// value as data (compiled [99] vs interp [7]). With no
+			// statically-known closure shape the two cannot be proven to
+			// agree — refuse; a compiled-factory producer (known arity)
+			// stays lowered, and an EVENT lead (no def-read — the
+			// `((FnUtil.const 7) 99)` spelling) keeps the island, which
+			// mirrors the interpreter's value semantics exactly.
+			if !known {
+				if _, read := es.defReads[residual[0].ID]; read {
+					return residual, 0, "def-bound computed fn apply (closure shape unknown — Stage 1)"
+				}
 			}
 		}
 	}

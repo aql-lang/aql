@@ -909,6 +909,65 @@ higher-order style opts out of the bytecode VM as a rule, not an
 exception. Worth stating plainly in the docs so the performance
 trade-off is a choice rather than a surprise.
 
+**Stage 1 landed (2026-08-21) — the def-bound computed-fn read.** The
+compile lane's false `undefined_word` on a name def-bound to a computed
+fn (`def h (mk 1)  (h 2)` — the strict check's carrier binding installs
+no `Defs` entry, so the read looked undefined where the CLI check and
+the interpreter both succeed) is resolved: on a compile pass, `stepWord`
+consults the per-pass fn-carrier side table (moved down to
+`core/go/check_fncarrier.go`) and substitutes the carrier with the same
+use + `NoteDefRead` provenance a def-value read records. The §5.6
+freeze-idiom row (`def c (mkc n) … (c 5)`) now **compiles natively with
+parity** — the first graduation in this family. Three companion
+soundness guards shipped with it, each closing a hole the substitution
+exposed (each was a would-be miscompile caught by the frontier parity
+harness):
+
+- a `/v` read of a table-bound name deliberately KEEPS the diagnostic
+  (`stepWordVal` declines the table) — substituting there green-lit a
+  lowering that dropped the operand;
+- the unmatched-dispatch trap declines a window naming a table-bound
+  word (`TryRecordUnmatchedDispatchTrap`): at run time that name IS
+  bound, so the static no-match is a modeling artifact, not a definite
+  runtime failure (the pmany/pseq rows trapped `signature_error` where
+  the interpreter succeeds);
+- the leading fn-carrier apply refuses a READ-substituted lead whose
+  closure shape is not statically known (`resolveDynamicApply`): the
+  interpreter word-dispatches such a read, while `OpCallDynamic`'s
+  island runs anonymous-VALUE semantics — for a named Go-impl fn value
+  (`FnUtil.const`'s result) those diverge (ADR-016's data-vs-call edge:
+  `((FnUtil.const 7) 99)` is 99 in BOTH engines, but
+  `def k (FnUtil.const 7)  (k 99)` is 7 interpreted). A compiled-factory
+  producer (statically known closure arity) stays lowered.
+
+A fourth guard closes the rematch window the same way
+(`RecordDispatchRematchValues` declines a read-substituted fn-carrier
+window value: `def q (if c [fn-arm] [fn-arm])  add 1 (q 5)` re-matched
+`add` over `[1, fn, 5]` and raised where the interpreter computes 7).
+And the escaping-closure factory itself graduated: `def a5 (mk 5)
+a5 3` — the §5.4 make-adder, called once through its binding —
+compiles natively with parity (repeated reads still refuse at the
+fn-value residual nets).
+
+**User-visible behaviour is preserved for every non-graduating row.**
+Refusals are loud by policy (`compile_refused`), but every program in
+this family refused behind the SILENT check-diagnostics sentinel before
+Stage 1 — so a pass that substituted a carrier read marks itself
+(`CheckState.FnCarrierReadSubstituted`), and a refusal from such a pass
+keeps the silent interpreter fallback (with the precise reason surfaced
+as the CLI's performance warning). The census suites classify this
+transitional class with the sentinel; the frontier compile ledger
+tracks its precise per-row reasons.
+
+The remaining rows in the family moved one or two stages later, each to
+a sound emit-land refusal (`frontierCompileLedger` records the exact
+strings): the Stage 3 function-valued-operand gate (the fn-util
+combinator rows), the Stage 2 single-result-branch rule (the
+U-combinator), capture-bearing `body result of unknown provenance`
+(compose, palt), and the guards above. Next stages per the campaign
+plan: the closure-flag split, extending `tryReturnedClosure` to
+`RecordUserCall` operands, captures, CPS.
+
 ### 5.9 Smaller edges met while writing the programs
 
 - **Quotations are not closures.** A `codequote`d body does not capture
