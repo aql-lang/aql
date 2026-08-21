@@ -517,7 +517,21 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// compile (unledgered), while these two spellings stay sound refusals.
 	`def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 5) (h2 10)`: {why: "repeated reads of the bound closure put a fn value before residual args (the make-adder's repeated-read shape; graduation = the multi-read closure lowering)", failsWith: "fn value precedes residual args"},
 	`def mk0 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g)]] )]] end def h0 (mk0 (z:Integer => [add 7 z])) end (h0 5)`:             {why: "a 0-arg apply of a 1-arg capture nets [g] and the interpreter raises inside the lambda; the fnval unit refuses instead of modeling the raise (sound: the fallback raises the identical error)", failsWith: "body result of unknown provenance"},
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                                         {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
+	// §9d — the GRADUAL inner parameter. Identical to the §9/§9b
+	// factories except the inner lambda's parameter is Any: the lead is
+	// admitted, the ARGUMENT gate refuses. A gradual argument cannot be
+	// proven non-function, and the interpreter never APPLIES a
+	// function-valued one — its leading collection meets a barrier and
+	// raises — where the trailing model the window records would apply.
+	// Not repairable at run time: the raise is a property of word
+	// dispatch (an island over the resolved window leaves both values
+	// inert), and the two possible texts are selected by collection state
+	// the window does not carry. This is the Church chain's actual
+	// blocker (audit §5.8 stage 1); pinned in core by
+	// TestS5BParenLeadFnApplyIdxGradualArgDeclines.
+	`def app g:Function => [x:Any => [(g x)]] end def h (app (z:Integer => [add 7 z])) end (h 5)`:                          {why: "audit §5.8/§9d: a gradual inner parameter cannot prove its argument non-function, so the lead window's argument gate refuses", failsWith: "body result of unknown provenance"},
+	`def app fn [[g:Function][Function][( fn [[x:Any][Any][(g x)]] )]] end def h (app (z:Integer => [mul 3 z])) end (h 5)`: {why: "audit §5.8/§9d: the verbose twin — the concrete-parameter spelling of this factory compiles (§9)", failsWith: "body result of unknown provenance"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                     {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
 
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4

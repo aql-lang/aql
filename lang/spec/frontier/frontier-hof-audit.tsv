@@ -110,3 +110,17 @@ def mkap g:Function => [v:Integer => [(g v)]] end def a (mkap (z:Integer => [add
 #     when the producer proves the closure arity equals the window.
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (2 (mk 4))	6	an event-provenance trailing apply with producer-proven arity compiles
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))	1 6	a wider window than the closure's arity under-applies in the interpreter (refuses; ledgered)
+#
+# §9d the GRADUAL inner parameter (2026-08-21): the same
+#     apply-the-capture factory as §9b/§9, but the inner lambda's
+#     parameter is Any rather than a concrete type. The window is
+#     otherwise identical and its lead is admitted — only the
+#     ARGUMENT gate refuses, because a gradual argument cannot be
+#     proven non-function and the interpreter RAISES on a
+#     function-valued one (its leading collection meets a barrier)
+#     where the trailing model applies. Refuses; ledgered. There is
+#     no runtime repair: the raise is a property of word dispatch,
+#     so an island over the resolved window leaves both values inert.
+#     This is the Church chain's actual blocker (§5.8 stage 1).
+def app g:Function => [x:Any => [(g x)]] end def h (app (z:Integer => [add 7 z])) end (h 5)	12	the arrow-inner factory with a gradual inner parameter (refuses; ledgered)
+def app fn [[g:Function][Function][( fn [[x:Any][Any][(g x)]] )]] end def h (app (z:Integer => [mul 3 z])) end (h 5)	15	the verbose twin of the row above — the concrete-parameter spelling compiles (§9)

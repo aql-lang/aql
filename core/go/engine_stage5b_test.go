@@ -731,6 +731,48 @@ func TestS5BParenLeadFnApplyIdxArity(t *testing.T) {
 	}
 }
 
+// TestS5BParenLeadFnApplyIdxGradualArgDeclines pins the classifier's
+// ARGUMENT gate — the one that keeps the Church-chain family refused
+// (design/HIGHER-ORDER-FUNCTIONS.0.md §5.8). Dropping either clause
+// compiles `def app f:Function => [x:Any => [(f x)]]` and its whole
+// family, which LOOKS like a graduation and is a miscompile waiting on a
+// function-valued argument: the interpreter never applies one — its
+// leading collection meets a function word, a barrier that never feeds
+// forward collection, and raises — where the trailing model the window
+// records binds and applies. There is no runtime repair: the raise is a
+// property of WORD dispatch, so an island over the resolved window leaves
+// both values inert instead of raising, and the two possible texts (the
+// stranded-forward barrier, or the lead's own no-match) are selected by
+// collection state the window does not carry.
+func TestS5BParenLeadFnApplyIdxGradualArgDeclines(t *testing.T) {
+	r := covRegistry(t, nil)
+	es := newS5BEmit()
+	es.dynApplyOK = true
+	es.leadEligible = true
+	e := NewTop(r)
+	lead := NewCarrier(TFunction)
+
+	// A GRADUAL argument: its runtime value may be a function.
+	gradual := NewCarrier(TAny)
+	gradual.Dynamic = true
+	e.Tape = NewTape([]Value{NewOpenParen(), lead, gradual, NewCloseParen()}, StackHeadroom)
+	if got := e.parenLeadFnApplyIdx(es, 0, 3, 2, 2); got != -1 {
+		t.Errorf("a gradual argument must decline the lead window, got %d", got)
+	}
+
+	// A STATICALLY-known fn argument: the divergence is certain.
+	e.Tape = NewTape([]Value{NewOpenParen(), lead, NewCarrier(TFunction), NewCloseParen()}, StackHeadroom)
+	if got := e.parenLeadFnApplyIdx(es, 0, 3, 2, 2); got != -1 {
+		t.Errorf("an fn-valued argument must decline the lead window, got %d", got)
+	}
+
+	// The admitted shape, for contrast: a concrete non-fn argument.
+	e.Tape = NewTape([]Value{NewOpenParen(), lead, NewInteger(5), NewCloseParen()}, StackHeadroom)
+	if got := e.parenLeadFnApplyIdx(es, 0, 3, 2, 2); got != 1 {
+		t.Errorf("a non-fn argument must admit the lead window, got %d", got)
+	}
+}
+
 func TestS5BCloseParenSkipperHook(t *testing.T) {
 	// Surviving paren content tells a RecorderSkipper to ignore the
 	// re-visit (lines 7538-7558).

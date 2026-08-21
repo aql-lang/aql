@@ -7552,6 +7552,26 @@ func (e *Engine) parenLeadFnApplyIdx(es EmitRecorder, openIdx, closeIdx, count, 
 		return -1
 	}
 	last := e.Tape.At(lastIdx)
+	// The ARGUMENT gate, and it is load-bearing in BOTH clauses. The two
+	// spellings converge only while the argument is not a function: a
+	// FUNCTION-valued argument is never applied by the interpreter, whose
+	// leading collection meets a function word — a barrier that never
+	// feeds forward collection — and RAISES, where the trailing model
+	// binds and applies. A statically-known fn argument is excluded
+	// outright; a GRADUAL one (`x:Any`) is excluded because nothing here
+	// can prove it will not be a function at run time.
+	//
+	// This cannot be repaired by resolving it at run time. The
+	// interpreter's raise is a property of WORD dispatch, not of the
+	// values: an island over the resolved window `[lead, fnArg]` leaves
+	// both inert (probe: the pair comes back as the residual `fn (Integer)
+	// fn (Integer)`, no apply and no error), while the word-read spelling
+	// raises — and it raises with one of TWO texts (the stranded-forward
+	// barrier when the lead parked a forward, the lead's own no-match when
+	// no overload could), selected by engine-internal collection state the
+	// window does not carry. So there is no faithful lowering to admit the
+	// shape with, and the refusal stands (design/HIGHER-ORDER-FUNCTIONS.0.md
+	// §5.8; pinned by TestS5BParenLeadFnApplyIdxGradualArgDeclines).
 	if last.Dynamic || IsFnValueResidual(last) {
 		return -1
 	}

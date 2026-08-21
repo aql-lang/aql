@@ -1035,15 +1035,70 @@ window `(1 2 (mk 4))` — where the interpreter under-applies and the
 deeper value survives — keeps the refusal (ledgered), as do quoted
 and carrier-lead spellings without an arity proof.
 
+**The Church chain's blocker, located (2026-08-21).** The stage above
+named the lever as "an arity channel for param-typed fn carriers". The
+probe battery says otherwise, and the correction matters because the
+arity work would not have moved these rows. Bisecting the family down
+to its smallest member isolates ONE discriminator — the inner lambda's
+parameter TYPE:
+
+```
+def app g:Function => [x:Integer => [(g x)]]   def h (app …)  (h 5)   # compiles (§9)
+def app g:Function => [x:Any     => [(g x)]]   def h (app …)  (h 5)   # refuses
+```
+
+Everything else — the factory, the capture, the call site, the lead's
+admission through `DynApplyLeadEligible` — is identical and already
+lands. What refuses is `parenLeadFnApplyIdx`'s **argument** gate
+(`last.Dynamic || IsFnValueResidual(last)`), and it is load-bearing:
+the leading and trailing spellings converge only while the argument is
+not a function. A FUNCTION-valued argument is never applied by the
+interpreter — its leading collection meets a function word, a barrier
+that never feeds forward collection, and RAISES — where the trailing
+model the window records binds and applies. A gradual (`Any`) argument
+cannot be proven non-function, so it is excluded with the static case.
+
+Dropping the gate compiles the whole `x:Any` family, including the
+one-level rows above, which reads as a graduation and is a miscompile
+waiting on its first function-valued argument. It cannot be repaired at
+run time, which is the part worth recording:
+
+- the interpreter's raise is a property of **word dispatch**, not of
+  the values. An island over the resolved window `[lead, fnArg]` — the
+  faithful-by-construction move everywhere else in this campaign —
+  leaves both inert instead (probe: the residual comes back
+  `fn (Integer) fn (Integer)`, no apply and no error);
+- and the raise has **two** texts — the stranded-forward barrier
+  (`g is still waiting for 1 argument(s) when x begins its own
+  dispatch`) when the lead parked a forward, the lead's own no-match
+  (`cannot call g — no signature matches the arguments`) when no
+  overload could — selected by engine-internal collection state the
+  compiled window does not carry. A single-sig lead takes the first, a
+  multi-overload lead the second, and the lead here is a CARRIER, so
+  neither is provable at record time.
+
+So the refusal stands, and it now stands **pinned** rather than
+incidental: `TestS5BParenLeadFnApplyIdxGradualArgDeclines` (core) fails
+if either clause is dropped, the gate's comment carries the reasoning,
+and `frontier-hof-audit.tsv` §9d ledgers the family so it graduates
+automatically when the shape is genuinely solved.
+
 Remaining stages, each its own probe-driven increment:
 
-1. **The Church chain's inner lead** — `((b x) y)` inside cif's lambda:
-   `(b x)`'s lead is a PARAM carrier (no producer, no concrete sig), so
-   the inner apply records but the OUTER apply's window stays
-   arity-unprovable and the body still count-refuses. The lever is an
-   arity channel for param-typed fn carriers (a declared `fnsig` bound,
-   or the §8.2 call-shape memo).
-2. `tryReturnedClosure` for nested curried residuals (2-level-plus
+1. **The gradual-argument lead window** (§9d, above) — the Church
+   chain's real gate. Needs a way to answer the interpreter's
+   word-dispatch question from a compiled window: either a proof at
+   record time that the argument slot cannot hold a function (a
+   non-`Any` bound, or a whole-program flow fact), or a lowering that
+   reproduces word-level collection rather than value application. The
+   arity channel the previous draft proposed is neither, and is not on
+   this path.
+2. **The Church chain's inner lead, beyond §9d** — `((b x) y)` inside
+   cif's lambda additionally needs the OUTER apply's window to be
+   arity-provable; the inner apply's own admission is blocked by (1)
+   first, so (1) is the prerequisite and the arity work is only visible
+   behind it.
+3. `tryReturnedClosure` for nested curried residuals (2-level-plus
    factories), and CPS (the factk rows). Stage 0 prerequisites
    (NUR077's Apply Op, NUR073's BROAD verdict) remain maintainer-ruled.
 
