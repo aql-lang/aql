@@ -66,7 +66,7 @@ var valofNatives = []NativeFunc{
 				// args and records as an ordinary CALL_USER, letting the bytecode
 				// compiler lower `…args fn apply`. Runtime is unchanged
 				// (applyHandler still re-steps the fn).
-				ReturnsFn: ReturnsIdentity(0),
+				ReturnsFn: applyReturns,
 				Returns:   []*Type{TAny}, BarrierPos: 0,
 			},
 			// Apply a Reach (a lens) to a receiver: `apply $.name person`
@@ -372,15 +372,62 @@ func valofHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 // captures still serve as TFunction-slot args to higher-order words
 // (filter, walk, behave) where the consumer's handler calls into the
 // engine directly via CallBoru.
-func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+// applyReturns is `apply`'s check-mode model: ReturnsIdentity(0), so the
+// check engine re-steps the fn value exactly as runtime does and an
+// arg-taking callee records as an ordinary call and lowers.
+//
+// One shape it must DECLARE rather than model. A fn whose only signatures
+// are 0-arg is applied by applyHandler at the apply site itself (ADR-016 /
+// NUR077 §5 Hole 1), and the check engine's re-step cannot see that: where
+// the re-step's data gate keeps the value inert — an anonymous lambda, a
+// macro — nothing is recorded and the program const-folds to the FUNCTION,
+// while the interpreter answers with the applied result. Keying on
+// Anonymous/Macro here is not a semantic choice; it is the factual
+// condition under which execFnDefLiteral's gate declines to dispatch, and
+// so the only way the two engines could part company. Refuse, and the
+// interpreter fallback owns the shape.
+func applyReturns(args []Value, r *Registry) []Value {
+	if len(args) == 1 && r != nil {
+		if fd, ok := args[0].Data.(FnDefInfo); ok &&
+			FnValueOnlyZeroArgSigs(fd) && (fd.Anonymous || fd.Macro) {
+			r.Check.Recorder().MarkUncompilable(
+				"apply of a 0-arg fn value the re-step leaves inert (ADR-016, NUR077 §5 Hole 1)")
+		}
+	}
+	return ReturnsIdentity(0)(args, r)
+}
+
+func applyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v := args[0]
 	if !v.Parent.Equal(TFunction) {
 		return nil, fmt.Errorf("apply: expected Function, got %s", v.Parent.String())
 	}
-	if _, ok := v.Data.(FnDefInfo); !ok {
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok {
 		return nil, fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", v.Data)
 	}
 	v.Quoted = false
+	// ADR-016 (NUR077 §5 Hole 1): a fn whose ONLY signatures are 0-arg is
+	// applied HERE rather than handed back for the engine to re-step. The
+	// re-step reaches execFnDefLiteral's data gate, which keeps a 0-arg
+	// ANONYMOUS value inert — and that gate is load-bearing (it is what
+	// parks `f/v` and keeps a lambda stored in a container as data), so it
+	// stays. Routing an EXPLICIT apply through it made ORIGIN decide the
+	// outcome, which ADR-016 forbids:
+	//
+	//	def z fn [[] [Integer] [42]]   z/v apply  ->  42
+	//	def f ([] => [42])             f/v apply  ->  fn f   (was)
+	//
+	// Applying here settles both spellings at the one site that knows an
+	// application was ASKED for. Restricted to fns with no arg-taking
+	// overload, so a nullary signature can never eclipse an arg-taking
+	// sibling the stack was about to satisfy (the NUR035 hazard); every
+	// other arity keeps the re-step, which already ignores origin.
+	if FnValueOnlyZeroArgSigs(fd) {
+		if sig, hasOwn := fd.FirstOwnSig(); hasOwn {
+			return CallBoruFn(r, &fd, sig, nil)
+		}
+	}
 	return []Value{v}, nil
 }
 

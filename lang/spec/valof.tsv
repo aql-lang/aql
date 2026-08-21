@@ -51,6 +51,7 @@ def z fn [[][Integer][42]]  z/v apply	42	apply fires a referenced 0-arg fn
 def f [a:Integer b:Integer] => [a sub b]  typeof (f/v)	Function	/v holds a bound lambda
 def f n:Integer => [n add 1]  (f/v) 5	6	grouped lambda reference dispatches
 def f n:Integer => [n add 1]  5 f/v apply	6	apply a referenced lambda
+def f ([] => [42])  typeof (f/v)	Function	a /v-parked 0-arg lambda is still DATA — `apply` applies it, the READ does not (the data gate stays; dropping it defeats parking)
 [([] => [42])]	[fn [[][Any][42]]]	a lambda inside a list is held, never fired in place
 #
 # §6  Negatives — the ONLY refusal is a name with nothing bound to it.

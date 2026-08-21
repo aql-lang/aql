@@ -48,8 +48,10 @@ above:
    arity-carrying, consumes the fn value, seamed at `execFnDefLiteral`
    (§5.1), serialised by `Flatten` via the existing `apply` word — after
    the THREE prerequisite defects are fixed as their own changes: the
-   §5.2 over-count, then §5's two holes (the ADR-016 0-arg anonymous
-   gate and `apply`'s double-recording).
+   §5.2 over-count (CLOSED 2026-08-18), then §5's two holes — the
+   ADR-016 0-arg anonymous gate (CLOSED 2026-08-21) and `apply`'s
+   double-recording (OPEN, and the one with a flagged unknown: whether it
+   can be fixed without new engine state).
 
 A and B were language decisions and are now taken. C and D are
 engineering, and C is the smaller and better-understood of the two; the
@@ -344,12 +346,58 @@ signatures are `TList`/`TMap` only, and `do (inc/r)` is a signature error.
 `DoEval` is also payloadless, so it cannot carry the arity `Pretty`/`Cost`/
 `opEqual` need. Apply needs its own Op.
 
-**Hole 1 — a 0-arg *anonymous* fn is silently not applied.**
-`(([] => [42])/r) apply` → `[fn]`, not `42`; the named equivalent works. This
-is the ADR-016 gate at `core/go/engine.go:5275`, which `lang/go/CLAUDE.md`
-already declares a defect rather than a design. A Flatten built on `apply`
-would reintroduce, for this one shape, exactly the quiet wrongness the refusal
-was installed to prevent.
+**Hole 1 — a 0-arg *anonymous* fn is silently not applied. CLOSED
+2026-08-21.**
+
+> **Fixed.** The minimal pair — identical shape, only origin differs, and
+> only at arity 0:
+>
+> ```
+> def z fn [[] [Integer] [42]]   z/v apply   ->  42
+> def f ([] => [42])             f/v apply   ->  fn f     (was)
+> ```
+>
+> **The gate is not the thing to remove.** Measured: dropping `Anonymous`
+> from `execFnDefLiteral`'s 0-arg data gate makes `f/v` answer `42`
+> (parking defeated), `(typeof f/v)` answer `Integer`, and a lambda stored
+> in a map answer `Integer` — the gate is what keeps a 0-arg lambda DATA
+> wherever one is held rather than called, and it must stay.
+>
+> The fault was routing an EXPLICIT apply through it. `applyHandler`
+> unquoted the value and handed it back for the engine to re-step, and the
+> re-step is exactly where the gate decides — so origin decided the
+> outcome. `applyHandler` now applies a fn whose ONLY signatures are 0-arg
+> at the apply site itself (`CallBoruFn`), which is the one place that
+> knows an application was asked for. Restricted by
+> `FnValueOnlyZeroArgSigs`, so a nullary signature can never eclipse an
+> arg-taking sibling the stack was about to satisfy (the NUR035 hazard);
+> every other arity keeps the re-step, which already ignores origin.
+>
+> The compiled lane needed the other half. `apply`'s check-mode model
+> (`ReturnsIdentity(0)` → `applyReturns`) REFUSES the shape whose re-step
+> the gate leaves inert, because the check pass would otherwise const-fold
+> the program to the FUNCTION while the interpreter now answers with the
+> applied result. Compiling that shape natively is future work; the
+> interpreter fallback is correct today, and the row is ledgered in
+> `lang/spec/frontier/frontier-fnvalue-scope.tsv`.
+>
+> **A VM mirror was written and then removed, which is worth recording.**
+> `callDynApplyTop` was given the same arity-0 branch on the reasoning
+> that otherwise the engines diverge. Coverage proved it dead: with the
+> check pass refusing the shape, `OpCallDynApplyTop` can never receive a
+> 0-arg-only ANONYMOUS fn, and for a NAMED one the island's re-step
+> dispatches it anyway — so both engines already agree without the
+> branch. It is noted here rather than left behind an
+> unreachability pragma: **if the compiled lane ever admits this shape,
+> the VM mirror has to come back with it**, or the divergence the
+> refusal is standing in for becomes real.
+>
+> Pinned in `lang/spec/valof.tsv` §5, whose heading ("Anonymous-function
+> references behave identically") was the one claim in the file that did
+> not hold at arity 0. Full suite green with no row changed.
+
+A Flatten built on `apply` would have reintroduced, for this one shape,
+exactly the quiet wrongness the refusal was installed to prevent.
 
 **Hole 2 — `apply` is not itself faithfully recordable.**
 `777 inc/r apply` records **both** `Call{apply,1}` and the induced
