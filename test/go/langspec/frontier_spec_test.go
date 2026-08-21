@@ -138,6 +138,20 @@ func TestFrontierSpecInterp(t *testing.T) {
 // Must match the TSV rows byte-for-byte — the orphan arm catches drift.
 const docMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/v, boom: boom/v} ] end `
 
+// hof* — shared def prefixes of the frontier-hof-audit.tsv rows (the
+// higher-order audit's §1 programs, design/HIGHER-ORDER-FUNCTIONS.0.md).
+// Must match the TSV rows byte-for-byte — the orphan arm catches drift.
+const (
+	hofSKI    = `def kk x:Any => [y:Any => [x]] end def ss f:Function => [g:Function => [x:Any => [(f x) (g x)]]] end def ii ((ss kk/v) kk/v) end `
+	hofBB     = `def bb f:Function => [g:Function => [x:Any => [f (g x)]]] end `
+	hofNum    = `def czero f:Function => [x:Any => [x]] end def csucc n:Function => [f:Function => [x:Any => [f ((n f/v) x)]]] end `
+	hofNumEnv = `def toint n:Function => [((n (k:Integer => [add k 1])) 0)] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end `
+	hofBool   = `def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end `
+	hofFactk  = `def factk fn [[n:Integer k:Function][Any][ if (lte 1 n) [ (k 1) ] [ def kk ( fn r:Integer Any [ def m (mul n r) (k m) ] ) (factk (sub 1 n) kk/v) ] ]] end `
+	hofPitem  = `def pitem s:String => [ if (eq 0 (size s)) [ {ok:false rest:s val:None} ] [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ] end def psat fn p:Function Function [ ( fn s:String Map [ def r (pitem s) if (r.ok) [ if (p (r.val)) [ r ] [ {ok:false rest:s val:None} ] ] [ r ] ] ) ] end `
+	hofPalt   = hofPitem + `def palt fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r (a s) if (r.ok) [ r ] [ (b s) ] ] ) ]] end def ab (palt (psat (c:String => [eq 'a' c])) (psat (c:String => [eq 'b' c]))) end `
+)
+
 // frontierCompileLedger pins the frontier rows the compiler REFUSES today,
 // keyed by exact input (the knownRefusals convention). failsWith pins the
 // refusal reason substring (stable core only); "" is the bootstrap sentinel.
@@ -438,6 +452,61 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// args (carrier.go, gated by disjunctCombosTakeSig). Row moved to
 	// lang/spec/bytecode-migrated.tsv; the family is pinned in
 	// lang/go/bytecode_ljoin_test.go.
+
+	// ───────────────────────────────────────────────────────────────────
+	// frontier-hof-audit.tsv — the higher-order audit's §1 programs
+	// (design/HIGHER-ORDER-FUNCTIONS.0.md §1, pinned 2026-08-21). Three
+	// refusal families, all pre-existing and documented in the audit:
+	//
+	// (1) audit §5.8 / COMPILABLE-SUBSET.md "slow, not wrong": a curried
+	//     combinator's body result is an inner fn literal closing over the
+	//     enclosing parameters — unknown provenance, so the mint refuses
+	//     and the interpreter owns the program. The CPS rows are the same
+	//     family one step in: the continuation call `(k m)` inside a
+	//     fn-local fn is a fn CALL operand of unknown provenance.
+	hofSKI + `(ii 42)`:      {why: "audit §5.8: curried combinator body result is an inner fn literal — unknown provenance", failsWith: "body result of unknown provenance"},
+	hofSKI + `(ii 'hello')`: {why: "audit §5.8: same program over a String operand", failsWith: "body result of unknown provenance"},
+	hofBB + `(((bb (n:Integer => [mul n 2])) (n:Integer => [add n 3])) 4)`:                                                             {why: "audit §5.8 over B; this row's CLI-check failure is NUR089's inline-lambda call site, but the compile lane refuses in the provenance class first", failsWith: "body result of unknown provenance"},
+	hofBB + `def d fn n:Integer Integer [mul n 2] end def e fn n:Integer Integer [add n 3] end (((bb d/v) e/v) 4)`:                     {why: "audit §5.8 over B; the named-/v call-site twin of the row above (checks clean at the CLI — the NUR089 pair)", failsWith: "body result of unknown provenance"},
+	`def cc f:Function => [x:Any => [y:Any => [(f y) x]]] end def add2 a:Integer => [b:Integer => [add a b]] end (((cc add2/v) 1) 10)`: {why: "audit §5.8 over C", failsWith: "body result of unknown provenance"},
+	`def ww f:Function => [x:Any => [(f x) x]] end def add2 a:Integer => [b:Integer => [add a b]] end ((ww add2/v) 4)`:                 {why: "audit §5.8 over W", failsWith: "body result of unknown provenance"},
+	hofNum + hofNumEnv + `(toint c3/v)`: {why: "audit §5.8 over the Church numerals (csucc)", failsWith: "body result of unknown provenance"},
+	hofNum + `def cplus m:Function => [n:Function => [f:Function => [x:Any => [((m f/v) ((n f/v) x))]]]] end ` + hofNumEnv + `(toint ((cplus c2/v) c3/v))`:        {why: "audit §5.8: Church addition", failsWith: "body result of unknown provenance"},
+	hofNum + `def cmult m:Function => [n:Function => [f:Function => [(m (n f/v))]]] end ` + hofNumEnv + `(toint ((cmult c2/v) c3/v))`:                             {why: "audit §5.8: Church multiplication", failsWith: "body result of unknown provenance"},
+	`def cpair a:Any => [b:Any => [s:Function => [((s a) b)]]] end def cfst p:Function => [(p (a:Any => [b:Any => [a]]))] end def p ((cpair 1) 2) end (cfst p/v)`: {why: "audit §5.8: Church pair, first projection", failsWith: "body result of unknown provenance"},
+	`def cpair a:Any => [b:Any => [s:Function => [((s a) b)]]] end def csnd p:Function => [(p (a:Any => [b:Any => [b]]))] end def p ((cpair 1) 2) end (csnd p/v)`: {why: "audit §5.8: Church pair, second projection", failsWith: "body result of unknown provenance"},
+	`def ctrue t:Any => [f:Any => [t/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end (((cif ctrue/v) 'T') 'F')`:                               {why: "audit §5.8: Church true through cif", failsWith: "body result of unknown provenance"},
+	`def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end (((cif cfalse/v) 'T') 'F')`:                             {why: "audit §5.8: Church false through cif", failsWith: "body result of unknown provenance"},
+	hofBool + `def cnot p:Function => [t:Any => [f:Any => [((p f) t)]]] end (((cif (cnot ctrue/v)) 'T') 'F')`:                                                     {why: "audit §5.8: Church not true", failsWith: "body result of unknown provenance"},
+	hofBool + `def cnot p:Function => [t:Any => [f:Any => [((p f) t)]]] end (((cif (cnot cfalse/v)) 'T') 'F')`:                                                    {why: "audit §5.8: Church not false", failsWith: "body result of unknown provenance"},
+	hofBool + `def cand p:Function => [q:Function => [((p q/v) cfalse/v)]] end (((cif ((cand ctrue/v) cfalse/v)) 'T') 'F')`:                                       {why: "audit §5.8: Church and, T ∧ F", failsWith: "body result of unknown provenance"},
+	hofBool + `def cand p:Function => [q:Function => [((p q/v) cfalse/v)]] end (((cif ((cand ctrue/v) ctrue/v)) 'T') 'F')`:                                        {why: "audit §5.8: Church and, T ∧ T", failsWith: "body result of unknown provenance"},
+	hofBool + `def cor p:Function => [q:Function => [((p ctrue/v) q/v)]] end (((cif ((cor ctrue/v) cfalse/v)) 'T') 'F')`:                                          {why: "audit §5.8: Church or, T ∨ F", failsWith: "body result of unknown provenance"},
+	hofBool + `def cor p:Function => [q:Function => [((p ctrue/v) q/v)]] end (((cif ((cor cfalse/v) cfalse/v)) 'T') 'F')`:                                         {why: "audit §5.8: Church or, F ∨ F", failsWith: "body result of unknown provenance"},
+	hofFactk + `(factk 5 (v:Integer => [v]))`:        {why: "audit §1.3/§5.8: CPS — the continuation call (k m) inside a fn-local fn is a call operand of unknown provenance", failsWith: "fn call operand of unknown provenance"},
+	hofFactk + `(factk 10 (v:Integer => [add 0 v]))`: {why: "audit §1.3/§5.8: same CPS shape, deeper recursion", failsWith: "fn call operand of unknown provenance"},
+
+	// (2) the §4.3 capture family: kk's inner lambda captures x, and the
+	//     compiled capture is unreachable at the ((kk 7) 99) call site —
+	//     the same refusal the audit's §4.3 kkA/B/C spellings draw.
+	`def kk x:Any => [y:Any => [x]] end ((kk 7) 99)`: {why: "audit §4.3's capture family: the inner lambda's capture of x is unreachable at the call site", failsWith: "unreachable at a call site"},
+
+	// (3) check-diagnostics refusals, one stage before emit: the compile
+	//     lane's strict check cannot resolve a name def-bound to a
+	//     COMPUTED fn (`def fact (fgen fgen/v)`, `def h (compose …)` —
+	//     undefined_word on the bound name, where the CLI's check passes
+	//     both, audit §1.4/§1.6), and the four parser rows draw NUR087's
+	//     branch-local-def false positive (undefined_word: r2 after
+	//     `def r1 (a s)` through a Function parameter). Graduation =
+	//     NUR087's retirement for the parser rows; the def-bound
+	//     computed-fn model for the U-combinator and compose rows.
+	`def fgen fn s:Function Function [ ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ] ) ] end def fact (fgen fgen/v) end (fact 5)`:                      {why: "strict-lane check: `fact` is def-bound to a computed fn and unresolved (the CLI check passes it — audit §1.4)", failsWith: "check diagnostics"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end def h (mk 1) end 2 h/v apply`:                                                                           {why: "strict-lane check: `h` is def-bound to a computed fn and unresolved (audit §5.4's workaround row; its ((mk 1) 2) sibling compiles natively as the unledgered control)", failsWith: "check diagnostics"},
+	`def compose fn [[f:Function g:Function][Function][ ( fn x:Integer Integer [ f (g x) ] ) ]] end def h (compose (a:Integer => [add 1 a]) (a:Integer => [mul 2 a])) end (h 5)`: {why: "strict-lane check: `h` is def-bound to a computed fn and unresolved (audit §1.6's compose row)", failsWith: "check diagnostics"},
+	hofPitem + `def manyloop fn [[a:Function s:String acc:List][Map][ def r (a s) if (r.ok) [ (manyloop a/v (r.rest) (push (r.val) acc)) ] [ {ok:true val:acc rest:s} ] ]] end def pmany fn a:Function Function [ ( fn s:String Map [ def z [] (manyloop a/v s z) ] ) ] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def digits (pmany digit/v) end (digits '123ab')`: {why: "NUR087's class: branch-local defs after calls through Function params flag undefined_word at check", failsWith: "check diagnostics"},
+	hofPalt + `(ab 'bzz')`: {why: "NUR087's class over the alternation rows", failsWith: "check diagnostics"},
+	hofPalt + `(ab 'zzz')`: {why: "NUR087's class over the alternation rows", failsWith: "check diagnostics"},
+	hofPitem + `def pseq fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r1 (a s) if (r1.ok) [ def r2 (b (r1.rest)) if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ] [ {ok:false rest:s val:None} ] ] [ {ok:false rest:s val:None} ] ] ) ]] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def two (pseq digit/v digit/v) end (two '42x')`: {why: "NUR087 verbatim: def r2 inside the if branch after def r1 (a s) — the audit's §5.5 minimal repro is this row's pseq body", failsWith: "check diagnostics"},
 }
 
 type frontierEntryLS struct {

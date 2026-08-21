@@ -78,6 +78,18 @@ Every program below was written and run against this tree, under both
 fallback), and is quoted here in full — definitions **and** the calls that
 produced the quoted output — so it can be re-run from the note itself.
 
+> **Pinned 2026-08-21.** These transcripts are now also a standing gate:
+> `lang/spec/frontier/frontier-hof-audit.tsv` re-checks every §1.1–§1.5
+> value (plus §1.6's combinator rows) on the interpreter oracle on every
+> `make test`, with the compile ledger in
+> `test/go/langspec/frontier_spec_test.go` pinning which rows the
+> compiler still refuses and why (§5.8's provenance class, §4.3's capture
+> family, NUR087's check false positive). The §1.4 divergences — Z, and
+> the naive Y that no strict language can run — are deliberately NOT
+> pinned: no budget bounds them (see the §1.4 correction), so a test
+> would hang the suite. The deterministic §5.4 rule that causes Z's
+> divergence is pinned instead (the corpus file's §7 rows).
+
 ### 1.1 The classical combinator bases
 
 `I = S K K`, derived rather than assumed:
@@ -244,12 +256,19 @@ def fact (fgen fgen/v)
 print (fact 5)       ;# 120
 ```
 
-The full **Z combinator** (`λf.(λx.f(λv.(x x)v))²`) **diverges** — it
-hangs until the step limit. The cause is not call-by-value eagerness:
-lambda bodies were confirmed lazy (a `raise` inside an unapplied lambda
-body never fires). The cause is §5.4 — `((x x) v)` does not parse as an
-application inside a body, so the `λv` thunk never actually guards the
-recursion.
+The full **Z combinator** (`λf.(λx.f(λv.(x x)v))²`) **diverges**. The
+cause is not call-by-value eagerness: lambda bodies were confirmed lazy
+(a `raise` inside an unapplied lambda body never fires). The cause is
+§5.4 — `((x x) v)` does not parse as an application inside a body, so
+the `λv` thunk never actually guards the recursion.
+
+> **Corrected 2026-08-21.** This originally said "it hangs until the
+> step limit". Measured: the step limit never trips — a run under
+> `--options steps:200000` was still going at 30 s, and an in-process
+> run grows until the OS kills it — so the divergence is bounded by
+> nothing the engine counts, only by an outside timeout. That is also
+> why Z is not pinned as a test (§1's pinning note): there is no budget
+> under which "diverges" terminates into an assertable error.
 
 ### 1.5 A real parser-combinator library
 
