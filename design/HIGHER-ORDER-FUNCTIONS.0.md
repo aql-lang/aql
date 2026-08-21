@@ -1174,10 +1174,61 @@ All four sweeps and the full frontier corpus are clean, and §9b, §9c
 and the Stage 1 graduations all still compile. `frontier-hof-audit.tsv`
 §9f ledgers the three shapes.
 
+**The widened sweep, and two more (2026-08-21, §9g).** The §9f note
+ended by saying the ~30 hand-picked programs were not exhaustive. They
+were not. A GENERATED sweep — the cross-product of factory spelling
+(verbose `fn`, arrow, capture-taking, gradual-parameter, three-level) ×
+binding shape (plain, rebind, two instances, `/v` alias) × 23
+consumption contexts (top level, operand, nested paren, def-local, `if`
+arms, `case` arms, `for`, `while`, `do`, `each`, `map`, `filter`, list
+literal, map value, fn body, user-fn argument, `apply`, `typeof`, …) —
+is **690 programs**, and it found **24 divergences** the hand-picked set
+missed, in exactly two contexts:
+
+```
+def h (mk (z:Integer => [add 7 z]))
+typeof (h 5)                # interpreted Integer; compiled `Function 5`
+filter [1 2] [gt 0 (h 5)]   # interpreted: body not Boolean
+                            # compiled:    cannot order Function and Integer
+```
+
+Bisected to `3d914ad` — but unlike §9e/§9f the defect is not *in* that
+commit. Before the Stage 2 admission these programs refused outright
+(the factory's inner unit did not compile), so the top-level modelling
+was never exercised. The admission **unmasked** it. The disassembly is
+unambiguous:
+
+```
+(h 5)          PUSH_LOCAL h ; PUSH_CONST 5 ; CALL_DYNAMIC /1   ← applies
+typeof (h 5)   PUSH_LOCAL h ; CALL_NATIVE typeof ; PUSH_CONST 5
+```
+
+The paren never collapsed into an apply. The bare spelling survives only
+because `Finalize`'s `resolveDynamicApply` lowers the leftover
+program-residual; consume that residual — hand it to a word — and the
+apply is simply lost. An `Any`-typed slot then swallows the FUNCTION and
+strands the argument behind it, which is why exactly `typeof` and
+`filter`'s `gt` surfaced it: a slot that type-checks a Function accepts
+the wrong operand silently, where `add`'s numeric slots reject it.
+
+`argIsProducedClosure` refuses a dispatch whose argument is a closure
+this pass produced (`producerReturnedClosureArity`). A word with a
+genuine `Function` slot is unaffected — its argument is not one of these
+produced closures. Re-swept: **690 programs, 0 divergences** (535 of them
+running to a value, not merely agreeing on an error), the two earlier
+sweeps clean, and the frontier corpus green with no graduation lost.
+Ledgered as §9g.
+
 The wider point for whoever picks this up: **every admission in this
-campaign needs a code-body probe.** All three failures, and §9e's,
-share one signature — an admission that is sound where the value is an
-operand, applied where the value is a token.
+campaign needs a code-body probe — and a generated sweep, not a
+hand-picked one.** All four classes share one signature — an admission
+sound where the value is an operand, applied where the value is a token
+— and the fourth was found only because the sweep was mechanised. Two of
+the four (§9f's `do`-body closure read, §9g) are not bugs the admitting
+commit wrote; they are shapes it made REACHABLE. Admitting a shape is
+therefore never a local change: it promotes a whole population of
+programs from "refused" to "modelled", and that population is what has
+to be swept.
 
 Remaining stages, each its own probe-driven increment:
 

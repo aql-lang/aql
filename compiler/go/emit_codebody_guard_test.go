@@ -46,3 +46,39 @@ func TestRecordCodeBodyClosureReadArms(t *testing.T) {
 		t.Errorf("the refusal must mark the program (compilable=%v reason=%q)", es.Compilable, es.Reason)
 	}
 }
+
+// TestArgIsProducedClosureArms pins the §9g guard: a compiled closure
+// this pass produced (a call result the recorder knows returned an
+// OpPushClosure) reaching a word's argument slot means the paren that
+// should have APPLIED it did not collapse, so the word would receive the
+// FUNCTION where the interpreter receives the applied result.
+func TestArgIsProducedClosureArms(t *testing.T) {
+	es := NewEmitState()
+	fn := core.NewFunction(core.FnDefInfo{Anonymous: true, Signatures: []core.Signature{{
+		Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+	}}})
+
+	// A plain value is never the shape.
+	if es.argIsProducedClosure([]core.Value{core.NewInteger(5)}) {
+		t.Error("a non-fn argument must not refuse")
+	}
+	// An fn value the pass did NOT produce as a closure is left alone —
+	// a word with a genuine Function slot keeps working.
+	if es.argIsProducedClosure([]core.Value{fn}) {
+		t.Error("an fn value with no produced-closure provenance must not refuse")
+	}
+	// The shape: the value came back from a user call whose unit returns
+	// exactly one compiled closure — the factory pattern
+	// producerReturnedClosureArity recognises.
+	es.fnRecs = append(es.fnRecs,
+		&fnUnitRec{outOps: []EmitOperand{{kind: opClosure, closureUnit: 1}}},
+		&fnUnitRec{nParams: 1})
+	es.frames[0] = append(es.frames[0], EmitEvent{seq: 0, kind: evCallUser, uc: emitUserCall{unit: 0, nout: 1}})
+	es.producedBy[fn.ID] = producer{seq: 0}
+	if !es.argIsProducedClosure([]core.Value{core.NewInteger(1), fn}) {
+		t.Fatal("a produced compiled closure at an argument slot must refuse")
+	}
+	if es.Compilable || !strings.Contains(es.Reason, "argument slot") {
+		t.Errorf("the refusal must mark the program (compilable=%v reason=%q)", es.Compilable, es.Reason)
+	}
+}

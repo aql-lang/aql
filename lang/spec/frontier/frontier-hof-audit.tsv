@@ -149,3 +149,15 @@ def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn [[c:Integer][
 def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end each [1 2 3] [(f 1)]	[3]	an each body reading a def-bound computed fn (compiled [3 3]; refuses now)
 def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end do [(f 2)]	3	a do body reading a def-bound computed fn (compiled raised undefined_word: f; refuses now)
 def mkg g:Function => [v:Integer => [(g v)]] end def h (mkg (z:Integer => [add 7 z])) end do [(h 1)]	8	a do body reading a def-bound COMPILED CLOSURE (compiled raised undefined_word: g; refuses now)
+#
+# §9g a computed closure at a WORD's argument slot (2026-08-21):
+#     found by a 690-program generated differential sweep over the
+#     cross-product of factory spelling x binding shape x consumption
+#     context. The interpreter APPLIES a paren-bounded call of a
+#     def-bound compiled closure; the compiled model could leave the
+#     paren uncollapsed, so an Any-typed slot swallowed the FUNCTION
+#     and stranded the argument behind it. Unmasked by 3d914ad (the
+#     Stage 2 admission): before it these programs refused outright.
+#     24 of the 690 diverged, in exactly two contexts. Refuses now.
+def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end typeof (h 5)	Integer	a computed closure applied in a typeof operand (compiled gave the two values `Function 5`; refuses now)
+def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end filter [1 2] [gt 0 (h 5)]	ERROR:filter_error	the same shape in a filter body (compiled raised `cannot order Function and Integer`; refuses now)

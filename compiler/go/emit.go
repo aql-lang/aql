@@ -5539,6 +5539,29 @@ func (es *EmitState) residualReadStable(v core.Value) bool {
 // a DATA list mentioning the name carries it as an Atom, not a Word, so it
 // does not match, and a body that never reads such a name is untouched —
 // which is what keeps §9b's family compiling.
+// argIsProducedClosure refuses a dispatch whose ARGUMENT is a compiled
+// closure this pass produced (a call result the recorder knows returned an
+// OpPushClosure — producerReturnedClosureArity). Such a value reaching a
+// word's slot means the paren that should have APPLIED it did not collapse
+// into an apply, so the compiled program hands the word the FUNCTION where
+// the interpreter hands it the applied result.
+func (es *EmitState) argIsProducedClosure(args []core.Value) bool {
+	if !es.Active() {
+		return false
+	}
+	for i := range args {
+		if !core.IsAppliableFn(args[i]) {
+			continue
+		}
+		if _, produced := es.producerReturnedClosureArity(args[i].ID); produced {
+			es.MarkUncompilable(
+				"computed closure at a word's argument slot (its apply did not collapse — Stage 2)")
+			return true
+		}
+	}
+	return false
+}
+
 func (es *EmitState) recordCodeBodyClosureRead(args []core.Value) bool {
 	if len(es.dynBoundClosures) == 0 {
 		return false
