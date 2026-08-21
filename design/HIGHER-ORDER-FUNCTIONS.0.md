@@ -1077,6 +1077,17 @@ run time, which is the part worth recording:
   multi-overload lead the second, and the lead here is a CARRIER, so
   neither is provable at record time.
 
+The obvious next idea — replay the window at WORD level, since the
+recorder does know the argument's name (the unit's slot→name `locals`
+table) — was probed too, and it does not close the gap either. Islanding
+`[lead, Word("x")]` with `x` bound to a function raises, but blames a
+THIRD target (`cannot call x — no signature matches the arguments`: the
+argument's own dispatch fires with no arguments), because the raise the
+interpreter produces depends on the enclosing frame and the lead's parked
+forward state — context no island reconstruction carries. Value island:
+inert. Word island: wrong blame. Both are recorded here so the next
+attempt does not re-derive them.
+
 So the refusal stands, and it now stands **pinned** rather than
 incidental: `TestS5BParenLeadFnApplyIdxGradualArgDeclines` (core) fails
 if either clause is dropped, the gate's comment carries the reasoning,
@@ -1090,9 +1101,10 @@ Remaining stages, each its own probe-driven increment:
    word-dispatch question from a compiled window: either a proof at
    record time that the argument slot cannot hold a function (a
    non-`Any` bound, or a whole-program flow fact), or a lowering that
-   reproduces word-level collection rather than value application. The
-   arity channel the previous draft proposed is neither, and is not on
-   this path.
+   reproduces the interpreter's FRAME — not merely its tokens: the
+   word-level island above shows tokens alone are not enough, because
+   the blame target follows the parked forward. The arity channel the
+   previous draft proposed is neither, and is not on this path.
 2. **The Church chain's inner lead, beyond §9d** — `((b x) y)` inside
    cif's lambda additionally needs the OUTER apply's window to be
    arity-provable; the inner apply's own admission is blocked by (1)
