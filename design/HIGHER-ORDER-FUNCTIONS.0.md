@@ -1094,6 +1094,45 @@ if either clause is dropped, the gate's comment carries the reasoning,
 and `frontier-hof-audit.tsv` §9d ledgers the family so it graduates
 automatically when the shape is genuinely solved.
 
+**A Stage 1 regression, found and closed (2026-08-21, §9e).** Probing
+the nested-curried-residual stage turned up a SILENT MISCOMPILE in the
+default lane — the one class this campaign must never produce:
+
+```
+def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn
+  [[c:Integer][Integer][add a (add b c)]] )]] )]]
+def f1 (mk2 1)
+def f2 (f1 2)
+(f2 3)                  # interpreter 6; compiled `2 fn (Integer) 3`
+```
+
+Bisected to `e48e5dd` — Stage 1's own read substitution. Before it, the
+`f1` read raised a false `undefined_word` and the program refused;
+making the read honest let the analysis reach `def f2 (f1 2)`, which it
+cannot model: it returns the CALLEE unchanged, so `f2` binds the very
+carrier `f1` denotes. Compiled, both names take one slot
+(`BIND_GLOBAL g0` and `g1` over the same `l0`) and the apply's
+unconsumed `2` leaks into the top-level residual.
+
+The def site now detects exactly that shape — a bind whose value is
+already table-bound under another NAME is a dropped apply, and nothing
+else, since a legitimate alias cannot reach it (`def g f1` is a
+strict-barrier syntax error; `def g f1/v` resolves through `Defs`
+without consulting the table) — and refuses. That restores `main`'s
+correctness (main refused this program too, behind the silent
+check-diagnostics sentinel) with no capability lost: the two-level
+chain, the chained spelling, multi-instance factories and the `/v`
+alias all still compile, and a six-shape differential sweep plus the
+frontier corpus agree across lanes. `frontier-hof-audit.tsv` §9e
+ledgers the shape.
+
+The lesson generalises to the rest of this campaign: making a read
+honest moves programs from "refused" into "modelled", and every shape
+that arrives there needs its model CHECKED, not assumed. Stage 1's four
+guards were written against the shapes its probe battery reached; this
+one it did not reach, because the chain needs two def-bound levels
+before the aliasing becomes visible.
+
 Remaining stages, each its own probe-driven increment:
 
 1. **The gradual-argument lead window** (§9d, above) — the Church

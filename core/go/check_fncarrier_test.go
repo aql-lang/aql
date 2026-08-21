@@ -143,3 +143,28 @@ func TestStepWordCompileCarrierMissStaysUndefined(t *testing.T) {
 		t.Errorf("expected the one undefined_word diagnostic, got %v", r.Check.Diagnostics)
 	}
 }
+
+// TestCheckFnCarrierBoundName pins the reverse lookup the def site uses to
+// catch a DROPPED APPLY: a bind whose value is already table-bound under
+// another name means the body's apply was not modeled (the analysis
+// returned the callee unchanged), which compiled both names onto one slot
+// and leaked the unconsumed argument into the residual.
+func TestCheckFnCarrierBoundName(t *testing.T) {
+	r := compileCheckRegistry(t)
+	if _, hit := CheckFnCarrierBoundName(r, ""); hit {
+		t.Error("an empty id must miss")
+	}
+	if _, hit := CheckFnCarrierBoundName(r, "v1"); hit {
+		t.Error("an empty table must miss")
+	}
+	carrier := NewCarrier(TFunction)
+	carrier.ID = "v1"
+	NoteCheckFnCarrierBind(r, "f1", carrier)
+	name, hit := CheckFnCarrierBoundName(r, "v1")
+	if !hit || name != "f1" {
+		t.Errorf("want the bound name f1, got %q hit=%v", name, hit)
+	}
+	if _, hit := CheckFnCarrierBoundName(r, "v2"); hit {
+		t.Error("an unbound id must miss")
+	}
+}

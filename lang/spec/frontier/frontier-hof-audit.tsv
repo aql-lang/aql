@@ -124,3 +124,15 @@ def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))
 #     This is the Church chain's actual blocker (§5.8 stage 1).
 def app g:Function => [x:Any => [(g x)]] end def h (app (z:Integer => [add 7 z])) end (h 5)	12	the arrow-inner factory with a gradual inner parameter (refuses; ledgered)
 def app fn [[g:Function][Function][( fn [[x:Any][Any][(g x)]] )]] end def h (app (z:Integer => [mul 3 z])) end (h 5)	15	the verbose twin of the row above — the concrete-parameter spelling compiles (§9)
+#
+# §9e the curried CHAIN through def bindings (2026-08-21): a
+#     three-level factory whose intermediate results are each
+#     def-bound. `def f2 (f1 2)` binds f2 to the very carrier f1
+#     denotes — the analysis cannot model the apply, so it returns
+#     the callee unchanged — and compiled that bound both names to
+#     ONE slot and leaked the unconsumed argument into the residual
+#     (`2 fn (Integer) 3` for the interpreter's `6`). A REGRESSION
+#     introduced by the Stage 1 read substitution: before it the
+#     read raised undefined_word and the program refused. Now the
+#     def site detects the dropped apply and refuses. Ledgered.
+def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn [[c:Integer][Integer][add a (add b c)]] )]] )]] end def f1 (mk2 1) end def f2 (f1 2) end (f2 3)	6	the three-level curried chain through def bindings (refuses; ledgered)

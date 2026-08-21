@@ -347,6 +347,17 @@ func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// fn-carrier side table they consult.
 	if checking && !IsConcrete(value) &&
 		value.Parent.ConformsTo(TFunction) {
+		// A DROPPED APPLY: this def binds the very carrier another name
+		// already denotes, which means the body's apply was not modeled —
+		// the analysis returned the callee unchanged. `def f2 (f1 2)` over
+		// a curried factory is the shape; compiled, both names take one
+		// slot and the unconsumed argument leaks into the residual
+		// (`2 fn (Integer) 3` where the interpreter answers `6`). Refuse
+		// so the interpreter fallback owns it — slow, not wrong.
+		if prev, dup := CheckFnCarrierBoundName(r, value.ID); dup && prev != name {
+			r.Check.Recorder().MarkUncompilable(
+				"def of a computed fn whose apply the analysis dropped (curried chain — Stage 1)")
+		}
 		NoteCheckFnCarrierBind(r, name, value)
 	}
 	return outs, nil

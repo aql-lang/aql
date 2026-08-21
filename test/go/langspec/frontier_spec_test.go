@@ -531,7 +531,15 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// TestS5BParenLeadFnApplyIdxGradualArgDeclines.
 	`def app g:Function => [x:Any => [(g x)]] end def h (app (z:Integer => [add 7 z])) end (h 5)`:                          {why: "audit §5.8/§9d: a gradual inner parameter cannot prove its argument non-function, so the lead window's argument gate refuses", failsWith: "body result of unknown provenance"},
 	`def app fn [[g:Function][Function][( fn [[x:Any][Any][(g x)]] )]] end def h (app (z:Integer => [mul 3 z])) end (h 5)`: {why: "audit §5.8/§9d: the verbose twin — the concrete-parameter spelling of this factory compiles (§9)", failsWith: "body result of unknown provenance"},
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                     {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
+	// §9e — the curried CHAIN through def bindings. `def f2 (f1 2)` binds
+	// f2 to the very carrier f1 denotes (the analysis returns the callee
+	// unchanged), which compiled put both names on one slot and leaked the
+	// unconsumed argument into the residual — `2 fn (Integer) 3` for the
+	// interpreter's `6`. A regression the Stage 1 read substitution
+	// introduced (before it, the read raised undefined_word and the
+	// program refused); the def site now detects the dropped apply.
+	`def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn [[c:Integer][Integer][add a (add b c)]] )]] )]] end def f1 (mk2 1) end def f2 (f1 2) end (f2 3)`: {why: "audit §5.8/§9e: a def-bound curried chain whose intermediate apply the analysis drops", failsWith: "apply the analysis dropped"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                                                                   {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
 
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4

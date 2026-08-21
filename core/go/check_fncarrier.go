@@ -31,6 +31,33 @@ func CheckFnCarrierBind(r *Registry, name string) (Value, bool) {
 	return v, hit
 }
 
+// CheckFnCarrierBoundName is CheckFnCarrierBind's reverse: the name this
+// pass already bound to the carrier VALUE id, if any. The def site uses it
+// to catch a DROPPED APPLY. `def f2 (f1 2)` over a curried factory binds
+// f2 to the very carrier f1 denotes — the analysis could not model the
+// apply, so it returned the callee unchanged — and the compiled program
+// then binds both names to one slot and leaks the unconsumed argument
+// into the residual (`2 fn (Integer) 3` for the interpreter's `6`). A
+// bind whose value is already table-bound under ANOTHER name is exactly
+// that shape, and nothing else: a legitimate alias cannot reach here
+// (`def g f1` is a strict-barrier syntax error, and `def g f1/v` resolves
+// through Defs without consulting this table).
+func CheckFnCarrierBoundName(r *Registry, id string) (string, bool) {
+	if id == "" {
+		return "", false
+	}
+	m, ok, _ := Cap[map[string]Value](r, capCheckFnCarrierBinds)
+	if !ok || m == nil {
+		return "", false
+	}
+	for name, v := range m {
+		if v.ID == id {
+			return name, true
+		}
+	}
+	return "", false
+}
+
 // ResetCheckFnCarrierBinds clears the fn-carrier side table so it is scoped
 // to a single check pass (a reused instance must not resolve a stale name).
 // Called at the start of every check pass alongside ResetModuleExportGrowth.
