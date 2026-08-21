@@ -154,12 +154,12 @@ def mk-literal fn spec:Map Map [
 # Object-shape predicates used across resolve/validate/queries.
 def is-entity-ref fn object:Map Boolean [
   (object.kind eq "entity") and
-    ((object has entity_id) and (not (object has value)))
+    ((object has 'entity_id') and (not (object has 'value')))
 ]
 
 def is-literal fn object:Map Boolean [
   (object.kind eq "literal") and
-    ((object has value) and (not (object has entity_id)))
+    ((object has 'value') and (not (object has 'entity_id')))
 ]
 
 export "KgSchema" {

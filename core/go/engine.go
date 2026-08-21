@@ -7078,6 +7078,12 @@ func (e *Engine) stepMove(val Value) error {
 func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	cont := info.Cont
 
+	// A while-mode continuation alternates condition and body regions
+	// rather than counting an iterator — its own driver owns the move.
+	if cont.WhileCond != nil {
+		return e.stepMoveWhile(markIdx, moveIdx, info)
+	}
+
 	// Collect resolved values between mark and move (this iteration's output).
 	for j := markIdx + 1; j < moveIdx; j++ {
 		cont.Results = append(cont.Results, e.Tape.At(j))
@@ -7136,6 +7142,76 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 		e.traceNote = "for done"
 	}
 	return nil
+}
+
+// stepMoveWhile drives a while loop's alternating regions. A CONDITION
+// region's last value decides — truthy splices the body region, falsy
+// splices the accumulated results and ends the loop; a BODY region's
+// values accumulate into cont.Results and the condition region replays.
+// Both regions run through the ordinary Run loop, so the step budget
+// meters the loop (`while [true] []` trips evaluation_limit) and
+// break/continue's forward scans find the move exactly as they find a
+// for loop's (cont.Results is what break splices; the discarded region
+// a continue leaves is a body whose collection round nets nothing).
+func (e *Engine) stepMoveWhile(markIdx, moveIdx int, info MoveInfo) error {
+	cont := info.Cont
+
+	if cont.WhileInBody {
+		for j := markIdx + 1; j < moveIdx; j++ {
+			cont.Results = append(cont.Results, e.Tape.At(j))
+		}
+		cont.WhileInBody = false
+		e.spliceWhileRegion(markIdx, moveIdx, info, cont.WhileCond, "while cond")
+		return nil
+	}
+
+	var condResult Value
+	for j := markIdx + 1; j < moveIdx; j++ {
+		condResult = e.Tape.At(j)
+	}
+	if condResult.Parent == nil {
+		delete(e.marks, info.To)
+		e.Tape.Splice(markIdx, moveIdx-markIdx+1)
+		e.Pointer = markIdx
+		return e.runtimeError("runtime_error", "while: condition produced no value", "while", "")
+	}
+	if CoerceBoolean(condResult) {
+		cont.WhileInBody = true
+		e.spliceWhileRegion(markIdx, moveIdx, info, cont.Body, "while body")
+		return nil
+	}
+
+	// Condition falsy — the loop is done: splice in the accumulated results.
+	delete(e.marks, info.To)
+	e.Tape.Splice(markIdx, moveIdx-markIdx+1, cont.Results...)
+	e.Pointer = markIdx
+	if e.trace != nil {
+		e.traceNote = "while done"
+	}
+	return nil
+}
+
+// spliceWhileRegion replaces the current mark..move span with a fresh
+// mark + region + move triple (the same reused-scratch shape as
+// stepMoveCont's re-mark) and points the engine at the new mark.
+func (e *Engine) spliceWhileRegion(markIdx, moveIdx int, info MoveInfo, region []Value, note string) {
+	id := NextMarkID()
+	tokens := e.loopTokens[:0]
+	tokens = append(tokens, NewMark(id, region...))
+	tokens = append(tokens, region...)
+	tokens = append(tokens, NewMoveCont(id, info.Reason, info.Cont))
+	e.loopTokens = tokens
+
+	delete(e.marks, info.To)
+	e.Tape.Splice(markIdx, moveIdx-markIdx+1, tokens...)
+	if e.marks == nil {
+		e.marks = make(map[string]bool)
+	}
+	e.marks[id] = true
+	e.Pointer = markIdx
+	if e.trace != nil {
+		e.traceNote = note
+	}
 }
 
 // stepMoveIf handles an if-statement continuation move. It collects the

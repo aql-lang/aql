@@ -278,6 +278,7 @@ func init() {
 		"walk {c:3,d:4} 5 6":                  "error [boru/walk_error]",
 		"whereis 'a'":                         "None",
 		"whereis a/q":                         "None",
+		"while ['a','b'] ['c','d']":           "error [boru/evaluation_limit]",
 		"with-decimal {a:1,b:2} ['a','b']":    "'a' 'b'",
 		"word 2":                              "2",
 		"xor 2 3":                             "false",

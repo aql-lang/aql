@@ -47,53 +47,54 @@ var accessorNatives = []NativeFunc{
 		// or a type-literal container all answer false — it never
 		// raises, so it composes inside if/filter/conditions.
 		//
-		//	{a:None} has a       → true   (present, value is None)
-		//	{a:1}    has b       → false  (absent)
+		//	{a:None} has 'a'     → true   (present, value is None)
+		//	{a:1}    has 'b'     → false  (absent)
 		//	[10,20]  has 1       → true
-		//	none     has a       → false
+		//	none     has a/q     → false
 		Name: "has",
-		// CompileModuleFold: a pure presence reader. CompileQuoteInert: the
-		// bare-word key overloads (`{a:1} has b`, `none has a`) quote the key
-		// as an inert Atom const, so the dispatch bakes a plain CALL_NATIVE
-		// over the baked container + key — the VM runs the same pure handler.
-		CompileEffect: CompileModuleFold | CompileQuoteInert,
+		// CompileModuleFold: a pure presence reader. `has` EVALUATES its key
+		// exactly as `get` does (2026-08-21, get-parity ruling): a bare
+		// bound word supplies its value, an unbound bare word is an
+		// undefined_word error, and a literal field name is spelled `'k'`
+		// or `k/q`. The TAtom overloads still match an EVALUATED Atom key.
+		CompileEffect: CompileModuleFold,
 
 		Signatures: []Signature{
 			// [Key | Node] — Map, List, Options, record-shape
-			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TNode}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
 			// [Key | Class instance]
-			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TClass}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TResource}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TResource}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
 			// [Key | Store]
-			{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasStoreHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TStore}, BarrierPos: 1, Impl: Go(hasStoreHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TStore}, BarrierPos: 1, Impl: Go(hasStoreHandler), Returns: []*Type{TBoolean}},
 			// [Key | Micron] — property presence, including the
 			// derived properties (address/href/parts/abs) and the
 			// optional Urlon fields (an absent port answers false).
-			{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasMicronHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TMicron}, BarrierPos: 1, Impl: Go(hasMicronHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(hasMicronHandler), Returns: []*Type{TBoolean}},
 			// [Key | Node/Xml] — the three well-known fields (tag / attr
 			// / cren) are BOUND on every Xml element, so `has` agrees
 			// with what dot/get can read (NUR021: it used to answer
 			// false for a field `dot` successfully returned); any other
 			// key answers false. Wins over [Key | Node] by specificity.
-			{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasXmlHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TXml}, BarrierPos: 1, Impl: Go(hasXmlHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TXml}, BarrierPos: 1, Impl: Go(hasXmlHandler), Returns: []*Type{TBoolean}},
 			// [Key | Module] — presence over the same descriptor lookup
 			// get/getr read (NUR021). A module NAMESPACE is a plain Map
 			// (facet-carrying), so it takes the [Key | Node] rows above;
 			// hasNodeHandler answers the $name/$module synthetics there.
-			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasModuleInstHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TModuleInst}, BarrierPos: 1, Impl: Go(hasModuleInstHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(hasModuleInstHandler), Returns: []*Type{TBoolean}},
 			// [Key | None] — total: an absent parent answers false.
-			// The Atom/q overload captures a bare-word key (`none has
-			// a`, `(m get sub) has k`), going one better than get/getr,
-			// whose None sigs take only an evaluated key.
-			{Args: []*Type{TAtom, TNone}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasNoneHandler), Returns: []*Type{TBoolean}},
+			// The Atom overload takes an EVALUATED atom key (`none has
+			// a/q`, `(m get sub) has k/q`) — aligned with get/getr
+			// since the 2026-08-21 get-parity ruling.
+			{Args: []*Type{TAtom, TNone}, BarrierPos: 1, Impl: Go(hasNoneHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(hasNoneHandler), Returns: []*Type{TBoolean}},
 		},
 	},

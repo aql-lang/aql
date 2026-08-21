@@ -95,7 +95,7 @@ mod 2 3.5	1.5	mod
 mul 2 3.5	7.0	mul
 neq 2 3	true	neq
 node {a:1}	{a:1}	node
-none has a	false	has
+none has a/q	false	has
 not 2	false	not
 not true	false	not
 outer [mul] [1 2] [3 4]	[[3 4] [6 8]]	outer
@@ -143,9 +143,9 @@ xor true false	true	xor
 {a:1 b:2 c:3} vals	[1 2 3]	vals
 {a:1 b:2} each [mul 10]	{a:10 b:20}	each
 {a:1 b:5 c:3} filter [gt 2]	{b:5 c:3}	filter
-{a:1} has b	false	has
+{a:1} has 'b'	false	has
 {a:1} set b 2	{a:1 b:2}	set
-{a:None} has a	true	has
+{a:None} has 'a'	true	has
 {k: 9} "k" get	9	get
 1 2 depth	1 2 2	depth
 1 2 3 1 pick	1 2 3 2	pick

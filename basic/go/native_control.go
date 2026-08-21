@@ -154,6 +154,23 @@ var ControlNatives = []NativeFunc{
 			},
 		},
 	},
+	{
+		// while [cond] [body] — the traditional condition loop. Both
+		// operands are quoted code lists; the condition re-evaluates
+		// before every iteration and the body's values accumulate onto
+		// the stack, exactly as `for` leaves its per-iteration values.
+		// break/continue work as in `for`. Engine-stepped regions keep
+		// the loop inside the step budget (a non-terminating condition
+		// trips evaluation_limit). The compile lane refuses the word —
+		// the interpreter owns it (lang/spec/frontier/frontier-while.tsv).
+		Name: "while",
+		Signatures: []Signature{{
+			Args:       []*Type{TList, TList},
+			NoEvalArgs: map[int]bool{0: true, 1: true},
+			Impl:       Go(WhileHandler),
+			ReturnsFn:  whileReturnsFn, BarrierPos: -1,
+		}},
+	},
 	// break and continue signal via Registry.FlowCtrl rather than
 	// returning an error. The Run loop in eng/engine.go reads the
 	// signal after every step and dispatches it through the nearest

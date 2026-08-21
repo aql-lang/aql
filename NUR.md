@@ -1332,6 +1332,13 @@ accidental partial signal of exactly that condition.
   lead-in, not a section) — the deliberate split this record's
   divergence leaks from.
 
+> **Family note (2026-08-21).** `has` — historically on the quoting side
+> with `set` — was moved to the evaluating side by maintainer direction:
+> its key now evaluates exactly as `get`'s (QuoteArgs stripped from every
+> `has` sig, core and the `boru:net` extension alike; pinned in
+> `lang/spec/corpus-core.tsv` incl. the `ERROR:undefined_word` negative).
+> The divergence this record accepts now covers `set` alone.
+
 ---
 
 ## NUR046 — `boru fmt` is not idempotent: one pass is not a fixed point {#nur046}

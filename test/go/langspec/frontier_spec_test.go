@@ -528,6 +528,20 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`import "boru:fn-util"  def f fn x:Integer Integer [x] end def c (FnUtil.curry f/v)`:                                                                                  {why: "Stage 3: a function-valued operand at a native's slot (the curry error rows pass f/v without def-binding the result)", failsWith: "function-valued operand at curry"},
 	`import "boru:fn-util"  FnUtil.flip 5`:  {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
 	`import "boru:fn-util"  FnUtil.curry 5`: {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
+
+	// ───────────────────────────────────────────────────────────────────
+	// frontier-while.tsv — the `while` word (closed audit §5.9's gap,
+	// 2026-08-21). Two refusal modes today, both sound: the recorder's
+	// code-body-word gate, and — where the recorder admits the call — a
+	// VM mid-run bail on the spliced mark/cond/move loop tokens, resolved
+	// by RunCompiled's whole-program interpreter re-run. Graduation = a
+	// WHILE_SETUP-style lowering (the for-loop FOR_SETUP precedent).
+	`while [false] ['x'] end 'done'`:   {why: "while (2026-08-21): the recorder admits the pure-literal regions, but the VM has no opcode for the spliced mark/cond/move loop tokens — it bails mid-run and RunCompiled re-runs on the interpreter (slow, not wrong)", failsWith: "did not run compiled"},
+	`while [true] [break] end 'ended'`: {why: "while (2026-08-21): the recorder's code-body-word gate refuses `while` — no loop lowering exists for a condition loop", failsWith: "code-body word while (Stage 2)"},
+	`def c (flex {n:0}) end while [(c get 'n') lt 3] [ (c get 'n') set 'n' ((c get 'n') add 1) c ]`:                                          {why: "while (2026-08-21): VM mid-run bail to the interpreter on the spliced loop tokens (the whole-program fallback)", failsWith: "did not run compiled"},
+	`def c (flex {n:0}) end while [(c get 'n') lt 3] [ set 'n' ((c get 'n') add 1) c end if ((c get 'n') eq 2) [continue] end (c get 'n') ]`: {why: "while (2026-08-21): the recorder's code-body-word gate refuses `while`", failsWith: "code-body word while (Stage 2)"},
+	`while [] [1]`:                      {why: "while (2026-08-21): the condition-produced-no-value error surfaces via the interpreter re-run after the VM bail", failsWith: "did not run compiled"},
+	`while ['ok'] [break] end 'truthy'`: {why: "while (2026-08-21): the recorder's code-body-word gate refuses `while`", failsWith: "code-body word while (Stage 2)"},
 }
 
 type frontierEntryLS struct {

@@ -88,16 +88,20 @@ func init() {
 		Summary: "Key/index presence as a Boolean.",
 		Description: "True when the key or index is BOUND — even to none — so a " +
 			"present-but-none entry is distinguishable from an absent one " +
-			"(get returns None for both; getr raises on a miss). Total: a " +
+			"(get returns None for both; getr raises on a miss). `has` " +
+			"EVALUATES its key exactly as `get` does: a bound bare word " +
+			"supplies its value, and a literal field name is spelled `'k'` " +
+			"or `k/q` (an unbound bare word raises undefined_word at name " +
+			"resolution, before has runs). Total over its containers: a " +
 			"missing key, an out-of-range index, or a None parent all answer " +
 			"false rather than raising, so it composes inside if/filter " +
 			"conditions. Covers Map/List/record (string, atom, or integer " +
 			"key), FlexMap/FlexList (key/index), class instances, and Store.",
 		Examples: []string{
-			`{a:None} has a ; # => true  — present, value is none`,
-			`{a:1} has b ; # => false — absent`,
+			`{a:None} has 'a' ; # => true  — present, value is none`,
+			`{a:1} has 'b' ; # => false — absent`,
 			`[10 20] has 1 ; # => true  — index in range`,
-			`none has a ; # => false — total on a None parent`,
+			`none has a/q ; # => false — total on a None parent`,
 		},
 	})
 

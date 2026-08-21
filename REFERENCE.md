@@ -585,14 +585,17 @@ make P {name:"Bob"}           # returns {name:'Bob' nick:None}
 
 To distinguish *absent* from *present-but-`none`*, ask `has` — the
 Boolean presence predicate (`get` returns `None` on a miss, `getr`
-raises, `has` answers whether the key is **bound** at all):
+raises, `has` answers whether the key is **bound** at all). Like
+`get` — and unlike `dot` — `has` **evaluates** its key: a bound bare
+word supplies its value, and a literal field name is spelled `'k'`
+or `k/q`:
 
 ```
-{a:None} has a                # returns true  — present, value is none
+{a:None} has 'a'              # returns true  — present, value is none
 {a:None} dot a                # returns None  — indistinguishable from…
 {a:1}    dot b                # returns None  — …an absent key
-{a:1}    has b                # returns false
-none     has a                # returns false — total: composes in conditions
+{a:1}    has 'b'              # returns false
+none     has a/q              # returns false — total: composes in conditions
 ```
 
 Because the two spellings compare equal under `eq` and both satisfy
@@ -1994,6 +1997,27 @@ def g fn [[x:IS][String][case x [Integer "i" String "s" "d"]]]
 # info: case_redundant_default — the clauses already cover IS
 ```
 
+#### `while` — the condition loop
+
+`while [cond] [body]` re-evaluates the condition list before every
+iteration and runs the body while its last value is truthy (the one
+truthiness rule — not Boolean-only). Body values accumulate onto the
+stack across iterations, exactly as `for` leaves its per-iteration
+values; `break` exits with the values collected so far and `continue`
+abandons the current body round. Every region is engine-stepped, so
+the step budget bounds the loop — a non-terminating condition trips
+`evaluation_limit` rather than hanging — and an empty condition region
+is a loud `runtime_error`. Compilation is currently refused (the loop
+runs on the interpreter; `lang/spec/frontier/frontier-while.tsv` pins
+the ledger).
+
+```
+def c (flex {n:0})
+while [(c get 'n') lt 3] [ (c get 'n') set 'n' ((c get 'n') add 1) c ]
+                          # three iterations accumulate their values
+while [false] ['x']       # a falsy condition runs the body zero times
+```
+
 #### `for` forms
 
 ```
@@ -2232,7 +2256,7 @@ word — `size` subsumes it.
 |------|-------------|---------|
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
-| `has` | Key/index presence as a Boolean — true when **bound**, even to `none`; total (never raises, `none` parent answers `false`) | `{a:None} has a` returns `true`; `{a:1} has b` returns `false`; `[10,20] has 1` returns `true` |
+| `has` | Key/index presence as a Boolean — true when **bound**, even to `none`; evaluates its key like `get` (a literal name is `'k'`/`k/q`); total (never raises, `none` parent answers `false`) | `{a:None} has 'a'` returns `true`; `{a:1} has 'b'` returns `false`; `[10,20] has 1` returns `true` |
 | `set` | Set a key — in place on Store, class instances, and FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)); copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}`; `set a/q 1 (flex {})` |
 | `del` | Delete a key — in place on FlexMap (returns the node); copy-returning on Map; missing key is a no-op | `{a:1 b:2} del a` returns `{b:2}`; `(flex {a:1}) del a` |
 | `context` | Push the current context Store | `context` |

@@ -31,21 +31,21 @@ func TestNur054InlineCtxRefusal(t *testing.T) {
 	const refusalMark = "NUR054"
 
 	refuse := []struct{ name, src string }{
-		{"set in case clause body", "case 1 [ 1 [ context set y 1 5 ] 2 [ 6 ] ]\ncontext has y"},
-		{"del in case clause body", "context set y 9\ncase 1 [ 1 [ context del y 5 ] 2 [ 6 ] ]\ncontext has y"},
-		{"set in otherwise list argument", "false otherwise [ context set y 1 5 ]\ncontext has y"},
-		{"set in def list auto-evaluation", "def b [ context set y 1 5 ]\ncontext has y"},
-		{"set in fn list argument", "def run fn [[b:List] [Any] [ 0 ]]\nrun [ context set y 1 5 ]\ncontext has y"},
-		{"set in each collection list", "each [ drop 0 ] [ context set y 1 1 ]\ncontext has y"},
-		{"set in interp-string hole", "`x${context set y 1 5}`\ncontext has y"},
-		{"set in nested list element", "false otherwise [ [ context set y 1 1 ] ]\ncontext has y"},
+		{"set in case clause body", "case 1 [ 1 [ context set y 1 5 ] 2 [ 6 ] ]\ncontext has y/q"},
+		{"del in case clause body", "context set y 9\ncase 1 [ 1 [ context del y 5 ] 2 [ 6 ] ]\ncontext has y/q"},
+		{"set in otherwise list argument", "false otherwise [ context set y 1 5 ]\ncontext has y/q"},
+		{"set in def list auto-evaluation", "def b [ context set y 1 5 ]\ncontext has y/q"},
+		{"set in fn list argument", "def run fn [[b:List] [Any] [ 0 ]]\nrun [ context set y 1 5 ]\ncontext has y/q"},
+		{"set in each collection list", "each [ drop 0 ] [ context set y 1 1 ]\ncontext has y/q"},
+		{"set in interp-string hole", "`x${context set y 1 5}`\ncontext has y/q"},
+		{"set in nested list element", "false otherwise [ [ context set y 1 1 ] ]\ncontext has y/q"},
 		// The refusal is AT THE MINT — `context` read inside the region —
 		// which is what closes the consumption paths a write-site rule cannot
 		// chase (the 2026-08-14 Codex review round confirmed all three live):
 		// a re-IDed alias, an identity probe, an xml child hole.
-		{"aliased write via dup in otherwise list", "false otherwise [ context dup drop set y 1 5 ]\ncontext has y"},
+		{"aliased write via dup in otherwise list", "false otherwise [ context dup drop set y 1 5 ]\ncontext has y/q"},
 		{"identity eq in interp hole", "def s (context)\n`x${context eq s}`"},
-		{"set in xml child hole", "<p>${context set y 1 5}</p> drop\ncontext has y"},
+		{"set in xml child hole", "<p>${context set y 1 5}</p> drop\ncontext has y/q"},
 	}
 	for _, c := range refuse {
 		t.Run("refuses/"+c.name, func(t *testing.T) {
@@ -66,23 +66,23 @@ func TestNur054InlineCtxRefusal(t *testing.T) {
 
 	compile := []struct{ name, src string }{
 		// Bracketed closure-unit bodies: contained by enterBodyUnit.
-		{"set in do body", "do [ context set y 1 5 ]\ncontext has y"},
-		{"set in each body", "each [ drop context set y 1 5 ] [1]\ncontext has y"},
+		{"set in do body", "do [ context set y 1 5 ]\ncontext has y/q"},
+		{"set in each body", "each [ drop context set y 1 5 ] [1]\ncontext has y/q"},
 		// Non-boundaries in either engine: the write leaks identically.
-		{"set in if branch", "if true [ context set y 1 5 ] [ 6 ]\ncontext has y"},
-		{"set in for body", "for 1 [ context set y 1 5 ]\ncontext has y"},
-		{"set in named fn body", "def f fn [[] [Any] [ context set y 1 5 ]]\nf\ncontext has y"},
-		{"set in if code-body condition", "if [ context set y 1 true ] [ 5 ] [ 6 ]\ncontext has y"},
+		{"set in if branch", "if true [ context set y 1 5 ] [ 6 ]\ncontext has y/q"},
+		{"set in for body", "for 1 [ context set y 1 5 ]\ncontext has y/q"},
+		{"set in named fn body", "def f fn [[] [Any] [ context set y 1 5 ]]\nf\ncontext has y/q"},
+		{"set in if code-body condition", "if [ context set y 1 true ] [ 5 ] [ 6 ]\ncontext has y/q"},
 		// Provenance precision: the handle was read OUTSIDE the inline
 		// region, so the write persists identically on both engines.
 		{"outside-bound handle written in case arm",
-			"def s (context)\ncase 1 [ 1 [ s set y 1 5 ] 2 [ 6 ] ]\ncontext has y"},
+			"def s (context)\ncase 1 [ 1 [ s set y 1 5 ] 2 [ 6 ] ]\ncontext has y/q"},
 		// A branch-join handle written at the TOP level: `if` branches are
 		// not context boundaries in EITHER engine, so the joined handle is
 		// the ambient layer on both — measured agreeing ([5 true] / [5 true])
 		// against the Codex round's contrary claim.
 		{"branch-joined handle written at top level",
-			"if true [ context ] [ context ] set y 1 5\ncontext has y"},
+			"if true [ context ] [ context ] set y 1 5\ncontext has y/q"},
 		// A case with no context write at all must keep its desugar.
 		{"case without context write", "case 1 [ 1 [ 5 ] 2 [ 6 ] ]"},
 	}

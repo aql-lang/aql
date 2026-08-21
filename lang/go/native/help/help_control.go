@@ -120,6 +120,30 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "while",
+		Summary: "Loop while a condition holds.",
+		Description: "The traditional condition loop: `while [cond] [body]` " +
+			"re-evaluates the condition list before every iteration and runs " +
+			"the body while its last value is truthy. Body values accumulate " +
+			"onto the stack across iterations, exactly as `for` leaves its " +
+			"per-iteration values. break exits with the values collected so " +
+			"far; continue abandons the current body round. Every region is " +
+			"engine-stepped, so the step budget bounds the loop — a " +
+			"non-terminating condition trips evaluation_limit rather than " +
+			"hanging.",
+		Examples: []string{
+			`while [false] ['x'] 'done' ; # => done — a falsy condition runs the body zero times`,
+			`while [true] [break] 'ended' ; # => ended — break exits with the values collected so far`,
+		},
+		Notes: []string{
+			"The condition is a truthiness read, not Boolean-only.",
+			"An empty condition region is a loud runtime_error.",
+			"Compilation is refused today — the loop runs on the interpreter " +
+				"(lang/spec/frontier/frontier-while.tsv pins the ledger).",
+		},
+	})
+
+	register(&Entry{
 		Word:    "for",
 		Summary: "Iterate over a numeric range.",
 		Description: "Iterates over a range and evaluates the body list for each step. " +

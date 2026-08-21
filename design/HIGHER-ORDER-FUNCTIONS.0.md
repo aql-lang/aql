@@ -457,8 +457,8 @@ currently in `REFERENCE.md` or `HOWTO.md`.
 | Callback for `each`/`fold`/`scan` over a **list** | `each [f] xs` (quotation) | `each f/v xs` — no such signature |
 | Callback for `filter` over either shape | `filter f/v xs` — the callback gets a `{key value}` pair over a list, a `KeyVal` over a map, never the bare element | — (`filter` is the only one of the five with a list `Function` form) |
 | Let a *user-defined* word take a quotation | `hof (codequote [body]) xs` | `hof [body] xs` — evaluated at the call site |
-| Computed key for a **quoting** accessor (`has`, `set`) | `m has (k)` | `m has k` — silently uses the literal `"k"` |
-| Computed key for `get` | `m get k` — `get` **evaluates** the key (`lang/spec/accessor.tsv`) | — this one needs no parens |
+| Computed key for the **quoting** accessor `set` | `set (k) v m` | `set k v m` — silently uses the literal `"k"` |
+| Computed key for `get` — and, since 2026-08-21, `has` | `m get k` / `m has k` — both **evaluate** the key (`lang/spec/accessor.tsv`) | — no parens needed; a literal name is `'k'` or `k/q` |
 
 `/v` deserves its own line, because one spelling now covers every
 binding kind — a fn (call suppressed), a non-fn (identity), and a
@@ -918,10 +918,14 @@ trade-off is a choice rather than a surprise.
   `hof [mul 2] xs` evaluates the bracket at the call site;
   `NoEvalArgs` is a native-word privilege. Use `codequote`.
 - **A computed key for a *quoting* accessor must be parenthesised.**
-  `cache has k` silently looks up the literal `"k"` and returns `false`
-  — NUR040's class, and what made a first `memoize` attempt miss on
-  every call while the cache visibly filled. `get` is not affected: it
-  evaluates a bare bound key (`lang/spec/accessor.tsv`).
+  At the audit's writing `cache has k` silently looked up the literal
+  `"k"` and returned `false` — NUR040's class, and what made a first
+  `memoize` attempt miss on every call while the cache visibly filled.
+  **Corrected 2026-08-21:** `has` now evaluates its key exactly as
+  `get` does, so that failure mode is gone for `has` — a bound bare
+  key computes, and an unbound one raises `undefined_word` loudly.
+  `set` remains the quoting member of the family (NUR040, Allowed):
+  its computed key still needs `(k)`.
 - **`flex` map keys must be Strings.** An `Integer` key is refused, which
   bites every memo table.
 - **No comparator-based sort.** `sort` takes no callback;
@@ -936,8 +940,13 @@ trade-off is a choice rather than a surprise.
   16 777 216 (`[boru/iota_error]: iota: count … exceeds the cap`). No
   infinite sequences, no generators; a `take`-from-an-unbounded-stream
   program has no expression.
-- **No `while`.** `for` is a numeric range with `break`; loops over a
-  condition are recursion.
+- ~~**No `while`.**~~ **Closed 2026-08-21:** `while [cond] [body]` is a
+  word — condition re-evaluated per iteration, body values accumulate,
+  `break`/`continue` as in `for`, step-budget-bounded (see
+  `REFERENCE.md` §"`while` — the condition loop";
+  `lang/spec/frontier/frontier-while.tsv`). At the audit's writing,
+  `for` was a numeric range with `break` and loops over a condition
+  were recursion.
 
 ---
 
