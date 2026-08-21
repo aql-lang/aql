@@ -3919,6 +3919,68 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	return true
 }
 
+// RecordDynApplyName records the same fn-value apply as RecordDynApply, but
+// resolves the FN through the NAME's def-site operand (its evDynBind event)
+// instead of the value's own ID — the §4.3 capture fallback (check's
+// recordFnValueApplyFallback): a call of an installed factory closure whose
+// unit carries CONSTRUCTION-SCOPE captures. The install re-minted the
+// binding's value ID (InstallFnDef wraps a fresh Function value), so
+// resolveOperand cannot place it; the def site's recorded operand is the
+// SAME runtime value under its original identity (the factory call's out —
+// typically a promoted local carrying the OpPushClosure result, whose baked
+// captures invokeClosure installs VM-native). The event-provenance
+// quote-state refusal RecordDynApply applies does not: this is a WORD-read
+// arrival (the interpreter dispatches the installed name regardless), and
+// the caller declines a quoted binding up front. Scoped to the TOP-LEVEL
+// frame — a def site inside a fn unit records its bind in that unit's
+// fragment, out of this scan's reach, and declines.
+func (es *EmitState) RecordDynApplyName(name string, args []core.Value, fn, out core.Value, pos core.SrcPos) bool {
+	if !es.Active() || name == "" || len(es.units) != 1 {
+		return false
+	}
+	if !core.IsFnValueResidual(fn) || fn.Quoted {
+		return false
+	}
+	if !fnConcreteSingleValuedOrCarrier(fn) {
+		return false
+	}
+	var fnOp EmitOperand
+	found := false
+	for i := len(es.frames[0]) - 1; i >= 0 && !found; i-- {
+		ev := &es.frames[0][i]
+		if ev.kind != evDynBind || ev.dyn == nil || ev.dyn.name != name {
+			continue
+		}
+		switch {
+		case ev.dyn.src.kind != opNone:
+			fnOp, found = ev.dyn.src, true
+		case ev.dyn.srcSeq >= 0:
+			fnOp, found = EventOperand(ev.dyn.srcSeq, 0), true
+		default:
+			return false // the def site itself had no operand home
+		}
+	}
+	if !found {
+		return false
+	}
+	ops := make([]EmitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := len(args) - 1; i >= 0; i-- {
+		if core.IsFnValueResidual(args[i]) {
+			return false
+		}
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops = append(ops, op)
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args)}})
+	es.setProduced(out, seq)
+	return true
+}
+
 // captureInertArmResidual mirrors the loop side's all-inert residual capture
 // (RecordLoop's net-drivers arm) for a BRANCH arm: a multi-value arm whose
 // residual is entirely inert (consts/locals — nothing event-produced) leaves

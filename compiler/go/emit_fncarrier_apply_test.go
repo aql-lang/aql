@@ -47,3 +47,70 @@ func TestRecordDispatchRematchDeclinesReadSubstitutedCarrier(t *testing.T) {
 		t.Error("a read-substituted fn-carrier window value must decline the rematch")
 	}
 }
+
+// TestRecordDynApplyNameArms pins the §4.3 name-route apply's decline arms
+// and its success path over a recorded def-site bind.
+func TestRecordDynApplyNameArms(t *testing.T) {
+	es := NewEmitState()
+	fn := core.NewFunction(core.FnDefInfo{Anonymous: true, Signatures: []core.Signature{{
+		Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TAny}, BarrierPos: -1,
+	}}})
+	out := core.NewCarrier(core.TAny)
+	arg := core.NewInteger(5)
+
+	if es.RecordDynApplyName("", []core.Value{arg}, fn, out, core.SrcPos{}) {
+		t.Error("an empty name must decline")
+	}
+	if es.RecordDynApplyName("h", []core.Value{arg}, core.NewInteger(1), out, core.SrcPos{}) {
+		t.Error("a non-fn value must decline")
+	}
+	qfn := fn
+	qfn.Quoted = true
+	if es.RecordDynApplyName("h", []core.Value{arg}, qfn, out, core.SrcPos{}) {
+		t.Error("a quoted fn must decline")
+	}
+	multi := core.NewFunction(core.FnDefInfo{Anonymous: true, Signatures: []core.Signature{{
+		Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TAny, core.TAny}, BarrierPos: -1,
+	}}})
+	if es.RecordDynApplyName("h", []core.Value{arg}, multi, out, core.SrcPos{}) {
+		t.Error("a multi-return fn must decline")
+	}
+	if es.RecordDynApplyName("h", []core.Value{arg}, fn, out, core.SrcPos{}) {
+		t.Error("a name with no recorded def-site bind must decline")
+	}
+
+	// A recorded def-site bind with an event operand: the apply records.
+	bound := core.NewCarrier(core.TFunction)
+	es.frames[0] = append(es.frames[0], EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "h", srcSeq: 4}})
+	seqBefore := len(es.frames[0])
+	if !es.RecordDynApplyName("h", []core.Value{arg}, fn, out, core.SrcPos{}) {
+		t.Fatal("a bound name with a resolvable arg must record")
+	}
+	if len(es.frames[0]) != seqBefore+1 {
+		t.Fatalf("expected one appended apply event, frames grew %d", len(es.frames[0])-seqBefore)
+	}
+	// A def site with NO operand home declines.
+	es2 := NewEmitState()
+	es2.frames[0] = append(es2.frames[0], EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "h", srcSeq: -1}})
+	if es2.RecordDynApplyName("h", []core.Value{arg}, fn, out, core.SrcPos{}) {
+		t.Error("a def site with no operand home must decline")
+	}
+	// An fn-valued ARG declines.
+	es3 := NewEmitState()
+	es3.frames[0] = append(es3.frames[0], EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "h", srcSeq: 4}})
+	if es3.RecordDynApplyName("h", []core.Value{fn}, fn, out, core.SrcPos{}) {
+		t.Error("an fn-valued arg must decline")
+	}
+	// An UNRESOLVABLE arg (a provenance-less carrier) declines.
+	if es3.RecordDynApplyName("h", []core.Value{core.NewCarrier(core.TInteger)}, fn, out, core.SrcPos{}) {
+		t.Error("an unresolvable arg must decline")
+	}
+	// A def site recorded with a SRC operand (a capture/local slot) is the
+	// other resolution arm.
+	es4 := NewEmitState()
+	es4.frames[0] = append(es4.frames[0], EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "h", src: localOperand(0), srcSeq: -1}})
+	if !es4.RecordDynApplyName("h", []core.Value{arg}, fn, out, core.SrcPos{}) {
+		t.Error("a src-operand def site must record")
+	}
+	_ = bound
+}

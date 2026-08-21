@@ -91,3 +91,15 @@ def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end d
 def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][add 1 (g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 4)	13	the applied capture's result feeds further computation
 def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 5) (h2 10)	15 30	repeated reads of the bound closure (refuses today; ledgered)
 def mk0 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g)]] )]] end def h0 (mk0 (z:Integer => [add 7 z])) end (h0 5)	ERROR:signature_error	a 0-arg apply of a 1-arg capture raises in the lambda body
+#
+# §9b the §4.3 capture-reachability fallback (2026-08-21): a call of a
+#     def-bound factory closure whose unit carries construction-scope
+#     captures lowers as a fn-VALUE apply through the def site's
+#     operand (RecordDynApplyName) — the runtime closure's baked
+#     captures apply VM-native. Repeats, rebinds and multi-instance
+#     spellings all compile; per-call outs freshen (the memoised
+#     residual shares IDs — without it `(h 5) (h 10)` compiled [17 17]).
+def mkap g:Function => [v:Integer => [(g v)]] end def h (mkap (z:Integer => [add 7 z])) end (h 5)	12	the arrow-inner factory: the apply-the-capture closure called through its binding
+def mkap g:Function => [v:Integer => [(g v)]] end def h (mkap (z:Integer => [add 7 z])) end (h 5) (h 10)	12 17	repeated calls freshen their outs per site
+def mkap g:Function => [v:Integer => [(g v)]] end def h (mkap (z:Integer => [add 1 z])) end (h 5) def h (mkap (z:Integer => [mul 2 z])) end (h 5)	6 10	a rebind between calls: each apply reads its own def site's operand
+def mkap g:Function => [v:Integer => [(g v)]] end def a (mkap (z:Integer => [add 1 z])) end def b (mkap (z:Integer => [mul 2 z])) end (a 5) (b 5)	6 10	two instances of one factory stay distinct

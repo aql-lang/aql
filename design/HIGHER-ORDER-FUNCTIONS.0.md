@@ -989,6 +989,39 @@ sound refusals (`fn value precedes residual args`, ledgered); the
 raises (the fallback raises the identical error); a `g:Any` data
 capture never reaches the admission (not a Function carrier).
 
+**Capture reachability at call sites — landed (2026-08-21, the second
+Stage-2 increment).** A CONCRETELY-installed factory closure
+(`def h (mkap …)  (h 5)`, the `=>`-inner spelling — the analysis yields
+a concrete FnDefInfo whose Captured are construction-scope carriers)
+used to refuse `capture g of h unreachable at a call site`: the unit
+call re-resolves its captures per call site, where they are
+meaningless. The call now lowers as a fn-VALUE apply through the DEF
+SITE's recorded operand (`RecordDynApplyName` reads the name's
+`evDynBind` event — the factory call's out, a promoted local carrying
+the `OpPushClosure` result whose baked captures `invokeClosure`
+installs VM-native). Two soundness pieces found by the probe battery:
+
+- the first route tried (`BIND_DYN_SCOPE` + `OpLookupDynScopeData`)
+  silently broke — `bindDynScope` → `InstallDef` DECLINES a
+  ClosurePayload value (the fn arm requires FnDefInfo), so the bind
+  no-opped and the lookup found the stale check-pass binding, whose
+  token body islanded without captures (`undefined_word: g` at run
+  time). The def-site-operand route avoids the def table entirely;
+- the memoised body analysis returns the SAME residual value (same ID)
+  for every call of one shape, so per-call outs must FRESHEN or
+  `producedBy` overwrites and every residual slot resolves to the last
+  apply (`(h 5) (h 10)` compiled `[17 17]` for the interpreter's
+  `[12 17]`). `recordFnValueApplyFallback` mints a fresh carrier per
+  site and substitutes it into the dispatch result.
+
+The gates, each load-bearing: single arg + single CARRIER out;
+anonymous, unquoted, single-own-sig binding; at least one
+non-concrete capture (fully-concrete-capture units keep the unit
+call). Pinned in `frontier-hof-audit.tsv` §9b: single call, repeated
+calls, rebind-between-calls ordering, and two factory instances all
+compile with parity; `((kk 7) 99)` (no def binding — no def-site
+operand) stays the ledgered §4.3 refusal.
+
 Remaining stages, each its own probe-driven increment:
 
 1. **Chained applies** — the Church/cif body `((b x) y)`: the inner
@@ -996,17 +1029,9 @@ Remaining stages, each its own probe-driven increment:
    inner's EVENT result, which `RecordDynApply` hard-refuses (runtime
    quote state unknown — the problem is real: PR #280's probe), so the
    body still count-refuses.
-2. **Capture reachability at call sites** — a CONCRETELY-installed
-   factory closure (`def h (mkap …)  (h 5)` where the analysis yields
-   a concrete FnDefInfo) compiles unit "h" whose captures are
-   construction-scope carriers, unreachable at outer call sites; the
-   sound route is the closure-VALUE apply (OpPushClosure's baked
-   captures), which the carrier-bound flavour already takes.
-
-After them: `tryReturnedClosure` for nested curried residuals
-(2-level-plus factories), and CPS (the factk rows). Stage 0
-prerequisites (NUR077's Apply Op, NUR073's BROAD verdict) remain
-maintainer-ruled.
+2. `tryReturnedClosure` for nested curried residuals (2-level-plus
+   factories), and CPS (the factk rows). Stage 0 prerequisites
+   (NUR077's Apply Op, NUR073's BROAD verdict) remain maintainer-ruled.
 
 ### 5.9 Smaller edges met while writing the programs
 
