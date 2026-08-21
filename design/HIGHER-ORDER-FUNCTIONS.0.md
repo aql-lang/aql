@@ -964,9 +964,35 @@ a sound emit-land refusal (`frontierCompileLedger` records the exact
 strings): the Stage 3 function-valued-operand gate (the fn-util
 combinator rows), the Stage 2 single-result-branch rule (the
 U-combinator), capture-bearing `body result of unknown provenance`
-(compose, palt), and the guards above. Next stages per the campaign
-plan: the closure-flag split, extending `tryReturnedClosure` to
-`RecordUserCall` operands, captures, CPS.
+(compose, palt), and the guards above.
+
+**Stage 2 probe (2026-08-21) — the closure-flag split's bookkeeping
+half landed; the admissions need witnesses.** `fnUnitRec.lambdaUnit`
+now distinguishes a returned lambda's own unit (word `"fnval"`, a real
+named-param frame) from a native code-body unit (each/do$body, a
+CallableSpec-input frame) — the split the campaign brief identified.
+But probing the admission it was meant to unlock
+(`DynApplyLeadEligible` inside lambda bodies) showed every candidate
+witness in the corpus blocked EARLIER, so the admission was reverted as
+unwitnessed (the Stage-G discipline: each exclusion lifted needs its
+own probe evidence). The concrete blockers, in dependency order:
+
+1. **Chained applies** — the Church/cif body `((b x) y)`: the inner
+   `(b x)` lead is a param slot (admissible), but the outer apply's
+   lead is the inner's EVENT result, which `RecordDynApply` hard-
+   refuses (runtime quote state unknown) — so the lambda body nets 2
+   values and count-refuses. Lifting this means proving the
+   event-lead apply faithful (the quote-state problem is real:
+   PR #280's probe).
+2. **Capture reachability at call sites** — the single-apply factory
+   `def h (mkap g/v)  (h 5)` refuses at `capture g of h unreachable at
+   a call site` before any lead apply is reached.
+
+Neither is a flag question; both are their own probe-driven stages.
+After them: `tryReturnedClosure` for nested curried residuals
+(2-level-plus factories), and CPS (the factk rows). Stage 0
+prerequisites (NUR077's Apply Op, NUR073's BROAD verdict) remain
+maintainer-ruled.
 
 ### 5.9 Smaller edges met while writing the programs
 

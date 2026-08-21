@@ -947,6 +947,21 @@ type fnUnitRec struct {
 	// type_error — so a closure keeps refusing the mismatch (islands) while a
 	// user fn compiles the error path (the VM RET raises the matching error).
 	closure bool
+	// lambdaUnit marks the fn-VALUE flavour of a closure unit (word "fnval"
+	// — a returned lambda's body compiled via tryReturnedClosure), as
+	// opposed to a native code-body unit (each/do$body, whose analysis
+	// frame is the CallableSpec inputs). A lambda unit's frame is the
+	// lambda's own declared named params — a real per-call frame like a
+	// user fn's — so frame-context admissions currently gated off the
+	// conflated `closure` flag (DynApplyLeadEligible's Stage-G lead apply,
+	// noteDynFrameReplay) CAN in principle re-admit it. No consumer keys on
+	// it yet: the §5.8 campaign's Stage-2 probe showed every candidate
+	// witness blocked EARLIER (the chained `((b x) y)` apply's
+	// event-provenance lead; capture reachability at the call site), so an
+	// admission here would be unwitnessed and unproven — the flag lands as
+	// the split's bookkeeping half, and each admission must bring its own
+	// probe evidence (the Stage-G discipline).
+	lambdaUnit bool
 	// takesTop marks a closure whose driving handler reads only the TOP of the
 	// body residual (each / fold / scan / filter / rand-list-of —
 	// CallableSpec.BodyResultTop). For such a unit, finish DROPS the unconsumed

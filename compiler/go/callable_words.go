@@ -68,6 +68,7 @@ func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK,
 	// memo hit: the key includes name+input types, which determine the shape).
 	es.fnRecs[unit].inShape = shape
 	es.fnRecs[unit].closure = true
+	es.fnRecs[unit].lambdaUnit = word == "fnval"
 	es.fnRecs[unit].takesTop = takesTop
 	// The two stored-ref compile paths use these eng-internal synthetic
 	// names; their rebind safety is the per-ref poisoning, so the frozen-
