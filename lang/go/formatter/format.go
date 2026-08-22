@@ -210,6 +210,7 @@ func FormatRulesWith(src string, ru Rules, parse Parse) string {
 	tree := parse(src)
 	capitalizeTypesInTree(tree)
 	elideFnBrackets(tree)
+	normaliseStatementEnd(tree)
 	return newRenderer(ru).emitRoot(tree, 0)
 }
 
@@ -705,6 +706,37 @@ func tokenToNodeKind(tk TokenKind) NodeKind {
 //   - immediately after "def" (variable name being defined)
 //   - immediately before ":" (parameter/key name)
 //   - they contain a "." (dotted word like table.kind)
+//
+// normaliseStatementEnd rewrites the statement terminator `end` to `;`
+// (STYLE-GUIDE §S6). The two are the same token — the parser aliases `;` to
+// `end` — so this is a spelling canonicalisation, like capitalizeTypesInTree
+// above, and it runs on the TREE so both front ends (hand and tabnas) agree
+// byte-for-byte.
+//
+// It is positional, because `end` is a perfectly good NAME in two places a
+// spelling test alone cannot tell apart. Both are valid boru:
+//
+//	{end: 1}       a map KEY      — `end` immediately before a colon
+//	m dot end      a field READ   — the accessor quotes the following word
+//
+// Rewriting either yields `{;: 1}` / `m dot ;`, which is a different program
+// (or none). The `.` sugar is already safe: `m.end` lexes as ONE dotted word,
+// never a bare `end` node. Everything else is the terminator.
+func normaliseStatementEnd(n *Node) {
+	for i, ch := range n.Children {
+		if ch.Kind == NdWord && ch.Text == "end" {
+			beforeColon := i+1 < len(n.Children) && n.Children[i+1].Kind == NdColon
+			afterDot := i > 0 && n.Children[i-1].Kind == NdWord &&
+				(n.Children[i-1].Text == "dot" || n.Children[i-1].Text == "dotr")
+			if !beforeColon && !afterDot {
+				ch.Kind = NdSemicolon
+				ch.Text = ";"
+			}
+		}
+		normaliseStatementEnd(ch)
+	}
+}
+
 func capitalizeTypesInTree(n *Node) {
 	for i, ch := range n.Children {
 		if ch.Kind == NdWord && !strings.Contains(ch.Text, ".") {

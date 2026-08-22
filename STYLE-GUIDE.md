@@ -352,3 +352,55 @@ class). `has` was in that class until it was changed to evaluate its key
 exactly as `get` does: a bound bare key now computes, and an unbound one
 raises `undefined_word` loudly rather than silently looking up the
 literal name.
+
+## S6 — Ending a statement: prefer `;` over `end`
+
+`;` and `end` are the same token — the parser aliases `;` to `end`
+(`eng/go/parser/grammar.go`'s `setupValRule`). Both spellings terminate a
+statement, and neither is deprecated. Prefer `;`:
+
+```boru
+def x 1 ; def y 2 ; add x y      ;# preferred
+def x 1 end def y 2 end add x y  ;# same program, heavier
+```
+
+It works everywhere `end` does — inline, at the end of a line, and to
+close a definition:
+
+```boru
+def inc fn [[n:Integer] [Integer] [add n 1]] ; inc 5   ;# 6
+```
+
+### Why
+
+- **A terminator is punctuation, not vocabulary.** `end` is a WORD, and it
+  sits in the same namespace the reader is scanning for operators and
+  bindings; `;` cannot be mistaken for one. This matters most where
+  statements are dense — a line of three `end`s reads as three tokens to
+  interpret, where three `;` read as structure.
+- **It keeps short statements on one line.** `def x 1 ; def y 2` is a
+  natural single line; the `end` spelling pushes toward one statement per
+  line whether or not that helps.
+- **It matches the comment mark already in use.** Every example in this
+  guide comments with `;#`, so `;` is already the familiar punctuation.
+
+### The formatter enforces it
+
+`boru fmt` normalises the terminator to `;` (`normaliseStatementEnd`), so
+this convention is applied rather than remembered. `end` stays valid input
+— it is the same token — but it will be rewritten on the next format.
+
+The rewrite is **positional**, because `end` is a perfectly good name in
+two places a spelling test cannot tell apart, and both are left alone:
+
+```boru
+def m {end: 1} ;      ;# a map KEY — survives
+def q (m dot end) ;   ;# the accessor quotes the following word — survives
+```
+
+`m.end` is safe for a different reason: the `.` sugar lexes as one dotted
+word, never a bare `end`.
+
+Formatting a file therefore converts it wholesale. That is intended, but
+it means a conversion shows up as a reformatting diff — run it as its own
+change, not folded into unrelated work.
