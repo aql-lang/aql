@@ -689,11 +689,7 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 				out[i] = c
 			}
 			if fnUnit >= 0 {
-				pos := core.SrcPos{}
-				if len(args) > 0 {
-					pos = args[0].Pos()
-				}
-				es.RecordUserCall(fnUnit, args, out, pos)
+				out = recordUserCallOrApply(es, r, nameCopy, capturesCopy, fnUnit, args, out)
 			} else if polyPlan != nil {
 				// Ambiguous multi-overload dispatch with every arm baked: record
 				// the runtime-re-matched poly call (OpCallUserPoly). Positions
@@ -758,13 +754,11 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 		}
 		// Undeclared fn (anonymous lambda, 0-return fn) with a non-empty body
 		// residual: the body's residual IS the result. Record the call with
-		// those N carriers so downstream resolves them to this dispatch.
+		// those N carriers so downstream resolves them to this dispatch — or,
+		// for a construction-scope-capture unit, the fn-VALUE apply fallback
+		// (the anonymous-lambda factory result is exactly this arm's shape).
 		if fnUnit >= 0 {
-			pos := core.SrcPos{}
-			if len(args) > 0 {
-				pos = args[0].Pos()
-			}
-			es.RecordUserCall(fnUnit, args, stk, pos)
+			stk = recordUserCallOrApply(es, r, nameCopy, capturesCopy, fnUnit, args, stk)
 		}
 		return stk
 	}
@@ -777,6 +771,90 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 // fn name must already be bound (recursion). Generic and Body-less (native /
 // handler) overloads are skipped — a generic body needs per-call type bindings,
 // and a native handler has no boru body to analyse.
+// recordUserCallOrApply records a compiled-unit dispatch at a ReturnsFunc
+// record site: the §4.3 fn-value apply fallback where the call qualifies
+// (the outs slice is then COPIED with the freshened carrier in slot 0),
+// else the ordinary RecordUserCall. Returns the outs to hand downstream.
+func recordUserCallOrApply(es core.EmitRecorder, r *core.Registry, name string, captures []core.CapturedBinding, fnUnit int, args, outs []core.Value) []core.Value {
+	pos := core.SrcPos{}
+	if len(args) > 0 {
+		pos = args[0].Pos()
+	}
+	if fresh, ok := recordFnValueApplyFallback(es, r, name, captures, args, outs, pos); ok {
+		outs = append([]core.Value(nil), outs...)
+		outs[0] = fresh
+		return outs
+	}
+	es.RecordUserCall(fnUnit, args, outs, pos)
+	return outs
+}
+
+// recordFnValueApplyFallback routes a call whose compiled unit carries
+// CONSTRUCTION-SCOPE (non-concrete) captures through the fn-VALUE apply
+// (RecordDynApply) instead of the unit call. Such a unit's captures are
+// analysis carriers resolvable only in the factory body's own scope, so
+// RecordUserCall refuses "capture X unreachable at a call site" at every
+// OUTER call site (the audit's §4.3 capture family) — while the STORED
+// runtime value carries its own concrete captures, which the dynamic
+// apply's interpreter-dispatch island installs faithfully (CallBoru's
+// Captured install). Deliberately narrow, each guard load-bearing:
+//
+//   - single arg, single out — RecordDynApply's op nets exactly one
+//     value, and a 1-arg window cannot be reordered by the op's
+//     trailing/forward normalisation;
+//   - the binding's value is an ANONYMOUS, single-own-sig, unquoted fn —
+//     the island's execFnDefLiteral provably APPLIES that class (a named
+//     or quoted value can stay data there where the word dispatch
+//     applies — ADR-016's divergence);
+//   - at least one capture non-concrete — a fully-concrete-capture unit
+//     keeps the established unit call.
+//
+// RecordDynApply's own guards (operand provenance, the event-lead
+// quote-state refusal, fnConcreteSingleValuedOrCarrier) still apply; a
+// decline or refusal there leaves the program on the sound fallback.
+// Pinned end-to-end by frontier-hof-audit.tsv §9's mkap row.
+func recordFnValueApplyFallback(es core.EmitRecorder, r *core.Registry, name string, captures []core.CapturedBinding, args, outs []core.Value, pos core.SrcPos) (core.Value, bool) {
+	if len(args) != 1 || len(outs) != 1 {
+		return core.Value{}, false
+	}
+	// The memoised body analysis returns the SAME residual value (same ID)
+	// for every call of one shape, so recording each apply against the
+	// shared out would overwrite producedBy and resolve every residual
+	// slot to the LAST apply (probe: `(h 5) (h 10)` compiled [17 17]).
+	// Freshen a CARRIER out per call site — the caller substitutes it —
+	// and decline a concrete out (freshening would erase its value).
+	if !outs[0].Carrier || outs[0].Parent == nil {
+		return core.Value{}, false
+	}
+	nonConcrete := false
+	for _, cb := range captures {
+		if !core.IsConcrete(cb.Value) {
+			nonConcrete = true
+			break
+		}
+	}
+	if !nonConcrete {
+		return core.Value{}, false
+	}
+	top, ok := r.Defs.Top(name)
+	if !ok {
+		return core.Value{}, false
+	}
+	fd, isFn := top.Data.(core.FnDefInfo)
+	if !isFn || !fd.Anonymous || top.Quoted {
+		return core.Value{}, false
+	}
+	if own := fd.OwnSigs(); len(own) != 1 {
+		return core.Value{}, false
+	}
+	fresh := core.NewCarrier(outs[0].Parent)
+	fresh.Dynamic = outs[0].Dynamic
+	if !es.RecordDynApplyName(name, args, top, fresh, pos) {
+		return core.Value{}, false
+	}
+	return fresh, true
+}
+
 func checkFnBodyAtConstruction(r *core.Registry, name string, fnDef core.FnDefInfo) {
 	if r == nil || !r.Check.IsActive() || fnDef.Gen != nil {
 		return

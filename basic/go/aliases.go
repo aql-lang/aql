@@ -504,8 +504,15 @@ var (
 	SetAtomReferent          = core.SetAtomReferent
 	NewBoolean               = core.NewBoolean
 	// NewCalendarDuration moved to lang/go/engine/native_temporal.go (Step 8).
-	NewCarrier               = core.NewCarrier
-	StampModuleCallGates     = core.StampModuleCallGates
+	NewCarrier           = core.NewCarrier
+	StampModuleCallGates = core.StampModuleCallGates
+	// The fn-carrier side table moved down to core (check_fncarrier.go)
+	// so the engine's compile-pass undefined-word branches can consult it.
+	NoteCheckFnCarrierBind   = core.NoteCheckFnCarrierBind
+	CheckFnCarrierBind       = core.CheckFnCarrierBind
+	CheckFnCarrierBoundName  = core.CheckFnCarrierBoundName
+	DropCheckFnCarrierBind   = core.DropCheckFnCarrierBind
+	ResetCheckFnCarrierBinds = core.ResetCheckFnCarrierBinds
 	NewCarrierTypedList      = core.NewCarrierTypedList
 	NewCarrierTypedListValue = core.NewCarrierTypedListValue
 	NewDynamicCarrier        = core.NewDynamicCarrier

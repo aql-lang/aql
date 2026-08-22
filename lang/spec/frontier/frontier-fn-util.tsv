@@ -1,0 +1,21 @@
+# boru Language Specification: boru:fn-util behaviour rows (frontier)
+# Format: input<TAB>expected<TAB>description
+#
+# Every row def-binds a fn computed by a FnUtil word, which the strict
+# compile-lane check refuses (undefined_word on the def-bound name — the
+# same family as the U-combinator and compose rows in
+# frontier-hof-audit.tsv; graduation = the def-bound computed-fn model).
+# The interpreter is the oracle that the vocabulary WORKS.
+import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.compose addone/v double/v) end (h 5)	11	compose applies g first: addone (double 5)
+import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.pipe addone/v double/v) end (h 5)	12	pipe applies f first: double (addone 5)
+import "boru:fn-util"  def k (FnUtil.const 7) end (k 99)	7	const ignores its argument
+import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def fs (FnUtil.flip sub2/v) end (fs 3 10)	7	flip reverses the signature order: sub2 10 3
+import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def c (FnUtil.curry sub2/v) end def c10 (c 10) end (c10 3)	7	curry: one argument at a time
+import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def p (FnUtil.partial sub2/v 10) end (p 3)	7	partial binds signature slot 0
+import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 3 5)	false	on: gt2 (sq 3) (sq 5) — 9 > 25
+import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 5 3)	true	on: 25 > 9
+import "boru:fn-util"  def f fn x:Integer Integer [add 1 x] end def m (FnUtil.memoize f/v) end (m 4)	5	memoize: the first call computes
+import "boru:fn-util"  def f fn [a:Integer Integer [a] s:String String [s]] end def c (FnUtil.curry f/v)	ERROR:FnUtil.curry: the function must have exactly one signature, got 2 overloads	curry refuses a multi-overload function
+import "boru:fn-util"  def f fn x:Integer Integer [x] end def c (FnUtil.curry f/v)	ERROR:FnUtil.curry: the function must take at least 2 parameters, got 1	curry refuses a unary function
+import "boru:fn-util"  FnUtil.flip 5	ERROR:call to 'flip' matched no signature	flip refuses a non-function operand at dispatch
+import "boru:fn-util"  FnUtil.curry 5	ERROR:call to 'curry' matched no signature	curry refuses a non-function operand at dispatch

@@ -404,14 +404,14 @@ WORD has
   [Scalar/String Node] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Scalar/Micron] barrier=1 returns=[Scalar/Boolean]
   [Scalar/Number/Integer Node] barrier=1 returns=[Scalar/Boolean]
-  [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Scalar/Boolean]
-  [Scalar/Atom Ideal/Class] barrier=1 quote={0} returns=[Scalar/Boolean]
-  [Scalar/Atom Ideal/Store] barrier=1 quote={0} returns=[Scalar/Boolean]
-  [Scalar/Atom Ideal/Resource] barrier=1 quote={0} returns=[Scalar/Boolean]
-  [Scalar/Atom Node/Xml] barrier=1 quote={0} returns=[Scalar/Boolean]
-  [Scalar/Atom Node] barrier=1 quote={0} returns=[Scalar/Boolean]
-  [Scalar/Atom Scalar/Micron] barrier=1 quote={0} returns=[Scalar/Boolean]
-  [Scalar/Atom None] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Module] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Class] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Store] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Resource] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Node/Xml] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Node] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Scalar/Micron] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom None] barrier=1 returns=[Scalar/Boolean]
   [Any None] barrier=1 returns=[Scalar/Boolean]
 WORD help
   [] barrier=0
@@ -896,6 +896,8 @@ WORD watch
 WORD whereis
   [Scalar/String] barrier=1 returns=[Any]
   [Scalar/Atom] barrier=1 returns=[Any]
+WORD while
+  [Node/List Node/List] barrier=2 noeval={0,1} +returnsfn
 WORD with-decimal
   [Node/Map Node/List] barrier=2 noeval={1} returns=[Any]
 WORD word

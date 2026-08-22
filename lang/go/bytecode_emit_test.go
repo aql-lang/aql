@@ -949,12 +949,15 @@ func TestEmitUserFnAndTailCall(t *testing.T) {
 		t.Errorf("non-tail recursive call wrongly marked tail:\n%s", got2)
 	}
 
-	// Refusal: a closure ESCAPING as a value (returned, then called
-	// through the binding) is a fn-value call site — Stage 4
-	// territory. Locally-called closures compile (capture slots);
-	// see TestEmitClosureCaptureSlots.
-	if _, r3 := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a5 (mk 5) a5 3`); r3 == "" {
-		t.Error("escaping closure compiled but must refuse")
+	// Stage 1 (the def-bound computed-fn read): a closure ESCAPING as a
+	// value — returned, bound, then called once through the binding —
+	// now COMPILES: the read resolves through the fn-carrier side table
+	// and the leading-apply machinery owns the call (runtime parity 8,
+	// pinned by the frontier harness; repeated reads still refuse at the
+	// fn-value residual nets). Locally-called closures were already
+	// compiled — see TestEmitClosureCaptureSlots.
+	if _, r3 := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a5 (mk 5) a5 3`); r3 != "" {
+		t.Errorf("escaping closure must compile since Stage 1, refused: %s", r3)
 	}
 }
 

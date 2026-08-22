@@ -59,6 +59,9 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 	if e.RecordDynApply(nil, Value{}, Value{}, SrcPos{}) {
 		t.Fatal("inactive RecordDynApply must decline")
 	}
+	if e.RecordDynApplyName("h", nil, Value{}, Value{}, SrcPos{}) {
+		t.Fatal("inactive RecordDynApplyName must decline")
+	}
 	if e.DynApplyLeadEligible(Value{}) {
 		t.Fatal("inactive DynApplyLeadEligible must be false")
 	}

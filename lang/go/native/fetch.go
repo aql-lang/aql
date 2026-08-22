@@ -440,7 +440,10 @@ func FetchAccessorExtensions(ft FetchModuleTypes) []FnDefInfo {
 				Impl: Go(fetchGetrHandler), Returns: []*Type{TAny}}}
 	}
 	hasSigs := []Signature{
-		{Args: []*Type{TAtom, ft.Fetch}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1,
+		// `has` evaluates its key (2026-08-21 get-parity ruling) — the
+		// TAtom overload matches an EVALUATED atom key (`r has status/q`),
+		// aligned with the core accessor's sigs.
+		{Args: []*Type{TAtom, ft.Fetch}, BarrierPos: 1,
 			Impl: Go(fetchHasHandler), Returns: []*Type{TBoolean}},
 		{Args: []*Type{TString, ft.Fetch}, BarrierPos: 1,
 			Impl: Go(fetchHasHandler), Returns: []*Type{TBoolean}},

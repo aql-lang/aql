@@ -347,48 +347,41 @@ func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// fn-carrier side table they consult.
 	if checking && !IsConcrete(value) &&
 		value.Parent.ConformsTo(TFunction) {
+		// SHADOWING a live binding. The computed fn is not installed in
+		// Defs (the arm below), so the name now denotes different things
+		// in the two stores: the carrier here, and whatever `def` bound
+		// earlier in Defs. The compiled program binds only the latter, so
+		// once anything pops or reads through the shadow the lanes part —
+		// `def f 1 ; def f (mk 1) ; undef f ; (f 2)` compiled `1 2` where
+		// the interpreter answers 3, because the interpreter's `def` bound
+		// the closure over the 1 and its `undef` left fn bindings alone.
+		// Refuse rather than model a name with two meanings.
+		if _, shadowed := r.Defs.Top(name); shadowed {
+			r.Check.Recorder().MarkUncompilable(
+				"computed fn shadows a live binding of the same name (two binding stores disagree — Stage 1)")
+		}
+		// A DROPPED APPLY: this def binds the very carrier another name
+		// already denotes, which means the body's apply was not modeled —
+		// the analysis returned the callee unchanged. `def f2 (f1 2)` over
+		// a curried factory is the shape; compiled, both names take one
+		// slot and the unconsumed argument leaks into the residual
+		// (`2 fn (Integer) 3` where the interpreter answers `6`). Refuse
+		// so the interpreter fallback owns it — slow, not wrong.
+		if prev, dup := CheckFnCarrierBoundName(r, value.ID); dup && prev != name {
+			r.Check.Recorder().MarkUncompilable(
+				"def of a computed fn whose apply the analysis dropped (curried chain — Stage 1)")
+		}
 		NoteCheckFnCarrierBind(r, name, value)
 	}
 	return outs, nil
 }
 
-// capCheckFnCarrierBinds is the per-check-pass side table of names def-bound
-// to a Function-family CARRIER (a computed fn the analysis cannot see).
-// installDef deliberately installs no Defs binding for those (the compiled
-// closure machinery owns the name), so the parse/mini/emit value-form macros
-// resolve the name here instead. Reset at the start of every check pass
-// (ResetCheckFnCarrierBinds) — like the module-export growth ledger.
-const capCheckFnCarrierBinds = "engine.check.fn-carrier-binds"
-
-// NoteCheckFnCarrierBind records name → carrier in the per-pass table.
-func NoteCheckFnCarrierBind(r *Registry, name string, v Value) {
-	if m, ok, _ := core.Cap[map[string]Value](r, capCheckFnCarrierBinds); ok && m != nil {
-		m[name] = v
-		return
-	}
-	_ = r.Capabilities.Set(capCheckFnCarrierBinds, map[string]Value{name: v})
-}
-
-// CheckFnCarrierBind returns the fn carrier def-bound to name during this
-// check pass, if any.
-func CheckFnCarrierBind(r *Registry, name string) (Value, bool) {
-	m, ok, _ := core.Cap[map[string]Value](r, capCheckFnCarrierBinds)
-	if !ok || m == nil {
-		return Value{}, false
-	}
-	v, hit := m[name]
-	return v, hit
-}
-
-// ResetCheckFnCarrierBinds clears the fn-carrier side table so it is scoped
-// to a single check pass (a reused instance must not resolve a stale name).
-// Called at the start of every check pass alongside ResetModuleExportGrowth.
-func ResetCheckFnCarrierBinds(r *Registry) {
-	if r == nil || r.Capabilities == nil {
-		return
-	}
-	_, _ = r.Capabilities.Delete(capCheckFnCarrierBinds)
-}
+// The per-check-pass fn-carrier side table (NoteCheckFnCarrierBind /
+// CheckFnCarrierBind / ResetCheckFnCarrierBinds) moved DOWN to
+// core/go/check_fncarrier.go: the engine's compile-pass undefined-word
+// branches (stepWord / stepWordVal) consult it alongside the parse/mini/
+// emit value-form macros, and core cannot reach a basic symbol. The
+// aliases in aliases.go keep this package's historical spellings.
 
 // defKeywordConstructors is the CLOSED SET of constructor words whose
 // bare form after a def name is a declared def signature — the KEYWORD
@@ -1369,6 +1362,12 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// or re-established binding at CALL time). Poison such refs so InvokeCallback
 	// falls back to CallBoru. Mirrors the def-site NotifyNameRebound.
 	r.Check.Recorder().NotifyNameRebound(name)
+	// The fn-carrier side table is a SECOND binding store for this name
+	// (installDef declines a computed fn, so the name lives only there).
+	// Drop it in step with the Defs pop, or the table outlives the binding
+	// and a later read resolves a stale carrier — see
+	// core.DropCheckFnCarrierBind for the two shapes that diverged.
+	DropCheckFnCarrierBind(r, name)
 	UninstallDef(r, name)
 	return nil, nil
 }

@@ -585,14 +585,17 @@ make P {name:"Bob"}           # returns {name:'Bob' nick:None}
 
 To distinguish *absent* from *present-but-`none`*, ask `has` — the
 Boolean presence predicate (`get` returns `None` on a miss, `getr`
-raises, `has` answers whether the key is **bound** at all):
+raises, `has` answers whether the key is **bound** at all). Like
+`get` — and unlike `dot` — `has` **evaluates** its key: a bound bare
+word supplies its value, and a literal field name is spelled `'k'`
+or `k/q`:
 
 ```
-{a:None} has a                # returns true  — present, value is none
+{a:None} has 'a'              # returns true  — present, value is none
 {a:None} dot a                # returns None  — indistinguishable from…
 {a:1}    dot b                # returns None  — …an absent key
-{a:1}    has b                # returns false
-none     has a                # returns false — total: composes in conditions
+{a:1}    has 'b'              # returns false
+none     has a/q              # returns false — total: composes in conditions
 ```
 
 Because the two spellings compare equal under `eq` and both satisfy
@@ -1336,6 +1339,21 @@ restricted words refuse. See
 > x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
 > already unusable as a `def` target.
 
+> **Closures: parameters and fn-locals are captured; module-scope names
+> are live.** A fn's parameters and body-local `def`s are *captured* —
+> the closure keeps them after the defining scope exits, and two
+> closures from one factory hold distinct copies. A name from the
+> enclosing **module** scope is *not* captured: it resolves at call
+> time through the def shadow stack, so a later `def n 100` changes
+> what an existing closure computes, and `undef n` pops back to the
+> earlier binding — redefinition reaches existing code, as at a REPL.
+> To freeze a value instead, route it through a parameter (parameters
+> are captured): `def mkc fn nn:Integer Function [(fn x:Integer
+> Integer [add nn x])]` then `def c (mkc n)` snapshots today's `n`
+> permanently. Pinned in `lang/spec/frontier/frontier-hof-audit.tsv`
+> §8; recorded as NUR097, and discussed with the cross-language
+> positioning in `design/HIGHER-ORDER-FUNCTIONS.0.md` §5.6.
+
 #### Splices and spread — `word`
 
 `word v` wraps its (unevaluated) argument in a splice marker. When the
@@ -1979,6 +1997,27 @@ def g fn [[x:IS][String][case x [Integer "i" String "s" "d"]]]
 # info: case_redundant_default — the clauses already cover IS
 ```
 
+#### `while` — the condition loop
+
+`while [cond] [body]` re-evaluates the condition list before every
+iteration and runs the body while its last value is truthy (the one
+truthiness rule — not Boolean-only). Body values accumulate onto the
+stack across iterations, exactly as `for` leaves its per-iteration
+values; `break` exits with the values collected so far and `continue`
+abandons the current body round. Every region is engine-stepped, so
+the step budget bounds the loop — a non-terminating condition trips
+`evaluation_limit` rather than hanging — and an empty condition region
+is a loud `runtime_error`. Compilation is currently refused (the loop
+runs on the interpreter; `lang/spec/frontier/frontier-while.tsv` pins
+the ledger).
+
+```
+def c (flex {n:0})
+while [(c get 'n') lt 3] [ (c get 'n') set 'n' ((c get 'n') add 1) c ]
+                          # three iterations accumulate their values
+while [false] ['x']       # a falsy condition runs the body zero times
+```
+
 #### `for` forms
 
 ```
@@ -2086,6 +2125,33 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 
+### The `boru:fn-util` module
+
+The point-free function vocabulary
+(`design/HIGHER-ORDER-FUNCTIONS.0.md` §6.4). Every word takes function
+VALUES — pass a named fn as `name/v` (or a bare name into the
+`Function`-typed slots) — and the constructors return ordinary
+first-class `Function` values: storable, passable, applied like any fn.
+
+| Word | Description | Example |
+|------|-------------|---------|
+| `FnUtil.identity` | The argument unchanged, any kind — functions included | `FnUtil.identity 42` returns `42` |
+| `FnUtil.const` | A 1-arg fn that always returns the captured value | `def k (FnUtil.const 7)` then `(k 99)` returns `7` |
+| `FnUtil.compose` | `(compose f g) x = f (g x)` — mathematical order | `def h (FnUtil.compose addone/v double/v)` then `(h 5)` returns `11` |
+| `FnUtil.pipe` | `(pipe f g) x = g (f x)` — pipeline order | `def h (FnUtil.pipe addone/v double/v)` then `(h 5)` returns `12` |
+| `FnUtil.flip` | The signature argument order reversed (`/u` as a word) | `def fs (FnUtil.flip sub2/v)` then `(fs 3 10)` returns `7` |
+| `FnUtil.curry` | A single-signature n-ary fn as a chain of unary fns | `def c (FnUtil.curry sub2/v)` then `def c10 (c 10)` and `(c10 3)` returns `7` |
+| `FnUtil.partial` | Bind signature slot 0, returning a fn of the rest | `def p (FnUtil.partial sub2/v 10)` then `(p 3)` returns `7` |
+| `FnUtil.on` | `(on b u) x y = b (u x) (u y)` | `def bigger (FnUtil.on gt2/v sq/v)` then `(bigger 3 5)` returns `false` |
+| `FnUtil.memoize` | The fn behind a canon-keyed result cache | `def m (FnUtil.memoize slow/v)` — a repeat call answers from the cache |
+
+`curry`, `partial`, `flip` and `memoize` require a fn with exactly ONE
+signature (reshaping a multi-overload fn would silently pick one).
+Programs that `def`-bind a FnUtil result currently run on the
+interpreter — the strict compile lane's def-bound-computed-fn model is
+an open item, pinned with the rows in
+`lang/spec/frontier/frontier-fn-util.tsv`.
+
 ### Higher-order array words
 
 | Word | Description | Example |
@@ -2190,7 +2256,7 @@ word — `size` subsumes it.
 |------|-------------|---------|
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
-| `has` | Key/index presence as a Boolean — true when **bound**, even to `none`; total (never raises, `none` parent answers `false`) | `{a:None} has a` returns `true`; `{a:1} has b` returns `false`; `[10,20] has 1` returns `true` |
+| `has` | Key/index presence as a Boolean — true when **bound**, even to `none`; evaluates its key like `get` (a literal name is `'k'`/`k/q`); total (never raises, `none` parent answers `false`) | `{a:None} has 'a'` returns `true`; `{a:1} has 'b'` returns `false`; `[10,20] has 1` returns `true` |
 | `set` | Set a key — in place on Store, class instances, and FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)); copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}`; `set a/q 1 (flex {})` |
 | `del` | Delete a key — in place on FlexMap (returns the node); copy-returning on Map; missing key is a no-op | `{a:1 b:2} del a` returns `{b:2}`; `(flex {a:1}) del a` |
 | `context` | Push the current context Store | `context` |

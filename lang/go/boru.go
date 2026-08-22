@@ -443,7 +443,10 @@ func (a *Boru) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	a.registry.RescueForwardRefDiagnostics()
 	a.registry.Check.EmitUnusedDefDiagnostics()
 
-	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
+	res := CheckResult{
+		Diagnostics:              a.registry.Check.Diagnostics,
+		FnCarrierReadSubstituted: a.registry.Check.FnCarrierReadSubstituted,
+	}
 	if sites := a.registry.Check.Recorder().Sites(); len(sites) > 0 {
 		res.SiteCounts = make(map[string]int, len(sites))
 		for k, v := range sites {
@@ -1051,6 +1054,10 @@ func (a *Boru) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	}
 	prog, reason, res, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
+		// Read the Stage 1 marker BEFORE the rollback: RestoreForCompile
+		// copies the whole pre-pass CheckState back (§3.2's in-place
+		// restore), which would wipe the per-pass flag.
+		carrierRead := a.registry.Check.FnCarrierReadSubstituted
 		a.registry.RestoreForCompile(snap)
 		// The check pass's in-place module-load stamps were rolled back with the
 		// scopes; drop them so -compile-report shows only the fallback re-run's
@@ -1080,7 +1087,17 @@ func (a *Boru) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 		// program with a check error or the "check diagnostics" sentinel
 		// fails (or, caught, succeeds) identically in both engines, and
 		// the re-run only renders the canonical result.
+		// A pass that substituted a fn-carrier read (Stage 1 —
+		// FnCarrierReadSubstituted) keeps the in-library fallback on a
+		// refusal: before Stage 1 every program in that class refused
+		// behind the SILENT check-diagnostics sentinel (the read raised a
+		// false undefined_word), and a working program must not trade its
+		// quiet slow path for a loud compile_refused because the
+		// diagnostic became honest. The refusal REASON is still reported
+		// (the CLI's performance warning), and programs whose model now
+		// succeeds compile natively instead.
 		if err == nil && reason != "" && reason != "check diagnostics" &&
+			!carrierRead &&
 			os.Getenv("BORU_COMPILE_FALLBACK") != "1" {
 			// compile_refused is a GUARANTEE to the caller: no observable
 			// effect escaped, so an explicit whole-source re-run (Run's own
@@ -1314,6 +1331,14 @@ type CheckResult struct {
 	// only by CompileCheck (the recording pass); nil for a plain Check.
 	// It answers "why didn't my hot loop compile to a single path?".
 	SiteCounts map[string]int `json:"site_counts,omitempty"`
+	// FnCarrierReadSubstituted marks a compile pass that resolved a read
+	// of a name def-bound to a computed fn through the fn-carrier side
+	// table (Stage 1). A REFUSAL from such a pass is the transitional
+	// class that refused behind the silent check-diagnostics sentinel
+	// before Stage 1 — RunCompiled keeps that silent interpreter fallback
+	// for it, and the census suites classify it with the sentinel rather
+	// than as a hard refusal. Populated only by CompileCheck.
+	FnCarrierReadSubstituted bool `json:"fn_carrier_read_substituted,omitempty"`
 }
 
 // CheckSummary reports the per-severity count of diagnostics from

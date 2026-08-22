@@ -170,7 +170,7 @@ var kernelErrorCodes = []string{
 	"syntax_error", "tape_exhausted", "type_error", "unbound_param",
 	"sugar_unbound",
 	"uncalled_function", "undefined_word", "unsupported", "unused_def",
-	"weak_value_error",
+	"weak_value_error", "while_error",
 }
 
 var _ = registerKernelErrorCodes()

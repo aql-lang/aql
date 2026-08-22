@@ -321,5 +321,5 @@ def P (class {n:Integer}) def p (make P {n:1}) (p del "n")	ERROR:sealed	a declar
 {a:1 b:2} del b	{a:1}	del removes the key
 {a:1 b:2} set b none	{a:1 b:none}	set none KEEPS the key, bound to none
 ({a:1 b:2} del b) eq ({a:1 b:2} set b none)	false	so the two writes differ
-({a:1} has b) eq ({a:1 b:none} has b)	false	`has` is what tells them apart
+({a:1} has 'b') eq ({a:1 b:none} has 'b')	false	`has` is what tells them apart
 {a:1 b:none} size	2	…and so does size — a none-bound key is a key

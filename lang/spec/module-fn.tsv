@@ -1,0 +1,13 @@
+# boru Language Specification: boru:fn-util — the point-free function
+# vocabulary (FnUtil namespace)
+# Format: input<TAB>expected<TAB>description
+#
+# The module ships the audit's §6.4 recommendation
+# (design/HIGHER-ORDER-FUNCTIONS.0.md): compose, pipe, curry, partial,
+# const, identity, flip, on, memoize. Only the rows that COMPILE live
+# here (the main corpus holds refusalCeiling = 0); the behaviour rows
+# def-bind a computed fn — the strict-lane check refusal pinned in the
+# frontier ledger — so they live in
+# lang/spec/frontier/frontier-fn-util.tsv until that family graduates.
+import "boru:fn-util"  FnUtil.identity 42	42	identity returns its argument
+import "boru:fn-util"  FnUtil.identity 'v'	'v'	identity over a String

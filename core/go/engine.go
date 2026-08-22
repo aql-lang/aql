@@ -2574,6 +2574,17 @@ func (e *Engine) stepWordVal(val Value, w WordInfo) error {
 	v, ok := ResolveRef(e.Registry, w.Name)
 	if !ok {
 		if e.Registry != nil && e.Registry.analysisActive() {
+			// Deliberately NO fn-carrier side-table consult here, unlike
+			// stepWord's twin branch: substituting the carrier for a `/v`
+			// read of a carrier-bound name lets the check pass green-light
+			// a unit whose lowering DROPS the operand — the top-level read
+			// has no producing event and no fn-unit home for the dyn-scope
+			// rescue, so `(pmany digit/v)` compiled to a 0-arg call and
+			// raised signature_error where the interpreter succeeds
+			// (frontier-hof-audit.tsv's pmany/pseq rows). Until the
+			// residual re-push machinery can lower such a read, the
+			// undefined_word diagnostic below keeps those units refused —
+			// slow, never wrong.
 			e.Registry.noteAnalysisDiagnostic(CheckBraid.UndefinedWordCheckDiag(e, w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
@@ -2903,6 +2914,43 @@ func (e *Engine) stepWord(val Value) error {
 		// every undefined word produces exactly one diagnostic.
 		if !e.Registry.analysisActive() {
 			return e.undefinedWordError(w.Name, val.Pos())
+		}
+		// A COMPILE pass first resolves a name def-bound to a
+		// Function-family CARRIER (a computed fn — installDef installs no
+		// Defs binding for those; core_helpers.go's fn arm) through the
+		// per-pass side table: the read substitutes the carrier exactly as
+		// a def-value read would, with the same use + NoteDefRead
+		// provenance, so `def h (mk 1)  (h 2)` feeds the carrier-lead
+		// apply machinery (IsFnTypedCarrier) instead of refusing the unit
+		// with a false undefined_word. Compile-pass-scoped: a PLAIN check
+		// constructs the concrete fn on this path (fn's handler runs in
+		// check), so its diagnostic surface never reaches here with a
+		// table entry — the gate keeps that contract explicit.
+		// A NESTED BODY declines. Stage 1 substitutes the carrier for a
+		// read of the name, which is right where the read is an OPERAND
+		// and wrong inside a branch / loop / quotation body, where the
+		// name is a body TOKEN whose binding the compiled body does not
+		// carry: `def f (mk 1)  do [(f 2)]` compiled to an island that
+		// raised `undefined word: f` where the interpreter answers 3.
+		// Declining restores this program class's pre-Stage-1 refusal
+		// (the read raises the check-diagnostics sentinel, so the
+		// interpreter fallback owns it, quietly) and leaves the proven
+		// operand contexts — where the graduations and §9b/§9c live —
+		// untouched. The list-member twin of this corruption is caught in
+		// the compiler (RecordMakeListInner).
+		if e.Registry.analysisCompiling() && e.Registry.Check.NestedBodyDepth == 0 {
+			if cv, hit := CheckFnCarrierBind(e.Registry, w.Name); hit {
+				e.Registry.noteAnalysisUse(w.Name)
+				e.Registry.analysisRecorder().NoteDefRead(cv.ID, w.Name)
+				// Mark the pass: if it ends in a refusal anyway, the
+				// compile entry points keep the SILENT interpreter
+				// fallback this program class had before Stage 1 (the
+				// read used to raise the check-diagnostics sentinel).
+				e.Registry.Check.FnCarrierReadSubstituted = true
+				cv = WithPos(cv, val)
+				e.Tape.Set(e.Pointer, cv)
+				return e.stepLiteral()
+			}
 		}
 		e.Registry.noteAnalysisDiagnostic(CheckBraid.UndefinedWordCheckDiag(e, w.Name, val.Pos()))
 		v := NewAtom(w.Name)
@@ -7078,6 +7126,12 @@ func (e *Engine) stepMove(val Value) error {
 func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	cont := info.Cont
 
+	// A while-mode continuation alternates condition and body regions
+	// rather than counting an iterator — its own driver owns the move.
+	if cont.WhileCond != nil {
+		return e.stepMoveWhile(markIdx, moveIdx, info)
+	}
+
 	// Collect resolved values between mark and move (this iteration's output).
 	for j := markIdx + 1; j < moveIdx; j++ {
 		cont.Results = append(cont.Results, e.Tape.At(j))
@@ -7136,6 +7190,76 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 		e.traceNote = "for done"
 	}
 	return nil
+}
+
+// stepMoveWhile drives a while loop's alternating regions. A CONDITION
+// region's last value decides — truthy splices the body region, falsy
+// splices the accumulated results and ends the loop; a BODY region's
+// values accumulate into cont.Results and the condition region replays.
+// Both regions run through the ordinary Run loop, so the step budget
+// meters the loop (`while [true] []` trips evaluation_limit) and
+// break/continue's forward scans find the move exactly as they find a
+// for loop's (cont.Results is what break splices; the discarded region
+// a continue leaves is a body whose collection round nets nothing).
+func (e *Engine) stepMoveWhile(markIdx, moveIdx int, info MoveInfo) error {
+	cont := info.Cont
+
+	if cont.WhileInBody {
+		for j := markIdx + 1; j < moveIdx; j++ {
+			cont.Results = append(cont.Results, e.Tape.At(j))
+		}
+		cont.WhileInBody = false
+		e.spliceWhileRegion(markIdx, moveIdx, info, cont.WhileCond, "while cond")
+		return nil
+	}
+
+	var condResult Value
+	for j := markIdx + 1; j < moveIdx; j++ {
+		condResult = e.Tape.At(j)
+	}
+	if condResult.Parent == nil {
+		delete(e.marks, info.To)
+		e.Tape.Splice(markIdx, moveIdx-markIdx+1)
+		e.Pointer = markIdx
+		return e.runtimeError("runtime_error", "while: condition produced no value", "while", "")
+	}
+	if CoerceBoolean(condResult) {
+		cont.WhileInBody = true
+		e.spliceWhileRegion(markIdx, moveIdx, info, cont.Body, "while body")
+		return nil
+	}
+
+	// Condition falsy — the loop is done: splice in the accumulated results.
+	delete(e.marks, info.To)
+	e.Tape.Splice(markIdx, moveIdx-markIdx+1, cont.Results...)
+	e.Pointer = markIdx
+	if e.trace != nil {
+		e.traceNote = "while done"
+	}
+	return nil
+}
+
+// spliceWhileRegion replaces the current mark..move span with a fresh
+// mark + region + move triple (the same reused-scratch shape as
+// stepMoveCont's re-mark) and points the engine at the new mark.
+func (e *Engine) spliceWhileRegion(markIdx, moveIdx int, info MoveInfo, region []Value, note string) {
+	id := NextMarkID()
+	tokens := e.loopTokens[:0]
+	tokens = append(tokens, NewMark(id, region...))
+	tokens = append(tokens, region...)
+	tokens = append(tokens, NewMoveCont(id, info.Reason, info.Cont))
+	e.loopTokens = tokens
+
+	delete(e.marks, info.To)
+	e.Tape.Splice(markIdx, moveIdx-markIdx+1, tokens...)
+	if e.marks == nil {
+		e.marks = make(map[string]bool)
+	}
+	e.marks[id] = true
+	e.Pointer = markIdx
+	if e.trace != nil {
+		e.traceNote = note
+	}
 }
 
 // stepMoveIf handles an if-statement continuation move. It collects the
@@ -7439,7 +7563,39 @@ func (e *Engine) parenLeadFnApplyIdx(es EmitRecorder, openIdx, closeIdx, count, 
 	if count != 2 {
 		return -1
 	}
+	// A NESTED BODY declines, for the same reason the fn-carrier read
+	// substitution does (stepWord): the admission models the window as
+	// the trailing spelling's event, and inside a branch / loop /
+	// quotation body the compiled body does not carry the bindings that
+	// model needs — `def mkg g:Function => [v:Integer => [(g v)]]  def h
+	// (mkg …)  do [(h 1)]` compiled to an island that raised `undefined
+	// word: g` (the factory's captured param) where the interpreter
+	// answers 8. The proven operand contexts, where §9/§9b live, are
+	// unaffected.
+	if e.Registry != nil && e.Registry.Check.NestedBodyDepth > 0 {
+		return -1
+	}
 	last := e.Tape.At(lastIdx)
+	// The ARGUMENT gate, and it is load-bearing in BOTH clauses. The two
+	// spellings converge only while the argument is not a function: a
+	// FUNCTION-valued argument is never applied by the interpreter, whose
+	// leading collection meets a function word — a barrier that never
+	// feeds forward collection — and RAISES, where the trailing model
+	// binds and applies. A statically-known fn argument is excluded
+	// outright; a GRADUAL one (`x:Any`) is excluded because nothing here
+	// can prove it will not be a function at run time.
+	//
+	// This cannot be repaired by resolving it at run time. The
+	// interpreter's raise is a property of WORD dispatch, not of the
+	// values: an island over the resolved window `[lead, fnArg]` leaves
+	// both inert (probe: the pair comes back as the residual `fn (Integer)
+	// fn (Integer)`, no apply and no error), while the word-read spelling
+	// raises — and it raises with one of TWO texts (the stranded-forward
+	// barrier when the lead parked a forward, the lead's own no-match when
+	// no overload could), selected by engine-internal collection state the
+	// window does not carry. So there is no faithful lowering to admit the
+	// shape with, and the refusal stands (design/HIGHER-ORDER-FUNCTIONS.0.md
+	// §5.8; pinned by TestS5BParenLeadFnApplyIdxGradualArgDeclines).
 	if last.Dynamic || IsFnValueResidual(last) {
 		return -1
 	}
@@ -8903,6 +9059,19 @@ func (e *Engine) TryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 				if top, ok := e.Registry.Defs.Top(wi.Name); ok {
 					v = top // the binding is what matchSignature examined
 				} else {
+					// A name def-bound to a COMPUTED fn (the fn-carrier side
+					// table — installDef installs no Defs binding for those)
+					// is check-invisible but BOUND at run time: `a/v` there
+					// delivers the real Function value the runtime match
+					// examines, so this static no-match is a modeling
+					// artifact, not a definite runtime failure (the pmany /
+					// pseq shape: `def digits (pmany digit/v)` trapped
+					// signature_error where the interpreter succeeds).
+					// Decline; the caller's refusal stands and the program
+					// falls back faithfully.
+					if _, hit := CheckFnCarrierBind(e.Registry, wi.Name); hit {
+						return false
+					}
 					// Known literals resolve exactly as the match's forward
 					// walk resolved them (true/false → Boolean) — the value
 					// the runtime dispatch examines.

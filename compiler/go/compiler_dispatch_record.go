@@ -51,6 +51,30 @@ func tryFoldScalarConst(r *core.Registry, sig *core.Signature, args []core.Value
 // boundary to a single named call is the first step of the Emit/check
 // decoupling (checker review, Tier 2).
 func recordDispatchOutcome(r *core.Registry, word string, sig *core.Signature, args, out []core.Value, pos core.SrcPos, ownerReg *core.Registry) {
+	// A CODE BODY that reads a def-bound compiled closure refuses here —
+	// the earliest point every native dispatch passes through, which is
+	// what makes the guard word-agnostic (`do` is the witness, but every
+	// NoEvalArgs code slot re-runs its tokens the same way). See
+	// recordCodeBodyClosureRead.
+	if rec, isEmit := r.Check.Recorder().(*EmitState); isEmit {
+		if rec.recordCodeBodyClosureRead(args) {
+			return
+		}
+		// A COMPILED CLOSURE reaching a word's argument slot. The
+		// interpreter APPLIES a paren-bounded call of such a value
+		// (`typeof (h 5)` → Integer); the compiled model can leave the
+		// paren uncollapsed, so an Any-typed slot swallows the FUNCTION
+		// and the argument strands behind it (`typeof (h 5)` → the two
+		// values `Function 5`, and `filter … [gt 0 (h 5)]` raises
+		// `cannot order Function and Integer` where the interpreter
+		// raises about a non-Boolean body). A word that legitimately
+		// takes a fn value declares a Function slot and its argument is
+		// not one of these produced closures, so refuse here and let the
+		// interpreter fallback own the shape.
+		if rec.argIsProducedClosure(args) {
+			return
+		}
+	}
 	// Tag a get-family read that surfaces a fn-valued container member so the
 	// stranded-member-fn guard can recognise its dynamic(Any) result downstream
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Independent of how the read itself

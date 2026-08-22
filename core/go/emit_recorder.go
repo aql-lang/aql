@@ -108,6 +108,12 @@ type EmitRecorder interface {
 	RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos)
 	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, sigs []Signature, args, outs []Value, pos SrcPos)
 	RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool
+	// RecordDynApplyName is RecordDynApply with the fn resolved through
+	// the NAME's recorded def-site operand (its evDynBind event) — the
+	// §4.3 capture fallback for calls of installed factory closures whose
+	// units carry construction-scope captures (check's
+	// recordFnValueApplyFallback).
+	RecordDynApplyName(name string, args []Value, fn, out Value, pos SrcPos) bool
 	DynApplyLeadEligible(v Value) bool
 	RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
@@ -240,7 +246,10 @@ func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos) {}
 func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Signature, []Value, []Value, SrcPos) {
 }
 func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return false }
-func (inactiveEmit) DynApplyLeadEligible(Value) bool                   { return false }
+func (inactiveEmit) RecordDynApplyName(string, []Value, Value, Value, SrcPos) bool {
+	return false
+}
+func (inactiveEmit) DynApplyLeadEligible(Value) bool { return false }
 func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) bool {
 	return false
 }

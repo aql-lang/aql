@@ -3420,16 +3420,16 @@ func TestDeferredListBodyCompiles(t *testing.T) {
 	}
 }
 
-// Quoted-operand inert words `has` / `inspect` (corpus-core.tsv) — a bare-word
-// key/name quotes to an inert Atom const, so the dispatch bakes a plain
-// CALL_NATIVE over the baked container + key (the VM runs the same pure
-// handler). Declaring CompileQuoteInert clears the "quoted-operand word"
-// refusal exactly as quote/codequote/raise/timeout already do.
+// `inspect` keeps CompileQuoteInert (a bare-word name quotes to an inert
+// Atom const, so the dispatch bakes a plain CALL_NATIVE); `has` left the
+// quoting family on 2026-08-21 (its key evaluates like get's), so its rows
+// here spell the atom keys explicitly with /q — inert consts either way,
+// still compiling natively with no island.
 func TestQuotedOperandHasInspectCompiles(t *testing.T) {
 	pos := []struct{ src, want string }{
-		{`{a:1} has b`, "[false]"},
-		{`{a:None} has a`, "[true]"},
-		{`none has a`, "[false]"},
+		{`{a:1} has b/q`, "[false]"},
+		{`{a:None} has a/q`, "[true]"},
+		{`none has a/q`, "[false]"},
 		{`inspect a/q`, "[{name:'a' kind:unknown signatures:[]}]"},
 	}
 	for _, c := range pos {

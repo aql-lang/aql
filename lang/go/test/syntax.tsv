@@ -1109,13 +1109,13 @@ def x 1 ; x:x	{x:1}
 # === has: Boolean key/index presence — get/getr's third sibling ===
 # "is this key BOUND, regardless of value": present-but-none is
 # distinguishable from absent. Total: never raises.
-{a:None} has a	true
-{a:1} has b	false
+{a:None} has 'a'	true
+{a:1} has 'b'	false
 {a:1} "a" has	true
 [10,20] has 1	true
 [10,20] has 5	false
-none has a	false
-({a:None} dot b) has k	false
+none has a/q	false
+({a:None} dot b) has k/q	false
 
 # === do/error is stack-neutral (decision DX report finding 6) ===
 # The caught error is pushed for the handler to bind, but a handler

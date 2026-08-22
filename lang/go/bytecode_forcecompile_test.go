@@ -50,10 +50,14 @@ func TestRunCompiledStrict(t *testing.T) {
 		// blocking diagnostic can be COMPILE-PASS-ONLY (`boru check` prints
 		// zero diagnostics for this program, which runs clean interpreted).
 		// The force-compile boundary appends the first blocking diagnostic's
-		// code and detail (completeness review §8.1(4)).
+		// code and detail (completeness review §8.1(4)). The fixture is the
+		// Stage 1 `/v`-hold class: a `/v` read of a name def-bound to a
+		// computed fn keeps its compile-lane undefined_word (stepWordVal
+		// declines the fn-carrier table) — the plain-read spelling of this
+		// program compiles since Stage 1 and can no longer pin the sentinel.
 		a, _ := New()
 		_, err := a.RunCompiledStrict(
-			`def mkadd fn [[k:Integer] [Function] [([y:Integer] => [k add y])]] def a (mkadd 4) a 10`)
+			`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] end def h (mk 1) end 2 h/v apply`)
 		if err == nil {
 			t.Fatal("expected a check-diagnostics refusal, got nil")
 		}

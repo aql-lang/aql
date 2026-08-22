@@ -102,7 +102,7 @@ var categories = []Category{
 		"patrun", "find", "patterns",
 	}, nil},
 	{"control", "Control flow, definitions, and functions.", []string{
-		"unpack", "unpack-prefix", "codequote", "do", "raise", "if", "case", "for", "break",
+		"unpack", "unpack-prefix", "codequote", "do", "raise", "if", "case", "for", "while", "break",
 		"continue", "def", "undef", "var", "fn", "args",
 		"afn", "guard", "error", "force-arity", "usurp", "forward-args",
 		"stack-args",

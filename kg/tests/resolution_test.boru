@@ -187,7 +187,7 @@ def blank2
 (KgIngest.ingest-entity
       {key:"b2" type:"Person" label:"Ada Wren" external_ids:{orcid:""}}
   )
-[(blank1.external_ids has orcid) false Assert.equal]
+[(blank1.external_ids has 'orcid') false Assert.equal]
 "a blank external-id value is pruned at ingest" Test.test end
 def r6 (KgResolve.resolve-entities [blank1 blank2] [])
 [((filter [dot status eq "merged"] (r6 get "entities")) size) 0
