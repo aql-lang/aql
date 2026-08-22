@@ -5055,6 +5055,32 @@ func (e *Engine) constFoldContainerVal(items []Value) (Value, bool) {
 // module), execution happens in a sub-engine using that registry so that
 // module-internal words are available. Otherwise, body tokens are spliced
 // into the current engine's stack.
+// takeAppliedMark consumes `apply`'s one-shot application signal
+// (FnDefInfo.Applied) from the value at valIdx, returning the cleared value
+// and whether the mark was set.
+//
+// The mark answers "did someone ask to CALL this value here?", which is a
+// different question from "is this value data?" — the one
+// execFnDefLiteral's inert-lambda gate answers from origin. Keeping them
+// separate is what lets that gate stay (it is what parks `f/v` and holds a
+// lambda in a container) while an explicit `apply` still dispatches at
+// arity 0, whatever the fn's origin (ADR-016, NUR077 §5 Hole 1).
+//
+// Clearing is unconditional and happens HERE, before any branch can store
+// the value: the mark targets the immediately-following dispatch only, so
+// it must never ride into a binding or a container. Same one-shot
+// discipline as ReachGroup and the sealFnValue seal.
+func (e *Engine) takeAppliedMark(valIdx int, val Value) (Value, bool) {
+	fd, isFn := val.Data.(FnDefInfo)
+	if !isFn || !fd.Applied {
+		return val, false
+	}
+	fd.Applied = false
+	val.Data = fd
+	e.Tape.Set(valIdx, val)
+	return val, true
+}
+
 func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// Consume the one-shot completion seal (armed by the collection-
 	// completion site when the callee is a VALUE, not a word). Consumed
@@ -5072,6 +5098,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		val.ReachGroup = false
 		e.Tape.Set(valIdx, val)
 	}
+	// `apply`'s one-shot application signal is spent by the same rule and
+	// for the same reason — see takeAppliedMark. The gate below reads the
+	// returned local, never the field, which by then is already cleared.
+	val, applied := e.takeAppliedMark(valIdx, val)
 	fnDef, ok := val.Data.(FnDefInfo)
 	if !ok {
 		e.Pointer++
@@ -5276,7 +5306,15 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// Macro values are likewise data here — a `(macro …)` result must bind
 	// to its name, not auto-expand (it expands only via the named stepWord
 	// branch). See design/MACROS-PHASE1.10.md §5.
-	if (fnDef.Anonymous || fnDef.Macro) && fwdCount == 0 && len(positions) == 0 {
+	// EXCEPT when an application was explicitly ASKED for: `f/v apply`
+	// sets FnDefInfo.Applied (native_valof.go) for a 0-arg-only fn, and
+	// that is the one case where the value is not data. Without this the
+	// gate let ORIGIN decide — a named 0-arg fn dispatched, an anonymous
+	// one stayed inert — which ADR-016 forbids (NUR077 §5 Hole 1). Macros
+	// keep parking regardless: applying a macro is never a stack-value
+	// dispatch (design/MACROS-PHASE1.10.md §5, D4).
+	if ((fnDef.Anonymous && !applied) || fnDef.Macro) &&
+		fwdCount == 0 && len(positions) == 0 {
 		e.Pointer++
 		return nil
 	}

@@ -2259,8 +2259,14 @@ reserved — it is payloadless and cannot carry the arity. Three prerequisite
 defects are fixed first, as their own changes: the argument-literal
 skip-accounting over-count (§5.2 — the silently-wrong half; CLOSED
 2026-08-18, pinned by `TestStackFormLiteralAccountingExact`), then the
-ADR-016 0-arg anonymous-fn gate and `apply`'s own double-recording (§5's
-two holes), so the Op does not reintroduce quiet wrongness.
+ADR-016 0-arg anonymous-fn gate (§5 Hole 1 — **CLOSED 2026-08-21**: `apply`
+applies a fn whose only signatures are 0-arg at the apply site itself, so
+origin no longer decides at arity 0; the data gate itself STAYS, since
+removing it defeats `/v` parking and container-held lambdas — pinned in
+`lang/spec/valof.tsv` §5) and `apply`'s own double-recording (§5 Hole 2 —
+**OPEN**, and the prerequisite carrying a flagged unknown: whether it can
+be fixed without new engine state), so the Op does not reintroduce quiet
+wrongness.
 
 ---
 

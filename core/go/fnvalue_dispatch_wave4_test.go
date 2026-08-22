@@ -114,6 +114,64 @@ func TestAnonFnValueZeroArgIsData(t *testing.T) {
 	}
 }
 
+// applied returns a copy of a fn VALUE carrying `apply`'s one-shot
+// application mark — what lang's applyHandler stamps to say a call was
+// asked for at this site.
+func applied(v Value) Value {
+	fd := v.Data.(FnDefInfo)
+	fd.Applied = true
+	v.Data = fd
+	return v
+}
+
+// TestAnonFnValueZeroArgAppliedDispatches is the positive twin of
+// TestAnonFnValueZeroArgIsData: the SAME value, marked Applied, dispatches.
+//
+// The two together are the whole point of the mark (ADR-016, NUR077 §5
+// Hole 1). The data gate above must stay — it is what makes
+// `def f ([] => [body])` bind the FUNCTION and what holds a lambda in a
+// container — but it keyed on Anonymous alone, so it also decided whether an
+// EXPLICIT apply fired, and a named 0-arg twin behaved differently. The mark
+// separates "is this data?" from "did someone ask to call it?" without
+// weakening either answer.
+func TestAnonFnValueZeroArgAppliedDispatches(t *testing.T) {
+	r := covRegistry(t, nil)
+	fnv := applied(anonFnVal(nil, nil, parenBody(NewInteger(99))))
+	out, err := NewTop(r).Run([]Value{fnv})
+	if err != nil {
+		t.Fatalf("applied 0-arg anon: %v", err)
+	}
+	if got := renderAll(out); got != "99" {
+		t.Errorf("got %q, want 99 — the Applied mark must make the gate yield", got)
+	}
+}
+
+// TestAppliedMarkIsOneShot pins that the mark is SPENT by the re-step that
+// reads it, whether or not that re-step dispatches. A macro is the case that
+// makes this observable: applying a macro is never a stack-value dispatch
+// (design/MACROS-PHASE1.10.md §5, D4), so the value parks — and it must park
+// UNMARKED, or the stale flag rides into whatever binding or container takes
+// it and fires a call at some later, unrelated step.
+func TestAppliedMarkIsOneShot(t *testing.T) {
+	r := covRegistry(t, nil)
+	fnv := anonFnVal(nil, nil, parenBody(NewInteger(99)))
+	fd := fnv.Data.(FnDefInfo)
+	fd.Macro = true
+	fd.Applied = true
+	fnv.Data = fd
+
+	out, err := NewTop(r).Run([]Value{fnv})
+	if err != nil {
+		t.Fatalf("applied macro value: %v", err)
+	}
+	if len(out) != 1 || !out[0].Parent.Equal(TFunction) {
+		t.Fatalf("a macro value must park as data, got %s", renderAll(out))
+	}
+	if got, ok := out[0].Data.(FnDefInfo); !ok || got.Applied {
+		t.Errorf("the Applied mark must not survive the re-step, got %+v", out[0])
+	}
+}
+
 func TestQuotedFnValueIsData(t *testing.T) {
 	r := covRegistry(t, nil)
 	fnv := anonFnVal(

@@ -761,6 +761,32 @@ type FnDefInfo struct {
 	// expander before normal forward collection. Unlike Anonymous (check-mode
 	// only), Macro gates runtime dispatch.
 	Macro bool
+	// Applied is a ONE-SHOT signal that an application was explicitly
+	// ASKED for at this value — set only by `apply` (native_valof.go) on a
+	// fn whose only signatures are 0-arg, and consumed by the very next
+	// re-step in execFnDefLiteral, which clears it alongside ReachGroup
+	// under the same Quoted-transience discipline.
+	//
+	// It exists because the inert-lambda gate in execFnDefLiteral keys on
+	// Anonymous, and that gate is load-bearing: it is what makes
+	// `def f ([] => [42])` bind f to the FUNCTION rather than to 42. But
+	// keying an APPLICATION on it made ORIGIN decide the outcome, which
+	// ADR-016 forbids —
+	//
+	//	def z fn [[] [Integer] [42]]   z/v apply  ->  42
+	//	def f ([] => [42])             f/v apply  ->  fn f   (was)
+	//
+	// The flag separates the two questions the gate had conflated: "is
+	// this value data?" (origin) and "did someone ask to call it?"
+	// (this). A lambda sitting on the stack still parks; the same lambda
+	// behind an explicit `apply` dispatches through the ONE re-step path
+	// every other arity already uses, so natives keep their Go handlers,
+	// context mutations land in the caller's frame, and the check pass
+	// models the result by re-stepping exactly as runtime does.
+	//
+	// Macros are deliberately NOT covered: applying a macro is never a
+	// stack-value dispatch (design/MACROS-PHASE1.10.md §5, D4).
+	Applied bool
 	// Gen carries the generic-parameter spec for a generic fn
 	// (`def identity gen [T] fn [[x:T] [T] [x]]`). Nil for ordinary
 	// fns. Dispatch admission rides the placeholder nodes' Behaviors;
