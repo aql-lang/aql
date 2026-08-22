@@ -101,7 +101,7 @@ func init() {
 		Description: "Creates a named module. The list is evaluated in an isolated scope and " +
 			"exported words become available under the module name.",
 		Examples: []string{
-			`import module [export "Utils" {greet:greet/v}] end ; # inline module`,
+			`import module [export "Utils" {greet:greet/v}] ; # inline module`,
 		},
 	})
 

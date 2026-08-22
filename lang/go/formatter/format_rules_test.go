@@ -71,8 +71,12 @@ func TestFormatRulesParameterized(t *testing.T) {
 			"{a:1\n    # note\n    b:2\n}\n"},
 		{"indent 2 map (default)", d, "{a:1 # note\nb:2}",
 			"{a:1\n  # note\n  b:2\n}\n"},
+		// The terminator normalises to `;` (STYLE-GUIDE §S6,
+		// normaliseStatementEnd), which also moves the break: a `;` attaches
+		// to the statement it ends, where the WORD `end` started the
+		// continuation line.
 		{"indent 4 continuation", i4, "def f fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]] end f 1 2 3",
-			"def f fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]]\n    end f 1 2 3\n"},
+			"def f fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]] ;\n    f 1 2 3\n"},
 		// container brackets are data.
 		{"angle list brackets", ang, "[1 2]", "<1 2>\n"},
 		// no strategies → the statement stays inline regardless of width.
