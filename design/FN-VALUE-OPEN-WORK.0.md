@@ -366,20 +366,46 @@ signatures are `TList`/`TMap` only, and `do (inc/r)` is a signature error.
 > The fault was routing an EXPLICIT apply through it. `applyHandler`
 > unquoted the value and handed it back for the engine to re-step, and the
 > re-step is exactly where the gate decides — so origin decided the
-> outcome. `applyHandler` now applies a fn whose ONLY signatures are 0-arg
-> at the apply site itself (`CallBoruFn`), which is the one place that
-> knows an application was asked for. Restricted by
-> `FnValueOnlyZeroArgSigs`, so a nullary signature can never eclipse an
-> arg-taking sibling the stack was about to satisfy (the NUR035 hazard);
-> every other arity keeps the re-step, which already ignores origin.
+> outcome. The gate had conflated two questions: "is this value data?"
+> (origin) and "did someone ask to call it?". `apply` now answers the
+> second explicitly — it MARKS the value (`FnDefInfo.Applied`, a one-shot
+> stamp the re-step consumes and clears alongside `ReachGroup`) and the
+> gate yields to the mark. Restricted by `FnValueOnlyZeroArgSigs`, so a
+> nullary signature can never eclipse an arg-taking sibling the stack was
+> about to satisfy (the NUR035 hazard); every other arity keeps the
+> re-step, which already ignores origin. Macros are excluded — applying a
+> macro is never a stack-value dispatch (MACROS-PHASE1.10.md §5, D4).
 >
-> The compiled lane needed the other half. `apply`'s check-mode model
-> (`ReturnsIdentity(0)` → `applyReturns`) REFUSES the shape whose re-step
-> the gate leaves inert, because the check pass would otherwise const-fold
-> the program to the FUNCTION while the interpreter now answers with the
-> applied result. Compiling that shape natively is future work; the
-> interpreter fallback is correct today, and the row is ledgered in
-> `lang/spec/frontier/frontier-fnvalue-scope.tsv`.
+> **A first fix CALLED instead of marking, and that is the record worth
+> keeping.** `applyHandler` invoked the fn at the apply site through
+> `CallBoruFn`. It closed the origin hole and passed its tests, but
+> `CallBoruFn` is a SECOND dispatch path, and a second path diverges from
+> the first in ways no test of the hole itself would catch — three,
+> reported on PR #399 and each verified against `main`:
+>
+> - a NATIVE 0-arg fn carries a Go handler and no boru body, and
+>   `CallBoruFn` ran the empty body, so `valof context apply typeof`
+>   consumed the fn and starved `typeof` (interpreted) while the compiled
+>   lane still answered `Store`;
+> - `CallBoruFn` runs the body in a sub-engine, so a body mutating the
+>   context lost the mutation — `f/v apply context get x/q` answered
+>   `42 1` interpreted against `42 2` compiled AND against the direct call;
+> - the check pass never runs a handler, so it could not model the applied
+>   result at all: `f/v apply add 1` ran to `43` but failed `check` with
+>   `no_signature` over `(Function, Integer)`. That is what forced
+>   `applyReturns` to declare the shape uncompilable.
+>
+> Marking has none of these by construction, because there is no second
+> path: `markApplied` is the ONE place the decision is made and both the
+> runtime handler and the check-mode model call it, so the two engines
+> cannot disagree about which values the gate must yield for. The
+> uncompilable declaration went with it — the shape now COMPILES with
+> parity, and its `frontierCompileLedger` row has graduated. Pinned in
+> `lang/spec/valof.tsv` §5, including one row per divergence above.
+>
+> The generalisation, which is the same one §9 draws for the admitting
+> commits: a fix that adds a code path is a fix that must be swept against
+> every path it now parallels. Prefer the fix that removes the fork.
 >
 > **A VM mirror was written and then removed, which is worth recording.**
 > `callDynApplyTop` was given the same arity-0 branch on the reasoning

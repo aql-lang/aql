@@ -143,15 +143,13 @@ const docMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [
 // refusal reason substring (stable core only); "" is the bootstrap sentinel.
 // Signatures transcribed from the 2026-07-13 bootstrap run.
 var frontierCompileLedger = map[string]frontierEntryLS{
-	// ADR-016 / NUR077 §5 Hole 1: `apply` on a fn whose ONLY signatures are
-	// 0-arg applies it at the apply site itself, so origin no longer decides
-	// at arity 0. The COMPILED lane cannot model that: the check engine
-	// re-steps the fn value, and execFnDefLiteral's data gate — which must
-	// stay, being what parks `f/v` and holds a lambda in a container — leaves
-	// an anonymous 0-arg value inert, so the program would const-fold to the
-	// FUNCTION where the interpreter now answers 42. apply's check-mode model
-	// refuses instead. Compiling the shape natively is the follow-up.
-	`def f ([] => [42])  f/v apply`: {why: "the check engine's re-step leaves a 0-arg anonymous fn inert, so the compiled model would answer with the Function", failsWith: "apply of a 0-arg fn value the re-step leaves inert"},
+	// (ADR-016 / NUR077 §5 Hole 1 was ledgered here and has GRADUATED —
+	// `def f ([] => [42])  f/v apply` compiles with parity. The refusal was
+	// an artefact of applying at the handler: that left the check engine's
+	// re-step to const-fold the program to the FUNCTION. Marking the value
+	// instead (FnDefInfo.Applied) puts both engines on the one gate, so the
+	// check pass models the applied result and there is nothing to refuse.
+	// Pinned in lang/spec/valof.tsv §5.)
 	// NUR054 — a `context` read inside an inline-lowered body (here an
 	// auto-evaluated def-list): the interpreter gives that body its own
 	// context layer, the inline stream has no layer to hand out, and every

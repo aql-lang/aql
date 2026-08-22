@@ -376,59 +376,81 @@ func valofHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 // check engine re-steps the fn value exactly as runtime does and an
 // arg-taking callee records as an ordinary call and lowers.
 //
-// One shape it must DECLARE rather than model. A fn whose only signatures
-// are 0-arg is applied by applyHandler at the apply site itself (ADR-016 /
-// NUR077 §5 Hole 1), and the check engine's re-step cannot see that: where
-// the re-step's data gate keeps the value inert — an anonymous lambda, a
-// macro — nothing is recorded and the program const-folds to the FUNCTION,
-// while the interpreter answers with the applied result. Keying on
-// Anonymous/Macro here is not a semantic choice; it is the factual
-// condition under which execFnDefLiteral's gate declines to dispatch, and
-// so the only way the two engines could part company. Refuse, and the
-// interpreter fallback owns the shape.
+// The 0-arg shape needs no special case here, and that is the point of
+// marking rather than calling (applyHandler below). Because the mark is
+// consumed by the re-step, the check engine walks the SAME gate the
+// interpreter does: it dispatches the applied fn and carries its result
+// forward, so a downstream consumer — `f/v apply add 1` — type-checks
+// against the RESULT rather than against the Function. An earlier revision
+// applied at the handler and had to declare the shape uncompilable to stay
+// honest; re-stepping models it exactly instead, so there is nothing left
+// to refuse.
 func applyReturns(args []Value, r *Registry) []Value {
-	if len(args) == 1 && r != nil {
-		if fd, ok := args[0].Data.(FnDefInfo); ok &&
-			FnValueOnlyZeroArgSigs(fd) && (fd.Anonymous || fd.Macro) {
-			r.Check.Recorder().MarkUncompilable(
-				"apply of a 0-arg fn value the re-step leaves inert (ADR-016, NUR077 §5 Hole 1)")
-		}
+	out := ReturnsIdentity(0)(args, r)
+	if len(out) == 1 {
+		out[0] = markApplied(out[0])
 	}
-	return ReturnsIdentity(0)(args, r)
+	return out
 }
 
-func applyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// markApplied stamps `apply`'s one-shot application signal on a fn value
+// whose only signatures are 0-arg, and is the SINGLE source of that
+// decision: the runtime handler and the check-mode model both call it, so
+// the two engines cannot disagree about which values the re-step's
+// inert-lambda gate must yield for. That is the whole reason the mark is a
+// value stamp rather than a call — a handler runs only at runtime, and the
+// check pass would have had to guess. Anything else is returned untouched.
+//
+// See FnDefInfo.Applied (core/go/value.go) for why the gate needs telling,
+// and execFnDefLiteral for where the mark is consumed and cleared.
+func markApplied(v Value) Value {
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok || !FnValueOnlyZeroArgSigs(fd) || !fd.Anonymous || fd.Macro {
+		return v
+	}
+	fd.Applied = true
+	v.Data = fd
+	return v
+}
+
+func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
 	if !v.Parent.Equal(TFunction) {
 		return nil, fmt.Errorf("apply: expected Function, got %s", v.Parent.String())
 	}
-	fd, ok := v.Data.(FnDefInfo)
-	if !ok {
+	if _, ok := v.Data.(FnDefInfo); !ok {
 		return nil, fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", v.Data)
 	}
 	v.Quoted = false
-	// ADR-016 (NUR077 §5 Hole 1): a fn whose ONLY signatures are 0-arg is
-	// applied HERE rather than handed back for the engine to re-step. The
-	// re-step reaches execFnDefLiteral's data gate, which keeps a 0-arg
-	// ANONYMOUS value inert — and that gate is load-bearing (it is what
-	// parks `f/v` and keeps a lambda stored in a container as data), so it
-	// stays. Routing an EXPLICIT apply through it made ORIGIN decide the
-	// outcome, which ADR-016 forbids:
+	// ADR-016 (NUR077 §5 Hole 1): a fn whose ONLY signatures are 0-arg
+	// must apply the same way whatever its ORIGIN. The re-step reaches
+	// execFnDefLiteral's data gate, which parks a 0-arg ANONYMOUS value —
+	// and that gate is load-bearing (it is what makes `def f ([] => [42])`
+	// bind f to the FUNCTION), so it stays. But letting it also answer
+	// "was a call asked for?" made origin decide the outcome:
 	//
 	//	def z fn [[] [Integer] [42]]   z/v apply  ->  42
 	//	def f ([] => [42])             f/v apply  ->  fn f   (was)
 	//
-	// Applying here settles both spellings at the one site that knows an
-	// application was ASKED for. Restricted to fns with no arg-taking
-	// overload, so a nullary signature can never eclipse an arg-taking
-	// sibling the stack was about to satisfy (the NUR035 hazard); every
-	// other arity keeps the re-step, which already ignores origin.
-	if FnValueOnlyZeroArgSigs(fd) {
-		if sig, hasOwn := fd.FirstOwnSig(); hasOwn {
-			return CallBoruFn(r, &fd, sig, nil)
-		}
-	}
-	return []Value{v}, nil
+	// So state the application instead of performing it: mark the value
+	// Applied and hand it back. The gate reads the mark and yields, and
+	// the call runs down the ONE dispatch path every other arity already
+	// uses. Calling here instead — through CallBoruFn — was a SECOND path,
+	// and it diverged from the first in three ways the re-step gets right
+	// by construction: a native 0-arg fn (`valof context apply`) kept its
+	// Go handler instead of running an empty body; a body mutating the
+	// context (`context set x/q 2`) landed those mutations in the caller's
+	// frame instead of a sub-engine's; and the check pass modelled the
+	// RESULT, because ReturnsIdentity(0) re-steps exactly as runtime does
+	// — so `f/v apply add 1` type-checks as `43` rather than failing
+	// no_signature over (Function, Integer).
+	//
+	// Restricted to fns with no arg-taking overload, so a nullary
+	// signature can never eclipse an arg-taking sibling the stack was
+	// about to satisfy (the NUR035 hazard). Macros are excluded by the
+	// gate itself — applying a macro is never a stack-value dispatch
+	// (design/MACROS-PHASE1.10.md §5, D4).
+	return []Value{markApplied(v)}, nil
 }
 
 // applyReachHandler applies a Reach (a lens) to a receiver value: it rebinds

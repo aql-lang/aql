@@ -701,13 +701,23 @@ lambdas. Don't expect to capture caller args; pass them explicitly.
 > **ADR-016 made this a DEFECT, not a design — and the OBSERVABLE half is
 > fixed (2026-08-21).** Arity and origin never change how a function
 > behaves, and this gate keyed on both. Where that was reachable — an
-> explicit `apply` — it is settled: `apply` now applies a fn whose only
-> signatures are 0-arg at the apply site itself, so
-> `def f ([] => [42])  f/v apply` answers `42` exactly as its named twin
-> does. See `design/FN-VALUE-OPEN-WORK.0.md` §5 Hole 1; pinned in
-> `lang/spec/valof.tsv` §5, whose heading ("Anonymous-function references
-> behave identically") was the one claim in that file which did not hold
-> at arity 0.
+> explicit `apply` — it is settled: `apply` MARKS a fn whose only
+> signatures are 0-arg (`FnDefInfo.Applied`) and the ordinary re-step
+> dispatches it, so `def f ([] => [42])  f/v apply` answers `42` exactly
+> as its named twin does. See `design/FN-VALUE-OPEN-WORK.0.md` §5 Hole 1;
+> pinned in `lang/spec/valof.tsv` §5, whose heading ("Anonymous-function
+> references behave identically") was the one claim in that file which did
+> not hold at arity 0.
+>
+> **Mark, do not call — the seam is the lesson.** The first fix called
+> from `applyHandler` via `CallBoruFn`, which made apply a SECOND dispatch
+> path, and it diverged from the re-step three ways: a native 0-arg fn lost
+> its Go handler to an empty boru body, a body's `context` mutations landed
+> in a sub-engine instead of the caller's frame, and the check pass could
+> not see the call at all (so the shape had to be declared uncompilable).
+> Marking routes every arity down the one path and all three go away —
+> the shape now COMPILES. If a future change needs apply to do more, add
+> to the mark, not to a second path.
 >
 > **The gate itself stays, deliberately.** Removing it was measured and is
 > wrong: `/v` parking collapses (`f/v` answers `42`), and a 0-arg lambda
