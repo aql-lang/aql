@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"sync"
 
 	core "github.com/boru-lang/boru/core/go"
 
@@ -387,11 +388,27 @@ var fnUtilNatives = []native.NativeFunc{
 				}
 				fn := args[0]
 				n := len(sig.Params)
+				// The cache is captured by the returned handler, and that
+				// handler rides a Function VALUE — which a ForkConcurrent
+				// registry inherits, so `await`, timers, services and network
+				// callbacks can drive the SAME closure from several
+				// goroutines. An unsynchronised map there is not merely racy:
+				// Go terminates the process on a concurrent map read/write.
+				// The invoke deliberately runs OUTSIDE the lock — it re-enters
+				// the interpreter and may itself call a memoized fn, which
+				// under a held lock would deadlock. Two goroutines racing the
+				// same cold key therefore both compute; last writer wins, and
+				// since memoize's contract is a PURE fn keyed by argument
+				// canon, either result is the same value.
+				var mu sync.Mutex
 				cache := map[string][]native.Value{}
 				return []native.Value{goFnValue("memoize", n,
 					func(hargs []native.Value, _ map[string]native.Value, _ []native.Value, hr *native.Registry) ([]native.Value, error) {
 						key := native.Canon(hargs)
-						if hit, ok := cache[key]; ok {
+						mu.Lock()
+						hit, ok := cache[key]
+						mu.Unlock()
+						if ok {
 							out := make([]native.Value, len(hit))
 							copy(out, hit)
 							return out, nil
@@ -402,7 +419,9 @@ var fnUtilNatives = []native.NativeFunc{
 						}
 						stored := make([]native.Value, len(vals))
 						copy(stored, vals)
+						mu.Lock()
 						cache[key] = stored
+						mu.Unlock()
 						return vals, nil
 					})}, nil
 			}),

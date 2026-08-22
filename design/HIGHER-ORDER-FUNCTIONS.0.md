@@ -1219,6 +1219,37 @@ running to a value, not merely agreeing on an error), the two earlier
 sweeps clean, and the frontier corpus green with no graduation lost.
 Ledgered as §9g.
 
+**A sixth, from review (2026-08-21, §9h).** Both P1 findings of the
+PR #397 Codex review were real, and both are instances of ONE fact: a
+computed fn is not installed in `Defs` — the compiled closure machinery
+owns the name — so it lives only in the check-pass carrier table, and
+the two binding stores can disagree.
+
+- **`undef` left the table behind.** It popped `Defs` and never dropped
+  the carrier, so a later read resolved a binding that was gone.
+  `DropCheckFnCarrierBind` fixes it, pinned directly.
+- **Shadowing gave the name two meanings**, which is the half the
+  reviewer's own repro did not reach and a probe did:
+
+  ```
+  def f 1 ;  def f (mk 1) ;  undef f ;  (f 2)
+  interpreted 3    compiled `1 2`
+  ```
+
+  The compiled program bound only the shadowed `f = 1` (the computed
+  `def` installs nothing), so the pop exposed it and stranded the `2`.
+  That is not repairable by dropping the table entry — the compiled
+  lane never had the closure under that name at all — so a computed fn
+  shadowing a live binding now refuses.
+
+Worth recording about the review itself: the reviewer's stated repro
+(`def f (mk 1) ; undef f ; (f 2)`) does **not** reproduce, because
+`undef` does not remove a fn binding at all — both lanes answer 3. The
+FINDING was right and the REPRO was wrong, and taking the repro at face
+value would have closed it as unreproducible. Whether `undef` should
+remove a fn binding is a separate language question, untouched here;
+the fix is correct whichever way it is eventually settled.
+
 The wider point for whoever picks this up: **every admission in this
 campaign needs a code-body probe — and a generated sweep, not a
 hand-picked one.** All four classes share one signature — an admission

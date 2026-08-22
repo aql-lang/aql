@@ -161,3 +161,15 @@ def mkg g:Function => [v:Integer => [(g v)]] end def h (mkg (z:Integer => [add 7
 #     24 of the 690 diverged, in exactly two contexts. Refuses now.
 def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end typeof (h 5)	Integer	a computed closure applied in a typeof operand (compiled gave the two values `Function 5`; refuses now)
 def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end filter [1 2] [gt 0 (h 5)]	ERROR:filter_error	the same shape in a filter body (compiled raised `cannot order Function and Integer`; refuses now)
+#
+# §9h the two binding stores (2026-08-21): both P1 findings of the
+#     PR #397 review. A computed fn is NOT installed in Defs — the
+#     compiled closure machinery owns the name — so it lives only in
+#     the check-pass carrier table, and the two stores can disagree.
+#     `undef` popped Defs without dropping the table (stale carrier),
+#     and a computed fn SHADOWING a live binding left the name with
+#     two meanings: compiled bound only the shadowed value, so
+#     `def f 1 ; def f (mk 1) ; undef f ; (f 2)` answered `1 2` where
+#     the interpreter answers 3. The drop is fixed; the shadow
+#     refuses. Ledgered.
+def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f 1 end def f (mk 1) end undef f (f 2)	3	a computed fn shadowing a live binding, then undef (compiled answered `1 2`; refuses now)

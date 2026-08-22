@@ -347,6 +347,19 @@ func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// fn-carrier side table they consult.
 	if checking && !IsConcrete(value) &&
 		value.Parent.ConformsTo(TFunction) {
+		// SHADOWING a live binding. The computed fn is not installed in
+		// Defs (the arm below), so the name now denotes different things
+		// in the two stores: the carrier here, and whatever `def` bound
+		// earlier in Defs. The compiled program binds only the latter, so
+		// once anything pops or reads through the shadow the lanes part —
+		// `def f 1 ; def f (mk 1) ; undef f ; (f 2)` compiled `1 2` where
+		// the interpreter answers 3, because the interpreter's `def` bound
+		// the closure over the 1 and its `undef` left fn bindings alone.
+		// Refuse rather than model a name with two meanings.
+		if _, shadowed := r.Defs.Top(name); shadowed {
+			r.Check.Recorder().MarkUncompilable(
+				"computed fn shadows a live binding of the same name (two binding stores disagree — Stage 1)")
+		}
 		// A DROPPED APPLY: this def binds the very carrier another name
 		// already denotes, which means the body's apply was not modeled —
 		// the analysis returned the callee unchanged. `def f2 (f1 2)` over
@@ -1349,6 +1362,12 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// or re-established binding at CALL time). Poison such refs so InvokeCallback
 	// falls back to CallBoru. Mirrors the def-site NotifyNameRebound.
 	r.Check.Recorder().NotifyNameRebound(name)
+	// The fn-carrier side table is a SECOND binding store for this name
+	// (installDef declines a computed fn, so the name lives only there).
+	// Drop it in step with the Defs pop, or the table outlives the binding
+	// and a later read resolves a stale carrier — see
+	// core.DropCheckFnCarrierBind for the two shapes that diverged.
+	DropCheckFnCarrierBind(r, name)
 	UninstallDef(r, name)
 	return nil, nil
 }

@@ -339,13 +339,16 @@ a value out of a name.
 
 ## S5 — Computed keys: parenthesise for the quoting accessors
 
-`get` evaluates a bare bound key; `has` and `set` quote it. So:
+`get` and `has` evaluate a bare bound key; `set` quotes it. So:
 
 ```boru
 m get k          ;# fine — get evaluates k
-m has (k)        ;# needed — a bare k looks up the literal "k"
-m set (k) v      ;# needed
+m has k          ;# fine — has evaluates it too, since 2026-08-21
+m set (k) v      ;# needed — set still quotes
 ```
 
-A bare key to `has`/`set` is a silent wrong answer, not an error
-(NUR040's class).
+A bare key to `set` is a silent wrong answer, not an error (NUR040's
+class). `has` was in that class until it was changed to evaluate its key
+exactly as `get` does: a bound bare key now computes, and an unbound one
+raises `undefined_word` loudly rather than silently looking up the
+literal name.

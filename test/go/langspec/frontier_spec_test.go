@@ -557,7 +557,13 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// Unmasked by 3d914ad — before the Stage 2 admission these refused.
 	`def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end typeof (h 5)`:              {why: "audit §5.8/§9g: a computed closure in a typeof operand — the apply did not collapse, so typeof took the Function", failsWith: "computed closure at a word's argument slot"},
 	`def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end filter [1 2] [gt 0 (h 5)]`: {why: "audit §5.8/§9g: the same shape inside a filter body", failsWith: "computed closure at a word's argument slot"},
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                                               {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
+	// §9h — the two binding stores (both P1 findings of the #397 review). A
+	// computed fn is not installed in Defs, so it lives only in the carrier
+	// table and the stores can disagree. Shadowing a live binding leaves the
+	// name with two meanings: compiled bound only the shadowed value, so this
+	// answered `1 2` where the interpreter answers 3. Refuses now.
+	`def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f 1 end def f (mk 1) end undef f (f 2)`: {why: "audit §5.8/§9h: a computed fn shadowing a live binding — Defs and the carrier table disagree about the name", failsWith: "computed fn shadows a live binding"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                         {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
 
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4

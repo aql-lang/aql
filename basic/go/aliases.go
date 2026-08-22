@@ -511,6 +511,7 @@ var (
 	NoteCheckFnCarrierBind   = core.NoteCheckFnCarrierBind
 	CheckFnCarrierBind       = core.CheckFnCarrierBind
 	CheckFnCarrierBoundName  = core.CheckFnCarrierBoundName
+	DropCheckFnCarrierBind   = core.DropCheckFnCarrierBind
 	ResetCheckFnCarrierBinds = core.ResetCheckFnCarrierBinds
 	NewCarrierTypedList      = core.NewCarrierTypedList
 	NewCarrierTypedListValue = core.NewCarrierTypedListValue

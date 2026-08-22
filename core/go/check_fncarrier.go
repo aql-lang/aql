@@ -58,6 +58,29 @@ func CheckFnCarrierBoundName(r *Registry, id string) (string, bool) {
 	return "", false
 }
 
+// DropCheckFnCarrierBind removes name from the fn-carrier side table — the
+// `undef` half of NoteCheckFnCarrierBind. Without it the table outlives the
+// binding it stands for, and the two stores disagree about what `undef` did:
+// `installDef` DECLINES to bind a computed fn (the compiled closure
+// machinery owns the name), so `undef` pops whatever Defs entry a previous
+// `def` left, while the table still answers with the computed carrier. Both
+// spellings then diverge —
+//
+//	def f (mk 1) ;  undef f ;  (f 2)              the table's stale carrier
+//	def f 1 ;  def f (mk 1) ;  undef f ;  (f 2)   compiled `1 2`, interp 3
+//
+// — the second because the pop exposed the SHADOWED `f = 1` in Defs while
+// the table kept the carrier. Dropping the entry makes the read miss, which
+// raises the ordinary undefined_word diagnostic and refuses the program to
+// the interpreter, where `undef` of a fn binding is the interpreter's own
+// business. Correct in both spellings, and correct whichever way that
+// separate question is eventually settled.
+func DropCheckFnCarrierBind(r *Registry, name string) {
+	if m, ok, _ := Cap[map[string]Value](r, capCheckFnCarrierBinds); ok && m != nil {
+		delete(m, name)
+	}
+}
+
 // ResetCheckFnCarrierBinds clears the fn-carrier side table so it is scoped
 // to a single check pass (a reused instance must not resolve a stale name).
 // Called at the start of every check pass alongside ResetModuleExportGrowth.
