@@ -23,7 +23,7 @@ import (
 // This is the VALUE test, deliberately distinct from
 // TestContextBoundaryDifferential, which asserts only that the two engines
 // AGREE. Agreement is not correctness: both engines leaking would pass there
-// and still make the doc a lie. So every row states what `context has y` must
+// and still make the doc a lie. So every row states what `context has y/q` must
 // actually be, and for the forms the compiler does not yet bracket it states
 // the two answers separately — which is what the doc's own caveat says.
 func TestDocumentedContextBoundaries(t *testing.T) {
@@ -79,7 +79,7 @@ g`, leaked, leaked},
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			src := c.src + "\ncontext has y"
+			src := c.src + "\ncontext has y/q"
 			a, _ := lang.New()
 			gotC, cErr := a.Run(src)
 			b, _ := lang.New()
@@ -89,7 +89,7 @@ g`, leaked, leaked},
 					cErr, iErr)
 			}
 			if got := lastBool(t, gotI); got != c.interp {
-				t.Errorf("interpreted: `context has y` = %v, want %v.\n"+
+				t.Errorf("interpreted: `context has y/q` = %v, want %v.\n"+
 					"This is the CANONICAL answer and EXPLANATION.md's boundary list "+
 					"publishes it. Changing it is a language-semantics change — update "+
 					"the doc in the same commit, or this is a regression.", got, c.interp)
@@ -103,17 +103,17 @@ g`, leaked, leaked},
 						"fix landing: set compiled to the interpreter's value here and " +
 						"delete the form from the doc's caveat."
 				}
-				t.Errorf("compiled: `context has y` = %v, want %v.%s", got, c.compiled, extra)
+				t.Errorf("compiled: `context has y/q` = %v, want %v.%s", got, c.compiled, extra)
 			}
 		})
 	}
 }
 
-// lastBool reads the boolean the `context has y` tail left on top.
+// lastBool reads the boolean the `context has y/q` tail left on top.
 func lastBool(t *testing.T, stack []any) bool {
 	t.Helper()
 	if len(stack) == 0 {
-		t.Fatalf("empty residual stack — the `context has y` tail produced nothing")
+		t.Fatalf("empty residual stack — the `context has y/q` tail produced nothing")
 	}
 	switch v := stack[len(stack)-1].(type) {
 	case bool:
@@ -123,7 +123,7 @@ func lastBool(t *testing.T, stack []any) bool {
 		if s == "true" || s == "false" {
 			return s == "true"
 		}
-		t.Fatalf("top of stack is %T (%v), not the boolean `context has y` returns; "+
+		t.Fatalf("top of stack is %T (%v), not the boolean `context has y/q` returns; "+
 			"full stack: %v", v, v, stack)
 		return false
 	}

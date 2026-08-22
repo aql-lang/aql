@@ -287,18 +287,18 @@ func TestW3ListOpsFlex(t *testing.T) {
 // ---- has / getr / dotr ----
 
 func TestW3Has(t *testing.T) {
-	w3MiscWant(t, `{a:None} has a`, `true`)
-	w3MiscWant(t, `{a:1} has b`, `false`)
+	w3MiscWant(t, `{a:None} has 'a'`, `true`)
+	w3MiscWant(t, `{a:1} has 'b'`, `false`)
 	w3MiscWant(t, `{a:1} has 'a'`, `true`)
 	w3MiscWant(t, `[10 20] has 1`, `true`)
 	w3MiscWant(t, `[10 20] has 5`, `false`)
-	w3MiscWant(t, `none has a`, `false`)
+	w3MiscWant(t, `none has a/q`, `false`)
 	// Class instances.
-	w3MiscWant(t, `def P class {x:1} def p (make P {x:5}) p has x`, `true`)
-	w3MiscWant(t, `def P class {x:1} def p (make P {x:5}) p has y`, `false`)
+	w3MiscWant(t, `def P class {x:1} def p (make P {x:5}) p has x/q`, `true`)
+	w3MiscWant(t, `def P class {x:1} def p (make P {x:5}) p has y/q`, `false`)
 	// Store (the context store).
-	w3MiscWant(t, `context set 'k' 1 end context has k`, `true`)
-	w3MiscWant(t, `context has nope-w3`, `false`)
+	w3MiscWant(t, `context set 'k' 1 end context has 'k'`, `true`)
+	w3MiscWant(t, `context has 'nope-w3'`, `false`)
 	// A type-literal container answers false, it never raises.
 	out, err := hasNodeHandler([]Value{NewAtom("a"), NewTypeLiteral(TMap)}, nil, nil, nil)
 	if err != nil || Canon(out) != `false` {

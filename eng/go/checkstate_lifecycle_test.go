@@ -25,11 +25,12 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,
 		"FnAnalysisCounts": true, "FnBodyDepth": true,
 		"CaughtBodyDepth": true, "NestedBodyDepth": true, "CondBodyDepth": true,
-		"SpecBaselines":    true,
-		"LoopBodyDepth":    true,
-		"CodeEffectDepth":  true,
-		"Compiling":        true,
-		"ArgsFrameUnnamed": true,
+		"SpecBaselines":            true,
+		"LoopBodyDepth":            true,
+		"CodeEffectDepth":          true,
+		"Compiling":                true,
+		"FnCarrierReadSubstituted": true,
+		"ArgsFrameUnnamed":         true,
 	}
 	// Fields Begin() resets to a canonical NON-zero per-pass value.
 	resetByBeginToCanonical := map[string]string{

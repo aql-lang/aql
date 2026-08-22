@@ -1906,6 +1906,11 @@ func (lw *lowerer) lowerCall(ev *EmitEvent) string {
 		if c.dynApplyUnquote {
 			op = OpCallDynApplyTop
 		}
+		if c.dynApplyKeepQuote {
+			// An event-provenance fn: the runtime quote state survives
+			// (no read substitution to mirror) — see OpCallDynTrailKeepQ.
+			op = OpCallDynTrailKeepQ
+		}
 		lw.emit(op, c.dynApply, c.pos)
 	} else if c.dynMixed {
 		// Forward-drift window (REFUSAL-CLOSURE §1): the layout placed

@@ -1312,13 +1312,25 @@ func TestDynApplyLeadEligible(t *testing.T) {
 		return u
 	}
 
-	// A CLOSURE unit declines (its analysis frame is the CallableSpec
-	// inputs, not a per-call named frame).
+	// A native code-body CLOSURE unit declines (its analysis frame is the
+	// CallableSpec inputs, not a per-call named frame).
 	es = NewEmitState()
 	u := openUnit(es, &fnUnitRec{closure: true})
 	u.localByID["g1"] = 0
 	if es.DynApplyLeadEligible(fnCarrier("g1")) {
-		t.Error("a closure unit must decline")
+		t.Error("a native code-body closure unit must decline")
+	}
+
+	// The Stage 2 closure-flag split: a LAMBDA unit ("fnval" — a returned
+	// lambda's own body, a real named-param frame with capture slots) is
+	// ADMITTED; the end-to-end witness is the factory's apply-the-capture
+	// body (`(g v)` inside the returned lambda —
+	// frontier-hof-audit.tsv §9).
+	es = NewEmitState()
+	u = openUnit(es, &fnUnitRec{closure: true, lambdaUnit: true})
+	u.localByID["g1"] = 0
+	if !es.DynApplyLeadEligible(fnCarrier("g1")) {
+		t.Error("a lambda unit's own slot must be admitted")
 	}
 
 	// An UNNAMED-param unit declines: the frame re-pushes its args beneath

@@ -76,19 +76,38 @@ var hermeticExempt = map[string]string{
 func TestModuleExportCoverage(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
 
-	// Slurp every spec file once into a single haystack.
+	// Slurp every spec file once into a single haystack — the flat corpus
+	// plus lang/spec/frontier/*.tsv: frontier rows are ordinary spec rows
+	// run by the interpreter oracle (TestFrontierSpecInterp) with their
+	// compile status ledgered, so a word whose result cannot yet be
+	// def-bound in a compiling row (the fn-util family) is still genuinely
+	// specced by its frontier rows.
 	entries, err := os.ReadDir(specDir)
 	if err != nil {
 		t.Fatalf("read spec dir %s: %v", specDir, err)
 	}
-	var haystack strings.Builder
+	paths := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
 			continue
 		}
-		data, rerr := os.ReadFile(filepath.Join(specDir, e.Name()))
+		paths = append(paths, filepath.Join(specDir, e.Name()))
+	}
+	frontierEntries, err := os.ReadDir(filepath.Join(specDir, "frontier"))
+	if err != nil {
+		t.Fatalf("read frontier spec dir: %v", err)
+	}
+	for _, e := range frontierEntries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		paths = append(paths, filepath.Join(specDir, "frontier", e.Name()))
+	}
+	var haystack strings.Builder
+	for _, p := range paths {
+		data, rerr := os.ReadFile(p)
 		if rerr != nil {
-			t.Fatalf("read %s: %v", e.Name(), rerr)
+			t.Fatalf("read %s: %v", p, rerr)
 		}
 		// Collect only the INPUT column (field 0) of real data rows.
 		// Comment lines (leading '#') and the expected/description columns

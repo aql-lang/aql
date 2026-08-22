@@ -1307,6 +1307,18 @@ type ForCont struct {
 	Step     int64   // increment per iteration
 	Body     []Value // original body tokens (replayed each iteration)
 	Results  []Value // accumulated results from completed iterations
+
+	// While mode — a `while` loop rides the same continuation and
+	// mark/move machinery as `for`, so break/continue's loop resolvers
+	// find it with no second scan. WhileCond non-nil marks the mode:
+	// IterName is empty and Current/End/Step are unused; the move
+	// alternates between a CONDITION region (WhileInBody false, the
+	// region's last value decides) and a BODY region (WhileInBody true,
+	// the region's values accumulate into Results). Every region runs
+	// through the ordinary Run loop, so the step budget meters the loop
+	// and `while [true] []` trips evaluation_limit instead of hanging.
+	WhileCond   []Value
+	WhileInBody bool
 }
 
 // IfCont holds the continuation state for a mark/move-driven if statement.

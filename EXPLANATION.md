@@ -810,7 +810,7 @@ reasonably expects them to scope and they do not:
 
 ```
 for 1 [ context set y 5 ]
-context has y                     # true — the write escaped the body
+context has y/q                   # true — the write escaped the body
 ```
 
 Two caveats. `set` on a context layer is copy-on-write, so "writes are

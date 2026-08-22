@@ -26,6 +26,7 @@ var moduleCatalog = []ModuleInfo{
 	{"bin-util", "Bitwise and byte-buffer helpers: masks, rotates, hashes."},
 	{"tui", "Terminal UIs: raw-terminal drawing and input events behind a host-injected backend."},
 	{"type-util", "Type introspection and construction utilities."},
+	{"fn-util", "Point-free function vocabulary: compose, pipe, curry, partial, const, identity, flip, on, memoize."},
 	{"vm", "Low-level virtual-machine primitives."},
 	{"report", "Tabular reporting and formatting."},
 	{"test", "Assertions and helpers for in-language tests."},

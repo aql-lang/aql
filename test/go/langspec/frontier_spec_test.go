@@ -138,6 +138,20 @@ func TestFrontierSpecInterp(t *testing.T) {
 // Must match the TSV rows byte-for-byte — the orphan arm catches drift.
 const docMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/v, boom: boom/v} ] end `
 
+// hof* — shared def prefixes of the frontier-hof-audit.tsv rows (the
+// higher-order audit's §1 programs, design/HIGHER-ORDER-FUNCTIONS.0.md).
+// Must match the TSV rows byte-for-byte — the orphan arm catches drift.
+const (
+	hofSKI    = `def kk x:Any => [y:Any => [x]] end def ss f:Function => [g:Function => [x:Any => [(f x) (g x)]]] end def ii ((ss kk/v) kk/v) end `
+	hofBB     = `def bb f:Function => [g:Function => [x:Any => [f (g x)]]] end `
+	hofNum    = `def czero f:Function => [x:Any => [x]] end def csucc n:Function => [f:Function => [x:Any => [f ((n f/v) x)]]] end `
+	hofNumEnv = `def toint n:Function => [((n (k:Integer => [add k 1])) 0)] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end `
+	hofBool   = `def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end `
+	hofFactk  = `def factk fn [[n:Integer k:Function][Any][ if (lte 1 n) [ (k 1) ] [ def kk ( fn r:Integer Any [ def m (mul n r) (k m) ] ) (factk (sub 1 n) kk/v) ] ]] end `
+	hofPitem  = `def pitem s:String => [ if (eq 0 (size s)) [ {ok:false rest:s val:None} ] [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ] end def psat fn p:Function Function [ ( fn s:String Map [ def r (pitem s) if (r.ok) [ if (p (r.val)) [ r ] [ {ok:false rest:s val:None} ] ] [ r ] ] ) ] end `
+	hofPalt   = hofPitem + `def palt fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r (a s) if (r.ok) [ r ] [ (b s) ] ] ) ]] end def ab (palt (psat (c:String => [eq 'a' c])) (psat (c:String => [eq 'b' c]))) end `
+)
+
 // frontierCompileLedger pins the frontier rows the compiler REFUSES today,
 // keyed by exact input (the knownRefusals convention). failsWith pins the
 // refusal reason substring (stable core only); "" is the bootstrap sentinel.
@@ -445,6 +459,158 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// args (carrier.go, gated by disjunctCombosTakeSig). Row moved to
 	// lang/spec/bytecode-migrated.tsv; the family is pinned in
 	// lang/go/bytecode_ljoin_test.go.
+
+	// ───────────────────────────────────────────────────────────────────
+	// frontier-hof-audit.tsv — the higher-order audit's §1 programs
+	// (design/HIGHER-ORDER-FUNCTIONS.0.md §1, pinned 2026-08-21). Three
+	// refusal families, all pre-existing and documented in the audit:
+	//
+	// (1) audit §5.8 / COMPILABLE-SUBSET.md "slow, not wrong": a curried
+	//     combinator's body result is an inner fn literal closing over the
+	//     enclosing parameters — unknown provenance, so the mint refuses
+	//     and the interpreter owns the program. The CPS rows are the same
+	//     family one step in: the continuation call `(k m)` inside a
+	//     fn-local fn is a fn CALL operand of unknown provenance.
+	hofSKI + `(ii 42)`:      {why: "audit §5.8: curried combinator body result is an inner fn literal — unknown provenance", failsWith: "body result of unknown provenance"},
+	hofSKI + `(ii 'hello')`: {why: "audit §5.8: same program over a String operand", failsWith: "body result of unknown provenance"},
+	hofBB + `(((bb (n:Integer => [mul n 2])) (n:Integer => [add n 3])) 4)`:                                                             {why: "audit §5.8 over B; this row's CLI-check failure is NUR089's inline-lambda call site, but the compile lane refuses in the provenance class first", failsWith: "body result of unknown provenance"},
+	hofBB + `def d fn n:Integer Integer [mul n 2] end def e fn n:Integer Integer [add n 3] end (((bb d/v) e/v) 4)`:                     {why: "audit §5.8 over B; the named-/v call-site twin of the row above (checks clean at the CLI — the NUR089 pair)", failsWith: "body result of unknown provenance"},
+	`def cc f:Function => [x:Any => [y:Any => [(f y) x]]] end def add2 a:Integer => [b:Integer => [add a b]] end (((cc add2/v) 1) 10)`: {why: "audit §5.8 over C", failsWith: "body result of unknown provenance"},
+	`def ww f:Function => [x:Any => [(f x) x]] end def add2 a:Integer => [b:Integer => [add a b]] end ((ww add2/v) 4)`:                 {why: "audit §5.8 over W", failsWith: "body result of unknown provenance"},
+	hofNum + hofNumEnv + `(toint c3/v)`: {why: "audit §5.8 over the Church numerals (csucc)", failsWith: "body result of unknown provenance"},
+	hofNum + `def cplus m:Function => [n:Function => [f:Function => [x:Any => [((m f/v) ((n f/v) x))]]]] end ` + hofNumEnv + `(toint ((cplus c2/v) c3/v))`:        {why: "audit §5.8: Church addition", failsWith: "body result of unknown provenance"},
+	hofNum + `def cmult m:Function => [n:Function => [f:Function => [(m (n f/v))]]] end ` + hofNumEnv + `(toint ((cmult c2/v) c3/v))`:                             {why: "audit §5.8: Church multiplication", failsWith: "body result of unknown provenance"},
+	`def cpair a:Any => [b:Any => [s:Function => [((s a) b)]]] end def cfst p:Function => [(p (a:Any => [b:Any => [a]]))] end def p ((cpair 1) 2) end (cfst p/v)`: {why: "audit §5.8: Church pair, first projection", failsWith: "body result of unknown provenance"},
+	`def cpair a:Any => [b:Any => [s:Function => [((s a) b)]]] end def csnd p:Function => [(p (a:Any => [b:Any => [b]]))] end def p ((cpair 1) 2) end (csnd p/v)`: {why: "audit §5.8: Church pair, second projection", failsWith: "body result of unknown provenance"},
+	`def ctrue t:Any => [f:Any => [t/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end (((cif ctrue/v) 'T') 'F')`:                               {why: "audit §5.8: Church true through cif", failsWith: "body result of unknown provenance"},
+	`def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end (((cif cfalse/v) 'T') 'F')`:                             {why: "audit §5.8: Church false through cif", failsWith: "body result of unknown provenance"},
+	hofBool + `def cnot p:Function => [t:Any => [f:Any => [((p f) t)]]] end (((cif (cnot ctrue/v)) 'T') 'F')`:                                                     {why: "audit §5.8: Church not true", failsWith: "body result of unknown provenance"},
+	hofBool + `def cnot p:Function => [t:Any => [f:Any => [((p f) t)]]] end (((cif (cnot cfalse/v)) 'T') 'F')`:                                                    {why: "audit §5.8: Church not false", failsWith: "body result of unknown provenance"},
+	hofBool + `def cand p:Function => [q:Function => [((p q/v) cfalse/v)]] end (((cif ((cand ctrue/v) cfalse/v)) 'T') 'F')`:                                       {why: "audit §5.8: Church and, T ∧ F", failsWith: "body result of unknown provenance"},
+	hofBool + `def cand p:Function => [q:Function => [((p q/v) cfalse/v)]] end (((cif ((cand ctrue/v) ctrue/v)) 'T') 'F')`:                                        {why: "audit §5.8: Church and, T ∧ T", failsWith: "body result of unknown provenance"},
+	hofBool + `def cor p:Function => [q:Function => [((p ctrue/v) q/v)]] end (((cif ((cor ctrue/v) cfalse/v)) 'T') 'F')`:                                          {why: "audit §5.8: Church or, T ∨ F", failsWith: "body result of unknown provenance"},
+	hofBool + `def cor p:Function => [q:Function => [((p ctrue/v) q/v)]] end (((cif ((cor cfalse/v) cfalse/v)) 'T') 'F')`:                                         {why: "audit §5.8: Church or, F ∨ F", failsWith: "body result of unknown provenance"},
+	hofFactk + `(factk 5 (v:Integer => [v]))`:        {why: "audit §1.3/§5.8: CPS — the continuation call (k m) inside a fn-local fn is a call operand of unknown provenance", failsWith: "fn call operand of unknown provenance"},
+	hofFactk + `(factk 10 (v:Integer => [add 0 v]))`: {why: "audit §1.3/§5.8: same CPS shape, deeper recursion", failsWith: "fn call operand of unknown provenance"},
+
+	// (2) the §4.3 capture family: kk's inner lambda captures x, and the
+	//     compiled capture is unreachable at the ((kk 7) 99) call site —
+	//     the same refusal the audit's §4.3 kkA/B/C spellings draw.
+	`def kk x:Any => [y:Any => [x]] end ((kk 7) 99)`: {why: "audit §4.3's capture family: the inner lambda's capture of x is unreachable at the call site", failsWith: "unreachable at a call site"},
+
+	// (3) the def-bound computed-fn family, post the Stage 1 check-model
+	//     fix (2026-08-21): a PLAIN read of a name def-bound to a computed
+	//     fn now resolves through the per-pass fn-carrier side table on the
+	//     compile lane (stepWord's consult — the false undefined_word is
+	//     gone), so these rows refuse one or two stages LATER, each at a
+	//     sound emit-land gate. The §5.6 freeze-idiom row graduated
+	//     outright (deleted here — TestFrontierSpecCompiled now requires it
+	//     to compile with parity). A `/v` read of such a name deliberately
+	//     KEEPS the undefined_word diagnostic (stepWordVal declines the
+	//     table): substituting there green-lights lowerings that drop the
+	//     operand (the pmany/pseq shape below refused at the unmatched-
+	//     dispatch recovery for the same reason — the trap declines a
+	//     window naming a table-bound word, engine.go's
+	//     TryRecordUnmatchedDispatchTrap).
+	`def fgen fn s:Function Function [ ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ] ) ] end def fact (fgen fgen/v) end (fact 5)`:                      {why: "the U-combinator's fn unit refuses at the Stage 2 single-result-branch rule once the `fact` read resolves (Stage 1 landed)", failsWith: "branch leaves extra values"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end def h (mk 1) end 2 h/v apply`:                                                                           {why: "the `/v` read of def-bound computed `h` keeps its undefined_word diagnostic (the deliberate Stage 1 /v hold; audit §5.4's workaround row — its ((mk 1) 2) sibling compiles natively as the unledgered control)", failsWith: "check diagnostics"},
+	`def compose fn [[f:Function g:Function][Function][ ( fn x:Integer Integer [ f (g x) ] ) ]] end def h (compose (a:Integer => [add 1 a]) (a:Integer => [mul 2 a])) end (h 5)`: {why: "with the `h` read resolved (Stage 1), compose's own unit refuses: the returned closure captures f and g — audit §1.6's compose row", failsWith: "body result of unknown provenance"},
+	hofPitem + `def manyloop fn [[a:Function s:String acc:List][Map][ def r (a s) if (r.ok) [ (manyloop a/v (r.rest) (push (r.val) acc)) ] [ {ok:true val:acc rest:s} ] ]] end def pmany fn a:Function Function [ ( fn s:String Map [ def z [] (manyloop a/v s z) ] ) ] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def digits (pmany digit/v) end (digits '123ab')`: {why: "`digit/v` at pmany's Function slot is check-invisible (digit is table-bound), so the dispatch no-match declines the trap and refuses (the sound Stage 1 outcome; a trap here raised signature_error where the interpreter succeeds)", failsWith: "unmatched dispatch recovered at pmany"},
+	hofPalt + `(ab 'bzz')`: {why: "with the `ab` read resolved (Stage 1), palt's own unit refuses: its returned closure captures the alternation's parsers", failsWith: "body result of unknown provenance"},
+	hofPalt + `(ab 'zzz')`: {why: "with the `ab` read resolved (Stage 1), palt's own unit refuses: its returned closure captures the alternation's parsers", failsWith: "body result of unknown provenance"},
+	hofPitem + `def pseq fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r1 (a s) if (r1.ok) [ def r2 (b (r1.rest)) if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ] [ {ok:false rest:s val:None} ] ] [ {ok:false rest:s val:None} ] ] ) ]] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def two (pseq digit/v digit/v) end (two '42x')`: {why: "`digit/v` at pseq's Function slots is check-invisible (digit is table-bound) — the same trap decline as the pmany row", failsWith: "unmatched dispatch recovered at pseq"},
+
+	// The §9 Stage-2 refusal rows: the lead-apply admission's witnesses
+	// compile (unledgered), while these two spellings stay sound refusals.
+	`def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h2 (mkc2 (z:Integer => [mul 3 z])) end (h2 5) (h2 10)`: {why: "repeated reads of the bound closure put a fn value before residual args (the make-adder's repeated-read shape; graduation = the multi-read closure lowering)", failsWith: "fn value precedes residual args"},
+	`def mk0 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g)]] )]] end def h0 (mk0 (z:Integer => [add 7 z])) end (h0 5)`:             {why: "a 0-arg apply of a 1-arg capture nets [g] and the interpreter raises inside the lambda; the fnval unit refuses instead of modeling the raise (sound: the fallback raises the identical error)", failsWith: "body result of unknown provenance"},
+	// §9d — the GRADUAL inner parameter. Identical to the §9/§9b
+	// factories except the inner lambda's parameter is Any: the lead is
+	// admitted, the ARGUMENT gate refuses. A gradual argument cannot be
+	// proven non-function, and the interpreter never APPLIES a
+	// function-valued one — its leading collection meets a barrier and
+	// raises — where the trailing model the window records would apply.
+	// Not repairable at run time: the raise is a property of word
+	// dispatch (an island over the resolved window leaves both values
+	// inert), and the two possible texts are selected by collection state
+	// the window does not carry. This is the Church chain's actual
+	// blocker (audit §5.8 stage 1); pinned in core by
+	// TestS5BParenLeadFnApplyIdxGradualArgDeclines.
+	`def app g:Function => [x:Any => [(g x)]] end def h (app (z:Integer => [add 7 z])) end (h 5)`:                          {why: "audit §5.8/§9d: a gradual inner parameter cannot prove its argument non-function, so the lead window's argument gate refuses", failsWith: "body result of unknown provenance"},
+	`def app fn [[g:Function][Function][( fn [[x:Any][Any][(g x)]] )]] end def h (app (z:Integer => [mul 3 z])) end (h 5)`: {why: "audit §5.8/§9d: the verbose twin — the concrete-parameter spelling of this factory compiles (§9)", failsWith: "body result of unknown provenance"},
+	// §9e — the curried CHAIN through def bindings. `def f2 (f1 2)` binds
+	// f2 to the very carrier f1 denotes (the analysis returns the callee
+	// unchanged), which compiled put both names on one slot and leaked the
+	// unconsumed argument into the residual — `2 fn (Integer) 3` for the
+	// interpreter's `6`. A regression the Stage 1 read substitution
+	// introduced (before it, the read raised undefined_word and the
+	// program refused); the def site now detects the dropped apply.
+	`def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn [[c:Integer][Integer][add a (add b c)]] )]] )]] end def f1 (mk2 1) end def f2 (f1 2) end (f2 3)`: {why: "audit §5.8/§9e: a def-bound curried chain whose intermediate apply the analysis drops", failsWith: "apply the analysis dropped"},
+	// §9f — code BODIES over def-bound computed fns. A code body is re-run
+	// by its native through the INTERPRETER, and neither of this branch's
+	// admissions survives that: the read substitution turns a body TOKEN
+	// into a value, and a compiled ClosurePayload is invokable only through
+	// the VM's re-entrant runner. All three were regressions found by a
+	// differential sweep and are now sound refusals.
+	`def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end each [1 2 3] [(f 1)]`: {why: "audit §5.8/§9f: an each body reading a def-bound computed fn — the substitution assembled the body as a data list", failsWith: "computed fn read inside an unevaluated body"},
+	`def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f (mk 1) end do [(f 2)]`:           {why: "audit §5.8/§9f: a do body reading a def-bound computed fn — the substitution declines in a nested body, restoring the pre-Stage-1 refusal", failsWith: "check diagnostics"},
+	`def mkg g:Function => [v:Integer => [(g v)]] end def h (mkg (z:Integer => [add 7 z])) end do [(h 1)]`:                {why: "audit §5.8/§9f: a do body reading a def-bound COMPILED CLOSURE — an interpreter re-run cannot apply one", failsWith: "code body reads a def-bound compiled closure"},
+	// §9g — a computed closure at a WORD's argument slot. Found by a
+	// 690-program generated differential sweep (factory spelling x binding
+	// shape x consumption context); 24 diverged, in exactly two contexts.
+	// The interpreter APPLIES a paren-bounded call of a def-bound compiled
+	// closure; the compiled model could leave the paren uncollapsed, so an
+	// Any-typed slot swallowed the FUNCTION and stranded the argument.
+	// Unmasked by 3d914ad — before the Stage 2 admission these refused.
+	`def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end typeof (h 5)`:              {why: "audit §5.8/§9g: a computed closure in a typeof operand — the apply did not collapse, so typeof took the Function", failsWith: "computed closure at a word's argument slot"},
+	`def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def h (mk (z:Integer => [add 7 z])) end filter [1 2] [gt 0 (h 5)]`: {why: "audit §5.8/§9g: the same shape inside a filter body", failsWith: "computed closure at a word's argument slot"},
+	// §9h — the two binding stores (both P1 findings of the #397 review). A
+	// computed fn is not installed in Defs, so it lives only in the carrier
+	// table and the stores can disagree. Shadowing a live binding leaves the
+	// name with two meanings: compiled bound only the shadowed value, so this
+	// answered `1 2` where the interpreter answers 3. Refuses now.
+	`def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f 1 end def f (mk 1) end undef f (f 2)`: {why: "audit §5.8/§9h: a computed fn shadowing a live binding — Defs and the carrier table disagree about the name", failsWith: "computed fn shadows a live binding"},
+	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                         {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
+
+	// ───────────────────────────────────────────────────────────────────
+	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4
+	// shipped 2026-08-21). Post the Stage 1 check-model fix the def-binding
+	// rows refuse at emit-land gates instead of the retired false
+	// undefined_word: the FnUtil combinators take `xx/v` Function operands,
+	// so most rows hit the Stage 3 function-valued-operand gate at the
+	// combinator call itself; the const row (an Integer operand — no Stage
+	// 3 gate) reaches the leading-apply classifier, where a read-
+	// substituted lead with no statically-known closure shape refuses
+	// (resolveDynamicApply — a Go-impl fn value's island apply is not
+	// provably the interpreter's word dispatch). The two curry-error rows
+	// were always the Stage 3 shape.
+	`import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.compose addone/v double/v) end (h 5)`: {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at compose"},
+	`import "boru:fn-util"  def addone x:Integer => [add 1 x] end def double x:Integer => [mul 2 x] end def h (FnUtil.pipe addone/v double/v) end (h 5)`:    {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at pipe"},
+	`import "boru:fn-util"  def k (FnUtil.const 7) end (k 99)`:                                                                                                            {why: "Stage 1 guard: `k` is a read-substituted Go-impl fn value with no statically-known closure shape — the island apply is not provably the interpreter's word dispatch (a lowered apply here returned 99 for 7)", failsWith: "def-bound computed fn apply"},
+	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def fs (FnUtil.flip sub2/v) end (fs 3 10)`:                                          {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at flip"},
+	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def c (FnUtil.curry sub2/v) end def c10 (c 10) end (c10 3)`:                         {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at curry"},
+	`import "boru:fn-util"  def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] end def p (FnUtil.partial sub2/v 10) end (p 3)`:                                         {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at partial"},
+	`import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 3 5)`: {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at on"},
+	`import "boru:fn-util"  def sq x:Integer => [mul x x] end def gt2 fn [[a:Integer b:Integer][Boolean][a gt b]] end def bigger (FnUtil.on gt2/v sq/v) end (bigger 5 3)`: {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at on"},
+	`import "boru:fn-util"  def f fn x:Integer Integer [add 1 x] end def m (FnUtil.memoize f/v) end (m 4)`:                                                                {why: "Stage 3: function-valued operands at the combinator's own slots (the fn-util family post Stage 1)", failsWith: "function-valued operand at memoize"},
+	`import "boru:fn-util"  def f fn [a:Integer Integer [a] s:String String [s]] end def c (FnUtil.curry f/v)`:                                                            {why: "Stage 3: a function-valued operand at a native's slot (the curry error rows pass f/v without def-binding the result)", failsWith: "function-valued operand at curry"},
+	`import "boru:fn-util"  def f fn x:Integer Integer [x] end def c (FnUtil.curry f/v)`:                                                                                  {why: "Stage 3: a function-valued operand at a native's slot (the curry error rows pass f/v without def-binding the result)", failsWith: "function-valued operand at curry"},
+	`import "boru:fn-util"  FnUtil.flip 5`:  {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
+	`import "boru:fn-util"  FnUtil.curry 5`: {why: "strict-lane check: the FnUtil result is def-bound to a computed fn and unresolved (the frontier-hof-audit def-bound family; graduation = the def-bound computed-fn model)", failsWith: "check diagnostics"},
+
+	// ───────────────────────────────────────────────────────────────────
+	// frontier-while.tsv — the `while` word (closed audit §5.9's gap,
+	// 2026-08-21). Two refusal modes today, both sound: the recorder's
+	// code-body-word gate, and — where the recorder admits the call — a
+	// VM mid-run bail on the spliced mark/cond/move loop tokens, resolved
+	// by RunCompiled's whole-program interpreter re-run. Graduation = a
+	// WHILE_SETUP-style lowering (the for-loop FOR_SETUP precedent).
+	`while [false] ['x'] end 'done'`:   {why: "while (2026-08-21): the recorder admits the pure-literal regions, but the VM has no opcode for the spliced mark/cond/move loop tokens — it bails mid-run and RunCompiled re-runs on the interpreter (slow, not wrong)", failsWith: "did not run compiled"},
+	`while [true] [break] end 'ended'`: {why: "while (2026-08-21): the recorder's code-body-word gate refuses `while` — no loop lowering exists for a condition loop", failsWith: "code-body word while (Stage 2)"},
+	`def c (flex {n:0}) end while [(c get 'n') lt 3] [ (c get 'n') set 'n' ((c get 'n') add 1) c ]`:                                          {why: "while (2026-08-21): VM mid-run bail to the interpreter on the spliced loop tokens (the whole-program fallback)", failsWith: "did not run compiled"},
+	`def c (flex {n:0}) end while [(c get 'n') lt 3] [ set 'n' ((c get 'n') add 1) c end if ((c get 'n') eq 2) [continue] end (c get 'n') ]`: {why: "while (2026-08-21): the recorder's code-body-word gate refuses `while`", failsWith: "code-body word while (Stage 2)"},
+	`while [] [1]`:                      {why: "while (2026-08-21): the condition-produced-no-value error surfaces via the interpreter re-run after the VM bail", failsWith: "did not run compiled"},
+	`while ['ok'] [break] end 'truthy'`: {why: "while (2026-08-21): the recorder's code-body-word gate refuses `while`", failsWith: "code-body word while (Stage 2)"},
 }
 
 type frontierEntryLS struct {
