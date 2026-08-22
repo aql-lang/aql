@@ -14,11 +14,11 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '4405286300390984155');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '2340974595685838074');
 INSERT INTO input_files VALUES ('../AGENTS.md', '5746437182943957856', 12139);
 INSERT INTO input_files VALUES ('../CLI.md', '4243301829870383948', 82989);
 INSERT INTO input_files VALUES ('../README.md', '6312173284019959426', 13333);
-INSERT INTO input_files VALUES ('../STYLE-GUIDE.md', '7891269853615683495', 16301);
+INSERT INTO input_files VALUES ('../STYLE-GUIDE.md', '5561184339668939745', 16295);
 INSERT INTO input_files VALUES ('../basic/go/go.mod', '592614718618454325', 457);
 INSERT INTO input_files VALUES ('../calc/go/go.mod', '6164707914494689882', 605);
 INSERT INTO input_files VALUES ('../check/go/go.mod', '5545877118704640253', 221);

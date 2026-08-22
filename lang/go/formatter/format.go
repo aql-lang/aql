@@ -132,9 +132,23 @@ func Format(src string) string {
 // emitRoot reproduces Format(src) exactly.
 func ParseTree(src string) *Node {
 	tree := DefaultParse(src)
-	capitalizeTypesInTree(tree)
-	elideFnBrackets(tree)
+	canonicaliseTree(tree)
 	return tree
+}
+
+// canonicaliseTree applies every semantics-preserving spelling transform, in
+// the order the emitter expects. It exists so ParseTree and FormatRulesWith
+// cannot disagree about what "the tree" is — the invariant ParseTree's doc
+// states (emitting its result with emitRoot reproduces Format exactly) holds
+// only while both run the SAME set, and it silently stopped holding when
+// normaliseStatementEnd was added to the format path alone: `Fmt.tree` went
+// on handing a declarative rule set `end` word nodes for a terminator the
+// built-in emitter had already respelled `;`. Add a transform HERE, never to
+// one caller.
+func canonicaliseTree(n *Node) {
+	capitalizeTypesInTree(n)
+	elideFnBrackets(n)
+	normaliseStatementEnd(n)
 }
 
 // NodeKindName is the stable dispatch key for a node kind — the atom a
@@ -208,9 +222,7 @@ func FormatRulesWith(src string, ru Rules, parse Parse) string {
 		parse = DefaultParse
 	}
 	tree := parse(src)
-	capitalizeTypesInTree(tree)
-	elideFnBrackets(tree)
-	normaliseStatementEnd(tree)
+	canonicaliseTree(tree)
 	return newRenderer(ru).emitRoot(tree, 0)
 }
 
@@ -720,21 +732,59 @@ func tokenToNodeKind(tk TokenKind) NodeKind {
 //	m dot end      a field READ   — the accessor quotes the following word
 //
 // Rewriting either yields `{;: 1}` / `m dot ;`, which is a different program
-// (or none). The `.` sugar is already safe: `m.end` lexes as ONE dotted word,
-// never a bare `end` node. Everything else is the terminator.
+// (or none). Everything else is the terminator.
 func normaliseStatementEnd(n *Node) {
 	for i, ch := range n.Children {
-		if ch.Kind == NdWord && ch.Text == "end" {
-			beforeColon := i+1 < len(n.Children) && n.Children[i+1].Kind == NdColon
-			afterDot := i > 0 && n.Children[i-1].Kind == NdWord &&
-				(n.Children[i-1].Text == "dot" || n.Children[i-1].Text == "dotr")
-			if !beforeColon && !afterDot {
-				ch.Kind = NdSemicolon
-				ch.Text = ";"
-			}
+		if ch.Kind == NdWord && ch.Text == "end" && !isNameSlot(n.Children, i) {
+			ch.Kind = NdSemicolon
+			ch.Text = ";"
 		}
 		normaliseStatementEnd(ch)
 	}
+}
+
+// isNameSlot reports whether kids[i] sits where a bare word is a NAME rather
+// than a word to execute — a map key, or the field of an accessor. Both
+// spelling rewriters (normaliseStatementEnd, capitalizeTypesInTree) ask this
+// one question, because both are rewriting a word's SPELLING and both are
+// wrong in exactly the same places. Keeping it in one function is what stops
+// them drifting: the two shipped with the guard duplicated, and each was
+// missing the same two positions.
+//
+// A word is in a name slot when it is:
+//
+//	{end: 1}    a map KEY        — immediately before `:`
+//	{end?: 1}   an OPTIONAL key  — before `?` then `:`
+//	m dot end   a field READ     — after the accessor word `dot` / `dotr`
+//	m !.end     a strict-dot read — after a bare `.` token
+//
+// The last two are one rule with two spellings. The plain `.` sugar is safe
+// on its own (`m.end` lexes as ONE dotted word, never a bare `end` node), but
+// `!` breaks that merge: `m!.end` lexes as `m` `!` `.` `end`, leaving `end` a
+// bare word after an NdDot. Guarding only the accessor WORDS missed it, and
+// fmt turned `m!.end` into `m !.;` — output the parser rejects.
+func isNameSlot(kids []*Node, i int) bool {
+	// Map key: `end:` or `end?:`.
+	if i+1 < len(kids) {
+		if kids[i+1].Kind == NdColon {
+			return true
+		}
+		if kids[i+1].Kind == NdQuestion &&
+			i+2 < len(kids) && kids[i+2].Kind == NdColon {
+			return true
+		}
+	}
+	// Accessor field: after `dot` / `dotr`, or after a bare `.` token.
+	if i > 0 {
+		prev := kids[i-1]
+		if prev.Kind == NdDot {
+			return true
+		}
+		if prev.Kind == NdWord && (prev.Text == "dot" || prev.Text == "dotr") {
+			return true
+		}
+	}
+	return false
 }
 
 func capitalizeTypesInTree(n *Node) {
@@ -748,16 +798,11 @@ func capitalizeTypesInTree(n *Node) {
 				// Skip if after a word that itself follows "refine" (e.g. refine Cond record).
 				afterTypeName := i > 1 && n.Children[i-2].Kind == NdWord &&
 					(n.Children[i-2].Text == "refine" || n.Children[i-2].Text == "def")
-				// Skip if before ":" (it's a key/param name).
-				beforeColon := i+1 < len(n.Children) && n.Children[i+1].Kind == NdColon
-				// Skip after the literal dot/dotr accessor word: these QUOTE the
-				// following bare word as a field NAME (`opts dot table` reads
-				// field "table"), so capitalising it would read a different
-				// field. (The `.` sugar produces a single dotted word carrying a
-				// ".", already skipped by the Contains check above.)
-				afterDot := i > 0 && n.Children[i-1].Kind == NdWord &&
-					(n.Children[i-1].Text == "dot" || n.Children[i-1].Text == "dotr")
-				if !afterDef && !afterTypeName && !beforeColon && !afterDot {
+				// Skip a NAME slot — a map key (`{integer: 1}`, `{integer?: 1}`)
+				// or an accessor field (`opts dot table`, `opts!.table`), which
+				// QUOTE the bare word, so capitalising it would name a different
+				// key. Shared with normaliseStatementEnd: same slots, same reason.
+				if !afterDef && !afterTypeName && !isNameSlot(n.Children, i) {
 					ch.Text = capitalize(lower)
 				}
 			}

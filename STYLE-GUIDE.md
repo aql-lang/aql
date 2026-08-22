@@ -360,15 +360,15 @@ literal name.
 statement, and neither is deprecated. Prefer `;`:
 
 ```boru
-def x 1 ; def y 2 ; add x y      ;# preferred
-def x 1 end def y 2 end add x y  ;# same program, heavier
+def x 1 ; def y 2 ; x add y      ;# preferred
+def x 1 end def y 2 end x add y  ;# same program, heavier
 ```
 
 It works everywhere `end` does — inline, at the end of a line, and to
 close a definition:
 
 ```boru
-def inc fn [[n:Integer] [Integer] [add n 1]] ; inc 5   ;# 6
+def inc fn n:Integer Integer [n add 1] ; inc 5   ;# 6
 ```
 
 ### Why
