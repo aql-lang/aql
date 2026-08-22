@@ -81,7 +81,7 @@ func init() {
 			"lookup; a filter-shaped fn (every sig [src opts subject]) partial-applies the same way. Note " +
 			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
-			`import "boru:minilang" def r ("AbcD" mini re '[a-z]+') end r.fst.m ; # => 'bc'`,
+			`import "boru:minilang" def r ("AbcD" mini re '[a-z]+') ; r.fst.m ; # => 'bc'`,
 			`import "boru:minilang" def f (+re/[a-z]+/) ("AbcD" f).fst.m ; # => 'bc' — a stored matcher`,
 			`import "boru:minilang" mini bf '++++++++[>++++++++<-]>+.' ; # => 'A'`,
 			`import "boru:minilang" def dbl fn [[src:String opts:Map] [String] [src add src]] mini dbl 'ab' ; # => 'abab' — a fn as the transducer`,
