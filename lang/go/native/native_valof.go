@@ -66,7 +66,7 @@ var valofNatives = []NativeFunc{
 				// args and records as an ordinary CALL_USER, letting the bytecode
 				// compiler lower `…args fn apply`. Runtime is unchanged
 				// (applyHandler still re-steps the fn).
-				ReturnsFn: ReturnsIdentity(0),
+				ReturnsFn: applyReturns,
 				Returns:   []*Type{TAny}, BarrierPos: 0,
 			},
 			// Apply a Reach (a lens) to a receiver: `apply $.name person`
@@ -372,6 +372,47 @@ func valofHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 // captures still serve as TFunction-slot args to higher-order words
 // (filter, walk, behave) where the consumer's handler calls into the
 // engine directly via CallBoru.
+// applyReturns is `apply`'s check-mode model: ReturnsIdentity(0), so the
+// check engine re-steps the fn value exactly as runtime does and an
+// arg-taking callee records as an ordinary call and lowers.
+//
+// The 0-arg shape needs no special case here, and that is the point of
+// marking rather than calling (applyHandler below). Because the mark is
+// consumed by the re-step, the check engine walks the SAME gate the
+// interpreter does: it dispatches the applied fn and carries its result
+// forward, so a downstream consumer — `f/v apply add 1` — type-checks
+// against the RESULT rather than against the Function. An earlier revision
+// applied at the handler and had to declare the shape uncompilable to stay
+// honest; re-stepping models it exactly instead, so there is nothing left
+// to refuse.
+func applyReturns(args []Value, r *Registry) []Value {
+	out := ReturnsIdentity(0)(args, r)
+	if len(out) == 1 {
+		out[0] = markApplied(out[0])
+	}
+	return out
+}
+
+// markApplied stamps `apply`'s one-shot application signal on a fn value
+// whose only signatures are 0-arg, and is the SINGLE source of that
+// decision: the runtime handler and the check-mode model both call it, so
+// the two engines cannot disagree about which values the re-step's
+// inert-lambda gate must yield for. That is the whole reason the mark is a
+// value stamp rather than a call — a handler runs only at runtime, and the
+// check pass would have had to guess. Anything else is returned untouched.
+//
+// See FnDefInfo.Applied (core/go/value.go) for why the gate needs telling,
+// and execFnDefLiteral for where the mark is consumed and cleared.
+func markApplied(v Value) Value {
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok || !FnValueOnlyZeroArgSigs(fd) || !fd.Anonymous || fd.Macro {
+		return v
+	}
+	fd.Applied = true
+	v.Data = fd
+	return v
+}
+
 func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
 	if !v.Parent.Equal(TFunction) {
@@ -381,7 +422,35 @@ func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 		return nil, fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", v.Data)
 	}
 	v.Quoted = false
-	return []Value{v}, nil
+	// ADR-016 (NUR077 §5 Hole 1): a fn whose ONLY signatures are 0-arg
+	// must apply the same way whatever its ORIGIN. The re-step reaches
+	// execFnDefLiteral's data gate, which parks a 0-arg ANONYMOUS value —
+	// and that gate is load-bearing (it is what makes `def f ([] => [42])`
+	// bind f to the FUNCTION), so it stays. But letting it also answer
+	// "was a call asked for?" made origin decide the outcome:
+	//
+	//	def z fn [[] [Integer] [42]]   z/v apply  ->  42
+	//	def f ([] => [42])             f/v apply  ->  fn f   (was)
+	//
+	// So state the application instead of performing it: mark the value
+	// Applied and hand it back. The gate reads the mark and yields, and
+	// the call runs down the ONE dispatch path every other arity already
+	// uses. Calling here instead — through CallBoruFn — was a SECOND path,
+	// and it diverged from the first in three ways the re-step gets right
+	// by construction: a native 0-arg fn (`valof context apply`) kept its
+	// Go handler instead of running an empty body; a body mutating the
+	// context (`context set x/q 2`) landed those mutations in the caller's
+	// frame instead of a sub-engine's; and the check pass modelled the
+	// RESULT, because ReturnsIdentity(0) re-steps exactly as runtime does
+	// — so `f/v apply add 1` type-checks as `43` rather than failing
+	// no_signature over (Function, Integer).
+	//
+	// Restricted to fns with no arg-taking overload, so a nullary
+	// signature can never eclipse an arg-taking sibling the stack was
+	// about to satisfy (the NUR035 hazard). Macros are excluded by the
+	// gate itself — applying a macro is never a stack-value dispatch
+	// (design/MACROS-PHASE1.10.md §5, D4).
+	return []Value{markApplied(v)}, nil
 }
 
 // applyReachHandler applies a Reach (a lens) to a receiver value: it rebinds

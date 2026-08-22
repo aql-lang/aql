@@ -15,3 +15,15 @@
 # one row of that section the compiler cannot yet model, and the main corpus
 # ratchets islands to zero.
 import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]	[3 4]	a cross-module predicate resolves `lim` in its OWN module (2), not the caller's (100)
+#
+# ADR-016 / NUR077 §5 Hole 1 (2026-08-21): `apply` on a fn whose ONLY
+#   signatures are 0-arg now applies it at the apply site itself, so
+#   origin no longer decides at arity 0 (`z/v apply` and `f/v apply`
+#   both answer 42). The COMPILED lane cannot model it: the check
+#   engine re-steps the fn value, and execFnDefLiteral's data gate —
+#   which must stay, since it is what parks `f/v` and holds a lambda
+#   in a container — leaves an anonymous 0-arg value inert, so the
+#   program would const-fold to the FUNCTION. apply's check-mode model
+#   refuses instead and the interpreter fallback answers. Compiling the
+#   shape natively is the follow-up.
+def f ([] => [42])  f/v apply	42	a 0-arg LAMBDA handed to apply — interpreter-correct, compile refused (ledgered)

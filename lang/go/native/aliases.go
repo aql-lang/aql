@@ -487,6 +487,7 @@ var (
 	RunResolved              = core.RunResolved
 	InvokeBody               = core.InvokeBody
 	CallBoruFn               = core.CallBoruFn
+	FnValueOnlyZeroArgSigs   = core.FnValueOnlyZeroArgSigs
 	FnHome                   = core.FnHome
 	ConvertIdealToMap        = core.ConvertIdealToMap
 	ConvertIdealToList       = core.ConvertIdealToList

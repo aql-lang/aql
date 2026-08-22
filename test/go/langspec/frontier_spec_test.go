@@ -157,6 +157,13 @@ const (
 // refusal reason substring (stable core only); "" is the bootstrap sentinel.
 // Signatures transcribed from the 2026-07-13 bootstrap run.
 var frontierCompileLedger = map[string]frontierEntryLS{
+	// (ADR-016 / NUR077 §5 Hole 1 was ledgered here and has GRADUATED —
+	// `def f ([] => [42])  f/v apply` compiles with parity. The refusal was
+	// an artefact of applying at the handler: that left the check engine's
+	// re-step to const-fold the program to the FUNCTION. Marking the value
+	// instead (FnDefInfo.Applied) puts both engines on the one gate, so the
+	// check pass models the applied result and there is nothing to refuse.
+	// Pinned in lang/spec/valof.tsv §5.)
 	// NUR054 — a `context` read inside an inline-lowered body (here an
 	// auto-evaluated def-list): the interpreter gives that body its own
 	// context layer, the inline stream has no layer to hand out, and every
