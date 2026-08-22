@@ -186,26 +186,27 @@ type eventFlags struct {
 }
 
 type emitCall struct {
-	word            string
-	sig             *core.Signature
-	ops             []EmitOperand
-	nout            int // number of results the call pushes (0 for a side-effect word, N for multi-result)
-	pos             core.SrcPos
-	poly            bool                  // dispatch via OpCallNativePoly (runtime MatchSignature)
-	polyReg         *core.Registry        // the sub-registry to re-match a module poly word in (nil = main registry)
-	polyNoMatch     *core.PolyNoMatchSpec // faithful-raise plan for the poly's runtime no-match arm (nil = defer)
-	makeList        bool                  // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	dynApply        int                   // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
-	dynApplyUnquote bool                  // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
-	dynMixed        bool                  // forward-drift window (REFUSAL-CLOSURE §1): island the len(ops) laid-out window [residual(s), dynamic value, word const, forward literal] verbatim via OpCallDynamicMixed — the island's own dispatch performs the interpreter's forward collection over the LIVE top value
-	makeMap         bool                  // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
-	mapKeys         []string
-	mapImpl         bool // the source map's Implicit flag
-	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
-	interpSegs      []InterpSeg
-	xmlTmpl         *core.XmlTmpl // assemble len(ops) hole operands into an XML element (OpInterpXml, §9.2c)
-	spliceDyn       bool          // spread the ONE laid-out payload operand at run time (OpSpliceDyn, §9.2b)
-	diverges        bool          // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	word              string
+	sig               *core.Signature
+	ops               []EmitOperand
+	nout              int // number of results the call pushes (0 for a side-effect word, N for multi-result)
+	pos               core.SrcPos
+	poly              bool                  // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg           *core.Registry        // the sub-registry to re-match a module poly word in (nil = main registry)
+	polyNoMatch       *core.PolyNoMatchSpec // faithful-raise plan for the poly's runtime no-match arm (nil = defer)
+	makeList          bool                  // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	dynApply          int                   // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
+	dynApplyUnquote   bool                  // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
+	dynApplyKeepQuote bool                  // the dynApply fn is EVENT-provenance (a direct call result, no read substitution): lower to OpCallDynTrailKeepQ, which preserves the runtime quote state (quoted stays data)
+	dynMixed          bool                  // forward-drift window (REFUSAL-CLOSURE §1): island the len(ops) laid-out window [residual(s), dynamic value, word const, forward literal] verbatim via OpCallDynamicMixed — the island's own dispatch performs the interpreter's forward collection over the LIVE top value
+	makeMap           bool                  // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	mapKeys           []string
+	mapImpl           bool // the source map's Implicit flag
+	interp            bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
+	interpSegs        []InterpSeg
+	xmlTmpl           *core.XmlTmpl // assemble len(ops) hole operands into an XML element (OpInterpXml, §9.2c)
+	spliceDyn         bool          // spread the ONE laid-out payload operand at run time (OpSpliceDyn, §9.2b)
+	diverges          bool          // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 	// typedBind, when non-nil, marks this event as a typed value-def's runtime
 	// validate/reparent step (OpBindTyped over the single operand) instead of a
 	// word dispatch — recorded by RecordTypedBind from the def handler's
@@ -641,6 +642,13 @@ type EmitState struct {
 	// binder/call-graph reachability model (dynamicScopeReachable). See
 	// NoteDefRead.
 	defReads map[string]string
+	// dynBoundClosures names the dyn-scope binds whose value is a COMPILED
+	// closure (a ClosurePayload). Applying one from compiled code is fine —
+	// §9b's factory family does exactly that — but an interpreter RE-RUN
+	// cannot apply it (payload.go's contract, plan P2), so a code body handed
+	// to a token-re-running native must not READ one. See
+	// recordCodeBodyClosureRead.
+	dynBoundClosures map[string]bool
 	// rootComputedBindIDs holds the value IDs of TOP-LEVEL computed fn-value
 	// defs (`def op (Parse.parser g)` and the sibling mini/emit value forms)
 	// that installDef DECLINED to install in Defs (the compiled-closure
@@ -947,6 +955,21 @@ type fnUnitRec struct {
 	// type_error — so a closure keeps refusing the mismatch (islands) while a
 	// user fn compiles the error path (the VM RET raises the matching error).
 	closure bool
+	// lambdaUnit marks the fn-VALUE flavour of a closure unit (word "fnval"
+	// — a returned lambda's body compiled via tryReturnedClosure), as
+	// opposed to a native code-body unit (each/do$body, whose analysis
+	// frame is the CallableSpec inputs). A lambda unit's frame is the
+	// lambda's own declared named params — a real per-call frame like a
+	// user fn's — so frame-context admissions currently gated off the
+	// conflated `closure` flag (DynApplyLeadEligible's Stage-G lead apply,
+	// noteDynFrameReplay) CAN in principle re-admit it. No consumer keys on
+	// it yet: the §5.8 campaign's Stage-2 probe showed every candidate
+	// witness blocked EARLIER (the chained `((b x) y)` apply's
+	// event-provenance lead; capture reachability at the call site), so an
+	// admission here would be unwitnessed and unproven — the flag lands as
+	// the split's bookkeeping half, and each admission must bring its own
+	// probe evidence (the Stage-G discipline).
+	lambdaUnit bool
 	// takesTop marks a closure whose driving handler reads only the TOP of the
 	// body residual (each / fold / scan / filter / rand-list-of —
 	// CallableSpec.BodyResultTop). For such a unit, finish DROPS the unconsumed
@@ -3771,10 +3794,24 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *core.Registry, si
 // in both spellings (probe-pinned across arities in
 // lang/go/bytecode_chained_apply_test.go).
 func (es *EmitState) DynApplyLeadEligible(v core.Value) bool {
-	if !es.Active() || len(es.openUnitRecs) == 0 || es.InClosureUnit() {
+	if !es.Active() || len(es.openUnitRecs) == 0 {
 		return false
 	}
-	if es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]].nUnnamed > 0 {
+	// The Stage 2 closure-flag split's consumer half: a native code-body
+	// closure unit (each/do$body — its analysis frame is the CallableSpec
+	// inputs) still declines, but a LAMBDA unit ("fnval" — a returned
+	// lambda's own body, a real named-param frame with capture slots) is
+	// admitted: the witness is the factory's inner apply-the-capture body
+	// (`def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer]
+	// [(g v)]] )]]` — without the admission the [g, v] residual
+	// count-refuses the fnval probe and the whole factory refuses "body
+	// result of unknown provenance"). The nUnnamed guard below still
+	// excludes bare-type params.
+	innermost := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+	if innermost.closure && !innermost.lambdaUnit {
+		return false
+	}
+	if innermost.nUnnamed > 0 {
 		return false
 	}
 	u := es.units[len(es.units)-1]
@@ -3859,24 +3896,38 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 		}
 	}
 	// An EVENT-provenance fn — the direct result of a compiled call — arrives
-	// WITHOUT the interpreter's read substitution, so its runtime quote state
-	// is unknowable here: a callee returning `quote (fn …)` stays INERT in
-	// the interpreter while OpCallDynTrailTop's read-mirror strip would apply
-	// it (probe-pinned: `def choose fn [[][Function][quote (fn …)]]
-	// (1 2 choose)` compiled 3 vs the interpreter's [1 2 fn] residual — PR
-	// #280 review). REFUSE, never plain-decline: on a decline the caller
-	// leaves the un-collapsed [args, fn] residual as the model, which
-	// miscompiles the mirror case (an UNQUOTED call result the interpreter
-	// DOES apply — `(1 2 (mk))` modelled [1 2 fn] vs the interpreter's 3).
-	// Only the apply WORD may own an event-provenance fn: applyHandler
-	// unquotes the VALUE regardless of arrival, which OpCallDynApplyTop
-	// mirrors. A local / const / dyn-scope arrival keeps the lowering — a
-	// stored read IS substituted (the strip's contract) — and a
-	// returned-closure operand pushes construction-fresh (never quoted), so
-	// the strip is a no-op there.
+	// WITHOUT the interpreter's read substitution, so its runtime quote
+	// state must SURVIVE: a callee returning `quote (fn …)` stays INERT in
+	// the interpreter ([args, fn] is the residual — probe-pinned: `def
+	// choose fn [[][Function][quote (fn …)]]  (1 2 choose)`, PR #280
+	// review) while an unquoted anonymous result auto-applies (`(1 2
+	// (mk))` → 3). OpCallDynTrailKeepQ preserves exactly that: no strip, a
+	// Quoted runtime value leaves the window untouched. (This retires the
+	// former hard-refusal here — "runtime quote state unknown" — which
+	// held while the only ops were the read-mirror strip and the apply
+	// word's unquote.) A local / const / dyn-scope arrival keeps the
+	// stripping op — a stored read IS substituted (the strip's contract).
+	keepQuote := false
 	if fnOp.kind == opEvent && applyIdx < 0 {
-		es.MarkUncompilable("trailing fn-value apply over a call result (runtime quote state unknown)")
-		return false
+		// The KeepQ lowering consumes EXACTLY len(args) window values on
+		// the unquoted path, so it is faithful only when the callee's own
+		// arity equals the window: a wider window under-applies in the
+		// interpreter (`(1 2 (mk 4))` nets [1, 6] — the 1-arg adder leaves
+		// the deeper value) where the op would consume both. A concrete
+		// single-sig callee proves its arity; anything else keeps the
+		// refusal (sound interpreter fallback).
+		proven := false
+		if arity, known := es.producerReturnedClosureArity(fn.ID); known {
+			proven = arity == len(args)
+		} else if fd, isFn := fn.Data.(core.FnDefInfo); isFn {
+			own := fd.OwnSigs()
+			proven = len(own) == 1 && own[0].TotalArgs() == len(args)
+		}
+		if !proven {
+			es.MarkUncompilable("trailing fn-value apply over a call result (runtime quote state unknown)")
+			return false
+		}
+		keepQuote = true
 	}
 	unquote := false
 	if applyIdx >= 0 {
@@ -3885,7 +3936,69 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 		unquote = true
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote, dynApplyKeepQuote: keepQuote}})
+	es.setProduced(out, seq)
+	return true
+}
+
+// RecordDynApplyName records the same fn-value apply as RecordDynApply, but
+// resolves the FN through the NAME's def-site operand (its evDynBind event)
+// instead of the value's own ID — the §4.3 capture fallback (check's
+// recordFnValueApplyFallback): a call of an installed factory closure whose
+// unit carries CONSTRUCTION-SCOPE captures. The install re-minted the
+// binding's value ID (InstallFnDef wraps a fresh Function value), so
+// resolveOperand cannot place it; the def site's recorded operand is the
+// SAME runtime value under its original identity (the factory call's out —
+// typically a promoted local carrying the OpPushClosure result, whose baked
+// captures invokeClosure installs VM-native). The event-provenance
+// quote-state refusal RecordDynApply applies does not: this is a WORD-read
+// arrival (the interpreter dispatches the installed name regardless), and
+// the caller declines a quoted binding up front. Scoped to the TOP-LEVEL
+// frame — a def site inside a fn unit records its bind in that unit's
+// fragment, out of this scan's reach, and declines.
+func (es *EmitState) RecordDynApplyName(name string, args []core.Value, fn, out core.Value, pos core.SrcPos) bool {
+	if !es.Active() || name == "" || len(es.units) != 1 {
+		return false
+	}
+	if !core.IsFnValueResidual(fn) || fn.Quoted {
+		return false
+	}
+	if !fnConcreteSingleValuedOrCarrier(fn) {
+		return false
+	}
+	var fnOp EmitOperand
+	found := false
+	for i := len(es.frames[0]) - 1; i >= 0 && !found; i-- {
+		ev := &es.frames[0][i]
+		if ev.kind != evDynBind || ev.dyn == nil || ev.dyn.name != name {
+			continue
+		}
+		switch {
+		case ev.dyn.src.kind != opNone:
+			fnOp, found = ev.dyn.src, true
+		case ev.dyn.srcSeq >= 0:
+			fnOp, found = EventOperand(ev.dyn.srcSeq, 0), true
+		default:
+			return false // the def site itself had no operand home
+		}
+	}
+	if !found {
+		return false
+	}
+	ops := make([]EmitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := len(args) - 1; i >= 0; i-- {
+		if core.IsFnValueResidual(args[i]) {
+			return false
+		}
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops = append(ops, op)
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args)}})
 	es.setProduced(out, seq)
 	return true
 }
@@ -4345,6 +4458,21 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []core.Value,
 	}
 	ops := make([]EmitOperand, len(vals))
 	for i, v := range vals {
+		// A READ-substituted fn-carrier window value (Stage 1's fn-carrier
+		// side table — defReads carries its ID, no FnDefInfo payload)
+		// poisons the window: the interpreter WORD-dispatches that read
+		// before this word ever collects, so the static window this
+		// rematch would replay never exists at run time (`def q (if c
+		// [fn-arm] [fn-arm])  add 1 (q 5)` re-matched add over [1, fn, 5]
+		// and raised signature_error where the interpreter computes 7).
+		// Decline; the caller's refusal stands and the program falls back.
+		if core.IsFnTypedCarrier(v) {
+			if _, isFn := v.Data.(core.FnDefInfo); !isFn {
+				if _, read := es.defReads[v.ID]; read {
+					return false
+				}
+			}
+		}
 		op, ok := es.resolveOperand(v)
 		if !ok {
 			return false
@@ -5401,9 +5529,85 @@ func (es *EmitState) residualReadStable(v core.Value) bool {
 // registry-visible OpBindDynScope ONLY for names in dynScopeNames (some
 // OpLookupDynScope reads them) and skips the event otherwise. Engine-internal
 // and capitalised (type) names never bind dynamically.
+// recordCodeBodyClosureRead refuses when a token BODY argument reads a name
+// dyn-bound to a compiled closure. Such a body is re-run by its native
+// through the INTERPRETER (`do [(h 1)]`, and every other NoEvalArgs code
+// slot), and a ClosurePayload is invokable only through the VM's re-entrant
+// runner — the re-run reaches the closure's TOKEN body with no captures
+// installed and raises (`undefined word: g` where the interpreter answers
+// 8). Scanning every concrete LIST argument is deliberately conservative:
+// a DATA list mentioning the name carries it as an Atom, not a Word, so it
+// does not match, and a body that never reads such a name is untouched —
+// which is what keeps §9b's family compiling.
+// argIsProducedClosure refuses a dispatch whose ARGUMENT is a compiled
+// closure this pass produced (a call result the recorder knows returned an
+// OpPushClosure — producerReturnedClosureArity). Such a value reaching a
+// word's slot means the paren that should have APPLIED it did not collapse
+// into an apply, so the compiled program hands the word the FUNCTION where
+// the interpreter hands it the applied result.
+func (es *EmitState) argIsProducedClosure(args []core.Value) bool {
+	if !es.Active() {
+		return false
+	}
+	for i := range args {
+		if !core.IsAppliableFn(args[i]) {
+			continue
+		}
+		if _, produced := es.producerReturnedClosureArity(args[i].ID); produced {
+			es.MarkUncompilable(
+				"computed closure at a word's argument slot (its apply did not collapse — Stage 2)")
+			return true
+		}
+	}
+	return false
+}
+
+func (es *EmitState) recordCodeBodyClosureRead(args []core.Value) bool {
+	if len(es.dynBoundClosures) == 0 {
+		return false
+	}
+	for i := range args {
+		// AsList is the single screen: it declines every non-list value
+		// AND every List-parented one with no readable payload (a carrier,
+		// a typed-list shape), which is exactly "no tokens to read here".
+		lst, aerr := core.AsList(args[i])
+		if aerr != nil {
+			continue
+		}
+		body := make([]core.Value, 0, lst.Len())
+		for j := 0; j < lst.Len(); j++ {
+			body = append(body, lst.Get(j))
+		}
+		found := false
+		core.WalkBodyWords(body, func(w core.WordInfo, _ core.Value) {
+			if es.dynBoundClosures[w.Name] {
+				found = true
+			}
+		})
+		if found {
+			es.MarkUncompilable(
+				"code body reads a def-bound compiled closure (an interpreter re-run cannot apply it — Stage 2)")
+			return true
+		}
+	}
+	return false
+}
+
 func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 	if !es.Active() || name == "" || name[0] == '_' || name[0] == '$' || core.IsCapitalisedName(name) {
 		return
+	}
+	// NOTE a name bound to a COMPILED CLOSURE. The value is invokable only
+	// through the VM's re-entrant runner, never the interpreter
+	// (payload.go's contract, plan P2) — so it is fine to apply from
+	// compiled code (that is what §9b's factory family does) and NOT fine
+	// for an interpreter RE-RUN to reach. recordCodeBodyClosureRead below
+	// catches the latter at the word that re-runs tokens.
+	if _, closure := es.producerReturnedClosureArity(v.ID); closure {
+		if es.dynBoundClosures == nil {
+			es.dynBoundClosures = map[string]bool{}
+		}
+		es.dynBoundClosures[name] = true
 	}
 	src, srcSeq := EmitOperand{}, -1
 	cur := es.units[len(es.units)-1]
@@ -5970,6 +6174,27 @@ func (es *EmitState) RecordMakeListInner(r *core.Registry, ins []core.Value, out
 	// check stays reachable — its isTop caller still reaches it under suspend.
 	if !es.Active() {
 		return false
+	}
+	// A CODE BODY the read substitution corrupted. Stage 1 substitutes a
+	// def-bound computed fn's carrier for a read of its name, which is
+	// right where the read is an operand — and wrong inside an
+	// UNEVALUATED body, where the name is a body TOKEN. `each [1 2 3]
+	// [(f 5)]` assembled the body as the DATA list [f, 5] (this record),
+	// dropping each's own input list, and compiled `[3 3]` for the
+	// interpreter's `[3]`; `do [(f 2)]` compiled to an island that
+	// raised `undefined word: f` where the interpreter answers 3. A
+	// table carrier reaching a list MEMBER is exactly that corruption and
+	// nothing else — a genuine data list of a computed fn spells the
+	// member `f/v`, and stepWordVal deliberately never consults the
+	// table — so refuse and let the interpreter fallback own it.
+	if r != nil {
+		for i := range ins {
+			if _, tabled := core.CheckFnCarrierBoundName(r, ins[i].ID); tabled {
+				es.MarkUncompilable(
+					"computed fn read inside an unevaluated body (the read substitution cannot model a code body — Stage 1)")
+				return false
+			}
+		}
 	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
@@ -6833,8 +7058,25 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 		// closure (miscompile mechanism E). Refuse; the interpreter applies
 		// the chain faithfully.
 		if applyDynamic {
-			if arity, known := es.producerReturnedClosureArity(residual[0].ID); known && arity != len(residual)-1 {
+			arity, known := es.producerReturnedClosureArity(residual[0].ID)
+			if known && arity != len(residual)-1 {
 				return residual, 0, "fn-value apply arity mismatch — curried chain or partial apply (Stage 3)"
+			}
+			// A READ-substituted lead (the fn-carrier side table: `def k
+			// (FnUtil.const 7)  (k 99)` — the read carries NoteDefRead
+			// provenance) is a WORD dispatch in the interpreter: the runtime
+			// binding always applies. OpCallDynamic's island instead runs
+			// anonymous-VALUE semantics, which leave a named Go-impl fn
+			// value as data (compiled [99] vs interp [7]). With no
+			// statically-known closure shape the two cannot be proven to
+			// agree — refuse; a compiled-factory producer (known arity)
+			// stays lowered, and an EVENT lead (no def-read — the
+			// `((FnUtil.const 7) 99)` spelling) keeps the island, which
+			// mirrors the interpreter's value semantics exactly.
+			if !known {
+				if _, read := es.defReads[residual[0].ID]; read {
+					return residual, 0, "def-bound computed fn apply (closure shape unknown — Stage 1)"
+				}
 			}
 		}
 	}

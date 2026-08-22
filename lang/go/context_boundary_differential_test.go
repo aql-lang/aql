@@ -68,27 +68,27 @@ func TestContextBoundaryDifferential(t *testing.T) {
 	}{
 		// ---- closure-unit bodies: bracketed at enterBodyUnit ----
 		{name: "do", src: `do [ context set y 1 5 ]
-context has y`},
+context has y/q`},
 		{name: "nested do", src: `do [ do [ context set y 1 5 ] ]
-context has y`},
+context has y/q`},
 		{name: "each", src: `each [ drop context set y 1 5 ] [1]
-context has y`},
+context has y/q`},
 		{name: "fold", src: `fold [ drop drop context set y 1 5 ] [1]
-context has y`},
+context has y/q`},
 		{name: "filter", src: `filter [ drop context set y 1 true ] [1]
-context has y`},
+context has y/q`},
 		{name: "outer", src: `outer [ drop drop context set y 1 5 ] [1] [2]
-context has y`},
+context has y/q`},
 		{name: "scan", src: `scan [ drop drop context set y 1 5 ] [1]
-context has y`},
+context has y/q`},
 		// Nested inside a fn body: a different unit-nesting shape, and the one
 		// the reverted patch's differential corpus found most reliably.
 		{name: "do inside a fn body", src: `def f fn [[] [Any] [ do [ context set y 1 5 ] ]]
 f
-context has y`},
+context has y/q`},
 		{name: "each inside a fn body", src: `def f fn [[] [Any] [ each [ drop context set y 1 5 ] [1] ]]
 f
-context has y`},
+context has y/q`},
 
 		// ---- forms that are NOT boundaries in EITHER engine ----
 		// Recorded because the note's own Blocker-2 table listed the fn-body
@@ -98,21 +98,21 @@ context has y`},
 		// "complete the fix" pass from bracketing CALL_USER and silently
 		// changing the interpreter's answer too.
 		{name: "if branch", src: `if true [ context set y 1 5 ] [ 6 ]
-context has y`},
+context has y/q`},
 		{name: "for body", src: `for 1 [ context set y 1 5 ]
-context has y`},
+context has y/q`},
 		{name: "named fn body", src: `def f fn [[] [Any] [ context set y 1 5 ]]
 f
-context has y`},
+context has y/q`},
 		{name: "called lambda", src: `def g ([] => [ context set y 1 5 ])
 g
-context has y`},
+context has y/q`},
 		// An `if` CODE-BODY condition is NoEval (handler-run, not list
 		// auto-evaluation), so it is outside the NUR054 inline regions and
 		// keeps compiling (TestNur054InlineCtxRefusal pins that); this row
 		// pins that the engines also AGREE on where its write lands.
 		{name: "if code-body condition", src: `if [ context set y 1 true ] [ 5 ] [ 6 ]
-context has y`},
+context has y/q`},
 
 		// ---- INLINED bodies: not bracketable by any seam — covered by the
 		// NUR054 refusal instead. Each of these programs REFUSES compilation
@@ -122,45 +122,45 @@ context has y`},
 		// interpreter and the rows agree trivially. The refusal reason is
 		// pinned by TestNur054InlineCtxRefusal.
 		{name: "case clause body", src: `case 1 [ 1 [ context set y 1 5 ] 2 [ 6 ] ]
-context has y`},
+context has y/q`},
 		{name: "otherwise list argument", src: `false otherwise [ context set y 1 5 ]
-context has y`},
+context has y/q`},
 		{name: "def list auto-evaluation", src: `def b [ context set y 1 5 ]
-context has y`},
+context has y/q`},
 		{name: "fn list argument never used", src: `def run fn [[b:List] [Any] [ 0 ]]
 run [ context set y 1 5 ]
-context has y`},
+context has y/q`},
 		// The newly-measured members of the same inline class, found while
 		// closing NUR054: a collection-argument list, an interp-string hole,
 		// and the `del` twin of the recorded `set` divergence.
 		{name: "each collection list", src: `each [ drop 0 ] [ context set y 1 1 ]
-context has y`},
-		{name: "interp-string hole", src: "`x${context set y 1 5}`\ncontext has y"},
+context has y/q`},
+		{name: "interp-string hole", src: "`x${context set y 1 5}`\ncontext has y/q"},
 		{name: "context del in case arm", src: `context set y 9
 case 1 [ 1 [ context del y 5 ] 2 [ 6 ] ]
-context has y`},
+context has y/q`},
 		// The 2026-08-14 Codex review round's three confirmed escapes, closed
 		// by moving the refusal to the MINT (`context` read in-region): a
 		// re-IDed alias a write-site rule could not chase, an xml child hole
 		// the region brackets had missed, and an identity probe through an
 		// escaped handle.
 		{name: "aliased write via dup in otherwise list",
-			src: "false otherwise [ context dup drop set y 1 5 ]\ncontext has y"},
+			src: "false otherwise [ context dup drop set y 1 5 ]\ncontext has y/q"},
 		{name: "xml child hole", src: `<p>${context set y 1 5}</p> drop
-context has y`},
+context has y/q`},
 		{name: "identity eq in interp hole", src: "def s (context)\n`x${context eq s}`"},
 		// Provenance precision: a store handle bound OUTSIDE the inline
 		// region written inside it is an in-place layer write that persists
 		// identically on both engines — it keeps compiling AND agrees.
 		{name: "outside-bound store handle written in case arm", src: `def s (context)
 case 1 [ 1 [ s set y 1 5 ] 2 [ 6 ] ]
-context has y`},
+context has y/q`},
 		// `if` branches are not context boundaries in EITHER engine, so a
 		// branch-joined `context` handle written at the top level is the
 		// ambient layer on both — it keeps compiling AND agrees (measured
 		// against the Codex round's contrary claim).
 		{name: "branch-joined handle written at top level", src: `if true [ context ] [ context ] set y 1 5
-context has y`},
+context has y/q`},
 		// PAREN-GROUPED, and FIXED — this row used to diverge in the OPPOSITE
 		// direction (compiled CONTAINED the write, interpreted leaked it),
 		// which is why it is worth keeping the mechanism written down. The
@@ -188,7 +188,7 @@ context has y`},
 		// Pop running against the parent's layer.
 		{name: "paren-grouped map-slot lambda method", src: `def m {f: ([a:Integer] => [ context set y 1 a ])}
 (m.f 1) drop
-context has y`},
+context has y/q`},
 		// The ungrouped twin — and read it carefully, because it agrees
 		// TRIVIALLY rather than by the same mechanism. The form does not
 		// compile at all (the refusal above), so the program falls back to the
@@ -197,7 +197,7 @@ context has y`},
 		// this row starts exercising two real engines instead of one.
 		{name: "ungrouped map-slot lambda method", src: `def m {f: ([a:Integer] => [ context set y 1 a ])}
 m.f 1 drop
-context has y`},
+context has y/q`},
 	}
 
 	// The RATCHET. The per-row checks below already fail when a recorded

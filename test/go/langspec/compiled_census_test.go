@@ -132,9 +132,16 @@ func computeCensus() (*census, error) {
 				return nil, err
 			}
 			a.SetClock(specClock)
-			prog, reason, _, cerr := a.CompileCheck(input)
+			prog, reason, res, cerr := a.CompileCheck(input)
 
-			if cerr != nil || reason == "check diagnostics" {
+			// A refusal from a pass that substituted a fn-carrier read
+			// (Stage 1) classifies with the check-diagnostics sentinel it
+			// refused behind before the substitution landed: RunCompiled
+			// keeps the same silent interpreter fallback for this class,
+			// so it is not a hard refusal (the frontier compile ledger
+			// tracks its precise reasons row by row).
+			if cerr != nil || reason == "check diagnostics" ||
+				(prog == nil && res.FnCarrierReadSubstituted) {
 				c.checkErr++
 				continue
 			}

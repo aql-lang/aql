@@ -290,8 +290,8 @@ def resolve-entities fn [[entities:List assertions:List] [Map] [
             (iota n)
         )
     )
-  def decisions (filter [var [[d] not (d has merge)]] raw-decisions)
-  def merge-plans (filter [var [[d] d has merge]] raw-decisions)
+  def decisions (filter [var [[d] not (d has 'merge')]] raw-decisions)
+  def merge-plans (filter [var [[d] d has 'merge']] raw-decisions)
   def to-merge (filter [var [[p] p get "merge"]] merge-plans)
     # Each plan's endpoints are resolved through the CURRENT canonical
   # representative first, so a chain (A=B by one identifier, B=C by

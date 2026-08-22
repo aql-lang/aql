@@ -1,10 +1,17 @@
 # Function types in boru — syntax proposal and working prototype
 
-**Status: proposal + prototype (2026-08-19).** The syntax is a proposal;
-the implementation is a prototype that was built and run against this
-tree, and every result below is a command that was executed with its
-output quoted verbatim. It is **not** merged — see §7 for what
-production would still need.
+**Status: landed (2026-08-19; status corrected 2026-08-21).** Written
+as a proposal plus prototype, but the implementation merged with the
+same branch that merged this note: `fnsig` is a live word — spec rows
+in `lang/spec/fnsig.tsv`, the handlers in
+`basic/go/native_definition.go` (`FnsigHandler`/`FnsigPairHandler`),
+the `FnUndefUnifier` in `core/go/unify_fnundef_named.go` — enforced at
+check time and at dispatch. Every result below is a command that was
+executed with its output quoted verbatim. §7 lists what production
+still needs beyond it. Since landing, NUR095's fix (2026-08-20)
+extended enforcement to fn-shape-typed class members
+(`lang/spec/class.tsv` §fn-members), with the checker's member-apply
+model lagging behind the runtime — NUR096.
 
 Answers the open item from
 [`HIGHER-ORDER-FUNCTIONS.0.md`](HIGHER-ORDER-FUNCTIONS.0.md) §2:
@@ -351,7 +358,7 @@ the prototype now ships with:
   selector role and the list form, which the pair form and the
   type-enforcement role made incomplete.
 
-- **Spec rows** — `lang/spec/fnsig.tsv`, 24 rows covering the pair/list
+- **Spec rows** — `lang/spec/fnsig.tsv`, 25 rows covering the pair/list
   identity, admission, refusal, variance, and the `is`/dispatch
   agreement. The compiled-coverage question they raised is answered:
   every row compiles, so the corpus's `refusalCeiling = 0` is untouched

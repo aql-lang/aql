@@ -62,7 +62,7 @@ true guard {a:1}	{a:1}	guard's Any value slot does too
 if {a:1} [1] [2]	1	a non-empty map is truthy in if's Any condition slot
 if {} [1] [2]	2	…and the empty map is falsy
 #
-# §5  QuoteArgs — def and set quote their key slot; get evaluates
+# §5  QuoteArgs — def and set quote their key slot; get and has evaluate
 def x/q 5 x	5	an explicit /q on def's name slot binds the same name
 def m {a:1 b:2} m get a/q	1	get with a quoted key reads the map
 def m {a:1 b:2} m get (quote a)	1	(quote a) materialises the same Atom key
@@ -71,6 +71,8 @@ def m {a:1 b:2} m get ("a")	1	a grouped key expression evaluates before the slot
 def m {a:1 b:2} m get a	ERROR:undefined_word	get EVALUATES a bare-word key: unbound a is an undefined word
 def m {a:1 b:2} def a "b" m get a	2	…and a BOUND bare word key evaluates to its value — reads key b, not a
 def m {a:1} def k a/q m get k	1	an Atom-valued variable evaluates into the key slot
+{a:1} has b	ERROR:undefined_word	has evaluates its key like get (2026-08-21): an unbound bare word raises before has runs
+def m {a:1} def b "a" m has b	true	…and a BOUND bare word key evaluates to its value — has checks key a, not b
 def m {a:1 b:2} m.a	1	dot access takes the key literally
 def m {a:1 b:2} def k "a" m.k	None	…even when the word is bound: no k key exists, → None (contrast `m get k`)
 def m {a:1 b:2} def b "a" m.b	2	a bound word that IS a key reads that key — the binding is ignored

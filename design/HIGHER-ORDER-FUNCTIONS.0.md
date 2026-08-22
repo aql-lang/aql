@@ -1,9 +1,10 @@
 # Higher-Order Functions in boru — capability audit
 
-**Status: point-in-time report (2026-08-19).** A dated empirical snapshot,
-not a living reference — see `design/README.md`. Its claims describe the
-engine as built from this tree on that date; several of them are pinned to
-NUR records whose fixes will change the answers.
+**Status: point-in-time report (2026-08-19; re-assessed 2026-08-21).**
+A dated empirical snapshot, not a living reference — see
+`design/README.md`. Its claims describe the engine as built from this
+tree on that date; several of them are pinned to NUR records whose fixes
+will change the answers.
 
 **Method:** empirical, against `cmd/go/bin/boru` built from this tree,
 cross-read with `core/`, `lang/`, `NUR.md`, `ADR.md` and
@@ -47,6 +48,27 @@ runs it (§5.7).
 > function-only gate removed. §5.2 is closed and NUR085 retired; §5.1,
 > §5.3–§5.9 were each re-run against the new binary and are unchanged.
 
+> **Re-assessed 2026-08-21** after the type-node fusion (PR #394) and
+> the valof-flip / NUR095 work (PR #396). Every §1 program, §4 spelling
+> and §5 hazard was re-run against a binary built from that tree. The
+> substrate verdict stands — every §1 program still produces its quoted
+> output on both engines — and §5.2 stays closed (no valof-flip
+> regression on non-type bindings). Four claims moved, each corrected in
+> place: §5.1's `I/v apply` escape hatch is **gone** (`/v` on a type
+> binding now denotes the minted node — `lang/spec/valof.tsv` §11 — so
+> lowercase names are the only remedy) and its stranded pair prints
+> differently; §2's "`Function` is opaque" now holds for *bare*
+> `Function` only (`fnsig` shipped, and fn-shape class members apply on
+> both engines — NUR095 retired, NUR096 records the checker lag);
+> §1.6's non-tail 100 000-deep row holds only on the compiled lane (the
+> interpreter now trips the tape ceiling near depth 40 000); and §5.4's
+> fn-body return-arity error lost its `ap:` prefix (it now names the
+> enclosing fn). NUR073 (§5.7) was re-run and is live, unchanged, the
+> default still siding with the compiler; NUR086–NUR089 all still
+> reproduce byte-for-byte. New records NUR091 and NUR096 join §5.1's
+> and §5.5's defect classes respectively. Stale citations fixed in
+> place.
+
 ---
 
 ## 1. What works — the evidence
@@ -55,6 +77,18 @@ Every program below was written and run against this tree, under both
 `-no-compile` (interpreter) and the default (bytecode with interpreter
 fallback), and is quoted here in full — definitions **and** the calls that
 produced the quoted output — so it can be re-run from the note itself.
+
+> **Pinned 2026-08-21.** These transcripts are now also a standing gate:
+> `lang/spec/frontier/frontier-hof-audit.tsv` re-checks every §1.1–§1.5
+> value (plus §1.6's combinator rows) on the interpreter oracle on every
+> `make test`, with the compile ledger in
+> `test/go/langspec/frontier_spec_test.go` pinning which rows the
+> compiler still refuses and why (§5.8's provenance class, §4.3's capture
+> family, NUR087's check false positive). The §1.4 divergences — Z, and
+> the naive Y that no strict language can run — are deliberately NOT
+> pinned: no budget bounds them (see the §1.4 correction), so a test
+> would hang the suite. The deterministic §5.4 rule that causes Z's
+> divergence is pinned instead (the corpus file's §7 rows).
 
 ### 1.1 The classical combinator bases
 
@@ -191,7 +225,9 @@ T  F  F  T  F  T  T  F      (one per line)
 > `(args).N` plus a boxing step to reach the enclosing fn's argument —
 > and `cand`/`cor`, which must return one Church boolean *as itself*,
 > resisted every spelling tried: named booleans tripped
-> `lang/spec/valof.tsv` §5's loud-dispatch rule, and holding them
+> `lang/spec/fn-value.tsv` §5's loud-dispatch rule ("a failed dispatch
+> is LOUD, wherever the value would have gone" — the original text
+> mis-cited `valof.tsv` §5 for this; fixed 2026-08-21), and holding them
 > anonymously in a list then ran into forward-collection barriers. It
 > was the one construction the audit could not finish. Removing the
 > function-only gate closed it (§5.2, NUR085 retired).
@@ -220,12 +256,19 @@ def fact (fgen fgen/v)
 print (fact 5)       ;# 120
 ```
 
-The full **Z combinator** (`λf.(λx.f(λv.(x x)v))²`) **diverges** — it
-hangs until the step limit. The cause is not call-by-value eagerness:
-lambda bodies were confirmed lazy (a `raise` inside an unapplied lambda
-body never fires). The cause is §5.4 — `((x x) v)` does not parse as an
-application inside a body, so the `λv` thunk never actually guards the
-recursion.
+The full **Z combinator** (`λf.(λx.f(λv.(x x)v))²`) **diverges**. The
+cause is not call-by-value eagerness: lambda bodies were confirmed lazy
+(a `raise` inside an unapplied lambda body never fires). The cause is
+§5.4 — `((x x) v)` does not parse as an application inside a body, so
+the `λv` thunk never actually guards the recursion.
+
+> **Corrected 2026-08-21.** This originally said "it hangs until the
+> step limit". Measured: the step limit never trips — a run under
+> `--options steps:200000` was still going at 30 s, and an in-process
+> run grows until the OS kills it — so the divergence is bounded by
+> nothing the engine counts, only by an outside timeout. That is also
+> why Z is not pinned as a test (§1's pinning note): there is no budget
+> under which "diverges" terminates into an assertable error.
 
 ### 1.5 A real parser-combinator library
 
@@ -298,7 +341,7 @@ Identical on both engines. It does **not** pass `boru check` — see §5.5.
 | Mutable capture (`flex` mutated through a closure) | ✅ `[1 2 3]` |
 | `usurp` (`/u`) wraps a fn and the wrapper is storable | ✅ `(sub2 10 3)` → `7`; `(sub2/u 10 3)` → `-7`; `def g (f2/u)` then `(g 10 3)` → `-7` |
 | Tail recursion, 1 000 000 deep | ✅ constant space; bounded by the 10M **step** limit, not the tape |
-| Non-tail recursion, 100 000 deep | ✅ `sum 100000` → `5000050000` |
+| Non-tail recursion, 100 000 deep | ✅ compiled lane: `sum 100000` → `5000050000`. **Re-assessed 2026-08-21:** the interpreter (`-no-compile`) now trips the 396 718-entry tape ceiling near depth 40 000, so this depth passes only under the default lane |
 | Non-tail recursion, 1 000 000 deep | ✅ *clean* refusal naming the tape ceiling and the remedy |
 | `gensym` | ✅ exists (`LISP-ANALYSIS.5.md` grading it **D** is stale) |
 
@@ -319,7 +362,7 @@ concatenative peers (Factor, Joy):
 | Partial application | ✓ | SRFI-26 | `.bind` | `curry` | **mechanism ✓, named combinator ✗** — see below |
 | Named `compose` / `pipe` | `.` `>>>` | `compose` | — | `compose` | **✗ — user-written** |
 | `flip` | ✓ | ✓ | — | `swap` | **≈ `usurp` / `/u`** (2-arg) |
-| Function type in the type system | `a -> b` | — | — | stack effects | **✗ — `Function` is opaque** |
+| Function type in the type system | `a -> b` | — | — | stack effects | **✓ where annotated — `fnsig` (see below); bare `Function` opaque** |
 | Polymorphic identity `λx.x` | ✓ | ✓ | ✓ | ✓ | **✓ since `/v` — `t:Any => [t/v]` (§5.2)** |
 | Dataflow shufflers (`dip`/`keep`/`bi`) | n/a | n/a | n/a | ✓ | **✗** |
 | Laziness / infinite structures | ✓ | promises / SRFI-41 | generators | library | **✗ — strict, materialised** |
@@ -329,7 +372,7 @@ concatenative peers (Factor, Joy):
 Three entries deserve emphasis.
 
 **Partial application exists; the *word* does not.** `curryOrStack`
-(`core/go/engine.go:7927`) packages an under-supplied forward call — word
+(`core/go/engine.go:7923`) packages an under-supplied forward call — word
 plus collected args — into a value that completes when it is later
 expanded, and `lang/go/test/basic.tsv` exercises it across the arithmetic
 words (`def add5 word [add 5]` then `10 add5` → `15`). So the row is not
@@ -337,11 +380,13 @@ words (`def add5 word [add 5]` then `10 add5` → `15`). So the row is not
 `partial`/`curry` word taking a `Function` and some arguments and
 returning a `Function`.
 
-**`Function` is opaque.** There is no way to write "a function from
-`Integer` to `String`". `tpartial` is unrelated (it makes record fields
-optional). The cost is that a call *through* a `Function` parameter
-carries no static information at all — the checker passes it, and the
-mismatch surfaces only at run time:
+**`Function` is opaque — where left bare.** At the audit's writing this
+read "there is no way to write a function from `Integer` to `String`";
+`fnsig` has since closed that where you annotate (see the re-assessment
+below). `tpartial` is unrelated (it makes record fields optional). The
+cost of a *bare* `Function` is unchanged: a call through it carries no
+static information at all — the checker passes it, and the mismatch
+surfaces only at run time:
 
 ```
 $ cat sa.boru
@@ -358,7 +403,23 @@ error: [boru/signature_error]: x is still waiting for 1 argument(s) when
 A clean check on a program that cannot run is the shape of the cost.
 Compare Haskell's `(a -> b) -> [a] -> [b]`, which makes `map` both
 checkable and self-documenting. boru's `map`-equivalent can only say
-`Function`.
+`Function` — or, now, a named `fnsig` type.
+
+> **Re-assessed 2026-08-21.** `fnsig` merged with the same branch that
+> merged this audit (2026-08-19) — the prototype
+> `design/FUNCTION-TYPES.0.md` described as unmerged shipped with it,
+> so this row was stale on arrival. `def IntToStr fnsig Integer String`
+> mints an enforceable fn-shape type: a wrong-shaped argument is
+> refused by the checker AND by dispatch (verified under `-no-check`,
+> contravariant parameters / covariant return), and the `sa` program
+> above, rewritten with `x:AA` for `def AA fnsig Any Any`, is caught at
+> CHECK time — the exact clean-check-cannot-run failure this paragraph
+> records moves to check time where you annotate. Since NUR095's fix
+> (2026-08-20) a fn stored through a named class's fnsig-typed field
+> applies on both engines (`lang/spec/class.tsv` §fn-members), with the
+> checker still modelling that member apply as inert — NUR096. The
+> transcript above still reproduces verbatim: a bare `Function`
+> parameter stays opaque, but that is now a choice, not a limit.
 
 **boru's real combinator strength is elsewhere.** The
 `usurp`/`stack-args`/`forward-args`/`force-arity` family adapts a
@@ -396,8 +457,8 @@ currently in `REFERENCE.md` or `HOWTO.md`.
 | Callback for `each`/`fold`/`scan` over a **list** | `each [f] xs` (quotation) | `each f/v xs` — no such signature |
 | Callback for `filter` over either shape | `filter f/v xs` — the callback gets a `{key value}` pair over a list, a `KeyVal` over a map, never the bare element | — (`filter` is the only one of the five with a list `Function` form) |
 | Let a *user-defined* word take a quotation | `hof (codequote [body]) xs` | `hof [body] xs` — evaluated at the call site |
-| Computed key for a **quoting** accessor (`has`, `set`) | `m has (k)` | `m has k` — silently uses the literal `"k"` |
-| Computed key for `get` | `m get k` — `get` **evaluates** the key (`lang/spec/accessor.tsv`) | — this one needs no parens |
+| Computed key for the **quoting** accessor `set` | `set (k) v m` | `set k v m` — silently uses the literal `"k"` |
+| Computed key for `get` — and, since 2026-08-21, `has` | `m get k` / `m has k` — both **evaluate** the key (`lang/spec/accessor.tsv`) | — no parens needed; a literal name is `'k'` or `k/q` |
 
 `/v` deserves its own line, because one spelling now covers every
 binding kind — a fn (call suppressed), a non-fn (identity), and a
@@ -592,14 +653,20 @@ differently): a purely syntactic choice moving a content hash.
 
 ```
 $ boru do 'def I x:Integer => [add 1 x] end I 5'
-fn (Integer) 5
+I 5
 $ echo $?
 0
 ```
 
+> **Re-assessed 2026-08-21.** This stranded pair printed
+> `fn (Integer) 5` when the audit was written. Since the type-node
+> fusion the bare capitalised name evaluates to the minted lattice
+> node, which renders as its own name — so the wrong stack now looks
+> like an unevaluated echo of the input, which is quieter still.
+
 `def <Capitalised>` installs a **type** binding, not a value binding
-(`eng/go/CLAUDE.md:611`, `eng/go/core_type.go::InstallType`,
-`lang/go/CLAUDE.md:890`). Given a function body this mints a **predicate
+(`eng/go/CLAUDE.md:655`, `core/go/core_type.go::InstallType`,
+`lang/go/CLAUDE.md:904`). Given a function body this mints a **predicate
 type** — a real and useful feature:
 
 ```
@@ -611,11 +678,23 @@ The collision is with convention: the combinator literature is `S`, `K`,
 `I`, `B`, `C`, `W`, `Y` — all capitals. A reader transcribing them gets
 no error, exit 0, and a wrong stack.
 
-**Workaround:** lowercase names; or reach the value explicitly —
-`5 I/v apply` → `6`, the answer the bare `I 5` above dropped.
+**Workaround:** lowercase names — now the only one. The escape hatch
+this audit originally recorded, `5 I/v apply` → `6`, no longer exists:
+the valof flip pinned `/v` on a type binding to the minted node for
+every declaration kind (`lang/spec/valof.tsv` §11), identical to bare
+evaluation, so the same spelling now refuses with
+`[boru/signature_error]` — "cannot call `apply` … expected Reach, got
+I (an I)" — exit 1, on both engines. The recorded fn body stays reachable
+only as the node's *content* (`TypeContentOf`), which has no surface
+spelling.
 **Severity:** silent wrong answer. **Not a bug** — but it costs a
-diagnostic. `I 5` leaving a `Function` and an `Integer` stranded is
-exactly the shape a hint could catch.
+diagnostic, and the case for one is stronger now that no `/v` spelling
+recovers the value. `I 5` leaving a type node and an `Integer` stranded
+is exactly the shape a hint could catch. The same silent-stranding
+class has since been caught at declaration time too: a malformed `fn`
+whose output slot is bare (`def f fn List Any [1]`) strands its
+operands and binds nothing, exit 0, where its bracketed-output twin
+raises — recorded as **NUR091**.
 
 ### 5.2 ~~Naming a `Function`-valued parameter calls it~~ — RESOLVED
 
@@ -704,13 +783,18 @@ statement applies it; under `print` the argument window merely collects
 both. Inside a fn body the same shape yields a return-arity error:
 
 ```
-error: [boru/type_error]: ap: expected 1 return value(s), got 2 — [fn (Integer) 2]
+error: [boru/type_error]: g: expected 1 return value(s), got 2 — [fn (Integer) 2]
 ```
+
+(The prefix names the enclosing fn — `g` here, empty for an anonymous
+one — and the message now carries a source span pointing at the group
+and the declaration, `core/go/return_check_msg.go`. It read `ap:` when
+the audit was written; same class, same payload.)
 
 This is why the Z combinator diverges: `((x x) v)` never applies, so the
 `λv` guard is inert.
 
-**Workaround:** `def h (g 1)` then `v h/v apply` → `3`.
+**Workaround:** `def h (mk 1)` then `2 h/v apply` → `3`.
 **Forward hazard:** NUR073's accepted **BROAD** verdict removes inline
 application entirely — *"`(fn Integer [Integer] [10 add]) 7` becomes two
 values and the inline-application idiom is removed"*. That idiom
@@ -751,7 +835,11 @@ runs it correctly.
 
 **Workaround:** `-no-check`, or hoist the binding.
 **Severity:** a correct program is refused by the default invocation.
-Recorded as **NUR087**.
+Recorded as **NUR087**. Post-audit, the checker-vs-runtime family
+gained a member one layer up: NUR095's fix (2026-08-20) made a fn
+stored through a fn-shape-typed class member apply in compiled
+execution, but the check pass still models that member apply as the
+inert pre-fix stack — recorded as **NUR096**.
 
 ### 5.6 Non-local names in a closure resolve late, through the def stack
 
@@ -770,7 +858,15 @@ push*, not an assignment, so an ML/Haskell reader expecting `6` gets
 `105`.
 
 **Severity:** confusing; matters whenever a combinator is defined before
-a name it mentions is re-`def`ed.
+a name it mentions is re-`def`ed. Recorded as **NUR097** (2026-08-21),
+with the proposed verdict *Allowed plus an in-file diagnostic* — the
+late half is the top-level liveness contract, not a defect. The
+freezing idiom is parameter capture:
+`def mkc fn nn:Integer Function [(fn x:Integer Integer [add nn x])]`
+then `def c (mkc n)` → `6` however `n` is later re-`def`ed. All three
+behaviours (105, the post-`undef` 6, and the frozen 6) are pinned as
+`lang/spec/frontier/frontier-hof-audit.tsv` §8, and the contract is
+documented in `REFERENCE.md` §"Definition and scoping".
 
 ### 5.7 The engines disagree — NUR073, live today
 
@@ -813,6 +909,378 @@ higher-order style opts out of the bytecode VM as a rule, not an
 exception. Worth stating plainly in the docs so the performance
 trade-off is a choice rather than a surprise.
 
+**Stage 1 landed (2026-08-21) — the def-bound computed-fn read.** The
+compile lane's false `undefined_word` on a name def-bound to a computed
+fn (`def h (mk 1)  (h 2)` — the strict check's carrier binding installs
+no `Defs` entry, so the read looked undefined where the CLI check and
+the interpreter both succeed) is resolved: on a compile pass, `stepWord`
+consults the per-pass fn-carrier side table (moved down to
+`core/go/check_fncarrier.go`) and substitutes the carrier with the same
+use + `NoteDefRead` provenance a def-value read records. The §5.6
+freeze-idiom row (`def c (mkc n) … (c 5)`) now **compiles natively with
+parity** — the first graduation in this family. Three companion
+soundness guards shipped with it, each closing a hole the substitution
+exposed (each was a would-be miscompile caught by the frontier parity
+harness):
+
+- a `/v` read of a table-bound name deliberately KEEPS the diagnostic
+  (`stepWordVal` declines the table) — substituting there green-lit a
+  lowering that dropped the operand;
+- the unmatched-dispatch trap declines a window naming a table-bound
+  word (`TryRecordUnmatchedDispatchTrap`): at run time that name IS
+  bound, so the static no-match is a modeling artifact, not a definite
+  runtime failure (the pmany/pseq rows trapped `signature_error` where
+  the interpreter succeeds);
+- the leading fn-carrier apply refuses a READ-substituted lead whose
+  closure shape is not statically known (`resolveDynamicApply`): the
+  interpreter word-dispatches such a read, while `OpCallDynamic`'s
+  island runs anonymous-VALUE semantics — for a named Go-impl fn value
+  (`FnUtil.const`'s result) those diverge (ADR-016's data-vs-call edge:
+  `((FnUtil.const 7) 99)` is 99 in BOTH engines, but
+  `def k (FnUtil.const 7)  (k 99)` is 7 interpreted). A compiled-factory
+  producer (statically known closure arity) stays lowered.
+
+A fourth guard closes the rematch window the same way
+(`RecordDispatchRematchValues` declines a read-substituted fn-carrier
+window value: `def q (if c [fn-arm] [fn-arm])  add 1 (q 5)` re-matched
+`add` over `[1, fn, 5]` and raised where the interpreter computes 7).
+And the escaping-closure factory itself graduated: `def a5 (mk 5)
+a5 3` — the §5.4 make-adder, called once through its binding —
+compiles natively with parity (repeated reads still refuse at the
+fn-value residual nets).
+
+**User-visible behaviour is preserved for every non-graduating row.**
+Refusals are loud by policy (`compile_refused`), but every program in
+this family refused behind the SILENT check-diagnostics sentinel before
+Stage 1 — so a pass that substituted a carrier read marks itself
+(`CheckState.FnCarrierReadSubstituted`), and a refusal from such a pass
+keeps the silent interpreter fallback (with the precise reason surfaced
+as the CLI's performance warning). The census suites classify this
+transitional class with the sentinel; the frontier compile ledger
+tracks its precise per-row reasons.
+
+The remaining rows in the family moved one or two stages later, each to
+a sound emit-land refusal (`frontierCompileLedger` records the exact
+strings): the Stage 3 function-valued-operand gate (the fn-util
+combinator rows), the Stage 2 single-result-branch rule (the
+U-combinator), capture-bearing `body result of unknown provenance`
+(compose, palt), and the guards above.
+
+**Stage 2 (2026-08-21) — the closure-flag split, landed with its
+witness.** `fnUnitRec.lambdaUnit` distinguishes a returned lambda's own
+unit (word `"fnval"`, a real named-param frame with capture slots) from
+a native code-body unit (each/do$body, a CallableSpec-input frame) —
+the split the campaign brief identified — and `DynApplyLeadEligible`
+now admits a lambda unit's own slots. The end-to-end witness (pinned in
+`frontier-hof-audit.tsv` §9): the **apply-the-capture factory**
+
+```
+def mkc2 fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]]
+def h2 (mkc2 (z:Integer => [add 7 z]))
+(h2 5)                                # → 12, compiled natively
+```
+
+compiles with parity — without the admission the inner `[g, v]`
+residual count-refused the fnval probe and the whole factory refused
+`body result of unknown provenance`. The probe battery around it:
+repeated reads (`(h2 5) (h2 10)`) and multi-instance factories stay
+sound refusals (`fn value precedes residual args`, ledgered); the
+0-arg-apply-of-a-1-arg-capture spelling refuses where the interpreter
+raises (the fallback raises the identical error); a `g:Any` data
+capture never reaches the admission (not a Function carrier).
+
+**Capture reachability at call sites — landed (2026-08-21, the second
+Stage-2 increment).** A CONCRETELY-installed factory closure
+(`def h (mkap …)  (h 5)`, the `=>`-inner spelling — the analysis yields
+a concrete FnDefInfo whose Captured are construction-scope carriers)
+used to refuse `capture g of h unreachable at a call site`: the unit
+call re-resolves its captures per call site, where they are
+meaningless. The call now lowers as a fn-VALUE apply through the DEF
+SITE's recorded operand (`RecordDynApplyName` reads the name's
+`evDynBind` event — the factory call's out, a promoted local carrying
+the `OpPushClosure` result whose baked captures `invokeClosure`
+installs VM-native). Two soundness pieces found by the probe battery:
+
+- the first route tried (`BIND_DYN_SCOPE` + `OpLookupDynScopeData`)
+  silently broke — `bindDynScope` → `InstallDef` DECLINES a
+  ClosurePayload value (the fn arm requires FnDefInfo), so the bind
+  no-opped and the lookup found the stale check-pass binding, whose
+  token body islanded without captures (`undefined_word: g` at run
+  time). The def-site-operand route avoids the def table entirely;
+- the memoised body analysis returns the SAME residual value (same ID)
+  for every call of one shape, so per-call outs must FRESHEN or
+  `producedBy` overwrites and every residual slot resolves to the last
+  apply (`(h 5) (h 10)` compiled `[17 17]` for the interpreter's
+  `[12 17]`). `recordFnValueApplyFallback` mints a fresh carrier per
+  site and substitutes it into the dispatch result.
+
+The gates, each load-bearing: single arg + single CARRIER out;
+anonymous, unquoted, single-own-sig binding; at least one
+non-concrete capture (fully-concrete-capture units keep the unit
+call). Pinned in `frontier-hof-audit.tsv` §9b: single call, repeated
+calls, rebind-between-calls ordering, and two factory instances all
+compile with parity; `((kk 7) 99)` (no def binding — no def-site
+operand) stays the ledgered §4.3 refusal.
+
+**The event-lead trailing apply — landed for proven arities
+(2026-08-21, §9c).** `RecordDynApply`'s event-provenance hard-refusal
+("runtime quote state unknown") is retired where the window is proven:
+a new op, `OpCallDynTrailKeepQ`, preserves the runtime quote state (no
+read-substitution strip — a callee returning `quote (fn …)` stays
+inert in BOTH engines, an unquoted anonymous result applies in both),
+and the record admits it only when the callee's arity provably equals
+the window (`producerReturnedClosureArity`, or a concrete single-sig
+proof). `(2 (mk 4))` compiles natively (frontier §9c); the wider
+window `(1 2 (mk 4))` — where the interpreter under-applies and the
+deeper value survives — keeps the refusal (ledgered), as do quoted
+and carrier-lead spellings without an arity proof.
+
+**The Church chain's blocker, located (2026-08-21).** The stage above
+named the lever as "an arity channel for param-typed fn carriers". The
+probe battery says otherwise, and the correction matters because the
+arity work would not have moved these rows. Bisecting the family down
+to its smallest member isolates ONE discriminator — the inner lambda's
+parameter TYPE:
+
+```
+def app g:Function => [x:Integer => [(g x)]]   def h (app …)  (h 5)   # compiles (§9)
+def app g:Function => [x:Any     => [(g x)]]   def h (app …)  (h 5)   # refuses
+```
+
+Everything else — the factory, the capture, the call site, the lead's
+admission through `DynApplyLeadEligible` — is identical and already
+lands. What refuses is `parenLeadFnApplyIdx`'s **argument** gate
+(`last.Dynamic || IsFnValueResidual(last)`), and it is load-bearing:
+the leading and trailing spellings converge only while the argument is
+not a function. A FUNCTION-valued argument is never applied by the
+interpreter — its leading collection meets a function word, a barrier
+that never feeds forward collection, and RAISES — where the trailing
+model the window records binds and applies. A gradual (`Any`) argument
+cannot be proven non-function, so it is excluded with the static case.
+
+Dropping the gate compiles the whole `x:Any` family, including the
+one-level rows above, which reads as a graduation and is a miscompile
+waiting on its first function-valued argument. It cannot be repaired at
+run time, which is the part worth recording:
+
+- the interpreter's raise is a property of **word dispatch**, not of
+  the values. An island over the resolved window `[lead, fnArg]` — the
+  faithful-by-construction move everywhere else in this campaign —
+  leaves both inert instead (probe: the residual comes back
+  `fn (Integer) fn (Integer)`, no apply and no error);
+- and the raise has **two** texts — the stranded-forward barrier
+  (`g is still waiting for 1 argument(s) when x begins its own
+  dispatch`) when the lead parked a forward, the lead's own no-match
+  (`cannot call g — no signature matches the arguments`) when no
+  overload could — selected by engine-internal collection state the
+  compiled window does not carry. A single-sig lead takes the first, a
+  multi-overload lead the second, and the lead here is a CARRIER, so
+  neither is provable at record time.
+
+The obvious next idea — replay the window at WORD level, since the
+recorder does know the argument's name (the unit's slot→name `locals`
+table) — was probed too, and it does not close the gap either. Islanding
+`[lead, Word("x")]` with `x` bound to a function raises, but blames a
+THIRD target (`cannot call x — no signature matches the arguments`: the
+argument's own dispatch fires with no arguments), because the raise the
+interpreter produces depends on the enclosing frame and the lead's parked
+forward state — context no island reconstruction carries. Value island:
+inert. Word island: wrong blame. Both are recorded here so the next
+attempt does not re-derive them.
+
+So the refusal stands, and it now stands **pinned** rather than
+incidental: `TestS5BParenLeadFnApplyIdxGradualArgDeclines` (core) fails
+if either clause is dropped, the gate's comment carries the reasoning,
+and `frontier-hof-audit.tsv` §9d ledgers the family so it graduates
+automatically when the shape is genuinely solved.
+
+**A Stage 1 regression, found and closed (2026-08-21, §9e).** Probing
+the nested-curried-residual stage turned up a SILENT MISCOMPILE in the
+default lane — the one class this campaign must never produce:
+
+```
+def mk2 fn [[a:Integer][Function][( fn [[b:Integer][Function][( fn
+  [[c:Integer][Integer][add a (add b c)]] )]] )]]
+def f1 (mk2 1)
+def f2 (f1 2)
+(f2 3)                  # interpreter 6; compiled `2 fn (Integer) 3`
+```
+
+Bisected to `e48e5dd` — Stage 1's own read substitution. Before it, the
+`f1` read raised a false `undefined_word` and the program refused;
+making the read honest let the analysis reach `def f2 (f1 2)`, which it
+cannot model: it returns the CALLEE unchanged, so `f2` binds the very
+carrier `f1` denotes. Compiled, both names take one slot
+(`BIND_GLOBAL g0` and `g1` over the same `l0`) and the apply's
+unconsumed `2` leaks into the top-level residual.
+
+The def site now detects exactly that shape — a bind whose value is
+already table-bound under another NAME is a dropped apply, and nothing
+else, since a legitimate alias cannot reach it (`def g f1` is a
+strict-barrier syntax error; `def g f1/v` resolves through `Defs`
+without consulting the table) — and refuses. That restores `main`'s
+correctness (main refused this program too, behind the silent
+check-diagnostics sentinel) with no capability lost: the two-level
+chain, the chained spelling, multi-instance factories and the `/v`
+alias all still compile, and a six-shape differential sweep plus the
+frontier corpus agree across lanes. `frontier-hof-audit.tsv` §9e
+ledgers the shape.
+
+The lesson generalises to the rest of this campaign: making a read
+honest moves programs from "refused" into "modelled", and every shape
+that arrives there needs its model CHECKED, not assumed. Stage 1's four
+guards were written against the shapes its probe battery reached; this
+one it did not reach, because the chain needs two def-bound levels
+before the aliasing becomes visible.
+
+**Three more, from a differential sweep (2026-08-21, §9f).** Acting on
+that lesson, a thirty-shape sweep — every def-bound-computed-fn program
+the surrounding vocabulary can spell, each run on both engines and
+diffed — found three further divergences, all in ONE context: a **code
+body**. A code body is re-run by its native through the INTERPRETER,
+and neither of this branch's admissions survives that:
+
+| Program | Compiled | Interpreted |
+|---|---|---|
+| `def f (mk 1)  each [1 2 3] [(f 1)]` | `[3 3]` | `[3]` |
+| `def f (mk 1)  do [(f 2)]` | raises `undefined word: f` | `3` |
+| `def h (mkg …)  do [(h 1)]` | raises `undefined word: g` | `8` |
+
+The first two are Stage 1's read substitution reaching a body TOKEN
+rather than an operand: `each`'s body assembled as the DATA list
+`[f, 5]` (an `OpMakeList`), taking each's own input list with it. The
+third is Stage 2's lead-apply admission (`3d914ad`) leaving a compiled
+`ClosurePayload` where `do`'s re-run must apply it — and a
+ClosurePayload is invokable only through the VM's re-entrant runner,
+never the interpreter (`payload.go`'s own contract, plan P2), so the
+re-run reached the closure's token body with no captures installed.
+
+Three guards, each at the narrowest point that catches its shape
+without costing a graduation:
+
+- the substitution declines inside a nested body
+  (`CheckState.NestedBodyDepth > 0`) — restoring this class's
+  pre-Stage-1 silent refusal;
+- `RecordMakeListInner` refuses a list whose member is a table
+  carrier — the corruption's list-assembly twin, which no nesting
+  counter sees because `each`'s body analyses at depth 0;
+- `recordDispatchOutcome` refuses a code-body argument that READS a
+  name dyn-bound to a compiled closure. Scoped to the read, not the
+  bind: a blanket refusal at `RecordDynBind` was tried first and
+  unwound the whole §9b family, which applies exactly such closures
+  from compiled code quite happily.
+
+All four sweeps and the full frontier corpus are clean, and §9b, §9c
+and the Stage 1 graduations all still compile. `frontier-hof-audit.tsv`
+§9f ledgers the three shapes.
+
+**The widened sweep, and two more (2026-08-21, §9g).** The §9f note
+ended by saying the ~30 hand-picked programs were not exhaustive. They
+were not. A GENERATED sweep — the cross-product of factory spelling
+(verbose `fn`, arrow, capture-taking, gradual-parameter, three-level) ×
+binding shape (plain, rebind, two instances, `/v` alias) × 23
+consumption contexts (top level, operand, nested paren, def-local, `if`
+arms, `case` arms, `for`, `while`, `do`, `each`, `map`, `filter`, list
+literal, map value, fn body, user-fn argument, `apply`, `typeof`, …) —
+is **690 programs**, and it found **24 divergences** the hand-picked set
+missed, in exactly two contexts:
+
+```
+def h (mk (z:Integer => [add 7 z]))
+typeof (h 5)                # interpreted Integer; compiled `Function 5`
+filter [1 2] [gt 0 (h 5)]   # interpreted: body not Boolean
+                            # compiled:    cannot order Function and Integer
+```
+
+Bisected to `3d914ad` — but unlike §9e/§9f the defect is not *in* that
+commit. Before the Stage 2 admission these programs refused outright
+(the factory's inner unit did not compile), so the top-level modelling
+was never exercised. The admission **unmasked** it. The disassembly is
+unambiguous:
+
+```
+(h 5)          PUSH_LOCAL h ; PUSH_CONST 5 ; CALL_DYNAMIC /1   ← applies
+typeof (h 5)   PUSH_LOCAL h ; CALL_NATIVE typeof ; PUSH_CONST 5
+```
+
+The paren never collapsed into an apply. The bare spelling survives only
+because `Finalize`'s `resolveDynamicApply` lowers the leftover
+program-residual; consume that residual — hand it to a word — and the
+apply is simply lost. An `Any`-typed slot then swallows the FUNCTION and
+strands the argument behind it, which is why exactly `typeof` and
+`filter`'s `gt` surfaced it: a slot that type-checks a Function accepts
+the wrong operand silently, where `add`'s numeric slots reject it.
+
+`argIsProducedClosure` refuses a dispatch whose argument is a closure
+this pass produced (`producerReturnedClosureArity`). A word with a
+genuine `Function` slot is unaffected — its argument is not one of these
+produced closures. Re-swept: **690 programs, 0 divergences** (535 of them
+running to a value, not merely agreeing on an error), the two earlier
+sweeps clean, and the frontier corpus green with no graduation lost.
+Ledgered as §9g.
+
+**A sixth, from review (2026-08-21, §9h).** Both P1 findings of the
+PR #397 Codex review were real, and both are instances of ONE fact: a
+computed fn is not installed in `Defs` — the compiled closure machinery
+owns the name — so it lives only in the check-pass carrier table, and
+the two binding stores can disagree.
+
+- **`undef` left the table behind.** It popped `Defs` and never dropped
+  the carrier, so a later read resolved a binding that was gone.
+  `DropCheckFnCarrierBind` fixes it, pinned directly.
+- **Shadowing gave the name two meanings**, which is the half the
+  reviewer's own repro did not reach and a probe did:
+
+  ```
+  def f 1 ;  def f (mk 1) ;  undef f ;  (f 2)
+  interpreted 3    compiled `1 2`
+  ```
+
+  The compiled program bound only the shadowed `f = 1` (the computed
+  `def` installs nothing), so the pop exposed it and stranded the `2`.
+  That is not repairable by dropping the table entry — the compiled
+  lane never had the closure under that name at all — so a computed fn
+  shadowing a live binding now refuses.
+
+Worth recording about the review itself: the reviewer's stated repro
+(`def f (mk 1) ; undef f ; (f 2)`) does **not** reproduce, because
+`undef` does not remove a fn binding at all — both lanes answer 3. The
+FINDING was right and the REPRO was wrong, and taking the repro at face
+value would have closed it as unreproducible. Whether `undef` should
+remove a fn binding is a separate language question, untouched here;
+the fix is correct whichever way it is eventually settled.
+
+The wider point for whoever picks this up: **every admission in this
+campaign needs a code-body probe — and a generated sweep, not a
+hand-picked one.** All four classes share one signature — an admission
+sound where the value is an operand, applied where the value is a token
+— and the fourth was found only because the sweep was mechanised. Two of
+the four (§9f's `do`-body closure read, §9g) are not bugs the admitting
+commit wrote; they are shapes it made REACHABLE. Admitting a shape is
+therefore never a local change: it promotes a whole population of
+programs from "refused" to "modelled", and that population is what has
+to be swept.
+
+Remaining stages, each its own probe-driven increment:
+
+1. **The gradual-argument lead window** (§9d, above) — the Church
+   chain's real gate. Needs a way to answer the interpreter's
+   word-dispatch question from a compiled window: either a proof at
+   record time that the argument slot cannot hold a function (a
+   non-`Any` bound, or a whole-program flow fact), or a lowering that
+   reproduces the interpreter's FRAME — not merely its tokens: the
+   word-level island above shows tokens alone are not enough, because
+   the blame target follows the parked forward. The arity channel the
+   previous draft proposed is neither, and is not on this path.
+2. **The Church chain's inner lead, beyond §9d** — `((b x) y)` inside
+   cif's lambda additionally needs the OUTER apply's window to be
+   arity-provable; the inner apply's own admission is blocked by (1)
+   first, so (1) is the prerequisite and the arity work is only visible
+   behind it.
+3. `tryReturnedClosure` for nested curried residuals (2-level-plus
+   factories), and CPS (the factk rows). Stage 0 prerequisites
+   (NUR077's Apply Op, NUR073's BROAD verdict) remain maintainer-ruled.
+
 ### 5.9 Smaller edges met while writing the programs
 
 - **Quotations are not closures.** A `codequote`d body does not capture
@@ -822,10 +1290,14 @@ trade-off is a choice rather than a surprise.
   `hof [mul 2] xs` evaluates the bracket at the call site;
   `NoEvalArgs` is a native-word privilege. Use `codequote`.
 - **A computed key for a *quoting* accessor must be parenthesised.**
-  `cache has k` silently looks up the literal `"k"` and returns `false`
-  — NUR040's class, and what made a first `memoize` attempt miss on
-  every call while the cache visibly filled. `get` is not affected: it
-  evaluates a bare bound key (`lang/spec/accessor.tsv`).
+  At the audit's writing `cache has k` silently looked up the literal
+  `"k"` and returned `false` — NUR040's class, and what made a first
+  `memoize` attempt miss on every call while the cache visibly filled.
+  **Corrected 2026-08-21:** `has` now evaluates its key exactly as
+  `get` does, so that failure mode is gone for `has` — a bound bare
+  key computes, and an unbound one raises `undefined_word` loudly.
+  `set` remains the quoting member of the family (NUR040, Allowed):
+  its computed key still needs `(k)`.
 - **`flex` map keys must be Strings.** An `Integer` key is refused, which
   bites every memo table.
 - **No comparator-based sort.** `sort` takes no callback;
@@ -840,8 +1312,13 @@ trade-off is a choice rather than a surprise.
   16 777 216 (`[boru/iota_error]: iota: count … exceeds the cap`). No
   infinite sequences, no generators; a `take`-from-an-unbounded-stream
   program has no expression.
-- **No `while`.** `for` is a numeric range with `break`; loops over a
-  condition are recursion.
+- ~~**No `while`.**~~ **Closed 2026-08-21:** `while [cond] [body]` is a
+  word — condition re-evaluated per iteration, body values accumulate,
+  `break`/`continue` as in `for`, step-budget-bounded (see
+  `REFERENCE.md` §"`while` — the condition loop";
+  `lang/spec/frontier/frontier-while.tsv`). At the audit's writing,
+  `for` was a numeric range with `break` and loops over a condition
+  were recursion.
 
 ---
 
@@ -852,20 +1329,24 @@ trade-off is a choice rather than a surprise.
    itself the total read, so there is no folklore idiom left to document
    (§5.2). `boru describe valof` and `lang/spec/valof.tsv` §9 carry the
    rule; `REFERENCE.md`/`HOWTO.md` were swept to the new spelling.
-2. **Add a diagnostic for §5.1.** A statement ending with an
-   uncalled `Function` beside stranded operands, where the function came
-   from a capitalised binding, is a near-certain typo. `undefined_word`
-   already offers "did you mean"; this deserves the same.
+2. **Add a diagnostic for §5.1.** A statement ending with a stranded
+   minted type node beside unconsumed operands — §5.1's shape since the
+   type-node fusion — is a near-certain typo, and since the valof flip
+   removed the `I/v apply` escape hatch a hint is the only help left.
+   `undefined_word` already offers "did you mean"; this deserves the
+   same.
 3. **Give `each`/`for-each`/`fold`/`scan` a `{TFunction, TList}`
    signature** (NUR086). Note this buys *signature availability*, not
    callback uniformity: `filter`'s list `Function` form passes a
    `{key,value}` pair, so a matching `filter` change is needed before an
    element-shaped callback works across the whole family.
-4. **Ship the missing vocabulary as a module** — `compose`, `pipe`,
-   `curry`, `partial`, `const`, `identity`, `flip`, `on`, `memoize`. Every
-   one was writable here in a handful of lines; `boru:fn-util` next to
-   `boru:type-util` would remove most of the friction this audit found
-   without touching the kernel.
+4. ~~**Ship the missing vocabulary as a module**~~ — **Done
+   (2026-08-21):** `boru:fn-util` ships `compose`, `pipe`, `curry`,
+   `partial`, `const`, `identity`, `flip`, `on`, `memoize` as native
+   words next to `boru:type-util` (`lang/go/modules/fn.go`;
+   `REFERENCE.md` §"The `boru:fn-util` module"; behaviour rows in
+   `lang/spec/frontier/frontier-fn-util.tsv`, ledgered under the
+   def-bound-computed-fn refusal until that family graduates).
 5. **Fix NUR087** — the checker refusing a correct closure is the only
    finding that stops a working program from running at all.
 6. **Land NUR073.** Until it lands, `-no-compile` and the default are two
