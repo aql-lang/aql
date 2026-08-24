@@ -51,10 +51,12 @@ var valofNatives = []NativeFunc{
 	},
 	{
 		Name: "apply",
-		// Stack-only: `args... fn apply` reads as "take the function
-		// off the stack and apply it to the preceding values." Forward
-		// collection would force callers to put fn-args after the fn,
-		// which fights boru's left-to-right stack flow.
+		// Stack-only — across BOTH overloads, with no per-overload
+		// exception (NUR098's fix, 2026-08-24): `args... fn apply` reads
+		// as "take the function off the stack and apply it to the
+		// preceding values," and the lens form is `receiver lens apply`.
+		// Forward collection would force callers to put fn-args after
+		// the fn, which fights boru's left-to-right stack flow.
 
 		Signatures: []Signature{
 			{
@@ -69,13 +71,14 @@ var valofNatives = []NativeFunc{
 				ReturnsFn: applyReturns,
 				Returns:   []*Type{TAny}, BarrierPos: 0,
 			},
-			// Apply a Reach (a lens) to a receiver: `apply $.name person`
+			// Apply a Reach (a lens) to a receiver: `person $.name apply`
 			// rebinds the reach's receiver to `person` and evaluates it —
-			// the lens "get". Forward-eligible so the reach reads first.
+			// the lens "get". Stack-only like the Function overload
+			// (NUR098's fix): the lens on top, its receiver beneath.
 			{
 				Args:    []*Type{TReach, TAny},
 				Impl:    Go(applyReachHandler),
-				Returns: []*Type{TAny}, BarrierPos: -1,
+				Returns: []*Type{TAny}, BarrierPos: 0,
 			},
 		},
 	},

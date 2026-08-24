@@ -105,16 +105,16 @@ func TestReceiverlessReachIsInertLens(t *testing.T) {
 // swaps the receiver and stays inert data.
 func TestReachApplyAndRebind(t *testing.T) {
 	// apply reads the field.
-	res, err := runNativeSteps(t, nil, []string{`def p {a: {b: 7}}`, `apply $.a.b p`})
+	res, err := runNativeSteps(t, nil, []string{`def p {a: {b: 7}}`, `p $.a.b apply`})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if n, _ := core.AsInteger(res[0]); n != 7 {
-		t.Errorf("apply $.a.b p = %v, want 7", res[0])
+		t.Errorf("p $.a.b apply = %v, want 7", res[0])
 	}
 	// getr strictness survives apply: a missing strict key errors.
-	if _, err := runNativeSteps(t, nil, []string{`def p {a: 1}`, `apply $!.missing p`}); err == nil {
-		t.Error("apply $!.missing p should error (dotr strict), got nil")
+	if _, err := runNativeSteps(t, nil, []string{`def p {a: 1}`, `p $!.missing apply`}); err == nil {
+		t.Error("p $!.missing apply should error (dotr strict), got nil")
 	}
 	// rebind returns an inert bound lens, not the value.
 	res, err = runNativeSteps(t, nil, []string{`def p {name: "ada"}`, `rebind $.name p`})

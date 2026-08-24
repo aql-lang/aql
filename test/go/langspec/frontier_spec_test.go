@@ -157,6 +157,16 @@ const (
 // refusal reason substring (stable core only); "" is the bootstrap sentinel.
 // Signatures transcribed from the 2026-07-13 bootstrap run.
 var frontierCompileLedger = map[string]frontierEntryLS{
+	// NUR098's fix (2026-08-24): apply is stack-only in BOTH overloads, so
+	// the forward-lens spellings are check-time no-matches BY DESIGN
+	// (frontier-apply-stackonly.tsv). The no-match takes the checker's
+	// best-fit recovery, and a recovered dispatch refuses compilation
+	// rather than compiling the error-trap program the main corpus's
+	// refusal ceiling (0) requires. Graduation = the unmatched-dispatch
+	// trap accepting a RECOVERED window; the rows then move to
+	// lang/spec/apply.tsv §4's negatives.
+	`def p {name:'ada'}  p apply $.name`: {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
+	`[10 20 30] apply $.1`:               {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
 	// (ADR-016 / NUR077 §5 Hole 1 was ledgered here and has GRADUATED —
 	// `def f ([] => [42])  f/v apply` compiles with parity. The refusal was
 	// an artefact of applying at the handler: that left the check engine's

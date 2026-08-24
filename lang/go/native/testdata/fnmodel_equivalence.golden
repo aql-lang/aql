@@ -38,7 +38,7 @@ WORD append
   [Any Node/List/FlexList/WeakFlexList] barrier=2 returns=[Node/List/FlexList/WeakFlexList] +returnsfn
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList] +returnsfn
 WORD apply
-  [Ideal/Reach Any] barrier=2 returns=[Any]
+  [Ideal/Reach Any] barrier=0 returns=[Any]
   [Type/Function] barrier=0 returns=[Any] +returnsfn
 WORD args
   [] barrier=0 returns=[Node/List]

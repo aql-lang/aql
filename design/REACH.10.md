@@ -50,8 +50,11 @@ residual" finding) and `LISP-ANALYSIS.5.md` §2/§8 #5 (uniform code-as-data).
 >   mark "no receiver".)
 > - **H  apply + rebind** — `eng.ApplyReach(r, info, recv)` evaluates a reach's
 >   segments against a receiver (the lens "get", honoring getr strictness +
->   computed keys). `apply $.name p` rebinds + evaluates; `rebind $.name p`
->   composes an inert bound lens.
+>   computed keys). `p $.name apply` rebinds + evaluates (stack form —
+>   since NUR098's fix, 2026-08-24, `apply` is stack-only in both
+>   overloads, so the earlier forward spelling `apply $.name p` refuses);
+>   `rebind $.name p` composes an inert bound lens (rebind stays
+>   forward-eligible).
 > - **J  Lens-as-Function** — a receiverless reach is an arity-1 accessor in
 >   higher-order positions: `each $.name people`, `filter $.active xs` (reads
 >   the element, not the {key,value} wrapper), `sortby $.age people`. Each word

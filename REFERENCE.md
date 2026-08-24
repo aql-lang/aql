@@ -1009,11 +1009,15 @@ rather than Forth tradition, and are pinned here per ADR-004 (a
 stack-only registration outside this list needs the same
 justification weight as a new init-time panic — NUR023):
 
-- `apply` (the `[Function]` overload) — `args… fn apply` means "take
-  the function off the stack and apply it to the preceding values";
-  forward collection would force callers to put the fn's arguments
-  after it, fighting the left-to-right stack flow the word exists to
-  serve. (`apply f/v 5` therefore raises — spell it `5 f/v apply`.)
+- `apply` — both overloads, with no per-overload exception (NUR098's
+  fix, 2026-08-24). `args… fn apply` means "take the function off the
+  stack and apply it to the preceding values"; forward collection
+  would force callers to put the fn's arguments after it, fighting
+  the left-to-right stack flow the word exists to serve. The
+  reach-lens overload follows the same rule — `receiver lens apply`,
+  the lens on top. (`apply f/v 5` and `xs apply $.1` therefore raise —
+  spell them `5 f/v apply` and `xs $.1 apply`;
+  `lang/spec/apply.tsv` §5 pins both directions.)
 - `__casematch` — the `case` desugar's internal match probe (each
   clause lowers to `if (v match __casematch) …`), always fed by the
   synthesized chain's stack discipline. The `__` prefix marks it

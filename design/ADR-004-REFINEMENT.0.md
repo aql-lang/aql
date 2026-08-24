@@ -144,6 +144,14 @@ word. A refined ADR needs both notions and should name them separately:
   report accurately, since it is what makes a single equivalence chain
   unstatable for that word.
 
+> **Corrected 2026-08-24 (NUR098's fix).** `apply`'s `[Reach Any]`
+> overload moved from `BarrierPos: -1` to `0`, so the word is now
+> uniformly stack-only and the corpus has ZERO mixed-overload words —
+> the 20-vs-19 discrepancy this section measures is retired (both
+> counts read 19). The two notions remain worth naming, with `apply`
+> as the historical example; the describe renderer keeps its split
+> banner for any future word whose overloads disagree.
+
 Either count carries the argument: a rule with one exception does not
 describe a system where a fifth of all argument-taking signatures sit
 between the two poles it names.
@@ -189,8 +197,11 @@ name which one it claims:
 1. **Semantic** — the word's meaning IS the stack arrangement. The
    Forth vocabulary qualifies; so does `apply`'s `[Function]` overload
    (the operand order *is* the point: the function arrives after the
-   values it consumes). Stack form merely reading better is NOT
-   sufficient, and neither is "this is how it is currently called".
+   values it consumes) — and, since NUR098's fix (2026-08-24), the
+   whole word: the `[Reach Any]` overload joined it at
+   `BarrierPos: 0` on the same ground. Stack form merely reading
+   better is NOT sufficient, and neither is "this is how it is
+   currently called".
 2. **Desugar-internal** — the word exists only as the target of a
    compiler/desugar expansion that constructs every call site itself,
    so no user-authored call form is being constrained. `__casematch`

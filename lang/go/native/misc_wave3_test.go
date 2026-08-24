@@ -378,7 +378,9 @@ func TestW3RefApply(t *testing.T) {
 }
 
 func TestW3ApplyRebindReach(t *testing.T) {
-	w3MiscWant(t, `def p {name:'ada'}  apply $.name p`, `'ada'`)
+	// Stack form — apply is stack-only in BOTH overloads (NUR098's fix);
+	// the forward spellings are pinned as refusals in lang/spec/apply.tsv §5.
+	w3MiscWant(t, `def p {name:'ada'}  p $.name apply`, `'ada'`)
 	w3MiscWant(t, `def p {name:'ada'}  typeof (rebind $.name p)`, `Reach`)
 	w3MiscWant(t, `getpath $.a.b {a:{b:7}}`, `7`)
 	w3MiscWant(t, `getpath 'a.b' {a:{b:7}}`, `7`)

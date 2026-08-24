@@ -13,10 +13,10 @@ $!.x	$!.x	receiverless getr lens
 typeof $.name	Reach	a receiverless reach has type Reach
 #
 # §2  apply — the lens "get": rebind the receiver and evaluate.
-def p {name:"ada" age:36}  apply $.name p	'ada'	apply a lens to a receiver reads the field
-def p {a:{b:7}}  apply $.a.b p	7	apply walks nested segments
-def xs [10 20 30]  apply $.1 xs	20	apply a numeric-key lens to a list
-def p {name:"ada"}  apply $!.name p	'ada'	getr segment finds a present key
+def p {name:"ada" age:36}  p $.name apply	'ada'	apply a lens to a receiver reads the field
+def p {a:{b:7}}  p $.a.b apply	7	apply walks nested segments
+def xs [10 20 30]  xs $.1 apply	20	apply a numeric-key lens to a list
+def p {name:"ada"}  p $!.name apply	'ada'	getr segment finds a present key
 #
 # §3  rebind — compose, don't evaluate: swap in a receiver, stay inert data.
 def p {name:"ada"}  typeof (rebind $.name p)	Reach	rebind returns a (bound) lens, not the value
@@ -43,13 +43,13 @@ import "boru:struct-util"  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 
 reach 5 [a b]	5.a.b	bare-word keys → get segments
 reach 5 [a !b]	5.a!.b	a `!` marker makes the next key strict (getr)
 reach 5 [a (add 1 2) c]	5.a.(add 1 2).c	a paren key is a deferred computed segment
-def p {a:{b:7}}  apply (reach 0 [a b]) p	7	a constructed lens applies like a parsed one
-def p {x:{y:9}}  def k "y"  apply (reach 0 [x (k)]) p	9	computed key evaluated at apply time
+def p {a:{b:7}}  p (reach 0 [a b]) apply	7	a constructed lens applies like a parsed one
+def p {x:{y:9}}  def k "y"  p (reach 0 [x (k)]) apply	9	computed key evaluated at apply time
 reach 5 [a !]	ERROR:reach_error	trailing `!` with no following key
 #
 # §7  Negatives
-def p {name:"ada"}  apply $!.missing p	ERROR:not_found	getr strictness: missing key errors through apply
-apply $.name 5	ERROR:	applying a field lens to a non-map yields no field (None/​error)
+def p {name:"ada"}  p $!.missing apply	ERROR:not_found	getr strictness: missing key errors through apply
+5 $.name apply	ERROR:	applying a field lens to a non-map yields no field (None/​error)
 # A leading / receiverless `.` (or `!.`) is a syntax error — member access
 # must follow a value; `$.key` is the supported detached-accessor form.
 .name	ERROR:syntax_error	receiverless `.` has no value to access
