@@ -2100,6 +2100,36 @@ the park now feeds the recorder's skip accounting. The record is
 discharged by the fix **plus** a row pinned via `canon`/`typeof` — the
 surviving name-rendering residue belongs to NUR074's class.
 
+**Evidence widened (2026-08-24, the higher-order design completeness
+review).** The audit's §5.4 context transcripts
+(`design/HIGHER-ORDER-FUNCTIONS.0.md`, corrected in place same date)
+are further reachable spellings of THIS divergence, not a separate
+context rule: the interpreter re-steps the collapsed fn in every §5.4
+context, and the "collect" answers the audit quotes are the compiled
+lane's. Verified against both the audit-day tree (`e332d15`) and HEAD:
+
+- `print ((mk 1) 2)` — audit §5.4's "silent wrong answer under
+  `print`": interpreted **3** on both trees; compiled `fn (Integer)`
+  with a stranded `2`. On the audit-day tree the shape compiled
+  NATIVELY, so the default lane diverged silently from `-no-compile` —
+  a second live row of this class while the audit's §0 counted one.
+  The §9g guard (`12c8150`, 2026-08-21) made the compile refuse
+  loudly, so today the default lane answers 3 behind the fallback
+  warning and the collect answer is reachable only via
+  `-force-compile`.
+- the fn-body twin `def g fn x:Integer Integer [((mk 1) 2)]` then
+  `(g 0)`: LIVE at HEAD and check-clean — interpreted **3**, exit 0;
+  compiled (the checked default included) raises
+  `[boru/type_error]: g: expected 1 return value(s), got 2`, exit 1.
+  The audit quotes the arity error as the behaviour; it is the
+  compiled lane's only.
+
+Both rows discharge with the same clause-3 fix (under BROAD no user
+paren re-steps, and the lanes agree on the collect). Until it lands,
+"the only such row in the corpus" stays true of the spec corpus but
+not of the reachable surface: the class has at least these two further
+spellings.
+
 ---
 
 ## NUR074 — `canon` renders a function's parameter names, so alpha-equivalent functions render differently {#nur074}

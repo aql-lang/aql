@@ -791,6 +791,27 @@ one — and the message now carries a source span pointing at the group
 and the declaration, `core/go/return_check_msg.go`. It read `ap:` when
 the audit was written; same class, same payload.)
 
+> **Corrected 2026-08-24 (completeness review).** These transcripts are
+> the COMPILED lane's, and always were: under `-no-compile` the
+> interpreter re-steps the collapsed fn in every context on this page —
+> `print ((mk 1) 2)` answered **3** on the audit-day tree (`e332d15`)
+> and answers 3 today — so "the argument window merely collects both"
+> recorded a silent engine divergence (NUR073's class, where §0 counted
+> one such divergence), not a lane-independent context rule. Since the
+> §9g guard (`12c8150`) the print shape REFUSES compilation, so the
+> default lane now answers 3 behind the loud fallback warning and the
+> quoted `fn (Integer)` / `2` reproduces only under `-force-compile`.
+> The fn-body arity error above is likewise the compiled lane's, and
+> that row is LIVE and check-clean today: interpreted `(g 0)` answers
+> 3, exit 0, where the checked default raises the quoted error, exit 1
+> — recorded as widened evidence on NUR073. Two attributions move with
+> this: the "silent wrong answer under `print`" severity belonged to
+> §5.7's engines-disagree class, and the Z explanation below holds for
+> the compiled lane only — the interpreter applies exactly the
+> `((x x) v)` shape, so the interpreter-lane divergence of §1.4's Z
+> (whose source this note does not quote — the one §1 program that
+> cannot be re-run from the page) has no established cause here.
+
 This is why the Z combinator diverges: `((x x) v)` never applies, so the
 `λv` guard is inert.
 
