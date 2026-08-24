@@ -179,11 +179,12 @@ var unflaggedPins = map[string]int{
 	"usurp.tsv":             1,
 	"user-types.tsv":        1,
 	// valof.tsv (was ref.tsv, pinned at 1): 1 → 2 with the /v totality
-	// rows. Dropping the function-only gate removed the old
-	// illegal_ref refusal, so what is left unflagged is the pair of
-	// unbound-name rows in §10 — whether a NAME is bound is a runtime
-	// scope question, not one the static pass resolves.
-	"valof.tsv": 2,
+	// rows, then 2 → 0 with NUR073's BROAD park (2026-08-24). §2's
+	// paren rows were rewritten from "the paren re-steps and fires" to
+	// "the paren PLACES the held value", which retired the two
+	// unbound-name ERROR rows the old spellings carried — nothing in
+	// the file is left for the static pass to miss.
+	"valof.tsv": 0,
 	// The weak set/append refusals and typed weak writes are check-
 	// mirrored (weakValueMirror + d2CheckWrite, native_storage.go). The
 	// residue is make's own errors — source-family mismatch and a
