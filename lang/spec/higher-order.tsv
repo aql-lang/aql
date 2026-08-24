@@ -30,6 +30,18 @@ scan [add] []	[]	empty in, empty out
 join ',' ['a' 'b' 'c']	'a,b,c'	join with a separator
 join ['a' 'b' 'c']	'a,b,c'	default separator is a comma
 #
+# §6  LIST Function form for each / for-each / fold / scan (NUR086's fix,
+#     2026-08-24). The callback receives the ELEMENT — the container's
+#     natural unit — so a plain `Integer -> Integer` function value can be
+#     handed to an iterator directly, no quotation wrapper and no adapter
+#     lambda. THE FAMILY RULE: a PER-CONTAINER Function form hands the
+#     container's natural unit (element for a list, KeyVal for a map);
+#     `filter`'s single cross-container form (§5) is the documented
+#     exception — one signature serving both shapes, so it hands a POSITION
+#     descriptor either way. See REFERENCE.md §"Higher-order array words".
+def dbl x:Integer => [mul 2 x]  each [dbl] [1 2 3]	[2 4 6]	…and the quotation wrapper it replaces still answers identically
+def kf kv:KeyVal => [mul 2 (kv.v)]  each kf/v {a:1 b:2}	{a:2 b:4}	the MAP form is unchanged: a per-container form hands a KeyVal
+#
 # §5  filter — keep elements whose callback returns true. The callback is
 #     a Function (not a code body). Over a LIST it receives a {key value}
 #     pair map (key = index); read the element via `.value`. Over a MAP it

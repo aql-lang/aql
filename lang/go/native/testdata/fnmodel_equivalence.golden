@@ -263,6 +263,7 @@ WORD dup2
   [Any Any] barrier=0 +returnsfn
 WORD each
   [Type/Function Node/Map] barrier=2 returns=[Node/Map]
+  [Type/Function Node/List] barrier=2 +returnsfn
   [Ideal/Reach Node/List] barrier=2 returns=[Node/List]
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
@@ -323,9 +324,11 @@ WORD fnsig
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/FunctionSignature]
 WORD fold
   [Type/Function Node/Map Any] barrier=3 +returnsfn
+  [Type/Function Node/List Any] barrier=3 +returnsfn
   [Node/List Node/Map Any] barrier=3 noeval={0} +returnsfn
   [Node/List Node/List Any] barrier=3 noeval={0} +returnsfn
   [Type/Function Node/Map] barrier=2 +returnsfn
+  [Type/Function Node/List] barrier=2 +returnsfn
   [Node/List Node/Map] barrier=2 noeval={0} +returnsfn
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD folder
@@ -336,6 +339,7 @@ WORD for
   [Scalar/Number/Integer Node/List] barrier=2 noeval={1} +returnsfn
 WORD for-each
   [Type/Function Node/Map] barrier=2
+  [Type/Function Node/List] barrier=2 +returnsfn
   [Node/List Node/Map] barrier=2 noeval={0}
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD force-arity
@@ -688,6 +692,7 @@ WORD rot
   [Any Any Any] barrier=0 +returnsfn
 WORD scan
   [Type/Function Node/Map] barrier=2 returns=[Node/Map]
+  [Type/Function Node/List] barrier=2 +returnsfn
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD script-args

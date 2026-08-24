@@ -2212,6 +2212,31 @@ into the signature: `fold` takes `body data init`, `scan` takes
 > [] fold [push] [1 2 3]    # returns [1 2 3] — element pushed onto the acc list
 > ```
 
+> **A `Function` value works over either container.** `each`,
+> `for-each`, `fold` and `scan` each take a `Function` callback over a
+> list as well as a map, and the LIST form hands the callback the
+> **element**:
+>
+> ```
+> def dbl x:Integer => [mul 2 x]
+> each dbl/v [1 2 3]                                 # returns [2 4 6]
+> each [dbl] [1 2 3]                                 # the quotation it replaces
+> fold add2/v [1 2 3] 0                              # (accumulator, element)
+> ```
+>
+> **The family rule:** a *per-container* `Function` form hands the
+> container's natural unit — the **element** for a list, a **KeyVal** for
+> a map. `filter` is the documented exception: it has ONE signature
+> serving both shapes, so it hands a **position descriptor** either way
+> (a `{key value}` pair over a list, a `KeyVal` over a map). That is
+> `filter`'s contract, not an oversight — the descriptor carries the
+> index, which a predicate over a position often needs.
+>
+> `for-each` discards every result, but a `Function` callback must still
+> satisfy its OWN declared return arity: a `=>` lambda declares one
+> return, so a print-only lambda is a contract error of the lambda's, not
+> of `for-each`'s. Use a quotation body for a purely-mutating loop.
+
 > **`filter` takes three predicate forms.** A quotation `[body]` runs
 > once per element with the element on the stack — exactly like
 > `each`/`fold` — and keeps the elements whose result is Boolean

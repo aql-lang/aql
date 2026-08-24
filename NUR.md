@@ -85,7 +85,6 @@ keep the two in sync in the same commit.
 | [NUR082](#nur082) | Three tree-walking subcommands, two rules for `.boru/`: `fmt` and (now) `check` skip the package directory, `boru test`'s `discover()` walks it — VERDICT 2026-08-18: resolve by fix, one shared walk helper carrying the skip | giving `boru check` directory targets, 2026-08-18 (W-CLI-CHECK) |
 | [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
 | [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
-| [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
@@ -2681,79 +2680,6 @@ and `cmd/go/internal/check/check.go` (`fs.Parse` error → `return 1`);
 exits 0 across the CLI, matching what `check` already does. This record
 retires when `boru fmt -h` also prints its flags and exits 0; `check`'s
 half is done.
-
----
-
-## NUR086 — The code-body iterators take a `Function` callback over a Map but not over a List {#nur086}
-
-**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
-higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3),
-trying to hand a `Function` value to `each` the way `filter` accepts one
-
-**Rule:** one word family, one argument-positioning convention.
-`each` / `for-each` / `fold` / `scan` / `filter` are documented together
-as the higher-order iterators (`describe query`,
-`lang/spec/higher-order.tsv`), and all five accept a quotation body over
-either container shape.
-
-**Divergence:** for the *Function* form, four of the five register the
-Map shape only, and the fifth registers both.
-
-| word | `{TFunction, …}` signatures | source |
-|---|---|---|
-| `each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:326` |
-| `for-each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:348` |
-| `fold` | `{TFunction, TMap, TAny}`, `{TFunction, TMap}` | `lang/go/native/native_array.go:393-394` |
-| `scan` | `{TFunction, TMap}` | `lang/go/native/native_array.go:420` |
-| `filter` | **`{TFunction, TAny}`** — list and map alike | `lang/go/native/natives.go:261` |
-
-```
-$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v [1 2 3]'
-error: [boru/signature_error]: cannot call `each` — no signature matches the arguments
-  = note: candidate `each (Function, Map)` takes 2 arguments, but none were supplied
-  = note: candidate `each (Reach, List)`  takes 2 arguments, but none were supplied
-
-$ boru do 'filter (p:Any => [(p.value mod 2) eq 0]) [1 2 3 4]'
-[2 4]
-```
-
-Compounding it, the Map form is not a plain element callback either — it
-hands the lambda a `KeyVal` — so a unary `Integer -> Integer` function
-value has **no** iterator it can be passed to directly:
-
-```
-$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v {a:1 b:2}'
-error: each: key "a": no matching lambda signature for 1 argument(s)
-```
-
-The only route is to name it inside a quotation (`each [dbl] xs`), which
-NUR037 refuses to compile when the fn is fn-local, or to write an
-adapter lambda (`each ([kv:Any] => [dbl (kv.v)]) m`).
-
-**Evidence:** the registrations cited above; the transcripts above;
-`lang/spec/higher-order.tsv` §5 documents `filter`'s Function form and no
-`each` counterpart. Not previously recorded.
-
-**Documentation status:** documented per word, nowhere as a family.
-`describe each` / `describe fold` / `describe scan` list the signatures
-faithfully, so the absence is discoverable one word at a time; but
-`lang/spec/higher-order.tsv`'s header presents the five together and
-`describe query` lists them together, and neither says the Function form
-is Map-only for four of them. The `{key,value}` / `KeyVal` callback
-shapes are documented (`lang/spec/higher-order.tsv` §5,
-`lang/go/native/filter.go`); what is undocumented is that no member of
-the family accepts a bare-element callback at all.
-
-**Verdict proposed:** resolve by fix — add `{TFunction, TList}` to
-`each` / `for-each` / `fold` / `scan`, handing the callback the element
-directly. Note this buys **signature availability**, not callback
-uniformity: `filter`'s list Function form passes a `{key,value}` pair
-(`lang/go/native/filter.go`), so after this change an
-`Integer -> Integer` function would work with `each` and still not with
-`filter`. Closing the family properly needs a matching `filter` decision
-— either an element-shaped list form or an explicit ruling that the pair
-wrapper is `filter`'s contract — and this record should not be discharged
-by the four additions alone.
 
 ---
 

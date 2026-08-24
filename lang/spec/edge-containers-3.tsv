@@ -109,7 +109,6 @@ scan [mul] (flex [2 3])	[2 6]	scan reads a FlexList like a list
 # §6  iteration shape errors and nesting
 # ====================================================================
 
-each ([x:Integer] => [x add 1]) [1]	ERROR:signature	a LAMBDA over a LIST is not an each signature — lambdas pair with maps, lists take quotations
 each [mul 2] 'x'	ERROR:signature	strings are not collections
 each [drop] [1]	ERROR:body produced no result	a list body must yield a value per element
 each [drop] {a:1}	ERROR:body produced no result	…map bodies too

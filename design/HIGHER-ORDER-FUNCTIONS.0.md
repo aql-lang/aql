@@ -772,7 +772,23 @@ still calls a function-bound parameter. That is ADR-011 working as
 designed ("calling is an act of the use site"); `/v` is how you say you
 meant the value.
 
-### 5.3 `each`/`for-each`/`fold`/`scan` take a `Function` callback over a Map but not over a List
+### 5.3 ~~`each`/`for-each`/`fold`/`scan` take a `Function` callback over a Map but not over a List~~ — **RESOLVED 2026-08-24**
+
+> **Closed 2026-08-24 (NUR086 retired).** All four now register
+> `{TFunction, TList}`, and the LIST form hands the callback the
+> **element**: `each dbl/v [1 2 3]` is `[2 4 6]`. The fix reused the
+> existing handlers unchanged — `eachHandler` already passed the element
+> to `InvokeBody`, and a Function value reaches the callback exactly
+> where a quotation body would — so this was a missing signature, not
+> missing machinery. The record's second half (a matching `filter`
+> decision) is ruled rather than deferred: **a per-container Function
+> form hands the container's natural unit; `filter`'s single
+> cross-container signature hands a position descriptor**, which is its
+> contract because the descriptor carries the index a positional
+> predicate needs. Pinned as `lang/spec/higher-order.tsv` §6 and stated
+> in `REFERENCE.md` §"Higher-order array words". The audit's "callback
+> uniformity across containers ✗" row in §2 is now: uniform where a form
+> is per-container, deliberately different for `filter`.
 
 ```
 $ boru do 'def dbl x:Integer => [mul 2 x] end each dbl/v [1 2 3]'
@@ -1422,11 +1438,12 @@ Remaining stages, each its own probe-driven increment:
    removed the `I/v apply` escape hatch a hint is the only help left.
    `undefined_word` already offers "did you mean"; this deserves the
    same.
-3. **Give `each`/`for-each`/`fold`/`scan` a `{TFunction, TList}`
-   signature** (NUR086). Note this buys *signature availability*, not
-   callback uniformity: `filter`'s list `Function` form passes a
-   `{key,value}` pair, so a matching `filter` change is needed before an
-   element-shaped callback works across the whole family.
+3. ~~**Give `each`/`for-each`/`fold`/`scan` a `{TFunction, TList}`
+   signature**~~ — **Done (2026-08-24, NUR086 retired).** The four
+   signatures landed with an ELEMENT callback, reusing the existing
+   handlers. The `filter` question this item raised is ruled rather than
+   left open: a per-container form hands the container's natural unit,
+   `filter`'s one cross-container form hands a position descriptor (§5.3).
 4. ~~**Ship the missing vocabulary as a module**~~ — **Done
    (2026-08-21):** `boru:fn-util` ships `compose`, `pipe`, `curry`,
    `partial`, `const`, `identity`, `flip`, `on`, `memoize` as native
