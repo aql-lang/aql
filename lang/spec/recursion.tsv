@@ -45,7 +45,7 @@ def g2 fn [[pq:Integer] [Integer] [pq]] g2 8 pq	ERROR:undefined_word	params are 
 # §6  closures — captures are construction-time snapshots, stable
 #     across recursive calls (TCO safety property 2)
 def out1 fn [[] [Integer] [def x 7 def go fn [[n:Integer] [Integer] [if (n lte 0) [x] [go (n sub 1)]]] go 3]] out1	7	a captured local stays visible through a chain of recursive calls
-def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] (mk2 5) 10	11	a param shadows a same-named capture (innermost binding wins)
+def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] 10 (mk2 5) apply	11	a param shadows a same-named capture (innermost binding wins)
 #
 # §7  frames that accrete values — each level leaves a value below the
 #     recursive call; such frames are NOT constant-space-able and must

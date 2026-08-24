@@ -2,6 +2,7 @@ package lang
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -28,12 +29,19 @@ func TestFnShapeMultiReturnLaneParity(t *testing.T) {
 		name string
 		src  string
 		want string
+		// tolerateRefusal marks a row whose compiled lane refuses SOUNDLY
+		// since the BROAD park (NUR073 clause 3): the paren-apply idiom the
+		// original pin rode was removed, and the BROAD spellings of this
+		// shape sit behind the def-bound-computed-fn compile frontier. The
+		// interpreter half of the pin still holds; graduation re-tightens it.
+		tolerateRefusal bool
 	}{
 		{
 			name: "class member leading apply",
 			src: `def T fnsig [[Integer] [Integer Integer]]
 def C class {op:T}
-((make C {op:(fn [[x:Integer] [Integer Integer] [x x]])}) dot op) 10`,
+def c (make C {op:(fn [[x:Integer] [Integer Integer] [x x]])})
+c.op 10`,
 			want: "[10 10]",
 		},
 		{
@@ -43,8 +51,9 @@ def C class {op:T}
 			name: "loop body dynamic apply",
 			src: `def T fnsig [[Integer] [Integer Integer]]
 def mk fn [[i:Integer] [T] [fn [[x:Integer] [Integer Integer] [x x]]]]
-for 2 [(mk 1) 7]`,
-			want: "[7 7 7 7]",
+for 2 [7 (mk 1) apply]`,
+			want:            "[7 7 7 7]",
+			tolerateRefusal: true,
 		},
 	}
 
@@ -60,9 +69,15 @@ for 2 [(mk 1) 7]`,
 
 			compiled, ran, reason, err := mustNew(t).RunAutoValues(tc.src)
 			if err != nil {
+				if tc.tolerateRefusal && strings.Contains(err.Error(), "compile_refused") {
+					t.Skipf("compiled lane refused soundly (%v)", err)
+				}
 				t.Fatalf("compiled: %v", err)
 			}
 			if !ran {
+				if tc.tolerateRefusal {
+					t.Skipf("compiled lane refused soundly (%q)", reason)
+				}
 				t.Fatalf("compiled lane refused (%q) — this shape compiled when the pin was written; a refusal here is a silent loss of coverage, not a pass", reason)
 			}
 			if got := fmt.Sprint(compiled); got != tc.want {

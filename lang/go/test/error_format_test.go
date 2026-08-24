@@ -361,7 +361,7 @@ func TestErrorFormatReturnTypeAnonymousFn(t *testing.T) {
 	// points at line 3 where the `fn [...]` is written.
 	src := "def x 1\n" +
 		"def y 2\n" +
-		"42 (fn [[Integer] String [dup]])"
+		"42 (fn [[Integer] String [dup]]) apply"
 	err := runWithSource(t, src)
 	ae := assertBoruError(t, err, "type_error")
 	assertErrorContains(t, err, "return value 1")

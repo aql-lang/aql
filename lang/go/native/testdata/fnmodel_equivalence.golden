@@ -989,7 +989,7 @@ CASE named-fn-multi-overload
   => "42"
 CASE afn-direct
   ([n:Integer] => [n add 1]) 41
-  => "42"
+  => "fn (Integer) 41"
 CASE closure-adder
   def make-adder ([x:Integer] => [([y:Integer] => [x add y])])  def add5 (make-adder 5)  add5 3
   => "8"
@@ -1024,7 +1024,7 @@ CHECK check-named-fn-untyped
   => "Scalar/Number/Integer"
 CHECK check-afn-direct
   ([n:Integer] => [n add 1]) 41
-  => "Scalar/Number/Integer"
+  => "Type/Function Scalar/Number/Integer"
 CHECK check-closure
   def mk ([x:Integer] => [([y:Integer] => [x add y])])  def a5 (mk 5)  a5 3
   => "Scalar/Number/Integer"

@@ -130,7 +130,7 @@ func TestFmtDeclarativeFormatter(t *testing.T) {
 	InstallResolver(reg)
 
 	const prog = `import "boru:fmt"
-def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
+def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd)) apply]]
 def rules {
   scalar: (nd:Any => (canon nd))
   entry:  (nd:Any => ({fmt:'concat' parts:[nd.key ':' (fmtapply nd.value)]}))

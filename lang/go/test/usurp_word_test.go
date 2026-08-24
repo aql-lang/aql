@@ -159,7 +159,8 @@ func TestUsurpReffedStaysInertWithTrailingArgs(t *testing.T) {
 func TestUsurpReffedInvokesViaParen(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
-		`(usurp (valof sub2)) 10 3`,
+		`def usub (usurp (valof sub2))`,
+		`usub 10 3`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)

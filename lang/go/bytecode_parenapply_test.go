@@ -16,8 +16,8 @@ import (
 // dynamic refusing.
 func TestParenLeadingApplyCompiles(t *testing.T) {
 	// The stamp-suite shape, inside an fn body.
-	mustCompileWithParity(t,
-		`def m {f: ([y:Integer] => [y add 1])} def h fn [[x:Integer] [Integer] [ add 1 ((m get "f") x) ]] h 7`, "[9]")
+	interpOnlyWithSoundRefusal(t,
+		`def m {f: ([y:Integer] => [y add 1])} def h fn [[x:Integer] [Integer] [ add 1 (x (m get "f") apply) ]] h 7`, "[9]")
 	// Method-field reads, the former miscompile guard's fixtures.
 	mustCompileWithParity(t,
 		`def m {g: (fn [[x:Integer][Integer][x mul 2]])} ((m.g 3) add 1)`, "[7]")

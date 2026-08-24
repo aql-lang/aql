@@ -28,6 +28,7 @@ def inc fn [[n:Integer][Integer][n add 1]]  5 inc/v apply  add 100	106	apply com
 #
 # §2  apply on an anonymous-function reference
 def f ([n:Integer] => [n add 1])  5 f/v apply	6	apply a referenced lambda
+def inc fn [[n:Integer][Integer][n add 1]]  5 (valof inc) apply	6	a PAREN-grouped reference applies identically: the paren PLACES the fn (NUR073 clause 3) and apply calls it — grouping and the /v suffix now agree
 #
 # §3  apply on a usurp (argument-reversed) wrapper
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/uv apply	7	apply a reffed-usurp wrapper: args reversed (3 sub 10... reversed → 10 sub 3)
@@ -35,7 +36,6 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/uv apply	7	appl
 # §4  Negatives
 5 apply	ERROR:signature_error	apply with no function on the stack
 def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply	ERROR:signature_error	bare inc fires on 5 first (→6); apply then has no fn
-def inc fn [[n:Integer][Integer][n add 1]]  5 (valof inc) apply	ERROR:signature_error	(valof inc) paren re-steps inc on the stacked 5 — pair apply with /v, not (valof …)
 #
 # §5  The reach-lens overload is stack-only too (NUR098's fix, 2026-08-24):
 #     receiver beneath, lens on top — `receiver lens apply`. The forward

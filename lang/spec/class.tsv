@@ -119,10 +119,10 @@ def Foo class {items:(flex [])} def s (flex []) def a (make Foo {items:s}) def b
 #     CALL_DYNAMIC was emitted; core.TypeIsFnShape /
 #     core.IsFnTypedCarrier close that). Field typing is sound
 #     everywhere: a wrong-shaped fn is refused at make.
-def C class {op:(fn [[x:Integer] [Integer] [x mul 2]])} ((make C {}) dot op) 21	42	a named class's fn DEFAULT member is callable when fetched
-def T fnsig Integer Integer ((make (class {op:T}) {op:(fn [[x:Integer] [Integer] [x add 1]])}) dot op) 5	6	an ANONYMOUS class's fnsig-typed member, provided at make, is callable
-def T fnsig Integer Integer def C class {op:T} ((make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) dot op) 5	6	a NAMED class's NAMED-fnsig member, provided at make, is callable (NUR095 retired)
-def C class {op:(fnsig Integer Integer)} ((make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) dot op) 5	6	a NAMED class's ANONYMOUS-fnsig member, provided at make, is callable (NUR095 retired)
-def T fnsig Integer Integer def C class {op:T} def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) (c dot op) 5	6	…and through a def-bound instance (the trailing stack-arg spelling is an interpreter-only pin — fnshape_member_interp_test.go)
-def R {op:(fnsig Integer Integer)} def r:R {op:(fn [[x:Integer] [Integer] [x add 9]])} (r dot op) 1	10	a record-shape's fnsig-typed member, provided at bind, is callable
+def C class {op:(fn [[x:Integer] [Integer] [x mul 2]])} def c (make C {}) c.op 21	42	a named class's fn DEFAULT member is callable through dot access (BROAD respelling: a paren PLACES the fetched fn, so the member call is spelled as the dot read it always was)
+def T fnsig Integer Integer def c (make (class {op:T}) {op:(fn [[x:Integer] [Integer] [x add 1]])}) c.op 5	6	an ANONYMOUS class's fnsig-typed member, provided at make, is callable
+def T fnsig Integer Integer def C class {op:T} def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) c.op 5	6	a NAMED class's NAMED-fnsig member, provided at make, is callable (NUR095 retired)
+def C class {op:(fnsig Integer Integer)} def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) c.op 5	6	a NAMED class's ANONYMOUS-fnsig member, provided at make, is callable (NUR095 retired)
+def T fnsig Integer Integer def C class {op:T} def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) c.op 5	6	…and through a def-bound instance (the trailing stack-arg spelling is an interpreter-only pin — fnshape_member_interp_test.go)
+def R {op:(fnsig Integer Integer)} def r:R {op:(fn [[x:Integer] [Integer] [x add 9]])} r.op 1	10	a record-shape's fnsig-typed member, provided at bind, is callable
 def T fnsig Integer Integer def C class {op:T} make C {op:(fn [[x:String] [Integer] [1]])}	ERROR:does not satisfy fn shape	a wrong-shaped fn is refused at make — member typing is enforced

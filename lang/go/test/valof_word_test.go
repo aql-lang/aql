@@ -243,7 +243,7 @@ func TestRefSuffixHoldsArgsUndispatched(t *testing.T) {
 // path picks them up.
 func TestInlineFnLiteralDispatchesWithStackArgs(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`2 3 (fn [[a:Integer b:Integer] [Integer] [a add b]])`,
+		`2 3 (fn [[a:Integer b:Integer] [Integer] [a add b]]) apply`,
 	})
 	if err != nil {
 		t.Fatalf("inline fn: %v", err)
@@ -291,10 +291,10 @@ func TestApplyErrorsOnNonFunction(t *testing.T) {
 // Function reference at the call site, and that reference dispatches only
 // when it is re-stepped elsewhere (unwrapped from a paren, retrieved from a
 // map). In particular a bare reference to a 0-arg fn does NOT auto-fire —
-// `val f` and `f/v` both hold the function, where re-stepping (`(valof f)`,
-// `(f/v)`) fires it. This is the regression guard for the historical
-// divergence where `valof`'s result was re-stepped (firing 0-arg fns) while
-// `/v` advanced past it.
+// `val f` and `f/v` both hold the function, and since the BROAD park
+// (NUR073 clause 3) a paren HOLDS it identically: `(valof f)` ≡ `valof f`.
+// This remains the guard that `valof` and `/v` never diverge from each
+// other, whatever the paren semantics of the day.
 func TestValMatchesSlashV(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -303,7 +303,7 @@ func TestValMatchesSlashV(t *testing.T) {
 		wantFn    bool   // true: top is an inert Function; false: top is the called result
 	}{
 		{"bare 0-arg held", `valof f`, `f/v`, true},
-		{"paren 0-arg fires", `(valof f)`, `(f/v)`, false},
+		{"paren 0-arg places (BROAD)", `(valof f)`, `(f/v)`, true},
 	}
 	def0 := `def f fn [[] [Integer] [42]]`
 	for _, c := range cases {

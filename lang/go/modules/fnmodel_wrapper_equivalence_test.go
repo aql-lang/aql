@@ -30,9 +30,7 @@ var updateWrapperGolden = flag.Bool("update-wrapper", false, "update the wrapper
 func wrapGet(arg native.Value, word string) []native.Value {
 	return []native.Value{
 		arg,
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord(word),
-		native.NewCloseParen(),
 	}
 }
 

@@ -46,6 +46,24 @@ import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export 
 import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/v} ] end  M.w	'zero'	with no argument the 0-arg signature still answers, one step later
 import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/v} ] end  size (M.w)	4	and a user paren around the bare form still dispatches inside it, so a consumer receives the RESULT
 #
+# §4b a paren PLACES its collapsed Function value — it never re-steps it
+#     (NUR073, discharged 2026-08-24 by the BROAD verdict's clause-3 fix:
+#     "parens do not re-step; they place a value or values on the forward
+#     stack"). This is the row the record could not pin while its oracle
+#     was open, and it is pinned through `canon` / `typeof` rather than on
+#     the bare residual, because a name-rendering difference survives in
+#     the residual renderer (the interpreter's value carries the resolved
+#     PARAM name, the compiler's the defining name) — NUR074's class, not
+#     this one's.
+#
+#     Note what is NOT affected: a bare WORD inside a group still calls
+#     (`(g)` dispatches g during the group's own evaluation — §4 above),
+#     and a reach-lowered group still dispatches (dot access, MathUtil.sqrt).
+#     Only a Function VALUE that survives the collapse is placed.
+def z fn [[][Integer][42]]  def h fn [[f:Function][Any][f/v]]  canon ((h z/v))	'fn [[][Integer][42]]'	the nested group places the returned fn — canon agrees on both engines (NUR073's discharge row)
+def z fn [[][Integer][42]]  def h fn [[f:Function][Any][f/v]]  typeof ((h z/v))	Function	…and so does typeof: the value divergence is closed
+def z fn [[][Integer][42]]  (z/v) apply	42	the placed value still fires where an application is ASKED for
+#
 # §5  a failed dispatch is LOUD, wherever the value would have gone
 #     (design/FN-VALUE-DISPATCH.0.md). The old contract marked the value
 #     and let the end-of-run drain judge it, so any consumer at all — a

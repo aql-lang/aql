@@ -25,7 +25,7 @@
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2 10 3	7	baseline: sub computes a-b
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (valof sub2) 10 3	-7	usurp reverses args: now 3-10
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3	-7	/u modifier reverses the same way
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (usurp (valof sub2)) 10 3	-7	paren-grouped by-value wrapper dispatches
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (usurp (valof sub2)) apply	7	paren-grouped by-value wrapper applies (a paren places; apply calls)
 def inc fn [[n:Integer][Integer][n add 1]]  inc/u 5	6	usurp of a 1-arg fn is a no-op on order
 def cat3 fn [[a:String b:String c:String][String][a add b add c]]  cat3/u 'x' 'y' 'z'	'zyx'	usurp reverses all three args
 def f fn [[a:Integer b:String][String][b add (a convert String)]]  f 7 'hi'	'hi7'	baseline: heterogeneous sig
@@ -53,10 +53,10 @@ usurp 5	ERROR:signature_error	usurp of a non-word literal matches neither overlo
 # dispatches when re-stepped (grouped in a paren, or via apply).
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/uv	fn [[b:Integer a:Integer][Integer][]]	/uv holds the reversed wrapper (params b,a) — not invoked
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/vu	fn [[b:Integer a:Integer][Integer][]]	/vu is the same as /uv (order-independent modifier letters)
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/uv) 10 3	-7	grouped reffed-usurp wrapper dispatches (reversed: 3 sub 10)
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/vu) 10 3	-7	/vu grouped dispatches identically
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/uv) apply	7	grouped reffed-usurp wrapper applies (stack order, then reversed)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/vu) apply	7	/vu grouped applies identically
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/uv apply	7	apply a held reversed wrapper (reversed args → 10 sub 3)
-def f ([a:Integer b:Integer] => [a sub b])  (f/uv) 10 3	-7	reffed-usurp of an anonymous fn, grouped → reversed dispatch
+def f ([a:Integer b:Integer] => [a sub b])  10 3 (f/uv) apply	7	reffed-usurp of an anonymous fn, grouped → applied, reversed
 #
 # ─── cond-first `if` via usurp (the motivating use case) ───
 # Plain `cond if then else` mis-binds because the stack `cond` falls into

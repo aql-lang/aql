@@ -207,7 +207,7 @@ func TestFnValueCrossRegistrySpliceArms(t *testing.T) {
 		r, other := mk(t)
 		helper := sameRegistryAnonFnValue(t, other, "xrf", typedFnBody("x", "Integer", "Integer",
 			NewWord("x"), NewWord("add"), NewInteger(1)))
-		res := runBoru(t, r, []Value{NewOpenParen(), helper, NewCloseParen(), NewInteger(41), NewEnd()})
+		res := runBoru(t, r, []Value{helper, NewInteger(41), NewEnd()})
 		if n, _ := AsInteger(res[len(res)-1]); n != 42 {
 			t.Fatalf("forward-form cross-registry dispatch = %d, want 42", n)
 		}

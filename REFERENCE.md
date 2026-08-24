@@ -273,6 +273,32 @@ collection:
 mul 2 (add 3 4)               # returns 14
 ```
 
+**A paren places its result; it never calls it.** Grouping is not a use
+site (ADR-011: *calling is an act of the use site*), so when a group
+collapses to a **function value** that value is placed on the forward
+stack as data — it is not applied to whatever follows:
+
+```
+def inc fn n:Integer Integer [add 1 n]
+(inc/v) 5                     # two values: the fn, then 5 — NOT 6
+5 (inc/v) apply               # returns 6 — application is explicit
+(fn Integer [Integer] [10 add]) 7
+                              # two values — an inline literal is no different
+```
+
+This is uniform: a reference, an inline `fn` literal and a `=>` lambda
+all behave the same way, so naming a function never changes what a call
+site means. Application is spelled explicitly — a bare word (`inc 5`),
+`apply` (`5 inc/v apply`), or a member read (`m.fn 5`).
+
+Two things are *not* affected, because neither is a collapsed value
+arriving at a paren:
+
+- a bare **word** inside a group still dispatches during the group's own
+  evaluation — `(g)` calls `g`, and `mul 2 (add 3 4)` is unchanged;
+- **dot access** still calls: `m.fn 5` and `MathUtil.sqrt 16` lower to a
+  reach group whose re-step *is* the dispatch.
+
 ### Template-string escapes
 
 `\\`, `` \` ``, `\$`, `\n`, `\t`, `\r`. Use `\$` for a literal `${`.
@@ -1522,7 +1548,9 @@ call — so it works with or without explicit parens, including as a
 fn bindings lexically:
 
 ```
-(x:Integer => [x mul 2]) 5                    # returns 10
+5 (x:Integer => [x mul 2]) apply             # returns 10 — a paren PLACES the
+                                              # lambda (see Grouping), so the
+                                              # application is explicit
 filter p:Any => [p.value gt 3] [1 2 3 4 5]    # returns [4 5]
 def double x:Integer => [x mul 2]
 double 7                                      # returns 14
@@ -2351,10 +2379,11 @@ consequences:
   the stack (the args are *not* consumed), and `[zero/v]` is
   `[<function>]` even for a 0-arg `zero` (it is **not** fired). To
   **call** a referenced function, use the bare word (`add 2 3`), `apply`
-  it (`2 3 f/v apply` — the bare `/v` word, *not* parenthesised and *not*
-  quoted: both of those reach `apply` as inert data and it refuses them),
-  or access it as a member (below), where
-  `get` brings the value live.
+  it (`2 3 f/v apply`; a QUOTED reference stays data and `apply` refuses
+  it), or access it as a member (below), where `get` brings the value
+  live. Grouping is not a call: since NUR073's fix a paren **places** its
+  collapsed value rather than re-stepping it, so `(f/v)` is `f/v` and
+  `5 (f/v) apply` is `5 f/v apply` — both `6` for an incrementing `f`.
 
 - **A function stored in a plain map** is callable via dot. Store it with
   `/v` — `{fn: myfn/v}` — which holds the function as data; then

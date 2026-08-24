@@ -187,7 +187,7 @@ def vt-picker-cols fn [[] [List] [
 ]]
 
 def vt-rrow fn [[cols:List rec:Map] [List] [
-  def row (each [ c:Map => [ vt-str (rec get c.key) ] ] cols)
+  def row (each [ (c:Map => [ vt-str (rec get c.key) ]) apply ] cols)
   row
 ]]
 
@@ -524,7 +524,7 @@ def vt-open-scan fn [[state:Map] [Map] [
 def vt-scan-submit fn [[state:Map] [Map] [
   def scr (vt-top state)
   def raw (vt-fval scr 0)
-  def paths (filter [ x:String => [(x eq "") not] ] (StringUtil.split " " raw))
+  def paths (filter [ (x:String => [(x eq "") not]) apply ] (StringUtil.split " " raw))
   do [ def txt (Vault.scan (if ((size paths) eq 0) [["."]] [paths]))
        vt-push (vt-pop state) {kind: "pager"  name: "scan"  title: "Scan"  text: txt  scroll: 0} ]
   error [ dot message  vt-form-fail state ]
@@ -1103,10 +1103,10 @@ def vt-body fn [[state:Map] [Map] [
       ] [ tbl ] ]
     "rtable" [ drop
       def cols (vt-rtable-cols scr.name)
-      Tui.table cols (each [ rec:Map => [ vt-rrow cols rec ] ] scr.rows) {cursor: scr.cursor} ]
+      Tui.table cols (each [ (rec:Map => [ vt-rrow cols rec ]) apply ] scr.rows) {cursor: scr.cursor} ]
     "picker" [ drop
       def cols (vt-picker-cols)
-      Tui.table cols (each [ rec:Map => [ vt-rrow cols rec ] ] scr.rows) {cursor: scr.cursor} ]
+      Tui.table cols (each [ (rec:Map => [ vt-rrow cols rec ]) apply ] scr.rows) {cursor: scr.cursor} ]
     "detail" [ drop
       def hdr (Tui.text (vt-detail-lines scr) {wrap: "wrap"  size: 7})
       def recs (Tui.box (Tui.list-view (each [ dot cmd ] scr.recipes) {cursor: scr.rsel})

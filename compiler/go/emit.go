@@ -4729,6 +4729,18 @@ func (es *EmitState) recordCallElided(word string, sig *core.Signature, args, ou
 			u.pendingApply = append(u.pendingApply, args[0].ID)
 			return true
 		}
+		// A DYNAMIC lead that is neither a concrete value nor a fn-typed
+		// carrier: the check's gradual match may have seated the
+		// [Reach Any] overload where runtime dispatches [Function] —
+		// reachable since the BROAD park (NUR073 clause 3) lets a fetched
+		// fn arrive at `apply` as an untyped carrier — so a recorded poly
+		// call carries the wrong arity and can only die as a VM-internal
+		// no-match. No overload is provable at record time: refuse.
+		if !core.IsConcrete(args[0]) && !core.IsFnTypedCarrier(args[0]) {
+			es.SiteCounts[SiteMeta]++
+			es.MarkUncompilable("apply over a dynamic lead (overload unprovable)")
+			return true
+		}
 	}
 	// Compile-time NAME RESOLUTION: a get/getr whose result is a
 	// statically-known callable or namespace (a raw fn export, a module
@@ -7042,7 +7054,8 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// its apply, and a decline there means the residual tail may cross the
 	// value's statement boundary — see methodShapeAnnotated.
 	applyDynamic := false
-	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) {
+	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) &&
+		!es.parenPlacedMemberFn(residual[0]) {
 		applyDynamic = !anyDynamicTail(residual)
 	}
 	// Leading Function CARRIER (the factory pattern: a returned closure now
@@ -8094,4 +8107,19 @@ func (es *EmitState) methodShapeAnnotated(id string) bool {
 func init() {
 	core.NewEmitStateHook = func() core.EmitRecorder { return NewEmitState() }
 	core.NewIsolatedEmitHook = newIsolatedEmit
+}
+
+// parenPlacedMemberFn reports whether a residual lead is a pinpointed
+// member-fn read — the shape a USER paren PLACES rather than applies since
+// NUR073's BROAD park (`(m dot f) 5` is two values interpreted, where dot
+// SUGAR `m.f 5` still dispatches through its reach group). Lowering such a
+// lead as an apply diverges from the interpreter, so resolveDynamicApply
+// declines it and the program falls back faithfully. The arrival model
+// (method_shape.go) still owns the un-parenthesised mid-expression apply,
+// which is why this test is on the residual lead only.
+func (es *EmitState) parenPlacedMemberFn(v core.Value) bool {
+	if es == nil || es.reg == nil || es.reg.Check == nil || v.ID == "" {
+		return false
+	}
+	return es.reg.Check.ParenPlacedFnIDs[v.ID]
 }

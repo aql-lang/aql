@@ -232,6 +232,21 @@ distinction and the transient `Quoted` flag, never the Parent type. A bare
 name bound to a function calls; a value at the pointer dispatches; `/v`
 takes the reference and is no collection barrier.
 
+> **Amended 2026-08-24 (maintainer):** clause 3 of the same 2026-08-16
+> ruling — *"parens do not re-step; they place a value or values on the
+> forward stack"* — is now implemented (NUR073's **BROAD** verdict,
+> 2026-08-17). GROUPING is not a use site: a paren places its collapsed
+> Function value, reference and inline literal alike, so the
+> inline-application idiom (`(fn Integer [Integer] [10 add]) 7` → `17`)
+> is removed and application is explicit — a bare name, `apply`, or a
+> member read. The rule above is unchanged and is what the fix serves:
+> "a value at the pointer dispatches" still holds for a value the main
+> loop encounters, and a paren collapse no longer manufactures such an
+> encounter. Two exclusions stay load-bearing: a reach-lowered group
+> (dot access — its re-step IS the dispatch), and a bare WORD inside a
+> group, which dispatches during the group's own evaluation (`(g)` still
+> calls `g`).
+
 ---
 
 ## ADR-012 — The kernel is mechanism, never content {#adr-012}

@@ -63,7 +63,7 @@ func TestArrowTokenAliasesAfn(t *testing.T) {
 // (Integer, String, etc.) that doesn't dispatch.
 func TestLambdaIdentity(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`([x:Any] => [x]) 7`,
+		`7 ([x:Any] => [x]) apply`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -80,7 +80,7 @@ func TestLambdaIdentity(t *testing.T) {
 // Literal body (single non-Word value) — afn captures it directly.
 func TestLambdaLiteralBody(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`([x:Any] => 42) "ignored"`,
+		`"ignored" ([x:Any] => 42) apply`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -96,7 +96,7 @@ func TestLambdaLiteralBody(t *testing.T) {
 
 func TestLambdaForwardApply(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`([x:Integer] => [x add 1]) 5`,
+		`5 ([x:Integer] => [x add 1]) apply`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -112,7 +112,7 @@ func TestLambdaForwardApply(t *testing.T) {
 
 func TestLambdaTwoArgs(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`([x:Integer y:Integer] => [x add y]) 2 3`,
+		`2 3 ([x:Integer y:Integer] => [x add y]) apply`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -128,7 +128,7 @@ func TestLambdaTwoArgs(t *testing.T) {
 
 func TestLambdaAfnAlias(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`([x:Integer] afn [x add 1]) 5`,
+		`5 ([x:Integer] afn [x add 1]) apply`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -240,7 +240,7 @@ func runCheckMode(t *testing.T, src string) []native.Value {
 }
 
 func TestLambdaCheckModeInfersInteger(t *testing.T) {
-	out := runCheckMode(t, `([x:Integer] => [x add 1]) 5`)
+	out := runCheckMode(t, `5 ([x:Integer] => [x add 1]) apply`)
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1: %v", len(out), out)
 	}

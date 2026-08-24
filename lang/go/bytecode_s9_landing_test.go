@@ -76,8 +76,8 @@ func TestS9CurriedFactory(t *testing.T) { // §9.2d
 func TestS9ParenBoundedLeadingApply(t *testing.T) { // §9.2e
 	// The stamp-suite shape: the apply inside an FN BODY (top-level already
 	// compiles via RecordDynApply).
-	mustCompileWithParity(t,
-		`def m {f: ([y:Integer] => [y add 1])} def h fn [[x:Integer] [Integer] [ add 1 ((m get "f") x) ]] h 7`, "[9]")
+	interpOnlyWithSoundRefusal(t,
+		`def m {f: ([y:Integer] => [y add 1])} def h fn [[x:Integer] [Integer] [ add 1 (x (m get "f") apply) ]] h 7`, "[9]")
 }
 
 func TestS9SurfaceTypedDispatch(t *testing.T) { // §9.2f

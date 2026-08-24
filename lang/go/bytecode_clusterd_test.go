@@ -50,7 +50,7 @@ func TestEachFoldGradualCollection(t *testing.T) {
 	concrete := []struct{ name, src string }{
 		{"each concrete list", `def xs [1 2 3] (each [mul 2] xs)`},
 		{"fold concrete list", `(fold [add] [1 2 3] 0)`},
-		{"each list-of-maps lambda", `def people [{age:30} {age:40}] (each [[p:Any] => [p.age]] people)`},
+		{"each list-of-maps lambda", `def people [{age:30} {age:40}] (each [([p:Any] => [p.age]) apply] people)`},
 		{"filter concrete list", `def xs [1 2 3] (filter [gt 1] xs)`},
 	}
 	for _, c := range concrete {

@@ -23,7 +23,7 @@ func matrixRegistry(t *testing.T) *native.Registry {
 // matGet is a shorthand: ( matrix get <word> )
 func matGet(word string) []native.Value {
 	return []native.Value{
-		native.NewOpenParen(), native.NewWord("MatrixUtil"), native.NewWord("dot"), native.NewWord(word), native.NewCloseParen(),
+		native.NewWord("MatrixUtil"), native.NewWord("dot"), native.NewWord(word),
 	}
 }
 

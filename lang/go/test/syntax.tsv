@@ -981,8 +981,12 @@ def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2
 
 # single typed param without brackets — the pair closes on =>
 def double (x:Integer => [x mul 2]) double 1	2
-(x:Integer => [x mul 2]) 5	10
-5 (x:Integer => [x mul 2])	10
+5 (x:Integer => [x mul 2]) apply	10
+# …the paren PLACES the lambda (a paren never re-steps its collapsed
+# value — NUR073 BROAD, clause 3); `apply` is the application act. The
+# in-group spelling keeps the direct dispatch: the lambda meets its
+# forward arg inside one group
+(x:Integer => [x mul 2] 5)	10
 # …equivalent to the bracketed form
 def double ([x:Integer] => [x mul 2]) double 1	2
 # the arrow binds tighter than the enclosing word's collection, so the
@@ -996,16 +1000,16 @@ filter p:Any => [p.value gt 3] [1 2 3 4 5]	[4 5]
 # captures parens RAW (per-call code), so the inner lambda constructs
 # inside the outer body with x bound
 def mk x:Integer => y:Integer => [x add y] end def a2 (mk 2) end a2 3	5
-def mk a:Integer => b:Integer => c:Integer => [a add b add c] end ((mk 1) 2) 3	6
+def mk a:Integer => b:Integer => c:Integer => [a add b add c] end 3 ((mk 1) 2) apply	6
 # …the explicit list-wrapped inner form still works
 def mk x:Integer => [(y:Integer => [x add y])] end def a2 (mk 2) end a2 3	5
 # a raw paren body may reference params (it runs per call)
-(x:Integer => (x mul 2)) 5	10
+5 (x:Integer => (x mul 2)) apply	10
 # multi-param needs brackets: in the bare form each pair closes
 # separately, so the first param strands as a stray map and the body's
 # reference to it is undefined — write ([x:Integer y:Integer] => body)
 (x:Integer y:Integer => [x add y]) 2 3		undefined_word
-([x:Integer y:Integer] => [x add y]) 2 3	5
+2 3 ([x:Integer y:Integer] => [x add y]) apply	5
 
 # === /q signature params: name:Atom/q captures the upcoming word ===
 
@@ -1021,7 +1025,7 @@ def f fn [[Atom/q] [Atom] [args.0]] f world	world
 # a following param collects normally after the captured name
 def kv fn [[k:Atom/q v:Any] [Any] [v]] kv color 7	7
 # lambda sigs share the same param parser
-(k:Atom/q => [k]) hi	hi
+def f (k:Atom/q => [k]) end f hi	hi
 # an atom that names no type is a KEYWORD slot — matches only that literal word
 def f fn [[foo/q] [Any] [args.0]] f foo	foo
 

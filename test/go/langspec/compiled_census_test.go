@@ -43,13 +43,14 @@ type census struct {
 	// not-fully-native rows (refused OR islanded): tier 1 interpreter-only
 	// (permanent), tier 2 reducible (TODO), allowlisted error rows, and the
 	// remaining compute frontier.
-	interp     int
-	reducible  int
-	errorRows  int
-	computeGap int
-	tier1By    map[string]int
-	tier2By    map[string]int
-	computeBy  map[string]int
+	interp      int
+	reducible   int
+	errorRows   int
+	computeGap  int
+	computeRows []string
+	tier1By     map[string]int
+	tier2By     map[string]int
+	computeBy   map[string]int
 }
 
 // refusedRow identifies one spec row the bytecode compiler refused to lower —
@@ -217,6 +218,7 @@ func computeCensus() (*census, error) {
 					r = "island (OpFallback span)"
 				}
 				c.computeBy[r]++
+				c.computeRows = append(c.computeRows, firstN(input, 88)+" — "+r)
 			}
 		}
 		f.Close()
@@ -225,4 +227,12 @@ func computeCensus() (*census, error) {
 		}
 	}
 	return c, nil
+}
+
+// firstN truncates a spec input for the compute-gap row log.
+func firstN(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }

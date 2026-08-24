@@ -522,6 +522,29 @@ func tryRecordPoly(r *core.Registry, word string, sig *core.Signature, args, out
 	if !matchReg.IsBuiltinWord(word) {
 		return false
 	}
+	// A poly window re-matches over a FIXED pop count, so it is unsound
+	// when a SMALLER-arity overload exists and the operands are dynamic:
+	// the interpreter can dispatch the narrow overload over the live
+	// values, leaving the rest on the stack, where the VM's N-window
+	// forces all N into one match (`apply`: the gradual check match seats
+	// [Reach Any] over a fetched-fn carrier, but runtime wants the 1-arg
+	// [Function] — reachable since the BROAD park, NUR073 clause 3).
+	// Wider overloads are harmless: with only N live values they cannot
+	// match on either engine. Decline; the dispatch falls to the ordinary
+	// record and its refusal nets.
+	// The no-match RECOVERY flavours (dynamicRecovery / noMatch) are
+	// exempt: they deliberately record a wider probe window and the VM's
+	// rematch owns under-match by deferring, so the smaller-arity hazard
+	// is theirs to handle.
+	// Confined to STACK-ONLY matches (BarrierPos 0): a forward-eligible
+	// word's window is disambiguated by its written tokens on both
+	// engines (`join`'s 1-arity overload never shadows its 2-arity call),
+	// so only the stack-sourced mixed-arity words — `apply`, per the
+	// ADR-004 closed list — carry the hazard.
+	if !dynamicRecovery && noMatch == nil && sig.BarrierPos == 0 &&
+		check.AnyDynamicCarrier(args) && smallerArityOverload(matchReg, word, len(args)) {
+		return false
+	}
 	// Only a genuinely dynamic dispatch (the case the checker could not
 	// commit to one overload — an island or a refusal today), a strict-
 	// disjunct straddle (disjunctStraddle), a no-signature recovery over an
@@ -939,4 +962,22 @@ func tryRecordDeferredList(r *core.Registry, sig *core.Signature, outs []core.Va
 		return false
 	}
 	return check.IsDeferredWordList(outs[0])
+}
+
+// smallerArityOverload reports whether the builtin word registers an
+// overload consuming FEWER than n operands — the condition under which a
+// poly window of n dynamic values can diverge from the interpreter's
+// dispatch (tryRecordPoly's mixed-arity decline; see the `apply` note
+// there).
+func smallerArityOverload(r *core.Registry, word string, n int) bool {
+	nf := r.Lookup(word)
+	if nf == nil {
+		return false
+	}
+	for i := range nf.Signatures {
+		if len(nf.Signatures[i].Args) < n {
+			return true
+		}
+	}
+	return false
 }

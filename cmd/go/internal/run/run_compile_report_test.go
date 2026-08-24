@@ -55,7 +55,7 @@ func TestExecuteCompileReport(t *testing.T) {
 	// refusal line) and reports under the anonymous display name.
 	stdout.Reset()
 	stderr.Reset()
-	capSrc := `def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`
+	capSrc := `def m {f: ([y:Integer] => [y add 1])} add 1 (5 (m get "f") apply) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`
 	if code := Execute([]string{"-compile-report", "-e", capSrc}, strings.NewReader(""), &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d, stderr=%s", code, stderr.String())
 	}

@@ -75,7 +75,7 @@ keep the two in sync in the same commit.
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
-| [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled — VERDICT 2026-08-17: resolve by fix, clause 3 ruled BROAD (a user paren never re-steps, inline application removed; ReachGroup exclusion stays; fix not yet built); discharged by the fix plus a `canon`/`typeof`-pinned row, the name residue being NUR074's class | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
+| [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` was `42` interpreted and `fn z` compiled — **RESOLVED 2026-08-24** by the ruled BROAD fix: every paren PLACES its collapsed Function (reach groups excluded), the inline-application idiom is removed, both engines agree, pinned via `canon`/`typeof` in `fn-value.tsv` §4b | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
 | [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
 | [NUR077](#nur077) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer — VERDICT 2026-08-17: resolve by fix, a NEW dedicated Apply Op (arity-carrying, consumes the value, seamed at `execFnDefLiteral`; `DoEval` stays reserved), after the three prerequisite recorder/gate defects are fixed | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
 | [NUR078](#nur078) | A bare fn name before a `Function`-typed slot still resolves as a reference, against amended ADR-011 — the engine's TFunction intercept implements the exception the 2026-08-17 amendment struck (`h zero` ≡ `h zero/r` when the slot is `Function`-typed; a call/barrier before any other slot) — VERDICT 2026-08-17: resolve by fix, open-work item B (all four sites retire together, re-opening the NUR038 call-head question in the implementing PR) | the ADR-011 amendment, 2026-08-17 (flagged by the PR #381 review, Codex P1) |
@@ -2018,7 +2018,8 @@ them revealed.
 
 ## NUR073 — The engines disagree on re-stepping a paren-collapsed Function {#nur073}
 
-**Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** PR #375
+**Status:** RESOLVED by fix (BROAD), 2026-08-24 · **Recorded:**
+2026-08-16 · **Surfaced by:** PR #375
 (break 1 of the `/r` survey) — a spec row drafted to pin the park's
 positionality turned out to be the one row in 6219 the compiled
 differential rejects; flagged for this register by the PR #375 review
@@ -2083,9 +2084,8 @@ already strips the name; the residual renderer does not), so this record
 is discharged by clause 3 **plus** a row pinned via `canon`/`typeof`
 rather than on the bare residual.
 
-**Verdict:** resolve by fix — **BROAD** (maintainer, 2026-08-17). The
-clause-3 implementation fork is decided; the fix is not yet built (both
-engines still apply `(fn Integer [Integer] [10 add]) 7` today). Under
+**Verdict:** resolve by fix — **BROAD** (maintainer, 2026-08-17),
+**landed 2026-08-24**. Under
 broad, a user paren never re-steps its
 collapsed value, reference and inline literal alike, so
 `(fn Integer [Integer] [10 add]) 7` becomes two values and the
@@ -2130,6 +2130,35 @@ paren re-steps, and the lanes agree on the collect). Until it lands,
 "the only such row in the corpus" stays true of the spec corpus but
 not of the reachable surface: the class has at least these two further
 spellings.
+
+**RESOLUTION (2026-08-24).** Clause 3 is implemented. `fnReturnPark`
+(`core/go/engine.go`) now parks a collapsed single unquoted Function for
+EVERY paren, keyed on `!wasReachGroup` instead of the frame-open test, so
+a user paren places its value exactly as a fn frame's return did. The
+reach-group exclusion stays load-bearing (dot access — its re-step IS the
+dispatch, `MathUtil.sqrt 16`), and a bare WORD inside a group still
+dispatches during the group's own evaluation (`(g)` calls `g`).
+
+Both engines now agree, which is what discharges this record. Pinned as
+`lang/spec/fn-value.tsv` §4b through `canon` and `typeof` — not the bare
+residual, per the correction above: a name-rendering difference survives
+there (the interpreter's value carries the resolved PARAM name, the
+compiler's the defining name), and that residue belongs to NUR074's
+class, not this one's.
+
+Costs paid with the fix, as budgeted: the inline-application idiom is
+gone (`(fn Integer [Integer] [10 add]) 7` is two values; the spelling is
+`7 (fn …) apply`), and the affected corpus rows were rewritten to the
+surviving spellings across `valof`, `apply`, `usurp`, `modifiers`,
+`fn-triple`, `class`, `corpus-core`, `corpus-structures`, `module-fmt`
+and `recursion`. Two compile-lane soundness guards shipped with it, each
+closing a miscompile window the park made REACHABLE (the §5.8 campaign's
+lesson — an admission is never a local change): `tryRecordPoly` declines
+a stack-only mixed-arity window over dynamic carriers (`apply`'s gradual
+[Reach Any] match where runtime dispatches [Function]), and
+`recordCallElided` declines a dynamic non-carrier lead for the same
+reason. ADR-011 carries the amendment; `REFERENCE.md` §Grouping states
+the user-facing contract.
 
 ---
 

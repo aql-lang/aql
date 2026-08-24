@@ -207,7 +207,7 @@ var frontierCases = []frontierCase{
 		// The capture shape from run_compile_report_test.go (verbatim
 		// — the leading map-lambda statement is load-bearing for the parse):
 		// the service handler closes over n.
-		return fcStampedRun(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`, "anonymous fn")
+		return fcStampedRun(`def m {f: ([y:Integer] => [y add 1])} add 1 (5 (m get "f") apply) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`, "anonymous fn")
 	}},
 	// UN-GRADUATED 2026-07-18: the gen/property bodies were graduated
 	// 2026-07-14 (stored-param-body units on the VM), but a direct rand-call

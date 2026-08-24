@@ -1197,6 +1197,7 @@ func installCheckBraid() {
 	core.CheckBraid.TagCheckModeDefRead = tagCheckModeDefRead
 	core.CheckBraid.TryDynamicFnValueDispatch = tryDynamicFnValueDispatch
 	core.CheckBraid.TryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
+	core.CheckBraid.ParenPlacedFnCarrier = parenPlacedFnCarrier
 	core.CheckBraid.TryShapedMethodDispatch = TryShapedMethodDispatch
 	core.CheckBraid.UndefinedWordCheckDiag = undefinedWordCheckDiag
 }
@@ -1220,3 +1221,37 @@ func installAnalysisImpl() {
 }
 
 func init() { installAnalysisImpl() }
+
+// parenPlacedFnCarrier is fnReturnPark's check-side twin (NUR073's BROAD
+// park): a pinpointed member-fn read carries its fn identity in the
+// recorder's side table, not in the carrier's type, so core cannot see
+// that a user paren just collapsed to a FUNCTION. Without this the lanes
+// disagree — `(m dot f) 5` parked interpreted and applied compiled, which
+// TestCompiledCombinationParity caught. Dot SUGAR is unaffected: its group
+// is reach-lowered, excluded before the park asks.
+func parenPlacedFnCarrier(e *core.Engine, idx int) bool {
+	r := e.Registry
+	if r == nil || r.Check == nil {
+		return false
+	}
+	es := r.Check.Recorder()
+	if es == nil || !es.Active() {
+		return false
+	}
+	v := e.Tape.At(idx)
+	if v.ID == "" {
+		return false
+	}
+	if _, ok := es.MemberFnReadValue(v.ID); !ok {
+		return false
+	}
+	// Core asks only AFTER excluding reach groups, so reaching here proves
+	// a USER paren: record the id for the compiler's residual lowering.
+	if cs := r.Check; cs != nil {
+		if cs.ParenPlacedFnIDs == nil {
+			cs.ParenPlacedFnIDs = map[string]bool{}
+		}
+		cs.ParenPlacedFnIDs[v.ID] = true
+	}
+	return true
+}

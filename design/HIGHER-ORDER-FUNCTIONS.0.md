@@ -34,15 +34,17 @@ through a parameter, and one live **engine disagreement**.
 | Are functions first-class? | **Yes.** Storable in lists and maps, passable, returnable, closing over locals, recursive, introspectable. |
 | Can all combinators be implemented? | **Yes**, since the `/v` change (2026-08-19). S, K, I, B, C, W, U, the full Church basis — booleans *including* `and`/`or`, numerals, pairs — CPS, and a working parser-combinator library were all built and run. The one construction the first pass could not finish now works in its naive spelling (§1.2, §5.2). |
 | Is it *pleasant*? | **Much more so.** `/v` is total over binding kinds, so the polymorphic combinators need no escape hatch — the two undocumented idioms (`(args).N` and boxing) are no longer required. |
-| Is it *safe*? | **Not yet.** Three silent-wrong-answer classes and one interpreter-vs-compiler divergence, listed in §5. |
+| Is it *safe*? | **Safer since 2026-08-24.** The interpreter-vs-compiler divergence (§5.7, NUR073) is CLOSED by the BROAD fix. Three silent-wrong-answer classes remain, listed in §5. |
 
 **One-line summary:** boru's function substrate is complete — every
 combinator in the audit was built and run — and since `/v` became total
 over binding kinds the surface has one spelling for "the value, whatever
 kind it is". What remains is narrower: a *call-vs-value* ambiguity at the
-paren-application and capitalised-name sites, and the fact that the
-correctness of a higher-order program can still depend on which engine
-runs it (§5.7).
+paren-application and capitalised-name sites. The engine-dependence that
+this line originally named (§5.7) is closed as of 2026-08-24: the BROAD
+fix makes a paren place its collapsed Function on both lanes, and with it
+the paren-application ambiguity itself is gone — application is now
+explicit, which is a surface change every §1 program had to absorb.
 
 > **Re-assessed 2026-08-19** after `/r`→`/v` / `ref`→`valof` landed with the
 > function-only gate removed. §5.2 is closed and NUR085 retired; §5.1,
@@ -78,6 +80,27 @@ Every program below was written and run against this tree, under both
 fallback), and is quoted here in full — definitions **and** the calls that
 produced the quoted output — so it can be re-run from the note itself.
 
+> **Superseded in spelling 2026-08-24 — NUR073's BROAD fix landed.** Every
+> §1 program below is written in the paren-application idiom
+> (`((f a) b)`), and that idiom no longer exists: a paren PLACES its
+> collapsed function value and never re-steps it, so application is
+> explicit. The programs themselves all still work — each was re-derived
+> and re-run in the new spelling, and the corpus rows carry it — so the
+> substrate verdict is unchanged; only the surface moved. The mechanical
+> translation is three rules:
+>
+> - a def-bound WORD still calls: `(toint c3/v)` is unchanged;
+> - a param-held fn applies through `apply`, argument beneath:
+>   `(f x)` becomes `x f/v apply`;
+> - a curried chain stages: `((f a) b)` becomes `b (f a) apply`.
+>
+> So `def ii ((ss kk/v) kk/v)` is now `def ii (kk/v (ss kk/v) apply)`,
+> and `(ii 42)` is `42 ii/v apply` — still `42`, still `check: 0
+> error(s)`. The parser-combinator library of §1.5 produces its four
+> quoted results byte-for-byte in the new spelling. Read the transcripts
+> below as the 2026-08-19 record; read
+> `lang/spec/frontier/frontier-hof-audit.tsv` for what runs today.
+>
 > **Pinned 2026-08-21.** These transcripts are now also a standing gate:
 > `lang/spec/frontier/frontier-hof-audit.tsv` re-checks every §1.1–§1.5
 > value (plus §1.6's combinator rows) on the interpreter oracle on every
@@ -832,8 +855,8 @@ applies that shape, so its divergence (§1.4) has a different, still
 unestablished cause — see the correction above.
 
 **Workaround:** `def h (mk 1)` then `2 h/v apply` → `3`.
-**Forward hazard:** NUR073's accepted **BROAD** verdict removes inline
-application entirely — *"`(fn Integer [Integer] [10 add]) 7` becomes two
+**Forward hazard — now realised (2026-08-24).** NUR073's accepted
+**BROAD** verdict removed inline application entirely — *"`(fn Integer [Integer] [10 add]) 7` becomes two
 values and the inline-application idiom is removed"*. That idiom
 currently answers `17`. Combinator code written against today's top-level
 behaviour will change meaning when the fix lands.
@@ -905,7 +928,18 @@ behaviours (105, the post-`undef` 6, and the frozen 6) are pinned as
 `lang/spec/frontier/frontier-hof-audit.tsv` §8, and the contract is
 documented in `REFERENCE.md` §"Definition and scoping".
 
-### 5.7 The engines disagree — NUR073, live today
+### 5.7 The engines disagree — NUR073, ~~live today~~ **RESOLVED 2026-08-24**
+
+> **Closed 2026-08-24.** The BROAD verdict's clause-3 fix landed: every
+> paren PLACES its collapsed Function (the reach-group exclusion stays,
+> so dot access still dispatches). `((h z/v))` is now the held value on
+> BOTH engines, pinned through `canon`/`typeof` in
+> `lang/spec/fn-value.tsv` §4b — the bare residual keeps a
+> name-rendering difference that belongs to NUR074's class, which is why
+> the pin is not on it. The transcript below is the pre-fix record; the
+> "choice of engine is a choice of semantics" claim it makes no longer
+> holds for this shape, and with it §0's "one live engine disagreement"
+> line is discharged.
 
 ```
 $ cat n73.boru
@@ -1386,8 +1420,13 @@ Remaining stages, each its own probe-driven increment:
    def-bound-computed-fn refusal until that family graduates).
 5. **Fix NUR087** — the checker refusing a correct closure is the only
    finding that stops a working program from running at all.
-6. **Land NUR073.** Until it lands, `-no-compile` and the default are two
-   languages for higher-order code, and the difference is silent.
+6. ~~**Land NUR073.**~~ **Done (2026-08-24):** the BROAD fix landed — a
+   paren places its collapsed Function on every lane, so `-no-compile`
+   and the default are one language for these shapes again. The cost the
+   verdict budgeted was paid: the paren-application idiom is gone and
+   every §1 program was re-spelled with explicit `apply` (see the §1
+   note). NUR073 is discharged, pinned via `canon`/`typeof` in
+   `lang/spec/fn-value.tsv` §4b.
 
 ---
 

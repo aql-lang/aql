@@ -20,8 +20,12 @@ func TestParenBoundedTrailingApply(t *testing.T) {
 }
 
 func TestParenBoundedApplyFeedsCall(t *testing.T) {
-	// The paren-bounded apply result feeds a following native call —
-	// the exact reorder hazard the event-collapse solves.
+	// The paren-bounded closure inside a consumer's window. Under the BROAD
+	// park (NUR073 clause 3) the inner collapse PLACES the closure instead of
+	// eagerly applying it against the 5, so cdub collects the 5 first (→ 10)
+	// and the placed closure dispatches at its next pointer encounter against
+	// cdub's result (→ 110). Pre-BROAD the eager inner apply gave cdub 105
+	// (→ 210); that order is gone with the re-step.
 	runTolerant(t, registerDynWords, func() []core.Value {
 		return []core.Value{
 			core.NewWord("cdub"),
@@ -30,7 +34,7 @@ func TestParenBoundedApplyFeedsCall(t *testing.T) {
 			core.NewOpenParen(), core.NewWord("cmk1"), core.NewCloseParen(),
 			core.NewCloseParen(),
 		}
-	}, "210")
+	}, "110")
 }
 
 func TestParenLeadingDynamicRefuses(t *testing.T) {
