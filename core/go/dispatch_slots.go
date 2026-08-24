@@ -49,9 +49,9 @@ var CheckBraid = struct {
 	// side table rather than the value's type). fnReturnPark asks it so a
 	// user paren places such a carrier exactly as the interpreter places
 	// the concrete Function it stands for (NUR073's BROAD park).
-	ParenPlacedFnCarrier         func(e *Engine, idx int) bool
-	TryShapedMethodDispatch      func(e *Engine, valIdx int) bool
-	UndefinedWordCheckDiag       func(e *Engine, name string, pos SrcPos) CheckDiagnostic
+	ParenPlacedFnCarrier    func(e *Engine, idx int) bool
+	TryShapedMethodDispatch func(e *Engine, valIdx int) bool
+	UndefinedWordCheckDiag  func(e *Engine, name string, pos SrcPos) CheckDiagnostic
 }{
 	CheckMixedFormAdvisories:     inactiveCheckMixedFormAdvisories,
 	CheckModeAssumeSig:           inactiveCheckModeAssumeSig,
