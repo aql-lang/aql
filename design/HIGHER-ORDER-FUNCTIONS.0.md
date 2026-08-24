@@ -862,7 +862,23 @@ currently answers `17`. Combinator code written against today's top-level
 behaviour will change meaning when the fix lands.
 **Severity:** silent wrong answer under `print`.
 
-### 5.5 The checker rejects correct higher-order programs, and `boru run` obeys it
+### 5.5 ~~The checker rejects correct higher-order programs~~ — **RESOLVED 2026-08-24**
+
+> **Closed 2026-08-24 (NUR087 retired).** The repro below, and the §1.5
+> library in its ORIGINAL spelling, now check clean and run under plain
+> `boru run`. Root cause, and it is narrower than this section's framing:
+> the `if` was never the trigger. `checkModeParenFnCollapse` — the
+> machinery built to close exactly this def-split false-positive class —
+> required the call's ARGUMENT to be non-dynamic, so `def r2 (b (r1.rest))`
+> (a call through a `Function` param whose argument is an earlier dynamic
+> binding) did not collapse, the pending `def` collected nothing, and every
+> later read of `r2` raised a false `undefined_word`. A dynamic argument
+> makes the result no less knowable than a static one — the window
+> collapses to `dynamic(Any)` either way — so the restriction bought no
+> soundness. Pinned as `lang/spec/fn-value.tsv`'s chained def-split rows,
+> flat and branch-local.
+
+### 5.5 (as recorded) The checker rejects correct higher-order programs, and `boru run` obeys it
 
 Minimal repro — a `def` inside an `if` branch becomes invisible once an
 earlier `def` in the same body bound the result of a call **through a
@@ -1418,8 +1434,13 @@ Remaining stages, each its own probe-driven increment:
    `REFERENCE.md` §"The `boru:fn-util` module"; behaviour rows in
    `lang/spec/frontier/frontier-fn-util.tsv`, ledgered under the
    def-bound-computed-fn refusal until that family graduates).
-5. **Fix NUR087** — the checker refusing a correct closure is the only
-   finding that stops a working program from running at all.
+5. ~~**Fix NUR087**~~ — **Done (2026-08-24).** The checker no longer
+   refuses the §1.5 library: the def-split collapse now admits a DYNAMIC
+   argument, which is the shape a parser combinator is built from
+   (`def r1 (a s)` then `def r2 (b (r1.rest))`). The audit's headline
+   complaint — a correct program stopped by its own pre-flight — is
+   closed, and the library runs under plain `boru run` in the spelling
+   this note quotes.
 6. ~~**Land NUR073.**~~ **Done (2026-08-24):** the BROAD fix landed — a
    paren places its collapsed Function on every lane, so `-no-compile`
    and the default are one language for these shapes again. The cost the

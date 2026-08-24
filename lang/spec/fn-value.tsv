@@ -154,6 +154,8 @@ def compose fn [[f:Function g:Function x:Integer] [Integer] [f (g x)]] compose (
 def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5	7	self-composition — the same fn value read twice, applied at two depths
 def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5	7	the def-split idiom: the apply seats in a def, the tail applies over the bound name (replayIsBodyTail's windowReadsID arm)
 def tds fn [[g:Function x:Integer] [Integer] [def r (x g) g r]] tds ([n:Integer] => [n add 1]) 5	7	the trailing-spelling def-split twin — same seating through the trailing RecordDynApply event
+def chain fn [[a:Function b:Function s:Integer][Integer][def r1 (a s) def r2 (b r1) r2]] chain ([n:Integer] => [n add 1]) ([n:Integer] => [n mul 10]) 4	50	CHAINED def-split (NUR087, fixed 2026-08-24): the second def calls through a Function param with the FIRST def's dynamic binding as its argument. The collapse used to require a non-dynamic argument, so this window stalled the pending def and every later read of r2 raised a false undefined_word — refusing a program both engines run
+def chainif fn [[a:Function b:Function s:Integer][Integer][def r1 (a s) if (gt 0 r1) [def r2 (b r1) r2] [0]]] chainif ([n:Integer] => [n add 1]) ([n:Integer] => [n mul 10]) 4	50	…and the branch-local spelling NUR087 was recorded from — the `if` was never the trigger, the dynamic ARGUMENT was
 #
 # §9  gradual-Any into a multi-overload user fn with DIFFERING arm returns.
 #     The checker cannot statically commit an arm, and until 2026-08-03 one

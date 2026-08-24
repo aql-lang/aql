@@ -130,8 +130,8 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   deliberately so — re-assessed twice 2026-08-21 (post type-node fusion
   and valof-flip; its §5.8 chronicles the PR #397 compilability
   campaign stage by stage), it records behaviour that NUR073, NUR078,
-  NUR086, NUR087, NUR088, NUR089, NUR091, NUR096 and NUR097 are each
-  expected to change (NUR085 and NUR095 landed — §5.2 is closed by the
+  NUR086, NUR088, NUR089, NUR091, NUR096 and NUR097 are each
+  expected to change (NUR085, NUR095, NUR073 and NUR087 landed — §5.2 is closed by the
   `/v` totality rule; §5.4's transcripts are corrected in place
   2026-08-24: they were the compiled lane's, NUR073's class), so read
   its §4.2 and §5 against the register rather than as current truth.

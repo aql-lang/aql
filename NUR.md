@@ -86,7 +86,6 @@ keep the two in sync in the same commit.
 | [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
 | [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
 | [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
-| [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
@@ -2755,83 +2754,6 @@ uniformity: `filter`'s list Function form passes a `{key,value}` pair
 — either an element-shaped list form or an explicit ruling that the pair
 wrapper is `filter`'s contract — and this record should not be discharged
 by the four additions alone.
-
----
-
-## NUR087 — A `def` inside an `if` branch is lost to the checker after a `def` bound a call through a `Function` parameter {#nur087}
-
-**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
-higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5)
-— a parser-combinator library that runs correctly is refused by the
-default `boru run`
-
-**Rule:** the checker is an *analysis* pass over a program the engine
-will run; a program the engine runs correctly must not be reported as an
-error (the check-accuracy discipline, `design/CHECK-ACCURACY-RATCHET.10.md`).
-`boru run` performs the check as a pre-flight and refuses on any Error,
-so a false positive is not advisory — it stops the program.
-
-**Divergence:** in a fn body, a `def` inside an `if` branch is not
-recorded once an **earlier** `def` in the same body bound the result of a
-call through a `Function` **parameter**. Minimal repro:
-
-```boru
-def mk fn [[a:Function b:Function] [Function] [
-  ( fn s:Integer Map [
-      def r1 (a s)
-      if (r1.ok)
-        [ def r2 (b (r1.rest))
-          if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
-                     [ {ok:false rest:s val:None} ] ]
-        [ {ok:false rest:s val:None} ] ] ) ]]
-def h (mk ([z:Integer] => [ {ok:true val:1 rest:8} ])
-          ([z:Integer] => [ {ok:true val:2 rest:9} ]))
-print (h 1)
-```
-
-```
-$ boru check m_checkfp4.boru
-check: 6:15: [error] undefined_word: undefined word: r2
-  = help: did you mean `r1`?
-check: [error] no_signature: cannot call `dot` — no signature matches the arguments; got (Atom, Word)
-  … 6 error(s)
-
-$ boru run -no-check m_checkfp4.boru
-{"ok": true, "val": [1, 2], "rest": 9}
-```
-
-`r2` is bound one line above its use, in the same branch. Replacing
-`def r1 (a s)` with a map literal — removing only the call through the
-`Function` parameter — makes the same file check clean, which isolates
-the trigger to that binding rather than to the nested `if`.
-
-**What it costs.** The shape is not exotic: it is the ordinary
-"run a parser, branch on success, run the next one" body, and it is what
-made the audit's parser-combinator library fail `boru run` outright
-(`check failed: 6 error(s)`, exit 1) while running correctly under
-`-no-check` on both engines. The follow-on `no_signature` on `dot` is
-collateral — having lost `r2`, the checker cannot type `r2.ok`.
-
-**Evidence:** the transcripts above, against this tree.
-`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.5 and §5.5 carry the full
-library and the reduction. Not previously recorded.
-
-**Documentation status:** undocumented as a class.
-`design/CHECK-FALSE-POSITIVES.0.md` and
-`design/CHECK-ACCURACY-RATCHET.10.md` record the known `undefined_word`
-false-positive classes in detail — dynamic-scope reads across a call
-chain, mini-redis's `expires`, the `zr` inline application, the
-closure-return `def f (mk 7)` rows — and this shape (a branch-local `def`
-lost after a `Function`-parameter call bound an earlier one in the same
-body) is not among them; no `lang/spec/*.tsv` or frontier row pins it
-either. `CLI.md` documents `--no-check` as a way to skip the pre-flight,
-but not as the remedy for a checker false positive, so a user meeting
-this has nothing that names their situation.
-
-**Verdict proposed:** resolve by fix — the branch-local `def` must be
-recorded whatever the provenance of an earlier binding in the same body.
-This record retires when the repro above checks clean, with the reduced
-file pinned as a negative test alongside it.
 
 ---
 

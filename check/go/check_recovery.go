@@ -583,6 +583,20 @@ func noteSpeculativeBarrierCommit(e *core.Engine, fwd core.ForwardInfo) {
 // un-collapsed (the spellings' collection orders diverge beyond one
 // argument — same edge as the compile side). Returns the possibly-shrunk
 // closeIdx.
+//
+// The leading case admits a DYNAMIC argument (NUR087's fix, 2026-08-24).
+// It previously required `!last.Dynamic`, which left exactly this
+// machinery's own false-positive class open one step further out: `def r2
+// (b r1)` — a call through a Function PARAM whose argument is an earlier
+// dynamic binding — did not collapse, so the pending `def` collected
+// nothing and every later read of `r2` raised a false `undefined_word`.
+// That is the shape the audit's parser-combinator library is built from
+// (`def r1 (a s)` then `def r2 (b (r1.rest))`), and it made plain
+// `boru run` refuse a program both engines run correctly. A dynamic
+// argument makes the RESULT no less knowable than a static one — the
+// window collapses to dynamic(Any) either way — so the restriction bought
+// no soundness. `IsFnValueResidual` still excludes a trailing fn VALUE
+// (a curried chain, where the window is not one call).
 func checkModeParenFnCollapse(e *core.Engine, openIdx, closeIdx int) int {
 	if !e.Registry.Check.Mode {
 		return closeIdx
@@ -604,7 +618,7 @@ func checkModeParenFnCollapse(e *core.Engine, openIdx, closeIdx int) int {
 	}
 	last := e.Tape.At(lastIdx)
 	trailing := !last.Dynamic && !last.Quoted && core.IsFnTypedCarrier(last)
-	leading := leadIdx >= 0 && count == 2 && !last.Dynamic && !core.IsFnValueResidual(last)
+	leading := leadIdx >= 0 && count == 2 && !core.IsFnValueResidual(last)
 	if !trailing && !leading {
 		return closeIdx
 	}
