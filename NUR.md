@@ -2113,10 +2113,12 @@ lane's. Verified against both the audit-day tree (`e332d15`) and HEAD:
   with a stranded `2`. On the audit-day tree the shape compiled
   NATIVELY, so the default lane diverged silently from `-no-compile` —
   a second live row of this class while the audit's §0 counted one.
-  The §9g guard (`12c8150`, 2026-08-21) made the compile refuse
-  loudly, so today the default lane answers 3 behind the fallback
-  warning and the collect answer is reachable only via
-  `-force-compile`.
+  The §9g guard (`12c8150`, 2026-08-21) made the compile refuse, so
+  today the lanes agree on 3: `boru run` answers 3 behind the loud
+  fallback warning, `boru do` — the audit's transcript command —
+  falls back silently by design, and `-force-compile` refuses with a
+  `force-compile` error rather than running the old lowering. The
+  quoted `fn (Integer)` / `2` reproduces only on a pre-guard tree.
 - the fn-body twin `def g fn x:Integer Integer [((mk 1) 2)]` then
   `(g 0)`: LIVE at HEAD and check-clean — interpreted **3**, exit 0;
   compiled (the checked default included) raises

@@ -87,8 +87,10 @@ produced the quoted output — so it can be re-run from the note itself.
 > family, NUR087's check false positive). The §1.4 divergences — Z, and
 > the naive Y that no strict language can run — are deliberately NOT
 > pinned: no budget bounds them (see the §1.4 correction), so a test
-> would hang the suite. The deterministic §5.4 rule that causes Z's
-> divergence is pinned instead (the corpus file's §7 rows).
+> would hang the suite. The deterministic §5.4 behaviour implicated in
+> Z's compiled-lane divergence is pinned instead (the corpus file's §7
+> rows: the statement-level apply and the `/v apply` workaround — the
+> 2026-08-24 correction in §5.4 narrows what that rule explains).
 
 ### 1.1 The classical combinator bases
 
@@ -258,9 +260,18 @@ print (fact 5)       ;# 120
 
 The full **Z combinator** (`λf.(λx.f(λv.(x x)v))²`) **diverges**. The
 cause is not call-by-value eagerness: lambda bodies were confirmed lazy
-(a `raise` inside an unapplied lambda body never fires). The cause is
-§5.4 — `((x x) v)` does not parse as an application inside a body, so
-the `λv` thunk never actually guards the recursion.
+(a `raise` inside an unapplied lambda body never fires). On the
+compiled lane the cause is §5.4's collect — `((x x) v)` does not
+apply there, so the `λv` thunk never actually guards the recursion.
+
+> **Corrected 2026-08-24.** This originally attributed the divergence
+> to §5.4 unconditionally ("`((x x) v)` does not parse as an
+> application inside a body"). §5.4's same-date correction shows the
+> interpreter DOES apply that shape — the collect is the compiled
+> lane's — so the attribution above holds for the compiled lane only.
+> Why the interpreter's run also diverges is unestablished, and cannot
+> be re-established from this page: the Z source was not quoted here,
+> the one §1 program that was not.
 
 > **Corrected 2026-08-21.** This originally said "it hangs until the
 > step limit". Measured: the step limit never trips — a run under
@@ -798,9 +809,12 @@ the audit was written; same class, same payload.)
 > and answers 3 today — so "the argument window merely collects both"
 > recorded a silent engine divergence (NUR073's class, where §0 counted
 > one such divergence), not a lane-independent context rule. Since the
-> §9g guard (`12c8150`) the print shape REFUSES compilation, so the
-> default lane now answers 3 behind the loud fallback warning and the
-> quoted `fn (Integer)` / `2` reproduces only under `-force-compile`.
+> §9g guard (`12c8150`) the print shape REFUSES compilation and the
+> lanes agree on 3 — `boru run` behind its loud fallback warning,
+> `boru do` (the command these transcripts use) falling back silently
+> by design, `-force-compile` refusing with a `force-compile` error —
+> so the quoted `fn (Integer)` / `2` reproduces only on a pre-guard
+> tree.
 > The fn-body arity error above is likewise the compiled lane's, and
 > that row is LIVE and check-clean today: interpreted `(g 0)` answers
 > 3, exit 0, where the checked default raises the quoted error, exit 1
@@ -812,8 +826,10 @@ the audit was written; same class, same payload.)
 > (whose source this note does not quote — the one §1 program that
 > cannot be re-run from the page) has no established cause here.
 
-This is why the Z combinator diverges: `((x x) v)` never applies, so the
-`λv` guard is inert.
+On the COMPILED lane this is why the Z spelling cannot work: `((x x)
+v)` never applies there, so the `λv` guard is inert. The interpreter
+applies that shape, so its divergence (§1.4) has a different, still
+unestablished cause — see the correction above.
 
 **Workaround:** `def h (mk 1)` then `2 h/v apply` → `3`.
 **Forward hazard:** NUR073's accepted **BROAD** verdict removes inline
