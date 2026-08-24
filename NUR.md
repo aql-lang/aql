@@ -92,6 +92,7 @@ keep the two in sync in the same commit.
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
+| [NUR098](#nur098) | `apply` is the corpus's one mixed-OVERLOAD word: the `[Function]` overload is all-stack (`5 f/v apply` → 6; `5 apply f/v` refuses) while `[Reach Any]` is fully forward-eligible (`[10 20 30] apply $.1` → 20), so one word carries opposite sourcing regimes and its own registration comment ("Stack-only: …") is contradicted by its second signature — VERDICT 2026-08-24: resolve by fix, `apply` becomes stack-only with no per-overload exception (measured cost: zero in-tree forward-spelling callers) | maintainer direction during the higher-order design review follow-up, 2026-08-24 |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -3194,3 +3195,74 @@ line N; module names resolve late") would catch it without touching
 semantics. This record is discharged by an Allowed verdict naming that
 hint as the mitigation (or by a maintainer ruling the hint unnecessary,
 with the §8 rows and the REFERENCE.md contract as the pinned acceptance).
+
+---
+
+## NUR098 — `apply`'s two overloads source arguments oppositely: one word, both regimes {#nur098}
+
+**Status:** Pending · **Recorded:** 2026-08-24 · **Surfaced by:**
+maintainer direction during the higher-order design completeness
+review follow-up (the "why is `apply` stack-form" discussion), against
+ADR-004-REFINEMENT §2.2's mixed-overload measurement
+
+**Rule:** argument sourcing is a property of the WORD. ADR-004's
+stack-only closed list exists so that "where do this word's operands
+come from" has one answer a caller can learn once (`REFERENCE.md`
+§"Two non-shuffle words…"; admission criteria in
+`design/ADR-004-REFINEMENT.0.md` §2.3).
+
+**Divergence:** `apply`'s overloads answer oppositely. The
+`[Function]` overload is all-stack (`BarrierPos: 0`); the
+`[Reach Any]` overload is fully forward-eligible (`BarrierPos: -1`) —
+both in `lang/go/native/native_valof.go`, where the WORD-level comment
+reads "Stack-only: `args... fn apply` …" and the second signature
+beneath it is not:
+
+```
+$ boru do 'def f x:Integer => [add 1 x] end 5 f/v apply'    → 6
+$ boru do 'def f x:Integer => [add 1 x] end 5 apply f/v'    → error: cannot call `apply` — no signature matches
+$ boru do '[10 20 30] apply $.1'                             → 20   (forward — works)
+$ boru do '[10 20 30] $.1 apply'                             → 20   (stack — same answer)
+```
+
+`design/ADR-004-REFINEMENT.0.md` §2.2 measures this as the corpus's
+ONLY mixed-overload word (its "20 vs 19" mixed-word-count discrepancy
+is exactly `apply`), and the help renderer carries a dedicated
+"Precedence: varies by signature — see the split below" banner to
+describe the split.
+
+**Consequence:** the word whose semantic admission ground is "the
+function arrives after the values it consumes" — the flagship of
+application-as-a-stack-act — is also the register's one exception to
+per-word sourcing uniformity. A caller must know which OVERLOAD they
+are hitting to know where operands come from; the fn overload's
+refusal help ("forward args for apply may have run into the next
+word") warns about a hazard the word's other overload invites; and
+every statement that "`apply` is stack-only" (the REFERENCE.md closed
+list, the registration comment) is true of one signature and false of
+the other.
+
+**Evidence:** the transcripts above, run against this tree
+(`cmd/go/bin/boru`); the two `BarrierPos` values at
+`lang/go/native/native_valof.go`; ADR-004-REFINEMENT §2.2's
+apply-is-the-difference measurement. Measured usage of the forward
+reach spelling at recording: **zero** — no `apply $…` call form
+appears anywhere in the tree (`lang/spec/`, `REFERENCE.md`,
+`TUTORIAL.md`, `HOWTO.md`, `utils/`, `kg/queries.boru`, all `.boru` /
+`.tsv` / `.md` files outside `kg/out/`); the spelling lives only in
+`apply`'s own help text (`help_storage.go`'s "xs apply $.1" and the
+registration comment's `apply $.name person`). The stack spelling
+computes the same answers today, so the forward form is redundant
+surface.
+
+**Verdict:** resolve by fix (maintainer, 2026-08-24): **`apply` is
+stack-only — no per-overload exceptions.** The `[Reach Any]` overload
+moves to `BarrierPos: 0`, making every `apply` signature
+stack-sourced, so the closed-list entry, the registration comment, and
+the semantic admission ground hold for the whole word. Cost at
+recording: no in-tree caller changes; the fix touches the overload's
+registration, `apply`'s help text (respell the forward examples), and
+retires the "varies by signature" split banner for this word.
+Discharged by the fix plus pinned rows: a positive row for the stack
+spelling (`xs $.1 apply`) and a negative row asserting the forward
+spelling (`xs apply $.1`) refuses.
