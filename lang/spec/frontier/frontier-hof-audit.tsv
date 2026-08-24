@@ -187,3 +187,11 @@ def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end de
 #     faithfully. Graduation = an arity channel for a fetched-fn apply lead.
 def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]] def rules {inc: ([x:Integer] => [x add 1])} app 5 rules	6	a fn fetched from a Map param, applied explicitly — the interpreter oracle; the compile lane refuses (ledgered)
 def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]] def rules {inc: 42} app 5 rules	ERROR:signature_error	…and its negative twin: a NON-fn in the rule slot makes apply refuse loudly (same lane story)
+#
+# §11 NUR087's branch-local spelling (2026-08-24). The def-split collapse
+#     now admits a DYNAMIC argument, so this CHECKS clean — the false
+#     undefined_word is gone and the flat twin is pinned in
+#     lang/spec/fn-value.tsv. The compile lane still takes the branch
+#     arm's dispatch through recovery, so the row lives here with its
+#     refusal ledgered rather than in the production corpus.
+def chainif fn [[a:Function b:Function s:Integer][Any][def r1 (a s) if (r1.ok) [def r2 (b (r1.rest)) (r2.val)] [0]]] chainif ([z:Integer] => [{ok:true rest:8}]) ([z:Integer] => [{ok:true val:50}]) 4	50	the branch-local def-split (NUR087's own shape): checks clean since the fix; the compile lane recovers the branch dispatch
