@@ -33,6 +33,15 @@ func TestFnReturnPark(t *testing.T) {
 	// PUSHED, not called — parking it would drop its OnPushLit.
 	refined := ReparentValue(NewFunction(FnDefInfo{Name: "refined"}), TAny)
 
+	// The analysis pass's stand-in for a concrete Function: a DYNAMIC
+	// fn-typed carrier (a member read, a call result).
+	dynFn := NewCarrier(TFunction)
+	dynFn.Dynamic = true
+
+	quotedDyn := NewCarrier(TFunction)
+	quotedDyn.Dynamic = true
+	quotedDyn.Quoted = true
+
 	// A named fn collapsed out of a reach group (tagReachCollapsedFn):
 	// dot access to a function is a call, so the park must decline it.
 	reachTagged := NewFunction(FnDefInfo{Name: "m.f"})
@@ -60,6 +69,21 @@ func TestFnReturnPark(t *testing.T) {
 			name: "reach group re-steps", tape: []Value{fnv},
 			closeIdx: 2, notReachGroup: false, want: 0,
 			why: "a reach-lowered group's re-step IS the dispatch (dot access must still call)",
+		},
+		{
+			// The CHECK pass's twin: an analysis pass holds a DYNAMIC
+			// fn-typed carrier where the interpreter holds a concrete
+			// Function, and that carrier is what would dispatch at the
+			// pointer there — so it must park identically or the two lanes
+			// disagree about a user paren (`(m dot f) 5`).
+			name: "dynamic fn-typed carrier parks", tape: []Value{dynFn},
+			closeIdx: 2, notReachGroup: true, want: 1,
+			why: "the check pass's stand-in for a concrete Function must park with it",
+		},
+		{
+			name: "quoted fn-typed carrier is data already", tape: []Value{quotedDyn},
+			closeIdx: 2, notReachGroup: true, want: 0,
+			why: "a Quoted carrier would not have dispatched on re-step either",
 		},
 		{
 			name: "reach-TAGGED value re-steps", tape: []Value{reachTagged},
