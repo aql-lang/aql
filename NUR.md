@@ -89,6 +89,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR101](#nur101) | A paren-computed fn applied inside a LIST LITERAL diverges silently: `[((mk 1) 2)]` bakes `[fn (Integer) 2]` compiled and evaluates to `[3]` interpreted — NUR073's class, still live after BROAD in the one context BROAD did not reach, and the compiled lane contradicts its OWN `[inc 2]` → `[3]` | re-measuring §5.4 after #402, 2026-08-25 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
@@ -232,6 +233,68 @@ site 1's gate needs a replacement contract, not a deletion — and naming that
 contract is a design call the register should not pre-empt. Recorded so the
 divergence between an accepted ADR and the code is not lost; the fix is the
 maintainer's to direct.
+
+---
+
+## NUR101 — a paren-computed fn inside a list literal is applied interpreted, baked compiled {#nur101}
+
+**Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** re-measuring
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.4 against the post-#402 tree
+
+**Rule:** the engines agree. NUR073's BROAD verdict settled that a paren
+PLACES its values rather than re-stepping them, and both lanes were brought
+to one answer; a list literal's contents are evaluated as a sub-program on
+both (`[1 add 2]` → `[3]`).
+
+**Divergence:** a fn value COMPUTED by a paren group and applied inside a
+list literal. No warning, no fallback, exit 0 either way, `boru check` clean
+— the two lanes simply return different data.
+
+```
+$ cat /tmp/l.boru
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [((mk 1) 2)]
+
+$ boru run /tmp/l.boru                    # compiled, NO fallback warning
+[fn (Integer) 2]
+$ boru run -no-compile /tmp/l.boru
+[3]
+$ boru run -force-compile /tmp/l.boru
+[fn (Integer) 2]
+$ boru check /tmp/l.boru
+check: 0 error(s), 0 warning(s), 0 info
+check: List
+```
+
+**The compiled lane is the defect, and it contradicts itself.** A list
+literal evaluates its contents on both lanes, and the compiled lane proves it
+can dispatch a fn there:
+
+```
+$ boru do '[1 add 2]'                                             # → [3] both lanes
+$ boru do 'def inc fn b:Integer Integer [add 1 b] end [inc 2]'    # → [3] both lanes
+```
+
+Only the paren-COMPUTED fn stops it. `[inc 2]` dispatches compiled; `[((mk 1)
+2)]` bakes two values. So this is not the placed-vs-stepped rule applied
+consistently — it is the compiled lane declining to step a value whose
+provenance it lost, in a context where it steps everything else.
+
+**Scope — it is the LIST literal specifically.** The map form falls back and
+therefore agrees (`{k:((mk 1) 2)}` → `{k:3}` both lanes, behind the loud
+"residual value of unknown provenance" warning), and a `/v`-PARKED fn agrees
+by staying inert on both (`[(inc/v) 2]` → `[fn inc(Integer) 2]`). The list
+literal is the one shape that compiles and diverges.
+
+**Why §5.4's correction did not catch it.** That note re-ran the `print` and
+fn-body shapes and recorded the lanes as agreeing on the first; both hold
+today. The list-literal shape was never in the transcript set, so the
+divergence survived the review that closed the rest of NUR073.
+
+**Verdict:** none proposed. The fix direction — teach the compiled lane to
+step a paren-computed fn inside an evaluated container, or refuse the shape
+rather than bake it — is a compiler-lane call, and the safe half (refuse and
+fall back, as the map form already does) is available immediately if the
+silent wrong answer is judged worse than the coverage loss.
 
 ---
 

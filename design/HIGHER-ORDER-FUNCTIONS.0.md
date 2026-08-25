@@ -1014,7 +1014,42 @@ unestablished cause — see the correction above.
 values and the inline-application idiom is removed"*. That idiom
 currently answers `17`. Combinator code written against today's top-level
 behaviour will change meaning when the fix lands.
-**Severity:** silent wrong answer under `print`.
+
+> **Re-measured 2026-08-25, post-BROAD and post-#402 — the severity moves
+> and one NEW divergence falls out.** Every shape on this page was re-run
+> on both lanes against the merged tree.
+>
+> **The `print` divergence is gone.** `print ((mk 1) 2)` answers
+> `fn (Integer)` then `2` on BOTH lanes now, so the recorded severity
+> ("silent wrong answer under `print`") and its NUR073 attribution are
+> discharged. What remains there is not a defect but ADR-011's rule
+> working as written — *calling is an act of the use site*. A placed fn
+> dispatches when it is STEPPED at the pointer and not when an argument
+> window merely collects it, which partitions cleanly:
+>
+> | applies | does not apply |
+> |---|---|
+> | statement level; `def r ((mk 1) 2)`; `((mk 1) 2) add 0`; `2 (mk 1) apply` | `print ((mk 1) 2)`; `[((mk 1) 2)]`; `add 0 ((mk 1) 2)` — which errors loudly |
+>
+> **The fn-body row is still live**, exactly as the 2026-08-24 note
+> records: interpreted `(g 0)` answers 3, the checked default raises
+> `type_error: expected 1 return value(s), got 2`.
+>
+> **And a shape this page never tested diverges silently — NUR101.**
+> `[((mk 1) 2)]` bakes `[fn (Integer) 2]` compiled, with NO fallback
+> warning, and evaluates to `[3]` interpreted. Exit 0 both ways,
+> `boru check` clean, different data. The compiled lane contradicts
+> ITSELF there: `[1 add 2]` and `[inc 2]` both answer `[3]` compiled, so a
+> list literal does evaluate its contents and the lane can dispatch a fn
+> inside one — only a paren-COMPUTED fn stops it. The map form falls back
+> and agrees; a `/v`-parked fn is inert on both. The list literal is the
+> one shape that compiles and diverges, which is why the review that
+> closed the rest of NUR073 missed it: it was never in the transcript set.
+
+**Severity:** ~~silent wrong answer under `print`~~ — that lane divergence
+is closed (see above). What is left is a **designed** use-site rule for the
+shapes on this page, plus one **live silent wrong answer** in a shape this
+page did not test: **NUR101**, `[((mk 1) 2)]`.
 
 ### 5.5 ~~The checker rejects correct higher-order programs~~ — **RESOLVED 2026-08-24**
 
