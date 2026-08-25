@@ -165,12 +165,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// refusal ceiling (0) requires. Graduation = the unmatched-dispatch
 	// trap accepting a RECOVERED window; the rows then move to
 	// lang/spec/apply.tsv §4's negatives.
-	// NUR101 (2026-08-25): a COMPUTED fn applied inside a list literal.
-	// The neighbours that still COMPILE — `[(mk 1)]` (nothing after it),
-	// `[(inc/v) 2]` (parked, inert on both), `[inc 2]` (named, dispatches
-	// on both) — stay in the main corpus; only the diverging shape is here.
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [((mk 1) 2)]`:   {why: "NUR101: the interpreter's autoEvalList runs a list's elements as a SUB-PROGRAM, so a dispatching fn element consumes what follows and the list is SHORTER than the recorder's element count — baked `[fn (Integer) 2]` where interpreted is `[3]`. RecordMakeListInner now REFUSES rather than baking it (COMPILABLE-SUBSET.md: slow, not wrong). Graduation = the recorder modelling the sub-program step, at which point these move into the main corpus", failsWith: "residual value of unknown provenance"},
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [9 ((mk 1) 2)]`: {why: "NUR101: the interpreter's autoEvalList runs a list's elements as a SUB-PROGRAM, so a dispatching fn element consumes what follows and the list is SHORTER than the recorder's element count — baked `[fn (Integer) 2]` where interpreted is `[3]`. RecordMakeListInner now REFUSES rather than baking it (COMPILABLE-SUBSET.md: slow, not wrong). Graduation = the recorder modelling the sub-program step, at which point these move into the main corpus", failsWith: "residual value of unknown provenance"},
 	// NUR099's `fnpred` (2026-08-25): `4 is Even` is the headline spelling
 	// for predicate membership and the one shape of it that does not
 	// compile. The COMPILING forms (typed def, typed param) carry the same
