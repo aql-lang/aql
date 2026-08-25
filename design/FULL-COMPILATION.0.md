@@ -1362,8 +1362,12 @@ the whole run), byte-identical protocol transcripts against the
 interpreter oracle, and green under `-race`. Echo and mini-redis prove
 the *sequential* callback path; nothing in the tree pins the concurrent
 and lifecycle cases — and the corpus's absence is already visible as CI
-noise (`TestTuiServeAllViewersGoneQuits`, a viewer-lifecycle race, flaked
-on this very PR's doc-only diff). Build the corpus on the existing apps
+noise: `TestTuiServeAllViewersGoneQuits` (a viewer-lifecycle race) flaked
+on this very PR's doc-only diff, and `TestServeStepShutdownDrains` (a
+debug-server shutdown drain) flaked under CPU contention during the
+Stage-1 verification run — both pass instantly standalone. Two
+independent server-lifecycle timing tests failing for load rather than
+logic, inside one work session, is the argument for case 11 below. Build the corpus on the existing apps
 (`bench/networking/`: echo, `echo_redis`, `echo_s3`;
 `design/examples/apps/`: mini-redis, mini-s3, todo-api), one case per
 concurrency shape:
