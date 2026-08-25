@@ -89,7 +89,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
-| [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` | reviewing the §5.1 diagnostic, 2026-08-25 |
+| [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
 Pending records normally use a compact form (rule / divergence /
@@ -171,10 +171,24 @@ parameters (compare NUR100, and ADR-016's absolute ban on arity-keyed
 exceptions). It also retires the case-keyed meaning: a fn body would mean one
 thing whatever the name's case.
 
-Open for the implementing change: the surface form (whether `fnpred` mirrors
-`fnsig`'s two forms — the pair form and the spec-list form), and the
-migration of the existing capitalised-fn predicate declarations — `Even`,
-`Positive`, `Negative`, `Pos` in the spec corpus, plus `design/examples/`.
+**Half landed, 2026-08-25.** `fnpred` ships with both of `fnsig`'s forms —
+the pair form `fnpred n:Integer [eq 0 (mod 2 n)]` and the spec-list form
+`fnpred [[n:Integer] [eq 0 (mod 2 n)]]` — and the output slot is supplied
+implicitly as `Any`, which is the honest declaration: both membership
+conventions are supported and they disagree on the return type, so pinning
+it to Boolean would refuse the None-on-failure form. `InstallType` now routes
+on the DECLARATION (`IsDeclaredPredicateFn`) before falling back to the
+parameter count, and `PredicateInputType` believes a declaration whatever the
+fn's shape. Pinned in `lang/spec/fnpred.tsv` (18 rows) and
+`core/go/fnpred_declared_test.go`.
+
+What remains, and why it is not in the same change: the arity route
+(`isPredicateFnValue`, and `PredicateInputType`'s count test) is still live,
+because ~150 sites across the corpus declare predicates the old way. Deleting
+it is a BREAKING change that needs those migrated to `fnpred` first. Both are
+marked DEPRECATED in place with a pointer here so neither is extended
+meanwhile. Only when they are gone does `def <Capitalised> <fn-with-body>`
+become refusable at the declaration — the outcome this record exists for.
 
 **Related.** The 1-argument cases (`def I …`, and the capitalised-constructor
 convention `def New fn opts:Map Service […]` used by `design/examples/`) stay

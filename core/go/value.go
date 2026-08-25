@@ -761,6 +761,19 @@ type FnDefInfo struct {
 	// expander before normal forward collection. Unlike Anonymous (check-mode
 	// only), Macro gates runtime dispatch.
 	Macro bool
+	// Predicate is true iff the FnDef was produced by the `fnpred` word —
+	// the author DECLARED this function to be a membership test, so
+	// InstallType routes a capitalised binding of it to the predicate-type
+	// branch. It is the explicit half of a routing decision that is
+	// otherwise made by counting parameters (isPredicateFnValue,
+	// PredicateInputType), which ADR-016 forbids: arity must never decide
+	// how a function behaves. A declared predicate says so; it is not
+	// inferred from its shape. NUR099.
+	//
+	// It is a DECLARATION, not a one-shot signal like Applied: it rides the
+	// value for its whole life, because "this function is a membership
+	// test" is a property of what was written, not of one call site.
+	Predicate bool
 	// Applied is a ONE-SHOT signal that an application was explicitly
 	// ASKED for at this value — set only by `apply` (native_valof.go) on a
 	// fn whose only signatures are 0-arg, and consumed by the very next

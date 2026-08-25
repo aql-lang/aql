@@ -370,6 +370,25 @@ func init() {
 		},
 	})
 	register(&Entry{
+		Word:    "fnpred",
+		Summary: "A predicate TYPE — a function minus its output.",
+		Description: "The mirror of fnsig: a function TYPE is a function minus its BODY, a predicate type " +
+			"is a function minus its OUTPUT, because a predicate's output is not a choice — it is membership. " +
+			"Two forms, exactly as fnsig has: the 2-arg pair form `fnpred n:Integer [eq 0 (mod 2 n)]`, and the " +
+			"spec-list form `fnpred [[n:Integer] [eq 0 (mod 2 n)]]` (a LIST input always selects the spec-list " +
+			"form, as with fn). Bound to a capitalised name it is a type membership ENFORCES: `4 is Even`, and " +
+			"a parameter or field declared `:Even` admits only values the body accepts. Two membership " +
+			"conventions are supported and the body chooses: return a Boolean, or return the VALUE for a " +
+			"member and `none` for a non-member. " +
+			"Use it whenever you mean a membership test — it says so, where a bare capitalised `def` over a " +
+			"fn body leaves the reader (and the engine) to infer it from the name's case.",
+		Examples: []string{
+			`def Even fnpred n:Integer [eq 0 (mod 2 n)] 4 is Even ; # => true`,
+			`def Even fnpred n:Integer [eq 0 (mod 2 n)] 5 is Even ; # => false`,
+			`def Positive fnpred n:Integer [if (n gt 0) [n] [None]] 0 is Positive ; # => false — none means non-member`,
+		},
+	})
+	register(&Entry{
 		Word:        "tnot",
 		Summary:     "The negation of a type: the type of every value that is NOT of it.",
 		Description: "`tnot Integer` is a Type/Negation matching anything that is not an Integer. Combine with type unions and intersections for precise constraints.",

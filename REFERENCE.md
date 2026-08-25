@@ -1648,22 +1648,43 @@ The newtype-vs-subset distinction and its cross-language rationale are
 explained in **[Explanation: Function signatures](EXPLANATION.md#function-signatures-and-refinement-types)**
 and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
-A predicate can also be a **function body**, which is what makes an
-arbitrary test a type — and it is the one place the capitalisation rule
-bites. `def` on a capitalised name binds a **type**, always, so handing
-it a function mints a predicate type rather than binding a callable:
+**Arbitrary predicates — `fnpred`.** When the test is not a comparison,
+declare it with `fnpred`, the mirror of `fnsig`. A function TYPE is a
+function minus its *body*; a predicate type is a function minus its
+*output*, because a predicate's output is not a choice — it is membership:
+
+| | input | output | body | |
+|---|---|---|---|---|
+| `fn` | ✓ | ✓ | ✓ | the whole function |
+| `fnsig` | ✓ | ✓ | | a function TYPE |
+| `fnpred` | ✓ | | ✓ | a predicate TYPE |
 
 ```boru
-def Even fn n:Integer Boolean [eq 0 (mod 2 n)] ;
+def Even fnpred n:Integer [eq 0 (mod 2 n)]
 4 is Even # returns true
 5 is Even # returns false
 ```
 
-`Even 4` therefore does **not** call anything. The name places its
-lattice node, the `4` is never consumed, and the program exits 0 with
-both left on the stack. `boru check` reports that shape as
-`stranded_type_call` and suggests the fix: lowercase the name when you
-want a function you can call.
+Two membership conventions, and the body chooses: return a **Boolean**, or
+return the **value** for a member and `none` for a non-member — the latter
+lets a predicate double as a normaliser.
+
+```boru
+def Positive fnpred n:Integer [if (n gt 0) [n] [None]]
+0 is Positive # returns false
+```
+
+`fnpred` also takes the spec-list form for an overload set, exactly as `fn`
+and `fnsig` do: `fnpred [[n:Integer] [eq 0 (mod 2 n)]]`.
+
+> **Say it with `fnpred`.** A capitalised `def` over a plain `fn` body —
+> `def Even fn n:Integer Boolean [...]` — also mints a predicate type, and
+> still works. But then the CASE of the name is what decides whether a body
+> is a callable function or a membership test, which is how `def I x:Integer
+> => [add 1 x]` silently becomes a type instead of a function: `I 5` places
+> the type node, never consumes the `5`, and exits 0. `boru check` reports
+> that shape as `stranded_type_call`. `fnpred` removes the guesswork —
+> lowercase names are functions, `fnpred` declares predicates.
 
 #### Recursion and tail calls
 

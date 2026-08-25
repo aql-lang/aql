@@ -254,6 +254,53 @@ var DefinitionNatives = []NativeFunc{
 		},
 	},
 	{
+		Name: "fnpred",
+
+		// `fn` one slot shorter, the OTHER way from fnsig. A function
+		// TYPE is a function minus its body; a predicate TYPE is a
+		// function minus its OUTPUT, because a predicate's output is not
+		// a choice — it is membership:
+		//
+		//	fn      input output body   →  the whole function
+		//	fnsig   input output        →  minus the body   (a function TYPE)
+		//	fnpred  input        body   →  minus the output (a predicate TYPE)
+		//
+		// Two forms, matched longest-first, exactly as fnsig has: the
+		// 2-arg pair form `fnpred n:Integer [eq 0 (mod 2 n)]`, and the
+		// spec-list form `fnpred [[n:Integer] [eq 0 (mod 2 n)]]` for an
+		// overload set. The pair form's input slot carries fn's `tnot
+		// List` Pattern so a list input ALWAYS selects the spec-list
+		// form. NoEvalArgs on both slots for the reasons fn documents —
+		// these are spec and code, not data.
+		//
+		// It exists so a membership test can SAY it is one. Without it,
+		// the only route to an arbitrary predicate type is a capitalised
+		// `def` over a fn body, which makes the CASE of a name decide
+		// whether a body is a callable function or a membership test, and
+		// makes the parameter COUNT decide whether the binding is a
+		// predicate at all — an arity-keyed exception ADR-016 forbids.
+		// NUR099.
+		Signatures: []Signature{
+			{
+				Args:          []*Type{TAny, TAny},
+				Patterns:      map[int]Value{0: NewNegation(NewTypeLiteral(TList))},
+				NoEvalArgs:    map[int]bool{0: true, 1: true},
+				NoEvalMapArgs: map[int]bool{0: true},
+				Impl:          Go(FnpredPairHandler, RunInCheck()),
+				Returns:       []*Type{TFunction}, BarrierPos: -1,
+			},
+			{
+				Args:       []*Type{TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Impl:       Go(FnpredHandler, RunInCheck()),
+				// Pure construction, like fnsig: it runs in check mode so a
+				// predicate type declared in a body is a REAL type
+				// statically, not an Any carrier.
+				Returns: []*Type{TFunction}, BarrierPos: -1,
+			},
+		},
+	},
+	{
 		Name: "args",
 
 		Signatures: []Signature{{
@@ -400,7 +447,7 @@ func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 // refuses to compile). Its bare def form keeps today's wait-through
 // path; a keyword form needs recorder plumbing first.
 var defKeywordConstructors = []string{
-	"fn", "fnsig", "refine", "class", "surface", "enum", "quote", "word",
+	"fn", "fnsig", "fnpred", "refine", "class", "surface", "enum", "quote", "word",
 }
 
 // defGenChainTails are the constructors that consume a pending `gen`
@@ -1752,6 +1799,56 @@ func FnsigPairHandler(args []Value, names map[string]Value, stack []Value, r *Re
 	}
 	spec := NewList([]Value{wrap(args[0]), wrap(args[1])})
 	return FnsigHandler([]Value{spec}, names, stack, r)
+}
+
+// FnpredPairHandler is the 2-arg form `fnpred <input> <body>`: wrap each
+// operand as a one-element list and delegate to the spec-list form, exactly
+// as FnsigPairHandler does for fnsig.
+func FnpredPairHandler(args []Value, names map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	wrap := func(v Value) Value {
+		if _, err := AsList(v); err == nil {
+			return v
+		}
+		return NewList([]Value{v})
+	}
+	spec := NewList([]Value{wrap(args[0]), wrap(args[1])})
+	return FnpredHandler([]Value{spec}, names, stack, r)
+}
+
+// FnpredHandler builds a fn from input/body PAIRS and marks it a declared
+// predicate. The output slot fn requires is supplied implicitly as `Any`,
+// which is the honest declaration: boru admits two membership conventions
+// and they disagree on the return type — Boolean-returning
+// (`fnpred n:Integer [eq 0 (mod 2 n)]`), and None-on-failure, where the body
+// yields the value for a member and None for a non-member
+// (`lang/spec/record.tsv` §177). Pinning the output to Boolean would refuse
+// the second; `Any` admits both and RunPredicate decides membership.
+func FnpredHandler(args []Value, names map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return nil, r.BoruError("fnpred_invalid_spec", "fnpred: argument must be a concrete list", "fnpred")
+	}
+	_lst, _ := AsList(args[0])
+	spec := _lst.Slice()
+	if len(spec) == 0 || len(spec)%2 != 0 {
+		return nil, r.BoruError("fnpred_invalid_spec",
+			"fnpred: list length must be a non-zero multiple of 2 (input body pairs); "+
+				"a predicate declares no output — use `fn` for the input/output/body form",
+			"fnpred")
+	}
+	// Expand each [input body] pair into fn's [input output body] triple
+	// with an implicit Any output.
+	triples := make([]Value, 0, len(spec)/2*3)
+	for i := 0; i < len(spec); i += 2 {
+		triples = append(triples, spec[i], NewList([]Value{NewTypeLiteral(TAny)}), spec[i+1])
+	}
+	out, err := FnConstruct(r, triples, r.TakePendingGen())
+	if err != nil {
+		return nil, err
+	}
+	// FnConstruct's success path is exactly one NewFunction, and
+	// MarkPredicateFn is total over the payload shape, so there is nothing
+	// to guard here.
+	return []Value{MarkPredicateFn(out[0])}, nil
 }
 
 func FnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

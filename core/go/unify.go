@@ -112,6 +112,42 @@ func unifyInnerR(a, b Value, r *Registry) (Value, *UnifyError) {
 // isPredicateFnValue reports whether v is a function value whose
 // first signature has a single typed parameter — the shape a
 // predicate type has.
+// IsDeclaredPredicateFn reports whether v is a fn value whose author
+// DECLARED it a membership test with `fnpred`. This is the explicit route
+// into the predicate-type branch, and the one that does not consult the
+// parameter count — ADR-016 forbids arity deciding how a function behaves,
+// and isPredicateFnValue below does exactly that. NUR099 tracks retiring
+// the arity route once the corpus has migrated to `fnpred`.
+func IsDeclaredPredicateFn(v Value) bool {
+	if v.Parent == nil || !v.Parent.Equal(TFunction) {
+		return false
+	}
+	info, ok := v.Data.(FnDefInfo)
+	return ok && info.Predicate
+}
+
+// MarkPredicateFn returns v with its fn payload marked a DECLARED predicate
+// — `fnpred`'s half of the pair above. Total: a value carrying no FnDefInfo
+// comes back unchanged, so a caller never has to guard the payload shape.
+func MarkPredicateFn(v Value) Value {
+	info, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return v
+	}
+	info.Predicate = true
+	return NewValueRaw(v.Parent, info)
+}
+
+// isPredicateFnValue reports whether v LOOKS like a predicate because it
+// takes one parameter.
+//
+// DEPRECATED ROUTE (NUR099, NUR100). Routing on the parameter count is an
+// arity-keyed exception, which ADR-016 forbids outright: it is why the same
+// fn body means a callable function under a lowercase name and a membership
+// test under a capitalised one, and why `def K fn [[a:Any b:Any]…]` binds a
+// type nothing can inhabit instead of being refused. `fnpred` is the
+// replacement (IsDeclaredPredicateFn); this stays only until the corpus has
+// migrated, and is not to be extended.
 func isPredicateFnValue(v Value) bool {
 	if v.Parent == nil {
 		return false

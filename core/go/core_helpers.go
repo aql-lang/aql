@@ -1004,7 +1004,14 @@ func PredicateInputType(v Value) *Type {
 		return nil
 	}
 	sig, ok := info.FirstOwnSig()
-	if !ok || len(sig.Params) != 1 {
+	if !ok || len(sig.Params) == 0 {
+		return nil
+	}
+	// The parameter-COUNT test is the DEPRECATED route (NUR099/NUR100):
+	// ADR-016 forbids arity deciding how a function behaves. A `fnpred`
+	// declaration carries the fact explicitly and is believed whatever its
+	// shape; the count is consulted only for a body that never said so.
+	if !info.Predicate && len(sig.Params) != 1 {
 		return nil
 	}
 	t := sig.Params[0].Type

@@ -519,19 +519,22 @@ var (
 	NewDynamicCarrierValue   = core.NewDynamicCarrierValue
 	// NewClockDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
-	NewFloat       = core.NewFloat
-	NewDefCleanup  = core.NewDefCleanup
-	NewDepScalar   = core.NewDepScalar
-	NewDisjunct    = core.NewDisjunct
-	NewEnum        = core.NewEnum
-	NewError       = core.NewError
-	NewEvalList    = core.NewEvalList
-	NewEvalMap     = core.NewEvalMap
-	NewFnUndef     = core.NewFnUndef
-	NewForward     = core.NewForward
-	NewFunction    = core.NewFunction
-	NewImplicitMap = core.NewImplicitMap
-	ModuleNSOf     = core.ModuleNSOf
+	NewFloat      = core.NewFloat
+	NewDefCleanup = core.NewDefCleanup
+	NewDepScalar  = core.NewDepScalar
+	NewDisjunct   = core.NewDisjunct
+	NewEnum       = core.NewEnum
+	NewError      = core.NewError
+	NewEvalList   = core.NewEvalList
+	NewEvalMap    = core.NewEvalMap
+	NewFnUndef    = core.NewFnUndef
+	NewForward    = core.NewForward
+	NewFunction   = core.NewFunction
+	// MarkPredicateFn stamps `fnpred`'s declaration onto a fn value —
+	// the explicit route into the predicate-type branch (NUR099).
+	MarkPredicateFn = core.MarkPredicateFn
+	NewImplicitMap  = core.NewImplicitMap
+	ModuleNSOf      = core.ModuleNSOf
 	// NewInstant moved to lang/go/engine/native_temporal.go (Step 8).
 	NewInteger               = core.NewInteger
 	IsMicronValue            = core.IsMicronValue
