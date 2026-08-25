@@ -401,7 +401,7 @@ LowerEvent(E):
        T-lane: CALL_NATIVE / CALL_USER / closure unit, as today.
   5  if operands resolve but the signature choice is runtime-only:
        T-lane poly: OpCallNativePoly / OpCallUserPoly, as today —
-       EXTENDED to variable pop-windows via the statement descriptor (§6.2),
+       EXTENDED to variable pop-windows via the region descriptor (§6.2),
        closing the smaller-arity-overload unsoundness
        (compiler_dispatch_record.go:544).
   6  otherwise — the former MarkUncompilable arm:
@@ -432,7 +432,7 @@ latch classes are not dispatch events at all: the fn-literal capture latch
 during body recording (`emit.go:1830`) and the *retroactive* stored-handler
 invalidation, where a later event invalidates an earlier bake
 (`emit.go:2460`). Under totality every one of these becomes a **demotion,
-never a refusal**: the recorder keeps a statement descriptor for *every*
+never a refusal**: the recorder keeps a region descriptor for *every*
 statement — T-lane ones included — so a statement whose typed lowering
 declines at Finalize re-lowers in descriptor (G-lane) form; a retroactive
 latch demotes the earlier statement the same way (its descriptor is still
@@ -470,7 +470,7 @@ the compile-time/run-time line the whole design draws, and it is the
 literature's line: the *domain* of every dispatch is static even when the
 verdict is not.
 
-### 6.2 The compiled collection machine — statement descriptors
+### 6.2 The compiled collection machine — region descriptors
 
 The single deepest finding of the code review: signature matching is
 already runtime-shared, but **argument collection is not**, and collection
@@ -483,14 +483,65 @@ ledger calls it "not repairable at run time". That verdict is about the
 *window* model — an arity-N pop with no history. The repair is at compile
 time: carry the history.
 
-**Mechanism.** For every G-lane statement the recorder emits a **statement
+**What the Stage-2 probe changed here.** Four agents read the collection
+machinery against this section (the F1 investigation, 2026-08-25). F1
+**holds** — the extraction is possible — but three of this section's
+load-bearing claims were wrong, and the corrections change what gets
+built:
+
+- **A per-STATEMENT descriptor cannot exist.** A statement's extent is not
+  statically bounded, because the statement's own operands can move it: a
+  paren group at position 0 that `def`s a *function* word creates a
+  forward-collection barrier at position 1 that did not exist when the
+  scan began, which then suppresses the pre-evaluation of the group at
+  position 2. Which slots a statement owns is an *output* of running that
+  statement. The unit is therefore a **region** — everything to the next
+  hard delimiter (`end`, `)`, EOF), whose boundaries are syntactic and
+  cannot shift — and collection *returns a cursor* saying where it
+  actually stopped.
+- **There is no single collection algorithm to extract.** Forward
+  collection is *three* loops over the same tokens with three different
+  stop-condition sets and three different position countings:
+  `resolveForwardArgs` (`core/go/engine.go:1876-2232`, once per dispatch,
+  over the union of viable barriers — it evaluates), the per-candidate
+  scan inside `Engine.MatchSignature` (`:8507-8749`, once per candidate
+  signature, over that signature's own `BarrierPos` — it classifies), and
+  the arrival loop in `stepLiteral` (`:3843-4162`, once per arriving
+  value). `design/FORWARD-COLLECTION-PHASES.10.md` documents two of the
+  three; the per-candidate scan is not in that note, and it is the one
+  that actually matches. They are not refinements of one another.
+- **Planning is not pure, and the named "hard case" was the wrong one.**
+  Overload *pruning* is itself an evaluation site: `pruneViable`
+  (`:1919-1934`) calls `SigArgMatches`, which for a predicate-typed slot
+  runs a boru body through `RunPredicate`. That is already a live
+  divergence — **NUR102**, an effectful predicate observed running four
+  times interpreted and twice compiled — found by this probe, in a place
+  this section never looked. Meanwhile the mid-scan sugar expansion F1
+  named as "the hard case" is, in phase 1, a gated syntactic lowering
+  that explicitly refuses to fire for the wrong overload; the *unguarded*
+  twin inside the per-candidate loop (`:8719-8731`) is the one that
+  mutates the tape and survives a `MatchSignature` returning nil.
+- **Slot indices are not stable across evaluation.** A zero-value paren
+  collapse slides the next token into the evaluated slot; a multi-value
+  collapse leaves extras to be re-examined as later positions.
+
+The consequence for the interface: it is wider than an "abstract slot
+sequence". What both adapters must implement is a **mutable, spliceable,
+live-length token window plus a host evaluator callback** — honestly, a
+second tape. That is a real answer to F1, but it is a bigger object than
+this section first described, and the VM adapter has to build it rather
+than index a frozen array.
+
+**Mechanism.** For every G-lane region the recorder emits a **region
 descriptor** — a static table entry (a new `Program` side table, peer to
-`Dispatches`) recording what the interpreter would have read off the tape:
+`Dispatches`) recording what the interpreter would have read off the tape,
+with the extent as an output rather than an input:
 
 ```
-StmtDesc {
+RegionDesc {
   lead:      word name | apply | fn-value slot     // what dispatches
-  slots:     []SlotDesc                            // written order
+  slots:     []SlotDesc                            // written order, to the
+                                                   // next HARD delimiter
     SlotDesc { class: const | local | event | group(fragment idx)
                | wordRef(name) | typeNode(id)
                quote: none | /q | /v | /u          // static modifiers
@@ -500,6 +551,9 @@ StmtDesc {
              // derived live for value leads and after rebinding (§6.5)
   seal/mods: dispatch-control facts the tape carried
 }
+// OpCollect returns (claimed window, parked sig, CURSOR) — the cursor is
+// where collection actually stopped, which its own evaluations may have
+// moved. Execution resumes there, not at a statically computed next slot.
 ```
 
 and a matching opcode pair:
@@ -1179,13 +1233,17 @@ sharing when different callers' registries disagree, `DefTable.Gen` cache
 reads as §7's inline-cache seed, and which `-race` gates each stage keeps
 green.
 
-**F1 — the collection kernel cannot be extracted.** If
-`resolveForwardArgs`'s interleaving of evaluation with planning cannot be
-factored over abstract slots without behavior change (the mid-scan sugar
-expansion, `engine.go:8731`, is the hard case), §6.2 fails and with it the
-faithful G-lane — the design would degrade to window dispatch, which §9d
-proves unfaithful. This is why Stage 2 is first and why its gate is the
-full differential on the *interpreter* side alone.
+**F1 — the collection kernel cannot be extracted. TESTED 2026-08-25:
+HOLDS, with corrections.** The probe (four agents over the collection
+machinery) found the extraction possible but this note's description of it
+wrong in three ways — the unit is a region and not a statement, there are
+three collection loops and not one, and planning is not pure. §6.2 now
+carries the corrected form and the wider interface it forces (a mutable
+spliceable window plus a host evaluator, not an abstract slot array). The
+falsifier stays live for the *implementation*: if that interface cannot be
+built without behavior change, the design degrades to window dispatch,
+which §9d proves unfaithful. Stage 2 is first for this reason, and its
+gate is the full differential on the *interpreter* side alone.
 
 **F1b — the extracted routine slows the interpreter.** Stage 2's gate
 includes interpreter performance, and unlike F4 there is no fallback: the
