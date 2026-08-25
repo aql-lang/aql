@@ -624,7 +624,7 @@ them:
 | open paren `(` | evaluates when a viable overload consumes the position | always a hard boundary | intentional: phase 1 pre-evaluates, the scan must not |
 | fn-word barrier | union-over-viable-sigs test | per-signature, and `specAt` can claim an `FnDefInfo` into an `Any` slot and walk PAST the function word | **latent, not live** (tested 2026-08-25): an `Any`-slot word followed by a function word raises the identical strict-barrier error in both lanes, because phase 1 commits or strands before the scan's weaker test is consulted. The divergence is real in the code and masked by ordering — unify deliberately, do not treat as a live bug |
 | reach call-head | exempts if ANY viable sig wants `Function` | only this signature | **latent, not live** (tested 2026-08-25): a `Function`-valued member reached through dot access selects the `Function` overload identically in both lanes, as does an `Integer`-valued one. Same masking as the barrier row |
-| sugar expansion | gated on viability | ungated, survives a nil return | **suspected drift** — see the hazard below |
+| sugar expansion | gated on viability, and MAKES the Angle head/use-site choice | refuses Angle; splices every other kind ungated | **resolved** (read 2026-08-25): not a contradiction. Angle is the only kind whose lowering depends on the viable set, and both walks refuse to commit that choice per-candidate. Every other kind has a single deterministic lowering, so expanding it early is idempotent and yields the tokens the next dispatch would have produced anyway |
 | interp-string / XML / paren-expr / splice | dedicated arms that pre-evaluate the form IN PLACE | no arms — and needs none | **resolved** (tested 2026-08-25): an interp-string in a `String`-typed forward slot yields the identical value in both lanes. Phase 1 has already replaced the form with a plain value by the time the scan runs, so the scan sees no form to have an arm for. **The tape mutation IS the interface between the phases** — the VM adapter must perform the same in-place pre-evaluation, or the scan meets forms it cannot classify |
 | `/q` quote slots | four checks at different stages | a fifth, differently conditioned | NOT duplicates: different questions, do not merge |
 
@@ -647,17 +647,28 @@ adapter that ran the classifying scan against un-pre-evaluated slots, or
 that consulted the per-signature barrier test first, would expose every
 one of these differences at once.
 
-**One hazard the extraction must not inherit.** The per-candidate scan
-splices sugar expansions into the tape (`core/go/engine.go:8731`)
-*ungated*, and the mutation survives a `MatchSignature` that returns nil
-— the repo's own test asserts the marker expands after `sig == nil`
+**A hazard that turned out not to be one — recorded because the
+correction is the useful part.** The per-candidate scan splices sugar
+expansions into the tape (`core/go/engine.go:8731`) *ungated*, and the
+mutation survives a `MatchSignature` that returns nil — the repo's own
+test asserts the marker expands after `sig == nil`
 (`core/go/engine_stage5b_test.go:1088-1093`). Four lines earlier the
-`SugarAngle` arm refuses the identical splice, with the reason written
-out: this scan runs once per candidate, "so committing a choice here
-would mutate the tape for the wrong overload". Phase 1's twin gates the
-same splice on viability for the same reason. Two of the three sites
-guard it and one does not; the shared routine must decide which is
-correct rather than preserve both behaviours by accident.
+`SugarAngle` arm refuses the identical splice. Read quickly that is a
+self-contradiction, and this note first recorded it as one.
+
+Reading both comments properly, it is not. What the Angle arm refuses to
+commit is a **choice**: the head/use-site form depends on the viable
+overload set, and a scan running once per candidate must not decide it —
+which is why the choice belongs at arrival. Every other sugar kind has a
+single deterministic lowering, so expanding it early produces exactly the
+tokens the next dispatch would have produced, and the mutation surviving
+is harmless. Phase 1 gates all kinds because it is the phase that *makes*
+the Angle choice and runs once per dispatch, where uniform gating is free.
+
+The extraction still has to preserve this, but as a rule rather than a
+repair: **a shared expansion step may commit any lowering that is a
+function of the marker alone, and none that is a function of the viable
+set.**
 
 **Why this escapes the recorded "DO NOT RETRY".** Three attempts to
 compile at the concrete-mismatch recovery site were differential-reverted
