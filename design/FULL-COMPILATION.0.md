@@ -575,8 +575,17 @@ and a matching opcode pair:
   forward's identity and blame position, the missing-count arithmetic, the
   paren-scope scan boundary, and a live `barrierReceiverWord` probe that
   can add a third text variant — or *commit* the forward instead
-  (`:6825-6866`). All of it is register state of the one machine, which is
-  why the mechanism is "extract the machine", never "enumerate the texts".
+  (`:6825-6866`). Most of that is register state of the one machine,
+  which is why the mechanism is "extract the machine", never "enumerate
+  the texts". But **not all of it is** — falsifier F2 fired on this
+  claim (§11), and the descriptor must additionally carry the
+  **enclosing value-stack residual** `reorderCandidates` reads (up to
+  four values, which may belong to an EARLIER statement and change the
+  candidate notes), the **`voidGroups`** record of paren groups that
+  collapsed to zero values (which changes the error *code*, not merely
+  its text), the live `barrierReceiverWord` probe's answer, and the
+  forward-parens suggestion's suppression condition. Finite and
+  carryable, but four items wider than this section first claimed.
 - `OpDispatchGeneric(desc)` — completes the statement:
   the word-policy gate first (the same `WordChecker` every named VM
   dispatch already consults — `vmContext.gateWord`, `lang/go/boru.go:418-427`
@@ -1254,15 +1263,38 @@ walk (mitigation to try first: a specialized, inlinable tape adapter),
 the sharing obligation needs a weaker form — one implementation generated
 into two specializations — and the drift-defense argument re-examination.
 
-**F2 — error identity needs state outside the collection machine.** §6.2
-claims the raise-selection state is exactly the machine's register state —
-parked signature, claimed count and missing-count arithmetic, the
-forward's identity and blame position, the paren-scope scan boundary, and
-the commit-vs-strand outcome including the live `barrierReceiverWord`
-probe (`core/go/engine.go:6825-6916`). If a case surfaces whose error
-selection depends on state outside that register set — state the
-descriptor cannot carry statically-bounded — the parity claim narrows and
-the case needs a ruling (spec the error) or a descriptor extension.
+**F2 — error identity needs state outside the collection machine.
+TESTED 2026-08-25: FIRED.** This note claimed the raise-selection state
+was exactly the collection machine's register state. It is not, and the
+counterexample is two statements:
+
+```
+$ boru -no-check -no-compile -e 'def one fn [[a:Integer][Integer][a]] end
+      def k w:Integer => [mul 2 w] end one k'
+  = note: candidate `one (Integer)` takes 1 argument, but none were supplied
+
+$ boru -no-check -no-compile -e 'def one fn [[a:Integer][Integer][a]] end
+      def k w:Integer => [mul 2 w] end "zz" end one k'
+  = note: the argument was 'zz' (a ProperString)
+  = note: candidate `one (Integer)` — argument 1: expected Integer, got 'zz' (a ProperString)
+```
+
+Same failing dispatch, same collection registers — a different
+diagnostic, because `reorderCandidates` reads up to four values off the
+**enclosing value stack** and the residual `"zz"` belongs to a *previous
+statement*. It is in no descriptor, no claimed window, and no
+`ForwardInfo`. A second counterexample moves the error **code** rather
+than its text: `e.voidGroups`, appended when a paren group collapses to
+zero values, is consulted before anything else and turns
+`signature_error` into `def_error`.
+
+This does not abandon the design: the extra state is finite and
+carryable, and the compiler already ships a precedent for handing
+error-rebuild state to the VM (`PolyNoMatchSpec`). But §6.2's
+*inventory* was wrong and is corrected there — and that precedent's own
+escape, deferring to the interpreter on drift, is exactly what T2
+forbids, so the widened form has to be complete rather than
+best-effort.
 
 **F3 — a `tapeBound: Yes` handler that cannot be rewritten.** If some
 handler's semantics genuinely require re-stepping its operand on the live
