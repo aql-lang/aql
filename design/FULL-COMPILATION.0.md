@@ -612,6 +612,18 @@ groups stay pre-compiled fragments (their boundaries are syntactic and
 cannot shift); what revalidation changes is only which slots a given live
 signature set claims.
 
+**One hazard the extraction must not inherit.** The per-candidate scan
+splices sugar expansions into the tape (`core/go/engine.go:8731`)
+*ungated*, and the mutation survives a `MatchSignature` that returns nil
+— the repo's own test asserts the marker expands after `sig == nil`
+(`core/go/engine_stage5b_test.go:1088-1093`). Four lines earlier the
+`SugarAngle` arm refuses the identical splice, with the reason written
+out: this scan runs once per candidate, "so committing a choice here
+would mutate the tape for the wrong overload". Phase 1's twin gates the
+same splice on viability for the same reason. Two of the three sites
+guard it and one does not; the shared routine must decide which is
+correct rather than preserve both behaviours by accident.
+
 **Why this escapes the recorded "DO NOT RETRY".** Three attempts to
 compile at the concrete-mismatch recovery site were differential-reverted
 because "the recovery fires for reasons (forward-collection state, arity,
@@ -1197,7 +1209,7 @@ universe closes alongside).
 |---|---|---|---|
 | **0** | Adopt the declaration triple (COMPILE-DECLARATION-MODEL Stages 0–2: delete the dead flag, introduce `{tapeBound, needs, env}` under C1–C4, assert over every signature) | 0 rows; produces the §6.8 handler worklist | low |
 | **1** | Instrument: engine-entry census + defer census + refusal-reason census; declare the observable alphabet for T3 | 0 rows; makes T2 measurable | low |
-| **2** | **Extract the collection kernel** (§6.2): factor `resolveForwardArgs`/arrival/`MatchSignature`-forward-scan over abstract slots; re-seat the Engine on it; prove no interpreter regression (perf + full differential) | 0 rows; unblocks everything | **high** — F1 |
+| **2** | **Extract the collection kernel** (§6.2): factor the THREE collection loops over the shared window+evaluator interface and re-seat the Engine on them — **three separate re-seats, landing separately**, since the differential cannot say which one broke otherwise. Gate: full differential green, allocation ceilings unmoved, CPU-profile share unmoved (NOT wall clock — see F1b) | 0 rows; unblocks everything | **high** — F1 |
 | **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included) + interpreter-side NUR101/NUR078 fixes to the ruled semantics; retire `OpCallDynFrame`/`callDynamic` islands onto Apply | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` lands with §6.3's registry-tagged captures here, the full-stack-in-body row with Stage 4's descriptor folds) | medium |
 | **4** | Statement descriptors + `OpCollect`/`OpDispatchGeneric` (§6.2, §6.5) + bind twins; recorder step-6 flips from refuse to generic for word dispatch; delete drift-window islanding | F (5), L (1), K (1), most unledgered dispatch gates, §9d | medium |
 | **5** | Production-order regions + generalized marks (§6.6) | C (11), D (13), I (5) | medium |
@@ -1207,7 +1219,18 @@ universe closes alongside).
 | **9** | Retire the valves (§6.10): defer sites → native answers; delete `OpFallback`/P7 machinery, the fence's re-run half, the fallback hatch; flip `CompileCheck` to total; `compile_refused` becomes a structured `internal_error` return (panics stay forbidden outside init-time registration) | T1, T2 complete | low by then |
 
 The dependency spine is 2 → {3,4} → 5 → 9; stages 6–8 are parallel tracks
-off it. Nothing lands without its differential gate; every stage's admission
+off it — **with one inversion the probe found**. `cover-gate-core` holds
+`core/go` to 100% coverage *by its own suite alone*
+(`Makefile`'s `CORE_GATE_FLOOR`), so any branch of the shared routine that
+only the VM adapter reaches is dead code in core's profile and fails the
+gate. The descriptor adapter therefore **cannot land until Stage 4 exists
+to exercise it**: Stage 2 ships the interface and the Engine re-seat, and
+the second adapter arrives with its client, not before. Two further
+implementation constraints from the same probe: `MatchSignature` already
+sits at gocyclo 87 / gocognit 211 under a `//nolint` against caps of
+70/200, so a merged routine cannot be one function; and the two largest
+collection loops are 13.4% and 18.0% of interpreter CPU, which is the
+budget any re-seat has to stay inside. Nothing lands without its differential gate; every stage's admission
 sweep is generated, not hand-picked (§8.3). Until a statement's enabling
 mechanism lands, step 6's arm remains **partial** for it: such statements
 keep refusing, loudly — a Stage-4 G-lane statement whose runtime-only
@@ -1263,14 +1286,26 @@ built without behavior change, the design degrades to window dispatch,
 which §9d proves unfaithful. Stage 2 is first for this reason, and its
 gate is the full differential on the *interpreter* side alone.
 
-**F1b — the extracted routine slows the interpreter.** Stage 2's gate
-includes interpreter performance, and unlike F4 there is no fallback: the
-Engine re-seat cannot be reverted without abandoning the sharing
-obligation §6.2 calls the parity foundation. If the abstraction layer
-over the interpreter's hottest loop cannot match the tape-specialized
-walk (mitigation to try first: a specialized, inlinable tape adapter),
-the sharing obligation needs a weaker form — one implementation generated
-into two specializations — and the drift-defense argument re-examination.
+**F1b — the extracted routine slows the interpreter. TESTED 2026-08-25:
+DOES NOT FIRE — but it exposed that the gate was unmeasurable.** The
+probe built the abstraction (a token-window accessor plus the host
+evaluator callbacks the corrected §6.2 demands) against a scratch copy of
+the tree and measured it on this repo's own interpreter benchmarks: zero
+extra allocations, no measurable time. Interface dispatch is not the
+risk.
+
+What the measurement did establish is that **Stage 2's gate as written —
+"prove no interpreter regression (perf + full differential)" — cannot be
+discharged on a shared container**. Two runs of *byte-identical code*
+differed by 5.4% geomean, with five of six shapes reporting
+"statistically significant" changes between −16% and +9%; at higher
+repetition counts the instrumented build measured 12.9% *faster* than
+baseline on the most collection-dense shape, which is obviously spurious.
+Wall clock on this class of host cannot resolve the effect the falsifier
+is about. The gate is therefore re-specified onto the deterministic
+instruments — the allocation ceilings, which are exact, and CPU-profile
+share, which is comparative — with wall clock recorded to the register
+(§14) rather than gating. A gate that fires at random is not a gate.
 
 **F2 — error identity needs state outside the collection machine.
 TESTED 2026-08-25: FIRED.** This note claimed the raise-selection state
