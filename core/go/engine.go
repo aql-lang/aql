@@ -1884,13 +1884,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		if sig.Fallback {
 			continue
 		}
-		barrier := sig.BarrierPos
-		switch {
-		case w.ForceStack:
-			barrier = 0
-		case w.ForceForward:
-			barrier = sig.TotalArgs()
-		}
+		barrier := effectiveForwardLimit(sig, w)
 		if barrier > 0 {
 			viable = append(viable, viableSig{sig, barrier})
 			if barrier > maxBarrier {
@@ -6515,6 +6509,30 @@ func viableConsumesAt(viable []viableSig, pos int) bool {
 // marks, moves, internals, return checks) and the statement bounds
 // (end / close paren). Free-function body of resolveForwardArgs' two
 // boundary tests, extracted for that function's complexity cap.
+// effectiveForwardLimit is the forward/stack split point for ONE
+// signature under ONE word's dispatch modifiers: the declared BarrierPos,
+// overridden wholesale by /s (nothing collects forward) and /f (everything
+// does).
+//
+// Shared by the two collection walks that both need it — the phase-1 plan
+// walk (resolveForwardArgs, which maxes it over the viable set) and the
+// per-candidate scan inside MatchSignature (which applies it per
+// candidate). They compute it identically and always must: the split point
+// is a property of the signature and the modifiers, not of which walk is
+// asking. resolveForwardArgs' comment already described its copy as
+// "mirroring matchSignature's forwardLimit computation" — a mirror is a
+// drift waiting to happen, so there is now one of it
+// (design/FULL-COMPILATION.0.md §6.2).
+func effectiveForwardLimit(sig *Signature, w WordInfo) int {
+	switch {
+	case w.ForceStack:
+		return 0
+	case w.ForceForward:
+		return sig.TotalArgs()
+	}
+	return sig.BarrierPos
+}
+
 func scanBoundaryToken(tok Value) bool {
 	if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
 		tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
@@ -8482,15 +8500,9 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		isPreferred := preferWordSig && nArgs > 0 &&
 			sig.QuoteArgs != nil && sig.QuoteArgs[0]
 
-		// Effective forward limit for this match attempt. /s and /f
-		// override the sig's declared boundary.
-		forwardLimit := sig.BarrierPos
-		switch {
-		case w.ForceStack:
-			forwardLimit = 0
-		case w.ForceForward:
-			forwardLimit = nArgs
-		}
+		// Effective forward limit for this match attempt — the same
+		// predicate the phase-1 plan walk uses (see effectiveForwardLimit).
+		forwardLimit := effectiveForwardLimit(sig, w)
 
 		// ── Step 1: forward matching ─────────────────────────────
 
@@ -8513,14 +8525,19 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				tok := e.Tape.At(scanIdx)
 				expectedType := SigArgType(sig, fwd)
 
-				// 1.4: structural boundaries — stop forward scan.
-				if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
-					tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
-					break
-				}
-
-				// 1.4: end, ) — boundary, stop.
-				if IsEnd(tok) || IsCloseParen(tok) {
+				// 1.4: structural boundaries (forward / mark / move /
+				// internal / return-check) and `end` / `)`. ONE predicate,
+				// shared with the phase-1 plan walk (resolveForwardArgs),
+				// which asks the identical question of the same tokens.
+				//
+				// The two loops legitimately DIFFER on other arms — an open
+				// paren is pre-evaluated there and a hard boundary here — so
+				// the arms where they agree are exactly the ones that must
+				// not be written twice and left to drift apart. Collection
+				// is three loops over the same tokens with three stop
+				// condition sets (design/FULL-COMPILATION.0.md §6.2); every
+				// decision they share belongs in one place.
+				if scanBoundaryToken(tok) {
 					break
 				}
 
