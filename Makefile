@@ -176,6 +176,15 @@ vuln:
 # normal `make test`: TestCompiledAllocCeilings and TestInterpAllocCeilings
 # in lang/go.
 BENCH_TIME ?= 1s
+
+# ---- performance register (design/FULL-COMPILATION.0.md section 14) ----
+# Records, never gates: runs the suites, derives the host id, and APPENDS
+# to bench/register/{hosts,measurements}.jsonl. The rows are committed —
+# a stage's before/after pair is part of its deliverable.
+.PHONY: bench-register
+bench-register:
+	@BORU=$(CURDIR)/cmd/go/bin/boru bench/register/run.sh $(BENCH_TIME)
+
 bench:
 	@echo "==> bench eng/go (kernel primitives)"
 	cd eng/go && go test -run '^$$' -bench 'BenchmarkKernel|BenchmarkTape' -benchmem -benchtime $(BENCH_TIME) .
