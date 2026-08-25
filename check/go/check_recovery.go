@@ -13,6 +13,7 @@ import (
 	core "github.com/boru-lang/boru/core/go"
 
 	"strconv"
+	"strings"
 )
 
 // undefinedWordCheckDiag is undefinedWordError's check-mode twin — the
@@ -1212,6 +1213,7 @@ func installCheckBraid() {
 	core.CheckBraid.TryDynamicFnValueDispatch = tryDynamicFnValueDispatch
 	core.CheckBraid.TryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
 	core.CheckBraid.ParenPlacedFnCarrier = parenPlacedFnCarrier
+	core.CheckBraid.NoteStrandedTypeCall = noteStrandedTypeCall
 	core.CheckBraid.TryShapedMethodDispatch = TryShapedMethodDispatch
 	core.CheckBraid.UndefinedWordCheckDiag = undefinedWordCheckDiag
 }
@@ -1235,6 +1237,108 @@ func installAnalysisImpl() {
 }
 
 func init() { installAnalysisImpl() }
+
+// noteStrandedTypeCall reports §5.1's silent wrong answer: a capitalised
+// name bound to a FUNCTION body is a TYPE, so writing it in call position
+// never calls. `def I x:Integer => [add 1 x] end I 5` prints `I 5` and
+// exits 0 — the minted lattice node is placed, the 5 is never consumed,
+// and nothing anywhere says so. The combinator literature is all capitals
+// (S, K, I, B, C, W, Y), so a reader transcribing it lands here first
+// (design/HIGHER-ORDER-FUNCTIONS.0.md §5.1, recommendation 2).
+//
+// The gate is deliberately narrow, because this is a hint and a false one
+// costs more than a missed one. It fires on a bare lattice node whose
+// DECLARED CONTENT is a function value, IMMEDIATELY followed by a
+// non-type value — the forward-form call `I 5` exactly. It stays quiet on:
+//
+//   - a node stranded LAST (`4 is Even  Even`, `xs E`): a statement that
+//     merely names a type after an earlier one produced a value is legal;
+//   - a node whose content is not a fn — a `fnsig` type, a `class`, a plain
+//     alias (`def Foo Integer  Foo 5`), a builtin (`Integer 5`): naming a
+//     type beside a value is ordinary in `is` / `typeof` code;
+//   - two adjacent nodes (`Even Odd`): nothing was being called.
+//
+// It judges the TOP-LEVEL residual only. That is not as narrow as it
+// sounds: a paren group runs on the same tape, and an `if` arm, a `for`
+// body, a `do` region and a fn body all surface their own residual into it,
+// so the stranded pair is caught wherever it can still reach the program's
+// result. What it excludes is the pair landing inside a container VALUE
+// (`[I 5]`, `{a:I b:5}`), evaluated by a sub-engine — boru carries types as
+// data, so a node beside a value in a list or a map is not a call that
+// failed to happen.
+//
+// KNOWN RECALL LIMIT — a residual scan cannot see a pair something else
+// already ate. `I 5 drop`, `I 5 print`, `def r (I 5)` and `size (I 5)` are
+// all the same defect and all go unreported: the later word takes the
+// operand, or the enclosing call takes the node, and by end-of-run the
+// adjacency is gone. Closing it means recording the candidate where the
+// node is PLACED (the step site knows the following SOURCE token, which is
+// the fact that actually decides it) rather than reading the finished
+// stack — a core-seam change, deliberately not folded into the commit that
+// introduced this. Pinned as a fact in
+// lang/go/test/stranded_type_call_test.go's MissesConsumedPair, and written
+// up under §5.1 "What it still misses" so the limit is a known one.
+func noteStrandedTypeCall(e *core.Engine, residual []core.Value) {
+	if !e.IsTop || !e.Registry.Check.IsActive() {
+		return
+	}
+	for i := 0; i+1 < len(residual); i++ {
+		v := residual[i]
+		if !fnBodiedTypeNode(v) || core.IsBareTypeNode(residual[i+1]) {
+			continue
+		}
+		// Prefer the SOURCE token over the node's own name: they agree for
+		// `I 5`, but an alias (`def J I  J 5`) writes J where the node is
+		// still called I, and the caret points at what was written. A
+		// computed placement — `(valof I) 5` — carries no position at all,
+		// and there the node's name is the only thing left to say.
+		name := v.Pos().Src
+		if name == "" {
+			name = v.String()
+		}
+		// CheckAddUnique, not AddDiagnostic: one SOURCE defect must cost one
+		// diagnostic. A fn body is analysed once per call shape, so a body
+		// that strands the pair (`def g y:Integer => [I y]  g 1  g 2`)
+		// surfaces the same tokens into the residual once per analysed call
+		// — identical code, detail and position every time.
+		core.CheckAddUnique(e.Registry, core.CheckDiagnostic{
+			Code: "stranded_type_call",
+			Detail: "'" + name + "' names a type, not a function: a capitalised def binds a TYPE, " +
+				"so the call never ran and its operands stayed on the stack",
+			Word: name,
+			Row:  v.Pos().Row,
+			Col:  v.Pos().Col,
+			Src:  v.Pos().Src,
+			Notes: []string{
+				"a def whose name is capitalised and whose body is a fn mints a TYPE " +
+					"(`4 is " + name + "` is the intended use); the fn body survives only as that type's content",
+			},
+			// No Replacement: the fix is a COORDINATED rename — the
+			// declaration and every reference — and this diagnostic points at
+			// one use site. A single-token replacement applied there would
+			// leave `def ` + name + ` …` standing and turn the call into an
+			// undefined_word, which is worse than no code action at all.
+			Suggestions: []core.DiagSuggestion{{
+				Message: "a capitalised def can only ever bind a type: rename it and its uses " +
+					"together (`def " + strings.ToLower(name) + " …` … `" + strings.ToLower(name) + " 5`)",
+			}},
+		})
+	}
+}
+
+// fnBodiedTypeNode reports whether v is a bare lattice node whose declared
+// content is a FUNCTION value — the node `def <Capitalised> <fn body>`
+// mints, whether that lands as a predicate type (a 1-arg Boolean body) or
+// a plainly Function-parented one (every other arity). Keying on the
+// CONTENT rather than on predicate-ness is what makes the multi-argument
+// combinators — `def K fn [[a:Any b:Any][Any][a]] end` — visible too.
+func fnBodiedTypeNode(v core.Value) bool {
+	if !core.IsBareTypeNode(v) {
+		return false
+	}
+	content, ok := core.TypeContentOf(v)
+	return ok && core.IsFnValueResidual(content)
+}
 
 // parenPlacedFnCarrier is fnReturnPark's check-side twin (NUR073's BROAD
 // park): a pinpointed member-fn read carries its fn identity in the

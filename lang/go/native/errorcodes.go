@@ -43,6 +43,7 @@ var langErrorCodes = []string{
 	"exit_error", "exposes_error", "extends_error", "extends_outside_gen",
 	"fetch_error",
 	"filter_error", "flex_error", "flush_error", "fn_error",
+	"fnpred_invalid_spec",
 	"fnsig_invalid_spec", "fold_error", "foldaxis_error", "gen_error",
 	"gen_unsupported_constructor", "get_error", "getr_error", "if_error",
 	"import_error", "inner_error", "insert_at_error", "internal",

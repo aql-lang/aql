@@ -67,6 +67,22 @@ var unflaggedPins = map[string]int{
 	// getStoreReturnsFn stays optimistic on a static miss by design. The
 	// Xml strict-miss row in the same batch IS flagged (getrXmlReturns).
 	"accessor.tsv": 2,
+	// fnpred.tsv: two unflagged classes, both runtime-only and both
+	// pre-existing — the capitalised-fn form `fnpred` replaces is unflagged
+	// identically, so neither is a regression this word introduced.
+	//   (i) malformed SPEC LISTS (an odd-length list; a triple where a pair
+	//       belongs): the shape error is the handler's own runtime check
+	//       over the constructed list, and the checker sees a well-typed
+	//       List argument with nothing to prove it wrong — exactly as
+	//       fnsig's own fnsig_invalid_spec rows are unflagged.
+	//   (ii) a CONCRETE value failing a predicate (`def q:Even 5`): running
+	//       a user predicate over a literal is decidable in principle but
+	//       the check pass does not, so the membership failure surfaces at
+	//       runtime. record.tsv carries the same gap for the same shape.
+	//   (iii) an unknown param TYPE in the spec (`[[n:NoSuchTypeXyz] [1]]`):
+	//       construction raises before any diagnostic is recorded, so the
+	//       failure is an error RETURN rather than a flagged row.
+	"fnpred.tsv": 6,
 	// as.tsv: the weak-payload guard row is a RUNTIME-only refusal by
 	// design — the ascribed dispatch statically commits the base FlexMap
 	// overload (sound: the interpreter takes the same widened match), and

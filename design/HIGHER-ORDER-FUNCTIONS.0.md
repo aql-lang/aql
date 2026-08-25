@@ -34,7 +34,7 @@ through a parameter, and one live **engine disagreement**.
 | Are functions first-class? | **Yes.** Storable in lists and maps, passable, returnable, closing over locals, recursive, introspectable. |
 | Can all combinators be implemented? | **Yes**, since the `/v` change (2026-08-19). S, K, I, B, C, W, U, the full Church basis — booleans *including* `and`/`or`, numerals, pairs — CPS, and a working parser-combinator library were all built and run. The one construction the first pass could not finish now works in its naive spelling (§1.2, §5.2). |
 | Is it *pleasant*? | **Much more so.** `/v` is total over binding kinds, so the polymorphic combinators need no escape hatch — the two undocumented idioms (`(args).N` and boxing) are no longer required. |
-| Is it *safe*? | **Safer since 2026-08-24.** The interpreter-vs-compiler divergence (§5.7, NUR073) is CLOSED by the BROAD fix. Three silent-wrong-answer classes remain, listed in §5. |
+| Is it *safe*? | **Safer since 2026-08-24.** The interpreter-vs-compiler divergence (§5.7, NUR073) is CLOSED by the BROAD fix. Three silent-wrong-answer classes remain, listed in §5 — and since 2026-08-25 the quietest of them, §5.1, is named by `boru check` as `stranded_type_call` instead of passing without comment. |
 
 **One-line summary:** boru's function substrate is complete — every
 combinator in the audit was built and run — and since `/v` became total
@@ -70,6 +70,14 @@ explicit, which is a surface change every §1 program had to absorb.
 > reproduce byte-for-byte. New records NUR091 and NUR096 join §5.1's
 > and §5.5's defect classes respectively. Stale citations fixed in
 > place.
+
+> **Recommendation 2 closed 2026-08-25.** §5.1's shape — a capitalised
+> name bound to a fn body, written in call position — now costs a
+> check-mode warning, `stranded_type_call`, carrying the did-you-mean
+> treatment the item asked for. `boru do` is unchanged and still silent:
+> the program runs and exits 0, so the finding sits in the suspicion
+> tier by the repo's own severity discipline, not by omission. §5.1
+> records the gate and the four shapes it deliberately stays quiet on.
 
 ---
 
@@ -683,7 +691,7 @@ differently): a purely syntactic choice moving a content hash.
 
 ## 5. Gotchas, ranked by how quietly they fail
 
-### 5.1 A capitalised name bound to a function never calls — silently
+### 5.1 A capitalised name bound to a function never calls — ~~silently~~ **DIAGNOSED 2026-08-25**
 
 ```
 $ boru do 'def I x:Integer => [add 1 x] end I 5'
@@ -721,14 +729,130 @@ evaluation, so the same spelling now refuses with
 I (an I)" — exit 1, on both engines. The recorded fn body stays reachable
 only as the node's *content* (`TypeContentOf`), which has no surface
 spelling.
-**Severity:** silent wrong answer. **Not a bug** — but it costs a
-diagnostic, and the case for one is stronger now that no `/v` spelling
-recovers the value. `I 5` leaving a type node and an `Integer` stranded
-is exactly the shape a hint could catch. The same silent-stranding
-class has since been caught at declaration time too: a malformed `fn`
-whose output slot is bare (`def f fn List Any [1]`) strands its
-operands and binds nothing, exit 0, where its bracketed-output twin
-raises — recorded as **NUR091**.
+**Severity:** silent wrong answer. **Not a bug** — but it cost a
+diagnostic, and that diagnostic has now landed (recommendation 2,
+2026-08-25). `boru check` reports the shape as **`stranded_type_call`**:
+
+```
+$ boru check -e 'def I x:Integer => [add 1 x] end I 5'
+check: 1:34: [warning] stranded_type_call: 'I' names a type, not a function: a capitalised def binds a TYPE, so the call never ran and its operands stayed on the stack
+  1 | def I x:Integer => [add 1 x] end I 5
+                                       ^
+  = note: a def whose name is capitalised and whose body is a fn mints a TYPE (`4 is I` is the intended use); the fn body survives only as that type's content
+  = help: lowercase the name to bind a callable function instead
+          i
+```
+
+The finding is **warning** severity, and `boru do` / `boru run` still
+print nothing: `I 5` runs to completion with exit 0, so the codebase's
+own severity discipline (`checkCodeSeverity`, `core/go/check_state.go` —
+Error is for GUARANTEED runtime failures) puts this in the suspicion
+tier, and the default pre-flight is quiet unless it is about to abort.
+The transcript at the top of this section is therefore still accurate for
+`boru do`; what changed is that `boru check`, `boru run --check`, and
+every editor on the LSP surface (which publishes every severity) now name
+the mistake and its fix. A project that wants the shape to FAIL has the
+existing lever: `boru check --pedantic` exits 1 on any warning.
+
+**How narrowly it fires.** The gate is a bare lattice node whose
+DECLARED CONTENT is a function value, immediately followed by a
+non-type value, on the top-level straight line
+(`check/go/check_recovery.go::noteStrandedTypeCall`, seam
+`CheckBraid.NoteStrandedTypeCall` at the end-of-`Run` residual). Keying
+on the node's fn *content* rather than on predicate-ness is what makes
+the multi-argument combinators visible: `def K fn [[a:Any b:Any][Any][a]]
+end` mints a plainly `Function`-parented node, not a predicate type, so
+a predicate test would have missed exactly the letters this audit is
+about. Four shapes stay deliberately quiet, because a false hint costs
+more here than a missed one:
+
+| Quiet on | Why |
+|---|---|
+| `4 is Even` | the deliberate predicate-type use — `is` consumed the node |
+| `4 is Even  Even`, `xs Even` | the node is stranded LAST; nothing followed it to be called |
+| `Integer 5`, `def Foo Integer  Foo 5`, `F 5` (a `fnsig`), `C 5` (a class) | the node's content is not a function — naming a type beside a value is ordinary `is`/`typeof` code |
+| `[I 5]`, `{a:I b:5}` | boru carries types as data; inside a container VALUE the pair is not a call that failed to happen |
+| `I 5 drop`, `def r (I 5)`, `size (I 5)` | **not by design** — a recall limit of the residual scan; see "What it still misses" below |
+
+Judging the top-level residual is not as narrow as it sounds: a paren
+group runs on the same tape, and an `if` arm, a `for` body, a `do` region
+and a fn body all surface their own residual into it, so
+`for [1 2] [I 5]` and `def g y:Integer => [I y]` are caught too.
+
+The name in the message follows what was WRITTEN, not what the node calls
+itself: `def J I  J 5` blames `J`, where the caret is. A *computed*
+placement (`(valof I) 5`) carries no source token, so there — and only
+there — the node's own name stands in, with no position to point at. There
+is no `Replacement` on the suggestion, deliberately: the fix is a
+COORDINATED rename (the declaration and every reference) and the diagnostic
+points at one use site, so a single-token code action applied there would
+leave `def I …` standing and turn the call into an `undefined_word` — worse
+than no code action at all. And one source defect costs one diagnostic: a
+body analysed once per call shape (`def g y:Integer => [I y]  g 1  g 2`)
+surfaces the same tokens repeatedly, so the emitter dedupes through
+`CheckAddUnique`. Positives and negatives are pinned together in
+`lang/go/test/stranded_type_call_test.go`.
+
+**What it still misses.** A residual scan cannot see a pair something else
+already ate, and that is a real hole rather than a rounding error:
+
+```
+def I x:Integer => [add 1 x] end I 5 drop      # → I          (drop took the 5)
+def I x:Integer => [add 1 x] end I 5 print     # → 5, then I  (print took it)
+def I x:Integer => [add 1 x] end def r (I 5) r # → 5 I        (def bound one of the pair)
+def I x:Integer => [add 1 x] end size (I 5)    # → 0 5        (size consumed the NODE)
+```
+
+Every one is §5.1 and none is reported. `def r (I 5)` is the sting: binding
+a combinator application to a name is the most natural way to *use* one, and
+that spelling gets nothing. Closing this means recording the candidate where
+the node is PLACED — the step site knows the following SOURCE token, which is
+the fact that actually decides it — instead of reading the finished stack. It
+was not folded into the change that introduced the diagnostic: that is a core
+step-loop seam with its own false-positive surface to re-validate, and the
+shape the audit itself records (`boru do 'def I … end I 5'`) is caught today.
+The limit is pinned as a fact by `TestStrandedTypeCallMissesConsumedPair`, so
+a fix closes it loudly rather than drifting past it.
+
+**A related declaration-time gap — NUR099.** Reviewing this diagnostic, the
+maintainer asked why `def <Capitalised>` accepts a function with an
+implementation body at all. Most of that reading does not hold: a fn body
+under a capitalised name IS the predicate-type declaration form, and a
+non-Boolean body is legal under the **None-on-failure** convention, where the
+body returns the value for a member and `None` for a non-member
+(`lang/spec/record.tsv` §177 pins `def Positive fn [n:Integer Integer [if (n
+gt 0) [n] [None]]]`, return type Integer). `def I x:Integer => [add 1 x]` is
+therefore a well-formed predicate that admits every Integer.
+
+What does hold is that `def K fn [[a:Any b:Any][Any][a]] end K 1 2` binds a
+type nothing can inhabit and reports nothing. The discriminator that suggests
+itself is the parameter count, and that is forbidden — ADR-016 bans
+exceptions keyed on arity, ruled absolute by the maintainer on 2026-08-25
+(the engine's own `RunPredicate` gate breaks the same rule; recorded as
+**NUR100**).
+
+The route that does work goes through the ROOT of §5.1, which is that one
+spelling carries two jobs. The same fn body means a callable function under a
+lowercase name and a membership test under a capitalised one, and the
+capitalised form cannot simply be refused because it is the ONLY way to
+declare an arbitrary predicate type: no word in the type-constructing
+vocabulary does that job (`refine` declines an Integer base outright, and the
+comparison predicates have their own door in `def Big (Integer gt 10)`). The
+capital is not something predicates want — it is the only entrance available.
+
+So give predicates their own door. **NUR099**'s verdict, ruled 2026-08-25, is
+a **`fnpred`** word analogous to `fnsig`: where `boru describe fnsig` reads
+*"a function TYPE — a function minus its body"*, `fnpred` is a predicate TYPE
+— a function kept FOR its body. Once it exists, `def <Capitalised>
+<fn-with-body>` denotes nothing legitimate and can be refused at the
+declaration, with no parameter counting anywhere, and the case-keyed meaning
+of a fn body retires with it. Until that lands, `stranded_type_call` remains
+the only thing reporting the §5.1 shape.
+
+The same silent-stranding class has since been caught at declaration time
+too: a malformed `fn` whose output slot is bare (`def f fn List Any [1]`)
+strands its operands and binds nothing, exit 0, where its bracketed-output
+twin raises — recorded as **NUR091**.
 
 ### 5.2 ~~Naming a `Function`-valued parameter calls it~~ — RESOLVED
 
@@ -1446,12 +1570,18 @@ Remaining stages, each its own probe-driven increment:
    itself the total read, so there is no folklore idiom left to document
    (§5.2). `boru describe valof` and `lang/spec/valof.tsv` §9 carry the
    rule; `REFERENCE.md`/`HOWTO.md` were swept to the new spelling.
-2. **Add a diagnostic for §5.1.** A statement ending with a stranded
-   minted type node beside unconsumed operands — §5.1's shape since the
-   type-node fusion — is a near-certain typo, and since the valof flip
-   removed the `I/v apply` escape hatch a hint is the only help left.
-   `undefined_word` already offers "did you mean"; this deserves the
-   same.
+2. ~~**Add a diagnostic for §5.1.**~~ **Done (2026-08-25):**
+   `stranded_type_call`, a check-mode **warning** — a bare lattice node
+   whose declared content is a FUNCTION, immediately followed by a
+   non-type value on the top-level straight line. It carries the
+   did-you-mean treatment this item asked for: a `= note:` naming the
+   capitalisation rule and a `= help:` whose replacement is the
+   lowercased name. Warning, not error, because the program runs and
+   exits 0 — so `boru do` is still silent, by the severity discipline
+   rather than by omission. The gate keys on the node's fn *content*,
+   not on predicate-ness, so the multi-argument combinators (`K`, `B`,
+   `C`, `W`) are caught alongside the 1-arg ones; §5.1 tabulates the
+   four shapes it deliberately stays quiet on.
 3. ~~**Give `each`/`for-each`/`fold`/`scan` a `{TFunction, TList}`
    signature**~~ — **Done (2026-08-24, NUR086 retired).** The four
    signatures landed with an ELEMENT callback, reusing the existing

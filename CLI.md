@@ -452,6 +452,15 @@ table):
 * `unreachable_signature` — an `fn` overload that an earlier, more
   general overload already subsumes, so first-match dispatch can never
   reach it.
+* `stranded_type_call` — a capitalised name bound to a **function** body
+  written in call position. `def` on a capitalised name binds a TYPE, so
+  the name never calls: it places its lattice node and leaves the
+  arguments after it unconsumed, and the program still exits 0 with a
+  wrong stack. The combinator names are all capitals, so transcribing
+  `S`, `K`, `I` lands here first; lowercase the name to bind a callable
+  function. The deliberate predicate-type use —
+  `def Even fn n:Integer Boolean [eq 0 (mod 2 n)] end 4 is Even` — stays
+  silent, as does any type carried as data.
 * `undefined_word`, `unused_def`, `unreachable_branch`,
   `record_shape_mismatch`, … — typos, dead bindings, constant `if`
   branches, record-field mismatches.

@@ -89,6 +89,8 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
+| [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -98,6 +100,138 @@ what will close it; a record **re-opened from Allowed** keeps the
 argued form it already had, with the superseded allowance retained as
 data. Expansion to the full argued form is what an **Allowed** verdict
 requires.
+
+---
+
+## NUR099 — a fn body means a different thing under a capitalised name, and that is the only door to a predicate type {#nur099}
+
+**Status:** Pending (verdict: resolve by fix) · **Recorded:** 2026-08-25 ·
+**Surfaced by:** the maintainer's review of the §5.1 `stranded_type_call`
+diagnostic
+
+**Rule:** boru refuses loudly, and at the declaration. A declaration the
+engine can already prove unusable is not accepted and left to fail later —
+NUR091 is the same rule applied to a malformed `fn` triple.
+
+**Divergence:** the declaration is accepted and nothing reports it.
+
+```
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  K 1 2'
+K 1 2
+$ echo $?
+0
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  4 is K   "s" is K   true is K'
+false false false                     ← the bound type admits nothing at all
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  def z:K 5 end z'
+error: def z: predicate type K: RunPredicate: predicate must take exactly one argument
+```
+
+The engine reaches a definite conclusion about `K` — but only when someone
+uses it AS A TYPE. It never reports at the declaration, and never at all for
+the spelling that actually happens: calling it.
+
+**Not the return type.** `def <Capitalised> <fn>` is the predicate-type
+declaration form and a non-Boolean body is legal — the **None-on-failure**
+convention returns the value for a member and `None` for a non-member
+(`lang/spec/record.tsv` §177: `def Positive fn [n:Integer Integer [if (n gt
+0) [n] [None]]]`, return type Integer). So `def I x:Integer => [add 1 x]` is
+a well-formed predicate admitting every Integer, and the return type cannot
+tell a mistake from a predicate.
+
+**The root cause is that one spelling carries two jobs.** The same fn body
+means different things according to the CASE of the name it is bound to:
+
+```
+def even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a callable function
+def Even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a predicate type
+```
+
+and the capitalised form cannot be refused, because it is the ONLY way to
+declare an arbitrary predicate type. The type-constructing vocabulary —
+`convert typeof inspect make refine class surface exposes gen of extends
+default const base tor tand tany tall teq is as tis istype behave fnsig tnot
+pathof` — has no predicate constructor. `refine` declines the job (*"base
+must be Record, Table, or a class type, got Integer"*), and the comparison
+predicates have their own door (`def Big (Integer gt 10)`), but an arbitrary
+membership test has none. The capital is not something predicates want; it is
+the only entrance available.
+
+**Verdict (2026-08-25, maintainer): resolve by fix — add `fnpred`, the word
+analogous to `fnsig`.** `boru describe fnsig` reads *"a function TYPE — a
+function minus its body"*; `fnpred` is its mirror, a predicate TYPE — a
+function kept FOR its body. One drops the body and keeps the shape, the other
+drops the shape and keeps the body, and both bound to a capitalised name
+produce a type: `fnsig`'s enforces a function's shape, `fnpred`'s enforces a
+value's membership.
+
+Once predicates have their own spelling, `def <Capitalised> <fn-with-body>`
+denotes nothing legitimate and can be refused AT THE DECLARATION — the
+outcome the maintainer asked for originally, reached without counting
+parameters (compare NUR100, and ADR-016's absolute ban on arity-keyed
+exceptions). It also retires the case-keyed meaning: a fn body would mean one
+thing whatever the name's case.
+
+**Half landed, 2026-08-25.** `fnpred` ships with both of `fnsig`'s forms —
+the pair form `fnpred n:Integer [eq 0 (mod 2 n)]` and the spec-list form
+`fnpred [[n:Integer] [eq 0 (mod 2 n)]]` — and the output slot is supplied
+implicitly as `Any`, which is the honest declaration: both membership
+conventions are supported and they disagree on the return type, so pinning
+it to Boolean would refuse the None-on-failure form. `InstallType` now routes
+on the DECLARATION (`IsDeclaredPredicateFn`) before falling back to the
+parameter count, and `PredicateInputType` believes a declaration whatever the
+fn's shape. Pinned in `lang/spec/fnpred.tsv` (18 rows) and
+`core/go/fnpred_declared_test.go`.
+
+What remains, and why it is not in the same change: the arity route
+(`isPredicateFnValue`, and `PredicateInputType`'s count test) is still live,
+because ~150 sites across the corpus declare predicates the old way. Deleting
+it is a BREAKING change that needs those migrated to `fnpred` first. Both are
+marked DEPRECATED in place with a pointer here so neither is extended
+meanwhile. Only when they are gone does `def <Capitalised> <fn-with-body>`
+become refusable at the declaration — the outcome this record exists for.
+
+**Related.** The 1-argument cases (`def I …`, and the capitalised-constructor
+convention `def New fn opts:Map Service […]` used by `design/examples/`) stay
+reachable only at the USE site until this lands, which is what
+`stranded_type_call` reports (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.1).
+
+---
+
+## NUR100 — ADR-016 forbids arity-keyed exceptions; two live sites use them {#nur100}
+
+**Status:** Pending (no verdict) · **Recorded:** 2026-08-25 · **Surfaced
+by:** the maintainer's ruling, 2026-08-25, that ADR-016's rule is absolute —
+"everything everywhere every time and always"
+
+**Rule:** ADR-016 — *"Every function behaves the same way whatever its arity
+and wherever it came from … this record forbids exceptions keyed on arity or
+origin."* Accepted 2026-08-15. The two exceptions it named as defects were
+fixed; the rule itself is unconditional.
+
+**Divergence:** two live sites decide behaviour by counting parameters.
+
+1. **`core/go/registry.go` `RunPredicate`** — whether a function may act as a
+   predicate at all is decided by its parameter count:
+
+   ```
+   error: predicate type K: RunPredicate: predicate must take exactly one argument
+   ```
+
+   A semantic exception: two functions that both express a membership test
+   are admitted or refused on arity alone.
+
+2. **`compiler/go/compiler_dispatch_record.go` `smallerArityOverload`** — a
+   poly window over dynamic operands is refused compilation when the word
+   registers an overload consuming FEWER operands. Lower stakes (a
+   compile-coverage conservatism, not an answer change — the lane falls back
+   and the results agree), but the same shape, and introduced recently in
+   PR #401.
+
+**No verdict.** The predicate role does need to test ONE value, so removing
+site 1's gate needs a replacement contract, not a deletion — and naming that
+contract is a design call the register should not pre-empt. Recorded so the
+divergence between an accepted ADR and the code is not lost; the fix is the
+maintainer's to direct.
 
 ---
 

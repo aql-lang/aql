@@ -25,6 +25,7 @@ func TestInactiveCheckBraid(t *testing.T) {
 		t.Fatal("inactive concreteEvalOnce must decline")
 	}
 	inactiveDrainUndefinedAtoms(nil)
+	inactiveNoteStrandedTypeCall(nil, []Value{NewCarrier(TInteger)})
 	if inactiveExprRefsCarrier(nil, []Value{NewCarrier(TInteger)}) {
 		t.Fatal("inactive exprRefsCarrier must be false")
 	}

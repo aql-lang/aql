@@ -1589,7 +1589,15 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// type-clean for downstream consumers of CheckResult.Stack.
 	CheckBraid.DrainUndefinedAtoms(e)
 
-	return e.reconcileTopResidual(e.Tape.TakeAll()), nil
+	// Judge the finished residual for the call that never happened: a
+	// capitalised `def` given a fn body binds a TYPE, so the name in call
+	// position places its node and strands the operands after it
+	// (design/HIGHER-ORDER-FUNCTIONS.0.md §5.1). Offered the RECONCILED
+	// list — what CheckResult.Stack reports — so a phantom None from a
+	// trailing 0-output guard cannot read as a stranded operand.
+	residual := e.reconcileTopResidual(e.Tape.TakeAll())
+	CheckBraid.NoteStrandedTypeCall(e, residual)
+	return residual, nil
 }
 
 // reconcileTopResidual reconciles the top-level program residual the same

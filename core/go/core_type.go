@@ -443,7 +443,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		info.Type = def
 		installSurfaceUnifier(def, info, name)
 		installTypeBinding(r, name, def, NewValueRaw(def, info))
-	} else if inputT, isPred := PredicateInputType(body), isPredicateFnValue(body); inputT != nil || isPred {
+	} else if inputT, isPred := PredicateInputType(body), IsDeclaredPredicateFn(body) || isPredicateFnValue(body); inputT != nil || isPred {
 		// Predicate type with a concrete input type: mint the *Type
 		// parented at the input rather than at TFunction so values
 		// rewrapped by the typed-bind path inherit input-side

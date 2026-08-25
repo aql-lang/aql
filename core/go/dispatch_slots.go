@@ -49,7 +49,15 @@ var CheckBraid = struct {
 	// side table rather than the value's type). fnReturnPark asks it so a
 	// user paren places such a carrier exactly as the interpreter places
 	// the concrete Function it stands for (NUR073's BROAD park).
-	ParenPlacedFnCarrier    func(e *Engine, idx int) bool
+	ParenPlacedFnCarrier func(e *Engine, idx int) bool
+	// NoteStrandedTypeCall judges the finished TOP-level residual for the
+	// call that never happened: a capitalised `def` given a fn body binds a
+	// TYPE, so the name in call position places its lattice node and leaves
+	// the operands after it unconsumed, exit 0 and all
+	// (design/HIGHER-ORDER-FUNCTIONS.0.md §5.1). Offered the reconciled
+	// residual — the exact list CheckResult.Stack reports — so the judgement
+	// reads what the user is shown.
+	NoteStrandedTypeCall    func(e *Engine, residual []Value)
 	TryShapedMethodDispatch func(e *Engine, valIdx int) bool
 	UndefinedWordCheckDiag  func(e *Engine, name string, pos SrcPos) CheckDiagnostic
 }{
@@ -72,6 +80,7 @@ var CheckBraid = struct {
 	TryDynamicFnValueDispatch:    inactiveTryDynamicFnValueDispatch,
 	TryMemberFnArrivalDispatch:   inactiveTryMemberFnArrivalDispatch,
 	ParenPlacedFnCarrier:         inactiveParenPlacedFnCarrier,
+	NoteStrandedTypeCall:         inactiveNoteStrandedTypeCall,
 	TryShapedMethodDispatch:      inactiveTryShapedMethodDispatch,
 	UndefinedWordCheckDiag:       inactiveUndefinedWordCheckDiag,
 }
@@ -97,6 +106,8 @@ func inactiveCheckModeSurfaceShape(e *Engine, w WordInfo, pos SrcPos) (bool, err
 func inactiveConcreteEvalOnce(e *Engine, items []Value) (Value, bool) { return Value{}, false }
 
 func inactiveDrainUndefinedAtoms(e *Engine) {}
+
+func inactiveNoteStrandedTypeCall(e *Engine, residual []Value) {}
 
 func inactiveExprRefsCarrier(e *Engine, items []Value) bool { return false }
 

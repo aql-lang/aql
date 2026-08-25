@@ -115,7 +115,7 @@ var categories = []Category{
 		"convert", "typeof", "inspect", "make", "refine", "class", "surface",
 		"exposes", "gen", "of", "extends", "default", "const",
 		"base", "tor", "tand", "tany", "tall", "teq",
-		"is", "as", "tis", "istype", "behave", "fnsig", "tnot", "pathof",
+		"is", "as", "tis", "istype", "behave", "fnsig", "fnpred", "tnot", "pathof",
 	}, map[string][]string{"type-util": {"tpartial"}}},
 	{"query", "Query pipelines, iteration, resources, and modules.", []string{
 		"join", "unify", "module", "import",
