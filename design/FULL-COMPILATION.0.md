@@ -625,7 +625,7 @@ them:
 | fn-word barrier | union-over-viable-sigs test | per-signature, and `specAt` can claim an `FnDefInfo` into an `Any` slot and walk PAST the function word | **latent, not live** (tested 2026-08-25): an `Any`-slot word followed by a function word raises the identical strict-barrier error in both lanes, because phase 1 commits or strands before the scan's weaker test is consulted. The divergence is real in the code and masked by ordering — unify deliberately, do not treat as a live bug |
 | reach call-head | exempts if ANY viable sig wants `Function` | only this signature | same shape as the row above |
 | sugar expansion | gated on viability | ungated, survives a nil return | **suspected drift** — see the hazard below |
-| interp-string / XML / paren-expr / splice | dedicated arms | no arms; falls through to the literal arm, matching only `Any` | intentional or gap — unclear, needs a ruling |
+| interp-string / XML / paren-expr / splice | dedicated arms that pre-evaluate the form IN PLACE | no arms — and needs none | **resolved** (tested 2026-08-25): an interp-string in a `String`-typed forward slot yields the identical value in both lanes. Phase 1 has already replaced the form with a plain value by the time the scan runs, so the scan sees no form to have an arm for. **The tape mutation IS the interface between the phases** — the VM adapter must perform the same in-place pre-evaluation, or the scan meets forms it cannot classify |
 | `/q` quote slots | four checks at different stages | a fifth, differently conditioned | NOT duplicates: different questions, do not merge |
 
 Only the first two were textually identical and could be unified by
