@@ -27,30 +27,41 @@ what a word has to say.
 ### 1.1 The declaration surface
 
 A word tells the recorder about itself through `Signature.CompileEffect`, a
-`uint16` bitfield (`core/go/value.go:432`), plus five adjacent per-signature
-fields. Measured declaration sites, excluding the definition, the two `aliases.go`
-re-exports, the recorder's own consumption, and tests:
+`uint16` bitfield (`core/go/value.go:432`), plus a set of adjacent per-signature
+fields. Counted as **assignments to the `CompileEffect` field** in non-test Go —
+not as identifier occurrences, which inflates every row with the flags' own
+explanatory comments:
 
 | Flag | Sites | What it declares |
 |---|---:|---|
-| `CompileStoresFn` | 24 | stores a fn, invokes it later off-tape |
-| `CompileFallbackBody` | 22 | code-body word; body may island |
+| `CompileStoresFn` | 22 | stores a fn, invokes it later off-tape |
+| `CompileFallbackBody` | 20 | code-body word; body may island |
 | `CompileIslandPure` | 17 | pure typed word; dispatch may island |
-| `CompileReadsFn` | 13 | reads a fn's shape, never invokes |
-| `CompileModuleFold` | 12 | pure module reader; const-foldable |
-| `CompileFnHandlerStrict` | 10 | …and validates its operand as an `FnDefInfo` |
-| `CompileScalarFold` | 10 | pure comparison; const-foldable |
-| `CompileDynBody` | 7 | runs a computed body; needs `DynEnv` |
+| `CompileReadsFn` | 12 | reads a fn's shape, never invokes |
+| `CompileModuleFold` | 11 | pure module reader; const-foldable |
+| `CompileFnHandlerStrict` | 9 | …and validates its operand as an `FnDefInfo` |
+| `CompileScalarFold` | 9 | pure comparison; const-foldable |
 | `CompileQuoteInert` | 6 | its quoted operand is inert data |
-| `CompileStoresBody` | 4 | stores a code body to run later |
-| `CompileDiverges` | 4 | always raises |
-| `CompileValueDiverges` | 3 | raises for a decidable operand shape |
-| `CompileStoresBodyList` | 3 | stores a list of code bodies |
+| `CompileDynBody` | 3 | runs a computed body; needs `DynEnv` |
+| `CompileStoresBody` | 3 | stores a code body to run later |
+| `CompileValueDiverges` | 2 | raises for a decidable operand shape |
+| `CompileDiverges` | 1 | always raises |
+| `CompileStoresBodyList` | 1 | stores a list of code bodies |
 | `CompileRunsBodyIsolated` | 1 | runs bodies in a captured-registry frame |
 | `CompileExecutesBody` | **0** | splices the body onto the tape ⇒ refuse |
 
-Plus `FnInertArgs` (3 sites — the per-position variant of the fn flags),
-`CallableSpec` (15 sites), `QuoteArgs`, `NoEvalArgs`, `BarrierPos`.
+The flag set is not the whole declaration surface. Four **per-position or
+per-slot** fields carry compile-relevant facts of their own, and any replacement
+has to account for all of them:
+
+| Field | Sites | What it declares |
+|---|---:|---|
+| `CallableSpec` (`Callable`) | 15 | the closure-compilation shape of a code body |
+| `FnInertArgs` | 3 | this *position*'s fn operand is inert (`is`, `as`, `parselang`) |
+| `FnDataArgs` | 1 | a dyn-scope fn operand lowers as data (`emit.go:5194`) |
+| `StoredBodies` | 1 | param-carrying stored body positions (`emit.go:2290`, `:5148`) |
+
+plus `QuoteArgs`, `NoEvalArgs` and `BarrierPos`.
 
 Two things stand out before any analysis.
 
@@ -155,9 +166,10 @@ zero. The stated reason is run-time independence, and there are three real costs
    downstream typed dispatch (a net loss)."* The compiled lane is
    `COMPILABLE-SUBSET.md`'s "carrier type-checker run with a recording side
    effect" — lowering works because every value carries provenance and a static
-   type, chained event to event. An island's output has neither, so the next
-   typed dispatch refuses, and the one after that. **An island does not contain
-   the loss; it propagates it.**
+   type, chained event to event. An island's output keeps its **provenance**
+   (`RecordFallback` registers it — see §4.2) but has no static **type**: it is a
+   dynamic carrier, so the next typed dispatch refuses, and the one after that.
+   **An island does not contain the loss; it propagates it.**
 2. **It is interpreter speed** for the span, which is what compiling was for.
 3. **It is re-entrant.** `COMPILABLE-SUBSET.md` §6: *"Soundness rests on island
    runs being non-nested/non-concurrent within a VM run"* — and the VM's own
@@ -276,23 +288,24 @@ env        Env      // {None, Captured, Live}
   diverging"* — it simply has no field for it. This is
   `design/FUNCTION-VALUE-SCOPE.0.md`'s rule appearing on the compiler side.
 
-Every operand-facing flag maps onto the triple without loss:
+Indicative mapping — **not yet an equivalence**, see the four open constraints
+below:
 
 | Today | `tapeBound` | `needs` | `env` |
 |---|:--:|---|---|
 | `CompileReadsFn` | false | `Any` (captures irrelevant — shape only) | `None` |
 | `CompileStoresFn` | false | `Any` | `Captured` |
 | `… \| CompileFnHandlerStrict` | false | **`FnDefInfo`** | `Captured` |
-| `CompileStoresBody` | false | `CompiledUnit` | `Captured` |
-| `CompileStoresBodyList` | false | `CompiledUnit` (element-wise) | `Captured` |
+| `CompileStoresBody` | false | `RawTokens \| CompiledUnit` | `Captured` |
+| `CompileStoresBodyList` | false | `RawTokens \| CompiledUnit` (element-wise) | `Captured` |
 | `CompileRunsBodyIsolated` | false | `RawTokens` | `Captured` |
 | `CompileDynBody` | false | `RawTokens` | **`Live`** (arms `DynEnv`) |
 | `CompileQuoteInert` | false | `Any` | `None` |
 | `CompileExecutesBody` | **true** | — | — |
-| `FnInertArgs[i]` | false | `Any` | `Captured` |
+| `FnInertArgs[i]` | false | `Any` | **per slot** — see C3 |
 | *(default)* | **true** | — | — |
 
-Three properties this buys:
+Two things this buys, if the constraints below are met:
 
 1. **`CompileExecutesBody` stops being a special case.** It becomes the honest
    answer `tapeBound: true` — the same answer the default gives, said out loud.
@@ -302,20 +315,51 @@ Three properties this buys:
    `needs: FnDefInfo`, which is a property a reader can check against
    `fnUtilArg`'s source in one glance instead of having to know that
    `StoresFn|FnHandlerStrict` is a meaningful conjunction.
-3. **The axes are orthogonal**, where the flags are not. Today the valid
-   combinations are folklore. Three independent fields cannot encode an invalid
-   one.
+
+#### Four constraints the triple must satisfy before Stage 2
+
+Raised in review of this note (PR #405) and all four verified against the code.
+They are not objections to the shape; they are the difference between a sketch
+and a specification.
+
+- **C1 — `tapeBound` must not be a plain `bool`.** Go's zero value is `false` =
+  *not* tape-bound = permissive, where today's `CompileDefault = 0` is
+  restrictive and therefore safe. A new word that forgets the field would get the
+  *unsafe* default — the exact inversion of the property this section claims. Use
+  a tri-state (`Unset` / `No` / `Yes`) with `Unset` refusing, or assert presence
+  at registration. **This is load-bearing: without it the fn-util defect gets
+  worse, not better.**
+- **C2 — `needs` is a set, not a value.** `CompileStoresBody` and
+  `CompileStoresBodyList` both document a decline path: *"A body that refuses to
+  compile rides as the plain inert const list and the word runs it on the
+  interpreter, unchanged."* The handler accepts `RawTokens` **or**
+  `CompiledUnit`; a single-valued field cannot say that, and Stage 2 would drop
+  the fallback.
+- **C3 — `env` must be derived per slot, not per flag.** The three `FnInertArgs`
+  sites disagree: `native_type.go:164` says of `is` position 1 that *"a fn value
+  there is DATA, never invoked"*, and `:190` says of `as` that *"Both slots are
+  DATA"* — both are `env: None` — while `parselang.go:122` runs *"the parser in
+  its OWN sub-engine"* and genuinely needs one. A wholesale
+  `FnInertArgs[i] → Captured` derivation is wrong for two of the three.
+- **C4 — cross-field validity must be asserted, not assumed.** An earlier draft
+  of this section claimed three independent fields "cannot encode an invalid
+  one". That is false: `tapeBound: true` with `needs: CompiledUnit` is
+  meaningless, as is executable `RawTokens` with `env: None`. Independence
+  *increases* the number of expressible states. Constrain them — validated
+  constructor, sum type, or a registration-time assertion over the legal
+  combinations.
 
 The declaration itself is **irreducible** — you cannot infer what Go code does
 by inspection, and any scheme that tries will produce the fn-util defect a fourth
-time. The goal is not to remove the obligation. It is to make it one obligation
-with three obvious answers instead of a growing vocabulary whose membership is
+time. The goal is not to remove the obligation, but to make it one obligation
+with a small fixed shape instead of a growing vocabulary whose membership is
 learned by grep.
 
 **What this does not do:** it does not compile one additional row. It is a
 refactor of how the same facts are stated. Its value is that the next word to
-arrive has a form to fill in rather than a taxonomy to study — and that the
-fn-util defect becomes a visibly empty field rather than an invisible absence.
+arrive has a form to fill in rather than a taxonomy to study — and, given C1,
+that the fn-util defect becomes a visibly empty field rather than an invisible
+absence.
 
 ### 4.2 Typed islands — let the escape carry a result contract
 
@@ -363,23 +407,47 @@ independently of how it runs. `TryRecordFallback` even receives the resulting
 trust it.
 
 For a large class of islanded constructs that contract is trivially statable:
-`FnUtil.compose f g` returns a Function from g's input to f's output; `each` over
-a `[:Integer]` with an `Integer -> Integer` callback returns `[:Integer]`.
+`each` over a `[:Integer]` with an `Integer -> Integer` callback returns
+`[:Integer]`.
 
 The consequence is that an island costs *one construct* instead of *the rest of
 the program*. At that point the all-or-nothing cliff becomes a local step, and
 `islandCeiling` can stop being a ratchet toward deletion and become what it
 should be: a **performance** budget, not a correctness gate.
 
-That reframes the frontier. Today a ledger entry means "the compiler cannot do
-this". With typed islands most would mean "the compiler does not yet
-*specialise* this" — an optimisation backlog rather than a capability gap, workable
-in value order instead of one shape at a time.
+#### Two things this section must not overclaim
 
-`boru:fn-util` is the ideal first demonstrator: nine words whose result types are
-mechanical to state (`memoize` caches, so it is not side-effect-free, but its
-*return* is its operand's return — the contract is still exact), all currently
-behind a wall that a declaration alone does not clear.
+**`boru:fn-util` is NOT the demonstrator**, though an earlier draft said it was.
+Its rows do not go through `TryRecordFallback` at all. Its natives already
+declare `Returns: TFunction`, and its behaviour rows refuse in
+`resolveDynamicApply` (`emit.go:7091`) for a reason that is about *semantics*,
+not typing:
+
+> a READ-substituted lead … is a WORD dispatch in the interpreter: the runtime
+> binding always applies. `OpCallDynamic`'s island instead runs anonymous-VALUE
+> semantics, which leave a named Go-impl fn value as data (compiled `[99]` vs
+> interp `[7]`). With no statically-known closure shape the two cannot be proven
+> to agree — refuse
+
+A result contract says nothing about that. Those rows need the NUR101 application
+model, and nothing in §4.2 brings them closer. (The same comment notes that the
+*event*-lead spelling — `((FnUtil.const 7) 99)`, no def-read — does keep the
+island, so fn-util touches both paths; it is only the ledgered def-bound rows
+that this section cannot claim.)
+
+**And the benefit is currently unmeasurable, because the two stages are coupled.**
+The downstream-of-a-dynamic refusal is `"unannotated or opaque word <word>"`
+(`emit.go:4889`), and **no frontier row cites it.** That is not evidence the
+cascade is cheap — it is evidence that islanding is forbidden outright, so the
+downstream case never arises in the corpus to be counted. Stage 3's value can
+therefore only be measured *after* Stage 4 lifts the ban, which is an argument
+for sequencing them together and for treating the first as provisional until the
+second reports.
+
+What §4.2 does establish is narrower and still worth having: the cascade is a
+typing failure rather than an addressability one, the mechanism to tolerate a
+dynamic output already exists, and the place to state a contract already exists.
+Whether that buys coverage is an open measurement, not a claim.
 
 ### 4.3 What this does **not** fix, and one thing it costs
 
@@ -392,7 +460,7 @@ the word's output as an event with provenance."* §4.2 establishes that an islan
 OUTPUT already has an address — `setProduced` registers it — so nothing there
 helps these rows: their missing address is on the **operand** side, and a result
 contract says nothing about operands. This note does not claim that family, and
-a reader should not read the 7 + ~11 in §5 as a dent in the 36.
+a reader should not read §5's 7 rows as a dent in the 36.
 
 **And the cost: two lanes that must agree is a bug detector.** NUR101 was found
 *by* the disagreement between them — and there the compiled lane was correct and
@@ -410,24 +478,32 @@ for collapsing to one semantics.
 | Stage | Work | Rows moved | Risk |
 |---|---|---:|---|
 | **0** | Delete `CompileExecutesBody` (0 sites) | 0 | none |
-| **1** | Introduce the triple; derive it from today's flags; assert equivalence over every registered signature | 0 | low — mechanical, gated by the existing differential corpus |
+| **1** | Resolve C1–C4; introduce the triple; derive it from today's flags and the four per-slot fields; assert equivalence over every registered signature | 0 | low — mechanical, gated by the existing differential corpus |
 | **2** | Flip the recorder to read the triple; retire the ten flags | 0 | low |
-| **3** | Add the result contract; make `OpFallback` results typed | ? | medium — changes what downstream sees |
-| **4** | Re-tier `islandCeiling` from a correctness gate to a perf budget; graduate the 7 working-but-ledgered rows | **7** | medium — needs a perf story, not just a correctness one |
-| **5** | Declare result contracts for `boru:fn-util`; graduate its rows behind §5.4 | **~11** | depends on NUR101 |
+| **3+4** | *(coupled — see §4.2)* Add the result contract, make `OpFallback` results typed, and re-tier `islandCeiling` from a correctness gate to a perf budget | **7** measured, rest unknown | medium — needs a perf story, and Stage 3's coverage benefit cannot be measured until 4 lands |
+
+The 7 are §1.3's working-but-ledgered rows; they graduate on the re-tier alone,
+independently of whether the result contract buys anything further.
+
+**`boru:fn-util` is not on this list.** Its rows refuse in `resolveDynamicApply`
+on the NUR101 application model, not on an island's result type (§4.2), so
+nothing here moves them.
 
 Stages 0–2 are a refactor with no behaviour change, and they are worth doing on
-their own: they are what stops the taxonomy producing a fourth fn-util. Stage 3
+their own: they are what stops the taxonomy producing a fourth fn-util. Stage 3+4
 is the real decision and should not be taken on this note alone.
 
 ---
 
 ## 6. What would falsify this
 
-- **If most operand-facing flags do not map cleanly onto the triple.** The table
-  in §4.1 is by inspection of the flag doc comments, not by implementing it.
-  Stage 1's equivalence assertion over every registered signature is the real
-  test, and it is cheap; run it before Stage 2.
+- **If C1–C4 cannot all be satisfied at once.** §4.1's four constraints were
+  each found by reading one flag's contract; there may be a fifth, and there may
+  be a pair that conflict. The table there is explicitly *indicative*, not an
+  equivalence. Stage 1's assertion over every registered signature — including
+  `FnInertArgs`, `FnDataArgs` and `StoredBodies`, whose omission from the first
+  draft of this note is itself the evidence that the surface is easy to
+  under-count — is the real test, and it is cheap; run it before Stage 2.
 - **If a typed island result does not actually stop the cascade.** §4.2 argues
   the cascade is purely a typing failure, on the strength of `setProduced` and
   `AnyDynamicCarrier`. The cheap check, before any implementation: instrument
