@@ -623,7 +623,7 @@ them:
 | forward/stack split point | `BarrierPos` + `/s` `/f` | identical arithmetic | **unified** (landed) — the source already called its copy a "mirror" |
 | open paren `(` | evaluates when a viable overload consumes the position | always a hard boundary | intentional: phase 1 pre-evaluates, the scan must not |
 | fn-word barrier | union-over-viable-sigs test | per-signature, and `specAt` can claim an `FnDefInfo` into an `Any` slot and walk PAST the function word | **latent, not live** (tested 2026-08-25): an `Any`-slot word followed by a function word raises the identical strict-barrier error in both lanes, because phase 1 commits or strands before the scan's weaker test is consulted. The divergence is real in the code and masked by ordering — unify deliberately, do not treat as a live bug |
-| reach call-head | exempts if ANY viable sig wants `Function` | only this signature | same shape as the row above |
+| reach call-head | exempts if ANY viable sig wants `Function` | only this signature | **latent, not live** (tested 2026-08-25): a `Function`-valued member reached through dot access selects the `Function` overload identically in both lanes, as does an `Integer`-valued one. Same masking as the barrier row |
 | sugar expansion | gated on viability | ungated, survives a nil return | **suspected drift** — see the hazard below |
 | interp-string / XML / paren-expr / splice | dedicated arms that pre-evaluate the form IN PLACE | no arms — and needs none | **resolved** (tested 2026-08-25): an interp-string in a `String`-typed forward slot yields the identical value in both lanes. Phase 1 has already replaced the form with a plain value by the time the scan runs, so the scan sees no form to have an arm for. **The tape mutation IS the interface between the phases** — the VM adapter must perform the same in-place pre-evaluation, or the scan meets forms it cannot classify |
 | `/q` quote slots | four checks at different stages | a fifth, differently conditioned | NOT duplicates: different questions, do not merge |
@@ -631,7 +631,21 @@ them:
 Only the first two were textually identical and could be unified by
 inspection. Every remaining row needs the difference argued before it is
 touched — which is why this is slow work rather than a mechanical sweep,
-and why the three loops re-seat separately (§10).
+and why the three loops re-seat separately (§10). Seven of the eight are
+now classified with evidence; the sugar row is the one still unbounded.
+
+**What the probes add up to, and it is a constraint rather than a
+comfort.** Five experiments over the four suspected rows all found the
+lanes agreeing. The divergences the code review identified are real *in
+the code* and masked *at the language level* — by phase ORDER. Phase 1
+commits or strands before the scan's weaker per-signature tests are ever
+consulted, and phase 1 pre-evaluates forms out of existence before the
+scan would have to classify them. So the ordering is not an
+implementation detail to be tidied during extraction: it is load-bearing
+for correctness, and the extracted machine must preserve it exactly. An
+adapter that ran the classifying scan against un-pre-evaluated slots, or
+that consulted the per-signature barrier test first, would expose every
+one of these differences at once.
 
 **One hazard the extraction must not inherit.** The per-candidate scan
 splices sugar expansions into the tape (`core/go/engine.go:8731`)
