@@ -814,6 +814,25 @@ shape the audit itself records (`boru do 'def I … end I 5'`) is caught today.
 The limit is pinned as a fact by `TestStrandedTypeCallMissesConsumedPair`, so
 a fix closes it loudly rather than drifting past it.
 
+**A related declaration-time gap — NUR099.** Reviewing this diagnostic, the
+maintainer asked why `def <Capitalised>` accepts a function with an
+implementation body at all. Most of that reading does not hold: a fn body
+under a capitalised name IS the predicate-type declaration form, and a
+non-Boolean body is legal under the **None-on-failure** convention, where the
+body returns the value for a member and `None` for a non-member
+(`lang/spec/record.tsv` §177 pins `def Positive fn [n:Integer Integer [if (n
+gt 0) [n] [None]]]`, return type Integer). `def I x:Integer => [add 1 x]` is
+therefore a well-formed predicate that admits every Integer.
+
+What does hold is that `def K fn [[a:Any b:Any][Any][a]] end K 1 2` binds a
+type nothing can inhabit and reports nothing — recorded as **NUR099**, with
+no proposed fix. The discriminator that suggests itself is the parameter
+count, and ADR-016 forbids exceptions keyed on arity; the maintainer ruled
+that absolute on 2026-08-25. The engine's own `RunPredicate` gate breaks the
+same rule and is recorded separately as **NUR100**. So this stays an open
+divergence, not a fix in waiting, and `stranded_type_call` remains the only
+thing reporting the §5.1 shape.
+
 The same silent-stranding class has since been caught at declaration time
 too: a malformed `fn` whose output slot is bare (`def f fn List Any [1]`)
 strands its operands and binds nothing, exit 0, where its bracketed-output

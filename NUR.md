@@ -89,6 +89,8 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR099](#nur099) | `def <Capitalised> <fn>` binds a type the engine can already prove nothing will ever inhabit, and says nothing: `def K fn [[a:Any b:Any][Any][a]] end K 1 2` prints `K 1 2`, exit 0 | reviewing the §5.1 diagnostic, 2026-08-25 |
+| [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -98,6 +100,92 @@ what will close it; a record **re-opened from Allowed** keeps the
 argued form it already had, with the superseded allowance retained as
 data. Expansion to the full argued form is what an **Allowed** verdict
 requires.
+
+---
+
+## NUR099 — a capitalised `def` binds an uninhabitable type, silently {#nur099}
+
+**Status:** Pending (no verdict) · **Recorded:** 2026-08-25 · **Surfaced
+by:** the maintainer's review of the §5.1 `stranded_type_call` diagnostic
+
+**Rule:** boru refuses loudly, and at the declaration. A declaration the
+engine can already prove unusable is not accepted and left to fail later —
+NUR091 is the same rule applied to a malformed `fn` triple.
+
+**Divergence:** the declaration is accepted and nothing reports it.
+
+```
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  K 1 2'
+K 1 2
+$ echo $?
+0
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  4 is K   "s" is K   true is K'
+false false false                     ← the bound type admits nothing at all
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  def z:K 5 end z'
+error: def z: predicate type K: RunPredicate: predicate must take exactly one argument
+```
+
+The engine reaches a definite conclusion about `K` — but only when someone
+uses it AS A TYPE. It never reports at the declaration, and never at all for
+the spelling that actually happens: calling it.
+
+**Not the return type.** `def <Capitalised> <fn>` is the predicate-type
+declaration form and a non-Boolean body is legal — the **None-on-failure**
+convention returns the value for a member and `None` for a non-member
+(`lang/spec/record.tsv` §177: `def Positive fn [n:Integer Integer [if (n gt
+0) [n] [None]]]`, return type Integer). So `def I x:Integer => [add 1 x]` is
+a well-formed predicate admitting every Integer, and the return type cannot
+tell a mistake from a predicate.
+
+**No verdict.** The obvious discriminator is the fn's parameter count, and
+that is forbidden outright — ADR-016 forbids exceptions keyed on arity, and
+the maintainer ruled 2026-08-25 that this holds "everything everywhere every
+time and always". No non-arity discriminator is known, so this record stands
+as an unargued divergence rather than a fix waiting to land. See NUR100: the
+arity gate the engine already runs here is itself in scope of that ruling.
+
+**Related.** The 1-argument cases (`def I …`, and the capitalised-constructor
+convention `def New fn opts:Map Service […]` used by `design/examples/`) are
+reachable only at the USE site, which is what `stranded_type_call` reports
+(`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.1).
+
+---
+
+## NUR100 — ADR-016 forbids arity-keyed exceptions; two live sites use them {#nur100}
+
+**Status:** Pending (no verdict) · **Recorded:** 2026-08-25 · **Surfaced
+by:** the maintainer's ruling, 2026-08-25, that ADR-016's rule is absolute —
+"everything everywhere every time and always"
+
+**Rule:** ADR-016 — *"Every function behaves the same way whatever its arity
+and wherever it came from … this record forbids exceptions keyed on arity or
+origin."* Accepted 2026-08-15. The two exceptions it named as defects were
+fixed; the rule itself is unconditional.
+
+**Divergence:** two live sites decide behaviour by counting parameters.
+
+1. **`core/go/registry.go` `RunPredicate`** — whether a function may act as a
+   predicate at all is decided by its parameter count:
+
+   ```
+   error: predicate type K: RunPredicate: predicate must take exactly one argument
+   ```
+
+   A semantic exception: two functions that both express a membership test
+   are admitted or refused on arity alone.
+
+2. **`compiler/go/compiler_dispatch_record.go` `smallerArityOverload`** — a
+   poly window over dynamic operands is refused compilation when the word
+   registers an overload consuming FEWER operands. Lower stakes (a
+   compile-coverage conservatism, not an answer change — the lane falls back
+   and the results agree), but the same shape, and introduced recently in
+   PR #401.
+
+**No verdict.** The predicate role does need to test ONE value, so removing
+site 1's gate needs a replacement contract, not a deletion — and naming that
+contract is a design call the register should not pre-empt. Recorded so the
+divergence between an accepted ADR and the code is not lost; the fix is the
+maintainer's to direct.
 
 ---
 
