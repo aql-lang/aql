@@ -622,7 +622,7 @@ them:
 | structural boundary, `end`, `)` | `scanBoundaryToken` | *was* an inline copy | **unified** (landed) |
 | forward/stack split point | `BarrierPos` + `/s` `/f` | identical arithmetic | **unified** (landed) — the source already called its copy a "mirror" |
 | open paren `(` | evaluates when a viable overload consumes the position | always a hard boundary | intentional: phase 1 pre-evaluates, the scan must not |
-| fn-word barrier | union-over-viable-sigs test | per-signature, and `specAt` can claim an `FnDefInfo` into an `Any` slot and walk PAST the function word | **suspected drift** — investigate before unifying |
+| fn-word barrier | union-over-viable-sigs test | per-signature, and `specAt` can claim an `FnDefInfo` into an `Any` slot and walk PAST the function word | **latent, not live** (tested 2026-08-25): an `Any`-slot word followed by a function word raises the identical strict-barrier error in both lanes, because phase 1 commits or strands before the scan's weaker test is consulted. The divergence is real in the code and masked by ordering — unify deliberately, do not treat as a live bug |
 | reach call-head | exempts if ANY viable sig wants `Function` | only this signature | same shape as the row above |
 | sugar expansion | gated on viability | ungated, survives a nil return | **suspected drift** — see the hazard below |
 | interp-string / XML / paren-expr / splice | dedicated arms | no arms; falls through to the literal arm, matching only `Any` | intentional or gap — unclear, needs a ruling |
