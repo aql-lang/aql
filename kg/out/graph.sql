@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '8228460546713811433');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '8165138848228113602');
 INSERT INTO input_files VALUES ('../AGENTS.md', '5746437182943957856', 12139);
 INSERT INTO input_files VALUES ('../CLI.md', '3434391071839442713', 83578);
 INSERT INTO input_files VALUES ('../README.md', '6312173284019959426', 13333);
@@ -40,6 +40,7 @@ INSERT INTO input_files VALUES ('../design/DIAGNOSTIC-VALUES.0.md', '40506076665
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
 INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '5680123931664569575', 11346);
 INSERT INTO input_files VALUES ('../design/FN-VALUE-OPEN-WORK.0.md', '7570822714448974016', 32328);
+INSERT INTO input_files VALUES ('../design/FULL-COMPILATION.0.md', '2986784275403659606', 57660);
 INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '4913722754517353679', 65012);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
 INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '3044536311677551962', 23460);
@@ -65,7 +66,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '3313384100721460283', 520);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '7226409198185034620', 58735);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '5815377652926130210', 61981);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -121,6 +122,9 @@ INSERT INTO sources VALUES ('src:fn-output-sig', 'text', 'design/FN-OUTPUT-SIG.0
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:fn-value-open-work', 'text', 'design/FN-VALUE-OPEN-WORK.0.md', 'function values: the open work, re-measured', NULL, 'fn-value-open-work-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:full-compilation', 'text', 'design/FULL-COMPILATION.0.md', 'full compilation: the total lowering design', NULL, 'full-compilation-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:function-value-scope', 'text', 'design/FUNCTION-VALUE-SCOPE.0.md', 'function value scope: where a fn value''s free words resolve', NULL, 'function-value-scope-2026-08', 'primary', '{
@@ -262,6 +266,8 @@ INSERT INTO entity_attributes VALUES ('ent:Document:3294415633888265368', 'role'
 INSERT INTO entities VALUES ('ent:Document:3521225411209893772', 'Document', 'design/LANG-ENG-CONTENT-AUDIT.0.md', 'design/lang-eng-content-audit.0.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:3534903004749141856', 'Document', 'design/CONTENT-ADDRESSING.0.md', 'design/content-addressing.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:3534903004749141856', 'role', 'the design note for deriving a definition''s identity from its content rather than its name: the three costs that share that root cause (the per-invoke DepsFresh walk, the AOT codec''s symbolic-reference refusals, the pre-1.0 rename tax), the split between an ARTIFACT digest over file bytes — unblocked, already specified by boru-vendor §5 — and a DEFINITION digest over meaning, which needs canonicity, alpha normalisation, macro expansion, referent substitution and cycle components; three options for referent substitution under call-time binding, recommending a (text digest, world digest) compound key; a five-phase sequence; and the rejections — codebase-as-database, hash-based type identity, immutable definitions as a language rule. Measured by design/unison-hash-identity-probe.0.md and scripts/hash-identity-probe.sh');
+INSERT INTO entities VALUES ('ent:Document:373024332343379636', 'Document', 'design/FULL-COMPILATION.0.md', 'design/full-compilation.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:373024332343379636', 'role', 'the total-lowering design for full compilation, answering the directive that islands are unacceptable, the interpreter is not an escape hatch, and failure to compile is a hard error: the compiler becomes TOTAL by changing its worst verdict from refuse to lower generically — every dispatch the checker cannot resolve compiles into opcodes that make the interpreter''s own decisions at runtime by calling the same kernel routines (one kernel, two lanes: typed where the checker has proof, generic elsewhere, decided per event not per program). The measured corrections to the frame: islandCeiling 0 counts only OpFallback while the compiled lane still re-enters Engine.Run via OpCallDynFrame value windows, the drift window''s source-token stepping, the callDynamic non-closure arms and ~15 vmDefer whole-program re-runs; and the 153-row ledger samples ~30 of ~130 distinct refusal reasons, so totality is proven against the gate inventory with generated sweeps. The mechanisms: statement descriptors plus an extracted collection kernel carrying the forward-collection/barrier state that selects between two raise texts (the §9d finding a bare stack window cannot repair); universal open-closure-converted fn values with lazy first-apply compilation; one Apply kernel implementing the NUR101 application model (name-read lead is WORD dispatch through the live def stack, anonymous value is data); bind twins making VM-time def order real; production-order mark regions dissolving the provenance families; the resident compiler for eval-class code with an induction argument for totality through runtime compilation; checker totality by compiling statically-definite errors to traps under an erasure discipline with lump boundaries; and retirement of every vmDefer valve onto compiled landing pads (the Self deopt-to-compiled precedent). Adopts COMPILE-DECLARATION-MODEL''s declaration triple, rejects its typed islands (the seven working island rows graduate natively via the universal fn-value lane), keeps the interpreter as the reference oracle so the two-lane bug detector survives, and stages the work behind new ratchets — engineEntryCeiling and deferCeiling — that make the live island residue measurable for the first time');
 INSERT INTO entities VALUES ('ent:Document:3904106568037504161', 'Document', 'AGENTS.md', 'agents.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:3955423872539901697', 'Document', 'HOWTO.md', 'howto.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:4163489813681141089', 'Document', 'README.md', 'readme.md', 'accepted');
@@ -582,6 +588,8 @@ INSERT INTO assertions VALUES ('ast:2618788706676923636', 'ent:Document:25748763
 INSERT INTO assertion_evidence VALUES ('ast:2618788706676923636', 'src:root-module', 'The finding', '**The finding: `Value` alone closes over 75.7% of `core/go`.**', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2650141132074711437', 'ent:Product:9122085017676103232', 'supports', 'entity', 'ent:Concept:5837115061456563631', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2650141132074711437', 'src:agents', 'First: let the tool document itself', 'The boru CLI documents both the language and itself, and that output is generated from the live engine', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:2688597691752512641', 'ent:Document:373024332343379636', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:2688597691752512641', 'src:full-compilation', 'title', 'Full compilation — the total lowering design', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2714957710081530623', 'ent:Document:3521225411209893772', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2714957710081530623', 'src:audit', 'title', 'Lang/Eng Content Audit — and the Types-Module Proposal', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2717924021842468202', 'ent:Document:5313783338663858074', 'supports', 'entity', 'ent:SoftwareModule:6880687338933514154', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -836,6 +844,8 @@ INSERT INTO assertions VALUES ('ast:9138469699059997665', 'ent:SoftwareModule:45
 INSERT INTO assertion_evidence VALUES ('ast:9138469699059997665', 'src:gomod:basic-go', 'module directive', 'module github.com/boru-lang/boru/basic/go', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:914658451831503592', 'ent:Document:6176355086953937469', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:914658451831503592', 'src:readme', 'Documentation', 'Tutorial | You are new to boru and want to learn it step by step.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:962654754858990955', 'ent:Document:373024332343379636', 'supports', 'entity', 'ent:SoftwareModule:6880687338933514154', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:962654754858990955', 'src:full-compilation', '0. The claim, in one paragraph', 'Under this design the worst verdict is *lower generically*', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:965013337224509220', 'ent:SoftwareModule:8275629451197117420', 'depends_on', 'entity', 'ent:SoftwareModule:559301050642427014', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:965013337224509220', 'src:gomod:lang-go', 'require block', 'github.com/boru-lang/boru/check/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:999583482530779094', 'ent:Document:5105101056062860425', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
