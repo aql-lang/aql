@@ -789,6 +789,20 @@ meant the value.
 > in `REFERENCE.md` §"Higher-order array words". The audit's "callback
 > uniformity across containers ✗" row in §2 is now: uniform where a form
 > is per-container, deliberately different for `filter`.
+>
+> **Two costs, both narrow and both stated rather than hidden.** The list
+> Function form reaches its callback through `InvokeBody`, which the
+> lowering ISLANDS rather than models, so those rows are ledgered in
+> `frontier-hof-audit.tsv` §12 — the fix buys the spelling, not the
+> speed, and graduation is a modelled fn-value callback frame. And a
+> LAMBDA over a *gradual-Any* collection now refuses to compile where it
+> used to: with two `TFunction` overloads reachable, the compiler cannot
+> commit, because the callback gets the ELEMENT over a list and a
+> `KeyVal` over a map — so a closure compiled against either shape is
+> wrong for the other. That refusal is correct; the default lane runs the
+> program on the interpreter with the loud warning
+> (`lang/go/bytecode_gradual_each_test.go`, the refusesAndFallsBack
+> group).
 
 ```
 $ boru do 'def dbl x:Integer => [mul 2 x] end each dbl/v [1 2 3]'

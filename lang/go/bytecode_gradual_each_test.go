@@ -82,11 +82,45 @@ func TestGradualAnyEachFoldScan(t *testing.T) {
 	// single TFunction overload so the ambiguity gate never fires and it commits
 	// the one matched overload), and an EMPTY collection (the seed/empty paths).
 	sound := []struct{ name, src string }{
-		{"lambda over dynamic map", pre + `[(mkl {a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i]))]`},
+		// NOTE (NUR086's fix, 2026-08-24): "lambda over dynamic map" MOVED to
+		// refusesAndFallsBack below. The invariant the comment above states —
+		// "a TFunction lambda body matches only the single {TFunction,Map}
+		// overload (count 1) — so a lambda never reaches here" — no longer
+		// holds: each/for-each/fold/scan gained {TFunction,List}, so a lambda
+		// over a GRADUAL collection now matches two TFunction overloads and
+		// the ambiguity gate fires. That refusal is CORRECT (a lambda gets the
+		// ELEMENT over a list and a KeyVal over a map, so a closure compiled
+		// against either shape is wrong for the other), and it is a real, if
+		// narrow, compile-coverage cost of the fix.
 		{"each over dynamic empty list", pre + `[(mkl [] each [dup add])]`},
 		{"each over dynamic empty map", pre + `[(mkl {} each [dup add])]`},
 		{"scan over dynamic empty list", pre + `[(scan [add] (mkl []))]`},
 	}
+	// REFUSES AND FALLS BACK: the compile lane cannot commit, the default lane
+	// runs the program correctly on the interpreter with the loud performance
+	// warning. Asserted through CompileCheck (the refusal is the point) plus
+	// interpreter parity, since RunCompiled surfaces a loud refusal as an error.
+	refusesAndFallsBack := []struct{ name, src, reason string }{
+		{"lambda over dynamic map", pre + `[(mkl {a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i]))]`,
+			"ambiguous overload (List vs Map)"},
+	}
+	for _, c := range refusesAndFallsBack {
+		t.Run("refuses/"+c.name, func(t *testing.T) {
+			a, _ := New()
+			prog, reason, _, _ := a.CompileCheck(c.src)
+			if prog != nil {
+				t.Fatalf("expected a refusal (%s); it compiled — if the shape is now modelled, move it back to sound", c.reason)
+			}
+			if !strings.Contains(reason, c.reason) {
+				t.Errorf("refusal reason %q does not mention %q", reason, c.reason)
+			}
+			b, _ := New()
+			if _, werr := b.RunInterp(c.src); werr != nil {
+				t.Errorf("the interpreter must still run it: %v", werr)
+			}
+		})
+	}
+
 	for _, c := range sound {
 		t.Run("sound/"+c.name, func(t *testing.T) {
 			a, _ := New()
