@@ -1494,7 +1494,16 @@ logic, inside one work session, is the argument for case 11 below. Build the cor
 `design/examples/apps/`: mini-redis, mini-s3, todo-api), one case per
 concurrency shape:
 
-1. **Steady-state sequential dispatch** — echo (exists; the baseline).
+1. **Steady-state sequential dispatch** — echo. **Built and measured
+   2026-08-25** (`test/go/servercorpus/callback_census_test.go`): a boru
+   program starts a TCP echo server, connects to itself, exchanges three
+   framed messages over the per-connection handler and closes. Compiled
+   result and interpreted result are identical, and the compiled run
+   performs **zero** unattributed interpreter runs — the handler executes
+   entirely on the VM. This case is therefore already at its end-state
+   ceiling rather than ratcheting toward one, which answers the plain
+   form of "does a callback server compile completely?" with yes. The
+   cases below are the shapes that answer is not yet known for.
 2. **Protocol framing / codec re-entry** — mini-redis (exists); extend
    with partial frames (the codec's `{need:1}` path re-entered
    mid-message) and pipelined commands.

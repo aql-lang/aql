@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '7759566779275067278');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '1401171029126284000');
 INSERT INTO input_files VALUES ('../AGENTS.md', '5746437182943957856', 12139);
 INSERT INTO input_files VALUES ('../CLI.md', '3434391071839442713', 83578);
 INSERT INTO input_files VALUES ('../README.md', '6312173284019959426', 13333);
@@ -40,7 +40,7 @@ INSERT INTO input_files VALUES ('../design/DIAGNOSTIC-VALUES.0.md', '40506076665
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
 INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '5680123931664569575', 11346);
 INSERT INTO input_files VALUES ('../design/FN-VALUE-OPEN-WORK.0.md', '7570822714448974016', 32328);
-INSERT INTO input_files VALUES ('../design/FULL-COMPILATION.0.md', '1104871987334583058', 103992);
+INSERT INTO input_files VALUES ('../design/FULL-COMPILATION.0.md', '8162664513798856045', 104626);
 INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '4913722754517353679', 65012);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
 INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '3044536311677551962', 23460);
@@ -65,7 +65,7 @@ INSERT INTO input_files VALUES ('../test/solardemo/go.mod', '8784937342672483810
 INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425', 1242);
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
-INSERT INTO input_files VALUES ('<go tree: modules + packages>', '3331850341318145970', 537);
+INSERT INTO input_files VALUES ('<go tree: modules + packages>', '3903893308060620019', 558);
 INSERT INTO input_files VALUES ('project/boru-project.jsonic', '5815377652926130210', 61981);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
@@ -518,6 +518,11 @@ INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8650101979302333988', 
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8650101979302333988', 'parent_module', 'cmd/go');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8650101979302333988', 'path', 'cmd/go/boru');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:8650101979302333988', 'unit', 'go-package');
+INSERT INTO entities VALUES ('ent:SoftwareModule:9039525583341183398', 'SoftwareModule', 'test/go/servercorpus package', 'test/go/servercorpus package', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:9039525583341183398', 'go_module', 'github.com/boru-lang/boru/test/go');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:9039525583341183398', 'parent_module', 'test/go');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:9039525583341183398', 'path', 'test/go/servercorpus');
+INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:9039525583341183398', 'unit', 'go-package');
 INSERT INTO entities VALUES ('ent:SoftwareModule:927371487649425292', 'SoftwareModule', 'lang/go/debugserve package', 'lang/go/debugserve package', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:927371487649425292', 'go_module', 'github.com/boru-lang/boru/lang/go');
 INSERT INTO entity_attributes VALUES ('ent:SoftwareModule:927371487649425292', 'parent_module', 'lang/go');
@@ -647,6 +652,8 @@ INSERT INTO assertions VALUES ('ast:3727255686445494517', 'ent:SoftwareModule:35
 INSERT INTO assertion_evidence VALUES ('ast:3727255686445494517', 'src:go-tree', 'test/go/specgen', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3762011129750730370', 'ent:Document:5215900749522722466', 'related_to', 'entity', 'ent:Product:2046405728378673079', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3762011129750730370', 'src:go-module-graph', 'Status', 'the same ground truth `kg/gomod.boru` reads to build the knowledge graph''s module view', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:376547755920904957', 'ent:SoftwareModule:9039525583341183398', 'part_of', 'entity', 'ent:SoftwareModule:5138375578915662736', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:376547755920904957', 'src:go-tree', 'test/go/servercorpus', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3803758004719555331', 'ent:Document:801358522423407770', 'supports', 'entity', 'ent:SoftwareModule:6880687338933514154', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3803758004719555331', 'src:compile-declaration-model', '3. Diagnosis: the flags are a patch set over a wrong default', 'The zero value is not "no information". It is a **substantive claim**', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3820981091835606929', 'ent:SoftwareModule:4361728672720029650', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
