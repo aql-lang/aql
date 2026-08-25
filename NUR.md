@@ -89,7 +89,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
-| [NUR099](#nur099) | `def <Capitalised> <fn>` binds a type the engine can already prove nothing will ever inhabit, and says nothing: `def K fn [[a:Any b:Any][Any][a]] end K 1 2` prints `K 1 2`, exit 0 | reviewing the §5.1 diagnostic, 2026-08-25 |
+| [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
 Pending records normally use a compact form (rule / divergence /
@@ -103,10 +103,11 @@ requires.
 
 ---
 
-## NUR099 — a capitalised `def` binds an uninhabitable type, silently {#nur099}
+## NUR099 — a fn body means a different thing under a capitalised name, and that is the only door to a predicate type {#nur099}
 
-**Status:** Pending (no verdict) · **Recorded:** 2026-08-25 · **Surfaced
-by:** the maintainer's review of the §5.1 `stranded_type_call` diagnostic
+**Status:** Pending (verdict: resolve by fix) · **Recorded:** 2026-08-25 ·
+**Surfaced by:** the maintainer's review of the §5.1 `stranded_type_call`
+diagnostic
 
 **Rule:** boru refuses loudly, and at the declaration. A declaration the
 engine can already prove unusable is not accepted and left to fail later —
@@ -137,17 +138,48 @@ convention returns the value for a member and `None` for a non-member
 a well-formed predicate admitting every Integer, and the return type cannot
 tell a mistake from a predicate.
 
-**No verdict.** The obvious discriminator is the fn's parameter count, and
-that is forbidden outright — ADR-016 forbids exceptions keyed on arity, and
-the maintainer ruled 2026-08-25 that this holds "everything everywhere every
-time and always". No non-arity discriminator is known, so this record stands
-as an unargued divergence rather than a fix waiting to land. See NUR100: the
-arity gate the engine already runs here is itself in scope of that ruling.
+**The root cause is that one spelling carries two jobs.** The same fn body
+means different things according to the CASE of the name it is bound to:
+
+```
+def even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a callable function
+def Even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a predicate type
+```
+
+and the capitalised form cannot be refused, because it is the ONLY way to
+declare an arbitrary predicate type. The type-constructing vocabulary —
+`convert typeof inspect make refine class surface exposes gen of extends
+default const base tor tand tany tall teq is as tis istype behave fnsig tnot
+pathof` — has no predicate constructor. `refine` declines the job (*"base
+must be Record, Table, or a class type, got Integer"*), and the comparison
+predicates have their own door (`def Big (Integer gt 10)`), but an arbitrary
+membership test has none. The capital is not something predicates want; it is
+the only entrance available.
+
+**Verdict (2026-08-25, maintainer): resolve by fix — add `fnpred`, the word
+analogous to `fnsig`.** `boru describe fnsig` reads *"a function TYPE — a
+function minus its body"*; `fnpred` is its mirror, a predicate TYPE — a
+function kept FOR its body. One drops the body and keeps the shape, the other
+drops the shape and keeps the body, and both bound to a capitalised name
+produce a type: `fnsig`'s enforces a function's shape, `fnpred`'s enforces a
+value's membership.
+
+Once predicates have their own spelling, `def <Capitalised> <fn-with-body>`
+denotes nothing legitimate and can be refused AT THE DECLARATION — the
+outcome the maintainer asked for originally, reached without counting
+parameters (compare NUR100, and ADR-016's absolute ban on arity-keyed
+exceptions). It also retires the case-keyed meaning: a fn body would mean one
+thing whatever the name's case.
+
+Open for the implementing change: the surface form (whether `fnpred` mirrors
+`fnsig`'s two forms — the pair form and the spec-list form), and the
+migration of the existing capitalised-fn predicate declarations — `Even`,
+`Positive`, `Negative`, `Pos` in the spec corpus, plus `design/examples/`.
 
 **Related.** The 1-argument cases (`def I …`, and the capitalised-constructor
-convention `def New fn opts:Map Service […]` used by `design/examples/`) are
-reachable only at the USE site, which is what `stranded_type_call` reports
-(`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.1).
+convention `def New fn opts:Map Service […]` used by `design/examples/`) stay
+reachable only at the USE site until this lands, which is what
+`stranded_type_call` reports (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.1).
 
 ---
 

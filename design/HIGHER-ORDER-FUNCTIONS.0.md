@@ -825,13 +825,29 @@ gt 0) [n] [None]]]`, return type Integer). `def I x:Integer => [add 1 x]` is
 therefore a well-formed predicate that admits every Integer.
 
 What does hold is that `def K fn [[a:Any b:Any][Any][a]] end K 1 2` binds a
-type nothing can inhabit and reports nothing — recorded as **NUR099**, with
-no proposed fix. The discriminator that suggests itself is the parameter
-count, and ADR-016 forbids exceptions keyed on arity; the maintainer ruled
-that absolute on 2026-08-25. The engine's own `RunPredicate` gate breaks the
-same rule and is recorded separately as **NUR100**. So this stays an open
-divergence, not a fix in waiting, and `stranded_type_call` remains the only
-thing reporting the §5.1 shape.
+type nothing can inhabit and reports nothing. The discriminator that suggests
+itself is the parameter count, and that is forbidden — ADR-016 bans
+exceptions keyed on arity, ruled absolute by the maintainer on 2026-08-25
+(the engine's own `RunPredicate` gate breaks the same rule; recorded as
+**NUR100**).
+
+The route that does work goes through the ROOT of §5.1, which is that one
+spelling carries two jobs. The same fn body means a callable function under a
+lowercase name and a membership test under a capitalised one, and the
+capitalised form cannot simply be refused because it is the ONLY way to
+declare an arbitrary predicate type: no word in the type-constructing
+vocabulary does that job (`refine` declines an Integer base outright, and the
+comparison predicates have their own door in `def Big (Integer gt 10)`). The
+capital is not something predicates want — it is the only entrance available.
+
+So give predicates their own door. **NUR099**'s verdict, ruled 2026-08-25, is
+a **`fnpred`** word analogous to `fnsig`: where `boru describe fnsig` reads
+*"a function TYPE — a function minus its body"*, `fnpred` is a predicate TYPE
+— a function kept FOR its body. Once it exists, `def <Capitalised>
+<fn-with-body>` denotes nothing legitimate and can be refused at the
+declaration, with no parameter counting anywhere, and the case-keyed meaning
+of a fn body retires with it. Until that lands, `stranded_type_call` remains
+the only thing reporting the §5.1 shape.
 
 The same silent-stranding class has since been caught at declaration time
 too: a malformed `fn` whose output slot is bare (`def f fn List Any [1]`)
