@@ -86,9 +86,51 @@ func TestStrandedTypeCallFires(t *testing.T) {
 		if positioned := d.Row != 0 && d.Col != 0; positioned == c.unpos {
 			t.Errorf("%q: positioned=%v, want %v (row=%d col=%d)", c.src, positioned, !c.unpos, d.Row, d.Col)
 		}
-		if len(d.Suggestions) != 1 || d.Suggestions[0].Replacement == nil ||
-			*d.Suggestions[0].Replacement != strings.ToLower(c.name) {
-			t.Errorf("%q: want a lowercase-the-name suggestion carrying %q", c.src, strings.ToLower(c.name))
+		// One suggestion, naming the lowercase spelling — and NO Replacement.
+		// The fix is a coordinated rename (the declaration and every
+		// reference); this diagnostic points at one use site, so a
+		// single-token code action applied there would leave the capitalised
+		// def standing and turn the call into an undefined_word.
+		if len(d.Suggestions) != 1 || d.Suggestions[0].Replacement != nil {
+			t.Errorf("%q: want exactly one suggestion and no mechanical replacement, got %+v", c.src, d.Suggestions)
+			continue
+		}
+		if !strings.Contains(d.Suggestions[0].Message, strings.ToLower(c.name)) {
+			t.Errorf("%q: suggestion must name the lowercase spelling %q, got %q",
+				c.src, strings.ToLower(c.name), d.Suggestions[0].Message)
+		}
+	}
+}
+
+// TestStrandedTypeCallDedupesOneSourceDefect — one source defect costs one
+// diagnostic. A fn body is analysed once per call shape, so a body that
+// strands the pair surfaces the same tokens into the residual once per
+// analysed call; without the dedupe the CLI and the LSP both show the
+// warning twice at the identical row and column.
+func TestStrandedTypeCallDedupesOneSourceDefect(t *testing.T) {
+	const src = `def I x:Integer => [add 1 x] end def g y:Integer => [I y] g 1 g 2`
+	if diags := strandedTypeCallDiags(t, src); len(diags) != 1 {
+		t.Errorf("two calls into one defective body must yield 1 diagnostic, got %d", len(diags))
+	}
+}
+
+// TestStrandedTypeCallMissesConsumedPair records the diagnostic's RECALL
+// limit as a fact, not a hope: judging the finished residual cannot see a
+// stranded pair that a later word or an enclosing construct consumed. Each
+// row below is the §5.1 defect and each goes unreported. Pinning it here
+// means the limit is visible to the next reader and any fix that closes it
+// fails this test loudly instead of drifting past it — see
+// design/HIGHER-ORDER-FUNCTIONS.0.md §5.1 "What it still misses".
+func TestStrandedTypeCallMissesConsumedPair(t *testing.T) {
+	for _, src := range []string{
+		`def I x:Integer => [add 1 x] end I 5 drop`,        // a later word takes the operand
+		`def I x:Integer => [add 1 x] end I 5 print`,       // an output word takes it
+		`def I x:Integer => [add 1 x] end  def r (I 5)  r`, // def binds one of the pair
+		`def I x:Integer => [add 1 x] end  size (I 5)`,     // an enclosing call consumes the node
+	} {
+		if diags := strandedTypeCallDiags(t, src); len(diags) != 0 {
+			t.Errorf("%q: NOW REPORTED (%d) — the residual scan's recall limit is closed; "+
+				"delete this row and update §5.1's \"What it still misses\"", src, len(diags))
 		}
 	}
 }

@@ -1266,6 +1266,18 @@ func init() { installAnalysisImpl() }
 // (`[I 5]`, `{a:I b:5}`), evaluated by a sub-engine — boru carries types as
 // data, so a node beside a value in a list or a map is not a call that
 // failed to happen.
+//
+// KNOWN RECALL LIMIT — a residual scan cannot see a pair something else
+// already ate. `I 5 drop`, `I 5 print`, `def r (I 5)` and `size (I 5)` are
+// all the same defect and all go unreported: the later word takes the
+// operand, or the enclosing call takes the node, and by end-of-run the
+// adjacency is gone. Closing it means recording the candidate where the
+// node is PLACED (the step site knows the following SOURCE token, which is
+// the fact that actually decides it) rather than reading the finished
+// stack — a core-seam change, deliberately not folded into the commit that
+// introduced this. Pinned as a fact in
+// lang/go/test/stranded_type_call_test.go's MissesConsumedPair, and written
+// up under §5.1 "What it still misses" so the limit is a known one.
 func noteStrandedTypeCall(e *core.Engine, residual []core.Value) {
 	if !e.IsTop || !e.Registry.Check.IsActive() {
 		return
@@ -1284,8 +1296,12 @@ func noteStrandedTypeCall(e *core.Engine, residual []core.Value) {
 		if name == "" {
 			name = v.String()
 		}
-		lower := strings.ToLower(name)
-		e.Registry.Check.AddDiagnostic(core.CheckDiagnostic{
+		// CheckAddUnique, not AddDiagnostic: one SOURCE defect must cost one
+		// diagnostic. A fn body is analysed once per call shape, so a body
+		// that strands the pair (`def g y:Integer => [I y]  g 1  g 2`)
+		// surfaces the same tokens into the residual once per analysed call
+		// — identical code, detail and position every time.
+		core.CheckAddUnique(e.Registry, core.CheckDiagnostic{
 			Code: "stranded_type_call",
 			Detail: "'" + name + "' names a type, not a function: a capitalised def binds a TYPE, " +
 				"so the call never ran and its operands stayed on the stack",
@@ -1297,9 +1313,14 @@ func noteStrandedTypeCall(e *core.Engine, residual []core.Value) {
 				"a def whose name is capitalised and whose body is a fn mints a TYPE " +
 					"(`4 is " + name + "` is the intended use); the fn body survives only as that type's content",
 			},
+			// No Replacement: the fix is a COORDINATED rename — the
+			// declaration and every reference — and this diagnostic points at
+			// one use site. A single-token replacement applied there would
+			// leave `def ` + name + ` …` standing and turn the call into an
+			// undefined_word, which is worse than no code action at all.
 			Suggestions: []core.DiagSuggestion{{
-				Message:     "lowercase the name to bind a callable function instead",
-				Replacement: &lower,
+				Message: "a capitalised def can only ever bind a type: rename it and its uses " +
+					"together (`def " + strings.ToLower(name) + " …` … `" + strings.ToLower(name) + " 5`)",
 			}},
 		})
 	}

@@ -772,6 +772,7 @@ more here than a missed one:
 | `4 is Even  Even`, `xs Even` | the node is stranded LAST; nothing followed it to be called |
 | `Integer 5`, `def Foo Integer  Foo 5`, `F 5` (a `fnsig`), `C 5` (a class) | the node's content is not a function — naming a type beside a value is ordinary `is`/`typeof` code |
 | `[I 5]`, `{a:I b:5}` | boru carries types as data; inside a container VALUE the pair is not a call that failed to happen |
+| `I 5 drop`, `def r (I 5)`, `size (I 5)` | **not by design** — a recall limit of the residual scan; see "What it still misses" below |
 
 Judging the top-level residual is not as narrow as it sounds: a paren
 group runs on the same tape, and an `if` arm, a `for` body, a `do` region
@@ -781,9 +782,37 @@ and a fn body all surface their own residual into it, so
 The name in the message follows what was WRITTEN, not what the node calls
 itself: `def J I  J 5` blames `J`, where the caret is. A *computed*
 placement (`(valof I) 5`) carries no source token, so there — and only
-there — the node's own name stands in, with no position to point at.
-Positives and negatives are pinned together in
+there — the node's own name stands in, with no position to point at. There
+is no `Replacement` on the suggestion, deliberately: the fix is a
+COORDINATED rename (the declaration and every reference) and the diagnostic
+points at one use site, so a single-token code action applied there would
+leave `def I …` standing and turn the call into an `undefined_word` — worse
+than no code action at all. And one source defect costs one diagnostic: a
+body analysed once per call shape (`def g y:Integer => [I y]  g 1  g 2`)
+surfaces the same tokens repeatedly, so the emitter dedupes through
+`CheckAddUnique`. Positives and negatives are pinned together in
 `lang/go/test/stranded_type_call_test.go`.
+
+**What it still misses.** A residual scan cannot see a pair something else
+already ate, and that is a real hole rather than a rounding error:
+
+```
+def I x:Integer => [add 1 x] end I 5 drop      # → I          (drop took the 5)
+def I x:Integer => [add 1 x] end I 5 print     # → 5, then I  (print took it)
+def I x:Integer => [add 1 x] end def r (I 5) r # → 5 I        (def bound one of the pair)
+def I x:Integer => [add 1 x] end size (I 5)    # → 0 5        (size consumed the NODE)
+```
+
+Every one is §5.1 and none is reported. `def r (I 5)` is the sting: binding
+a combinator application to a name is the most natural way to *use* one, and
+that spelling gets nothing. Closing this means recording the candidate where
+the node is PLACED — the step site knows the following SOURCE token, which is
+the fact that actually decides it — instead of reading the finished stack. It
+was not folded into the change that introduced the diagnostic: that is a core
+step-loop seam with its own false-positive surface to re-validate, and the
+shape the audit itself records (`boru do 'def I … end I 5'`) is caught today.
+The limit is pinned as a fact by `TestStrandedTypeCallMissesConsumedPair`, so
+a fix closes it loudly rather than drifting past it.
 
 The same silent-stranding class has since been caught at declaration time
 too: a malformed `fn` whose output slot is bare (`def f fn List Any [1]`)
