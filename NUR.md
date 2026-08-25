@@ -89,6 +89,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR101](#nur101) | BROAD is only half implemented: a paren places its collapsed Function when the group holds a REFERENCE or an inline LITERAL, but still DISPATCHES it when the group COMPUTES one — `(fn Integer [Integer] [10 add]) 7` is `fn 7` (correct) while `(mk 1) 2` is `3`, against ADR-011's "reference and inline literal alike" | re-measuring §5.4 after #402, 2026-08-25 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
@@ -232,6 +233,264 @@ site 1's gate needs a replacement contract, not a deletion — and naming that
 contract is a design call the register should not pre-empt. Recorded so the
 divergence between an accepted ADR and the code is not lost; the fix is the
 maintainer's to direct.
+
+---
+
+## NUR101 — BROAD places a REFERENCED fn but still dispatches a COMPUTED one {#nur101}
+
+**Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** re-measuring
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.4 against the post-#402 tree; the
+diagnosis below is the maintainer's correction of this record's first version
+
+**Rule:** ADR-011's 2026-08-24 amendment, implementing NUR073's BROAD verdict
+— *"a paren places its collapsed Function value, **reference and inline
+literal alike**, so the inline-application idiom … is removed and application
+is explicit — a bare name, `apply`, or a member read."*
+
+**Divergence:** it holds for a reference and for an inline literal. It does
+NOT hold when the group COMPUTES the function.
+
+```
+$ boru do 'def inc fn b:Integer Integer [add 1 b] end
+           def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end
+           …'
+
+(fn Integer [Integer] [10 add]) 7      → fn (Integer) 7      ← inline literal: places ✓
+(inc/v) 2                              → fn inc(Integer) 2   ← reference: places ✓
+(valof inc) 2                          → fn inc(Integer) 2   ← reference: places ✓
+(mk 1) 2                               → 3                   ← COMPUTED: dispatches ✗
+(if true [inc/v] [inc/v]) 2            → 3                   ← COMPUTED: dispatches ✗
+```
+
+Three of the five obey the rule; the two whose group computes a Function
+apply it inline — exactly the idiom BROAD removed. `(fn …) 7` is ADR-011's
+own worked example and answers correctly, which is what makes the computed
+case a gap in the fix rather than a disagreement about the rule.
+
+**NUR073 is therefore incompletely fixed.** Its record is annotated RESOLVED
+2026-08-24; the reference and literal halves are, and the computed half is
+not.
+
+**One known downstream symptom, and it is where this was found.** Inside a
+list literal the two lanes then disagree, silently:
+
+```
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [((mk 1) 2)]
+
+interpreted → [3]                  ← carries the bug into container evaluation
+compiled    → [fn (Integer) 2]     ← BROAD-correct
+```
+
+Exit 0 both ways, no warning, `boru check` clean. The COMPILED answer is the
+specified one here; fixing the placement rule fixes the divergence with it,
+and no compiler change is wanted. (This record's first version had it exactly
+backwards — it named the compiled lane defective and a refusal gate was
+written against that reading. Both were reverted. The argument that misled it
+was `[inc 2]` → `[3]`, which proves nothing: ADR-011 explicitly carves out
+*"a bare WORD inside a group, which dispatches during the group's own
+evaluation"*. Raised on PR #403.)
+
+**Verdict:** resolve by fix — extend BROAD's placement to a computed group
+result, so `(mk 1) 2` is `fn 2` like its reference and literal twins. Two
+things to check when it lands: the top-level `((mk 1) 2)` → `3` transcripts
+in §5.4 and its `def h (mk 1)` / `2 h/v apply` workaround were written against
+the unfixed behaviour and will need re-spelling, exactly as every §1 program
+was when BROAD's first half landed; and `def h (mk 1)  h 2` → `3` must keep
+working, since a bare NAME bound to a function calls by rule.
+
+---
+
+## NUR099 — a fn body means a different thing under a capitalised name, and that is the only door to a predicate type {#nur099}
+
+**Status:** Pending (verdict: resolve by fix) · **Recorded:** 2026-08-25 ·
+**Surfaced by:** the maintainer's review of the §5.1 `stranded_type_call`
+diagnostic
+
+**Rule:** boru refuses loudly, and at the declaration. A declaration the
+engine can already prove unusable is not accepted and left to fail later —
+NUR091 is the same rule applied to a malformed `fn` triple.
+
+**Divergence:** the declaration is accepted and nothing reports it.
+
+```
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  K 1 2'
+K 1 2
+$ echo $?
+0
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  4 is K   "s" is K   true is K'
+false false false                     ← the bound type admits nothing at all
+$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  def z:K 5 end z'
+error: def z: predicate type K: RunPredicate: predicate must take exactly one argument
+```
+
+The engine reaches a definite conclusion about `K` — but only when someone
+uses it AS A TYPE. It never reports at the declaration, and never at all for
+the spelling that actually happens: calling it.
+
+**Not the return type.** `def <Capitalised> <fn>` is the predicate-type
+declaration form and a non-Boolean body is legal — the **None-on-failure**
+convention returns the value for a member and `None` for a non-member
+(`lang/spec/record.tsv` §177: `def Positive fn [n:Integer Integer [if (n gt
+0) [n] [None]]]`, return type Integer). So `def I x:Integer => [add 1 x]` is
+a well-formed predicate admitting every Integer, and the return type cannot
+tell a mistake from a predicate.
+
+**The root cause is that one spelling carries two jobs.** The same fn body
+means different things according to the CASE of the name it is bound to:
+
+```
+def even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a callable function
+def Even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a predicate type
+```
+
+and the capitalised form cannot be refused, because it is the ONLY way to
+declare an arbitrary predicate type. The type-constructing vocabulary —
+`convert typeof inspect make refine class surface exposes gen of extends
+default const base tor tand tany tall teq is as tis istype behave fnsig tnot
+pathof` — has no predicate constructor. `refine` declines the job (*"base
+must be Record, Table, or a class type, got Integer"*), and the comparison
+predicates have their own door (`def Big (Integer gt 10)`), but an arbitrary
+membership test has none. The capital is not something predicates want; it is
+the only entrance available.
+
+**Verdict (2026-08-25, maintainer): resolve by fix — add `fnpred`, the word
+analogous to `fnsig`.** `boru describe fnsig` reads *"a function TYPE — a
+function minus its body"*; `fnpred` is its mirror, a predicate TYPE — a
+function kept FOR its body. One drops the body and keeps the shape, the other
+drops the shape and keeps the body, and both bound to a capitalised name
+produce a type: `fnsig`'s enforces a function's shape, `fnpred`'s enforces a
+value's membership.
+
+Once predicates have their own spelling, `def <Capitalised> <fn-with-body>`
+denotes nothing legitimate and can be refused AT THE DECLARATION — the
+outcome the maintainer asked for originally, reached without counting
+parameters (compare NUR100, and ADR-016's absolute ban on arity-keyed
+exceptions). It also retires the case-keyed meaning: a fn body would mean one
+thing whatever the name's case.
+
+**Half landed, 2026-08-25.** `fnpred` ships with both of `fnsig`'s forms —
+the pair form `fnpred n:Integer [eq 0 (mod 2 n)]` and the spec-list form
+`fnpred [[n:Integer] [eq 0 (mod 2 n)]]` — and the output slot is supplied
+implicitly as `Any`, which is the honest declaration: both membership
+conventions are supported and they disagree on the return type, so pinning
+it to Boolean would refuse the None-on-failure form. `InstallType` now routes
+on the DECLARATION (`IsDeclaredPredicateFn`) before falling back to the
+parameter count, and `PredicateInputType` believes a declaration whatever the
+fn's shape. Pinned in `lang/spec/fnpred.tsv` (18 rows) and
+`core/go/fnpred_declared_test.go`.
+
+What remains, and why it is not in the same change: the arity route
+(`isPredicateFnValue`, and `PredicateInputType`'s count test) is still live,
+because ~150 sites across the corpus declare predicates the old way. Deleting
+it is a BREAKING change that needs those migrated to `fnpred` first. Both are
+marked DEPRECATED in place with a pointer here so neither is extended
+meanwhile. Only when they are gone does `def <Capitalised> <fn-with-body>`
+become refusable at the declaration — the outcome this record exists for.
+
+**Related.** The 1-argument cases (`def I …`, and the capitalised-constructor
+convention `def New fn opts:Map Service […]` used by `design/examples/`) stay
+reachable only at the USE site until this lands, which is what
+`stranded_type_call` reports (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.1).
+
+---
+
+## NUR100 — ADR-016 forbids arity-keyed exceptions; two live sites use them {#nur100}
+
+**Status:** Pending (no verdict) · **Recorded:** 2026-08-25 · **Surfaced
+by:** the maintainer's ruling, 2026-08-25, that ADR-016's rule is absolute —
+"everything everywhere every time and always"
+
+**Rule:** ADR-016 — *"Every function behaves the same way whatever its arity
+and wherever it came from … this record forbids exceptions keyed on arity or
+origin."* Accepted 2026-08-15. The two exceptions it named as defects were
+fixed; the rule itself is unconditional.
+
+**Divergence:** two live sites decide behaviour by counting parameters.
+
+1. **`core/go/registry.go` `RunPredicate`** — whether a function may act as a
+   predicate at all is decided by its parameter count:
+
+   ```
+   error: predicate type K: RunPredicate: predicate must take exactly one argument
+   ```
+
+   A semantic exception: two functions that both express a membership test
+   are admitted or refused on arity alone.
+
+2. **`compiler/go/compiler_dispatch_record.go` `smallerArityOverload`** — a
+   poly window over dynamic operands is refused compilation when the word
+   registers an overload consuming FEWER operands. Lower stakes (a
+   compile-coverage conservatism, not an answer change — the lane falls back
+   and the results agree), but the same shape, and introduced recently in
+   PR #401.
+
+**No verdict.** The predicate role does need to test ONE value, so removing
+site 1's gate needs a replacement contract, not a deletion — and naming that
+contract is a design call the register should not pre-empt. Recorded so the
+divergence between an accepted ADR and the code is not lost; the fix is the
+maintainer's to direct.
+
+---
+
+## NUR101 — a paren-computed fn inside a list literal is applied interpreted, baked compiled {#nur101}
+
+**Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** re-measuring
+`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.4 against the post-#402 tree
+
+**Rule:** the engines agree. NUR073's BROAD verdict settled that a paren
+PLACES its values rather than re-stepping them, and both lanes were brought
+to one answer; a list literal's contents are evaluated as a sub-program on
+both (`[1 add 2]` → `[3]`).
+
+**Divergence:** a fn value COMPUTED by a paren group and applied inside a
+list literal. No warning, no fallback, exit 0 either way, `boru check` clean
+— the two lanes simply return different data.
+
+```
+$ cat /tmp/l.boru
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [((mk 1) 2)]
+
+$ boru run /tmp/l.boru                    # compiled, NO fallback warning
+[fn (Integer) 2]
+$ boru run -no-compile /tmp/l.boru
+[3]
+$ boru run -force-compile /tmp/l.boru
+[fn (Integer) 2]
+$ boru check /tmp/l.boru
+check: 0 error(s), 0 warning(s), 0 info
+check: List
+```
+
+**The compiled lane is the defect, and it contradicts itself.** A list
+literal evaluates its contents on both lanes, and the compiled lane proves it
+can dispatch a fn there:
+
+```
+$ boru do '[1 add 2]'                                             # → [3] both lanes
+$ boru do 'def inc fn b:Integer Integer [add 1 b] end [inc 2]'    # → [3] both lanes
+```
+
+Only the paren-COMPUTED fn stops it. `[inc 2]` dispatches compiled; `[((mk 1)
+2)]` bakes two values. So this is not the placed-vs-stepped rule applied
+consistently — it is the compiled lane declining to step a value whose
+provenance it lost, in a context where it steps everything else.
+
+**Scope — it is the LIST literal specifically.** The map form falls back and
+therefore agrees (`{k:((mk 1) 2)}` → `{k:3}` both lanes, behind the loud
+"residual value of unknown provenance" warning), and a `/v`-PARKED fn agrees
+by staying inert on both (`[(inc/v) 2]` → `[fn inc(Integer) 2]`). The list
+literal is the one shape that compiles and diverges.
+
+**Why §5.4's correction did not catch it.** That note re-ran the `print` and
+fn-body shapes and recorded the lanes as agreeing on the first; both hold
+today. The list-literal shape was never in the transcript set, so the
+divergence survived the review that closed the rest of NUR073.
+
+**Verdict:** none proposed. The fix direction — teach the compiled lane to
+step a paren-computed fn inside an evaluated container, or refuse the shape
+rather than bake it — is a compiler-lane call, and the safe half (refuse and
+fall back, as the map form already does) is available immediately if the
+silent wrong answer is judged worse than the coverage loss.
 
 ---
 

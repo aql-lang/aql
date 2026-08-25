@@ -1014,7 +1014,59 @@ unestablished cause — see the correction above.
 values and the inline-application idiom is removed"*. That idiom
 currently answers `17`. Combinator code written against today's top-level
 behaviour will change meaning when the fix lands.
-**Severity:** silent wrong answer under `print`.
+
+> **Re-measured 2026-08-25, post-BROAD and post-#402 — the severity moves
+> and one NEW divergence falls out.** Every shape on this page was re-run
+> on both lanes against the merged tree.
+>
+> **The `print` divergence is gone.** `print ((mk 1) 2)` answers
+> `fn (Integer)` then `2` on BOTH lanes now, so the recorded severity
+> ("silent wrong answer under `print`") and its NUR073 attribution are
+> discharged. What remains there is not a defect but ADR-011's rule
+> working as written — *calling is an act of the use site*. A placed fn
+> dispatches when it is STEPPED at the pointer and not when an argument
+> window merely collects it, which partitions cleanly:
+>
+> | applies | does not apply |
+> |---|---|
+> | statement level; `def r ((mk 1) 2)`; `((mk 1) 2) add 0`; `2 (mk 1) apply` | `print ((mk 1) 2)`; `[((mk 1) 2)]`; `add 0 ((mk 1) 2)` — which errors loudly |
+>
+> **The fn-body row is still live**, exactly as the 2026-08-24 note
+> records: interpreted `(g 0)` answers 3, the checked default raises
+> `type_error: expected 1 return value(s), got 2`.
+>
+> **And BROAD turns out to be only half implemented — NUR101.** The
+> partition above is not a designed use-site rule after all. ADR-011's
+> amendment says a paren places its collapsed Function *"reference and
+> inline literal alike"*, and it does — but NOT when the group COMPUTES
+> one:
+>
+> ```
+> (fn Integer [Integer] [10 add]) 7   → fn (Integer) 7      inline literal: places ✓
+> (inc/v) 2                           → fn inc(Integer) 2   reference: places ✓
+> (mk 1) 2                            → 3                   COMPUTED: dispatches ✗
+> (if true [inc/v] [inc/v]) 2         → 3                   COMPUTED: dispatches ✗
+> ```
+>
+> So the `((mk 1) 2)` → `3` transcripts at the head of this section record
+> the UNFIXED behaviour, not a rule: the specified answer is `fn 2`, and
+> when the computed half of BROAD lands these transcripts and the
+> `def h (mk 1)` / `2 h/v apply` workaround will need re-spelling, exactly
+> as every §1 program did when BROAD's first half landed. `def h (mk 1)`
+> then `h 2` → `3` stays correct throughout — a bare NAME bound to a
+> function calls, by rule.
+>
+> The symptom that surfaced it: `[((mk 1) 2)]` is `[3]` interpreted and
+> `[fn (Integer) 2]` compiled, silently — exit 0 both ways, `boru check`
+> clean. The COMPILED answer is the specified one; the interpreter carries
+> the placement bug into container evaluation. Fixing the placement rule
+> closes the divergence with it, and wants no compiler change.
+
+**Severity:** ~~silent wrong answer under `print`~~ — that lane divergence
+is closed (see above). What is left is **NUR101**: BROAD placed a referenced
+or literal fn but still dispatches a COMPUTED one, so this section's
+`(mk 1) 2` → `3` transcripts record unfixed behaviour rather than a rule,
+and the same gap shows as a silent lane divergence one container deeper.
 
 ### 5.5 ~~The checker rejects correct higher-order programs~~ — **RESOLVED 2026-08-24**
 
@@ -1149,6 +1201,45 @@ not wrong" — and unlike §5.7 it is *announced* on stderr. But it means
 higher-order style opts out of the bytecode VM as a rule, not an
 exception. Worth stating plainly in the docs so the performance
 trade-off is a choice rather than a surprise.
+
+> **Re-measured 2026-08-25 — the headline above is no longer true.**
+> Thirteen higher-order shapes were run against the post-#402 tree. NINE
+> compile. "Opts out as a rule" was accurate when written; it is not the
+> shape of the boundary now, and the two lines that matter most —
+> the closure factory and the curried arrow, the very spellings this
+> section quotes as always refusing — are on the compiling side.
+>
+> | compiles today | |
+> |---|---|
+> | `each` / `fold` / `filter` with a `/v` callback | `each dbl/v [1 2 3]` |
+> | an inline lambda callback | `each ([x:Integer] => [mul 2 x]) [1 2 3]` |
+> | `apply` | `5 inc/v apply` |
+> | a **closure factory** | `def a5 (mk 5)` … `a5 3` |
+> | a **curried arrow** | `def g (f 2)` … `g 3` |
+> | a fn held in a map, read and applied | `5 (m.f) apply` |
+> | a fn returned from an `if` branch | `5 (if true [i/v] [d/v]) apply` |
+>
+> What still refuses is narrower and falls in three named classes:
+>
+> | refuses | reason |
+> |---|---|
+> | a function-valued operand to a MODULE word — `FnUtil.compose`, `FnUtil.partial` | `function-valued operand at compose (Stage 3)` |
+> | self-application (the Y shape) | `body result of unknown provenance` — §5.8's original signature |
+> | deep combinator chains (S) | `unmatched dispatch recovered at apply` |
+>
+> The first is the one that bites: `boru:fn-util` is the module
+> recommendation 4 shipped for exactly this style (`compose`, `pipe`,
+> `curry`, `partial`, …), and none of it compiles — so the vocabulary the
+> audit added to make higher-order code pleasant is also the vocabulary
+> that guarantees the interpreter. That is the highest-value target left
+> on this page.
+>
+> Corpus-wide the picture is already good: the main spec set compiles
+> **7182 of 7182** compilable rows with 0 islanded, and what does not
+> compile is isolated in ledgered frontier files. The performance
+> trade-off this section asked to be stated plainly is therefore much
+> smaller than it was — it applies to three identifiable shapes, not to
+> higher-order style as such.
 
 **Stage 1 landed (2026-08-21) — the def-bound computed-fn read.** The
 compile lane's false `undefined_word` on a name def-bound to a computed
