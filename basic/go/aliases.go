@@ -254,7 +254,6 @@ const (
 	CompileStoresBody       = core.CompileStoresBody
 	CompileStoresBodyList   = core.CompileStoresBodyList
 	CompileFnHandlerStrict  = core.CompileFnHandlerStrict
-	CompileExecutesBody     = core.CompileExecutesBody
 	CompileRunsBodyIsolated = core.CompileRunsBodyIsolated
 	CompileDynBody          = core.CompileDynBody
 

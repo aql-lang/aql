@@ -482,18 +482,6 @@ const (
 	// than uncompilable. The divergence is sound in a branch/loop arm too (the
 	// arm never produces a value, like break/continue).
 	CompileDiverges
-	// CompileExecutesBody marks a word whose NoEvalArgs body is CODE the handler
-	// SPLICES onto the tape for re-execution (a block-with-locals word like `var`),
-	// as opposed to one it READS or STORES as data (a query clause, a Test.prop
-	// spec, a timeout body). Such a handler RETURNS tape-coupled tokens
-	// (def/body/undef, mark/move) the interpreter re-steps — which the VM cannot
-	// run — so the recorder must REFUSE it (Stage 2 code-body) even when the body
-	// is an inert word-list that would otherwise pass noEvalBodiesInert and bake as
-	// a CALL_NATIVE. Without this flag `var [[v] …]` baked to a CALL_NATIVE whose
-	// handler then tripped the VM's tape-coupled-result screen at run time. Closure-
-	// compilable body words (each / fold / do — they declare a CallableSpec) take
-	// the closure path before reaching the refusal, so they do NOT set this.
-	CompileExecutesBody
 	// CompileRunsBodyIsolated marks a word whose NoEvalArgs body(ies) are NEITHER
 	// spliced onto the tape NOR const-baked and re-run in the enclosing sub-engine.
 	// Instead the handler executes each body via a fresh, ISOLATED CallBoru frame
@@ -509,8 +497,8 @@ const (
 	// even when the body is a DYNAMIC value (a map get, `p get "gen"`) whose tokens
 	// are not statically inert -- the VM evaluates the operand to the same List value
 	// and hands it to the same handler. The flag exempts ONLY the inert-scoped
-	// disjunct of the code-body refusal; a word that ALSO splices its body
-	// (CompileExecutesBody) or declares a body-executing CallableSpec still refuses.
+	// disjunct of the code-body refusal; a word that declares a body-executing
+	// CallableSpec still refuses.
 	CompileRunsBodyIsolated
 
 	// CompileScalarFold marks a PURE value-level word (the comparison family:
