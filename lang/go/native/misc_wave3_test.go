@@ -378,7 +378,9 @@ func TestW3RefApply(t *testing.T) {
 }
 
 func TestW3ApplyRebindReach(t *testing.T) {
-	w3MiscWant(t, `def p {name:'ada'}  apply $.name p`, `'ada'`)
+	// Stack form — apply is stack-only in BOTH overloads (NUR098's fix);
+	// the forward spellings are pinned as refusals in lang/spec/apply.tsv §5.
+	w3MiscWant(t, `def p {name:'ada'}  p $.name apply`, `'ada'`)
 	w3MiscWant(t, `def p {name:'ada'}  typeof (rebind $.name p)`, `Reach`)
 	w3MiscWant(t, `getpath $.a.b {a:{b:7}}`, `7`)
 	w3MiscWant(t, `getpath 'a.b' {a:{b:7}}`, `7`)
@@ -397,7 +399,7 @@ func TestW3ApplyRebindReach(t *testing.T) {
 
 func TestW3Usurp(t *testing.T) {
 	// Value form and by-name form.
-	w3MiscWant(t, `def f fn [[x:Integer] [Integer] [mul x 2]]  3 (usurp f)`, `6`)
+	w3MiscWant(t, `def f fn [[x:Integer] [Integer] [mul x 2]]  3 (usurp f) apply`, `6`)
 	w3MiscWant(t, `def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/uv apply`, `7`)
 	w3MiscErr(t, `usurp no-such-w3`, "not bound")
 	w3MiscErr(t, `def x 5 usurp x`, "requires a function word")
@@ -411,7 +413,7 @@ func TestW3Usurp(t *testing.T) {
 
 func TestW3StackForwardArgs(t *testing.T) {
 	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  5 (stack-args inc)/v apply`, `6`)
-	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  (forward-args inc) 5`, `6`)
+	w3MiscWant(t, `def inc fn [[n:Integer][Integer][n add 1]]  def fwi (forward-args inc)  fwi 5`, `6`)
 	w3MiscErr(t, `stack-args no-such-w3`, "not bound")
 	w3MiscErr(t, `def x 5 stack-args x`, "requires a function word")
 	w3MiscErr(t, `forward-args no-such-w3`, "not bound")

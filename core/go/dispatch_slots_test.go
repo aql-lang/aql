@@ -46,6 +46,9 @@ func TestInactiveCheckBraid(t *testing.T) {
 	if inactiveTryMemberFnArrivalDispatch(nil, 0) {
 		t.Fatal("inactive memberFnArrival must decline")
 	}
+	if inactiveParenPlacedFnCarrier(nil, 0) {
+		t.Fatal("inactive parenPlacedFnCarrier must decline")
+	}
 	if inactiveTryShapedMethodDispatch(nil, 0) {
 		t.Fatal("inactive shapedMethod must decline")
 	}

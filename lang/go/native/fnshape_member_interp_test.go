@@ -19,7 +19,8 @@ func TestFnShapeMemberTrailingApplyInterp(t *testing.T) {
 	r := seam5Reg(t)
 	out, err := seam5Run(r, `def T fnsig Integer Integer
 def C class {op:T}
-5 ((make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) dot op)`)
+def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])})
+5 c.op`)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

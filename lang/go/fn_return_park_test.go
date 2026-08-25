@@ -16,9 +16,10 @@ import (
 // invoke it (core/go/engine.go's fnReturnPark).
 //
 // The maintainer ruling this pins: `/v` is not sticky — it deactivates the ONE
-// use it is attached to — and arity never changes the answer. Both directions
-// matter, so the negatives are here too: a USER paren still re-steps, and a
-// frame returning a non-Function is untouched.
+// use it is attached to — and arity never changes the answer. Since the BROAD
+// park (NUR073 clause 3) a USER paren places its collapsed value exactly as a
+// frame does; the remaining negatives are the value conditions — a frame
+// returning a non-Function or several values is untouched.
 //
 // Every case runs on BOTH engines. The whole point of the fix was that they
 // disagreed; a repair on one engine alone would just move the divergence.
@@ -64,21 +65,21 @@ func fnReturnParkCases() []fnReturnParkCase {
 			why:  "ADR-016: arity does not change the answer",
 		},
 		{
-			// NEGATIVE — a USER paren is not a frame, so it still re-steps and
-			// the held 0-arg fn fires (lang/spec/ref.tsv §2). The two collapses
-			// are told apart by FrameOpenInfo; had the fix keyed on anything
-			// forgeable from source text, this would be `[Function]`.
-			name: "user paren still re-steps",
-			src:  zero + "(z/v)",
-			want: "[42]",
-			why:  "only a fn FRAME parks; a user paren is a fresh use",
+			// BROAD (NUR073 clause 3): a USER paren places its collapsed value
+			// exactly as a frame does — `(z/v)` is the same as `z/v`, per the
+			// maintainer ruling "parens do not re-step; they place a value or
+			// values on the forward stack".
+			name: "user paren places too (BROAD)",
+			src:  zero + "typeof (z/v)",
+			want: "[Function]",
+			why:  "a paren places its collapsed value — grouping is not a fresh use (NUR073 clause 3)",
 		},
 		{
-			// NEGATIVE — `ref` is the same operation spelled long, and it must
-			// agree with `/v` in both directions.
-			name: "user paren re-steps a ref",
-			src:  zero + "(valof z)",
-			want: "[42]",
+			// `ref` is the same operation spelled long, and it must agree
+			// with `/v` in both directions — inert under a paren alike.
+			name: "user paren places a ref too",
+			src:  zero + "typeof (valof z)",
+			want: "[Function]",
 			why:  "`ref` and `/v` are one operation in every position",
 		},
 		{

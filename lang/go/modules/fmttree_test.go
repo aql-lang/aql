@@ -114,7 +114,7 @@ func TestFmtTreeDeclarativeFormatter(t *testing.T) {
 	// compiled twin is TestFmtTreeDeclarativeFormatterCompiledParity
 	// (fmt_compiled_parity_test.go).
 	const rules = `import "boru:fmt"
-def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
+def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd)) apply]]
 def ends-dot fn [nd:Any Any [
   def t (nd.text)
   all [(eq (Fmt.kind nd) word/q) (gt 0 (size t)) (eq (slice ((size t) sub 1) (size t) t) ".")]

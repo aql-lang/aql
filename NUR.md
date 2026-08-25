@@ -75,7 +75,7 @@ keep the two in sync in the same commit.
 | [NUR063](#nur063) | Seven self-knowledge words are proposed to dispatch from two module surfaces (`boru:debug` and `boru:scry`) — VERDICT 2026-08-15: `boru:scry` canonical, the `boru:debug` copies frozen behind shared handlers and deprecated on a stated timeline | design/BORU-SCRY.0.md §6 (flagged for NUR by PR #344 Codex P1) |
 | [NUR064](#nur064) | Pattern clauses route-and-bind in `receive` but route-only in `add` — VERDICT 2026-08-15: defer to the processes/services design line, to be decided when those modules are built | `design/STATE-MACHINES.0.md` §8 (flagged for NUR by the PR #345 review, Codex P1) |
 | [NUR065](#nur065) | Two spellings of the classifier role get different static guarantees: `classes:` is alphabet-closed and diagnosed, `classify:` is neither — VERDICT 2026-08-15: defer to the state-machine design line (its open question #7) | `design/STATE-MACHINES.0.md` §3.6 (flagged for NUR by the PR #352 review, Codex P1) |
-| [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` is `42` interpreted and `fn z` compiled — VERDICT 2026-08-17: resolve by fix, clause 3 ruled BROAD (a user paren never re-steps, inline application removed; ReachGroup exclusion stays; fix not yet built); discharged by the fix plus a `canon`/`typeof`-pinned row, the name residue being NUR074's class | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
+| [NUR073](#nur073) | The engines disagree on re-stepping a paren-collapsed Function: `((h z/r))` was `42` interpreted and `fn z` compiled — **RESOLVED 2026-08-24** by the ruled BROAD fix: every paren PLACES its collapsed Function (reach groups excluded), the inline-application idiom is removed, both engines agree, pinned via `canon`/`typeof` in `fn-value.tsv` §4b | PR #375 (break 1 of the `/r` survey); flagged for NUR by the PR #375 review, Codex P1 |
 | [NUR074](#nur074) | `canon` renders a function's PARAMETER names, so alpha-equivalent functions render — and digest — differently; NUR031's planned fix (render the anonymous fn literal) does not reach this | `design/unison-hash-identity-probe.0.md` P4 (flagged for NUR by the PR #376 review, Codex P1) |
 | [NUR077](#nur077) | `StackForm`'s op vocabulary can CALL a word by name but cannot APPLY a function value, so an inline lambda or a fn read out of a container has no faithful representation — `Call{Name, Arity}` re-invokes by name and does not consume a receiver. `Eval` now refuses those forms (`ErrUnnamedApply`) rather than replaying them to a different answer — VERDICT 2026-08-17: resolve by fix, a NEW dedicated Apply Op (arity-carrying, consumes the value, seamed at `execFnDefLiteral`; `DoEval` stays reserved), after the three prerequisite recorder/gate defects are fixed | the `OnCall` frame-skeleton over-count fix, 2026-08-16 |
 | [NUR078](#nur078) | A bare fn name before a `Function`-typed slot still resolves as a reference, against amended ADR-011 — the engine's TFunction intercept implements the exception the 2026-08-17 amendment struck (`h zero` ≡ `h zero/r` when the slot is `Function`-typed; a call/barrier before any other slot) — VERDICT 2026-08-17: resolve by fix, open-work item B (all four sites retire together, re-opening the NUR038 call-head question in the implementing PR) | the ADR-011 amendment, 2026-08-17 (flagged by the PR #381 review, Codex P1) |
@@ -85,14 +85,11 @@ keep the two in sync in the same commit.
 | [NUR082](#nur082) | Three tree-walking subcommands, two rules for `.boru/`: `fmt` and (now) `check` skip the package directory, `boru test`'s `discover()` walks it — VERDICT 2026-08-18: resolve by fix, one shared walk helper carrying the skip | giving `boru check` directory targets, 2026-08-18 (W-CLI-CHECK) |
 | [NUR083](#nur083) | `check` and `build` anchor relative imports to the FILE's directory, `run` and `debug` to the process cwd, so `boru check sub/m.boru` now accepts a program `boru run sub/m.boru` refuses from the same cwd — VERDICT 2026-08-18: resolve by fix, `run`/`debug` adopt the file anchor (the multi-target `check` cannot use cwd at all) | multi-file `boru check`, 2026-08-18 (W-CLI-CHECK) |
 | [NUR084](#nur084) | `-h` is not a uniform surface: FlagSet commands print their flags to stderr, `fmt` reads `-h` as a filename, and none exits 0 — though `boru help <cmd>` tells users to run it — VERDICT 2026-08-18: resolve by fix, `fmt` gains a FlagSet and `flag.ErrHelp` exits 0 | `boru check -h` failing as a missing file, 2026-08-18 (W-CLI-CHECK) |
-| [NUR086](#nur086) | The four code-body iterators accept a `Function` callback over a Map but not over a List, while `filter` — the fifth member of the same family — accepts one over both | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3) |
-| [NUR087](#nur087) | A `def` inside an `if` branch becomes invisible to the checker once an earlier `def` in the same body bound the result of a call through a `Function` parameter, so `boru run` refuses a program that runs correctly under `-no-check` | the higher-order capability audit, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5) |
 | [NUR088](#nur088) | One signature has six valid spellings; `boru fmt` collapses only ONE of them to the short form, so four survive the formatter untouched and a `fmt`-clean file still carries several spellings of one signature | writing `STYLE-GUIDE.md` §S1, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §4.2) |
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
-
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
 obvious). A record argued to a **resolve-by-fix** verdict keeps the
@@ -2019,7 +2016,8 @@ them revealed.
 
 ## NUR073 — The engines disagree on re-stepping a paren-collapsed Function {#nur073}
 
-**Status:** Pending · **Recorded:** 2026-08-16 · **Surfaced by:** PR #375
+**Status:** RESOLVED by fix (BROAD), 2026-08-24 · **Recorded:**
+2026-08-16 · **Surfaced by:** PR #375
 (break 1 of the `/r` survey) — a spec row drafted to pin the park's
 positionality turned out to be the one row in 6219 the compiled
 differential rejects; flagged for this register by the PR #375 review
@@ -2084,9 +2082,8 @@ already strips the name; the residual renderer does not), so this record
 is discharged by clause 3 **plus** a row pinned via `canon`/`typeof`
 rather than on the bare residual.
 
-**Verdict:** resolve by fix — **BROAD** (maintainer, 2026-08-17). The
-clause-3 implementation fork is decided; the fix is not yet built (both
-engines still apply `(fn Integer [Integer] [10 add]) 7` today). Under
+**Verdict:** resolve by fix — **BROAD** (maintainer, 2026-08-17),
+**landed 2026-08-24**. Under
 broad, a user paren never re-steps its
 collapsed value, reference and inline literal alike, so
 `(fn Integer [Integer] [10 add]) 7` becomes two values and the
@@ -2099,6 +2096,67 @@ differential and the stackform round-trip suite must be measured, since
 the park now feeds the recorder's skip accounting. The record is
 discharged by the fix **plus** a row pinned via `canon`/`typeof` — the
 surviving name-rendering residue belongs to NUR074's class.
+
+**Evidence widened (2026-08-24, the higher-order design completeness
+review).** The audit's §5.4 context transcripts
+(`design/HIGHER-ORDER-FUNCTIONS.0.md`, corrected in place same date)
+are further reachable spellings of THIS divergence, not a separate
+context rule: the interpreter re-steps the collapsed fn in every §5.4
+context, and the "collect" answers the audit quotes are the compiled
+lane's. Verified against both the audit-day tree (`e332d15`) and HEAD:
+
+- `print ((mk 1) 2)` — audit §5.4's "silent wrong answer under
+  `print`": interpreted **3** on both trees; compiled `fn (Integer)`
+  with a stranded `2`. On the audit-day tree the shape compiled
+  NATIVELY, so the default lane diverged silently from `-no-compile` —
+  a second live row of this class while the audit's §0 counted one.
+  The §9g guard (`12c8150`, 2026-08-21) made the compile refuse, so
+  today the lanes agree on 3: `boru run` answers 3 behind the loud
+  fallback warning, `boru do` — the audit's transcript command —
+  falls back silently by design, and `-force-compile` refuses with a
+  `force-compile` error rather than running the old lowering. The
+  quoted `fn (Integer)` / `2` reproduces only on a pre-guard tree.
+- the fn-body twin `def g fn x:Integer Integer [((mk 1) 2)]` then
+  `(g 0)`: LIVE at HEAD and check-clean — interpreted **3**, exit 0;
+  compiled (the checked default included) raises
+  `[boru/type_error]: g: expected 1 return value(s), got 2`, exit 1.
+  The audit quotes the arity error as the behaviour; it is the
+  compiled lane's only.
+
+Both rows discharge with the same clause-3 fix (under BROAD no user
+paren re-steps, and the lanes agree on the collect). Until it lands,
+"the only such row in the corpus" stays true of the spec corpus but
+not of the reachable surface: the class has at least these two further
+spellings.
+
+**RESOLUTION (2026-08-24).** Clause 3 is implemented. `fnReturnPark`
+(`core/go/engine.go`) now parks a collapsed single unquoted Function for
+EVERY paren, keyed on `!wasReachGroup` instead of the frame-open test, so
+a user paren places its value exactly as a fn frame's return did. The
+reach-group exclusion stays load-bearing (dot access — its re-step IS the
+dispatch, `MathUtil.sqrt 16`), and a bare WORD inside a group still
+dispatches during the group's own evaluation (`(g)` calls `g`).
+
+Both engines now agree, which is what discharges this record. Pinned as
+`lang/spec/fn-value.tsv` §4b through `canon` and `typeof` — not the bare
+residual, per the correction above: a name-rendering difference survives
+there (the interpreter's value carries the resolved PARAM name, the
+compiler's the defining name), and that residue belongs to NUR074's
+class, not this one's.
+
+Costs paid with the fix, as budgeted: the inline-application idiom is
+gone (`(fn Integer [Integer] [10 add]) 7` is two values; the spelling is
+`7 (fn …) apply`), and the affected corpus rows were rewritten to the
+surviving spellings across `valof`, `apply`, `usurp`, `modifiers`,
+`fn-triple`, `class`, `corpus-core`, `corpus-structures`, `module-fmt`
+and `recursion`. Two compile-lane soundness guards shipped with it, each
+closing a miscompile window the park made REACHABLE (the §5.8 campaign's
+lesson — an admission is never a local change): `tryRecordPoly` declines
+a stack-only mixed-arity window over dynamic carriers (`apply`'s gradual
+[Reach Any] match where runtime dispatches [Function]), and
+`recordCallElided` declines a dynamic non-carrier lead for the same
+reason. ADR-011 carries the amendment; `REFERENCE.md` §Grouping states
+the user-facing contract.
 
 ---
 
@@ -2625,156 +2683,6 @@ half is done.
 
 ---
 
-## NUR086 — The code-body iterators take a `Function` callback over a Map but not over a List {#nur086}
-
-**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
-higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.3),
-trying to hand a `Function` value to `each` the way `filter` accepts one
-
-**Rule:** one word family, one argument-positioning convention.
-`each` / `for-each` / `fold` / `scan` / `filter` are documented together
-as the higher-order iterators (`describe query`,
-`lang/spec/higher-order.tsv`), and all five accept a quotation body over
-either container shape.
-
-**Divergence:** for the *Function* form, four of the five register the
-Map shape only, and the fifth registers both.
-
-| word | `{TFunction, …}` signatures | source |
-|---|---|---|
-| `each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:326` |
-| `for-each` | `{TFunction, TMap}` | `lang/go/native/native_array.go:348` |
-| `fold` | `{TFunction, TMap, TAny}`, `{TFunction, TMap}` | `lang/go/native/native_array.go:393-394` |
-| `scan` | `{TFunction, TMap}` | `lang/go/native/native_array.go:420` |
-| `filter` | **`{TFunction, TAny}`** — list and map alike | `lang/go/native/natives.go:261` |
-
-```
-$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v [1 2 3]'
-error: [boru/signature_error]: cannot call `each` — no signature matches the arguments
-  = note: candidate `each (Function, Map)` takes 2 arguments, but none were supplied
-  = note: candidate `each (Reach, List)`  takes 2 arguments, but none were supplied
-
-$ boru do 'filter (p:Any => [(p.value mod 2) eq 0]) [1 2 3 4]'
-[2 4]
-```
-
-Compounding it, the Map form is not a plain element callback either — it
-hands the lambda a `KeyVal` — so a unary `Integer -> Integer` function
-value has **no** iterator it can be passed to directly:
-
-```
-$ boru do 'def dbl x:Integer => [x mul 2] each dbl/v {a:1 b:2}'
-error: each: key "a": no matching lambda signature for 1 argument(s)
-```
-
-The only route is to name it inside a quotation (`each [dbl] xs`), which
-NUR037 refuses to compile when the fn is fn-local, or to write an
-adapter lambda (`each ([kv:Any] => [dbl (kv.v)]) m`).
-
-**Evidence:** the registrations cited above; the transcripts above;
-`lang/spec/higher-order.tsv` §5 documents `filter`'s Function form and no
-`each` counterpart. Not previously recorded.
-
-**Documentation status:** documented per word, nowhere as a family.
-`describe each` / `describe fold` / `describe scan` list the signatures
-faithfully, so the absence is discoverable one word at a time; but
-`lang/spec/higher-order.tsv`'s header presents the five together and
-`describe query` lists them together, and neither says the Function form
-is Map-only for four of them. The `{key,value}` / `KeyVal` callback
-shapes are documented (`lang/spec/higher-order.tsv` §5,
-`lang/go/native/filter.go`); what is undocumented is that no member of
-the family accepts a bare-element callback at all.
-
-**Verdict proposed:** resolve by fix — add `{TFunction, TList}` to
-`each` / `for-each` / `fold` / `scan`, handing the callback the element
-directly. Note this buys **signature availability**, not callback
-uniformity: `filter`'s list Function form passes a `{key,value}` pair
-(`lang/go/native/filter.go`), so after this change an
-`Integer -> Integer` function would work with `each` and still not with
-`filter`. Closing the family properly needs a matching `filter` decision
-— either an element-shaped list form or an explicit ruling that the pair
-wrapper is `filter`'s contract — and this record should not be discharged
-by the four additions alone.
-
----
-
-## NUR087 — A `def` inside an `if` branch is lost to the checker after a `def` bound a call through a `Function` parameter {#nur087}
-
-**Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** the
-higher-order capability audit (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.5)
-— a parser-combinator library that runs correctly is refused by the
-default `boru run`
-
-**Rule:** the checker is an *analysis* pass over a program the engine
-will run; a program the engine runs correctly must not be reported as an
-error (the check-accuracy discipline, `design/CHECK-ACCURACY-RATCHET.10.md`).
-`boru run` performs the check as a pre-flight and refuses on any Error,
-so a false positive is not advisory — it stops the program.
-
-**Divergence:** in a fn body, a `def` inside an `if` branch is not
-recorded once an **earlier** `def` in the same body bound the result of a
-call through a `Function` **parameter**. Minimal repro:
-
-```boru
-def mk fn [[a:Function b:Function] [Function] [
-  ( fn s:Integer Map [
-      def r1 (a s)
-      if (r1.ok)
-        [ def r2 (b (r1.rest))
-          if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ]
-                     [ {ok:false rest:s val:None} ] ]
-        [ {ok:false rest:s val:None} ] ] ) ]]
-def h (mk ([z:Integer] => [ {ok:true val:1 rest:8} ])
-          ([z:Integer] => [ {ok:true val:2 rest:9} ]))
-print (h 1)
-```
-
-```
-$ boru check m_checkfp4.boru
-check: 6:15: [error] undefined_word: undefined word: r2
-  = help: did you mean `r1`?
-check: [error] no_signature: cannot call `dot` — no signature matches the arguments; got (Atom, Word)
-  … 6 error(s)
-
-$ boru run -no-check m_checkfp4.boru
-{"ok": true, "val": [1, 2], "rest": 9}
-```
-
-`r2` is bound one line above its use, in the same branch. Replacing
-`def r1 (a s)` with a map literal — removing only the call through the
-`Function` parameter — makes the same file check clean, which isolates
-the trigger to that binding rather than to the nested `if`.
-
-**What it costs.** The shape is not exotic: it is the ordinary
-"run a parser, branch on success, run the next one" body, and it is what
-made the audit's parser-combinator library fail `boru run` outright
-(`check failed: 6 error(s)`, exit 1) while running correctly under
-`-no-check` on both engines. The follow-on `no_signature` on `dot` is
-collateral — having lost `r2`, the checker cannot type `r2.ok`.
-
-**Evidence:** the transcripts above, against this tree.
-`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.5 and §5.5 carry the full
-library and the reduction. Not previously recorded.
-
-**Documentation status:** undocumented as a class.
-`design/CHECK-FALSE-POSITIVES.0.md` and
-`design/CHECK-ACCURACY-RATCHET.10.md` record the known `undefined_word`
-false-positive classes in detail — dynamic-scope reads across a call
-chain, mini-redis's `expires`, the `zr` inline application, the
-closure-return `def f (mk 7)` rows — and this shape (a branch-local `def`
-lost after a `Function`-parameter call bound an earlier one in the same
-body) is not among them; no `lang/spec/*.tsv` or frontier row pins it
-either. `CLI.md` documents `--no-check` as a way to skip the pre-flight,
-but not as the remedy for a checker false positive, so a user meeting
-this has nothing that names their situation.
-
-**Verdict proposed:** resolve by fix — the branch-local `def` must be
-recorded whatever the provenance of an earlier binding in the same body.
-This record retires when the repro above checks clean, with the reduced
-file pinned as a negative test alongside it.
-
----
-
 ## NUR088 — `boru fmt` collapses one of the six signature spellings, not the other five {#nur088}
 
 **Status:** Pending · **Recorded:** 2026-08-19 · **Surfaced by:** writing
@@ -3162,3 +3070,4 @@ line N; module names resolve late") would catch it without touching
 semantics. This record is discharged by an Allowed verdict naming that
 hint as the mitigation (or by a maintainer ruling the hint unnecessary,
 with the §8 rows and the REFERENCE.md contract as the pinned acceptance).
+

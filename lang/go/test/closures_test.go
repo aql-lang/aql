@@ -206,7 +206,8 @@ func TestClosureInnerFnHasCaptures(t *testing.T) {
 func TestClosureParamShadowsCapture(t *testing.T) {
 	out, err := runNativeSteps(t, nil, []string{
 		`def mk ([x:Integer] => [([x:String] => [x])])`,
-		`(mk 5) "hello"`,
+		`def mk5 (mk 5)`,
+		`mk5 "hello"`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)

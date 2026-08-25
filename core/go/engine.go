@@ -6340,11 +6340,13 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 }
 
 // fnReturnPark reports how far past a collapsed paren's start the pointer must
-// land: 1 when the paren is a fn FRAME delivering a single unquoted Function
-// value as its RETURN, 0 otherwise. Returning a function is not a fresh use of
-// it, so stepCloseParen's rewind must step PAST that value rather than re-step
-// it into a call (design/FUNCTION-VALUE-SCOPE.0.md §12.6; `def h fn
-// [[f:Function] [Any] [f/v]]` returned 7 where it must return the fn value).
+// land: 1 when the paren collapsed to a single unquoted Function value, 0
+// otherwise. A paren places its value on the forward stack and never re-steps
+// it — reference and inline literal alike (NUR073's BROAD verdict, maintainer
+// clause 3, 2026-08-17: "parens do not re-step; they place a value or values
+// on the forward stack") — so stepCloseParen's rewind must step PAST that
+// value rather than re-step it into a call
+// (design/FUNCTION-VALUE-SCOPE.0.md §12.6; design/FN-VALUE-OPEN-WORK.0.md §2).
 //
 // This is the ParkResult idiom (see spliceMatchResults), which `valof` already
 // uses, and it is deliberately POSITIONAL: inertness is a property of the
@@ -6355,14 +6357,13 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // value and would make it permanently inert, and `ReachGroup` is a barrier
 // hint of the opposite polarity.
 //
-// A USER paren still re-steps (lang/spec/valof.tsv §2) because it carries no
-// FrameOpenInfo — that payload is machine-generated only (NewFrameOpen /
-// NewFrameOpenSpan are its sole constructors), so no source text can forge it,
-// and it is the ONLY thing distinguishing the two collapses. Callers snapshot
-// it before the pair removals destroy the open paren. The exactly-one-survivor
-// test is the same one tagReachCollapsedFn uses. Returning the OFFSET rather
-// than a bool keeps the branch out of stepCloseParen, which sits at its
-// cyclomatic cap (NUR038).
+// The ONE exclusion is a reach-lowered group (`m.p` → `( m dot p )`), whose
+// re-step IS the dispatch — `MathUtil.sqrt 16` fails without it — so the
+// caller hands in notReachGroup (snapshotted before the pair removals destroy
+// the open paren) rather than the pre-BROAD frame-open test. The
+// exactly-one-survivor test is the same one tagReachCollapsedFn uses.
+// Returning the OFFSET rather than a bool keeps the branch out of
+// stepCloseParen, which sits at its cyclomatic cap (NUR038).
 //
 // The value test MIRRORS stepLiteral's dispatch guard exactly — same three
 // clauses, same order — because the invariant is "park iff the re-step would
@@ -6371,11 +6372,32 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // stepLiteral would merely have pushed, silently losing its OnPushLit for any
 // installed Recorder. That mirroring is why the test lives in the shared
 // fnValueDispatchesAtPointer rather than being spelled twice.
-func (e *Engine) fnReturnPark(idx, closeIdx int, wasFrameOpen bool) int {
-	if !wasFrameOpen || closeIdx != idx+2 || idx >= e.Tape.Len() {
+func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
+	if !notReachGroup || closeIdx != idx+2 || idx >= e.Tape.Len() {
 		return 0
 	}
-	if fnValueDispatchesAtPointer(e.Tape.At(idx)) {
+	v := e.Tape.At(idx)
+	if v.ReachGroup {
+		// The VALUE-borne twin of the group exclusion: a dot-accessed named
+		// fn collapsed by an inner reach group (tagReachCollapsedFn) and now
+		// sitting alone in a USER paren. An unmarked dot-access to a
+		// function is a CALL, never claimable data (NUR038) — the re-step
+		// IS its dispatch, so the park must decline it.
+		return 0
+	}
+	if fnValueDispatchesAtPointer(v) {
+		return 1
+	}
+	// The CHECK pass's twin of the same decision. Where the interpreter
+	// holds a concrete Function, an analysis pass holds a DYNAMIC fn-typed
+	// carrier (a member read, a call result) — and that carrier is what
+	// would dispatch at the pointer there, so it must park identically or
+	// the lanes disagree about a user paren. Measured: `(m dot f) 5` parked
+	// interpreted and applied compiled, the divergence
+	// TestCompiledCombinationParity caught when the BROAD park landed.
+	// Reach groups never reach here (both exclusions above), so dot SUGAR
+	// keeps dispatching on both lanes.
+	if v.Dynamic && !v.Quoted && (IsFnTypedCarrier(v) || CheckBraid.ParenPlacedFnCarrier(e, idx)) {
 		return 1
 	}
 	return 0
@@ -6421,7 +6443,7 @@ func fnValueDispatchesAtPointer(v Value) bool {
 // now sit at [openIdx .. closeIdx-2] inclusive — the same span as
 // [openIdx, closeIdx-1) in the original indices, minus 1 for the removed
 // OpenParen.
-func (e *Engine) creditParenSurvivorSkips(closeIdx int, reStepped bool) {
+func (e *Engine) creditParenSurvivorSkips(openIdx, closeIdx int, reStepped bool) {
 	skipper, ok := e.recorder.(RecorderSkipper)
 	if !ok || e.recorder == nil {
 		return
@@ -6429,6 +6451,19 @@ func (e *Engine) creditParenSurvivorSkips(closeIdx int, reStepped bool) {
 	end := closeIdx - 1
 	if end > e.Tape.Len() { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		end = e.Tape.Len()
+	}
+	// Collapsed off the main loop (reStepped false) the span starts at
+	// openIdx, NOT the post-park pointer: a PARKED survivor is about to be
+	// COLLECTED exactly like its unparked siblings — the collection hook
+	// fires OnPushLit for it at match completion — so its in-paren emission
+	// is owed the same credit. Since the BROAD park (NUR073 clause 3) a
+	// user paren parks its collapsed fn too, which is how `g (z/v) 777`
+	// re-found the PR #387 double-record without this start. On the main
+	// loop (reStepped true) the parked value is stepped past and never
+	// re-encountered, so it stays outside the span.
+	start := e.Pointer
+	if !reStepped {
+		start = openIdx
 	}
 	// A Function forfeits its credit ONLY when the main loop will re-step it,
 	// because only there does stepLiteral hand it to execFnDefLiteral without
@@ -6443,7 +6478,7 @@ func (e *Engine) creditParenSurvivorSkips(closeIdx int, reStepped bool) {
 	// statement of its own, and a non-recordable survivor in this span is not
 	// reachable from the suites, so the guard form cannot meet ADR-008.
 	survived := 0
-	for i := e.Pointer; i < end; i++ {
+	for i := start; i < end; i++ {
 		sv := e.Tape.At(i)
 		if IsRecordableLiteral(sv) && !(reStepped && fnValueDispatchesAtPointer(sv)) {
 			survived++
@@ -7690,13 +7725,12 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 	if openIdx < 0 {
 		return e.syntaxError("unmatched closing parenthesis", ")")
 	}
+	// Snapshot BEFORE the pair removals below destroy the open paren. The
+	// reach-group tag feeds both tagReachCollapsedFn and fnReturnPark's ONE
+	// exclusion: a reach-lowered group's re-step IS the dispatch, while every
+	// other paren — user-written and fn frame alike — parks a collapsed
+	// Function as placed data (NUR073's BROAD verdict, clause 3).
 	wasReachGroup := e.Tape.At(openIdx).ReachGroup
-	// Snapshot BEFORE the pair removals below destroy the open paren. A fn
-	// FRAME's open paren carries FrameOpenInfo (fn_frame.go); a user-written
-	// paren does not. That payload is machine-generated only — the sole
-	// constructors are NewFrameOpen / NewFrameOpenSpan — so no source text can
-	// forge it, and it is the ONLY thing distinguishing the two collapses.
-	wasFrameOpen := IsFrameOpen(e.Tape.At(openIdx))
 
 	// Resolve any forwards inside the paren scope via implicit end.
 	// We loop because resolving a forward may cause re-evaluation.
@@ -7994,7 +8028,7 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 	// kept in agreement. Read here — after the pair removals, with closeIdx
 	// still the pre-removal index CheckModeParenFnCollapse may have rewritten
 	// above.
-	park := e.fnReturnPark(openIdx, closeIdx, wasFrameOpen)
+	park := e.fnReturnPark(openIdx, closeIdx, !wasReachGroup)
 
 	// Recorder hook: the values that survived inside the paren will
 	// be re-encountered by the main loop after we set pointer back
@@ -8013,7 +8047,7 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 	// never re-encountered and so are never credited. Extracted to
 	// creditParenSurvivorSkips for the stepCloseParen complexity cap
 	// (NUR038), same reason as fnReturnPark and tagReachCollapsedFn above.
-	e.creditParenSurvivorSkips(closeIdx, reStepped)
+	e.creditParenSurvivorSkips(openIdx, closeIdx, reStepped)
 	return nil
 }
 

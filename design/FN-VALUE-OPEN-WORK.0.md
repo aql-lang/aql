@@ -12,7 +12,7 @@
 
 | # | Item | State | Blocked on |
 |---|---|---|---|
-| A | **Clause 3** — "parens do not re-step" | Measured three ways. **RULED 2026-08-17: BROAD** (§1.1); fix not yet built. | Nobody — unblocked (§2) |
+| A | **Clause 3** — "parens do not re-step" | Measured three ways. **RULED 2026-08-17: BROAD** (§1.1); **BUILT AND LANDED 2026-08-24** — `fnReturnPark` keyed on `!wasReachGroup`, NUR073 discharged (§2.6) | — done (§2) |
 | B | **Clause 2** — passing a function requires `/r` | Mechanism located (4 sites, ~56 lines). Blast radius **3 rows**, not 9. **ADR-011 amended 2026-08-17**; all four sites retire together (§1.1). | Nobody — unblocked (§3) |
 | C | **Break 2** — compiler refuses a 0-arg fn read from a plain container | **CLOSED 2026-08-17**: the arrival model claims the empty-window arity-0 landing (`tryMemberFnArrivalDispatch`), the read guards skip a pinpointed genuine-0-arg member read (`zeroArgMemberFnLandingOut`), and a landing the model cannot claim re-refuses (guard-owned decline). Pinned in `lang/spec/ref.tsv` §3 (4 rows) and the graduated bytecode pins. | — done (§4) |
 | D | **NUR077** — a StackForm cannot apply a function value | Design sketch tested. **RULED 2026-08-17: a new dedicated Apply Op** (§1.1). Prerequisite 1 of 3 (§5.2's over-count) **CLOSED 2026-08-18**; the two §5 holes remain — see §5 before building. | Nobody — unblocked (§5) |
@@ -189,6 +189,45 @@ So a row pinned on the bare residual would still fail the differential; one
 pinned via `canon` or `typeof` would pass. That residue is NUR074's class of
 problem (canon already strips the name; the residual renderer does not), not
 clause 3's.
+
+### 2.6 Item A landed (2026-08-24)
+
+The one-line edit §2.1 predicted is the edit that shipped:
+`fnReturnPark(openIdx, closeIdx, !wasReachGroup)` in `stepCloseParen`,
+with `wasFrameOpen` retired from that call (`IsFrameOpen` stays
+load-bearing for the frame machinery itself). The `ReachGroup` exclusion
+is exactly as load-bearing as predicted — dot access must still
+dispatch.
+
+**Measured cost, against §2.2's 30-row estimate.** The corpus had grown,
+so the real number is larger: **46 production spec rows** across ten
+files (`valof` 7, `modifiers` 9, `class` 6, `fn-triple` 5, `usurp` 4,
+plus `apply`, `corpus-core`, `corpus-structures`, `module-fmt`,
+`recursion`), the whole combinator half of
+`frontier-hof-audit.tsv` (23 rows), and one `cmd/go` fixture. Every one
+was rewritten to a surviving spelling rather than deleted, and the
+mechanical rule is three lines: a def-bound WORD still calls; a
+param-held fn applies as `x f/v apply`; a curried chain stages as
+`b (f a) apply`.
+
+**The substrate claim survives the respelling**, which was the thing
+worth checking: SKI (I = S K K, derived), BCKW, Church numerals, pairs
+and the full boolean basis, CPS, the U combinator and the §1.5
+parser-combinator library all still run and still produce their quoted
+answers — the library byte-for-byte. What changed is the surface, not
+the expressiveness.
+
+**Two compile-lane guards shipped with it**, each closing a miscompile
+window the park made REACHABLE rather than one it wrote (§5.8's lesson
+in `design/HIGHER-ORDER-FUNCTIONS.0.md`): `tryRecordPoly` declines a
+stack-only mixed-arity window over dynamic carriers, and
+`recordCallElided` declines a dynamic non-carrier lead — both the
+`apply` shape where the check's gradual `[Reach Any]` match meets a
+runtime `[Function]` dispatch.
+
+Discharged in `NUR.md` (NUR073), pinned in `lang/spec/fn-value.tsv` §4b
+via `canon`/`typeof`, amended into ADR-011, and stated for users in
+`REFERENCE.md` §Grouping.
 
 ## 3. Item B — clause 2, and a much smaller amendment than recorded
 

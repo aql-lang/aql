@@ -20,7 +20,6 @@ func TestDispatchRematchRaisesByteIdentical(t *testing.T) {
 		`def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x dot value]] end f (make Box<String> {value:'s'})`,
 		`def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x dot value]] end f (make (Box of [String]) {value:'s'})`,
 		`def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply`,
-		`def inc fn [[n:Integer][Integer][n add 1]]  5 (valof inc) apply`,
 	}
 	for _, src := range rows {
 		t.Run(fmt.Sprintf("%.40s", src), func(t *testing.T) {

@@ -40,7 +40,7 @@ def P class {x:1} def p (make P {}) ((convert Map p) set x 9) drop p.x	1	writing
 def P class {x:1} keys (make P {x:5})	ERROR:signature	keys is a Map word — instances need convert Map first
 def l [0] def l2 (set 0 l l) ((l2 get 0) eq l)	true	a list stored INTO its own copy-returning set is the receiver itself, shared
 def l [1] def l2 (push l l) ((l2 get 1) eq l)	true	pushing a list onto itself embeds the receiver container
-def m {a:[1]} (apply $.a m) eq m.a	true	a reach lens extracts the same shared member dot does
+def m {a:[1]} (m $.a apply) eq m.a	true	a reach lens extracts the same shared member dot does
 
 # ====================================================================
 # §5  boundary indices and None elements

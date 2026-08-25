@@ -143,7 +143,7 @@ func init() {
 	register(&Entry{
 		Word:        "apply",
 		Summary:     "Apply a referenced function or a reach lens to stack arguments.",
-		Description: "x inc/v apply calls the referenced fn inc on x; xs apply $.1 reads index 1 via a reach lens. The general invoke-this-fn-or-lens word.",
+		Description: "x inc/v apply calls the referenced fn inc on x; xs $.1 apply reads index 1 via a reach lens. The general invoke-this-fn-or-lens word — stack-only in both forms.",
 		Examples:    []string{`def inc fn n:Integer Integer [n add 1] 5 inc/v apply ; # => 6`},
 	})
 	register(&Entry{

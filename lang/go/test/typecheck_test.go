@@ -170,14 +170,14 @@ func TestCheckUncalledFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	count := func(src string) int {
+	count := func(src, code string) int {
 		res, err := a.Check(src)
 		if err != nil {
 			t.Fatalf("check %q: %v", src, err)
 		}
 		n := 0
 		for _, d := range res.Diagnostics {
-			if d.Code == "uncalled_function" {
+			if d.Code == code {
 				n++
 			}
 		}
@@ -186,29 +186,32 @@ func TestCheckUncalledFunction(t *testing.T) {
 
 	cases := []struct {
 		src  string
+		code string
 		want int
 		desc string
 	}{
-		{`import "boru:math-util" end  MathUtil.sqrt "x"`, 1, "module namespace call, mismatched args"},
-		{`import "boru:math-util" end  MathUtil.sqrt 4.0`, 0, "module namespace call, correct args"},
-		{`import "boru:math-util" end  MathUtil.sqrt`, 0, "bare module reference, no args"},
-		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) "hello"`, 1, "local fn value, wrong-typed arg"},
-		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) 5`, 0, "local fn value, correct arg"},
-		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/v "hello"`, 0, "genuinely inert /v ref (no paren) is not a call"},
-		// A failed dispatch whose value a FOLLOWING word then consumes is
-		// flagged too, and that is the point of the loud contract
-		// (design/FN-VALUE-DISPATCH.0.md): what happens to the value
-		// afterwards is not evidence about whether the CALL was meant.
-		// Deferring to end-of-run made every Any-typed consumer — `print`,
-		// `def`, a Function param — silence a real dispatch failure.
-		// Composition that wants the function as data says so with `/v`,
-		// which is the row below.
-		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  ((usurp f) g)`, 1, "a consumed failed dispatch is still a failed dispatch"},
-		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  (g f/v)`, 0, "the same composition spelled with /v is a value, not a call"},
+		{`import "boru:math-util" end  MathUtil.sqrt "x"`, "uncalled_function", 1, "module namespace call, mismatched args"},
+		{`import "boru:math-util" end  MathUtil.sqrt 4.0`, "uncalled_function", 0, "module namespace call, correct args"},
+		{`import "boru:math-util" end  MathUtil.sqrt`, "uncalled_function", 0, "bare module reference, no args"},
+		// Since the BROAD park (NUR073 clause 3) a paren PLACES a computed
+		// fn, so the calling spelling stages it through a def and calls the
+		// bare name — where a wrong-typed call is a hard no_signature error.
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  def uf (usurp f)  uf "hello"`, "no_signature", 1, "local fn value, wrong-typed arg (no_signature via the def-staged call)"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  def uf (usurp f)  uf 5`, "no_signature", 0, "local fn value, correct arg"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/v "hello"`, "uncalled_function", 0, "genuinely inert /v ref (no paren) is not a call"},
+		// Under BROAD `((usurp f) g)` no longer dispatches at the paren:
+		// the wrapper is PLACED and g collects it as its Function arg, so
+		// the spelling now MEANS what the /v row below always meant — a
+		// value handed to g, not a call. The loud contract of
+		// design/FN-VALUE-DISPATCH.0.md lives where a dispatch actually
+		// fires (the def-staged rows above); a placed, consumed fn draws
+		// no uncalled_function.
+		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  ((usurp f) g)`, "uncalled_function", 0, "a placed wrapper consumed by g is a value, not a call (BROAD)"},
+		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  (g f/v)`, "uncalled_function", 0, "the same composition spelled with /v is a value, not a call"},
 	}
 	for _, c := range cases {
-		if got := count(c.src); got != c.want {
-			t.Errorf("%s: want %d uncalled_function, got %d  (%s)", c.desc, c.want, got, c.src)
+		if got := count(c.src, c.code); got != c.want {
+			t.Errorf("%s: want %d %s, got %d  (%s)", c.desc, c.want, c.code, got, c.src)
 		}
 	}
 }

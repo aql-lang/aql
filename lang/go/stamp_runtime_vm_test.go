@@ -179,7 +179,7 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 // unchanged. (The former paren-apply fixture graduated 2026-07-17, §9.2e.)
 func TestStampFnValueRefusingBodyInterpretsUnchanged(t *testing.T) {
 	a, v := stampHarness(t, `
-def h (fn [[x:Integer] [Integer] [ (((fn [[a:Integer] [Function] [(fn [[b:Integer] [Function] [(fn [[c:Integer] [Integer] [x add a add b add c]])]])]]) 1) 2) 3 ]])
+def h (fn [[x:Integer] [Integer] [ 3 2 1 (fn [[a:Integer] [Function] [(fn [[b:Integer] [Function] [(fn [[c:Integer] [Integer] [x add a add b add c]])]])]]) apply apply apply ]])
 `, "h", true)
 	stamped, ok := compiler.StampFnValue(a.registry, v)
 	if ok {

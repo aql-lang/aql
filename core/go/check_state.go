@@ -225,6 +225,14 @@ type CheckState struct {
 	// because the diagnostic became honest. Reset by Begin.
 	FnCarrierReadSubstituted bool
 
+	// ParenPlacedFnIDs records the analysis-pass carriers a USER paren
+	// PLACED rather than applied (NUR073's BROAD park). Only the collapse
+	// knows the discriminator — a reach-lowered group still dispatches, a
+	// user paren does not — so the fact is recorded there and read by the
+	// compiler's residual lowering, which must not lower a placed lead as
+	// an apply (`(m dot f) 5` is two values; `m.f 5` still applies).
+	ParenPlacedFnIDs map[string]bool
+
 	// FnAnalysisCounts tracks distinct body analyses (memo misses)
 	// per fn DEFINITION SITE (fnQuotaKey: scope + name + body position,
 	// NOT bare name — every higher-order closure shares a synthetic
@@ -708,6 +716,7 @@ func (c *CheckState) Clone() *CheckState {
 	if c.Diagnostics != nil {
 		cp.Diagnostics = append([]CheckDiagnostic(nil), c.Diagnostics...)
 	}
+	cp.ParenPlacedFnIDs = cloneMap(c.ParenPlacedFnIDs)
 	cp.FnSummaries = cloneMap(c.FnSummaries)
 	cp.FnInflight = cloneMap(c.FnInflight)
 	cp.FnNameInflight = cloneMap(c.FnNameInflight)
@@ -803,6 +812,7 @@ func (c *CheckState) Begin() func() {
 	// must not inherit a prior compile's true.
 	c.Compiling = false
 	c.FnCarrierReadSubstituted = false
+	c.ParenPlacedFnIDs = nil
 	// Arm process-wide ID minting for the pass's lifetime: the emit
 	// recorder keys provenance on Value.IDs minted at creation, so every
 	// value created while ANY pass is live must carry one (see

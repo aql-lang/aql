@@ -47,9 +47,9 @@ func TestQuoteLambdaCallbackParity(t *testing.T) {
 
 	// CONTROLS — value-typed lambdas keep compiling natively.
 	fnValueM2Native(t, "Integer-lambda each with a capture",
-		`def start 10 each [[k:Integer] => [start add k]] [1 2 3]`,
+		`def start 10 each [([k:Integer] => [start add k]) apply] [1 2 3]`,
 		"[[11 12 13]]")
 	fnValueM2Native(t, "Any-lambda over computed keys applies in both engines",
-		`each [[k:Any] => [k]] (keys {meta: 7})`,
+		`each [([k:Any] => [k]) apply] (keys {meta: 7})`,
 		"[['meta']]")
 }

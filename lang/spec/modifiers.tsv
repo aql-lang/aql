@@ -68,11 +68,11 @@ foo/q	foo/q	/q works on ANY name, bound or not — it is pure data
 #
 # §6  /v  valof (full coverage in valof.tsv)
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  typeof (sub2/v)	Function	/v references a fn value without invoking it
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/v) 10 3	7	grouped reference dispatches
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/v) apply	-7	grouped reference applies (stack order: top→sig[0])
 #
 # §7  /u, /uv  usurp (full coverage in usurp.tsv)
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3	-7	/u reverses argument order
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/uv) 10 3	-7	/uv holds the reversed wrapper; grouped → dispatch
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/uv) apply	7	/uv holds the reversed wrapper; apply calls it
 #
 # §8  VALID combinations — letters stack in any order
 add/qs	add/q	q dominates: s accepted but ignored
@@ -80,10 +80,10 @@ add/sq	add/q	/sq ≡ /qs
 add/q2	add/q	q dominates: digit ignored
 add/2q	add/q	/2q ≡ /q2
 foo/qf	foo/q	q dominates: f ignored
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/vu) 10 3	-7	/vu ≡ /uv (usurp + valof)
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/vs) 10 3	7	/vs = valof (+ s ignored): plain dispatch, NOT reversed
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/us) 10 3	-7	/us = usurp (+ s ignored): reversed
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/u2) 10 3	-7	/u2 = usurp (+ digit ignored)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/vu) apply	7	/vu ≡ /uv (usurp + valof)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/vs) apply	-7	/vs = valof (+ s ignored): plain apply, NOT reversed
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/us) apply	7	/us = usurp (+ s ignored): reversed
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 (sub2/u2) apply	7	/u2 = usurp (+ digit ignored)
 #
 # §9  INVALID combinations — all-modifier-alphabet spellings are a loud
 #     parse error (NUR027); non-alphabet letters keep the plain-word
@@ -108,8 +108,8 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/uv apply	7	/uv 
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {f: sub2/v}  ops.f 10 3	7	/v in a map slot, dispatched via dot-access
 #
 # §11  On anonymous functions
-([n:Integer] => [n add 1]) 5	6	bare lambda invocation (no modifier)
-def f ([n:Integer] => [n add 1])  (f/v) 5	6	/v on a bound lambda, grouped → dispatch
+5 ([n:Integer] => [n add 1]) apply	6	grouped lambda applies through apply (a paren places it)
+def f ([n:Integer] => [n add 1])  5 (f/v) apply	6	/v on a bound lambda, grouped → applied
 def f ([a:Integer b:Integer] => [a sub b])  f/u 10 3	-7	/u on a bound lambda
-def f ([a:Integer b:Integer] => [a sub b])  (f/uv) 10 3	-7	/uv on a bound lambda
+def f ([a:Integer b:Integer] => [a sub b])  10 3 (f/uv) apply	7	/uv on a bound lambda
 def f ([n:Integer] => [n add 1])  5 f/v apply	6	/v + apply on a lambda

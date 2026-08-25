@@ -43,8 +43,15 @@ var CheckBraid = struct {
 	TagCheckModeDefRead          func(e *Engine, top *Value, name string)
 	TryDynamicFnValueDispatch    func(e *Engine, valIdx int) bool
 	TryMemberFnArrivalDispatch   func(e *Engine, valIdx int) bool
-	TryShapedMethodDispatch      func(e *Engine, valIdx int) bool
-	UndefinedWordCheckDiag       func(e *Engine, name string, pos SrcPos) CheckDiagnostic
+	// ParenPlacedFnCarrier reports whether the value at idx is an
+	// analysis-pass carrier the check side knows to be a FUNCTION (a
+	// pinpointed member-fn read, whose fn identity lives in the recorder's
+	// side table rather than the value's type). fnReturnPark asks it so a
+	// user paren places such a carrier exactly as the interpreter places
+	// the concrete Function it stands for (NUR073's BROAD park).
+	ParenPlacedFnCarrier    func(e *Engine, idx int) bool
+	TryShapedMethodDispatch func(e *Engine, valIdx int) bool
+	UndefinedWordCheckDiag  func(e *Engine, name string, pos SrcPos) CheckDiagnostic
 }{
 	CheckMixedFormAdvisories:     inactiveCheckMixedFormAdvisories,
 	CheckModeAssumeSig:           inactiveCheckModeAssumeSig,
@@ -64,6 +71,7 @@ var CheckBraid = struct {
 	TagCheckModeDefRead:          inactiveTagCheckModeDefRead,
 	TryDynamicFnValueDispatch:    inactiveTryDynamicFnValueDispatch,
 	TryMemberFnArrivalDispatch:   inactiveTryMemberFnArrivalDispatch,
+	ParenPlacedFnCarrier:         inactiveParenPlacedFnCarrier,
 	TryShapedMethodDispatch:      inactiveTryShapedMethodDispatch,
 	UndefinedWordCheckDiag:       inactiveUndefinedWordCheckDiag,
 }
@@ -115,6 +123,10 @@ func inactiveTagCheckModeDefRead(e *Engine, top *Value, name string) {}
 func inactiveTryDynamicFnValueDispatch(e *Engine, valIdx int) bool { return false }
 
 func inactiveTryMemberFnArrivalDispatch(e *Engine, valIdx int) bool { return false }
+
+// inactiveParenPlacedFnCarrier is the NAMED inactive default for
+// ParenPlacedFnCarrier (core/go/CLAUDE.md: every seam slot has one).
+func inactiveParenPlacedFnCarrier(e *Engine, idx int) bool { return false }
 
 func inactiveTryShapedMethodDispatch(e *Engine, valIdx int) bool { return false }
 

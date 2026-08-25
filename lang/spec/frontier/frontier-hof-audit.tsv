@@ -9,7 +9,8 @@
 # every `make test`, and the compile ledger (frontier_spec_test.go) pins
 # which programs the compiler still refuses and why — mostly the audit's
 # §5.8 "body result of unknown provenance" class over curried combinator
-# bodies; the parser rows (NUR087's branch-local-def false positive) and
+# bodies; the parser rows (the def-split shape NUR087 recorded, its false
+# positive fixed 2026-08-24) and
 # the rows that def-bind a COMPUTED fn (`def fact (fgen fgen/v)`,
 # `def h (compose …)`) refuse one stage earlier, at check diagnostics.
 # NUR089 (the inline-lambda call site) is a CLI-check property of the B
@@ -25,39 +26,41 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  the classical combinator bases (audit §1.1)
-def kk x:Any => [y:Any => [x]] end def ss f:Function => [g:Function => [x:Any => [(f x) (g x)]]] end def ii ((ss kk/v) kk/v) end (ii 42)	42	I = S K K, derived: identity over an Integer
-def kk x:Any => [y:Any => [x]] end def ss f:Function => [g:Function => [x:Any => [(f x) (g x)]]] end def ii ((ss kk/v) kk/v) end (ii 'hello')	'hello'	the derived identity is polymorphic (String)
-def bb f:Function => [g:Function => [x:Any => [f (g x)]]] end (((bb (n:Integer => [mul n 2])) (n:Integer => [add n 3])) 4)	14	B with inline-lambda args: runs to 14; the CHECK failure at this call site is NUR089
-def bb f:Function => [g:Function => [x:Any => [f (g x)]]] end def d fn n:Integer Integer [mul n 2] end def e fn n:Integer Integer [add n 3] end (((bb d/v) e/v) 4)	14	the same B with named /v references checks clean — the call-site pair of NUR089
-def cc f:Function => [x:Any => [y:Any => [(f y) x]]] end def add2 a:Integer => [b:Integer => [add a b]] end (((cc add2/v) 1) 10)	11	C flips the argument order
-def kk x:Any => [y:Any => [x]] end ((kk 7) 99)	7	K drops its second argument
-def ww f:Function => [x:Any => [(f x) x]] end def add2 a:Integer => [b:Integer => [add a b]] end ((ww add2/v) 4)	8	W duplicates its argument
+def kk x:Any => [y:Any => [x/v]] end def ss f:Function => [g:Function => [x:Any => [(x g/v apply) (x f/v apply) apply]]] end def ii (kk/v (ss kk/v) apply) end 42 ii/v apply	42	I = S K K, derived: identity over an Integer (BROAD: application is explicit — a paren places, apply calls)
+def kk x:Any => [y:Any => [x/v]] end def ss f:Function => [g:Function => [x:Any => [(x g/v apply) (x f/v apply) apply]]] end def ii (kk/v (ss kk/v) apply) end 'hello' ii/v apply	'hello'	the derived identity is polymorphic (String)
+def bb f:Function => [g:Function => [x:Any => [(x g/v apply) f/v apply]]] end 4 ((n:Integer => [add n 3]) (bb (n:Integer => [mul n 2])) apply) apply	14	B with inline-lambda args: runs to 14; the CHECK failure at this call site is NUR089
+def bb f:Function => [g:Function => [x:Any => [(x g/v apply) f/v apply]]] end def d fn n:Integer Integer [mul n 2] end def e fn n:Integer Integer [add n 3] end 4 (e/v (bb d/v) apply) apply	14	the same B with named /v references checks clean — the call-site pair of NUR089
+def cc f:Function => [x:Any => [y:Any => [x/v (y f/v apply) apply]]] end def add2 a:Integer => [b:Integer => [add a b]] end 10 (1 (cc add2/v) apply) apply	11	C flips the argument order
+def kk x:Any => [y:Any => [x/v]] end 99 (kk 7) apply	7	K drops its second argument
+def ww f:Function => [x:Any => [x/v (x f/v apply) apply]] end def add2 a:Integer => [b:Integer => [add a b]] end 4 (ww add2/v) apply	8	W duplicates its argument
 #
 # §2  Church encodings (audit §1.2)
-def czero f:Function => [x:Any => [x]] end def csucc n:Function => [f:Function => [x:Any => [f ((n f/v) x)]]] end def toint n:Function => [((n (k:Integer => [add k 1])) 0)] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end (toint c3/v)	3	Church numeral three decodes
-def czero f:Function => [x:Any => [x]] end def csucc n:Function => [f:Function => [x:Any => [f ((n f/v) x)]]] end def cplus m:Function => [n:Function => [f:Function => [x:Any => [((m f/v) ((n f/v) x))]]]] end def toint n:Function => [((n (k:Integer => [add k 1])) 0)] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end (toint ((cplus c2/v) c3/v))	5	Church addition: 2 + 3
-def czero f:Function => [x:Any => [x]] end def csucc n:Function => [f:Function => [x:Any => [f ((n f/v) x)]]] end def cmult m:Function => [n:Function => [f:Function => [(m (n f/v))]]] end def toint n:Function => [((n (k:Integer => [add k 1])) 0)] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end (toint ((cmult c2/v) c3/v))	6	Church multiplication: 2 * 3
-def cpair a:Any => [b:Any => [s:Function => [((s a) b)]]] end def cfst p:Function => [(p (a:Any => [b:Any => [a]]))] end def p ((cpair 1) 2) end (cfst p/v)	1	Church pair: first projection
-def cpair a:Any => [b:Any => [s:Function => [((s a) b)]]] end def csnd p:Function => [(p (a:Any => [b:Any => [b]]))] end def p ((cpair 1) 2) end (csnd p/v)	2	Church pair: second projection
-def ctrue t:Any => [f:Any => [t/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end (((cif ctrue/v) 'T') 'F')	'T'	Church true selects the first branch (the naive spelling /v enabled — NUR085 retired)
-def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end (((cif cfalse/v) 'T') 'F')	'F'	Church false selects the second branch
-def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end def cnot p:Function => [t:Any => [f:Any => [((p f) t)]]] end (((cif (cnot ctrue/v)) 'T') 'F')	'F'	Church not true
-def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end def cnot p:Function => [t:Any => [f:Any => [((p f) t)]]] end (((cif (cnot cfalse/v)) 'T') 'F')	'T'	Church not false
-def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end def cand p:Function => [q:Function => [((p q/v) cfalse/v)]] end (((cif ((cand ctrue/v) cfalse/v)) 'T') 'F')	'F'	Church and: T ∧ F
-def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end def cand p:Function => [q:Function => [((p q/v) cfalse/v)]] end (((cif ((cand ctrue/v) ctrue/v)) 'T') 'F')	'T'	Church and: T ∧ T
-def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end def cor p:Function => [q:Function => [((p ctrue/v) q/v)]] end (((cif ((cor ctrue/v) cfalse/v)) 'T') 'F')	'T'	Church or: T ∨ F
-def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [((p t) e)]]] end def cor p:Function => [q:Function => [((p ctrue/v) q/v)]] end (((cif ((cor cfalse/v) cfalse/v)) 'T') 'F')	'F'	Church or: F ∨ F
+def czero f:Function => [x:Any => [x/v]] end def csucc n:Function => [f:Function => [x:Any => [(x (n f/v apply) apply) f/v apply]]] end def toint n:Function => [0 ((k:Integer => [add k 1]) n/v apply) apply] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end (toint c3/v)	3	Church numeral three decodes
+def czero f:Function => [x:Any => [x/v]] end def csucc n:Function => [f:Function => [x:Any => [(x (n f/v apply) apply) f/v apply]]] end def cplus m:Function => [n:Function => [f:Function => [x:Any => [(x (n f/v apply) apply) (m f/v apply) apply]]]] end def toint n:Function => [0 ((k:Integer => [add k 1]) n/v apply) apply] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end (toint (c3/v (cplus c2/v) apply))	5	Church addition: 2 + 3
+def czero f:Function => [x:Any => [x/v]] end def csucc n:Function => [f:Function => [x:Any => [(x (n f/v apply) apply) f/v apply]]] end def cmult m:Function => [n:Function => [f:Function => [(f/v n/v apply) m/v apply]]] end def toint n:Function => [0 ((k:Integer => [add k 1]) n/v apply) apply] end def c1 (csucc czero/v) end def c2 (csucc c1/v) end def c3 (csucc c2/v) end (toint (c3/v (cmult c2/v) apply))	6	Church multiplication: 2 * 3
+def cpair a:Any => [b:Any => [s:Function => [b/v (a/v s/v apply) apply]]] end def cfst p:Function => [(a:Any => [b:Any => [a/v]]) p/v apply] end def p (2 (cpair 1) apply) end (cfst p/v)	1	Church pair: first projection
+def cpair a:Any => [b:Any => [s:Function => [b/v (a/v s/v apply) apply]]] end def csnd p:Function => [(a:Any => [b:Any => [b/v]]) p/v apply] end def p (2 (cpair 1) apply) end (csnd p/v)	2	Church pair: second projection
+def ctrue t:Any => [f:Any => [t/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end 'F' ('T' (cif ctrue/v) apply) apply	'T'	Church true selects the first branch
+def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end 'F' ('T' (cif cfalse/v) apply) apply	'F'	Church false selects the second branch
+def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end def cnot p:Function => [t:Any => [f:Any => [t/v (f/v p/v apply) apply]]] end 'F' ('T' (cif (cnot ctrue/v)) apply) apply	'F'	Church not true
+def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end def cnot p:Function => [t:Any => [f:Any => [t/v (f/v p/v apply) apply]]] end 'F' ('T' (cif (cnot cfalse/v)) apply) apply	'T'	Church not false
+def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end def cand p:Function => [q:Function => [cfalse/v (q/v p/v apply) apply]] end 'F' ('T' (cif (cfalse/v (cand ctrue/v) apply)) apply) apply	'F'	Church and: T and F
+def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end def cand p:Function => [q:Function => [cfalse/v (q/v p/v apply) apply]] end 'F' ('T' (cif (ctrue/v (cand ctrue/v) apply)) apply) apply	'T'	Church and: T and T
+def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end def cor p:Function => [q:Function => [q/v (ctrue/v p/v apply) apply]] end 'F' ('T' (cif (cfalse/v (cor ctrue/v) apply)) apply) apply	'T'	Church or: T or F
+def ctrue t:Any => [f:Any => [t/v]] end def cfalse t:Any => [f:Any => [f/v]] end def cif p:Function => [t:Any => [e:Any => [e/v (t/v p/v apply) apply]]] end def cor p:Function => [q:Function => [q/v (ctrue/v p/v apply) apply]] end 'F' ('T' (cif (cfalse/v (cor cfalse/v) apply)) apply) apply	'F'	Church or: F or F
 #
 # §3  continuation-passing style (audit §1.3)
-def factk fn [[n:Integer k:Function][Any][ if (lte 1 n) [ (k 1) ] [ def kk ( fn r:Integer Any [ def m (mul n r) (k m) ] ) (factk (sub 1 n) kk/v) ] ]] end (factk 5 (v:Integer => [v]))	120	CPS factorial, identity continuation
-def factk fn [[n:Integer k:Function][Any][ if (lte 1 n) [ (k 1) ] [ def kk ( fn r:Integer Any [ def m (mul n r) (k m) ] ) (factk (sub 1 n) kk/v) ] ]] end (factk 10 (v:Integer => [add 0 v]))	3628800	CPS factorial, computing continuation
+def factk fn [[n:Integer k:Function][Any][ if (lte 1 n) [ 1 k/v apply ] [ def kk ( fn r:Integer Any [ def m (mul n r) m k/v apply ] ) (factk (sub 1 n) kk/v) ] ]] end (factk 5 (v:Integer => [v]))	120	CPS factorial, identity continuation
+def factk fn [[n:Integer k:Function][Any][ if (lte 1 n) [ 1 k/v apply ] [ def kk ( fn r:Integer Any [ def m (mul n r) m k/v apply ] ) (factk (sub 1 n) kk/v) ] ]] end (factk 10 (v:Integer => [add 0 v]))	3628800	CPS factorial, computing continuation
 #
 # §4  anonymous recursion — the U combinator (audit §1.4)
-def fgen fn s:Function Function [ ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((s s) (sub 1 n)) ] ] ) ] end def fact (fgen fgen/v) end (fact 5)	120	U-combinator factorial: self-application passed explicitly
+def fgen fn s:Function Function [ ( fn n:Integer Integer [ if (lte 1 n) [1] [ mul n ((sub 1 n) (s/v s/v apply) apply) ] ] ) ] end def fact (fgen fgen/v) end (fact 5)	120	U-combinator factorial: self-application passed explicitly
 #
 # §5  a real parser-combinator library (audit §1.5). All four rows draw the
-#     NUR087 checker false positive (branch-local def after a call through a
-#     Function parameter), so the compile lane refuses at check; the
+#     def-split shape NUR087 recorded (a def bound by a call through a
+#     Function parameter, then another consuming it). NUR087's own false
+#     positive was FIXED 2026-08-24 — these rows check clean now — and the
+#     compile lane still refuses them for the reasons ledgered; the
 #     interpreter is the oracle that the library WORKS.
 def pitem s:String => [ if (eq 0 (size s)) [ {ok:false rest:s val:None} ] [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ] end def psat fn p:Function Function [ ( fn s:String Map [ def r (pitem s) if (r.ok) [ if (p (r.val)) [ r ] [ {ok:false rest:s val:None} ] ] [ r ] ] ) ] end def manyloop fn [[a:Function s:String acc:List][Map][ def r (a s) if (r.ok) [ (manyloop a/v (r.rest) (push (r.val) acc)) ] [ {ok:true val:acc rest:s} ] ]] end def pmany fn a:Function Function [ ( fn s:String Map [ def z [] (manyloop a/v s z) ] ) ] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def digits (pmany digit/v) end (digits '123ab')	{ok:true val:(quote ['1' '2' '3']) rest:'ab'}	many(sat(digit)) consumes the digit prefix
 def pitem s:String => [ if (eq 0 (size s)) [ {ok:false rest:s val:None} ] [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ] end def psat fn p:Function Function [ ( fn s:String Map [ def r (pitem s) if (r.ok) [ if (p (r.val)) [ r ] [ {ok:false rest:s val:None} ] ] [ r ] ] ) ] end def palt fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r (a s) if (r.ok) [ r ] [ (b s) ] ] ) ]] end def ab (palt (psat (c:String => [eq 'a' c])) (psat (c:String => [eq 'b' c]))) end (ab 'bzz')	{ok:true val:'b' rest:'zz'}	alternation: the second branch matches
@@ -173,3 +176,37 @@ def mk fn [[g:Function][Function][( fn [[v:Integer][Integer][(g v)]] )]] end def
 #     the interpreter answers 3. The drop is fixed; the shadow
 #     refuses. Ledgered.
 def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f 1 end def f (mk 1) end undef f (f 2)	3	a computed fn shadowing a live binding, then undef (compiled answered `1 2`; refuses now)
+#
+# §10 the fetched-fn APPLY shape (2026-08-24, NUR073's BROAD park). BROAD
+#     removed the paren-application idiom this row was written in, so the
+#     member call is respelled to explicit `apply` — which puts a
+#     DYNAMICALLY-FETCHED fn at apply's stack slot, where the check pass's
+#     gradual match seats [Reach Any] while runtime dispatches [Function].
+#     Both compile guards (tryRecordPoly, recordCallElided) decline rather
+#     than record a wrong-arity poly window, so the row falls back
+#     faithfully. Graduation = an arity channel for a fetched-fn apply lead.
+def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]] def rules {inc: ([x:Integer] => [x add 1])} app 5 rules	6	a fn fetched from a Map param, applied explicitly — the interpreter oracle; the compile lane refuses (ledgered)
+def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]] def rules {inc: 42} app 5 rules	ERROR:signature_error	…and its negative twin: a NON-fn in the rule slot makes apply refuse loudly (same lane story)
+#
+# §11 NUR087's branch-local spelling (2026-08-24). The def-split collapse
+#     now admits a DYNAMIC argument, so this CHECKS clean — the false
+#     undefined_word is gone and the flat twin is pinned in
+#     lang/spec/fn-value.tsv. The compile lane still takes the branch
+#     arm's dispatch through recovery, so the row lives here with its
+#     refusal ledgered rather than in the production corpus.
+def chainif fn [[a:Function b:Function s:Integer][Any][def r1 (a s) if (r1.ok) [def r2 (b (r1.rest)) (r2.val)] [0]]] chainif ([z:Integer] => [{ok:true rest:8}]) ([z:Integer] => [{ok:true val:50}]) 4	50	the branch-local def-split (NUR087's own shape): checks clean since the fix; the compile lane recovers the branch dispatch
+#
+# §12 the LIST Function form (NUR086's fix, 2026-08-24). All four words
+#     now take a Function callback over a list, handing it the ELEMENT.
+#     The rows RUN on both lanes; they live here because the compile
+#     lane reaches them through an island (each/fold/scan) or the
+#     Stage 3 function-valued-operand gate (for-each), which the
+#     production corpus's compute-gap ceiling of 0 does not admit.
+#     The compiling twins — the quotation wrapper and the map form —
+#     stay pinned in lang/spec/higher-order.tsv §6.
+def dbl x:Integer => [mul 2 x]  each dbl/v [1 2 3]	[2 4 6]	a Function value maps over a list — the element reaches the callback
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0	6	fold with an explicit seed: the callback sees (accumulator, element)
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3]	6	…and unseeded, the first element seeds it
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  scan add2/v [1 2 3]	[1 3 6]	scan keeps the running accumulator
+def dbl x:Integer => [mul 2 x]  for-each dbl/v [1 2 3]		for-each discards every result — the fn must still satisfy its OWN declared return arity (a void lambda breaks its contract, not for-each's)
+each ([x:Integer] => [x add 1]) [1]	[2]	a LAMBDA over a LIST is an each signature since NUR086's fix (2026-08-24): the list Function form hands the callback the ELEMENT, so a lambda needs neither a quotation wrapper nor a maps

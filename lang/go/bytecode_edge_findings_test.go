@@ -50,6 +50,44 @@ func mustRefuseWithParity(t *testing.T, src, want string) {
 
 // mustCompileWithParity asserts src compiles natively (no whole-program
 // fallback island in the reason) and RunCompiled matches the interpreter.
+// interpOnlyWithSoundRefusal asserts the interpreter's answer and TOLERATES a
+// sound compile refusal: since the BROAD park (NUR073 clause 3) a fetched fn
+// reaches `apply` as an untyped carrier, and the record refuses ("apply over
+// a dynamic lead") rather than lower an unprovable overload — the default
+// lane falls back to the interpreter. Graduating the shape re-tightens the
+// pin to mustCompileWithParity.
+func interpOnlyWithSoundRefusal(t *testing.T, src, want string) {
+	t.Helper()
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotI, errI := c.RunInterp(src)
+	if errI != nil {
+		t.Fatalf("%q: interp: %v", src, errI)
+	}
+	if want != "" && fmt.Sprint(gotI) != want {
+		t.Errorf("%q: interp got %v, want %s", src, gotI, want)
+	}
+	a, _ := New()
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("%q: CompileCheck: %v", src, cerr)
+	}
+	if prog == nil {
+		t.Logf("%q: compile refused soundly (%q)", src, reason)
+		return
+	}
+	b, _ := New()
+	gotC, compiled, errC := b.RunCompiled(src)
+	if !compiled || errC != nil {
+		t.Fatalf("%q: compiled run: compiled=%v err=%v", src, compiled, errC)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("%q: parity compiled=%v interp=%v", src, gotC, gotI)
+	}
+}
+
 func mustCompileWithParity(t *testing.T, src, want string) {
 	t.Helper()
 	a, err := New()
@@ -323,11 +361,13 @@ func TestMemberFnArrivalDeclineFences(t *testing.T) {
 		want      string // interp result (fmt.Sprint)
 	}{
 		// A computed key cannot pinpoint the member: the tag rides bool-only,
-		// the model declines — and with no static fn evidence the shape
-		// compiles through the ordinary dynamic paths with parity.
-		{"computed key", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/v} def k (do [double/q]) (m get k) 21 eq 42`, true, "[true]"},
+		// the model declines — and the fetched fn reaches `apply` as an
+		// untyped carrier, which the record refuses ("apply over a dynamic
+		// lead", the BROAD-era mixed-arity guard) rather than lower an
+		// unprovable overload. Sound refusal; the interpreter owns it.
+		{"computed key", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/v} def k (do [double/q]) 21 (m get k) apply eq 42`, false, "[true]"},
 		// A LIST member pinpoints by concrete index — the arrival model fires.
-		{"list member", `def d fn [[n:Integer][Integer][n mul 2]] def lst [d/v] (lst get 0) 21 eq 42`, true, "[true]"},
+		{"list member", `def d fn [[n:Integer][Integer][n mul 2]] def lst [d/v] 21 (lst get 0) apply eq 42`, true, "[true]"},
 		// Anonymous lambda member: no name for the model — sound refusal.
 		{"anonymous member", `def m {double: ([n:Integer] => [n mul 2])} m.double 21 eq 42`, false, "[true]"},
 		// 0-arg member: the arrival model claims the empty-window arity-0
@@ -420,8 +460,8 @@ func TestEdgeFindingSentinelInInterpolatedParts(t *testing.T) {
 	// An APPLIED anonymous fn is raw tokens at scan time (`fn` + sig/body
 	// lists), so the body-list recursion sees its break — and the interpreter
 	// does propagate an applied callee's break to the enclosing loop.
-	mustCompileWithParity(t, "def b (quote [`${(fn [[x:Integer] [Integer] [break 7]]) 1}`]) for 5 [do b i]", "[]")
-	mustCompileWithParity(t, `def b (quote [(fn [[x:Integer] [Integer] [break 7]]) 1]) for 5 [do b i]`, "[]")
+	mustCompileWithParity(t, "def b (quote [`${1 (fn [[x:Integer] [Integer] [break 7]]) apply}`]) for 5 [do b i]", "[]")
+	mustCompileWithParity(t, `def b (quote [1 (fn [[x:Integer] [Integer] [break 7]]) apply]) for 5 [do b i]`, "[]")
 
 	// Negatives — sentinel-free interpolations/maps must KEEP compiling.
 	mustCompileWithParity(t, "def b (quote [`v${1 add 1}`]) for 2 [do b i]", "[v2 0 v2 1]")
@@ -599,18 +639,14 @@ func TestEdgeFindingLoopCollectDefCompiles(t *testing.T) {
 // trace: a body with any event AFTER the window's last producer (its
 // effects would reorder behind the replay) keeps refusing.
 func TestEdgeFindingDynamicFnValueApplyBodyTail(t *testing.T) {
-	// The stylesheet idiom, stack-arranged apply: fn value fetched by a
-	// dynamic key, applied to the waiting nd below it.
-	mustCompileWithParity(t,
+	// The stylesheet idiom: fn value fetched by a dynamic key, applied to
+	// the waiting nd via `apply` — since the BROAD park (NUR073 clause 3)
+	// the fetched fn is PLACED by its paren, so the explicit apply is the
+	// application act (the pre-BROAD "fn steps first and forward-collects"
+	// variant is the removed idiom).
+	interpOnlyWithSoundRefusal(t,
 		`def rules {inc: ([x:Integer] => [x add 1])}
-		 def app fn [[nd:Any m:Map] [Any] [nd (m get "inc")]]
-		 app 5 rules`,
-		"[6]")
-	// Forward-collection variant: the fetched fn steps FIRST and collects
-	// the following token region, exactly as the interpreter's pointer does.
-	mustCompileWithParity(t,
-		`def rules {inc: ([x:Integer] => [x add 1])}
-		 def app fn [[nd:Any m:Map] [Any] [(m get "inc") nd]]
+		 def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]]
 		 app 5 rules`,
 		"[6]")
 	// NOT-callable runtime value: the replay leaves it as data and the RET

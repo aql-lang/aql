@@ -34,15 +34,17 @@ through a parameter, and one live **engine disagreement**.
 | Are functions first-class? | **Yes.** Storable in lists and maps, passable, returnable, closing over locals, recursive, introspectable. |
 | Can all combinators be implemented? | **Yes**, since the `/v` change (2026-08-19). S, K, I, B, C, W, U, the full Church basis — booleans *including* `and`/`or`, numerals, pairs — CPS, and a working parser-combinator library were all built and run. The one construction the first pass could not finish now works in its naive spelling (§1.2, §5.2). |
 | Is it *pleasant*? | **Much more so.** `/v` is total over binding kinds, so the polymorphic combinators need no escape hatch — the two undocumented idioms (`(args).N` and boxing) are no longer required. |
-| Is it *safe*? | **Not yet.** Three silent-wrong-answer classes and one interpreter-vs-compiler divergence, listed in §5. |
+| Is it *safe*? | **Safer since 2026-08-24.** The interpreter-vs-compiler divergence (§5.7, NUR073) is CLOSED by the BROAD fix. Three silent-wrong-answer classes remain, listed in §5. |
 
 **One-line summary:** boru's function substrate is complete — every
 combinator in the audit was built and run — and since `/v` became total
 over binding kinds the surface has one spelling for "the value, whatever
 kind it is". What remains is narrower: a *call-vs-value* ambiguity at the
-paren-application and capitalised-name sites, and the fact that the
-correctness of a higher-order program can still depend on which engine
-runs it (§5.7).
+paren-application and capitalised-name sites. The engine-dependence that
+this line originally named (§5.7) is closed as of 2026-08-24: the BROAD
+fix makes a paren place its collapsed Function on both lanes, and with it
+the paren-application ambiguity itself is gone — application is now
+explicit, which is a surface change every §1 program had to absorb.
 
 > **Re-assessed 2026-08-19** after `/r`→`/v` / `ref`→`valof` landed with the
 > function-only gate removed. §5.2 is closed and NUR085 retired; §5.1,
@@ -78,6 +80,27 @@ Every program below was written and run against this tree, under both
 fallback), and is quoted here in full — definitions **and** the calls that
 produced the quoted output — so it can be re-run from the note itself.
 
+> **Superseded in spelling 2026-08-24 — NUR073's BROAD fix landed.** Every
+> §1 program below is written in the paren-application idiom
+> (`((f a) b)`), and that idiom no longer exists: a paren PLACES its
+> collapsed function value and never re-steps it, so application is
+> explicit. The programs themselves all still work — each was re-derived
+> and re-run in the new spelling, and the corpus rows carry it — so the
+> substrate verdict is unchanged; only the surface moved. The mechanical
+> translation is three rules:
+>
+> - a def-bound WORD still calls: `(toint c3/v)` is unchanged;
+> - a param-held fn applies through `apply`, argument beneath:
+>   `(f x)` becomes `x f/v apply`;
+> - a curried chain stages: `((f a) b)` becomes `b (f a) apply`.
+>
+> So `def ii ((ss kk/v) kk/v)` is now `def ii (kk/v (ss kk/v) apply)`,
+> and `(ii 42)` is `42 ii/v apply` — still `42`, still `check: 0
+> error(s)`. The parser-combinator library of §1.5 produces its four
+> quoted results byte-for-byte in the new spelling. Read the transcripts
+> below as the 2026-08-19 record; read
+> `lang/spec/frontier/frontier-hof-audit.tsv` for what runs today.
+>
 > **Pinned 2026-08-21.** These transcripts are now also a standing gate:
 > `lang/spec/frontier/frontier-hof-audit.tsv` re-checks every §1.1–§1.5
 > value (plus §1.6's combinator rows) on the interpreter oracle on every
@@ -87,8 +110,10 @@ produced the quoted output — so it can be re-run from the note itself.
 > family, NUR087's check false positive). The §1.4 divergences — Z, and
 > the naive Y that no strict language can run — are deliberately NOT
 > pinned: no budget bounds them (see the §1.4 correction), so a test
-> would hang the suite. The deterministic §5.4 rule that causes Z's
-> divergence is pinned instead (the corpus file's §7 rows).
+> would hang the suite. The deterministic §5.4 behaviour implicated in
+> Z's compiled-lane divergence is pinned instead (the corpus file's §7
+> rows: the statement-level apply and the `/v apply` workaround — the
+> 2026-08-24 correction in §5.4 narrows what that rule explains).
 
 ### 1.1 The classical combinator bases
 
@@ -258,9 +283,18 @@ print (fact 5)       ;# 120
 
 The full **Z combinator** (`λf.(λx.f(λv.(x x)v))²`) **diverges**. The
 cause is not call-by-value eagerness: lambda bodies were confirmed lazy
-(a `raise` inside an unapplied lambda body never fires). The cause is
-§5.4 — `((x x) v)` does not parse as an application inside a body, so
-the `λv` thunk never actually guards the recursion.
+(a `raise` inside an unapplied lambda body never fires). On the
+compiled lane the cause is §5.4's collect — `((x x) v)` does not
+apply there, so the `λv` thunk never actually guards the recursion.
+
+> **Corrected 2026-08-24.** This originally attributed the divergence
+> to §5.4 unconditionally ("`((x x) v)` does not parse as an
+> application inside a body"). §5.4's same-date correction shows the
+> interpreter DOES apply that shape — the collect is the compiled
+> lane's — so the attribution above holds for the compiled lane only.
+> Why the interpreter's run also diverges is unestablished, and cannot
+> be re-established from this page: the Z source was not quoted here,
+> the one §1 program that was not.
 
 > **Corrected 2026-08-21.** This originally said "it hangs until the
 > step limit". Measured: the step limit never trips — a run under
@@ -738,7 +772,37 @@ still calls a function-bound parameter. That is ADR-011 working as
 designed ("calling is an act of the use site"); `/v` is how you say you
 meant the value.
 
-### 5.3 `each`/`for-each`/`fold`/`scan` take a `Function` callback over a Map but not over a List
+### 5.3 ~~`each`/`for-each`/`fold`/`scan` take a `Function` callback over a Map but not over a List~~ — **RESOLVED 2026-08-24**
+
+> **Closed 2026-08-24 (NUR086 retired).** All four now register
+> `{TFunction, TList}`, and the LIST form hands the callback the
+> **element**: `each dbl/v [1 2 3]` is `[2 4 6]`. The fix reused the
+> existing handlers unchanged — `eachHandler` already passed the element
+> to `InvokeBody`, and a Function value reaches the callback exactly
+> where a quotation body would — so this was a missing signature, not
+> missing machinery. The record's second half (a matching `filter`
+> decision) is ruled rather than deferred: **a per-container Function
+> form hands the container's natural unit; `filter`'s single
+> cross-container signature hands a position descriptor**, which is its
+> contract because the descriptor carries the index a positional
+> predicate needs. Pinned as `lang/spec/higher-order.tsv` §6 and stated
+> in `REFERENCE.md` §"Higher-order array words". The audit's "callback
+> uniformity across containers ✗" row in §2 is now: uniform where a form
+> is per-container, deliberately different for `filter`.
+>
+> **Two costs, both narrow and both stated rather than hidden.** The list
+> Function form reaches its callback through `InvokeBody`, which the
+> lowering ISLANDS rather than models, so those rows are ledgered in
+> `frontier-hof-audit.tsv` §12 — the fix buys the spelling, not the
+> speed, and graduation is a modelled fn-value callback frame. And a
+> LAMBDA over a *gradual-Any* collection now refuses to compile where it
+> used to: with two `TFunction` overloads reachable, the compiler cannot
+> commit, because the callback gets the ELEMENT over a list and a
+> `KeyVal` over a map — so a closure compiled against either shape is
+> wrong for the other. That refusal is correct; the default lane runs the
+> program on the interpreter with the loud warning
+> (`lang/go/bytecode_gradual_each_test.go`, the refusesAndFallsBack
+> group).
 
 ```
 $ boru do 'def dbl x:Integer => [mul 2 x] end each dbl/v [1 2 3]'
@@ -791,18 +855,60 @@ one — and the message now carries a source span pointing at the group
 and the declaration, `core/go/return_check_msg.go`. It read `ap:` when
 the audit was written; same class, same payload.)
 
-This is why the Z combinator diverges: `((x x) v)` never applies, so the
-`λv` guard is inert.
+> **Corrected 2026-08-24 (completeness review).** These transcripts are
+> the COMPILED lane's, and always were: under `-no-compile` the
+> interpreter re-steps the collapsed fn in every context on this page —
+> `print ((mk 1) 2)` answered **3** on the audit-day tree (`e332d15`)
+> and answers 3 today — so "the argument window merely collects both"
+> recorded a silent engine divergence (NUR073's class, where §0 counted
+> one such divergence), not a lane-independent context rule. Since the
+> §9g guard (`12c8150`) the print shape REFUSES compilation and the
+> lanes agree on 3 — `boru run` behind its loud fallback warning,
+> `boru do` (the command these transcripts use) falling back silently
+> by design, `-force-compile` refusing with a `force-compile` error —
+> so the quoted `fn (Integer)` / `2` reproduces only on a pre-guard
+> tree.
+> The fn-body arity error above is likewise the compiled lane's, and
+> that row is LIVE and check-clean today: interpreted `(g 0)` answers
+> 3, exit 0, where the checked default raises the quoted error, exit 1
+> — recorded as widened evidence on NUR073. Two attributions move with
+> this: the "silent wrong answer under `print`" severity belonged to
+> §5.7's engines-disagree class, and the Z explanation below holds for
+> the compiled lane only — the interpreter applies exactly the
+> `((x x) v)` shape, so the interpreter-lane divergence of §1.4's Z
+> (whose source this note does not quote — the one §1 program that
+> cannot be re-run from the page) has no established cause here.
+
+On the COMPILED lane this is why the Z spelling cannot work: `((x x)
+v)` never applies there, so the `λv` guard is inert. The interpreter
+applies that shape, so its divergence (§1.4) has a different, still
+unestablished cause — see the correction above.
 
 **Workaround:** `def h (mk 1)` then `2 h/v apply` → `3`.
-**Forward hazard:** NUR073's accepted **BROAD** verdict removes inline
-application entirely — *"`(fn Integer [Integer] [10 add]) 7` becomes two
+**Forward hazard — now realised (2026-08-24).** NUR073's accepted
+**BROAD** verdict removed inline application entirely — *"`(fn Integer [Integer] [10 add]) 7` becomes two
 values and the inline-application idiom is removed"*. That idiom
 currently answers `17`. Combinator code written against today's top-level
 behaviour will change meaning when the fix lands.
 **Severity:** silent wrong answer under `print`.
 
-### 5.5 The checker rejects correct higher-order programs, and `boru run` obeys it
+### 5.5 ~~The checker rejects correct higher-order programs~~ — **RESOLVED 2026-08-24**
+
+> **Closed 2026-08-24 (NUR087 retired).** The repro below, and the §1.5
+> library in its ORIGINAL spelling, now check clean and run under plain
+> `boru run`. Root cause, and it is narrower than this section's framing:
+> the `if` was never the trigger. `checkModeParenFnCollapse` — the
+> machinery built to close exactly this def-split false-positive class —
+> required the call's ARGUMENT to be non-dynamic, so `def r2 (b (r1.rest))`
+> (a call through a `Function` param whose argument is an earlier dynamic
+> binding) did not collapse, the pending `def` collected nothing, and every
+> later read of `r2` raised a false `undefined_word`. A dynamic argument
+> makes the result no less knowable than a static one — the window
+> collapses to `dynamic(Any)` either way — so the restriction bought no
+> soundness. Pinned as `lang/spec/fn-value.tsv`'s chained def-split rows,
+> flat and branch-local.
+
+### 5.5 (as recorded) The checker rejects correct higher-order programs, and `boru run` obeys it
 
 Minimal repro — a `def` inside an `if` branch becomes invisible once an
 earlier `def` in the same body bound the result of a call **through a
@@ -868,7 +974,18 @@ behaviours (105, the post-`undef` 6, and the frozen 6) are pinned as
 `lang/spec/frontier/frontier-hof-audit.tsv` §8, and the contract is
 documented in `REFERENCE.md` §"Definition and scoping".
 
-### 5.7 The engines disagree — NUR073, live today
+### 5.7 The engines disagree — NUR073, ~~live today~~ **RESOLVED 2026-08-24**
+
+> **Closed 2026-08-24.** The BROAD verdict's clause-3 fix landed: every
+> paren PLACES its collapsed Function (the reach-group exclusion stays,
+> so dot access still dispatches). `((h z/v))` is now the held value on
+> BOTH engines, pinned through `canon`/`typeof` in
+> `lang/spec/fn-value.tsv` §4b — the bare residual keeps a
+> name-rendering difference that belongs to NUR074's class, which is why
+> the pin is not on it. The transcript below is the pre-fix record; the
+> "choice of engine is a choice of semantics" claim it makes no longer
+> holds for this shape, and with it §0's "one live engine disagreement"
+> line is discharged.
 
 ```
 $ cat n73.boru
@@ -1335,11 +1452,12 @@ Remaining stages, each its own probe-driven increment:
    removed the `I/v apply` escape hatch a hint is the only help left.
    `undefined_word` already offers "did you mean"; this deserves the
    same.
-3. **Give `each`/`for-each`/`fold`/`scan` a `{TFunction, TList}`
-   signature** (NUR086). Note this buys *signature availability*, not
-   callback uniformity: `filter`'s list `Function` form passes a
-   `{key,value}` pair, so a matching `filter` change is needed before an
-   element-shaped callback works across the whole family.
+3. ~~**Give `each`/`for-each`/`fold`/`scan` a `{TFunction, TList}`
+   signature**~~ — **Done (2026-08-24, NUR086 retired).** The four
+   signatures landed with an ELEMENT callback, reusing the existing
+   handlers. The `filter` question this item raised is ruled rather than
+   left open: a per-container form hands the container's natural unit,
+   `filter`'s one cross-container form hands a position descriptor (§5.3).
 4. ~~**Ship the missing vocabulary as a module**~~ — **Done
    (2026-08-21):** `boru:fn-util` ships `compose`, `pipe`, `curry`,
    `partial`, `const`, `identity`, `flip`, `on`, `memoize` as native
@@ -1347,10 +1465,20 @@ Remaining stages, each its own probe-driven increment:
    `REFERENCE.md` §"The `boru:fn-util` module"; behaviour rows in
    `lang/spec/frontier/frontier-fn-util.tsv`, ledgered under the
    def-bound-computed-fn refusal until that family graduates).
-5. **Fix NUR087** — the checker refusing a correct closure is the only
-   finding that stops a working program from running at all.
-6. **Land NUR073.** Until it lands, `-no-compile` and the default are two
-   languages for higher-order code, and the difference is silent.
+5. ~~**Fix NUR087**~~ — **Done (2026-08-24).** The checker no longer
+   refuses the §1.5 library: the def-split collapse now admits a DYNAMIC
+   argument, which is the shape a parser combinator is built from
+   (`def r1 (a s)` then `def r2 (b (r1.rest))`). The audit's headline
+   complaint — a correct program stopped by its own pre-flight — is
+   closed, and the library runs under plain `boru run` in the spelling
+   this note quotes.
+6. ~~**Land NUR073.**~~ **Done (2026-08-24):** the BROAD fix landed — a
+   paren places its collapsed Function on every lane, so `-no-compile`
+   and the default are one language for these shapes again. The cost the
+   verdict budgeted was paid: the paren-application idiom is gone and
+   every §1 program was re-spelled with explicit `apply` (see the §1
+   note). NUR073 is discharged, pinned via `canon`/`typeof` in
+   `lang/spec/fn-value.tsv` §4b.
 
 ---
 

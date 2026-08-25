@@ -189,9 +189,10 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 		// the [Reach Any] overload cannot even fill its window.
 		{"Integer carrier vs apply Function slot",
 			`def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply`},
-		// apply.tsv:38 — same via a ref value on the stack.
-		{"ref-value carrier vs apply",
-			`def inc fn [[n:Integer][Integer][n add 1]]  5 (valof inc) apply`},
+		// (The former "ref value on the stack" sibling — `5 (valof inc)
+		// apply` — stopped raising under the BROAD park, NUR073 clause 3:
+		// the paren places inc's reference and apply fires it, answering 6
+		// on both engines; apply.tsv pins the positive.)
 		// (The former Boolean-carrier and private-Flag-overload cases are
 		// no longer carrier-disjoint: `add` now carries a within-type
 		// [Boolean Boolean] CoreDefault overload that a Boolean — or a

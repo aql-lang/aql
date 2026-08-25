@@ -144,6 +144,9 @@ func TestOnlyMetaFallsBack(t *testing.T) {
 	for _, w := range sortedKeys(tier2By) {
 		t.Logf("  reduce %4d  %s", tier2By[w], w)
 	}
+	for _, row := range c.computeRows {
+		t.Logf("  gap row: %s", row)
+	}
 	t.Logf("compute gaps by reason (ceiling %d):", computeRefusalCeiling)
 	for _, r := range sortedKeys(computeByReason) {
 		t.Logf("  gap    %4d  %s", computeByReason[r], r)

@@ -319,6 +319,15 @@ var allArrayNatives = []NativeFunc{
 				Impl:    Go(eachReachHandler),
 				Returns: []*Type{TList}, BarrierPos: -1,
 			},
+			// LIST Function form (NUR086's fix, 2026-08-24): the same
+			// handler, the same element — a Function value reaches the
+			// callback exactly where a quotation body would, so
+			// `each dbl/v [1 2 3]` is `each [dbl] [1 2 3]` without the
+			// wrapper. The callback receives the ELEMENT: a per-container
+			// form hands the container's natural unit (element for a list,
+			// KeyVal for a map). `filter`'s single cross-container form is
+			// the documented exception — it hands a position descriptor.
+			{Args: []*Type{TFunction, TList}, Impl: Go(eachHandler), ReturnsFn: eachReturnsFn, BarrierPos: -1},
 			// Map forms — iterate entries in key order, keeping the map shape
 			// (mapValues). Quotation pushes the value; a lambda receives a
 			// KeyVal {k v i n}. See native_map_iter.go.
@@ -343,6 +352,15 @@ var allArrayNatives = []NativeFunc{
 				Impl:       Go(forEachHandler),
 				ReturnsFn:  forEachReturnsFn, BarrierPos: -1,
 			},
+			// LIST Function form (NUR086's fix, 2026-08-24): the same
+			// handler, the same element — a Function value reaches the
+			// callback exactly where a quotation body would, so
+			// `each dbl/v [1 2 3]` is `each [dbl] [1 2 3]` without the
+			// wrapper. The callback receives the ELEMENT: a per-container
+			// form hands the container's natural unit (element for a list,
+			// KeyVal for a map). `filter`'s single cross-container form is
+			// the documented exception — it hands a position descriptor.
+			{Args: []*Type{TFunction, TList}, Impl: Go(forEachHandler), ReturnsFn: forEachReturnsFn, BarrierPos: -1},
 			// Map forms — iterate entries for side effects, produce nothing.
 			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(forEachMapHandler), Returns: []*Type{}, BarrierPos: -1},
 			{Args: []*Type{TFunction, TMap}, Impl: Go(forEachMapHandler), Returns: []*Type{}, BarrierPos: -1},
@@ -382,6 +400,16 @@ var allArrayNatives = []NativeFunc{
 				Impl:       Go(foldNoInitHandler),
 				ReturnsFn:  foldNoInitReturnsFn, BarrierPos: -1,
 			},
+			// LIST Function form (NUR086's fix, 2026-08-24): the same
+			// handler, the same element — a Function value reaches the
+			// callback exactly where a quotation body would, so
+			// `each dbl/v [1 2 3]` is `each [dbl] [1 2 3]` without the
+			// wrapper. The callback receives the ELEMENT: a per-container
+			// form hands the container's natural unit (element for a list,
+			// KeyVal for a map). `filter`'s single cross-container form is
+			// the documented exception — it hands a position descriptor.
+			{Args: []*Type{TFunction, TList, TAny}, Impl: Go(foldWithInitHandler), ReturnsFn: foldWithInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TFunction, TList}, Impl: Go(foldNoInitHandler), ReturnsFn: foldNoInitReturnsFn, BarrierPos: -1},
 			// Map forms — reduce entries (quotation: acc beneath, value on top;
 			// lambda: (acc, KeyVal)). Seeded explicitly, or by the first value.
 			// The accumulator-type inference is collection-agnostic
@@ -413,6 +441,15 @@ var allArrayNatives = []NativeFunc{
 				Impl:       Go(scanHandler),
 				ReturnsFn:  scanReturnsFn, BarrierPos: -1,
 			},
+			// LIST Function form (NUR086's fix, 2026-08-24): the same
+			// handler, the same element — a Function value reaches the
+			// callback exactly where a quotation body would, so
+			// `each dbl/v [1 2 3]` is `each [dbl] [1 2 3]` without the
+			// wrapper. The callback receives the ELEMENT: a per-container
+			// form hands the container's natural unit (element for a list,
+			// KeyVal for a map). `filter`'s single cross-container form is
+			// the documented exception — it hands a position descriptor.
+			{Args: []*Type{TFunction, TList}, Impl: Go(scanHandler), ReturnsFn: scanReturnsFn, BarrierPos: -1},
 			// Map forms — running fold over a map's values (the first value
 			// seeds), keeping the map shape. Quotation: acc beneath, value on
 			// top; lambda: (acc, KeyVal).

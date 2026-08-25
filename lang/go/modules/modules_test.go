@@ -118,9 +118,7 @@ func TestMathDotAbs(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewInteger(-5),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("abs"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsInteger(result[0])
 	if v != 5 {
@@ -132,9 +130,7 @@ func TestMathDotSin(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewFloat(0),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("sin"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if v != 0.0 {
@@ -146,9 +142,7 @@ func TestMathDotCos(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewFloat(0),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("cos"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if v != 1.0 {
@@ -160,9 +154,7 @@ func TestMathDotSqrt(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewFloat(4),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("sqrt"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if v != 2.0 {
@@ -176,9 +168,7 @@ func TestMathDotMin(t *testing.T) {
 	// We need: 3 7 (math get min)
 	result := runBoru(t, r, []native.Value{
 		native.NewInteger(3), native.NewInteger(7),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("min"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsInteger(result[0])
 	if v != 3 {
@@ -190,9 +180,7 @@ func TestMathDotMax(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewInteger(3), native.NewInteger(7),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("max"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsInteger(result[0])
 	if v != 7 {
@@ -203,9 +191,7 @@ func TestMathDotMax(t *testing.T) {
 func TestMathDotPi(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("pi"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if math.Abs(v-math.Pi) > 0.0001 {
@@ -216,9 +202,7 @@ func TestMathDotPi(t *testing.T) {
 func TestMathDotE(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("e"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if math.Abs(v-math.E) > 0.0001 {
@@ -230,9 +214,7 @@ func TestMathDotNegate(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewInteger(5),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("negate"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsInteger(result[0])
 	if v != -5 {
@@ -244,9 +226,7 @@ func TestMathDotCeil(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewFloat(1.2),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("ceil"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if v != 2.0 {
@@ -258,9 +238,7 @@ func TestMathDotFloor(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewFloat(1.8),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("floor"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if v != 1.0 {
@@ -272,9 +250,7 @@ func TestMathDotRound(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewFloat(1.5),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("round"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsNumber(result[0])
 	if v != 2.0 {
@@ -286,9 +262,7 @@ func TestMathDotSign(t *testing.T) {
 	r := mathRegistry(t)
 	result := runBoru(t, r, []native.Value{
 		native.NewInteger(-7),
-		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("sign"),
-		native.NewCloseParen(),
 	})
 	v, _ := native.AsInteger(result[0])
 	if v != -1 {

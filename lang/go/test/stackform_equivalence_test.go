@@ -305,7 +305,12 @@ func TestStackFormEquivalence_UserFunctions(t *testing.T) {
 // produce.
 func TestStackFormRefusesFunctionValueApplication(t *testing.T) {
 	for _, src := range []string{
-		`([n:Integer] => [n add 1]) 5`,
+		// The in-group spelling: the lambda dispatches at the pointer with
+		// its forward arg. (The old row `([n:Integer] => [n add 1]) 5`
+		// stopped being an application under the BROAD park — the paren
+		// places the lambda and the 5 rides — so it records as data and
+		// replays fine; NUR073 clause 3.)
+		`(n:Integer => [n add 1] 5)`,
 		`def fs [ fn [[n:Integer] [Integer] [n add 1]] ] ((fs get 0) 5)`,
 		`def m {f: (fn [[n:Integer] [Integer] [n add 1]])} (m.f 5)`,
 	} {

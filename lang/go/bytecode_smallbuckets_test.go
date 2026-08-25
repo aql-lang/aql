@@ -20,7 +20,7 @@ func TestReachComputedSegmentLowers(t *testing.T) {
 		want string
 	}{
 		{`reach 5 [a (add 1 2) c]`, "5.a.(add 1 2).c"},
-		{`def p {x:{y:9}}  def k "y"  apply (reach 0 [x (k)]) p`, "9"},
+		{`def p {x:{y:9}}  def k "y"  p (reach 0 [x (k)]) apply`, "9"},
 	}
 	for _, c := range cases {
 		a, _ := New()

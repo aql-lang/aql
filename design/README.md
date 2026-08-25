@@ -116,19 +116,27 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   the audit's "`Function` is opaque" finding. Measures what the change
   buys (a wrong-shaped argument moves from a run-time refusal to a
   check-time error) and what it does not (NUR089 is orthogonal and
-  survives it). **Proposal, not merged** — §7 lists what production
-  would still need. *(§5 item 3 — the pair form rejecting structural
-  named types — retired 2026-08-20 by the type-node fusion.)*
+  survives it). **Landed 2026-08-19** (in-file status corrected
+  2026-08-21): `fnsig` shipped with the same branch that merged the
+  note, enforced at check time and at dispatch; §7 lists what
+  production still needs beyond it. *(§5 item 3 — the pair form
+  rejecting structural named types — retired 2026-08-20 by the
+  type-node fusion.)*
 - `HIGHER-ORDER-FUNCTIONS.0.md` — an empirical audit of higher-order
   support and combinator expressibility (2026-08-19): what was built and
   run, a comparison against Haskell/Scheme/JS/Factor, and the
   call-vs-value gotchas, plus §4.2 on the six spellings of one signature
   and which of them `boru fmt` collapses. **Point-in-time**, and
-  deliberately so — it records behaviour that NUR073, NUR078, NUR086,
-  NUR087 and NUR088 are each expected to change (NUR085 already landed:
-  §5.2 is closed by the `/v` totality rule), so read its §4.2
-  and §5 against the register rather than as current truth. The house
-  rules it applies live in [`STYLE-GUIDE.md`](../STYLE-GUIDE.md).
+  deliberately so — re-assessed twice 2026-08-21 (post type-node fusion
+  and valof-flip; its §5.8 chronicles the PR #397 compilability
+  campaign stage by stage), it records behaviour that NUR073, NUR078,
+  NUR088, NUR089, NUR091, NUR096 and NUR097 are each
+  expected to change (NUR085, NUR095, NUR073, NUR087 and NUR086 landed — §5.2 is closed by the
+  `/v` totality rule; §5.4's transcripts are corrected in place
+  2026-08-24: they were the compiled lane's, NUR073's class), so read
+  its §4.2 and §5 against the register rather than as current truth.
+  The house rules it applies live in
+  [`STYLE-GUIDE.md`](../STYLE-GUIDE.md).
 - `CLIENT-FIXES-2026-06-24.md`, `CLIENT-VERIFICATION-MAIN-2026-06-24.md`,
   `FORCE-COMPILE-CLIENT-COVERAGE.0.md` — dated client-library verification
   reports.
