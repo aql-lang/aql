@@ -962,7 +962,16 @@ adopted declaration triple (§3.4): every signature declares, per operand,
   **rewritten to a structured or unit-taking form**. That is a finite,
   enumerable worklist (the triple's registration assert produces it), and
   it is the part of totality that is handler work rather than compiler
-  work. Nothing in the survey suggests a shortcut exists.
+  work. Nothing in the survey suggests a shortcut exists. **Measured
+  2026-08-25** (`test/go/langspec/declaration_census_test.go`): of 522
+  signatures in the default registry, 172 are declaration-relevant — they
+  take a code body, quote an operand, declare a callable convention, or
+  can receive a Function-typed operand — and **114 of those carry no
+  compile declaration at all** (code-body 59, quoted 44, fn-operand 11).
+  That is the Stage-6 worklist, and it is a floor rather than a total,
+  since importing modules registers more. Each one is a place the recorder
+  runs on the zero value's assumption, which is precisely what C1's
+  tri-state exists to stop being silent about.
 - The **check-lenient words** behind the `SuppressedRuntimeError` latch
   (`lang/go/boru.go:474-482` — an orphan `gen`, an `unpack` of a missing
   key: lenient in check mode, strict at runtime) are their own per-word
