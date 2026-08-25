@@ -3464,3 +3464,73 @@ semantics. This record is discharged by an Allowed verdict naming that
 hint as the mitigation (or by a maintainer ruling the hint unnecessary,
 with the §8 rows and the REFERENCE.md contract as the pinned acceptance).
 
+
+## NUR102 — a predicate body runs a different number of times in each lane {#nur102}
+
+**Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** the
+Stage-2 collection-kernel feasibility probe for
+`design/FULL-COMPILATION.0.md` (falsifier F1), which found overload
+pruning to be an evaluation site the design had not accounted for
+
+**Rule:** the compiled lane reproduces the interpreter's observable
+behaviour exactly — values, errors, **and effects in their order**
+(`design/COMPILABLE-SUBSET.md` §1: "a residual byte-identical to the
+interpreter's `Run` for the same source"). A user-visible boru body must
+not run a different number of times depending on which lane executes it.
+
+**Divergence:** an effectful `fnpred` body runs **four times interpreted
+and twice compiled** for the same call, with the same final value:
+
+```
+$ cat pred.boru
+def Even fnpred n:Integer [ print "P" eq 0 (mod 2 n) ] end
+def we fn [[a:Even][String]["even-arm"]] end
+def we fn [[a:Integer][String]["int-arm"]] end
+print (we 4)
+
+$ boru run -no-compile pred.boru
+P
+P
+P
+P
+even-arm
+
+$ boru run -force-compile pred.boru
+P
+P
+even-arm
+```
+
+**Mechanism.** Predicate types are checked by *running boru code inside
+signature matching*: `SigArgMatches` reaches `PredicateUnifier.Match`
+(`core/go/unify_predicate.go:51-68`) → `Registry.RunPredicate`
+(`core/go/registry.go:1917`) → the predicate's body. The interpreter
+reaches that path more often than the VM does, because **overload pruning
+during forward collection is itself an evaluation site**: `pruneViable`
+(`core/go/engine.go:1919-1934`) calls `SigArgMatches` while it is still
+deciding which signatures remain viable, once per surviving candidate per
+scan step. The compiled lane matches once over concrete values and
+never replays the pruning. The count is therefore a function of *how the
+call was written*, not of what it computes — the same probe measured the
+forward form `we 4` entering the scan body while the stack form `4 we`
+breaks at the boundary token and never prunes at all.
+
+**Why it was not caught.** The differential gates compare residual values
+and error taxonomy; neither compares **effect counts**, so a divergence
+visible only as repeated output, repeated logging, or repeated mutation
+inside a predicate passes every existing gate. The frontier ledger has no
+predicate-effect row, and `design/COMPILABLE-SUBSET.md` mentions
+predicates only for typed binds and tape-bound handlers.
+
+**Why it matters beyond purity.** A predicate is ordinary boru: it may
+log, may touch a store, may be expensive. "Slow, not wrong" does not
+cover it — the two lanes disagree observably, and which one is *correct*
+is itself unsettled, since neither count is obviously the specified one.
+
+**Discharge.** Either (a) rule that predicate bodies must be pure, and
+enforce it, at which point the count is unobservable and this becomes
+Allowed; or (b) make the count part of the contract and have both lanes
+produce it, which the full-compilation plan's §6.3 predicate-unit work
+would need to do anyway. Whichever way it goes, the differential harness
+needs an effect-count comparison, or the next divergence of this shape is
+equally invisible.
