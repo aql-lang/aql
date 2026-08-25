@@ -41,6 +41,10 @@ func vmDeferAlt(r *core.Registry, curDebug []core.SrcPos, pc int, site, msg stri
 // island's live frames and returns no values, leaving the registry FlowCtrl
 // flag set for the VM to translate (escapedFlow).
 func runIslandResolved(r *core.Registry, inputs, tokens []core.Value) ([]core.Value, error) {
+	// Census seam: core.RunResolved emits "RunResolved" here; this is its
+	// island twin, so it names itself rather than reporting only the
+	// Engine.Run its pooled sub-engine emits.
+	r.NoteInterp("vm:island-resolved")
 	input := make([]core.Value, len(inputs)+len(tokens))
 	copy(input, inputs)
 	copy(input[len(inputs):], tokens)

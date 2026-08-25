@@ -205,6 +205,10 @@ func (vc *vmContext) island() *core.Engine {
 // flow_error the interpreter never raises.
 func (vc *vmContext) islandRun(reg *core.Registry, tokens []core.Value) ([]core.Value, error) {
 	if reg == nil || reg == vc.r {
+		// Census seam (core/interp_entry.go): names the island so the
+		// engine-entry census can separate compiled-lane re-entry from a
+		// sanctioned interpreter run. Engine.Run emits its own entry too.
+		vc.r.NoteInterp("vm:island")
 		eng := vc.island()
 		eng.FlowUnwind = true
 		res, err := eng.Run(tokens)
