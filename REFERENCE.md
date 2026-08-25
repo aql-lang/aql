@@ -1648,6 +1648,23 @@ The newtype-vs-subset distinction and its cross-language rationale are
 explained in **[Explanation: Function signatures](EXPLANATION.md#function-signatures-and-refinement-types)**
 and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
+A predicate can also be a **function body**, which is what makes an
+arbitrary test a type — and it is the one place the capitalisation rule
+bites. `def` on a capitalised name binds a **type**, always, so handing
+it a function mints a predicate type rather than binding a callable:
+
+```boru
+def Even fn n:Integer Boolean [eq 0 (mod 2 n)] ;
+4 is Even # returns true
+5 is Even # returns false
+```
+
+`Even 4` therefore does **not** call anything. The name places its
+lattice node, the `4` is never consumed, and the program exits 0 with
+both left on the stack. `boru check` reports that shape as
+`stranded_type_call` and suggests the fix: lowercase the name when you
+want a function you can call.
+
 #### Recursion and tail calls
 
 Functions recurse freely — a body's reference to its own (or a

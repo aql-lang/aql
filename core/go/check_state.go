@@ -549,7 +549,14 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// Housekeeping / structural (previously set inline at the emit sites —
 	// the table is the single source of truth; TestCheckSeverityTableComplete
 	// gates that every emitted code has an entry).
-	"unused_def":            SeverityWarning,
+	"unused_def": SeverityWarning,
+	// §5.1's silent stranding: a capitalised `def` given a fn body binds a
+	// TYPE, so the name in call position never calls — the lattice node and
+	// the operands written after it are simply left on the residual. WARNING,
+	// not error: the program runs and exits 0, so this is a suspicion about
+	// what the author meant, not a guaranteed runtime failure (the same line
+	// index_out_of_range was promoted across, in the other direction).
+	"stranded_type_call":    SeverityWarning,
 	"unreachable_branch":    SeverityWarning,
 	"record_shape_mismatch": SeverityError,
 	"fold_error":            SeverityError,
