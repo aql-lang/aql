@@ -612,6 +612,27 @@ groups stay pre-compiled fragments (their boundaries are syntactic and
 cannot shift); what revalidation changes is only which slots a given live
 signature set claims.
 
+**The shared-vs-divergent map — Stage 2's actual worklist.** The three
+loops are not merged; each decision they share is given one home, and each
+difference is classified as intentional or as drift. The probe mapped
+them:
+
+| Decision | Phase-1 plan walk | Per-candidate scan | Status |
+|---|---|---|---|
+| structural boundary, `end`, `)` | `scanBoundaryToken` | *was* an inline copy | **unified** (landed) |
+| forward/stack split point | `BarrierPos` + `/s` `/f` | identical arithmetic | **unified** (landed) — the source already called its copy a "mirror" |
+| open paren `(` | evaluates when a viable overload consumes the position | always a hard boundary | intentional: phase 1 pre-evaluates, the scan must not |
+| fn-word barrier | union-over-viable-sigs test | per-signature, and `specAt` can claim an `FnDefInfo` into an `Any` slot and walk PAST the function word | **suspected drift** — investigate before unifying |
+| reach call-head | exempts if ANY viable sig wants `Function` | only this signature | same shape as the row above |
+| sugar expansion | gated on viability | ungated, survives a nil return | **suspected drift** — see the hazard below |
+| interp-string / XML / paren-expr / splice | dedicated arms | no arms; falls through to the literal arm, matching only `Any` | intentional or gap — unclear, needs a ruling |
+| `/q` quote slots | four checks at different stages | a fifth, differently conditioned | NOT duplicates: different questions, do not merge |
+
+Only the first two were textually identical and could be unified by
+inspection. Every remaining row needs the difference argued before it is
+touched — which is why this is slow work rather than a mechanical sweep,
+and why the three loops re-seat separately (§10).
+
 **One hazard the extraction must not inherit.** The per-candidate scan
 splices sugar expansions into the tape (`core/go/engine.go:8731`)
 *ungated*, and the mutation survives a `MatchSignature` that returns nil
