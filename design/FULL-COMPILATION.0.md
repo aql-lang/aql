@@ -384,9 +384,12 @@ dependency order.
 
 Binding-time analysis of the Engine loop (`core/go/engine.go:1375-1490`,
 `stepWord` `:2658`, `Engine.MatchSignature` `:8381`) yields a clean split.
-**Static, per token, always:** the token window of every statement; barrier
-geometry (`BarrierPos`, `/s`→0, `/f`→N); dispatch modifiers (`/v`, `/u`,
-`/q`); sugar/reach/paren lowering; statement boundaries; macro expansion.
+**Static, per token, always:** the token *region* of every statement (its
+hard syntactic delimiters — `end`, parens, the statement commit); dispatch
+modifiers (`/v`, `/u`, `/q`); sugar/reach/paren lowering; macro expansion.
+Barrier geometry and token word-vs-value class are static *per binding
+set* — they follow the live signatures, so under rebinding they are
+re-derived, not re-recorded (§6.2's revalidation rule).
 **Runtime-irreducible:** (1) overload selection over unknown value types —
 including predicate params that run boru code inside matching; (2) the
 forward/stack **split itself** under dynamic operands (forward drift);
@@ -444,12 +447,30 @@ and a matching opcode pair:
   parked-signature and claimed-count state that selects the text lives in
   the machine's registers, fed from the descriptor.
 - `OpDispatchGeneric(desc)` — completes the statement:
-  live `Registry.Lookup` + `aggregateDispatch` on the lead (honoring
+  the word-policy gate first (the same `WordChecker` every named VM
+  dispatch already consults — `vmContext.gateWord`, `lang/go/boru.go:418-427`
+  — raising the identical permission error before any matching or entry),
+  then live `Registry.Lookup` + `aggregateDispatch` on the lead (honoring
   rebinding, §6.5), kernel `MatchSignature` over the claimed window
   (variable window — the arity is an output of collection, not an input,
   closing the fixed-pop unsoundness), then handler call / unit entry /
   curry-list construction (`curryOrStack`'s compiled twin) / the
   interpreter's exact no-match raise.
+
+**Live revalidation, because boundaries are binding-dependent.** The
+forward scan's extent is derived from the *live* binding's signatures
+(per-signature `forwardLimit` = `BarrierPos`), and even a token's
+word-vs-value class can change when a name is rebound. A descriptor that
+froze record-time classification would therefore collect wrongly after a
+rebind (§6.5). So slots carry the underlying **token identity** alongside
+their record-time class, the descriptor spans the statement's full
+syntactic region (hard delimiters — `end`, close-paren, statement commit —
+bound it regardless of bindings), and `OpCollect` re-derives class and
+scan extent against the live binding set using the shared routine — the
+same re-derivation the interpreter performs on every execution. Paren
+groups stay pre-compiled fragments (their boundaries are syntactic and
+cannot shift); what revalidation changes is only which slots a given live
+signature set claims.
 
 **The extraction obligation.** The collection algorithm today reads *and
 mutates* the tape (sugar expansion mid-scan, `engine.go:8731`;
@@ -581,7 +602,27 @@ shadow — its graduation note already says "a runtime dispatch respecting
 the conditional binding", `core/go/core_helpers.go:165`), the NUR037
 fn-local-fn refusal (the name is looked up live, so the never-executed-def
 hazard disappears), and the frozen-read refusal
-(`NoteFrozenRead`/`NotifyNameRebound`) for G-lane regions. Hot code loading
+(`NoteFrozenRead`/`NotifyNameRebound`) for G-lane regions.
+
+Two consistency obligations come with the twins. **Reconciliation with
+the check pass:** today the compiled path deliberately *keeps* the check
+pass's `RunInCheckMode` installs and runs the Program on that registry
+(`lang/go/boru.go:1200-1202`); replaying the same transitions through
+twins would double-apply them (duplicate `DefTable` entries, so a later
+`undef` exposes the duplicate instead of the prior binding). The twin
+regime therefore rolls the *runtime-visible binding transitions* back to
+the pre-check snapshot before `RunProgram` — the twins then apply each
+transition exactly once, in source order — while compile-time-only
+products (minted type IDs, macro expansions, const folds) stay baked
+under the front-end carve-out. **Effect order:** the check pass currently
+executes module imports, effects included, before any VM instruction
+(`lang/go/boru.go:1017-1023` — the C1 fence is armed before the check
+pass for exactly this reason), which violates T3's ordering for a program
+with a runtime effect *before* an effectful import. Under totality the
+front-end pass must be **observationally silent** — the doctrine's O1
+effect-freedom obligation enforced rather than assumed — with every
+effectful half of a check-mode word (imports above all) given a runtime
+twin at its source position. Hot code loading
 then stops being "an interpreter-path feature"
 (`design/HOT-CODE-LOADING.0.md:94-99`): a swap's cost is a G-lane lookup or
 a JIT restamp — de-optimization, not decompilation.
@@ -686,11 +727,18 @@ Four changes, all conservative in the abstract-interpretation frame:
 
 1. **Delete the whole-program "check diagnostics" sentinel**
    (`lang/go/boru.go:459-472`). A statically-definite error compiles to
-   `OpTrap` with the interpreter's structured diagnostic (existing
-   discipline; the trap raises at the same moment, catchably — family E's
-   `FnUtil.flip 5` rows, where *the error is the specified result*).
-   Could-match dynamics compile to G-lane dispatch that raises or succeeds
-   as the runtime decides. Recovered windows (family F) become traps or
+   code that raises the interpreter's error at the identical moment,
+   catchably (family E's `FnUtil.flip 5` rows, where *the error is the
+   specified result*) — in two forms, because diagnostic *content* is
+   value-dependent even when failure is not: `OpTrap` with the baked
+   structured diagnostic only where every operand is concrete, and the
+   runtime error-builder over the live window otherwise. The trap path
+   already declines carrier operands for exactly this reason — the rich
+   diagnostic (received-argument note, per-candidate verdicts) must be
+   built over the *concrete* runtime value or the lanes diverge
+   (`core/go/engine.go:9182-9197`), and the runtime rematch is the shipped
+   mechanism that builds it live. Could-match dynamics compile to G-lane
+   dispatch that raises or succeeds as the runtime decides. Recovered windows (family F) become traps or
    G-lane rematch — `OpDispatchRematch` is the in-tree template. The
    fabricated `assume-sig` recovery windows, which corrupt the tape model,
    are replaced by honest G-lane regions, not admitted.
@@ -710,9 +758,15 @@ Four changes, all conservative in the abstract-interpretation frame:
    step-budget exhaustion during check has no emit-anyway story
    (`check_state.go:250`) — is O5 in §11.
 4. **State the alignment property formally** so it can be tested: (a)
-   *erasure* — checker output has zero runtime footprint (its degenerate
-   gradual guarantee: annotation changes never change behavior, with `=`
-   rather than "up to cast errors" — Siek et al., SNAPL 2015); (b)
+   *erasure* — the checker's **inferred** facts (carriers, joins,
+   narrowings) have zero runtime footprint: discarding them changes
+   nothing, in either lane, with `=` rather than "up to cast errors"
+   (the degenerate gradual guarantee — Siek et al., SNAPL 2015).
+   Deliberately out of scope: **source annotations**, which in boru are
+   runtime dispatch inputs — a signature's declared types feed
+   `MatchSignature`, and a typed def validates at bind time — so they are
+   program semantics both lanes must honor identically, not checker
+   metadata to erase; (b)
    *abstraction soundness* — every carrier fact over-approximates every
    run (both lanes — one execution semantics as far as the checker is
    concerned); (c) *lane coherence* — `obs(VM(compile p)) = obs(Engine p)`
@@ -845,7 +899,7 @@ universe closes alongside).
 | **6** | Handler migration per the triple (§6.8): units-not-tokens, `while` lowering, per-region DynEnv, `args`/`__pa`/`context` frames | H (6), context/tape-bound gate families | medium — wide but enumerable |
 | **7** | Runtime compilation everywhere (§6.7): computed bodies, splices, module bodies; induction argument documented and fuzzed | eval-class gates | medium |
 | **8** | Checker totality (§6.9): sentinel deletion, traps for definite errors, `!Compiling`-fork collapse, soundiness classification | E (8) | medium |
-| **9** | Retire the valves (§6.10): defer sites → native answers; delete `OpFallback`/P7 machinery, the fence's re-run half, the fallback hatch; flip `CompileCheck` to total; `compile_refused` becomes an internal panic | T1, T2 complete | low by then |
+| **9** | Retire the valves (§6.10): defer sites → native answers; delete `OpFallback`/P7 machinery, the fence's re-run half, the fallback hatch; flip `CompileCheck` to total; `compile_refused` becomes a structured `internal_error` return (panics stay forbidden outside init-time registration) | T1, T2 complete | low by then |
 
 The dependency spine is 2 → {3,4} → 5 → 9; stages 6–8 are parallel tracks
 off it. Nothing lands without its differential gate; every stage's admission
