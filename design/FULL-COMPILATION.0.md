@@ -1086,7 +1086,10 @@ New ratchets, alongside the existing ones (all monotone, all in-tree):
   incl. error taxonomy), the property fuzzer, whole-suite
   `--compile`==`--no-compile`, executed censuses (compile-time censuses
   are blind), and hand-pinned off-corpus regressions with no-`FALLBACK`
-  disassembly asserts — all existing, all kept green throughout.
+  disassembly asserts — all existing, all kept green throughout; the
+  server-concurrency corpus (§13) joins them as it lands.
+- **The performance register** (§14) — the permanent, host-keyed record
+  every stage writes its before/after measurements into.
 
 ---
 
@@ -1191,7 +1194,8 @@ and the directive itself must arbitrate. No such word is currently known;
 region measures slower than the tree-walker on like-for-like programs, the
 premise "descriptor precomputation ≥ interpreter's re-derivation" is wrong
 in this VM; the design still holds semantically but the performance story
-reverts to T-lane coverage pressure. Benchmark at Stage 4, not at the end.
+reverts to T-lane coverage pressure. Benchmark at Stage 4, not at the end
+— into the register (§14), so the verdict is host-keyed and durable.
 
 **F5 — runtime compilation breaks the induction.** §6.7's induction rests
 on named preconditions: §5's Finalize totality, an answer for O5's
@@ -1204,7 +1208,186 @@ the fuzzer must hunt for it explicitly.
 
 ---
 
-## 12. Related work
+## 12. Worked example — a callback server, statement by statement
+
+The sharpest acceptance test for this design is the workload boru's own
+benchmarks already care about: a Node-style callback server. The tree
+contains its two poles today. `bench/networking/echo_boru.boru` — a
+`Net.serve-raw` handler whose body the callback-compilation seam runs on
+the VM — measures **~65,100 req/s compiled vs ~884 interpreted (~74×),
+within ~1.7× of hand-written Go** (`bench/networking/README.md`). And
+`design/examples/apps/mini-redis.boru` is a full protocol server (custom
+codec, patrun-routed commands) with the same architecture. Both compile
+**because they avoid the Node idioms**. Add the two most Node-shaped moves
+— composed middleware and a `while` read loop — and today the *whole
+program* refuses, landing every request back at ~884 req/s. That cliff is
+the design's target.
+
+The program (real surface syntax; `auth`/`route` bodies elided):
+
+```
+import "boru:net"
+import "boru:fn-util"
+
+def auth  fn line:String String [ … pass or reject … ]        # S1
+def route fn line:String String [ … dispatch on the verb … ]  # S1
+def handle (FnUtil.compose route/v auth/v)                    # S2
+
+def ln
+  (Net.serve-raw {tcp:8080}                                   # S3
+      (fn sock:Socket Any                                     # S4
+          [def nl (convert Bytes "\n")
+            while [ … more input … ]                          # S5
+              [def line (convert String (Net.recv-until sock nl))  # S6
+                def reply (handle line)                       # S7
+                Net.send-bytes (convert Bytes reply) sock     # S8
+              ]
+          ]
+      ))
+```
+
+Statement by statement:
+
+| Stmt | Interpreter semantics | Today | Under this design |
+|---|---|---|---|
+| S1 | typed fns; bodies checked, units built | compiles (T-lane `CALL_USER` units) | unchanged |
+| S2 | `compose` receives two fn *values* (`/v`), stores them, returns a composed fn value — invoked later from Go, never on the tape | **refuses**: `function-valued operand at FnUtil.compose (Stage 3)` — the missing `CompileStoresFn`-class declaration, the fn-util defect | declaration triple says `tapeBound: No` (§6.8, Stage 0); the composed value is data over two units — Factor's `composed` cell (§6.3, Stage 3) |
+| S3 | `serve-raw` stores the handler fn; the Go accept loop owns it | compiles; store-site callback stamping is shipped (`RuntimeStampingEnabled`) | unchanged, minus the `CallBoru` fallback arm |
+| S4 | the connection callback: a closure, invoked per connection **after the program ends** | compiles; `InvokeCallback` → `RunUnit` — this seam *is* the measured ~74× | unchanged; the busy-registry decline arm retires (§6.7) |
+| S5 | `while [cond] [body]`: per-iteration condition re-eval, body values accumulate, `break`/`continue` | **refuses**: `code-body word while (Stage 2)` — family H | structured `WHILE` lowering (§6.8, Stage 6) |
+| S6, S8 | socket words, typed operands | compile (T-lane `CALL_NATIVE` — the echo bench proves it) | unchanged |
+| S7 | `(handle line)`: a **name-read lead** — WORD dispatch; the live binding of `handle` applies, every request | **refuses**: `def-bound computed fn apply (closure shape unknown — Stage 1)` — the NUR101 wall; this is the Express-middleware idiom, 100% refused today | §6.4 Apply + §6.5 generic dispatch: live def-stack lookup, then unit entry — G-lane, cacheable (§7) — Stage 3/4 |
+| S9 (hot swap) | a reload re-runs `def handle (FnUtil.compose route2/v auth/v)`; the next request sees v2 because S7 re-resolves the name | rebind gates refuse or the program was interpreted anyway | bind twins + live lookup make it native; in-flight connections finish on the old unit (frame-boundary cutover, §4), the next S7 dispatch sees v2; staleness costs one memoised restamp per world (§6.7) |
+
+And the runtime path, end to end: the callback stamps at its store site
+(shipped); steady-state dispatch invokes the unit with the registry idle
+between events (shipped — the echo number); a handler that synchronously
+triggers *another* callback hits the busy-registry route, which is the
+re-entrant-hosting item (§6.7/§6.10) — the one genuinely new runtime
+mechanism this program needs; a recv timeout raises the same
+`[boru/timeout]` error with the same blame, propagated, never re-run
+(§6.10); and the read loop runs constant-space under Apply's tail
+discipline (§6.4). Under the design the program compiles **whole**: S7 is
+the only G-lane event in it, paying one live lookup per request against
+an otherwise fully typed lowering.
+
+---
+
+## 13. The server-concurrency test corpus
+
+**The goal is that every callback case compiles — all of them, fully.**
+Each case below is a graduation gate, not an aspiration: it passes only
+when it runs with zero runtime `Engine` entries (the §9 census armed for
+the whole run), byte-identical protocol transcripts against the
+interpreter oracle, and green under `-race`. Echo and mini-redis prove
+the *sequential* callback path; nothing in the tree pins the concurrent
+and lifecycle cases — and the corpus's absence is already visible as CI
+noise (`TestTuiServeAllViewersGoneQuits`, a viewer-lifecycle race, flaked
+on this very PR's doc-only diff). Build the corpus on the existing apps
+(`bench/networking/`: echo, `echo_redis`, `echo_s3`;
+`design/examples/apps/`: mini-redis, mini-s3, todo-api), one case per
+concurrency shape:
+
+1. **Steady-state sequential dispatch** — echo (exists; the baseline).
+2. **Protocol framing / codec re-entry** — mini-redis (exists); extend
+   with partial frames (the codec's `{need:1}` path re-entered
+   mid-message) and pipelined commands.
+3. **Concurrent connections** — N simultaneous clients, handlers on
+   multiple goroutines: the one-registry-per-goroutine rule under load;
+   the O6 design item's test bed.
+4. **Nested synchronous callback** — a handler that calls a service whose
+   reply invokes another boru callback before the first returns: the
+   busy-registry route (`CanHostVM` decline), i.e. §6.10's re-entrant
+   hosting row, exercised deliberately.
+5. **Handler re-entrancy** — a handler whose body applies itself (or its
+   own composed chain) recursively.
+6. **Hot swap under load** — rebind the routed handler mid-traffic:
+   in-flight connections complete on the old unit, the next dispatch sees
+   the new one, and restamp cost is one compile per world (§6.7) —
+   asserted by counting compiles, not just answers.
+7. **Fan-out** — `spawn`/`await` inside a handler; `await first`/`any`
+   winner residuals (family I's mark regions) driving a reply.
+8. **Deadlines and timers** — recv timeouts and timer callbacks: the
+   `[boru/timeout]` error identity and blame position, compiled vs
+   interpreted.
+9. **Error paths** — a raising handler per connection: same error, same
+   catchability, connection teardown identical, and no whole-program
+   re-run behind it (the C1 fence's retirement made observable).
+10. **Long-lived connection / soak** — hours-scale run: constant-space
+    read loops (tail discipline, §6.4), no drift-triggered degrade to
+    interpretation ever (`engineEntryCeiling` stays 0 for the whole
+    soak), GC stability.
+11. **Session/viewer lifecycle** — the TUI-serve class: all clients
+    disconnecting, reconnecting, half-closed sockets — pinned
+    deterministically, replacing today's timing-sensitive test.
+
+Every case doubles as a **register workload** (§14): the corpus is both
+the correctness gate and the performance instrument, so a stage that
+graduates a case also records what that graduation cost or bought.
+
+---
+
+## 14. The performance register
+
+The measurement discipline today is good at *relative* answers
+(`benchstat` before/after, the alloc-ceiling gates in `make test` —
+`design/PERF-BASELINE.10.md`) and bad at *longitudinal* ones: snapshots
+live as prose in design notes, and `bench/networking/README.md` already
+carries both warnings this section exists to fix — "absolute req/s track
+the box", and a superseded row that had silently measured the wrong lane.
+A ten-stage compiler rebuild needs a permanent, host-honest record.
+
+**The register.** `bench/register/` holds two committed, append-only
+JSONL files:
+
+- `hosts.jsonl` — one record per distinct host: `host` (the id — a short
+  stable hash over the normalized identity tuple: CPU model, physical
+  core count, memory, OS name and major version, architecture,
+  virtualization class), plus the full spec the id was derived from —
+  CPU model string, cores/threads, RAM, storage class, OS and kernel
+  versions, bare-metal/VM/container, CPU governor where known, and a
+  free-text label.
+- `measurements.jsonl` — one line per measurement:
+  `{ts, commit, host, surface, workload, metric, value, unit, n,
+  spread, benchtime, flags, go, os_version}`. `os_version` and `go` ride
+  on every row because a host drifts under a stable id (patch levels,
+  toolchains). `surface` is one of **`check`** (the static pass —
+  `BenchmarkPerfCheck`), **`compile`** (emit + lower cost —
+  `BenchmarkPerfCompile`), **`interp`** (interpreted execution),
+  **`exec`** (compiled execution — the Stage-6 suite), and **`e2e`** (the
+  §13 server workloads: req/s, µs/round-trip). All three implementation
+  surfaces — interpreter, checker, compiler — are first-class, so a
+  change that buys execution speed by spending check time is *visible*.
+
+**Mechanics.** A `make bench-register` target runs the suites and the
+§13 workloads, derives the host id, and appends rows; a verify step
+asserts the files are append-only (existing lines byte-identical — the
+kg digest discipline applied to measurements). The register **records,
+never gates**: execution time is too noisy to fail CI on, so the
+deterministic alloc ceilings remain the only perf *gates*, and the
+register is the memory. A pinned CI runner class may contribute rows
+under its own host id; developer boxes contribute under theirs.
+
+**Reading it.** Absolute comparisons are valid only within one host id;
+across hosts, only ratios travel (compiled/interpreted, boru/Go,
+check-cost/exec-cost) — so rows record the absolutes and reports derive
+the ratios. A small boru tool (`bench/register/report.boru`, in the kg
+pipeline's dogfooding tradition) renders per-`(host, workload)` time
+series over commits and flags a value outside the trailing window's
+spread. Permanence is the point: rows are never edited or deleted — a
+measurement discovered to be wrong is *superseded by a new row* naming
+it, the same discipline the frontier ledger uses — so "did Stage 4's
+descriptors slow the interpreter?" (F1b) and "what did Stage 3 buy on
+mini-redis?" stay answerable years later, on the hosts that measured
+them.
+
+Every stage in §10 lands with register rows on at least one host: the
+before/after pair is part of the stage's deliverable, and F4's Stage-4
+benchmark is simply the first mandated pair.
+
+---
+
+## 15. Related work
 
 **In-tree:** `COMPILABLE-SUBSET.md` (the subset this note totalizes);
 `COMPILE-DECLARATION-MODEL.0.md` (the declaration triple, adopted; typed
