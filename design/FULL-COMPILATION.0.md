@@ -111,8 +111,15 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | K/L. Context layer; conditional fn shadow | 2 | `context` needs a frame the inline stream lacks; `installDef` overlap-removal defeats rollback |
 
 **2.2 The ledger is a sample, not the universe.** The recorder holds ~96
-`MarkUncompilable` sites plus ~31 lowering declines — on the order of **130
-distinct refusal reasons**, of which the ledger exercises ~30. Whole gate
+`MarkUncompilable` sites plus lowering declines. Measured at the Stage-1
+baseline (2026-08-25): **96 recorder call sites** (compiler/go 64, check/go
+11, basic/go 10, core/go 7, lang/go 2, plus 2 test fixtures) and **78
+lowerer/`Finalize` declines**, normalizing to **161 distinct reason
+templates** — a third more than this note first estimated, and a majority
+of them built at run time from a word name rather than written as literals.
+The frontier ledger pins 38 `failsWith` substrings, of which only 33 are
+source reason strings at all (the other five are harness verdicts) — so the
+ledger exercises about a fifth of the surface. Whole gate
 families have zero ledgered rows: `args`/`__pa` context words, anonymous
 dispatch, quoted-operand words (`usurp`/force-arity/ref), `dynamic input` /
 `unannotated or opaque word` (`compiler/go/emit.go:4880/:4889`),
@@ -1072,14 +1079,29 @@ New ratchets, alongside the existing ones (all monotone, all in-tree):
   extended from attribution to census — the gate the completion plan names
   `TestNoInterpreterExecution` is planned there, not yet in the tree.
   Start = current live residue (§2.3); end = 0 outside carve-outs. This is
-  T2's number; today it is not measured, which is how the value-window
-  islands stayed invisible under `islandCeiling=0`.
+  T2's number. **Measured 2026-08-25 and now in the tree**
+  (`test/go/langspec/engine_entry_census_test.go`, riding the
+  compile-or-fallback walk): **505** unattributed interpreter runs across
+  7,568 corpus rows, by route `Engine.Run×505` (the ground truth — every
+  tree-walk emits it exactly once) with `CallBoru×282`,
+  `vm:island×63`, `runPooledSub×37`, `InvokeCallback:callboru×34`,
+  `RunResolved×31`, `vm:island-resolved×21` naming how it was reached.
+  The 84 VM islands are the point: `islandCeiling=0` passed the whole time,
+  because it counts only `OpFallback` spans in a disassembly. The two island
+  chokepoints had to be given their own seams to be nameable at all —
+  `runIslandResolved` was a hand-rolled copy of `core.RunResolved` that had
+  dropped its seam emit, so every island reported the generic `Engine.Run`.
 - **`deferCeiling`** — `vmDefer` activations on the corpus; end = 0, then
-  the mechanism deletes.
-- **Refusal-reason census** — the ~130 gate strings across the *pipeline*:
-  recorder, `Finalize`/lowerer, and the `CompileCheck` latches (§2.2).
-  Each stage names the strings it deletes; end = no refusal string
-  reachable from `Finalize` (§5), not merely an empty recorder.
+  the mechanism deletes. Measured 2026-08-25: **5** — `vm:poly-nout-drift×3`,
+  `vm:poly-no-match×2`, both named in §6.10's retirement table.
+- **Refusal-site census** — the recorder's `MarkUncompilable` call sites,
+  counted by source scan (`test/go/langspec/refusal_site_census_test.go`):
+  **96** at the Stage-1 baseline. This is the STATIC half — machinery that
+  exists rather than machinery that fired — so it keeps falling while the
+  corpus's runtime refusal count sits at zero. The lowerer/`Finalize` and
+  `CompileCheck` layers surface as reasons in the corpus census and as
+  pinned frontier rows; end = no refusal string reachable from `Finalize`
+  (§5), not merely an empty recorder.
 - **Frontier ledger** — rows graduate by the stale-arm mechanism, never
   hand-edits; family counts per §2.1 are the per-stage scorecard.
 - **Parity gates** — `make verify-bytecode` (byte-identical differential
