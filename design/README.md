@@ -171,6 +171,16 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   specimens that now compile though `COMPILABLE-SUBSET.md` §5 lists their
   class as refusing.
 
+- **`COMPILE-DECLARATION-MODEL.0.md`** — the follow-on question that survey
+  did not ask: is each higher-order word a special case, or is there a
+  general solution? Measures the declaration surface (fifteen
+  `CompileEffect` flags, one of them with zero declaration sites) against
+  the 153 ledgered frontier rows, finds seven that compile and answer
+  correctly but are ledgered as failures purely because they island, and
+  proposes collapsing the ten operand-facing flags to three orthogonal
+  per-position facts plus a declared result contract for `OpFallback`.
+  A **proposal**, not a description of the engine.
+
 ## Legacy / historical — completed plans & phase docs
 
 - `PLAN.10.md` (marked complete), `PERMISSIONS-PLAN.10.md`,

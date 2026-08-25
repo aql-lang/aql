@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '5182969467364508058');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '8228460546713811433');
 INSERT INTO input_files VALUES ('../AGENTS.md', '5746437182943957856', 12139);
 INSERT INTO input_files VALUES ('../CLI.md', '3434391071839442713', 83578);
 INSERT INTO input_files VALUES ('../README.md', '6312173284019959426', 13333);
@@ -31,6 +31,7 @@ INSERT INTO input_files VALUES ('../design/BORU-INFOVIEW.0.md', '209086989370126
 INSERT INTO input_files VALUES ('../design/BORU-SCRY.0.md', '3285728856019765195', 16574);
 INSERT INTO input_files VALUES ('../design/BORU-VIZ.0.md', '1948552775752251328', 25772);
 INSERT INTO input_files VALUES ('../design/CANON-ROUNDTRIP.0.md', '1353161920241380593', 7262);
+INSERT INTO input_files VALUES ('../design/COMPILE-DECLARATION-MODEL.0.md', '6965732432450518714', 27974);
 INSERT INTO input_files VALUES ('../design/CONTENT-ADDRESSING.0.md', '2493386413761043225', 18345);
 INSERT INTO input_files VALUES ('../design/CORE-TS-COVERAGE.0.md', '7605485402373327537', 10411);
 INSERT INTO input_files VALUES ('../design/CORE-TS-DIVERGENCES.1.md', '7903590270407909717', 22542);
@@ -64,7 +65,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '3313384100721460283', 520);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '3769257166460388091', 55028);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '7226409198185034620', 58735);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -90,6 +91,9 @@ INSERT INTO sources VALUES ('src:canon-roundtrip', 'text', 'design/CANON-ROUNDTR
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:cli-md', 'text', 'CLI.md', 'CLI.md subcommand reference', NULL, 'cli-md-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:compile-declaration-model', 'text', 'design/COMPILE-DECLARATION-MODEL.0.md', 'the compile declaration model: one general solution, or fifteen special cases?', NULL, 'compile-declaration-model-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:completeness-review', 'text', 'design/checker-compiler-completeness-review.0.md', 'Type checker + bytecode compiler — completeness review', NULL, 'completeness-review-2026-08', 'primary', '{
@@ -303,6 +307,8 @@ INSERT INTO entity_attributes VALUES ('ent:Document:7594380001231677524', 'role'
 INSERT INTO entities VALUES ('ent:Document:7656991804093821644', 'Document', 'design/FN-VALUE-OPEN-WORK.0.md', 'design/fn-value-open-work.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:7656991804093821644', 'role', 'the open-work inventory for the function-value line after PRs #366/#375/#378: four remaining items, all unblocked since the 2026-08-17 maintainer rulings (§1.1) — clause 3 (parens do not re-step) ruled BROAD, clause 2 (passing a function requires /r) enabled by the ADR-011 amendment with all four engine sites retiring together (re-opening the NUR038 call-head question, registered as NUR078), break 2 (the compiler''s sound refusal of a 0-arg fn read from a plain container), and the StackForm apply — ruled a new dedicated Apply Op — every figure re-measured against 8732662, correcting three that the earlier notes carry: the clause-3 row count is 30 not 31, the clause-2 bare-name count is 3 not 9, and narrow-vs-broad ARE separable, by FnDefInfo.Name rather than by a rejected value-borne marker; plus the finding that break 2 is an arity-0 extension of tryMemberFnArrivalDispatch rather than Phase 3 work, that its refusal masks a confirmed miscompile and is untracked by any frontier row, and that the apply Op''s sketched target has two holes — a 0-arg anonymous fn is silently not applied, and `apply` itself double-records so a replay applies twice');
 INSERT INTO entities VALUES ('ent:Document:7770110494347118706', 'Document', 'lang/go/CLAUDE.md', 'lang/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:801358522423407770', 'Document', 'design/COMPILE-DECLARATION-MODEL.0.md', 'design/compile-declaration-model.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:801358522423407770', 'role', 'the proposal for what a word must tell the bytecode recorder, measured rather than argued: boru already has TWO general solutions — interpreter islands (OpFallback), used at scale then ratcheted to islandCeiling 0, and a CompileEffect taxonomy that grew to fifteen flags to replace them. The measurement (declaration counts taken from CompileEffect ASSIGNMENTS, not identifier occurrences, after a first draft inflated every row with the flags own comments): CompileExecutesBody has ZERO declaration sites, a dead member of a vocabulary that only grows; four further per-slot fields carry compile-relevant facts (CallableSpec, FnInertArgs, FnDataArgs, StoredBodies); 153 ledgered frontier rows of which ~43 are fn-value shapes and ~36 provenance, frontier-hof-audit.tsv alone 65 or 43% of the ledger; and SEVEN rows that compile and answer correctly but are ledgered as failures purely because the program embeds an island. The diagnosis: CompileDefault = 0 is not an absence of information but the substantive claim that the handler re-steps fn operands on the tape, false for most words that receive one, and the flags are a patch set withdrawing it one word at a time — the same defect three times (var, service/add, boru:fn-util). The proposal: collapse the ten operand-facing flags to three orthogonal per-position facts (tapeBound, the representation needed, the env where names resolve — the last already reasoned about at emit.go:4827 with no field to hold it), subject to four constraints verified in review (tapeBound must be tri-state because Go zero-values a bool to the PERMISSIVE answer, needs must be a set because stored-body words accept RawTokens OR CompiledUnit, env must be derived per slot because is and as are None where parselang is not, and cross-field validity must be asserted because independence increases the expressible states); and let an island carry a result contract, which is an extension of dynOutNativeOK and ReturnsFn rather than a new mechanism, since an island output already HAS provenance and only lacks a type. What it explicitly does not claim: boru:fn-util is NOT the demonstrator — its rows refuse in resolveDynamicApply on the NUR101 application model, not on an island result type; the benefit of typed islands is unmeasurable until the islandCeiling ban lifts, since no frontier row cites the downstream-of-dynamic refusal; the ~36 provenance rows are a separate axis; and two lanes that must agree is a bug detector, NUR101 having been found BY the disagreement with the compiled lane correct');
 INSERT INTO entities VALUES ('ent:Document:8751021793288559660', 'Document', 'design/CANON-ROUNDTRIP.0.md', 'design/canon-roundtrip.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:8751021793288559660', 'role', 'ADR-015''s reasoning: why canon is a VALUE round-trip (deq) rather than a textual fixpoint, why no kind is exempt, the 2026-08-15 measurements showing functions render as a debug spelling keyed on the binding name and Store as a pointer-bearing Go struct dump, NUR031 as the equality prerequisite, and the two-port property gate that lands with a shrinking failure ledger');
 INSERT INTO entities VALUES ('ent:Document:8799605016341004740', 'Document', 'design/TS-PARITY-AUDIT.0.md', 'design/ts-parity-audit.0.md', 'accepted');
@@ -580,6 +586,8 @@ INSERT INTO assertions VALUES ('ast:2714957710081530623', 'ent:Document:35212254
 INSERT INTO assertion_evidence VALUES ('ast:2714957710081530623', 'src:audit', 'title', 'Lang/Eng Content Audit — and the Types-Module Proposal', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2717924021842468202', 'ent:Document:5313783338663858074', 'supports', 'entity', 'ent:SoftwareModule:6880687338933514154', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2717924021842468202', 'src:reload-invalidation', '5. The design', 'replace the per-invoke DepSnap walk with a per-ref valid', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:2754678850283816673', 'ent:Document:801358522423407770', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:2754678850283816673', 'src:compile-declaration-model', 'title', 'The compile declaration model', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2979279625592738698', 'ent:SoftwareModule:1529704399546216258', 'part_of', 'entity', 'ent:SoftwareModule:4192460694199531608', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2979279625592738698', 'src:go-tree', 'wpg/serve', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3002920817860690706', 'ent:SoftwareModule:8275629451197117420', 'depends_on', 'entity', 'ent:SoftwareModule:4559967244660037230', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -624,6 +632,8 @@ INSERT INTO assertions VALUES ('ast:3727255686445494517', 'ent:SoftwareModule:35
 INSERT INTO assertion_evidence VALUES ('ast:3727255686445494517', 'src:go-tree', 'test/go/specgen', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3762011129750730370', 'ent:Document:5215900749522722466', 'related_to', 'entity', 'ent:Product:2046405728378673079', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3762011129750730370', 'src:go-module-graph', 'Status', 'the same ground truth `kg/gomod.boru` reads to build the knowledge graph''s module view', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:3803758004719555331', 'ent:Document:801358522423407770', 'supports', 'entity', 'ent:SoftwareModule:6880687338933514154', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:3803758004719555331', 'src:compile-declaration-model', '3. Diagnosis: the flags are a patch set over a wrong default', 'The zero value is not "no information". It is a **substantive claim**', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3820981091835606929', 'ent:SoftwareModule:4361728672720029650', 'depends_on', 'entity', 'ent:SoftwareModule:6706536563979604982', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3820981091835606929', 'src:gomod:cmd-go', 'require block', 'github.com/boru-lang/boru/parser/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3821304020166363356', 'ent:Document:1162242714758522750', 'supports', 'entity', 'ent:SoftwareModule:4559967244660037230', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
