@@ -6187,6 +6187,33 @@ func (es *EmitState) RecordMakeListInner(r *core.Registry, ins []core.Value, out
 	if !es.Active() {
 		return false
 	}
+	// NUR101 — a dispatching fn element makes the bake unfaithful. The
+	// interpreter's autoEvalList runs the elements as a SUB-PROGRAM, so an
+	// element that would dispatch at the pointer consumes what follows it and
+	// the list comes out SHORTER than `ins`:
+	//
+	//	def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end
+	//	[((mk 1) 2)]        interpreted [3]   ·   baked [fn (Integer) 2]
+	//
+	// It baked because the guard below asks whether an element can be SOURCED
+	// (the closure is an event result, so it can) and never whether the
+	// interpreter would STEP it. Refuse instead, per design/COMPILABLE-SUBSET.md:
+	// "anything the recorder cannot prove it can lower faithfully is refused …
+	// the worst failure mode is therefore slow, not wrong".
+	//
+	// Narrow on purpose, matching where the lanes actually diverge: a
+	// dispatching element with nothing after it has no operand to consume and
+	// the lanes agree (`[(mk 1)]` → `[fn (Integer)]` both), and a `/v`-PARKED
+	// fn is inert on both (`[(inc/v) 2]` → `[fn inc(Integer) 2]` both) — the
+	// Quoted term in FnValueDispatchesAtPointer is what tells them apart.
+	// IsFnValueResidual, not FnValueDispatchesAtPointer: recording happens on
+	// the CHECK pass, where a computed fn is a Function CARRIER with no
+	// FnDefInfo payload, so the concrete-value predicate never fires here.
+	for i := 0; i+1 < len(ins); i++ {
+		if core.IsFnValueResidual(ins[i]) && !ins[i].Quoted {
+			return false
+		}
+	}
 	// A CODE BODY the read substitution corrupted. Stage 1 substitutes a
 	// def-bound computed fn's carrier for a read of its name, which is
 	// right where the read is an operand — and wrong inside an

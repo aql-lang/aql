@@ -265,19 +265,39 @@ check: 0 error(s), 0 warning(s), 0 info
 check: List
 ```
 
-**The compiled lane is the defect, and it contradicts itself.** A list
-literal evaluates its contents on both lanes, and the compiled lane proves it
-can dispatch a fn there:
+**The compiled lane is the defect, and it contradicts ITSELF — visible in
+its own bytecode.** The identical placement dispatches at top level and is
+assembled as data one container deeper:
 
 ```
-$ boru do '[1 add 2]'                                             # → [3] both lanes
-$ boru do 'def inc fn b:Integer Integer [add 1 b] end [inc 2]'    # → [3] both lanes
+$ boru check --emit   # ((mk 1) 2)
+0001 CALL_USER   f0   ; mk/1
+0002 PUSH_CONST  k1   ; 2 (Integer)
+0003 CALL_DYNAMIC /1  ; apply fn-value        ← it DOES dispatch the placed fn
+
+$ boru check --emit   # [((mk 1) 2)]
+0001 CALL_USER   f0   ; mk/1
+0002 PUSH_CONST  k1   ; 2 (Integer)
+0003 MAKE_LIST   n2   ; assemble 2 into a list   ← same placement, baked as data
 ```
 
-Only the paren-COMPUTED fn stops it. `[inc 2]` dispatches compiled; `[((mk 1)
-2)]` bakes two values. So this is not the placed-vs-stepped rule applied
-consistently — it is the compiled lane declining to step a value whose
-provenance it lost, in a context where it steps everything else.
+**Not `[inc 2]` — that is not evidence** (raised on PR #403, correctly). A
+bare WORD inside a group is explicitly carved out by ADR-011's amendment —
+*"a bare WORD inside a group … dispatches during the group's own
+evaluation"* — so `[inc 2]` → `[3]` says nothing about a placed VALUE. The
+top-level `CALL_DYNAMIC` above is the evidence, and it is the compiled lane's
+own.
+
+**Nor does ADR-011 specify the baked residual** (the reading offered on
+#403). The amendment says a paren "no longer MANUFACTURES such an encounter"
+while *"a value at the pointer dispatches" still holds for a value the main
+loop encounters*. A list literal's contents are evaluated as a sub-program on
+both lanes (`[1 add 2]` → `[3]`), so that evaluation supplies an ORDINARY
+encounter, exactly as the main loop does at top level — which is why the
+compiled lane emits `CALL_DYNAMIC` there. If the placed fn were specified
+never to dispatch, that top-level `CALL_DYNAMIC` would itself be wrong, and
+`((mk 1) 2)` → `3` is pinned on both lanes and relied on throughout
+design/HIGHER-ORDER-FUNCTIONS.0.md.
 
 **Scope — it is the LIST literal specifically.** The map form falls back and
 therefore agrees (`{k:((mk 1) 2)}` → `{k:3}` both lanes, behind the loud

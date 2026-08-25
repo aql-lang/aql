@@ -1,0 +1,34 @@
+# A COMPUTED fn applied inside a list literal — NUR101's shape, and the
+# refusal that keeps the lanes honest about it.
+#
+# The interpreter's autoEvalList runs a list's elements as a SUB-PROGRAM
+# (`[1 add 2]` → `[3]`), so an element that dispatches at the pointer
+# consumes what follows it and the list comes out SHORTER than the recorder's
+# element count. Baked, `[((mk 1) 2)]` was `[fn (Integer) 2]`; interpreted it
+# is `[3]` — different data, no warning, exit 0 either way, `boru check`
+# clean. That is NUR073's class surviving BROAD in the one context BROAD did
+# not reach.
+#
+# RecordMakeListInner now refuses the shape instead of baking it, per
+# design/COMPILABLE-SUBSET.md — "anything the recorder cannot prove it can
+# lower faithfully is refused … the worst failure mode is therefore slow, not
+# wrong". The rows below are the ANSWER the interpreter gives, which the
+# default lane now also gives behind its loud fallback warning.
+#
+# The gate is narrow, and these neighbours stay COMPILED in the main corpus
+# rather than living here — refusing them would be coverage lost for nothing,
+# because the lanes already agree:
+#
+#   [(mk 1)]        a dispatching fn with NOTHING after it has no operand to
+#                   consume → `[fn (Integer)]` on both lanes
+#   [(inc/v) 2]     a /v-PARKED fn is inert on both → `[fn inc(Integer) 2]`
+#   [inc 2]         a bare WORD, which ADR-011 explicitly carves out ("a bare
+#                   WORD inside a group … dispatches during the group's own
+#                   evaluation") — it dispatches on both lanes and says
+#                   NOTHING about a placed value; it is not evidence either way
+#
+# Graduation: the recorder modelling the sub-program step (so `[((mk 1) 2)]`
+# lowers to the dispatch and then a 1-element OpMakeList), at which point
+# these rows move into the main corpus beside `[inc 2]`.
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [((mk 1) 2)]	[3]	the computed fn applies inside the list, as it does for a named fn
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [9 ((mk 1) 2)]	[9 3]	…and the elements before it are untouched

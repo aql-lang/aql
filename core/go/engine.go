@@ -6379,7 +6379,7 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // reparented to a refined function type also parks) would step past a value
 // stepLiteral would merely have pushed, silently losing its OnPushLit for any
 // installed Recorder. That mirroring is why the test lives in the shared
-// fnValueDispatchesAtPointer rather than being spelled twice.
+// FnValueDispatchesAtPointer rather than being spelled twice.
 func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 	if !notReachGroup || closeIdx != idx+2 || idx >= e.Tape.Len() {
 		return 0
@@ -6393,7 +6393,7 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 		// IS its dispatch, so the park must decline it.
 		return 0
 	}
-	if fnValueDispatchesAtPointer(v) {
+	if FnValueDispatchesAtPointer(v) {
 		return 1
 	}
 	// The CHECK pass's twin of the same decision. Where the interpreter
@@ -6411,7 +6411,14 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 	return 0
 }
 
-// fnValueDispatchesAtPointer reports whether the main loop, on re-encountering
+// FnValueDispatchesAtPointer is EXPORTED for the compiler's list-literal gate
+// (NUR101): the recorder must know whether an element the interpreter's
+// autoEvalList sub-run will STEP would dispatch there, because a dispatching
+// element changes the list's length and makes a baked OpMakeList unfaithful.
+// The `!Quoted` term is what separates a `/v`-PARKED fn (inert on both lanes,
+// safe to bake) from a computed one (applied by the interpreter).
+//
+// FnValueDispatchesAtPointer reports whether the main loop, on re-encountering
 // v at the pointer, would hand it to execFnDefLiteral rather than PUSH it as a
 // literal. It is stepLiteral's dispatch guard verbatim — same three clauses,
 // same order — and is the single home of that test: fnReturnPark asks it to
@@ -6423,7 +6430,7 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 // dispatches (or is stepped past) never fires OnPushLit, so crediting it a
 // skip leaves an unspendable credit that silently swallows the NEXT real
 // literal — design/FN-VALUE-OPEN-WORK.0.md §5.2.
-func fnValueDispatchesAtPointer(v Value) bool {
+func FnValueDispatchesAtPointer(v Value) bool {
 	return v.Parent.Equal(TFunction) && isFnDefValue(v) && !v.Quoted
 }
 
@@ -6441,7 +6448,7 @@ func fnValueDispatchesAtPointer(v Value) bool {
 //     ADR-016 0-arg anonymous gate, steps past) — never a push;
 //   - the PARKED return, the one survivor the rewind steps past.
 //
-// fnValueDispatchesAtPointer answers both: a park is by construction a value
+// FnValueDispatchesAtPointer answers both: a park is by construction a value
 // that satisfies it, so excluding dispatchers covers the parked case too and
 // no `park` term is subtracted here. (The park half was raised on PR #375;
 // the function-value half is design/FN-VALUE-OPEN-WORK.0.md §5.2, same class
@@ -6488,7 +6495,7 @@ func (e *Engine) creditParenSurvivorSkips(openIdx, closeIdx int, reStepped bool)
 	survived := 0
 	for i := start; i < end; i++ {
 		sv := e.Tape.At(i)
-		if IsRecordableLiteral(sv) && !(reStepped && fnValueDispatchesAtPointer(sv)) {
+		if IsRecordableLiteral(sv) && !(reStepped && FnValueDispatchesAtPointer(sv)) {
 			survived++
 		}
 	}
@@ -8031,7 +8038,7 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 	e.tagReachCollapsedFn(openIdx, closeIdx, wasReachGroup)
 
 	// The park drives the REWIND below, and nothing else: the recorder's skip
-	// count asks fnValueDispatchesAtPointer about each survivor directly
+	// count asks FnValueDispatchesAtPointer about each survivor directly
 	// rather than subtracting this (§5.2), so the two no longer have to be
 	// kept in agreement. Read here — after the pair removals, with closeIdx
 	// still the pre-removal index CheckModeParenFnCollapse may have rewritten
