@@ -67,22 +67,20 @@ var unflaggedPins = map[string]int{
 	// getStoreReturnsFn stays optimistic on a static miss by design. The
 	// Xml strict-miss row in the same batch IS flagged (getrXmlReturns).
 	"accessor.tsv": 2,
-	// fnpred.tsv: two unflagged classes, both runtime-only and both
-	// pre-existing — the capitalised-fn form `fnpred` replaces is unflagged
-	// identically, so neither is a regression this word introduced.
-	//   (i) malformed SPEC LISTS (an odd-length list; a triple where a pair
-	//       belongs): the shape error is the handler's own runtime check
-	//       over the constructed list, and the checker sees a well-typed
-	//       List argument with nothing to prove it wrong — exactly as
-	//       fnsig's own fnsig_invalid_spec rows are unflagged.
-	//   (ii) a CONCRETE value failing a predicate (`def q:Even 5`): running
-	//       a user predicate over a literal is decidable in principle but
-	//       the check pass does not, so the membership failure surfaces at
-	//       runtime. record.tsv carries the same gap for the same shape.
-	//   (iii) an unknown param TYPE in the spec (`[[n:NoSuchTypeXyz] [1]]`):
-	//       construction raises before any diagnostic is recorded, so the
-	//       failure is an error RETURN rather than a flagged row.
-	"fnpred.tsv": 6,
+	// fnpred.tsv: ONE unflagged class, and every unflagged row is in it — a
+	// CONCRETE value failing a predicate (`def q:Even 5`, and the typed-param
+	// twin `f 5`). Running a user predicate over a literal is decidable in
+	// principle, but the check pass does not, so the membership failure
+	// surfaces at runtime. record.tsv carries the same gap for the same
+	// shape, and the capitalised-fn form `fnpred` replaces is unflagged
+	// identically — so this is not a regression the word introduced.
+	//
+	// 6 -> 5, 2026-08-25: the pin and its comment were written from reasoning
+	// rather than measurement when the word landed, and named two further
+	// classes that the checker in fact DOES flag — the malformed spec lists
+	// (`fnpred_invalid_spec`) and the unknown param type. Measured with
+	// BORU_LOG_UNFLAGGED=1; only the five membership rows remain.
+	"fnpred.tsv": 5,
 	// as.tsv: the weak-payload guard row is a RUNTIME-only refusal by
 	// design — the ascribed dispatch statically commits the base FlexMap
 	// overload (sound: the interpreter takes the same widened match), and
@@ -147,6 +145,16 @@ var unflaggedPins = map[string]int{
 	"module-debug.tsv":    3,
 	"module-emitlang.tsv": 8,
 	"module-fmt.tsv":      3,
+	// module-fn.tsv: the two `FnUtil.curry` refusal rows. Both are the
+	// native's own RUNTIME shape checks over the operand it received — a
+	// multi-overload function, and a unary one — and the checker sees a
+	// well-typed Function argument at a Function slot with nothing to prove
+	// wrong: overload count and parameter count are payload facts, not
+	// signature facts. (They graduated here from the frontier ledger on
+	// 2026-08-25, when the fn-util family declared CompileStoresFn and the
+	// Stage 3 fn-operand wall in front of them lifted; they were unflagged
+	// there for the same reason.)
+	"module-fn.tsv": 2,
 	// 34 → 35: C2's read-line refuses an OUTPUT stream at runtime — stdout is
 	// a perfectly good StreamKind, so the shape checks out statically and only
 	// the handler knows it is the wrong direction. Its two sibling negatives

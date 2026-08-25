@@ -6,8 +6,17 @@
 # (design/HIGHER-ORDER-FUNCTIONS.0.md): compose, pipe, curry, partial,
 # const, identity, flip, on, memoize. Only the rows that COMPILE live
 # here (the main corpus holds refusalCeiling = 0); the behaviour rows
-# def-bind a computed fn — the strict-lane check refusal pinned in the
-# frontier ledger — so they live in
+# def-bind a computed fn — "def-bound computed fn apply (closure shape
+# unknown — Stage 1)", the §5.4 / NUR101 family — so they live in
 # lang/spec/frontier/frontier-fn-util.tsv until that family graduates.
 import "boru:fn-util"  FnUtil.identity 42	42	identity returns its argument
 import "boru:fn-util"  FnUtil.identity 'v'	'v'	identity over a String
+#
+# The REFUSAL rows compile: curry's shape checks run inside the native,
+# on an operand the recorder now bakes as an inert const (the family's
+# CompileStoresFn declaration), so the compiled lane raises the same
+# type_error the interpreter does. The BEHAVIOUR rows still cannot —
+# they def-bind the computed fn, which is the second wall (§5.4 /
+# NUR101) — and stay in the frontier ledger.
+import "boru:fn-util"  def f fn [a:Integer Integer [a] s:String String [s]] end def c (FnUtil.curry f/v)	ERROR:FnUtil.curry: the function must have exactly one signature, got 2 overloads	curry refuses a multi-overload function
+import "boru:fn-util"  def f fn x:Integer Integer [x] end def c (FnUtil.curry f/v)	ERROR:FnUtil.curry: the function must take at least 2 parameters, got 1	curry refuses a unary function

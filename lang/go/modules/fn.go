@@ -162,6 +162,36 @@ func goFnValue(name string, nParams int, h native.Handler) native.Value {
 
 // ---- The natives ----
 
+// COMPILE EFFECT (the fn-util family). Every word here takes its fn operand
+// as INERT DATA: it stashes the value in the wrapper it returns and invokes it
+// LATER, from inside a Go handler (invokeFnUtil — MatchFnSig + CallBoruFn), so
+// the fn is never re-stepped on the VM tape. That is exactly the
+// CompileStoresFn contract, and the same criterion parse.go states for its own
+// slots ("the fn is stored, not invoked on the tape"). Without the
+// declaration the recorder assumes the DEFAULT — a fn-valued operand means the
+// handler invokes it on the tape — and refuses every call at
+// RecordCallOperands, keyed on the SIGNATURE's declared arg type before it can
+// look at the operand. `/v` at the call site cannot lift that: the refusal is
+// about what the WORD does, and `/v` only stops a dispatch the TFunction slot
+// already prevents (see the exports comment above).
+//
+// CompileFnHandlerStrict rides along for every word whose handler VALIDATES
+// its operand as an FnDefInfo — all of them but `_f_const`, through
+// fnUtilArg / fnUtilSigArg. A CAPTURING fn at such a slot cannot bake as a
+// const, would lower to a bare OpPushClosure, and the handler would then
+// reject the ClosurePayload with a type_error the interpreter never raises;
+// the strict flag makes the recorder refuse so the interpreter owns the shape.
+// This mirrors native_service.go's service/add slots exactly. `_f_const`
+// stores its operand OPAQUELY — it never inspects the value, so a closure
+// round-trips through it untouched — and therefore declares no strict flag.
+//
+// This clears the FIRST of two walls in front of the fn-util rows. The second
+// is the def-bound computed-fn model (§5.4 / NUR101): with the declaration in
+// place every behaviour row refuses with "def-bound computed fn apply (closure
+// shape unknown — Stage 1)" instead. The `const` row is the control that this
+// second wall is not fn-util's doing — `_f_const` takes TAny, so the fn-operand
+// gate never applied to it, and it refused that way all along.
+// lang/spec/frontier/frontier-fn-util.tsv carries the ledger.
 var fnUtilNatives = []native.NativeFunc{
 	// identity — the total identity, any kind (a Function value passes
 	// through inert; /v made the user-space spelling writable, this is
@@ -183,9 +213,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "_f_const",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TAny},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn,
+			Args:          []*native.Type{native.TAny},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x := args[0]
 				return []native.Value{goFnValue("const", 1,
@@ -200,9 +231,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "compose",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TFunction, native.TFunction},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn | native.CompileFnHandlerStrict,
+			Args:          []*native.Type{native.TFunction, native.TFunction},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				f, err := fnUtilArg(args[0], "FnUtil.compose", r)
 				if err != nil {
@@ -228,9 +260,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "pipe",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TFunction, native.TFunction},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn | native.CompileFnHandlerStrict,
+			Args:          []*native.Type{native.TFunction, native.TFunction},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				f, err := fnUtilArg(args[0], "FnUtil.pipe", r)
 				if err != nil {
@@ -257,9 +290,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "flip",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TFunction},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn | native.CompileFnHandlerStrict,
+			Args:          []*native.Type{native.TFunction},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				if _, err := fnUtilSigArg(args[0], "FnUtil.flip", r); err != nil {
 					return nil, err
@@ -277,9 +311,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "curry",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TFunction},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn | native.CompileFnHandlerStrict,
+			Args:          []*native.Type{native.TFunction},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fd, err := fnUtilSigArg(args[0], "FnUtil.curry", r)
 				if err != nil {
@@ -304,9 +339,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "partial",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TFunction, native.TAny},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn | native.CompileFnHandlerStrict,
+			Args:          []*native.Type{native.TFunction, native.TAny},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fd, err := fnUtilSigArg(args[0], "FnUtil.partial", r)
 				if err != nil {
@@ -339,9 +375,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "on",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TFunction, native.TFunction},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn | native.CompileFnHandlerStrict,
+			Args:          []*native.Type{native.TFunction, native.TFunction},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				b, err := fnUtilArg(args[0], "FnUtil.on", r)
 				if err != nil {
@@ -374,9 +411,10 @@ var fnUtilNatives = []native.NativeFunc{
 	{
 		Name: "memoize",
 		Signatures: []native.Signature{{
-			BarrierPos: -1,
-			Args:       []*native.Type{native.TFunction},
-			Returns:    []*native.Type{native.TFunction},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn | native.CompileFnHandlerStrict,
+			Args:          []*native.Type{native.TFunction},
+			Returns:       []*native.Type{native.TFunction},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fd, err := fnUtilSigArg(args[0], "FnUtil.memoize", r)
 				if err != nil {
