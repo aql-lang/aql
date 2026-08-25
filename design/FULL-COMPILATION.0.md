@@ -88,11 +88,13 @@ that would need deoptimization (§6.9).
 Three measurements define the distance to T1/T2. The first two are known;
 the third is this note's correction to the frame.
 
-**2.1 The ledgered frontier is 153 rows, 126 refusing.** The
-`lang/spec/frontier/*.tsv` ledger pins 126 interpreter-works/compiler-refuses
-rows across 38 `failsWith` reasons plus 27 must-compile witnesses
-(`test/go/langspec/frontier_spec_test.go:700-738`). Grouped by missing
-capability (family letters used throughout this note):
+**2.1 The ledgered frontier is 153 rows, 127 refusing.** The
+`lang/spec/frontier/*.tsv` ledger pins 127 interpreter-works/compiler-refuses
+rows across 38 `failsWith` reasons plus 26 must-compile witnesses
+(`test/go/langspec/frontier_spec_test.go:700-738`; counts measured from the
+`frontierCompileLedger` map itself). Grouped by missing capability (family
+letters used throughout this note; the A–D/I split below carries one fewer
+row than the ledger — a one-row re-audit of that pool is owed):
 
 | Family | Rows | Essence |
 |---|---:|---|
@@ -117,10 +119,17 @@ dispatch, quoted-operand words (`usurp`/force-arity/ref), `dynamic input` /
 `for:` multi-value bodies (`emit.go:4101`), mid-body dynamic apply
 (`emit.go:3481`), multi-arg chained apply, splice/interp-string/XML
 runtime-computed parts, the `mini` hooks, the typed-def construction family
-(`basic/go/native_definition.go:801-1732`). Totality must be proven against
-the **gate inventory**, with generated differential sweeps as the oracle
-(the 690-program sweep that found 24 divergences the ~30 hand-picked rows
-missed — `design/HIGHER-ORDER-FUNCTIONS.0.md` §9e), not against the 153
+(`basic/go/native_definition.go:801-1732`). And the recorder is not the
+only latch: whole-program refusal also latches in `CompileCheck` itself —
+`SuppressedRuntimeError` (a word deliberately lenient in check mode whose
+runtime raise the pass could not model: an orphan `gen`, an `unpack` of a
+missing key — `lang/go/boru.go:474-482`), `AmbiguousGradualSplit` (set
+inside `Engine.MatchSignature`, `core/go/engine.go:8393-8413`; latched at
+`boru.go:483-491`), and `Finalize`'s own post-recording declines
+(`boru.go:503-506`; §5). Totality must be proven against the **whole gate
+inventory**, with generated differential sweeps as the oracle (the
+690-program sweep that found 24 divergences the ~30 hand-picked rows
+missed — `design/HIGHER-ORDER-FUNCTIONS.0.md` §9g), not against the 153
 rows.
 
 **2.3 "Islands are at zero" is true only of `OpFallback`.** The live system
@@ -139,6 +148,16 @@ still re-enters the interpreter at runtime on the compiled path:
   form.
 - Raw-token code bodies fall through `InvokeBody` to `RunResolved`
   (`core/go/invoke.go:21`; `eng/go/vm_defer.go:43`).
+- Predicate and membership types run boru code **inside signature matching
+  itself**: `v.Is(t)` on a predicate type routes through `PredicateUnifier`
+  (which holds a `*Registry` — `core/go/unify_predicate.go:20-26`) to
+  `Registry.RunPredicate` (`core/go/registry.go:1917`) → `CallBoru`, a
+  sub-engine tape run for any unstamped predicate body — reachable from
+  every "kernel" matching site, the VM's included.
+- A callback arriving while the main registry is mid-run routes to the
+  interpreter by *structure*, not analysis: `CanHostVM` declines
+  (`core/go/registry.go:677-686`) and `InvokeCallback` falls to `CallBoru`
+  (`core/go/invoke.go:49-52`).
 - ~15 named `vmDefer` sites resolve runtime surprises by **re-running the
   whole program on the interpreter**, fenced by the C1 effect fence
   (`lang/go/boru.go:1264`) — dyn-scope misses, poly no-match/NOut drift,
@@ -190,6 +209,17 @@ dispatch-resolution problem**. What refuses today is everything *around*
 dispatch: putting operands on the stack (collection), naming their homes
 (provenance), typing their results, and applying fn values with the right
 application model. §6 gives each of those its mechanism.
+
+Two of the doctrine's own rulings this note must **supersede rather than
+inherit**, and says so where it does. C4 records the fail-safe decline
+seams ("decline → interpreter, never the reverse") as *permanent by
+design* — §6.10 retires them anyway, a deliberate overturn T2 forces, with
+a named compiled replacement per seam: the seams were permanent because
+their only landing pad was the interpreter, and T2 removes the landing
+pad. And C3's R3 defers registry-aware (predicate-faithful) matching in
+compiled dispatch to "a separate later design, not assumed"
+(`RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md:109-117`) — §6.3's
+predicate-unit inventory and §6.10's retirement row are that design.
 
 **3.3 The precedents all have this shape.** Full compilation of a dynamic
 language without an interpreter escape hatch has been shipped repeatedly,
@@ -307,14 +337,25 @@ already was.
   `aggregateDispatch`; the `RuntimeNoMatch` diagnostic builders), and the
   Engine is refactored to call the newly extracted routines (§6.2) so
   there is exactly one implementation of every decision.
-- **No speculation, no deopt.** The T-lane lowers only checker-*proven*
-  facts (soundness rule §6.9), so it never needs to bail; uncertainty
-  routes to the G-lane at compile time, not at runtime. The residual
-  runtime drift guards that exist for staleness (user-poly Impl identity,
-  `eng/go/vm.go:646-650`; `NOut` drift; stamped-ref `depsFresh`) retire
-  their interpreter landing pads onto G-lane re-dispatch or bounded JIT
-  restamp (§6.10). This is the Self stance minus speculation: the generic
-  lane is the landing pad, and it is compiled code.
+- **No speculation, no deopt — which demands a sharper eligibility rule
+  than "checker-proven".** A fact proven against a *mutable binding* is a
+  bet under §6.5's live-rebinding semantics: the recorded `NOut` and Impl
+  identity are claims a rebind can falsify (`eng/go/vm.go:575-585`,
+  `:646-650`), and no site-local replacement can repair the
+  **continuation** — the downstream T-lane code laid out for the stale
+  result count — in an in-flight frame: a restamp serves *future* entries
+  only, and a site-local re-dispatch executes the new arm but leaves the
+  stale layout. So T-lane eligibility is *binding-stable* proof: facts
+  rooted in sealed natives, module-sealed words, unit-locals, and
+  structure the checker can prove no reachable rebind touches (the
+  soundness classification, §6.9). A binding-*sensitive* dispatch — and
+  the width-consuming region downstream of it — lowers to the
+  G-lane/mark-region form, which is count-generic by construction and
+  therefore valid across any rebind. Runtime staleness guards then never
+  need an interpreter landing pad: future entries recompile (§6.7's
+  restamp policy); in-flight frames were never speculated on. This is the
+  Self stance minus speculation: the generic lane is the landing pad, and
+  it is compiled code.
 
 The formal frame for T4 (§6.9): the checker stays an *abstracted
 interpreter* over carriers — the pattern of Van Horn & Might, "Abstracting
@@ -370,8 +411,28 @@ path per seam (strictly additive probes only); the probe-then-real closure
 compile pattern and its drift hazards; `Rollback` cannot unwind compiled fn
 units (`emit.go:3269`) — G-lane emission must be as latch-free as T-lane
 recording. Step 6 is total by construction (every token class has a
-descriptor form — the Deutsch–Schiffman argument), which is what makes the
-whole procedure total.
+descriptor form — the Deutsch–Schiffman argument).
+
+**The same rule must bind the lowering phase, or the procedure is not
+total.** Recording is only half the pipeline: `Finalize` and the lowerer
+decline today *after* recording succeeded (`emit.go:7545-7592` —
+`resolveDynamicApply`, residual operand resolution, mark-window
+verification, `seatResults`; ~31 decline strings in `lower.go`, e.g.
+`spillSeat`/`layoutOperands` at `:386`/`:1512` and the fragment-depth
+ceiling at `:2041`; `stamp_runtime.go:139-153` records the
+clean-probe-then-Finalize-declines class as production-reachable). And two
+latch classes are not dispatch events at all: the fn-literal capture latch
+during body recording (`emit.go:1830`) and the *retroactive* stored-handler
+invalidation, where a later event invalidates an earlier bake
+(`emit.go:2460`). Under totality every one of these becomes a **demotion,
+never a refusal**: the recorder keeps a statement descriptor for *every*
+statement — T-lane ones included — so a statement whose typed lowering
+declines at Finalize re-lowers in descriptor (G-lane) form; a retroactive
+latch demotes the earlier statement the same way (its descriptor is still
+held); typed-def construction shapes take their §6.8 lowering. The
+totality claim is therefore a **pipeline** property — "no refusal string
+reachable from `Finalize`", not merely "no `MarkUncompilable` in the
+recorder" — and §9's census is scoped accordingly.
 
 The rest of §6 specifies the runtime mechanisms step 5–6 rely on, in
 dependency order.
@@ -409,11 +470,11 @@ already runtime-shared, but **argument collection is not**, and collection
 is value-dependent. The pinned §9d case
 (`test/go/langspec/frontier_spec_test.go:562-573`): a function-valued
 argument reaching a leading collection must RAISE where a trailing-window
-model would apply — and *which of two raise texts* fires is "selected by
-engine-internal collection state the window does not carry". The ledger
-calls it "not repairable at run time". That verdict is about the *window*
-model — an arity-N pop with no history. The repair is at compile time:
-carry the history.
+model would apply — and which of two raise texts fires is, in the ledger's
+own words, "selected by collection state the window does not carry". The
+ledger calls it "not repairable at run time". That verdict is about the
+*window* model — an arity-N pop with no history. The repair is at compile
+time: carry the history.
 
 **Mechanism.** For every G-lane statement the recorder emits a **statement
 descriptor** — a static table entry (a new `Program` side table, peer to
@@ -427,7 +488,9 @@ StmtDesc {
                | wordRef(name) | typeNode(id)
                quote: none | /q | /v | /u          // static modifiers
              }
-  barrier:   per-candidate-sig BarrierPos geometry  // static
+  barrier:   per-candidate-sig BarrierPos geometry
+             // static only for a record-time-resolved word lead;
+             // derived live for value leads and after rebinding (§6.5)
   seal/mods: dispatch-control facts the tape carried
 }
 ```
@@ -441,11 +504,18 @@ and a matching opcode pair:
   *calling their compiled fragments* only where a viable overload consumes
   the position (preserving the interpreter's conditional-evaluation order),
   applying `/q` Word→Atom in place, honoring the strict forward barrier
-  ("a function word … never feeds an open forward"), and producing either
+  (a bare function word acts as a forward-collection barrier —
+  `fnWordBarrierAt`, `core/go/engine.go:2234-2242`), and producing either
   a claimed window + parked signature, or the interpreter's own stranded-
   forward / no-match raise — with the same *text selection*, because the
-  parked-signature and claimed-count state that selects the text lives in
-  the machine's registers, fed from the descriptor.
+  state that selects the text is the collection machine's register state,
+  fed from the descriptor. That state is wider than a pair of scalars:
+  `strandedForwardError` (`core/go/engine.go:6878-6916`) draws on the
+  forward's identity and blame position, the missing-count arithmetic, the
+  paren-scope scan boundary, and a live `barrierReceiverWord` probe that
+  can add a third text variant — or *commit* the forward instead
+  (`:6825-6866`). All of it is register state of the one machine, which is
+  why the mechanism is "extract the machine", never "enumerate the texts".
 - `OpDispatchGeneric(desc)` — completes the statement:
   the word-policy gate first (the same `WordChecker` every named VM
   dispatch already consults — `vmContext.gateWord`, `lang/go/boru.go:418-427`
@@ -471,6 +541,16 @@ same re-derivation the interpreter performs on every execution. Paren
 groups stay pre-compiled fragments (their boundaries are syntactic and
 cannot shift); what revalidation changes is only which slots a given live
 signature set claims.
+
+**Why this escapes the recorded "DO NOT RETRY".** Three attempts to
+compile at the concrete-mismatch recovery site were differential-reverted
+because "the recovery fires for reasons (forward-collection state, arity,
+coercion) the param guard does not replicate"
+(`design/VOXGIG-COMPILE-LEAVES.1.md:610-616`). Those attempts *committed a
+bet* at compile time and guarded it with a check that lacked the
+collection state; the descriptor mechanism exists to *carry* that state
+and re-run the same routine — a replayed decision, not a guarded guess.
+F2 is the falsifier if that distinction fails in practice.
 
 **The extraction obligation.** The collection algorithm today reads *and
 mutates* the tape (sugar expansion mid-scan, `engine.go:8731`;
@@ -512,11 +592,15 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   dual-representation hook already exists (`SigImpl.BoruImpl.Compiled`,
   `core/go/sigimpl.go:56-61`).
 - **Captures with homes**, including the currently-unsolved cross-registry
-  case: capture operands tagged with their defining registry
-  (`callable_words.go:474-481`; `CompiledFn.Reg` + `enterUnit` curReg swap
-  are the shipped halves, `compiler/go/bytecode.go:970`,
-  `eng/go/vm.go:1403-1414`), retiring the foreign-module island (family D's
-  cross-module rows, the `filter A.big` working island).
+  case. Today a capture is a bare `{Name, Value}` snapshot
+  (`CapturedBinding`, `core/go/value.go:882-885`; the capture rule is
+  `ComputeCaptures`, `core/go/fn_capture.go:312`; closure operands resolve
+  in `compiler/go/callable_words.go:470-480`). The *proposed* extension —
+  nothing shipped does this yet — tags capture operands with their defining
+  registry, completing the shipped halves (`CompiledFn.Reg` + `enterUnit`
+  curReg swap, `compiler/go/bytecode.go:970`, `eng/go/vm.go:1403-1414`)
+  and retiring the foreign-module island (family D's cross-module rows,
+  the `filter A.big` working island).
 - **Quote state and dispatch-control state** (`/q` polarity, sealed/applied
   bits) — so the quote-lambda screen (`check/go/check_fnbody.go:388`)
   becomes routing, not refusal: a `/q`-slot lambda delivered as a callback
@@ -535,6 +619,16 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   compiled twin — a curried value is `(base fn, held args)`, applied by the
   shared apply; no per-composition codegen (Factor's `curried`/`composed`
   cells).
+- **Predicate and membership-type bodies join the same inventory.** Today
+  `v.Is(t)` on a predicate/DepScalar type runs the predicate's boru body
+  through `Registry.RunPredicate` → `CallBoru` — a tape run *inside the
+  matcher*, reachable from every matching site including the VM's
+  (`core/go/unify_predicate.go:21`, `core/go/membership.go:3-6`). Under
+  the universal representation a predicate body carries a lazily-stamped
+  unit like any other fn value, and `RunPredicate` executes it through the
+  VM invoker, mid-match raise semantics preserved. This is the
+  registry-aware matching that doctrine item R3 deferred to "a separate
+  later design, not assumed" — this section is that design (§3.2).
 
 With this representation, family A's "unknown provenance / closure shape
 unknown" dissolves for the *value* half: an unknown fn value is not a hole
@@ -546,8 +640,8 @@ shape, concrete as to "applicable".
 
 One dedicated, arity-carrying **Apply** kernel routine, seamed where
 `execFnDefLiteral` sits today (`core/go/engine.go:5092`), used by both
-lanes (the maintainer-ruled "dedicated Apply Op", NUR077/I15). Its contract
-implements the application model that NUR101 established:
+lanes (the maintainer-ruled "dedicated Apply Op" — NUR077, `NUR.md:80`).
+Its contract implements the application model that NUR101 established:
 
 - **Name-read lead** (`def k (FnUtil.const 7)` … `k 99`, `(k 99)`): WORD
   dispatch — the runtime binding always applies. Lowering: `OpDispatchGeneric`
@@ -559,8 +653,8 @@ implements the application model that NUR101 established:
 - **Computed groups** (`(mk 1) 2`): the spec (ADR BROAD, `ADR.md:235-248`)
   says the group *places* its collapsed Function — and here the compiled
   lane is already the specified one; the **interpreter** is wrong
-  (`NUR.md:239-300` — "fix is interpreter placement, no compiler change
-  wanted"). Graduating family J (and parts of A) therefore requires
+  (`NUR.md:285-286` — "fixing the placement rule fixes the divergence with
+  it, and no compiler change is wanted"). Graduating family J (and parts of A) therefore requires
   interpreter fixes to the ruled semantics; the parity oracle for those
   rows is *the ruling*, not the current interpreter output. The doc-level
   consequence: T3's oracle is "the interpreter once NUR101/NUR078 land",
@@ -573,7 +667,21 @@ implements the application model that NUR101 established:
   taxonomy) because Apply calls the same `CallBoru` return-enforcement
   helpers (`core/go/registry.go:1585-1752`) — with `CallBoru`'s internal
   tape run replaced by unit entry for compiled bodies (it is already
-  tape-free at its *interface*; the inside migrates per §6.8).
+  tape-free at its *interface*; the inside migrates per §6.8). Fidelity
+  cuts both ways: Apply reproduces `execFnDefLiteral`'s landing rule *as
+  it is*, asymmetries included — the foreign-frame path is trim-only,
+  count never enforced (the documented frame-path asymmetry,
+  `eng/go/vm.go:2316-2344`) — so the replacement for RetReplay never
+  raises where the interpreter trims.
+- **Tail position is part of the contract.** The interpreter runs
+  constant-space loops through dynamically-dispatched callees; a G-lane
+  Apply that entered every unit by nested VM activation (`runUnitNested`,
+  `eng/go/vm.go:397-410`, Go-stack re-entrant) would grow a frame per
+  iteration — an unbounded-loop divergence in exactly the programs
+  totality admits. The descriptor marks tail position; Apply in tail
+  context enters units by frame replacement (the `OpTailCallUser`
+  discipline) or by trampolining through the dispatch loop; a
+  deep-tail-loop compiled-vs-interpreted gate joins §9's parity suite.
 
 `RetReplay`, `OpCallDynFrame`, and the `callDynamic` island arms retire
 onto this routine: the body-tail window becomes an ordinary Apply on a
@@ -597,32 +705,56 @@ comments (`emit.go:2460/2474` — "until the §5.6 bind twins make VM-time
 def order real"). Every check-mode `def`/`undef`/module install that
 affects runtime-visible bindings emits a twin op so the VM's registry state
 at instruction *i* equals the interpreter's tape state at the corresponding
-token. This deletes family F (rebind staleness), family L (conditional fn
-shadow — its graduation note already says "a runtime dispatch respecting
-the conditional binding", `core/go/core_helpers.go:165`), the NUR037
+token. This deletes the unledgered **rebind-staleness gates** — the frozen-read
+refusals (`NoteFrozenRead`/`NotifyNameRebound`) and the interim
+stored-handler latches (`emit.go:2460-2478`) — family L (conditional fn
+shadow: the refusal site is `core/go/core_helpers.go:165`, and the
+ledger's graduation note asks for exactly this — "a runtime dispatch
+respecting the conditional binding",
+`test/go/langspec/frontier_spec_test.go:206-207`), and the NUR037
 fn-local-fn refusal (the name is looked up live, so the never-executed-def
-hazard disappears), and the frozen-read refusal
-(`NoteFrozenRead`/`NotifyNameRebound`) for G-lane regions.
+hazard disappears). Family F — dispatch *recovery* — is §6.9(1)'s to
+close, not the twins'.
 
-Two consistency obligations come with the twins. **Reconciliation with
-the check pass:** today the compiled path deliberately *keeps* the check
-pass's `RunInCheckMode` installs and runs the Program on that registry
-(`lang/go/boru.go:1200-1202`); replaying the same transitions through
-twins would double-apply them (duplicate `DefTable` entries, so a later
-`undef` exposes the duplicate instead of the prior binding). The twin
-regime therefore rolls the *runtime-visible binding transitions* back to
-the pre-check snapshot before `RunProgram` — the twins then apply each
-transition exactly once, in source order — while compile-time-only
-products (minted type IDs, macro expansions, const folds) stay baked
-under the front-end carve-out. **Effect order:** the check pass currently
-executes module imports, effects included, before any VM instruction
-(`lang/go/boru.go:1017-1023` — the C1 fence is armed before the check
-pass for exactly this reason), which violates T3's ordering for a program
-with a runtime effect *before* an effectful import. Under totality the
-front-end pass must be **observationally silent** — the doctrine's O1
-effect-freedom obligation enforced rather than assumed — with every
-effectful half of a check-mode word (imports above all) given a runtime
-twin at its source position. Hot code loading
+Three consistency obligations come with the twins, and they interlock.
+
+**Replay, never re-execution.** Today the compiled path deliberately
+*keeps* the check pass's `RunInCheckMode` installs and runs the Program on
+that registry (`lang/go/boru.go:1200-1202`); replaying the same
+transitions through twins would double-apply them (duplicate `DefTable`
+entries, so a later `undef` exposes the duplicate instead of the prior
+binding). The twin regime therefore rolls the *runtime-visible binding
+transitions* back to the pre-check snapshot before `RunProgram`, and each
+twin re-installs the **identical binding object** the check pass produced
+— the same `FnDefInfo`, the same module instance — at its source position;
+nothing runs twice, and compile-time-only products (minted type IDs, macro
+expansions, const folds) stay baked under the front-end carve-out. A
+module import in particular executes **once**, in the front end; its twin
+re-binds the already-produced instance, so module fn-value identity
+(§6.3's pointer-based `eq`) has a single referent and a Program's pinned
+sub-registries stay the only instance.
+
+**Stamp freshness is taken against the post-replay world.** Dependency
+snapshots recorded during the check pass (`DepSnap` over `(Depth, Gen)`,
+`compiler/go/stamp_runtime.go:155-165`) would read stale against a
+rolled-back-and-replayed `DefTable`; under the twin regime dep snapshots
+are taken — or re-based — at twin-execution time, so the first invoke does
+not mass-restamp.
+
+**Effect order.** The check pass currently executes module imports,
+effects included, before any VM instruction (`lang/go/boru.go:1017-1023` —
+the C1 fence is armed before the check pass for exactly this reason),
+which violates T3's ordering for a program with a runtime effect *before*
+an effectful import. Under totality the front-end pass must be
+**observationally silent** — the doctrine's O1 effect-freedom obligation
+enforced rather than assumed — with every effectful half of a check-mode
+word given a runtime twin at its source position. The one effect the
+twins cannot carry is module-body execution itself: an effect-dependent
+*export* must exist before the checker can type against it, so the body
+runs in the front end. Until Stage 7's compile-module-bodies work moves
+that execution to the twin position, import-time effect ordering remains
+a **named front-end carve-out with a documented T3 exception** — which is
+today's behavior, made explicit (O4). Hot code loading
 then stops being "an interpreter-path feature"
 (`design/HOT-CODE-LOADING.0.md:94-99`): a swap's cost is a G-lane lookup or
 a JIT restamp — de-optimization, not decompilation.
@@ -675,14 +807,53 @@ sound and total:
 - **Isolation**: never a mid-run `CompileCheck` on the executing registry
   (the shipped rule); compiled-at-runtime units enter by the same universal
   convention as AOT units.
-- **Induction**: runtime compilation must itself never refuse. It cannot,
-  once §5 is total: the recursive call is to the *same* total procedure,
-  and the recursion is well-founded because each invocation compiles a
-  strictly smaller body with no analysis that can fail (the G-lane needs
-  none). Cost is the known trade — compile-on-eval is ~interpretation cost
-  per op for run-once code (§7) — bounded by the existing structural
-  unit cache (the "Phase 6 JIT detached-unit cache" graduation,
-  `emit.go:6569`, keyed structurally, never by `Value.ID`).
+- **Induction**: runtime compilation must itself never refuse — and
+  "never refuse" is a property of the whole pipeline, not the recorder
+  alone. The recursive call is to the *same* total procedure, so what the
+  induction actually establishes is this: each compile of a finite body
+  terminates and, given §5's demotion rule at `Finalize`, produces a
+  runnable Program. A computed body is *not* structurally smaller than its
+  producer — eval chains can construct larger bodies — so total compile
+  work is bounded by **execution**, not program size, which matches
+  interpreter cost semantics: the interpreter also pays per execution of
+  computed code. Its preconditions are explicit and carried by F5: §5's
+  Finalize totality, an answer for the front end's own ceilings (O5's
+  check-budget exhaustion; the fragment-depth ceiling, `lower.go:2041`),
+  and the eligibility/policy gates around detached stamping. Cost is the
+  known trade — compile-on-eval is ~interpretation cost per op for
+  run-once code (§7) — bounded by the **planned** Phase 6 JIT
+  detached-unit cache: named as the graduation at `emit.go:6569`, scoped
+  in `RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md`'s Phase 6 (body identity
+  keys on the structural `FnAnalysisKey` precedent, never `Value.ID`), and
+  **not yet built** — an explicit Stage 7 dependency.
+- **Staleness policy at the end state**: the bounded restamp
+  (`RestampMaxTries = 3`) exists because its exhaustion arm lands on
+  `CallBoru` — tape interpretation — fine under today's valve, banned
+  under T2, and "G-lane re-dispatch" is no answer for a boru body (it
+  selects the live arm; *executing* the arm still needs the unit the
+  budget just refused). Under totality the restamp is **unbounded but
+  memoised**, keyed structurally per `(body key, dep Gen)` via the unit
+  cache: a rebind costs one compile per *world*, not per invoke, and the
+  rebind-between-every-invoke pathology degrades to compile-per-invoke ≈
+  interpreter cost (§7 prices it) — never to a wrong answer or an
+  interpreter run. The budget deletes with the valve.
+- **Registry mutation inside runtime-compiled code.** A computed body may
+  itself contain `def`/`import`/`type`/macro use. The rule is §6.5's twin
+  regime applied to the *executing* registry: the fork's check pass is
+  observationally silent and its runtime-visible transitions twin into
+  the unit, applied to the live registry at unit-run time in source
+  order; compile-time identities the fork minted (types, macro
+  expansions) are re-minted/reconciled onto the live registry under the
+  same single-instance rule, with the interpreter's own behavior for the
+  same eval-time definitions as the parity oracle. Macro bindings visible
+  to the fork's expansion are the live registry's at fork time — a
+  mid-run rebind after the fork is the same race the interpreter has.
+- **Re-entrant hosting**: the busy-registry callback route (`CanHostVM`
+  declining → `CallBoru`, `core/go/registry.go:677-686`,
+  `core/go/invoke.go:49-52`) is a *structural* decline that no recorder
+  totality touches; its retirement is nested VM hosting on the running
+  registry — the mid-run `NestedRunner` seam already exists — named in
+  §6.10's table.
 
 One genuine pressure point from the survey: systems that refuse islands
 also refuse *lexical* eval (Chez/SBCL/Hermes evaluate against top-level
@@ -694,7 +865,8 @@ armed per-region by the descriptor (§6.2), not program-wide.
 ### 6.8 Handler contracts: retiring the tape-coupled handler class
 
 The VM refuses handler results that carry tape tokens (`screenResults`,
-`eng/go/vm.go:171`) — correctly: "return tokens for the engine to re-step"
+`eng/go/vm.go:217-223`, over the `tapeCoupled` predicate at `:171`) —
+correctly: "return tokens for the engine to re-step"
 is the one interpreter capability with no compiled meaning. Totality
 requires that no reachable handler *needs* it. The instrument is the
 adopted declaration triple (§3.4): every signature declares, per operand,
@@ -705,9 +877,10 @@ adopted declaration triple (§3.4): every signature declares, per operand,
 - Handlers with `needs: CompiledUnit`-capable slots receive **units**
   (compiled at record time when the body is written down; at runtime via
   §6.7 when computed). `InvokeBody`'s raw-token fall-through arm retires;
-  bodies run through `enterBodyUnit` under the VM invoker — this is the
-  "modelled compiled frame for every code-body word" that the HOF audit
-  set as the InvokeBody island's graduation criterion.
+  bodies run through `enterBodyUnit` under the VM invoker — the modelled
+  callback frame the HOF audit names as the `InvokeBody` island's
+  graduation criterion (`design/HIGHER-ORDER-FUNCTIONS.0.md:921`),
+  generalized here from the list-Function rows to every code-body word.
 - `env: Live` handlers (dyn-scope, `parselang`-class) get the per-region
   DynEnv arming.
 - Structured-lowering words that still splice (`while` — family H) get
@@ -720,6 +893,15 @@ adopted declaration triple (§3.4): every signature declares, per operand,
   enumerable worklist (the triple's registration assert produces it), and
   it is the part of totality that is handler work rather than compiler
   work. Nothing in the survey suggests a shortcut exists.
+- The **check-lenient words** behind the `SuppressedRuntimeError` latch
+  (`lang/go/boru.go:474-482` — an orphan `gen`, an `unpack` of a missing
+  key: lenient in check mode, strict at runtime) are their own per-word
+  migration item, because neither of §6.9's mechanisms covers them as-is —
+  the pass could not even *model* the runtime raise, so a trap has nothing
+  proven to carry and the recorded stream was built on the lenient answer.
+  Each such word either gets a strict check-mode twin (model the raise;
+  then the trap/builder discipline applies) or a generic lowering of the
+  affected statement. The latch's own census enumerates the list.
 
 ### 6.9 Checker totality and lane alignment
 
@@ -738,10 +920,16 @@ Four changes, all conservative in the abstract-interpretation frame:
    built over the *concrete* runtime value or the lanes diverge
    (`core/go/engine.go:9182-9197`), and the runtime rematch is the shipped
    mechanism that builds it live. Could-match dynamics compile to G-lane
-   dispatch that raises or succeeds as the runtime decides. Recovered windows (family F) become traps or
-   G-lane rematch — `OpDispatchRematch` is the in-tree template. The
-   fabricated `assume-sig` recovery windows, which corrupt the tape model,
-   are replaced by honest G-lane regions, not admitted.
+   dispatch that raises or succeeds as the runtime decides. Recovered
+   windows (family F) become traps or G-lane rematch — `OpDispatchRematch`
+   is the in-tree template, and §6.2's descriptor state is what
+   distinguishes this from the three differential-reverted recovery-site
+   attempts the "DO NOT RETRY" record pins. The fabricated `assume-sig`
+   recovery windows, which corrupt the tape model, are replaced by honest
+   G-lane regions, not admitted. With the sentinel gone, the C2 error
+   oracle's check-error trigger is unreachable: C2 narrows to parse-error
+   programs — which never reach either executor — and retires as a
+   production path at Stage 8, surviving only inside the harness (§8).
 2. **Classify every checker shortcut** as `advisory-only` vs
    `sound-for-lowering` (the soundiness rule — Livshits et al., CACM 2015).
    The quota/recursion bails are widenings and must widen only to
@@ -756,7 +944,7 @@ Four changes, all conservative in the abstract-interpretation frame:
    emission itself, `check_recovery.go:1018,1126`). T4 requires one
    checker behavior regardless of the consumer. The open budget question —
    step-budget exhaustion during check has no emit-anyway story
-   (`check_state.go:250`) — is O5 in §11.
+   (`core/go/check_state.go:250`) — is O5 in §11.
 4. **State the alignment property formally** so it can be tested: (a)
    *erasure* — the checker's **inferred** facts (carriers, joins,
    narrowings) have zero runtime footprint: discarding them changes
@@ -779,16 +967,26 @@ Four changes, all conservative in the abstract-interpretation frame:
 The end-state runtime has **no interpreter landing pad**. The worklist is
 the ~15 `vmDefer` sites plus the C1 fence, each with a named replacement:
 
-| Defer site | Replacement |
+| Escape site | Replacement |
 |---|---|
 | dyn-scope miss / dispatching / active-token | G-lane lookup raises the interpreter's own error |
 | poly no-match (canonical error cases) | kernel no-match raise (`PolyNoMatchSpec` already proves window rebuildability — make it total via the descriptor) |
-| NOut drift / user-poly table drift | JIT restamp (bounded), else G-lane re-dispatch |
+| NOut drift / user-poly table drift | never speculated on under §4's binding-stability rule — the site and its continuation are G-lane; future entries restamp (§6.7) |
 | rematch-**matched** ("the doctrine's landing pad") | execute the matched arm natively — the R1 item the plan already names |
 | shaped-method claims | `OpCallDynMethod` completes natively via Apply |
-| RetReplay count mismatch | Apply's own return-count enforcement |
+| RetReplay count mismatch | Apply reproduces `execFnDefLiteral`'s landing rule as-is — trim-only on the foreign-frame path (`eng/go/vm.go:2316-2344`), never a new enforcement the interpreter lacks |
 | splice-active | generalized mark regions |
 | callback `internal_error` degrade (`core/go/invoke.go:56-64`) | propagate — with no second lane there is nothing to degrade *to* |
+| predicate body inside matching (`RunPredicate` → `CallBoru`) | lazily-stamped predicate units run via the VM invoker (§6.3) |
+| busy-registry callback (`CanHostVM` decline → `CallBoru`) | re-entrant VM hosting on the running registry (the `NestedRunner` seam, §6.7) |
+| JIT-declined / restamp-exhausted bodies → pooled sub-engine | unbounded memoised restamp (§6.7); the analysis-decline class dissolves with §5's Finalize totality |
+
+This retirement list deliberately **overturns C4's recorded permanence**
+of the fail-safe decline seams ("permanent by design",
+`RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md:123-135`): those seams were
+permanent because their only landing pad was the interpreter, and
+refusing to land there meant refusing the program. T2 removes the landing
+pad; the table is the argument that each seam can land compiled instead.
 
 The C1 effect fence exists to make re-runs safe; when there are no re-runs
 it reduces to error propagation. `runtimeShouldFallback`
@@ -824,9 +1022,13 @@ overhead is paid once at compile time.
   elsewhere) — so measure before building (§11, F4).
 - The known costs, priced: per-region DynEnv arming (bounded by region, not
   program); lazy first-apply compilation (Factor's trade — compile cost
-  ~interpretation cost for run-once bodies, amortized by the structural
-  unit cache); alloc ceilings stay gated (`lang/go/bytecode_allocguard_test.go`)
-  and the facade-inlining discipline holds.
+  ~interpretation cost for run-once bodies, amortized by the planned
+  structural unit cache, §6.7); the rebind-per-invoke pathology — a
+  dependency rebound between every invoke forces a compile per invoke,
+  which memoised restamp floors at ≈ interpreter cost for the same
+  program, the correct floor; alloc ceilings stay gated
+  (`lang/go/bytecode_allocguard_test.go`) and the facade-inlining
+  discipline holds.
 
 The step-budget divergence (`COMPILABLE-SUBSET.md` §7) remains the one
 place the lanes are observably different programs at the ceiling; O2 asks
@@ -864,14 +1066,20 @@ detector. This design keeps it, on three legs:
 New ratchets, alongside the existing ones (all monotone, all in-tree):
 
 - **`engineEntryCeiling`** — runtime `Engine` entries observed during
-  compiled corpus runs (extending `TestNoInterpreterExecution` from
-  attribution to census). Start = current live residue (§2.3); end = 0
-  outside carve-outs. This is T2's number; today it is not measured, which
-  is how the value-window islands stayed invisible under `islandCeiling=0`.
+  compiled corpus runs, built on the shipped interpreter-entry attribution
+  seam (`ArmInterpEntryHook`, `core/go/interp_entry.go:78`, and the
+  unattributed-entry assertions in `lang/go/frontier_cases_test.go:120-140`)
+  extended from attribution to census — the gate the completion plan names
+  `TestNoInterpreterExecution` is planned there, not yet in the tree.
+  Start = current live residue (§2.3); end = 0 outside carve-outs. This is
+  T2's number; today it is not measured, which is how the value-window
+  islands stayed invisible under `islandCeiling=0`.
 - **`deferCeiling`** — `vmDefer` activations on the corpus; end = 0, then
   the mechanism deletes.
-- **Refusal-reason census** — the ~130 gate strings; each stage names the
-  strings it deletes; end = the recorder contains no `MarkUncompilable`.
+- **Refusal-reason census** — the ~130 gate strings across the *pipeline*:
+  recorder, `Finalize`/lowerer, and the `CompileCheck` latches (§2.2).
+  Each stage names the strings it deletes; end = no refusal string
+  reachable from `Finalize` (§5), not merely an empty recorder.
 - **Frontier ledger** — rows graduate by the stale-arm mechanism, never
   hand-edits; family counts per §2.1 are the per-stage scorecard.
 - **Parity gates** — `make verify-bytecode` (byte-identical differential
@@ -893,17 +1101,21 @@ universe closes alongside).
 | **0** | Adopt the declaration triple (COMPILE-DECLARATION-MODEL Stages 0–2: delete the dead flag, introduce `{tapeBound, needs, env}` under C1–C4, assert over every signature) | 0 rows; produces the §6.8 handler worklist | low |
 | **1** | Instrument: engine-entry census + defer census + refusal-reason census; declare the observable alphabet for T3 | 0 rows; makes T2 measurable | low |
 | **2** | **Extract the collection kernel** (§6.2): factor `resolveForwardArgs`/arrival/`MatchSignature`-forward-scan over abstract slots; re-seat the Engine on it; prove no interpreter regression (perf + full differential) | 0 rows; unblocks everything | **high** — F1 |
-| **3** | Universal fn values (§6.3) + the Apply kernel (§6.4) + interpreter-side NUR101/NUR078 fixes to the ruled semantics; retire `OpCallDynFrame`/`callDynamic` islands onto Apply | A (45), B (22), J (2), G (7 — natively, no islands) | medium |
+| **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included) + interpreter-side NUR101/NUR078 fixes to the ruled semantics; retire `OpCallDynFrame`/`callDynamic` islands onto Apply | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` lands with §6.3's registry-tagged captures here, the full-stack-in-body row with Stage 4's descriptor folds) | medium |
 | **4** | Statement descriptors + `OpCollect`/`OpDispatchGeneric` (§6.2, §6.5) + bind twins; recorder step-6 flips from refuse to generic for word dispatch; delete drift-window islanding | F (5), L (1), K (1), most unledgered dispatch gates, §9d | medium |
 | **5** | Production-order regions + generalized marks (§6.6) | C (11), D (13), I (5) | medium |
 | **6** | Handler migration per the triple (§6.8): units-not-tokens, `while` lowering, per-region DynEnv, `args`/`__pa`/`context` frames | H (6), context/tape-bound gate families | medium — wide but enumerable |
-| **7** | Runtime compilation everywhere (§6.7): computed bodies, splices, module bodies; induction argument documented and fuzzed | eval-class gates | medium |
+| **7** | Runtime compilation everywhere (§6.7): computed bodies, splices, module bodies; the structural unit cache built here if not before (a hard dependency); unbounded memoised restamp; induction preconditions documented and fuzzed | eval-class gates | medium |
 | **8** | Checker totality (§6.9): sentinel deletion, traps for definite errors, `!Compiling`-fork collapse, soundiness classification | E (8) | medium |
 | **9** | Retire the valves (§6.10): defer sites → native answers; delete `OpFallback`/P7 machinery, the fence's re-run half, the fallback hatch; flip `CompileCheck` to total; `compile_refused` becomes a structured `internal_error` return (panics stay forbidden outside init-time registration) | T1, T2 complete | low by then |
 
 The dependency spine is 2 → {3,4} → 5 → 9; stages 6–8 are parallel tracks
 off it. Nothing lands without its differential gate; every stage's admission
-sweep is generated, not hand-picked (§8.3).
+sweep is generated, not hand-picked (§8.3). Until a statement's enabling
+mechanism lands, step 6's arm remains **partial** for it: such statements
+keep refusing, loudly — a Stage-4 G-lane statement whose runtime-only
+result width feeds a static seat still declines until Stage 5's regions
+land. T1 is a Stage-9 property, not a rolling one.
 
 ---
 
@@ -915,8 +1127,8 @@ re-litigated, the affected rows' oracle is undefined and Stage 3 stalls.
 
 **O2 — the step budget.** Totality makes the per-instruction metering the
 only live metering. Ruling needed: keep the documented one-directional
-divergence against the oracle, or re-meter to match. Same for the lane-
-divergent tape/stack ceilings (I14).
+divergence against the oracle, or re-meter to match. Same for the
+lane-divergent tape/stack ceilings the fn-value work measured.
 
 **O3 — closure identity latitude.** If future optimization wants closure
 caching/sharing, the spec must first grant Lua-5.2-style latitude;
@@ -931,6 +1143,17 @@ exhausts the budget has no emit-anyway story; totality needs one (likely:
 widen-to-dynamic at the frontier of the exhausted region — but that must
 be designed, not assumed).
 
+**O6 — concurrency.** The runtime is one-registry-per-goroutine; detached
+stamping runs under `ForkConcurrent`'s owning-goroutine contract
+(`compiler/go/stamp_runtime.go:57-59`), and a `RestampBox` serialises
+concurrent invokers of a shared signature across registries
+(`:189-198`). Under "runtime compilation everywhere" plus
+restamp-as-the-staleness-answer, the design owes rules for: registry
+affinity of G-lane lookup and restamp under `spawn`/`await`, restamp-box
+sharing when different callers' registries disagree, `DefTable.Gen` cache
+reads as §7's inline-cache seed, and which `-race` gates each stage keeps
+green.
+
 **F1 — the collection kernel cannot be extracted.** If
 `resolveForwardArgs`'s interleaving of evaluation with planning cannot be
 factored over abstract slots without behavior change (the mid-scan sugar
@@ -939,10 +1162,23 @@ faithful G-lane — the design would degrade to window dispatch, which §9d
 proves unfaithful. This is why Stage 2 is first and why its gate is the
 full differential on the *interpreter* side alone.
 
-**F2 — error identity needs unbounded interpreter state.** §6.2 claims the
-raise-text selection state is exactly (parked sig, claimed count, barrier
-geometry). If a case surfaces whose error selection depends on state the
-descriptor cannot carry statically-bounded, the parity claim narrows and
+**F1b — the extracted routine slows the interpreter.** Stage 2's gate
+includes interpreter performance, and unlike F4 there is no fallback: the
+Engine re-seat cannot be reverted without abandoning the sharing
+obligation §6.2 calls the parity foundation. If the abstraction layer
+over the interpreter's hottest loop cannot match the tape-specialized
+walk (mitigation to try first: a specialized, inlinable tape adapter),
+the sharing obligation needs a weaker form — one implementation generated
+into two specializations — and the drift-defense argument re-examination.
+
+**F2 — error identity needs state outside the collection machine.** §6.2
+claims the raise-selection state is exactly the machine's register state —
+parked signature, claimed count and missing-count arithmetic, the
+forward's identity and blame position, the paren-scope scan boundary, and
+the commit-vs-strand outcome including the live `barrierReceiverWord`
+probe (`core/go/engine.go:6825-6916`). If a case surfaces whose error
+selection depends on state outside that register set — state the
+descriptor cannot carry statically-bounded — the parity claim narrows and
 the case needs a ruling (spec the error) or a descriptor extension.
 
 **F3 — a `tapeBound: Yes` handler that cannot be rewritten.** If some
@@ -957,10 +1193,14 @@ premise "descriptor precomputation ≥ interpreter's re-derivation" is wrong
 in this VM; the design still holds semantically but the performance story
 reverts to T-lane coverage pressure. Benchmark at Stage 4, not at the end.
 
-**F5 — runtime compilation breaks the induction.** If any runtime-compile
-path can recurse into a shape that needs analysis that can fail (violating
-§6.7's induction), totality has a hole; the fix is extending the G-lane to
-that shape, and the fuzzer must hunt for it explicitly.
+**F5 — runtime compilation breaks the induction.** §6.7's induction rests
+on named preconditions: §5's Finalize totality, an answer for O5's
+check-budget exhaustion, the fragment-depth ceiling (`lower.go:2041`), and
+the eligibility/policy gates around detached stamping. If any
+runtime-compile path can still reach a shape that refuses — or if the
+memoised-restamp policy cannot hold its cost floor — totality has a hole;
+the fix is extending the G-lane (or the demotion rule) to that shape, and
+the fuzzer must hunt for it explicitly.
 
 ---
 
@@ -971,11 +1211,16 @@ that shape, and the fuzzer must hunt for it explicitly.
 islands, rejected); `COMPILE-REFUSAL-SURVEY.0.md` (dispatch opcodes
 necessary but insufficient — the finding §6.2/§6.6 answer);
 `RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md` (the doctrine and the defer
-worklist); `HIGHER-ORDER-FUNCTIONS.0.md` (§9d and the generated-sweep
-law); `FUNCTION-VALUE-SCOPE.0.md` (the env axis); `NUR.md` NUR101/NUR078/
-NUR067/NUR037; `DO-STRUCTURE-COMPILATION.0.md` (the "always compile"
-directive); `HOT-CODE-LOADING.0.md`; `STAGE3-INLINING-DESIGN-ROUND.0.md`
-(one recording path; the third architecture); `AOT-COMPILE.0.md` and
+worklist); `HIGHER-ORDER-FUNCTIONS.0.md` (§9d and the §9g generated-sweep law);
+`FUNCTION-VALUE-SCOPE.0.md` (the env axis); `NUR.md` NUR101/NUR078
+(NUR067 and NUR037 survive outside `NUR.md` — the ledger notes at
+`test/go/langspec/frontier_spec_test.go:439-451` and
+`design/HIGHER-ORDER-FUNCTIONS.0.md:1197`);
+`DO-STRUCTURE-COMPILATION.0.md` (the "always compile" directive);
+`HOT-CODE-LOADING.0.md`; `STAGE3-INLINING-DESIGN-ROUND.0.md` (one
+recording path; the third architecture); `VOXGIG-COMPILE-LEAVES.1.md`
+(the differential-reverted recovery-site attempts — the "DO NOT RETRY"
+record §6.2 answers); `AOT-COMPILE.0.md` and
 `INTERPRETER-TIERED-EXECUTION.0.md` (adjacent, unimplemented tiers).
 
 **Systems:** Pestov, Ehrenberg & Groff, "Factor: A Dynamic Stack-based
