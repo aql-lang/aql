@@ -532,6 +532,28 @@ second tape. That is a real answer to F1, but it is a bigger object than
 this section first described, and the VM adapter has to build it rather
 than index a frozen array.
 
+**The VM's window needs no adapter — it IS a Tape (measured 2026-08-26).**
+The paragraph above concludes that both adapters must implement "a mutable,
+spliceable, live-length token window plus a host evaluator callback —
+honestly, a second tape", and that the VM "has to build it rather than index
+a frozen array". Both hold, and the building is `NewTape`. A `Tape` has no
+Engine reference — `buf`, `gapStart`, `gapEnd`, `forwards`, and nothing else
+— so one constructed over a slice of runtime values satisfies
+`CollectWindow` directly, with no adapter type at all
+(`TestStandaloneTapeSatisfiesCollectWindow`). The planned second window
+implementation is therefore deleted from this stage's worklist before it was
+written.
+
+That is worth more than the code it saves. A re-implementation would have to
+AGREE with the original on splice and gap semantics, and
+`collect_kernel.go`'s first stated property is that "the window mutation IS
+the interface between the phases" — precisely the thing a parallel
+implementation is most likely to get subtly wrong, and in a way the
+differential would catch only where a test happens to splice. Sharing the
+type makes the agreement structural. What the VM adapter still owes is the
+`collectHost` half: the EVALUATIONS, which is where its real work was
+always going to be.
+
 **Mechanism.** For every G-lane region the recorder emits a **region
 descriptor** — a static table entry (a new `Program` side table, peer to
 `Dispatches`) recording what the interpreter would have read off the tape,

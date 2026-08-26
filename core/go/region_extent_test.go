@@ -167,3 +167,58 @@ func TestRegionSlotCount(t *testing.T) {
 		t.Errorf("RegionSlotCount(99) = %d, want 0 (past-end spans nothing)", got)
 	}
 }
+
+// --- the VM adapter's window is a Tape ----------------------------------
+
+// §6.2 says the VM adapter must build "a mutable, spliceable, live-length
+// token window plus a host evaluator callback — honestly, a second tape",
+// and that it "has to BUILD it rather than index a frozen array". Both are
+// true, and the building is NewTape: a Tape has no Engine reference (buf,
+// gapStart, gapEnd, forwards and nothing else), so one constructed over a
+// slice of runtime values satisfies CollectWindow with no adapter at all.
+//
+// This matters beyond saving code. The two lanes then share the SAME splice
+// and gap semantics by construction rather than by a parallel implementation
+// agreeing with the original — and "the window mutation IS the interface
+// between the phases" (collect_kernel.go) is exactly the property a
+// re-implementation would be most likely to get subtly wrong.
+func TestStandaloneTapeSatisfiesCollectWindow(t *testing.T) {
+	var w CollectWindow = NewTape([]Value{
+		NewInteger(1), NewWord("add"), NewInteger(2),
+	}, StackHeadroom)
+
+	if w.Len() != 3 {
+		t.Fatalf("Len = %d, want 3", w.Len())
+	}
+	if v, _ := AsInteger(w.At(0)); v != 1 {
+		t.Errorf("At(0) = %v, want 1", w.At(0))
+	}
+
+	// Set replaces in place.
+	w.Set(0, NewInteger(9))
+	if v, _ := AsInteger(w.At(0)); v != 9 {
+		t.Errorf("after Set, At(0) = %v, want 9", w.At(0))
+	}
+
+	// Splice changes the LENGTH — the live-length property the frozen-array
+	// model cannot express, and the one a zero- or multi-value group
+	// collapse depends on.
+	w.Splice(1, 1, NewInteger(7), NewInteger(8))
+	if w.Len() != 4 {
+		t.Fatalf("after Splice, Len = %d, want 4", w.Len())
+	}
+	if v, _ := AsInteger(w.At(1)); v != 7 {
+		t.Errorf("after Splice, At(1) = %v, want 7", w.At(1))
+	}
+
+	// A multi-value collapse leaves extras to be re-examined as later
+	// positions, so the region's extent is re-read rather than trusted.
+	if got := RegionEnd(w, 0); got != 4 {
+		t.Errorf("RegionEnd after splice = %d, want 4 (extent re-read, not cached)", got)
+	}
+
+	w.Remove(0)
+	if w.Len() != 3 {
+		t.Errorf("after Remove, Len = %d, want 3", w.Len())
+	}
+}
