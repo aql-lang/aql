@@ -3626,12 +3626,28 @@ from three `stepWord` sites (`:2499`, `:2597`, `:2918`), each passing
 `w.Name` from a `WordInfo`. An empty `Word` on the diagnostic therefore
 means **a Word token whose Name is empty is being stepped**.
 
-That is the next thing to look at, and it narrows the search a long way:
-the repro's only interesting construct is `o.pretty`, and dot access
-lowers to a `get`/`getr` chain (`design/REACH.10.md`). The hypothesis is
-that the reach lowering yields a nameless Word on the compile path that
-it does not on the plain-check path. Not yet confirmed — no instrumented
-run has been done.
+**Trigger isolated (2026-08-26), and it is NOT the reach lowering.** The
+first hypothesis — that dot access produced a nameless Word — was tested
+and falsified. The trigger needs two conditions together:
+
+| param type | body | result |
+|---|---|---|
+| `{pretty:Boolean}` | `o.pretty` | **refuses** |
+| `Map` | `o.pretty` | compiles |
+| `{pretty:Boolean}` | `o get "pretty"` | **refuses** |
+| `{pretty:Boolean}` | `true` (no field read) | compiles |
+| `{pretty:Boolean}` | `o.pretty`, other names | **refuses** |
+
+So: **a field read from a parameter whose declared type is a STRUCTURAL
+RECORD type**. Neither half alone reproduces — the same dot access over a
+plain `Map` parameter compiles and returns `true`, and the same record
+parameter with no field read compiles. It is not dot-specific either:
+an explicit `get` fails identically, which is what rules the reach
+lowering out.
+
+The remaining question is why a field read against a record-typed carrier
+yields a Word with an empty Name on the compile path and not on the plain
+one.
 
 Whether this shares a root cause with the `h2` site in mini-redis is
 unknown; both are armed-only `undefined_word`, but the shapes differ
