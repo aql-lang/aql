@@ -222,28 +222,6 @@ func RunLoopBodyAnalysis(r *Registry, body Value, bindNames []string, bindVals [
 	return AnalysisImpl.AnalyseLoopBody(r, body, bindNames, bindVals, provenTrips)
 }
 
-// RunFnConstructionPass is the exported accessor for the construction-time
-// body check — the twin of RunFnBodyAnalysis, for the third outside
-// consumer of the analysis seam.
-//
-// InstallFnDef already runs this pass for a fn installed under a NAME, and
-// that is where the property "a typo in an uncalled body is still reported"
-// comes from. A fn VALUE constructed anonymously never reaches InstallFnDef,
-// so until it is `def`-bound its body was analysed by nobody — which made
-// `each ([e:Any] => [nosuchw e]) [1 2 3]` check clean and then raise
-// `undefined_word` at run time (NUR105). The construction site is the word
-// library's (`fn` / `afn` / the `=>` lambda all funnel through it), so the
-// pass has to be reachable from there, exactly as `fn` and `for` already
-// reach AnalyseFnBody / AnalyseLoopBody.
-//
-// Named or anonymous, the analysis is the SAME one: same param carriers,
-// same isolation, same diagnostics-only contract. That is the point — a
-// second construction-time analysis with its own rules would be a new way
-// for the two spellings to disagree, which is the defect, not the fix.
-func RunFnConstructionPass(r *Registry, name string, fnDef FnDefInfo) {
-	AnalysisImpl.FnConstructionPass(r, name, fnDef)
-}
-
 // NoteFnBodyPending queues a constructed fn VALUE for the end-of-pass body
 // check. The word library calls it where the value is built — `fn`, `afn`,
 // and the `=>` lambda that lowers to `afn` — and that is the only place an
