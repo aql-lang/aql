@@ -3593,6 +3593,23 @@ Hypotheses tested and REJECTED, recorded so they are not re-explored:
   at top level, and inside a one-parameter lambda — both check clean
   under compilation. The trigger is narrower than the surface shape.
 
+**Isolated so far.** Importing the module is not enough: a program that
+imports mini-redis and evaluates `1` compiles clean. Calling
+`MiniRedis.serve {port:0}` **alone** trips it — no connection, no
+command, no traffic. So the trigger is the compile pass analysing the
+lambda bodies that `serve` registers as service handlers, one of which
+(`mini-redis.boru:210`) is the `h2` site. Plain check of the same program
+does not analyse them, or does not surface what it finds there.
+
+That points at the interaction between analysis of a STORED handler body
+and the statement-level `def`-then-read shape, rather than at either
+alone — consistent with both reductions above checking clean, since
+neither stored its lambda. The next experiment is a minimal
+store-a-lambda-then-analyse case; the pre-evaluation ordering documented
+in `design/FULL-COMPILATION.0.md` §6.2 (phase 1 evaluates paren groups in
+place, before later statements bind) is the obvious suspect for why a
+read of `h2` could be analysed before its `def` binds.
+
 **Discharge.** Either collapse the forks so the two passes cannot
 disagree, or — where a fork is genuinely required — prove it
 diagnostic-neutral, which is what §6.9(3) asks for. Note that fixing the
