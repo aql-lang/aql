@@ -904,6 +904,11 @@ type Program struct {
 	XmlInterps []XmlInterpSpec
 	Traps      []TrapSpec
 	Dispatches []DispatchSpec
+	// Regions backs OpCollect / OpDispatchGeneric: one entry per G-lane
+	// region, recording what the interpreter would have read off the tape
+	// (region_desc.go). Peer to Dispatches. Nil for a program with no
+	// generically-lowered dispatch.
+	Regions    []RegionDesc
 	TypedBinds []core.TypedBindSpec
 	// GlobalBinds backs OpBindGlobal: one entry per top-level computed `def`,
 	// naming the binding and the DEPTH its check-pass install recorded, so the
