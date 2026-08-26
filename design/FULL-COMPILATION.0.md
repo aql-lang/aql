@@ -1212,6 +1212,32 @@ Four changes, all conservative in the abstract-interpretation frame:
    oracle's check-error trigger is unreachable: C2 narrows to parse-error
    programs — which never reach either executor — and retires as a
    production path at Stage 8, surviving only inside the harness (§8).
+   **What a definite error implies for the code AFTER it (decided
+   2026-08-26; NUR103's second fault).** The checker already models a
+   provably-failing call as DIVERGENCE — the ReturnsFn returns an empty
+   residual, the mechanism `1 div 0` uses (`design/CHECK-ACCURACY-RATCHET.10.md`).
+   What it does not model is the consequence. An empty residual means
+   `def h2 (cur set "f" None)` binds NOTHING, so a later read of `h2` is
+   reported as an `undefined_word` — a diagnostic at a different line,
+   about a different name, than the fault. That is how NUR103's mini-redis
+   refusal came to name `h2` at `mini-redis.boru:210` when the site that
+   actually reproduces is the HDEL handler at :230.
+
+   The rule this stage adopts: **after a provably-divergent expression, the
+   rest of the region is UNREACHABLE.** Report the divergence ONCE, at its
+   site, and suppress its downstream consequences rather than re-deriving
+   them as findings about names. That is what an empty residual already
+   means — `Never` — and it is what the compiled lane will DO: the trap or
+   runtime error-builder raises, and nothing after it executes. A checker
+   that reports consequences the compiled program can never reach is
+   describing a program that does not exist.
+
+   Two things this does not license. It does not suppress the divergence
+   itself, which stays a finding at its own site. And it does not extend
+   past the region: a divergence inside one branch arm says nothing about
+   the arm beside it, which is why the unit is the region §6.2 defines and
+   not the statement.
+
 2. **Classify every checker shortcut** as `advisory-only` vs
    `sound-for-lowering` (the soundiness rule — Livshits et al., CACM 2015).
    The quota/recursion bails are widenings and must widen only to
