@@ -88,3 +88,32 @@ def n 0 if (n eq 0) [98] [] if (n eq 0) [99] [] add 1 2	98 99 3	two guards, both
 def n 0 if (n eq 0) [98] if (n eq 0) [99] add 1 2	99 3	unsilenced chain: the second guard claims the first's 98 as its else (plan-consistent stack claim, §3)
 def n 0 if (n eq 0) [99]	99	end-of-program drains a parked guard: then-branch runs
 def n 5 if (n eq 0) [99]		…and a false guard leaves nothing
+#
+# §9  the TWO stranded-forward texts, and what selects between them.
+#     Both are signature_error, so §6's ERROR:signature rows do not tell
+#     them apart — these do. `end` is the selector: stepEnd runs the same
+#     backward scan strandedForwardError does and DRAINS the parked
+#     forward, so after an `end` there is nothing left to strand and the
+#     ordinary no-match raise fires instead. Load-bearing for
+#     FULL-COMPILATION.0.md §6.2: a region descriptor is bounded by hard
+#     delimiters, so it can only carry this state if the scan cannot
+#     cross one. Pinned because Stage 4's OpCollect must reproduce the
+#     selection, not merely the raise.
+def g fn [[a:Any b:Any] [Any] [add a b]] g 1 def x 5 x	ERROR:still waiting for 1 argument	no `end`: the strict barrier strands g at `def`
+def g fn [[a:Any b:Any] [Any] [add a b]] g 1 end def x 5 x	ERROR:no signature matches	…the `end` drains the forward first, so the no-match raise fires instead
+#
+#     The scan-side half of the same invariant — that `end` DRAINS the
+#     parked forward, which is what makes those two texts exclusive — is
+#     pinned white-box in core/go/region_extent_test.go, where the tape can
+#     be built directly.
+#
+#     The remaining half (an arriving function VALUE is claimed into the
+#     parked forward's slot rather than dispatching, so execFnDefLiteral
+#     cannot park a second forward) has NO row here on purpose: the shape
+#     needs a computed closure at a word's argument slot, which the
+#     compiler still refuses — "its apply did not collapse" — until the
+#     Stage 3/4 fn-value work lands, and a spec row must satisfy both
+#     lanes. Refusing is the right answer today. Measured by hand instead:
+#     `def mk fn [[n:Integer][Function][(fn [[v:Integer][Integer][add n
+#     v]])]] end def g fn [[a:Any b:Any][Any][a]] end g 1 (mk 10) 3` gives
+#     `1 3` interpreted. Add the row when that shape compiles.

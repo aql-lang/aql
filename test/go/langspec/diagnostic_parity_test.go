@@ -37,7 +37,8 @@ import (
 // only; 0 when the two passes cannot disagree (Stage 8).
 //
 // 318 of 7568 corpus rows at the baseline, 317 of 7569 after the first row
-// was fixed, 318 of 7572 once NUR104's spec rows landed, counting FINDINGS
+// was fixed, 318 of 7572 once NUR104's spec rows landed, 319 of 7574 with
+// the Stage-4 forward-barrier pair, counting FINDINGS
 // only; a
 // further 260 rows differ on informational advisories, tracked separately
 // because some of those are pass-specific BY DESIGN (see diagSet). The shapes are structured, not
@@ -62,7 +63,21 @@ import (
 // both refuse the call. A ratchet that only ever falls would forbid adding
 // ERROR rows to the corpus, which is the wrong incentive; what it must
 // forbid is a divergence nobody accounted for. This one is accounted for.
-const diagnosticParityCeiling = 318 // 318 (2026-08-26, Stage-1 baseline) -> 317 (NUR103 record-field fix) -> 318 (+3 NUR104 spec rows, one diverging) -> 0 (Stage 8)
+//
+// 318 -> 319, same day, and accounted for the same way. The Stage-4 region
+// probe added two rows to `forward-barrier.tsv` §9 to tell the two
+// stranded-forward texts apart — both are signature_error, so every prior
+// row matched only `ERROR:signature` and NOTHING distinguished them. Of the
+// two, exactly one diverges, and it is the `end` row:
+// `def g fn [[a:Any b:Any] [Any] [add a b]] g 1 end def x 5 x` reports
+// `no_signature/g` on the plain pass and nothing on the armed one. That is
+// the documented no_signature suppression again — the single largest shape
+// in this ledger, already carrying 29 `plain=no_signature/g armed=` rows —
+// so the checker's behaviour is unchanged and the count moved only because
+// the corpus grew. Its sibling (the same program WITHOUT the `end`) does
+// not diverge: it RAISES on the check pass rather than reporting a finding,
+// and a raise is not a finding on either side.
+const diagnosticParityCeiling = 319 // 318 (2026-08-26, Stage-1 baseline) -> 317 (NUR103 record-field fix) -> 318 (+3 NUR104 spec rows, one diverging) -> 319 (+2 Stage-4 forward-barrier rows, one diverging) -> 0 (Stage 8)
 
 // armedOnlyCeiling is the sharpest of the three classes: rows the plain
 // check calls clean and the compile-armed pass finds fault with. It is the

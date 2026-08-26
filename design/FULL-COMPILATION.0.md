@@ -612,6 +612,76 @@ groups stay pre-compiled fragments (their boundaries are syntactic and
 cannot shift); what revalidation changes is only which slots a given live
 signature set claims.
 
+**Why an `end`-bounded extent is enough for the stranded-forward state —
+PROVED 2026-08-26, and it needed proving.** This section bounds a region by
+hard delimiters and then assumes the descriptor carries the state selecting
+the stranded-forward raise text. Those two claims do not obviously compose.
+`strandedForwardError` (`core/go/engine.go:6543`) selects its Forward by
+scanning BACKWARD from the pointer, stopping at an OpenParen — **`end` is
+not a stop condition**. A second Forward parked in an earlier region would
+therefore be reachable by a scan inside this one, and a region-bounded
+descriptor would not carry it. Given F2 already fired on this section's
+carried-state list, completeness here is argued, not assumed.
+
+The text selection is real, and `end` is what makes it:
+
+```
+g 1 def x 5 x       → "g is still waiting for 1 argument(s) when `def`
+                       begins its own dispatch"      (strandedForwardError)
+g 1 end def x 5 x   → "cannot call `g` — no signature matches"
+                     + "the argument was 1 (an Integer)"     (no-match raise)
+```
+
+`stepEnd` (`:6604`) runs the *identical* backward scan and REMOVES the
+Forward it finds. So nothing is left to strand once the `end` has stepped —
+but `stepEnd` removes only the NEAREST one, so this is sound only if at most
+one Forward is ever live per paren scope. It is, and the argument is short
+because the parking surface is:
+
+- `insertForward` (`:3452`) is the SOLE parking site (`:3798` only rewrites
+  an existing marker in place), and it has exactly two callers.
+- `:2786`, the bare-function-word dispatch. Guarded: both strict-barrier
+  sites (`:2253` for `/u`, `:2564` for a bare word) run
+  `commitBarrierForward` and then `strandedForwardError` BEFORE dispatch, so
+  a live forward is either committed away or raises. Neither reaches a
+  second park.
+- `:4982`, inside `execFnDefLiteral` — a function **value** forward-
+  collecting. This one is NOT gated by the bare-word barrier, and is the
+  case worth checking. It cannot fire either: for the value to reach
+  `execFnDefLiteral` the arrival loop must let it through, and with a
+  forward parked the arrival routes it into that forward's slot instead.
+  `g 1 (mk 10) 3` claims the function as `g`'s argument (`g` then fails
+  inside its own body); `g 1 h 3` meets the barrier and strands.
+
+So the backward scan provably cannot cross a region boundary. Two
+consequences Stage 4 has to honour rather than rediscover:
+
+- **The invariant is held by the strict barrier and the arrival loop
+  TOGETHER**, not by either alone. An `OpCollect` adapter that reproduced
+  the barrier but not the arrival routing would park a second forward and
+  silently change which raise text fires — a parity break with no existing
+  test to catch it.
+- **That second caller is held only by the arrival loop**, which is the one
+  collection loop with ZERO samples on both sides of the Stage 2 CPU-share
+  gate (§11, F1b). The gate's blind spot and this load-bearing path are the
+  same path, so Stage 4 work touching arrival needs purpose-built tests; no
+  benchmark in the tree exercises it.
+
+What is guarded, and what is not. The scan half — that `end` drains the
+forward, which is what makes the two texts exclusive — is pinned white-box
+in `core/go/region_extent_test.go`, and the two texts themselves are pinned
+as `lang/spec/forward-barrier.tsv` §9 (they were previously indistinguishable
+there: both are `signature_error`, and every existing row matched only
+`ERROR:signature`). The ARRIVAL half has no corpus row, and the reason is a
+Stage 4 datum in its own right: **the shape does not compile today**.
+`g 1 (mk 10) 3` refuses with *computed closure at a word's argument slot (its
+apply did not collapse)* — it is a §9-family fn-value refusal — so it cannot
+be a spec row, which must satisfy both lanes. It is measured by hand (`1 3`
+interpreted) and becomes a row when Stage 3's fn values make it compile.
+That the invariant Stage 4's descriptor rests on is currently witnessed only
+by a shape Stage 3 has yet to close is worth carrying forward rather than
+forgetting.
+
 **The shared-vs-divergent map — Stage 2's actual worklist.** The three
 loops are not merged; each decision they share is given one home, and each
 difference is classified as intentional or as drift. The probe mapped
