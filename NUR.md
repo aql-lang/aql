@@ -3601,14 +3601,24 @@ lambda bodies that `serve` registers as service handlers, one of which
 (`mini-redis.boru:210`) is the `h2` site. Plain check of the same program
 does not analyse them, or does not surface what it finds there.
 
-That points at the interaction between analysis of a STORED handler body
-and the statement-level `def`-then-read shape, rather than at either
-alone — consistent with both reductions above checking clean, since
-neither stored its lambda. The next experiment is a minimal
-store-a-lambda-then-analyse case; the pre-evaluation ordering documented
-in `design/FULL-COMPILATION.0.md` §6.2 (phase 1 evaluates paren groups in
-place, before later statements bind) is the obvious suspect for why a
-read of `h2` could be analysed before its `def` binds.
+That points at the analysis of a STORED handler body rather than at the
+`def`-then-read shape alone. **The store-a-lambda experiment was run and
+also checks clean**: a `service` with one `add`-registered handler whose
+body carries the identical shape — a map read, an `if`-defaulted binding,
+then `def h2 (hh set "f" 1) (hashes set "k" h2) drop 1` — compiles
+without complaint. So handler storage plus the shape is still not
+sufficient.
+
+Four reductions have now failed to reproduce, while `MiniRedis.serve`
+alone reproduces every time. What remains different about the real one:
+it registers **fourteen** handlers in a single chained statement, several
+sharing binding names across sibling lambdas, and the `h2` site reads
+`(f)` and `(k)` — paren-wrapped bare names — where the reductions used
+literals. Any of those could be the multiplier. The phase-1
+pre-evaluation ordering (`design/FULL-COMPILATION.0.md` §6.2: paren
+groups evaluate in place before later statements bind) remains the
+suspect for how a read could be analysed before its `def` binds, but it
+is not yet demonstrated.
 
 **Discharge.** Either collapse the forks so the two passes cannot
 disagree, or — where a fork is genuinely required — prove it
