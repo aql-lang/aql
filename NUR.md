@@ -3573,14 +3573,25 @@ not compile at all, and this diagnostic is the sole reason. A user cannot
 diagnose it either, because the tool they would reach for — `boru check`
 — reports the program clean.
 
-**Mechanism (to confirm).** `design/FULL-COMPILATION.0.md` §6.9(3) already
+**Mechanism (not yet isolated).** `design/FULL-COMPILATION.0.md` §6.9(3)
 names the shape: numerous analysis models fork on `!Compiling` — static-if
 reduction, loop spread, closure surfacing, and the emission of
 `no_signature` itself. One of those forks is presumably reached here, and
-the compile-armed path loses a binding the plain path keeps. The exact
-fork is NOT yet isolated: two reductions of the surface shape (`def` and
-use in one statement; the same inside a one-param lambda) both check
-clean under compilation, so the trigger is narrower than it looks.
+the compile-armed path surfaces a diagnostic the plain path does not.
+
+Hypotheses tested and REJECTED, recorded so they are not re-explored:
+
+- *The fn-analysis quota fork.* `check/go/carrier.go:2757` skips the
+  quota short-circuit while `Compiling`, on the stated grounds that the
+  compiler must see real body events rather than a fabricated
+  `declaredReturnBail`. That would make the compile pass analyse bodies
+  plain check skips — an exact fit for the symptom. **Ruled out:** the
+  bail emits an `analysis_truncated` diagnostic at quota+1, and the plain
+  check of this program reports no such diagnostic, so the quota is never
+  reached.
+- *A general "def and use in one statement" defect.* Two reductions —
+  at top level, and inside a one-parameter lambda — both check clean
+  under compilation. The trigger is narrower than the surface shape.
 
 **Discharge.** Either collapse the forks so the two passes cannot
 disagree, or — where a fork is genuinely required — prove it
