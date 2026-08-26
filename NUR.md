@@ -3649,6 +3649,26 @@ The remaining question is why a field read against a record-typed carrier
 yields a Word with an empty Name on the compile path and not on the plain
 one.
 
+**Two code leads, for whoever takes it further.**
+
+`recordSchemaCarrier` (`check/go/check_fnmodel.go:50`) builds the
+body-analysis carrier for a record-shaped param. Its own comment records
+a PAST defect of this exact family: a struct-literal carrier left with the
+zero ID made every record-typed param collapse onto the SAME frame slot
+(id `""`), miscompiling a fn that read two record params. The fix was to
+mint an ID explicitly. That this path has already produced one
+empty-identifier bug makes it worth checking whether an analogous
+identifier is left empty on the READ side.
+
+`nur068ReturnCarrier` (`check/go/check_fnmodel.go:134`) sits a few lines
+away and is a documented `!Compiling` fork: plain check surfaces the
+residual's record schema, while the compile pass deliberately keeps the
+declared carrier "so the recorded call results and the RET contract are
+untouched". That fork is argued and plausibly correct. It is also the
+same CLASS `design/FULL-COMPILATION.0.md` §6.9(3) requires be collapsed
+or proven diagnostic-neutral; it has not been proven neutral, and this
+record is evidence that something in its neighbourhood is not.
+
 Whether this shares a root cause with the `h2` site in mini-redis is
 unknown; both are armed-only `undefined_word`, but the shapes differ
 (record-param dot access here, a `def`-then-read inside a stored handler
