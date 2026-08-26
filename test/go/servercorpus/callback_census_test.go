@@ -21,6 +21,9 @@
 package servercorpus
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -137,4 +140,105 @@ func renderResult(vals []any) string {
 		parts[i] = "?"
 	}
 	return strings.Join(parts, "")
+}
+
+// miniRedisProgram drives the mini-redis app — case 2 of the corpus. Where
+// echo exercises ONE callback, this exercises a protocol server: the wire
+// codec is a pair of boru functions (decode / encode) the Go connection
+// loop invokes per message, sitting under a patrun-routed command table
+// and over a per-connection handler. If the callback path re-enters the
+// interpreter anywhere beyond the simplest shape, this is where it shows.
+const miniRedisProgram = `
+import "boru:net"
+import "%s"
+def ln (MiniRedis.serve {port:0})
+def port ((Net.addr ln).port)
+def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String port)]))
+MiniRedis.cmd ep "SET k hello" drop
+MiniRedis.cmd ep "GET k"
+`
+
+// redisEntryCeiling is the unattributed-entry count for the protocol-server
+// case. Monotone DOWN only; 0 at Stage 9. Measured, not chosen.
+//
+// 51 today because the program does not compile AT ALL: it refuses on the
+// check-diagnostics sentinel with `undefined_word: h2`
+// (design/examples/apps/mini-redis.boru:210), where a name bound earlier in
+// the same statement is read inside a lambda body registered as a service
+// handler. The interpreter binds and resolves it; the checker does not see
+// the binding. Two smaller reductions of the shape did NOT reproduce, so
+// the trigger is narrower than "def and use in one statement" and is not
+// yet isolated.
+//
+// This is frontier family E — the sentinel section 6.9 deletes at Stage 8 —
+// and it is the whole reason a realistic protocol server refuses while the
+// plain echo server compiles to zero.
+const redisEntryCeiling = 51 // 51 (2026-08-25, refuses on check diagnostics) -> 0 (Stage 8/9)
+
+func TestMiniRedisCallbackCensus(t *testing.T) {
+	app, err := filepath.Abs(filepath.Join("..", "..", "..", "design", "examples", "apps", "mini-redis.boru"))
+	if err != nil {
+		t.Fatalf("resolve mini-redis: %v", err)
+	}
+	if _, err := os.Stat(app); err != nil {
+		t.Skipf("mini-redis app not present: %v", err)
+	}
+	program := fmt.Sprintf(miniRedisProgram, app)
+
+	var (
+		mu      sync.Mutex
+		entries []lang.InterpEntry
+	)
+	ac, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	disarm := ac.ArmInterpEntryHook(func(e lang.InterpEntry) {
+		mu.Lock()
+		defer mu.Unlock()
+		entries = append(entries, e)
+	})
+	gotC, wasCompiled, errC := ac.RunCompiled(program)
+	disarm()
+	if errC != nil {
+		t.Fatalf("compiled run: %v", errC)
+	}
+
+	ai, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	gotI, errI := ai.RunInterp(program)
+	if errI != nil {
+		t.Fatalf("interpreted run: %v", errI)
+	}
+
+	if renderResult(gotC) != renderResult(gotI) {
+		t.Errorf("mini-redis transcript diverged:\n  compiled    = %q\n  interpreted = %q",
+			renderResult(gotC), renderResult(gotI))
+	}
+	if got := renderResult(gotI); !strings.Contains(got, "hello") {
+		t.Errorf("GET did not round-trip: interpreted result %q, want it to contain %q", got, "hello")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	bySeam := map[string]int{}
+	runs := 0
+	for _, e := range entries {
+		if e.Attribution != "" {
+			continue
+		}
+		bySeam[e.Seam]++
+		if e.Seam == "Engine.Run" {
+			runs++
+		}
+	}
+	t.Logf("mini-redis callback census: compiled=%v, %d unattributed interpreter runs (routes: %v)",
+		wasCompiled, runs, bySeam)
+
+	if runs > redisEntryCeiling {
+		t.Errorf("mini-redis callback census %d exceeds ceiling %d — the protocol callbacks re-entered the interpreter: %v",
+			runs, redisEntryCeiling, bySeam)
+	}
 }

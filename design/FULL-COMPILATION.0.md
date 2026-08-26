@@ -1504,9 +1504,31 @@ concurrency shape:
    ceiling rather than ratcheting toward one, which answers the plain
    form of "does a callback server compile completely?" with yes. The
    cases below are the shapes that answer is not yet known for.
-2. **Protocol framing / codec re-entry** — mini-redis (exists); extend
-   with partial frames (the codec's `{need:1}` path re-entered
-   mid-message) and pipelined commands.
+2. **Protocol framing / codec re-entry** — mini-redis. **Built and
+   measured 2026-08-25** (`test/go/servercorpus`), and the result is the
+   sharpest evidence in this note: the app **does not compile at all**,
+   and runs 51 unattributed interpreter runs. The reason is a single
+   check diagnostic — `undefined_word: h2` at
+   `design/examples/apps/mini-redis.boru:210`, where a name bound earlier
+   in the same statement is read inside a lambda body registered as a
+   service handler. The interpreter binds and resolves it; the checker
+   does not see the binding, and the whole-program sentinel converts that
+   into a refusal.
+
+   So the gap between "a callback server compiles" and "a realistic
+   callback server compiles" is not, in this instance, any of the
+   higher-order machinery this note spends its length on. It is frontier
+   family E — one checker limitation, tripping the sentinel §6.9(1)
+   deletes. Echo compiles to zero because it never trips it. That is an
+   argument for sequencing Stage 8 earlier than its position in §10
+   suggests: it is cheap relative to the spine and it is what stands
+   between a real server and the compiled lane today. (Two smaller
+   reductions of the `h2` shape did not reproduce, so the trigger is
+   narrower than "def and use in one statement" and wants isolating
+   before it is fixed.)
+
+   Extend the case with partial frames (the codec's `{need:1}` path
+   re-entered mid-message) and pipelined commands once it compiles.
 3. **Concurrent connections** — N simultaneous clients, handlers on
    multiple goroutines: the one-registry-per-goroutine rule under load;
    the O6 design item's test bed.
