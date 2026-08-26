@@ -676,6 +676,39 @@ Ceilings are untouched. Worth recording because §11's F1b re-specified this
 gate onto the alloc guard precisely for being exact, and it is exact at the
 scale that matters — a per-dispatch regression — not at ±1.
 
+**Re-seat 3 of 3 landed (2026-08-26), and it corrects this section.**
+`stepLiteral` is NOT a collection loop end to end, which is what "the
+arrival loop in `stepLiteral`" above implied. It is four things in
+sequence: form expansion; a standalone-value path (splices, dispatch
+modifiers, shaped-method dispatch, the recorder push); the arrival MATCH
+decision; and commit-and-maybe-dispatch bookkeeping. Only the third is
+collection.
+
+Re-seating the whole of it was measured and rejected: it would have needed
+some SEVENTEEN further host methods — `recorder`, `trace`, `inFnFrame`,
+`sealFnValue`, `rearrangeForForward`, `pendingForwardIdx`, `stepSugar`,
+`forceStackWord`, `fnValueWouldWiden` and the rest. An interface that wide
+is not a seam; it is the Engine wearing a different name, and the whole
+point of the seam is that a SECOND implementation can satisfy it from
+different material. So the extraction takes the decision and leaves the
+dispatches: `collectArrival` returns a VERDICT — collect, dispatch this
+0-arg reach-read fn, close the window at this barrier, or implicit-end —
+and the host performs whichever dispatch it names. It needed ZERO new host
+methods.
+
+The two in-place window edits it does own are exactly the ones a match
+verdict depends on (the `/q` Word→Atom conversion and the `/v` marker
+consumption), and the host re-reads the window afterwards to see them. The
+one addition to `collectWindow` is `Remove`, because a deletion should not
+have to be spelt as a degenerate splice.
+
+The generalisable rule, and the reason this is a correction rather than a
+shortcut: **the collection kernel decides, the host dispatches.** A loop
+that both classifies and enters functions is two responsibilities, and the
+seam is the line between them. Stage 4's adapter inherits that line for
+free — it implements four verdict responses, not seventeen engine
+internals.
+
 The host methods are deliberately UNEXPORTED. Nothing outside core can
 implement this yet — `cover-gate-core` would make any adapter-only arm dead
 code — so exporting now would put an unused public API on `*Engine`. Stage

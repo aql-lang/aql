@@ -3687,80 +3687,21 @@ func (e *Engine) stepLiteral() error {
 	// Once matchSignature has chosen a signature, args are collected in
 	// order — no permutation or sig switching is permitted.
 	//
-	// When a /q-marked TAtom slot accepts a Word, convert the Word to
-	// an Atom in place so the eventual handler sees a uniform Atom
-	// value rather than having to polymorphically extract a name from
-	// either shape.
-	if fwd.CollectedArgs < fwd.ExpectedArgs {
-		val := e.Tape.At(valIdx)
-		nextIdx := fwd.CollectedArgs
-		matches := SigArgMatches(fwd.Sig, nextIdx, val)
-		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
-			val.Parent.Equal(TWord) && TAtom.ConformsTo(SigArgType(fwd.Sig, nextIdx)) {
-			w, _ := AsWord(val)
-			atom := NewAtom(w.Name)
-			atom.pos = val.pos // preserve source position across /q Word→Atom conversion
-			e.Tape.Set(valIdx, atom)
-			matches = true
+	// Does the arriving value fill the pending slot? The decision runs on
+	// the collection kernel (collect_kernel.go); the three non-collect
+	// verdicts are DISPATCHES, and dispatching stays here with the host.
+	// The kernel's own in-place edits — the /q Word→Atom conversion, the
+	// `/v` marker consumption — are read back off the tape below.
+	switch collectArrival(e, fwd, valIdx) {
+	case arrivalDispatchFn:
+		return e.execFnDefLiteral(valIdx)
+	case arrivalBarrierClose:
+		if e.commitBarrierForward() {
+			return nil
 		}
-		// A named function that a REACH-LOWERED group collapsed to (the
-		// transient ReachGroup tag) and that WOULD COLLECT from the
-		// tokens after it is a CALL, not data — the value twin of the
-		// fn-word collection barrier (NUR038). A bare fn word in the
-		// window stops collection; the SAME function reached through a
-		// dot-access (`5 m.p m.p 7`, `IO.printstr "A" IO.printstr "B"` —
-		// the second callee resolving mid-collection with ITS argument
-		// right after it) must stop it too, or the open window swallows
-		// the next statement whole. The call-vs-data decision mirrors
-		// execFnDefLiteral's own: a reach-read fn with NOTHING to claim
-		// stays data (`typeof IO.stdin`, `def sqrt MathUtil.sqrt` — the
-		// pinned reference idioms). A slot that SPECIFICALLY expects a
-		// Function always admits (the designed reference intercept,
-		// e.g. `each`); explicit data intent spells `/v` — either
-		// already Quoted, or the group's trailing Word/__DM marker
-		// consumed here exactly as execFnDefLiteral's peek does
-		// (`def g M.w/v`: the fn arrives mid-collection before that
-		// peek can run); user-written reference expressions ((inc/v),
-		// (usurp sub2)) carry no tag.
-		if matches && val.ReachGroup && !val.Quoted &&
-			!SigArgType(fwd.Sig, nextIdx).ConformsTo(TFunction) {
-			marked := false
-			if valIdx+1 < e.Tape.Len() {
-				if _, ok := AsDispatchMod(e.Tape.At(valIdx + 1)); ok {
-					e.Tape.Remove(valIdx + 1)
-					val.Quoted = true
-					e.Tape.Set(valIdx, val)
-					marked = true
-				}
-			}
-			switch {
-			case marked:
-				// `/v` data intent — collected below as the reference.
-			case fnValueHasZeroArgSig(val):
-				// A 0-arg overload makes the dot-read a PROPERTY call
-				// (`typeof IO.stdin` → the stream, `def g Parse.grammar`
-				// → the grammar): dispatch it in place — it consumes
-				// nothing, so no cross-statement swallow is possible —
-				// and its RESULT arrives at this still-pending window.
-				return e.execFnDefLiteral(valIdx)
-			case e.reachFnWouldClaim(val, valIdx+1):
-				// The dot-read fn is the NEXT dispatch — commit the
-				// pending forward with the args it already claimed (the
-				// same dispatch an explicit `end` would trigger; the
-				// else-less guard fires: `if (bad) [raise …] M.log x`),
-				// or resolve it from the stack when no smaller-arity
-				// overload can fire. Either way the window closes HERE
-				// and the fn re-steps as its own statement.
-				if e.commitBarrierForward() {
-					return nil
-				}
-				return e.implicitEnd(fwdIdx)
-			}
-		}
-		if !matches {
-			// Type mismatch — implicit end: resolve forward from stack.
-			return e.implicitEnd(fwdIdx)
-		}
+		return e.implicitEnd(fwdIdx)
+	case arrivalImplicitEnd:
+		return e.implicitEnd(fwdIdx)
 	}
 
 	// Remove the value from its current position.

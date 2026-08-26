@@ -63,6 +63,11 @@ type collectWindow interface {
 	Set(i int, v Value)
 	// Splice replaces count tokens at i with repl, changing the length.
 	Splice(i, count int, repl ...Value)
+	// Remove drops the token at i. Splice(i, 1) says the same thing; the
+	// dedicated method is what the arrival decision actually reaches for,
+	// and the window is not the place to make a caller spell a deletion as
+	// a degenerate splice.
+	Remove(i int)
 }
 
 // collectHost is the evaluator half of the seam: what a collection walk
@@ -770,4 +775,117 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 		break
 	}
 	return fwd, specAt
+}
+
+// arrivalVerdict is what the ARRIVAL decision concludes about a value that
+// has reached the pointer with a forward collection pending. It is a
+// verdict and not an action on purpose: the three non-collect outcomes are
+// DISPATCHES — entering a function, committing a parked forward, resolving
+// one from the stack — and dispatching is the host's job, not the
+// collection kernel's. Keeping the boundary there is what stopped this
+// re-seat from dragging the recorder, the tracer, the fn-frame probe and
+// the fn-value sealer through the seam with it: an interface wide enough to
+// carry those would be the Engine wearing a different name, and the second
+// implementation could not satisfy it from its own material.
+type arrivalVerdict int
+
+const (
+	// arrivalCollect — the value fills the pending slot. The host commits
+	// it into the window and advances the collection counters.
+	arrivalCollect arrivalVerdict = iota
+	// arrivalDispatchFn — the value is a reach-read fn with a 0-arg
+	// overload, so the dot-read is a PROPERTY call. The host dispatches it
+	// in place; it consumes nothing, so no cross-statement swallow is
+	// possible, and its RESULT arrives at this still-pending window.
+	arrivalDispatchFn
+	// arrivalBarrierClose — the value is a reach-read fn that WOULD CLAIM
+	// the tokens after it, so it is the NEXT dispatch (NUR038, the value
+	// twin of the fn-word collection barrier). The host commits the parked
+	// forward with what it already holds, or resolves it from the stack
+	// when no smaller-arity overload can fire; either way the window closes
+	// here and the fn re-steps as its own statement.
+	arrivalBarrierClose
+	// arrivalImplicitEnd — the value does not match the slot. The host
+	// resolves the forward from the stack.
+	arrivalImplicitEnd
+)
+
+// collectArrival is the ARRIVAL decision, seated on the seam: once per value
+// reaching the pointer with a collection pending, does this value fill the
+// next slot?
+//
+// It is the third of the three collection loops, and the one whose shape the
+// design had wrong. `stepLiteral` is not a collection loop end to end — it
+// is form expansion, then a standalone-value path (splices, dispatch
+// modifiers, shaped-method dispatch, the recorder push), then this decision,
+// then the commit-and-maybe-dispatch bookkeeping. Only the decision is
+// collection. Re-seating the whole of it would have needed some seventeen
+// further host methods — e.recorder, e.trace, e.inFnFrame, e.sealFnValue,
+// e.rearrangeForForward, e.pendingForwardIdx and the rest — which is not a
+// seam but an Engine with extra steps.
+//
+// So the extraction takes the decision and leaves the dispatches: the two
+// in-place window mutations it DOES own (the /q Word→Atom conversion and
+// the `/v` marker consumption) are exactly the ones a match verdict depends
+// on, and the host re-reads the window afterwards to see them.
+func collectArrival(h collectHost, fwd ForwardInfo, valIdx int) arrivalVerdict {
+	if fwd.CollectedArgs >= fwd.ExpectedArgs {
+		return arrivalCollect
+	}
+	win := h.collectWindow()
+	val := win.At(valIdx)
+	nextIdx := fwd.CollectedArgs
+	matches := SigArgMatches(fwd.Sig, nextIdx, val)
+	// A /q-marked TAtom slot accepts a Word: convert it in place so the
+	// eventual handler sees a uniform Atom rather than having to extract a
+	// name from either shape.
+	if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
+		val.Parent.Equal(TWord) && TAtom.ConformsTo(SigArgType(fwd.Sig, nextIdx)) {
+		w, _ := AsWord(val)
+		atom := NewAtom(w.Name)
+		atom.pos = val.pos // preserve source position across /q Word→Atom conversion
+		win.Set(valIdx, atom)
+		matches = true
+	}
+	// A named function that a REACH-LOWERED group collapsed to (the
+	// transient ReachGroup tag) and that WOULD COLLECT from the tokens after
+	// it is a CALL, not data — the value twin of the fn-word collection
+	// barrier (NUR038). A bare fn word in the window stops collection; the
+	// SAME function reached through a dot-access (`5 m.p m.p 7`,
+	// `IO.printstr "A" IO.printstr "B"` — the second callee resolving
+	// mid-collection with ITS argument right after it) must stop it too, or
+	// the open window swallows the next statement whole. The call-vs-data
+	// decision mirrors execFnDefLiteral's own: a reach-read fn with NOTHING
+	// to claim stays data (`typeof IO.stdin`, `def sqrt MathUtil.sqrt` — the
+	// pinned reference idioms). A slot that SPECIFICALLY expects a Function
+	// always admits (the designed reference intercept, e.g. `each`);
+	// explicit data intent spells `/v` — either already Quoted, or the
+	// group's trailing Word/__DM marker consumed here exactly as
+	// execFnDefLiteral's peek does (`def g M.w/v`: the fn arrives
+	// mid-collection before that peek can run); user-written reference
+	// expressions ((inc/v), (usurp sub2)) carry no tag.
+	if matches && val.ReachGroup && !val.Quoted &&
+		!SigArgType(fwd.Sig, nextIdx).ConformsTo(TFunction) {
+		marked := false
+		if valIdx+1 < win.Len() {
+			if _, ok := AsDispatchMod(win.At(valIdx + 1)); ok {
+				win.Remove(valIdx + 1)
+				val.Quoted = true
+				win.Set(valIdx, val)
+				marked = true
+			}
+		}
+		switch {
+		case marked:
+			// `/v` data intent — collected as the reference.
+		case fnValueHasZeroArgSig(val):
+			return arrivalDispatchFn
+		case h.reachFnWouldClaim(val, valIdx+1):
+			return arrivalBarrierClose
+		}
+	}
+	if !matches {
+		return arrivalImplicitEnd
+	}
+	return arrivalCollect
 }
