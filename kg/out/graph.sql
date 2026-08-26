@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '1502330315638475197');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '620477527613768952');
 INSERT INTO input_files VALUES ('../AGENTS.md', '5746437182943957856', 12139);
 INSERT INTO input_files VALUES ('../CLI.md', '3434391071839442713', 83578);
 INSERT INTO input_files VALUES ('../README.md', '6312173284019959426', 13333);
@@ -40,7 +40,7 @@ INSERT INTO input_files VALUES ('../design/DIAGNOSTIC-VALUES.0.md', '40506076665
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
 INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '5680123931664569575', 11346);
 INSERT INTO input_files VALUES ('../design/FN-VALUE-OPEN-WORK.0.md', '7570822714448974016', 32328);
-INSERT INTO input_files VALUES ('../design/FULL-COMPILATION.0.md', '3506240045432444944', 128463);
+INSERT INTO input_files VALUES ('../design/FULL-COMPILATION.0.md', '439064635491115212', 130501);
 INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '4913722754517353679', 65012);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
 INSERT INTO input_files VALUES ('../design/GO-TS-PARITY.0.md', '3044536311677551962', 23460);
@@ -48,6 +48,7 @@ INSERT INTO input_files VALUES ('../design/HIGHER-ORDER-FUNCTIONS.0.md', '665965
 INSERT INTO input_files VALUES ('../design/HOT-CODE-LOADING.0.md', '27384681369847472', 19039);
 INSERT INTO input_files VALUES ('../design/LANG-ENG-CONTENT-AUDIT.0.md', '9151136880658015899', 42992);
 INSERT INTO input_files VALUES ('../design/MODULE-VIEWS.0.md', '570466612363092696', 22324);
+INSERT INTO input_files VALUES ('../design/O1-RELITIGATION.0.md', '4223834445488588616', 9650);
 INSERT INTO input_files VALUES ('../design/RELOAD-INVALIDATION.0.md', '2757752285559380360', 21723);
 INSERT INTO input_files VALUES ('../design/ROOT-MODULE-FEASIBILITY.0.md', '6235317352461048001', 6313);
 INSERT INTO input_files VALUES ('../design/STATE-MACHINES.0.md', '7873846898373868814', 88994);
@@ -66,7 +67,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '3903893308060620019', 558);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '5815377652926130210', 61981);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '7600662120504989503', 64582);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -213,6 +214,9 @@ INSERT INTO sources VALUES ('src:hot-code-loading', 'text', 'design/HOT-CODE-LOA
 INSERT INTO sources VALUES ('src:module-views', 'text', 'design/MODULE-VIEWS.0.md', 'module-provided views and widgets proposal', NULL, 'module-views-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
+INSERT INTO sources VALUES ('src:o1-relitigation', 'text', 'design/O1-RELITIGATION.0.md', 'O1: re-litigating the NUR101 / NUR078 rulings', NULL, 'o1-relitigation-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
 INSERT INTO sources VALUES ('src:readme', 'text', 'README.md', 'boru README', NULL, 'readme-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -254,6 +258,8 @@ INSERT INTO entities VALUES ('ent:Document:1913611373576952100', 'Document', 'de
 INSERT INTO entity_attributes VALUES ('ent:Document:1913611373576952100', 'role', 'the design RFC for general-purpose state machines: a mixed Go+boru boru:state module (definition/bindings/snapshot split, pure step, thirteen-item semantic freeze, in-definition input classification via classes:/classify:, state_* check diagnostics, service and process hosts) and the argued decision to add words, not syntax — revised against Noble''s Forth FSM paper for the tabular lineage the statechart survey had missed');
 INSERT INTO entities VALUES ('ent:Document:203047846460430642', 'Document', 'design/DECLARATIVE-GRAMMAR.0.md', 'design/declarative-grammar.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:203047846460430642', 'role', 'the shared declarative tabnas grammar artifact (parser/go/grammar.json): contract, loader pair, and the batch-migration state');
+INSERT INTO entities VALUES ('ent:Document:2101452453024924878', 'Document', 'design/O1-RELITIGATION.0.md', 'design/o1-relitigation.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:2101452453024924878', 'role', 'the re-litigation brief for FULL-COMPILATION open question O1, which blocks Stage 3: both rulings Stage 3 depends on are re-measured rather than re-argued, and both records turn out to be out of date. The finding that actually blocks implementation is that NUR.md holds TWO entries titled NUR101, both Status Pending, both claiming the anchor #nur101, ruling the OPPOSITE way on the same program — line 243 holds the compiled lane correct and the interpreter in need of fixing, line 439 states the compiled lane is the defect — with line 243 recording that line 439''s reading was reverted while the superseded record was never deleted, so O1 cannot be implemented as ruled because the register does not record one ruling, and the duplicate anchor makes every #nur101 link resolve to the first. Re-measurement then narrows the question twice: NUR101''s top-level half is ALREADY FIXED (all five placement cases place, including the two the record calls defective — (mk 1) 2 answers fn (Integer) 2 where the record says 3), so what remains is not about list literals at all but the single question of whether a COMPUTED function applied inside an enclosing group places or dispatches ((mk 1) 2 places, ((mk 1) 2) dispatches, and the list literal merely inherits it), with ADR-011''s carve-out for a bare WORD inside a group neither clearly covering nor excluding a computed group result — which is how two records read it two ways; and NUR078''s divergence is confirmed live (h zero answers 42 through the struck TFunction intercept while hany zero is a barrier error, so the slot type decides) but its prescribed replacement names /r, a modifier ADR-011 collapsed into /v, so the ruling as literally written removes the only working path and directs users to one that does not exist. Three rulings are needed to unblock Stage 3: delete one NUR101 entry, decide place-vs-dispatch-vs-context-dependent for the enclosing-group case, and decide implement-as-amended-respelled-to-/v vs reverse-the-amendment for NUR078 — the latter given no recommendation, since the tree pins the exception as designed behaviour in path-modifier.tsv:67 while the register records it as struck');
 INSERT INTO entities VALUES ('ent:Document:2168448879393025844', 'Document', 'design/BORU-VIZ.0.md', 'design/boru-viz.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:2168448879393025844', 'role', 'the boru:viz proposal: pure diagram-source generation (Mermaid + DOT, D2 later) from arbitrary data structures — code generation only, written in boru, with the shared graph/tree/trace/schema contract its §3 pins for boru:scry and every other producer');
 INSERT INTO entities VALUES ('ent:Document:2308799538575712501', 'Document', 'design/CORE-TS-DIVERGENCES.1.md', 'design/core-ts-divergences.1.md', 'accepted');

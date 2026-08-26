@@ -1,0 +1,213 @@
+# O1 — re-litigating the NUR101 / NUR078 rulings
+
+**Status:** awaiting a maintainer ruling. Nothing here is implemented, and
+nothing should be until the rulings below are settled.
+
+`design/FULL-COMPILATION.0.md` §11 O1 makes Stage 3 depend on interpreter
+changes to *ruled-but-unimplemented* semantics: if the rulings are
+re-litigated, the affected rows have no oracle and Stage 3 stalls. This note
+re-opens them as directed, and it does so by **re-measuring first**. That
+turned out to matter: both records are, in different ways, out of date, and
+one of the two questions is materially narrower than it looks.
+
+Measured 2026-08-26 against `df0edb5`, interpreted lane
+(`-no-check -no-compile`) unless stated.
+
+---
+
+## 1. NUR101 — the register holds two contradictory rulings
+
+**Before anything else: `NUR.md` contains two entries titled NUR101, both
+`Status: Pending`, both claiming the anchor `{#nur101}`, and they rule the
+OPPOSITE WAY on the same program.**
+
+| | line 243 | line 439 |
+|---|---|---|
+| Title | BROAD places a REFERENCED fn but still dispatches a COMPUTED one | a paren-computed fn inside a list literal is applied interpreted, baked compiled |
+| Verdict on `[((mk 1) 2)]` | compiled `[fn (Integer) 2]` is **correct**; fix the interpreter | "**The compiled lane is the defect**" |
+| Says about the other reading | "This record's first version had it exactly backwards — it named the compiled lane defective and a refusal gate was written against that reading. Both were reverted." | — |
+
+Line 243 is the maintainer's correction; line 439 is the reading it
+describes as reverted. The correction was written, the superseded record was
+not removed, and both now sit in the file under one ID. A duplicate anchor
+also means every `#nur101` link in the tree resolves to the first and the
+second is unreachable.
+
+**This is the actual blocker.** O1 cannot be "implemented as ruled" because
+the register does not record one ruling. Whatever is decided below, one of
+these two entries has to be deleted — and per the register's own discipline
+(Resolved records are DELETED, numbers never reused) the superseded one goes
+rather than being annotated.
+
+### 1.1 The top-level half is already fixed
+
+Line 243's transcript is stale. Every one of its five placement cases now
+places:
+
+```
+(fn b:Integer Integer [add 10 b]) 7   -> fn (Integer) 7        record: ✓ places
+(inc/v) 2                             -> fn inc(Integer) 2     record: ✓ places
+(valof inc) 2                         -> fn inc(Integer) 2     record: ✓ places
+(mk 1) 2                              -> fn (Integer) 2        record says: 3  ← now places
+(if true [inc/v] [inc/v]) 2           -> fn inc(Integer) 2     record says: 3  ← now places
+```
+
+The two cases the record calls defective are the two it was written about,
+and they behave as the record's own verdict asks. Something between
+2026-08-25 and now closed them; the record was never re-measured. Its
+guard also still holds — `def h (mk 1) end  h 2` → `3`, a bare name bound to
+a function still calls by rule.
+
+### 1.2 What is actually left
+
+Narrower, and sharper than either record states. Placement depends on
+whether the application sits inside an enclosing group:
+
+```
+(mk 1) 2         -> fn (Integer) 2     places
+((mk 1) 2)       -> 3                  dispatches   ← the whole remaining question
+```
+
+The list literal inherits exactly this, because its contents evaluate as a
+sub-program in which the inner form *is* `((mk 1) 2)`:
+
+```
+[((mk 1) 2)]     interpreted [3]   compiled [fn (Integer) 2]     diverges, silently
+{k:((mk 1) 2)}   interpreted {k:3} compiled {k:3}                agrees (compiled falls back)
+```
+
+So there is **one** open question, not two, and it is not really about list
+literals:
+
+> Does a COMPUTED function value applied inside an enclosing group PLACE, or
+> DISPATCH?
+
+ADR-011's carve-out — *"a bare WORD inside a group, which dispatches during
+the group's own evaluation"* — is about a bare word. `(mk 1)` is not a bare
+word; it is a computed group result. The carve-out neither clearly covers
+this nor clearly excludes it, which is why the two records could each read
+it their own way.
+
+### 1.3 The two rulings available
+
+**(a) Place — extend BROAD uniformly.** `((mk 1) 2)` becomes `fn (Integer)
+2`, matching its unwrapped twin, and `[((mk 1) 2)]` becomes
+`[fn (Integer) 2]` on both lanes. One rule, no enclosing-context exception.
+
+- Costs: `((mk 1) 2)` → `3` transcripts in `HIGHER-ORDER-FUNCTIONS.0.md`
+  §5.4 need re-spelling, as every §1 program did when BROAD's first half
+  landed. Any user code applying a computed fn inside parens changes answer
+  silently — no error, just a different value.
+- Gains: the divergence closes with no compiler change, the compiled lane is
+  already there, and Stage 3 gets a rule with no context-sensitivity to
+  model.
+
+**(b) Dispatch — the carve-out extends to computed results.** `(mk 1) 2`
+would have to *also* dispatch for consistency, reverting the top-level fix
+in §1.1 above.
+
+- Costs: reopens what §1.1 shows is already closed, and re-introduces the
+  inline-application idiom BROAD was adopted to remove. The compiled lane
+  then needs a change it does not need today.
+- Gains: existing §5.4 transcripts stand; no user-visible answer changes.
+
+**(c) Enclosing context is load-bearing — keep both.** `(mk 1) 2` places,
+`((mk 1) 2)` dispatches, as today, and the COMPILED lane is fixed to match
+the interpreter inside list literals.
+
+- Costs: the rule becomes "places, except inside a group", which Stage 4's
+  descriptor must then carry as state; §9d's whole difficulty is precisely
+  this kind of context-dependence. It also makes line 439 the correct record
+  and line 243's correction the wrong one.
+- Gains: nothing in the existing corpus moves.
+
+**Recommendation: (a).** It is the only one of the three that leaves a rule
+with no context exception, it is what the compiled lane already does, and
+§1.1 shows the tree has been moving toward it. But (a) changes answers
+silently in user code, which is the maintainer's call and not mine.
+
+---
+
+## 2. NUR078 — the ruling names a modifier the language no longer has
+
+The divergence is real and still live:
+
+```
+def zero fn [[][Integer][7]] end
+def h    fn [[f:Function][Integer][42]] end
+def hany fn [[f:Any][Integer][43]] end
+
+h zero      -> 42                    the struck exception: bare name resolves as a REFERENCE
+hany zero   -> signature_error       …the same bare name before an Any slot is a call/barrier
+```
+
+The slot type decides, which is exactly what the 2026-08-17 amendment
+rejects. That much of the record holds.
+
+**What does not hold is its prescribed replacement.** The record says
+*"passing a function as an argument requires `/r`"*, and repeats `/r`
+throughout. `/r` is not a modifier in this language:
+
+```
+h zero/r        -> signature_error        ← the ruling's own spelling fails
+h zero/q        -> signature_error
+h zero/v        -> 42                     ← this is the spelling that works
+h (valof zero)  -> 42
+```
+
+ADR-011 collapsed `/r` into `/v`. The record was written before, or in spite
+of, that collapse and never re-spelled. So the ruling as literally written
+would remove the only working path (`h zero`) and direct users to one that
+does not exist.
+
+### 2.1 What implementing it actually costs
+
+Four sites retire together (`FN-VALUE-OPEN-WORK.0.md` §3.2): `stepWord`'s
+TFunction intercept (`core/go/engine.go:2679-2702`),
+`hasPendingForwardExpectingFunction`, `sigWantsFunctionAt`, and the
+ReachGroup-arrival `ConformsTo(TFunction)` test. Retiring `sigWantsFunctionAt`
+re-opens the NUR038 call-head question inside the same change.
+`lang/spec/path-modifier.tsv:67` currently pins the exception as *designed*
+behaviour and would be rewritten, along with two frontier ledger rows.
+
+The user-visible effect: `h zero` stops working and becomes `h zero/v`.
+Every call site passing a bare fn name to a `Function` slot must be
+re-spelled.
+
+### 2.2 The rulings available
+
+**(a) Implement as amended, re-spelled to `/v`.** Bare name always calls;
+`/v` passes. One rule for every slot type, `Any` and `Function` alike.
+
+- Costs: breaks every `h zero` call site; the ergonomic loss is real, since
+  a `Function`-typed slot arguably *does* declare the intent, which is what
+  `path-modifier.tsv:67` says. Re-opens NUR038 in the same change.
+- Gains: removes a rule where the slot type silently changes what a token
+  means — the same class of context-sensitivity as §1.2, and the same class
+  Stage 4's descriptor has to carry if it survives.
+
+**(b) Reverse the amendment; keep the intercept as designed.** Strike the
+strike. `path-modifier.tsv:67`'s reading becomes doctrine.
+
+- Costs: a token's meaning keeps depending on the slot it lands in, which
+  Stage 4 must then model in the descriptor — this is not free, it is
+  precisely the "class can change when a name is rebound" problem §6.2 calls
+  out for live revalidation.
+- Gains: no user code changes; the more ergonomic surface survives.
+
+**No recommendation on this one.** (a) and (b) trade ergonomics against
+uniformity, and the tree currently documents (b) as intentional in a pinned
+spec row while the register records (a) as ruled. That contradiction is the
+maintainer's to settle; I do not think the evidence favours either.
+
+---
+
+## 3. What is needed to unblock Stage 3
+
+1. Delete one of the two NUR101 entries.
+2. Rule §1.3 (a), (b) or (c).
+3. Rule §2.2 (a) or (b), and if (a), re-spell the record from `/r` to `/v`.
+
+With those three, Stage 3 has an oracle and can proceed. Without them it
+stays parked, and no amount of implementation effort changes that — which is
+what O1 has been saying.

@@ -1022,6 +1022,39 @@ re-binds the already-produced instance, so module fn-value identity
 (§6.3's pointer-based `eq`) has a single referent and a Program's pinned
 sub-registries stay the only instance.
 
+**The rollback primitive already exists — and is too COARSE to reuse.**
+Probed 2026-08-26. `Registry.SnapshotForCompile` / `RestoreForCompile`
+(`core/go/compile_sandbox.go:42,91`) already implement exactly the
+snapshot-and-roll-back this regime needs, and `RunCompiledStrict` already
+applies them — but only on ERROR paths, which is why the success path keeps
+the check pass's installs and why the twins have nothing to replay onto
+today. So the rollback half of this design is an existing primitive applied
+at a different point, not new machinery. Two caveats before reusing it:
+
+- **It restores `r.Types`** (`compile_sandbox.go:107`), which would discard
+  the minted type IDs this section requires to stay BAKED under the
+  front-end carve-out. The twin regime needs a NARROWER snapshot —
+  runtime-visible bindings (`r.Defs`) and the module ledger, leaving the
+  lattice, macro expansions and const folds alone. Reusing
+  `RestoreForCompile` wholesale would roll back the compile-time products
+  the twins are specifically not supposed to replay.
+- **The dispatch-cache invalidation comes with it.** `RestoreForCompile`
+  drops every `dispatchCache` entry because `DefTable.Clone` starts a fresh
+  generation timeline at 0, so a gen-0 entry cached before the rollback
+  could be served for a name whose restored binding differs
+  (`compile_sandbox.go:96-106`). A narrow rollback inherits that hazard
+  exactly — the twins reinstall bindings under names the cache may already
+  hold — so the cache reset is part of the regime, not an artifact of the
+  wide snapshot.
+
+Measured alongside: there is no double-install TODAY, on either lane.
+`def x 1 end def x 2 end undef x end x` answers `1` compiled and
+interpreted, and `def x 1 end undef x end x` is `undefined_word` on both. The
+single-install path is what makes `undef` expose the prior binding correctly,
+which is precisely why adding a second install without the rollback would
+break it — the hazard this section names is real, and currently latent only
+because nothing replays.
+
 **Stamp freshness is taken against the post-replay world.** Dependency
 snapshots recorded during the check pass (`DepSnap` over `(Depth, Gen)`,
 `compiler/go/stamp_runtime.go:155-165`) would read stale against a
