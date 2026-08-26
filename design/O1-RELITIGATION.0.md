@@ -98,9 +98,16 @@ it their own way.
   §5.4 need re-spelling, as every §1 program did when BROAD's first half
   landed. Any user code applying a computed fn inside parens changes answer
   silently — no error, just a different value.
-- Gains: the divergence closes with no compiler change, the compiled lane is
-  already there, and Stage 3 gets a rule with no context-sensitivity to
-  model.
+- Costs, second half — **this is not interpreter-only.** The compiled lane
+  is at (a) for the LIST LITERAL and not for the enclosing group:
+  `lang/go/bytecode_curried_test.go:17-24` (`TestCurriedFactoryCompiles`)
+  runs `((mk 1) 2)` through `mustCompileWithParity` and pins the compiled
+  result as `[3]`. Making that expression place therefore needs a compiler
+  change and that fixture rewritten, alongside the interpreter's. An earlier
+  draft of this note advertised (a) as costing no compiler change, reasoning
+  from the list-literal result alone; that was wrong.
+- Gains: Stage 3 gets a rule with no context-sensitivity to model, and the
+  silent lane divergence closes.
 
 **(b) Dispatch — the carve-out extends to computed results.** `(mk 1) 2`
 would have to *also* dispatch for consistency, reverting the top-level fix
@@ -109,7 +116,12 @@ in §1.1 above.
 - Costs: reopens what §1.1 shows is already closed, and re-introduces the
   inline-application idiom BROAD was adopted to remove. The compiled lane
   then needs a change it does not need today.
-- Gains: existing §5.4 transcripts stand; no user-visible answer changes.
+- Gains: existing §5.4 transcripts stand, and the compiled lane's
+  `((mk 1) 2)` fixture stands with them.
+- **But not "no user-visible change".** (b) requires `(mk 1) 2` to revert
+  from the `fn (Integer) 2` measured in §1.1 to `3`. That is a user-visible
+  answer change in exactly the way (a)'s is, and an earlier draft of this
+  note claimed otherwise — understating (b)'s compatibility cost.
 
 **(c) Enclosing context is load-bearing — keep both.** `(mk 1) 2` places,
 `((mk 1) 2)` dispatches, as today, and the COMPILED lane is fixed to match
@@ -122,13 +134,14 @@ the interpreter inside list literals.
 - Gains: nothing in the existing corpus moves.
 
 **Recommendation: (a).** It is the only one of the three that leaves a rule
-with no context exception, it is what the compiled lane already does, and
-§1.1 shows the tree has been moving toward it. But (a) changes answers
-silently in user code, which is the maintainer's call and not mine.
+with no context exception, and §1.1 shows the tree has been moving toward
+it. Note that (a) and (b) BOTH change user-visible answers and BOTH need a
+compiler change — the choice is which answer is right, not which is
+cheaper. That is the maintainer's call and not mine.
 
 ---
 
-## 2. NUR078 — the ruling names a modifier the language no longer has
+## 2. NUR078 — the divergence is live; the `/r` spelling is NOT a defect
 
 The divergence is real and still live:
 
@@ -144,21 +157,30 @@ hany zero   -> signature_error       …the same bare name before an Any slot is
 The slot type decides, which is exactly what the 2026-08-17 amendment
 rejects. That much of the record holds.
 
-**What does not hold is its prescribed replacement.** The record says
-*"passing a function as an argument requires `/r`"*, and repeats `/r`
-throughout. `/r` is not a modifier in this language:
+**A correction to an earlier draft of this note.** That draft made a second
+claim — that the record's prescribed `/r` names a modifier the language does
+not have, so the ruling "removes the only working path and directs users to
+one that does not exist" — and offered it as a further thing needing a
+ruling. **That was wrong, and it is withdrawn.** `NUR.md:50-56` carries an
+explicit convention:
+
+> The modifier `/r` was renamed **`/v`** … Records dated before that day
+> quote the old spellings verbatim, because that is what was observed and
+> argued at the time; `/r` no longer parses, so read `/r` as `/v` … The
+> behaviour those records describe is unchanged by the rename.
+
+NUR078 is dated 2026-08-17; the rename is 2026-08-19. The record is covered
+by the register's own convention and already identifies the working
+replacement. The measurement stands and is worth keeping —
 
 ```
-h zero/r        -> signature_error        ← the ruling's own spelling fails
-h zero/q        -> signature_error
-h zero/v        -> 42                     ← this is the spelling that works
+h zero/r        -> signature_error   as the spelling note says: no longer parses
+h zero/v        -> 42                the replacement the record means
 h (valof zero)  -> 42
 ```
 
-ADR-011 collapsed `/r` into `/v`. The record was written before, or in spite
-of, that collapse and never re-spelled. So the ruling as literally written
-would remove the only working path (`h zero`) and direct users to one that
-does not exist.
+— but it is a reading convention, not a contradiction, and **not** a Stage 3
+blocker. Only the substantive question below is.
 
 ### 2.1 What implementing it actually costs
 
@@ -206,8 +228,11 @@ maintainer's to settle; I do not think the evidence favours either.
 
 1. Delete one of the two NUR101 entries.
 2. Rule §1.3 (a), (b) or (c).
-3. Rule §2.2 (a) or (b), and if (a), re-spell the record from `/r` to `/v`.
+3. Rule §2.2 (a) or (b).
 
 With those three, Stage 3 has an oracle and can proceed. Without them it
 stays parked, and no amount of implementation effort changes that — which is
 what O1 has been saying.
+
+(An earlier draft listed a fourth item, re-spelling NUR078's `/r` to `/v`.
+Withdrawn — see §2. The register's spelling note already covers it.)

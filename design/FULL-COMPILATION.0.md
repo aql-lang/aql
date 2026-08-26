@@ -1064,18 +1064,35 @@ sub-registries stay the only instance.
 Probed 2026-08-26. `Registry.SnapshotForCompile` / `RestoreForCompile`
 (`core/go/compile_sandbox.go:42,91`) already implement exactly the
 snapshot-and-roll-back this regime needs, and `RunCompiledStrict` already
-applies them — but only on ERROR paths, which is why the success path keeps
-the check pass's installs and why the twins have nothing to replay onto
-today. So the rollback half of this design is an existing primitive applied
-at a different point, not new machinery. Two caveats before reusing it:
+applies them — but only when the front end FAILS: a `CompileCheck` error and
+an uncompilable-program refusal each restore, while an error out of
+`eng.RunProgram` returns directly and leaves the check-pass installs in place
+(`lang/go/boru.go:1225-1231`). So it is the compile/check-failure paths, not
+every error path — the function's own doc comment overstates this, and a
+program that compiles and then raises at runtime keeps its installs. Either
+way the SUCCESS path keeps them, which is why the twins have nothing to
+replay onto today. So the rollback half of this design is an existing
+primitive applied at a different point, not new machinery. Three caveats
+before reusing it:
 
 - **It restores `r.Types`** (`compile_sandbox.go:107`), which would discard
   the minted type IDs this section requires to stay BAKED under the
   front-end carve-out. The twin regime needs a NARROWER snapshot —
-  runtime-visible bindings (`r.Defs`) and the module ledger, leaving the
-  lattice, macro expansions and const folds alone. Reusing
-  `RestoreForCompile` wholesale would roll back the compile-time products
-  the twins are specifically not supposed to replay.
+  runtime-visible bindings (`r.Defs`) and the module ledger — leaving macro
+  expansions and const folds alone. Reusing `RestoreForCompile` wholesale
+  would roll back the compile-time products the twins are specifically not
+  supposed to replay.
+- **But `r.Types` cannot be excluded WHOLESALE either.** A capitalised
+  `undef` executing on the check pass RETIRES a lattice node
+  (`basic/go/native_definition.go:1389-1400`: `PopEntry` then
+  `r.Types.Retire(entry.TypeDef)` when this binding minted it). Restore
+  `r.Defs` alone and the type BINDING comes back while its ID stays retired
+  — a live binding pointing at a dead node, before the VM has reached the
+  twin at that `undef`'s source position. So the narrow snapshot has to
+  separate the two things `r.Types` holds: minted IDs are RETAINED, runtime
+  RETIREMENTS are rolled back and re-applied by their twins. That is a
+  partition of the TypeTable, not an exclusion of it, and it is the part of
+  this design with the least existing machinery to lean on.
 - **The dispatch-cache invalidation comes with it.** `RestoreForCompile`
   drops every `dispatchCache` entry because `DefTable.Clone` starts a fresh
   generation timeline at 0, so a gen-0 entry cached before the rollback

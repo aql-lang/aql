@@ -89,7 +89,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
-| [NUR101](#nur101) | BROAD is only half implemented: a paren places its collapsed Function when the group holds a REFERENCE or an inline LITERAL, but still DISPATCHES it when the group COMPUTES one — `(fn Integer [Integer] [10 add]) 7` is `fn 7` (correct) while `(mk 1) 2` is `3`, against ADR-011's "reference and inline literal alike" | re-measuring §5.4 after #402, 2026-08-25 |
+| [NUR101](#nur101) | BROAD's placement now depends on ENCLOSING CONTEXT: re-measured 2026-08-26, `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` still dispatches (`3`), and a list literal inherits the wrapped form — so `[((mk 1) 2)]` is `[3]` interpreted and `[fn (Integer) 2]` compiled, silently. The original top-level half (a computed group dispatching where a reference or literal placed) is CLOSED; the enclosing-group case is open on BOTH lanes. NB this file holds TWO records under this number, ruling opposite ways — see the record | re-measuring §5.4 after #402, 2026-08-25; re-measured 2026-08-26 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
@@ -293,6 +293,53 @@ written against that reading. Both were reverted. The argument that misled it
 was `[inc 2]` → `[3]`, which proves nothing: ADR-011 explicitly carves out
 *"a bare WORD inside a group, which dispatches during the group's own
 evaluation"*. Raised on PR #403.)
+
+**Re-measured 2026-08-26 (against `df0edb5`), and the divergence has
+NARROWED.** The transcript above is stale: every one of its five placement
+cases now places, including the two it calls defective —
+
+```
+(mk 1) 2                     → fn (Integer) 2      this record says: 3
+(if true [inc/v] [inc/v]) 2  → fn inc(Integer) 2   this record says: 3
+```
+
+— and the guard still holds (`def h (mk 1) end  h 2` → `3`). So the
+top-level half of this record is CLOSED.
+
+What survives is narrower, and it is not about list literals: placement now
+depends on whether the application sits inside an ENCLOSING GROUP.
+
+```
+(mk 1) 2      → fn (Integer) 2     places
+((mk 1) 2)    → 3                  dispatches      ← the whole remaining divergence
+```
+
+The list literal merely inherits it, because its contents evaluate as a
+sub-program in which the inner form IS `((mk 1) 2)`; that is why
+`[((mk 1) 2)]` is `[3]` interpreted and `[fn (Integer) 2]` compiled. The map
+form agrees on both lanes because the compiled lane falls back there.
+
+Note also that the compiled lane is NOT uniformly at the placing answer:
+`lang/go/bytecode_curried_test.go:17-24` pins compiled `((mk 1) 2)` as `[3]`.
+So the enclosing-group case diverges from the unwrapped case on BOTH lanes,
+and closing it is not an interpreter-only change.
+
+The open question is therefore single: **does a COMPUTED function applied
+inside an enclosing group place, or dispatch?** ADR-011's carve-out is
+written for *"a bare WORD inside a group"*, and `(mk 1)` is not a bare word,
+which is how this register came to hold two contradictory readings (see
+below). Options, costs and a recommendation:
+[design/O1-RELITIGATION.0.md](design/O1-RELITIGATION.0.md).
+
+**Register hygiene: this file holds TWO records numbered NUR101**, both
+Pending, both claiming the anchor `{#nur101}`, ruling opposite ways on this
+same program — this one, and "a paren-computed fn inside a list literal is
+applied interpreted, baked compiled", which states *"the compiled lane is the
+defect"*. This record's own note below says that reading "had it exactly
+backwards" and was reverted, but the superseded record was never deleted. The
+duplicate anchor also makes every `#nur101` link resolve to this one. One of
+the two must be deleted (the register deletes superseded records rather than
+annotating them); which one follows from the ruling above.
 
 **Verdict:** resolve by fix — extend BROAD's placement to a computed group
 result, so `(mk 1) 2` is `fn 2` like its reference and literal twins. Two
