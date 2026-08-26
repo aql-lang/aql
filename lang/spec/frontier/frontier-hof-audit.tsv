@@ -68,14 +68,14 @@ def pitem s:String => [ if (eq 0 (size s)) [ {ok:false rest:s val:None} ] [ {ok:
 def pitem s:String => [ if (eq 0 (size s)) [ {ok:false rest:s val:None} ] [ {ok:true val:(slice 0 1 s) rest:(slice 1 (size s) s)} ] ] end def psat fn p:Function Function [ ( fn s:String Map [ def r (pitem s) if (r.ok) [ if (p (r.val)) [ r ] [ {ok:false rest:s val:None} ] ] [ r ] ] ) ] end def pseq fn [[a:Function b:Function][Function][ ( fn s:String Map [ def r1 (a s) if (r1.ok) [ def r2 (b (r1.rest)) if (r2.ok) [ {ok:true val:[(r1.val) (r2.val)] rest:(r2.rest)} ] [ {ok:false rest:s val:None} ] ] [ {ok:false rest:s val:None} ] ] ) ]] end def isdigit c:String => [ and (gte "0" c) (lte "9" c) ] end def digit (psat isdigit/v) end def two (pseq digit/v digit/v) end (two '42x')	{ok:true val:['4' '2'] rest:'x'}	sequencing: two digits then a remainder
 #
 # §6  the §1.6 capability table's combinator rows
-def fs [ (a:Integer => [add 1 a]) (a:Integer => [mul 2 a]) ] end ((fs get 1) 5)	fn (Integer) 5	NUR101 (ruled 2026-08-26): `get` is not one of the three application forms, so the paren PLACES the retrieved fn. Was `10`
-def tbl {double:(a:Integer => [mul 2 a]) inc:(a:Integer => [add 1 a])} end def k 'double' end ((tbl get k) 5)	fn (Integer) 5	NUR101 (ruled 2026-08-26): same as the list case — a map read through `get` places, it does not apply. Was `10`
+def fs [ (a:Integer => [add 1 a]) (a:Integer => [mul 2 a]) ] end ((fs get 1) 5)	fn [[a:Integer][Any][word(mul) 2 word(a)]] 5	NUR101 (ruled 2026-08-26): `get` is not one of the three application forms, so the paren PLACES the retrieved fn. Was `10`
+def tbl {double:(a:Integer => [mul 2 a]) inc:(a:Integer => [add 1 a])} end def k 'double' end ((tbl get k) 5)	fn [[a:Integer][Any][word(mul) 2 word(a)]] 5	NUR101 (ruled 2026-08-26): same as the list case — a map read through `get` places, it does not apply. Was `10`
 def fs [ (a:Integer => [add 1 a]) (a:Integer => [mul 2 a]) ] end fold [apply] fs 5	12	pipeline over a list of functions
 def compose fn [[f:Function g:Function][Function][ ( fn x:Integer Integer [ f (g x) ] ) ]] end def h (compose (a:Integer => [add 1 a]) (a:Integer => [mul 2 a])) end (h 5)	11	a named compose returning a Function
 def f2 fn [[a:Integer b:Integer][Integer][a sub b]] end def g (f2/u) end (g 10 3)	-7	a usurp wrapper is storable and callable
 #
 # §7  the §5.4 application-context rule (audit §5.4; why Z diverges)
-def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end ((mk 1) 2)	fn (Integer) 2	NUR101 (ruled 2026-08-26): a statement no longer applies a collapsed fn value; the paren places it uniformly. Was `3`
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end ((mk 1) 2)	fn [[b:Integer][Integer][word(add) word(a) word(b)]] 2	NUR101 (ruled 2026-08-26): a statement no longer applies a collapsed fn value; the paren places it uniformly. Was `3`
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end def h (mk 1) end 2 h/v apply	3	the audit's workaround: bind the computed fn, then apply through /v
 #
 # §8  the §5.6 binding contract (audit §5.6, NUR097): parameters and
