@@ -1085,7 +1085,18 @@ Four changes, all conservative in the abstract-interpretation frame:
    (`module_body_executed_in_check` warns that `boru check` executed a
    module body the user did not ask it to run, and under compilation that
    execution is the program's own), so counting them would demand the
-   wrong thing. The findings divergence runs in both directions. Plain-only findings
+   wrong thing. Classified by what the USER sees, the 318 split three ways: **5** rows
+   clean to `boru check` and refused by the compiler — NUR103's class, the
+   one a user cannot diagnose; **41** where the armed pass drops a
+   diagnostic but refuses, so the finding still reaches the user through
+   the refusal reason (the documented `no_signature` suppression, which
+   exists precisely so the specific reason is not masked by the generic
+   sentinel); and **272** where a check finding vanishes and the program
+   compiles anyway. That last group is the surprise: on 272 corpus rows
+   the checker is STRICTER than the compiler, so `boru check` reports
+   errors on programs that compile and run. Stage 8's work is therefore
+   two different jobs — 5 rows of invisible divergence, and a
+   272-row false-positive surface — not one undifferentiated 318. Plain-only findings
    (`no_signature` suppressed while compiling, `unreachable_branch`, the
    `module_body_executed_in_check` info); armed-only findings
    (`redundant_guard`, `case_not_exhaustive`, and — the NUR103 shape —

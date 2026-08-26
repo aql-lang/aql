@@ -52,6 +52,20 @@ import (
 // diagnostic-neutral (section 6.9(3)), which is what drives this to zero.
 const diagnosticParityCeiling = 318 // 318 (2026-08-26, Stage-1 baseline) -> 0 (Stage 8)
 
+// armedOnlyCeiling is the sharpest of the three classes: rows the plain
+// check calls clean and the compile-armed pass finds fault with. It is the
+// one a user CANNOT diagnose, because the tool they would reach for
+// reports the program fine — NUR103's shape. Monotone DOWN only.
+//
+// The other two classes are less severe and tracked in the log rather than
+// gated: 41 rows where the armed pass drops a diagnostic but REFUSES, so
+// the finding still reaches the user through the refusal reason (the
+// documented no_signature suppression), and 272 where a check finding
+// vanishes and the program compiles anyway — the checker being stricter
+// than the compiler, which is a false-positive surface rather than a
+// silent-acceptance one.
+const armedOnlyCeiling = 5 // 5 (2026-08-26) -> 0 (Stage 8)
+
 // diagKey renders a diagnostic's identity for set comparison: the code and
 // the word it is about. Detail text is deliberately excluded — it embeds
 // positions and inferred types that legitimately differ in phrasing
@@ -106,6 +120,7 @@ func TestDiagnosticParityAcrossPasses(t *testing.T) {
 	}
 
 	var rows, diverged, infoDiverged int
+	var armedOnly, carriedByRefusal, lostUnderCompile int
 	byShape := map[string]int{}
 	var examples []string
 
@@ -139,10 +154,11 @@ func TestDiagnosticParityAcrossPasses(t *testing.T) {
 				continue // a pass that cannot run is not a parity question
 			}
 			ac := newDifferentialInstance(t)
-			_, _, armed, cerr := ac.CompileCheck(input)
+			prog, _, armed, cerr := ac.CompileCheck(input)
 			if cerr != nil {
 				continue
 			}
+			refused := prog == nil
 
 			if strings.Join(infoSet(plain.Diagnostics), ",") != strings.Join(infoSet(armed.Diagnostics), ",") {
 				infoDiverged++
@@ -152,6 +168,21 @@ func TestDiagnosticParityAcrossPasses(t *testing.T) {
 				continue
 			}
 			diverged++
+			// Classify by what the USER sees, which is the property that
+			// matters. A finding the armed pass drops is not lost if that
+			// pass REFUSED — the refusal reason carries it, which is
+			// exactly why no_signature is suppressed while compiling
+			// (check/go/check_recovery.go: emitting it there would mask the
+			// specific reason as the generic sentinel). What is serious is a
+			// finding only ONE lane surfaces at all.
+			switch {
+			case len(c) > len(p):
+				armedOnly++ // the NUR103 class: clean to `boru check`, refused by the compiler
+			case refused:
+				carriedByRefusal++ // dropped as a diagnostic, still reported as a refusal
+			default:
+				lostUnderCompile++ // `boru check` errors that vanish AND the program compiles
+			}
 			shape := "plain=" + strings.Join(p, "|") + " armed=" + strings.Join(c, "|")
 			byShape[shape]++
 			if len(examples) < 5 {
@@ -161,10 +192,15 @@ func TestDiagnosticParityAcrossPasses(t *testing.T) {
 		f.Close()
 	}
 
-	t.Logf("diagnostic parity: %d rows, %d diverged on FINDINGS (errors+warnings), %d diverged on info-only advisories",
-		rows, diverged, infoDiverged)
+	t.Logf("diagnostic parity: %d rows, %d diverged on FINDINGS, %d on info-only advisories", rows, diverged, infoDiverged)
+	t.Logf("  by user impact: %d armed-only (clean to check, refused compiling — the NUR103 class), %d carried by the refusal reason instead, %d lost under compilation (check errors that vanish while the program compiles)",
+		armedOnly, carriedByRefusal, lostUnderCompile)
 	for _, ex := range examples {
 		t.Logf("  e.g. %s", ex)
+	}
+	if armedOnly > armedOnlyCeiling {
+		t.Errorf("armed-only findings %d exceed ceiling %d — programs that `boru check` calls clean and the compiler refuses, which a user cannot diagnose (NUR103)",
+			armedOnly, armedOnlyCeiling)
 	}
 	if diverged > diagnosticParityCeiling {
 		t.Errorf("diagnostic parity: %d rows exceed ceiling %d — the checker's verdict depends on who is asking (NUR103). Top shapes:\n%s",
