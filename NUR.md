@@ -3534,3 +3534,57 @@ produce it, which the full-compilation plan's §6.3 predicate-unit work
 would need to do anyway. Whichever way it goes, the differential harness
 needs an effect-count comparison, or the next divergence of this shape is
 equally invisible.
+
+## NUR103 — the checker's answer depends on who is asking {#nur103}
+
+**Status:** Pending · **Recorded:** 2026-08-26 · **Surfaced by:** the
+server-concurrency corpus (`test/go/servercorpus`), measuring why a real
+protocol server does not compile
+
+**Rule:** one analysis, one answer. The static pass is a single
+abstracted interpreter over carriers; its verdict on a program is a
+property of the program, not of what the caller intends to do with the
+verdict.
+
+**Divergence:** the same program yields a clean check and a refusing
+compile.
+
+```
+$ boru check redis_run.boru
+check: 0 error(s), 0 warning(s), 1 info
+
+$ boru run -force-compile redis_run.boru
+error: force-compile: check diagnostics: [undefined_word] undefined word: h2
+
+$ boru run -no-compile redis_run.boru      # runs fine, returns "hello"
+```
+
+where `redis_run.boru` imports `design/examples/apps/mini-redis.boru` and
+issues a SET then a GET. The offending name is at `mini-redis.boru:210`
+— `def h2 (h set (f) v) (hashes set (k) h2) drop 1`, inside a lambda
+registered as a service handler. Checking the module **on its own** is
+also clean (0 errors, 2 unrelated unused-def warnings), so the diagnostic
+is produced by neither the module nor the plain check of the importing
+program: it appears only when the analysis runs with the recorder armed.
+
+**Why it matters.** This is the mechanism that refuses realistic servers.
+The plain echo server compiles to zero interpreter runs; mini-redis does
+not compile at all, and this diagnostic is the sole reason. A user cannot
+diagnose it either, because the tool they would reach for — `boru check`
+— reports the program clean.
+
+**Mechanism (to confirm).** `design/FULL-COMPILATION.0.md` §6.9(3) already
+names the shape: numerous analysis models fork on `!Compiling` — static-if
+reduction, loop spread, closure surfacing, and the emission of
+`no_signature` itself. One of those forks is presumably reached here, and
+the compile-armed path loses a binding the plain path keeps. The exact
+fork is NOT yet isolated: two reductions of the surface shape (`def` and
+use in one statement; the same inside a one-param lambda) both check
+clean under compilation, so the trigger is narrower than it looks.
+
+**Discharge.** Either collapse the forks so the two passes cannot
+disagree, or — where a fork is genuinely required — prove it
+diagnostic-neutral, which is what §6.9(3) asks for. Note that fixing the
+underlying binding bug is NOT sufficient on its own: the general defect
+is that a diagnostic can exist in one pass and not the other, and the
+next instance would be just as invisible to `boru check`.
