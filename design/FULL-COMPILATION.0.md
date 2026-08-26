@@ -1159,9 +1159,33 @@ faults and has to land before the rest of 6.9 can be trusted: a fork
 argument about diagnostics is meaningless while one pass is not reading the
 code. Second, the ratchets are measuring a smaller universe than they claim
 — the diagnostic-parity count, the check-accuracy pins, and the frontier
-census all read a plain pass that skipped these bodies, so all three move
-in BOTH directions when this lands and must be re-measured rather than
-adjusted.
+census all read a plain pass that skipped these bodies.
+
+**Fixed 2026-08-26**, and the shape of the fix is a finding in its own
+right. The body is analysed by the same pass `InstallFnDef` already ran,
+but QUEUED at construction and DRAINED at END OF PASS, beside
+`RescueForwardRefDiagnostics`. Three attempts were needed and each failure
+named a property this section has to respect:
+
+1. **The construction site is too early.** Every forward reference is still
+   unbound there, a recursive self-call most of all, so `def fact fn [… [n
+   mul (fact (n sub 1))]]` reported `mul: got (Integer, Atom)`. The
+   `undefined_word` behind it is rescued at end of pass; its CONSEQUENCE is
+   not. Any totality work that moves an analysis earlier inherits this.
+2. **A body must be analysed in the scope it was WRITTEN in.** Draining
+   against one registry called every module-scope name in mini-redis's
+   handler lambdas undefined. The Stage-4 descriptor adapter carries the
+   same obligation.
+3. **A speculative analysis that cannot run must report nothing.** The
+   drain analyses bodies in ISOLATION, so one that reads the caller's stack
+   cannot run at all — the Church-numeral row raised the
+   strict-forward-barrier error on a program that answers 5.
+   `fn_body_error` is the analyser reporting that IT could not proceed, and
+   6.9's traps have to make the same distinction: a definite error in the
+   PROGRAM compiles to a trap, a failure of the ANALYSIS does not.
+
+Whole corpus green afterwards, ratchets included — which also settles the
+"moves in both directions" worry above: it moved neither.
 
 Four changes, all conservative in the abstract-interpretation frame:
 

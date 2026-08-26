@@ -3929,7 +3929,8 @@ larger change than this one.
 
 ## NUR105 — `boru check` does not analyse a callback body passed as an argument {#nur105}
 
-**Status:** Pending · **Recorded:** 2026-08-26 · **Surfaced by:** bounding
+**Status:** Pending — the three defect rows are fixed, one position is
+not (see Discharge) · **Recorded:** 2026-08-26 · **Surfaced by:** bounding
 NUR103's mini-redis half, whose first fault was "check does not analyse a
 service-handler body". The bound turned out to be far wider than service
 handlers.
@@ -4006,14 +4007,90 @@ chain there (unanalysed body → a divergent call silently unbinding its
 exactly this. Fixing this is the first of NUR103's three faults, and closes
 the handler case along with the three defect rows above.
 
-**Discharge.** Analyse the body where the function VALUE is CONSTRUCTED,
-not where it is bound. The def-binding route already does it, for all three
-spellings, which is both the proof that the analysis works and the shape to
-copy: the construction site is common to every spelling, so the fix is one
-route, not three. Two things to watch: the analysis
-must run under the same one-shape-per-body quota the other routes use (an
-`each` over a 500-element list must not analyse the body 500 times), and
-the newly-visible diagnostics will move the check-accuracy and
-diagnostic-parity ratchets in BOTH directions — some rows gain a true
-finding, and some previously "armed-only" rows become agreed. Both ratchets
-have to be re-measured in the same change, not adjusted by guess.
+**Discharged for the three defect rows (2026-08-26).** Construction now
+QUEUES the body (`CheckState.PendingFnBodies`) and the queue DRAINS at end
+of pass, immediately before `RescueForwardRefDiagnostics` and
+`EmitUnusedDefDiagnostics` — which sit there for exactly the same reason.
+The analysis itself is the SAME pass `InstallFnDef` already ran, reached
+through the analysis seam (`RunFnConstructionPass`): one route, not three,
+because a second construction-time analysis with its own rules would be a
+new way for two spellings of one callback to disagree, which is the defect
+rather than the fix.
+
+The queue matters, and the first version did without it. Analysing a body
+at its CONSTRUCTION site analyses it too early — every forward reference is
+still unbound there, a recursive self-call most of all — so
+
+```
+def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]
+```
+
+reported `mul: got (Integer, Atom)`, because `fact` resolved to the
+undefined-word placeholder. The `undefined_word` behind it would have been
+rescued at end of pass; its CONSEQUENCE would not. Draining at end of pass
+fixes that and disposes of a second problem at the same time: a fn that
+reaches `InstallFnDef` before the drain is analysed THERE, under its name,
+so the named path keeps its precision and the drain gets exactly the set of
+fn values nothing ever named.
+
+**Three things implementing it discovered, and they are the part worth
+keeping.**
+
+FIRST, the dynamic-scope rescue is NAME-KEYED. `RescueForwardRefDiagnostics` asks
+whether a binder of the name can reach the READING fn through the call
+graph, and the reader is a NAME; `DynamicScopeReachable` answers false
+outright when it is empty. So a nameless analysis silently loses the rescue,
+and the pinned recursion idiom
+
+```
+def f fn [[m:Map n:Integer] [Integer]
+  [if (n lte 0) [acc2] [def acc2 n … f m (n sub 1)]]]
+```
+
+drew a false `undefined_word: acc2` — a false POSITIVE traded for the false
+negative, which is not a fix.
+
+An anonymous body has no call-graph identity, so the sound reachability
+question cannot be ASKED of it. The rescue now answers optimistically
+rather than refusing to ask: rescue when SOME fn binds the name. That is
+deliberately weaker than the named rule, and what makes it acceptable is
+the alternative — these bodies were not analysed at all before, so optimism
+cannot regress against silence, while the strict rule flags a legal idiom. A
+genuine typo, a name no fn binds anywhere, is still flagged, which is the
+case this record is about. It is scoped to the rescue, which is
+diagnostics-only: the COMPILER asks the same question to decide whether to
+COMMIT a dyn-scope read, and must keep refusing on an unanswerable one.
+
+SECOND, a body must be analysed in the SCOPE IT WAS WRITTEN IN. Draining
+every queued body against the top-level registry reported every
+module-scope name in mini-redis's handler lambdas as undefined —
+`arg-at`, `kv-read`, `now-ms` — because those words are bound in the
+module's sub-registry. Each queue entry therefore carries its own registry.
+Caught by the two mini-redis false-positive tests, which is what they are
+for.
+
+THIRD, a SPECULATIVE analysis that cannot run must report nothing. The
+drain analyses bodies nobody asked about, in ISOLATION, with no enclosing
+stack — so a body that reads the caller's stack cannot be run at all. The
+Church-numeral row in `frontier-hof-audit.tsv` raised the
+strict-forward-barrier error whose own text says why ("`apply` reads its
+receiver from the enclosing stack") on a program that answers 5.
+`fn_body_error` is the analyser reporting that IT could not proceed — a
+fact about the analysis, not about the code — so the drain drops it. A
+NAMED fn keeps it: defining a fn is asking for its body to be analysed.
+
+Two smaller notes. Every named fn's body diagnostics came out TWICE until a
+pass-scoped body-position set was added — a fn reaches the check at
+construction AND at install, and the two differ only in the name, which
+`FnSummaries`' key does not collapse. And the CheckState lifecycle gate had
+a blind spot of its own, found the moment the first struct-keyed field
+arrived: its clone assertion could not build a second key for anything but
+string- and pointer-keyed maps, so the mutation silently did not happen and
+the assertion passed for a map `Clone` was in fact sharing.
+
+**Still open, which is why this record stays Pending.** A lambda written as
+a MAP-literal value is still unanalysed, where the list-literal twin is
+analysed — a different route (the map's values evaluate in a sub-engine).
+It is the never-called position, so nothing raises at run time, but the
+record's rule is about where the body was WRITTEN, and one position still
+decides the answer.
