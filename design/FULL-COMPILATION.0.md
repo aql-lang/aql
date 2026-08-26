@@ -1076,7 +1076,19 @@ Four changes, all conservative in the abstract-interpretation frame:
    model of this stance (Lindahl & Sagonas, PPDP 2006); the difference —
    boru's typed lane *trusts* its facts — is exactly why the
    classification must be explicit.
-3. **Collapse or prove diagnostic-neutral every `!Compiling` fork**
+3. **Collapse or prove diagnostic-neutral every `!Compiling` fork.**
+   **Measured 2026-08-26** (`test/go/langspec/diagnostic_parity_test.go`):
+   **568 of 7,568 corpus rows** already produce different diagnostics from
+   a plain check than from a compile-armed one — 7.5% of the corpus, and
+   the divergence runs in both directions. Plain-only findings
+   (`no_signature` suppressed while compiling, `unreachable_branch`, the
+   `module_body_executed_in_check` info); armed-only findings
+   (`redundant_guard`, `case_not_exhaustive`, and — the NUR103 shape —
+   `undefined_word` on programs plain check calls clean); and 57 rows
+   where one plain diagnostic becomes **two** under compilation. Some of
+   these are deliberate and documented. None of them was measured, and
+   the user-visible consequence is that `boru check` can report a program
+   clean that the compiler refuses, with no way to see why.
    (static-if reduction, loop spread, closure surfacing, `no_signature`
    emission itself, `check_recovery.go:1018,1126`). T4 requires one
    checker behavior regardless of the consumer. The open budget question —
