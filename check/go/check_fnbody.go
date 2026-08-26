@@ -864,6 +864,23 @@ func checkFnBodyAtConstruction(r *core.Registry, name string, fnDef core.FnDefIn
 		if s.Fallback || len(s.Body()) == 0 {
 			continue
 		}
+		// One analysis per BODY per pass. A fn reaches this check twice —
+		// once where the value is constructed, once where it is installed
+		// under a name — and the two differ only in the name, which
+		// FnSummaries' key does not collapse. Without this the body's
+		// diagnostics come out twice, byte-identically. A body with no
+		// source position is not memoised: the zero SrcPos is shared by
+		// every synthesized body, so keying on it would silence real
+		// diagnostics from a different one.
+		if pos := s.Body()[0].Pos(); pos != (core.SrcPos{}) {
+			if r.Check.FnBodyChecked[pos] {
+				continue
+			}
+			if r.Check.FnBodyChecked == nil {
+				r.Check.FnBodyChecked = map[core.SrcPos]bool{}
+			}
+			r.Check.FnBodyChecked[pos] = true
+		}
 		paramNames := make([]string, len(s.Params))
 		genArgs := make([]core.Value, len(s.Params))
 		for j, p := range s.Params {

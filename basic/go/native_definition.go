@@ -1674,6 +1674,25 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 		PopGenBindings(r, genSpec)
 	}
 
+	// Check mode, NON-generic fns: the same construction-time body check
+	// InstallFnDef runs for a fn installed under a name, run here for the
+	// fn VALUE — because an anonymous one never reaches InstallFnDef, and
+	// until it is `def`-bound its body was analysed by nobody. That made
+	// `each ([e:Any] => [nosuchw e]) [1 2 3]` check clean and then raise
+	// `undefined_word` at run time, while the identical body one line up as
+	// a `def` was reported (NUR105). POSITION decided it, not spelling: a
+	// code BLOCK argument and a named fn REFERENCE were both analysed.
+	//
+	// It is the SAME pass, through the analysis seam, not a second one with
+	// its own rules — a construction-time check that disagreed with the
+	// install-time one would be a new way for two spellings of the same
+	// callback to differ, which is the defect rather than the fix. The
+	// generic branch above stays separate because a type PARAMETER has no
+	// synthesizable example value; it binds placeholder carriers instead.
+	if r.Check.IsActive() && genSpec == nil {
+		core.RunFnConstructionPass(r, "", fnDef)
+	}
+
 	// Check mode: flag overloads that an earlier, higher-priority
 	// signature already subsumes — under first-match-wins dispatch they
 	// can never fire (the dead-clause analogue). A static property of the
@@ -1768,6 +1787,15 @@ func AfnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Signatures: []FnSig{sig},
 		Anonymous:  true,
 		Captured:   core.ComputeCaptures(r, &sig),
+	}
+	// The same construction-time body check FnConstruct runs, for the same
+	// reason: a lambda passed straight to a word (`each ([e:Any] => [typo
+	// e]) xs`) is never installed under a name, so this is its only chance
+	// to be analysed at all (NUR105). One analysis per body per pass — the
+	// pass itself dedupes, so a lambda that IS later `def`-bound is not
+	// analysed twice.
+	if r.Check.IsActive() {
+		core.RunFnConstructionPass(r, "", fnDef)
 	}
 	return []Value{NewFunction(fnDef)}, nil
 }

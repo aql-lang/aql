@@ -98,6 +98,24 @@ type CheckState struct {
 	// a placeholder instead of looping.
 	FnInflight map[string]bool
 
+	// FnBodyChecked records which fn BODIES the construction-time check has
+	// already analysed in this pass, keyed by the body's first token's
+	// source position — the one identity that is stable across the two
+	// routes into that check. A fn reaches it twice: once when the value is
+	// CONSTRUCTED (`fn` / `afn` / the `=>` lambda, which is where an
+	// anonymous callback's only chance is — NUR105) and again when it is
+	// INSTALLED under a name (`def f fn …`). The analysis is the same one
+	// both times, but the name differs, so FnSummaries' (name, arg-types)
+	// key does not collapse them and the body's diagnostics would be
+	// emitted twice, byte-identically. Duplicates are not cosmetic here:
+	// the diagnostic-parity gate tracks "one diagnostic becomes two" as its
+	// own divergence class.
+	//
+	// A body with NO source position (a synthesized one) is never recorded:
+	// the zero SrcPos is shared by every such body, so memoising on it
+	// would silence the second one's real diagnostics.
+	FnBodyChecked map[SrcPos]bool
+
 	// FnNameInflight counts, per fn NAME, how many of its body analyses
 	// are on the stack. A recursive self-call with a DIFFERENT arg shape
 	// has a different FnInflight key, so it does not bail — it re-analyses
@@ -726,6 +744,7 @@ func (c *CheckState) Clone() *CheckState {
 	cp.ParenPlacedFnIDs = cloneMap(c.ParenPlacedFnIDs)
 	cp.FnSummaries = cloneMap(c.FnSummaries)
 	cp.FnInflight = cloneMap(c.FnInflight)
+	cp.FnBodyChecked = cloneMap(c.FnBodyChecked)
 	cp.FnNameInflight = cloneMap(c.FnNameInflight)
 	cp.FnAnalysisCounts = cloneMap(c.FnAnalysisCounts)
 	cp.DefsInstalled = cloneMap(c.DefsInstalled)
@@ -804,6 +823,7 @@ func (c *CheckState) Begin() func() {
 	c.FnNameInflight = nil
 	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
+	c.FnBodyChecked = nil
 	c.Emit = TheInactiveEmit
 	c.CodeEffectDepth = 0
 	c.FnBodyDepth = 0
@@ -1290,6 +1310,30 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 			// calls the reader (`def f fn [[] [x]] def g fn [[x:Integer] [1]] f`)
 			// stays flagged: it genuinely errors at run time.
 			if r.Check.DynamicScopeReachable(d.Word, d.FnName) {
+				continue
+			}
+			// An ANONYMOUS body has no call-graph identity, so the sound
+			// reachability question above cannot be asked of it at all: the
+			// reader name is the key, and there is none. Answer it
+			// optimistically instead of refusing to ask — rescue when SOME fn
+			// binds the name.
+			//
+			// This is deliberately weaker than the named rule, and the reason
+			// it is acceptable here is the alternative. Anonymous callback
+			// bodies became visible to the checker at all only with NUR105;
+			// before that they were not analysed, so nothing was reported for
+			// them. Optimism cannot regress against "silent", and the strict
+			// rule would trade NUR105's false NEGATIVE for a false positive on
+			// a legal, common idiom (a lambda reading a name its caller's
+			// frame binds). A genuine typo — a name no fn binds anywhere — is
+			// still flagged, which is the case NUR105 is about.
+			//
+			// Scoped to the rescue, which is diagnostics-only. The compiler
+			// asks DynamicScopeReachable the same question to decide whether
+			// to COMMIT a dyn-scope read, and it must keep refusing on an
+			// unanswerable one — admitting there would be a soundness change,
+			// not a diagnostic one.
+			if d.FnName == "" && len(r.Check.FnBinders[d.Word]) > 0 {
 				continue
 			}
 		}
