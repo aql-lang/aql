@@ -4051,15 +4051,22 @@ drew a false `undefined_word: acc2` — a false POSITIVE traded for the false
 negative, which is not a fix.
 
 An anonymous body has no call-graph identity, so the sound reachability
-question cannot be ASKED of it. The rescue now answers optimistically
-rather than refusing to ask: rescue when SOME fn binds the name. That is
-deliberately weaker than the named rule, and what makes it acceptable is
-the alternative — these bodies were not analysed at all before, so optimism
-cannot regress against silence, while the strict rule flags a legal idiom. A
-genuine typo, a name no fn binds anywhere, is still flagged, which is the
-case this record is about. It is scoped to the rescue, which is
-diagnostics-only: the COMPILER asks the same question to decide whether to
-COMMIT a dyn-scope read, and must keep refusing on an unanswerable one.
+question cannot be ASKED of it. The first fix answered it optimistically —
+rescue when SOME fn binds the name — a rule deliberately weaker than the
+named one, justified only by the alternative being a false positive on a
+legal idiom.
+
+**The drain removed the need for it, and the merged cover-gate is what
+noticed.** The gate came back one statement short and the statement was
+that arm: with the analysis deferred to end of pass, every name is bound by
+then, so the plain `r.Defs.Top(d.Word)` rescue directly above catches these
+diagnostics and the optimistic arm is never reached. Deleting it changes
+nothing — the pinned recursion-with-dynamic-scope shape still checks clean
+and the matrix is unchanged. The redesign that made the analysis CORRECT
+also made a soundness-weakening special case redundant; those two usually
+travel together, and a 100% floor is what surfaces the second half, because
+nothing else in a suite reports an arm that has quietly stopped being
+reachable.
 
 SECOND, a body must be analysed in the SCOPE IT WAS WRITTEN IN. Draining
 every queued body against the top-level registry reported every
