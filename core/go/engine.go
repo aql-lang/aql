@@ -1873,356 +1873,43 @@ func pruneKeywordViable(viable []viableSig, pos int, tok Value) []viableSig {
 	return kept
 }
 
+// resolveForwardArgs is the interpreter's seat on the phase-1 plan walk:
+// it hands the Engine to the collection kernel as the host, with the tape
+// as the window and the token after the dispatching word as the start.
+// The walk itself lives in collect_kernel.go, where the three collection
+// loops meet one seam (design/FULL-COMPILATION.0.md §6.2).
 func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
-	// Forward-eligible signatures paired with their effective barrier
-	// (the /s and /f modifiers override the declared BarrierPos, mirroring
-	// matchSignature's forwardLimit computation).
-	viable := make([]viableSig, 0, len(fn.Signatures))
-	maxBarrier := 0
-	for si := range fn.Signatures {
-		sig := &fn.Signatures[si]
-		if sig.Fallback {
-			continue
-		}
-		barrier := effectiveForwardLimit(sig, w)
-		if barrier > 0 {
-			viable = append(viable, viableSig{sig, barrier})
-			if barrier > maxBarrier {
-				maxBarrier = barrier
-			}
-		}
-	}
-	if maxBarrier <= 0 {
-		return nil
-	}
+	return collectForward(e, fn, w, e.Pointer+1)
+}
 
-	// viableConsumes reports whether any still-viable signature collects a
-	// forward argument at position pos (i.e. pos is within its barrier).
-	viableConsumes := func(pos int) bool {
-		return viableConsumesAt(viable, pos)
-	}
+// --- the Engine's collectHost seat ------------------------------------
+//
+// Each method is a direct call so it inlines: the two largest collection
+// loops are 13.4% and 18.0% of interpreter CPU, which is the budget the
+// re-seat has to stay inside, and the alloc-ceiling tests gate the rest.
 
-	// pruneViable drops every signature that a concrete forward value at
-	// position pos definitely rules out (parity with matchSignature's
-	// per-position rejection). Raw/Form/TypeArg slots and Any slots are
-	// never used to prune (conservative — keep the signature viable);
-	// a concrete Pattern on the slot prunes exactly as patternsOk would
-	// reject the position (forwardPatternRejects) — fn's `tnot List`
-	// triple sig must fall out of the viable set on a spec-list token,
-	// or its 3-token window pre-evaluates groups past the call.
-	pruneViable := func(pos int, v Value) {
-		kept := viable[:0]
-		for _, vs := range viable {
-			keep := true
-			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) {
-				if et := SigArgType(vs.sig, pos); !et.Equal(TAny) && !SigArgMatches(vs.sig, pos, v) {
-					keep = false
-				} else if forwardPatternRejects(vs.sig, pos, v) {
-					keep = false
-				}
-			}
-			if keep {
-				kept = append(kept, vs)
-			}
-		}
-		viable = kept
-	}
+func (e *Engine) collectWindow() collectWindow { return e.Tape }
 
-	// scanHasKeyword: computed once so the per-token keyword prune below
-	// is zero-cost for the overwhelming majority of words, which carry
-	// no keyword slots.
-	scanHasKeyword := sigsHaveKeywordSlot(viable)
+func (e *Engine) evalGroupAt(i int) error { return e.evalParenGroupAt(i) }
 
-	// prunePatterns is the PATTERN-ONLY prune for values whose TYPE must
-	// not prune (a collapsed paren result — multi-value accounting — or a
-	// def-bound word's binding, whose matchSignature treatment is
-	// contextual). The pattern verdict is position-exact either way: the
-	// value tested is what matchSignature's patternsOk will test at this
-	// position, so a definite concrete-pattern rejection (the same
-	// forwardPatternRejects parity pruneViable uses) is sound. Quote slots
-	// are exempt — a /q position captures the word's NAME, not its
-	// binding.
-	prunePatterns := func(pos int, v Value) {
-		kept := viable[:0]
-		for _, vs := range viable {
-			keep := true
-			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) &&
-				!(vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos]) &&
-				forwardPatternRejects(vs.sig, pos, v) {
-				keep = false
-			}
-			if keep {
-				kept = append(kept, vs)
-			}
-		}
-		viable = kept
-	}
+func (e *Engine) evalInterp(tok Value) (Value, error) { return e.evalInterpString(tok) }
 
-	// pruneResolvedPatterns applies prunePatterns to a token, resolving a
-	// WORD through Defs.Top first — the same resolution patternsOk applies
-	// before unifying — so the pattern is tested against the binding the
-	// matcher will actually see. An unbound word never prunes.
-	pruneResolvedPatterns := func(pos int, tok Value) {
-		if IsWord(tok) {
-			if wi, werr := AsWord(tok); werr == nil {
-				if top, ok := e.Registry.Defs.Top(wi.Name); ok {
-					prunePatterns(pos, top)
-				}
-			}
-			return
-		}
-		prunePatterns(pos, tok)
-	}
+func (e *Engine) evalXml(tok Value) (Value, error) { return e.EvalXmlInterp(tok) }
 
-	pos := 0
-	scanIdx := e.Pointer + 1
-	for pos < maxBarrier && scanIdx < e.Tape.Len() {
-		tok := e.Tape.At(scanIdx)
+func (e *Engine) expandSugarAt(tok Value, pos, i int, viable []viableSig) (bool, error) {
+	return e.expandScanSugar(tok, pos, i, viable)
+}
 
-		// Boundary tokens (engine structurals, end / `)`): stop scanning.
-		if scanBoundaryToken(tok) {
-			break
-		}
+func (e *Engine) flowInterrupted() bool { return e.Registry.FlowCtrl != FlowNone }
 
-		// A sugar marker expands HERE — once per dispatch, before
-		// matchSignature's per-candidate scans (which must never mutate
-		// the tape per sig). A marker the expansion helper refuses is a
-		// boundary; a selected-head expansion failure is the user's
-		// syntax error, surfaced now.
-		if IsSugar(tok) {
-			expanded, serr := e.expandScanSugar(tok, pos, scanIdx, viable)
-			if serr != nil {
-				return serr
-			}
-			if !expanded {
-				break
-			}
-			continue
-		}
+func (e *Engine) scratchParenSpan(items []Value) []Value { return e.expandParenExprScratch(items) }
 
-		// Keyword slots are decided by the raw token at their position —
-		// prune before any group evaluation or word expansion below, so a
-		// keyword overload's larger arity never widens the scan past the
-		// dispatch the non-keyword overloads will actually make: `def g
-		// (fn […]) (g 3)` must not pre-evaluate `(g 3)` before the
-		// 2-arg def binds g.
-		if scanHasKeyword {
-			viable = pruneKeywordViable(viable, pos, tok)
-		}
+func (e *Engine) defTop(name string) (Value, bool) { return e.Registry.Defs.Top(name) }
 
-		// Open paren: a forward group of unknown type.
-		if IsOpenParen(tok) {
-			// Structure-first gate: evaluate ONLY if some still-viable
-			// overload consumes a forward argument at this position.
-			// Otherwise no signature wants a value here — leave the
-			// paren raw so matchSignature treats it as a boundary.
-			if !viableConsumes(pos) {
-				break
-			}
-			if err := e.evalParenGroupAt(scanIdx); err != nil {
-				return err
-			}
-			// Flow-control raised inside the paren: let the outer Run
-			// frame resolve it (parity with the former preEvalParens).
-			if e.Registry.FlowCtrl != FlowNone {
-				return nil
-			}
-			// The paren collapsed to its result value(s) at scanIdx; count
-			// it as one resolved position and advance, exactly as the
-			// former scan did. (The result's runtime type is not used to
-			// prune further: a group can collapse to zero or many values,
-			// so we keep the conservative one-slot accounting.) A concrete
-			// PATTERN mismatch does prune: whatever now sits at scanIdx is
-			// exactly what matchSignature will test at this sig position,
-			// so a sig whose pattern definitely rejects it can never be
-			// selected here — without this, a paren-spelled spec list
-			// (`fn (quote [[…]]) …`) left fn's 3-token triple window open
-			// and pre-evaluated the NEXT statement's groups. A WORD at
-			// scanIdx (the group collapsed to zero values and the next
-			// token slid in) prunes only through its resolved binding.
-			// A tagged reach-collapsed named fn that WOULD CLAIM its
-			// next token is a CALL head — the group resolved a callee,
-			// not an operand: stop the scan (the fn-word barrier's
-			// value twin, NUR038). A claim-less one is an operand, and
-			// so is one filling a FUNCTION slot of the collecting word
-			// (`usurp (m dot a)` — the higher-order consumer wants the
-			// fn itself; Any slots stay barred).
-			res := e.Tape.At(scanIdx)
-			if e.reachCallHeadBarrier(res, viable, pos, scanIdx) {
-				break
-			}
-			pruneResolvedPatterns(pos, res)
-			pos++
-			scanIdx++
-			continue
-		}
+func (e *Engine) isFnWordBarrier(tok Value) bool { return e.fnWordBarrierAt(tok) }
 
-		// Interpolated template string: an expression, not a value — its
-		// type is only knowable after evaluation (always a String).
-		// Treated like a paren group: when a still-viable overload
-		// consumes this position, evaluate it in place so a typed slot
-		// (`raise` msg:String, `add`'s Scalar overload) sees the String
-		// it will actually receive. Left raw, the token's internal
-		// InterpString type would prune every typed signature and a
-		// `raise `bad: ${x}`` mis-dispatched to the 0-arg fallback.
-		if IsInterpString(tok) {
-			if !viableConsumes(pos) {
-				break
-			}
-			result, err := e.evalInterpString(tok)
-			if err != nil {
-				return err
-			}
-			result.pos = tok.pos
-			e.Tape.Set(scanIdx, result)
-			pruneViable(pos, result)
-			pos++
-			scanIdx++
-			continue
-		}
-
-		// Interpolated XML literal: same as InterpString — its type
-		// (Node/Xml) is only knowable after evaluation, so evaluate in
-		// place when a viable overload consumes this position, then prune.
-		if IsXmlInterp(tok) {
-			if !viableConsumes(pos) {
-				break
-			}
-			result, err := e.EvalXmlInterp(tok)
-			if err != nil {
-				return err
-			}
-			result.pos = tok.pos
-			e.Tape.Set(scanIdx, result)
-			pruneViable(pos, result)
-			pos++
-			scanIdx++
-			continue
-		}
-
-		// Paren expression value (paren-nesting Step 3): expand it back to
-		// its OpenParen … CloseParen marker span in place, then re-process
-		// — the IsOpenParen branch above collapses it on THIS engine. See
-		// design/PAREN-REPRESENTATION.9.md Step 3.
-		if IsParenExpr(tok) {
-			// Step 4: a quote-captured ParenExpr (already Quoted) or a
-			// raw-capture forward position is left unevaluated so the
-			// matched sig captures the paren as code.
-			if tok.Quoted || rawParenForward(fn, pos) || rawFormForward(fn, pos) {
-				pos++
-				scanIdx++
-				continue
-			}
-			peItems, _ := AsParenExpr(tok)
-			e.Tape.Splice(scanIdx, 1, e.expandParenExprScratch(peItems)...)
-			continue
-		}
-
-		// A Reach in the forward window evaluates like a ParenExpr (Reach
-		// Phase B): expand to its lowered get-chain marker span in place,
-		// then re-process. Quoted/raw-capture reaches are left for the
-		// matched sig (parity with the ParenExpr branch above).
-		if IsReach(tok) {
-			if !isEvalReach(tok) || rawParenForward(fn, pos) || rawFormForward(fn, pos) {
-				pos++
-				scanIdx++
-				continue
-			}
-			// A dot-access chain is a single-value navigation, not a
-			// forward-collection barrier (see the statement-branch Reach
-			// hook): pre-evaluate it into the collecting word's slot exactly
-			// like a paren group — uniformly, strict or not. Only a bare
-			// function word that collects its own args stops the scan
-			// (below). design/STRICT-FORWARD-BARRIER.0.md.
-			info, _ := AsReach(tok)
-			e.Tape.Splice(scanIdx, 1, expandReach(info)...)
-			continue
-		}
-
-		// A word def-bound to a DATA __SP splice marker occupies its
-		// forward position as the paren group (w) — the `f w ≡ f (w)`
-		// equivalence: a plain (non-function) def-bound word expands into
-		// the token stream wherever it stands. Rewriting the token to
-		// ParenExpr([w]) and reprocessing routes it through the ParenExpr/
-		// OpenParen branches above, so evaluation gating, multi-value
-		// collapse, and raw-capture handling are byte-identical to a
-		// written (w). Exemptions: positions no still-viable overload
-		// consumes (viableConsumes — the rewrite is a TAPE MUTATION that
-		// outlives this dispatch, so a word in the window of a pruned
-		// overload must stay a word for the NEXT word to capture; the
-		// paren/interp branches above gate the same way), structural-
-		// capture slots (/q takes the word's NAME, a KEYWORD slot takes the
-		// matching literal word, form/raw/type slots take the raw token —
-		// see capturesForwardToken), code-bearing splices (Forth-style
-		// macros that must run against the live stack — see spliceIsData),
-		// and binder operands (`def y xs` rebinds the MARKER so y aliases
-		// the splice — see bindsReferent).
-		if IsWord(tok) && viableConsumes(pos) && !bindsReferent(fn.Name) && !capturesForwardToken(fn, pos, tok) {
-			if wi, werr := AsWord(tok); werr == nil {
-				if top, ok := e.Registry.Defs.Top(wi.Name); ok && IsSplice(top) {
-					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
-						pe := NewParenExpr([]Value{tok})
-						pe.pos = tok.pos
-						e.Tape.Set(scanIdx, pe)
-						continue
-					}
-				}
-			}
-		}
-
-		// A registered FUNCTION word in the forward window that the collecting
-		// word does NOT capture is the NEXT dispatch — the runtime's "another
-		// function word is a barrier" rule (commitBarrierForward) stops forward
-		// collection here, and the pre-evaluation scan must stop too. The
-		// former scan counted the word as one resolved forward position and
-		// kept going, so a LATER group was pre-evaluated ACROSS the barrier
-		// once the COLLECTING word's own max arity (maxBarrier) reached past
-		// it. With a heterogeneous-arity overload — e.g. a 3-arg `add` —
-		// `(g) add (g) add (g)` evaluated the third group before the first add
-		// ran; the recorded events then put both later operands on the
-		// simulated stack and the operand layout refused "not adjacent on
-		// top". Stop so each dispatch pre-evaluates only the groups IT
-		// collects, in source order. Lookup mirrors commitBarrierForward's own
-		// function-word test. The capturesForwardToken guard preserves a word
-		// the collecting sig takes STRUCTURALLY as an operand (a /q name like
-		// `undef foo`, a raw/form/type slot, a matching KEYWORD literal like
-		// def's `fn`) — there the function word is the argument, not a
-		// barrier, and the scan must walk past it.
-		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) && e.fnWordBarrierAt(tok) {
-			break
-		}
-
-		// A tagged reach-collapsed named fn already in the window (a
-		// re-plan after the arrival gate closed a statement) that WOULD
-		// CLAIM its next token is a CALL head — the fn-word barrier's
-		// value twin (NUR038): stop. A claim-less one is an operand, and
-		// so is one filling a FUNCTION slot of the collecting word.
-		if e.reachCallHeadBarrier(tok, viable, pos, scanIdx) {
-			break
-		}
-
-		// Non-group token. A concrete literal carries a final type that
-		// matchSignature tests identically, so it is sound to prune the
-		// viable set on it. Words and other non-concrete tokens are left
-		// un-pruned (their matchSignature treatment is contextual) but are
-		// still counted as one resolved position — so, exactly like the
-		// former scan, groups beyond a NON-FUNCTION word remain reachable.
-		if mt, kind := e.staticForwardType(tok); kind == fwdValue {
-			pruneViable(pos, mt)
-		} else if IsWord(tok) {
-			// A def-bound word's TYPE stays un-pruned (contextual), but
-			// its concrete-PATTERN verdict is exact — patternsOk resolves
-			// the word through Defs.Top the same way before unifying — so
-			// a sig whose pattern rejects the binding can never be
-			// selected with this word at this position. Without this, a
-			// word-spelled spec list (`def sw quote [[…]]  fn sw …`) left
-			// fn's 3-token triple window open past the call.
-			pruneResolvedPatterns(pos, tok)
-		}
-		pos++
-		scanIdx++
-	}
-	return nil
+func (e *Engine) isReachCallHead(tok Value, viable []viableSig, pos, i int) bool {
+	return e.reachCallHeadBarrier(tok, viable, pos, i)
 }
 
 // fnWordBarrierAt reports whether a scan token is a bare function word

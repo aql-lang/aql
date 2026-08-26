@@ -628,6 +628,31 @@ them:
 | interp-string / XML / paren-expr / splice | dedicated arms that pre-evaluate the form IN PLACE | no arms — and needs none | **resolved** (tested 2026-08-25): an interp-string in a `String`-typed forward slot yields the identical value in both lanes. Phase 1 has already replaced the form with a plain value by the time the scan runs, so the scan sees no form to have an arm for. **The tape mutation IS the interface between the phases** — the VM adapter must perform the same in-place pre-evaluation, or the scan meets forms it cannot classify |
 | `/q` quote slots | four checks at different stages | a fifth, differently conditioned | NOT duplicates: different questions, do not merge |
 
+**Re-seat 1 of 3 landed (2026-08-26): the phase-1 plan walk.** The seam is
+`core/go/collect_kernel.go` — a `collectWindow` (live-length, spliceable;
+the interpreter's `*Tape` satisfies it as written) plus a `collectHost`
+splitting the EVALUATIONS, which mutate the window and may raise, from the
+CLASSIFICATIONS, which are pure questions against the live binding set. The
+plan walk moved onto it verbatim: the extracted function is TEXTUALLY
+IDENTICAL to the method it replaced modulo the mechanical host
+substitution, which is the strongest evidence available that the re-seat is
+behaviour-neutral, and `resolveForwardArgs` is now a two-line seat.
+
+The gate F1b re-specified onto the deterministic instruments reads clean:
+allocation counts are IDENTICAL on all eight interpreter shapes — 841,
+4641, 7648, 6876, 1625, 1104, 6041, 16345 allocs/op before and after, not
+merely under ceiling. Interface dispatch costs nothing here, as the probe
+predicted.
+
+The host methods are deliberately UNEXPORTED. Nothing outside core can
+implement this yet — `cover-gate-core` would make any adapter-only arm dead
+code — so exporting now would put an unused public API on `*Engine`. Stage
+4 exports the interface, its methods, and the two helper types they name
+(`viableSig`, `fwdKind`) when the second implementation makes that real.
+The per-candidate scan and the arrival loop re-seat separately, for the
+reason §10 gives: a differential failure has to name one re-seat to be
+worth anything.
+
 Only the first two were textually identical and could be unified by
 inspection. Every remaining row needs the difference argued before it is
 touched — which is why this is slow work rather than a mechanical sweep,
