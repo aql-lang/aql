@@ -7084,7 +7084,14 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// `((…) 99)` spelling — has VALUE semantics, and value semantics are what
 	// the ruling changed. So the carrier bit no longer resolves the
 	// ambiguity; the lead's provenance does.
-	_, leadIsDefRead := es.defReads[residual[0].ID]
+	// Read the lead's provenance only once it is known to EXIST — this
+	// function is reached with an empty residual, so indexing residual[0]
+	// unguarded panics (ADR-005: panics are forbidden), which is exactly what
+	// the first cut of this change did.
+	leadIsDefRead := false
+	if len(residual) > 0 {
+		_, leadIsDefRead = es.defReads[residual[0].ID]
+	}
 	if !applyDynamic && leadIsDefRead && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 		// When the carrier's closure arity is statically recoverable (its
