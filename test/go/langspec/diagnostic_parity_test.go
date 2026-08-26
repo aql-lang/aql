@@ -121,6 +121,7 @@ func TestDiagnosticParityAcrossPasses(t *testing.T) {
 
 	var rows, diverged, infoDiverged int
 	var armedOnly, carriedByRefusal, lostUnderCompile int
+	var armedOnlyRows []string
 	byShape := map[string]int{}
 	var examples []string
 
@@ -178,6 +179,10 @@ func TestDiagnosticParityAcrossPasses(t *testing.T) {
 			switch {
 			case len(c) > len(p):
 				armedOnly++ // the NUR103 class: clean to `boru check`, refused by the compiler
+				// Few enough to name. Listing them is the difference between
+				// a ratchet and a worklist.
+				armedOnlyRows = append(armedOnlyRows,
+					e.Name()+":L"+itoa(lineNum)+"  "+strings.Join(c, "|")+"  "+firstNRunes(input, 70))
 			case refused:
 				carriedByRefusal++ // dropped as a diagnostic, still reported as a refusal
 			default:
@@ -197,6 +202,9 @@ func TestDiagnosticParityAcrossPasses(t *testing.T) {
 		armedOnly, carriedByRefusal, lostUnderCompile)
 	for _, ex := range examples {
 		t.Logf("  e.g. %s", ex)
+	}
+	for _, r := range armedOnlyRows {
+		t.Logf("  armed-only: %s", r)
 	}
 	if armedOnly > armedOnlyCeiling {
 		t.Errorf("armed-only findings %d exceed ceiling %d — programs that `boru check` calls clean and the compiler refuses, which a user cannot diagnose (NUR103)",

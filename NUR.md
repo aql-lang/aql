@@ -3593,6 +3593,43 @@ Hypotheses tested and REJECTED, recorded so they are not re-explored:
   at top level, and inside a one-parameter lambda — both check clean
   under compilation. The trigger is narrower than the surface shape.
 
+**MINIMAL REPRO (2026-08-26).** Found by the diagnostic-parity gate
+(`test/go/langspec/diagnostic_parity_test.go`), which enumerates every
+corpus row whose findings differ between the passes. One line, and the
+code is entirely ordinary — a record-typed parameter read through dot
+access:
+
+```
+$ cat rec.boru
+def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {pretty:true}
+
+$ boru check rec.boru
+check: 0 error(s), 0 warning(s), 0 info
+check: Boolean
+
+$ boru run -no-compile rec.boru
+true
+
+$ boru run -force-compile rec.boru
+error: force-compile: check diagnostics: [undefined_word] undefined word:
+```
+
+Note the diagnostic names **no word at all** — an empty `Word` field —
+which is itself a defect: whatever emits it has lost the identifier it is
+complaining about. The corpus row is `edge-dispatch-3.tsv:L56`.
+
+Whether this shares a root cause with the `h2` site in mini-redis is
+unknown; both are armed-only `undefined_word`, but the shapes differ
+(record-param dot access here, a `def`-then-read inside a stored handler
+there). Four manual reductions of the mini-redis shape had failed — they
+were reducing the wrong program. The gate found this in one run, which is
+the argument for building the measurement before hunting the bug.
+
+**The other four armed-only rows**, for whoever picks this up:
+`case.tsv:L76` (`case_not_exhaustive`), `case.tsv:L97`
+(`undefined_word/zed`), `edge-quote-1.tsv:L103` (`undefined_word/nosuch`,
+emitted TWICE), `generics-fn.tsv:L55` (`undefined_word/value`).
+
 **Isolated so far.** Importing the module is not enough: a program that
 imports mini-redis and evaluates `1` compiles clean. Calling
 `MiniRedis.serve {port:0}` **alone** trips it — no connection, no
