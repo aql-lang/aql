@@ -163,12 +163,21 @@ MiniRedis.cmd ep "GET k"
 //
 // 51 today because the program does not compile AT ALL: it refuses on the
 // check-diagnostics sentinel with `undefined_word: h2`
-// (design/examples/apps/mini-redis.boru:210), where a name bound earlier in
-// the same statement is read inside a lambda body registered as a service
-// handler. The interpreter binds and resolves it; the checker does not see
-// the binding. Two smaller reductions of the shape did NOT reproduce, so
-// the trigger is narrower than "def and use in one statement" and is not
-// yet isolated.
+// (design/examples/apps/mini-redis.boru:210).
+//
+// DIAGNOSED 2026-08-26 (NUR103), by delta-debugging this app rather than
+// writing reductions: of its fourteen registered handlers, HDEL alone
+// reproduces — and HSET, the site the message NAMES, does not. Three faults
+// compose. (1) `boru check` does not analyse a service-handler body AT ALL:
+// a bare undefined word inside one is reported clean by check and refused by
+// the compiler, so a typo in a request handler ships. The compile pass must
+// read that body — it records it into a compiled callback unit — so every
+// divergence follows from that asymmetry. (2) A call the checker models as
+// DIVERGENT silently unbinds its `def`, so the later read is undefined; at
+// run time the receiver is a real value and the handler works. (3) The
+// `no_signature` that would name the failing call is suppressed while
+// compiling, which is why the escaping diagnostic is at a different line,
+// about a different name, than its cause.
 //
 // This is frontier family E — the sentinel section 6.9 deletes at Stage 8 —
 // and it is the whole reason a realistic protocol server refuses while the

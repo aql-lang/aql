@@ -88,7 +88,15 @@ func ResolveSigChildParam(r *Registry, v Value) Value {
 // pinned to a literal VALUE (`{status:'ok'}` — a value is a type, ADR-010)
 // keeps its value pattern and a field naming no type keeps its word. A nested
 // inline record (`{a:{b:Integer}}`) resolves recursively, so a chained read
-// narrows through it the same way a nested NAMED record already does.
+// narrows through it the same way a nested NAMED record already does, and a
+// field type EXPRESSION (`{a:(Integer tor String)}`) evaluates, exactly as
+// ResolveChildTypeExpr evaluates a typed container's paren child.
+//
+// It deliberately does NOT delegate to ResolveFieldType, the cascade `record`
+// and `class` run over their own field maps. That resolver also EVALUATES a
+// concrete List field as code, which is right for a type DECLARATION and
+// wrong for a dispatch PATTERN, where `{a:[1 2]}` pins the field to that
+// list. The two share the type-name cascade, not the value arms.
 func ResolveSigRecordFields(r *Registry, v Value) Value {
 	if r == nil {
 		return v
@@ -97,13 +105,17 @@ func ResolveSigRecordFields(r *Registry, v Value) Value {
 	if !ok || mp.M == nil {
 		return v
 	}
+	// ONE pass, results held: a field type EXPRESSION is evaluated, and a
+	// scan-then-rebuild would run it twice — visibly, for an expression with
+	// an effect.
+	keys := mp.M.Keys()
+	resolved := make([]Value, len(keys))
 	changed := false
-	for _, k := range mp.M.Keys() {
+	for i, k := range keys {
 		fv, _ := mp.M.Get(k)
-		if _, hit := resolveSigFieldType(r, fv); hit {
-			changed = true
-			break
-		}
+		rv, hit := resolveSigFieldType(r, fv)
+		resolved[i] = rv
+		changed = changed || hit
 	}
 	// Identity matters here: the pattern is stored on the signature and
 	// compared by the dispatcher, so an all-concrete field map is handed
@@ -114,10 +126,8 @@ func ResolveSigRecordFields(r *Registry, v Value) Value {
 	out := NewOrderedMap()
 	out.Implicit = mp.M.Implicit
 	out.Meta = mp.M.Meta
-	for _, k := range mp.M.Keys() {
-		fv, _ := mp.M.Get(k)
-		rv, _ := resolveSigFieldType(r, fv)
-		out.Set(k, rv)
+	for i, k := range keys {
+		out.Set(k, resolved[i])
 	}
 	res := NewMap(out)
 	res.pos = v.pos
@@ -132,11 +142,14 @@ func ResolveSigRecordFields(r *Registry, v Value) Value {
 func resolveSigFieldType(r *Registry, fv Value) (Value, bool) {
 	w, werr := AsWord(fv)
 	if werr != nil {
-		if _, isMap := fv.Data.(MapPayload); !isMap {
-			return fv, false
+		if _, isMap := fv.Data.(MapPayload); isMap {
+			nested := ResolveSigRecordFields(r, fv)
+			return nested, !ExactEqual(nested, fv)
 		}
-		nested := ResolveSigRecordFields(r, fv)
-		return nested, !ExactEqual(nested, fv)
+		if IsParenExpr(fv) {
+			return resolveSigFieldExpr(r, fv)
+		}
+		return fv, false
 	}
 	if def := r.LookupTypeName(w.Name); def != nil && IsTypeParamNode(def) {
 		return NewTypeLiteral(def), true
@@ -148,6 +161,37 @@ func resolveSigFieldType(r *Registry, fv Value) (Value, bool) {
 		return NewTypeLiteral(t), true
 	}
 	return fv, false
+}
+
+// resolveSigFieldExpr evaluates a record-pattern field whose type is an
+// EXPRESSION — `{a:(Integer tor String)}`, `{b:(Box of [Integer])}`. In the
+// inline spelling the paren span is inert data inside the fn-spec list, so
+// the field kept a ParenExpr the dispatcher could never match: `fn
+// [[o:{a:(Integer tor String)}] …]` refused `{a:7}` outright, where the same
+// field written through `refine Record [{a:(Integer tor String)}]` — which
+// dispatches, and so evaluates — admits it. Same asymmetry as the bare type
+// word, one level up.
+//
+// Failure is SILENT and leaves the field alone: a sig install is not a place
+// to raise, and a paren that does not evaluate to a single value was never a
+// type constraint to begin with (it keeps whatever meaning the dispatcher
+// already gave it). ResolveChildTypeExpr, the typed-container twin, reports
+// its error because its caller is positioned to attach it to the param.
+func resolveSigFieldExpr(r *Registry, fv Value) (Value, bool) {
+	toks, terr := AsParenExpr(fv)
+	if terr != nil { //covergate:allow IsParenExpr at the sole call site requires the ParenExpr payload, so AsParenExpr cannot fail here
+		return fv, false
+	}
+	sub := New(r)
+	input := make([]Value, 0, len(toks)+2)
+	input = append(input, NewOpenParen())
+	input = append(input, toks...)
+	input = append(input, NewCloseParen())
+	out, rerr := sub.Run(input)
+	if rerr != nil || len(out) != 1 || !IsTypeBody(out[0]) {
+		return fv, false
+	}
+	return out[0], true
 }
 
 // ResolveChildTypeExpr evaluates a typed-list/map child constraint

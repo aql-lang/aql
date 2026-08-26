@@ -56,6 +56,9 @@ def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {
 def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {pretty:true}	true	an implicit map-shape param checks the same way
 def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {prety:true}	ERROR:no signature matches	…including the rejection
 def f fn [[o:{inner:{n:Integer}}][Integer][o.inner.n]] f {inner:{n:7}}	7	a NESTED implicit map-shape param narrows a chained read the same way
+def f fn [[o:{a:(Integer tor String)}][Any][o.a]] f {a:7}	7	a field TYPE EXPRESSION evaluates at sig install, so the inline spelling dispatches like the named one
+def f fn [[o:{a:(Integer tor String)}][Any][o.a]] f {a:true}	ERROR:no signature matches	…and rejects what the disjunct excludes
+def f fn [[o:{a:[1 2]}][Any][o.a]] f {a:[1 2]}	[1 2]	a field pinned to a LIST value stays a value pattern — a pattern is not a type declaration
 #
 # §4  options maps pass through Any slots untouched
 def f fn [[x:Any][Any][x]] f {trim:true}	{trim:true}	an Any param takes an options-looking map as plain data

@@ -1098,7 +1098,7 @@ Four changes, all conservative in the abstract-interpretation frame:
    two different jobs — 5 rows of invisible divergence, and a
    272-row false-positive surface — not one undifferentiated 318.
 
-   **First row discharged, same day: 5 → 4, 318 → 317.** The gate found a
+   **First row discharged, same day: 5 → 4, and 318 → 317 → 318.** The gate found a
    one-line instance the four manual reductions of the mini-redis shape had
    all missed — a field read from a structural-record parameter,
    `edge-dispatch-3.tsv:L56`. It was not a `!Compiling` fork at all. An
@@ -1115,6 +1115,18 @@ Four changes, all conservative in the abstract-interpretation frame:
    lessons for the remaining rows: the measurement found in one run what
    reasoning had missed four times, and "armed-only" does not imply "a fork
    is responsible".
+
+   The parity count then went back to 318, and the arithmetic is worth
+   spelling out because it is the ratchet's first real test. NUR104 added
+   three spec rows and one of them — an `ERROR:no signature matches` row —
+   diverges: `no_signature/f` on the plain pass, nothing on the armed one,
+   program compiles. That is the documented suppression, the class already
+   carrying 41 rows, and it is invisible to the user (both lanes surface
+   the identical error through the CLI pre-flight, and both refuse the
+   call). So the ceiling rose by one against a corpus three rows larger. A
+   ratchet that may only ever fall would forbid adding ERROR rows to the
+   corpus, which is exactly the wrong incentive; what it has to forbid is a
+   divergence nobody accounted for.
 
    Plain-only findings
    (`no_signature` suppressed while compiling, `unreachable_branch`, the
@@ -1557,11 +1569,25 @@ concurrency shape:
    sharpest evidence in this note: the app **does not compile at all**,
    and runs 51 unattributed interpreter runs. The reason is a single
    check diagnostic — `undefined_word: h2` at
-   `design/examples/apps/mini-redis.boru:210`, where a name bound earlier
-   in the same statement is read inside a lambda body registered as a
-   service handler. The interpreter binds and resolves it; the checker
-   does not see the binding, and the whole-program sentinel converts that
-   into a refusal.
+   `design/examples/apps/mini-redis.boru:210`. The interpreter binds and
+   resolves that name; the checker does not, and the whole-program
+   sentinel converts that into a refusal.
+
+   **Diagnosed 2026-08-26** (NUR103), by delta-debugging the app rather
+   than writing reductions: of the fourteen registered handlers, `HDEL`
+   alone reproduces — and `HSET`, the site the message NAMES, does not.
+   Three faults compose, and the first is not a parity nicety but a
+   COVERAGE HOLE: **`boru check` does not analyse a service-handler body
+   at all**. A bare undefined word inside one is reported clean by `boru
+   check` and refused by the compiler, so a typo in a request handler
+   ships. The compile pass must read that body — it records it into a
+   compiled callback unit — so every divergence follows from that one
+   asymmetry. On top of it, a call the checker models as DIVERGENT
+   silently unbinds its `def` (so the later read is undefined), and the
+   `no_signature` that would name the failing call is suppressed while
+   compiling — which is why the escaping diagnostic is at a different
+   line, about a different name, than the cause. Twelve self-contained
+   lines reproduce it; NUR103 carries them.
 
    So the gap between "a callback server compiles" and "a realistic
    callback server compiles" is not, in this instance, any of the
@@ -1570,10 +1596,12 @@ concurrency shape:
    deletes. Echo compiles to zero because it never trips it. That is an
    argument for sequencing Stage 8 earlier than its position in §10
    suggests: it is cheap relative to the spine and it is what stands
-   between a real server and the compiled lane today. (Two smaller
-   reductions of the `h2` shape did not reproduce, so the trigger is
-   narrower than "def and use in one statement" and wants isolating
-   before it is fixed.)
+   between a real server and the compiled lane today. The diagnosis
+   sharpens that argument rather than softening it: fault 1 is a
+   user-facing checker hole that wants fixing whether or not full
+   compilation lands, and fault 2 — should a provably-divergent value
+   expression bind a `Never` carrier instead of nothing? — is a question
+   the totality model has to answer anyway.
 
    Extend the case with partial frames (the codec's `{need:1}` path
    re-entered mid-message) and pipelined commands once it compiles.

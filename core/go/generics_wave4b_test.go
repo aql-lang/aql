@@ -625,6 +625,24 @@ func TestResolveSigRecordFields(t *testing.T) {
 		t.Errorf("literal value pattern rewritten: %v", status)
 	}
 
+	// A field type EXPRESSION evaluates, and a paren that does not name one
+	// type is left alone — silently, since a sig install is no place to raise.
+	exprFields := NewOrderedMap()
+	exprFields.Set("one", NewParenExpr([]Value{NewWord("Integer")}))
+	exprFields.Set("two", NewParenExpr([]Value{NewWord("Integer"), NewWord("String")}))
+	exprFields.Set("val", NewParenExpr([]Value{NewInteger(1)}))
+	exprFields.Set("bad", NewParenExpr([]Value{NewWord("noSuchWordAtAll")}))
+	em, _ := AsMap(ResolveSigRecordFields(r, NewMap(exprFields)))
+	one, _ := em.Get("one")
+	if !IsBareTypeNode(one) || !ValueType(one).Equal(TInteger) {
+		t.Errorf("field type expression = %v (want the Integer type)", one)
+	}
+	for _, k := range []string{"two", "val", "bad"} {
+		if fv, _ := em.Get(k); !IsParenExpr(fv) {
+			t.Errorf("field %q rewritten: %v", k, fv)
+		}
+	}
+
 	// A nested inline record resolves recursively.
 	inner := NewOrderedMap()
 	inner.Set("b", NewWord("Integer"))

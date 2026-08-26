@@ -37,7 +37,8 @@ import (
 // only; 0 when the two passes cannot disagree (Stage 8).
 //
 // 318 of 7568 corpus rows at the baseline, 317 of 7569 after the first row
-// was fixed, counting FINDINGS only; a
+// was fixed, 318 of 7572 once NUR104's spec rows landed, counting FINDINGS
+// only; a
 // further 260 rows differ on informational advisories, tracked separately
 // because some of those are pass-specific BY DESIGN (see diagSet). The shapes are structured, not
 // noise, and they run in BOTH directions:
@@ -51,7 +52,17 @@ import (
 //
 // Some are deliberate; the design requires each to be collapsed or proven
 // diagnostic-neutral (section 6.9(3)), which is what drives this to zero.
-const diagnosticParityCeiling = 317 // 318 (2026-08-26, Stage-1 baseline) -> 317 (NUR103 record-field fix) -> 0 (Stage 8)
+// 317 -> 318, same day: NUR104 added three spec rows to
+// `edge-dispatch-3.tsv` and one of them diverges. Measured, not guessed —
+// `def f fn [[o:{a:(Integer tor String)}][Any][o.a]] f {a:true}` reports
+// `no_signature/f` on the plain pass and NOTHING on the armed one, while
+// the program compiles. That is the documented no_signature suppression,
+// the class already carrying 41 rows, and it is invisible to the user:
+// both lanes surface the identical error through the CLI pre-flight, and
+// both refuse the call. A ratchet that only ever falls would forbid adding
+// ERROR rows to the corpus, which is the wrong incentive; what it must
+// forbid is a divergence nobody accounted for. This one is accounted for.
+const diagnosticParityCeiling = 318 // 318 (2026-08-26, Stage-1 baseline) -> 317 (NUR103 record-field fix) -> 318 (+3 NUR104 spec rows, one diverging) -> 0 (Stage 8)
 
 // armedOnlyCeiling is the sharpest of the three classes: rows the plain
 // check calls clean and the compile-armed pass finds fault with. It is the
