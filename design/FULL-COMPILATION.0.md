@@ -1096,7 +1096,27 @@ Four changes, all conservative in the abstract-interpretation frame:
    the checker is STRICTER than the compiler, so `boru check` reports
    errors on programs that compile and run. Stage 8's work is therefore
    two different jobs — 5 rows of invisible divergence, and a
-   272-row false-positive surface — not one undifferentiated 318. Plain-only findings
+   272-row false-positive surface — not one undifferentiated 318.
+
+   **First row discharged, same day: 5 → 4, 318 → 317.** The gate found a
+   one-line instance the four manual reductions of the mini-redis shape had
+   all missed — a field read from a structural-record parameter,
+   `edge-dispatch-3.tsv:L56`. It was not a `!Compiling` fork at all. An
+   INLINE record parameter's field type words (`o:{pretty:Boolean}`) were
+   never resolved to types, where the named `type R record {…}` spelling had
+   them resolved by `record`'s own dispatch; the schema-bearing param carrier
+   copies the pattern verbatim, so the field read narrowed to
+   `dynamic(Word)`, and the step loop — which classifies by parent type
+   alone — then dispatched that CARRIER as a token, with no `WordInfo` and
+   hence no name. Only the compile pass builds the precise carrier, which is
+   the whole reason the divergence looked like a fork. Fixed by resolving the
+   field words at sig install (`ResolveSigRecordFields`) and by making a
+   word-typed carrier DATA in `stepWord`; NUR103 carries the trace. Two
+   lessons for the remaining rows: the measurement found in one run what
+   reasoning had missed four times, and "armed-only" does not imply "a fork
+   is responsible".
+
+   Plain-only findings
    (`no_signature` suppressed while compiling, `unreachable_branch`, the
    `module_body_executed_in_check` info); armed-only findings
    (`redundant_guard`, `case_not_exhaustive`, and — the NUR103 shape —

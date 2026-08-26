@@ -29,6 +29,24 @@ value-dependent errors that are the runtime's job, not statically flaggable.
 This was a single global pin; the aggregate evolution is recorded here, and the
 count is now tracked per spec file in `unflaggedPins`.
 
+2026-08-26, NUR103 record-field fix — two NEW entries, `edge-quote-1.tsv: 1`
+and `edge-quote-3.tsv: 1`, and one row added elsewhere. Both files carry the
+same shape: a WORD element pulled out of a quoted list bare (`quote [add 1 2]
+get 0`, and its `macroexpand` twin) re-fires at the pointer and raises
+`signature_error` at run time. The static flag they lost was a PHANTOM. In
+check mode `get` yields a Word-TYPED CARRIER, and the step loop classified on
+the parent type alone, so it dispatched that carrier as a token — a carrier
+has no `WordInfo`, hence no name, so what "flagged" these rows was
+`undefined_word` naming no word, at no position. `stepWord` now collects a
+word-typed carrier as data, and the checker types the row `Word`, which is
+correct; WHICH word it stands for, and whether that word dispatches cleanly
+with no arguments, is not decidable from the carrier — so these are
+runtime-only, like the rest of this map. The same commit resolves an inline
+record parameter's field type words at sig install
+(`ResolveSigRecordFields`), which is what produced the bad carrier in the
+first place; `edge-dispatch-3.tsv` gains a nested-record VALUE row and keeps
+its pin. False positives untouched (still 0).
+
 2026-07-22, PR #298 merge with main — two adjustments.
 `module-minilang.tsv: 19 → 20` (+1): this branch's new `sp` (structure-path)
 built-in kind adds one runtime-only `mini_parse_error` row (`{a:1} mini sp

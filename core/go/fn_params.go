@@ -745,7 +745,11 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 			resolved = ResolveSigChildParam(r, resolved)
 			return TMap, &resolved, nil
 		}
-		return TMap, &v, nil
+		// An INLINE record pattern (`o:{pretty:Boolean}`) resolves its
+		// field type words here, where the named spelling's `record`
+		// dispatch already resolved them (ResolveSigRecordFields).
+		resolved := ResolveSigRecordFields(r, v)
+		return TMap, &resolved, nil
 	}
 	if v.Parent.Equal(TList) {
 		if IsTypedList(v) {

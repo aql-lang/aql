@@ -36,7 +36,8 @@ import (
 // differ between a plain check and a compile-armed check. Monotone DOWN
 // only; 0 when the two passes cannot disagree (Stage 8).
 //
-// 318 of 7568 corpus rows at the baseline, counting FINDINGS only; a
+// 318 of 7568 corpus rows at the baseline, 317 of 7569 after the first row
+// was fixed, counting FINDINGS only; a
 // further 260 rows differ on informational advisories, tracked separately
 // because some of those are pass-specific BY DESIGN (see diagSet). The shapes are structured, not
 // noise, and they run in BOTH directions:
@@ -50,7 +51,7 @@ import (
 //
 // Some are deliberate; the design requires each to be collapsed or proven
 // diagnostic-neutral (section 6.9(3)), which is what drives this to zero.
-const diagnosticParityCeiling = 318 // 318 (2026-08-26, Stage-1 baseline) -> 0 (Stage 8)
+const diagnosticParityCeiling = 317 // 318 (2026-08-26, Stage-1 baseline) -> 317 (NUR103 record-field fix) -> 0 (Stage 8)
 
 // armedOnlyCeiling is the sharpest of the three classes: rows the plain
 // check calls clean and the compile-armed pass finds fault with. It is the
@@ -64,7 +65,14 @@ const diagnosticParityCeiling = 318 // 318 (2026-08-26, Stage-1 baseline) -> 0 (
 // vanishes and the program compiles anyway — the checker being stricter
 // than the compiler, which is a false-positive surface rather than a
 // silent-acceptance one.
-const armedOnlyCeiling = 5 // 5 (2026-08-26) -> 0 (Stage 8)
+// 5 -> 4, 2026-08-26: `edge-dispatch-3.tsv:L56` — a field read from a
+// STRUCTURAL-RECORD parameter — is fixed. The inline record pattern's field
+// type words now resolve at sig install (ResolveSigRecordFields), so the
+// schema-bearing param carrier no longer narrows the read to dynamic(Word),
+// and the step loop no longer dispatches a word-typed CARRIER as a nameless
+// token. NUR103 has the full trace; its `h2` half is a different defect and
+// is not among these four.
+const armedOnlyCeiling = 4 // 5 (2026-08-26) -> 4 (NUR103 record-field fix) -> 0 (Stage 8)
 
 // diagKey renders a diagnostic's identity for set comparison: the code and
 // the word it is about. Detail text is deliberately excluded — it embeds

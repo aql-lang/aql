@@ -64,6 +64,92 @@ func ResolveSigChildParam(r *Registry, v Value) Value {
 	return NewTypedList(child)
 }
 
+// ResolveSigRecordFields is ResolveSigChildParam's STRUCTURAL-RECORD twin: it
+// resolves the field TYPE WORDS of an inline record pattern — the
+// `{pretty:Boolean}` of `fn [[o:{pretty:Boolean}] …]` — to type values at sig
+// install, exactly when the named param types resolve (ResolveSigType).
+//
+// A NAMED record type gets this for free: `type R record {pretty:Boolean}`
+// DISPATCHES `record`, so its field map is evaluated and ResolveDefType's
+// pattern already carries type values. The INLINE spelling never evaluates —
+// the map rides inside the fn-spec LIST, which is inert data — so its field
+// values arrive as bare Word tokens and nothing downstream re-resolved them.
+// The dispatcher tolerated that (Unify resolves the name at match time), but
+// the schema-bearing param carrier copies the pattern's fields VERBATIM
+// (check's recordSchemaCarrier), so a body field read narrowed to the WORD's
+// own type: `o.pretty` checked as dynamic(Word), not dynamic(Boolean). That
+// carrier then arrived at the step loop as a Word-typed value with no
+// WordInfo and raised a NAMELESS `undefined_word` — on the compile path only,
+// because the plain check pass builds the coarse `{:Any}` carrier and never
+// reads the schema. NUR103.
+//
+// Resolution follows ResolveSigChildParam's cascade — type-param node, user
+// type body, builtin name — and leaves everything else untouched, so a field
+// pinned to a literal VALUE (`{status:'ok'}` — a value is a type, ADR-010)
+// keeps its value pattern and a field naming no type keeps its word. A nested
+// inline record (`{a:{b:Integer}}`) resolves recursively, so a chained read
+// narrows through it the same way a nested NAMED record already does.
+func ResolveSigRecordFields(r *Registry, v Value) Value {
+	if r == nil {
+		return v
+	}
+	mp, ok := v.Data.(MapPayload)
+	if !ok || mp.M == nil {
+		return v
+	}
+	changed := false
+	for _, k := range mp.M.Keys() {
+		fv, _ := mp.M.Get(k)
+		if _, hit := resolveSigFieldType(r, fv); hit {
+			changed = true
+			break
+		}
+	}
+	// Identity matters here: the pattern is stored on the signature and
+	// compared by the dispatcher, so an all-concrete field map is handed
+	// back as the SAME value rather than an equal copy.
+	if !changed {
+		return v
+	}
+	out := NewOrderedMap()
+	out.Implicit = mp.M.Implicit
+	out.Meta = mp.M.Meta
+	for _, k := range mp.M.Keys() {
+		fv, _ := mp.M.Get(k)
+		rv, _ := resolveSigFieldType(r, fv)
+		out.Set(k, rv)
+	}
+	res := NewMap(out)
+	res.pos = v.pos
+	return res
+}
+
+// resolveSigFieldType resolves ONE record-pattern field's type expression and
+// reports whether it changed. A bare Word naming a type becomes that type
+// (ResolveSigChildParam's cascade, arm for arm); a nested inline record map
+// recurses. Anything else — a literal value pattern, a typed container, a
+// word naming no type — is returned unchanged.
+func resolveSigFieldType(r *Registry, fv Value) (Value, bool) {
+	w, werr := AsWord(fv)
+	if werr != nil {
+		if _, isMap := fv.Data.(MapPayload); !isMap {
+			return fv, false
+		}
+		nested := ResolveSigRecordFields(r, fv)
+		return nested, !ExactEqual(nested, fv)
+	}
+	if def := r.LookupTypeName(w.Name); def != nil && IsTypeParamNode(def) {
+		return NewTypeLiteral(def), true
+	}
+	if tv, ok := r.TopTypeBody(w.Name); ok && IsTypeBody(tv) {
+		return tv, true
+	}
+	if t, ok := ResolveBuiltinTypeName(w.Name); ok {
+		return NewTypeLiteral(t), true
+	}
+	return fv, false
+}
+
 // ResolveChildTypeExpr evaluates a typed-list/map child constraint
 // that arrived as an unevaluated ParenExpr — `[:(Pair of [String
 // Integer])]` in data context parses with the paren span as the

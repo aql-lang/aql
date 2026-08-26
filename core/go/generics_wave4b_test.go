@@ -577,6 +577,90 @@ func TestResolveSigChildParam(t *testing.T) {
 	}
 }
 
+// TestResolveSigRecordFields covers the structural-record twin of
+// ResolveSigChildParam: an INLINE record parameter's field type words resolve
+// at sig install, where the named `type R record {…}` spelling had them
+// resolved by `record`'s own dispatch. An unresolved field word used to reach
+// the schema-bearing param carrier, so a body field read narrowed to
+// dynamic(Word) and the step loop then dispatched that carrier as a nameless
+// token (NUR103).
+func TestResolveSigRecordFields(t *testing.T) {
+	r := newTestRegistry(t)
+	spec := &GenSpecInfo{Params: []GenParam{{Name: "T"}}}
+	PushGenBindings(r, spec)
+	defer PopGenBindings(r, spec)
+	if err := InstallType(r, "RsrfRec", NewRecordType(intStrRecord().Fields)); err != nil {
+		t.Fatalf("InstallType: %v", err)
+	}
+
+	fields := NewOrderedMap()
+	fields.Set("pretty", NewWord("Boolean")) // builtin name
+	fields.Set("param", NewWord("T"))        // live type-param placeholder
+	fields.Set("rec", NewWord("RsrfRec"))    // user type body
+	fields.Set("nope", NewWord("notAType"))  // names no type
+	fields.Set("status", NewString("ok"))    // a value is a type (ADR-010)
+	got := ResolveSigRecordFields(r, NewMap(fields))
+	gm, err := AsMap(got)
+	if err != nil {
+		t.Fatalf("AsMap: %v", err)
+	}
+	pretty, _ := gm.Get("pretty")
+	if !IsBareTypeNode(pretty) || !ValueType(pretty).Equal(TBoolean) {
+		t.Errorf("builtin field = %v (want the Boolean type)", pretty)
+	}
+	param, _ := gm.Get("param")
+	if !IsBareTypeNode(param) || TypeParamName(&param) != "T" {
+		t.Errorf("type-param field = %v", param)
+	}
+	rec, _ := gm.Get("rec")
+	if !IsRecordType(rec) {
+		t.Errorf("user-type field = %v (want the record body)", rec)
+	}
+	nope, _ := gm.Get("nope")
+	if !IsWord(nope) {
+		t.Errorf("word naming no type rewritten: %v", nope)
+	}
+	status, _ := gm.Get("status")
+	if !IsConcrete(status) {
+		t.Errorf("literal value pattern rewritten: %v", status)
+	}
+
+	// A nested inline record resolves recursively.
+	inner := NewOrderedMap()
+	inner.Set("b", NewWord("Integer"))
+	outer := NewOrderedMap()
+	outer.Set("a", NewMap(inner))
+	nested := ResolveSigRecordFields(r, NewMap(outer))
+	nm, _ := AsMap(nested)
+	av, _ := nm.Get("a")
+	im, _ := AsMap(av)
+	bv, _ := im.Get("b")
+	if !IsBareTypeNode(bv) || !ValueType(bv).Equal(TInteger) {
+		t.Errorf("nested field = %v (want the Integer type)", bv)
+	}
+
+	// Nothing to resolve: the SAME value comes back, not an equal copy — the
+	// pattern is stored on the signature and compared by the dispatcher.
+	inertFields := NewOrderedMap()
+	inertFields.Set("a", NewInteger(1))
+	inertFields.Set("b", NewMap(NewOrderedMap()))
+	inert := NewMap(inertFields)
+	if out := ResolveSigRecordFields(r, inert); out.ID != inert.ID {
+		t.Errorf("all-concrete field map rebuilt: %v", out)
+	}
+
+	// Non-map values, an empty payload, and a nil registry pass through.
+	if v := ResolveSigRecordFields(r, NewInteger(1)); !IsConcrete(v) {
+		t.Error("integer rewritten")
+	}
+	if v := ResolveSigRecordFields(r, NewMap(nil)); v.Data == nil {
+		t.Error("nil-backed map rewritten")
+	}
+	if v := ResolveSigRecordFields(nil, NewMap(fields)); !v.Parent.Equal(TMap) {
+		t.Error("nil registry rewrote the value")
+	}
+}
+
 func TestResolveChildTypeExpr(t *testing.T) {
 	r := newTestRegistry(t)
 	// A ParenExpr child evaluates in a sub-engine.

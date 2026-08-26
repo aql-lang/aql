@@ -109,6 +109,19 @@ var unflaggedPins = map[string]int{
 	"edge-errors-2.tsv":   1,
 	"edge-forward-1.tsv":  1,
 	"edge-forward-2.tsv":  1,
+	// edge-quote-1.tsv / edge-quote-3.tsv: one row each, the same shape —
+	// a WORD element pulled out of a quoted list bare (`quote [add 1 2] get
+	// 0`, and its macroexpand twin) re-fires at the pointer and raises
+	// `signature_error` at run time. Newly unflagged 2026-08-26, and the
+	// flag they lost was a PHANTOM: check mode's `get` yields a Word-typed
+	// CARRIER, which the step loop used to dispatch as a token even though
+	// a carrier has no WordInfo and therefore no name — so what "flagged"
+	// these rows was `undefined_word` naming no word, at no position
+	// (NUR103). With that arm fixed the checker types the row `Word`, which
+	// is exactly right; whether the word it stands for dispatches cleanly
+	// depends on WHICH word and is not decidable from the carrier.
+	"edge-quote-1.tsv": 1,
+	"edge-quote-3.tsv": 1,
 	// edge-scalars-3.tsv: the pad byte-cap PROJECTION row (PR #306
 	// review — a multi-byte fill exceeding maxStringResultBytes) is a
 	// value-dependent resource bound, the runtime's job.

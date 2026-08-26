@@ -3618,13 +3618,15 @@ Note the diagnostic names **no word at all** — an empty `Word` field —
 which is itself a defect: whatever emits it has lost the identifier it is
 complaining about. The corpus row is `edge-dispatch-3.tsv:L56`.
 
-**Traced to the emitter.** The check-mode constructor
-`undefinedWordCheckDiag` (`check/go/check_recovery.go:22`) has no
-production callers — it is exercised only by tests. The live emitter is
-`Engine.undefinedWordError(name, pos)` (`core/go/engine.go:860`), reached
-from three `stepWord` sites (`:2499`, `:2597`, `:2918`), each passing
-`w.Name` from a `WordInfo`. An empty `Word` on the diagnostic therefore
-means **a Word token whose Name is empty is being stepped**.
+**Traced to the emitter.** An earlier note here claimed the check-mode
+constructor `undefinedWordCheckDiag` (`check/go/check_recovery.go`) had no
+production callers and that the live emitter was
+`Engine.undefinedWordError`. That was wrong, and instrumenting
+`undefinedWordError` proved it: for this program it never fires. The live
+emitter IS `undefinedWordCheckDiag`, reached through the `CheckBraid` seam
+from the analysis arm of `stepWord` (`core/go/engine.go`) — with `w.Name`
+empty and no source position. So **something with no name is being stepped
+as a word**.
 
 **Trigger isolated (2026-08-26), and it is NOT the reach lowering.** The
 first hypothesis — that dot access produced a nameless Word — was tested
@@ -3645,36 +3647,110 @@ parameter with no field read compiles. It is not dot-specific either:
 an explicit `get` fails identically, which is what rules the reach
 lowering out.
 
-The remaining question is why a field read against a record-typed carrier
-yields a Word with an empty Name on the compile path and not on the plain
-one.
+An instrumented run printed the sub-engine's whole tape at that moment, and
+the answer was in one line:
 
-**Two code leads, for whoever takes it further.**
+```
+[step] ({__OP} dynamic(record{pretty:word(Boolean)}){Map} pretty{Atom} >word(dot){Word} ){__CP}
+[step] ({__OP} >dynamic(word()){Word} ){__CP}
+=== EMPTY WORD  data=<nil> parent=Word carrier=true dynamic=true
+```
 
-`recordSchemaCarrier` (`check/go/check_fnmodel.go:50`) builds the
-body-analysis carrier for a record-shaped param. Its own comment records
-a PAST defect of this exact family: a struct-literal carrier left with the
-zero ID made every record-typed param collapse onto the SAME frame slot
-(id `""`), miscompiling a fn that read two record params. The fix was to
-mint an ID explicitly. That this path has already produced one
-empty-identifier bug makes it worth checking whether an analogous
-identifier is left empty on the READ side.
+`o.pretty` lowers to `( o dot pretty )` and reduces correctly. What it
+reduces TO is the defect: a **carrier whose type is `Word`**. The step loop
+classifies by type alone (`IsWord` is `v.Parent.Equal(TWord)`), so the next
+step dispatches that carrier as a token; it has no `WordInfo` payload, so
+the name is `""`, and every name arm falls through to the undefined-word
+tail. Hence a diagnostic naming no word.
 
-`nur068ReturnCarrier` (`check/go/check_fnmodel.go:134`) sits a few lines
-away and is a documented `!Compiling` fork: plain check surfaces the
-residual's record schema, while the compile pass deliberately keeps the
-declared carrier "so the recorded call results and the RET contract are
-untouched". That fork is argued and plausibly correct. It is also the
-same CLASS `design/FULL-COMPILATION.0.md` §6.9(3) requires be collapsed
-or proven diagnostic-neutral; it has not been proven neutral, and this
-record is evidence that something in its neighbourhood is not.
+**Why the carrier's type is `Word`.** The param's declared record schema is
+`{pretty: word(Boolean)}` — the field type is still the unevaluated Word
+TOKEN `Boolean`, not the type. `recordSchemaFieldReturns`
+(`lang/go/native/native_storage.go`) then does the obviously right thing
+with the wrong input: `ft := ValueType(fv)` on a Word token is `Word`, so
+the field read narrows to `dynamic(Word)`.
 
-Whether this shares a root cause with the `h2` site in mini-redis is
-unknown; both are armed-only `undefined_word`, but the shapes differ
-(record-param dot access here, a `def`-then-read inside a stored handler
-there). Four manual reductions of the mini-redis shape had failed — they
-were reducing the wrong program. The gate found this in one run, which is
-the argument for building the measurement before hunting the bug.
+The field type is unresolved because of an asymmetry between the two ways
+of spelling a record parameter:
+
+| spelling | how the field map is built | field value |
+|---|---|---|
+| `type R record {pretty:Boolean}` then `o:R` | `record` DISPATCHES, evaluating its map | type value |
+| inline `o:{pretty:Boolean}` | rides inside the fn-spec LIST — inert data, never evaluated | Word token |
+
+`ResolveSigType`'s map arm returned the inline map as the pattern verbatim.
+The dispatcher tolerated it (`Unify` resolves the name at match time, which
+is why `f {pretty:1}` was correctly REJECTED all along), but the
+schema-bearing param carrier — `recordSchemaCarrier`, `check/go/check_fnmodel.go`
+— copies the pattern's fields verbatim into a `RecordTypeInfo`, so the
+unresolved word reached the read. The typed-container child of `xs:[:Foo]`
+has had exactly this resolution since generics landed
+(`ResolveSigChildParam`); the structural-record field simply never got its
+twin.
+
+**Why only the compile path.** Nothing in the fork logic — the plain pass
+builds the COARSE param carrier (`{:Any}`, no schema), so it never reads the
+field schema and never mints the bad type. Only the compile pass builds the
+precise schema-bearing carrier. The `!Compiling` forks named as suspects
+above (`nur068ReturnCarrier`, the fn-analysis quota) are not implicated;
+neither is the reach lowering, which the truth table had already cleared.
+
+**Fixed (2026-08-26).** Two changes, one for each half:
+
+1. `ResolveSigRecordFields` (`core/go/generics_unify.go`) resolves an inline
+   record pattern's field type words at sig install, following
+   `ResolveSigChildParam`'s cascade arm for arm — type-param node, user type
+   body, builtin name — and leaving literal-value patterns (`{status:'ok'}`,
+   ADR-010) and words naming no type untouched. Nested inline records
+   resolve recursively. Wired into `ResolveSigType`'s map arm, so both
+   spellings of a record parameter now produce the same pattern.
+2. `stepWord` (`core/go/engine.go`) collects a word-TYPED value with no
+   `WordInfo` as data instead of dispatching it. A carrier is an abstract
+   value, not a token: there is no name to look up and no arguments to
+   collect. This is reachable for any word-typed carrier that is genuinely
+   word-typed — a `w:Word` record field read, a declared `Word` return — and
+   is what keeps the class of defect from re-appearing as another nameless
+   diagnostic.
+
+With both in place the minimal repro checks clean, interprets to `true`, and
+COMPILES to `true` under `-force-compile`.
+
+The second half was not compile-path-only, which the record-schema instance
+had disguised. A fn with a DECLARED `Word` return produces the same carrier
+on the plain pass, and the same nameless diagnostic came out of `boru check`:
+
+```
+$ cat w.boru
+def g fn [[][Word][quote foo]]
+def h (g)
+1
+
+$ boru check w.boru                     # before
+check: 1:20: [error] type_error: g: return value 1: expected Word, got Atom
+check: [error] undefined_word: undefined word:            <- spurious, positionless
+check: 2 error(s), 1 warning(s), 0 info
+
+$ boru check w.boru                     # after
+check: 1:20: [error] type_error: g: return value 1: expected Word, got Atom
+check: 1 error(s), 1 warning(s), 0 info
+```
+
+One real diagnostic, one phantom beside it, with no position and no name.
+That is the shape to watch for: a positionless diagnostic is a diagnostic
+whose subject the emitter never had.
+
+**Still open: the `h2` site is a DIFFERENT defect.** `MiniRedis.serve`
+still refuses with `undefined_word: h2` after this fix. That one names its
+word, so it is not the nameless-carrier family at all; the two shapes shared
+only the armed-only symptom. The mini-redis investigation notes below stand
+unchanged, and so does the general Discharge: the class defect is that a
+diagnostic can exist in one pass and not the other, which no single
+root-cause fix retires.
+
+Worth recording how this one was found: four manual reductions of the
+mini-redis shape had failed, because they were reducing the wrong program.
+The parity gate found an unrelated, far smaller instance in one run — which
+is the argument for building the measurement before hunting the bug.
 
 **The other four armed-only rows**, for whoever picks this up:
 `case.tsv:L76` (`case_not_exhaustive`), `case.tsv:L97`

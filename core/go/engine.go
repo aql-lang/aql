@@ -2650,7 +2650,20 @@ func (e *Engine) hasPendingForwardCollecting() bool {
 }
 
 func (e *Engine) stepWord(val Value) error {
-	w, _ := AsWord(val)
+	w, werr := AsWord(val)
+	if werr != nil {
+		// A Word-TYPED value with no WordInfo payload is a CARRIER, not a
+		// token: check mode's carrier-strip nulls the payload, so there is
+		// no name to look up and no arguments to collect. It is the
+		// abstract value "some word", and the only sound step for an
+		// abstract value is to collect it as data. Dispatching it instead
+		// fell through every name arm to the undefined-word tail and
+		// emitted a NAMELESS `undefined_word` diagnostic — an error no
+		// source position could explain, raised on the compile path alone
+		// (NUR103). Reachable for any word-typed carrier: a `w:Word`
+		// record field read, a declared-Word return, a Word-typed def.
+		return e.stepLiteral()
+	}
 
 	// /u modifier — see stepWordUsurp. Handled before the /v branch
 	// so the /uv combo usurps rather than plain-referencing.
