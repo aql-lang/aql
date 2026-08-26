@@ -1914,8 +1914,6 @@ func (e *Engine) isReachCallHead(tok Value, viable []viableSig, pos, i int) bool
 
 func (e *Engine) lookupWord(name string) *FnDefInfo { return e.Registry.Lookup(name) }
 
-func (e *Engine) analysisCompiling() bool { return e.Registry.analysisCompiling() }
-
 func (e *Engine) expandSugarTokens(sinfo SugarInfo, tok Value, head bool) ([]Value, error) {
 	return SugarExpansion(e.Registry, sinfo, tok, head)
 }
@@ -8066,6 +8064,10 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	// been grabbed). noteSplit flags it so the compiler refuses; dispatch
 	// itself is unchanged. See CheckState.AmbiguousGradualSplit.
 	checkActive := e.Registry != nil && e.Registry.analysisActive()
+	// Only ever read under checkActive (the scan's gradual-Any arm), so the
+	// runtime hot path never asks; hoisted here so the per-candidate loop
+	// asks once per dispatch rather than once per candidate.
+	compiling := checkActive && e.Registry.analysisCompiling()
 	mixedCarrierRejectIdx := -1
 	noteSplit := func(positions []int, fwd int) {
 		if !checkActive || mixedCarrierRejectIdx < 0 || fwd == 0 {
@@ -8165,7 +8167,7 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		// simply does not execute and every arg comes from the stack below.
 		// fwd is how many params the forward tokens filled; specAt the
 		// first slot a dispatching word filled, -1 for none.
-		fwd, specAt := collectCandidateScan(e, sig, forwardLimit, positions, e.Pointer+1, checkActive)
+		fwd, specAt := collectCandidateScan(e, sig, forwardLimit, positions, e.Pointer+1, checkActive, compiling)
 
 		// 1.3: all params matched by forward?
 		if fwd == nArgs {

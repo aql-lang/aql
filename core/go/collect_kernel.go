@@ -120,11 +120,6 @@ type collectHost interface {
 	staticForwardType(tok Value) (Value, fwdKind)
 	// lookupWord resolves a name to its function binding, if any.
 	lookupWord(name string) *FnDefInfo
-	// analysisCompiling reports whether the active analysis pass is a
-	// COMPILE pass rather than a plain check — the one fork the scan
-	// consults, so a gradual Any operand stays unmatched under compilation
-	// and the emitter refuses instead of baking a guess.
-	analysisCompiling() bool
 	// reachFnWouldClaim reports whether a reach-read fn at i would collect
 	// from the tokens after it — the call-vs-data decision.
 	reachFnWouldClaim(tok Value, i int) bool
@@ -523,9 +518,17 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 //
 // positions is written in place; fwd is how many parameters the forward
 // tokens filled and specAt the first slot a dispatching word filled (-1 for
-// none). checkActive is hoisted by the caller rather than re-asked here, so
-// the per-signature loop keeps asking it exactly once per dispatch.
-func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, positions []int, start int, checkActive bool) (fwd, specAt int) {
+// none).
+//
+// checkActive and compiling are hoisted by the caller rather than asked
+// here. Both are per-DISPATCH facts, so the per-signature loop asks them
+// once instead of once per candidate — and `compiling` is only ever read
+// under `checkActive`, so the caller computes it under the same guard and
+// the runtime hot path never asks at all. They are plain bools rather than
+// host methods for the same reason: a seam method that only one arm calls,
+// under a condition the rest of the walk does not reach, is a method whose
+// only proof of life is that one arm.
+func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, positions []int, start int, checkActive, compiling bool) (fwd, specAt int) {
 	win := h.collectWindow()
 	specAt = -1
 	scanIdx := start
@@ -609,7 +612,7 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 						break
 					}
 				}
-				gradualAny := checkActive && !h.analysisCompiling() &&
+				gradualAny := checkActive && !compiling &&
 					top.Parent != nil && top.Parent.Equal(TAny)
 				if SigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) || gradualAny {
 					// A dispatching binding (FnDefInfo) planned as an
