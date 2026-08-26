@@ -6072,7 +6072,29 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 	// TestCompiledCombinationParity caught when the BROAD park landed.
 	// Reach groups never reach here (both exclusions above), so dot SUGAR
 	// keeps dispatching on both lanes.
-	if v.Dynamic && !v.Quoted {
+	// The carrier need not be DYNAMIC. A returned closure reaches the check
+	// pass as a NON-dynamic fn-typed carrier, and gating this arm on Dynamic
+	// alone let it fall through both arms — no park, so the rewind re-stepped
+	// it into a call and `((mk 1) 2)` answered 3 compiled where the
+	// interpreter placed (NUR101). Measured: disp=false dyn=false
+	// carrier=true, which no arm claimed.
+	//
+	// KNOWN COST, and it is the sticky-inertness hazard this function's own
+	// header warns about. Parking here is positional and stamps nothing on
+	// the value, exactly as intended — but the compiler learns about it
+	// through ParenPlacedFnIDs, which is keyed by value ID, and an ID travels
+	// with a binding. So `def h (mk 1) end  h 2` now refuses ("fn value
+	// precedes residual args"): h's value carries the placed mark from the
+	// paren that produced it, and the residual lowering declines to apply a
+	// lead it believes was placed — even though `h` is a bare-NAME dispatch
+	// that must still call. Sound (it falls back and answers 3), but a
+	// compiled-coverage loss.
+	//
+	// The member-fn case does not hit this because a member read is consumed
+	// at its site and never rebound. The general carrier is. Closing it means
+	// making the compiler's placement signal POSITIONAL like this one, rather
+	// than value-keyed — not widening the ID table further.
+	if !v.Quoted && (v.Dynamic || IsFnTypedCarrier(v)) {
 		// Ask the braid FIRST, and unconditionally. It is not only a
 		// predicate: it RECORDS the placement in ParenPlacedFnIDs for the
 		// compiler's residual lowering, which must not lower a placed lead
