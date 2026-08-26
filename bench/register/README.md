@@ -67,6 +67,41 @@ make bench-register              # or: BORU=cmd/go/bin/boru bench/register/run.s
 `hosts.jsonl` row on its own if you want to inspect it. Set
 `REGISTER_LABEL` to name the machine.
 
+### CPU-profile share
+
+```bash
+bench/register/cpushare.sh [benchtime] [repeats]   # defaults: 3s, 3
+```
+
+A second instrument, for the question wall clock cannot answer on a
+shared box: *what fraction of interpreter CPU do the collection loops
+cost?* Profile share is comparative **within a single run**, so the
+machine's noise largely divides out of it — which is why
+`design/FULL-COMPILATION.0.md` §11 re-specified falsifier F1b's gate onto
+it after two runs of byte-identical code disagreed by 5.4% geomean on
+wall clock.
+
+It appends `cum_pct_total` (share of all samples) and `cum_pct_interp`
+(share of `Engine.Run`) rows under `surface: interp`, workload
+`cpushare/<anchor>`, each carrying `spread` across the repeats. **Always
+read a share against its `spread`** — the whole point of the instrument
+is that a 0.2-point move under a 2-point spread is not a move.
+
+Two things to know before trusting a number out of it:
+
+- It profiles the **dispatch-dense** interpreter benchmarks
+  (`BenchmarkParens`, `BenchmarkBytecodeBaseline`), not the
+  collection-*word* suite. In `BenchmarkPerfWords` the 500-element inner
+  work swamps dispatch and the same loops sit near 3–5% of samples, where
+  a real regression hides inside the spread. Override with
+  `CPUSHARE_BENCH` if you know why you want to.
+- The anchors are the three loops' **callers**, which is what lets one
+  profile be compared to another across a refactor that renamed or
+  extracted the callees. Anything the callees cost shows up in them.
+  `collectArrival` has no samples in any benchmark here at all, so
+  nothing in this repository measures the arrival path — treat that as a
+  known blind spot, not as a pass.
+
 Every stage of the full-compilation plan lands with a before/after pair
 on at least one host: the pair is part of the stage's deliverable.
 

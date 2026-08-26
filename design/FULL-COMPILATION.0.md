@@ -1486,7 +1486,7 @@ universe closes alongside).
 |---|---|---|---|
 | **0** | Adopt the declaration triple (COMPILE-DECLARATION-MODEL Stages 0–2: delete the dead flag, introduce `{tapeBound, needs, env}` under C1–C4, assert over every signature) | 0 rows; produces the §6.8 handler worklist | low |
 | **1** | Instrument: engine-entry census + defer census + refusal-reason census; declare the observable alphabet for T3 | 0 rows; makes T2 measurable | low |
-| **2** | **Extract the collection kernel** (§6.2): factor the THREE collection loops over the shared window+evaluator interface and re-seat the Engine on them — **three separate re-seats, landing separately**, since the differential cannot say which one broke otherwise. Gate: full differential green, allocation ceilings unmoved, CPU-profile share unmoved (NOT wall clock — see F1b) | 0 rows; unblocks everything | **high** — F1 · **Engine side LANDED 2026-08-26** in three commits; §6.2 records what each re-seat cost and where the third one corrected this note. The second adapter is Stage 4's, by the `cover-gate-core` inversion below |
+| **2** | **Extract the collection kernel** (§6.2): factor the THREE collection loops over the shared window+evaluator interface and re-seat the Engine on them — **three separate re-seats, landing separately**, since the differential cannot say which one broke otherwise. Gate: full differential green, allocation ceilings unmoved, CPU-profile share unmoved (NOT wall clock — see F1b) | 0 rows; unblocks everything | **high** — F1 · **Engine side LANDED 2026-08-26** in three commits; §6.2 records what each re-seat cost and where the third one corrected this note. **Gate discharged**: full differential green, allocation ceilings unmoved, merged `cover-gate` 100.0%, and CPU-profile share unmoved (F1b, §11 — every anchor within ±0.18pp against ±0.9–3.0 spread). The second adapter is Stage 4's, by the `cover-gate-core` inversion below |
 | **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included) + interpreter-side NUR101/NUR078 fixes to the ruled semantics; retire `OpCallDynFrame`/`callDynamic` islands onto Apply | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` lands with §6.3's registry-tagged captures here, the full-stack-in-body row with Stage 4's descriptor folds) | medium |
 | **4** | Statement descriptors + `OpCollect`/`OpDispatchGeneric` (§6.2, §6.5) + bind twins; recorder step-6 flips from refuse to generic for word dispatch; delete drift-window islanding | F (5), L (1), K (1), most unledgered dispatch gates, §9d | medium |
 | **5** | Production-order regions + generalized marks (§6.6) | C (11), D (13), I (5) | medium |
@@ -1507,7 +1507,14 @@ implementation constraints from the same probe: `MatchSignature` already
 sits at gocyclo 87 / gocognit 211 under a `//nolint` against caps of
 70/200, so a merged routine cannot be one function; and the two largest
 collection loops are 13.4% and 18.0% of interpreter CPU, which is the
-budget any re-seat has to stay inside. Nothing lands without its differential gate; every stage's admission
+budget any re-seat has to stay inside. **Read those two figures with
+their basis in mind** — the probe recorded them without one, and "share"
+means two different numbers depending on whether the denominator is all
+samples or `Engine.Run`'s cumulative time. The 2026-08-26 gate run (F1b,
+§11) records both explicitly, and on file: on the dispatch-dense set
+`resolveForwardArgs` and `MatchSignature` are 15.3% and 10.0% of *total
+samples*, 34.4% and 22.4% of *interpreter* CPU. Compare like with like,
+or the budget moves under you. Nothing lands without its differential gate; every stage's admission
 sweep is generated, not hand-picked (§8.3). Until a statement's enabling
 mechanism lands, step 6's arm remains **partial** for it: such statements
 keep refusing, loudly — a Stage-4 G-lane statement whose runtime-only
@@ -1583,6 +1590,51 @@ is about. The gate is therefore re-specified onto the deterministic
 instruments — the allocation ceilings, which are exact, and CPU-profile
 share, which is comparative — with wall clock recorded to the register
 (§14) rather than gating. A gate that fires at random is not a gate.
+
+**The re-specified gate, MEASURED 2026-08-26: PASSES.** `6d8f2f7`
+(pre-extraction) against `89a7931` (the branch tip, all three re-seats
+landed), same host, alternating runs, `n=3` profiles a side. Share of
+*interpreter* CPU — each anchor's cumulative time over `Engine.Run`'s,
+which is the basis that divides out any uniform shift in how much of the
+process is interpreter at all:
+
+| Anchor | `6d8f2f7` | `89a7931` | Δ | run-to-run spread |
+|---|---|---|---|---|
+| `stepWord` | 89.01% | 88.90% | −0.11 | ±2.98 |
+| `MatchSignature` | 22.45% | 22.63% | +0.18 | ±2.12 |
+| `resolveForwardArgs` | 34.44% | 34.61% | +0.17 | ±2.16 |
+| `stepLiteral` | 12.02% | 12.16% | +0.14 | ±0.88 |
+
+Every movement is an order of magnitude below the spread of the runs it
+was measured from, so the honest reading is **no resolvable change**, not
+"a 0.17-point regression". Three details matter for whoever re-runs this
+at Stage 4:
+
+- **The anchors are the CALLERS, not the seam.** `collectForward`,
+  `collectCandidateScan` and `collectArrival` exist only after the
+  extraction, so they compare to nothing; they are called by these three,
+  and whatever they cost lands here. `resolveForwardArgs` is now
+  `(inline)` in the tip's profile with `collectForward` carrying the
+  identical cumulative time — the two-line seat costs nothing, which is
+  the closest thing to direct evidence that the re-seat was free.
+- **The benchmark had to change to make the gate sensitive.**
+  `BenchmarkPerfWords` — the obvious choice, since it is the *collection
+  word* suite — is the wrong instrument: its 500-element inner work
+  swamps dispatch, putting the loops at 3–5% of samples where a real
+  regression hides inside the spread. Measured there, the same comparison
+  reads +0.40/+0.43/−0.27 against noise bands of 1.4–1.6 — the same
+  verdict, at a quarter of the resolution. The dispatch-dense interpreter
+  set (`BenchmarkParens`, `BenchmarkBytecodeBaseline`, both on
+  `RunInterp`) puts them at ~34% and ~23% of interpreter CPU instead.
+- **`collectArrival` is not covered by this gate.** It has *zero*
+  samples in either profile and is not inlinable, so the arrival path is
+  simply not hot in any benchmark this repository has. That is a gap in
+  the instrument, not a pass: a regression there would be invisible here.
+
+The instrument is committed as `bench/register/cpushare.sh` and appends
+to the register (§14) rather than living in the note, precisely so Stage
+4 — which touches all three loops again — re-runs it instead of
+re-deriving it. Rows are on file for both commits above.
 
 **F2 — error identity needs state outside the collection machine.
 TESTED 2026-08-25: FIRED.** This note claimed the raise-selection state
