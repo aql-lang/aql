@@ -1078,9 +1078,14 @@ Four changes, all conservative in the abstract-interpretation frame:
    classification must be explicit.
 3. **Collapse or prove diagnostic-neutral every `!Compiling` fork.**
    **Measured 2026-08-26** (`test/go/langspec/diagnostic_parity_test.go`):
-   **568 of 7,568 corpus rows** already produce different diagnostics from
-   a plain check than from a compile-armed one — 7.5% of the corpus, and
-   the divergence runs in both directions. Plain-only findings
+   **318 of 7,568 corpus rows** already produce different FINDINGS —
+   errors and warnings — from a plain check than from a compile-armed
+   one, with a further 260 differing only on informational advisories.
+   The split matters: some advisories are pass-specific by design
+   (`module_body_executed_in_check` warns that `boru check` executed a
+   module body the user did not ask it to run, and under compilation that
+   execution is the program's own), so counting them would demand the
+   wrong thing. The findings divergence runs in both directions. Plain-only findings
    (`no_signature` suppressed while compiling, `unreachable_branch`, the
    `module_body_executed_in_check` info); armed-only findings
    (`redundant_guard`, `case_not_exhaustive`, and — the NUR103 shape —
