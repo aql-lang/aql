@@ -1912,6 +1912,14 @@ func (e *Engine) isReachCallHead(tok Value, viable []viableSig, pos, i int) bool
 	return e.reachCallHeadBarrier(tok, viable, pos, i)
 }
 
+func (e *Engine) lookupWord(name string) *FnDefInfo { return e.Registry.Lookup(name) }
+
+func (e *Engine) analysisCompiling() bool { return e.Registry.analysisCompiling() }
+
+func (e *Engine) expandSugarTokens(sinfo SugarInfo, tok Value, head bool) ([]Value, error) {
+	return SugarExpansion(e.Registry, sinfo, tok, head)
+}
+
 // fnWordBarrierAt reports whether a scan token is a bare function word
 // acting as a forward-collection barrier: registered as a function and
 // NOT `/v`-marked. An `/v`-marked word is NO barrier — it denotes its
@@ -8210,260 +8218,13 @@ func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		for i := range positions {
 			positions[i] = 0
 		}
-		fwd := 0     // number of params matched by forward tokens
-		specAt := -1 // first slot filled by a dispatching word, -1 = none
-
-		// Always run the forward scan up to forwardLimit; if it's 0
-		// the loop simply doesn't execute and all args come from
-		// the stack below.
-		{
-			scanIdx := e.Pointer + 1
-
-			// One inner loop over parameters, matching forward tokens.
-			for fwd < forwardLimit && scanIdx < e.Tape.Len() {
-
-				tok := e.Tape.At(scanIdx)
-				expectedType := SigArgType(sig, fwd)
-
-				// 1.4: structural boundaries (forward / mark / move /
-				// internal / return-check) and `end` / `)`. ONE predicate,
-				// shared with the phase-1 plan walk (resolveForwardArgs),
-				// which asks the identical question of the same tokens.
-				//
-				// The two loops legitimately DIFFER on other arms — an open
-				// paren is pre-evaluated there and a hard boundary here — so
-				// the arms where they agree are exactly the ones that must
-				// not be written twice and left to drift apart. Collection
-				// is three loops over the same tokens with three stop
-				// condition sets (design/FULL-COMPILATION.0.md §6.2); every
-				// decision they share belongs in one place.
-				if scanBoundaryToken(tok) {
-					break
-				}
-
-				// 1.5: open parens are pre-evaluated by preEvalParens
-				// before matching begins. If one remains, treat as boundary.
-				if IsOpenParen(tok) {
-					break
-				}
-
-				// FormArgs (macro raw capture): accept ANY form at this
-				// position — a word stays a Word, a paren/list/literal stays
-				// as-is — with no resolution, no dispatch, no Word→Atom
-				// coercion, and no function-word boundary. The operand is
-				// captured unevaluated. See design/MACROS-PHASE1.10.md §3.
-				if sig.FormArgs != nil && sig.FormArgs[fwd] {
-					positions[fwd] = scanIdx
-					fwd++
-					scanIdx++
-					continue
-				}
-
-				if IsWord(tok) {
-					ww, _ := AsWord(tok)
-					// /q modifier: capture the upcoming Word as an Atom
-					// (the conversion happens at insertForward / stepLiteral
-					// time; here we just count it as a match).
-					if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] {
-						if TAtom.ConformsTo(expectedType) {
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
-						break
-					}
-
-					// Defined word: resolves to its def type.
-					if top, ok := e.Registry.Defs.Top(ww.Name); ok {
-						// Gradual typing: an Any-typed forward operand — a value
-						// flowed from a dynamic `get`, or a param bound to Any at
-						// a gradual call site — is optimistically accepted for a
-						// concrete param in PURE CHECK mode. At runtime the value
-						// is concrete and dispatches (or raises) exactly as the
-						// interpreter does, so the static analysis stays advisory
-						// rather than emitting a spurious no_signature. NOT in
-						// compile mode: there the dispatch must remain UNMATCHED so
-						// the emitter refuses (force-compile) instead of baking a
-						// wrong direct call — preserving compile==interpret.
-						// A TYPE binding denotes its lattice node (the Stage 2
-						// flip — deftable.Top), so the same plan-time guard the
-						// builtin-name arm below carries applies here: a type
-						// literal is refused at a concrete-payload slot, so the
-						// plan never claims what the commit re-match would
-						// reject.
-						if IsBareTypeNode(top) {
-							isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
-							if !isTypeArg && rejectsTypeLiteral(top, expectedType) {
-								break
-							}
-						}
-						gradualAny := checkActive && !e.Registry.analysisCompiling() &&
-							top.Parent != nil && top.Parent.Equal(TAny)
-						if SigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) || gradualAny {
-							// A dispatching binding (FnDefInfo) planned as an
-							// operand is SPECULATIVE: at runtime this token
-							// dispatches rather than arriving as a value
-							// (the `def name fn […]` idiom relies on exactly
-							// that — fn runs and its result completes def).
-							// Record the first such slot so the parked
-							// ForwardInfo carries the plan's stop condition.
-							// A slot that specifically expects a Function
-							// gets the word as a resolved REFERENCE at
-							// collection time (stepWord's TFunction
-							// intercept) — consistent, not speculative.
-							if _, isFn := top.Data.(FnDefInfo); isFn &&
-								specAt == -1 && !expectedType.Equal(TFunction) {
-								specAt = fwd
-							}
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
-						if _, ok := top.Data.(FnDefInfo); !ok {
-							break // simple def, type mismatch
-						}
-					}
-
-					// (A def-bound TYPE name is fully handled by the
-					// Defs.Top arm above — post the Stage 2 flip the
-					// binding denotes its bare node, which that arm
-					// either claims or rejects terminally, so no
-					// separate TopTypeBody mirror remains.)
-
-					// 1.4: function word — boundary, stop. A `/v`-marked
-					// word is NO boundary in principle (it denotes its
-					// REFERENCE value, NUR050/G12) — but since the ADR-011
-					// collapse its Defs binding IS a Function value, so
-					// every slot that can admit the reference (a Function
-					// slot, an Any slot) already claimed it in the
-					// def-binding branch above; a /v word reaching here
-					// faces a slot no Function can fill and stops the scan
-					// exactly like its unmarked twin. (Lookup and Defs.Top
-					// read the same store, so this arm is only reached on
-					// the def-binding branch's typed fall-through.)
-					if e.Registry.Lookup(ww.Name) != nil {
-						break
-					}
-
-					// Known literals: true/false → Boolean, type names → type literal.
-					if ww.Name == "true" || ww.Name == "false" {
-						if SigArgMatches(sig, fwd, Value{Parent: TBoolean}) || expectedType.Equal(TAny) {
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
-						break
-					}
-					if tn, isType := ResolveBuiltinTypeName(ww.Name); isType {
-						lit := NewTypeLiteral(tn)
-						if SigArgMatches(sig, fwd, lit) {
-							// Same admission a future LITERAL token gets
-							// (the block below): a type literal is refused
-							// at a concrete-payload slot, so the plan never
-							// claims what the commit re-match would reject.
-							isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
-							if !isTypeArg && rejectsTypeLiteral(lit, expectedType) {
-								break
-							}
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
-						break
-					}
-
-					// Undefined word: always resolves to Atom.
-					if SigArgMatches(sig, fwd, Value{Parent: TAtom}) || expectedType.Equal(TAny) {
-						positions[fwd] = scanIdx
-						fwd++
-						scanIdx++
-						continue
-					}
-					break // type mismatch
-				}
-
-				// Open paren marker: boundary, stop forward scan.
-				if IsOpenParen(tok) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-					break
-				}
-
-				// A reach-collapsed NAMED function value (the transient
-				// ReachGroup tag) that WOULD CLAIM its next token is a
-				// CALL head — the value twin of the fn-word boundary
-				// above (NUR038): it stops the forward scan exactly as
-				// its bare-word spelling would. One with no claim is an
-				// operand (a branch arm, a reference) and scans on, as
-				// does one filling this sig's own Function slot.
-				if tok.ReachGroup && !tok.Quoted && isFnDefValue(tok) &&
-					!sigWantsFunctionAt(sig, fwd) &&
-					e.reachFnWouldClaim(tok, scanIdx+1) {
-					break
-				}
-
-				// A /q (QuoteArgs) position captures a literal word/ATOM (the
-				// IsWord branch above handles a raw word). A non-concrete carrier
-				// whose type is NOT atom-family — a computed check-mode value such
-				// as the pre-evaluated result of `quote (s get k)` (an Any/Integer
-				// carrier) — is not an atom, so it must not fill the /q slot via
-				// the Any-conforms-to-everything rule: that would pick quote's
-				// word-capture sig ([TAtom], QuoteArgs) over its value sig ([TAny],
-				// ReturnsIdentity), refuse to compile, and (since the /q handler is
-				// quoteWordHandler) never run the value path. A genuine Atom
-				// carrier (e.g. `set (quote name) v`) DOES conform and still
-				// matches. Inert at runtime (operands are concrete there). Mirrors
-				// the stack-phase and positionalMatch /q guards. See
-				// design/module-fn-checkstate-ownership.2.md.
-				if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] && tok.Carrier && !IsConcrete(tok) && !tok.Parent.ConformsTo(TAtom) {
-					break
-				}
-
-				// A sugar marker EXPANDS in place during the scan
-				// (sugar.go): the tokens it lowers to — a fn word, a
-				// ParenExpr — then get exactly the treatment the
-				// pre-marker parser output got. The current slot's
-				// QuoteArgs flag selects the Angle marker's head form
-				// (the binder's name slot). An unexpandable marker is
-				// a boundary; it errors at step time.
-				if IsSugar(tok) {
-					sinfo, sok := AsSugar(tok)
-					if !sok { //covergate:allow IsSugar guarantees a SugarInfo payload
-						break
-					}
-					// The Angle marker's head/use-site choice belongs at
-					// ARRIVAL (stepSugar's pending-forward probe): this
-					// scan runs once per CANDIDATE sig, so committing a
-					// choice here would mutate the tape for the wrong
-					// overload. It is a plain boundary.
-					if sinfo.Kind == SugarAngle {
-						break
-					}
-					exp, serr := SugarExpansion(e.Registry, sinfo, tok, false)
-					if serr != nil {
-						break
-					}
-					e.Tape.Splice(scanIdx, 1, exp...)
-					continue
-				}
-				// Literal value: direct type check.
-				if SigArgMatches(sig, fwd, tok) || expectedType.Equal(TAny) {
-					isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
-					if !isTypeArg && rejectsTypeLiteral(tok, expectedType) {
-						break // reject type literal at concrete-payload sig
-					}
-					positions[fwd] = scanIdx
-					fwd++
-					scanIdx++
-					continue
-				}
-
-				// *Type mismatch — stop forward scanning.
-				break
-			}
-		}
+		// The per-candidate scan runs on the collection kernel
+		// (collect_kernel.go): once per candidate signature, over THIS
+		// signature's own forward limit. If forwardLimit is 0 the walk
+		// simply does not execute and every arg comes from the stack below.
+		// fwd is how many params the forward tokens filled; specAt the
+		// first slot a dispatching word filled, -1 for none.
+		fwd, specAt := collectCandidateScan(e, sig, forwardLimit, positions, e.Pointer+1, checkActive)
 
 		// 1.3: all params matched by forward?
 		if fwd == nArgs {

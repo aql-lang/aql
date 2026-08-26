@@ -644,6 +644,38 @@ allocation counts are IDENTICAL on all eight interpreter shapes — 841,
 merely under ceiling. Interface dispatch costs nothing here, as the probe
 predicted.
 
+**Re-seat 2 of 3 landed (2026-08-26): the per-candidate scan.** Same
+discipline, same result: the extracted `collectCandidateScan` is textually
+identical to the block it replaces modulo the host substitution, and
+`MatchSignature` — already at gocyclo 87 against a cap of 70 — sheds 250
+lines to a single call. The scan needed four host methods the plan walk did
+not (`lookupWord`, `analysisCompiling`, `reachFnWouldClaim`,
+`expandSugarTokens`), which is the seam telling the truth about what the
+two loops actually share: the window, `defTop`, and nothing else. Note what
+it did NOT need — no arm for an interp-string, an XML literal or a paren
+expression. That absence IS the window-mutation property, seen from the
+consuming side.
+
+The one lowering the scan commits is a sugar expansion, and the seam makes
+the rule explicit rather than incidental: a lowering that is a function of
+the MARKER alone may commit; one that is a function of the VIABLE SET may
+not. That is why the viable slice is a parameter of `expandSugarAt` rather
+than host state, and why the Angle marker stays a boundary here and is
+decided at arrival.
+
+The allocation gate needs one honest footnote. The 64-iteration alloc guard
+reported +1 alloc/op on three of eight shapes after this re-seat, and the
+instinct — "exact instrument, so investigate" — was right to follow but the
+finding was measurement, not code: escape analysis over the whole package
+is byte-identical between the two states (715 sites, zero diff), and a
+200-iteration benchmark of the same shape reports the SAME count for both
+(7649/7649) where the 64-iteration guard reported 7648/7649. The per-op
+count is simply not deterministic to ±1 for these shapes, so the guard's
+integer division lands either side of it depending on the iteration total.
+Ceilings are untouched. Worth recording because §11's F1b re-specified this
+gate onto the alloc guard precisely for being exact, and it is exact at the
+scale that matters — a per-dispatch regression — not at ±1.
+
 The host methods are deliberately UNEXPORTED. Nothing outside core can
 implement this yet — `cover-gate-core` would make any adapter-only arm dead
 code — so exporting now would put an unused public API on `*Engine`. Stage
