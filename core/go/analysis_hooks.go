@@ -243,3 +243,48 @@ func RunLoopBodyAnalysis(r *Registry, body Value, bindNames []string, bindVals [
 func RunFnConstructionPass(r *Registry, name string, fnDef FnDefInfo) {
 	AnalysisImpl.FnConstructionPass(r, name, fnDef)
 }
+
+// NoteFnBodyPending queues a constructed fn VALUE for the end-of-pass body
+// check. The word library calls it where the value is built — `fn`, `afn`,
+// and the `=>` lambda that lowers to `afn` — and that is the only place an
+// anonymous callback can be caught at all: it never reaches InstallFnDef,
+// so until this it was analysed by nobody (NUR105).
+//
+// It QUEUES rather than analyses because the construction site is too early.
+// Every forward reference is still unbound there, a recursive self-call most
+// of all, so analysing `def fact fn [… [n mul (fact (n sub 1))]]` in place
+// sees the undefined-word placeholder and reports `mul: got (Integer,
+// Atom)`. End of pass is where the environment is complete; see
+// CheckState.PendingFnBodies.
+func NoteFnBodyPending(r *Registry, fnDef FnDefInfo) {
+	if r == nil || !r.Check.IsActive() {
+		return
+	}
+	r.Check.PendingFnBodies = append(r.Check.PendingFnBodies, PendingFnBody{Reg: r, Fn: fnDef})
+}
+
+// RunPendingFnBodyChecks drains the queue, at end of pass and before the
+// forward-reference rescue so the drain's own diagnostics are rescued too.
+//
+// A queued fn that reached InstallFnDef in the meantime was analysed there,
+// under its NAME — which the dynamic-scope rescue and the return-conformance
+// messages both key on — and FnBodyChecked keeps this from repeating it. What
+// is left is exactly the set of fn values nothing ever named.
+func RunPendingFnBodyChecks(r *Registry) {
+	if r == nil || !r.Check.IsActive() {
+		return
+	}
+	// Draining can itself construct fn values (a body analysis runs `fn`),
+	// so take the queue and loop until it stops growing rather than ranging
+	// over a slice being appended to.
+	for len(r.Check.PendingFnBodies) > 0 {
+		batch := r.Check.PendingFnBodies
+		r.Check.PendingFnBodies = nil
+		for _, pb := range batch {
+			// In the registry the body was WRITTEN in: a handler lambda inside
+			// an imported module reads that module's own words, which the
+			// importer's registry cannot see.
+			AnalysisImpl.FnConstructionPass(pb.Reg, "", pb.Fn)
+		}
+	}
+}

@@ -116,6 +116,30 @@ type CheckState struct {
 	// would silence the second one's real diagnostics.
 	FnBodyChecked map[SrcPos]bool
 
+	// PendingFnBodies holds fn VALUES whose bodies have not been analysed
+	// yet — recorded where the value is CONSTRUCTED (`fn` / `afn` / the `=>`
+	// lambda) and DRAINED at end of pass, which is the earliest moment the
+	// analysis can be right.
+	//
+	// It is a queue rather than an immediate call because a body analysed at
+	// its construction site is analysed too early. Every forward reference is
+	// still unbound there — a recursive self-call most of all — so
+	// `def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n
+	// sub 1))]]]` sees `fact` as the undefined-word placeholder and reports
+	// `mul: got (Integer, Atom)`. The undefined_word itself would be rescued
+	// at end of pass; its CONSEQUENCE would not, and a diagnostic whose cause
+	// is retracted but whose effect survives is worse than either.
+	//
+
+	//
+	// Each entry carries its own REGISTRY because a body must be analysed in
+	// the scope it was written in. A handler lambda inside an imported module
+	// reads that module's own words (`arg-at`, `kv-read`), which are bound in
+	// the module's sub-registry and invisible from the importer's — draining
+	// everything against one registry reported every module-scope name as
+	// undefined.
+	PendingFnBodies []PendingFnBody
+
 	// FnNameInflight counts, per fn NAME, how many of its body analyses
 	// are on the stack. A recursive self-call with a DIFFERENT arg shape
 	// has a different FnInflight key, so it does not bail — it re-analyses
@@ -724,6 +748,13 @@ type PendingMethodApply struct {
 	Word   string // the member word name (defensive re-key at the outcome seam)
 }
 
+// PendingFnBody is one queued construction-time body check: the fn value and
+// the REGISTRY whose scope its body was written in.
+type PendingFnBody struct {
+	Reg *Registry
+	Fn  FnDefInfo
+}
+
 // Clone returns a deep copy of the analysis state: scalar fields are
 // copied, the maps (FnSummaries, FnInflight, FnAnalysisCounts,
 // DefsInstalled, DefsUsed, ContextTypes) and the Diagnostics slice are
@@ -745,6 +776,9 @@ func (c *CheckState) Clone() *CheckState {
 	cp.FnSummaries = cloneMap(c.FnSummaries)
 	cp.FnInflight = cloneMap(c.FnInflight)
 	cp.FnBodyChecked = cloneMap(c.FnBodyChecked)
+	if c.PendingFnBodies != nil {
+		cp.PendingFnBodies = append([]PendingFnBody(nil), c.PendingFnBodies...)
+	}
 	cp.FnNameInflight = cloneMap(c.FnNameInflight)
 	cp.FnAnalysisCounts = cloneMap(c.FnAnalysisCounts)
 	cp.DefsInstalled = cloneMap(c.DefsInstalled)
@@ -824,6 +858,7 @@ func (c *CheckState) Begin() func() {
 	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
 	c.FnBodyChecked = nil
+	c.PendingFnBodies = nil
 	c.Emit = TheInactiveEmit
 	c.CodeEffectDepth = 0
 	c.FnBodyDepth = 0

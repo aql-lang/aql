@@ -1674,23 +1674,21 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 		PopGenBindings(r, genSpec)
 	}
 
-	// Check mode, NON-generic fns: the same construction-time body check
-	// InstallFnDef runs for a fn installed under a name, run here for the
-	// fn VALUE — because an anonymous one never reaches InstallFnDef, and
-	// until it is `def`-bound its body was analysed by nobody. That made
-	// `each ([e:Any] => [nosuchw e]) [1 2 3]` check clean and then raise
-	// `undefined_word` at run time, while the identical body one line up as
-	// a `def` was reported (NUR105). POSITION decided it, not spelling: a
-	// code BLOCK argument and a named fn REFERENCE were both analysed.
+	// NON-generic fns: QUEUE the body for the end-of-pass check. An
+	// anonymous fn value never reaches InstallFnDef, so until this its body
+	// was analysed by nobody — `each ([e:Any] => [nosuchw e]) [1 2 3]`
+	// checked clean and then raised `undefined_word` at run time, while the
+	// identical body one line up as a `def` was reported (NUR105). POSITION
+	// decided it, not spelling.
 	//
-	// It is the SAME pass, through the analysis seam, not a second one with
-	// its own rules — a construction-time check that disagreed with the
-	// install-time one would be a new way for two spellings of the same
-	// callback to differ, which is the defect rather than the fix. The
-	// generic branch above stays separate because a type PARAMETER has no
-	// synthesizable example value; it binds placeholder carriers instead.
-	if r.Check.IsActive() && genSpec == nil {
-		core.RunFnConstructionPass(r, "", fnDef)
+	// Queued, not analysed here: the construction site is too early, because
+	// every forward reference is still unbound (see NoteFnBodyPending). A fn
+	// that reaches InstallFnDef before the drain is analysed there instead,
+	// under its name. The generic branch above stays separate because a type
+	// PARAMETER has no synthesizable example value; it binds placeholder
+	// carriers instead.
+	if genSpec == nil {
+		core.NoteFnBodyPending(r, fnDef)
 	}
 
 	// Check mode: flag overloads that an earlier, higher-priority
@@ -1788,15 +1786,11 @@ func AfnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Anonymous:  true,
 		Captured:   core.ComputeCaptures(r, &sig),
 	}
-	// The same construction-time body check FnConstruct runs, for the same
-	// reason: a lambda passed straight to a word (`each ([e:Any] => [typo
-	// e]) xs`) is never installed under a name, so this is its only chance
-	// to be analysed at all (NUR105). One analysis per body per pass — the
-	// pass itself dedupes, so a lambda that IS later `def`-bound is not
-	// analysed twice.
-	if r.Check.IsActive() {
-		core.RunFnConstructionPass(r, "", fnDef)
-	}
+	// Queue the body for the end-of-pass check, exactly as FnConstruct does
+	// and for the same reason: a lambda passed straight to a word (`each
+	// ([e:Any] => [typo e]) xs`) is never installed under a name, so this is
+	// its only chance to be analysed at all (NUR105).
+	core.NoteFnBodyPending(r, fnDef)
 	return []Value{NewFunction(fnDef)}, nil
 }
 

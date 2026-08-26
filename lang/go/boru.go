@@ -311,6 +311,7 @@ func (a *Boru) Check(src string) (CheckResult, error) {
 	// Drop fn-body forward-reference false positives (the name is
 	// defined by now), then emit unused-def warnings — both need the
 	// fully-populated end-of-pass state.
+	native.RunPendingFnBodyChecks(a.registry)
 	a.registry.RescueForwardRefDiagnostics()
 	a.registry.Check.EmitUnusedDefDiagnostics()
 	if err != nil {
@@ -440,6 +441,7 @@ func (a *Boru) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	engine := native.NewTop(a.registry)
 	engine.SetSource(src)
 	residual, runErr := engine.Run(values)
+	native.RunPendingFnBodyChecks(a.registry)
 	a.registry.RescueForwardRefDiagnostics()
 	a.registry.Check.EmitUnusedDefDiagnostics()
 

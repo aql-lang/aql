@@ -25,6 +25,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,
 		"FnAnalysisCounts": true, "FnBodyDepth": true,
 		"FnBodyChecked":   true,
+		"PendingFnBodies": true,
 		"CaughtBodyDepth": true, "NestedBodyDepth": true, "CondBodyDepth": true,
 		"SpecBaselines":            true,
 		"LoopBodyDepth":            true,
