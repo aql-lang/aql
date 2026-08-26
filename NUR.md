@@ -89,7 +89,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
-| [NUR101](#nur101) | BROAD's placement now depends on ENCLOSING CONTEXT: re-measured 2026-08-26, `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` still dispatches (`3`), and a list literal inherits the wrapped form — so `[((mk 1) 2)]` is `[3]` interpreted and `[fn (Integer) 2]` compiled, silently. The original top-level half (a computed group dispatching where a reference or literal placed) is CLOSED; the enclosing-group case is open on BOTH lanes. NB this file holds TWO records under this number, ruling opposite ways — see the record | re-measuring §5.4 after #402, 2026-08-25; re-measured 2026-08-26 |
+| [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`), and a list literal inherits the wrapped form — so `[((mk 1) 2)]` is `[3]` interpreted and `[fn (Integer) 2]` compiled, silently. **RULED 2026-08-26: place uniformly** — no enclosing-context exception; both lanes move, and the duplicate record under this number is deleted | re-measuring §5.4 after #402, 2026-08-25; re-measured and ruled 2026-08-26 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
@@ -331,15 +331,27 @@ which is how this register came to hold two contradictory readings (see
 below). Options, costs and a recommendation:
 [design/O1-RELITIGATION.0.md](design/O1-RELITIGATION.0.md).
 
-**Register hygiene: this file holds TWO records numbered NUR101**, both
-Pending, both claiming the anchor `{#nur101}`, ruling opposite ways on this
-same program — this one, and "a paren-computed fn inside a list literal is
-applied interpreted, baked compiled", which states *"the compiled lane is the
-defect"*. This record's own note below says that reading "had it exactly
-backwards" and was reverted, but the superseded record was never deleted. The
-duplicate anchor also makes every `#nur101` link resolve to this one. One of
-the two must be deleted (the register deletes superseded records rather than
-annotating them); which one follows from the ruling above.
+**RULED 2026-08-26 — place uniformly.** A computed function applied inside
+an enclosing group PLACES, exactly as its unwrapped twin does. `((mk 1) 2)`
+becomes `fn (Integer) 2`, and `[((mk 1) 2)]` becomes `[fn (Integer) 2]` on
+both lanes. There is no enclosing-context exception: ADR-011's carve-out
+stays what it says, a bare WORD inside a group, and a computed group result
+is not one.
+
+Both lanes move. The compiled lane is NOT already at this answer for the
+enclosing-group case — `lang/go/bytecode_curried_test.go:17-24` pins compiled
+`((mk 1) 2)` as `[3]` — so the fix is interpreter AND compiler, and that
+fixture is rewritten with it. `design/HIGHER-ORDER-FUNCTIONS.0.md` §5.4's
+`((mk 1) 2)` → `3` transcripts and its `def h (mk 1)` / `2 h/v apply`
+workaround are re-spelled, as every §1 program was when BROAD's first half
+landed. `def h (mk 1) end  h 2` → `3` must keep working: a bare NAME bound to
+a function calls by rule, and that rule is untouched.
+
+The superseded second record under this number — "a paren-computed fn inside
+a list literal is applied interpreted, baked compiled", which read the
+compiled lane as the defect — is DELETED as of this ruling, per the
+register's own discipline for superseded records. Its content is subsumed:
+the list literal was never the subject, it merely inherits the wrapped form.
 
 **Verdict:** resolve by fix — extend BROAD's placement to a computed group
 result, so `(mk 1) 2` is `fn 2` like its reference and literal twins. Two
@@ -483,65 +495,6 @@ maintainer's to direct.
 
 ---
 
-## NUR101 — a paren-computed fn inside a list literal is applied interpreted, baked compiled {#nur101}
-
-**Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** re-measuring
-`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.4 against the post-#402 tree
-
-**Rule:** the engines agree. NUR073's BROAD verdict settled that a paren
-PLACES its values rather than re-stepping them, and both lanes were brought
-to one answer; a list literal's contents are evaluated as a sub-program on
-both (`[1 add 2]` → `[3]`).
-
-**Divergence:** a fn value COMPUTED by a paren group and applied inside a
-list literal. No warning, no fallback, exit 0 either way, `boru check` clean
-— the two lanes simply return different data.
-
-```
-$ cat /tmp/l.boru
-def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [((mk 1) 2)]
-
-$ boru run /tmp/l.boru                    # compiled, NO fallback warning
-[fn (Integer) 2]
-$ boru run -no-compile /tmp/l.boru
-[3]
-$ boru run -force-compile /tmp/l.boru
-[fn (Integer) 2]
-$ boru check /tmp/l.boru
-check: 0 error(s), 0 warning(s), 0 info
-check: List
-```
-
-**The compiled lane is the defect, and it contradicts itself.** A list
-literal evaluates its contents on both lanes, and the compiled lane proves it
-can dispatch a fn there:
-
-```
-$ boru do '[1 add 2]'                                             # → [3] both lanes
-$ boru do 'def inc fn b:Integer Integer [add 1 b] end [inc 2]'    # → [3] both lanes
-```
-
-Only the paren-COMPUTED fn stops it. `[inc 2]` dispatches compiled; `[((mk 1)
-2)]` bakes two values. So this is not the placed-vs-stepped rule applied
-consistently — it is the compiled lane declining to step a value whose
-provenance it lost, in a context where it steps everything else.
-
-**Scope — it is the LIST literal specifically.** The map form falls back and
-therefore agrees (`{k:((mk 1) 2)}` → `{k:3}` both lanes, behind the loud
-"residual value of unknown provenance" warning), and a `/v`-PARKED fn agrees
-by staying inert on both (`[(inc/v) 2]` → `[fn inc(Integer) 2]`). The list
-literal is the one shape that compiles and diverges.
-
-**Why §5.4's correction did not catch it.** That note re-ran the `print` and
-fn-body shapes and recorded the lanes as agreeing on the first; both hold
-today. The list-literal shape was never in the transcript set, so the
-divergence survived the review that closed the rest of NUR073.
-
-**Verdict:** none proposed. The fix direction — teach the compiled lane to
-step a paren-computed fn inside an evaluated container, or refuse the shape
-rather than bake it — is a compiler-lane call, and the safe half (refuse and
-fall back, as the map form already does) is available immediately if the
-silent wrong answer is judged worse than the coverage loss.
 
 ---
 
@@ -2798,12 +2751,27 @@ test.
 designed behaviour ("the planner's designed TFunction intercept"); two
 more bare uses sit in the frontier divergence ledger (§3.3's count of 3).
 
-**Verdict:** resolve by fix — open-work item B (ruled 2026-08-17). All
-four sites retire together, `sigWantsFunctionAt` included, which
-re-opens the NUR038 call-head question inside the implementing PR; the
-`unused_def` use-recording re-homes with the intercept, and
-`path-modifier.tsv:67` plus the two frontier rows are rewritten. This
-record retires when that fix lands.
+**RE-AFFIRMED 2026-08-26 — implement as amended.** Re-litigated under O1
+(`design/O1-RELITIGATION.0.md` §2) and the amendment stands: a bare name
+bound to a function CALLS, universally, and passing one as an argument is
+explicit. The slot type must stop deciding what a token means — that is the
+same class of context-sensitivity Stage 4's descriptor would otherwise have
+to carry as live state, and one rule for every slot type is worth the
+ergonomic loss.
+
+Read the record's `/r` as `/v` throughout, per this file's 2026-08-19
+spelling note; `h zero/v` is the spelling that works today. An earlier draft
+of the O1 brief claimed the `/r` spelling was itself a defect directing users
+to a path that does not exist. It is not — the convention covers it — and
+that claim is withdrawn.
+
+**Verdict:** resolve by fix — open-work item B (ruled 2026-08-17,
+re-affirmed 2026-08-26). All four sites retire together,
+`sigWantsFunctionAt` included, which re-opens the NUR038 call-head question
+inside the implementing PR; the `unused_def` use-recording re-homes with the
+intercept, and `path-modifier.tsv:67` plus the two frontier rows are
+rewritten. Every `h zero` call site becomes `h zero/v`. This record retires
+when that fix lands.
 
 
 ## NUR079 — Gated words inside an imported file-module body escape the policy that governs the same call at top level {#nur079}
