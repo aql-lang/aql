@@ -720,6 +720,48 @@ That the invariant Stage 4's descriptor rests on is currently witnessed only
 by a shape Stage 3 has yet to close is worth carrying forward rather than
 forgetting.
 
+**Live revalidation has a witness now, and today's answer to it is a
+REFUSAL.** Probed 2026-08-26. This section asserts that a token's
+word-vs-value class can change on a rebind, so a descriptor freezing
+record-time classification would collect wrongly; the PR #406 review pressed
+the same point. Both are right, and the divergence is one line of source
+apart:
+
+```
+def w fn [[a:Any b:Any][Any][a]] end
+def k 5 end
+def go fn [[][Any][w k 1]] end
+go                                       -> 5          k is a VALUE: collected
+… def k fn [[][Integer][9]] end  go      -> raises     k is a WORD: barrier
+```
+
+Same body, same source position, same descriptor. A descriptor that froze
+`k` as a value slot would answer `5` where the interpreter raises — a silent
+wrong answer, not a crash, which is the failure mode this whole section
+exists to prevent.
+
+Two things the probe adds to the section's account. First, where the rebind
+precedes the call in source order the CHECKER catches it — `go`'s body is
+analysed against the post-rebind binding and the program never compiles
+(`fn_body_error`), so the lanes agree without anything re-deriving at
+runtime. That agreement is not evidence the compiled lane revalidates.
+Second, where the rebind sits BETWEEN two calls of the same region, so the
+checker cannot fold it, the compiled lane REFUSES, by name:
+
+```
+def r1 (go) end  def k fn [[][Integer][9]] end  def r2 (go) end
+  -> bytecode compilation refused: module binding k rebound after a fn unit
+     baked its value                      (compiler/go/emit.go:2474)
+```
+
+That is precisely one of the interim rebind-staleness latches §6.5 says the
+bind twins delete. So the current architecture's answer to live revalidation
+is not a frozen classification and not a re-derivation — it is a refusal
+standing in for both. `OpCollect` re-deriving class and extent against the
+live binding set is what lets that refusal go, and this pair is its
+acceptance test: the compiled lane must ANSWER both spellings, `5` and the
+barrier raise, rather than declining the second.
+
 **The shared-vs-divergent map — Stage 2's actual worklist.** The three
 loops are not merged; each decision they share is given one home, and each
 difference is classified as intentional or as drift. The probe mapped
