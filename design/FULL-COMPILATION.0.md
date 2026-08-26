@@ -597,6 +597,44 @@ and a matching opcode pair:
   curry-list construction (`curryOrStack`'s compiled twin) / the
   interpreter's exact no-match raise.
 
+**F2's carried-state list is INCOMPLETE — by three readers, all
+region-local.** Probed 2026-08-26, enumerating what the no-match raise path
+actually reads rather than trusting the list. F2 fired once and widened this
+list by four items; it is short by at least three more:
+
+- `IsFnShapeTypedBindingContext` (`core/go/engine.go:759`) — appends the
+  *"this is a typed-binding context expecting a function value — did you mean
+  `X/q`?"* suggestion to a `signature_error` (`:3286`), and separately GATES
+  `PolyNoMatchProbe` entirely (`:446`), so it changes whether the poly probe
+  runs at all and not merely how the text reads. It needs the enclosing
+  collector's Forward, that sig's arg-0 type, the MAP VALUE sitting at
+  `FuncIndex - CollectedArgs`, and a live `ResolveTypedName` on the
+  constraint word.
+- `pendingForwardFunc` (`:806`) — the enclosing collector's NAME, which
+  tailors an undefined-word hint when it is `def` (`:842`).
+- `polyReachBound` — read into the same poly probe alongside the residual
+  (`:450`), so the reach bound rides with `reorderCandidates`' four values
+  rather than being implied by them.
+
+**They do not falsify the region bound, and the reason is the invariant
+above.** All three key on the ENCLOSING COLLECTOR'S FORWARD, and at most one
+Forward is ever live per paren scope — so the collector they find is the
+region's own, never an earlier region's, and its collected args sit adjacent
+to its `FuncIndex` and are in-region with it. The one-forward-per-scope
+invariant therefore does double duty: it bounds the stranded-forward scan AND
+it bounds these. The list needs extending; the bound does not.
+
+One candidate ruled OUT, which is worth recording so it is not re-derived:
+`insufficientArgsError` appends a `"stack: "` note built by
+`describeStackTypes` (`core/go/boru_error.go:315`) over the tape window
+`[pointer-3, pointer+4)` — bounded, but stopping at neither a paren nor a
+region boundary, and rendering `word(name)` / `atom(name)` payloads rather
+than types alone. That WOULD be extra-regional state. It is unreachable: its
+sole production call site (`engine.go:7509`) carries a proof-carrying
+`//covergate:allow` as a defensive arm unreachable via the harness, so the
+note never reaches a user and needs no carrying. If that arm ever becomes
+reachable, this paragraph is the falsifier.
+
 **Live revalidation, because boundaries are binding-dependent.** The
 forward scan's extent is derived from the *live* binding's signatures
 (per-signature `forwardLimit` = `BarrierPos`), and even a token's
