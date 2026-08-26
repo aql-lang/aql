@@ -1347,30 +1347,6 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 			if r.Check.DynamicScopeReachable(d.Word, d.FnName) {
 				continue
 			}
-			// An ANONYMOUS body has no call-graph identity, so the sound
-			// reachability question above cannot be asked of it at all: the
-			// reader name is the key, and there is none. Answer it
-			// optimistically instead of refusing to ask — rescue when SOME fn
-			// binds the name.
-			//
-			// This is deliberately weaker than the named rule, and the reason
-			// it is acceptable here is the alternative. Anonymous callback
-			// bodies became visible to the checker at all only with NUR105;
-			// before that they were not analysed, so nothing was reported for
-			// them. Optimism cannot regress against "silent", and the strict
-			// rule would trade NUR105's false NEGATIVE for a false positive on
-			// a legal, common idiom (a lambda reading a name its caller's
-			// frame binds). A genuine typo — a name no fn binds anywhere — is
-			// still flagged, which is the case NUR105 is about.
-			//
-			// Scoped to the rescue, which is diagnostics-only. The compiler
-			// asks DynamicScopeReachable the same question to decide whether
-			// to COMMIT a dyn-scope read, and it must keep refusing on an
-			// unanswerable one — admitting there would be a soundness change,
-			// not a diagnostic one.
-			if d.FnName == "" && len(r.Check.FnBinders[d.Word]) > 0 {
-				continue
-			}
 		}
 		kept = append(kept, d)
 	}
