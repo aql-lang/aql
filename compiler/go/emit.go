@@ -7064,10 +7064,28 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 		applyDynamic = !anyDynamicTail(residual)
 	}
 	// Leading Function CARRIER (the factory pattern: a returned closure now
-	// on the stack) with no dynamic / fn value after it. A carrier always applies
-	// — the one non-applied shape (an inert `f/v`) is a CONCRETE const, not a
-	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
-	if !applyDynamic && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) {
+	// on the stack) with no dynamic / fn value after it.
+	//
+	// NUR101, ruled 2026-08-26 — PLACE UNIFORMLY. This arm used to read "a
+	// carrier always applies — the one non-applied shape (an inert `f/v`) is
+	// a CONCRETE const, not a carrier — so the carrier bit resolves the
+	// apply-vs-inert ambiguity". That premise was true only while the
+	// interpreter's paren rewind RE-STEPPED a collapsed Function into a call.
+	// It no longer does (core/go/engine.go, fnReturnPark): a paren places its
+	// Function whatever else survived beside it, so a Function carrier
+	// LEADING a program residual is placed data, not a pending call, and
+	// applying it here would compile `((mk 1) 2)` to 3 where the interpreter
+	// now answers `fn (Integer) 2`.
+	//
+	// What still applies is a lead the interpreter DISPATCHES BY NAME. The
+	// discriminator was already here for another purpose: a READ-substituted
+	// lead (`def k (…)  (k 99)`, carrying NoteDefRead provenance) is a WORD
+	// dispatch, and a runtime binding always applies. An EVENT lead — the
+	// `((…) 99)` spelling — has VALUE semantics, and value semantics are what
+	// the ruling changed. So the carrier bit no longer resolves the
+	// ambiguity; the lead's provenance does.
+	_, leadIsDefRead := es.defReads[residual[0].ID]
+	if !applyDynamic && leadIsDefRead && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 		// When the carrier's closure arity is statically recoverable (its
 		// producer is a compiled factory fn returning one anonymous closure),
