@@ -1360,16 +1360,40 @@ func parenPlacedFnCarrier(e *core.Engine, idx int) bool {
 	if v.ID == "" {
 		return false
 	}
+	// A GENUINE fn-typed carrier is visible to core, so core does not need
+	// this predicate to decide the park — but the COMPILER still needs the
+	// placement recorded, and this is the only place that knows a USER paren
+	// (not a reach group) did the placing. Record and report placed.
+	//
+	// This used to fall through to the member-read gate below and decline,
+	// which combined with an `||` short-circuit at the call site meant a
+	// genuine carrier was never recorded at all: `((mk 1) 2)` placed
+	// interpreted and applied compiled, because the residual lowering had no
+	// way to learn the lead was placed data (NUR101).
+	if core.IsFnTypedCarrier(v) {
+		recordParenPlacedFn(r, v.ID)
+		return true
+	}
 	if _, ok := es.MemberFnReadValue(v.ID); !ok {
 		return false
 	}
 	// Core asks only AFTER excluding reach groups, so reaching here proves
 	// a USER paren: record the id for the compiler's residual lowering.
-	if cs := r.Check; cs != nil {
-		if cs.ParenPlacedFnIDs == nil {
-			cs.ParenPlacedFnIDs = map[string]bool{}
-		}
-		cs.ParenPlacedFnIDs[v.ID] = true
-	}
+	recordParenPlacedFn(r, v.ID)
 	return true
+}
+
+// recordParenPlacedFn notes that a USER paren placed the carrier with this
+// id, for the compiler's residual lowering to read (ParenPlacedFnIDs — see
+// its doc in core/go/check_state.go: the lowering "must not lower a placed
+// lead as an apply").
+func recordParenPlacedFn(r *core.Registry, id string) {
+	cs := r.Check
+	if cs == nil {
+		return
+	}
+	if cs.ParenPlacedFnIDs == nil {
+		cs.ParenPlacedFnIDs = map[string]bool{}
+	}
+	cs.ParenPlacedFnIDs[id] = true
 }

@@ -6053,6 +6053,14 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 		return 0
 	}
 	if fnValueDispatchesAtPointer(v) {
+		// Record the placement here too. In CHECK mode this arm catches a
+		// Function the pass folded to a concrete value, and it returns before
+		// the Dynamic arm below ever asks the braid — so without this the
+		// compiler's residual lowering never learns the lead was PLACED and
+		// applies it, which is `(mk 1) 2` placing interpreted and answering 3
+		// compiled (NUR101). Reach groups are already excluded above, so
+		// reaching here proves a USER paren.
+		CheckBraid.ParenPlacedFnCarrier(e, idx)
 		return 1
 	}
 	// The CHECK pass's twin of the same decision. Where the interpreter
@@ -6064,8 +6072,18 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 	// TestCompiledCombinationParity caught when the BROAD park landed.
 	// Reach groups never reach here (both exclusions above), so dot SUGAR
 	// keeps dispatching on both lanes.
-	if v.Dynamic && !v.Quoted && (IsFnTypedCarrier(v) || CheckBraid.ParenPlacedFnCarrier(e, idx)) {
-		return 1
+	if v.Dynamic && !v.Quoted {
+		// Ask the braid FIRST, and unconditionally. It is not only a
+		// predicate: it RECORDS the placement in ParenPlacedFnIDs for the
+		// compiler's residual lowering, which must not lower a placed lead
+		// as an apply. Behind an `||` after IsFnTypedCarrier it never ran for
+		// a genuine carrier — the short-circuit meant the one case the
+		// compiler most needs to know about was the one case never recorded,
+		// so `((mk 1) 2)` placed interpreted and applied compiled (NUR101).
+		placed := CheckBraid.ParenPlacedFnCarrier(e, idx)
+		if IsFnTypedCarrier(v) || placed {
+			return 1
+		}
 	}
 	return 0
 }

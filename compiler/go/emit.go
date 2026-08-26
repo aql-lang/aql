@@ -7077,22 +7077,20 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// applying it here would compile `((mk 1) 2)` to 3 where the interpreter
 	// now answers `fn (Integer) 2`.
 	//
-	// What still applies is a lead the interpreter DISPATCHES BY NAME. The
-	// discriminator was already here for another purpose: a READ-substituted
-	// lead (`def k (…)  (k 99)`, carrying NoteDefRead provenance) is a WORD
-	// dispatch, and a runtime binding always applies. An EVENT lead — the
-	// `((…) 99)` spelling — has VALUE semantics, and value semantics are what
-	// the ruling changed. So the carrier bit no longer resolves the
-	// ambiguity; the lead's provenance does.
-	// Read the lead's provenance only once it is known to EXIST — this
-	// function is reached with an empty residual, so indexing residual[0]
-	// unguarded panics (ADR-005: panics are forbidden), which is exactly what
-	// the first cut of this change did.
-	leadIsDefRead := false
-	if len(residual) > 0 {
-		_, leadIsDefRead = es.defReads[residual[0].ID]
-	}
-	if !applyDynamic && leadIsDefRead && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) {
+	// The discriminator is PLACEMENT, and the mechanism already existed:
+	// ParenPlacedFnIDs (core/go/check_state.go), whose own doc says it is
+	// "read by the compiler's residual lowering, which must not lower a
+	// placed lead as an apply — `(m dot f) 5` is two values; `m.f 5` still
+	// applies". It was recorded only for member-fn reads; the park now
+	// records every carrier it places, so this arm can ask it directly.
+	//
+	// A narrower gate on def-read provenance was tried first and OVER-REACHED:
+	// it refused `c.op 5`, a member-read apply that ADR-011 lists among the
+	// three explicit application forms (a bare name, `apply`, a member read)
+	// and that the interpreter still applies. Placement is the question, not
+	// how the lead was named.
+	if !applyDynamic && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) &&
+		!es.parenPlacedMemberFn(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 		// When the carrier's closure arity is statically recoverable (its
 		// producer is a compiled factory fn returning one anonymous closure),
