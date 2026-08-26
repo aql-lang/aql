@@ -3618,6 +3618,21 @@ Note the diagnostic names **no word at all** — an empty `Word` field —
 which is itself a defect: whatever emits it has lost the identifier it is
 complaining about. The corpus row is `edge-dispatch-3.tsv:L56`.
 
+**Traced to the emitter.** The check-mode constructor
+`undefinedWordCheckDiag` (`check/go/check_recovery.go:22`) has no
+production callers — it is exercised only by tests. The live emitter is
+`Engine.undefinedWordError(name, pos)` (`core/go/engine.go:860`), reached
+from three `stepWord` sites (`:2499`, `:2597`, `:2918`), each passing
+`w.Name` from a `WordInfo`. An empty `Word` on the diagnostic therefore
+means **a Word token whose Name is empty is being stepped**.
+
+That is the next thing to look at, and it narrows the search a long way:
+the repro's only interesting construct is `o.pretty`, and dot access
+lowers to a `get`/`getr` chain (`design/REACH.10.md`). The hypothesis is
+that the reach lowering yields a nameless Word on the compile path that
+it does not on the plain-check path. Not yet confirmed — no instrumented
+run has been done.
+
 Whether this shares a root cause with the `h2` site in mini-redis is
 unknown; both are armed-only `undefined_word`, but the shapes differ
 (record-param dot access here, a `def`-then-read inside a stored handler
