@@ -24,6 +24,8 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"MethodShapes": true, "PendingMethodApply": true,
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,
 		"FnAnalysisCounts": true, "FnBodyDepth": true,
+		"FnBodyChecked":   true,
+		"PendingFnBodies": true,
 		"CaughtBodyDepth": true, "NestedBodyDepth": true, "CondBodyDepth": true,
 		"SpecBaselines":            true,
 		"LoopBodyDepth":            true,
@@ -178,6 +180,14 @@ func mutateContainers(v reflect.Value) {
 				// Pointer-keyed maps (CtxShapes): a fresh non-nil pointer is
 				// a distinguishable second key.
 				k.Set(reflect.New(f.Type().Key().Elem()))
+			case reflect.Struct:
+				// Struct-keyed maps (FnBodyChecked's SrcPos): populateNonZero
+				// seeds the map with the ZERO key, so a non-zero one is the
+				// distinguishable second. Without this arm the mutation
+				// silently did not happen and the clone check PASSED for a
+				// map Clone was in fact sharing — the gate's own blind spot,
+				// found when the first struct-keyed field arrived.
+				populateNonZero(k)
 			default:
 				continue
 			}

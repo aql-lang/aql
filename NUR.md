@@ -93,6 +93,10 @@ keep the two in sync in the same commit.
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
+| [NUR102](#nur102) | A predicate body runs a different number of times in each lane — overload pruning evaluates it 4× interpreted and 2× compiled, an effect-count divergence no differential gate can see because both lanes return the same value | the Stage-2 collection-kernel feasibility probe, 2026-08-25 |
+| [NUR103](#nur103) | The checker's answer depends on who is asking: the same program yields a clean `boru check` and a refusing compile, so the tool a user would reach for reports the program fine — **one instance fixed 2026-08-26** (a nameless `undefined_word` from a Word-typed carrier); the mini-redis instance is diagnosed and OPEN, and its first fault is a coverage hole — `boru check` does not analyse a service-handler body at all, so a bare undefined word inside one ships clean | the server-concurrency corpus, 2026-08-26 |
+| [NUR105](#nur105) | `boru check` does not analyse the body of a function VALUE constructed in ARGUMENT position — all three anonymous spellings (`=>`, `fn`, `afn`) — so `each ([e:Any] => [nosuchw e]) [1 2 3]` checks clean and then raises `undefined_word` at run time, an error the checker catches without difficulty when the identical body is `def`-bound. A code BLOCK argument and a named fn REFERENCE are both analysed, so position decides it, not spelling; measured matrix in the record | bounding NUR103's mini-redis half, 2026-08-26 |
+| [NUR104](#nur104) | A record type means two different things depending on how it is spelt: the named spelling DISPATCHES and so evaluates its field map, the inline `o:{…}` rides inside the inert fn-spec list and never does — **the two field shapes found so far are fixed 2026-08-26**, the construction asymmetry is not | tracing NUR103, 2026-08-26 |
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
 obvious). A record argued to a **resolve-by-fix** verdict keeps the
@@ -3464,3 +3468,650 @@ semantics. This record is discharged by an Allowed verdict naming that
 hint as the mitigation (or by a maintainer ruling the hint unnecessary,
 with the §8 rows and the REFERENCE.md contract as the pinned acceptance).
 
+
+## NUR102 — a predicate body runs a different number of times in each lane {#nur102}
+
+**Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** the
+Stage-2 collection-kernel feasibility probe for
+`design/FULL-COMPILATION.0.md` (falsifier F1), which found overload
+pruning to be an evaluation site the design had not accounted for
+
+**Rule:** the compiled lane reproduces the interpreter's observable
+behaviour exactly — values, errors, **and effects in their order**
+(`design/COMPILABLE-SUBSET.md` §1: "a residual byte-identical to the
+interpreter's `Run` for the same source"). A user-visible boru body must
+not run a different number of times depending on which lane executes it.
+
+**Divergence:** an effectful `fnpred` body runs **four times interpreted
+and twice compiled** for the same call, with the same final value:
+
+```
+$ cat pred.boru
+def Even fnpred n:Integer [ print "P" eq 0 (mod 2 n) ] end
+def we fn [[a:Even][String]["even-arm"]] end
+def we fn [[a:Integer][String]["int-arm"]] end
+print (we 4)
+
+$ boru run -no-compile pred.boru
+P
+P
+P
+P
+even-arm
+
+$ boru run -force-compile pred.boru
+P
+P
+even-arm
+```
+
+**Mechanism.** Predicate types are checked by *running boru code inside
+signature matching*: `SigArgMatches` reaches `PredicateUnifier.Match`
+(`core/go/unify_predicate.go:51-68`) → `Registry.RunPredicate`
+(`core/go/registry.go:1917`) → the predicate's body. The interpreter
+reaches that path more often than the VM does, because **overload pruning
+during forward collection is itself an evaluation site**: `pruneViable`
+(`core/go/engine.go:1919-1934`) calls `SigArgMatches` while it is still
+deciding which signatures remain viable, once per surviving candidate per
+scan step. The compiled lane matches once over concrete values and
+never replays the pruning. The count is therefore a function of *how the
+call was written*, not of what it computes — the same probe measured the
+forward form `we 4` entering the scan body while the stack form `4 we`
+breaks at the boundary token and never prunes at all.
+
+**Why it was not caught.** The differential gates compare residual values
+and error taxonomy; neither compares **effect counts**, so a divergence
+visible only as repeated output, repeated logging, or repeated mutation
+inside a predicate passes every existing gate. The frontier ledger has no
+predicate-effect row, and `design/COMPILABLE-SUBSET.md` mentions
+predicates only for typed binds and tape-bound handlers.
+
+**Why it matters beyond purity.** A predicate is ordinary boru: it may
+log, may touch a store, may be expensive. "Slow, not wrong" does not
+cover it — the two lanes disagree observably, and which one is *correct*
+is itself unsettled, since neither count is obviously the specified one.
+
+**Discharge.** Either (a) rule that predicate bodies must be pure, and
+enforce it, at which point the count is unobservable and this becomes
+Allowed; or (b) make the count part of the contract and have both lanes
+produce it, which the full-compilation plan's §6.3 predicate-unit work
+would need to do anyway. Whichever way it goes, the differential harness
+needs an effect-count comparison, or the next divergence of this shape is
+equally invisible.
+
+## NUR103 — the checker's answer depends on who is asking {#nur103}
+
+**Status:** Pending · **Recorded:** 2026-08-26 · **Surfaced by:** the
+server-concurrency corpus (`test/go/servercorpus`), measuring why a real
+protocol server does not compile
+
+**Rule:** one analysis, one answer. The static pass is a single
+abstracted interpreter over carriers; its verdict on a program is a
+property of the program, not of what the caller intends to do with the
+verdict.
+
+**Divergence:** the same program yields a clean check and a refusing
+compile.
+
+```
+$ boru check redis_run.boru
+check: 0 error(s), 0 warning(s), 1 info
+
+$ boru run -force-compile redis_run.boru
+error: force-compile: check diagnostics: [undefined_word] undefined word: h2
+
+$ boru run -no-compile redis_run.boru      # runs fine, returns "hello"
+```
+
+where `redis_run.boru` imports `design/examples/apps/mini-redis.boru` and
+issues a SET then a GET. The offending name is at `mini-redis.boru:210`
+— `def h2 (h set (f) v) (hashes set (k) h2) drop 1`, inside a lambda
+registered as a service handler. Checking the module **on its own** is
+also clean (0 errors, 2 unrelated unused-def warnings), so the diagnostic
+is produced by neither the module nor the plain check of the importing
+program: it appears only when the analysis runs with the recorder armed.
+
+**Why it matters.** This is the mechanism that refuses realistic servers.
+The plain echo server compiles to zero interpreter runs; mini-redis does
+not compile at all, and this diagnostic is the sole reason. A user cannot
+diagnose it either, because the tool they would reach for — `boru check`
+— reports the program clean.
+
+**Mechanism (not yet isolated).** `design/FULL-COMPILATION.0.md` §6.9(3)
+names the shape: numerous analysis models fork on `!Compiling` — static-if
+reduction, loop spread, closure surfacing, and the emission of
+`no_signature` itself. One of those forks is presumably reached here, and
+the compile-armed path surfaces a diagnostic the plain path does not.
+
+Hypotheses tested and REJECTED, recorded so they are not re-explored:
+
+- *The fn-analysis quota fork.* `check/go/carrier.go:2757` skips the
+  quota short-circuit while `Compiling`, on the stated grounds that the
+  compiler must see real body events rather than a fabricated
+  `declaredReturnBail`. That would make the compile pass analyse bodies
+  plain check skips — an exact fit for the symptom. **Ruled out:** the
+  bail emits an `analysis_truncated` diagnostic at quota+1, and the plain
+  check of this program reports no such diagnostic, so the quota is never
+  reached.
+- *A general "def and use in one statement" defect.* Two reductions —
+  at top level, and inside a one-parameter lambda — both check clean
+  under compilation. The trigger is narrower than the surface shape.
+
+**MINIMAL REPRO (2026-08-26).** Found by the diagnostic-parity gate
+(`test/go/langspec/diagnostic_parity_test.go`), which enumerates every
+corpus row whose findings differ between the passes. One line, and the
+code is entirely ordinary — a record-typed parameter read through dot
+access:
+
+```
+$ cat rec.boru
+def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {pretty:true}
+
+$ boru check rec.boru
+check: 0 error(s), 0 warning(s), 0 info
+check: Boolean
+
+$ boru run -no-compile rec.boru
+true
+
+$ boru run -force-compile rec.boru
+error: force-compile: check diagnostics: [undefined_word] undefined word:
+```
+
+Note the diagnostic names **no word at all** — an empty `Word` field —
+which is itself a defect: whatever emits it has lost the identifier it is
+complaining about. The corpus row is `edge-dispatch-3.tsv:L56`.
+
+**Traced to the emitter.** An earlier note here claimed the check-mode
+constructor `undefinedWordCheckDiag` (`check/go/check_recovery.go`) had no
+production callers and that the live emitter was
+`Engine.undefinedWordError`. That was wrong, and instrumenting
+`undefinedWordError` proved it: for this program it never fires. The live
+emitter IS `undefinedWordCheckDiag`, reached through the `CheckBraid` seam
+from the analysis arm of `stepWord` (`core/go/engine.go`) — with `w.Name`
+empty and no source position. So **something with no name is being stepped
+as a word**.
+
+**Trigger isolated (2026-08-26), and it is NOT the reach lowering.** The
+first hypothesis — that dot access produced a nameless Word — was tested
+and falsified. The trigger needs two conditions together:
+
+| param type | body | result |
+|---|---|---|
+| `{pretty:Boolean}` | `o.pretty` | **refuses** |
+| `Map` | `o.pretty` | compiles |
+| `{pretty:Boolean}` | `o get "pretty"` | **refuses** |
+| `{pretty:Boolean}` | `true` (no field read) | compiles |
+| `{pretty:Boolean}` | `o.pretty`, other names | **refuses** |
+
+So: **a field read from a parameter whose declared type is a STRUCTURAL
+RECORD type**. Neither half alone reproduces — the same dot access over a
+plain `Map` parameter compiles and returns `true`, and the same record
+parameter with no field read compiles. It is not dot-specific either:
+an explicit `get` fails identically, which is what rules the reach
+lowering out.
+
+An instrumented run printed the sub-engine's whole tape at that moment, and
+the answer was in one line:
+
+```
+[step] ({__OP} dynamic(record{pretty:word(Boolean)}){Map} pretty{Atom} >word(dot){Word} ){__CP}
+[step] ({__OP} >dynamic(word()){Word} ){__CP}
+=== EMPTY WORD  data=<nil> parent=Word carrier=true dynamic=true
+```
+
+`o.pretty` lowers to `( o dot pretty )` and reduces correctly. What it
+reduces TO is the defect: a **carrier whose type is `Word`**. The step loop
+classifies by type alone (`IsWord` is `v.Parent.Equal(TWord)`), so the next
+step dispatches that carrier as a token; it has no `WordInfo` payload, so
+the name is `""`, and every name arm falls through to the undefined-word
+tail. Hence a diagnostic naming no word.
+
+**Why the carrier's type is `Word`.** The param's declared record schema is
+`{pretty: word(Boolean)}` — the field type is still the unevaluated Word
+TOKEN `Boolean`, not the type. `recordSchemaFieldReturns`
+(`lang/go/native/native_storage.go`) then does the obviously right thing
+with the wrong input: `ft := ValueType(fv)` on a Word token is `Word`, so
+the field read narrows to `dynamic(Word)`.
+
+The field type is unresolved because of an asymmetry between the two ways
+of spelling a record parameter:
+
+| spelling | how the field map is built | field value |
+|---|---|---|
+| `type R record {pretty:Boolean}` then `o:R` | `record` DISPATCHES, evaluating its map | type value |
+| inline `o:{pretty:Boolean}` | rides inside the fn-spec LIST — inert data, never evaluated | Word token |
+
+`ResolveSigType`'s map arm returned the inline map as the pattern verbatim.
+The dispatcher tolerated it (`Unify` resolves the name at match time, which
+is why `f {pretty:1}` was correctly REJECTED all along), but the
+schema-bearing param carrier — `recordSchemaCarrier`, `check/go/check_fnmodel.go`
+— copies the pattern's fields verbatim into a `RecordTypeInfo`, so the
+unresolved word reached the read. The typed-container child of `xs:[:Foo]`
+has had exactly this resolution since generics landed
+(`ResolveSigChildParam`); the structural-record field simply never got its
+twin.
+
+**Why only the compile path.** Nothing in the fork logic — the plain pass
+builds the COARSE param carrier (`{:Any}`, no schema), so it never reads the
+field schema and never mints the bad type. Only the compile pass builds the
+precise schema-bearing carrier. The `!Compiling` forks named as suspects
+above (`nur068ReturnCarrier`, the fn-analysis quota) are not implicated;
+neither is the reach lowering, which the truth table had already cleared.
+
+**Fixed (2026-08-26).** Two changes, one for each half:
+
+1. `ResolveSigRecordFields` (`core/go/generics_unify.go`) resolves an inline
+   record pattern's field type words at sig install, following
+   `ResolveSigChildParam`'s cascade arm for arm — type-param node, user type
+   body, builtin name — and leaving literal-value patterns (`{status:'ok'}`,
+   ADR-010) and words naming no type untouched. Nested inline records
+   resolve recursively. Wired into `ResolveSigType`'s map arm, so both
+   spellings of a record parameter now produce the same pattern.
+2. `stepWord` (`core/go/engine.go`) collects a word-TYPED value with no
+   `WordInfo` as data instead of dispatching it. A carrier is an abstract
+   value, not a token: there is no name to look up and no arguments to
+   collect. This is reachable for any word-typed carrier that is genuinely
+   word-typed — a `w:Word` record field read, a declared `Word` return — and
+   is what keeps the class of defect from re-appearing as another nameless
+   diagnostic.
+
+With both in place the minimal repro checks clean, interprets to `true`, and
+COMPILES to `true` under `-force-compile`.
+
+The second half was not compile-path-only, which the record-schema instance
+had disguised. A fn with a DECLARED `Word` return produces the same carrier
+on the plain pass, and the same nameless diagnostic came out of `boru check`:
+
+```
+$ cat w.boru
+def g fn [[][Word][quote foo]]
+def h (g)
+1
+
+$ boru check w.boru                     # before
+check: 1:20: [error] type_error: g: return value 1: expected Word, got Atom
+check: [error] undefined_word: undefined word:            <- spurious, positionless
+check: 2 error(s), 1 warning(s), 0 info
+
+$ boru check w.boru                     # after
+check: 1:20: [error] type_error: g: return value 1: expected Word, got Atom
+check: 1 error(s), 1 warning(s), 0 info
+```
+
+One real diagnostic, one phantom beside it, with no position and no name.
+That is the shape to watch for: a positionless diagnostic is a diagnostic
+whose subject the emitter never had.
+
+**The `h2` site is a DIFFERENT defect.** `MiniRedis.serve` still refuses
+with `undefined_word: h2` after this fix. That one names its word, so it is
+not the nameless-carrier family at all; the two shapes shared only the
+armed-only symptom. It is diagnosed separately below, and the general
+Discharge stands either way: the class defect is that a diagnostic can
+exist in one pass and not the other, which no single root-cause fix
+retires.
+
+Worth recording how this one was found: four manual reductions of the
+mini-redis shape had failed, because they were reducing the wrong program.
+The parity gate found an unrelated, far smaller instance in one run — which
+is the argument for building the measurement before hunting the bug.
+
+**The other four armed-only rows**, for whoever picks this up:
+`case.tsv:L76` (`case_not_exhaustive`), `case.tsv:L97`
+(`undefined_word/zed`), `edge-quote-1.tsv:L103` (`undefined_word/nosuch`,
+emitted TWICE), `generics-fn.tsv:L55` (`undefined_word/value`).
+
+**The `h2` half, diagnosed 2026-08-26.** Found by delta-debugging the real
+program rather than by writing reductions: keep one handler at a time and
+ask which still refuses. Thirteen of the fourteen drop out; `HDEL` alone
+reproduces, and `HSET` — the site the diagnostic NAMES — does not. Reducing
+that block in place, then lifting it out of the module, gives twelve
+self-contained lines:
+
+```
+import "boru:net"
+def serve fn opts:Map Any [
+  def svc (service {kv:{}}) add {cmd:"HDEL"}
+    ([req:Map state:Any] =>
+        [def hashes {}
+          def cur (hashes get "k")
+          def h2 (cur set "f" None) h2
+        ]
+    )
+    svc Net.listen {tcp:opts.port codec:Net.lines} svc
+]
+def ln (serve {port:0})
+1
+```
+
+`boru check`: clean. `boru run -no-compile`: `1`. `boru run
+-force-compile`: `undefined_word: h2`. Three faults compose, each of them
+§6.9(3)'s family:
+
+1. **`boru check` does not analyse a service-handler body at all.** Put a
+   bare `noSuchWordHere` in that lambda and `boru check` still reports the
+   program clean while the compiler refuses it. This is not a parity
+   nicety — it is a COVERAGE HOLE: a typo inside a request handler ships.
+   The compile pass must analyse the body, because it has to record it into
+   a compiled callback unit; the plain pass never does, and every
+   divergence below follows from that one asymmetry. Bounded by
+   experiment: a lambda called directly, and a lambda never called at all,
+   are both analysed by both passes. It is registration through `add` that
+   loses the body. (A lambda inside a LIST literal diverges the other way —
+   plain check flags it, the compile pass refuses before reaching it.)
+2. **A call the checker models as divergent silently unbinds its `def`.**
+   `hashes` is the literal `{}`, so `cur` is statically `None`, so `cur set
+   "f" None` matches no signature and is modelled as producing no residual.
+   `def h2 <nothing>` therefore binds nothing, and the following read of
+   `h2` is an undefined word. At run time none of this happens: `cur` is a
+   real map and the handler works, which is why the interpreter answers
+   `1`.
+3. **The suppression hides the cause and leaves the symptom.** The
+   `no_signature` that would NAME the failing `set` call is suppressed
+   while compiling (the documented fork, `check_recovery.go`). Removing
+   just the `h2` read makes the program compile silently — the bad call
+   raises nothing on either pass. So the one diagnostic that does escape is
+   the downstream consequence of a cause the user is never shown, at a
+   different line, about a different name. That is exactly why the site the
+   message names (`HSET`) is not the site that reproduces (`HDEL`).
+
+Read together: the checker is analysing code the user's own tool never
+looks at, reaching a false conclusion about it (the run-time `cur` is not
+`None`), and reporting that conclusion through its least informative
+symptom. The four earlier manual reductions all failed because they
+reproduced the `def`-then-read SHAPE, which is fine on its own — what
+matters is a `def` whose value the checker proves divergent, inside a body
+only one pass ever reads.
+
+**Discharge for this half.** Fault 1 is **fixed** — NUR105, which turned
+out to be far wider than service handlers and is recorded separately. With
+it, `boru check` on mini-redis reports what the compiler was refusing on,
+at :230 in the HDEL handler, with the causal `no_signature` immediately
+before the `h2` read: the refusal is diagnosable by the tool a user would
+reach for, which was the point.
+
+Fault 2 is **decided, not yet implemented** (2026-08-26). The question was
+whether a provably-divergent value expression should bind a `Never` carrier
+rather than nothing. The answer is the same one from a different angle:
+after a provably-divergent expression the rest of the region is
+UNREACHABLE, so the divergence is reported ONCE at its own site and its
+downstream consequences are suppressed rather than re-derived as findings
+about names. That is what an empty residual already means, and it is what
+the compiled lane will do — the trap raises and nothing after it executes.
+A checker reporting consequences the compiled program can never reach is
+describing a program that does not exist.
+`design/FULL-COMPILATION.0.md` §6.9(1) carries the rule and its two limits:
+it does not suppress the divergence itself, and it does not extend past the
+region.
+
+Fault 3 is §6.9(3)'s named fork, and this record is the argument that
+suppressing a diagnostic does not make its consequences go away; it makes
+them unattributable.
+
+
+**Discharge.** Either collapse the forks so the two passes cannot
+disagree, or — where a fork is genuinely required — prove it
+diagnostic-neutral, which is what §6.9(3) asks for. Note that fixing the
+underlying binding bug is NOT sufficient on its own: the general defect
+is that a diagnostic can exist in one pass and not the other, and the
+next instance would be just as invisible to `boru check`.
+
+
+## NUR104 — a record type means two different things depending on how it is spelt {#nur104}
+
+**Status:** Pending — the two field shapes found so far are fixed, the
+construction asymmetry that produced them is not (see Discharge) ·
+**Recorded:** 2026-08-26 · **Surfaced by:** tracing NUR103's nameless `undefined_word` —
+the mechanism turned out to be general, so the neighbouring shapes were
+probed and one of them diverged outright
+
+**Rule:** one type, one meaning. A record type constrains a slot the same
+way however it was written; the surface spelling is not part of the
+semantics.
+
+**Divergence.** It is. A record type reaches a parameter slot by two
+routes, and only one of them ever EVALUATES its field map:
+
+| spelling | how the field map is built | field values |
+|---|---|---|
+| `type R record {…}` / `refine Record [{…}]`, then `o:R` | the word DISPATCHES, so the map is evaluated | types |
+| inline `o:{…}` | rides inside the fn-spec LIST, which is inert data | raw tokens |
+
+The dispatcher papered over the easy case — `Unify` resolves a bare type
+NAME at match time — so `o:{pretty:Boolean}` dispatched correctly and the
+asymmetry stayed invisible. It was not invisible one level up. A field
+whose type is an EXPRESSION kept an unevaluated paren the matcher could
+not read, and the two spellings gave opposite answers to the same call:
+
+```
+$ boru run -e 'def R (refine Record [{a:(Integer tor String)}])
+              def f fn [[o:R][Any][o.a]]  f {a:7}'
+7
+
+$ boru run -e 'def f fn [[o:{a:(Integer tor String)}][Any][o.a]]  f {a:7}'
+check: [error] no_signature: cannot call `f` — no signature matches the
+arguments; got (Map); nearest [Map]
+```
+
+Same type, same argument, same question; one answers 7 and the other
+refuses. Nothing about `(Integer tor String)` is exotic — an optional
+field (`{y?:String}`) is spelt with a disjunct too.
+
+**Why it matters.** This is the deeper version of NUR103, whose whole
+mechanism was a downstream consumer reading a field type the inline
+spelling had never resolved. There, an unresolved WORD produced a
+Word-typed carrier and a nameless diagnostic. Here, an unresolved
+EXPRESSION produces a pattern that matches nothing. The two are the same
+defect at different depths, which is the argument for fixing the cause
+rather than either symptom: any consumer that reads an inline record's
+field types is reading tokens where the named spelling gives it types,
+and there is no reason to expect the two found so far are the last.
+
+**Discharge.** `ResolveSigRecordFields` (`core/go/generics_unify.go`)
+resolves an inline record pattern's field types at sig install, which is
+where the named spelling's own dispatch had already resolved them: a bare
+type word through `ResolveSigChildParam`'s cascade, a nested inline record
+recursively, and a field type EXPRESSION by evaluating it, exactly as
+`ResolveChildTypeExpr` evaluates a typed container's paren child.
+
+It deliberately does NOT delegate to `ResolveFieldType`, the cascade
+`record` and `class` run over their own field maps, because that resolver
+also evaluates a concrete List field as code — right for a type
+DECLARATION, wrong for a dispatch PATTERN, where `{a:[1 2]}` pins the
+field to that list. The two share the type-name cascade, not the value
+arms. That line is pinned by a spec row.
+
+Evaluation failure at sig install is SILENT and leaves the field alone: a
+paren that does not evaluate to a single type was never a type constraint,
+and a signature install is not a place to raise.
+
+One consequence is worth stating outright rather than leaving implied: a
+field expression now RUNS when the signature installs, so
+`fn [[o:{a:(print "hi")}] …]` prints at `def` time. That is not new
+behaviour being introduced — it is the named spelling's behaviour, which
+`refine Record [{a:(print "hi")}]` has always had, arriving at the
+spelling that lacked it. Alignment is the point; a divergence in WHEN a
+type expression runs is as real as a divergence in what it means.
+
+**What is NOT closed by it.** The general property — that the two
+spellings are built by different machinery at all — stands. This fix makes
+them agree on the field types; it does not merge the two construction
+paths, so a future field shape could diverge again the same way. Merging
+them, or deriving one from the other, is the real discharge and is a
+larger change than this one.
+
+
+## NUR105 — `boru check` does not analyse a callback body passed as an argument {#nur105}
+
+**Status:** Pending — the three defect rows are fixed, one position is
+not (see Discharge) · **Recorded:** 2026-08-26 · **Surfaced by:** bounding
+NUR103's mini-redis half, whose first fault was "check does not analyse a
+service-handler body". The bound turned out to be far wider than service
+handlers.
+
+**Rule:** one analysis, one answer — and the analysis is over the whole
+program. A body the checker is demonstrably able to analyse is not skipped
+because of where the body was written.
+
+**Divergence.** `boru check` reports clean, and the program dies:
+
+```
+$ cat cb.boru
+each ([e:Any] => [nosuchw e]) [1 2 3]
+1
+
+$ boru check cb.boru
+check: 0 error(s), 0 warning(s), 0 info
+check: List Integer
+
+$ boru run cb.boru
+error: each: element 0: [boru/undefined_word]: undefined word: nosuchw
+```
+
+This is not a parity nicety and not a subtlety of gradual typing. It is a
+plain FALSE NEGATIVE on the most common callback idiom in the language, for
+an error — an undefined word — that the checker catches without difficulty
+when the identical body is written one line up as a `def`.
+
+**Measured, and the boundary is sharp.** Two columns: whether `boru check`
+emits a finding naming the undefined word, and whether the program raises
+when actually run (`-no-check -no-compile`, so the pre-flight verdict does
+not stand in for the runtime's).
+
+| callback spelling and position | check names it | runs |
+|---|---|---|
+| `each [nosuchw] …` — code BLOCK as arg | yes | raises |
+| `each ([e:Any] => [nosuchw e]) …` — **`=>` lambda as arg** | **no** | **raises** |
+| `each (fn [[e:Any][Any][nosuchw e]]) …` — **`fn` value as arg** | **no** | **raises** |
+| `each ([e:Any] afn [nosuchw e]) …` — **`afn` value as arg** | **no** | **raises** |
+| `each f/v …` — named fn REFERENCE as arg | yes | raises |
+| `def g ([x:Any] => [nosuchw 1])` — def-bound lambda | yes | not called |
+| `def g (fn [[x:Any][Any][nosuchw 1]])` — def-bound fn value | yes | not called |
+| `def g ([x:Any] afn [nosuchw 1])` — def-bound afn value | yes | not called |
+| `def xs [([x:Any] => [nosuchw 1])]` — lambda in a list | no | not called |
+| `def m {k:([x:Any] => [nosuchw 1])}` — lambda in a map | no | not called |
+| `([x:Any] => [nosuchw 1])` — bare lambda statement | no | not called |
+
+Three rows are outright defects — the bolded ones, where the checker is
+silent and the program then raises. The rest are consistent: either the
+body is analysed, or it is never reached at run time so there is nothing to
+miss. (Whether an unreached broken body deserves a warning is a separate
+question, and not this record's.)
+
+The boundary is not "anonymous", and not "which lambda spelling". All three
+anonymous spellings — `=>`, `fn`, `afn` — are analysed when `def`-bound and
+missed when passed as an argument; a code BLOCK argument is analysed, and
+so is a named fn REFERENCE. What decides it is the POSITION: a function
+VALUE constructed as an argument has its body analysed by nobody. The same
+gap covers the bare-statement position and the stored service handler.
+
+**Why it matters more than its NUR number suggests.** `each`, `filter`,
+`fold`, `map`, every `Net`/`service` handler, every sort comparator: the
+callback-as-argument shape is how boru does higher-order work, and it is
+the shape §12 and §13 of `design/FULL-COMPILATION.0.md` build the whole
+server story on. A user writing a typo inside one gets no warning from the
+tool that exists to warn them. It also means the frontier measurements
+that read `boru check` diagnostics have been reading a pass that skipped
+this code — the diagnostic-parity gate's own numbers included.
+
+**Relationship to NUR103.** Same family, wider blast radius. The stored
+service handler is the same gap in a different position, and NUR103's fault
+chain there (unanalysed body → a divergent call silently unbinding its
+`def` → the `no_signature` suppression hiding the cause) begins with
+exactly this. Fixing this is the first of NUR103's three faults, and closes
+the handler case along with the three defect rows above.
+
+**Discharged for the three defect rows (2026-08-26).** Construction now
+QUEUES the body (`CheckState.PendingFnBodies`) and the queue DRAINS at end
+of pass, immediately before `RescueForwardRefDiagnostics` and
+`EmitUnusedDefDiagnostics` — which sit there for exactly the same reason.
+The analysis itself is the SAME pass `InstallFnDef` already ran, reached
+through the analysis seam (`RunFnConstructionPass`): one route, not three,
+because a second construction-time analysis with its own rules would be a
+new way for two spellings of one callback to disagree, which is the defect
+rather than the fix.
+
+The queue matters, and the first version did without it. Analysing a body
+at its CONSTRUCTION site analyses it too early — every forward reference is
+still unbound there, a recursive self-call most of all — so
+
+```
+def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]
+```
+
+reported `mul: got (Integer, Atom)`, because `fact` resolved to the
+undefined-word placeholder. The `undefined_word` behind it would have been
+rescued at end of pass; its CONSEQUENCE would not. Draining at end of pass
+fixes that and disposes of a second problem at the same time: a fn that
+reaches `InstallFnDef` before the drain is analysed THERE, under its name,
+so the named path keeps its precision and the drain gets exactly the set of
+fn values nothing ever named.
+
+**Three things implementing it discovered, and they are the part worth
+keeping.**
+
+FIRST, the dynamic-scope rescue is NAME-KEYED. `RescueForwardRefDiagnostics` asks
+whether a binder of the name can reach the READING fn through the call
+graph, and the reader is a NAME; `DynamicScopeReachable` answers false
+outright when it is empty. So a nameless analysis silently loses the rescue,
+and the pinned recursion idiom
+
+```
+def f fn [[m:Map n:Integer] [Integer]
+  [if (n lte 0) [acc2] [def acc2 n … f m (n sub 1)]]]
+```
+
+drew a false `undefined_word: acc2` — a false POSITIVE traded for the false
+negative, which is not a fix.
+
+An anonymous body has no call-graph identity, so the sound reachability
+question cannot be ASKED of it. The first fix answered it optimistically —
+rescue when SOME fn binds the name — a rule deliberately weaker than the
+named one, justified only by the alternative being a false positive on a
+legal idiom.
+
+**The drain removed the need for it, and the merged cover-gate is what
+noticed.** The gate came back one statement short and the statement was
+that arm: with the analysis deferred to end of pass, every name is bound by
+then, so the plain `r.Defs.Top(d.Word)` rescue directly above catches these
+diagnostics and the optimistic arm is never reached. Deleting it changes
+nothing — the pinned recursion-with-dynamic-scope shape still checks clean
+and the matrix is unchanged. The redesign that made the analysis CORRECT
+also made a soundness-weakening special case redundant; those two usually
+travel together, and a 100% floor is what surfaces the second half, because
+nothing else in a suite reports an arm that has quietly stopped being
+reachable.
+
+SECOND, a body must be analysed in the SCOPE IT WAS WRITTEN IN. Draining
+every queued body against the top-level registry reported every
+module-scope name in mini-redis's handler lambdas as undefined —
+`arg-at`, `kv-read`, `now-ms` — because those words are bound in the
+module's sub-registry. Each queue entry therefore carries its own registry.
+Caught by the two mini-redis false-positive tests, which is what they are
+for.
+
+THIRD, a SPECULATIVE analysis that cannot run must report nothing. The
+drain analyses bodies nobody asked about, in ISOLATION, with no enclosing
+stack — so a body that reads the caller's stack cannot be run at all. The
+Church-numeral row in `frontier-hof-audit.tsv` raised the
+strict-forward-barrier error whose own text says why ("`apply` reads its
+receiver from the enclosing stack") on a program that answers 5.
+`fn_body_error` is the analyser reporting that IT could not proceed — a
+fact about the analysis, not about the code — so the drain drops it. A
+NAMED fn keeps it: defining a fn is asking for its body to be analysed.
+
+Two smaller notes. Every named fn's body diagnostics came out TWICE until a
+pass-scoped body-position set was added — a fn reaches the check at
+construction AND at install, and the two differ only in the name, which
+`FnSummaries`' key does not collapse. And the CheckState lifecycle gate had
+a blind spot of its own, found the moment the first struct-keyed field
+arrived: its clone assertion could not build a second key for anything but
+string- and pointer-keyed maps, so the mutation silently did not happen and
+the assertion passed for a map `Clone` was in fact sharing.
+
+**Still open, which is why this record stays Pending.** A lambda written as
+a MAP-literal value is still unanalysed, where the list-literal twin is
+analysed — a different route (the map's values evaluate in a sub-engine).
+It is the never-called position, so nothing raises at run time, but the
+record's rule is about where the body was WRITTEN, and one position still
+decides the answer.

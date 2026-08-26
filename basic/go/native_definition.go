@@ -1674,6 +1674,23 @@ func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 		PopGenBindings(r, genSpec)
 	}
 
+	// NON-generic fns: QUEUE the body for the end-of-pass check. An
+	// anonymous fn value never reaches InstallFnDef, so until this its body
+	// was analysed by nobody — `each ([e:Any] => [nosuchw e]) [1 2 3]`
+	// checked clean and then raised `undefined_word` at run time, while the
+	// identical body one line up as a `def` was reported (NUR105). POSITION
+	// decided it, not spelling.
+	//
+	// Queued, not analysed here: the construction site is too early, because
+	// every forward reference is still unbound (see NoteFnBodyPending). A fn
+	// that reaches InstallFnDef before the drain is analysed there instead,
+	// under its name. The generic branch above stays separate because a type
+	// PARAMETER has no synthesizable example value; it binds placeholder
+	// carriers instead.
+	if genSpec == nil {
+		core.NoteFnBodyPending(r, fnDef)
+	}
+
 	// Check mode: flag overloads that an earlier, higher-priority
 	// signature already subsumes — under first-match-wins dispatch they
 	// can never fire (the dead-clause analogue). A static property of the
@@ -1769,6 +1786,11 @@ func AfnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Anonymous:  true,
 		Captured:   core.ComputeCaptures(r, &sig),
 	}
+	// Queue the body for the end-of-pass check, exactly as FnConstruct does
+	// and for the same reason: a lambda passed straight to a word (`each
+	// ([e:Any] => [typo e]) xs`) is never installed under a name, so this is
+	// its only chance to be analysed at all (NUR105).
+	core.NoteFnBodyPending(r, fnDef)
 	return []Value{NewFunction(fnDef)}, nil
 }
 

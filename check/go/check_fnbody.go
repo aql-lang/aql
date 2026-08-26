@@ -864,6 +864,23 @@ func checkFnBodyAtConstruction(r *core.Registry, name string, fnDef core.FnDefIn
 		if s.Fallback || len(s.Body()) == 0 {
 			continue
 		}
+		// One analysis per BODY per pass. A fn reaches this check twice —
+		// once where the value is constructed, once where it is installed
+		// under a name — and the two differ only in the name, which
+		// FnSummaries' key does not collapse. Without this the body's
+		// diagnostics come out twice, byte-identically. A body with no
+		// source position is not memoised: the zero SrcPos is shared by
+		// every synthesized body, so keying on it would silence real
+		// diagnostics from a different one.
+		if pos := s.Body()[0].Pos(); pos != (core.SrcPos{}) {
+			if r.Check.FnBodyChecked[pos] {
+				continue
+			}
+			if r.Check.FnBodyChecked == nil {
+				r.Check.FnBodyChecked = map[core.SrcPos]bool{}
+			}
+			r.Check.FnBodyChecked[pos] = true
+		}
 		paramNames := make([]string, len(s.Params))
 		genArgs := make([]core.Value, len(s.Params))
 		for j, p := range s.Params {
@@ -887,7 +904,34 @@ func checkFnBodyAtConstruction(r *core.Registry, name string, fnDef core.FnDefIn
 		// advisory) live on r.Check.Diagnostics and are unaffected — exactly the
 		// diagnostics-only contract this pass needs.
 		restore := r.Check.IsolateEmit()
+		before := len(r.Check.Diagnostics)
 		AnalyseFnBody(r, name, paramNames, s.Body(), genArgs, fnDef.Captured, declared, fnDef.Anonymous)
 		restore()
+		// A SPECULATIVE analysis that cannot run reports nothing. The
+		// end-of-pass drain analyses bodies nobody asked about — fn values
+		// nothing ever named (NUR105) — and it analyses them in ISOLATION,
+		// with no enclosing stack. A body that reads the caller's stack
+		// therefore cannot be run at all: the Church-numeral row in
+		// frontier-hof-audit.tsv raises the strict-forward-barrier error
+		// whose own text says why ("`apply` reads its receiver from the
+		// enclosing stack"), on a program that runs correctly and answers 5.
+		//
+		// `fn_body_error` is the analyser reporting that IT could not
+		// proceed, which is a fact about the analysis and not about the
+		// code. For a NAMED fn it stays: defining a fn is asking for its
+		// body to be analysed, and the existing surface is pinned. For a
+		// body the checker volunteered to look at, the honest output of a
+		// failed look is silence — the compile path still refuses these
+		// programs, and loudly.
+		if name == "" {
+			kept := r.Check.Diagnostics[:before]
+			for _, d := range r.Check.Diagnostics[before:] {
+				if d.Code == "fn_body_error" {
+					continue
+				}
+				kept = append(kept, d)
+			}
+			r.Check.Diagnostics = kept
+		}
 	}
 }

@@ -126,6 +126,22 @@ func (r *Registry) noteInterp(seam string) {
 	(*fp)(InterpEntry{Seam: seam, Attribution: att, CheckMode: check})
 }
 
+// NoteInterp emits one interpreter-entry observation for an emit point
+// OUTSIDE this module — the VM's island seams (eng/go), which reach
+// Engine.Run through their own pooled run and would otherwise report only
+// the generic "Engine.Run" seam, indistinguishable from a sanctioned
+// interpreter run. The engine-entry census
+// (design/FULL-COMPILATION.0.md section 9) has to name WHICH mechanism
+// re-entered, so the SEAM carries the label.
+//
+// Deliberately does NOT touch Attribution: an island is exactly the
+// unattributed interpreter execution the C4 end-state invariant forbids,
+// and tagging one would make the frontier's unattributed-entry assertions
+// (lang/go/frontier_cases_test.go fcNoUnattributedInterp) pass vacuously.
+func (r *Registry) NoteInterp(seam string) {
+	r.noteInterp(seam)
+}
+
 // SetInterpAttribution installs tag as the C4 attribution context for
 // interpreter entries on this registry and returns the restore func — the
 // compiled-mode entry points bracket their SANCTIONED fallback re-runs with

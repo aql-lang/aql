@@ -150,7 +150,7 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			// so each element maps to the literal). `var` SPLICES its body, so it
 			// refuses inside the closure probe and the each body bakes as an
 			// interpreted const the handler runs per element — the path the var
-			// clean-refusal (CompileExecutesBody) enabled. The body still executes
+			// clean-refusal path enabled. The body still executes
 			// (side effects / errors are compared for taxonomy parity), but the
 			// mapped value is the trailing literal.
 			vbody := gen(r, cInt, depth-1, append(append([]string{}, scope...), "v"))

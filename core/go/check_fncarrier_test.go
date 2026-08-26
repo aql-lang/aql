@@ -168,3 +168,29 @@ func TestCheckFnCarrierBoundName(t *testing.T) {
 		t.Error("an unbound id must miss")
 	}
 }
+
+// TestStepWordCarrierIsData — a word-TYPED CARRIER at the pointer is DATA,
+// not a token. `IsWord` classifies on the parent type alone, so a carrier of
+// type Word used to be dispatched as a word; it has no WordInfo, so the name
+// was "" and every name arm fell through to the undefined-word tail, emitting
+// a diagnostic that named no word and carried no position (NUR103). stepWord
+// now collects it like any other value: there is nothing to look up and no
+// arguments to collect.
+func TestStepWordCarrierIsData(t *testing.T) {
+	r := covRegistry(t, nil)
+	end := r.Check.Begin()
+	defer end()
+
+	carrier := NewCarrier(TWord)
+	e := NewTop(r)
+	e.Tape = NewTape([]Value{carrier}, StackHeadroom)
+	if err := e.stepWord(e.Tape.At(0)); err != nil {
+		t.Fatalf("stepWord over a word carrier errored: %v", err)
+	}
+	if len(r.Check.Diagnostics) != 0 {
+		t.Errorf("a word carrier raised diagnostics: %v", r.Check.Diagnostics)
+	}
+	if got := e.Tape.At(0); got.Undefined || !got.Carrier || !got.Parent.Equal(TWord) {
+		t.Errorf("word carrier not collected as data: %v", got)
+	}
+}

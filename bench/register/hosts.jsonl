@@ -1,0 +1,1 @@
+{"host":"h:2334862291130966535","label":"vm","cpu_model":"Intel(R) Xeon(R) Processor @ 2.80GHz","cpu_cores":4,"cpu_threads":4,"mem_kb":16461084,"arch":"amd64","os_name":"Ubuntu","os_major":"24.04","kernel":"6.18.44-fc-v21","virt":"docker","governor":"","first_seen":"2026-08-25T22:11:51Z","id_fields":"cpu_model|cpu_cores|mem_gib|os_name|os_major|arch|virt"}

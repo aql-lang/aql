@@ -252,7 +252,6 @@ const (
 	CompileStoresBody       = core.CompileStoresBody
 	CompileStoresBodyList   = core.CompileStoresBodyList
 	CompileFnHandlerStrict  = core.CompileFnHandlerStrict
-	CompileExecutesBody     = core.CompileExecutesBody
 	CompileRunsBodyIsolated = core.CompileRunsBodyIsolated
 	CompileDynBody          = core.CompileDynBody
 
@@ -272,6 +271,7 @@ const (
 // Function re-exports — every exported borueng function.
 var (
 	AnalyseFnBody             = core.RunFnBodyAnalysis
+	RunPendingFnBodyChecks    = core.RunPendingFnBodyChecks
 	AnalyseLoopBody           = core.RunLoopBodyAnalysis
 	AsAtom                    = core.AsAtom
 	AsChildType               = core.AsChildType

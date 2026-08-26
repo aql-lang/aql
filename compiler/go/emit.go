@@ -4809,17 +4809,22 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(core.CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || (!sig.CompileEffect.Has(core.CompileRunsBodyIsolated) && !es.noEvalBodiesInertScoped(sig, args))):
+	case len(sig.NoEvalArgs) > 0 && ((sig.Callable != nil && execBodyRefsNames(sig, args)) || (!sig.CompileEffect.Has(core.CompileRunsBodyIsolated) && !es.noEvalBodiesInertScoped(sig, args))):
 		// A code-body word is refused when:
 		//   - its body is not inert data (UNLESS the word runs the body in an
 		//     ISOLATED CallBoru frame — CompileRunsBodyIsolated — where name
 		//     resolution is identical under interpreter and VM: Test.check-prop's
 		//     dynamic gen/property bodies bake as CALL_NATIVE operands and run
 		//     through the same captured-parent handler in both modes); OR
-		//   - it SPLICES the body onto the tape (CompileExecutesBody, e.g. `var`):
-		//     the handler returns tape-coupled tokens the VM cannot run, so baking a
-		//     CALL_NATIVE (which an inert word-list body would otherwise permit)
-		//     trips the VM's tape-coupled-result screen; OR
+		//   - it SPLICES the body onto the tape (a block-with-locals word like
+		//     `var`): the handler returns tape-coupled tokens the VM cannot run, so
+		//     baking a CALL_NATIVE (which an inert word-list body would otherwise
+		//     permit) trips the VM's tape-coupled-result screen. This class had its
+		//     own opt-out flag (CompileExecutesBody) until the inert-scope test
+		//     below grew to cover it; the flag reached ZERO declaration sites and
+		//     was retired (design/FULL-COMPILATION.0.md Stage 0), so the case now
+		//     rests on the inert-scope disjunct plus the runtime screen that caught
+		//     it originally; OR
 		//   - it EXECUTES the body via InvokeBody (sig.Callable != nil — each / fold
 		//     / scan / filter / do / case / …) AND the body references a NAME
 		//     (execBodyRefsNames). Such a word is normally compiled by the closure

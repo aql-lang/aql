@@ -164,6 +164,8 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 	}
 
 	var rows, compiledPath, mismatches int
+	entryCensus := newEngineEntryCensus()
+	bailCensus := newDeferCensus()
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
 			continue
@@ -190,7 +192,11 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 			rows++
 
 			ac := newDifferentialInstance(t)
+			disarm := ac.ArmInterpEntryHook(entryCensus.add)
+			disarmBail := ac.ArmRuntimeBailHook(bailCensus.add)
 			gotC, wasCompiled, errC := ac.RunCompiled(input)
+			disarm()
+			disarmBail()
 			if wasCompiled {
 				compiledPath++
 			}
@@ -251,6 +257,8 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 	}
 
 	t.Logf("compile-or-fallback: %d rows, %d compiled, %d divergences (values + error taxonomy)", rows, compiledPath, mismatches)
+	entryCensus.assertCeiling(t)
+	bailCensus.assertCeiling(t)
 	if mismatches != 0 {
 		t.Errorf("%d compile-or-fallback divergences — every program must compile or fall back to an identical result and error taxonomy", mismatches)
 	}

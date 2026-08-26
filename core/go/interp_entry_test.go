@@ -146,3 +146,31 @@ func TestObserveHooksNilSafe(t *testing.T) {
 	nilReg.noteInterp("Engine.Run") // must not panic
 	nilReg.NoteBail("vm:test", "x") // must not panic
 }
+
+// NoteInterp is the exported emit point the VM's island seams use (eng/go
+// cannot reach the unexported noteInterp). It records the caller's seam
+// verbatim and leaves Attribution EMPTY — an island is unattributed
+// interpreter execution by definition, and the frontier's
+// unattributed-entry assertions depend on it staying that way. Nil-safe
+// like its unexported twin.
+func TestNoteInterpExportedSeam(t *testing.T) {
+	r := runUnitReg(t)
+	var c entryCollector
+	disarm := r.ArmInterpEntryHook(c.add)
+	defer disarm()
+
+	r.NoteInterp("vm:island")
+	r.NoteInterp("vm:island-resolved")
+
+	if got := strings.Join(c.seams(), " "); got != "vm:island vm:island-resolved" {
+		t.Fatalf("island seams: got %q, want %q", got, "vm:island vm:island-resolved")
+	}
+	for _, e := range c.entries {
+		if e.Attribution != "" || e.CheckMode {
+			t.Fatalf("island entry must stay unattributed: %+v", e)
+		}
+	}
+
+	var nilReg *Registry
+	nilReg.NoteInterp("vm:island") // must not panic
+}
