@@ -1888,7 +1888,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 // loops are 13.4% and 18.0% of interpreter CPU, which is the budget the
 // re-seat has to stay inside, and the alloc-ceiling tests gate the rest.
 
-func (e *Engine) collectWindow() collectWindow { return e.Tape }
+func (e *Engine) collectWindow() CollectWindow { return e.Tape }
 
 func (e *Engine) evalGroupAt(i int) error { return e.evalParenGroupAt(i) }
 

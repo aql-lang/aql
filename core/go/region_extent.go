@@ -46,7 +46,7 @@ package core
 //
 // Out-of-range and negative starts clamp; the result is always in
 // [max(from,0), w.Len()].
-func RegionEnd(w collectWindow, from int) int {
+func RegionEnd(w CollectWindow, from int) int {
 	if w == nil {
 		return 0
 	}
@@ -84,7 +84,7 @@ func RegionEnd(w collectWindow, from int) int {
 
 // RegionSlotCount is the number of tokens the region starting at `from`
 // spans, delimiter excluded.
-func RegionSlotCount(w collectWindow, from int) int {
+func RegionSlotCount(w CollectWindow, from int) int {
 	if w == nil {
 		return 0
 	}

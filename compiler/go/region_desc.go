@@ -59,10 +59,16 @@ type SlotQuote uint8
 
 const (
 	QuoteNone  SlotQuote = iota
-	QuoteAtom            // /q — capture the upcoming Word as an Atom
-	QuoteValue           // /v — park a function as inert data
-	QuoteUsurp           // /u — the usurp wrapper
+	QuoteAtom            // the slot is already an Atom — a /q capture, done
+	QuoteValue           // /v — take the binding's VALUE, disabling any call
+	QuoteData            // /q on a RESULT — treat what the slot yields as data
 )
+
+// There is deliberately no QuoteUsurp. `/u` is not carried on the token: it
+// desugars to the `usurp` WORD (see DispatchModInfo's doc in
+// core/go/value.go), so it arrives as an ordinary lead rather than as a
+// modifier on a slot. A constant for it would describe a token shape that
+// does not exist.
 
 // SlotDesc is one written-order position in a region.
 type SlotDesc struct {
