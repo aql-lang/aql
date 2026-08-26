@@ -95,6 +95,7 @@ keep the two in sync in the same commit.
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
 | [NUR102](#nur102) | A predicate body runs a different number of times in each lane — overload pruning evaluates it 4× interpreted and 2× compiled, an effect-count divergence no differential gate can see because both lanes return the same value | the Stage-2 collection-kernel feasibility probe, 2026-08-25 |
 | [NUR103](#nur103) | The checker's answer depends on who is asking: the same program yields a clean `boru check` and a refusing compile, so the tool a user would reach for reports the program fine — **one instance fixed 2026-08-26** (a nameless `undefined_word` from a Word-typed carrier); the mini-redis instance is diagnosed and OPEN, and its first fault is a coverage hole — `boru check` does not analyse a service-handler body at all, so a bare undefined word inside one ships clean | the server-concurrency corpus, 2026-08-26 |
+| [NUR105](#nur105) | `boru check` does not analyse the body of a function VALUE constructed in ARGUMENT position — all three anonymous spellings (`=>`, `fn`, `afn`) — so `each ([e:Any] => [nosuchw e]) [1 2 3]` checks clean and then raises `undefined_word` at run time, an error the checker catches without difficulty when the identical body is `def`-bound. A code BLOCK argument and a named fn REFERENCE are both analysed, so position decides it, not spelling; measured matrix in the record | bounding NUR103's mini-redis half, 2026-08-26 |
 | [NUR104](#nur104) | A record type means two different things depending on how it is spelt: the named spelling DISPATCHES and so evaluates its field map, the inline `o:{…}` rides inside the inert fn-spec list and never does — **the two field shapes found so far are fixed 2026-08-26**, the construction asymmetry is not | tracing NUR103, 2026-08-26 |
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -3924,3 +3925,95 @@ them agree on the field types; it does not merge the two construction
 paths, so a future field shape could diverge again the same way. Merging
 them, or deriving one from the other, is the real discharge and is a
 larger change than this one.
+
+
+## NUR105 — `boru check` does not analyse a callback body passed as an argument {#nur105}
+
+**Status:** Pending · **Recorded:** 2026-08-26 · **Surfaced by:** bounding
+NUR103's mini-redis half, whose first fault was "check does not analyse a
+service-handler body". The bound turned out to be far wider than service
+handlers.
+
+**Rule:** one analysis, one answer — and the analysis is over the whole
+program. A body the checker is demonstrably able to analyse is not skipped
+because of where the body was written.
+
+**Divergence.** `boru check` reports clean, and the program dies:
+
+```
+$ cat cb.boru
+each ([e:Any] => [nosuchw e]) [1 2 3]
+1
+
+$ boru check cb.boru
+check: 0 error(s), 0 warning(s), 0 info
+check: List Integer
+
+$ boru run cb.boru
+error: each: element 0: [boru/undefined_word]: undefined word: nosuchw
+```
+
+This is not a parity nicety and not a subtlety of gradual typing. It is a
+plain FALSE NEGATIVE on the most common callback idiom in the language, for
+an error — an undefined word — that the checker catches without difficulty
+when the identical body is written one line up as a `def`.
+
+**Measured, and the boundary is sharp.** Two columns: whether `boru check`
+emits a finding naming the undefined word, and whether the program raises
+when actually run (`-no-check -no-compile`, so the pre-flight verdict does
+not stand in for the runtime's).
+
+| callback spelling and position | check names it | runs |
+|---|---|---|
+| `each [nosuchw] …` — code BLOCK as arg | yes | raises |
+| `each ([e:Any] => [nosuchw e]) …` — **`=>` lambda as arg** | **no** | **raises** |
+| `each (fn [[e:Any][Any][nosuchw e]]) …` — **`fn` value as arg** | **no** | **raises** |
+| `each ([e:Any] afn [nosuchw e]) …` — **`afn` value as arg** | **no** | **raises** |
+| `each f/v …` — named fn REFERENCE as arg | yes | raises |
+| `def g ([x:Any] => [nosuchw 1])` — def-bound lambda | yes | not called |
+| `def g (fn [[x:Any][Any][nosuchw 1]])` — def-bound fn value | yes | not called |
+| `def g ([x:Any] afn [nosuchw 1])` — def-bound afn value | yes | not called |
+| `def xs [([x:Any] => [nosuchw 1])]` — lambda in a list | no | not called |
+| `def m {k:([x:Any] => [nosuchw 1])}` — lambda in a map | no | not called |
+| `([x:Any] => [nosuchw 1])` — bare lambda statement | no | not called |
+
+Three rows are outright defects — the bolded ones, where the checker is
+silent and the program then raises. The rest are consistent: either the
+body is analysed, or it is never reached at run time so there is nothing to
+miss. (Whether an unreached broken body deserves a warning is a separate
+question, and not this record's.)
+
+The boundary is not "anonymous", and not "which lambda spelling". All three
+anonymous spellings — `=>`, `fn`, `afn` — are analysed when `def`-bound and
+missed when passed as an argument; a code BLOCK argument is analysed, and
+so is a named fn REFERENCE. What decides it is the POSITION: a function
+VALUE constructed as an argument has its body analysed by nobody. The same
+gap covers the bare-statement position and the stored service handler.
+
+**Why it matters more than its NUR number suggests.** `each`, `filter`,
+`fold`, `map`, every `Net`/`service` handler, every sort comparator: the
+callback-as-argument shape is how boru does higher-order work, and it is
+the shape §12 and §13 of `design/FULL-COMPILATION.0.md` build the whole
+server story on. A user writing a typo inside one gets no warning from the
+tool that exists to warn them. It also means the frontier measurements
+that read `boru check` diagnostics have been reading a pass that skipped
+this code — the diagnostic-parity gate's own numbers included.
+
+**Relationship to NUR103.** Same family, wider blast radius. The stored
+service handler is the same gap in a different position, and NUR103's fault
+chain there (unanalysed body → a divergent call silently unbinding its
+`def` → the `no_signature` suppression hiding the cause) begins with
+exactly this. Fixing this is the first of NUR103's three faults, and closes
+the handler case along with the three defect rows above.
+
+**Discharge.** Analyse the body where the function VALUE is CONSTRUCTED,
+not where it is bound. The def-binding route already does it, for all three
+spellings, which is both the proof that the analysis works and the shape to
+copy: the construction site is common to every spelling, so the fix is one
+route, not three. Two things to watch: the analysis
+must run under the same one-shape-per-body quota the other routes use (an
+`each` over a 500-element list must not analyse the body 500 times), and
+the newly-visible diagnostics will move the check-accuracy and
+diagnostic-parity ratchets in BOTH directions — some rows gain a true
+finding, and some previously "armed-only" rows become agreed. Both ratchets
+have to be re-measured in the same change, not adjusted by guess.

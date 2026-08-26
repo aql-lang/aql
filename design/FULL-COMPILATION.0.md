@@ -1132,6 +1132,37 @@ adopted declaration triple (§3.4): every signature declares, per operand,
 
 ### 6.9 Checker totality and lane alignment
 
+**A precondition this section did not know it had (measured 2026-08-26,
+NUR105).** Every alignment claim below assumes the two passes analyse the
+same program. They do not. A function VALUE constructed in ARGUMENT
+position — all three anonymous spellings, `=>` and `fn` and `afn` — has its
+body analysed by NOBODY on the plain pass:
+
+```
+$ boru check cb.boru      # each ([e:Any] => [nosuchw e]) [1 2 3]
+check: 0 error(s), 0 warning(s), 0 info
+
+$ boru run cb.boru
+error: each: element 0: [boru/undefined_word]: undefined word: nosuchw
+```
+
+That is a false negative, not a fork: the identical body is flagged the
+moment it is `def`-bound, so the checker can plainly do the analysis. A
+code BLOCK argument and a named fn REFERENCE are both analysed; POSITION
+decides it, not spelling. `each`, `filter`, `fold`, every `service`
+handler, every comparator — the callback-as-argument shape is how boru does
+higher-order work, and it is the shape §12 and §13 build the server story
+on.
+
+Two consequences for this section. First, it is the FIRST of NUR103's three
+faults and has to land before the rest of 6.9 can be trusted: a fork
+argument about diagnostics is meaningless while one pass is not reading the
+code. Second, the ratchets are measuring a smaller universe than they claim
+— the diagnostic-parity count, the check-accuracy pins, and the frontier
+census all read a plain pass that skipped these bodies, so all three move
+in BOTH directions when this lands and must be re-measured rather than
+adjusted.
+
 Four changes, all conservative in the abstract-interpretation frame:
 
 1. **Delete the whole-program "check diagnostics" sentinel**
