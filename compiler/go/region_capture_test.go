@@ -91,7 +91,8 @@ func TestCaptureRegionSlotsReadsQuote(t *testing.T) {
 func TestCaptureRegionSlotsLeavesSourceToLowerer(t *testing.T) {
 	w := capTape([]core.Value{core.NewInteger(1)})
 	got := CaptureRegionSlots(w, 0)
-	if len(got) != 1 || got[0].Source != SlotConst {
-		t.Errorf("Source = %v, want the SlotConst zero (lowerer fills it)", got[0].Source)
+	if len(got) != 1 || got[0].Source != SlotNone {
+		t.Errorf("Source = %v, want the INVALID SlotNone zero — a capture must not "+
+			"look like a reference to Consts[0]", got[0].Source)
 	}
 }

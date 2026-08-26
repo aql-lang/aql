@@ -635,6 +635,30 @@ sole production call site (`engine.go:7509`) carries a proof-carrying
 note never reaches a user and needs no carrying. If that arm ever becomes
 reachable, this paragraph is the falsifier.
 
+**Correction (2026-08-26): that widened state cannot live in the
+DESCRIPTOR.** The list above says the descriptor "must additionally carry"
+the value-stack residual, the `voidGroups` record, the `barrierReceiverWord`
+answer and the suggestion's suppression condition. It cannot, and the reason
+is structural rather than stylistic: a `Program` is SHARED — every run
+spawns branch goroutines that `RunUnit` the same Program's units on their
+forks (`lang/go/bytecode_concurrency_test.go`) — so a descriptor field
+written during collection races, and one frozen at record time selects the
+wrong error for every later execution. Both failures are silent.
+
+Every item on that list is runtime-varying, which is what makes the split
+forced. Whether a paren fragment collapses to zero values depends on what
+the fragment computes, so it can differ between two executions of one
+region. The enclosing residual is whatever the stack holds now. And this
+section already calls `barrierReceiverWord` a LIVE probe — a live answer
+cannot be a static field.
+
+So the descriptor splits in two: `RegionDesc` holds what is true of every
+execution (the lead, the slots, the position), and a per-invocation
+`RegionState` holds the raise-selection facts, built fresh by `OpCollect`.
+That does not weaken the region bound — every one of those facts is still
+region-LOCAL, by the one-forward-per-scope invariant above. Local and
+per-invocation are different properties, and this section conflated them.
+
 **Live revalidation, because boundaries are binding-dependent.** The
 forward scan's extent is derived from the *live* binding's signatures
 (per-signature `forwardLimit` = `BarrierPos`), and even a token's

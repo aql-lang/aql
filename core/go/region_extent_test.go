@@ -133,6 +133,17 @@ func TestRegionEndClampsOutOfRange(t *testing.T) {
 	if got := RegionEnd(nil, 0); got != 0 {
 		t.Errorf("RegionEnd(nil) = %d, want 0", got)
 	}
+	// A TYPED nil is a non-nil interface holding a nil pointer, so a plain
+	// `w == nil` lets it through and (*Tape).Len dereferences it. Panics are
+	// forbidden (ADR-005), and a function advertising nil handling has to
+	// deliver it for the shape a caller actually produces.
+	var typedNil *Tape
+	if got := RegionEnd(typedNil, 0); got != 0 {
+		t.Errorf("RegionEnd(typed-nil *Tape) = %d, want 0", got)
+	}
+	if got := RegionSlotCount(typedNil, 0); got != 0 {
+		t.Errorf("RegionSlotCount(typed-nil *Tape) = %d, want 0", got)
+	}
 }
 
 func TestRegionSlotCount(t *testing.T) {

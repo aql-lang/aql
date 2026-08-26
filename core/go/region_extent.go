@@ -47,7 +47,7 @@ package core
 // Out-of-range and negative starts clamp; the result is always in
 // [max(from,0), w.Len()].
 func RegionEnd(w CollectWindow, from int) int {
-	if w == nil {
+	if !windowPresent(w) {
 		return 0
 	}
 	n := w.Len()
@@ -85,7 +85,7 @@ func RegionEnd(w CollectWindow, from int) int {
 // RegionSlotCount is the number of tokens the region starting at `from`
 // spans, delimiter excluded.
 func RegionSlotCount(w CollectWindow, from int) int {
-	if w == nil {
+	if !windowPresent(w) {
 		return 0
 	}
 	if from < 0 {
@@ -96,4 +96,27 @@ func RegionSlotCount(w CollectWindow, from int) int {
 		return 0
 	}
 	return end - from
+}
+
+// windowPresent reports whether w is a usable window.
+//
+// A plain `w == nil` is NOT enough, and the gap is the classic Go one: a
+// TYPED nil (`var t *Tape; RegionEnd(t, 0)`) is a non-nil interface holding
+// a nil pointer, so the plain check passes it through and (*Tape).Len
+// dereferences it. Panics are forbidden outside annotated init-time
+// registration (ADR-005), and a function that advertises nil handling has to
+// deliver it for the shape a caller will actually produce.
+//
+// The type assertion covers *Tape because *Tape is the only implementer
+// today. A future window that can be typed-nil must either be added here or
+// make its own methods nil-safe; the compile-time assertion in
+// collect_kernel.go is what will bring a new implementer to this comment.
+func windowPresent(w CollectWindow) bool {
+	if w == nil {
+		return false
+	}
+	if t, ok := w.(*Tape); ok && t == nil {
+		return false
+	}
+	return true
 }

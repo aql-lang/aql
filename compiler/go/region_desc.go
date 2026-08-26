@@ -39,8 +39,16 @@ import core "github.com/boru-lang/boru/core/go"
 type SlotSource uint8
 
 const (
+	// SlotNone is the ZERO VALUE and is INVALID — never a valid-looking
+	// "const index 0". eng/go/CLAUDE.md's "No Zero-Value Overload
+	// (CRITICAL)" forbids the alternative, and EmitOperand already reserves
+	// its zero as opNone for precisely this failure: a single missed
+	// initialisation used to mean Consts[0] silently. A descriptor whose
+	// Source is still SlotNone is malformed and must be rejected before
+	// execution, not run against constant 0.
+	SlotNone SlotSource = iota
 	// SlotConst is a value interned in Program.Consts.
-	SlotConst SlotSource = iota
+	SlotConst
 	// SlotLocal is a frame-local slot.
 	SlotLocal
 	// SlotEvent is a prior recorded event's result, taken from the stack.
@@ -97,9 +105,10 @@ const (
 	LeadFnValue
 )
 
-// RegionDesc is one G-lane region: what dispatches, the slots it may claim
-// in written order to the next HARD delimiter, and the state the
-// interpreter's raise-selection reads that collection alone does not carry.
+// RegionDesc is one G-lane region: what dispatches, and the slots it may
+// claim in written order to the next HARD delimiter. STATIC — it is part of
+// a shared Program, so everything here must be true of every execution of
+// the region. Per-execution facts live in RegionState.
 //
 // The extent is an OUTPUT, not an input — OpCollect returns a cursor saying
 // where collection actually stopped, because its own evaluations can move it
@@ -112,26 +121,47 @@ type RegionDesc struct {
 	Word  string
 	Slots []SlotDesc
 	Pos   core.SrcPos
+}
 
-	// --- raise-selection state (§6.2, widened by falsifier F2) ---
-	//
-	// Collection's own register state selects most of the interpreter's
-	// raise text, and that rides in the machine. These are the pieces that
-	// do NOT, each measured rather than assumed. All are REGION-LOCAL: they
-	// key on the enclosing collector's Forward, and at most one Forward is
-	// live per paren scope (core/go/region_extent.go), so the collector they
-	// find is always this region's own.
-
+// RegionState is the raise-selection state a collection carries, built
+// FRESH on every execution of a region.
+//
+// It is deliberately NOT part of RegionDesc, and that is a correction to
+// §6.2, which lists these as things "the descriptor must additionally
+// carry". They cannot live there. A Program is SHARED: every run spawns
+// branch goroutines that RunUnit the same Program's units on their forks
+// (lang/go/bytecode_concurrency_test.go), so a field written during
+// collection would race, and a field frozen at record time would select the
+// wrong error for every later execution. Both failure modes are silent.
+//
+// Every field below is runtime-varying, which is what makes the split
+// forced rather than stylistic:
+//
+//   - whether a paren fragment collapses to zero values depends on what the
+//     fragment computes, so it can differ between two executions of one
+//     region;
+//   - the enclosing value-stack residual is whatever the stack holds NOW,
+//     and may belong to an earlier statement;
+//   - barrierReceiverWord is described by §6.2 itself as a LIVE probe — a
+//     live answer cannot be a static field;
+//   - the fn-shape and pending-forward answers read the enclosing
+//     collector's Forward, which exists only during a collection.
+//
+// All of it is region-LOCAL: each keys on the enclosing collector's Forward,
+// and at most one Forward is live per paren scope
+// (core/go/region_extent.go), so the collector found is always this region's
+// own. Local, but per-invocation.
+type RegionState struct {
 	// StackResidual is the enclosing value-stack residual reorderCandidates
 	// reads — up to four values, which may belong to an EARLIER statement
 	// and change the candidate notes.
 	StackResidual []core.Value
-	// VoidGroups records paren groups that collapsed to zero values. This
-	// changes the error CODE, not merely its text.
+	// VoidGroups records paren groups that collapsed to zero values on THIS
+	// execution. It changes the error CODE, not merely its text.
 	VoidGroups []int
-	// BarrierReceiver is the live barrierReceiverWord probe's answer: whether
-	// the boundary word reads a slot from the ENCLOSING stack, which a paren
-	// group would seal off. It adds a third text variant.
+	// BarrierReceiver is the live barrierReceiverWord probe's answer:
+	// whether the boundary word reads a slot from the ENCLOSING stack, which
+	// a paren group would seal off. It adds a third text variant.
 	BarrierReceiver bool
 	// SuppressForwardParens is the forward-parens suggestion's suppression
 	// condition.
