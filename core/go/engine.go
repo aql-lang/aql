@@ -5989,8 +5989,26 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 }
 
 // fnReturnPark reports how far past a collapsed paren's start the pointer must
-// land: 1 when the paren collapsed to a single unquoted Function value, 0
-// otherwise. A paren places its value on the forward stack and never re-steps
+// land: 1 when the value the rewind would re-step is an unquoted Function, 0
+// otherwise.
+//
+// NUR101, ruled 2026-08-26 — PLACE UNIFORMLY. This used to require the paren
+// to have collapsed to EXACTLY ONE survivor (`closeIdx == idx+2`), which is
+// what made placement depend on enclosing context: `(inc/v) 7` placed at top
+// level, while `((inc/v) 7)` dispatched, because the outer paren had two
+// survivors and so declined the park — its rewind then landed ON the
+// Function and re-stepped it into a call. A list literal inherited the
+// wrapped form, which is where the silent lane divergence came from
+// (`[((mk 1) 2)]` was `[3]` interpreted and `[fn (Integer) 2]` compiled).
+//
+// The survivor count was never the right question. Whether the rewind
+// re-steps a Function INTO A CALL is a property of the value at the rewind
+// position, not of how many values happen to sit beside it, so the count
+// clause is gone and the value test decides alone. Measured before the fix:
+// all four kinds — a `/v` reference, `valof`, a computed result and an
+// inline literal — placed at top level and dispatched inside a group, so
+// this was never about computed results specifically, as the register's
+// first framing had it. A paren places its value on the forward stack and never re-steps
 // it — reference and inline literal alike (NUR073's BROAD verdict, maintainer
 // clause 3, 2026-08-17: "parens do not re-step; they place a value or values
 // on the forward stack") — so stepCloseParen's rewind must step PAST that
@@ -6022,7 +6040,7 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // installed Recorder. That mirroring is why the test lives in the shared
 // fnValueDispatchesAtPointer rather than being spelled twice.
 func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
-	if !notReachGroup || closeIdx != idx+2 || idx >= e.Tape.Len() {
+	if !notReachGroup || idx >= e.Tape.Len() {
 		return 0
 	}
 	v := e.Tape.At(idx)
