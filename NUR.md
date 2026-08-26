@@ -3823,16 +3823,30 @@ reproduced the `def`-then-read SHAPE, which is fine on its own — what
 matters is a `def` whose value the checker proves divergent, inside a body
 only one pass ever reads.
 
-**Discharge for this half.** Fault 1 is the one to fix first and is worth
-its own change: `boru check` must analyse a registered handler body, both
-because a typo there should be caught and because a fault the compiler can
-see must be visible to the tool the user reaches for. Fault 2 is a design
-question the FULL-COMPILATION model has to answer anyway — whether a
-provably-divergent value expression should bind a `Never` carrier rather
-than nothing, so a downstream read reports the DIVERGENCE and not a
-spurious undefined word. Fault 3 is §6.9(3)'s named fork, and this record
-is the argument that suppressing a diagnostic does not make its
-consequences go away; it makes them unattributable.
+**Discharge for this half.** Fault 1 is **fixed** — NUR105, which turned
+out to be far wider than service handlers and is recorded separately. With
+it, `boru check` on mini-redis reports what the compiler was refusing on,
+at :230 in the HDEL handler, with the causal `no_signature` immediately
+before the `h2` read: the refusal is diagnosable by the tool a user would
+reach for, which was the point.
+
+Fault 2 is **decided, not yet implemented** (2026-08-26). The question was
+whether a provably-divergent value expression should bind a `Never` carrier
+rather than nothing. The answer is the same one from a different angle:
+after a provably-divergent expression the rest of the region is
+UNREACHABLE, so the divergence is reported ONCE at its own site and its
+downstream consequences are suppressed rather than re-derived as findings
+about names. That is what an empty residual already means, and it is what
+the compiled lane will do — the trap raises and nothing after it executes.
+A checker reporting consequences the compiled program can never reach is
+describing a program that does not exist.
+`design/FULL-COMPILATION.0.md` §6.9(1) carries the rule and its two limits:
+it does not suppress the divergence itself, and it does not extend past the
+region.
+
+Fault 3 is §6.9(3)'s named fork, and this record is the argument that
+suppressing a diagnostic does not make its consequences go away; it makes
+them unattributable.
 
 
 **Discharge.** Either collapse the forks so the two passes cannot
