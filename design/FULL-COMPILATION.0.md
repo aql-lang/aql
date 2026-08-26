@@ -597,6 +597,44 @@ and a matching opcode pair:
   curry-list construction (`curryOrStack`'s compiled twin) / the
   interpreter's exact no-match raise.
 
+**F2's carried-state list is INCOMPLETE — by three readers, all
+region-local.** Probed 2026-08-26, enumerating what the no-match raise path
+actually reads rather than trusting the list. F2 fired once and widened this
+list by four items; it is short by at least three more:
+
+- `IsFnShapeTypedBindingContext` (`core/go/engine.go:759`) — appends the
+  *"this is a typed-binding context expecting a function value — did you mean
+  `X/q`?"* suggestion to a `signature_error` (`:3286`), and separately GATES
+  `PolyNoMatchProbe` entirely (`:446`), so it changes whether the poly probe
+  runs at all and not merely how the text reads. It needs the enclosing
+  collector's Forward, that sig's arg-0 type, the MAP VALUE sitting at
+  `FuncIndex - CollectedArgs`, and a live `ResolveTypedName` on the
+  constraint word.
+- `pendingForwardFunc` (`:806`) — the enclosing collector's NAME, which
+  tailors an undefined-word hint when it is `def` (`:842`).
+- `polyReachBound` — read into the same poly probe alongside the residual
+  (`:450`), so the reach bound rides with `reorderCandidates`' four values
+  rather than being implied by them.
+
+**They do not falsify the region bound, and the reason is the invariant
+above.** All three key on the ENCLOSING COLLECTOR'S FORWARD, and at most one
+Forward is ever live per paren scope — so the collector they find is the
+region's own, never an earlier region's, and its collected args sit adjacent
+to its `FuncIndex` and are in-region with it. The one-forward-per-scope
+invariant therefore does double duty: it bounds the stranded-forward scan AND
+it bounds these. The list needs extending; the bound does not.
+
+One candidate ruled OUT, which is worth recording so it is not re-derived:
+`insufficientArgsError` appends a `"stack: "` note built by
+`describeStackTypes` (`core/go/boru_error.go:315`) over the tape window
+`[pointer-3, pointer+4)` — bounded, but stopping at neither a paren nor a
+region boundary, and rendering `word(name)` / `atom(name)` payloads rather
+than types alone. That WOULD be extra-regional state. It is unreachable: its
+sole production call site (`engine.go:7509`) carries a proof-carrying
+`//covergate:allow` as a defensive arm unreachable via the harness, so the
+note never reaches a user and needs no carrying. If that arm ever becomes
+reachable, this paragraph is the falsifier.
+
 **Live revalidation, because boundaries are binding-dependent.** The
 forward scan's extent is derived from the *live* binding's signatures
 (per-signature `forwardLimit` = `BarrierPos`), and even a token's
@@ -681,6 +719,48 @@ interpreted) and becomes a row when Stage 3's fn values make it compile.
 That the invariant Stage 4's descriptor rests on is currently witnessed only
 by a shape Stage 3 has yet to close is worth carrying forward rather than
 forgetting.
+
+**Live revalidation has a witness now, and today's answer to it is a
+REFUSAL.** Probed 2026-08-26. This section asserts that a token's
+word-vs-value class can change on a rebind, so a descriptor freezing
+record-time classification would collect wrongly; the PR #406 review pressed
+the same point. Both are right, and the divergence is one line of source
+apart:
+
+```
+def w fn [[a:Any b:Any][Any][a]] end
+def k 5 end
+def go fn [[][Any][w k 1]] end
+go                                       -> 5          k is a VALUE: collected
+… def k fn [[][Integer][9]] end  go      -> raises     k is a WORD: barrier
+```
+
+Same body, same source position, same descriptor. A descriptor that froze
+`k` as a value slot would answer `5` where the interpreter raises — a silent
+wrong answer, not a crash, which is the failure mode this whole section
+exists to prevent.
+
+Two things the probe adds to the section's account. First, where the rebind
+precedes the call in source order the CHECKER catches it — `go`'s body is
+analysed against the post-rebind binding and the program never compiles
+(`fn_body_error`), so the lanes agree without anything re-deriving at
+runtime. That agreement is not evidence the compiled lane revalidates.
+Second, where the rebind sits BETWEEN two calls of the same region, so the
+checker cannot fold it, the compiled lane REFUSES, by name:
+
+```
+def r1 (go) end  def k fn [[][Integer][9]] end  def r2 (go) end
+  -> bytecode compilation refused: module binding k rebound after a fn unit
+     baked its value                      (compiler/go/emit.go:2474)
+```
+
+That is precisely one of the interim rebind-staleness latches §6.5 says the
+bind twins delete. So the current architecture's answer to live revalidation
+is not a frozen classification and not a re-derivation — it is a refusal
+standing in for both. `OpCollect` re-deriving class and extent against the
+live binding set is what lets that refusal go, and this pair is its
+acceptance test: the compiled lane must ANSWER both spellings, `5` and the
+barrier raise, rather than declining the second.
 
 **The shared-vs-divergent map — Stage 2's actual worklist.** The three
 loops are not merged; each decision they share is given one home, and each
@@ -1021,6 +1101,56 @@ module import in particular executes **once**, in the front end; its twin
 re-binds the already-produced instance, so module fn-value identity
 (§6.3's pointer-based `eq`) has a single referent and a Program's pinned
 sub-registries stay the only instance.
+
+**The rollback primitive already exists — and is too COARSE to reuse.**
+Probed 2026-08-26. `Registry.SnapshotForCompile` / `RestoreForCompile`
+(`core/go/compile_sandbox.go:42,91`) already implement exactly the
+snapshot-and-roll-back this regime needs, and `RunCompiledStrict` already
+applies them — but only when the front end FAILS: a `CompileCheck` error and
+an uncompilable-program refusal each restore, while an error out of
+`eng.RunProgram` returns directly and leaves the check-pass installs in place
+(`lang/go/boru.go:1225-1231`). So it is the compile/check-failure paths, not
+every error path — the function's own doc comment overstates this, and a
+program that compiles and then raises at runtime keeps its installs. Either
+way the SUCCESS path keeps them, which is why the twins have nothing to
+replay onto today. So the rollback half of this design is an existing
+primitive applied at a different point, not new machinery. Three caveats
+before reusing it:
+
+- **It restores `r.Types`** (`compile_sandbox.go:107`), which would discard
+  the minted type IDs this section requires to stay BAKED under the
+  front-end carve-out. The twin regime needs a NARROWER snapshot —
+  runtime-visible bindings (`r.Defs`) and the module ledger — leaving macro
+  expansions and const folds alone. Reusing `RestoreForCompile` wholesale
+  would roll back the compile-time products the twins are specifically not
+  supposed to replay.
+- **But `r.Types` cannot be excluded WHOLESALE either.** A capitalised
+  `undef` executing on the check pass RETIRES a lattice node
+  (`basic/go/native_definition.go:1389-1400`: `PopEntry` then
+  `r.Types.Retire(entry.TypeDef)` when this binding minted it). Restore
+  `r.Defs` alone and the type BINDING comes back while its ID stays retired
+  — a live binding pointing at a dead node, before the VM has reached the
+  twin at that `undef`'s source position. So the narrow snapshot has to
+  separate the two things `r.Types` holds: minted IDs are RETAINED, runtime
+  RETIREMENTS are rolled back and re-applied by their twins. That is a
+  partition of the TypeTable, not an exclusion of it, and it is the part of
+  this design with the least existing machinery to lean on.
+- **The dispatch-cache invalidation comes with it.** `RestoreForCompile`
+  drops every `dispatchCache` entry because `DefTable.Clone` starts a fresh
+  generation timeline at 0, so a gen-0 entry cached before the rollback
+  could be served for a name whose restored binding differs
+  (`compile_sandbox.go:96-106`). A narrow rollback inherits that hazard
+  exactly — the twins reinstall bindings under names the cache may already
+  hold — so the cache reset is part of the regime, not an artifact of the
+  wide snapshot.
+
+Measured alongside: there is no double-install TODAY, on either lane.
+`def x 1 end def x 2 end undef x end x` answers `1` compiled and
+interpreted, and `def x 1 end undef x end x` is `undefined_word` on both. The
+single-install path is what makes `undef` expose the prior binding correctly,
+which is precisely why adding a second install without the rollback would
+break it — the hazard this section names is real, and currently latent only
+because nothing replays.
 
 **Stamp freshness is taken against the post-replay world.** Dependency
 snapshots recorded during the check pass (`DepSnap` over `(Depth, Gen)`,
