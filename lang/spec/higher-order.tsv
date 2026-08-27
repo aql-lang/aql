@@ -39,7 +39,25 @@ join ['a' 'b' 'c']	'a,b,c'	default separator is a comma
 #     `filter`'s single cross-container form (§5) is the documented
 #     exception — one signature serving both shapes, so it hands a POSITION
 #     descriptor either way. See REFERENCE.md §"Higher-order array words".
+#     GRADUATED 2026-08-27 (Stage 3): the list `each` rows below moved
+#     here out of lang/spec/frontier/frontier-hof-audit.tsv §12, where
+#     they sat because the compile lane reached the callback through an
+#     ISLAND. lambdaCallbackInputs simply had no list case for `each` —
+#     it handled the MAP twin and fell through — so the lambda lowering
+#     declined at its first gate. The convention was measured off the
+#     interpreter rather than inferred from the map twin:
+#     `def show fn [[e:Any][Any][typeof e]] each show/v [1 2 3]` answers
+#     [Integer Integer Integer], i.e. ONE input, the bare element, passed
+#     through unchanged. fold / scan / for-each still island — their
+#     conventions carry an ACCUMULATOR whose type after step 1 is the
+#     body's return, which is a separate measured question.
+def dbl x:Integer => [mul 2 x]  each dbl/v [1 2 3]	[2 4 6]	a Function VALUE maps over a list — the element reaches the callback with no quotation wrapper
 def dbl x:Integer => [mul 2 x]  each [dbl] [1 2 3]	[2 4 6]	…and the quotation wrapper it replaces still answers identically
+each ([x:Integer] => [x add 1]) [1]	[2]	a LAMBDA over a LIST is an each signature since NUR086's fix — neither a quotation wrapper nor a map form is needed
+each ([x:Integer] => [x add 1]) [1 2 3]	[2 3 4]	…over more than one element, the closure body is compiled ONCE and driven per element
+each ([x:Any] => [typeof x]) [1 'a' true]	[Integer ProperString Boolean]	a HETEROGENEOUS list: the element carrier is the lattice join, so the body dispatches per alternative exactly as the runtime does
+each ([x:Integer] => [x add 1]) []	[]	the empty list runs the callback zero times
+def n 3  each ([x:Integer] => [x mul n]) [1 2]	[3 6]	the callback CAPTURES an enclosing binding — the capture rides the closure, not a re-lookup
 def kf kv:KeyVal => [mul 2 (kv.v)]  each kf/v {a:1 b:2}	{a:2 b:4}	the MAP form is unchanged: a per-container form hands a KeyVal
 #
 # §5  filter — keep elements whose callback returns true. The callback is

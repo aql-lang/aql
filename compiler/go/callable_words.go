@@ -787,6 +787,18 @@ func lambdaCallbackInputs(r *core.Registry, word string, spec core.CallableSpec,
 		if isMap {
 			return []core.Value{keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
+		// A LIST each hands the callback the bare ELEMENT (NUR086's list
+		// Function form: "a per-container form hands the container's natural
+		// unit"). Measured against the interpreter, not inferred from the map
+		// twin: `def show fn [[e:Any][Any][typeof e]] each show/v [1 2 3]`
+		// answers [Integer Integer Integer], so one input, passed through
+		// unchanged. filter is the documented exception in the other
+		// direction — its single cross-container form hands a {key,value}
+		// position descriptor even over a list, which is why the two cases
+		// here differ rather than sharing a branch.
+		if isList {
+			return []core.Value{check.NewElementCarrier(elem)}, ClosureInValue, true
+		}
 	case "fold":
 		// Init form only (`init fold (lambda) {m}` → args [lambda, map, init]):
 		// the accumulator carries the seed's type, the entry rides as a KeyVal.
