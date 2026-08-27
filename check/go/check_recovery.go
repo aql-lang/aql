@@ -1360,47 +1360,35 @@ func parenPlacedFnCarrier(e *core.Engine, idx int) bool {
 	if v.ID == "" {
 		return false
 	}
+	// THREE shapes place, and they are one decision with one record.
+	//
 	// A GENUINE fn-typed carrier is visible to core, so core does not need
 	// this predicate to decide the park — but the COMPILER still needs the
 	// placement recorded, and this is the only place that knows a USER paren
-	// (not a reach group) did the placing. Record and report placed.
+	// (not a reach group) did the placing. Same for a DYNAMIC value the
+	// checker cannot prove non-callable: the park treats it as placed, so the
+	// compiler has to learn the same fact or the two ends disagree about the
+	// shape. Only when NEITHER holds does the original member-read gate
+	// decide, and a member read that reaches it admits on the same terms.
 	//
-	// This used to fall through to the member-read gate below and decline,
-	// which combined with an `||` short-circuit at the call site meant a
-	// genuine carrier was never recorded at all: `((mk 1) 2)` placed
-	// interpreted and applied compiled, because the residual lowering had no
-	// way to learn the lead was placed data (NUR101).
-	if core.IsFnTypedCarrier(v) {
-		recordParenPlacedFn(r, v.ID)
-		return true
+	// Both wide arms used to fall through to that gate and decline, which
+	// combined with an `||` short-circuit at the call site meant a genuine
+	// carrier was never recorded at all: `((mk 1) 2)` placed interpreted and
+	// applied compiled, because the residual lowering had no way to learn the
+	// lead was placed data (NUR101).
+	if !core.IsFnTypedCarrier(v) && !(v.Dynamic && core.SigTypeMatches(v, core.TFunction)) {
+		if _, ok := es.MemberFnReadValue(v.ID); !ok {
+			return false
+		}
 	}
-	// …and a DYNAMIC value the checker cannot prove non-callable. The park
-	// treats it as placed (see fnReturnPark's maybeFn arm), so the compiler
-	// has to learn the same fact or the two ends disagree about the shape.
-	if v.Dynamic && core.SigTypeMatches(v, core.TFunction) {
-		recordParenPlacedFn(r, v.ID)
-		return true
-	}
-	if _, ok := es.MemberFnReadValue(v.ID); !ok {
-		return false
-	}
-	// Core asks only AFTER excluding reach groups, so reaching here proves
-	// a USER paren: record the id for the compiler's residual lowering.
-	recordParenPlacedFn(r, v.ID)
-	return true
-}
-
-// recordParenPlacedFn notes that a USER paren placed the carrier with this
-// id, for the compiler's residual lowering to read (ParenPlacedFnIDs — see
-// its doc in core/go/check_state.go: the lowering "must not lower a placed
-// lead as an apply").
-func recordParenPlacedFn(r *core.Registry, id string) {
+	// Core asks only AFTER excluding reach groups, so reaching here proves a
+	// USER paren: record the id for the compiler's residual lowering, which
+	// must not lower a placed lead as an apply (ParenPlacedFnIDs — see its
+	// doc in core/go/check_state.go).
 	cs := r.Check
-	if cs == nil {
-		return
-	}
 	if cs.ParenPlacedFnIDs == nil {
 		cs.ParenPlacedFnIDs = map[string]bool{}
 	}
-	cs.ParenPlacedFnIDs[id] = true
+	cs.ParenPlacedFnIDs[v.ID] = true
+	return true
 }
