@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '222812471608839964');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '3365204049398186641');
 INSERT INTO input_files VALUES ('../AGENTS.md', '5746437182943957856', 12139);
 INSERT INTO input_files VALUES ('../CLI.md', '3434391071839442713', 83578);
 INSERT INTO input_files VALUES ('../README.md', '6312173284019959426', 13333);
@@ -49,6 +49,7 @@ INSERT INTO input_files VALUES ('../design/HOT-CODE-LOADING.0.md', '273846813698
 INSERT INTO input_files VALUES ('../design/LANG-ENG-CONTENT-AUDIT.0.md', '9151136880658015899', 42992);
 INSERT INTO input_files VALUES ('../design/MODULE-VIEWS.0.md', '570466612363092696', 22324);
 INSERT INTO input_files VALUES ('../design/O1-RELITIGATION.0.md', '606391173479908545', 11869);
+INSERT INTO input_files VALUES ('../design/PAREN-RESTEP-RULE.0.md', '5725948406221895311', 8925);
 INSERT INTO input_files VALUES ('../design/RELOAD-INVALIDATION.0.md', '2757752285559380360', 21723);
 INSERT INTO input_files VALUES ('../design/ROOT-MODULE-FEASIBILITY.0.md', '6235317352461048001', 6313);
 INSERT INTO input_files VALUES ('../design/STATE-MACHINES.0.md', '7873846898373868814', 88994);
@@ -67,7 +68,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '3903893308060620019', 558);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '7600662120504989503', 64582);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '3323874133807229803', 67592);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -217,6 +218,9 @@ INSERT INTO sources VALUES ('src:module-views', 'text', 'design/MODULE-VIEWS.0.m
 INSERT INTO sources VALUES ('src:o1-relitigation', 'text', 'design/O1-RELITIGATION.0.md', 'O1: re-litigating the NUR101 / NUR078 rulings', NULL, 'o1-relitigation-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
+INSERT INTO sources VALUES ('src:paren-restep-rule', 'text', 'design/PAREN-RESTEP-RULE.0.md', 'the paren re-step rule — what actually decides place-vs-apply', NULL, 'paren-restep-rule-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
 INSERT INTO sources VALUES ('src:readme', 'text', 'README.md', 'boru README', NULL, 'readme-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -258,6 +262,8 @@ INSERT INTO entities VALUES ('ent:Document:1913611373576952100', 'Document', 'de
 INSERT INTO entity_attributes VALUES ('ent:Document:1913611373576952100', 'role', 'the design RFC for general-purpose state machines: a mixed Go+boru boru:state module (definition/bindings/snapshot split, pure step, thirteen-item semantic freeze, in-definition input classification via classes:/classify:, state_* check diagnostics, service and process hosts) and the argued decision to add words, not syntax — revised against Noble''s Forth FSM paper for the tabular lineage the statechart survey had missed');
 INSERT INTO entities VALUES ('ent:Document:203047846460430642', 'Document', 'design/DECLARATIVE-GRAMMAR.0.md', 'design/declarative-grammar.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:203047846460430642', 'role', 'the shared declarative tabnas grammar artifact (parser/go/grammar.json): contract, loader pair, and the batch-migration state');
+INSERT INTO entities VALUES ('ent:Document:208373100487963948', 'Document', 'design/PAREN-RESTEP-RULE.0.md', 'design/paren-restep-rule.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:208373100487963948', 'role', 'the measured statement of when a paren-collapsed function is PLACED and when it is re-stepped into a CALL, superseding NUR101''s 2026-08-26 place-uniformly ruling whose premise it falsifies. The rule: a Function a paren placed is re-stepped exactly when it leads TWO OR MORE survivors of an enclosing group that closes with a paren rewind — a user paren, an fn frame, or an if/for/do body — while the program top level, list literals and map literals do not rewind; placement is the one-survivor case and the enclosing group is a SECOND decision taken one paren out, not a context that modifies the first. The ruling had been implemented by deleting fnReturnPark''s survivor-count clause on the reasoning that the count was never the right question; it is, and deleting it turned (x:Integer => [x mul 2] 5) from 10 into fn (Integer) 5 and broke seven suites. The defect was the COMPILER''S, in both directions, and there were five silent miscompiles: (mk 1) 2 and (mk2 5) 10 applied what the interpreter places, while [((mk 1) 2)] and two if-arm shapes placed what it applies — ((mk 1) 2) compiling correctly at the top level only by ACCIDENT, because the outer paren collapses and the pair reaches the program residual where the carrier arm applies it. The fix is a matched PAIR of records taken at the collapse, the last moment the two spellings are distinguishable — ParenPlacedFnIDs and the new ParenReSteppedFnIDs — read by the residual lowering, the branch-arm merge and the list-literal assembly, which is what lets [(mk 1) 2] keep compiling while [((mk 1) 2)], byte-identical in its elements, refuses. Value divergences on the 16-shape probe: five to zero. Also the finding of how they survived a 100%-covered parity suite (NUR106): Stage J flipped lang.Run to the compiled path and 75 parity assertions across five files still read it as their interpreter oracle, comparing the compiled lane against itself; the sweep to RunInterp surfaced NUR107 on the very test that had pinned that claim as non-reproducing');
 INSERT INTO entities VALUES ('ent:Document:2101452453024924878', 'Document', 'design/O1-RELITIGATION.0.md', 'design/o1-relitigation.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:2101452453024924878', 'role', 'the re-litigation brief for FULL-COMPILATION open question O1, which blocks Stage 3: both rulings Stage 3 depends on are re-measured rather than re-argued, and both records turn out to be out of date. The finding that actually blocks implementation is that NUR.md holds TWO entries titled NUR101, both Status Pending, both claiming the anchor #nur101, ruling the OPPOSITE way on the same program — line 243 holds the compiled lane correct and the interpreter in need of fixing, line 439 states the compiled lane is the defect — with line 243 recording that line 439''s reading was reverted while the superseded record was never deleted, so O1 cannot be implemented as ruled because the register does not record one ruling, and the duplicate anchor makes every #nur101 link resolve to the first. Re-measurement then narrows the question twice: NUR101''s top-level half is ALREADY FIXED (all five placement cases place, including the two the record calls defective — (mk 1) 2 answers fn (Integer) 2 where the record says 3), so what remains is not about list literals at all but the single question of whether a COMPUTED function applied inside an enclosing group places or dispatches ((mk 1) 2 places, ((mk 1) 2) dispatches, and the list literal merely inherits it), with ADR-011''s carve-out for a bare WORD inside a group neither clearly covering nor excluding a computed group result — which is how two records read it two ways; and NUR078''s divergence is confirmed live (h zero answers 42 through the struck TFunction intercept while hany zero is a barrier error, so the slot type decides) but its prescribed replacement names /r, a modifier ADR-011 collapsed into /v, so the ruling as literally written removes the only working path and directs users to one that does not exist. Three rulings are needed to unblock Stage 3: delete one NUR101 entry, decide place-vs-dispatch-vs-context-dependent for the enclosing-group case, and decide implement-as-amended-respelled-to-/v vs reverse-the-amendment for NUR078 — the latter given no recommendation, since the tree pins the exception as designed behaviour in path-modifier.tsv:67 while the register records it as struck');
 INSERT INTO entities VALUES ('ent:Document:2168448879393025844', 'Document', 'design/BORU-VIZ.0.md', 'design/boru-viz.0.md', 'accepted');
@@ -636,12 +642,16 @@ INSERT INTO assertions VALUES ('ast:3211344478610580799', 'ent:Concept:385439590
 INSERT INTO assertion_evidence VALUES ('ast:3211344478610580799', 'src:readme', 'Forward arguments', 'the defining feature of the surface syntax is forward arguments', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3217052068632183309', 'ent:Document:5175176782070740682', 'supports', 'entity', 'ent:SoftwareModule:4361728672720029650', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3217052068632183309', 'src:boru-infoview', 'Architecture — what is new', '`cmd/go/internal/lsp/` — inlay hints, hover, code actions, `boru/stackAt`', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:3249308603671750244', 'ent:Document:208373100487963948', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:3249308603671750244', 'src:paren-restep-rule', 'title', 'The paren re-step rule', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3261162321000951212', 'ent:SoftwareModule:4386785925506277682', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3261162321000951212', 'src:go-work', 'use block', './test/specfix', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3331627459435955194', 'ent:SoftwareModule:8275629451197117420', 'depends_on', 'entity', 'ent:SoftwareModule:6880687338933514154', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3331627459435955194', 'src:gomod:lang-go', 'require block', 'github.com/boru-lang/boru/compiler/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:3384030660507785166', 'ent:Document:1162242714758522750', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3384030660507785166', 'src:basic-check-cut', 'title', 'BASIC-CHECK-CUT.0 — removing `basic`''s dependency on `check`', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:3398339673163661910', 'ent:Document:208373100487963948', 'supports', 'entity', 'ent:SoftwareModule:6880687338933514154', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:3398339673163661910', 'src:paren-restep-rule', '1. The rule', 'exactly when it leads **two or more survivors**', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3410841662781299382', 'ent:Document:4790579719562719716', 'supports', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3410841662781299382', 'src:core-ts-coverage', 'The corpus is not the instrument', 'keep growing `core/spec` as a cross-engine spec, and stop treating it', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3427363101233560350', 'ent:Document:8751021793288559660', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
