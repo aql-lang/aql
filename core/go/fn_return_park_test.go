@@ -106,9 +106,14 @@ func TestFnReturnPark(t *testing.T) {
 			why: "the park applies only to a Function residual — every ordinary call returns through here",
 		},
 		{
-			name: "more than one survivor is untouched", tape: []Value{fnv, NewInteger(1)},
-			closeIdx: 3, notReachGroup: true, want: 0,
-			why: "the park is the exactly-one-survivor case; stepping past a multi-value collapse strands the rest",
+			name: "more than one survivor still parks the leading Function", tape: []Value{fnv, NewInteger(1)},
+			closeIdx: 3, notReachGroup: true, want: 1,
+			why: "NUR101 (ruled 2026-08-26): the park is NOT the exactly-one-survivor case. It used to be, " +
+				"and that is precisely what made placement depend on enclosing context — `(inc/v) 7` placed " +
+				"at top level while `((inc/v) 7)` dispatched, because the outer paren had two survivors and " +
+				"so declined the park, landing the rewind ON the Function and re-stepping it into a call. " +
+				"Whether the rewind re-steps a Function is a property of the value at the rewind position, " +
+				"not of how many values sit beside it",
 		},
 		{
 			name: "empty collapse is untouched", tape: []Value{},
