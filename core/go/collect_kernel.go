@@ -41,8 +41,14 @@ package core
 //     window is live-length and the walk re-reads Len() after every
 //     mutation instead of trusting a computed extent.
 //
-// Scope note. Today the interpreter is the sole implementation: *Engine for
-// the host half, its *Tape for the window. The VM's region-descriptor
+// Scope note. Today the interpreter is the sole implementation of the HOST
+// half: *Engine, with its *Tape as the window. The WINDOW half is exported
+// (Stage 4) because the region recorder walks a window it does not host —
+// it reads tokens and their extent to build a descriptor, and never
+// evaluates — so it needs the window type without needing collectHost. The
+// host half stays unexported until the VM adapter that implements it lands
+// with OpCollect; exporting it earlier would put an unused public API on
+// *Engine, which is what this note warned against. The VM's region-descriptor
 // adapter is the second, and it arrives WITH ITS CLIENT in Stage 4, not
 // before — core/go is held to 100% coverage BY ITS OWN SUITE
 // (cover-gate-core), so a seam arm only the VM adapter reaches would be
@@ -53,10 +59,10 @@ package core
 // types they name (viableSig, fwdKind) when the second implementation
 // makes that real.
 
-// collectWindow is the token window a collection walk reads and mutates: a
+// CollectWindow is the token window a collection walk reads and mutates: a
 // live-length, spliceable sequence, NOT a frozen slot array. The
 // interpreter's *Tape satisfies it as written.
-type collectWindow interface {
+type CollectWindow interface {
 	// Len is the window's CURRENT length, re-read after every mutation.
 	Len() int
 	At(i int) Value
@@ -77,7 +83,7 @@ type collectWindow interface {
 // implementation builds them from different material.
 type collectHost interface {
 	// collectWindow is the token window this host collects over.
-	collectWindow() collectWindow
+	collectWindow() CollectWindow
 
 	// --- evaluations: these mutate the window and may raise ---
 
@@ -134,7 +140,7 @@ type collectHost interface {
 // kernel" a fact the compiler checks rather than a claim in a comment.
 var (
 	_ collectHost   = (*Engine)(nil)
-	_ collectWindow = (*Tape)(nil)
+	_ CollectWindow = (*Tape)(nil)
 )
 
 // collectForward is the PHASE-1 plan walk, seated on the seam: once per

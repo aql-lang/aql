@@ -532,6 +532,28 @@ second tape. That is a real answer to F1, but it is a bigger object than
 this section first described, and the VM adapter has to build it rather
 than index a frozen array.
 
+**The VM's window needs no adapter — it IS a Tape (measured 2026-08-26).**
+The paragraph above concludes that both adapters must implement "a mutable,
+spliceable, live-length token window plus a host evaluator callback —
+honestly, a second tape", and that the VM "has to build it rather than index
+a frozen array". Both hold, and the building is `NewTape`. A `Tape` has no
+Engine reference — `buf`, `gapStart`, `gapEnd`, `forwards`, and nothing else
+— so one constructed over a slice of runtime values satisfies
+`CollectWindow` directly, with no adapter type at all
+(`TestStandaloneTapeSatisfiesCollectWindow`). The planned second window
+implementation is therefore deleted from this stage's worklist before it was
+written.
+
+That is worth more than the code it saves. A re-implementation would have to
+AGREE with the original on splice and gap semantics, and
+`collect_kernel.go`'s first stated property is that "the window mutation IS
+the interface between the phases" — precisely the thing a parallel
+implementation is most likely to get subtly wrong, and in a way the
+differential would catch only where a test happens to splice. Sharing the
+type makes the agreement structural. What the VM adapter still owes is the
+`collectHost` half: the EVALUATIONS, which is where its real work was
+always going to be.
+
 **Mechanism.** For every G-lane region the recorder emits a **region
 descriptor** — a static table entry (a new `Program` side table, peer to
 `Dispatches`) recording what the interpreter would have read off the tape,
@@ -634,6 +656,30 @@ sole production call site (`engine.go:7509`) carries a proof-carrying
 `//covergate:allow` as a defensive arm unreachable via the harness, so the
 note never reaches a user and needs no carrying. If that arm ever becomes
 reachable, this paragraph is the falsifier.
+
+**Correction (2026-08-26): that widened state cannot live in the
+DESCRIPTOR.** The list above says the descriptor "must additionally carry"
+the value-stack residual, the `voidGroups` record, the `barrierReceiverWord`
+answer and the suggestion's suppression condition. It cannot, and the reason
+is structural rather than stylistic: a `Program` is SHARED — every run
+spawns branch goroutines that `RunUnit` the same Program's units on their
+forks (`lang/go/bytecode_concurrency_test.go`) — so a descriptor field
+written during collection races, and one frozen at record time selects the
+wrong error for every later execution. Both failures are silent.
+
+Every item on that list is runtime-varying, which is what makes the split
+forced. Whether a paren fragment collapses to zero values depends on what
+the fragment computes, so it can differ between two executions of one
+region. The enclosing residual is whatever the stack holds now. And this
+section already calls `barrierReceiverWord` a LIVE probe — a live answer
+cannot be a static field.
+
+So the descriptor splits in two: `RegionDesc` holds what is true of every
+execution (the lead, the slots, the position), and a per-invocation
+`RegionState` holds the raise-selection facts, built fresh by `OpCollect`.
+That does not weaken the region bound — every one of those facts is still
+region-LOCAL, by the one-forward-per-scope invariant above. Local and
+per-invocation are different properties, and this section conflated them.
 
 **Live revalidation, because boundaries are binding-dependent.** The
 forward scan's extent is derived from the *live* binding's signatures
