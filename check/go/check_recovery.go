@@ -520,6 +520,16 @@ func shareCheckState(e *core.Engine, capturedReg *core.Registry) func() {
 // clone's FnDefInfo.Registry is deliberately nil — see TransplantExtension).
 // Idempotent under nesting: when an enclosing dispatch already shared, the
 // swap is pointer-equal and the restore puts back the same shared state.
+// ShareCheckStateFrom is shareCheckStateFrom exported for the COMPILER's
+// cross-registry closure compile (compiler/go/callable_words.go): a foreign
+// fn value's body must resolve its free words in the DEFINING registry while
+// the analysis it drives — params, carriers, the recorder — stays the
+// CALLER's, because the unit it produces has to land in the caller's program.
+// Same mechanism, same restore contract, same idempotence under nesting.
+func ShareCheckStateFrom(owner, caller *core.Registry) func() {
+	return shareCheckStateFrom(owner, caller)
+}
+
 func shareCheckStateFrom(owner, caller *core.Registry) func() {
 	if owner == nil || caller == nil || owner == caller || !caller.Check.IsActive() {
 		return func() {}

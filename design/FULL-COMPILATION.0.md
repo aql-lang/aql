@@ -1047,13 +1047,13 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   predicates (the measured row), capture-tagging retires it for foreign
   closures that also capture.
 
-  **The split alone is NOT sufficient, and a throwaway prototype proved it
-  rather than arguing it (2026-08-27).** Threading `fd.Registry` through
-  `compileClosureBody` while pointing the foreign `CheckState.Emit` at the
-  caller's `EmitState` does produce a natively-compiled unit — the island
-  goes away, `FALLBACK` disappears from the disassembly. The answer is
-  wrong: `[[]]` against the interpreter's `[[3 4]]`, and the compiled body
-  is
+  **The registry half alone is NOT sufficient, and a throwaway prototype
+  proved it rather than arguing it (2026-08-27).** Threading `fd.Registry`
+  through `compileClosureBody` while pointing ONLY the foreign
+  `CheckState.Emit` at the caller's `EmitState` does produce a
+  natively-compiled unit — the island goes away, `FALLBACK` disappears from
+  the disassembly. The answer is wrong: `[[]]` against the interpreter's
+  `[[3 4]]`, and the compiled body is
 
   ```
   fn f0 filter$body/1 (locals=1) [e]:
@@ -1061,23 +1061,82 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
     0001 RET
   ```
 
-  The predicate CONST-FOLDED to `false`. The closure body's compile does
-  compile-time evaluation of the body, and for a foreign body that
-  evaluation reaches a definite constant it has no business reaching —
-  folding away the per-element parameter along with the free word. So the
-  increment's first question is not "where do names resolve at run time"
-  (the `CompiledFn.Reg` / `curReg` machinery answers that and is shipped);
-  it is **why the body analysis folds at all under a swapped registry, and
-  what the fold is reading**. Whoever takes this: reproduce the four-line
-  disassembly above first — it is the shortest path to the real defect, and
-  it is a silent wrong answer, which is exactly what `foreignFnHome`
-  currently prevents.
+  The predicate CONST-FOLDED to `false`, folding away the per-element
+  parameter along with the free word — a silent wrong answer, which is
+  exactly what `foreignFnHome` was there to prevent.
 
-  The RUNTIME halves are genuinely shipped and need nothing: `CompiledFn.Reg`
-  is stamped for module-preamble fns (`compiler/go/emit.go:7771`) and the VM
-  swaps `curReg` on unit entry (`eng/go/vm.go:1403-1414`). A cross-registry
-  closure unit would ride exactly that path. What is missing is only the
-  compile-side plumbing to produce one.
+  **LANDED 2026-08-27; the fold was reading the wrong CheckState.** Pointing
+  the foreign `Emit` at the caller is half a share: the body compiles under
+  the FOREIGN module's carriers, params and recorder, so `e` — the caller's
+  per-element param — has no carrier there and the analysis reaches a
+  constant it has no business reaching. Sharing the WHOLE CheckState is the
+  fix, and it is not new machinery: `shareCheckStateFrom` is what
+  `execFnDefLiteral` already uses to run a module fn's body on the
+  importer's engine, restore contract and nesting idempotence included. It
+  is now exported as `check.ShareCheckStateFrom` and
+  `compiler/go/callable_words.go`'s body-lambda path uses it, so the two
+  roles land where §6.3 said they must:
+
+  | role | registry | why |
+  | --- | --- | --- |
+  | BINDINGS | `fd.Registry` (foreign) | `lim` inside A's predicate must be A's `lim`; `StartFnCompile` on that registry stamps `CompiledFn.Reg`, and the VM's `curReg` swap carries it to run time |
+  | ANALYSIS | caller's `CheckState` | params, carriers and the RECORDER — the unit must land in the CALLER's program, which is where `OpPushClosure` references it |
+
+  Measured after: `filter A.big [1 2 3 4]` compiles with no `FALLBACK` and
+  answers `[[3 4]]` on both lanes, with A's `lim` compiling as its own unit
+  returning 2. The row graduated out of the frontier ledger into
+  `lang/spec/module-fnvalue-boundary.tsv` §4.
+
+  `foreignFnHome` therefore survives as a QUESTION every caller must answer
+  — compile it in its own home, or decline — rather than as a blanket
+  refusal. The extras/hook path (walk's ascend slot) still answers DECLINE:
+  its shared-token-shape hooks have no per-hook registry to swap to.
+
+  **The same question reaches MODULE-SCOPE MUTABLE CAPTURES, and asking it
+  there exposed a SIXTH silent miscompile** — same family as NUR101's five,
+  found the same way, by running the shape rather than reasoning about it.
+  `moduleScopeMutableCaptures` rides a module-scope flex cell or class
+  instance as a closure slot, and it was looking the name up in the CALLER.
+  For a foreign body that is the wrong scope, and when both modules bind the
+  name it silently swaps the cell:
+
+  ```
+  import module [def acc (flex [1 2 3]) def big fn [[e:Map] [Boolean]
+    [(size acc) lt (e dot value)]] export "A" {big: big/v}] end
+  def acc (flex []) filter A.big [1 2 3 4]
+
+  interpreted  [[4]]           <- A's acc, size 3
+  compiled     [[1 2 3 4]]     <- the CALLER's acc, size 0
+  0007 PUSH_CLOSURE f0  ; closure filter$body/2   (capturing l0)
+  ```
+
+  The lookup now uses `fd.Registry` for a foreign body. A foreign cell has
+  no producing event in the CALLER's emit tables, so `resolveOperand`
+  declines and this row falls back — sound, parity restored, and ONE island
+  remains where the shape needs a registry-tagged operand for a foreign
+  module-scope instance. That is the follow-up the frontier ledger named;
+  the parity fence is `lang/go`'s
+  `TestForeignClosureCaptureResolvesInItsOwnRegistry`.
+
+  Worth naming as method: the first version of this increment carried a
+  REFUSAL for the shape (`len(captures) > len(fd.Captured)` → decline) with
+  a comment saying no corpus row exercised it. Writing the row to cover the
+  refusal is what found the miscompile underneath it. A guard whose
+  justification is "nothing measures this" is a request to go measure it.
+
+  The RUNTIME halves needed nothing, as recorded: `CompiledFn.Reg` is
+  stamped for module-preamble fns (`compiler/go/emit.go:7771`) and the VM
+  swaps `curReg` on unit entry (`eng/go/vm.go:1403-1414`). The
+  cross-registry closure unit rides exactly that path.
+
+  **The pattern, third instance in this stage.** A documented blocker turned
+  out to be a different blocker once run. §6.4's "the interpreter is wrong"
+  was the compiler's model of it; the closure-render refusal was actually
+  guarding bare-name dispatch; and here "why does the body analysis fold at
+  all" had nothing to do with folding under a swapped registry — the
+  analysis was simply looking at a CheckState with no carrier for `e`. Each
+  time, the prototype that RAN found it and the reasoning that preceded it
+  did not.
 - **Quote state and dispatch-control state** (`/q` polarity, sealed/applied
   bits) — so the quote-lambda screen (`check/go/check_fnbody.go:388`)
   becomes routing, not refusal: a `/q`-slot lambda delivered as a callback
@@ -1819,7 +1878,7 @@ universe closes alongside).
 | **0** | Adopt the declaration triple (COMPILE-DECLARATION-MODEL Stages 0–2: delete the dead flag, introduce `{tapeBound, needs, env}` under C1–C4, assert over every signature) | 0 rows; produces the §6.8 handler worklist | low |
 | **1** | Instrument: engine-entry census + defer census + refusal-reason census; declare the observable alphabet for T3 | 0 rows; makes T2 measurable | low |
 | **2** | **Extract the collection kernel** (§6.2): factor the THREE collection loops over the shared window+evaluator interface and re-seat the Engine on them — **three separate re-seats, landing separately**, since the differential cannot say which one broke otherwise. Gate: full differential green, allocation ceilings unmoved, CPU-profile share unmoved (NOT wall clock — see F1b) | 0 rows; unblocks everything | **high** — F1 · **Engine side LANDED 2026-08-26** in three commits; §6.2 records what each re-seat cost and where the third one corrected this note. **Gate discharged**: full differential green, allocation ceilings unmoved, merged `cover-gate` 100.0%, and CPU-profile share unmoved (F1b, §11 — every anchor within ±0.18pp against ±0.9–3.0 spread). The second adapter is Stage 4's, by the `cover-gate-core` inversion below |
-| **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included); retire `OpCallDynFrame`/`callDynamic` islands onto Apply. **NUR101's half of the interpreter-fix precondition is discharged and was never an interpreter fix**: measured 2026-08-27, the interpreter was already correct and the compiler carried five miscompiles (§6.4, design/PAREN-RESTEP-RULE.0.md). What remains of O1 is NUR078 alone. Also inherited from that work: four refusals whose graduation IS this stage — `DynApplyLeadEligible` must admit an EVENT lead — and three error-lane divergences pinned as measured (NUR107/108/109) that Apply's error contract has to settle | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` lands with §6.3's registry-tagged captures here, the full-stack-in-body row with Stage 4's descriptor folds) | medium |
+| **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included); retire `OpCallDynFrame`/`callDynamic` islands onto Apply. **NUR101's half of the interpreter-fix precondition is discharged and was never an interpreter fix**: measured 2026-08-27, the interpreter was already correct and the compiler carried five miscompiles (§6.4, design/PAREN-RESTEP-RULE.0.md). What remains of O1 is NUR078 alone. Also inherited from that work: four refusals whose graduation IS this stage — `DynApplyLeadEligible` must admit an EVENT lead — and three error-lane divergences pinned as measured (NUR107/108/109) that Apply's error contract has to settle | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` LANDED 2026-08-27 — not with registry-tagged captures, which its predicate does not have, but with the CheckState share of §6.3; the full-stack-in-body row with Stage 4's descriptor folds) | medium |
 | **4** | Statement descriptors + `OpCollect`/`OpDispatchGeneric` (§6.2, §6.5) + bind twins; recorder step-6 flips from refuse to generic for word dispatch; delete drift-window islanding | F (5), L (1), K (1), most unledgered dispatch gates, §9d | medium |
 | **5** | Production-order regions + generalized marks (§6.6) | C (11), D (13), I (5) | medium |
 | **6** | Handler migration per the triple (§6.8): units-not-tokens, `while` lowering, per-region DynEnv, `args`/`__pa`/`context` frames | H (6), context/tape-bound gate families | medium — wide but enumerable |

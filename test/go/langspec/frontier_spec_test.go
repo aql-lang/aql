@@ -297,35 +297,48 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)`: {why: "arity-1 Function param read bare with no argument: a bare name is a CALL, so raising is correct and the compiler is wrong to yield the Function", failsWith: "parity"},
 
 	// Cross-module fn value in a higher-order word's CLOSURE slot
-	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3). A fn value resolves its free
-	// words in its DEFINING module; the closure lowering compiles the body
-	// against the CALLING one, so compiling this baked the caller's `lim`
-	// (100) and returned [] where the interpreter returns [3 4] — a
-	// check-clean miscompile. foreignFnHome (compiler/go/callable_words.go)
-	// declines the lowering, and the callback seam's island runs the body on
-	// its own registry (core.CallBoruFn), so parity holds and the island is
-	// merely slow.
+	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3) — GRADUATED 2026-08-27
+	// (Stage 3) into lang/spec/module-fnvalue-boundary.tsv §4.
 	//
-	// Graduation = compile the foreign body against fd.Registry. The RUNTIME
-	// half already exists: CompiledFn.Reg (compiler/go/bytecode.go:970) plus
-	// enterUnit's `if p.Fns[u].Reg != nil { curReg = p.Fns[u].Reg }`
-	// (eng/go/vm.go:1403-1414) already give a closure unit its own dispatch
-	// registry, and StartFnCompile's fnReg parameter (compiler/go/emit.go:3314)
-	// already plumbs it. Three of the four compile-side roles are solved
-	// patterns the NAMED foreign-fn path already uses — shareCheckStateFrom
-	// (check/go/check_recovery.go:527) for the CheckState, and
-	// fd.Registry.AnalysisScopeID() for the memo key, exactly as
-	// check/go/check_fnbody.go:312,513 does. The one unsolved role is CAPTURE
-	// OPERANDS: recordClosureDispatch resolves them in the CALLER's emit tables
-	// (callable_words.go:474-481) and dynScopeRescue re-resolves them at run
-	// time against the caller's curReg (eng/go/vm.go:1902), so a foreign
-	// module-scope capture has no operand home. Closing it needs either a
-	// refusal for foreign closures with non-lexical captures, or a
-	// registry-tagged dyn-scope operand so OpLookupDynScope can name
-	// fd.Registry. The context bracket is a second, smaller asymmetry:
-	// enterBodyUnit pushes/pops on the CALLING registry (vm.go:294-300) while
-	// curReg would be fd.Registry.
-	`import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]`: {why: "a fn value from another module reaches a higher-order word's closure slot; the lowering would resolve its free words in the CALLING module, so it declines and the callback-seam island owns it", failsWith: "islanded"},
+	// It was here because a fn value resolves its free words in its DEFINING
+	// module while the closure lowering compiled the body against the CALLING
+	// one, so compiling this baked the caller's `lim` (100) and returned []
+	// where the interpreter returns [3 4] — a check-clean miscompile that
+	// foreignFnHome declined into the callback seam's island.
+	//
+	// The graduation criterion written here — "compile the foreign body
+	// against fd.Registry", with shareCheckStateFrom named as the CheckState
+	// half — is exactly what landed, so this entry is worth reading as a
+	// worked example of a ledger entry that paid off. Two details it got
+	// right and one it got wrong:
+	//
+	//   RIGHT  the RUNTIME halves needed nothing (CompiledFn.Reg +
+	//          enterUnit's curReg swap), and StartFnCompile's fnReg
+	//          parameter already plumbed the compile side.
+	//   RIGHT  CAPTURE OPERANDS are the unsolved role — and more unsolved
+	//          than this entry knew. Looking a foreign body's module-scope
+	//          mutable captures up in the CALLER (which is what the code
+	//          did) compiles a closure over the WRONG cell whenever the two
+	//          modules share a name: a SIXTH silent miscompile, in NUR101's
+	//          family, found by writing the row. The lookup now uses
+	//          fd.Registry, which declines at resolveOperand instead — the
+	//          "registry-tagged dyn-scope operand" this entry named as the
+	//          alternative is what would compile it. Fence:
+	//          lang/go TestForeignClosureCaptureResolvesInItsOwnRegistry.
+	//   WRONG  it read shareCheckStateFrom as one of several solved roles
+	//          rather than as the whole remaining problem. A prototype that
+	//          threaded fd.Registry and pointed only the foreign
+	//          CheckState.Emit at the caller compiled a unit that const-
+	//          folded the predicate to `false` — the body had no carrier for
+	//          the per-element param, because the params live on the
+	//          CheckState too. Sharing the WHOLE CheckState is the fix
+	//          (check.ShareCheckStateFrom), and it is what makes the
+	//          bindings-foreign / analysis-local split work.
+	//
+	// The context bracket noted here as a second asymmetry (enterBodyUnit
+	// pushes/pops on the CALLING registry, vm.go:294-300, while curReg is
+	// fd.Registry) did not need addressing for this row; it stays recorded
+	// in case a future row reaches it.
 
 	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns —
 	// the P1.3 target — GRADUATED 2026-08-03 (completeness-review §8.2(3)/

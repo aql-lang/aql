@@ -175,8 +175,9 @@ func moduleScopeMutableCaptures(r *core.Registry, bodyToks []core.Value, existin
 // mutable-accumulator capture is: a compiled body cannot rebind a module-scope
 // name (body defs are body-local; module-mutating meta words refuse), so the
 // value threaded at OpPushClosure equals every per-run lookup the interpreter
-// makes. An unreachable carrier declines later in recordClosureDispatch (capOps
-// resolveOperand) — sound fallback.
+// makes. A carrier with no producing event in the emit tables declines later in
+// recordClosureDispatch (capOps resolveOperand) — sound fallback, and the
+// ordinary path for a FOREIGN body's captures, whose events live elsewhere.
 //
 // A concrete value still const-bakes (excluded here); a bare type node is a
 // type, never a carried instance (excluded). A Dynamic (gradual-Any) carrier is
@@ -326,7 +327,7 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	// cleanly), rides the stack at OpPushClosure, and binds a trailing unit
 	// slot in invokeClosureOn — value-identical to the interpreter's
 	// construction-time snapshot, taken at the same program point per dispatch.
-	lam, ok := lambdaHookCompatible(r, fd, inputs, shape, true)
+	lam, ok := lambdaHookCompatible(r, fd, inputs, shape, true, true)
 	if !ok {
 		return false
 	}
@@ -345,28 +346,78 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	// (already name-sorted per the CapturedBinding contract); the module-scope
 	// additions append after, and the unit binds trailing slots in this same
 	// merged order.
-	captures := moduleScopeMutableCaptures(r, lam.Body(), fd.Captured)
+	// MODULE-SCOPE mutable captures resolve where the BODY was written, so a
+	// foreign body's are looked up in its own registry — see the foreignFnHome
+	// arm below for why the two registries split.
+	capReg := r
+	if foreignFnHome(r, fd) {
+		capReg = fd.Registry
+	}
+	captures := moduleScopeMutableCaptures(capReg, lam.Body(), fd.Captured)
+	// A fn value DEFINED in another module resolves its free words THERE
+	// (design/FUNCTION-VALUE-SCOPE.0.md). Compile its body against that
+	// registry, with the CALLER's CheckState shared onto it: the split is
+	// exactly two roles the registry plays, and they go different ways.
+	//
+	//   BINDINGS  the foreign registry — `lim` inside module A's predicate
+	//             must be A's `lim`, not the importer's. StartFnCompile takes
+	//             the same registry, so rec.reg is foreign and the unit gets
+	//             CompiledFn.Reg stamped; the VM's curReg swap then resolves
+	//             the body's runtime dispatches there too.
+	//   ANALYSIS  the caller's CheckState — params, carriers and above all the
+	//             RECORDER. The unit must land in the CALLER's program, since
+	//             that is where OpPushClosure references it.
+	//
+	// Measured: without the share, the body compiles to `PUSH_CONST false;
+	// RET` — the predicate const-folds away, `filter A.big [1 2 3 4]` answers
+	// [] against the interpreter's [3 4]. With it, the body compiles to the
+	// real predicate and A's `lim` compiles as its own unit returning 2
+	// (§6.3, design/FULL-COMPILATION.0.md).
+	//
+	// ShareCheckStateFrom is the same mechanism execFnDefLiteral already uses
+	// to run a module fn's body on the importer's engine, restore contract and
+	// nesting idempotence included.
+	if foreignFnHome(r, fd) {
+		restore := check.ShareCheckStateFrom(fd.Registry, r)
+		defer restore()
+		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
+	}
 	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
 }
 
 // foreignFnHome reports whether fd is a fn VALUE that was DEFINED in another
 // module — its `Registry` is set and is not the registry being compiled.
 //
-// Such a body's free words resolve in the DEFINING module
+// It is a QUESTION about where the body's free words resolve, not a verdict.
+// Such a body resolves them in the DEFINING module
 // (design/FUNCTION-VALUE-SCOPE.0.md): that is what `execFnDefLiteral` does at
-// runtime and what the CallBoruFn / InvokeCallbackFn seams now do for every
-// native callback. A closure unit, though, is compiled against `r` — the module
-// doing the CALLING — so lowering a foreign fn's body bakes in whatever `r`
-// happens to bind for those names. The two engines then disagree: `filter
-// P.big xs` returns one answer interpreted and another compiled, with no
-// diagnostic either way.
+// runtime and what the CallBoruFn / InvokeCallbackFn seams do for every native
+// callback. Compile the body against `r` — the module doing the CALLING — and
+// it bakes in whatever `r` happens to bind for those names, so `filter P.big
+// xs` returns one answer interpreted and another compiled, with no diagnostic
+// either way. That was measured, not assumed: the caller's `lim` (100) baked in
+// and the row answered [] where the interpreter answers [3 4].
 //
-// Declining the lowering is the whole fix. The refusal falls through to the
-// runtime callback path, which runs the body on fd.Registry — the same place
-// the interpreter runs it — so the answers match. Compiling the body correctly
-// (against fd.Registry, with its own const pool and stamp registry) is the
-// larger Phase-2 change; refusing costs only the closure fast path on a
-// cross-module callback, and costs nothing at all on the common same-module one.
+// So every use of this predicate must ANSWER the question, one of two ways:
+//
+//   - COMPILE THE BODY IN ITS OWN HOME. tryRecordLambdaClosure does this for
+//     the BODY lambda: recordClosureDispatch takes fd.Registry, and the
+//     caller's CheckState is shared onto it so the recorder still writes into
+//     the calling program. See the comment at that call site for the split.
+//   - DECLINE. The refusal falls through to the runtime callback path, which
+//     runs the body on fd.Registry — the same place the interpreter runs it —
+//     so the answers match. This is what the extras/hook path does: its
+//     shared-token-shape hooks have no per-hook registry to swap to.
+//
+// The same question reaches MODULE-SCOPE MUTABLE CAPTURES, and it has the same
+// two answers. tryRecordLambdaClosure looks them up in fd.Registry for a
+// foreign body; a foreign cell then has no producing event in the CALLER's
+// emit tables, so resolveOperand declines and the call falls back. Looking
+// them up in the caller instead compiles a closure over the WRONG cell
+// whenever the two modules share a name — measured as a silent wrong answer,
+// pinned by lang/go TestForeignClosureCaptureResolvesInItsOwnRegistry.
+//
+// What is NOT allowed is to ignore the answer and compile against `r` anyway.
 // Both callers take fd from `args[i].Data.(core.FnDefInfo)` and pass its
 // address, so fd is never nil here.
 func foreignFnHome(r *core.Registry, fd *core.FnDefInfo) bool {
@@ -398,21 +449,20 @@ func foreignFnHome(r *core.Registry, fd *core.FnDefInfo) bool {
 //     a KeyVal (a Map subtype) the carrier conservatively under-types as a
 //     plain Map, so any Map-family param is accepted there and only a
 //     provably-incompatible param (a scalar, a sibling container) refuses.
-func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Value, shape core.ClosureInShape, allowCaptures bool) (*core.Signature, bool) {
-	// A fn value DEFINED in another module resolves its free words THERE
-	// (design/FUNCTION-VALUE-SCOPE.0.md); a closure unit is compiled against r,
-	// the module doing the CALLING, so lowering one would bake in whatever r
-	// binds for those names — one answer interpreted, another compiled, no
-	// diagnostic either way. Declining leaves the runtime callback seam
-	// (core.CallBoruFn) to run the body on its own registry, which is where the
-	// interpreter runs it too, so the engines agree. Compiling a foreign body
-	// correctly is the cross-registry-unit follow-up; the frontier ledger entry
-	// for the `filter A.big` row records what it takes.
+func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Value, shape core.ClosureInShape, allowCaptures, foreignOK bool) (*core.Signature, bool) {
+	// A fn value DEFINED in another module resolves its free words THERE, so a
+	// caller that cannot compile the body in that home must decline it here
+	// rather than lower it against r (foreignFnHome's header has the split).
+	// `foreignOK` is that caller's answer: the BODY-lambda path passes true
+	// because it goes on to compile against fd.Registry; the extras/hook path
+	// passes false because it has no registry to swap to, and the runtime
+	// callback seam (core.CallBoruFn) then runs the body in its own home,
+	// which is where the interpreter runs it too.
 	//
-	// This lives here rather than at the two call sites so there is ONE branch
-	// to reach and to cover: the BODY-lambda path exercises it, and the
-	// extras/hook path (walk's ascend slot) inherits it for free.
-	if foreignFnHome(r, fd) {
+	// The gate lives here rather than at the call sites so there is ONE branch
+	// to reach and to cover, and so a THIRD caller cannot be added without
+	// being asked the question.
+	if foreignFnHome(r, fd) && !foreignOK {
 		return nil, false
 	}
 	lam, ok := fd.FirstOwnSig()
@@ -485,11 +535,22 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	if !isReal || real == nil {
 		return false
 	}
+	// A capture with no producing event in THIS EmitState has no operand home,
+	// so the closure path declines and the island runs the body instead. This
+	// was carried as an unreachable defensive arm until the cross-registry
+	// closure landed (Stage 3, §6.3): a FOREIGN body's module-scope mutable
+	// captures are looked up in fd.Registry, and a foreign flex cell is
+	// produced by the foreign module's events, never the caller's — so it
+	// reaches here on the ordinary path. Declining is the RIGHT answer, not a
+	// belt: resolving that name in the caller instead compiles a closure over
+	// the caller's cell, which is a silent wrong answer whenever the two
+	// modules share the name (lang/go
+	// TestForeignClosureCaptureResolvesInItsOwnRegistry).
 	capOps := make([]EmitOperand, len(captures))
 	for i, cb := range captures {
 		op, ok := real.resolveOperand(cb.Value)
-		if !ok { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-			return false // an unreachable capture — keep the island path
+		if !ok {
+			return false
 		}
 		capOps[i] = op
 	}
@@ -516,7 +577,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 		if !insOK { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return false
 		}
-		lam, lamOK := lambdaHookCompatible(r, &fd, hookIns, hookShape, false)
+		lam, lamOK := lambdaHookCompatible(r, &fd, hookIns, hookShape, false, false)
 		if !lamOK {
 			return false
 		}

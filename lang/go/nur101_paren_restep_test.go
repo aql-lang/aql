@@ -131,6 +131,94 @@ func TestParenReStepPlacedLayoutCompiles(t *testing.T) {
 	}
 }
 
+// TestForeignClosureCompilesInItsOwnRegistry pins the cross-registry closure
+// unit (Stage 3, §6.3): a fn value from another module reaching a native
+// callback slot compiles NATIVELY and resolves its free words where it was
+// written.
+//
+// This row islanded until 2026-08-27 — one `FALLBACK` instruction for the
+// whole `filter` call, the right answer by the mechanism the mission forbids.
+// The lowering declined because compiling the body against the CALLER bakes
+// the caller's `lim` (100) and answers `[]`.
+//
+// Both halves of the fix are load-bearing, and the negative half is why this
+// test asserts the DISASSEMBLY and not just the value:
+//
+//   - compile against the DEFINING registry, so `lim` is module A's (2), and
+//     StartFnCompile stamps CompiledFn.Reg for the VM's curReg swap;
+//   - share the CALLER's CheckState onto it, so params, carriers and the
+//     recorder stay local and the unit lands in the caller's program.
+//
+// With the registry alone the body const-folds to `PUSH_CONST false; RET` —
+// a silent wrong answer. A value-only assertion would pass the day someone
+// re-islands this, so the island check is the point.
+func TestForeignClosureCompilesInItsOwnRegistry(t *testing.T) {
+	const src = `import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("foreign closure did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("foreign closure ISLANDED — the compile is the point, not the answer:\n%s", dis)
+	}
+	if !strings.Contains(dis, "PUSH_CLOSURE") {
+		t.Errorf("expected a closure unit for the foreign predicate:\n%s", dis)
+	}
+	if strings.Contains(dis, "false (Boolean)") {
+		t.Errorf("the predicate CONST-FOLDED — the caller's CheckState is not shared:\n%s", dis)
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	gotI, errI := mustNew(t).RunInterp(src)
+	if !compiled || errC != nil || errI != nil {
+		t.Fatalf("run: compiled=%v errC=%v errI=%v", compiled, errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[3 4]]" {
+		t.Errorf("compiled=%v interp=%v, want [[3 4]] on both — `lim` must be module A's 2, "+
+			"not the caller's 100 (which answers [[]])", gotC, gotI)
+	}
+}
+
+// TestForeignClosureCaptureResolvesInItsOwnRegistry is the negative half of
+// the cross-registry closure unit, and it caught a SIXTH silent miscompile in
+// the same family as NUR101's five.
+//
+// A foreign body's MODULE-SCOPE mutable captures — a flex cell, a class
+// instance, anything moduleScopeMutableCaptures rides as a closure slot — must
+// be looked up in the registry that WROTE the body, exactly like its free
+// words. Look them up in the CALLER and a name collision silently swaps the
+// cell: here both modules bind `acc`, module A's holds three elements and the
+// caller's is empty, so the predicate keeps only 4 interpreted and everything
+// compiled.
+//
+// Measured, on a build with the lookup against the caller:
+//
+//	compiled [[1 2 3 4]]   interpreted [[4]]
+//	0007 PUSH_CLOSURE f0   ; closure filter$body/2   <- capturing l0, the
+//	                                                    CALLER's flex cell
+//
+// With the lookup in fd.Registry the capture is module A's cell, which has no
+// producing event in the CALLER's emit tables, so resolveOperand declines and
+// the call falls back — sound, and the answers agree. Compiling it needs a
+// registry-tagged operand for a foreign module-scope instance (the follow-up
+// the frontier ledger names); the fence here is parity, which holds either way.
+func TestForeignClosureCaptureResolvesInItsOwnRegistry(t *testing.T) {
+	const src = `import module [def acc (flex [1 2 3]) def big fn [[e:Map] [Boolean] [(size acc) lt (e dot value)]] export "A" {big: big/v}] end def acc (flex []) filter A.big [1 2 3 4]`
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	gotI, errI := mustNew(t).RunInterp(src)
+	if !compiled || errC != nil || errI != nil {
+		t.Fatalf("run: compiled=%v errC=%v errI=%v", compiled, errC, errI)
+	}
+	if fmt.Sprint(gotI) != "[[4]]" {
+		t.Fatalf("interpreter answered %v, want [[4]] — the oracle moved, re-derive this fence", gotI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("compiled=%v interp=%v — the closure captured the CALLER's `acc` (empty) "+
+			"instead of module A's (3 elements); moduleScopeMutableCaptures must be looked "+
+			"up in fd.Registry for a foreign body", gotC, gotI)
+	}
+}
+
 // TestParenReStepListElementRefusal pins the one shape in the rule table that
 // the compiler REFUSES rather than answers, and why the refusal is not the
 // lazy reading.
