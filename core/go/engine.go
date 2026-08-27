@@ -7335,6 +7335,22 @@ func (e *Engine) stepPastOpenParen(val Value) {
 // the possibly-shrunk closeIdx (args spliced out).
 func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeIdx int) int {
 	fnVal := e.Tape.At(first)
+	// A paren that PLACED this fn did not leave a pending call for the paren
+	// to bound (NUR101, ruled 2026-08-26). Recording an apply here is how
+	// `((tbl get k) 5)` came to answer 10 compiled against a placed
+	// `fn (Integer) 5` interpreted: `tbl get k` carries member-read
+	// provenance, so the window modelled a method apply even though the
+	// collapse had already placed the value as data.
+	//
+	// This is the THIRD path that had to learn the ruling, and the one the
+	// other two do not cover: the residual lowering never runs for this shape
+	// and neither stepCloseParen apply site fires — the program lowers to
+	// CALL_DYN_METHOD from here instead. Refuse rather than record; the
+	// fallback then answers exactly as the interpreter does.
+	if cs := e.Registry.Check; cs != nil && fnVal.ID != "" && cs.ParenPlacedFnIDs[fnVal.ID] {
+		es.MarkUncompilable("paren-placed fn value is data, not a pending apply")
+		return closeIdx
+	}
 	if !es.MemberFnRead(fnVal.ID) {
 		es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
 		return closeIdx
