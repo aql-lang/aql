@@ -1374,6 +1374,13 @@ func parenPlacedFnCarrier(e *core.Engine, idx int) bool {
 		recordParenPlacedFn(r, v.ID)
 		return true
 	}
+	// …and a DYNAMIC value the checker cannot prove non-callable. The park
+	// treats it as placed (see fnReturnPark's maybeFn arm), so the compiler
+	// has to learn the same fact or the two ends disagree about the shape.
+	if v.Dynamic && core.SigTypeMatches(v, core.TFunction) {
+		recordParenPlacedFn(r, v.ID)
+		return true
+	}
 	if _, ok := es.MemberFnReadValue(v.ID); !ok {
 		return false
 	}

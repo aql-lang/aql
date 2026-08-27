@@ -6103,7 +6103,24 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 		// compiler most needs to know about was the one case never recorded,
 		// so `((mk 1) 2)` placed interpreted and applied compiled (NUR101).
 		placed := CheckBraid.ParenPlacedFnCarrier(e, idx)
-		if IsFnTypedCarrier(v) || placed {
+		// A DYNAMIC value whose static bound does not exclude Function parks
+		// too. At run time the interpreter holds the concrete value and parks
+		// through fnValueDispatchesAtPointer above; the check pass holds
+		// dynamic(Any) and cannot prove callability, so without this arm no
+		// park claims it, the pass models an apply, and the compiler bakes
+		// one — `((tbl get k) 5)` answering 10 compiled against a placed
+		// `fn (Integer) 5` interpreted (NUR101, frontier-hof-audit:72).
+		//
+		// Parking a MAYBE-callable is the sound direction, and the asymmetry
+		// is the point: placing a value that turns out non-callable costs
+		// nothing, because a non-callable value sitting before other args
+		// just sits there — exactly what the unparked path would have left.
+		// Applying one that turns out callable is a wrong answer. The
+		// not-disjoint-against-Function test is the same rule the residual
+		// lowering's auto-dispatch guard already uses, so both ends agree on
+		// what "might be callable" means.
+		maybeFn := v.Dynamic && SigTypeMatches(v, TFunction)
+		if IsFnTypedCarrier(v) || placed || maybeFn {
 			return 1
 		}
 	}
