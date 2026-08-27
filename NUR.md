@@ -89,6 +89,8 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
+| [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR106](#nur106) | Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compares the compiled lane against itself and passes unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
 | [NUR107](#nur107) | A type-mismatched callee under a leading one-arg apply diverges: `ld ([k:String] => [k]) 14` raises `signature_error` interpreted and returns `[fn (String) 14]` compiled. `TestLeadApplyNoMatchTwoReturnParity` pinned it as NON-reproducing on 2026-08-03 — against the vacuous oracle of NUR106 | the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
@@ -242,6 +244,83 @@ maintainer's to direct.
 
 ---
 
+## NUR108 — the compiled lane's diagnostics point somewhere else {#nur108}
+
+**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** completing
+the NUR106 oracle sweep
+
+**Rule:** the two lanes agree on errors, and a diagnostic's POSITION is part
+of the error — it is the half a user reads first.
+
+**Divergence:** the code and the message match exactly; the position does not,
+in two different ways.
+
+```
+def f fn [[x:Integer] [Integer] [def v:(Integer gt 10) x v]] f 5
+
+compiled → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
+           --> source position unknown
+interp   → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
+           --> 1:34   …with the `def v` underlined
+```
+
+```
+def x:(Integer gt 10) 5 x
+
+compiled → --> 1:23   …pointing at the VALUE
+interp   → --> 1:1    …pointing at the `def`
+```
+
+The first is a LOSS — `BIND_TYPED`'s validate failure carries no position at
+all, so the renderer falls back to "source position unknown". The second is a
+DISAGREEMENT: the terminal trap fires at the value it rejected, the
+interpreter blames the binding.
+
+**Not cosmetic.** A user who compiles and a user who interprets get different
+answers to "where do I look", and the first gets none. It also makes every
+error-parity assertion that compares `err.Error()` — the rendered form,
+position folded in — untrustworthy as a lane comparison, which is how this
+stayed invisible under NUR106's vacuous oracle.
+
+**Verdict: resolve by fix.** `BIND_TYPED` must carry the def's position into
+its raise; the trap should blame the same token the interpreter does. Pinned
+meanwhile in `TestTypedDefBindCompiles`, which now compares Code and Detail
+and fences the position gap explicitly, so closing it fails the fence.
+
+---
+
+## NUR109 — an unbound parser name is two different errors {#nur109}
+
+**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** completing
+the NUR106 oracle sweep
+
+**Rule:** the two lanes raise the same taxonomy for the same program.
+
+**Divergence:** `parse op 'inc'`, where `op` was bound only inside a branch
+that did not run —
+
+```
+compiled → [boru/parse_error]: parse: the parser is not a usable function value
+interp   → [boru/parse_unknown_lang]: parse: no parser "op" is registered
+```
+
+**The compiled answer is the specified one**, and the test that hid this says
+so in its own header: *"a def-scoped parser value has no 'missing kind' — only
+an unusable value, and the two engines must agree on it."* The interpreter
+still falls back to the kind-name miss, because an unbound def-scoped name is
+indistinguishable to it from an unregistered kind.
+
+`TestParseFnDispatchMissParity` asserted both lanes raised `parse_error` and
+read its interp side from `Run` — the compiled lane (NUR106) — so it compared
+`parse_error` to itself.
+
+**Verdict: resolve by fix, interpreter-side.** The interpreter needs the same
+distinction the compiled dispatch already makes: a name that resolved to a
+value which is not a usable parser is not a missing kind. Pinned as measured
+meanwhile.
+
+---
+
 ## NUR106 — the parity harness stopped comparing lanes, and stayed green {#nur106}
 
 **Status:** Pending (verdict: resolve by fix — the sweep landed; the guard has
@@ -276,13 +355,23 @@ into a green check, and the greenness is itself the evidence people cite. The
 75 sites were all in the files most specifically about fn-value compilation —
 the harness failed hardest exactly where it was most needed.
 
-**Verdict: resolve by fix.** The mechanical sweep (`gotI…Run(` →
-`…RunInterp(`) landed with this record and surfaced NUR107 immediately. What
-is NOT yet done is the guard that stops it recurring: nothing prevents the
-next Run-like flip from stranding its oracle uses again. Candidates, cheapest
-first — rename the oracle in test helpers to a single `interpOracle(t, src)`
-so there is one site to flip; or a lint/vet rule rejecting `.Run(` in a file
-that also calls `RunCompiled`.
+**Verdict: resolve by fix.** The mechanical sweep landed with this record and
+surfaced NUR107 immediately.
+
+**The first pass of that sweep was itself incomplete, and a review bot caught
+it** — which is the register's own point made twice. The pattern used
+(`gotI…Run(` → `…RunInterp(`) keyed on ONE naming convention and missed
+`errI`, `eI`, `gi`/`ei` and an effect-parity closure, leaving 21 assertions
+still comparing the compiled lane to itself in the same files. Completing it
+surfaced NUR108 and NUR109. A convention-keyed sweep is not a sweep; the
+audit that finds the last one is "every `.Run(` in a file that also calls
+`RunCompiled`, read individually".
+
+What is NOT yet done is the guard that stops it recurring: nothing prevents
+the next Run-like flip from stranding its oracle uses again. Candidates,
+cheapest first — rename the oracle in test helpers to a single
+`interpOracle(t, src)` so there is one site to flip; or a lint/vet rule
+rejecting `.Run(` in a file that also calls `RunCompiled`.
 
 ---
 

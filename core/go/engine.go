@@ -5992,24 +5992,29 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // land: 1 when the value the rewind would re-step is an unquoted Function, 0
 // otherwise.
 //
-// NUR101, ruled 2026-08-26 — PLACE UNIFORMLY. This used to require the paren
-// to have collapsed to EXACTLY ONE survivor (`closeIdx == idx+2`), which is
-// what made placement depend on enclosing context: `(inc/v) 7` placed at top
-// level, while `((inc/v) 7)` dispatched, because the outer paren had two
-// survivors and so declined the park — its rewind then landed ON the
-// Function and re-stepped it into a call. A list literal inherited the
-// wrapped form, which is where the silent lane divergence came from
-// (`[((mk 1) 2)]` was `[3]` interpreted and `[fn (Integer) 2]` compiled).
+// THE SURVIVOR COUNT IS THE QUESTION, and `closeIdx == idx+2` is how it is
+// asked. NUR101's 2026-08-26 "place uniformly" ruling was first implemented by
+// DELETING that clause, on the reasoning that whether the rewind re-steps a
+// Function is a property of the value alone and not of how many values sit
+// beside it. Measured 2026-08-27, that is false: with more than one survivor
+// the park must DECLINE, because the rewind then lands ON the leading value
+// and stepLiteral dispatches it — which is the whole of
+// `(x:Integer => [x mul 2] 5)` being 10. Deleting the clause made that program
+// `fn (Integer) 5` and broke seven suites. Do not remove it again
+// (design/PAREN-RESTEP-RULE.0.md; TestFnReturnPark's more-than-one-survivor
+// row pins it).
 //
-// The survivor count was never the right question. Whether the rewind
-// re-steps a Function INTO A CALL is a property of the value at the rewind
-// position, not of how many values happen to sit beside it, so the count
-// clause is gone and the value test decides alone. Measured before the fix:
-// all four kinds — a `/v` reference, `valof`, a computed result and an
-// inline literal — placed at top level and dispatched inside a group, so
-// this was never about computed results specifically, as the register's
-// first framing had it. A paren places its value on the forward stack and never re-steps
-// it — reference and inline literal alike (NUR073's BROAD verdict, maintainer
+// So placement is the ONE-survivor case, and the enclosing group is a SECOND
+// decision taken one paren out — not a context that modifies this one.
+// `(inc/v) 7` places while `((inc/v) 7)` is 8, and both are this function
+// answering correctly at two different parens: the inner collapse has one
+// survivor and parks, the outer has two and declines. recordParenReStep, called
+// by stepCloseParen right after this, records that second decision for the
+// compiler, which sees the identical residual for both spellings and cannot
+// otherwise tell them apart.
+//
+// A paren places its value on the forward stack and never re-steps it —
+// reference and inline literal alike (NUR073's BROAD verdict, maintainer
 // clause 3, 2026-08-17: "parens do not re-step; they place a value or values
 // on the forward stack") — so stepCloseParen's rewind must step PAST that
 // value rather than re-step it into a call

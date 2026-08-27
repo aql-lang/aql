@@ -83,16 +83,25 @@ Stage J flipped `lang.Run` from the tree-walking interpreter to the
 COMPILED path with an interpreter fallback on refusal. `RunInterp` is the
 oracle; `Run` is not one any more.
 
-**75 parity assertions across 5 files still read `gotI, _ := …Run(src)`** and
-compare it against `RunCompiled`. Every one of them compares the compiled
-lane against itself and passes unconditionally. `TestFactoryApplyCompiles`
-is the clean example: it asserts `(mk2 5) 10` is `[11]` on "both lanes",
-and the interpreter has never answered `11` for that program.
+**96 parity assertions across 5 files still read `…Run(src)`** and compare it
+against `RunCompiled`. Every one of them compares the compiled lane against
+itself and passes unconditionally. `TestFactoryApplyCompiles` is the clean
+example: it asserts `(mk2 5) 10` is `[11]` on "both lanes", and the
+interpreter has never answered `11` for that program.
 
 This is the finding that matters most. A parity harness that silently stops
 comparing lanes is worse than no harness: it converts a whole class of
 divergence into a green check. Any future flip of a Run-like entry point
 must be accompanied by a mechanical sweep of its oracle uses.
+
+**And the first pass of that sweep was itself incomplete** — a review bot
+caught it, which is the same lesson twice. The pattern used keyed on ONE
+naming convention (`gotI`) and missed `errI`, `eI`, `gi`/`ei` and an
+effect-parity closure: 21 assertions in the same files kept comparing the
+compiled lane to itself. A convention-keyed sweep is not a sweep. The audit
+that finds the last one is "every `.Run(` in a file that also calls
+`RunCompiled`, read individually". Completing it surfaced two more
+divergences (NUR108, NUR109) on top of NUR107.
 
 ## 5. What landed here
 
@@ -166,10 +175,22 @@ Stage 3's universal fn values plus the Apply kernel. When it lands,
 parity rows, and the `ParenReSteppedFnIDs` side table can retire in favour of
 the recorded event.
 
-## 7. Two records this opened
+## 7. Four records this opened
 
-- **NUR106** — the vacuous parity harness (§4). The mechanical sweep landed;
-  the guard that stops it recurring has not.
-- **NUR107** — a type-mismatched callee raises interpreted and returns data
-  compiled. Surfaced by the sweep, on the very test that had pinned that claim
-  as non-reproducing. VM-side fix, its own increment.
+- **NUR106** — the vacuous parity harness (§4). The sweep landed; the guard
+  that stops it recurring has not.
+- **NUR107** — a callee no overload of which matches raises `signature_error`
+  interpreted and returns data compiled. Surfaced by the sweep, on the very
+  test that had pinned that claim as non-reproducing. VM-side fix, its own
+  increment.
+- **NUR108** — the compiled lane's diagnostics point somewhere else: a
+  `BIND_TYPED` validate failure carries no position at all, and a
+  statically-failing typed-def trap blames the value where the interpreter
+  blames the `def`. Same code, same message.
+- **NUR109** — `parse` over an unbound def-scoped parser name is `parse_error`
+  compiled and `parse_unknown_lang` interpreted. The compiled answer is the
+  specified one; the interpreter still falls back to the kind-name miss.
+
+All three divergences are error-lane, and all three were behind NUR106. That
+is the pattern worth carrying forward: the oracle hole was in the files most
+specifically about the lane it hid.

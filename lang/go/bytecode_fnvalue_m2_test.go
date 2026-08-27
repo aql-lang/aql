@@ -187,7 +187,7 @@ func TestLogRegisterSinkCompiles(t *testing.T) {
 	{
 		src := `import "boru:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q`
 		_, compiled, errC := mustNew(t).RunCompiled(src)
-		_, errI := mustNew(t).Run(src)
+		_, errI := mustNew(t).RunInterp(src)
 		if !compiled {
 			t.Errorf("register duplicate: did not run compiled")
 		}
