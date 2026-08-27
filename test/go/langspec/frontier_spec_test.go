@@ -431,18 +431,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// EmitState.RecordCallOperands. Graduation = a compiled representation
 	// for a function value as an operand (the Stage-3 fn-value work); the
 	// rows then move to compare-restrict.tsv and fn-value.tsv.
-	`def f fn x:Integer [Integer] [x add 1] f/v eq f/v`:                                         {why: "NUR031: a function is reflexively eq", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/v deq f/v`:                                        {why: "NUR031: …and reflexively deq — ADR-015's prerequisite for the kind", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/v) def b (f/v) a/v eq b/v`:                 {why: "NUR031: two names for one function are eq — identity survives rebinding", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/v) a/v eq f/v`:                             {why: "NUR031: …and eq to the function they were reached from", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v eq g/v`:  {why: "NUR031: identical content is NOT eq — eq is identity", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v deq g/v`: {why: "NUR031: …but it IS deq — deq is content", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/v deq h/v`: {why: "NUR031: a different body is a different value", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/v deq s/v`:         {why: "NUR031: a different signature likewise", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] canon (f/v)`:                                        {why: "NUR031: canon renders the anonymous fn literal — no binding name", failsWith: "function value reaches canon (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/v) (canon (a/v)) eq (canon (f/v))`:         {why: "NUR031: one function under two names has ONE canon", failsWith: "function value reaches canon (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/v eq 1`:                                           {why: "NUR031: cross-type eq is false, never an error", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/v deq 1`:                                          {why: "NUR031: cross-type deq likewise", failsWith: "function value reaches deq (Stage 3)"},
 	// The namespace rows refuse for the MODULE-synthetic reason above, not
 	// the fn-value one: a namespace binding has no bakeable operand home.
 	`import "boru:io" IO deq IO`:                          {why: "NUR031: a function-exporting namespace is deq-reflexive — the record's acceptance signal", failsWith: "operand of unknown provenance"},

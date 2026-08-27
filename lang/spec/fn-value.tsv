@@ -172,3 +172,13 @@ def chain fn [[a:Function b:Function s:Integer][Integer][def r1 (a s) def r2 (b 
 #     commitment (pins: lang/go/bytecode_poly_join_test.go).
 def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 5)	1	differing arm returns: Integer arm selected at runtime
 def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 'x')	's'	differing arm returns: String arm selected at runtime
+#
+# §10 canon over a fn value — content, name-independent (NUR031).
+#     GRADUATED 2026-08-27 (Stage 3) out of
+#     lang/spec/frontier/frontier-nur031-fn-eq.tsv. `canon` only READS a
+#     fn value's content, never invokes it, so it declares CompileReadsFn
+#     and the value rides as an ordinary const operand. That
+#     name-independence is what deq rides on: the binding a function was
+#     reached through is not part of what it is.
+def f fn x:Integer [Integer] [x add 1] canon (f/v)	'fn [[x:Integer][Integer][word(x) word(add) 1]]'	canon renders the anonymous fn literal — no `fn f`, because the name is how it was reached
+def f fn x:Integer [Integer] [x add 1] def a (f/v) (canon (a/v)) eq (canon (f/v))	true	so one function under two names has ONE canon — the name-independence deq rides on

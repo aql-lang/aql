@@ -99,7 +99,7 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | Family | Rows | Essence |
 |---|---:|---|
 | A. Computed-fn / closure provenance | 45 | fn values whose shape the checker cannot know: Church/SKI/CPS chains, `FnUtil` results, computed closures at argument slots, curried chains |
-| B. Fn value as data operand (Stage 3) | 22 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped |
+| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The rest are `is` against a predicate type, which really does invoke |
 | C. Multi-dynamic-result residual | 11 | two dynamic results live at once; the static seat model cannot address them |
 | D. Provenance totalization | 13 | operands with no producing event: `$module`/namespace synthetics, cross-registry captures |
 | E. Check-diagnostics sentinel | 8 | the checker rejects programs the interpreter runs (`lang/go/boru.go:459-472`) |
@@ -1151,6 +1151,32 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   de-facto spec: compiled closures must reproduce it, and any future
   closure caching/sharing (Keep, Hearn & Dybvig, Scheme Workshop 2012)
   requires a Lua-5.2-style spec loosening *first* (§11, O3).
+
+  **LANDED 2026-08-27 for `eq`/`neq`/`deq`/`canon`, and it did NOT need the
+  universal representation.** The premise held — those words only read —
+  but the conclusion attached the graduation to work that turned out to be
+  unnecessary for it. `RecordCallOperands` refuses a fn-valued operand at
+  any word that has not declared what it does with one; `eq`/`neq`/`deq`/
+  `canon` had simply never declared. They now carry `CompileReadsFn`, the
+  fn rides as an ordinary const operand, and twelve ledger rows graduated
+  into `lang/spec/compare-restrict.tsv` and `lang/spec/fn-value.tsv` §10.
+
+  The fact that makes it sound was measured, not assumed: **the identity
+  token survives the const bake.** `FnDefInfo.ident` is a pointer minted
+  once per authored function and copied by value, so an interned const
+  carries it — `f/v eq g/v` is false for two identically-bodied functions
+  and `a/v eq b/v` is true for two bindings of one, on both lanes. The
+  graduated negatives pin both directions, plus rebinding, a container
+  read, and callability after a comparison.
+
+  **What this says about the family-B count.** Of §2.1's 22 rows, 12 were
+  a missing declaration, not a representational gap. The remaining 8 are
+  `is` against a predicate type, and those are genuinely this section's:
+  `is`'s TYPE slot INVOKES the predicate through `RunPredicate` →
+  `CallBoru` (its value slot is already `FnInertArgs`), so they need the
+  predicate-body-as-unit work below, not a flag. Before attributing a
+  refusal family to a representational change, check whether the word has
+  merely failed to say what it does.
 - **Partial applications as data**: `curryOrStack`'s curry list gets a
   compiled twin — a curried value is `(base fn, held args)`, applied by the
   shared apply; no per-composition codegen (Factor's `curried`/`composed`

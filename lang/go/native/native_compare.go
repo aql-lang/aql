@@ -139,6 +139,7 @@ var comparisonNatives = []NativeFunc{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(core.EqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
+			CompileEffect: CompileReadsFn, // reads a fn value's identity/content, never invokes it
 		}},
 	},
 	{
@@ -149,6 +150,7 @@ var comparisonNatives = []NativeFunc{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(core.NeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
+			CompileEffect: CompileReadsFn, // reads a fn value's identity/content, never invokes it
 		}},
 	},
 	{
@@ -159,6 +161,7 @@ var comparisonNatives = []NativeFunc{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(core.DeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
+			CompileEffect: CompileReadsFn, // reads a fn value's identity/content, never invokes it
 		}},
 	},
 }
