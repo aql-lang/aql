@@ -7347,11 +7347,16 @@ func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeI
 	// and neither stepCloseParen apply site fires — the program lowers to
 	// CALL_DYN_METHOD from here instead. Refuse rather than record; the
 	// fallback then answers exactly as the interpreter does.
-	if cs := e.Registry.Check; cs != nil && fnVal.ID != "" && cs.ParenPlacedFnIDs[fnVal.ID] {
-		es.MarkUncompilable("paren-placed fn value is data, not a pending apply")
-		return closeIdx
+	placed := false
+	if cs := e.Registry.Check; cs != nil && fnVal.ID != "" {
+		placed = cs.ParenPlacedFnIDs[fnVal.ID]
 	}
-	if !es.MemberFnRead(fnVal.ID) {
+	// Folded into the EXISTING refusal rather than given its own: the
+	// refusal-site census only ever falls (refusal_site_census_test.go), so a
+	// new MarkUncompilable call is a ratchet regression even when the reason
+	// is genuinely new. The declines are the same decline — this window does
+	// not model the apply — so they share a site.
+	if placed || !es.MemberFnRead(fnVal.ID) {
 		es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
 		return closeIdx
 	}
