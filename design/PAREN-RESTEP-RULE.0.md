@@ -163,17 +163,37 @@ either agrees with `RunInterp` or refuses — it never answers differently.
 
 ## 6. Graduation
 
-Four shapes refuse where the interpreter answers, and they are the same
-shape in four positions: a paren-bounded carrier apply whose result is
-consumed somewhere the residual lowering does not reach — a list element, an
-`if` arm, or an un-rewound program residual that must stay placed.
+**Two graduated 2026-08-27 with Stage 3's first increment, and the mechanism
+is not the one this section predicted.** The refusals were called "the same
+shape in four positions". They are two different questions, and only one of
+them needed the Apply kernel:
 
-Recording the apply itself (rather than refusing) needs `RecordDynApply` to
-admit an EVENT lead, which `DynApplyLeadEligible` declines today. That is
-Stage 3's universal fn values plus the Apply kernel. When it lands,
-`TestParenReStepListElementRefusal` and the `nur101Refusal` fences graduate to
-parity rows, and the `ParenReSteppedFnIDs` side table can retire in favour of
-the recorded event.
+- **A LAYOUT question** — will anything re-step this value where it now
+  sits? At a program residual, no, and the records already prove it.
+  `placedNotReStepped` (`compiler/go/emit.go`) lets the residual refusal loop
+  skip such a value and simply lay it out, where before it refused, reading
+  the ABSENCE of a record as evidence of a hazard. `(inc/v) 7` and
+  `(tbl get k) 5` compile natively on that alone, and
+  `frontier-nur038-seal.tsv`'s explicit-paren row graduated into
+  `lang/spec/fn-value.tsv` §6 with them. A CONCRETE fn value joined the
+  record as its fourth placement shape for this reader; the two apply arms
+  gate on `Carrier` and `Dynamic` respectively and never see one, so the
+  widening was layout-only.
+- **A RENDERING question** — `(mk 1) 2` and `(mk2 5) 10` still refuse, now
+  saying so precisely: "unconsumed fn-value carrier in residual (closure
+  render)". A VM closure does not render like the interpreter's `FnDefInfo`.
+  That is §6.3's universal fn value, and it is Stage 3's real dependency.
+
+The two remaining arm/list shapes (`if true [(mk 1) 2]`, `[((mk 1) 2)]`) need
+the apply RECORDED rather than skipped, which needs `RecordDynApply` to admit
+an EVENT lead — `DynApplyLeadEligible` declines it today. When that lands,
+`TestParenReStepListElementRefusal` graduates to a parity row and
+`ParenReSteppedFnIDs` can retire in favour of the recorded event.
+
+The ratchet for what already graduated is
+`TestParenReStepPlacedLayoutCompiles`, pinned POSITIVE on purpose: the rule
+test tolerates refusals by design, which is what makes it safe to extend and
+useless for catching a regression back to one.
 
 ## 7. Four records this opened
 

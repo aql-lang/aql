@@ -6058,6 +6058,18 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 		return 0
 	}
 	if fnValueDispatchesAtPointer(v) {
+		// Record the placement here too. This arm catches the value the CHECK
+		// pass folded to a concrete Function — an inert `/v` reference, a
+		// `valof`, an inline literal — and it returns before the carrier arm
+		// below ever asks the braid, so without this the residual layout never
+		// learns the lead was placed and refuses `(inc/v) 7` against its own
+		// interpreted answer of `fn inc(Integer) 7`.
+		//
+		// Reach groups are excluded above, so reaching here proves a USER
+		// paren. The record is read by placedNotReStepped (compiler/go/emit.go),
+		// which needs BOTH halves of the pair — placed here, re-stepped by
+		// recordParenReStep — to prove nothing downstream applies the value.
+		CheckBraid.ParenPlacedFnCarrier(e, idx)
 		return 1
 	}
 	// The CHECK pass's twin of the same decision. Where the interpreter

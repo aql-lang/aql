@@ -1064,15 +1064,38 @@ Its contract implements the application model that NUR101 established:
 - **Anonymous/event value in value position**: data unless applied by the
   placement rules; a named Go-impl fn value stays data. Lowering: push; the
   descriptor's placement facts decide.
-- **Computed groups** (`(mk 1) 2`): the spec (ADR BROAD, `ADR.md:235-248`)
-  says the group *places* its collapsed Function — and here the compiled
-  lane is already the specified one; the **interpreter** is wrong
-  (`NUR.md:285-286` — "fixing the placement rule fixes the divergence with
-  it, and no compiler change is wanted"). Graduating family J (and parts of A) therefore requires
-  interpreter fixes to the ruled semantics; the parity oracle for those
-  rows is *the ruling*, not the current interpreter output. The doc-level
-  consequence: T3's oracle is "the interpreter once NUR101/NUR078 land",
-  and those NURs sequence *before* the affected G-lane admissions (§10).
+- **Computed groups** (`(mk 1) 2`): **CORRECTED 2026-08-27 — this bullet
+  had it backwards in both halves, and the correction is load-bearing for
+  the rest of the stage.** It read: the compiled lane is already the
+  specified one, the interpreter is wrong, and "no compiler change is
+  wanted". Measured against `RunInterp`, the interpreter was right and the
+  compiler carried FIVE silent miscompiles, in both directions
+  (design/PAREN-RESTEP-RULE.0.md). NUR101 was fixed compiler-side only, and
+  the interpreter ended that work byte-identical to where it started.
+
+  The rule, and Apply must implement it exactly: a Function a paren PLACED
+  is re-stepped into a CALL exactly when it leads **two or more survivors**
+  of an enclosing group that closes with a paren rewind — a user paren, an
+  fn frame, or an `if` / `for` / `do` body. The program top level, list
+  literals and map literals do not rewind. So `(mk 1) 2` places
+  (`fn (Integer) 2`) and `((mk 1) 2)` applies (`3`); placement is the
+  one-survivor case, and the enclosing group is a SECOND decision taken one
+  paren out, not a context that modifies the first.
+
+  The two decisions are recorded at the collapse — `ParenPlacedFnIDs` and
+  `ParenReSteppedFnIDs` (`core/go/check_state.go`) — because the paren
+  structure is erased before the residual lowering runs, which is why
+  `resolveDynamicApply` had to guess and guessed wrong both ways. **Apply
+  inherits that constraint**: it cannot re-derive place-vs-call from the
+  residual it is handed, so the descriptor must carry the fact. Four shapes
+  refuse today for exactly this reason (a paren-bounded carrier apply
+  consumed where the residual lowering does not reach), and they are this
+  stage's to graduate: `RecordDynApply` must admit an EVENT lead, which
+  `DynApplyLeadEligible` declines.
+
+  The doc-level consequence, also corrected: T3's oracle is **the
+  interpreter as it is**, not "the interpreter once NUR101 lands". Family J
+  and the affected parts of A need no interpreter change to graduate.
 - **Curried chains stage**: each application step is its own Apply event
   (the intermediate closure is a first-class value), eliminating
   "miscompile mechanism E" (`emit.go:7067-7076`) structurally.
@@ -1733,7 +1756,7 @@ universe closes alongside).
 | **0** | Adopt the declaration triple (COMPILE-DECLARATION-MODEL Stages 0–2: delete the dead flag, introduce `{tapeBound, needs, env}` under C1–C4, assert over every signature) | 0 rows; produces the §6.8 handler worklist | low |
 | **1** | Instrument: engine-entry census + defer census + refusal-reason census; declare the observable alphabet for T3 | 0 rows; makes T2 measurable | low |
 | **2** | **Extract the collection kernel** (§6.2): factor the THREE collection loops over the shared window+evaluator interface and re-seat the Engine on them — **three separate re-seats, landing separately**, since the differential cannot say which one broke otherwise. Gate: full differential green, allocation ceilings unmoved, CPU-profile share unmoved (NOT wall clock — see F1b) | 0 rows; unblocks everything | **high** — F1 · **Engine side LANDED 2026-08-26** in three commits; §6.2 records what each re-seat cost and where the third one corrected this note. **Gate discharged**: full differential green, allocation ceilings unmoved, merged `cover-gate` 100.0%, and CPU-profile share unmoved (F1b, §11 — every anchor within ±0.18pp against ±0.9–3.0 spread). The second adapter is Stage 4's, by the `cover-gate-core` inversion below |
-| **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included) + interpreter-side NUR101/NUR078 fixes to the ruled semantics; retire `OpCallDynFrame`/`callDynamic` islands onto Apply | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` lands with §6.3's registry-tagged captures here, the full-stack-in-body row with Stage 4's descriptor folds) | medium |
+| **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included); retire `OpCallDynFrame`/`callDynamic` islands onto Apply. **NUR101's half of the interpreter-fix precondition is discharged and was never an interpreter fix**: measured 2026-08-27, the interpreter was already correct and the compiler carried five miscompiles (§6.4, design/PAREN-RESTEP-RULE.0.md). What remains of O1 is NUR078 alone. Also inherited from that work: four refusals whose graduation IS this stage — `DynApplyLeadEligible` must admit an EVENT lead — and three error-lane divergences pinned as measured (NUR107/108/109) that Apply's error contract has to settle | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` lands with §6.3's registry-tagged captures here, the full-stack-in-body row with Stage 4's descriptor folds) | medium |
 | **4** | Statement descriptors + `OpCollect`/`OpDispatchGeneric` (§6.2, §6.5) + bind twins; recorder step-6 flips from refuse to generic for word dispatch; delete drift-window islanding | F (5), L (1), K (1), most unledgered dispatch gates, §9d | medium |
 | **5** | Production-order regions + generalized marks (§6.6) | C (11), D (13), I (5) | medium |
 | **6** | Handler migration per the triple (§6.8): units-not-tokens, `while` lowering, per-region DynEnv, `args`/`__pa`/`context` frames | H (6), context/tape-bound gate families | medium — wide but enumerable |
@@ -1771,9 +1794,35 @@ land. T1 is a Stage-9 property, not a rolling one.
 
 ## 11. Open questions (O) and what would falsify this (F)
 
-**O1 — NUR101/NUR078 interpreter fixes.** Stage 3 depends on interpreter
-changes to ruled-but-unimplemented semantics. If those rulings are
-re-litigated, the affected rows' oracle is undefined and Stage 3 stalls.
+**O1 — NUR101/NUR078 interpreter fixes. HALF CLOSED 2026-08-27, and the
+way it closed is the finding.** This asked whether Stage 3's oracle was
+safe, on the premise that both NURs needed interpreter changes to
+ruled-but-unimplemented semantics.
+
+NUR101 needed none. Measured against `RunInterp`, the interpreter already
+implemented the ruled rule and the COMPILER carried five silent
+miscompiles, in both directions — the register, this document's §6.4, and
+the ruling built on them all had it backwards. The first implementation of
+the ruling as written deleted `fnReturnPark`'s survivor-count clause and
+broke seven suites; the clause was restored and the fix landed
+compiler-side only (design/PAREN-RESTEP-RULE.0.md).
+
+Two lessons carry into the remaining stages, both cheap and both
+non-optional:
+
+1. **Measure the oracle before building on a claim about it.** Every
+   statement in this document of the form "the compiled lane is already
+   the specified one" is a hypothesis until run against `RunInterp`.
+2. **`RunInterp` is the oracle, and only `RunInterp`.** Stage J flipped
+   `lang.Run` to the compiled path; 96 parity assertions across five files
+   went on reading it as their interpreter side, comparing the compiler
+   against itself and passing unconditionally (NUR106). That hole is what
+   let the five miscompiles sit under a 100%-covered suite. It is swept,
+   but nothing yet prevents the next Run-like flip from re-opening it.
+
+What remains of O1 is **NUR078 alone** — and its own record notes the
+ruling as written names `/r`, a modifier ADR-011 collapsed into `/v`, so
+it needs re-spelling before it can be implemented as amended.
 
 **O2 — the step budget.** Totality makes the per-instruction metering the
 only live metering. Ruling needed: keep the documented one-directional

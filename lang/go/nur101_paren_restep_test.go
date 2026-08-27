@@ -92,6 +92,45 @@ func TestParenReStepRule(t *testing.T) {
 	}
 }
 
+// TestParenReStepPlacedLayoutCompiles ratchets what the placed record BUYS,
+// not just what it prevents. A residual whose lead a user paren placed and no
+// enclosing paren re-stepped is inert on both lanes, so the layout may simply
+// lay it out — where before it refused, reading the absence of a record as
+// evidence of a hazard.
+//
+// These graduated 2026-08-27 with Stage 3's first increment. Pinned as
+// POSITIVE so the coverage cannot quietly regress to a refusal: the rule test
+// above tolerates refusals by design, which is what makes it safe to extend
+// and useless as a ratchet.
+func TestParenReStepPlacedLayoutCompiles(t *testing.T) {
+	for _, c := range []struct{ src, want, why string }{
+		{`def inc fn [[n:Integer] [Integer] [n add 1]] (inc/v) 7`,
+			"[fn inc(Integer) 7]",
+			"a CONCRETE fn value placed by a user paren — the record's fourth shape"},
+		{`def tbl {double:(a:Integer => [mul 2 a])} def k 'double' (tbl get k) 5`,
+			"[fn (Integer) 5]",
+			"a DYNAMIC maybe-callable placed by a user paren"},
+		{`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end (m.p 5) (m.p 7)`,
+			"[5 7]",
+			"the graduated NUR038 seal row: each paren applies, and two placed results are not a hazard"},
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: REGRESSED to a refusal (%s) — %s", c.src, reason, c.why)
+			continue
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
+		if !compiled || errC != nil || errI != nil {
+			t.Errorf("%q: compiled=%v errC=%v errI=%v", c.src, compiled, errC, errI)
+			continue
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v, want %s on both — %s", c.src, gotC, gotI, c.want, c.why)
+		}
+	}
+}
+
 // TestParenReStepListElementRefusal pins the one shape in the rule table that
 // the compiler REFUSES rather than answers, and why the refusal is not the
 // lazy reading.

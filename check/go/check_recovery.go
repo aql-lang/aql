@@ -1360,7 +1360,7 @@ func parenPlacedFnCarrier(e *core.Engine, idx int) bool {
 	if v.ID == "" {
 		return false
 	}
-	// THREE shapes place, and they are one decision with one record.
+	// FOUR shapes place, and they are one decision with one record.
 	//
 	// A GENUINE fn-typed carrier is visible to core, so core does not need
 	// this predicate to decide the park — but the COMPILER still needs the
@@ -1368,15 +1368,23 @@ func parenPlacedFnCarrier(e *core.Engine, idx int) bool {
 	// (not a reach group) did the placing. Same for a DYNAMIC value the
 	// checker cannot prove non-callable: the park treats it as placed, so the
 	// compiler has to learn the same fact or the two ends disagree about the
-	// shape. Only when NEITHER holds does the original member-read gate
-	// decide, and a member read that reaches it admits on the same terms.
+	// shape. A CONCRETE fn value joins them — an inert `/v` reference, a
+	// `valof`, an inline literal — because a user paren places one exactly as
+	// it places a carrier, and the residual layout needs the record to know
+	// that nothing will re-step it (`(inc/v) 7` is `fn inc(Integer) 7`, and
+	// refusing it was reading the absence of a record as evidence). It reaches
+	// only the LAYOUT reader: the two apply arms gate on Carrier and Dynamic
+	// respectively, so neither sees a concrete value. Only when NONE of the
+	// three holds does the original member-read gate decide, and a member read
+	// that reaches it admits on the same terms.
 	//
 	// Both wide arms used to fall through to that gate and decline, which
 	// combined with an `||` short-circuit at the call site meant a genuine
 	// carrier was never recorded at all: `((mk 1) 2)` placed interpreted and
 	// applied compiled, because the residual lowering had no way to learn the
 	// lead was placed data (NUR101).
-	if !core.IsFnTypedCarrier(v) && !(v.Dynamic && core.SigTypeMatches(v, core.TFunction)) {
+	if !core.IsFnTypedCarrier(v) && !(v.Dynamic && core.SigTypeMatches(v, core.TFunction)) &&
+		!core.IsFnValueResidual(v) {
 		if _, ok := es.MemberFnReadValue(v.ID); !ok {
 			return false
 		}

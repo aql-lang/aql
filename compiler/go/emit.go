@@ -7195,6 +7195,21 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// read — dynamic(FlexMap) — sitting under later statement results,
 	// edge-containers-2.tsv:76).
 	for i := 0; i+1 < len(residual); i++ {
+		// …and a value the COLLAPSE recorded as placed, which is the same
+		// argument from a recorded fact rather than a static type (the paren
+		// re-step rule, design/PAREN-RESTEP-RULE.0.md). The rewind that would
+		// have applied this value is the interpreter's own, and it declined:
+		// one survivor, so the pointer stepped past. Nothing downstream
+		// re-steps a program residual, so both engines leave it as data and
+		// the residual renders identically — `(mk 1) 2` is `fn (Integer) 2`
+		// on both lanes.
+		//
+		// Gated on NOT re-stepped, not merely on placed: an enclosing paren
+		// undoes the placement one level out (`((mk 1) 2)` is 3), and that
+		// shape is a real apply the machinery above owns.
+		if es.placedNotReStepped(residual[i]) {
+			continue
+		}
 		if residual[i].Dynamic &&
 			core.SigTypeMatches(residual[i], core.TFunction) {
 			if es.markWindowSeq != 0 {
@@ -8225,6 +8240,20 @@ func (es *EmitState) leadPlacedNotRead(v core.Value) bool {
 	// interpreter places. Recorded at the collapse by recordParenReStep,
 	// because nothing downstream can still tell them apart.
 	return !es.parenReSteppedFn(v)
+}
+
+// placedNotReStepped reports whether the collapse recorded v as PLACED by a
+// user paren and NOT re-stepped by an enclosing one — the two facts that
+// together prove the interpreter leaves it as data where it now sits.
+//
+// This is the residual-layout twin of leadPlacedNotRead, and deliberately
+// does NOT consult read provenance: a def-read or member-read lead is a
+// DISPATCH question (does this name call?), while this is a LAYOUT question
+// (will anything re-step this value?). A read that dispatches is handled by
+// the apply arms above; by the time control reaches the refusal loop the
+// only question left is whether the value sits inert.
+func (es *EmitState) placedNotReStepped(v core.Value) bool {
+	return es.parenPlacedMemberFn(v) && !es.parenReSteppedFn(v)
 }
 
 func (es *EmitState) parenReSteppedFn(v core.Value) bool {

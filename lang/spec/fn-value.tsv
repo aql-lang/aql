@@ -114,8 +114,13 @@ import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/v} ] end  
 #     twin-call VALUE rows live in
 #     lang/spec/frontier/frontier-nur038-seal.tsv — semantically green,
 #     compile-refused on the pre-existing residual-ordering limitation
-#     ("dynamic value precedes residual args").
+#     ("dynamic value precedes residual args"). The EXPLICIT-PAREN row of
+#     that set GRADUATED here 2026-08-27 (Stage 3): each paren applies and
+#     nets one value, and the residual layout no longer reads two placed
+#     results as an auto-dispatch hazard, because the collapse now records
+#     which values a rewind re-steps (design/PAREN-RESTEP-RULE.0.md).
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 add 1	6	a sealed call composes with a following word statement
+def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end (m.p 5) (m.p 7)	5 7	explicit parens as the seal — graduated from the frontier 2026-08-27
 def i fn [[x:Integer] [Integer] [x add 1]] end def m {i: i/v} end m.i 5 m.i 7	6 8	typed twins — the type gate already isolated these; unchanged
 #
 # §7  fn-local fns as higher-order body words REFUSE compilation (NUR037).
