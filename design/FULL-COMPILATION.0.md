@@ -1026,12 +1026,23 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   What actually blocks it is `foreignFnHome`
   (`compiler/go/callable_words.go:373`), which declines any fn whose
   `fd.Registry` differs from `r`, and the decline is correct as the code
-  stands: `compileClosureBody` takes the registry as a parameter, but the
-  recorder it compiles through hangs off it —
-  `r.Check.Emit`, `r.Check.Diagnostics`, the probe fork — so "compile this
-  body against another registry" is not a parameter change. That
-  entanglement is the Phase-2 work, and it is worth stating separately
-  from the capture extension because the two are independently useful:
+  stands. **Probed 2026-08-27 for the exact reason, because "pass the other
+  registry" looks like a parameter change and is not:** for the `A.big`
+  case, `r.Check != fd.Registry.Check` *and*
+  `r.Check.Emit != fd.Registry.Check.Emit`. A module sub-registry carries
+  its OWN CheckState and its OWN EmitState.
+
+  So the job is not "compile the body against `fd.Registry`" — that would
+  record the unit into a different program's unit table and const pool,
+  where the caller's `OpPushClosure` cannot reference it. The job is to
+  **split the two roles the registry currently plays**: which registry
+  RESOLVES names during body compilation, and which EmitState RECORDS the
+  resulting unit. The unit must land in the caller's table; its dispatches
+  must resolve in the foreign registry, at compile time as well as at run
+  time.
+
+  That split is the Phase-2 work, and it is worth stating separately from
+  the capture extension because the two are independently useful:
   registry-threading retires the island for capture-free foreign
   predicates (the measured row), capture-tagging retires it for foreign
   closures that also capture.
