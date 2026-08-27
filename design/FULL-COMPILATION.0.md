@@ -1047,6 +1047,32 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   predicates (the measured row), capture-tagging retires it for foreign
   closures that also capture.
 
+  **The split alone is NOT sufficient, and a throwaway prototype proved it
+  rather than arguing it (2026-08-27).** Threading `fd.Registry` through
+  `compileClosureBody` while pointing the foreign `CheckState.Emit` at the
+  caller's `EmitState` does produce a natively-compiled unit — the island
+  goes away, `FALLBACK` disappears from the disassembly. The answer is
+  wrong: `[[]]` against the interpreter's `[[3 4]]`, and the compiled body
+  is
+
+  ```
+  fn f0 filter$body/1 (locals=1) [e]:
+    0000 PUSH_CONST  k0   ; false (Boolean)
+    0001 RET
+  ```
+
+  The predicate CONST-FOLDED to `false`. The closure body's compile does
+  compile-time evaluation of the body, and for a foreign body that
+  evaluation reaches a definite constant it has no business reaching —
+  folding away the per-element parameter along with the free word. So the
+  increment's first question is not "where do names resolve at run time"
+  (the `CompiledFn.Reg` / `curReg` machinery answers that and is shipped);
+  it is **why the body analysis folds at all under a swapped registry, and
+  what the fold is reading**. Whoever takes this: reproduce the four-line
+  disassembly above first — it is the shortest path to the real defect, and
+  it is a silent wrong answer, which is exactly what `foreignFnHome`
+  currently prevents.
+
   The RUNTIME halves are genuinely shipped and need nothing: `CompiledFn.Reg`
   is stamped for module-preamble fns (`compiler/go/emit.go:7771`) and the VM
   swaps `curReg` on unit entry (`eng/go/vm.go:1403-1414`). A cross-registry
