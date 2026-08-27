@@ -7090,7 +7090,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// and that the interpreter still applies. Placement is the question, not
 	// how the lead was named.
 	if !applyDynamic && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) &&
-		!es.parenPlacedMemberFn(residual[0]) {
+		!es.leadPlacedNotRead(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 		// When the carrier's closure arity is statically recoverable (its
 		// producer is a compiled factory fn returning one anonymous closure),
@@ -8145,6 +8145,36 @@ func init() {
 // declines it and the program falls back faithfully. The arrival model
 // (method_shape.go) still owns the un-parenthesised mid-expression apply,
 // which is why this test is on the residual lead only.
+// leadPlacedNotRead reports whether a residual's leading fn carrier is
+// PLACED DATA rather than a pending call (NUR101, ruled 2026-08-26).
+//
+// Placement alone cannot answer this, and that is the whole subtlety.
+// ParenPlacedFnIDs is keyed by value ID, and an ID travels with a binding:
+// `def h (mk 1) end  h 2` marks h's value placed, because the paren that
+// PRODUCED it placed it — but `h` is a bare-NAME dispatch and a bare name
+// always calls. Measured: both `h 2` and `((mk 1) 2)` report placed=true, so
+// a placement-only gate refuses the one that must apply. That is the
+// sticky-inertness fnReturnPark's header forbids, arriving through the side
+// table instead of the value.
+//
+// Read provenance alone cannot answer it either: gating on defReads was
+// tried and OVER-REACHED, refusing `c.op 5` — a member-read apply that
+// ADR-011 lists among the three explicit application forms.
+//
+// The conjunction is what works. A lead is placed data only when the paren
+// placed it AND it did not arrive through a read that dispatches: a def-read
+// (a bare name) or a member read both CALL, whatever mark the value carries
+// from wherever it was built.
+func (es *EmitState) leadPlacedNotRead(v core.Value) bool {
+	if !es.parenPlacedMemberFn(v) {
+		return false
+	}
+	if _, read := es.defReads[v.ID]; read {
+		return false
+	}
+	return true
+}
+
 func (es *EmitState) parenPlacedMemberFn(v core.Value) bool {
 	if es == nil || es.reg == nil || es.reg.Check == nil || v.ID == "" {
 		return false
