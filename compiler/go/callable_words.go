@@ -806,16 +806,57 @@ func lambdaCallbackInputs(r *core.Registry, word string, spec core.CallableSpec,
 			acc := args[spec.BodyPos+2]
 			return []core.Value{core.NewCarrier(acc.Parent), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
+		// A LIST fold does NOT get a case — see the ARITY-1 BOUNDARY note.
 	case "scan":
 		// scan seeds the accumulator from the first value (no init operand): the
 		// accumulator carries the value type, the entry rides as a KeyVal.
 		if isMap {
 			return []core.Value{core.NewCarrier(elem), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
+		// A LIST scan does NOT get a case — see the ARITY-1 BOUNDARY note.
 	}
 	return nil, ClosureInValue, false
 }
 
+// THE ARITY-1 BOUNDARY — why `each` over a list is admitted above and `fold` /
+// `scan` are not. Measured 2026-08-27; the first attempt admitted all three and
+// was wrong, which is the useful part of the record.
+//
+// A compiled closure binds its inputs POSITIONALLY: invokeClosureOn fills the
+// unit's leading param slots from the handler's `inputs` slice in order
+// (eng/go/vm.go). The INTERPRETER does not — a Function-value callback goes
+// through MatchFnSig, which assigns arguments to params by TYPE. With one input
+// the two cannot disagree. With two they can, and for a list fold they do:
+//
+//	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+//	  interpreted  123      (a accumulates: 0 → 1 → 12 → 123)
+//	  compiled      60      (the pair arrives swapped)
+//
+// Supplying the carriers in the other order does NOT fix it — the carriers only
+// TYPE the body; the runtime order is the handler's push order either way. So
+// admitting fold/scan needs the compiled callback frame to reproduce
+// MatchFnSig's ASSIGNMENT rather than bind positionally. That is the "modelled
+// fn-value callback frame" the frontier ledger asked for, now located exactly,
+// and it is why the ledger was right about fold/scan and wrong about each.
+//
+// TWO PROBE LESSONS, both of which cost a wrong admission:
+//
+//   - A TYPED probe cannot establish positional order, because the matcher
+//     reassigns by type. `fn [[a:Integer b:String]…] fold f/v [1 2 3] 'seed'`
+//     matching, and its swap not matching, reads like "a is the element" and
+//     proves nothing of the kind. Use SAME-TYPED params or make no positional
+//     claim.
+//   - The accumulator's runtime type after step 1 is the BODY'S RETURN, not the
+//     seed's, so a single static carrier looked like it needed a stability
+//     guard. It does not: the body binds the accumulator at its DECLARED PARAM
+//     type, not the carrier's tag — `fold ([acc:Scalar kv:KeyVal] => [if (acc
+//     is Integer) ['I'] ['S']]) {a:1 b:2 c:3} 0` answers 'S' on BOTH lanes,
+//     and `typeof acc` answers Scalar on both. A step whose accumulator fails
+//     the declared param no-matches identically in both lanes, and an
+//     OVERLOADED callback is already refused (lambdaHookCompatible wants
+//     exactly one own signature). That guard would have refused valid programs
+//     for a hazard that is not there.
+//
 // pairCarrier builds a representative {key, value} pair Map carrier — the shape
 // filter's list Function form hands its callback (key = the index, value = the
 // element). Field VALUES are carriers (Integer key, elem value) so the compiled

@@ -104,7 +104,7 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | D. Provenance totalization | 13 | operands with no producing event: `$module`/namespace synthetics, cross-registry captures |
 | E. Check-diagnostics sentinel | 8 | the checker rejects programs the interpreter runs (`lang/go/boru.go:459-472`) |
 | F. Dispatch recovery | 5 | `unmatched dispatch recovered at apply/…` — recovered windows have no trap lowering yet |
-| G. Working islands | 7 → 5 | compile and run correctly; ledgered only because the program embeds `OpFallback`. **2 graduated 2026-08-27** (list `each`, Function and lambda forms): `lambdaCallbackInputs` had a MAP case and no LIST case, so the lambda lowering declined at its first gate — a missing case, not the "modelled fn-value callback frame" the ledger asked for. `fold`/`scan` remain, and are genuinely different: they carry an accumulator |
+| G. Working islands | 7 → 5 | compile and run correctly; ledgered only because the program embeds `OpFallback`. **2 graduated 2026-08-27** (list `each`, Function and lambda forms): `lambdaCallbackInputs` had a MAP case and no LIST case, so the lambda lowering declined at its first gate — a missing case, not the "modelled fn-value callback frame" the ledger asked for. `fold`/`scan` remain and DO need that frame: at 2 inputs the compiled closure's positional binding disagrees with `MatchFnSig`'s stack-order assignment (§6.3, the arity-1 boundary) |
 | H. `while` | 6 | no structured lowering; body words splice tape-coupled tokens |
 | I. Variadic no-static-seat | 5 | `await first/any` winner residuals: 0..N results exceed any static seat (NUR067) |
 | J. Pinned miscompiles | 2 | bare `Function`-param read — both lanes wrong vs the 2026-08-15 ruling |
@@ -1200,19 +1200,58 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   (`each ([x:String] => [x]) [1 2 3]`) still declines and both lanes
   agree, which is the check that the admission did not widen too far.
 
-  **`fold`/`scan` are NOT the same shape and are deliberately not
-  graduated with it.** Their callback carries an ACCUMULATOR, and its type
-  after step 1 is the BODY'S RETURN, not the seed's — so the single static
-  carrier the map twin uses is sound only while those agree. That wants
-  its own measurement.
+  **`fold`/`scan` stay islanded, and the reason is now located exactly —
+  the ARITY-1 BOUNDARY.** They were attempted alongside `each` and the
+  attempt failed usefully.
 
-  One more measured correction while proving the convention, recorded
-  because a wrong claim in a spec comment is how the NUR101 miscompiles
-  survived: `frontier-hof-audit.tsv` said fold's callback "sees
-  (accumulator, element)". The sig positions are the other way round.
-  `def f fn [[a:Integer b:String][String][b]]  fold f/v [1 2 3] 'seed'`
-  MATCHES — `a` is the Integer element, `b` the String seed — while the
-  swapped spelling raises no_signature.
+  A compiled closure binds its inputs POSITIONALLY: `invokeClosureOn`
+  (`eng/go/vm.go`) fills the unit's leading param slots from the handler's
+  `inputs` slice in order. The INTERPRETER does not — a Function-value
+  callback goes through `MatchFnSig`, which consumes the STACK top-down,
+  so the handler's push of (accumulator, element) makes the ELEMENT
+  `sig[0]`. **With one input the two rules cannot disagree**, which is why
+  list `each` compiles. With two they do:
+
+  ```
+  fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+    interpreted  123      a accumulates: 0 → 1 → 12 → 123
+    positional    60      the pair arrives swapped
+  ```
+
+  Nine shapes diverged that way. Supplying the carriers in the other order
+  changed NOTHING — carriers TYPE the body; they do not set the runtime
+  order. So admitting a 2-input list callback needs the compiled frame to
+  reproduce `MatchFnSig`'s ASSIGNMENT rather than bind positionally. That
+  is the "modelled fn-value callback frame" the ledger asked for, and the
+  ledger was right about `fold`/`scan` in exactly the way it was wrong
+  about `each`. Fence: `lang/go`'s `TestListFoldCallbackOrderFence`.
+
+  **Two probe lessons, each of which bought a wrong admission.**
+
+  1. **A typed probe cannot establish positional order**, because the
+     matcher reassigns by type. `fn [[a:Integer b:String]…] fold f/v
+     [1 2 3] 'seed'` matching, and its swap not matching, reads like "`a`
+     is the element" and proves nothing of the kind — the matcher put the
+     Integer in whichever slot was declared Integer. Use SAME-TYPED params
+     or make no positional claim. The first reading of this convention was
+     built on that probe and was wrong.
+  2. **The accumulator-stability guard was unnecessary.** The
+     accumulator's runtime type after step 1 is the BODY'S RETURN, not the
+     seed's, which looked like it needed a guard. It does not: the body
+     binds the accumulator at its DECLARED PARAM type, not the carrier's
+     tag. `fold ([acc:Scalar kv:KeyVal] => [if (acc is Integer) ['I']
+     ['S']]) {a:1 b:2 c:3} 0` answers `'S'` on BOTH lanes — the
+     accumulator really does go Integer → String mid-fold and the compiled
+     body sees it — and `typeof acc` answers `Scalar` on both. A step whose
+     accumulator fails the declared param no-matches identically in both
+     lanes, and an OVERLOADED callback is already refused
+     (`lambdaHookCompatible` wants exactly one own signature). Written from
+     reasoning alone, that guard would have refused valid programs for a
+     hazard that is not there.
+
+  The pair is worth stating together: **the guard I was going to add was
+  not needed, and the blocker I thought was absent was real.** Both were
+  settled by running the shapes, and neither by reading the code.
 - **Partial applications as data**: `curryOrStack`'s curry list gets a
   compiled twin — a curried value is `(base fn, held args)`, applied by the
   shared apply; no per-composition codegen (Factor's `curried`/`composed`

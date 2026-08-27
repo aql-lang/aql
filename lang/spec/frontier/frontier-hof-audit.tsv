@@ -212,18 +212,31 @@ def chainif fn [[a:Function b:Function s:Integer][Any][def r1 (a s) if (r1.ok) [
 #     asked. The convention was then measured off the interpreter — one
 #     input, the bare element — rather than inferred from the map twin.
 #
-#     WHAT IS LEFT IS NOT THE SAME SHAPE. fold and scan carry an
-#     ACCUMULATOR, and its type after step 1 is the BODY'S RETURN, not the
-#     seed's — so a single static carrier is only sound while those agree.
-#     That is a measured question of its own and the reason they are not
-#     graduated alongside each.
+#     WHAT IS LEFT IS NOT THE SAME SHAPE, and the reason is ARITY. A
+#     compiled closure binds its inputs POSITIONALLY (invokeClosureOn fills
+#     the unit's leading param slots in order); the interpreter runs a
+#     Function-value callback through MatchFnSig, which consumes the STACK
+#     top-down, so the handler's push of (accumulator, element) makes the
+#     ELEMENT sig[0]. At ONE input the two rules cannot disagree — which is
+#     why each graduated. At TWO they do:
 #
-#     Also measured, and worth flagging because the row comment below said
-#     otherwise: the callback's sig positions are (ELEMENT, ACCUMULATOR),
-#     not (accumulator, element). `def f fn [[a:Integer b:String][String]
-#     [b]] fold f/v [1 2 3] 'seed'` MATCHES (a is the Integer element, b
-#     the String seed) while the swapped spelling raises no_signature.
+#       fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+#         interpreted 123   (a accumulates: 0 -> 1 -> 12 -> 123)
+#         positional   60   (the pair arrives swapped)
+#
+#     Admitting fold/scan therefore needs the compiled callback frame to
+#     reproduce MatchFnSig's ASSIGNMENT, not more carriers — supplying them
+#     in the other order changes nothing. Fence: lang/go's
+#     TestListFoldCallbackOrderFence.
+#
+#     ON THE ROW COMMENTS BELOW: for the LIST form the callback's sig is
+#     (ELEMENT, ACCUMULATOR). Establishing that needs SAME-TYPED params —
+#     a probe with distinct types cannot see position, because MatchFnSig
+#     reassigns by type, and reading one as positional evidence is what
+#     produced the swapped admission above.
 def dbl x:Integer => [mul 2 x]  for-each dbl/v [1 2 3]		for-each discards every result — the fn must still satisfy its OWN declared return arity (a void lambda breaks its contract, not for-each's)
-def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0	6	fold with an explicit seed: the callback's sig is (element, accumulator)
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0	6	fold with an explicit seed: the callback's sig is (element, accumulator) — same-typed params, so `add` reads the same either way
+fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0	123	…and a NON-commutative body shows the order: `a` is the accumulator (0 -> 1 -> 12 -> 123), which a positional compiled binding gets backwards (60)
+scan ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3]	[1 12 123]	scan the same way — the running accumulator is sig[1]
 def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3]	6	…and unseeded, the first element seeds it
 def add2 fn [[a:Integer b:Integer][Integer][add a b]]  scan add2/v [1 2 3]	[1 3 6]	scan keeps the running accumulator

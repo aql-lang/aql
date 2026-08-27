@@ -219,6 +219,54 @@ func TestForeignClosureCaptureResolvesInItsOwnRegistry(t *testing.T) {
 	}
 }
 
+// TestListFoldCallbackOrderFence is a FENCE, not a graduation: it pins the
+// parity that a positional admission of `fold` / `scan` over a LIST breaks.
+//
+// A compiled closure binds its inputs POSITIONALLY — invokeClosureOn fills the
+// unit's leading param slots from the handler's `inputs` slice in order. The
+// interpreter does not: a Function-value callback goes through MatchFnSig,
+// which consumes the STACK top-down, so the handler's push of (accumulator,
+// element) makes the ELEMENT sig[0]. With ONE input the two rules cannot
+// disagree, which is why list `each` is admitted. With two they do:
+//
+//	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+//	  interpreted  123      a accumulates: 0 → 1 → 12 → 123
+//	  positional    60      the pair arrives swapped
+//
+// An attempt to admit these by supplying carriers in lambdaCallbackInputs
+// produced exactly that, on nine shapes. Swapping the carrier order did NOT
+// change it — carriers TYPE the body, they do not set the runtime order — so
+// admitting fold/scan needs the compiled callback frame to reproduce
+// MatchFnSig's assignment instead of binding positionally.
+//
+// The rows below use SAME-TYPED params on purpose. A typed probe cannot see
+// positional order at all, because the matcher reassigns by type; that is what
+// made the first reading of this convention wrong.
+func TestListFoldCallbackOrderFence(t *testing.T) {
+	for _, tc := range []struct{ src, want string }{
+		{`fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0`, "[123]"},
+		{`scan ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3]`, "[[1 12 123]]"},
+		{`def f fn [[e:Integer a:Integer] [Integer] [a mul 10 add e]]  fold f/v [1 2 3] 0`, "[123]"},
+		{`def n 2  fold ([e:Integer a:Integer] => [a add (e mul n)]) [1 2 3] 0`, "[12]"},
+	} {
+		gotC, ran, errC := mustNew(t).RunCompiled(tc.src)
+		gotI, errI := mustNew(t).RunInterp(tc.src)
+		if !ran || errC != nil || errI != nil {
+			t.Fatalf("%s: ran=%v errC=%v errI=%v", tc.src, ran, errC, errI)
+		}
+		if fmt.Sprint(gotI) != tc.want {
+			t.Fatalf("%s: interpreter answered %v, want %s — the oracle moved, re-derive this fence",
+				tc.src, gotI, tc.want)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: compiled=%v interp=%v — the callback's (accumulator, element) pair "+
+				"arrived SWAPPED. A compiled closure binds inputs positionally; MatchFnSig "+
+				"consumes the stack top-down. Admitting a 2-input list callback needs the "+
+				"frame to reproduce the assignment, not more carriers", tc.src, gotC, gotI)
+		}
+	}
+}
+
 // TestParenReStepListElementRefusal pins the one shape in the rule table that
 // the compiler REFUSES rather than answers, and why the refusal is not the
 // lazy reading.
