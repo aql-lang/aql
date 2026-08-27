@@ -1015,6 +1015,32 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   curReg swap, `compiler/go/bytecode.go:970`, `eng/go/vm.go:1403-1414`)
   and retiring the foreign-module island (family D's cross-module rows,
   the `filter A.big` working island).
+
+  **Measured 2026-08-27, and the blocker is not the captures.** The
+  `filter A.big` row compiles today to *one instruction* — `0000 FALLBACK
+  b0 ; filter (nin=0)` — the whole call islanded, right answer by the
+  mechanism the mission forbids. Its predicate has NO lexical captures at
+  all: what it needs is the free word `lim` resolved in module A, not in
+  the caller. So capture-tagging is not what unblocks this row.
+
+  What actually blocks it is `foreignFnHome`
+  (`compiler/go/callable_words.go:373`), which declines any fn whose
+  `fd.Registry` differs from `r`, and the decline is correct as the code
+  stands: `compileClosureBody` takes the registry as a parameter, but the
+  recorder it compiles through hangs off it —
+  `r.Check.Emit`, `r.Check.Diagnostics`, the probe fork — so "compile this
+  body against another registry" is not a parameter change. That
+  entanglement is the Phase-2 work, and it is worth stating separately
+  from the capture extension because the two are independently useful:
+  registry-threading retires the island for capture-free foreign
+  predicates (the measured row), capture-tagging retires it for foreign
+  closures that also capture.
+
+  The RUNTIME halves are genuinely shipped and need nothing: `CompiledFn.Reg`
+  is stamped for module-preamble fns (`compiler/go/emit.go:7771`) and the VM
+  swaps `curReg` on unit entry (`eng/go/vm.go:1403-1414`). A cross-registry
+  closure unit would ride exactly that path. What is missing is only the
+  compile-side plumbing to produce one.
 - **Quote state and dispatch-control state** (`/q` polarity, sealed/applied
   bits) — so the quote-lambda screen (`check/go/check_fnbody.go:388`)
   becomes routing, not refusal: a `/q`-slot lambda delivered as a callback
