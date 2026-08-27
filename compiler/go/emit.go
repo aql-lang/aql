@@ -7224,8 +7224,32 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 			return residual, 0, "fn value precedes residual args (auto-dispatch boundary)"
 		}
 	}
+	// An unconsumed fn-value CARRIER refuses on the stated grounds that "a VM
+	// closure renders unlike the interpreter's FnDefInfo".
+	//
+	// Measured 2026-08-27 (Stage 3): for a carrier a user paren PLACED and no
+	// enclosing paren re-stepped, that fear does not materialise — `(mk 1) 2`,
+	// `(mk2 5) 10` and a bare `(mk 5)` all render byte-identically on the two
+	// lanes. What the refusal was actually holding back is two OTHER hazards,
+	// and both are excluded here rather than assumed away:
+	//
+	//   - a bare-NAME read of a def-bound placed closure must DISPATCH, not
+	//     sit as data (ADR-011). Without the defReads exclusion
+	//     `def mk … def f (mk 7)  f` compiled `[fn]` against the
+	//     interpreter's `[7]` — a live divergence this relaxation introduced
+	//     and the exclusion removes. Placement is a LAYOUT fact; a read that
+	//     calls is a DISPATCH fact, and this loop needs both.
+	//   - a captured closure baked as a CONST loses its closure state
+	//     (TestEmitFnValueData). The placed-and-not-read carriers reaching
+	//     here do not take that path.
+	//
+	// What remains genuinely blocked is §6.3's universal fn value, and the
+	// residue is now visible rather than hidden behind a blanket refusal.
 	for i := range residual {
 		if core.IsFnTypedCarrier(residual[i]) {
+			if es.placedNotReStepped(residual[i]) && !es.isDefRead(residual[i]) {
+				continue
+			}
 			return residual, 0, "unconsumed fn-value carrier in residual (closure render)"
 		}
 	}
@@ -8254,6 +8278,16 @@ func (es *EmitState) leadPlacedNotRead(v core.Value) bool {
 // only question left is whether the value sits inert.
 func (es *EmitState) placedNotReStepped(v core.Value) bool {
 	return es.parenPlacedMemberFn(v) && !es.parenReSteppedFn(v)
+}
+
+// isDefRead reports whether v arrived through a read of a def-bound name —
+// the provenance that makes a value a DISPATCH rather than data, since a bare
+// name always calls (ADR-011). leadPlacedNotRead folds the same test into its
+// conjunction; the residual-layout loops ask for it separately because they
+// answer a different question and only some of them need it.
+func (es *EmitState) isDefRead(v core.Value) bool {
+	_, read := es.defReads[v.ID]
+	return read
 }
 
 func (es *EmitState) parenReSteppedFn(v core.Value) bool {

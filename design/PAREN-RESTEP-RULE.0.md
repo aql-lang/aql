@@ -163,10 +163,10 @@ either agrees with `RunInterp` or refuses — it never answers differently.
 
 ## 6. Graduation
 
-**Two graduated 2026-08-27 with Stage 3's first increment, and the mechanism
-is not the one this section predicted.** The refusals were called "the same
-shape in four positions". They are two different questions, and only one of
-them needed the Apply kernel:
+**Two of the four graduated 2026-08-27 with Stage 3's first increment, and
+neither needed the Apply kernel.** The refusals were called "the same shape in
+four positions". They are two different questions, and the answer to both
+turned out to be a record the collapse already takes:
 
 - **A LAYOUT question** — will anything re-step this value where it now
   sits? At a program residual, no, and the records already prove it.
@@ -179,10 +179,30 @@ them needed the Apply kernel:
   record as its fourth placement shape for this reader; the two apply arms
   gate on `Carrier` and `Dynamic` respectively and never see one, so the
   widening was layout-only.
-- **A RENDERING question** — `(mk 1) 2` and `(mk2 5) 10` still refuse, now
-  saying so precisely: "unconsumed fn-value carrier in residual (closure
-  render)". A VM closure does not render like the interpreter's `FnDefInfo`.
-  That is §6.3's universal fn value, and it is Stage 3's real dependency.
+- **A RENDERING question** — the second loop refused any unconsumed fn-value
+  carrier because "a VM closure renders unlike the interpreter's
+  `FnDefInfo`". **Measured, that fear does not materialise** for a carrier a
+  paren placed and nothing re-stepped: `(mk 1) 2`, `(mk2 5) 10`, `(mk 5) 10`
+  and a bare `(mk2 5)` all render byte-identically on the two lanes. They are
+  parity rows now, and `(mk2 5)` left `TestFactoryApplyCompiles`'s negative
+  list — whose own parity assertion had never fired for it.
+
+  What the blanket refusal was actually holding back is two OTHER hazards,
+  found by relaxing it and watching what broke:
+
+  1. **A bare-NAME read of a def-bound placed closure must DISPATCH**, not
+     sit as data (ADR-011). `def mk … def f (mk 7)  f` compiled `[fn]`
+     against the interpreter's `[7]` the moment the refusal came off — a
+     live divergence the relaxation introduced and a `defReads` exclusion
+     removes. Placement is a LAYOUT fact; a read that calls is a DISPATCH
+     fact, and this loop needs both.
+  2. **A captured closure baked as a CONST loses its closure state**
+     (`TestEmitFnValueData`). The placed-and-unread carriers reaching this
+     loop do not take that path.
+
+  Both are excluded explicitly rather than assumed away. What remains
+  genuinely blocked is §6.3's universal fn value — and the residue is now
+  visible instead of hidden behind one refusal covering three things.
 
 The two remaining arm/list shapes (`if true [(mk 1) 2]`, `[((mk 1) 2)]`) need
 the apply RECORDED rather than skipped, which needs `RecordDynApply` to admit
