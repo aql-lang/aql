@@ -106,14 +106,15 @@ func TestFnReturnPark(t *testing.T) {
 			why: "the park applies only to a Function residual — every ordinary call returns through here",
 		},
 		{
-			name: "more than one survivor still parks the leading Function", tape: []Value{fnv, NewInteger(1)},
-			closeIdx: 3, notReachGroup: true, want: 1,
-			why: "NUR101 (ruled 2026-08-26): the park is NOT the exactly-one-survivor case. It used to be, " +
-				"and that is precisely what made placement depend on enclosing context — `(inc/v) 7` placed " +
-				"at top level while `((inc/v) 7)` dispatched, because the outer paren had two survivors and " +
-				"so declined the park, landing the rewind ON the Function and re-stepping it into a call. " +
-				"Whether the rewind re-steps a Function is a property of the value at the rewind position, " +
-				"not of how many values sit beside it",
+			name: "more than one survivor is untouched", tape: []Value{fnv, NewInteger(1)},
+			closeIdx: 3, notReachGroup: true, want: 0,
+			why: "NUR101, MEASURED 2026-08-27: the survivor count IS the question, and this case pins why. " +
+				"A paren holding a Function AND residual args is an APPLICATION — `(x:Integer => [x mul 2] 5)` " +
+				"is 10, not a parked fn beside a 5 — and the apply happens precisely because the park declines, " +
+				"landing the rewind ON the Function so the re-step dispatches it. Removing this clause (the " +
+				"first cut at NUR101's `place uniformly` ruling) turned that program into `fn (Integer) 5` and " +
+				"broke seven more suites with it. Placement is the ONE-survivor case; the ruling's real content " +
+				"is that the COMPILER must learn the same split, not that the interpreter should stop applying",
 		},
 		{
 			name: "empty collapse is untouched", tape: []Value{},

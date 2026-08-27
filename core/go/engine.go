@@ -6040,7 +6040,7 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 // installed Recorder. That mirroring is why the test lives in the shared
 // fnValueDispatchesAtPointer rather than being spelled twice.
 func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
-	if !notReachGroup || idx >= e.Tape.Len() {
+	if !notReachGroup || closeIdx != idx+2 || idx >= e.Tape.Len() {
 		return 0
 	}
 	v := e.Tape.At(idx)

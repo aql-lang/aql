@@ -2763,7 +2763,7 @@ func (es *EmitState) RecordBranch(b core.BranchRecord) {
 			return EmitOperand{}, false, true
 		}
 		op, ok := es.resolveOperand(stk[len(stk)-1])
-		if !ok {
+		if !ok || residualLeadReStepped(stk) {
 			es.MarkUncompilable("if: " + name + "-branch result of unknown provenance")
 			return EmitOperand{}, false, false
 		}
@@ -7060,7 +7060,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// value's statement boundary — see methodShapeAnnotated.
 	applyDynamic := false
 	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) &&
-		!es.parenPlacedMemberFn(residual[0]) {
+		!es.leadPlacedNotRead(residual[0]) {
 		applyDynamic = !anyDynamicTail(residual)
 	}
 	// Leading Function CARRIER (the factory pattern: a returned closure now
@@ -8013,6 +8013,31 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []core.Value) (int, bool) 
 		return w, true
 	}
 	return 0, false
+}
+
+// residualLeadReStepped reports whether a branch ARM's residual LEADS with a
+// value the interpreter's frame-close rewind re-steps INTO A CALL while this
+// arm's merge would model it as placed data (NUR101, measured 2026-08-27).
+//
+// The arm body executes inside a frame, and a frame closes through
+// stepCloseParen like any other paren: with MORE than one survivor the park
+// declines, the rewind lands ON the leading value, and a Function there
+// dispatches. `if true [(mk 1) 2]` is therefore 3 interpreted — while
+// resolveArm reads only stk[len-1] and merges the arm as the placed pair,
+// compiling to `fn (Integer) 2`. That was a SILENT divergence, the last of the
+// five NUR101 shapes; refuse until the apply is modelled (Stage 3).
+//
+// Narrower than closureResidualHasUnappliedFn on purpose. A closure body
+// refuses a carrier ANYWHERE, because its driving handler maps every residual
+// value; an arm's SOLE carrier is legitimately placed data on both lanes
+// (`if c [(mk 1)]`), so only a LEAD over >=2 survivors — the shape the rewind
+// re-steps — is unmodelled here.
+func residualLeadReStepped(stk []core.Value) bool {
+	if len(stk) < 2 || stk[0].Quoted {
+		return false
+	}
+	return core.IsFnTypedCarrier(stk[0]) ||
+		(stk[0].Dynamic && core.SigTypeMatches(stk[0], core.TFunction))
 }
 
 // closureResidualHasUnappliedFn reports whether a closure body's residual

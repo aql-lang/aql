@@ -64,7 +64,7 @@ func TestParseFnDispatchCompiles(t *testing.T) {
 		if errC != nil || !compiled {
 			t.Fatalf("%s: compiled run failed: compiled=%v err=%v", c.name, compiled, errC)
 		}
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if errI != nil {
 			t.Fatalf("%s: interp run failed: %v", c.name, errI)
 		}
@@ -151,7 +151,7 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 			t.Errorf("%s: expected a native program:\n%s", c.name, dis)
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if errC != nil || errI != nil || !compiled {
 			t.Fatalf("%s: compiled=%v errC=%v errI=%v", c.name, compiled, errC, errI)
 		}
@@ -164,7 +164,7 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 	// is the built-in member-type export, identical in both engines.
 	const present = `import "boru:minilang"  MiniLang.Re`
 	gotC, _, errC := mustNew(t).RunCompiled(present)
-	gotI, errI := mustNew(t).Run(present)
+	gotI, errI := mustNew(t).RunInterp(present)
 	if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Fatalf("present key: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}

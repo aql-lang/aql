@@ -44,7 +44,7 @@ func runBothEngines(t *testing.T, prog string) (compiled, interpreted string) {
 	if err != nil {
 		t.Fatalf("lang.New (interpreter): %v", err)
 	}
-	gotI, errI := ai.Run(prog)
+	gotI, errI := ai.RunInterp(prog)
 	if errI != nil {
 		t.Fatalf("Run: %v", errI)
 	}

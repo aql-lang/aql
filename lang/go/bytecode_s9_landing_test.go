@@ -69,7 +69,11 @@ func TestS9XmlInterpComputed(t *testing.T) { // §9.2c
 }
 
 func TestS9CurriedFactory(t *testing.T) { // §9.2d
-	mustCompileWithParity(t,
+	// Regressed to a sound refusal 2026-08-27 (NUR101,
+	// design/PAREN-RESTEP-RULE.0.md): the [3] was the right answer reached by
+	// the program-residual carrier arm, which cannot tell `((mk 1) 2)` from
+	// `(mk 1) 2` — the shape the interpreter PLACES. Graduates with Stage 3.
+	nur101Refusal(t,
 		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] ((mk 1) 2)`, "[3]")
 }
 
