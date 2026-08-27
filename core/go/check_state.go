@@ -275,6 +275,22 @@ type CheckState struct {
 	// an apply (`(m dot f) 5` is two values; `m.f 5` still applies).
 	ParenPlacedFnIDs map[string]bool
 
+	// ParenReSteppedFnIDs records the opposite fact, and the two together are
+	// the paren re-step rule (design/PAREN-RESTEP-RULE.0.md): the carriers an
+	// enclosing paren's rewind LANDED ON and will therefore re-step into a
+	// CALL. A paren with more than one survivor declines the park, so the
+	// pointer comes back onto the leading value — `((mk 1) 2)` is 3 for
+	// exactly that reason, while its unwrapped twin `(mk 1) 2` is
+	// `fn (Integer) 2` because no rewind ever reaches it.
+	//
+	// Recorded at the collapse, for the same reason ParenPlacedFnIDs is: the
+	// residual lowering sees the identical `[carrier, 2]` for both spellings
+	// and cannot recover which one it has. Without this the compiler must
+	// either apply both (miscompiling the placed one) or refuse both (losing
+	// the applied one) — it did the first until 2026-08-27 and the second
+	// briefly after, and neither is right. Reset by Begin.
+	ParenReSteppedFnIDs map[string]bool
+
 	// FnAnalysisCounts tracks distinct body analyses (memo misses)
 	// per fn DEFINITION SITE (fnQuotaKey: scope + name + body position,
 	// NOT bare name — every higher-order closure shares a synthetic
@@ -773,6 +789,7 @@ func (c *CheckState) Clone() *CheckState {
 		cp.Diagnostics = append([]CheckDiagnostic(nil), c.Diagnostics...)
 	}
 	cp.ParenPlacedFnIDs = cloneMap(c.ParenPlacedFnIDs)
+	cp.ParenReSteppedFnIDs = cloneMap(c.ParenReSteppedFnIDs)
 	cp.FnSummaries = cloneMap(c.FnSummaries)
 	cp.FnInflight = cloneMap(c.FnInflight)
 	cp.FnBodyChecked = cloneMap(c.FnBodyChecked)
@@ -875,6 +892,7 @@ func (c *CheckState) Begin() func() {
 	c.Compiling = false
 	c.FnCarrierReadSubstituted = false
 	c.ParenPlacedFnIDs = nil
+	c.ParenReSteppedFnIDs = nil
 	// Arm process-wide ID minting for the pass's lifetime: the emit
 	// recorder keys provenance on Value.IDs minted at creation, so every
 	// value created while ANY pass is live must carry one (see

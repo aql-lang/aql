@@ -35,7 +35,7 @@ func TestFnBodyFunctionContext(t *testing.T) {
 		if err != nil {
 			t.Fatalf("strict compiled: %v :: %s", err, c.src)
 		}
-		gotI, _ := mustNew(t).Run(c.src)
+		gotI, _ := mustNew(t).RunInterp(c.src)
 		if fmt.Sprint(got) != fmt.Sprint(gotI) {
 			t.Errorf("compiled %v != interp %v (MISCOMPILE) :: %s", got, gotI, c.src)
 		}
@@ -50,7 +50,7 @@ func TestFnBodyFunctionContext(t *testing.T) {
 		{`def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f`, "7"}, // captures the enclosing param
 	}
 	for _, c := range afn {
-		gotI, _ := mustNew(t).Run(c.src)
+		gotI, _ := mustNew(t).RunInterp(c.src)
 		if !strings.Contains(fmt.Sprint(gotI), c.want) {
 			t.Errorf("afn: got %v, want it to contain %q :: %s", gotI, c.want, c.src)
 		}

@@ -16,12 +16,27 @@ import (
 // VM-native.
 func TestCurriedFactoryCompiles(t *testing.T) {
 	// The §9.2 fixture (verbose form) and its lambda twin.
+	//
+	// These are the WRAPPED spelling, and the wrap is the whole difference
+	// (NUR101, design/PAREN-RESTEP-RULE.0.md): the outer paren leaves two
+	// survivors, so the park declines and the rewind re-steps the carrier into
+	// a call. The UNWRAPPED `(mk 1) 2` places instead, and compiling both as
+	// applies is how `(mk2 5) 10` came to answer 11 against the interpreter's
+	// `fn (Integer) 10`. The residual lowering now tells them apart by the
+	// re-step record ParenReSteppedFnIDs, taken at the collapse.
 	mustCompileWithParity(t,
 		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] ((mk 1) 2)`, "[3]")
 	mustCompileWithParity(t,
 		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]] ((mk 1) 2)`, "[3]")
 	mustCompileWithParity(t,
 		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] (((mk 1)) 2)`, "[3]")
+
+	// The unwrapped twin of the first row, pinned beside it so the pair reads
+	// as one rule rather than two behaviours: no enclosing rewind, so the
+	// carrier is PLACED and the 2 lands beside it.
+	nur101Refusal(t,
+		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] (mk 1) 2`,
+		"[fn (Integer) 2]")
 
 	// Decline fences, each parity-faithful:
 	// THREE-level currying (a capture threading through two constructions)

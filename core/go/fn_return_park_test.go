@@ -108,7 +108,13 @@ func TestFnReturnPark(t *testing.T) {
 		{
 			name: "more than one survivor is untouched", tape: []Value{fnv, NewInteger(1)},
 			closeIdx: 3, notReachGroup: true, want: 0,
-			why: "the park is the exactly-one-survivor case; stepping past a multi-value collapse strands the rest",
+			why: "NUR101, MEASURED 2026-08-27: the survivor count IS the question, and this case pins why. " +
+				"A paren holding a Function AND residual args is an APPLICATION — `(x:Integer => [x mul 2] 5)` " +
+				"is 10, not a parked fn beside a 5 — and the apply happens precisely because the park declines, " +
+				"landing the rewind ON the Function so the re-step dispatches it. Removing this clause (the " +
+				"first cut at NUR101's `place uniformly` ruling) turned that program into `fn (Integer) 5` and " +
+				"broke seven more suites with it. Placement is the ONE-survivor case; the ruling's real content " +
+				"is that the COMPILER must learn the same split, not that the interpreter should stop applying",
 		},
 		{
 			name: "empty collapse is untouched", tape: []Value{},

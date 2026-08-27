@@ -1,7 +1,18 @@
 # O1 — re-litigating the NUR101 / NUR078 rulings
 
-**Status:** awaiting a maintainer ruling. Nothing here is implemented, and
-nothing should be until the rulings below are settled.
+**Status: RULED 2026-08-26.** Both questions are settled and Stage 3 is
+unblocked. The rulings are recorded on the register entries themselves
+(`NUR.md`, NUR101 and NUR078), which are the contract; this note is kept as
+the argument that produced them, not as a live question.
+
+- **§1.3 → (a) place uniformly.** A computed function applied inside an
+  enclosing group places. No enclosing-context exception. Both lanes move,
+  and `bytecode_curried_test.go:17-24` is rewritten with the fix.
+- **§2.2 → (a) implement as amended.** A bare name bound to a function
+  calls, universally; `/v` passes one as an argument. All four intercept
+  sites retire together.
+- **The duplicate NUR101 record is deleted** — the line-439 entry, which read
+  the compiled lane as the defect. The surviving record carries the ruling.
 
 `design/FULL-COMPILATION.0.md` §11 O1 makes Stage 3 depend on interpreter
 changes to *ruled-but-unimplemented* semantics: if the rulings are

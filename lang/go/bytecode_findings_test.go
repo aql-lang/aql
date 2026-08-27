@@ -1529,7 +1529,7 @@ func TestPRReviewFindings(t *testing.T) {
 		out, _ := io.ReadAll(r)
 		return string(out)
 	}
-	ci := effOut(func(a *Boru, s string) { a.Run(s) })
+	ci := effOut(func(a *Boru, s string) { a.RunInterp(s) })
 	cc := effOut(func(a *Boru, s string) { a.RunCompiled(s) })
 	if ci != cc || ci != "x\n" {
 		t.Errorf("#2 effect parity: interp print=%q compiled print=%q (want %q once)", ci, cc, "x\n")
@@ -1589,7 +1589,7 @@ func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 		t.Fatalf("heterogeneous-arity chain fell back to the interpreter:\n%s", prog.Disassemble())
 	}
 	gotC, compiled, errC := mk().RunCompiled(src)
-	gotI, _ := mk().Run(src)
+	gotI, _ := mk().RunInterp(src)
 	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[15]" {
 		t.Fatalf("parity broke: compiled=%v gotC=%v gotI=%v (want [15])", compiled, gotC, gotI)
 	}
@@ -1646,24 +1646,18 @@ func TestFactoryApplyCompiles(t *testing.T) {
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	const factory = `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] `
 
-	// POSITIVE — the factory result applied to an arg compiles natively to 11,
-	// with the const-baked fn + dynamic apply in the stream (and NO closure
-	// unit: the captureless fn must keep its FnDefInfo).
-	apply := factory + `(mk2 5) 10`
-	a, _ := New()
-	prog, reason, _, cerr := a.CompileCheck(apply)
-	if cerr != nil || prog == nil {
-		t.Fatalf("factory-apply did not compile: reason=%q err=%v", reason, cerr)
-	}
-	dis := prog.Disassemble()
-	if strings.Contains(dis, "PUSH_CLOSURE") || !strings.Contains(dis, "(Function)") || !strings.Contains(dis, "CALL_DYNAMIC") {
-		t.Fatalf("factory-apply must lower the captureless fn as a const FnDefInfo + dynamic apply:\n%s", dis)
-	}
-	gotC, compiled, errC := mustNew(t).RunCompiled(apply)
-	gotI, _ := mustNew(t).Run(apply)
-	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[11]" {
-		t.Fatalf("factory-apply parity: compiled=%v gotC=%v gotI=%v (want [11])", compiled, gotC, gotI)
-	}
+	// WAS a positive: `(mk2 5) 10` compiled natively to 11, and this test
+	// asserted 11 "on both lanes" — reading gotI from `Run`, which post
+	// Stage J IS the compiled lane (NUR106). The interpreter has never
+	// answered 11 for this program: `(mk2 5)` is a paren with ONE survivor,
+	// so it PLACES, and the 10 lands beside it (NUR101,
+	// design/PAREN-RESTEP-RULE.0.md). The native compile was a MISCOMPILE
+	// that its own parity assertion could not see.
+	//
+	// Now a sound refusal. Unlike the `((mk2 5) 10)` family this one does not
+	// graduate with Stage 3 — there is nothing to apply here; if it ever
+	// compiles again it must compile to the PLACED pair.
+	nur101Refusal(t, factory+`(mk2 5) 10`, "[fn (Integer) 10]")
 
 	// A CAPTURING factory (`[y] => [x add y]` closes over the factory's param x)
 	// now ALSO compiles natively — tryReturnedClosure threads the resolved capture
@@ -1685,7 +1679,7 @@ func TestFactoryApplyCompiles(t *testing.T) {
 			`def mk fn [[x:Integer][Function][(fn [[0][Integer][x]])]] ((mk 5) 0)`},
 	} {
 		gC, comp, eC := mustNew(t).RunCompiled(neg.src)
-		gI, eI := mustNew(t).Run(neg.src)
+		gI, eI := mustNew(t).RunInterp(neg.src)
 		if comp {
 			t.Errorf("%s: expected fallback (wasCompiled=false), got compiled", neg.name)
 		}
@@ -1724,7 +1718,7 @@ func TestValueDefLocalsClassIsolation(t *testing.T) {
 		{"out-of-order defs", `def a (flex [1 2 3]) def b (flex [4 5 6]) a.0 add b.0`, "[5]"},
 	} {
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%s: expected compiled, fell back: %s", c.name, c.src)
 		}
@@ -1767,7 +1761,7 @@ func TestEnclosingReadInBranchCompiles(t *testing.T) {
 		{"fn-body-enclosing-else", `def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 0`, "[0]"},
 	} {
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%s: expected compiled, fell back: %s", c.name, c.src)
 		}
@@ -1820,7 +1814,7 @@ func TestIslandBurndownEmptyBodyAndCaseTrap(t *testing.T) {
 		if !compiled {
 			t.Errorf("%s: fell back at run time", c.name)
 		}
-		_, errI := mustNew(t).Run(c.src)
+		_, errI := mustNew(t).RunInterp(c.src)
 		var aeC, aeI *core.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
 			t.Errorf("%s: expected BoruError from both engines, got c=%v i=%v", c.name, errC, errI)
@@ -1862,7 +1856,7 @@ func TestCodequoteCompilesNative(t *testing.T) {
 		if !compiled || errC != nil {
 			t.Fatalf("%q: compiled=%v err=%v", c, compiled, errC)
 		}
-		gotI, _ := mustNew(t).Run(c)
+		gotI, _ := mustNew(t).RunInterp(c)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: compiled=%v interp=%v", c, gotC, gotI)
 		}
@@ -1935,7 +1929,7 @@ func TestVarCompilesAsLet(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%q: %v", c.src, err)
 		}
-		gotI, _ := mustNew(t).Run(c.src)
+		gotI, _ := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: an each-var let body should compile", c.src)
 		}
@@ -1967,7 +1961,7 @@ func TestVarCompilesAsLet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reach each-var: %v", err)
 	}
-	gotGI, _ := mustNew(t).Run(reach)
+	gotGI, _ := mustNew(t).RunInterp(reach)
 	if !compiled {
 		t.Errorf("reach each-var: a clean var-reach body should compile, got a fallback")
 	}
@@ -2005,7 +1999,7 @@ func TestTopTakingClosureTrim(t *testing.T) {
 		}
 		// Byte-identical to the interpreter either way.
 		gotC, _, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: compiled=%v (%v) interp=%v (%v)", c.src, gotC, errC, gotI, errI)
 		}
@@ -2045,7 +2039,7 @@ func TestInterpStringRuntimePartCompiles(t *testing.T) {
 		t.Errorf("the interpolation must lower to a native INTERP (no island):\n%s", dis)
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
-	gotI, errI := mustNew(t).Run(src)
+	gotI, errI := mustNew(t).RunInterp(src)
 	if !compiled {
 		t.Errorf("the program must run compiled, fell back")
 	}
@@ -2083,7 +2077,7 @@ func TestInterpStringRuntimePartCompiles(t *testing.T) {
 		t.Errorf("a dynamic multi-value hole must refuse to compile")
 	}
 	mC, mcompiled, _ := mustNew(t).RunCompiled(multi)
-	mI, _ := mustNew(t).Run(multi)
+	mI, _ := mustNew(t).RunInterp(multi)
 	if mcompiled {
 		t.Errorf("dynamic multi-value hole must fall back, ran compiled")
 	}
@@ -2132,7 +2126,7 @@ func TestInterpStringOpInterpParity(t *testing.T) {
 			t.Errorf("%q: dynamic hole must lower to INTERP:\n%s", c.src, dis)
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if !compiled || errC != nil || errI != nil {
 			t.Errorf("%q: run failed compiled=%v errC=%v errI=%v", c.src, compiled, errC, errI)
 			continue
@@ -2171,7 +2165,7 @@ func TestIllegalRefTrapCompiles(t *testing.T) {
 		if !compiled {
 			t.Errorf("%q: trap program did not run compiled (fell back)", src)
 		}
-		_, errI := mustNew(t).Run(src)
+		_, errI := mustNew(t).RunInterp(src)
 		if codeOf(errC) != "illegal_ref" || codeOf(errI) != "illegal_ref" {
 			t.Errorf("%q: compiled=[%s] interp=[%s], want both illegal_ref", src, codeOf(errC), codeOf(errI))
 		}
@@ -2191,7 +2185,7 @@ func TestIllegalRefTrapCompiles(t *testing.T) {
 	if !compiled || errC != nil {
 		t.Fatalf("legal /v compiled run: compiled=%v err=%v", compiled, errC)
 	}
-	gotI, _ := mustNew(t).Run(ok)
+	gotI, _ := mustNew(t).RunInterp(ok)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("legal /v parity: compiled=%v interp=%v", gotC, gotI)
 	}
@@ -2203,7 +2197,7 @@ func TestIllegalRefTrapCompiles(t *testing.T) {
 func TestValOnNonFnBindingCompilesToTheValue(t *testing.T) {
 	const src = `def x 5  x/v`
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
-	gotI, errI := mustNew(t).Run(src)
+	gotI, errI := mustNew(t).RunInterp(src)
 	if errC != nil || errI != nil {
 		t.Fatalf("%q: errC=%v errI=%v", src, errC, errI)
 	}
@@ -2242,7 +2236,7 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 		if !compiled {
 			t.Errorf("%q: trap program did not run compiled (fell back)", c.src)
 		}
-		_, errI := mustNew(t).Run(c.src)
+		_, errI := mustNew(t).RunInterp(c.src)
 		if codeOf(errC) != c.code || codeOf(errI) != c.code {
 			t.Errorf("%q: compiled=[%s] interp=[%s], want both %s", c.src, codeOf(errC), codeOf(errI), c.code)
 		}
@@ -2253,7 +2247,7 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 	// *_unknown_lang error.
 	const ok = `import "boru:minilang"  ("AbcD" mini re '[a-z]+').fst.m`
 	gotC, _, errC := mustNew(t).RunCompiled(ok)
-	gotI, errI := mustNew(t).Run(ok)
+	gotI, errI := mustNew(t).RunInterp(ok)
 	if errC != nil || errI != nil {
 		t.Fatalf("valid mini re: compiled err=%v interp err=%v", errC, errI)
 	}
@@ -2287,7 +2281,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 	if !compiled {
 		t.Errorf("%q: trap program did not run compiled (fell back)", src)
 	}
-	_, errI := mustNew(t).Run(src)
+	_, errI := mustNew(t).RunInterp(src)
 	if codeOf(errC) != "not_found" || codeOf(errI) != "not_found" {
 		t.Errorf("%q: compiled=[%s] interp=[%s], want both not_found", src, codeOf(errC), codeOf(errI))
 	}
@@ -2301,7 +2295,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 		}
 	}
 	gotC, _, eC := mustNew(t).RunCompiled(okGetr)
-	gotI, eI := mustNew(t).Run(okGetr)
+	gotI, eI := mustNew(t).RunInterp(okGetr)
 	if eC != nil || eI != nil {
 		t.Fatalf("valid getr: compiled err=%v interp err=%v", eC, eI)
 	}
@@ -2339,7 +2333,7 @@ func TestBareFnMapFieldCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", src, dis)
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(src)
-		gotI, eI := mustNew(t).Run(src)
+		gotI, eI := mustNew(t).RunInterp(src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", src)
 		}
@@ -2355,7 +2349,7 @@ func TestBareFnMapFieldCompiles(t *testing.T) {
 	// parity — the fold must not change their behaviour.
 	for _, src := range []string{`def m {a:5 b:"x"} m`, `def x 7 def m {a:x} m`} {
 		gotC, _, eC := mustNew(t).RunCompiled(src)
-		gotI, eI := mustNew(t).Run(src)
+		gotI, eI := mustNew(t).RunInterp(src)
 		if eC != nil || eI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: compiled=%v(%v) interp=%v(%v)", src, gotC, eC, gotI, eI)
 		}
@@ -2387,7 +2381,7 @@ func TestChainedVariadicIfCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, dis)
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -2422,7 +2416,7 @@ func TestCaseEmptyScrutineeTrapCompiles(t *testing.T) {
 	if !compiled {
 		t.Errorf("trap program did not run compiled (fell back)")
 	}
-	_, errI := mustNew(t).Run(src)
+	_, errI := mustNew(t).RunInterp(src)
 	if codeOf(errC) != "case_error" || codeOf(errI) != "case_error" {
 		t.Errorf("compiled=[%s] interp=[%s], want both case_error", codeOf(errC), codeOf(errI))
 	}
@@ -2439,7 +2433,7 @@ func TestCaseEmptyScrutineeTrapCompiles(t *testing.T) {
 		t.Errorf("value scrutinee: expected native if-chain, no island/trap:\n%s", dis)
 	}
 	gotC, _, errC2 := mustNew(t).RunCompiled(ok)
-	gotI, errI2 := mustNew(t).Run(ok)
+	gotI, errI2 := mustNew(t).RunInterp(ok)
 	if errC2 != nil || errI2 != nil {
 		t.Fatalf("value scrutinee: compiled err=%v interp err=%v", errC2, errI2)
 	}
@@ -2473,7 +2467,7 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 		if !compiled || errC != nil {
 			t.Fatalf("%q: compiled run: compiled=%v err=%v", src, compiled, errC)
 		}
-		gotI, _ := mustNew(t).Run(src)
+		gotI, _ := mustNew(t).RunInterp(src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: parity: compiled=%v interp=%v", src, gotC, gotI)
 		}
@@ -2485,7 +2479,7 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 	// compiled run must stay byte-identical to the interpreter — pin that parity.
 	const harness = `import "boru:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
 	gotC, _, errC := mustNew(t).RunCompiled(harness)
-	gotI, errI := mustNew(t).Run(harness)
+	gotI, errI := mustNew(t).RunInterp(harness)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("Test harness parity: compiled=%v(%v) interp=%v(%v)", gotC, errC, gotI, errI)
 	}
@@ -2518,7 +2512,7 @@ func TestRunSpecHarnessCompiles(t *testing.T) {
 	// §8); until then this asserts the soundness invariant, not native coverage.
 	const harness = `"boru:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
 	gotC, _, errC := mustNew(t).RunCompiled(harness) // fallback allowed
-	gotI, errI := mustNew(t).Run(harness)
+	gotI, errI := mustNew(t).RunInterp(harness)
 	if errC != nil || errI != nil {
 		t.Fatalf("run-spec harness run: errC=%v errI=%v", errC, errI)
 	}
@@ -2542,7 +2536,7 @@ func TestRunSpecHarnessCompiles(t *testing.T) {
 			continue
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled || eC != nil || eI != nil {
 			t.Errorf("%q: run: compiled=%v eC=%v eI=%v", c.src, compiled, eC, eI)
 			continue
@@ -2560,7 +2554,7 @@ func TestRunSpecHarnessCompiles(t *testing.T) {
 		{`def xs [9 8] end for (xs size) [ i ] end`, "[0 1]"},
 	} {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled || eC != nil || eI != nil {
 			t.Errorf("%q: live loop run: compiled=%v eC=%v eI=%v", c.src, compiled, eC, eI)
 			continue
@@ -2606,7 +2600,7 @@ func TestDispatchRecoveryPolyCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -2630,7 +2624,7 @@ func TestDispatchRecoveryPolyCompiles(t *testing.T) {
 		{`"x" add 1`, "[x1]"},
 	} {
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -2661,7 +2655,7 @@ func TestDynamicOperandRecoveryPolyCompiles(t *testing.T) {
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -2682,7 +2676,7 @@ func TestDynamicOperandRecoveryPolyCompiles(t *testing.T) {
 		`5 get "a"`,
 	} {
 		_, _, eC := mustNew(t).RunCompiled(src)
-		_, eI := mustNew(t).Run(src)
+		_, eI := mustNew(t).RunInterp(src)
 		if eC == nil || eI == nil {
 			t.Errorf("%q: expected a signature error in both engines, compiled=%v interp=%v", src, eC, eI)
 			continue
@@ -2704,7 +2698,7 @@ func TestDynamicOperandRecoveryPolyCompiles(t *testing.T) {
 func TestZeroOutputDynamicPolyCompiles(t *testing.T) {
 	const src = `def l [1 2] push 3 l drop l`
 	gotC, compiled, eC := mustNew(t).RunCompiled(src)
-	gotI, eI := mustNew(t).Run(src)
+	gotI, eI := mustNew(t).RunInterp(src)
 	if eC != nil || eI != nil {
 		t.Fatalf("compiled err=%v interp err=%v", eC, eI)
 	}
@@ -2743,7 +2737,7 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -2759,7 +2753,7 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	// — a genuine type error, not a dynamic dispatch. It must refuse the poly and
 	// raise the same signature_error in both engines, never silently succeed.
 	_, _, eC := mustNew(t).RunCompiled(`5 set a 9`)
-	_, eI := mustNew(t).Run(`5 set a 9`)
+	_, eI := mustNew(t).RunInterp(`5 set a 9`)
 	if eC == nil || eI == nil {
 		t.Fatalf("set over Integer: expected signature error in both engines, compiled=%v interp=%v", eC, eI)
 	}
@@ -2795,7 +2789,7 @@ func TestSetOverDynamicReceiverConsumedCompiles(t *testing.T) {
 			t.Fatalf("%q: expected a compiled program, refused: %s", c.src, reason)
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -2841,7 +2835,7 @@ func TestConditionalBranchApplyCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -2868,7 +2862,7 @@ func TestConditionalBranchApplyCompiles(t *testing.T) {
 		{`def n 0 if (n eq 0) ["a"] 7 16`, "[a 16]"},
 	} {
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -2906,7 +2900,7 @@ func TestSubRegistryPolyCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -2928,7 +2922,7 @@ func TestSubRegistryPolyCompiles(t *testing.T) {
 		{`size (if true ["ab"] ["cde"])`, "[2]"},
 	} {
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -2964,7 +2958,7 @@ func TestMixedFnValueApplyCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -2986,7 +2980,7 @@ func TestMixedFnValueApplyCompiles(t *testing.T) {
 		{`def m {g: 42}  3 m.g 2`, "[3 42 2]"},
 	} {
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -3020,7 +3014,7 @@ func TestPatrunFnValueStoreCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -3039,7 +3033,7 @@ func TestPatrunFnValueStoreCompiles(t *testing.T) {
 	// and h {v:5} → 5+100 = 105, compiled == interp.
 	capSrc := `def mk fn [[bse:Integer] [Patrun] [def p (patrun Function)  add {cmd:"x"} ([m:Map] => [m.v add bse]) p  p]]  def api (mk 100)  def h (find {cmd:"x" v:5} api)  h {v:5}`
 	gotC, capComp, eC := mustNew(t).RunCompiled(capSrc)
-	gotI, eI := mustNew(t).Run(capSrc)
+	gotI, eI := mustNew(t).RunInterp(capSrc)
 	if eC != nil || eI != nil {
 		t.Fatalf("capturing: compiled err=%v interp err=%v", eC, eI)
 	}
@@ -3087,7 +3081,7 @@ func TestStageAVariadicBranchResult(t *testing.T) {
 		if fmt.Sprint(got) != c.want {
 			t.Errorf("m %s: compiled %v want %s", c.arg, got, c.want)
 		}
-		gotI, _ := mustNew(t).Run(src)
+		gotI, _ := mustNew(t).RunInterp(src)
 		if fmt.Sprint(gotI) != c.want {
 			t.Errorf("m %s: interp %v want %s", c.arg, gotI, c.want)
 		}
@@ -3120,7 +3114,7 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 		}
 		// The interpreter is the backstop; RunCompiled falls back and matches it.
 		gc, _, ec := mustNew(t).RunCompiled(src)
-		gi, ei := mustNew(t).Run(src)
+		gi, ei := mustNew(t).RunInterp(src)
 		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {
 			t.Errorf("fallback parity: compiled=%v/%s interp=%v/%s :: %s", gc, codeOf(ec), gi, codeOf(ei), src)
 		}
@@ -3157,8 +3151,12 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 		src  string
 		want string
 	}{
-		// top-level: factory returns a closure capturing x, applied immediately.
-		{`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  (mk 5) 10`, "[15]"},
+		// The top-level row `(mk 5) 10` MOVED OUT 2026-08-27: it asserted [15]
+		// on "both lanes" while reading gotI from the compiled lane (NUR106).
+		// The interpreter places — `(mk 5)` has one survivor — and answers
+		// `fn (Integer) 10`; the native compile was a miscompile. It is pinned
+		// as a sound refusal below. The two per-iteration rows stay positive:
+		// a `for` BODY closes through a frame rewind, so both lanes apply.
 		// per-iteration apply inside a for body — the landed row.
 		{`def mk2 fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  for 3 [(mk2 i) 10]`, "[10 11 12]"},
 		// a multi-arg trailing apply over the per-iteration closure.
@@ -3175,11 +3173,16 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 			continue
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, _ := mustNew(t).Run(c.src)
+		gotI, _ := mustNew(t).RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s", c.src, compiled, gotC, errC, gotI, c.want)
 		}
 	}
+
+	// The relocated top-level row (NUR101): the interpreter PLACES.
+	nur101Refusal(t,
+		`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  (mk 5) 10`,
+		"[fn (Integer) 10]")
 
 	// Negative: a per-iteration body whose trailing apply arg is itself a COMPUTED
 	// (event) value is NOT the leading-fn-carrier + re-pushable-args shape — it must
@@ -3194,7 +3197,7 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 			t.Errorf("%q: a computed apply-arg must NOT compile to a native per-iteration apply:\n%s", src, prog.Disassemble())
 		}
 		gc, _, ec := mustNew(t).RunCompiled(src)
-		gi, ei := mustNew(t).Run(src)
+		gi, ei := mustNew(t).RunInterp(src)
 		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {
 			t.Errorf("fallback parity: compiled=%v/%s interp=%v/%s :: %s", gc, codeOf(ec), gi, codeOf(ei), src)
 		}
@@ -3233,7 +3236,7 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 			t.Errorf("%q: expected the parser body to lower to a CALL_USER unit:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -3252,7 +3255,7 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 	// raises parse_registry_frozen identically in BOTH engines.
 	dbl := `"boru:parselang" import end  ParseLang.register`
 	_, _, eC := mustNew(t).RunCompiled(dbl)
-	_, eI := mustNew(t).Run(dbl)
+	_, eI := mustNew(t).RunInterp(dbl)
 	if codeOf(eC) != "parse_registry_frozen" {
 		t.Errorf("register tombstone compiled: code=%q want parse_registry_frozen (err=%v)", codeOf(eC), eC)
 	}
@@ -3289,7 +3292,7 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 			t.Errorf("seed %d: expected no interpreter island:\n%s", seed, dis)
 		}
 		gotC, compiled, eC := newClocked().RunCompiled(src)
-		gotI, eI := newClocked().Run(src)
+		gotI, eI := newClocked().RunInterp(src)
 		if !compiled {
 			t.Errorf("seed %d: did not run compiled", seed)
 		}
@@ -3334,7 +3337,7 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 				seed, prog.Disassemble())
 		}
 		gotC, _, eC := newClocked().RunCompiled(src)
-		gotI, eI := newClocked().Run(src)
+		gotI, eI := newClocked().RunInterp(src)
 		if eC != nil || eI != nil {
 			t.Fatalf("seed %d (recv-bound): compiled err=%v interp err=%v", seed, eC, eI)
 		}
@@ -3388,7 +3391,7 @@ func TestDeferredListBodyCompiles(t *testing.T) {
 		if fmt.Sprint(got) != c.want {
 			t.Errorf("compiled %v want %s :: %s", got, c.want, c.src)
 		}
-		gotI, _ := mustNew(t).Run(c.src)
+		gotI, _ := mustNew(t).RunInterp(c.src)
 		if fmt.Sprint(gotI) != c.want {
 			t.Errorf("interp %v want %s :: %s", gotI, c.want, c.src)
 		}
@@ -3407,7 +3410,7 @@ func TestDeferredListBodyCompiles(t *testing.T) {
 	}
 	for _, c := range contrast {
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if codeOf(eC) != codeOf(eI) {
 			t.Errorf("error parity: compiled=%s interp=%s :: %s", codeOf(eC), codeOf(eI), c.src)
 		}
@@ -3444,7 +3447,7 @@ func TestQuotedOperandHasInspectCompiles(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%q: did not run compiled", c.src)
 		}
@@ -3463,7 +3466,7 @@ func TestQuotedOperandHasInspectCompiles(t *testing.T) {
 		{`{a:1} has "z"`, "[false]"},
 	} {
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -3493,7 +3496,7 @@ func TestDoMapCompilesNoIsland(t *testing.T) {
 			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
 		}
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)
-		gotI, eI := mustNew(t).Run(c.src)
+		gotI, eI := mustNew(t).RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
 		}
@@ -3504,7 +3507,7 @@ func TestDoMapCompilesNoIsland(t *testing.T) {
 	// NEGATIVE: the LIST (code-body) sig is unaffected by the Map-sig change —
 	// it still compiles its body and runs compiled == interp.
 	gotC, _, eC := mustNew(t).RunCompiled(`do [1 add 2]`)
-	gotI, eI := mustNew(t).Run(`do [1 add 2]`)
+	gotI, eI := mustNew(t).RunInterp(`do [1 add 2]`)
 	if eC != nil || eI != nil {
 		t.Fatalf("do [body]: compiled err=%v interp err=%v", eC, eI)
 	}
@@ -3531,7 +3534,7 @@ func TestOuterCompilesNoIsland(t *testing.T) {
 		t.Errorf("expected no island:\n%s", prog.Disassemble())
 	}
 	gotC, compiled, eC := mustNew(t).RunCompiled(src)
-	gotI, eI := mustNew(t).Run(src)
+	gotI, eI := mustNew(t).RunInterp(src)
 	if !compiled {
 		t.Errorf("did not run compiled")
 	}
@@ -3543,7 +3546,7 @@ func TestOuterCompilesNoIsland(t *testing.T) {
 	}
 	// NEGATIVE: a non-concrete-list arg still errors (outer_error), not a crash.
 	_, _, eBad := mustNew(t).RunCompiled(`outer [mul] List [3 4]`)
-	_, eBadI := mustNew(t).Run(`outer [mul] List [3 4]`)
+	_, eBadI := mustNew(t).RunInterp(`outer [mul] List [3 4]`)
 	if (eBad == nil) != (eBadI == nil) {
 		t.Errorf("outer over a type-literal list: compiled err=%v interp err=%v (should agree)", eBad, eBadI)
 	}
@@ -3571,7 +3574,7 @@ func TestFnBodyContainerLiteralIdentity(t *testing.T) {
 		if errC != nil || !compiled {
 			t.Fatalf("%s: compiled run: compiled=%v err=%v", c.name, compiled, errC)
 		}
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if errI != nil {
 			t.Fatalf("%s: interp run: %v", c.name, errI)
 		}
@@ -3603,7 +3606,7 @@ func TestFnBodyContainerLiteralIdentity(t *testing.T) {
 		if errC != nil || !compiled {
 			t.Fatalf("%s: compiled run: compiled=%v err=%v", c.name, compiled, errC)
 		}
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if errI != nil {
 			t.Fatalf("%s: interp run: %v", c.name, errI)
 		}
@@ -3652,7 +3655,7 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 		}
 		// The silent-fallback path must produce the interpreter's value.
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if compiled {
 			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
 		}
@@ -3663,6 +3666,11 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 			t.Errorf("%s: fallback=%v interp=%v", c.name, gotC, gotI)
 		}
 	}
+
+	// The UNWRAPPED twin of the preserved `((mk 5) 10)` row: no enclosing
+	// rewind, so the interpreter PLACES and the compiler must not apply
+	// (NUR101, design/PAREN-RESTEP-RULE.0.md).
+	nur101Refusal(t, `def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  (mk 5) 10`, "[fn (Integer) 10]")
 
 	// PRESERVED coverage: fn-free container reads (paren or bare), APPLIED
 	// member calls (a multi-param member fed its args — the method-through-map
@@ -3684,7 +3692,7 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 		if errC != nil || !compiled {
 			t.Fatalf("preserved %q: compiled=%v err=%v", src, compiled, errC)
 		}
-		gotI, errI := mustNew(t).Run(src)
+		gotI, errI := mustNew(t).RunInterp(src)
 		if errI != nil {
 			t.Fatalf("preserved %q: interp err=%v", src, errI)
 		}
@@ -3745,7 +3753,7 @@ func TestWalkHookClosureCompiles(t *testing.T) {
 			t.Errorf("%s: expected no island:\n%s", c.name, prog.Disassemble())
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%s: did not run compiled", c.name)
 		}
@@ -3763,7 +3771,7 @@ func TestWalkHookClosureCompiles(t *testing.T) {
 	{
 		src := `def acc (flex {})  walk {mode: "depth"} {a:1} (m:Any => [m.path drop])  acc`
 		_, compiled, errC := mustNew(t).RunCompiled(src)
-		_, errI := mustNew(t).Run(src)
+		_, errI := mustNew(t).RunInterp(src)
 		if !compiled {
 			t.Errorf("flex-map ascend: did not run compiled")
 		}
@@ -3804,7 +3812,7 @@ func TestWalkHookClosureCompiles(t *testing.T) {
 			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if compiled {
 			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
 		}
@@ -3860,7 +3868,7 @@ func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
 		if !compiled {
 			t.Errorf("%s: trap program did not run compiled (fell back)", c.name)
 		}
-		_, errI := mustNew(t).Run(c.src)
+		_, errI := mustNew(t).RunInterp(c.src)
 		if codeOf(errC) != c.code || codeOf(errI) != c.code {
 			t.Fatalf("%s: compiled=[%s] interp=[%s], want both %s", c.name, codeOf(errC), codeOf(errI), c.code)
 		}
@@ -3944,7 +3952,7 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 			t.Errorf("refinement escape: want the core-default refusal, got prog=%v reason=%q", prog != nil, reason)
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(src)
-		gotI, errI := mustNew(t).Run(src)
+		gotI, errI := mustNew(t).RunInterp(src)
 		if compiled {
 			t.Errorf("refinement escape: must fall back to the interpreter")
 		}
@@ -3965,7 +3973,7 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 			t.Fatalf("%s: refused (%q); want a runtime-rematch compile", c.name, reason)
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if compiled {
 			t.Errorf("%s: the runtime MATCH must defer to the interpreter", c.name)
 		}
@@ -4001,7 +4009,7 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 			t.Errorf("%s: expected a DISPATCH_REMATCH lowering:\n%s", c.name, prog.Disassemble())
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%s: the runtime NO-MATCH must raise compiled, not defer", c.name)
 		}
@@ -4038,7 +4046,7 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if compiled {
 			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
 		}
@@ -4062,7 +4070,7 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 		}
 	}
 	gotC, _, errC := mustNew(t).RunCompiled(flexReach)
-	gotI, errI := mustNew(t).Run(flexReach)
+	gotI, errI := mustNew(t).RunInterp(flexReach)
 	if errC != nil || errI != nil {
 		t.Fatalf("flex-reach row errored: compiled=%v interp=%v", errC, errI)
 	}
@@ -4092,7 +4100,7 @@ func TestUnmatchedDispatchTrapSpliceGraduated(t *testing.T) {
 	if !compiled {
 		t.Fatal("the trap program must run compiled")
 	}
-	gotI, errI := mustNew(t).Run(src)
+	gotI, errI := mustNew(t).RunInterp(src)
 	if errC == nil || errI == nil {
 		t.Fatalf("both engines must raise: compiled=%v interp=%v", errC, errI)
 	}
@@ -4143,7 +4151,7 @@ func TestTypedDefBindCompiles(t *testing.T) {
 		if !compiled || errC != nil {
 			t.Fatalf("%s: compiled run failed: compiled=%v err=%v", c.name, compiled, errC)
 		}
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if errI != nil {
 			t.Fatalf("%s: interp run failed: %v", c.name, errI)
 		}
@@ -4172,12 +4180,47 @@ func TestTypedDefBindCompiles(t *testing.T) {
 	}
 	for _, c := range fails {
 		_, errC := mustNew(t).RunCompiledStrict(c.src)
-		_, errI := mustNew(t).Run(c.src)
+		_, errI := mustNew(t).RunInterp(c.src)
 		if errC == nil || errI == nil {
 			t.Fatalf("%s: expected both engines to raise: compiled=%v interp=%v", c.name, errC, errI)
 		}
-		if errC.Error() != errI.Error() {
-			t.Errorf("%s: error divergence:\n  compiled: %s\n  interp:   %s", c.name, errC, errI)
+		// Code and message must match exactly. The rendered POSITION is
+		// compared separately below (NUR108): two of these three rows carry
+		// the identical code and detail on both lanes and differ only in
+		// where the diagnostic points, which `.Error()` folds in — and this
+		// assertion read its interp side from `Run`, the compiled lane, until
+		// 2026-08-27 (NUR106), so it never compared anything at all.
+		var aeC, aeI *core.BoruError
+		okC, okI := errors.As(errC, &aeC), errors.As(errI, &aeI)
+		if okC != okI {
+			t.Errorf("%s: one lane raised a structured diagnostic and the other did not:\n"+
+				"  compiled: %v\n  interp:   %v", c.name, errC, errI)
+			continue
+		}
+		if !okC {
+			// A predicate failure raises a plain error on both lanes; there is
+			// no position to diverge over, so compare the text and move on.
+			if errC.Error() != errI.Error() {
+				t.Errorf("%s: error divergence:\n  compiled: %s\n  interp:   %s", c.name, errC, errI)
+			}
+			continue
+		}
+		if aeC.Code != aeI.Code || aeC.Detail != aeI.Detail {
+			t.Errorf("%s: error divergence:\n  compiled: [%s] %s\n  interp:   [%s] %s",
+				c.name, aeC.Code, aeC.Detail, aeI.Code, aeI.Detail)
+		}
+		// NUR108, measured 2026-08-27: the compiled lane loses the position on
+		// a BIND_TYPED validate failure — Row 0, rendered "source position
+		// unknown" — where the interpreter points at the `def`. Pinned so the
+		// day it is fixed this fence fails and graduates into the equality
+		// above.
+		if aeC.Row != 0 {
+			t.Errorf("%s: NUR108 CLOSED? compiled now carries row %d (interp %d) — "+
+				"fold the position into the equality above and delete this fence",
+				c.name, aeC.Row, aeI.Row)
+		}
+		if aeI.Row == 0 {
+			t.Errorf("%s: the interpreter lost its position too — that is a regression, not NUR108", c.name)
 		}
 	}
 
@@ -4199,7 +4242,7 @@ func TestTypedDefBindCompiles(t *testing.T) {
 		t.Errorf("static typed-def must ride the const pool, not BIND_TYPED:\n%s", prog.Disassemble())
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(staticSrc)
-	gotI, errI := mustNew(t).Run(staticSrc)
+	gotI, errI := mustNew(t).RunInterp(staticSrc)
 	if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("static typed-def parity: compiled=%v/%v/%v interp=%v/%v", gotC, compiled, errC, gotI, errI)
 	}
@@ -4215,9 +4258,21 @@ func TestTypedDefBindCompiles(t *testing.T) {
 		t.Errorf("statically-failing typed-def must never emit a bind:\n%s", fprog.Disassemble())
 	}
 	_, errFC := mustNew(t).RunCompiledStrict(failingSrc)
-	_, errFI := mustNew(t).Run(failingSrc)
-	if errFC == nil || errFI == nil || errFC.Error() != errFI.Error() {
-		t.Errorf("failing typed-def trap parity: compiled=%v interp=%v", errFC, errFI)
+	_, errFI := mustNew(t).RunInterp(failingSrc)
+	var aeFC, aeFI *core.BoruError
+	if !errors.As(errFC, &aeFC) || !errors.As(errFI, &aeFI) {
+		t.Fatalf("failing typed-def trap parity: compiled=%v interp=%v", errFC, errFI)
+	}
+	if aeFC.Code != aeFI.Code || aeFC.Detail != aeFI.Detail {
+		t.Errorf("failing typed-def trap parity: compiled=[%s] %s interp=[%s] %s",
+			aeFC.Code, aeFC.Detail, aeFI.Code, aeFI.Detail)
+	}
+	// NUR108 again, the other way round: here BOTH lanes carry a position and
+	// they point at different tokens — the trap fires at the VALUE (1:23), the
+	// interpreter at the `def` (1:1). Same code, same message, same fix.
+	if aeFC.Col == aeFI.Col && aeFC.Row == aeFI.Row {
+		t.Errorf("NUR108 CLOSED? the trap and the interpreter now agree at %d:%d — "+
+			"fold the position into the equality above and delete this fence", aeFC.Row, aeFC.Col)
 	}
 }
 
@@ -4241,7 +4296,7 @@ func TestPR225P1Refusals(t *testing.T) {
 		t.Errorf("refusal reason = %q; want the embedded-binding identity reason", reason)
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(embeds)
-	gotI, errI := mustNew(t).Run(embeds)
+	gotI, errI := mustNew(t).RunInterp(embeds)
 	if compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[true]" {
 		t.Errorf("fallback parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want [true])",
 			compiled, errC, errI, gotC, gotI)
@@ -4256,7 +4311,7 @@ func TestPR225P1Refusals(t *testing.T) {
 	// an arity-0 OpCallDynMethod with parity.
 	const classFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function} def o (make C {f:make42/v}) o.f`
 	gotC2, compiled2, errC2 := mustNew(t).RunCompiled(classFn)
-	gotI2, errI2 := mustNew(t).Run(classFn)
+	gotI2, errI2 := mustNew(t).RunInterp(classFn)
 	if !compiled2 || errC2 != nil || errI2 != nil || fmt.Sprint(gotC2) != fmt.Sprint(gotI2) || fmt.Sprint(gotI2) != "[42]" {
 		t.Errorf("compiled parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want compiled [42])",
 			compiled2, errC2, errI2, gotC2, gotI2)
@@ -4309,7 +4364,7 @@ func TestFilterLambdaCaptureCompiles(t *testing.T) {
 			t.Errorf("%s: expected no island:\n%s", c.name, prog.Disassemble())
 		}
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
+		gotI, errI := mustNew(t).RunInterp(c.src)
 		if !compiled {
 			t.Errorf("%s: did not run compiled", c.name)
 		}
@@ -4334,7 +4389,7 @@ def f (fn [[] [List] [ filter two [1 2 3] ]]) f`
 			// The multi-overload operand must not compile to a single closure
 			// unit; islanding or refusal are both sound.
 			gotC, _, errC := mustNew(t).RunCompiled(src)
-			gotI, errI := mustNew(t).Run(src)
+			gotI, errI := mustNew(t).RunInterp(src)
 			if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 				t.Errorf("multi-overload operand diverged: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 			}
@@ -4347,7 +4402,7 @@ def f (fn [[] [List] [ filter two [1 2 3] ]]) f`
 	{
 		src := `def f (fn [[x:Any] [Any] [ filter ([e:Any] => [ e.value ]) x.items ]]) f {items: [1 2]}`
 		gotC, _, errC := mustNew(t).RunCompiled(src)
-		gotI, errI := mustNew(t).Run(src)
+		gotI, errI := mustNew(t).RunInterp(src)
 		if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("dynamic-collection lambda diverged: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 		}
@@ -4363,7 +4418,7 @@ def f (fn [[] [List] [ filter two [1 2 3] ]]) f`
   acc
 ]]) f "z"`
 		gotC, _, errC := mustNew(t).RunCompiled(src)
-		gotI, errI := mustNew(t).Run(src)
+		gotI, errI := mustNew(t).RunInterp(src)
 		if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("capturing hook lambda diverged: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 		}

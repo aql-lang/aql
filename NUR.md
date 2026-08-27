@@ -89,7 +89,11 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
-| [NUR101](#nur101) | BROAD's placement now depends on ENCLOSING CONTEXT: re-measured 2026-08-26, `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` still dispatches (`3`), and a list literal inherits the wrapped form — so `[((mk 1) 2)]` is `[3]` interpreted and `[fn (Integer) 2]` compiled, silently. The original top-level half (a computed group dispatching where a reference or literal placed) is CLOSED; the enclosing-group case is open on BOTH lanes. NB this file holds TWO records under this number, ruling opposite ways — see the record | re-measuring §5.4 after #402, 2026-08-25; re-measured 2026-08-26 |
+| [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
+| [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
+| [NUR106](#nur106) | Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compares the compiled lane against itself and passes unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
+| [NUR107](#nur107) | A type-mismatched callee under a leading one-arg apply diverges: `ld ([k:String] => [k]) 14` raises `signature_error` interpreted and returns `[fn (String) 14]` compiled. `TestLeadApplyNoMatchTwoReturnParity` pinned it as NON-reproducing on 2026-08-03 — against the vacuous oracle of NUR106 | the NUR106 oracle sweep, 2026-08-27 |
+| [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
 | [NUR097](#nur097) | One syntax, two binding regimes: a closure CAPTURES parameters and fn-locals but resolves module-scope names LATE through the def stack, so a later `def` silently changes an existing closure's answer — verdict proposed: Allowed (top-level liveness) plus an in-file check hint | the higher-order capability audit's §5.6, re-assessed 2026-08-21 (`design/HIGHER-ORDER-FUNCTIONS.0.md`) |
@@ -240,6 +244,174 @@ maintainer's to direct.
 
 ---
 
+## NUR108 — the compiled lane's diagnostics point somewhere else {#nur108}
+
+**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** completing
+the NUR106 oracle sweep
+
+**Rule:** the two lanes agree on errors, and a diagnostic's POSITION is part
+of the error — it is the half a user reads first.
+
+**Divergence:** the code and the message match exactly; the position does not,
+in two different ways.
+
+```
+def f fn [[x:Integer] [Integer] [def v:(Integer gt 10) x v]] f 5
+
+compiled → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
+           --> source position unknown
+interp   → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
+           --> 1:34   …with the `def v` underlined
+```
+
+```
+def x:(Integer gt 10) 5 x
+
+compiled → --> 1:23   …pointing at the VALUE
+interp   → --> 1:1    …pointing at the `def`
+```
+
+The first is a LOSS — `BIND_TYPED`'s validate failure carries no position at
+all, so the renderer falls back to "source position unknown". The second is a
+DISAGREEMENT: the terminal trap fires at the value it rejected, the
+interpreter blames the binding.
+
+**Not cosmetic.** A user who compiles and a user who interprets get different
+answers to "where do I look", and the first gets none. It also makes every
+error-parity assertion that compares `err.Error()` — the rendered form,
+position folded in — untrustworthy as a lane comparison, which is how this
+stayed invisible under NUR106's vacuous oracle.
+
+**Verdict: resolve by fix.** `BIND_TYPED` must carry the def's position into
+its raise; the trap should blame the same token the interpreter does. Pinned
+meanwhile in `TestTypedDefBindCompiles`, which now compares Code and Detail
+and fences the position gap explicitly, so closing it fails the fence.
+
+---
+
+## NUR109 — an unbound parser name is two different errors {#nur109}
+
+**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** completing
+the NUR106 oracle sweep
+
+**Rule:** the two lanes raise the same taxonomy for the same program.
+
+**Divergence:** `parse op 'inc'`, where `op` was bound only inside a branch
+that did not run —
+
+```
+compiled → [boru/parse_error]: parse: the parser is not a usable function value
+interp   → [boru/parse_unknown_lang]: parse: no parser "op" is registered
+```
+
+**The compiled answer is the specified one**, and the test that hid this says
+so in its own header: *"a def-scoped parser value has no 'missing kind' — only
+an unusable value, and the two engines must agree on it."* The interpreter
+still falls back to the kind-name miss, because an unbound def-scoped name is
+indistinguishable to it from an unregistered kind.
+
+`TestParseFnDispatchMissParity` asserted both lanes raised `parse_error` and
+read its interp side from `Run` — the compiled lane (NUR106) — so it compared
+`parse_error` to itself.
+
+**Verdict: resolve by fix, interpreter-side.** The interpreter needs the same
+distinction the compiled dispatch already makes: a name that resolved to a
+value which is not a usable parser is not a missing kind. Pinned as measured
+meanwhile.
+
+---
+
+## NUR106 — the parity harness stopped comparing lanes, and stayed green {#nur106}
+
+**Status:** Pending (verdict: resolve by fix — the sweep landed; the guard has
+not) · **Recorded:** 2026-08-27 · **Surfaced by:** measuring NUR101's ruling
+against `RunInterp` and finding the interpreter had never produced the answer
+its own tests asserted
+
+**Rule:** the compiled lane is measured against the tree-walking interpreter,
+byte-identical in values, errors and output. `RunInterp` is that oracle, and
+its doc comment says so: *"the differential oracle the compiled path is
+measured against … it survives Stage J's Run flip as the explicitly-named
+interpreter entry point."*
+
+**Divergence:** Stage J flipped `lang.Run` to the COMPILED path with an
+interpreter fallback only on refusal. **75 parity assertions across five files
+were not swept with it** and still read
+
+```go
+gotC, compiled, errC := b.RunCompiled(src)
+gotI, _              := mustNew(t).Run(src)     // ← the compiled lane again
+if fmt.Sprint(gotC) != fmt.Sprint(gotI) { … }   // ← compares it to itself
+```
+
+`TestFactoryApplyCompiles` is the clean instance: it asserts `(mk2 5) 10` is
+`[11]` "on both lanes", and the interpreter answers `fn (Integer) 10` — it has
+never answered `11` for that program. Five of NUR101's miscompiles and the
+live divergence now filed as NUR107 sat behind these assertions.
+
+**Why it matters more than any one divergence.** A parity harness that stops
+comparing lanes is worse than no harness: it converts a whole class of defect
+into a green check, and the greenness is itself the evidence people cite. The
+75 sites were all in the files most specifically about fn-value compilation —
+the harness failed hardest exactly where it was most needed.
+
+**Verdict: resolve by fix.** The mechanical sweep landed with this record and
+surfaced NUR107 immediately.
+
+**The first pass of that sweep was itself incomplete, and a review bot caught
+it** — which is the register's own point made twice. The pattern used
+(`gotI…Run(` → `…RunInterp(`) keyed on ONE naming convention and missed
+`errI`, `eI`, `gi`/`ei` and an effect-parity closure, leaving 21 assertions
+still comparing the compiled lane to itself in the same files. Completing it
+surfaced NUR108 and NUR109. A convention-keyed sweep is not a sweep; the
+audit that finds the last one is "every `.Run(` in a file that also calls
+`RunCompiled`, read individually".
+
+What is NOT yet done is the guard that stops it recurring: nothing prevents
+the next Run-like flip from stranding its oracle uses again. Candidates,
+cheapest first — rename the oracle in test helpers to a single
+`interpOracle(t, src)` so there is one site to flip; or a lint/vet rule
+rejecting `.Run(` in a file that also calls `RunCompiled`.
+
+---
+
+## NUR107 — a no-match callee raises interpreted and returns data compiled {#nur107}
+
+**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** the NUR106
+oracle sweep, on the very test that had pinned this claim as non-reproducing
+
+**Rule:** the two lanes agree on errors as well as values — the same program
+raises the same taxonomy on both, which is what
+`TestLeadApplyArityMismatchParity` pins for a 2-arg, a 0-arg and a
+multi-return callee under a one-arg window.
+
+**Divergence:** a TYPE-mismatched callee does not.
+
+```
+def ld fn [[g:Function x:Integer] [Function Integer] [(g x)]] ld ([k:String] => [k]) 14
+
+interpreted → [boru/signature_error]: cannot call `g` — no signature matches the arguments
+compiled    → [fn (String) 14]                                          ← no error at all
+```
+
+The interpreter's word dispatch raises on no-match. The VM's dynamic apply
+treats "no signature matched" as "not callable" and leaves `[fn, arg]` as
+data — which is right for a value that is genuinely not a function, and wrong
+for a Function whose overloads simply do not admit the argument.
+
+**This was pinned as NOT reproducing.** `TestLeadApplyNoMatchTwoReturnParity`
+carries the comment *"Verified non-reproducing 2026-08-03; this pin keeps it
+that way"*, and it verified against `Run` — the compiled lane (NUR106). The
+Codex-review claim it was written to dismiss (PR #327) was correct. The test
+is re-pinned to the measured behaviour with this record's number on it.
+
+**Verdict: resolve by fix, VM-side.** `callDynamic` must distinguish *not a
+function* from *a function no overload of which matches*, and raise for the
+second. The blast radius is every dynamic-apply opcode, so it wants its own
+increment rather than riding NUR101's.
+
+---
+
 ## NUR101 — BROAD places a REFERENCED fn but still dispatches a COMPUTED one {#nur101}
 
 **Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** re-measuring
@@ -331,15 +503,27 @@ which is how this register came to hold two contradictory readings (see
 below). Options, costs and a recommendation:
 [design/O1-RELITIGATION.0.md](design/O1-RELITIGATION.0.md).
 
-**Register hygiene: this file holds TWO records numbered NUR101**, both
-Pending, both claiming the anchor `{#nur101}`, ruling opposite ways on this
-same program — this one, and "a paren-computed fn inside a list literal is
-applied interpreted, baked compiled", which states *"the compiled lane is the
-defect"*. This record's own note below says that reading "had it exactly
-backwards" and was reverted, but the superseded record was never deleted. The
-duplicate anchor also makes every `#nur101` link resolve to this one. One of
-the two must be deleted (the register deletes superseded records rather than
-annotating them); which one follows from the ruling above.
+**RULED 2026-08-26 — place uniformly.** A computed function applied inside
+an enclosing group PLACES, exactly as its unwrapped twin does. `((mk 1) 2)`
+becomes `fn (Integer) 2`, and `[((mk 1) 2)]` becomes `[fn (Integer) 2]` on
+both lanes. There is no enclosing-context exception: ADR-011's carve-out
+stays what it says, a bare WORD inside a group, and a computed group result
+is not one.
+
+Both lanes move. The compiled lane is NOT already at this answer for the
+enclosing-group case — `lang/go/bytecode_curried_test.go:17-24` pins compiled
+`((mk 1) 2)` as `[3]` — so the fix is interpreter AND compiler, and that
+fixture is rewritten with it. `design/HIGHER-ORDER-FUNCTIONS.0.md` §5.4's
+`((mk 1) 2)` → `3` transcripts and its `def h (mk 1)` / `2 h/v apply`
+workaround are re-spelled, as every §1 program was when BROAD's first half
+landed. `def h (mk 1) end  h 2` → `3` must keep working: a bare NAME bound to
+a function calls by rule, and that rule is untouched.
+
+The superseded second record under this number — "a paren-computed fn inside
+a list literal is applied interpreted, baked compiled", which read the
+compiled lane as the defect — is DELETED as of this ruling, per the
+register's own discipline for superseded records. Its content is subsumed:
+the list literal was never the subject, it merely inherits the wrapped form.
 
 **Verdict:** resolve by fix — extend BROAD's placement to a computed group
 result, so `(mk 1) 2` is `fn 2` like its reference and literal twins. Two
@@ -348,6 +532,79 @@ in §5.4 and its `def h (mk 1)` / `2 h/v apply` workaround were written against
 the unfixed behaviour and will need re-spelling, exactly as every §1 program
 was when BROAD's first half landed; and `def h (mk 1)  h 2` → `3` must keep
 working, since a bare NAME bound to a function calls by rule.
+
+---
+
+**THE RULING'S PREMISE IS FALSIFIED — measured 2026-08-27.** The ruling
+above stands as a statement of intent about the LANGUAGE; what it got wrong
+is the claim that the interpreter needed to change to reach it.
+
+The first implementation deleted `fnReturnPark`'s survivor-count clause
+(`closeIdx != idx+2`), on the reasoning that "the survivor count was never
+the right question". It is. Deleting it turned
+`(x:Integer => [x mul 2] 5)` from `10` into `fn (Integer) 5` and broke seven
+suites. The clause is reinstated.
+
+The rule, as MEASURED against `RunInterp` rather than assumed:
+
+> A Function a paren PLACED is re-stepped into a CALL exactly when it leads
+> **two or more survivors** of an enclosing group that closes with a paren
+> rewind — a user paren, an fn frame, or an `if` / `for` / `do` body. The
+> program top level, list literals and map literals do not rewind.
+
+Placement is the one-survivor case; the enclosing group is a SECOND decision
+taken one paren out, not a context that modifies the first. That predicts
+every measured row, including the ones this record never tried
+(`for 2 [(mk 1) 2]` → `3 3`, `case 1 [1] [(mk 1) 2]` → places).
+
+**The defect was the COMPILER'S, in both directions, and there were five of
+them** — not the one this record names. The paren structure is erased before
+the residual lowering, so `resolveDynamicApply` sees the same
+`[carrier, 2]` for `(mk 1) 2` and for `((mk 1) 2)` and guesses:
+
+| program | interpreted | compiled (before) |
+|---|---|---|
+| `(mk 1) 2` | `fn (Integer) 2` | `3` — applied a placement |
+| `(mk2 5) 10` | `fn (Integer) 10` | `11` — applied a placement |
+| `[((mk 1) 2)]` | `[3]` | `[fn (Integer) 2]` — placed an apply |
+| `if true [(mk 1) 2]` | `3` | `fn (Integer) 2` — placed an apply |
+| `if true [((mk 1) 2)]` | `3` | `fn (Integer) 2` — placed an apply |
+
+`((mk 1) 2)` compiling to `3` at the top level was RIGHT BY ACCIDENT: the
+outer paren collapses, the pair reaches the program residual, and the
+carrier arm applies it there. One level down, inside a list or an arm, the
+same paren reaches no residual lowering and produced the opposite answer.
+
+**How they survived a 100%-covered suite.** Stage J flipped `lang.Run` from
+the tree-walking interpreter to the COMPILED path. **75 parity assertions
+across five files still read `gotI, _ := ….Run(src)`** and compare it to
+`RunCompiled` — the compiled lane against itself, passing unconditionally.
+`TestFactoryApplyCompiles` asserts `(mk2 5) 10` is `[11]` "on both lanes";
+the interpreter has never answered `11` for that program. This is the
+finding that matters most in this record, and it generalises: any flip of a
+Run-like entry point needs a mechanical sweep of its oracle uses.
+
+**Verdict (2026-08-27): resolve by fix, COMPILER-side only. LANDED.** The
+interpreter is already correct and is unchanged.
+
+The mechanism is a matched PAIR of records taken at the collapse, because
+that is the last moment the two spellings are distinguishable:
+`ParenPlacedFnIDs` (the park returned 1 — one survivor, placed) and the new
+`ParenReSteppedFnIDs` (the park returned 0 over more than one survivor — the
+rewind lands on the lead and re-steps it). The residual lowering, the branch
+arm merge and the list-literal assembly all read the pair instead of
+guessing from the value's shape, which is what lets `((mk 1) 2)` keep
+compiling natively while `(mk 1) 2` — byte-identical at that point — is
+refused rather than applied.
+
+**Value divergences on the 16-shape probe: five → zero.** Four shapes refuse
+where the interpreter answers; they are one shape in four positions (a
+paren-bounded carrier apply consumed where the residual lowering does not
+reach), and they graduate together with Stage 3's universal fn values and
+Apply kernel. Standing measurement:
+`lang/go/nur101_paren_restep_test.go`. Full account, with the measurement
+tables and the harness finding:
+[design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md).
 
 ---
 
@@ -483,65 +740,6 @@ maintainer's to direct.
 
 ---
 
-## NUR101 — a paren-computed fn inside a list literal is applied interpreted, baked compiled {#nur101}
-
-**Status:** Pending · **Recorded:** 2026-08-25 · **Surfaced by:** re-measuring
-`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.4 against the post-#402 tree
-
-**Rule:** the engines agree. NUR073's BROAD verdict settled that a paren
-PLACES its values rather than re-stepping them, and both lanes were brought
-to one answer; a list literal's contents are evaluated as a sub-program on
-both (`[1 add 2]` → `[3]`).
-
-**Divergence:** a fn value COMPUTED by a paren group and applied inside a
-list literal. No warning, no fallback, exit 0 either way, `boru check` clean
-— the two lanes simply return different data.
-
-```
-$ cat /tmp/l.boru
-def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end [((mk 1) 2)]
-
-$ boru run /tmp/l.boru                    # compiled, NO fallback warning
-[fn (Integer) 2]
-$ boru run -no-compile /tmp/l.boru
-[3]
-$ boru run -force-compile /tmp/l.boru
-[fn (Integer) 2]
-$ boru check /tmp/l.boru
-check: 0 error(s), 0 warning(s), 0 info
-check: List
-```
-
-**The compiled lane is the defect, and it contradicts itself.** A list
-literal evaluates its contents on both lanes, and the compiled lane proves it
-can dispatch a fn there:
-
-```
-$ boru do '[1 add 2]'                                             # → [3] both lanes
-$ boru do 'def inc fn b:Integer Integer [add 1 b] end [inc 2]'    # → [3] both lanes
-```
-
-Only the paren-COMPUTED fn stops it. `[inc 2]` dispatches compiled; `[((mk 1)
-2)]` bakes two values. So this is not the placed-vs-stepped rule applied
-consistently — it is the compiled lane declining to step a value whose
-provenance it lost, in a context where it steps everything else.
-
-**Scope — it is the LIST literal specifically.** The map form falls back and
-therefore agrees (`{k:((mk 1) 2)}` → `{k:3}` both lanes, behind the loud
-"residual value of unknown provenance" warning), and a `/v`-PARKED fn agrees
-by staying inert on both (`[(inc/v) 2]` → `[fn inc(Integer) 2]`). The list
-literal is the one shape that compiles and diverges.
-
-**Why §5.4's correction did not catch it.** That note re-ran the `print` and
-fn-body shapes and recorded the lanes as agreeing on the first; both hold
-today. The list-literal shape was never in the transcript set, so the
-divergence survived the review that closed the rest of NUR073.
-
-**Verdict:** none proposed. The fix direction — teach the compiled lane to
-step a paren-computed fn inside an evaluated container, or refuse the shape
-rather than bake it — is a compiler-lane call, and the safe half (refuse and
-fall back, as the map form already does) is available immediately if the
-silent wrong answer is judged worse than the coverage loss.
 
 ---
 
@@ -2798,12 +2996,27 @@ test.
 designed behaviour ("the planner's designed TFunction intercept"); two
 more bare uses sit in the frontier divergence ledger (§3.3's count of 3).
 
-**Verdict:** resolve by fix — open-work item B (ruled 2026-08-17). All
-four sites retire together, `sigWantsFunctionAt` included, which
-re-opens the NUR038 call-head question inside the implementing PR; the
-`unused_def` use-recording re-homes with the intercept, and
-`path-modifier.tsv:67` plus the two frontier rows are rewritten. This
-record retires when that fix lands.
+**RE-AFFIRMED 2026-08-26 — implement as amended.** Re-litigated under O1
+(`design/O1-RELITIGATION.0.md` §2) and the amendment stands: a bare name
+bound to a function CALLS, universally, and passing one as an argument is
+explicit. The slot type must stop deciding what a token means — that is the
+same class of context-sensitivity Stage 4's descriptor would otherwise have
+to carry as live state, and one rule for every slot type is worth the
+ergonomic loss.
+
+Read the record's `/r` as `/v` throughout, per this file's 2026-08-19
+spelling note; `h zero/v` is the spelling that works today. An earlier draft
+of the O1 brief claimed the `/r` spelling was itself a defect directing users
+to a path that does not exist. It is not — the convention covers it — and
+that claim is withdrawn.
+
+**Verdict:** resolve by fix — open-work item B (ruled 2026-08-17,
+re-affirmed 2026-08-26). All four sites retire together,
+`sigWantsFunctionAt` included, which re-opens the NUR038 call-head question
+inside the implementing PR; the `unused_def` use-recording re-homes with the
+intercept, and `path-modifier.tsv:67` plus the two frontier rows are
+rewritten. Every `h zero` call site becomes `h zero/v`. This record retires
+when that fix lands.
 
 
 ## NUR079 — Gated words inside an imported file-module body escape the policy that governs the same call at top level {#nur079}

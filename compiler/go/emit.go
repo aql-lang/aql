@@ -2763,7 +2763,7 @@ func (es *EmitState) RecordBranch(b core.BranchRecord) {
 			return EmitOperand{}, false, true
 		}
 		op, ok := es.resolveOperand(stk[len(stk)-1])
-		if !ok {
+		if !ok || residualLeadReStepped(stk) {
 			es.MarkUncompilable("if: " + name + "-branch result of unknown provenance")
 			return EmitOperand{}, false, false
 		}
@@ -6213,6 +6213,23 @@ func (es *EmitState) RecordMakeListInner(r *core.Registry, ins []core.Value, out
 			}
 		}
 	}
+	// A list literal whose LEAD element an enclosing paren re-stepped into a
+	// call (the paren re-step rule, design/PAREN-RESTEP-RULE.0.md).
+	// `[((mk 1) 2)]` is `[3]` interpreted — the inner paren leaves two
+	// survivors, the park declines, and the rewind dispatches the carrier —
+	// while this assembly bakes the pair as TWO elements and answers
+	// `[fn (Integer) 2]`. That was NUR101's original symptom, and it was
+	// silent.
+	//
+	// The re-step record is what makes the two spellings separable at all:
+	// `[(mk 1) 2]` reaches here with the SAME `[carrier, 2]` elements and the
+	// interpreter really does place them, so a test on the lead's shape alone
+	// would break the correct one. Return false rather than MarkUncompilable —
+	// an unrecorded list is already an unresolvable residual and the program
+	// falls back — until Stage 3 can record the apply as an element event.
+	if len(ins) >= 2 && es.parenReSteppedFn(ins[0]) {
+		return false
+	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
 	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and
@@ -7060,14 +7077,37 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// value's statement boundary — see methodShapeAnnotated.
 	applyDynamic := false
 	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) &&
-		!es.parenPlacedMemberFn(residual[0]) {
+		!es.leadPlacedNotRead(residual[0]) {
 		applyDynamic = !anyDynamicTail(residual)
 	}
 	// Leading Function CARRIER (the factory pattern: a returned closure now
-	// on the stack) with no dynamic / fn value after it. A carrier always applies
-	// — the one non-applied shape (an inert `f/v`) is a CONCRETE const, not a
-	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
-	if !applyDynamic && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) {
+	// on the stack) with no dynamic / fn value after it.
+	//
+	// NUR101, ruled 2026-08-26 — PLACE UNIFORMLY. This arm used to read "a
+	// carrier always applies — the one non-applied shape (an inert `f/v`) is
+	// a CONCRETE const, not a carrier — so the carrier bit resolves the
+	// apply-vs-inert ambiguity". That premise was true only while the
+	// interpreter's paren rewind RE-STEPPED a collapsed Function into a call.
+	// It no longer does (core/go/engine.go, fnReturnPark): a paren places its
+	// Function whatever else survived beside it, so a Function carrier
+	// LEADING a program residual is placed data, not a pending call, and
+	// applying it here would compile `((mk 1) 2)` to 3 where the interpreter
+	// now answers `fn (Integer) 2`.
+	//
+	// The discriminator is PLACEMENT, and the mechanism already existed:
+	// ParenPlacedFnIDs (core/go/check_state.go), whose own doc says it is
+	// "read by the compiler's residual lowering, which must not lower a
+	// placed lead as an apply — `(m dot f) 5` is two values; `m.f 5` still
+	// applies". It was recorded only for member-fn reads; the park now
+	// records every carrier it places, so this arm can ask it directly.
+	//
+	// A narrower gate on def-read provenance was tried first and OVER-REACHED:
+	// it refused `c.op 5`, a member-read apply that ADR-011 lists among the
+	// three explicit application forms (a bare name, `apply`, a member read)
+	// and that the interpreter still applies. Placement is the question, not
+	// how the lead was named.
+	if !applyDynamic && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) &&
+		!es.leadPlacedNotRead(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 		// When the carrier's closure arity is statically recoverable (its
 		// producer is a compiled factory fn returning one anonymous closure),
@@ -7992,6 +8032,35 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []core.Value) (int, bool) 
 	return 0, false
 }
 
+// residualLeadReStepped reports whether a branch ARM's residual LEADS with a
+// value the interpreter's frame-close rewind re-steps INTO A CALL while this
+// arm's merge would model it as placed data (NUR101, measured 2026-08-27).
+//
+// The arm body executes inside a frame, and a frame closes through
+// stepCloseParen like any other paren: with MORE than one survivor the park
+// declines, the rewind lands ON the leading value, and a Function there
+// dispatches. `if true [(mk 1) 2]` is therefore 3 interpreted — while
+// resolveArm reads only stk[len-1] and merges the arm as the placed pair,
+// compiling to `fn (Integer) 2`. That was a SILENT divergence, the last of the
+// five NUR101 shapes; refuse until the apply is modelled (Stage 3).
+//
+// The re-step RECORD is deliberately not consulted here: the arm frame is the
+// rewinding group, so there is no enclosing paren to have recorded anything —
+// the shape IS the fact at this point.
+//
+// Narrower than closureResidualHasUnappliedFn on purpose. A closure body
+// refuses a carrier ANYWHERE, because its driving handler maps every residual
+// value; an arm's SOLE carrier is legitimately placed data on both lanes
+// (`if c [(mk 1)]`), so only a LEAD over >=2 survivors — the shape the rewind
+// re-steps — is unmodelled here.
+func residualLeadReStepped(stk []core.Value) bool {
+	if len(stk) < 2 || stk[0].Quoted {
+		return false
+	}
+	return core.IsFnTypedCarrier(stk[0]) ||
+		(stk[0].Dynamic && core.SigTypeMatches(stk[0], core.TFunction))
+}
+
 // closureResidualHasUnappliedFn reports whether a closure body's residual
 // leaves an fn value the driving handler (BodyResultTop / BodyOutResidual)
 // would map UNAPPLIED — the off-corpus comparator-each MISCOMPILE (`[1 2]
@@ -8122,6 +8191,49 @@ func init() {
 // declines it and the program falls back faithfully. The arrival model
 // (method_shape.go) still owns the un-parenthesised mid-expression apply,
 // which is why this test is on the residual lead only.
+// leadPlacedNotRead reports whether a residual's leading fn carrier is
+// PLACED DATA rather than a pending call (NUR101, ruled 2026-08-26).
+//
+// Placement alone cannot answer this, and that is the whole subtlety.
+// ParenPlacedFnIDs is keyed by value ID, and an ID travels with a binding:
+// `def h (mk 1) end  h 2` marks h's value placed, because the paren that
+// PRODUCED it placed it — but `h` is a bare-NAME dispatch and a bare name
+// always calls. Measured: both `h 2` and `((mk 1) 2)` report placed=true, so
+// a placement-only gate refuses the one that must apply. That is the
+// sticky-inertness fnReturnPark's header forbids, arriving through the side
+// table instead of the value.
+//
+// Read provenance alone cannot answer it either: gating on defReads was
+// tried and OVER-REACHED, refusing `c.op 5` — a member-read apply that
+// ADR-011 lists among the three explicit application forms.
+//
+// The conjunction is what works. A lead is placed data only when the paren
+// placed it AND it did not arrive through a read that dispatches: a def-read
+// (a bare name) or a member read both CALL, whatever mark the value carries
+// from wherever it was built.
+func (es *EmitState) leadPlacedNotRead(v core.Value) bool {
+	if !es.parenPlacedMemberFn(v) {
+		return false
+	}
+	if _, read := es.defReads[v.ID]; read {
+		return false
+	}
+	// An ENCLOSING paren re-stepped it, so the placement was undone one level
+	// out and the lead is a pending call after all (the paren re-step rule,
+	// design/PAREN-RESTEP-RULE.0.md). This is what separates `((mk 1) 2)` — 3
+	// on both lanes — from `(mk 1) 2`, whose identical residual the
+	// interpreter places. Recorded at the collapse by recordParenReStep,
+	// because nothing downstream can still tell them apart.
+	return !es.parenReSteppedFn(v)
+}
+
+func (es *EmitState) parenReSteppedFn(v core.Value) bool {
+	if es == nil || es.reg == nil || es.reg.Check == nil || v.ID == "" {
+		return false
+	}
+	return es.reg.Check.ParenReSteppedFnIDs[v.ID]
+}
+
 func (es *EmitState) parenPlacedMemberFn(v core.Value) bool {
 	if es == nil || es.reg == nil || es.reg.Check == nil || v.ID == "" {
 		return false

@@ -48,7 +48,7 @@ func fnValueM2Native(t *testing.T, name, src, want string) {
 		t.Errorf("%s: expected native, got island:\n%s", name, prog.Disassemble())
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
-	gotI, errI := mustNew(t).Run(src)
+	gotI, errI := mustNew(t).RunInterp(src)
 	if !compiled {
 		t.Fatalf("%s: did not run compiled", name)
 	}
@@ -73,7 +73,7 @@ func fnValueM2Refusal(t *testing.T, name, src, wantReason string) {
 		t.Errorf("%s: refusal reason %q; want substring %q", name, reason, wantReason)
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
-	gotI, errI := mustNew(t).Run(src)
+	gotI, errI := mustNew(t).RunInterp(src)
 	if compiled {
 		t.Errorf("%s: ran compiled; want interpreter fallback", name)
 	}
@@ -187,7 +187,7 @@ func TestLogRegisterSinkCompiles(t *testing.T) {
 	{
 		src := `import "boru:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q`
 		_, compiled, errC := mustNew(t).RunCompiled(src)
-		_, errI := mustNew(t).Run(src)
+		_, errI := mustNew(t).RunInterp(src)
 		if !compiled {
 			t.Errorf("register duplicate: did not run compiled")
 		}

@@ -61,7 +61,7 @@ func fnValueM2NativeErrParity(t *testing.T, name, src, wantCode string) {
 		t.Fatalf("%s: want a native compile, got refusal %q / err %v", name, reason, cerr)
 	}
 	_, compiled, errC := mustNew(t).RunCompiled(src)
-	_, errI := mustNew(t).Run(src)
+	_, errI := mustNew(t).RunInterp(src)
 	if !compiled {
 		t.Fatalf("%s: did not run compiled", name)
 	}
@@ -77,8 +77,27 @@ func fnValueM2NativeErrParity(t *testing.T, name, src, wantCode string) {
 // faithful at every runtime arity (not just the 1-arg happy path).
 func TestLeadApplyArityMismatchParity(t *testing.T) {
 	lead := `def ld fn [[g:Function x:Integer] [Integer] [(g x)]] ld `
-	fnValueM2NativeErrParity(t, "2-arg runtime fn under a 1-arg window",
-		lead+`([[a:Integer b:Integer] [Integer] [a sub b]] fn) 14`, "type_error")
+	// The 2-arg row does NOT agree, and this test asserted that it did while
+	// reading its interp side from `Run` — the compiled lane (NUR106). It is
+	// NUR107: the interpreter's word dispatch raises signature_error on
+	// no-match, while the VM's dynamic apply reads "no overload matched" as
+	// "not callable", leaves [fn, arg] as data, and the frame's return-count
+	// check fires instead. Pinned as measured so it graduates loudly.
+	{
+		src := lead + `([[a:Integer b:Integer] [Integer] [a sub b]] fn) 14`
+		_, compiled, errC := mustNew(t).RunCompiled(src)
+		_, errI := mustNew(t).RunInterp(src)
+		if !compiled {
+			t.Errorf("2-arg runtime fn under a 1-arg window: did not run compiled (%v)", errC)
+		}
+		if codeOf(errC) != "type_error" {
+			t.Errorf("NUR107 compiled: got [%s] %v, want type_error (the return-count check)", codeOf(errC), errC)
+		}
+		if codeOf(errI) != "signature_error" {
+			t.Errorf("NUR107 interp: got [%s] %v, want signature_error — if this is now type_error "+
+				"the divergence is CLOSED: restore fnValueM2NativeErrParity for this row", codeOf(errI), errI)
+		}
+	}
 	fnValueM2NativeErrParity(t, "0-arg runtime fn under a 1-arg window",
 		lead+`(fn [[] [Integer] [42]]) 14`, "signature_error")
 	fnValueM2NativeErrParity(t, "multi-return runtime fn under a 1-arg window",

@@ -69,6 +69,10 @@ func TestS9XmlInterpComputed(t *testing.T) { // §9.2c
 }
 
 func TestS9CurriedFactory(t *testing.T) { // §9.2d
+	// Still [3], but no longer by accident: the residual lowering used to
+	// apply EVERY leading carrier, which is right here and wrong for the
+	// unwrapped `(mk 1) 2` (NUR101, design/PAREN-RESTEP-RULE.0.md). The
+	// re-step record separates them.
 	mustCompileWithParity(t,
 		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] ((mk 1) 2)`, "[3]")
 }

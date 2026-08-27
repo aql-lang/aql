@@ -71,12 +71,30 @@ func TestFullStackHostOverloadParity(t *testing.T) {
 
 // TestLeadApplyNoMatchTwoReturnParity pins the Codex-review claim (PR #327,
 // engine.go leading apply) that a type-mismatched 1-arg callee under a
-// TWO-value declared return diverges. It does not: the interpreter's
-// no-match leaves [fn, arg] as data — exactly what the compiled trailing
-// event nets — and the 2-value return contract accepts it on both engines.
-// Verified non-reproducing 2026-08-03; this pin keeps it that way.
+// TWO-value declared return diverges.
+//
+// IT DOES (NUR107, measured 2026-08-27). This test previously asserted the
+// opposite — "verified non-reproducing 2026-08-03" — and verified it against
+// `Run`, which post-Stage-J IS the compiled lane (NUR106): it compared the
+// compiled answer to itself and passed unconditionally. The review claim was
+// right.
+//
+// The interpreter's word dispatch RAISES on no-match; the VM's dynamic apply
+// reads "no signature matched" as "not callable" and leaves [fn, arg] as
+// data. Pinned here as the measured divergence so it fails loudly the moment
+// callDynamic learns to tell a non-function from a function whose overloads
+// do not admit the argument — which is NUR107's fix, and its own increment.
 func TestLeadApplyNoMatchTwoReturnParity(t *testing.T) {
-	fnValueM2Native(t, "type-mismatched 1-arg callee, 2-value declared return",
-		`def ld fn [[g:Function x:Integer] [Function Integer] [(g x)]] ld ([k:String] => [k]) 14`,
-		"[fn (String) 14]")
+	const src = `def ld fn [[g:Function x:Integer] [Function Integer] [(g x)]] ld ([k:String] => [k]) 14`
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	gotI, errI := mustNew(t).RunInterp(src)
+	if !compiled {
+		t.Fatalf("no-match lead apply: did not run compiled (errC=%v)", errC)
+	}
+	if errI == nil || codeOf(errI) != "signature_error" {
+		t.Errorf("NUR107 interpreted: err=%v got=%v, want a signature_error", errI, gotI)
+	}
+	if errC != nil || fmt.Sprint(gotC) != "[fn (String) 14]" {
+		t.Errorf("NUR107 compiled: err=%v got=%v, want no error and [fn (String) 14]", errC, gotC)
+	}
 }

@@ -5989,9 +5989,32 @@ func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
 }
 
 // fnReturnPark reports how far past a collapsed paren's start the pointer must
-// land: 1 when the paren collapsed to a single unquoted Function value, 0
-// otherwise. A paren places its value on the forward stack and never re-steps
-// it — reference and inline literal alike (NUR073's BROAD verdict, maintainer
+// land: 1 when the value the rewind would re-step is an unquoted Function, 0
+// otherwise.
+//
+// THE SURVIVOR COUNT IS THE QUESTION, and `closeIdx == idx+2` is how it is
+// asked. NUR101's 2026-08-26 "place uniformly" ruling was first implemented by
+// DELETING that clause, on the reasoning that whether the rewind re-steps a
+// Function is a property of the value alone and not of how many values sit
+// beside it. Measured 2026-08-27, that is false: with more than one survivor
+// the park must DECLINE, because the rewind then lands ON the leading value
+// and stepLiteral dispatches it — which is the whole of
+// `(x:Integer => [x mul 2] 5)` being 10. Deleting the clause made that program
+// `fn (Integer) 5` and broke seven suites. Do not remove it again
+// (design/PAREN-RESTEP-RULE.0.md; TestFnReturnPark's more-than-one-survivor
+// row pins it).
+//
+// So placement is the ONE-survivor case, and the enclosing group is a SECOND
+// decision taken one paren out — not a context that modifies this one.
+// `(inc/v) 7` places while `((inc/v) 7)` is 8, and both are this function
+// answering correctly at two different parens: the inner collapse has one
+// survivor and parks, the outer has two and declines. recordParenReStep, called
+// by stepCloseParen right after this, records that second decision for the
+// compiler, which sees the identical residual for both spellings and cannot
+// otherwise tell them apart.
+//
+// A paren places its value on the forward stack and never re-steps it —
+// reference and inline literal alike (NUR073's BROAD verdict, maintainer
 // clause 3, 2026-08-17: "parens do not re-step; they place a value or values
 // on the forward stack") — so stepCloseParen's rewind must step PAST that
 // value rather than re-step it into a call
@@ -6046,8 +6069,56 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 	// TestCompiledCombinationParity caught when the BROAD park landed.
 	// Reach groups never reach here (both exclusions above), so dot SUGAR
 	// keeps dispatching on both lanes.
-	if v.Dynamic && !v.Quoted && (IsFnTypedCarrier(v) || CheckBraid.ParenPlacedFnCarrier(e, idx)) {
-		return 1
+	// The carrier need not be DYNAMIC. A returned closure reaches the check
+	// pass as a NON-dynamic fn-typed carrier, and gating this arm on Dynamic
+	// alone let it fall through both arms — no park, so the rewind re-stepped
+	// it into a call and `((mk 1) 2)` answered 3 compiled where the
+	// interpreter placed (NUR101). Measured: disp=false dyn=false
+	// carrier=true, which no arm claimed.
+	//
+	// KNOWN COST, and it is the sticky-inertness hazard this function's own
+	// header warns about. Parking here is positional and stamps nothing on
+	// the value, exactly as intended — but the compiler learns about it
+	// through ParenPlacedFnIDs, which is keyed by value ID, and an ID travels
+	// with a binding. So `def h (mk 1) end  h 2` now refuses ("fn value
+	// precedes residual args"): h's value carries the placed mark from the
+	// paren that produced it, and the residual lowering declines to apply a
+	// lead it believes was placed — even though `h` is a bare-NAME dispatch
+	// that must still call. Sound (it falls back and answers 3), but a
+	// compiled-coverage loss.
+	//
+	// The member-fn case does not hit this because a member read is consumed
+	// at its site and never rebound. The general carrier is. Closing it means
+	// making the compiler's placement signal POSITIONAL like this one, rather
+	// than value-keyed — not widening the ID table further.
+	if !v.Quoted && (v.Dynamic || IsFnTypedCarrier(v)) {
+		// Ask the braid FIRST, and unconditionally. It is not only a
+		// predicate: it RECORDS the placement in ParenPlacedFnIDs for the
+		// compiler's residual lowering, which must not lower a placed lead
+		// as an apply. Behind an `||` after IsFnTypedCarrier it never ran for
+		// a genuine carrier — the short-circuit meant the one case the
+		// compiler most needs to know about was the one case never recorded,
+		// so `((mk 1) 2)` placed interpreted and applied compiled (NUR101).
+		placed := CheckBraid.ParenPlacedFnCarrier(e, idx)
+		// A DYNAMIC value whose static bound does not exclude Function parks
+		// too. At run time the interpreter holds the concrete value and parks
+		// through fnValueDispatchesAtPointer above; the check pass holds
+		// dynamic(Any) and cannot prove callability, so without this arm no
+		// park claims it, the pass models an apply, and the compiler bakes
+		// one — `((tbl get k) 5)` answering 10 compiled against a placed
+		// `fn (Integer) 5` interpreted (NUR101, frontier-hof-audit:72).
+		//
+		// Parking a MAYBE-callable is the sound direction, and the asymmetry
+		// is the point: placing a value that turns out non-callable costs
+		// nothing, because a non-callable value sitting before other args
+		// just sits there — exactly what the unparked path would have left.
+		// Applying one that turns out callable is a wrong answer. The
+		// not-disjoint-against-Function test is the same rule the residual
+		// lowering's auto-dispatch guard already uses, so both ends agree on
+		// what "might be callable" means.
+		if IsFnTypedCarrier(v) || placed {
+			return 1
+		}
 	}
 	return 0
 }
@@ -7260,6 +7331,14 @@ func (e *Engine) stepPastOpenParen(val Value) {
 // the possibly-shrunk closeIdx (args spliced out).
 func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeIdx int) int {
 	fnVal := e.Tape.At(first)
+	// This window IS the enclosing paren's re-step: it fires only for a paren
+	// with >=2 net values and a DYNAMIC lead, which is exactly the shape whose
+	// park declines and whose rewind lands on the lead (the paren re-step rule,
+	// design/PAREN-RESTEP-RULE.0.md). So a placement recorded by the INNER
+	// paren that produced the lead — `(tbl get k)` in `((tbl get k) 5)` — says
+	// nothing here: the outer paren undoes it. A gate on that mark was added
+	// 2026-08-26 under the since-falsified "place uniformly" ruling and
+	// refused this row against its own interpreted answer of 10; it is gone.
 	if !es.MemberFnRead(fnVal.ID) {
 		es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
 		return closeIdx
@@ -7703,6 +7782,14 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 	// above.
 	park := e.fnReturnPark(openIdx, closeIdx, !wasReachGroup)
 
+	// The park's negative twin, and the second half of the paren re-step rule
+	// (design/PAREN-RESTEP-RULE.0.md). A park of 0 over MORE than one survivor
+	// means the rewind below lands ON the leading value, and a Function there
+	// is re-stepped INTO A CALL — `((mk 1) 2)` is 3 for exactly this reason.
+	// Record it for the compiler, which sees the same `[carrier, 2]` residual
+	// for this shape and for `(mk 1) 2`, where no rewind ever arrives.
+	e.recordParenReStep(openIdx, closeIdx, park, wasReachGroup)
+
 	// Recorder hook: the values that survived inside the paren will
 	// be re-encountered by the main loop after we set pointer back
 	// to openIdx (below). They were already emitted to the recorder
@@ -7722,6 +7809,39 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 	// (NUR038), same reason as fnReturnPark and tagReachCollapsedFn above.
 	e.creditParenSurvivorSkips(openIdx, closeIdx, reStepped)
 	return nil
+}
+
+// recordParenReStep notes a Function-typed carrier this collapse is about to
+// re-step into a call, so the compiler's residual lowering can tell an APPLIED
+// lead from a PLACED one. Called with the POST-removal indices, where the
+// survivors occupy [openIdx, closeIdx-2]: more than one of them means the park
+// declined and the rewind lands on the lead.
+//
+// The park's own exclusions apply here too — a reach-lowered group's re-step is
+// its dispatch, not a user paren's, and it never needed recording. Only the
+// LEAD matters: the rewind reaches exactly one value.
+func (e *Engine) recordParenReStep(openIdx, closeIdx, park int, wasReachGroup bool) {
+	if park != 0 || wasReachGroup || closeIdx <= openIdx+2 || openIdx >= e.Tape.Len() {
+		return
+	}
+	if e.Registry == nil || e.Registry.Check == nil {
+		return
+	}
+	v := e.Tape.At(openIdx)
+	if v.Quoted || v.ID == "" {
+		return
+	}
+	// The same "might be callable" test the residual lowering's auto-dispatch
+	// guard uses, so both ends agree on what the rewind would have called: a
+	// genuine fn-typed carrier, or a dynamic value whose static bound does not
+	// exclude Function.
+	if !IsFnTypedCarrier(v) && !(v.Dynamic && SigTypeMatches(v, TFunction)) {
+		return
+	}
+	if e.Registry.Check.ParenReSteppedFnIDs == nil {
+		e.Registry.Check.ParenReSteppedFnIDs = map[string]bool{}
+	}
+	e.Registry.Check.ParenReSteppedFnIDs[v.ID] = true
 }
 
 // findCloseParenAfter finds the index of the matching close-paren marker
