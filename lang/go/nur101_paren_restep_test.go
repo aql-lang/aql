@@ -65,10 +65,7 @@ func TestParenReStepRule(t *testing.T) {
 		{mk + `(mk 1) 2`, "[fn (Integer) 2]", "program residual: nothing rewinds, so the carrier is placed"},
 		{mk + `((mk 1) 2)`, "[3]", "the outer paren rewinds onto the carrier and dispatches it"},
 		{mk + `[(mk 1) 2]`, "[[fn (Integer) 2]]", "a list literal does not rewind: two elements"},
-		// `[((mk 1) 2)]` belongs here and is DELIBERATELY absent: it is the one
-		// shape still answering differently, pinned on its own in
-		// TestParenReStepKnownDivergence so the divergence is tracked rather
-		// than mixed in with the rows that hold.
+		{mk + `[((mk 1) 2)]`, "[[3]]", "the inner paren rewinds: one element (refused — see below)"},
 		{mk + `if true [(mk 1) 2]`, "[3]", "the arm's frame rewinds"},
 		{mk + `for 2 [(mk 1) 2]`, "[3 3]", "the loop body's frame rewinds, once per iteration"},
 		{mk + `do [(mk 1) 2]`, "[3]", "the do body's frame rewinds"},
@@ -95,27 +92,35 @@ func TestParenReStepRule(t *testing.T) {
 	}
 }
 
-// TestParenReStepKnownDivergence pins the ONE shape still answering
-// differently, so it cannot regress further or be fixed unnoticed.
+// TestParenReStepListElementRefusal pins the one shape in the rule table that
+// the compiler REFUSES rather than answers, and why the refusal is not the
+// lazy reading.
 //
-// `[((mk 1) 2)]`: the list-literal assembly receives the paren's survivors as
-// ELEMENTS, and in check mode the inner paren has not applied — so RecordMakeList
-// sees exactly the same `[carrier, 2]` it sees for `[(mk 1) 2]`, which the
-// interpreter really does place as two elements. The two shapes are
-// indistinguishable at that point; refusing on the lead would break the correct
-// one. Closing it needs the apply RECORDED at the paren, which is Stage 3.
-func TestParenReStepKnownDivergence(t *testing.T) {
+// `[((mk 1) 2)]` is `[3]` interpreted: the inner paren leaves two survivors,
+// the park declines, and the rewind dispatches the carrier. It compiled to
+// `[[fn (Integer) 2]]` until 2026-08-27 — NUR101's original symptom, silent,
+// exit 0, `boru check` clean.
+//
+// It cannot be fixed by testing the lead's SHAPE, because `[(mk 1) 2]` reaches
+// RecordMakeList with byte-identical `[carrier, 2]` elements and really is two
+// elements on both lanes. Only the re-step record taken at the collapse
+// separates them — which is why that row above still compiles and this one
+// refuses.
+//
+// GRADUATION: Stage 3 records the apply as an element event and this becomes a
+// parity row.
+func TestParenReStepListElementRefusal(t *testing.T) {
 	const src = `def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] [((mk 1) 2)]`
-	gotI, errI := mustNew(t).RunInterp(src)
-	gotC, compiled, errC := mustNew(t).RunCompiled(src)
-	if errI != nil || errC != nil || !compiled {
-		t.Fatalf("setup: interp=%v/%v compiled=%v/%v", gotI, errI, gotC, compiled)
+	nur101Refusal(t, src, "[[3]]")
+
+	// The twin that MUST keep compiling: no inner rewind, so two elements.
+	const placed = `def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] [(mk 1) 2]`
+	gotC, compiled, errC := mustNew(t).RunCompiled(placed)
+	gotI, errI := mustNew(t).RunInterp(placed)
+	if !compiled || errC != nil || errI != nil {
+		t.Fatalf("placed list twin: compiled=%v errC=%v errI=%v", compiled, errC, errI)
 	}
-	if fmt.Sprint(gotI) != "[[3]]" {
-		t.Errorf("interp = %v, want [[3]] — the inner paren rewinds and dispatches", gotI)
-	}
-	if fmt.Sprint(gotC) != "[[fn (Integer) 2]]" {
-		t.Errorf("compiled = %v, want [[fn (Integer) 2]] — if this changed, the NUR101 "+
-			"divergence is CLOSED: delete this test and add the row to TestParenReStepRule", gotC)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[fn (Integer) 2]]" {
+		t.Errorf("placed list twin: compiled=%v interp=%v, want [[fn (Integer) 2]] on both", gotC, gotI)
 	}
 }

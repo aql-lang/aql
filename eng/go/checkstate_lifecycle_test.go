@@ -33,6 +33,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"Compiling":                true,
 		"FnCarrierReadSubstituted": true,
 		"ParenPlacedFnIDs":         true,
+		"ParenReSteppedFnIDs":      true,
 		"ArgsFrameUnnamed":         true,
 	}
 	// Fields Begin() resets to a canonical NON-zero per-pass value.

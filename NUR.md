@@ -495,13 +495,26 @@ the interpreter has never answered `11` for that program. This is the
 finding that matters most in this record, and it generalises: any flip of a
 Run-like entry point needs a mechanical sweep of its oracle uses.
 
-**Verdict (2026-08-27): resolve by fix, COMPILER-side only.** The
-interpreter is already correct. What landed teaches the compiler §1's rule
-where it is cheap and refuses where it is not, taking the value divergences
-on the 16-shape probe from five to zero; the remaining refusals graduate
-with Stage 3's universal fn values and Apply kernel, which is what lets a
-paren-bounded carrier lead record an apply instead of declining. Full
-account, with the measurement table and the harness finding:
+**Verdict (2026-08-27): resolve by fix, COMPILER-side only. LANDED.** The
+interpreter is already correct and is unchanged.
+
+The mechanism is a matched PAIR of records taken at the collapse, because
+that is the last moment the two spellings are distinguishable:
+`ParenPlacedFnIDs` (the park returned 1 — one survivor, placed) and the new
+`ParenReSteppedFnIDs` (the park returned 0 over more than one survivor — the
+rewind lands on the lead and re-steps it). The residual lowering, the branch
+arm merge and the list-literal assembly all read the pair instead of
+guessing from the value's shape, which is what lets `((mk 1) 2)` keep
+compiling natively while `(mk 1) 2` — byte-identical at that point — is
+refused rather than applied.
+
+**Value divergences on the 16-shape probe: five → zero.** Four shapes refuse
+where the interpreter answers; they are one shape in four positions (a
+paren-bounded carrier apply consumed where the residual lowering does not
+reach), and they graduate together with Stage 3's universal fn values and
+Apply kernel. Standing measurement:
+`lang/go/nur101_paren_restep_test.go`. Full account, with the measurement
+tables and the harness finding:
 [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md).
 
 ---

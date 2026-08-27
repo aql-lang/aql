@@ -3642,11 +3642,7 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 		// landing model owns it and the guard refuses — the division of
 		// labour instanceFnMember's own comment states.
 		{"unpinpointable instance key", `def make42 fn [[] [Integer] [42]] def C class {fld:Function} def o (make C {fld:make42/v}) def keyof fn [[n:Integer] [Atom] [if (n gt 0) [fld/q] [other/q]]] (o get (keyof 1))`, "auto-dispatches"},
-		// The reason MOVED 2026-08-27 from "arity mismatch" to the placed-lead
-		// decline (NUR101): the carrier arm now stops at the placement test,
-		// before it ever reaches the arity check that used to name this. Same
-		// refusal, earlier gate; the substring tracks whichever fires first.
-		{"nested-factory curried chain", `def mk fn [[a:Integer] [Function] [([b:Integer] => [([c:Integer] => [a add b add c])])]]  (((mk 1) 2) 3)`, "fn value precedes residual args"},
+		{"nested-factory curried chain", `def mk fn [[a:Integer] [Function] [([b:Integer] => [([c:Integer] => [a add b add c])])]]  (((mk 1) 2) 3)`, "arity mismatch"},
 	}
 	for _, c := range refusals {
 		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
@@ -3671,11 +3667,10 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 		}
 	}
 
-	// The paren-bounded carrier apply the preserved list used to hold. It is a
-	// sound refusal now (NUR101, design/PAREN-RESTEP-RULE.0.md): the program
-	// residual cannot tell `((mk 5) 10)` — which the interpreter APPLIES —
-	// from `(mk 5) 10`, which it PLACES. Graduates with Stage 3.
-	nur101Refusal(t, `def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  ((mk 5) 10)`, "[15]")
+	// The UNWRAPPED twin of the preserved `((mk 5) 10)` row: no enclosing
+	// rewind, so the interpreter PLACES and the compiler must not apply
+	// (NUR101, design/PAREN-RESTEP-RULE.0.md).
+	nur101Refusal(t, `def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  (mk 5) 10`, "[fn (Integer) 10]")
 
 	// PRESERVED coverage: fn-free container reads (paren or bare), APPLIED
 	// member calls (a multi-param member fed its args — the method-through-map
@@ -3687,7 +3682,7 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 		`({a:1 b:2} get b/q) add 1`,
 		`{a:1 b:2} dot b`,
 		`def add1 fn [[x:Integer] [Integer] [x add 1]]  {f:add1/v}.f 5`,
-		// `((mk 5) 10)` LEFT this list 2026-08-27 — see the nur101Refusal below.
+		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  ((mk 5) 10)`,
 		`def make42 fn [[] [Integer] [42]]  {f:make42/v}.f`,
 		`def make42 fn [[] [Integer] [42]]  def m {f:make42/v}  (m get f/q)`,
 		`def f fn [[] [Integer] [7]]  {b:f/v} dot b`,

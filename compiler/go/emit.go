@@ -6213,6 +6213,23 @@ func (es *EmitState) RecordMakeListInner(r *core.Registry, ins []core.Value, out
 			}
 		}
 	}
+	// A list literal whose LEAD element an enclosing paren re-stepped into a
+	// call (the paren re-step rule, design/PAREN-RESTEP-RULE.0.md).
+	// `[((mk 1) 2)]` is `[3]` interpreted — the inner paren leaves two
+	// survivors, the park declines, and the rewind dispatches the carrier —
+	// while this assembly bakes the pair as TWO elements and answers
+	// `[fn (Integer) 2]`. That was NUR101's original symptom, and it was
+	// silent.
+	//
+	// The re-step record is what makes the two spellings separable at all:
+	// `[(mk 1) 2]` reaches here with the SAME `[carrier, 2]` elements and the
+	// interpreter really does place them, so a test on the lead's shape alone
+	// would break the correct one. Return false rather than MarkUncompilable —
+	// an unrecorded list is already an unresolvable residual and the program
+	// falls back — until Stage 3 can record the apply as an element event.
+	if len(ins) >= 2 && es.parenReSteppedFn(ins[0]) {
+		return false
+	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
 	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and
@@ -8027,6 +8044,10 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []core.Value) (int, bool) 
 // compiling to `fn (Integer) 2`. That was a SILENT divergence, the last of the
 // five NUR101 shapes; refuse until the apply is modelled (Stage 3).
 //
+// The re-step RECORD is deliberately not consulted here: the arm frame is the
+// rewinding group, so there is no enclosing paren to have recorded anything —
+// the shape IS the fact at this point.
+//
 // Narrower than closureResidualHasUnappliedFn on purpose. A closure body
 // refuses a carrier ANYWHERE, because its driving handler maps every residual
 // value; an arm's SOLE carrier is legitimately placed data on both lanes
@@ -8197,7 +8218,20 @@ func (es *EmitState) leadPlacedNotRead(v core.Value) bool {
 	if _, read := es.defReads[v.ID]; read {
 		return false
 	}
-	return true
+	// An ENCLOSING paren re-stepped it, so the placement was undone one level
+	// out and the lead is a pending call after all (the paren re-step rule,
+	// design/PAREN-RESTEP-RULE.0.md). This is what separates `((mk 1) 2)` — 3
+	// on both lanes — from `(mk 1) 2`, whose identical residual the
+	// interpreter places. Recorded at the collapse by recordParenReStep,
+	// because nothing downstream can still tell them apart.
+	return !es.parenReSteppedFn(v)
+}
+
+func (es *EmitState) parenReSteppedFn(v core.Value) bool {
+	if es == nil || es.reg == nil || es.reg.Check == nil || v.ID == "" {
+		return false
+	}
+	return es.reg.Check.ParenReSteppedFnIDs[v.ID]
 }
 
 func (es *EmitState) parenPlacedMemberFn(v core.Value) bool {

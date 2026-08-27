@@ -96,29 +96,80 @@ must be accompanied by a mechanical sweep of its oracle uses.
 
 ## 5. What landed here
 
-The interpreter is UNCHANGED — §1 is what it already did. Everything below
-is the compiler learning it.
+The interpreter is UNCHANGED — §1 is what it already did. Everything below is
+the compiler learning it.
 
-1. **`fnReturnPark`'s survivor clause is restored** and its header rewritten
-   to say why the count is the question.
-2. **`stepCloseParen`'s window scan admits a Function-typed CARRIER lead**,
-   not only a DYNAMIC one. A paren whose lead the windows cannot model now
-   refuses (sharing `recordParenLeadingApply`'s existing refusal site)
-   instead of falling through to a placement the interpreter never performs.
-   Concrete fn values are excluded by `IsFnTypedCarrier`'s `Carrier` bit,
-   which keeps `((inc/v) 7)` → `8` compiling.
-3. **`RecordBranch.resolveArm` refuses an arm whose residual LEADS with a
-   re-stepped fn** (`armResidualReStepped`) — narrower than
+**The mechanism, and the reason it has to exist.** The paren structure is
+erased before the residual lowering, so `resolveDynamicApply` sees the same
+`[carrier, 2]` for `(mk 1) 2` and for `((mk 1) 2)` — one placed, one applied,
+byte-identical at that point. Nothing downstream can recover the difference,
+so the fact is recorded where it is still known: at the collapse.
+
+`CheckState` now carries a matched pair, and together they ARE §1:
+
+- `ParenPlacedFnIDs` — the carriers a paren PLACED (one survivor; the park
+  returns 1 and the pointer steps past). Already existed for member reads;
+  the park now records every carrier it places.
+- `ParenReSteppedFnIDs` — the carriers an enclosing paren's rewind LANDED ON
+  and will re-step into a call (more than one survivor; the park returns 0).
+  New, written by `recordParenReStep` immediately after the park is read,
+  from the same post-removal indices.
+
+`leadPlacedNotRead` then reads "placed, not arrived through a read that
+dispatches, **and not re-stepped one level out**". Three facts, all recorded,
+none inferred.
+
+The individual changes:
+
+1. **`fnReturnPark`'s survivor clause is restored** and its header rewritten to
+   say why the count is the question. No behaviour change from `main`.
+2. **`recordParenReStep`** records the park's negative twin (above), under the
+   park's own exclusions — a reach-lowered group's re-step is its dispatch, not
+   a user paren's — and the same "might be callable" test the auto-dispatch
+   guard uses, so both ends agree on what the rewind would have called.
+3. **`resolveDynamicApply`'s carrier arm** applies a placed lead only when the
+   re-step record says an enclosing paren claimed it. `((mk 1) 2)` and
+   `((mk2 5) 10)` keep compiling natively; `(mk 1) 2` and `(mk2 5) 10` — which
+   compiled to the WRONG answer — now refuse.
+4. **Its dynamic arm** was over-refusing a def-bound read (`def h (find …)  h
+   {…}`): a bare name always calls, whatever mark its value carries from
+   wherever it was built. It now shares `leadPlacedNotRead`'s conjunction
+   instead of testing placement alone.
+5. **`RecordBranch.resolveArm` refuses an arm whose residual LEADS with a
+   re-stepped fn** (`residualLeadReStepped`) — narrower than
    `closureResidualHasUnappliedFn`, because an arm's SOLE carrier is
-   legitimately placed data on both lanes.
+   legitimately placed data on both lanes (`if c [(mk 1)]`).
+6. **`RecordMakeListInner` refuses a list whose LEAD element the re-step record
+   claims.** This is where the record earns its keep: `[(mk 1) 2]` arrives with
+   byte-identical elements and must keep compiling, so only the recorded fact
+   can separate them.
 
-Result on the 16-shape probe: **0 value divergences**, down from 5.
+Result on the 16-shape probe: **0 value divergences**, down from 5, with
+`((mk 1) 2)`, `((mk2 5) 10)`, `[(mk 1) 2]`, `for`/`do` bodies and
+`((inc/v) 7)` all still compiling natively.
+
+The standing measurement is `lang/go/nur101_paren_restep_test.go`
+(`TestParenReStepRule`): for every shape the rule classifies, the compiled lane
+either agrees with `RunInterp` or refuses — it never answers differently.
 
 ## 6. Graduation
 
-The refusals are the honest signal, not the destination. Applying a
-paren-bounded carrier lead needs `RecordDynApply` to admit an EVENT lead,
-which `DynApplyLeadEligible` declines today — that is Stage 3's universal fn
-values plus the Apply kernel. When it lands, rows 2 and 3 above become
-recorded applies rather than refusals, and `((mk 1) 2)` compiles natively in
-every position rather than only as the program residual.
+Four shapes refuse where the interpreter answers, and they are the same
+shape in four positions: a paren-bounded carrier apply whose result is
+consumed somewhere the residual lowering does not reach — a list element, an
+`if` arm, or an un-rewound program residual that must stay placed.
+
+Recording the apply itself (rather than refusing) needs `RecordDynApply` to
+admit an EVENT lead, which `DynApplyLeadEligible` declines today. That is
+Stage 3's universal fn values plus the Apply kernel. When it lands,
+`TestParenReStepListElementRefusal` and the `nur101Refusal` fences graduate to
+parity rows, and the `ParenReSteppedFnIDs` side table can retire in favour of
+the recorded event.
+
+## 7. Two records this opened
+
+- **NUR106** — the vacuous parity harness (§4). The mechanical sweep landed;
+  the guard that stops it recurring has not.
+- **NUR107** — a type-mismatched callee raises interpreted and returns data
+  compiled. Surfaced by the sweep, on the very test that had pinned that claim
+  as non-reproducing. VM-side fix, its own increment.

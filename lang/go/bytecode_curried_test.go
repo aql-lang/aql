@@ -17,26 +17,26 @@ import (
 func TestCurriedFactoryCompiles(t *testing.T) {
 	// The §9.2 fixture (verbose form) and its lambda twin.
 	//
-	// REGRESSED TO A SOUND REFUSAL 2026-08-27 (NUR101, PAREN-RESTEP-RULE.0.md).
-	// These compiled to [3] — the right answer — but by the WRONG mechanism:
-	// the outer paren collapses, the pair reaches the PROGRAM residual, and
-	// resolveDynamicApply's carrier arm applies it there. That arm cannot tell
-	// `((mk 1) 2)` from `(mk 1) 2`, whose residual is identical and which the
-	// interpreter PLACES as `fn (Integer) 2`; applying both is how `(mk 1) 2`
-	// and `(mk2 5) 10` came to be silent miscompiles. Refusing both is the only
-	// sound reading available until the apply is recorded AT the paren.
-	//
-	// GRADUATION: Stage 3's universal fn values + Apply kernel. Today
-	// DynApplyLeadEligible declines an EVENT lead, so parenLeadFnApplyIdx
-	// cannot claim this window; when it can, these become native applies again
-	// and the rows below go back to mustCompileWithParity with "[3]".
-	for _, src := range []string{
-		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] ((mk 1) 2)`,
-		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]] ((mk 1) 2)`,
-		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] (((mk 1)) 2)`,
-	} {
-		nur101Refusal(t, src, "[3]")
-	}
+	// These are the WRAPPED spelling, and the wrap is the whole difference
+	// (NUR101, design/PAREN-RESTEP-RULE.0.md): the outer paren leaves two
+	// survivors, so the park declines and the rewind re-steps the carrier into
+	// a call. The UNWRAPPED `(mk 1) 2` places instead, and compiling both as
+	// applies is how `(mk2 5) 10` came to answer 11 against the interpreter's
+	// `fn (Integer) 10`. The residual lowering now tells them apart by the
+	// re-step record ParenReSteppedFnIDs, taken at the collapse.
+	mustCompileWithParity(t,
+		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] ((mk 1) 2)`, "[3]")
+	mustCompileWithParity(t,
+		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]] ((mk 1) 2)`, "[3]")
+	mustCompileWithParity(t,
+		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] (((mk 1)) 2)`, "[3]")
+
+	// The unwrapped twin of the first row, pinned beside it so the pair reads
+	// as one rule rather than two behaviours: no enclosing rewind, so the
+	// carrier is PLACED and the 2 lands beside it.
+	nur101Refusal(t,
+		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] (mk 1) 2`,
+		"[fn (Integer) 2]")
 
 	// Decline fences, each parity-faithful:
 	// THREE-level currying (a capture threading through two constructions)
@@ -73,17 +73,9 @@ func TestCurriedFactoryCompiles(t *testing.T) {
 	// A QUOTED returned fn value stays INERT: lowering it to a closure would
 	// drop the Quoted flag and the VM would auto-apply a value the
 	// interpreter keeps as data (PR #279 review: compiled [3] vs interp
-	// [fn (Integer) 2]).
-	//
-	// REGRESSED TO A SOUND REFUSAL 2026-08-27 with the rest of the
-	// paren-bounded carrier family (NUR101). The quoted-ness lives on the fn
-	// value the factory returns, not on the CARRIER the residual leads with,
-	// so resolveDynamicApply cannot see it and declines the placed lead like
-	// any other. It compiled correctly before only because the apply it
-	// emitted was a runtime no-op (isAppliableFn leaves a quoted value as
-	// data) — the right answer from an instruction that should not have been
-	// there. Graduates with the rest of the family.
-	nur101Refusal(t,
+	// [fn (Integer) 2]). The nameless gate excludes quoted values, so it
+	// falls back with parity.
+	mustCompileWithParity(t,
 		`def mk fn [[] [Function] [quote (fn [[b:Integer] [Integer] [b add 1]])]] ((mk) 2)`,
 		"[fn (Integer) 2]")
 }
