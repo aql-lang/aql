@@ -1448,6 +1448,21 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   pin flipped to `TestPredicateBodyRunsOnTheVM` and now fails if the
   interpreter arm comes back.
 
+  **The hazard the fix widened, closed with it.** `ClosurePayload` carried a
+  `Unit` and no program. That was sound for as long as a closure could only
+  be invoked under the program that pushed it — which was the case exactly
+  because foreign units never ran nested. Hosting them ends it: while a
+  detached unit runs, the registry's `Invoker` points at the FOREIGN
+  program's context, so a closure belonging to the enclosing one would index
+  the wrong `Fns` table. Out of range degrades (the local panic guard); a
+  VALID index naming a different body is a silent wrong answer, which is the
+  class this work exists to eliminate. The payload now carries its program
+  (`ClosurePayload.Prog`, boxed as `any` — core sits below compiler, the same
+  shape `BoruImpl.Compiled` uses) and `invokeClosureOn` routes by it through
+  the same nested hosting. Reachability today is narrow — it needs a stamped
+  body that also invokes an externally-supplied fn value, which Stage 3 has
+  not enabled — so this is closed BEFORE Stage 3 opens it rather than after.
+
   **The pattern, ninth instance.** A documented blocker is a hypothesis
   until RUN. The verdict here was right — relaxing the `is` gate on top of
   a hidden island would have been laundering — and the reason given for it

@@ -602,10 +602,16 @@ const (
 	ClosureInKeyVal
 )
 
-// NewClosure builds a closure Value over a compiled body unit (default value
-// input shape). The VM stamps the unit's real InShape at OpPushClosure.
-func NewClosure(unit int, captures []core.Value) core.Value {
-	return core.Value{Parent: core.TFunction, Data: core.ClosurePayload{Unit: unit, Captures: captures}}
+// NewClosure builds a closure Value over prog's body unit (default value input
+// shape). The VM stamps the unit's real InShape at OpPushClosure.
+//
+// prog is required rather than optional: a closure's Unit is an index into ITS
+// program's Fns table, and the VM routes an invoke by that identity
+// (ClosurePayload.Prog). A nil prog is legal and means "no identity recorded" —
+// it reads as whichever program is running, which is only ever right for a
+// value that is inspected rather than invoked.
+func NewClosure(prog *Program, unit int, captures []core.Value) core.Value {
+	return core.Value{Parent: core.TFunction, Data: core.ClosurePayload{Prog: prog, Unit: unit, Captures: captures}}
 }
 
 // ClosureWantsKeyVal reports whether v is a compiled closure whose body expects

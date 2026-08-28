@@ -453,6 +453,12 @@ func (vc *vmContext) invokeClosureOn(reg *core.Registry, body core.Value, inputs
 		// non-reentrancy contract).
 		return core.RunResolved(reg, inputs, core.BodyTokens(body))
 	}
+	// A closure minted by ANOTHER program indexes that program's Fns table, so
+	// it runs in that program's own nested context rather than against vc.p
+	// (see closureProgram for why this became reachable).
+	if p, foreign := vc.closureProgram(cl); foreign {
+		return vc.hostForeign(p, reg, cl.Unit, inputs, cl.Captures)
+	}
 	// Inputs fill the leading param slots, captures the trailing ones
 	// (StartFnCompile registers params before captures) — the same split
 	// RunUnit and runUnitNested bind, so it uses the same helper rather than
@@ -1642,7 +1648,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 				copy(caps, stack[len(stack)-nc:])
 				stack = stack[:len(stack)-nc]
 			}
-			cl := core.ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape, Render: p.Fns[in.Arg].Render}
+			cl := core.ClosurePayload{Prog: p, Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape, Render: p.Fns[in.Arg].Render}
 			stack = append(stack, core.Value{Parent: core.TFunction, Data: cl})
 		case compiler.OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled

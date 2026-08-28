@@ -65,9 +65,29 @@ func vmInternalError(rec any, src string) error {
 // callback (InvokeCompiled's C1 fence then retries it on CallBoru), not abort
 // the whole enclosing program and re-run it on the interpreter.
 func (vc *vmContext) runForeignUnit(ref *compiler.CompiledFnRef, args []core.Value) (res []core.Value, handled bool, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			res, handled, err = nil, true, vmInternalError(rec, vc.r.Source)
+		}
+	}()
+	res, err = vc.hostForeign(ref.Prog, vc.r, ref.Unit, args, ref.Captures)
+	return res, true, err
+}
+
+// hostForeign is the nested-hosting body both foreign entries share:
+// runForeignUnit for a detached REF, and invokeClosureOn for a closure VALUE
+// whose program is not the running one. It builds p's own vmContext, points
+// the registry's body seams at it for the duration, and restores everything on
+// the way out.
+//
+// reg is the registry the body runs against — vc.r for a detached ref, the
+// CALLING registry for a closure (invokeClosureOn's contract: a module
+// sub-registry or a per-connection fork resolves names as its own dispatch
+// would).
+func (vc *vmContext) hostForeign(p *compiler.Program, reg *core.Registry, unit int, inputs, captures []core.Value) ([]core.Value, error) {
 	r := vc.r
 	sub := &vmContext{
-		p:          ref.Prog,
+		p:          p,
 		r:          r,
 		ceiling:    vc.ceiling,
 		stepLimit:  vc.stepLimit,
@@ -75,21 +95,15 @@ func (vc *vmContext) runForeignUnit(ref *compiler.CompiledFnRef, args []core.Val
 		argsFloor:  r.Args.Depth(),
 		frameDepth: vc.frameDepth,
 	}
-	// Registered FIRST so it runs LAST: the budget is handed back on every
-	// path, including the one where the panic guard below has replaced res/err.
-	// A bailed callback still spent its steps.
+	// Registered first so it runs last of this function's defers: the budget is
+	// handed back on every path, a bailed body included.
 	defer func() { vc.steps = sub.steps }()
-	if ref.Prog.DynEnv {
+	if p.DynEnv {
 		// The DynEnv args bracket, per runVMEntry: an error unwind returns
 		// straight out of sub.run, so rebalance to the entry depth on every
 		// path rather than only the clean one.
 		defer r.Args.Truncate(sub.argsFloor)
 	}
-	defer func() {
-		if rec := recover(); rec != nil {
-			res, handled, err = nil, true, vmInternalError(rec, r.Source)
-		}
-	}()
 	// The foreign program owns body execution for the duration: a closure it
 	// pushes, or a further detached ref it reaches, indexes ITS Fns table, so
 	// both seams must point at sub while it runs. Restored on exit so the
@@ -105,6 +119,28 @@ func (vc *vmContext) runForeignUnit(ref *compiler.CompiledFnRef, args []core.Val
 			fr.Invoker = nil
 		}
 	}()
-	res, err = sub.enterBodyUnit(r, ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures))
-	return res, true, err
+	return sub.enterBodyUnit(reg, unit, bindUnitLocals(&p.Fns[unit], inputs, captures))
+}
+
+// closureProgram answers whether cl was minted by a program OTHER than the one
+// vc is running, and returns it when so.
+//
+// A ClosurePayload's Unit is an index into its OWN program's Fns table. For as
+// long as a closure could only be invoked under the program that pushed it,
+// that was a distinction without a difference and the payload carried no
+// program at all. Nested foreign hosting ends that: while a detached unit runs,
+// the registry's Invoker points at the FOREIGN program's context, so a closure
+// belonging to the enclosing one would index the wrong table — out of range
+// (caught, degraded) or, worse, a valid index naming a different body, which is
+// a silent wrong answer. This is the check that makes that impossible rather
+// than merely unlikely.
+//
+// A payload with no program recorded reads as the running program, which is
+// exactly what it did before the field existed. Note the p != nil arm: a
+// hand-built NewClosure(nil, …) boxes a TYPED nil, so the type assertion
+// SUCCEEDS and only the pointer test separates "no identity" from "a real
+// foreign program" — the same typed-nil trap the S3 plan installers document.
+func (vc *vmContext) closureProgram(cl core.ClosurePayload) (*compiler.Program, bool) {
+	p, ok := cl.Prog.(*compiler.Program)
+	return p, ok && p != nil && p != vc.p
 }

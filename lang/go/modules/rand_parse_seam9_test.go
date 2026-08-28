@@ -26,7 +26,7 @@ func w9RandListOfHandler(t *testing.T) native.Handler {
 // body is a compiled closure and r.Invoker is seamed to control InvokeBody.
 func TestW9RandListOfClosureArms(t *testing.T) {
 	h := w9RandListOfHandler(t)
-	closure := compiler.NewClosure(0, nil) // ClosurePayload → IsCompiledClosure true
+	closure := compiler.NewClosure(nil, 0, nil) // ClosurePayload → IsCompiledClosure true
 	twoArgs := func() []native.Value { return []native.Value{closure, native.NewInteger(1)} }
 
 	// 376: the body invocation errors.
@@ -56,7 +56,7 @@ func TestW9CallParseFnCompiledClosure(t *testing.T) {
 	r.Invoker = func(_ *native.Registry, _ native.Value, _ []native.Value) ([]native.Value, error) {
 		return []native.Value{want}, nil
 	}
-	closure := compiler.NewClosure(0, nil)
+	closure := compiler.NewClosure(nil, 0, nil)
 	out, err := callParseFn(r, closure, []native.Value{native.NewString("x")})
 	if err != nil {
 		t.Fatalf("callParseFn(compiled closure): %v", err)

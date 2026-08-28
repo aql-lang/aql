@@ -487,6 +487,22 @@ type StoreShapeInfo struct {
 // driving handler shapes each input correctly.
 type ClosurePayload struct {
 	PayloadBase
+	// Prog is the PROGRAM Unit indexes, held opaquely: core sits below
+	// compiler, so it boxes a *compiler.Program the same way BoruImpl.Compiled
+	// boxes a *CompiledFnRef. It is load-bearing rather than bookkeeping — a
+	// closure value is only interpretable relative to the program that minted
+	// it, since Unit is an index into THAT program's Fns table and names a
+	// different body, or none, against any other. The VM compares it against
+	// the running program before indexing and hosts a mismatch in a nested
+	// context (eng/go/vm_foreign_unit.go).
+	//
+	// The comparison became reachable when detached units started running
+	// nested inside a live run: before that a closure could only be invoked
+	// under the one program that was executing when it was pushed, which is
+	// why the payload carried no identity for as long as it did. Nil means no
+	// identity was recorded — only hand-built values reach that, and they read
+	// as the running program, exactly as they did before this field.
+	Prog     any
 	Unit     int
 	Captures []Value
 	InShape  ClosureInShape

@@ -23,7 +23,7 @@ func TestW8OpcodeStringUnknown(t *testing.T) {
 }
 
 func TestW8NewClosureValue(t *testing.T) {
-	v := compiler.NewClosure(3, []core.Value{core.NewInteger(1)})
+	v := compiler.NewClosure(nil, 3, []core.Value{core.NewInteger(1)})
 	cp, ok := v.Data.(core.ClosurePayload)
 	if !ok {
 		t.Fatalf("NewClosure did not carry a ClosurePayload: %v", v)

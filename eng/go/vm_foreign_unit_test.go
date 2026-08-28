@@ -174,3 +174,48 @@ func TestRunUnitNestedForeignClearsForeignInvokers(t *testing.T) {
 		t.Error("the foreign run left its invoker installed on a module registry")
 	}
 }
+
+// A closure VALUE carries the program its Unit indexes, and the invoker routes
+// by it. Both rows use unit 0 of a DIFFERENT program returning a different
+// constant, so an invoke that ignored the identity would answer the running
+// program's body — a valid index naming the wrong body, which is the silent
+// wrong answer this field exists to make impossible.
+//
+// Before nested foreign hosting a closure could only be invoked under the
+// program that pushed it, so the payload carried no identity and none was
+// needed. It is needed now: while a detached unit runs, the registry's Invoker
+// points at the foreign program's context.
+func TestInvokeClosureRoutesByItsOwnProgram(t *testing.T) {
+	vc, r := foreignVC(t, oneConstProg(11))
+	foreign := oneConstProg(22)
+
+	res, err := vc.invokeClosureOn(r, compiler.NewClosure(foreign, 0, nil), nil)
+	if err != nil {
+		t.Fatalf("invokeClosureOn (foreign): %v", err)
+	}
+	if n, _ := res[0].AsConcreteInteger(); n != 22 {
+		t.Fatalf("a foreign closure must run ITS program's unit (22), got %v", res[0])
+	}
+	if r.Invoker != nil {
+		t.Error("the foreign closure run must restore the enclosing body seam")
+	}
+
+	// The same-program twin still enters directly, with no nesting.
+	res, err = vc.invokeClosureOn(r, compiler.NewClosure(vc.p, 0, nil), nil)
+	if err != nil {
+		t.Fatalf("invokeClosureOn (own): %v", err)
+	}
+	if n, _ := res[0].AsConcreteInteger(); n != 11 {
+		t.Fatalf("an own-program closure runs vc.p's unit (11), got %v", res[0])
+	}
+
+	// No identity recorded reads as the running program — what every closure
+	// did before the field existed.
+	res, err = vc.invokeClosureOn(r, compiler.NewClosure(nil, 0, nil), nil)
+	if err != nil {
+		t.Fatalf("invokeClosureOn (no identity): %v", err)
+	}
+	if n, _ := res[0].AsConcreteInteger(); n != 11 {
+		t.Fatalf("an identity-less closure runs the RUNNING program (11), got %v", res[0])
+	}
+}
