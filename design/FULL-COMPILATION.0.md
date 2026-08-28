@@ -187,6 +187,39 @@ the **defer valve**. This note treats both as first-class targets with their
 own ratchets (§9), because a total compiler whose runtime quietly re-runs
 programs on the interpreter has not left the status quo.
 
+**THE RESIDUE IS NOW MEASURED, 2026-08-28, and it was never zero.**
+`test/go/langspec`'s `TestInterpEntryCensus` runs EVERY corpus row compiled
+with Stage 1's `InterpEntry` hook armed and counts the entries that are
+UNATTRIBUTED — interpreter execution the end-state invariant does not permit:
+
+```
+7603 rows, 7180 ran compiled, 184 with unattributed interpreter entries
+  Engine.Run              501      InvokeCallback:callboru   28
+  CallBoru                275      vm:island-resolved        21
+  vm:island                66      RunResolved               31
+  runPooledSub             37                    959 entries total
+```
+
+**Read that against `TestCompiledCoverage`'s `0 islanded`.** Both numbers are
+correct and they measure different things. The island ceiling counts programs
+whose DISASSEMBLY embeds an `OpFallback` span; it cannot see a `CallBoru` made
+inside a native handler, because no opcode records one — and that is precisely
+where interpretation survives (§6.3's predicate finding: every predicate
+dispatch takes `InvokeCallback:callboru` with no ledger row and no island
+flag). So **"0 islanded" is a claim about the metric, and 184 is the claim
+about the runtime.**
+
+This matters for the stage plan, not just for bookkeeping. **T2 is not
+satisfiable while this number is non-zero, whatever the `OpFallback` ceiling
+says**, so Stage 9 cannot honestly flip to total on the island ceiling alone.
+The census is a DOWNWARD ratchet like `refusalSiteCeiling` — it only falls,
+and a rise wants a design note rather than a bigger constant.
+
+The seam spread is also the work-list, and it is not one problem: `Engine.Run`
+and `CallBoru` dominate, `vm:island` shows OpFallback spans that DO execute,
+and `InvokeCallback:callboru` is the predicate/callback seam. Each retires
+against a different stage.
+
 ---
 
 ## 3. Why the two-lane shape is forced, and why it is already legal
