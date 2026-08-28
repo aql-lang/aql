@@ -168,12 +168,29 @@ var varyRefusalLedger = map[string]string{
 // bodyHasReplayHazard) + the ensureExportsBound ModuleExport re-bind fix
 // landed: the typed-def half refuses soundly, the import half compiles
 // natively as a closure unit.
+// varyKnownMiscompiles pins variants that diverge from the interpreter, so a
+// divergence is never left unrecorded.
 var varyKnownMiscompiles = map[string]string{
 	// Pinned 2026-07-30. NOT a regression: the project rename rewrote every
 	// corpus row, which reshuffles Sample()'s FNV priority and pulled
 	// module-io.tsv:241 into the default 32-seed breadth for the first time.
-	// Verified identical on the pre-rename tree (same seed, same transform,
-	// same divergence), so this is a long-standing gap the sampler had never
-	// reached, not something the rename introduced.
+	// Verified identical on the pre-rename tree, so this is a long-standing
+	// gap the sampler had never reached.
+	//
+	// BRIEFLY MASKED, 2026-08-28, and un-masked deliberately. stampFnConst's
+	// container descent stamps the mount handlers (they are fn values inside a
+	// map const), and a stamped handler does not take the identity-losing
+	// path — so the divergence disappeared. That is not a fix. The stamp is an
+	// OPTIMISATION: it declines for a body whose free words need a
+	// dynamic-scope rescue, for a body whose lowering refuses, for a capturing
+	// fn, and whenever runtime stamping is unarmed. A wrong answer that is
+	// correct only while an optimisation happens to apply is a wrong answer
+	// waiting to come back, and it would come back silently.
+	//
+	// So the stamp now declines rather than perturb the enclosing program (see
+	// stampFnConst's dynScopeNames restore), the three refusal buckets the
+	// descent had introduced are gone, and this stays pinned as the
+	// independent defect it is: a flex map captured by a mount handler loses
+	// its identity across loop iterations under compilation.
 	"for 2 [import \"boru:io\"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon \"n/a.txt\") \"hello mounted\" drop  IO.read (make Pathon \"n/a.txt\")]": "a flex-map captured by a mount handler loses its identity across loop iterations under compilation: the compiled run raises [boru/set_error] \"expected a FlexMap, got FlexMap\" (same type name, different instance) where the interpreter round-trips cleanly",
 }

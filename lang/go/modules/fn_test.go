@@ -291,7 +291,7 @@ func TestFnUtilCurryChain(t *testing.T) {
 	}
 }
 
-// TestFnUtilBoruBody drives invokeFnUtil's CallBoruFn tail with a
+// TestFnUtilBoruBody drives invokeFnUtil's InvokeCallbackFn tail with a
 // boru-bodied fn (the arm the Go-impl wrappers skip).
 func TestFnUtilBoruBody(t *testing.T) {
 	r := fnUtilReg(t)

@@ -645,13 +645,22 @@ for every caller:
   definition in hand. Also re-anchors `InvokeCompiled`'s `depsFresh`
   check (§7.3 item 5), which was previously evaluated against a registry
   nobody had asked about.
-- **`CallBoruFn(r, fnDef, sig, args)`** — the interpreter-only sibling.
-  Six words (`filter`, the map-lambda `each`/`fold` bodies, core `walk`,
+- ~~**`CallBoruFn(r, fnDef, sig, args)`** — the interpreter-only
+  sibling.~~ **RETIRED 2026-08-28.** It carried the same
+  defining-registry routing but kept the call on `CallBoru`, because six
+  words (`filter`, the map-lambda `each`/`fold` bodies, core `walk`,
   `StructUtil.walk`, `IO.mount`, `boru:parse`) already choose between a
-  compiled closure and an interpreter `FnDefInfo` themselves; routing
+  compiled closure and an interpreter `FnDefInfo` themselves, and routing
   their `FnDefInfo` half through `InvokeCallback` would silently move
-  those bodies onto the VM. Fixing *where* free words resolve must not
-  also change *which* engine resolves them.
+  those bodies onto the VM: *fixing where free words resolve must not
+  also change which engine resolves them.* That was the right fence for
+  THIS document's change and the wrong one for full compilation, which
+  wants exactly that move. All seven sites (those six plus the fn-util
+  words) now call `InvokeCallbackFn`, and the function is deleted rather
+  than left as a hatch — a second dispatch path is a divergence source in
+  its own right (`design/FN-VALUE-OPEN-WORK.0.md` records two it caused).
+  The routing rule this document establishes is unchanged; only the
+  engine choice moved.
 
 ### 12.2 What changed, by class
 

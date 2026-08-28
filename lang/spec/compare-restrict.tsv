@@ -118,13 +118,42 @@ def s (context) (s deq s)	true	…and deq to itself
 (do [raise "boom"]) eq (do [raise "bang"])	false	different messages are not equal
 (do [raise bad_input "x"]) eq (do [raise other "x"])	false	different codes are not equal
 
+# ── Function values: eq is identity, deq is content (NUR031) ─────────
+# GRADUATED 2026-08-27 (Stage 3) out of
+# lang/spec/frontier/frontier-nur031-fn-eq.tsv. These rows were always
+# green on the interpreter and compile-REFUSED on a pre-existing rule
+# with nothing to do with equality: any fn value reaching a non-inert
+# word was refused outright. eq / neq / deq / canon only ever READ a fn
+# value — identity is a token minted once per authored function and
+# copied by value, content is canon — so they now declare CompileReadsFn
+# and the value rides as an ordinary const operand.
+def f fn x:Integer [Integer] [x add 1] f/v eq f/v	true	a function is reflexively eq — the identity token survives the reach
+def f fn x:Integer [Integer] [x add 1] f/v deq f/v	true	…and reflexively deq, which is what ADR-015's round-trip needs of the kind
+def f fn x:Integer [Integer] [x add 1] def a (f/v) def b (f/v) a/v eq b/v	true	two names for ONE function are eq — identity survives rebinding
+def f fn x:Integer [Integer] [x add 1] def a (f/v) a/v eq f/v	true	…and the rebound name is eq to the function it was reached from
+def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v eq g/v	false	GOTCHA: two independently-written functions with identical content are NOT eq — eq is identity, not content
+def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v deq g/v	true	…but they ARE deq: same params, same returns, same body
+def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/v deq h/v	false	a different BODY is a different value — deq discriminates it
+def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/v deq s/v	false	…as does a different signature
+def f fn x:Integer [Integer] [x add 1] f/v eq 1	false	cross-type eq is false, never an error
+def f fn x:Integer [Integer] [x add 1] f/v deq 1	false	deq likewise
+# The NEGATIVES that make the identity claim real: a compiled const bake
+# must not collapse two functions into one, and must not split one into
+# two. Both directions are pinned above (eq false on identical content,
+# eq true across two bindings of one function); these add the reads that
+# would go wrong if the bake dropped the identity token or the content.
+def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v neq g/v	true	neq is eq's complement on the identity question
+def f fn x:Integer [Integer] [x add 1] f/v neq f/v	false	…and agrees with it on reflexivity
+def f fn x:Integer [Integer] [x add 1] def a (f/v) def f fn x:Integer [Integer] [x add 9] a/v eq f/v	false	rebinding the NAME does not rebind the value the earlier read captured
+def f fn x:Integer [Integer] [x add 1] def m {a: f/v} (m dot a) eq (m dot a)	true	a fn value read twice out of a container is the same function
+def f fn x:Integer [Integer] [x add 1] def r (f/v eq f/v) f 5	6	reading a function for comparison leaves it callable
+
 # ── The code and type values: the rest of the fall-through (NUR031) ───
 # A word and a declared type were the last kinds `deq` rejected outright
 # — equal to nothing, not even themselves. Both are IMMUTABLE
 # declarations, so eq and deq coincide on them, as they already do on an
 # Error and on a scalar leaf. (A function is the third; its rows are
-# compile-refused as fn-value operands, so they live in
-# lang/spec/frontier/frontier-nur031-fn-eq.tsv.)
+# directly above.)
 (quote [x]) deq (quote [x])	true	a word is deq to an equal word — content, since a word IS its name and modifiers
 (quote [x]) deq (quote [y])	false	…and different names are not deq
 (quote [x add 1]) deq (quote [x add 1])	true	quoted code compares element-wise now that its words do

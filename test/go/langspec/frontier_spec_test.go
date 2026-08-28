@@ -165,20 +165,30 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// refusal ceiling (0) requires. Graduation = the unmatched-dispatch
 	// trap accepting a RECOVERED window; the rows then move to
 	// lang/spec/apply.tsv §4's negatives.
-	// NUR099's `fnpred` (2026-08-25): `4 is Even` is the headline spelling
-	// for predicate membership and the one shape of it that does not
-	// compile. The COMPILING forms (typed def, typed param) carry the same
-	// membership in the main corpus — lang/spec/fnpred.tsv.
-	`def Even fnpred n:Integer [eq 0 (mod 2 n)]  4 is Even`:                 {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def Even fnpred n:Integer [eq 0 (mod 2 n)]  5 is Even`:                 {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def Even fnpred [[n:Integer] [eq 0 (mod 2 n)]]  4 is Even`:             {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def Even fnpred [[n:Integer] [eq 0 (mod 2 n)]]  5 is Even`:             {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def Big fnpred n:Integer [n gt 10]  50 is Big`:                         {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def Big fnpred n:Integer [n gt 10]  5 is Big`:                          {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def Positive fnpred n:Integer [if (n gt 0) [n] [None]]  5 is Positive`: {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def Positive fnpred n:Integer [if (n gt 0) [n] [None]]  0 is Positive`: {why: "a predicate type's constraint IS a function value, so `is` against one walks that value into the Stage 3 gate; PRE-EXISTING and identical for the capitalised-fn form fnpred replaces, which is why no `is <predicate-type>` row exists in the main corpus. Graduation = Stage 3 admitting a function value at `is`, at which point these move into lang/spec/fnpred.tsv", failsWith: "function value reaches is"},
-	`def p {name:'ada'}  p apply $.name`:                                    {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
-	`[10 20 30] apply $.1`:                                                  {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
+	// (NUR099's `fnpred` `is` rows were ledgered here and have GRADUATED —
+	// 2026-08-28, lang/spec/fnpred.tsv §7. The ledger's stated cause, "a
+	// predicate type's constraint IS a function value, so `is` walks that
+	// value into the Stage 3 gate", was wrong: a predicate NODE is a bare
+	// type literal riding as data, and the body runs through the callback
+	// seam, never the tape. The real blocker was that the seam declined
+	// every detached unit mid-run, so the rows would have compiled with an
+	// interpreter island hidden inside the handler. Closed by
+	// eng/go/vm_foreign_unit.go.)
+	// (stampFnConst's container descent briefly added TWO buckets here on
+	// 2026-08-28 — a mount-handler seed refusing with "dynamic-scope def
+	// `files` of unpromoted computed value" and its loop twin with "module
+	// binding files rebound after a stored handler captured it as a dep".
+	// Both were ONE leak: compileStoredFnUnit analyses against the LIVE emit
+	// state, so the enclosing compile inherited a promotion decision and a dep
+	// record from a body it may never apply. They were ledgered on the grounds
+	// that the loop seed otherwise MISCOMPILES — and that was the mistake: the
+	// descent masked the miscompile rather than fixing it, and the mask lifts
+	// silently whenever the stamp declines. The stamp now restores
+	// es.dynScopeNames and an optional ref no longer escalates a rebind, so
+	// both rows compile and the divergence is pinned where divergences belong,
+	// in varyKnownMiscompiles.)
+	`def p {name:'ada'}  p apply $.name`: {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
+	`[10 20 30] apply $.1`:               {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
 	// (ADR-016 / NUR077 §5 Hole 1 was ledgered here and has GRADUATED —
 	// `def f ([] => [42])  f/v apply` compiles with parity. The refusal was
 	// an artefact of applying at the handler: that left the check engine's
@@ -297,35 +307,48 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)`: {why: "arity-1 Function param read bare with no argument: a bare name is a CALL, so raising is correct and the compiler is wrong to yield the Function", failsWith: "parity"},
 
 	// Cross-module fn value in a higher-order word's CLOSURE slot
-	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3). A fn value resolves its free
-	// words in its DEFINING module; the closure lowering compiles the body
-	// against the CALLING one, so compiling this baked the caller's `lim`
-	// (100) and returned [] where the interpreter returns [3 4] — a
-	// check-clean miscompile. foreignFnHome (compiler/go/callable_words.go)
-	// declines the lowering, and the callback seam's island runs the body on
-	// its own registry (core.CallBoruFn), so parity holds and the island is
-	// merely slow.
+	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3) — GRADUATED 2026-08-27
+	// (Stage 3) into lang/spec/module-fnvalue-boundary.tsv §4.
 	//
-	// Graduation = compile the foreign body against fd.Registry. The RUNTIME
-	// half already exists: CompiledFn.Reg (compiler/go/bytecode.go:970) plus
-	// enterUnit's `if p.Fns[u].Reg != nil { curReg = p.Fns[u].Reg }`
-	// (eng/go/vm.go:1403-1414) already give a closure unit its own dispatch
-	// registry, and StartFnCompile's fnReg parameter (compiler/go/emit.go:3314)
-	// already plumbs it. Three of the four compile-side roles are solved
-	// patterns the NAMED foreign-fn path already uses — shareCheckStateFrom
-	// (check/go/check_recovery.go:527) for the CheckState, and
-	// fd.Registry.AnalysisScopeID() for the memo key, exactly as
-	// check/go/check_fnbody.go:312,513 does. The one unsolved role is CAPTURE
-	// OPERANDS: recordClosureDispatch resolves them in the CALLER's emit tables
-	// (callable_words.go:474-481) and dynScopeRescue re-resolves them at run
-	// time against the caller's curReg (eng/go/vm.go:1902), so a foreign
-	// module-scope capture has no operand home. Closing it needs either a
-	// refusal for foreign closures with non-lexical captures, or a
-	// registry-tagged dyn-scope operand so OpLookupDynScope can name
-	// fd.Registry. The context bracket is a second, smaller asymmetry:
-	// enterBodyUnit pushes/pops on the CALLING registry (vm.go:294-300) while
-	// curReg would be fd.Registry.
-	`import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]`: {why: "a fn value from another module reaches a higher-order word's closure slot; the lowering would resolve its free words in the CALLING module, so it declines and the callback-seam island owns it", failsWith: "islanded"},
+	// It was here because a fn value resolves its free words in its DEFINING
+	// module while the closure lowering compiled the body against the CALLING
+	// one, so compiling this baked the caller's `lim` (100) and returned []
+	// where the interpreter returns [3 4] — a check-clean miscompile that
+	// foreignFnHome declined into the callback seam's island.
+	//
+	// The graduation criterion written here — "compile the foreign body
+	// against fd.Registry", with shareCheckStateFrom named as the CheckState
+	// half — is exactly what landed, so this entry is worth reading as a
+	// worked example of a ledger entry that paid off. Two details it got
+	// right and one it got wrong:
+	//
+	//   RIGHT  the RUNTIME halves needed nothing (CompiledFn.Reg +
+	//          enterUnit's curReg swap), and StartFnCompile's fnReg
+	//          parameter already plumbed the compile side.
+	//   RIGHT  CAPTURE OPERANDS are the unsolved role — and more unsolved
+	//          than this entry knew. Looking a foreign body's module-scope
+	//          mutable captures up in the CALLER (which is what the code
+	//          did) compiles a closure over the WRONG cell whenever the two
+	//          modules share a name: a SIXTH silent miscompile, in NUR101's
+	//          family, found by writing the row. The lookup now uses
+	//          fd.Registry, which declines at resolveOperand instead — the
+	//          "registry-tagged dyn-scope operand" this entry named as the
+	//          alternative is what would compile it. Fence:
+	//          lang/go TestForeignClosureCaptureResolvesInItsOwnRegistry.
+	//   WRONG  it read shareCheckStateFrom as one of several solved roles
+	//          rather than as the whole remaining problem. A prototype that
+	//          threaded fd.Registry and pointed only the foreign
+	//          CheckState.Emit at the caller compiled a unit that const-
+	//          folded the predicate to `false` — the body had no carrier for
+	//          the per-element param, because the params live on the
+	//          CheckState too. Sharing the WHOLE CheckState is the fix
+	//          (check.ShareCheckStateFrom), and it is what makes the
+	//          bindings-foreign / analysis-local split work.
+	//
+	// The context bracket noted here as a second asymmetry (enterBodyUnit
+	// pushes/pops on the CALLING registry, vm.go:294-300, while curReg is
+	// fd.Registry) did not need addressing for this row; it stays recorded
+	// in case a future row reaches it.
 
 	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns —
 	// the P1.3 target — GRADUATED 2026-08-03 (completeness-review §8.2(3)/
@@ -364,7 +387,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7`:                        {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
 	`def m {l: ([x:Any] => [x])} end m.l 5 m.l 7`:                                                    {why: "NUR038 seal: lambda twins", failsWith: "fn-value-call boundary"},
 	`def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/v} end m.p 5 h 7`: {why: "NUR038 seal: value call then bare-word call", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end (m.p 5) (m.p 7)`:                            {why: "NUR038 seal: explicit paren seals", failsWith: "fn-value-call boundary"},
 	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 end m.p 7`:                            {why: "NUR038 seal: explicit end seals", failsWith: "fn-value-call boundary"},
 	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7`:              {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
 
@@ -419,18 +441,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// EmitState.RecordCallOperands. Graduation = a compiled representation
 	// for a function value as an operand (the Stage-3 fn-value work); the
 	// rows then move to compare-restrict.tsv and fn-value.tsv.
-	`def f fn x:Integer [Integer] [x add 1] f/v eq f/v`:                                         {why: "NUR031: a function is reflexively eq", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/v deq f/v`:                                        {why: "NUR031: …and reflexively deq — ADR-015's prerequisite for the kind", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/v) def b (f/v) a/v eq b/v`:                 {why: "NUR031: two names for one function are eq — identity survives rebinding", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/v) a/v eq f/v`:                             {why: "NUR031: …and eq to the function they were reached from", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v eq g/v`:  {why: "NUR031: identical content is NOT eq — eq is identity", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def g fn x:Integer [Integer] [x add 1] f/v deq g/v`: {why: "NUR031: …but it IS deq — deq is content", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def h fn x:Integer [Integer] [x add 2] f/v deq h/v`: {why: "NUR031: a different body is a different value", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def s fn x:String [String] [x] f/v deq s/v`:         {why: "NUR031: a different signature likewise", failsWith: "function value reaches deq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] canon (f/v)`:                                        {why: "NUR031: canon renders the anonymous fn literal — no binding name", failsWith: "function value reaches canon (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] def a (f/v) (canon (a/v)) eq (canon (f/v))`:         {why: "NUR031: one function under two names has ONE canon", failsWith: "function value reaches canon (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/v eq 1`:                                           {why: "NUR031: cross-type eq is false, never an error", failsWith: "function value reaches eq (Stage 3)"},
-	`def f fn x:Integer [Integer] [x add 1] f/v deq 1`:                                          {why: "NUR031: cross-type deq likewise", failsWith: "function value reaches deq (Stage 3)"},
 	// The namespace rows refuse for the MODULE-synthetic reason above, not
 	// the fn-value one: a namespace binding has no bakeable operand home.
 	`import "boru:io" IO deq IO`:                          {why: "NUR031: a function-exporting namespace is deq-reflexive — the record's acceptance signal", failsWith: "operand of unknown provenance"},
@@ -496,12 +506,7 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]] def rules {inc: ([x:Integer] => [x add 1])} app 5 rules`:                                                                                     {why: "the fetched-fn apply shape: the check pass's gradual [Reach Any] match meets a runtime [Function] dispatch, so tryRecordPoly and recordCallElided both decline a wrong-arity poly window (NUR073's BROAD park made this spelling reachable); graduation = an arity channel for a fetched-fn apply lead", failsWith: "apply over a dynamic lead"},
 	`def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]] def rules {inc: 42} app 5 rules`:                                                                                                             {why: "the fetched-fn apply shape's negative twin — same gradual-match decline; graduation = an arity channel for a fetched-fn apply lead", failsWith: "apply over a dynamic lead"},
 	`def chainif fn [[a:Function b:Function s:Integer][Any][def r1 (a s) if (r1.ok) [def r2 (b (r1.rest)) (r2.val)] [0]]] chainif ([z:Integer] => [{ok:true rest:8}]) ([z:Integer] => [{ok:true val:50}]) 4`: {why: "NUR087's branch-local def-split: the check pass is clean since the fix, but the branch arm's dispatch through a Function param takes the checker's best-fit recovery, and a recovered dispatch refuses compilation; graduation = a modelled branch-arm param dispatch", failsWith: "unmatched dispatch recovered at dot"},
-	`def dbl x:Integer => [mul 2 x]  each dbl/v [1 2 3]`:                                                                                                                                                     {why: "NUR086's list Function form: the callback reaches the element through InvokeBody, which the lowering islands rather than modelling; graduation = a modelled fn-value callback frame", failsWith: "islanded: program embeds an OpFallback span"},
-	`def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0`:                                                                                                                           {why: "the seeded fold twin of the each row — same islanded callback", failsWith: "islanded: program embeds an OpFallback span"},
-	`def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3]`:                                                                                                                             {why: "the unseeded fold twin — the first element seeds, same island", failsWith: "islanded: program embeds an OpFallback span"},
-	`def add2 fn [[a:Integer b:Integer][Integer][add a b]]  scan add2/v [1 2 3]`:                                                                                                                             {why: "the scan twin — same islanded callback", failsWith: "islanded: program embeds an OpFallback span"},
 	`def dbl x:Integer => [mul 2 x]  for-each dbl/v [1 2 3]`:                                                                                                                                                 {why: "for-each's Function form meets the Stage 3 function-valued-operand gate before the callback is even reached", failsWith: "function-valued operand at for-each (Stage 3)"},
-	`each ([x:Integer] => [x add 1]) [1]`:                                                                                                                                                                    {why: "the row that pinned the OLD contract (a lambda over a list was ERROR:signature) — NUR086's fix makes it answer [2]; it islands like its §12 siblings", failsWith: "islanded: program embeds an OpFallback span"},
 	// Rewritten 2026-08-24 for the BROAD park (NUR073): the audit's §1
 	// programs are respelled with explicit apply, so these keys are the
 	// migrated TSV rows verbatim (literal keys — the shared hof* prefixes no
@@ -605,7 +610,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// name with two meanings: compiled bound only the shadowed value, so this
 	// answered `1 2` where the interpreter answers 3. Refuses now.
 	`def mk fn [[a:Integer][Function][( fn [[b:Integer][Integer][add a b]] )]] end def f 1 end def f (mk 1) end undef f (f 2)`: {why: "audit §5.8/§9h: a computed fn shadowing a live binding — Defs and the carrier table disagree about the name", failsWith: "computed fn shadows a live binding"},
-	`def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))`:                                         {why: "the §9c wider-window spelling: the 1-arg closure under-applies in the interpreter ([1 6] — the deeper value survives) where the KeepQ op would consume the window, so the producer-arity gate keeps the refusal", failsWith: "runtime quote state unknown"},
 
 	// ───────────────────────────────────────────────────────────────────
 	// frontier-fn-util.tsv — the boru:fn-util behaviour rows (audit §6.4

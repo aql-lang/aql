@@ -1,8 +1,9 @@
 # RUNTIME-STAMPING — detached fn-unit compilation for runtime-constructed callbacks
 
-Status: **landed** (four phases, 2026-07-10). This note records the design,
-the discoveries that reshaped it mid-flight, and the invariants the
-implementation pins.
+Status: **landed** (four phases, 2026-07-10; one half of the seam was found
+UNLANDED 2026-08-28 and closed — see "The half that did not land"). This note
+records the design, the discoveries that reshaped it mid-flight, and the
+invariants the implementation pins.
 
 ## The problem
 
@@ -174,6 +175,85 @@ mini-s3's `do`/`error` trap lowering and its higher-order LIST handler
 patterns beyond filter-lambda; Model/check-prop stamping (the store-word
 trigger likely covers Model actions nearly for free).
 
+## The half that did not land (found and closed 2026-08-28)
+
+This note's status line said **landed** for thirteen months, and for
+callbacks that fire on an IDLE registry it was true. For callbacks reached
+from INSIDE a live compiled run it was not, and nothing here said so.
+
+`InvokeCallback` chooses between two VM entries: `RunUnit` when
+`CanHostVM()` (a per-connection fork, a spawned process — the registry is
+idle), and the nested runner otherwise. The nested runner declined:
+
+```go
+if !ok || ref.Prog != vc.p { return nil, false, nil }   // eng/go/vm.go
+```
+
+A detached ref is compiled on an isolated fork into its **own standalone
+one-unit Program** — that is the primitive's whole point — so `ref.Prog`
+never equals the running program, and the nested arm rejected the entire
+class by construction. The stamp still ran, still succeeded, and still
+recorded `Stamped:true`: `-compile-report` said compiled and the runtime
+interpreted, with no gate anywhere that could notice the two disagreeing.
+
+The population this hid is not the one the note was written for. Codec fns
+and service handlers fire on idle forks, so they took `RunUnit` and the
+measured 4.4x held. **Predicate types** — every `def Pos fnpred …`,
+consulted at a param, a typed def, a return, or an `is` — are invoked from
+inside the live run, and every one of them interpreted. Measured over the
+spec corpus: 24 of the 28 `InvokeCallback:callboru` entries in
+`TestInterpEntryCensus`.
+
+`eng/go/vm_foreign_unit.go` hosts the foreign program's unit in a nested
+`vmContext` bound to that program instead of declining it, sharing the
+enclosing run's runaway guards (`steps`, `frameDepth`) and keeping its own
+`dynBinds` / `islandEng` / panic guard. Census: 184 → 163 rows,
+`InvokeCallback:callboru` 28 → 4, with `TestSpecCompiledDifferential`
+unchanged.
+
+The lesson for this note specifically: a stamp LEDGER records an attempt,
+not an execution. "Stamped:true" answers "did the compile succeed", and the
+question worth gating was always "did the unit RUN" — which only the
+`InterpEntry` census can answer, and which did not exist when the four
+phases landed.
+
+## A stamp is an OPTIMISATION, and must behave like one (2026-08-28)
+
+The const-chokepoint stamp (`EmitState.stampFnConst`, at `resolveOperand`'s
+interning point) reaches a far larger population than the store-site edge: every
+fn value the program bakes as a const, including the ones nested in list and map
+consts. It also differs from `StampDetachedFn` in one way that matters — it uses
+`compileStoredFnUnit` IN-PROGRAM rather than forking, because a fork per const
+cost ~6x on `lang/go/modules` and transiently exhausted memory. In-program means
+it analyses against the LIVE emit state, and every write it leaves behind is a
+constraint the ENCLOSING program inherits from a body it may never apply.
+
+Three channels, and the tell is the same each time: **the symptom names the
+enclosing program's problem, not the stamped body's.**
+
+| channel | what leaks | remedy |
+|---|---|---|
+| `Check.Diagnostics` | an error finding refuses the program | `TruncateDiagnostics` back to the pre-attempt length |
+| `dynScopeNames` | a rescued free word makes Finalize install an `OpBindDynScope` twin in every binding unit, so the program's own `def` must lower a dynamic bind it has no promoted value for | snapshot, restore, and **decline the stamp** — a live unit reads through `OpLookupDynScope`, so only the whole stamp can go |
+| `storedHandlerDeps` | a later rebind of a captured name refuses the whole program via `NotifyNameRebound` | mark the ref `optional`: still poisoned (it islands), but no escalation |
+
+The rule underneath all three: **a stamp that would change the enclosing
+program's own lowering is not worth taking.** Declining costs exactly the island
+the program had before anything stamped it — the behaviour the differential
+already validates — while taking it costs a program that does not run.
+
+This was nearly got wrong in the other direction, and that is the part worth
+remembering. The first draft ledgered two of the refusals rather than fixing
+them, arguing that WITHOUT the descent one sampler seed miscompiles (a flex map
+captured by a mount handler loses its identity across loop iterations) and a
+refusal beats a wrong answer. It does — but the descent was not FIXING that
+divergence, it was MASKING it. A stamp declines for a capturing fn, for a body
+whose lowering refuses, for a body needing a dynamic-scope rescue, and whenever
+stamping is unarmed; a wrong answer that is correct only while an optimisation
+happens to apply is a wrong answer waiting to come back, silently, with its pin
+already deleted. **An optimisation may never be load-bearing for correctness** —
+if removing it changes an answer, the answer was wrong and the pin stays.
+
 ## Invariants pinned by tests
 
 - Mode contract: unarmed registries never stamp
@@ -187,7 +267,13 @@ trigger likely covers Model actions nearly for free).
   (`TestRunCompiledFallbackNoDuplicateStampReport`).
 - Isolation: a mid-run stamp leaves the parent's Defs depths/gens,
   CheckState identity, and diagnostics untouched
-  (`TestStampFnValueParentStateUntouched`).
+  (`TestStampFnValueParentStateUntouched`); the IN-PROGRAM const-chokepoint
+  stamp leaves the enclosing program's own lowering unchanged — a stamp that
+  would register a dynamic-scope name is declined and the map restored
+  (`TestStampConstDynScopeDeclineKeepsEnclosingCompile`, which refuses the
+  enclosing program if the restore is removed), and an `optional` ref poisons
+  on a dep rebind without escalating to a program refusal
+  (`TestNotifyNameReboundBranches`).
 - Fail-safe: refusing bodies, capturing fns, multi-overload fns, Go-backed
   fns all decline with byte-identical behaviour; a stale dep falls back to
   the LIVE interpreter resolution (`TestStampFnValueDepRebindFallsBackLive`,

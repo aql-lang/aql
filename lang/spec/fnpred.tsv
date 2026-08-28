@@ -61,3 +61,30 @@ def E fnpred [[n:Integer] [1] [2]]	ERROR:fnpred_invalid_spec	…and a triple is 
 #     A well-shaped pair whose INPUT is not a valid param spec fails in
 #     construction, exactly as `fn`'s does — fnpred adds no new leniency.
 def E fnpred [[n:NoSuchTypeXyz] [1]]	ERROR:unknown type	an unknown param type is refused at construction
+#
+# §7  `is` against a predicate type — the headline spelling for the
+#     membership a fnpred declaration creates.
+#
+#     These lived in lang/spec/frontier/frontier-fnpred.tsv until 2026-08-28,
+#     ledgered as `function value reaches is (Stage 3)`. The refusal was
+#     never about `is`: a predicate NODE is a bare type literal that rides as
+#     data, and the body runs through the callback seam, not the tape. What
+#     blocked them was that the seam's nested arm declined every detached
+#     unit, so the body interpreted inside the handler — admitting the rows
+#     would have hidden an island rather than removed one. With foreign units
+#     hostable (eng/go/vm_foreign_unit.go) the body runs on the VM, so the
+#     rows compile AND stay honest; the interp-entry census is what keeps
+#     that claim checkable.
+def Even fnpred n:Integer [eq 0 (mod 2 n)]  4 is Even	true	an even Integer is a member
+def Even fnpred n:Integer [eq 0 (mod 2 n)]  5 is Even	false	an odd one is not
+def Even fnpred [[n:Integer] [eq 0 (mod 2 n)]]  4 is Even	true	the spec-list form is the same type
+def Even fnpred [[n:Integer] [eq 0 (mod 2 n)]]  5 is Even	false	…and refuses the same values
+def Big fnpred n:Integer [n gt 10]  50 is Big	true	Boolean convention: true means member
+def Big fnpred n:Integer [n gt 10]  5 is Big	false	…and false means not
+def Positive fnpred n:Integer [if (n gt 0) [n] [None]]  5 is Positive	true	None-on-failure: a non-none result means member
+def Positive fnpred n:Integer [if (n gt 0) [n] [None]]  0 is Positive	false	…and none means not
+#     The input-type gate rejects before the body runs, so a predicate over
+#     Integer never sees a String — and the TYPE itself is not an inhabitant
+#     question: a bare node passes the gate as the type it is.
+def Even fnpred n:Integer [eq 0 (mod 2 n)]  "x" is Even	false	the input-type gate rejects without running the body
+def Even fnpred n:Integer [eq 0 (mod 2 n)]  Even is Even	true	a type literal is the type itself, not an inhabitant

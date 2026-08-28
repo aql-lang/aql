@@ -56,7 +56,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 	}
 	e.RecordUserCall(0, nil, nil, core.SrcPos{})
 	e.RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, nil, core.SrcPos{})
-	if e.RecordDynApply(nil, core.Value{}, core.Value{}, core.SrcPos{}) {
+	if _, ok := e.RecordDynApply(nil, core.Value{}, core.Value{}, core.SrcPos{}); ok {
 		t.Fatal("inactive RecordDynApply should refuse")
 	}
 	if e.RecordDynMethod(core.Value{}, nil, nil, "w", core.SrcPos{}) {

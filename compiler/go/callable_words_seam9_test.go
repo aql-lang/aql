@@ -43,11 +43,11 @@ func TestW9LambdaHookCompatible(t *testing.T) {
 	r := newTestRegistry(t)
 
 	// No own sig (empty) → decline.
-	if _, ok := lambdaHookCompatible(r, &core.FnDefInfo{}, nil, ClosureInValue, false); ok {
+	if _, ok := lambdaHookCompatible(r, &core.FnDefInfo{}, nil, ClosureInValue, false, false); ok {
 		t.Error("a sig-less fn should decline")
 	}
 	// An own sig with an empty body → decline.
-	if _, ok := lambdaHookCompatible(r, &core.FnDefInfo{Signatures: []core.Signature{{}}}, nil, ClosureInValue, false); ok {
+	if _, ok := lambdaHookCompatible(r, &core.FnDefInfo{Signatures: []core.Signature{{}}}, nil, ClosureInValue, false, false); ok {
 		t.Error("an empty-body sig should decline")
 	}
 	// More than one own sig → decline.
@@ -55,28 +55,28 @@ func TestW9LambdaHookCompatible(t *testing.T) {
 		{Params: []core.FnParam{{Name: "a"}}, Impl: body},
 		{Params: []core.FnParam{{Name: "b"}}, Impl: body},
 	}}
-	if _, ok := lambdaHookCompatible(r, two, []core.Value{core.NewInteger(1)}, ClosureInValue, false); ok {
+	if _, ok := lambdaHookCompatible(r, two, []core.Value{core.NewInteger(1)}, ClosureInValue, false, false); ok {
 		t.Error("a multi-overload fn should decline")
 	}
 	// A body carrying a flow-control sentinel → decline.
 	sentinel := &core.FnDefInfo{Signatures: []core.Signature{{
 		Params: []core.FnParam{{Name: "a"}}, Impl: core.Boru([]core.Value{core.NewWord("break")}),
 	}}}
-	if _, ok := lambdaHookCompatible(r, sentinel, []core.Value{core.NewInteger(1)}, ClosureInValue, false); ok {
+	if _, ok := lambdaHookCompatible(r, sentinel, []core.Value{core.NewInteger(1)}, ClosureInValue, false, false); ok {
 		t.Error("a sentinel body should decline")
 	}
 	// Param / input arity mismatch → decline.
 	arity := &core.FnDefInfo{Signatures: []core.Signature{{
 		Params: []core.FnParam{{Name: "a"}, {Name: "b"}}, Impl: body,
 	}}}
-	if _, ok := lambdaHookCompatible(r, arity, []core.Value{core.NewInteger(1)}, ClosureInValue, false); ok {
+	if _, ok := lambdaHookCompatible(r, arity, []core.Value{core.NewInteger(1)}, ClosureInValue, false, false); ok {
 		t.Error("an arity mismatch should decline")
 	}
 	// A nil-typed param is skipped; the compatible lambda is returned.
 	okFd := &core.FnDefInfo{Signatures: []core.Signature{{
 		Params: []core.FnParam{{Name: "a"}}, Impl: body, // Type nil
 	}}}
-	if _, ok := lambdaHookCompatible(r, okFd, []core.Value{core.NewInteger(1)}, ClosureInValue, false); !ok {
+	if _, ok := lambdaHookCompatible(r, okFd, []core.Value{core.NewInteger(1)}, ClosureInValue, false, false); !ok {
 		t.Error("a nil-typed param should be skipped and the lambda accepted")
 	}
 	// The capture gate is caller-selected: the extras/hook path (false)
@@ -85,10 +85,10 @@ func TestW9LambdaHookCompatible(t *testing.T) {
 		Signatures: []core.Signature{{Params: []core.FnParam{{Name: "a"}}, Impl: body}},
 		Captured:   []core.CapturedBinding{{Name: "kv", Value: core.NewInteger(9)}},
 	}
-	if _, ok := lambdaHookCompatible(r, capFd, []core.Value{core.NewInteger(1)}, ClosureInValue, false); ok {
+	if _, ok := lambdaHookCompatible(r, capFd, []core.Value{core.NewInteger(1)}, ClosureInValue, false, false); ok {
 		t.Error("the hook path must refuse a capturing lambda")
 	}
-	if _, ok := lambdaHookCompatible(r, capFd, []core.Value{core.NewInteger(1)}, ClosureInValue, true); !ok {
+	if _, ok := lambdaHookCompatible(r, capFd, []core.Value{core.NewInteger(1)}, ClosureInValue, true, false); !ok {
 		t.Error("the body path must admit a capturing lambda")
 	}
 }
@@ -223,6 +223,12 @@ func TestW9EmptyFlexHookOperand(t *testing.T) {
 // The guard lives in lambdaHookCompatible rather than at its two call sites so
 // that BOTH the body-lambda path and the extras/hook path (walk's ascend slot)
 // inherit it from one branch.
+//
+// UPDATED 2026-08-27 (Stage 3): the decline is now CONDITIONAL on foreignOK.
+// The body-lambda call site passes true, because it compiles the body against
+// the defining registry with the caller's CheckState shared onto it; the
+// extras/hook site passes false, because it has no per-hook capture layout to
+// share and keeps the island. Both polarities are asserted below.
 func TestW9LambdaHookDeclinesForeignRegistry(t *testing.T) {
 	r := newTestRegistry(t)
 	other := newTestRegistry(t)
@@ -231,17 +237,24 @@ func TestW9LambdaHookDeclinesForeignRegistry(t *testing.T) {
 
 	// Same registry (Registry nil — a fn defined in the running scope): admitted.
 	local := &core.FnDefInfo{Signatures: []core.Signature{sig}}
-	if _, ok := lambdaHookCompatible(r, local, []core.Value{core.NewInteger(1)}, ClosureInValue, true); !ok {
+	if _, ok := lambdaHookCompatible(r, local, []core.Value{core.NewInteger(1)}, ClosureInValue, true, false); !ok {
 		t.Error("a locally-defined lambda must still be admitted")
 	}
-	// Foreign defining registry: declined.
+	// Foreign defining registry, foreignOK false (the extras/hook site): declined.
 	foreign := &core.FnDefInfo{Signatures: []core.Signature{sig}, Registry: other}
-	if _, ok := lambdaHookCompatible(r, foreign, []core.Value{core.NewInteger(1)}, ClosureInValue, true); ok {
-		t.Error("a fn value from another module must decline the closure lowering")
+	if _, ok := lambdaHookCompatible(r, foreign, []core.Value{core.NewInteger(1)}, ClosureInValue, true, false); ok {
+		t.Error("without foreignOK a fn value from another module must decline the closure lowering")
+	}
+	// …and ADMITTED with foreignOK, which is the body-lambda site: that caller
+	// shares the caller's CheckState onto the defining registry before
+	// compiling, so the body resolves its free words at home and the unit
+	// still lands in the caller's program.
+	if _, ok := lambdaHookCompatible(r, foreign, []core.Value{core.NewInteger(1)}, ClosureInValue, true, true); !ok {
+		t.Error("with foreignOK a fn value from another module must be admitted")
 	}
 	// A fn whose defining registry IS the compiling one is not foreign.
 	same := &core.FnDefInfo{Signatures: []core.Signature{sig}, Registry: r}
-	if _, ok := lambdaHookCompatible(r, same, []core.Value{core.NewInteger(1)}, ClosureInValue, true); !ok {
+	if _, ok := lambdaHookCompatible(r, same, []core.Value{core.NewInteger(1)}, ClosureInValue, true, false); !ok {
 		t.Error("Registry == r is the same module, not a foreign one")
 	}
 }

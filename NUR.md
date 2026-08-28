@@ -89,10 +89,11 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
 | [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
-| [NUR106](#nur106) | Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compares the compiled lane against itself and passes unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
-| [NUR107](#nur107) | A type-mismatched callee under a leading one-arg apply diverges: `ld ([k:String] => [k]) 14` raises `signature_error` interpreted and returns `[fn (String) 14]` compiled. `TestLeadApplyNoMatchTwoReturnParity` pinned it as NON-reproducing on 2026-08-03 — against the vacuous oracle of NUR106 | the NUR106 oracle sweep, 2026-08-27 |
+| [NUR106](#nur106) | RESOLVED 2026-08-28. Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compared the compiled lane against itself and passed unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them. A THIRD sweep round found four more in the sibling package `lang/go/test`, which the first two never reached; the guard `test/go/oraclegate` now pins bare `Run` calls per file, with counts, in any test file that also calls `RunCompiled` | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
+| [NUR107](#nur107) | RESOLVED 2026-08-28. A type-mismatched callee under a leading one-arg apply diverged: `ld ([k:String] => [k]) 14` raised `signature_error` interpreted and returned `[fn (String) 14]` compiled — with a two-value declared return, no error at all. `MatchFnSig` moved into core and the VM now raises for a Function whose overloads do not admit the args, keeping the data behaviour only for values that are genuinely not callable. The DETAIL half (the interpreter names the binding, the VM cannot) stays open under NUR108 | the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
@@ -236,11 +237,47 @@ fixed; the rule itself is unconditional.
    and the results agree), but the same shape, and introduced recently in
    PR #401.
 
-**No verdict.** The predicate role does need to test ONE value, so removing
-site 1's gate needs a replacement contract, not a deletion — and naming that
-contract is a design call the register should not pre-empt. Recorded so the
-divergence between an accepted ADR and the code is not lost; the fix is the
-maintainer's to direct.
+**A THIRD SITE existed and was not on this list; it is now gone (2026-08-28).**
+The compiler's `lambdaCallbackInputs` admitted a list `each` callback and
+refused list `fold`/`scan`, under a rule its own note called THE ARITY-1
+BOUNDARY: "at one input no convention can disagree, at two they can". Arity
+deciding what compiles is the same shape as sites 1 and 2, in the admission
+lane rather than the dispatch lane, and it survived unrecorded because it read
+as a compile-coverage limit rather than a semantic exception.
+
+It was also wrong on the facts. The two containers disagree because the MAP
+path binds POSITIONALLY (`CallBoruFn`, args in sig order) and the LIST path
+runs its inputs as a STACK (`InvokeBody` → `RunResolved`, `MatchSignature`
+filling top-down) — a per-path convention, not an arity threshold. One
+per-word permutation at the closure bind (`ClosureInStackPair`) reconciles
+them, and the rows compile at both arities with no boundary anywhere. Five
+ledger rows graduated with it (design/FULL-COMPILATION.0.md §6.3).
+
+This site was found while fixing something else, not by looking for
+arity-keyed rules, which is the register's own weakness rather than an
+accident. **`test/go/aritygate` now counts them** (2026-08-28): it flags every
+comparison against the arity of a function being INSPECTED — `len(sig.Params)`,
+`x.Arity`, `sig.TotalArgs()` — and pins the census per file, so a new site
+fails the build and a retired one must be tightened away.
+
+Two design notes on it, because a gate that cries wolf gets disabled. It does
+NOT flag a handler bounds-checking the args IT received (`len(args) < 2`): a
+function reading its own declared positions is not an exception to anything,
+and an earlier draft that counted those found 298 sites across 100 files. And a
+PIN IS NOT AN ACCUSATION — most of the 148 pinned sites are the matcher and its
+machinery reading arities in order to MATCH a signature, which IS the argument
+rule. The pins exist so a CHANGE forces someone to say which kind it is. Sites
+1 and 2 above are marked in the table as the named divergences they are.
+
+Verified against a deliberate violation before landing: adding
+`len(s.Params) == 1` to a pinned file fails the gate, and removing it restores
+green.
+
+**No verdict on sites 1 and 2.** The predicate role does need to test ONE
+value, so removing site 1's gate needs a replacement contract, not a deletion
+— and naming that contract is a design call the register should not pre-empt.
+Recorded so the divergence between an accepted ADR and the code is not lost;
+the fix is the maintainer's to direct.
 
 ---
 
@@ -287,6 +324,95 @@ its raise; the trap should blame the same token the interpreter does. Pinned
 meanwhile in `TestTypedDefBindCompiles`, which now compares Code and Detail
 and fences the position gap explicitly, so closing it fails the fence.
 
+**SHARPENED 2026-08-28, and one plausible fix measured and REJECTED.**
+
+Three things the record did not have:
+
+1. **It is NOT a general "compiled diagnostics lose positions" problem.**
+   Ordinary runtime errors carry exact, MATCHING positions on both lanes, at
+   top level and inside a fn body — `def n (2 add 3)  n div 0` and
+   `def f fn [[x:Integer] [Integer] [x div 0]]  f 5` both report `1:20` and
+   `1:36` respectively on each lane. The position machinery works; only the
+   typed-bind path is blind.
+2. **It is not fn-body-specific either**, which the record's example implies.
+   A TOP-LEVEL dynamic typed def loses it identically:
+   `def n (2 add 3)  def v:(Integer gt 10) n  v` renders no position compiled
+   against the interpreter's `1:18`.
+3. **The VM comment blaming `fmt.Errorf` is stale.** Traced at the raise, the
+   error IS a `*BoruError` and `stampAt` IS reached with a valid pc — but
+   `curDebug[pc]` is `0:0`, because the RECORD carried no position. The loss is
+   in the recorder, not the stamper.
+
+**Why the recorder has none, and why the obvious fix is wrong.** `def`'s args
+cannot supply it: the NAME arrives as a `/q`-captured Atom and the BODY as an
+already-collected value, and measured, BOTH are `0:0` at every typed-def record
+site. The interpreter does not read them either — the ENGINE stamps its error at
+the dispatch token after the handler returns.
+
+`r.Check.CurCallPos` looks like exactly the right source: it is that dispatch
+position, and the control words already use it for handler-built diagnostics.
+**Measured, it is not.** It is documented as "overwritten on every dispatch",
+and by the time the `def` handler runs it holds a NESTED call's position — the
+fix rendered `1:10` where the interpreter says `1:18`, and `1:62` where it says
+`1:34`. That trades a missing caret for a confidently wrong one, which is worse:
+"source position unknown" is at least honest. Reverted, unshipped.
+
+So the fix needs the `def` TOKEN's own position threaded to the record — a
+position the recorder does not currently receive from any of its three
+available sources. That is the work, and it is smaller than "compiled
+diagnostics" but larger than a fallback expression.
+
+---
+
+## NUR110 — a def in an untaken branch binds anyway {#nur110}
+
+**Status:** Pending · **Recorded:** 2026-08-28 · **Surfaced by:** checking what
+NUR109's compiled answer rested on
+
+**Rule:** a `def` runs when its branch runs. A name defined only inside a
+branch that was not taken is not bound afterwards — which is exactly what the
+interpreter does, and what both lanes already do for a zero-iteration loop.
+
+**Divergence:** the compiled lane binds it anyway.
+
+```
+if false [def op 1] [0]  end  op
+  compiled     [0 1]                 <- op is 1
+  interpreted  undefined_word        <- op was never defined
+
+if false [def op 1] []   end  op          → [1]           vs undefined_word
+if false [def op 1] [0]  end  typeof op   → [0 Integer]   vs undefined_word
+```
+
+**Why the existing gate misses it.** Family L already refuses the SHADOW case:
+a fn redefined inside a conditional body overlap-removes the enclosing overload
+in place, the depth-based rollback cannot revert it, and `installDef` marks the
+program uncompilable (`core/go/core_helpers.go`, gated on
+`analysisInCondBody`). But that refusal is reached only when the overlap filter
+actually DROPS an entry — `changed` is true. **A fresh `def` drops nothing**, so
+`changed` stays false and no refusal fires. The gate covers redefinition and not
+definition.
+
+Measured boundaries, so the fix knows its own edges:
+
+| shape | compiled | interpreted | |
+| --- | --- | --- | --- |
+| fresh def, untaken `if` branch | binds | unbound | **miscompile** |
+| shadowing a VALUE binding | refused (residual provenance) | correct | sound |
+| shadowing a FN overload | refused (family L, by name) | correct | sound |
+| zero-iteration `for` body | unbound | unbound | correct |
+| taken branch | binds | binds | correct |
+
+The zero-iteration loop row is the useful one: the same question is already
+answered correctly there, so the machinery to get this right exists.
+
+**Verdict: resolve by fix, compiler-side — and refusing is a fix.** Its two
+siblings above refuse, and a refusal is sound (the interpreter runs the program
+correctly); a silent wrong binding is not. Full graduation is the same one
+family L already names — "a runtime dispatch respecting the conditional
+binding" — which is Stage 4/5's def-twin work, not Stage 3's. Pinned as
+measured meanwhile by `lang/go`'s `TestCondBodyFreshDefBindsCompiledOnly`.
+
 ---
 
 ## NUR109 — an unbound parser name is two different errors {#nur109}
@@ -319,12 +445,30 @@ distinction the compiled dispatch already makes: a name that resolved to a
 value which is not a usable parser is not a missing kind. Pinned as measured
 meanwhile.
 
+**THE VERDICT IS SUSPENDED, 2026-08-28 — its premise does not hold.** It rests
+on "the compiled answer is the specified one", and the compiled answer rests in
+turn on `op` being BOUND at the parse site. Measured, that binding is itself a
+miscompile: `op` is defined only inside a branch that does not run, and the
+compiled lane binds it anyway ([NUR110](#nur110)). The interpreter's
+`parse_unknown_lang` is the CONSISTENT answer for a name that is not bound —
+which is what both lanes say when the same `op` is read bare on the interpreter.
+
+So this is a SYMPTOM, not an independent divergence, and "fix the interpreter to
+agree" would have taught it to agree with a wrong binding. Re-derive the verdict
+once NUR110 is closed: with `op` correctly unbound, both lanes should reach the
+unregistered-kind path and the question may not survive at all.
+
+This is the third time in this stage that a record's verdict named the wrong
+lane — §6.4's "the interpreter is wrong" and NUR101's ruling premise were the
+others. The common cause each time was reasoning from the compiled lane's answer
+without checking what that answer rested on.
+
 ---
 
 ## NUR106 — the parity harness stopped comparing lanes, and stayed green {#nur106}
 
-**Status:** Pending (verdict: resolve by fix — the sweep landed; the guard has
-not) · **Recorded:** 2026-08-27 · **Surfaced by:** measuring NUR101's ruling
+**Status:** Resolved 2026-08-28 (the sweep landed 2026-08-27 and was completed
+in a third round; the guard is `test/go/oraclegate`) · **Recorded:** 2026-08-27 · **Surfaced by:** measuring NUR101's ruling
 against `RunInterp` and finding the interpreter had never produced the answer
 its own tests asserted
 
@@ -373,12 +517,39 @@ cheapest first — rename the oracle in test helpers to a single
 `interpOracle(t, src)` so there is one site to flip; or a lint/vet rule
 rejecting `.Run(` in a file that also calls `RunCompiled`.
 
+**GUARD LANDED 2026-08-28, as the second candidate:
+`test/go/oraclegate`.** In a test file that also calls `RunCompiled`, a bare
+`Run` is presumed to be an oracle read and must be justified BY FILE, with a
+COUNT — so adding one to a pinned file trips the count and adding one to an
+unpinned file trips the table. It ratchets like `fissiongate`: a count that
+falls must be lowered, and a pinned file with no calls left must be removed.
+Verified by reintroducing a swept site and watching it fail.
+
+**AND THE SWEEP HAD RESIDUE AGAIN — a third round, in a package the earlier
+two never reached.** `lang/go/test` is a sibling package, so a sweep of
+`lang/go` misses it entirely. Four sites, three of them reading `Run` into a
+variable literally named `interp` and comparing it against `RunCompiled`
+under an error message that says "(miscompile)":
+
+```
+lang/go/test/fn_triple_compiled_test.go:51      interp, ierr := ai.Run(c.src)
+lang/go/test/xml_interp_compiled_test.go:46     interp, ierr := ai.Run(c.src)
+lang/go/test/module_typed_exports_test.go:84    interp, err  := ai.Run(src)
+lang/go/bytecode_probe_widenings_test.go:35     _, errC := a.Run(src)   ← labelled "interp" in its own message
+```
+
+All four now read `RunInterp`, and all four still pass — those rows genuinely
+agree, so no new divergence came out of this round. That is the argument for
+the gate rather than a fourth sweep: **three sweeps found residue three
+times.** A sweep does not stay swept; a gate does.
+
 ---
 
 ## NUR107 — a no-match callee raises interpreted and returns data compiled {#nur107}
 
-**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** the NUR106
-oracle sweep, on the very test that had pinned this claim as non-reproducing
+**Status:** Resolved 2026-08-28 · **Recorded:** 2026-08-27 · **Surfaced by:**
+the NUR106 oracle sweep, on the very test that had pinned this claim as
+non-reproducing
 
 **Rule:** the two lanes agree on errors as well as values — the same program
 raises the same taxonomy on both, which is what
@@ -409,6 +580,40 @@ is re-pinned to the measured behaviour with this record's number on it.
 function* from *a function no overload of which matches*, and raise for the
 second. The blast radius is every dynamic-apply opcode, so it wants its own
 increment rather than riding NUR101's.
+
+**RESOLVED 2026-08-28**, exactly as the verdict specified. `MatchFnSig` moved
+DOWN from `basic/go` into `core` (every operand was already a core type, and
+`eng` cannot import `basic`), and the VM's trailing apply now asks it before
+falling through to the island: a Function carrying own signatures none of which
+admits the args raises `core.RuntimeNoMatch` — the same builder the interpreter
+uses — instead of leaving `[fn, args]` as data. Both lanes answer
+`signature_error`.
+
+Two things the fix turned up that the record did not have:
+
+- **The naked shape.** With a TWO-value declared return
+  (`[Function Integer]`), the two-value residual `[fn, arg]` satisfies the
+  frame's return-count check, so the compiled lane raised *nothing at all*.
+  Narrower return arities merely surfaced a `type_error`, which is what made
+  this look like a taxonomy quibble rather than a silent wrong answer.
+- **Delegation wrappers are the one exception, and they are load-bearing.** A
+  module wrapper FnDef's own signatures are NOT the ones dispatch consults —
+  `execFnDefLiteral` looks the inner native up by name and matches against its
+  signatures. Asking `MatchFnSig` about the wrapper answers the wrong question
+  and rejects well-formed calls; `TestSeam7DelegationApplySuccess` caught it
+  immediately. The guard skips `IsDelegationFnDef` and lets the delegation
+  branch do the real matching.
+
+`TestLeadApplyNoMatchTwoReturnParity` and the 2-arg row of
+`TestLeadApplyArityMismatchParity` both flip from pinned-divergence to parity
+assertions — the latter rejoining the shared `fnValueM2NativeErrParity` helper
+exactly as its own note asked.
+
+**What is NOT closed is the DETAIL, and it belongs to NUR108.** The interpreter
+names the binding it dispatched (``cannot call `g` ``); the VM has only an
+anonymous fn value and renders ``cannot call `` ``. The taxonomy matches, the
+message does not. Carrying the source name to the apply site is plumbing the
+recorder does not do yet.
 
 ---
 
@@ -605,141 +810,6 @@ Apply kernel. Standing measurement:
 `lang/go/nur101_paren_restep_test.go`. Full account, with the measurement
 tables and the harness finding:
 [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md).
-
----
-
-## NUR099 — a fn body means a different thing under a capitalised name, and that is the only door to a predicate type {#nur099}
-
-**Status:** Pending (verdict: resolve by fix) · **Recorded:** 2026-08-25 ·
-**Surfaced by:** the maintainer's review of the §5.1 `stranded_type_call`
-diagnostic
-
-**Rule:** boru refuses loudly, and at the declaration. A declaration the
-engine can already prove unusable is not accepted and left to fail later —
-NUR091 is the same rule applied to a malformed `fn` triple.
-
-**Divergence:** the declaration is accepted and nothing reports it.
-
-```
-$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  K 1 2'
-K 1 2
-$ echo $?
-0
-$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  4 is K   "s" is K   true is K'
-false false false                     ← the bound type admits nothing at all
-$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  def z:K 5 end z'
-error: def z: predicate type K: RunPredicate: predicate must take exactly one argument
-```
-
-The engine reaches a definite conclusion about `K` — but only when someone
-uses it AS A TYPE. It never reports at the declaration, and never at all for
-the spelling that actually happens: calling it.
-
-**Not the return type.** `def <Capitalised> <fn>` is the predicate-type
-declaration form and a non-Boolean body is legal — the **None-on-failure**
-convention returns the value for a member and `None` for a non-member
-(`lang/spec/record.tsv` §177: `def Positive fn [n:Integer Integer [if (n gt
-0) [n] [None]]]`, return type Integer). So `def I x:Integer => [add 1 x]` is
-a well-formed predicate admitting every Integer, and the return type cannot
-tell a mistake from a predicate.
-
-**The root cause is that one spelling carries two jobs.** The same fn body
-means different things according to the CASE of the name it is bound to:
-
-```
-def even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a callable function
-def Even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a predicate type
-```
-
-and the capitalised form cannot be refused, because it is the ONLY way to
-declare an arbitrary predicate type. The type-constructing vocabulary —
-`convert typeof inspect make refine class surface exposes gen of extends
-default const base tor tand tany tall teq is as tis istype behave fnsig tnot
-pathof` — has no predicate constructor. `refine` declines the job (*"base
-must be Record, Table, or a class type, got Integer"*), and the comparison
-predicates have their own door (`def Big (Integer gt 10)`), but an arbitrary
-membership test has none. The capital is not something predicates want; it is
-the only entrance available.
-
-**Verdict (2026-08-25, maintainer): resolve by fix — add `fnpred`, the word
-analogous to `fnsig`.** `boru describe fnsig` reads *"a function TYPE — a
-function minus its body"*; `fnpred` is its mirror, a predicate TYPE — a
-function kept FOR its body. One drops the body and keeps the shape, the other
-drops the shape and keeps the body, and both bound to a capitalised name
-produce a type: `fnsig`'s enforces a function's shape, `fnpred`'s enforces a
-value's membership.
-
-Once predicates have their own spelling, `def <Capitalised> <fn-with-body>`
-denotes nothing legitimate and can be refused AT THE DECLARATION — the
-outcome the maintainer asked for originally, reached without counting
-parameters (compare NUR100, and ADR-016's absolute ban on arity-keyed
-exceptions). It also retires the case-keyed meaning: a fn body would mean one
-thing whatever the name's case.
-
-**Half landed, 2026-08-25.** `fnpred` ships with both of `fnsig`'s forms —
-the pair form `fnpred n:Integer [eq 0 (mod 2 n)]` and the spec-list form
-`fnpred [[n:Integer] [eq 0 (mod 2 n)]]` — and the output slot is supplied
-implicitly as `Any`, which is the honest declaration: both membership
-conventions are supported and they disagree on the return type, so pinning
-it to Boolean would refuse the None-on-failure form. `InstallType` now routes
-on the DECLARATION (`IsDeclaredPredicateFn`) before falling back to the
-parameter count, and `PredicateInputType` believes a declaration whatever the
-fn's shape. Pinned in `lang/spec/fnpred.tsv` (18 rows) and
-`core/go/fnpred_declared_test.go`.
-
-What remains, and why it is not in the same change: the arity route
-(`isPredicateFnValue`, and `PredicateInputType`'s count test) is still live,
-because ~150 sites across the corpus declare predicates the old way. Deleting
-it is a BREAKING change that needs those migrated to `fnpred` first. Both are
-marked DEPRECATED in place with a pointer here so neither is extended
-meanwhile. Only when they are gone does `def <Capitalised> <fn-with-body>`
-become refusable at the declaration — the outcome this record exists for.
-
-**Related.** The 1-argument cases (`def I …`, and the capitalised-constructor
-convention `def New fn opts:Map Service […]` used by `design/examples/`) stay
-reachable only at the USE site until this lands, which is what
-`stranded_type_call` reports (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.1).
-
----
-
-## NUR100 — ADR-016 forbids arity-keyed exceptions; two live sites use them {#nur100}
-
-**Status:** Pending (no verdict) · **Recorded:** 2026-08-25 · **Surfaced
-by:** the maintainer's ruling, 2026-08-25, that ADR-016's rule is absolute —
-"everything everywhere every time and always"
-
-**Rule:** ADR-016 — *"Every function behaves the same way whatever its arity
-and wherever it came from … this record forbids exceptions keyed on arity or
-origin."* Accepted 2026-08-15. The two exceptions it named as defects were
-fixed; the rule itself is unconditional.
-
-**Divergence:** two live sites decide behaviour by counting parameters.
-
-1. **`core/go/registry.go` `RunPredicate`** — whether a function may act as a
-   predicate at all is decided by its parameter count:
-
-   ```
-   error: predicate type K: RunPredicate: predicate must take exactly one argument
-   ```
-
-   A semantic exception: two functions that both express a membership test
-   are admitted or refused on arity alone.
-
-2. **`compiler/go/compiler_dispatch_record.go` `smallerArityOverload`** — a
-   poly window over dynamic operands is refused compilation when the word
-   registers an overload consuming FEWER operands. Lower stakes (a
-   compile-coverage conservatism, not an answer change — the lane falls back
-   and the results agree), but the same shape, and introduced recently in
-   PR #401.
-
-**No verdict.** The predicate role does need to test ONE value, so removing
-site 1's gate needs a replacement contract, not a deletion — and naming that
-contract is a design call the register should not pre-empt. Recorded so the
-divergence between an accepted ADR and the code is not lost; the fix is the
-maintainer's to direct.
-
----
-
 
 ---
 

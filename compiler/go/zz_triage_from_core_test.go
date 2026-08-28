@@ -79,7 +79,7 @@ func TestRecordDynApplyPendingConsume(t *testing.T) {
 	seedProduced(es, fn, 1)
 	es.units[len(es.units)-1].pendingApply = []string{fn.ID}
 	out := core.NewInteger(0)
-	if !es.RecordDynApply([]core.Value{core.NewInteger(10)}, fn, out, core.SrcPos{}) {
+	if _, ok := es.RecordDynApply([]core.Value{core.NewInteger(10)}, fn, out, core.SrcPos{}); !ok {
 		t.Fatal("resolvable apply with pending entry should record")
 	}
 	if len(es.units[len(es.units)-1].pendingApply) != 0 {

@@ -99,12 +99,12 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | Family | Rows | Essence |
 |---|---:|---|
 | A. Computed-fn / closure provenance | 45 | fn values whose shape the checker cannot know: Church/SKI/CPS chains, `FnUtil` results, computed closures at argument slots, curried chains |
-| B. Fn value as data operand (Stage 3) | 22 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped |
+| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The 8 `is` rows COMPILE if the gate is relaxed and, until 2026-08-28, still must not have been: measured, the predicate body ran on the interpreter inside the handler, so admitting them would have hidden an island rather than removed one. **The body now runs on the VM** (§6.3, RESOLVED — the cause was a cross-program decline in `runUnitNested`, not the representation), and **all 8 GRADUATED 2026-08-28** into `lang/spec/fnpred.tsv` §7 with two shapes the ledger never carried. Family B is closed |
 | C. Multi-dynamic-result residual | 11 | two dynamic results live at once; the static seat model cannot address them |
 | D. Provenance totalization | 13 | operands with no producing event: `$module`/namespace synthetics, cross-registry captures |
 | E. Check-diagnostics sentinel | 8 | the checker rejects programs the interpreter runs (`lang/go/boru.go:459-472`) |
 | F. Dispatch recovery | 5 | `unmatched dispatch recovered at apply/…` — recovered windows have no trap lowering yet |
-| G. Working islands | 7 | compile and run correctly; ledgered only because the program embeds `OpFallback` |
+| G. Working islands | 7 → 5 | compile and run correctly; ledgered only because the program embeds `OpFallback`. **2 graduated 2026-08-27** (list `each`, Function and lambda forms): `lambdaCallbackInputs` had a MAP case and no LIST case, so the lambda lowering declined at its first gate — a missing case, not the "modelled fn-value callback frame" the ledger asked for. **5 more graduated 2026-08-28** (list `fold`/`scan`, Function and lambda, seeded and unseeded): they needed no frame either — both handlers hand `(accumulator, element)`, and the two engines disagree only because the MAP path binds POSITIONALLY (`CallBoruFn`) while the LIST path runs its inputs as a STACK (`InvokeBody` → `RunResolved`), where `MatchSignature` fills top-down. One per-word permutation at the closure bind (`ClosureInStackPair`) reconciles them (§6.3). The family is down to the `apply` island and the full-stack-word row |
 | H. `while` | 6 | no structured lowering; body words splice tape-coupled tokens |
 | I. Variadic no-static-seat | 5 | `await first/any` winner residuals: 0..N results exceed any static seat (NUR067) |
 | J. Pinned miscompiles | 2 | bare `Function`-param read — both lanes wrong vs the 2026-08-15 ruling |
@@ -161,6 +161,17 @@ still re-enters the interpreter at runtime on the compiled path:
   `Registry.RunPredicate` (`core/go/registry.go:1917`) → `CallBoru`, a
   sub-engine tape run for any unstamped predicate body — reachable from
   every "kernel" matching site, the VM's included.
+
+  **CONFIRMED BY MEASUREMENT 2026-08-27**, not just by reading: the
+  `InterpEntry` hook on a compiled `def Pos fnpred n:Integer [n gt 0]
+  def f fn [[x:Pos] [Integer] [x]]  f 5` records
+  `InvokeCallback:callboru` + `CallBoru`, both UNATTRIBUTED, with no `is`
+  and no ledger row anywhere in the program. `RunPredicate` does reach for
+  the VM first (`InvokeCallbackFn`: "the VM when the body compiled to a
+  unit, `CallBoru` otherwise") — the body is simply never a unit, so the
+  reach always falls through. This is the concrete shape of the residue,
+  and §6.3 records why it also blocks family B's 8 `is` rows from a
+  graduation that would otherwise look clean.
 - A callback arriving while the main registry is mid-run routes to the
   interpreter by *structure*, not analysis: `CanHostVM` declines
   (`core/go/registry.go:677-686`) and `InvokeCallback` falls to `CallBoru`
@@ -175,6 +186,69 @@ T2 therefore has a second, unledgered debt: the **live island residue** and
 the **defer valve**. This note treats both as first-class targets with their
 own ratchets (§9), because a total compiler whose runtime quietly re-runs
 programs on the interpreter has not left the status quo.
+
+**THE RESIDUE IS NOW MEASURED, 2026-08-28, and it was never zero.**
+`test/go/langspec`'s `TestInterpEntryCensus` runs EVERY corpus row compiled
+with Stage 1's `InterpEntry` hook armed and counts the entries that are
+UNATTRIBUTED — interpreter execution the end-state invariant does not permit:
+
+```
+7603 rows, 7180 ran compiled, 184 with unattributed interpreter entries
+  Engine.Run              501      InvokeCallback:callboru   28
+  CallBoru                275      vm:island-resolved        21
+  vm:island                66      RunResolved               31
+  runPooledSub             37                    959 entries total
+```
+
+**163 as of the same day**, after §6.3's predicate finding was RUN rather
+than reasoned about (`eng/go/vm_foreign_unit.go`): `InvokeCallback:callboru`
+28 → 4, and `Engine.Run` / `CallBoru` each −24, because one declined
+predicate dragged all three seams behind it. The seam attribution below is
+otherwise unchanged, and its first row is now nearly retired.
+
+**Read that against `TestCompiledCoverage`'s `0 islanded`.** Both numbers are
+correct and they measure different things. The island ceiling counts programs
+whose DISASSEMBLY embeds an `OpFallback` span; it cannot see a `CallBoru` made
+inside a native handler, because no opcode records one — and that is precisely
+where interpretation survives (§6.3's predicate finding: every predicate
+dispatch takes `InvokeCallback:callboru` with no ledger row and no island
+flag). So **"0 islanded" is a claim about the metric, and 184 is the claim
+about the runtime.**
+
+This matters for the stage plan, not just for bookkeeping. **T2 is not
+satisfiable while this number is non-zero, whatever the `OpFallback` ceiling
+says**, so Stage 9 cannot honestly flip to total on the island ceiling alone.
+The census is a DOWNWARD ratchet like `refusalSiteCeiling` — it only falls,
+and a rise wants a design note rather than a bigger constant.
+
+The seam spread is also the work-list, and it is not one problem. Sampling the
+rows that produce each seam attributes the 959 entries to named stages rather
+than leaving them a number:
+
+| seam | what produces it (sampled) | retires with |
+| --- | --- | --- |
+| `InvokeCallback:callboru` | **predicate types**, every sampled row — `def Pos (fn [[n:Integer] [Boolean] [n gt 0]])` at a param, a typed def, or a return. **28 → 4: RETIRED for predicates 2026-08-28** (§6.3); the 4 that remain are a different, unsampled population | §6.3 predicate bodies as units |
+| `CallBoru` | the same predicate rows, plus module fn bodies that `raise`, plus `Test.check-prop`. **275 → 251** with the predicate half gone | §6.3, then §6.8 |
+| `RunResolved` | `do` with a RAW-TOKEN body — `do [1 2 (if b [] [9 9])]`, `do [for 3 [1]]` | §6.8 units-not-tokens |
+| `Engine.Run` | the Reach/lens apply (`p $.name apply`, `[10 20 30] $.1 apply`) and `do` with a MAP body whose entries are code (`do {n:[a add 1]}`) | §6.8, plus a lens-apply lowering |
+| `runPooledSub` | the same lens-apply rows, and `Vm.run` / `canon` round-trips | §6.8 / §6.7 (runtime compilation) |
+| `vm:island-resolved` | the fn-value apply chains — `compose`/`twice`/`stage`, `fnsig`-typed params, module fn-value boundary rows | §6.3 universal fn values |
+| `vm:island` | OpFallback spans that DO execute: a fn value read from a container (`m.double 21`), `do`/`error` rows, `StructUtil.parse/v` | §6.3 + §6.10 |
+
+Two readings worth stating. First, **§6.3's predicate work is the single
+largest attributable cluster** — it owns `InvokeCallback:callboru` outright and
+much of `CallBoru` — which is the same conclusion the family-B `is` refusal
+reached from the opposite direction, and it is why that refusal must stand
+until the bodies compile. That cluster is now retired, and the two independent
+measurements that converged on it are the reason it was found: the seam
+attribution said "predicates own this seam", the family-B refusal said "the
+predicate body is not a unit", and reading the seam they BOTH blamed turned up
+a four-line decline in the nested runner rather than the representation work
+both had scheduled (§6.3, RESOLVED). Second, **`Engine.Run` and `RunResolved` together are
+the `do`/code-body family**, so Stage 6's handler migration is a bigger
+contributor to the live residue than its ledger row (H, 6 rows) suggests: the
+ledger counts rows that REFUSE, and this counts rows that COMPILE and then
+interpret anyway.
 
 ---
 
@@ -340,7 +414,7 @@ already was.
   level down. The obligation is structural: G-lane opcodes call the same
   `core` functions the Engine calls (`MatchSignature`, `signature.go:175`;
   `SigTypeMatches` incl. the dynamic-carrier rule, `:297-341`;
-  `CallBoruFn`/`InvokeCallbackFn`; `RunTypedBind`; `Registry.Lookup` +
+  `InvokeCallbackFn`; `RunTypedBind`; `Registry.Lookup` +
   `aggregateDispatch`; the `RuntimeNoMatch` diagnostic builders), and the
   Engine is refactored to call the newly extracted routines (§6.2) so
   there is exactly one implementation of every decision.
@@ -1015,6 +1089,128 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   curReg swap, `compiler/go/bytecode.go:970`, `eng/go/vm.go:1403-1414`)
   and retiring the foreign-module island (family D's cross-module rows,
   the `filter A.big` working island).
+
+  **Measured 2026-08-27, and the blocker is not the captures.** The
+  `filter A.big` row compiles today to *one instruction* — `0000 FALLBACK
+  b0 ; filter (nin=0)` — the whole call islanded, right answer by the
+  mechanism the mission forbids. Its predicate has NO lexical captures at
+  all: what it needs is the free word `lim` resolved in module A, not in
+  the caller. So capture-tagging is not what unblocks this row.
+
+  What actually blocks it is `foreignFnHome`
+  (`compiler/go/callable_words.go:373`), which declines any fn whose
+  `fd.Registry` differs from `r`, and the decline is correct as the code
+  stands. **Probed 2026-08-27 for the exact reason, because "pass the other
+  registry" looks like a parameter change and is not:** for the `A.big`
+  case, `r.Check != fd.Registry.Check` *and*
+  `r.Check.Emit != fd.Registry.Check.Emit`. A module sub-registry carries
+  its OWN CheckState and its OWN EmitState.
+
+  So the job is not "compile the body against `fd.Registry`" — that would
+  record the unit into a different program's unit table and const pool,
+  where the caller's `OpPushClosure` cannot reference it. The job is to
+  **split the two roles the registry currently plays**: which registry
+  RESOLVES names during body compilation, and which EmitState RECORDS the
+  resulting unit. The unit must land in the caller's table; its dispatches
+  must resolve in the foreign registry, at compile time as well as at run
+  time.
+
+  That split is the Phase-2 work, and it is worth stating separately from
+  the capture extension because the two are independently useful:
+  registry-threading retires the island for capture-free foreign
+  predicates (the measured row), capture-tagging retires it for foreign
+  closures that also capture.
+
+  **The registry half alone is NOT sufficient, and a throwaway prototype
+  proved it rather than arguing it (2026-08-27).** Threading `fd.Registry`
+  through `compileClosureBody` while pointing ONLY the foreign
+  `CheckState.Emit` at the caller's `EmitState` does produce a
+  natively-compiled unit — the island goes away, `FALLBACK` disappears from
+  the disassembly. The answer is wrong: `[[]]` against the interpreter's
+  `[[3 4]]`, and the compiled body is
+
+  ```
+  fn f0 filter$body/1 (locals=1) [e]:
+    0000 PUSH_CONST  k0   ; false (Boolean)
+    0001 RET
+  ```
+
+  The predicate CONST-FOLDED to `false`, folding away the per-element
+  parameter along with the free word — a silent wrong answer, which is
+  exactly what `foreignFnHome` was there to prevent.
+
+  **LANDED 2026-08-27; the fold was reading the wrong CheckState.** Pointing
+  the foreign `Emit` at the caller is half a share: the body compiles under
+  the FOREIGN module's carriers, params and recorder, so `e` — the caller's
+  per-element param — has no carrier there and the analysis reaches a
+  constant it has no business reaching. Sharing the WHOLE CheckState is the
+  fix, and it is not new machinery: `shareCheckStateFrom` is what
+  `execFnDefLiteral` already uses to run a module fn's body on the
+  importer's engine, restore contract and nesting idempotence included. It
+  is now exported as `check.ShareCheckStateFrom` and
+  `compiler/go/callable_words.go`'s body-lambda path uses it, so the two
+  roles land where §6.3 said they must:
+
+  | role | registry | why |
+  | --- | --- | --- |
+  | BINDINGS | `fd.Registry` (foreign) | `lim` inside A's predicate must be A's `lim`; `StartFnCompile` on that registry stamps `CompiledFn.Reg`, and the VM's `curReg` swap carries it to run time |
+  | ANALYSIS | caller's `CheckState` | params, carriers and the RECORDER — the unit must land in the CALLER's program, which is where `OpPushClosure` references it |
+
+  Measured after: `filter A.big [1 2 3 4]` compiles with no `FALLBACK` and
+  answers `[[3 4]]` on both lanes, with A's `lim` compiling as its own unit
+  returning 2. The row graduated out of the frontier ledger into
+  `lang/spec/module-fnvalue-boundary.tsv` §4.
+
+  `foreignFnHome` therefore survives as a QUESTION every caller must answer
+  — compile it in its own home, or decline — rather than as a blanket
+  refusal. The extras/hook path (walk's ascend slot) still answers DECLINE:
+  its shared-token-shape hooks have no per-hook registry to swap to.
+
+  **The same question reaches MODULE-SCOPE MUTABLE CAPTURES, and asking it
+  there exposed a SIXTH silent miscompile** — same family as NUR101's five,
+  found the same way, by running the shape rather than reasoning about it.
+  `moduleScopeMutableCaptures` rides a module-scope flex cell or class
+  instance as a closure slot, and it was looking the name up in the CALLER.
+  For a foreign body that is the wrong scope, and when both modules bind the
+  name it silently swaps the cell:
+
+  ```
+  import module [def acc (flex [1 2 3]) def big fn [[e:Map] [Boolean]
+    [(size acc) lt (e dot value)]] export "A" {big: big/v}] end
+  def acc (flex []) filter A.big [1 2 3 4]
+
+  interpreted  [[4]]           <- A's acc, size 3
+  compiled     [[1 2 3 4]]     <- the CALLER's acc, size 0
+  0007 PUSH_CLOSURE f0  ; closure filter$body/2   (capturing l0)
+  ```
+
+  The lookup now uses `fd.Registry` for a foreign body. A foreign cell has
+  no producing event in the CALLER's emit tables, so `resolveOperand`
+  declines and this row falls back — sound, parity restored, and ONE island
+  remains where the shape needs a registry-tagged operand for a foreign
+  module-scope instance. That is the follow-up the frontier ledger named;
+  the parity fence is `lang/go`'s
+  `TestForeignClosureCaptureResolvesInItsOwnRegistry`.
+
+  Worth naming as method: the first version of this increment carried a
+  REFUSAL for the shape (`len(captures) > len(fd.Captured)` → decline) with
+  a comment saying no corpus row exercised it. Writing the row to cover the
+  refusal is what found the miscompile underneath it. A guard whose
+  justification is "nothing measures this" is a request to go measure it.
+
+  The RUNTIME halves needed nothing, as recorded: `CompiledFn.Reg` is
+  stamped for module-preamble fns (`compiler/go/emit.go:7771`) and the VM
+  swaps `curReg` on unit entry (`eng/go/vm.go:1403-1414`). The
+  cross-registry closure unit rides exactly that path.
+
+  **The pattern, third instance in this stage.** A documented blocker turned
+  out to be a different blocker once run. §6.4's "the interpreter is wrong"
+  was the compiler's model of it; the closure-render refusal was actually
+  guarding bare-name dispatch; and here "why does the body analysis fold at
+  all" had nothing to do with folding under a swapped registry — the
+  analysis was simply looking at a CheckState with no carrier for `e`. Each
+  time, the prototype that RAN found it and the reasoning that preceded it
+  did not.
 - **Quote state and dispatch-control state** (`/q` polarity, sealed/applied
   bits) — so the quote-lambda screen (`check/go/check_fnbody.go:388`)
   becomes routing, not refusal: a `/q`-slot lambda delivered as a callback
@@ -1029,6 +1225,128 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   de-facto spec: compiled closures must reproduce it, and any future
   closure caching/sharing (Keep, Hearn & Dybvig, Scheme Workshop 2012)
   requires a Lua-5.2-style spec loosening *first* (§11, O3).
+
+  **LANDED 2026-08-27 for `eq`/`neq`/`deq`/`canon`, and it did NOT need the
+  universal representation.** The premise held — those words only read —
+  but the conclusion attached the graduation to work that turned out to be
+  unnecessary for it. `RecordCallOperands` refuses a fn-valued operand at
+  any word that has not declared what it does with one; `eq`/`neq`/`deq`/
+  `canon` had simply never declared. They now carry `CompileReadsFn`, the
+  fn rides as an ordinary const operand, and twelve ledger rows graduated
+  into `lang/spec/compare-restrict.tsv` and `lang/spec/fn-value.tsv` §10.
+
+  The fact that makes it sound was measured, not assumed: **the identity
+  token survives the const bake.** `FnDefInfo.ident` is a pointer minted
+  once per authored function and copied by value, so an interned const
+  carries it — `f/v eq g/v` is false for two identically-bodied functions
+  and `a/v eq b/v` is true for two bindings of one, on both lanes. The
+  graduated negatives pin both directions, plus rebinding, a container
+  read, and callability after a comparison.
+
+  **What this says about the family-B count.** Of §2.1's 22 rows, 12 were
+  a missing declaration, not a representational gap. The remaining 8 are
+  `is` against a predicate type, and those are genuinely this section's:
+  `is`'s TYPE slot INVOKES the predicate through `RunPredicate` →
+  `CallBoru` (its value slot is already `FnInertArgs`), so they need the
+  predicate-body-as-unit work below, not a flag. Before attributing a
+  refusal family to a representational change, check whether the word has
+  merely failed to say what it does.
+
+  **Family G's list `each` went the same way, 2026-08-27.** Two of the
+  seven working-island rows — `each dbl/v [1 2 3]` and
+  `each ([x:Integer] => [x add 1]) [1]` — were ledgered as needing "a
+  modelled fn-value callback frame". They needed no frame. Tracing the
+  decline showed the lowering never reached the frame question:
+  `lambdaCallbackInputs` (`compiler/go/callable_words.go`) switches per
+  word, had a MAP case for `each`, no LIST case, and fell through to its
+  catch-all `ok=false` — the FIRST gate in `tryRecordLambdaClosure`. The
+  list convention was then measured off the interpreter rather than
+  inferred from the map twin:
+
+  ```
+  def show fn [[e:Any][Any][typeof e]]  each show/v [1 2 3]
+    → [Integer Integer Integer]        one input, the bare element
+  ```
+
+  One `ClosureInValue` element carrier, and all of it compiles — including
+  a heterogeneous list (the join carrier distributes per alternative), an
+  empty list, and a capturing lambda. The mismatched-param case
+  (`each ([x:String] => [x]) [1 2 3]`) still declines and both lanes
+  agree, which is the check that the admission did not widen too far.
+
+  **`fold`/`scan` stay islanded, and the reason is now located exactly —
+  the ARITY-1 BOUNDARY.** They were attempted alongside `each` and the
+  attempt failed usefully.
+
+  A compiled closure binds its inputs POSITIONALLY: `invokeClosureOn`
+  (`eng/go/vm.go`) fills the unit's leading param slots from the handler's
+  `inputs` slice in order. The interpreter presents them in the CALLBACK
+  CONVENTION for the container, and the two conventions differ:
+
+  | form | sig[0] | sig[1] |
+  | --- | --- | --- |
+  | MAP fold/scan | ACCUMULATOR | entry (KeyVal) |
+  | LIST fold/scan | ELEMENT | accumulator |
+
+  Measured with AMBIGUOUS param types, so it is a real ordering convention
+  and not a by-type assignment that merely looks like one:
+  `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed, while
+  `fold ([x:Any y:Any] => [x]) [7] 0` answers the element. The MAP form
+  already agrees on both lanes — ambiguous types included — because the
+  handler's input order happens to match its convention.
+
+  **With one input no convention can disagree**, which is why list `each`
+  compiles. With two, the list form's do:
+
+  ```
+  fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+    interpreted  123      a accumulates: 0 → 1 → 12 → 123
+    positional    60      the pair arrives swapped
+  ```
+
+  Nine shapes diverged that way. Supplying the carriers in the other order
+  changed NOTHING, and that is the most useful thing measured: carriers
+  only TYPE the body. The unit's param slots come from the LAMBDA's own
+  declared order, and what lands in each is the handler's push order — so
+  both carrier spellings produced 60.
+
+  Admitting a 2-input list callback therefore means making the two orders
+  agree at the seam that actually decides it: the handler's input order for
+  that form, or a per-word permutation at the closure bind. That is the
+  "modelled fn-value callback frame" the ledger asked for, and the ledger
+  was right about `fold`/`scan` in exactly the way it was wrong about
+  `each`. Fence: `lang/go`'s `TestListFoldCallbackOrderFence`.
+
+  **Two probe lessons, each of which bought a wrong admission.**
+
+  1. **A typed probe cannot establish positional order**, because the
+     matcher reassigns by type. `fn [[a:Integer b:String]…] fold f/v
+     [1 2 3] 'seed'` matching, and its swap not matching, reads like "`a`
+     is the element" and proves nothing of the kind — the matcher put the
+     Integer in whichever slot was declared Integer. Use SAME-TYPED or
+     `Any` params, or make no positional claim. The first reading of this
+     convention was built on that probe and was wrong; the correction then
+     over-shot the other way, asserting the accumulator is `sig[0]` for
+     BOTH containers, which the ambiguous-type probe above disproves. Both
+     errors came from reasoning about the matcher instead of running a body
+     that reports which argument it received.
+  2. **The accumulator-stability guard was unnecessary.** The
+     accumulator's runtime type after step 1 is the BODY'S RETURN, not the
+     seed's, which looked like it needed a guard. It does not: the body
+     binds the accumulator at its DECLARED PARAM type, not the carrier's
+     tag. `fold ([acc:Scalar kv:KeyVal] => [if (acc is Integer) ['I']
+     ['S']]) {a:1 b:2 c:3} 0` answers `'S'` on BOTH lanes — the
+     accumulator really does go Integer → String mid-fold and the compiled
+     body sees it — and `typeof acc` answers `Scalar` on both. A step whose
+     accumulator fails the declared param no-matches identically in both
+     lanes, and an OVERLOADED callback is already refused
+     (`lambdaHookCompatible` wants exactly one own signature). Written from
+     reasoning alone, that guard would have refused valid programs for a
+     hazard that is not there.
+
+  The pair is worth stating together: **the guard I was going to add was
+  not needed, and the blocker I thought was absent was real.** Both were
+  settled by running the shapes, and neither by reading the code.
 - **Partial applications as data**: `curryOrStack`'s curry list gets a
   compiled twin — a curried value is `(base fn, held args)`, applied by the
   shared apply; no per-composition codegen (Factor's `curried`/`composed`
@@ -1043,6 +1361,394 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   VM invoker, mid-match raise semantics preserved. This is the
   registry-aware matching that doctrine item R3 deferred to "a separate
   later design, not assumed" — this section is that design (§3.2).
+
+  **MEASURED 2026-08-27, and the measurement stopped a graduation that
+  would have been laundering.** Family B's remaining 8 rows
+  (`function value reaches is (Stage 3)`) compile the moment
+  `RecordCallOperands` stops refusing a predicate-type operand: all ten
+  shapes probed — both `fnpred` spellings, the `None`-signalling body, the
+  input-type gate, a predicate reaching a free word — answer correctly on
+  BOTH lanes with no `FALLBACK` in the disassembly. A predicate is exactly
+  ONE input, so the arity-1 boundary that blocks `fold`/`scan` does not
+  apply. It reads like a clean graduation.
+
+  It is not one, and a program-level `FALLBACK` check cannot tell:
+  **`OpFallback` is invisible to a `CallBoru` made INSIDE a native
+  handler**, which is precisely where the predicate runs. `RunPredicate`
+  reaches the body through `InvokeCallbackFn`, whose contract is "the VM
+  when the body compiled to a unit, `CallBoru` otherwise". Measured
+  through the `InterpEntry` hook (Stage 1's own instrumentation, built for
+  this question), the body is NEVER a unit — every predicate invocation
+  takes the interpreter arm, emitting `InvokeCallback:callboru` +
+  `CallBoru`, both UNATTRIBUTED.
+
+  So relaxing the gate would trade an honest whole-program refusal for a
+  compiled program with an interpreter island hidden inside a handler —
+  the one outcome the directive rules out, and worse than the refusal
+  because it removes the row from the census while the interpretation
+  stays. The refusal stands until predicate bodies compile to units.
+
+  **The control is the part that matters beyond this decision.** A
+  predicate reached through ORDINARY DISPATCH — `def f fn [[x:Pos] …]  f 5`
+  — takes the same interpreter arm today, with no `is`, no gate, and no
+  ledger row. The same holds at a typed def. So this is **PRE-EXISTING
+  live-island debt in compiled programs**, not something the gate
+  prevents: the gate only keeps the census from under-reporting it. It
+  belongs with T2's "live island residue" debt in §2.3, and it is a
+  second, independent reason predicate-body units are Stage-3 work rather
+  than a flag. Pinned by `lang/go`'s
+  `TestPredicateBodyRunsOnInterpreter`, which fails — with the graduation
+  instructions — once the bodies do compile.
+
+  **RESOLVED 2026-08-28 — and the stated CAUSE above was wrong.** "The body
+  is never a unit" was an inference from the seam, not a reading of it. The
+  bodies compiled. `def Positive fn […]` stamped a detached unit at type
+  construction (`core/go/core_type.go` → `CompiledRuntime.StampDetached` →
+  `StampDetachedFn`) and recorded `Stamped:true` in the stamp ledger —
+  `-compile-report` said compiled, the runtime interpreted, and the two
+  had no shared gate to disagree at.
+
+  The decline was one line, `eng/go/vm.go`'s `runUnitNested`:
+
+  ```go
+  if !ok || ref.Prog != vc.p { return nil, false, nil }
+  ```
+
+  A DETACHED ref is compiled on an isolated `ForkConcurrent` into its own
+  standalone one-unit `Program` — that is what makes it detached — so
+  `ref.Prog != vc.p` is true for every one of them, always. The mid-run
+  nested path therefore rejected the entire class by construction, while
+  `InvokeCallback`'s contract read "the VM when it compiled to a unit
+  (nested in a live run, or fresh on an idle registry)". Only the idle half
+  was ever real: a callback firing AFTER `RunProgram` returned (serve-raw
+  on a connection, a spawned process) found `CanHostVM()` true and took
+  `RunUnit`; a callback reached from INSIDE a live run found it false, fell
+  to the nested runner, and was declined. Predicates are the second kind,
+  every time.
+
+  The fix is `eng/go/vm_foreign_unit.go`: host the foreign program's unit
+  in a nested `vmContext` bound to ITS program instead of declining it. Four
+  pieces of state stay shared with the enclosing run because each is a
+  runaway guard a per-callback reset would defeat — `steps` (copied in,
+  handed back), `frameDepth` (seeded, so recursion THROUGH a detached
+  callback hits the same ceiling and fails as `tape_exhausted` rather than
+  overflowing the Go stack), `ceiling` and `stepLimit`. Three are
+  deliberately NOT shared: `dynBinds`, `islandEng` (the enclosing island
+  engine may be mid-flight — exactly the re-entrancy its contract forbids),
+  and `foreignInvokers`. The panic guard is local rather than borrowed from
+  the enclosing `runVMEntry`, so a bailout inside one callback degrades
+  THAT callback to `CallBoru` through `InvokeCompiled`'s C1 fence instead
+  of aborting the whole enclosing program.
+
+  Measured, corpus-wide: unattributed interpreter-entry rows **184 → 163**,
+  `InvokeCallback:callboru` **28 → 4**, and `Engine.Run` and `CallBoru` each
+  −24 — the three fell together because one declined predicate dragged all
+  three seams behind it. `TestSpecCompiledDifferential` is unchanged: every
+  row that moved onto the VM still answers what `RunInterp` answers. The
+  pin flipped to `TestPredicateBodyRunsOnTheVM` and now fails if the
+  interpreter arm comes back.
+
+  **List `fold`/`scan`: the same shape, one seam lower (2026-08-28).** The
+  ledger asked for "a modelled fn-value callback frame" and §6.3 read the
+  divergence as an arity boundary — one input cannot disagree, two can. Both
+  descriptions were downstream of the real mechanism, which is neither arity
+  nor carriers: **both handlers hand `(accumulator, element)`**, and the two
+  engines assign it differently because the MAP path calls the lambda
+  POSITIONALLY (`mapBody.callLambda` → `CallBoruFn`, args in sig order) while
+  the LIST path goes through `InvokeBody`, whose interpreter arm runs the
+  inputs as a STACK (`RunResolved`) where `MatchSignature` fills top-down.
+  Same order in, opposite assignment out.
+
+  So the fix is ONE per-word permutation at the closure bind
+  (`ClosureInStackPair`), not a frame. Five ledger rows graduate into
+  `lang/spec/higher-order.tsv` §12 with four `Any`-param rows that report the
+  convention directly.
+
+  Worth naming precisely: these rows never REFUSED. They **islanded** — the
+  right answer, produced by the interpreter, inside a program the coverage
+  metric calls compiled. That is why the graduated pin asserts the
+  DISASSEMBLY: its parity half passed for the entire time the island existed,
+  so a value-only assertion here proves nothing and would keep passing the day
+  someone re-islands the callback.
+
+  **The Apply kernel, first increment (2026-08-28).** §6.4 asks for "one
+  dedicated, arity-carrying Apply kernel routine, seamed where the interpreter
+  applies". What was there instead: the dynamic-apply opcodes islanded their
+  callee through a sub-engine, because a runtime fn value carrying no compiled
+  unit has nothing else to run. **75 corpus rows do that**, in programs whose
+  disassembly says `fallbacks=0` and which `TestCompiledCoverage` reports as
+  "0 islanded" — the same blindness the predicate seam had, one opcode family
+  over.
+
+  Two halves, and each was got wrong once first.
+
+  **The unit has to ride the VALUE.** A dynamic apply's callee is unknown at
+  compile time by construction, so `stampFnConst` compiles a fn-value CONST's
+  body to a unit at the const chokepoint (`resolveOperand`). In-program via
+  `compileStoredFnUnit`, not `StampDetachedSig`: the detached form isolates a
+  refusal neatly and costs a `ForkConcurrent` plus a full compile pass PER fn
+  const — measured at 6x on `lang/go/modules` and a transient OOM. The refusal
+  the cheap form exposes is handled where it belongs: `fnUnitRec.stampOnly`
+  makes a stamp unit's Finalize refusal produce a trap stub and a dropped ref
+  instead of refusing the program, because a stamp is an optimisation and must
+  never be able to refuse anything.
+
+  **A fn application is a CALL, not a body.** `enterBodyUnit` brackets a
+  per-body context frame for the three seams that re-enter the VM; `OpCallUser`
+  is deliberately not among them, and neither is the interpreter's own
+  `execFnDefLiteral`. Routing the apply through the callback seam therefore
+  added a frame the interpreter does not, and it showed up as a **silent wrong
+  answer** — `TestContextBoundaryDifferential/paren-grouped_map-slot_lambda_method`,
+  a `context set` escaping on one engine and not the other. The kernel now
+  models `OpCallUserPoly`, the existing precedent for entering a unit the loop
+  only learns at RUN time: match, pop args into frame locals, re-check the
+  param contract, push a frame. `dynApplyEnter` hands that decision back to the
+  loop (`*dynEnter`) because frames, locals and pc are the loop's.
+
+  Three declines are load-bearing rather than defensive. A **QUOTED** fn is
+  data — the island got that free from the tape, and a direct frame push does
+  not (`((mk) 2)` answered `[3]` against the interpreter's `[fn (Integer) 2]`).
+  A **cross-program** ref cannot be a frame of this program. A **shape
+  mismatch** between the matched sig and its unit is compile/run drift.
+
+  Two collisions the const chokepoint exposed, both of which narrowed the
+  increment honestly. Its analysis leaks diagnostics into the enclosing
+  program, and an error diagnostic REFUSES it — `TruncateDiagnostics` drops
+  exactly what the attempt added, since a speculative compile's findings are
+  not the program's. And descending into containers first read as OUT, on the
+  grounds that stamping a fn nested in a map const mutates the shared
+  `*BoruImpl` of a value inside USER DATA — precisely what `StampFnValue`'s
+  cloning form exists to avoid. The evidence was a model action's `{gen: …}`
+  stamped here first, after which `stampActionFn`'s clone-and-name found a ref,
+  declined, and the stamp report lost its attribution.
+
+  That reading of the clone contract was wrong, and it is the fourth documented
+  blocker in this work whose stated CAUSE named the wrong lane while the
+  symptom was real (§6.4, NUR101 and §7's "the body is never a unit" are the
+  others). The clone protects a CALLER's input from the model module's stamp;
+  it says nothing about the compile pass stamping a const it baked itself. What
+  actually broke was ATTRIBUTION — one report line, not one semantics — and it
+  is fixed where it was lost: `StampFnValue`'s already-stamped early return now
+  records the event before returning. Descent landed. The next section is what
+  it cost.
+
+  Measured across the increments: census **184 → 131**, `vm:island` **66 → 39**,
+  `vm:island-resolved` **21 → 10**, corpus 7622 rows / 7248 compiled / 0
+  islanded / 0 refused, differential unchanged throughout.
+
+  **Container descent, and the mask it nearly shipped.** Of the island rows
+  the top-level stamp leaves, roughly four in five are a fn read out of a
+  container — `def m {f: (fn …)}  m.f 5`, `def ops {f: inc/v}  ops.f 5`, a
+  class field method. Descending into list and map consts takes them (census
+  141 → 131). It also made three variation-sampler buckets REFUSE that
+  previously compiled (pass 403 → 401, refused 33 → 36), and their names
+  located the cause precisely: "dynamic-scope def `files` of unpromoted
+  computed value" and "module binding files rebound after a stored handler
+  captured it as a dep" both indict the ENCLOSING compile, not the stamped
+  body. `compileStoredFnUnit` analyses against the LIVE emit state, so it
+  leaks through two channels past the diagnostics `TruncateDiagnostics`
+  already restores: `dynScopeNames`, whose entries make Finalize install an
+  `OpBindDynScope` twin in every binding unit — so the enclosing program's own
+  `def` must now lower a dynamic bind it may have no promoted value for — and
+  `storedHandlerDeps`, whose records make a later rebind of that name refuse
+  the whole program through `NotifyNameRebound`.
+
+  The first draft ledgered both buckets and argued the trade was worth it:
+  WITHOUT the descent the same seed **miscompiles** — a flex map captured by a
+  mount handler loses its identity across loop iterations, and the compiled run
+  raises `expected a FlexMap, got FlexMap` where the interpreter round-trips —
+  and a refusal is a program that does not run, while a miscompile is a program
+  that runs and lies.
+
+  **That argument was wrong, and its wrongness is the lesson.** The descent was
+  not FIXING the flex-map divergence; it was MASKING it. A stamp is an
+  OPTIMISATION: it declines for a capturing fn, for a body whose lowering
+  refuses, for a body needing a dynamic-scope rescue, and whenever runtime
+  stamping is unarmed. A wrong answer that is correct only while an
+  optimisation happens to apply is a wrong answer waiting to come back — and it
+  would come back SILENTLY, because nothing in the gate ties that seed's
+  correctness to the stamp firing. Graduating the pin on that basis would have
+  deleted the only record that the defect exists.
+
+  So both channels are closed at the source and the pin is restored:
+
+  - `dynScopeNames` is snapshotted and restored, and a stamp that added a name
+    is DECLINED. A successful stamp genuinely reads through `OpLookupDynScope`,
+    so the name cannot be dropped under a live ref; the rule is instead that a
+    stamp which would change the enclosing program's own lowering is not worth
+    taking. Declining leaves the apply island — exactly the behaviour the
+    differential already validates.
+  - A stamp ref is marked `optional`. `NotifyNameRebound` still poisons it (the
+    apply islands, as before the stamp existed) but no longer escalates to the
+    program-level refusal. That escalation is right for a STORE-SITE ref, whose
+    `CallBoru` fallback would read the pass-final binding; for an optimisation
+    ref, islanding IS the whole remedy.
+
+  Result: pass 403, refused 33 — the pre-descent numbers, both buckets gone,
+  their frontier rows deleted — with the census increment kept, and the
+  flex-map divergence pinned where divergences belong rather than hidden behind
+  an optimisation that happened to fire.
+
+  **The native-callback seam, and what the CallBoru column turned out to be.**
+  `core/go/invoke.go` carried two near-identical entries: `InvokeCallbackFn`
+  (offer the body to the VM, fall back to `CallBoru`) and `CallBoruFn` (the same
+  defining-registry routing, straight to `CallBoru`). Seven words used the
+  second — `filter`'s Function form, the map-lambda `each`/`fold` bodies, core
+  `walk` / `StructUtil.walk`, `IO.mount`'s fileops handlers, `boru:parse`'s
+  matcher and action callbacks, and the fn-util words. Its comment gave the
+  reason: *fixing WHERE free words resolve must not also change WHICH engine
+  resolves them.* That is the right scope fence for
+  design/FUNCTION-VALUE-SCOPE.0.md's change and precisely the fence this work
+  removes, so all seven now call `InvokeCallbackFn` and `CallBoruFn` is deleted
+  — a second dispatch path is a divergence source in its own right, and
+  design/FN-VALUE-OPEN-WORK.0.md records two it caused.
+
+  The measurement is the interesting half. `CallBoru` had sat at **251** through
+  four consecutive fixes — visibly the largest block of interpretation debt in
+  the census, and the reason this increment was picked next. The flip moved it
+  to 238 and the row count by exactly ONE. So the 224 that remain were probed:
+
+  | origin | entries |
+  |---|---|
+  | `Test.property`'s generator/property calls | 224 |
+  | `core_helpers` foreign-registry fn dispatch | 8 |
+  | `InvokeCallback`'s own interpreter fallback | 6 |
+
+  It was never broad debt. It is two or three `module-test.tsv` rows amplified
+  by an iteration count — `Test.property` runs its bodies ~100 times per row,
+  the seam counts INVOCATIONS, and the ceiling counts ROWS. Those bodies are raw
+  QUOTATIONS: the module already routes a compiled sig through `InvokeCallback`
+  and only falls back when the property was written as `[body]` tokens, which
+  carry no unit to offer. Compiling them is Stage 7's runtime-compilation work,
+  not a seam flip, and it is worth perhaps three rows.
+
+  **The lesson generalises past this seam.** A census whose counts mix per-row
+  and per-invocation events cannot be read as a priority order — a large number
+  can be one row in a loop, and a small one can be a whole family. The row count
+  is the ratchet for exactly that reason; the seam spread is a shape, and every
+  seam worth acting on has to be attributed before it is worth acting on.
+
+  **The Apply kernel reaches LENSES, and the attribution is what found it.**
+  A `Reach` is a callable value exactly as a fn value is — `p $.name apply`,
+  `each $.name people`, `filter $.on xs`, `ArrayUtil.sortby $.age people`,
+  `StructUtil.getpath $.a.b m` — and every one of them funnels through a single
+  primitive, `core.ApplyReach`, which lowered the lens to a `[recv dot key …]`
+  token chain and ran it on a pooled sub-engine. Per application. That is an
+  interpreter entry inside a native handler: the exact shape the OpFallback
+  ceiling cannot see, since these programs disassemble with `fallbacks=0`.
+
+  It was picked by reading the per-file table, not by guessing: `reach.tsv`, 14
+  rows, every one through `runPooledSub` and nothing else. A probe confirmed all
+  14 reached `ApplyReach` before a line was written.
+
+  **Writing a second walker in Go was the wrong fix, and the codebase says so
+  in its own voice.** `getpathReachHandler` routes here deliberately — "so
+  per-segment getr strictness and computed keys behave exactly as bare `m.a.b`
+  — the same primitive `apply` uses". One dispatch path is the rule. So the
+  path stays and moves onto the VM instead.
+
+  The chain is already a one-parameter function body: bind the receiver, run the
+  dots. So the unit is compiled from *exactly the tokens `ApplyReach` would
+  otherwise have interpreted*, with the receiver value replaced by a reference
+  to the bound parameter — no hand-lowering, no second model of what a segment
+  means. Everything downstream (dep freshness, the JIT re-stamp, the effect
+  fence, the internal-error degrade) is the `CompiledRuntime` seam's, unchanged.
+
+  The unit is cached on the Reach PAYLOAD, as a pointer field, which is the same
+  trick `*BoruImpl` plays for a signature's compiled ref: every copy of the value
+  shares one cache, so a lens in `each $.name people` compiles once rather than
+  per element. That mattered — a per-application stamp is a fork and a whole
+  compile pass, the cost that sank the first per-const stamping attempt outright.
+  Canon renders a Reach from its `Segments`, so the field takes no part in
+  equality or serialisation.
+
+  One shape differs from the interpreted chain: the receiver arrives as a NAMED
+  parameter rather than a stack push. That was settled by measurement rather
+  than argument — the whole corpus, the spec differential, the variation sweep
+  and the frontier ledgers are unchanged. **Census 130 → 114**, `runPooledSub`
+  36 → 11, `reach.tsv` gone from the cluster table entirely; `path-modifier.tsv`
+  now leads it at 13 rows, every one through `vm:island`.
+
+  **And it split a ratchet, which is the more useful finding.** The defer census
+  rose 5 → 6: `5 $.name apply` — a lens on a receiver its first segment cannot
+  read — reaches `CALL_NATIVE_POLY` with no match and the VM defers. That census
+  is monotone-DOWN by rule, so the increment could not simply land.
+
+  The rule is right and the instrument was imprecise. `deferCeiling`'s own prose
+  says what it counts: a bail "resolving it by asking the caller to re-run the
+  whole program on the interpreter". Measured, all five of its bails do exactly
+  that — the row returns `wasCompiled=false`. This one does not: `ApplyReach`
+  has a complete fallback of its own, catches the `internal_error`, runs the
+  interpreted chain for that ONE application, and the program finishes
+  **compiled**. Two different events under one number.
+
+  So the walk now sorts each bail by what happened to its row. `deferCeiling`
+  keeps its exact meaning and its exact number — **5, unchanged** — and the
+  locally-resolved kind ratchets separately from 1. That is not relaxing a gate
+  to fit a change; the strict number is untouched and is now measured precisely
+  instead of approximately, and the weaker event is counted rather than hidden
+  inside it.
+
+  Why the VM cannot raise natively here: the site has a designed native-raise
+  arm, gated on a `PolyNoMatchSpec` — a faithfulness proof the check pass
+  records only at a dispatch it actually watched FAIL. A lens body is analysed
+  with an `Any` receiver, so its dispatch never fails at check time and no proof
+  exists to record. Both counts reach 0 at Stage 9 by the same work, not by a
+  lens-specific fix.
+
+  **A note on what the coverage gate found.** After the kernel took every
+  reachable shape, `callDynApplyTop`'s ISLAND success return stopped being
+  covered — fourteen probed sources (usurp-built values, runtime-returned fns,
+  bodies whose stamp should decline) all took the compiled path. It is pinned
+  with a constructed decline rather than a `//covergate:allow`: "no program I
+  could write reaches this" is the same reasoning that hid a silent miscompile
+  earlier in this work, and it is not a proof of unreachability.
+
+  **The graduation, landed and PROVEN honest.** With the body on the VM the
+  refusal in `RecordCallOperands` had nothing left to defend, and the arm
+  that refused a predicate-type OPERAND is gone. What the first attempt
+  lacked was not a better argument but a detector: a program-level
+  `FALLBACK` check cannot see a `CallBoru` inside a handler, so "it compiles
+  and answers correctly" was compatible with an island. The interp-entry
+  census is that detector, and it is decisive here — **10 rows joined the
+  compiled corpus (7603 → 7613, compiled 7229 → 7239) and the census did not
+  move: 163 before, 163 after.** Had any of the new rows interpreted its
+  predicate, the count could only have risen. Two shapes graduated that the
+  frontier file never carried: the input-type gate (`"x" is Even` → `false`
+  without running the body) and the type literal itself
+  (`Even is Even` → `true`).
+
+  The ledger's stated cause was wrong in the same way §6.4's and NUR101's
+  were: "a predicate type's constraint IS a function value, so `is` walks
+  that value into the Stage 3 gate". It does not. A predicate NODE is a bare
+  type literal that rides as DATA; the body runs through the callback seam,
+  never the tape, so the re-step the gate defends against was never in play.
+  The gate was right by accident, for a reason nobody had written down.
+
+  **The hazard the fix widened, closed with it.** `ClosurePayload` carried a
+  `Unit` and no program. That was sound for as long as a closure could only
+  be invoked under the program that pushed it — which was the case exactly
+  because foreign units never ran nested. Hosting them ends it: while a
+  detached unit runs, the registry's `Invoker` points at the FOREIGN
+  program's context, so a closure belonging to the enclosing one would index
+  the wrong `Fns` table. Out of range degrades (the local panic guard); a
+  VALID index naming a different body is a silent wrong answer, which is the
+  class this work exists to eliminate. The payload now carries its program
+  (`ClosurePayload.Prog`, boxed as `any` — core sits below compiler, the same
+  shape `BoruImpl.Compiled` uses) and `invokeClosureOn` routes by it through
+  the same nested hosting. Reachability today is narrow — it needs a stamped
+  body that also invokes an externally-supplied fn value, which Stage 3 has
+  not enabled — so this is closed BEFORE Stage 3 opens it rather than after.
+
+  **The pattern, ninth instance.** A documented blocker is a hypothesis
+  until RUN. The verdict here was right — relaxing the `is` gate on top of
+  a hidden island would have been laundering — and the reason given for it
+  was wrong, which made the remedy look like "Stage 3 representation work"
+  when it was a four-line predicate in the nested runner. Reading the seam
+  the measurement blamed, rather than trusting the measurement's account of
+  it, is what separated the two. The graduation the pin names — admit a
+  predicate-type operand in `RecordCallOperands`, move the 8 `is` rows into
+  `lang/spec/fnpred.tsv` — is now unblocked on its stated condition.
 
 With this representation, family A's "unknown provenance / closure shape
 unknown" dissolves for the *value* half: an unknown fn value is not a hole
@@ -1064,22 +1770,85 @@ Its contract implements the application model that NUR101 established:
 - **Anonymous/event value in value position**: data unless applied by the
   placement rules; a named Go-impl fn value stays data. Lowering: push; the
   descriptor's placement facts decide.
-- **Computed groups** (`(mk 1) 2`): the spec (ADR BROAD, `ADR.md:235-248`)
-  says the group *places* its collapsed Function — and here the compiled
-  lane is already the specified one; the **interpreter** is wrong
-  (`NUR.md:285-286` — "fixing the placement rule fixes the divergence with
-  it, and no compiler change is wanted"). Graduating family J (and parts of A) therefore requires
-  interpreter fixes to the ruled semantics; the parity oracle for those
-  rows is *the ruling*, not the current interpreter output. The doc-level
-  consequence: T3's oracle is "the interpreter once NUR101/NUR078 land",
-  and those NURs sequence *before* the affected G-lane admissions (§10).
+- **Computed groups** (`(mk 1) 2`): **CORRECTED 2026-08-27 — this bullet
+  had it backwards in both halves, and the correction is load-bearing for
+  the rest of the stage.** It read: the compiled lane is already the
+  specified one, the interpreter is wrong, and "no compiler change is
+  wanted". Measured against `RunInterp`, the interpreter was right and the
+  compiler carried FIVE silent miscompiles, in both directions
+  (design/PAREN-RESTEP-RULE.0.md). NUR101 was fixed compiler-side only, and
+  the interpreter ended that work byte-identical to where it started.
+
+  The rule, and Apply must implement it exactly: a Function a paren PLACED
+  is re-stepped into a CALL exactly when it leads **two or more survivors**
+  of an enclosing group that closes with a paren rewind — a user paren, an
+  fn frame, or an `if` / `for` / `do` body. The program top level, list
+  literals and map literals do not rewind. So `(mk 1) 2` places
+  (`fn (Integer) 2`) and `((mk 1) 2)` applies (`3`); placement is the
+  one-survivor case, and the enclosing group is a SECOND decision taken one
+  paren out, not a context that modifies the first.
+
+  The two decisions are recorded at the collapse — `ParenPlacedFnIDs` and
+  `ParenReSteppedFnIDs` (`core/go/check_state.go`) — because the paren
+  structure is erased before the residual lowering runs, which is why
+  `resolveDynamicApply` had to guess and guessed wrong both ways. **Apply
+  inherits that constraint**: it cannot re-derive place-vs-call from the
+  residual it is handed, so the descriptor must carry the fact. Four shapes
+  refuse today for exactly this reason (a paren-bounded carrier apply
+  consumed where the residual lowering does not reach), and they are this
+  stage's to graduate: `RecordDynApply` must admit an EVENT lead, which
+  `DynApplyLeadEligible` declines.
+
+  The doc-level consequence, also corrected: T3's oracle is **the
+  interpreter as it is**, not "the interpreter once NUR101 lands". Family J
+  and the affected parts of A need no interpreter change to graduate.
 - **Curried chains stage**: each application step is its own Apply event
   (the intermediate closure is a first-class value), eliminating
   "miscompile mechanism E" (`emit.go:7067-7076`) structurally.
 - **Under-application and count mismatches** follow the interpreter's own
   rules (`(1 2 (mk 4))` → `1 6`; return-count trims and their exact error
   taxonomy) because Apply calls the same `CallBoru` return-enforcement
-  helpers (`core/go/registry.go:1585-1752`) — with `CallBoru`'s internal
+  helpers (`core/go/registry.go:1585-1752`)
+
+  **LANDED 2026-08-28, ahead of the Apply kernel and without it.** Two
+  things had to be measured first, and both moved the target.
+
+  1. **§6.4's own refusal inventory was stale.** This section said "four
+     shapes refuse today … `RecordDynApply` must admit an EVENT lead,
+     which `DynApplyLeadEligible` declines". Enumerated against
+     `RunInterp`, the EVENT-lead shapes (`((mk 1) 2)`, `(mk 1) 2`, the
+     def-bound and trailing spellings, the curried chain) ALL COMPILE —
+     increments 2–3 graduated them. **Exactly one** Apply shape refused:
+     the wider window, `(1 2 (mk 4))`.
+  2. **A SEVENTH silent miscompile sat next to it**, unledgered, found by
+     probing the family rather than the refusal. `(9 1 2 add2/v)` — a
+     CONCRETE 2-arg callee under a 3-wide window — answered `[3, 9]`
+     compiled against the interpreter's `[9, 3]`. The survivor came out
+     ABOVE the result instead of below it. The event path had an arity
+     gate; the concrete path had none at all, so nothing was watching.
+
+  Both are one defect: the lowered apply consumed the WHOLE window
+  regardless of what the callee takes. The fix is to consume the callee's
+  own arity and leave the rest, which is what the interpreter does —
+  `RecordDynApply` now reports how many window values it CONSUMED, and the
+  collapse site removes only that suffix of the window. The arity is sound
+  by construction (`producerReturnedClosureArity` answers only for a unit
+  with exactly one closure out-op; a single-sig concrete callee otherwise),
+  so a branch-varying factory or an overloaded callee never reaches the
+  trim — they decline earlier or here.
+
+  The NARROWER window is the opposite shape and still refuses: the
+  interpreter leaves the fn UNAPPLIED (`(5 (mk2 10))` → `[5, fn]`) and
+  nothing models that. **That refusal must MARK, not merely decline** —
+  measured, a quiet decline let the collapse site's `RegisterTrailingApply`
+  fallback lower the window anyway and answer a silent `15`. Both arms
+  share ONE `MarkUncompilable` site on purpose: the refusal-site census is
+  a downward ratchet, and it caught the second site immediately (97 against
+  a ceiling of 96) even though the shapes refused are strictly fewer.
+
+  Four rows graduate into `lang/spec/fn-value.tsv` §11, including the
+  concrete-callee ordering row that had no ledger entry because nothing
+  knew it was wrong. — with `CallBoru`'s internal
   tape run replaced by unit entry for compiled bodies (it is already
   tape-free at its *interface*; the inside migrates per §6.8). Fidelity
   cuts both ways: Apply reproduces `execFnDefLiteral`'s landing rule *as
@@ -1733,7 +2502,7 @@ universe closes alongside).
 | **0** | Adopt the declaration triple (COMPILE-DECLARATION-MODEL Stages 0–2: delete the dead flag, introduce `{tapeBound, needs, env}` under C1–C4, assert over every signature) | 0 rows; produces the §6.8 handler worklist | low |
 | **1** | Instrument: engine-entry census + defer census + refusal-reason census; declare the observable alphabet for T3 | 0 rows; makes T2 measurable | low |
 | **2** | **Extract the collection kernel** (§6.2): factor the THREE collection loops over the shared window+evaluator interface and re-seat the Engine on them — **three separate re-seats, landing separately**, since the differential cannot say which one broke otherwise. Gate: full differential green, allocation ceilings unmoved, CPU-profile share unmoved (NOT wall clock — see F1b) | 0 rows; unblocks everything | **high** — F1 · **Engine side LANDED 2026-08-26** in three commits; §6.2 records what each re-seat cost and where the third one corrected this note. **Gate discharged**: full differential green, allocation ceilings unmoved, merged `cover-gate` 100.0%, and CPU-profile share unmoved (F1b, §11 — every anchor within ±0.18pp against ±0.9–3.0 spread). The second adapter is Stage 4's, by the `cover-gate-core` inversion below |
-| **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included) + interpreter-side NUR101/NUR078 fixes to the ruled semantics; retire `OpCallDynFrame`/`callDynamic` islands onto Apply | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` lands with §6.3's registry-tagged captures here, the full-stack-in-body row with Stage 4's descriptor folds) | medium |
+| **3** | Universal fn values (§6.3, predicate units included) + the Apply kernel (§6.4, tail discipline included); retire `OpCallDynFrame`/`callDynamic` islands onto Apply. **NUR101's half of the interpreter-fix precondition is discharged and was never an interpreter fix**: measured 2026-08-27, the interpreter was already correct and the compiler carried five miscompiles (§6.4, design/PAREN-RESTEP-RULE.0.md). What remains of O1 is NUR078 alone. Also inherited from that work: four refusals whose graduation IS this stage — `DynApplyLeadEligible` must admit an EVENT lead — and three error-lane divergences pinned as measured (NUR107/108/109) that Apply's error contract has to settle | A (45), B (22), J (2), and five of G's seven (the fn-value island rows; `filter A.big` LANDED 2026-08-27 — not with registry-tagged captures, which its predicate does not have, but with the CheckState share of §6.3; the full-stack-in-body row with Stage 4's descriptor folds) | medium |
 | **4** | Statement descriptors + `OpCollect`/`OpDispatchGeneric` (§6.2, §6.5) + bind twins; recorder step-6 flips from refuse to generic for word dispatch; delete drift-window islanding | F (5), L (1), K (1), most unledgered dispatch gates, §9d | medium |
 | **5** | Production-order regions + generalized marks (§6.6) | C (11), D (13), I (5) | medium |
 | **6** | Handler migration per the triple (§6.8): units-not-tokens, `while` lowering, per-region DynEnv, `args`/`__pa`/`context` frames | H (6), context/tape-bound gate families | medium — wide but enumerable |
@@ -1771,9 +2540,35 @@ land. T1 is a Stage-9 property, not a rolling one.
 
 ## 11. Open questions (O) and what would falsify this (F)
 
-**O1 — NUR101/NUR078 interpreter fixes.** Stage 3 depends on interpreter
-changes to ruled-but-unimplemented semantics. If those rulings are
-re-litigated, the affected rows' oracle is undefined and Stage 3 stalls.
+**O1 — NUR101/NUR078 interpreter fixes. HALF CLOSED 2026-08-27, and the
+way it closed is the finding.** This asked whether Stage 3's oracle was
+safe, on the premise that both NURs needed interpreter changes to
+ruled-but-unimplemented semantics.
+
+NUR101 needed none. Measured against `RunInterp`, the interpreter already
+implemented the ruled rule and the COMPILER carried five silent
+miscompiles, in both directions — the register, this document's §6.4, and
+the ruling built on them all had it backwards. The first implementation of
+the ruling as written deleted `fnReturnPark`'s survivor-count clause and
+broke seven suites; the clause was restored and the fix landed
+compiler-side only (design/PAREN-RESTEP-RULE.0.md).
+
+Two lessons carry into the remaining stages, both cheap and both
+non-optional:
+
+1. **Measure the oracle before building on a claim about it.** Every
+   statement in this document of the form "the compiled lane is already
+   the specified one" is a hypothesis until run against `RunInterp`.
+2. **`RunInterp` is the oracle, and only `RunInterp`.** Stage J flipped
+   `lang.Run` to the compiled path; 96 parity assertions across five files
+   went on reading it as their interpreter side, comparing the compiler
+   against itself and passing unconditionally (NUR106). That hole is what
+   let the five miscompiles sit under a 100%-covered suite. It is swept,
+   but nothing yet prevents the next Run-like flip from re-opening it.
+
+What remains of O1 is **NUR078 alone** — and its own record notes the
+ruling as written names `/r`, a modifier ADR-011 collapsed into `/v`, so
+it needs re-spelling before it can be implemented as amended.
 
 **O2 — the step budget.** Totality makes the per-instruction metering the
 only live metering. Ruling needed: keep the documented one-directional

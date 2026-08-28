@@ -63,7 +63,8 @@ var inspectNatives = []NativeFunc{
 		Name: "canon",
 
 		Signatures: []Signature{
-			{Args: []*Type{TAny}, Impl: Go(canonHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAny}, Impl: Go(canonHandler), Returns: []*Type{TString}, BarrierPos: -1,
+				CompileEffect: CompileReadsFn}, // renders a fn value's content, never invokes it
 		},
 	},
 }

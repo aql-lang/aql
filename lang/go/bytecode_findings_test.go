@@ -505,13 +505,26 @@ func TestFnValueIntrospectionLowers(t *testing.T) {
 		}
 	}
 
-	// Negative: `is` over a predicate fn INVOKES it (applies the predicate), so
-	// it must NOT be exempted — it still falls back (parity preserved).
+	// The former negative, kept as a POSITIVE with its history.
+	//
+	// This asserted that `is` over a predicate fn must not compile, "because
+	// it INVOKES the fn". The premise held and the conclusion did not follow:
+	// invoking is not re-stepping. A predicate NODE rides as data and its body
+	// runs through the callback seam, so the tape hazard introspection is
+	// exempted from was never present here either. What genuinely blocked it
+	// was that the callback seam interpreted the body — fixed in
+	// eng/go/vm_foreign_unit.go, after which these rows compile with no
+	// interpreter entry at all (design/FULL-COMPILATION.0.md §6.3).
 	const inv = `def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`
 	c, _ := New()
-	_, compiled, _ := c.RunCompiled(inv)
-	if compiled {
-		t.Errorf("`is` over a predicate fn must not compile as introspection (it invokes the fn)")
+	gotInv, compiled, errInv := c.RunCompiled(inv)
+	if !compiled || errInv != nil {
+		t.Errorf("`is` over a predicate fn: compiled=%v err=%v, want a compiled run", compiled, errInv)
+	}
+	d, _ := New()
+	wantInv, _ := d.RunInterp(inv)
+	if fmt.Sprint(gotInv) != fmt.Sprint(wantInv) {
+		t.Errorf("`is` over a predicate fn: compiled=%v interpreted=%v", gotInv, wantInv)
 	}
 }
 
@@ -1657,7 +1670,12 @@ func TestFactoryApplyCompiles(t *testing.T) {
 	// Now a sound refusal. Unlike the `((mk2 5) 10)` family this one does not
 	// graduate with Stage 3 — there is nothing to apply here; if it ever
 	// compiles again it must compile to the PLACED pair.
-	nur101Refusal(t, factory+`(mk2 5) 10`, "[fn (Integer) 10]")
+	// GRADUATED 2026-08-27 (Stage 3): compiles natively to the PLACED pair,
+	// which is what the interpreter has always answered. The `11` this test
+	// used to assert was the miscompile.
+	mustCompileWithParity(t, factory+`(mk2 5) 10`, "[fn (Integer) 10]")
+	// …and the bare closure result, out of the negative list below with it.
+	mustCompileWithParity(t, factory+`(mk2 5)`, "[fn (Integer)]")
 
 	// A CAPTURING factory (`[y] => [x add y]` closes over the factory's param x)
 	// now ALSO compiles natively — tryReturnedClosure threads the resolved capture
@@ -1666,9 +1684,11 @@ func TestFactoryApplyCompiles(t *testing.T) {
 
 	// NEGATIVE — the boundaries that must keep falling back (faithfully):
 	for _, neg := range []struct{ name, src string }{
-		// A bare closure RESULT must not compile — a VM closure prints
-		// differently from the interpreter's FnDefInfo, so it falls back.
-		{"bare closure residual", factory + `(mk2 5)`},
+		// `(mk2 5)` — a bare closure RESULT — LEFT this negative list
+		// 2026-08-27 (Stage 3). Its premise was that "a VM closure prints
+		// differently from the interpreter's FnDefInfo"; measured, it prints
+		// `[fn (Integer)]` on both lanes, and this loop's own parity
+		// assertion never fired for it. It is a parity row below.
 		// A CAPTURING returned fn with MULTIPLE own sigs declines the
 		// closure model (FirstOwnSig is not the runtime MatchFnSig pick).
 		{"capturing multi-sig returned fn",
@@ -3179,8 +3199,10 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 		}
 	}
 
-	// The relocated top-level row (NUR101): the interpreter PLACES.
-	nur101Refusal(t,
+	// The relocated top-level row (NUR101): the interpreter PLACES, and as of
+	// 2026-08-27 (Stage 3) the compiled lane places it too rather than
+	// refusing — a capturing factory's result laid out as data.
+	mustCompileWithParity(t,
 		`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  (mk 5) 10`,
 		"[fn (Integer) 10]")
 
@@ -3669,8 +3691,10 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 
 	// The UNWRAPPED twin of the preserved `((mk 5) 10)` row: no enclosing
 	// rewind, so the interpreter PLACES and the compiler must not apply
-	// (NUR101, design/PAREN-RESTEP-RULE.0.md).
-	nur101Refusal(t, `def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  (mk 5) 10`, "[fn (Integer) 10]")
+	// (NUR101, design/PAREN-RESTEP-RULE.0.md). GRADUATED to a parity row
+	// 2026-08-27 (Stage 3) — placing it is now something the compiled lane
+	// can DO, not merely something it declines to get wrong.
+	mustCompileWithParity(t, `def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  (mk 5) 10`, "[fn (Integer) 10]")
 
 	// PRESERVED coverage: fn-free container reads (paren or bare), APPLIED
 	// member calls (a multi-param member fed its args — the method-through-map

@@ -86,6 +86,9 @@ func StampDetachedSig(r *core.Registry, fd core.FnDefInfo, sigIdx int, pos core.
 		// owns its program and Finalize, so any gradual-caused failure is
 		// one silently declined stamp.
 		es.storedGradualDepth = 1
+		// Re-entrancy fence — see EmitState.inStampCompile. Measured before it
+		// existed: lang/go/modules went from 77s to not finishing.
+		es.inStampCompile = true
 	}
 	// An identity-less capture value (minted at pure runtime, where the
 	// mode-gated ID elision skips minting) cannot key its positional capture
@@ -229,8 +232,19 @@ func StampFnValue(r *core.Registry, v core.Value) (core.Value, bool) {
 	// Refuse an already-stamped value wholesale (first stamp wins: a
 	// compile-time stamp or an earlier detached one already carries the VM
 	// edge for the sigs it accepted; re-stamping is the §7c box's job).
+	//
+	// RECORD THE ATTRIBUTION ANYWAY. ok=false here means "this call did not
+	// stamp", which is not the same as "this value is not compiled" — and the
+	// stamp REPORT answers the second question. Callers that name an anonymous
+	// value before stamping it (stampActionFn labels a model action's lambda
+	// with the action name) are the reason it matters: once stampFnConst began
+	// stamping fn consts at compile time, the model's own stamp found a ref,
+	// declined, and `-compile-report` lost the "gen" row the frontier ledger
+	// pins — while the body was, in fact, compiled. Reporting the outcome
+	// rather than this call's participation in it keeps the report true.
 	for i := range fd.Signatures {
 		if CompiledRef(&fd.Signatures[i]) != nil {
+			r.RecordStampEvent(core.StampEvent{Name: fd.Name, Pos: v.Pos(), Stamped: true})
 			return v, false
 		}
 	}

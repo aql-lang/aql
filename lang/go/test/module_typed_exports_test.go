@@ -81,7 +81,7 @@ func TestModuleExportedTypesAcrossEngines(t *testing.T) {
 			if err != nil {
 				t.Fatalf("lang.New: %v", err)
 			}
-			interp, err := ai.Run(src)
+			interp, err := ai.RunInterp(src)
 			if err != nil {
 				t.Fatalf("interpreter: %v", err)
 			}

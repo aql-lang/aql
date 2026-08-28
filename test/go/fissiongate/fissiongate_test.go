@@ -59,10 +59,14 @@ var pinnedKindRoutingSites = map[string]int{
 	// param stays loose on the newtype-alternative swap while `is` stays
 	// strict — the DIVERGENCE PIN of design/TYPE-REPRESENTATION.1.md §6.
 	"lang/go/native/native_type.go": 2,
-	// The recorder refuses a predicate-type node at a fn-invoking word
-	// exactly as the fn value it replaced — the Stage 3 refusal,
-	// design/TYPE-REPRESENTATION.1.md §9 / design/COMPILABLE-SUBSET.md.
-	"compiler/go/emit.go": 1,
+	// (compiler/go/emit.go was pinned at 1 — the recorder refusing a
+	// predicate-type node at a fn-invoking word "exactly as the fn value it
+	// replaced". RETIRED 2026-08-28: a predicate node is not a fn value in
+	// disguise, it is a bare type literal riding as data whose body runs
+	// through the callback seam, so the recorder had no kind to route on once
+	// that seam stopped interpreting. design/FULL-COMPILATION.0.md §6.3. This
+	// is the ratchet doing its job: the pin's own failure message asked for
+	// the table to be tightened.)
 	// The typed-def gate splits a Function-parented constraint from a
 	// predicate-type node so `def x:T v` runs the predicate rather than
 	// binding the fn shape — design/TYPE-REPRESENTATION.1.md §6.

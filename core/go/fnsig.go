@@ -153,3 +153,57 @@ func FnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 	}
 	return false
 }
+
+// MatchFnSig finds the first OWN signature of a fn VALUE whose params admit
+// args, or nil when none does. Params are matched pairwise in sig order, which
+// is the order a forward-bound call presents them.
+//
+// It lives in core because every operand is a core type, and because BOTH
+// engines have to ask the same question: the interpreter's word dispatch
+// raises on no-match, so the VM's dynamic apply must be able to tell "not a
+// function" (leave the window as data — right) from "a function no overload of
+// which admits these arguments" (raise — NUR107). `basic` keeps the historical
+// spelling as a thin re-export; this is the one implementation.
+//
+// A value with no FnDefInfo payload — a fn-typed CARRIER, a closure — has no
+// own signatures to consult and answers nil, so a caller must treat nil as "no
+// opinion" unless it has already established that the value carries sigs.
+func MatchFnSig(fn Value, args []Value) *FnSig {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		return nil
+	}
+	ownSigs := fnDef.OwnSigs()
+	for i := range ownSigs {
+		sig := &ownSigs[i]
+		if len(sig.Params) != len(args) {
+			continue
+		}
+		match := true
+		for j, p := range sig.Params {
+			if !args[j].Parent.ConformsTo(p.Type) {
+				match = false
+				break
+			}
+			if p.Pattern != nil && !p.Pattern.Carrier {
+				pat := *p.Pattern
+				if pat.Parent.Equal(TMap) && args[j].Parent.Equal(TMap) &&
+					pat.Data != nil && args[j].Data != nil {
+					if !OpenUnifyMap(pat, args[j]) {
+						match = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(args[j], pat); !uOk {
+						match = false
+						break
+					}
+				}
+			}
+		}
+		if match {
+			return sig
+		}
+	}
+	return nil
+}

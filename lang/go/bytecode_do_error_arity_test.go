@@ -73,17 +73,55 @@ func TestFullStackHostOverloadParity(t *testing.T) {
 // engine.go leading apply) that a type-mismatched 1-arg callee under a
 // TWO-value declared return diverges.
 //
-// IT DOES (NUR107, measured 2026-08-27). This test previously asserted the
-// opposite — "verified non-reproducing 2026-08-03" — and verified it against
-// `Run`, which post-Stage-J IS the compiled lane (NUR106): it compared the
-// compiled answer to itself and passed unconditionally. The review claim was
-// right.
+// IT DID (NUR107), and this is the shape where the defect was NAKED. The
+// declared TWO-value return is what made it so: the residual [fn, arg] has two
+// values, so the frame's return-count check accepted it and no error fired at
+// all. Narrower return arities merely surfaced a type_error instead, which is
+// why the whole thing read as a taxonomy quibble rather than a silent wrong
+// answer.
 //
-// The interpreter's word dispatch RAISES on no-match; the VM's dynamic apply
-// reads "no signature matched" as "not callable" and leaves [fn, arg] as
-// data. Pinned here as the measured divergence so it fails loudly the moment
-// callDynamic learns to tell a non-function from a function whose overloads
-// do not admit the argument — which is NUR107's fix, and its own increment.
+//	interpreted  signature_error
+//	compiled     [fn (String) 14]        <- no error whatsoever
+//
+// The test previously asserted the OPPOSITE — "verified non-reproducing
+// 2026-08-03" — reading its interp side from `Run`, which post-Stage-J IS the
+// compiled lane (NUR106): it compared the compiled answer to itself and passed
+// unconditionally. The review claim was right.
+//
+// CLOSED 2026-08-28: the VM's dynamic apply now distinguishes "not callable"
+// (leave the window as data, which the interpreter also does) from "a Function
+// no overload of which admits these arguments" (raise). Both lanes raise
+// signature_error, and this pin flips to a PARITY assertion.
+// TestTrailingApplyBareFunctionStaysData is NUR107's negative: the guard that
+// raises for "a Function no overload of which admits these arguments" must NOT
+// raise for a value that is Function-TYPED but carries no signatures at all.
+//
+// A bare `Function` type literal is exactly that shape — appliable by tag
+// (IsAppliableFn reads the lattice parent), with no FnDefInfo payload and so
+// no own signatures to consult. MatchFnSig answers nil there, and reading that
+// nil as "no overload matched" would raise on a program both engines leave
+// alone. So the guard checks OwnSigs() length first, and this row is what
+// keeps that check honest.
+func TestTrailingApplyBareFunctionStaysData(t *testing.T) {
+	for _, src := range []string{
+		`(14 Function)`,
+		`def m {f: Function}  (14 (m dot f))`,
+	} {
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		gotI, errI := mustNew(t).RunInterp(src)
+		if !compiled {
+			t.Fatalf("%s: did not run compiled (%v)", src, errC)
+		}
+		if errC != nil || errI != nil {
+			t.Errorf("%s: a signature-less Function value must stay DATA, not raise "+
+				"(errC=%v errI=%v)", src, errC, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: compiled=%v interp=%v", src, gotC, gotI)
+		}
+	}
+}
+
 func TestLeadApplyNoMatchTwoReturnParity(t *testing.T) {
 	const src = `def ld fn [[g:Function x:Integer] [Function Integer] [(g x)]] ld ([k:String] => [k]) 14`
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
@@ -92,9 +130,63 @@ func TestLeadApplyNoMatchTwoReturnParity(t *testing.T) {
 		t.Fatalf("no-match lead apply: did not run compiled (errC=%v)", errC)
 	}
 	if errI == nil || codeOf(errI) != "signature_error" {
-		t.Errorf("NUR107 interpreted: err=%v got=%v, want a signature_error", errI, gotI)
+		t.Errorf("interpreted: err=%v got=%v, want a signature_error", errI, gotI)
 	}
-	if errC != nil || fmt.Sprint(gotC) != "[fn (String) 14]" {
-		t.Errorf("NUR107 compiled: err=%v got=%v, want no error and [fn (String) 14]", errC, gotC)
+	if errC == nil || codeOf(errC) != "signature_error" {
+		t.Errorf("compiled: err=%v got=%v, want a signature_error — a Function whose "+
+			"overloads do not admit the argument must RAISE, not sit as data (NUR107)", errC, gotC)
+	}
+}
+
+// TestCondBodyFreshDefBindsCompiledOnly pins NUR110 as measured: a FRESH `def`
+// inside a branch that did not run binds the name in the compiled lane and not
+// in the interpreter.
+//
+// The interpreter is right — a `def` runs when its branch runs — and both lanes
+// already agree on the same question for a zero-iteration loop, which is why
+// the machinery to get this right demonstrably exists.
+//
+// Family L's CondBodyDepth gate refuses the SHADOW case (a redefinition whose
+// overlap-removal drops an enclosing overload, which the depth-based rollback
+// cannot revert). It is reached only when something is actually dropped, so a
+// fresh definition slips past it: the gate covers redefinition, not definition.
+//
+// Pinned as the measured divergence so it fails loudly when closed. The fix is
+// compiler-side and REFUSING counts — both siblings refuse, a refusal runs the
+// program correctly on the interpreter, and a silent wrong binding does not.
+func TestCondBodyFreshDefBindsCompiledOnly(t *testing.T) {
+	for _, tc := range []struct{ src, wantCompiled string }{
+		{`if false [def op 1] [0]  end  op`, "[0 1]"},
+		{`if false [def op 1] []   end  op`, "[1]"},
+		{`if false [def op 1] [0]  end  typeof op`, "[0 Integer]"},
+	} {
+		gotC, compiled, errC := mustNew(t).RunCompiled(tc.src)
+		gotI, errI := mustNew(t).RunInterp(tc.src)
+		if !compiled {
+			t.Fatalf("%s: did not run compiled (%v)", tc.src, errC)
+		}
+		if codeOf(errI) != "undefined_word" {
+			t.Errorf("%s: interpreted err=[%s] got=%v, want undefined_word — the oracle moved, "+
+				"re-derive this fence", tc.src, codeOf(errI), gotI)
+		}
+		if errC != nil || fmt.Sprint(gotC) != tc.wantCompiled {
+			t.Errorf("%s: compiled err=%v got=%v, want %s — if the compiled lane now RAISES or "+
+				"REFUSES, NUR110 is CLOSED: delete this fence and assert parity",
+				tc.src, errC, gotC, tc.wantCompiled)
+		}
+	}
+}
+
+// TestCondBodyZeroIterationLoopAgrees is NUR110's control, and the reason its
+// verdict says the machinery exists: the same question — does a `def` in a body
+// that never ran leave a binding? — is already answered identically by both
+// lanes for a loop that runs zero times.
+func TestCondBodyZeroIterationLoopAgrees(t *testing.T) {
+	const src = `for 0 [def op 1]  end  op`
+	_, _, errC := mustNew(t).RunCompiled(src)
+	_, errI := mustNew(t).RunInterp(src)
+	if codeOf(errC) != "undefined_word" || codeOf(errI) != "undefined_word" {
+		t.Errorf("zero-iteration loop: compiled=[%s] interp=[%s], want both undefined_word",
+			codeOf(errC), codeOf(errI))
 	}
 }

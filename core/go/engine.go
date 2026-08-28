@@ -4343,8 +4343,25 @@ func expandReach(info ReachInfo) []Value {
 // are identical. It is the primitive behind the `apply` word and the
 // receiverless-reach-as-Function higher-order behaviour.
 func ApplyReach(r *Registry, info ReachInfo, recv Value) (Value, error) {
+	// The compiled lane first: a stamped lens runs its unit on the VM instead of
+	// re-entering the interpreter for every application (reach_unit.go). ran is
+	// false for an unarmed registry, a lens whose body declined, and a unit that
+	// bailed with no observable effect — all of which keep the chain below.
+	if sig := compiledLensSig(r, info.unit, info.Segments); sig != nil {
+		if vres, verr, ran := compiledRuntime.InvokeCompiled(r, sig, []Value{recv}); ran {
+			return lastReachResult(vres, verr)
+		}
+	}
 	toks := lowerReach(ReachInfo{Receiver: []Value{recv}, Segments: info.Segments})
 	res, err := RunPooledSub(r, expandParenExpr(toks), false)
+	return lastReachResult(res, err)
+}
+
+// lastReachResult is the shared tail of ApplyReach's two lanes: an error wins,
+// an empty result is the lens finding nothing to hand back, and otherwise the
+// chain's last value is the read. Shared so the compiled lane cannot drift from
+// the interpreted one on what "the value of a lens" means.
+func lastReachResult(res []Value, err error) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
@@ -6058,6 +6075,18 @@ func (e *Engine) fnReturnPark(idx, closeIdx int, notReachGroup bool) int {
 		return 0
 	}
 	if fnValueDispatchesAtPointer(v) {
+		// Record the placement here too. This arm catches the value the CHECK
+		// pass folded to a concrete Function — an inert `/v` reference, a
+		// `valof`, an inline literal — and it returns before the carrier arm
+		// below ever asks the braid, so without this the residual layout never
+		// learns the lead was placed and refuses `(inc/v) 7` against its own
+		// interpreted answer of `fn inc(Integer) 7`.
+		//
+		// Reach groups are excluded above, so reaching here proves a USER
+		// paren. The record is read by placedNotReStepped (compiler/go/emit.go),
+		// which needs BOTH halves of the pair — placed here, re-stepped by
+		// recordParenReStep — to prove nothing downstream applies the value.
+		CheckBraid.ParenPlacedFnCarrier(e, idx)
 		return 1
 	}
 	// The CHECK pass's twin of the same decision. Where the interpreter
@@ -7450,7 +7479,9 @@ func (e *Engine) recordParenLeadFnApply(es EmitRecorder, leadFn, lastIdx, closeI
 	out := NewCarrier(TAny)
 	out.ID = GenerateID(IDPrefixForType(TAny))
 	out.pos = lead.pos
-	if es.RecordDynApply([]Value{e.Tape.At(lastIdx)}, lead, out, lead.Pos()) {
+	// A one-value window: the callee either consumes it or the record
+	// declines, so there is no partial-consumption case to thread here.
+	if _, ok := es.RecordDynApply([]Value{e.Tape.At(lastIdx)}, lead, out, lead.Pos()); ok {
 		e.Tape.Set(leadFn, out)
 		e.Tape.Remove(lastIdx)
 		closeIdx--
@@ -7734,9 +7765,15 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 			out := NewCarrier(TAny)
 			out.ID = GenerateID(IDPrefixForType(TAny))
 			out.pos = last.pos
-			if es.RecordDynApply(argVals, last, out, last.Pos()) {
+			// consumed counts from the TOP of the window (the values
+			// nearest the fn). It is normally every arg, but a callee whose
+			// arity is provably smaller UNDER-APPLIES exactly as the
+			// interpreter does — `(1 2 (mk 4))` with a 1-arg adder nets
+			// [1, 6] — so only the consumed SUFFIX collapses and the deeper
+			// values stay on the tape as residual.
+			if consumed, ok := es.RecordDynApply(argVals, last, out, last.Pos()); ok {
 				e.Tape.Set(lastIdx, out)
-				for j := len(argIdxs) - 1; j >= 0; j-- {
+				for j := len(argIdxs) - 1; j >= len(argIdxs)-consumed; j-- {
 					e.Tape.Remove(argIdxs[j])
 					closeIdx--
 				}

@@ -53,6 +53,35 @@ const engineEntryCeiling = 505 // 505 (2026-08-25, Stage-1 baseline) -> 0 (Stage
 // with a stable site tag.
 const deferCeiling = 5 // 5 (2026-08-25, Stage-1 baseline) -> 0 (Stage 9)
 
+// deferLocalCeiling is the second, weaker kind of bail — and it exists because
+// a change made the difference measurable rather than theoretical.
+//
+// deferCeiling's own prose says what it counts: a bail "resolving it by asking
+// the caller to re-run the whole program on the interpreter". Measured, all
+// five of its bails do exactly that — the row comes back wasCompiled=false.
+// The lens units (core/go/reach_unit.go) produce one that does not: a lens
+// applied to a receiver its first segment cannot read reaches CALL_NATIVE_POLY
+// with no match, and ApplyReach — which has a complete fallback of its own —
+// catches the internal_error, runs the interpreted chain for that ONE
+// application, and the program finishes COMPILED (wasCompiled=true).
+//
+// Those are not the same event, and one ratchet cannot hold both: counting
+// them together would either forbid a change that removed 16 rows of
+// interpretation, or quietly relax the number that guards whole-program
+// re-runs. So the walk sorts each bail by what actually happened to its row,
+// deferCeiling keeps its exact meaning and its exact number, and the local
+// kind ratchets separately from 1.
+//
+// A row that produced BOTH kinds attributes all of its bails to the STRICTER
+// census (wasCompiled is per row, not per bail) — the safe direction, and no
+// corpus row does it today.
+//
+// Monotone DOWN, same as its sibling: 0 at Stage 9, when the poly no-match
+// site can raise natively instead of deferring. It cannot today for a lens —
+// PolyNoMatchSpec is a faithfulness proof the check pass records at a FAILED
+// dispatch, and a lens body analysed with an `Any` receiver never fails one.
+const deferLocalCeiling = 1 // 1 (2026-08-28, the lens units) -> 0 (Stage 9)
+
 // deferCensus tallies runtime bails by site tag.
 type deferCensus struct {
 	mu     sync.Mutex
@@ -86,6 +115,20 @@ func (c *deferCensus) assertCeiling(t *testing.T) {
 	if total > deferCeiling {
 		t.Errorf("defer census %d exceeds ceiling %d — the VM bailed to the interpreter at runtime: %s",
 			total, deferCeiling, c.report())
+	}
+}
+
+// assertLocalCeiling is assertCeiling for the locally-resolved kind: the VM
+// bailed, but the caller had its own fallback and the program stayed compiled.
+func (c *deferCensus) assertLocalCeiling(t *testing.T) {
+	t.Helper()
+	c.mu.Lock()
+	total := c.total
+	c.mu.Unlock()
+	t.Logf("defer census (locally resolved, program stayed compiled): %d (sites: %s)", total, c.report())
+	if total > deferLocalCeiling {
+		t.Errorf("locally-resolved defer census %d exceeds ceiling %d — a caller's "+
+			"fallback absorbed a VM bail somewhere new: %s", total, deferLocalCeiling, c.report())
 	}
 }
 

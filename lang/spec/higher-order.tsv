@@ -39,7 +39,27 @@ join ['a' 'b' 'c']	'a,b,c'	default separator is a comma
 #     `filter`'s single cross-container form (§5) is the documented
 #     exception — one signature serving both shapes, so it hands a POSITION
 #     descriptor either way. See REFERENCE.md §"Higher-order array words".
+#     GRADUATED 2026-08-27 (Stage 3): the list `each` rows below moved
+#     here out of lang/spec/frontier/frontier-hof-audit.tsv §12, where
+#     they sat because the compile lane reached the callback through an
+#     ISLAND. lambdaCallbackInputs simply had no list case for `each` —
+#     it handled the MAP twin and fell through — so the lambda lowering
+#     declined at its first gate. The convention was measured off the
+#     interpreter rather than inferred from the map twin:
+#     `def show fn [[e:Any][Any][typeof e]] each show/v [1 2 3]` answers
+#     [Integer Integer Integer], i.e. ONE input, the bare element, passed
+#     through unchanged.
+#
+#     §12 below is the fold/scan half, GRADUATED 2026-08-28. The note here
+#     used to say their accumulator's post-step-1 type was "a separate
+#     measured question"; it is not the blocker and never was — see §12.
+def dbl x:Integer => [mul 2 x]  each dbl/v [1 2 3]	[2 4 6]	a Function VALUE maps over a list — the element reaches the callback with no quotation wrapper
 def dbl x:Integer => [mul 2 x]  each [dbl] [1 2 3]	[2 4 6]	…and the quotation wrapper it replaces still answers identically
+each ([x:Integer] => [x add 1]) [1]	[2]	a LAMBDA over a LIST is an each signature since NUR086's fix — neither a quotation wrapper nor a map form is needed
+each ([x:Integer] => [x add 1]) [1 2 3]	[2 3 4]	…over more than one element, the closure body is compiled ONCE and driven per element
+each ([x:Any] => [typeof x]) [1 'a' true]	[Integer ProperString Boolean]	a HETEROGENEOUS list: the element carrier is the lattice join, so the body dispatches per alternative exactly as the runtime does
+each ([x:Integer] => [x add 1]) []	[]	the empty list runs the callback zero times
+def n 3  each ([x:Integer] => [x mul n]) [1 2]	[3 6]	the callback CAPTURES an enclosing binding — the capture rides the closure, not a re-lookup
 def kf kv:KeyVal => [mul 2 (kv.v)]  each kf/v {a:1 b:2}	{a:2 b:4}	the MAP form is unchanged: a per-container form hands a KeyVal
 #
 # §5  filter — keep elements whose callback returns true. The callback is
@@ -85,3 +105,37 @@ fold [add] {}	ERROR:fold_error	empty map with no initial value is an error
 {a:1 b:2 c:3} scan ([acc:Integer kv:KeyVal] => [acc add kv.v])	{a:1 b:3 c:6}	scan lambda gets (accumulator, KeyVal)
 {a:5} scan [add]	{a:5}	a singleton map is its seed
 {a:1 b:2} scan [drop drop]	ERROR:scan_error	a scan body that leaves nothing is an error
+#
+# §12 LIST fold / scan with a callback that takes an ACCUMULATOR. Graduated
+#     2026-08-28 out of lang/spec/frontier/frontier-hof-audit.tsv §12.
+#
+#     THE CONVENTION, measured with SAME-TYPED and `Any` params (a probe with
+#     distinct types cannot see position — MatchFnSig reassigns by type, and
+#     reading one as positional evidence is what produced an earlier swapped
+#     admission):
+#
+#         MAP  fold/scan   sig[0] = ACCUMULATOR, sig[1] = entry (KeyVal)
+#         LIST fold/scan   sig[0] = ELEMENT,     sig[1] = accumulator
+#
+#     Both handlers hand (accumulator, element). The two differ because the
+#     MAP path calls the lambda POSITIONALLY (CallBoruFn binds args in sig
+#     order) while the LIST path runs its inputs as a STACK (InvokeBody ->
+#     RunResolved), where MatchSignature fills from the top down. Same order
+#     in, opposite assignment out.
+#
+#     A compiled closure is positional like the map path, so the list pair
+#     used to arrive swapped and the whole call ISLANDED — the right answer
+#     by the interpreter, inside a compiled program. One per-word permutation
+#     at the closure bind (ClosureInStackPair) makes the two agree; the rows
+#     now compile native with no interpreter entry. Carriers could never have
+#     fixed it: they TYPE the body, they do not choose which local receives
+#     what.
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0	6	fold with an explicit seed: the callback's sig is (element, accumulator) — same-typed params, so `add` reads the same either way
+fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0	123	…and a NON-commutative body shows the order: `a` is the accumulator (0 -> 1 -> 12 -> 123); a positional bind with no permutation answers 60
+scan ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3]	[1 12 123]	scan the same way — the running accumulator is sig[1]
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3]	6	…and unseeded, the first element seeds it
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  scan add2/v [1 2 3]	[1 3 6]	scan keeps the running accumulator
+fold ([x:Any y:Any] => [x]) [7] 0	7	an Any-param probe reports POSITION: sig[0] is the element
+fold ([x:Any y:Any] => [y]) [7] 0	0	…and sig[1] the accumulator (the seed, on step 1)
+fold ([x:Any y:Any] => [x]) {a:1} 0	0	the MAP twin is the OTHER way round: sig[0] is the accumulator
+scan ([x:Any y:Any] => [y]) [7 8]	[7 7]	scan's list accumulator is sig[1] too — the seed is the first element

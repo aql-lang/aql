@@ -600,12 +600,42 @@ const (
 	// ClosureInKeyVal wraps a map entry as a KeyVal {k v i n} before the (last)
 	// input — the map-iteration LAMBDA convention (`each (kv => …) {m}`).
 	ClosureInKeyVal
+	// ClosureInStackPair says the handler hands its inputs in STACK order
+	// (deeper first) while the body's params were declared in the order the
+	// interpreter's top-down assignment produces, so the bind REVERSES them.
+	//
+	// This is the list fold/scan lambda, and it is the one place the two
+	// engines' argument rules genuinely disagree rather than merely look like
+	// they might. Both handlers hand `(accumulator, element)`. The MAP path
+	// calls the lambda directly — CallBoruFn binds args positionally, so
+	// sig[0] is the ACCUMULATOR. The LIST path goes through InvokeBody, whose
+	// interpreter arm runs the inputs as a STACK (RunResolved), and
+	// MatchSignature fills from the top down — so sig[0] is the ELEMENT. Same
+	// handler order, opposite assignment, because one path is positional and
+	// the other is a stack.
+	//
+	// A compiled closure is positional like the map path, so without this the
+	// list pair arrives swapped:
+	//
+	//	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+	//	  interpreted 123    compiled (unpermuted) 60
+	//
+	// Carriers cannot fix it — they TYPE the body, they do not choose which
+	// local receives what — which is why this rides as a per-word shape at the
+	// bind rather than as a carrier order.
+	ClosureInStackPair
 )
 
-// NewClosure builds a closure Value over a compiled body unit (default value
-// input shape). The VM stamps the unit's real InShape at OpPushClosure.
-func NewClosure(unit int, captures []core.Value) core.Value {
-	return core.Value{Parent: core.TFunction, Data: core.ClosurePayload{Unit: unit, Captures: captures}}
+// NewClosure builds a closure Value over prog's body unit (default value input
+// shape). The VM stamps the unit's real InShape at OpPushClosure.
+//
+// prog is required rather than optional: a closure's Unit is an index into ITS
+// program's Fns table, and the VM routes an invoke by that identity
+// (ClosurePayload.Prog). A nil prog is legal and means "no identity recorded" —
+// it reads as whichever program is running, which is only ever right for a
+// value that is inspected rather than invoked.
+func NewClosure(prog *Program, unit int, captures []core.Value) core.Value {
+	return core.Value{Parent: core.TFunction, Data: core.ClosurePayload{Prog: prog, Unit: unit, Captures: captures}}
 }
 
 // ClosureWantsKeyVal reports whether v is a compiled closure whose body expects
@@ -657,6 +687,20 @@ type CompiledFnRef struct {
 	// stamped ref always has poisoned=false).
 	depNames map[string]bool
 	poisoned bool
+	// optional marks a ref that exists ONLY as an optimisation — stampFnConst's
+	// fn-value consts, whose fallback is the island the program used before
+	// anything stamped them. It changes what a dep REBIND costs: poisoning
+	// drops the ref (Finalize leaves Prog nil, the apply islands), and for an
+	// optional ref that IS the whole remedy, because islanding restores the
+	// exact pre-stamp behaviour the differential already validates.
+	//
+	// A store-site ref is not optional and keeps the program-level refusal:
+	// its handler is invoked at RUNTIME, after module-scope def sites have all
+	// executed in the compile pass, so the CallBoru fallback reads the
+	// PASS-FINAL binding where the interpreter read the point-in-program one
+	// (design/RELOAD-INVALIDATION.0.md §3 F1). Nothing the compile pass can do
+	// makes that right, which is why the whole program falls back there.
+	optional bool
 	// DepSnap is the RUNTIME-stamped twin of the compile-time poisoning above
 	// (StampDetachedFn): a ref created OUTSIDE a whole-program pass has no
 	// recording EmitState alive to observe later rebinds, so freshness moves

@@ -110,9 +110,16 @@ def mkap g:Function => [v:Integer => [(g v)]] end def a (mkap (z:Integer => [add
 # §9c the event-lead trailing apply (2026-08-21): OpCallDynTrailKeepQ
 #     preserves an event-provenance fn's runtime quote state (no read
 #     substitution to mirror), retiring RecordDynApply's hard-refusal
-#     when the producer proves the closure arity equals the window.
+#     when the producer proves the closure arity.
+#
+#     THE WIDER-WINDOW ROW GRADUATED 2026-08-28 (Stage 3) into
+#     lang/spec/fn-value.tsv §11. It was ledgered on the reading that a
+#     wider window is a shape the lowering cannot model. It is not: the
+#     interpreter simply UNDER-APPLIES, and the faithful lowering hands
+#     the op only the callee's own arity and leaves the deeper values on
+#     the tape. RecordDynApply now reports how many window values it
+#     consumed so the collapse site removes exactly that suffix.
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (2 (mk 4))	6	an event-provenance trailing apply with producer-proven arity compiles
-def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))	1 6	a wider window than the closure's arity under-applies in the interpreter (refuses; ledgered)
 #
 # §9d the GRADUAL inner parameter (2026-08-21): the same
 #     apply-the-capture factory as §9b/§9, but the inner lambda's
@@ -197,16 +204,62 @@ def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") apply]] def rules {inc: 42} a
 def chainif fn [[a:Function b:Function s:Integer][Any][def r1 (a s) if (r1.ok) [def r2 (b (r1.rest)) (r2.val)] [0]]] chainif ([z:Integer] => [{ok:true rest:8}]) ([z:Integer] => [{ok:true val:50}]) 4	50	the branch-local def-split (NUR087's own shape): checks clean since the fix; the compile lane recovers the branch dispatch
 #
 # §12 the LIST Function form (NUR086's fix, 2026-08-24). All four words
-#     now take a Function callback over a list, handing it the ELEMENT.
+#     take a Function callback over a list, handing it the ELEMENT.
 #     The rows RUN on both lanes; they live here because the compile
-#     lane reaches them through an island (each/fold/scan) or the
-#     Stage 3 function-valued-operand gate (for-each), which the
-#     production corpus's compute-gap ceiling of 0 does not admit.
-#     The compiling twins — the quotation wrapper and the map form —
-#     stay pinned in lang/spec/higher-order.tsv §6.
-def dbl x:Integer => [mul 2 x]  each dbl/v [1 2 3]	[2 4 6]	a Function value maps over a list — the element reaches the callback
-def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0	6	fold with an explicit seed: the callback sees (accumulator, element)
-def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3]	6	…and unseeded, the first element seeds it
-def add2 fn [[a:Integer b:Integer][Integer][add a b]]  scan add2/v [1 2 3]	[1 3 6]	scan keeps the running accumulator
+#     lane reaches them through an island (fold/scan) or the Stage 3
+#     function-valued-operand gate (for-each), which the production
+#     corpus's compute-gap ceiling of 0 does not admit.
+#
+#     EACH GRADUATED 2026-08-27 (Stage 3) into lang/spec/higher-order.tsv
+#     §6, with five shapes it never had here (multi-element, empty,
+#     heterogeneous, capturing, and the Function-value form). It islanded
+#     for a duller reason than "a modelled fn-value callback frame":
+#     lambdaCallbackInputs had a MAP case for each and no LIST case, so it
+#     fell through to its catch-all decline before any frame question was
+#     asked. The convention was then measured off the interpreter — one
+#     input, the bare element — rather than inferred from the map twin.
+#
+#     WHAT IS LEFT IS NOT THE SAME SHAPE, and the reason is ARITY. A
+#     compiled closure binds its inputs POSITIONALLY (invokeClosureOn fills
+#     the unit's leading param slots in order); the interpreter presents
+#     them in the CALLBACK CONVENTION for the container, and the two
+#     conventions differ:
+#
+#       MAP  fold/scan   sig[0] = ACCUMULATOR, sig[1] = entry
+#       LIST fold/scan   sig[0] = ELEMENT,     sig[1] = accumulator
+#
+#     Measured with AMBIGUOUS param types, so it is a real ordering
+#     convention rather than a by-type assignment that looks like one:
+#     `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed, while
+#     `fold ([x:Any y:Any] => [x]) [7] 0` answers the element. The MAP form
+#     already agrees on both lanes because the handler's input order
+#     matches its convention; at ONE input no convention can disagree,
+#     which is why each graduated. The LIST form at TWO does:
+#
+#       fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+#         interpreted 123   (a accumulates: 0 -> 1 -> 12 -> 123)
+#         positional   60   (the pair arrives swapped)
+#
+#     Supplying the carriers in the other order changes NOTHING — carriers
+#     only TYPE the body; the unit's param slots come from the LAMBDA's own
+#     declared order and what lands in each is the handler's push order. So
+#     admitting fold/scan means making the two orders agree at the seam
+#     that decides it: the handler's input order for that form, or a
+#     per-word permutation at the closure bind. Fence: lang/go's
+#     TestListFoldCallbackOrderFence.
+#
+#     ON THE ROW COMMENTS BELOW: for the LIST form the callback's sig is
+#     (ELEMENT, ACCUMULATOR). Establishing that needs SAME-TYPED or `Any`
+#     params — a probe with distinct types cannot see position, because
+#     MatchFnSig reassigns by type, and reading one as positional evidence
+#     is what produced the swapped admission above.
+#
+#     GRADUATED 2026-08-28 — the five list fold/scan rows that were here now
+#     live in lang/spec/hof.tsv §12. The gap was never carriers and never a
+#     "modelled callback frame": both handlers hand (accumulator, element),
+#     and the two engines disagree because the MAP path calls the lambda
+#     POSITIONALLY (CallBoruFn) while the LIST path runs the inputs as a
+#     STACK (InvokeBody -> RunResolved), where MatchSignature fills top-down.
+#     One per-word permutation at the closure bind (ClosureInStackPair) makes
+#     the two agree, and the rows compile NATIVE with no interpreter entry.
 def dbl x:Integer => [mul 2 x]  for-each dbl/v [1 2 3]		for-each discards every result — the fn must still satisfy its OWN declared return arity (a void lambda breaks its contract, not for-each's)
-each ([x:Integer] => [x add 1]) [1]	[2]	a LAMBDA over a LIST is an each signature since NUR086's fix (2026-08-24): the list Function form hands the callback the ELEMENT, so a lambda needs neither a quotation wrapper nor a maps

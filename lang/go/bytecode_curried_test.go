@@ -34,7 +34,11 @@ func TestCurriedFactoryCompiles(t *testing.T) {
 	// The unwrapped twin of the first row, pinned beside it so the pair reads
 	// as one rule rather than two behaviours: no enclosing rewind, so the
 	// carrier is PLACED and the 2 lands beside it.
-	nur101Refusal(t,
+	//
+	// GRADUATED 2026-08-27 from a refusal to a parity row (Stage 3): the
+	// residual-layout loops now skip a placed, unread carrier instead of
+	// refusing it on a closure-render fear that measurement did not support.
+	mustCompileWithParity(t,
 		`def mk fn [[a:Integer] [Function] [(fn [[b:Integer] [Integer] [a add b]])]] (mk 1) 2`,
 		"[fn (Integer) 2]")
 

@@ -32,12 +32,12 @@ func TestProbeWideningComputedRangeStartStep(t *testing.T) {
 	{
 		src := `for [1 2 3 4] [ 5 drop ] 0`
 		a, _ := New()
-		_, errC := a.Run(src)
+		_, errI := a.RunInterp(src)
 		b, _ := New()
 		gotC, _, errC2 := b.RunCompiled(src)
 		_ = gotC
-		if codeOf(errC) != "for_error" || codeOf(errC2) != "for_error" {
-			t.Errorf("4-elem range: want for_error both, got interp [%s] compiled [%s]", codeOf(errC), codeOf(errC2))
+		if codeOf(errI) != "for_error" || codeOf(errC2) != "for_error" {
+			t.Errorf("4-elem range: want for_error both, got interp [%s] compiled [%s]", codeOf(errI), codeOf(errC2))
 		}
 	}
 }

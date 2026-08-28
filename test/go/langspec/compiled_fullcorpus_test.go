@@ -24,6 +24,8 @@ package langspec
 import (
 	"bufio"
 	"errors"
+
+	lang "github.com/boru-lang/boru/lang/go"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -166,6 +168,7 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 	var rows, compiledPath, mismatches int
 	entryCensus := newEngineEntryCensus()
 	bailCensus := newDeferCensus()
+	localBailCensus := newDeferCensus()
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
 			continue
@@ -193,10 +196,23 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 
 			ac := newDifferentialInstance(t)
 			disarm := ac.ArmInterpEntryHook(entryCensus.add)
-			disarmBail := ac.ArmRuntimeBailHook(bailCensus.add)
+			// A bail's COST is not knowable when it fires — it depends on who
+			// catches it — so hold the row's bails and sort them by what
+			// actually happened (see deferLocalCeiling).
+			var rowBails []lang.BailEvent
+			disarmBail := ac.ArmRuntimeBailHook(func(ev lang.BailEvent) {
+				rowBails = append(rowBails, ev)
+			})
 			gotC, wasCompiled, errC := ac.RunCompiled(input)
 			disarm()
 			disarmBail()
+			for _, ev := range rowBails {
+				if wasCompiled {
+					localBailCensus.add(ev)
+				} else {
+					bailCensus.add(ev)
+				}
+			}
 			if wasCompiled {
 				compiledPath++
 			}
@@ -259,6 +275,7 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 	t.Logf("compile-or-fallback: %d rows, %d compiled, %d divergences (values + error taxonomy)", rows, compiledPath, mismatches)
 	entryCensus.assertCeiling(t)
 	bailCensus.assertCeiling(t)
+	localBailCensus.assertLocalCeiling(t)
 	if mismatches != 0 {
 		t.Errorf("%d compile-or-fallback divergences — every program must compile or fall back to an identical result and error taxonomy", mismatches)
 	}

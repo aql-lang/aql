@@ -46,11 +46,19 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 // dispatches through, so retiring the interpreter for reducible callback bodies
 // is one routing decision rather than an edit per word.
 //
-// Correctness is fail-safe: a nil CompiledRef, an un-stamped ref (a body the
-// compiler refused, or a run that never reached Finalize), or a busy registry
-// all fall to CallBoru, whose values and error taxonomy are unchanged. When the
-// VM path IS taken, RunUnit executes the exact unit the differential gates prove
-// equivalent to the interpreter.
+// Correctness is fail-safe: a nil CompiledRef, or an un-stamped ref (a body the
+// compiler refused, or a run that never reached Finalize), falls to CallBoru,
+// whose values and error taxonomy are unchanged. When the VM path IS taken it
+// executes the exact unit the differential gates prove equivalent to the
+// interpreter.
+//
+// A BUSY registry used to fall to CallBoru as well, and that was the seam's
+// quiet hole rather than a safety property: a runtime-stamped body reached from
+// inside a live compiled run — every predicate type in the corpus — recorded
+// Stamped:true in the stamp ledger and then interpreted, because the nested
+// runner declined any ref whose program was not the running one, which a
+// detached ref never is. It now hosts the foreign unit instead
+// (eng/go/vm_foreign_unit.go).
 //
 // A callback fires AFTER the enclosing RunProgram returned (serve-raw handling a
 // connection, a spawned process), so — unlike an in-program island — there is no
@@ -115,23 +123,18 @@ func InvokeCallbackFn(r *Registry, fnDef *FnDefInfo, sig *Signature, args []Valu
 	return InvokeCallback(target, sig, args, caps)
 }
 
-// CallBoruFn is InvokeCallbackFn's interpreter-only sibling: it applies the same
-// defining-registry routing but keeps the call on CallBoru instead of offering
-// the body to the VM first.
-//
-// The distinction is deliberate. The words that reach here — `filter`'s
-// Function form, the map-lambda `each`/`fold` bodies, core `walk` /
-// `StructUtil.walk`, `IO.mount`'s fileops handlers, `boru:parse`'s matcher and
-// action callbacks — each already decide between a compiled CLOSURE (routed to
-// InvokeBody) and an interpreter FnDefInfo, and that split is byte-identical to
-// their pre-seam handlers. Routing the FnDefInfo half through InvokeCallback
-// would silently move those bodies onto the VM, which is an execution-engine
-// change and not what design/FUNCTION-VALUE-SCOPE.0.md §11 asks for. Fixing WHERE
-// free words resolve must not also change WHICH engine resolves them.
-func CallBoruFn(r *Registry, fnDef *FnDefInfo, sig *Signature, args []Value) ([]Value, error) {
-	target, caps := FnHome(r, fnDef)
-	return target.CallBoru(sig, args, caps)
-}
+// (CallBoruFn stood here — InvokeCallbackFn's interpreter-only sibling, same
+// defining-registry routing but never offering the body to the VM. It existed
+// for one reason, stated in its own comment: "fixing WHERE free words resolve
+// must not also change WHICH engine resolves them", the right scope fence for
+// design/FUNCTION-VALUE-SCOPE.0.md's change. Full compilation reverses that
+// fence — the seven words it served (`filter`'s Function form, the map-lambda
+// each/fold bodies, core walk / StructUtil.walk, IO.mount's fileops handlers,
+// boru:parse's matcher and action callbacks, and the fn-util words) now call
+// InvokeCallbackFn, so the body is offered to the VM with the CallBoru
+// fallback intact. A SECOND dispatch path is a source of divergence in its own
+// right — design/FN-VALUE-OPEN-WORK.0.md §Origin records two it caused — so
+// with its last caller gone it is deleted rather than left as a hatch.)
 
 // FnHome answers the two questions every native callback seam has to ask about
 // a fn VALUE before running it: which registry resolves its free words, and

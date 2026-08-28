@@ -114,8 +114,13 @@ import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/v} ] end  
 #     twin-call VALUE rows live in
 #     lang/spec/frontier/frontier-nur038-seal.tsv — semantically green,
 #     compile-refused on the pre-existing residual-ordering limitation
-#     ("dynamic value precedes residual args").
+#     ("dynamic value precedes residual args"). The EXPLICIT-PAREN row of
+#     that set GRADUATED here 2026-08-27 (Stage 3): each paren applies and
+#     nets one value, and the residual layout no longer reads two placed
+#     results as an auto-dispatch hazard, because the collapse now records
+#     which values a rewind re-steps (design/PAREN-RESTEP-RULE.0.md).
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 add 1	6	a sealed call composes with a following word statement
+def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end (m.p 5) (m.p 7)	5 7	explicit parens as the seal — graduated from the frontier 2026-08-27
 def i fn [[x:Integer] [Integer] [x add 1]] end def m {i: i/v} end m.i 5 m.i 7	6 8	typed twins — the type gate already isolated these; unchanged
 #
 # §7  fn-local fns as higher-order body words REFUSE compilation (NUR037).
@@ -167,3 +172,31 @@ def chain fn [[a:Function b:Function s:Integer][Integer][def r1 (a s) def r2 (b 
 #     commitment (pins: lang/go/bytecode_poly_join_test.go).
 def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 5)	1	differing arm returns: Integer arm selected at runtime
 def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 'x')	's'	differing arm returns: String arm selected at runtime
+#
+# §10 canon over a fn value — content, name-independent (NUR031).
+#     GRADUATED 2026-08-27 (Stage 3) out of
+#     lang/spec/frontier/frontier-nur031-fn-eq.tsv. `canon` only READS a
+#     fn value's content, never invokes it, so it declares CompileReadsFn
+#     and the value rides as an ordinary const operand. That
+#     name-independence is what deq rides on: the binding a function was
+#     reached through is not part of what it is.
+def f fn x:Integer [Integer] [x add 1] canon (f/v)	'fn [[x:Integer][Integer][word(x) word(add) 1]]'	canon renders the anonymous fn literal — no `fn f`, because the name is how it was reached
+def f fn x:Integer [Integer] [x add 1] def a (f/v) (canon (a/v)) eq (canon (f/v))	true	so one function under two names has ONE canon — the name-independence deq rides on
+#
+# §11 UNDER-APPLICATION: a window WIDER than the callee's arity.
+#     GRADUATED 2026-08-28 (Stage 3) out of
+#     lang/spec/frontier/frontier-hof-audit.tsv §9c. The interpreter
+#     applies the callee to the values nearest it and leaves the deeper
+#     ones in the residual; the compiled lane now does the same, because
+#     RecordDynApply reports how many window values the lowered apply
+#     CONSUMES and the collapse site removes only that suffix. The arity
+#     is sound by construction — a closure unit with a known param count,
+#     or a single-signature concrete callee — so a factory whose branches
+#     return different arities, or an overloaded callee, never reaches the
+#     trim. The narrower window (fewer args than the arity) is the
+#     opposite shape and still refuses: the interpreter leaves the fn
+#     UNAPPLIED, which nothing here models.
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))	1 6	a 1-arg closure under a 2-wide window: the adder takes the top value, the deeper 1 survives
+def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 3 (mk 4))	1 2 7	…and two deeper values survive, in order
+def add2 fn [[a:Integer b:Integer][Integer][add a b]]  (9 1 2 add2/v)	9 3	a CONCRETE 2-arg callee under a 3-wide window — the survivor stays BELOW the result, the order the compiled lane used to get backwards
+def mk2 fn [[n:Integer] [Function] [([a:Integer b:Integer] => [a add b add n])]]  (1 2 3 (mk2 10))	1 15	a 2-arg closure under a 3-wide window consumes the top two

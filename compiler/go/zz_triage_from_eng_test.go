@@ -749,7 +749,7 @@ func TestLambdaHookQuoteScreen(t *testing.T) {
 	atomFd := &core.FnDefInfo{Signatures: []core.Signature{{
 		Params: []core.FnParam{{Name: "k", Type: core.TAtom}}, Impl: body,
 	}}}
-	if _, ok := lambdaHookCompatible(r, atomFd, []core.Value{core.NewCarrier(core.TAtom)}, ClosureInValue, true); ok {
+	if _, ok := lambdaHookCompatible(r, atomFd, []core.Value{core.NewCarrier(core.TAtom)}, ClosureInValue, true, false); ok {
 		t.Error("an Atom-typed lambda param must decline the callback admission")
 	}
 	// The explicit Quote flag declines identically, whatever the type.
@@ -757,14 +757,14 @@ func TestLambdaHookQuoteScreen(t *testing.T) {
 		Params: []core.FnParam{{Name: "k", Type: core.TInteger, Quote: true}}, Impl: body,
 	}}}
 	core.NormalizeSig(&quoteFd.Signatures[0])
-	if _, ok := lambdaHookCompatible(r, quoteFd, []core.Value{core.NewCarrier(core.TInteger)}, ClosureInValue, true); ok {
+	if _, ok := lambdaHookCompatible(r, quoteFd, []core.Value{core.NewCarrier(core.TInteger)}, ClosureInValue, true, false); ok {
 		t.Error("a /q lambda param must decline the callback admission")
 	}
 	// Control: a plain Integer param keeps admitting.
 	intFd := &core.FnDefInfo{Signatures: []core.Signature{{
 		Params: []core.FnParam{{Name: "n", Type: core.TInteger}}, Impl: body,
 	}}}
-	if _, ok := lambdaHookCompatible(r, intFd, []core.Value{core.NewCarrier(core.TInteger)}, ClosureInValue, true); !ok {
+	if _, ok := lambdaHookCompatible(r, intFd, []core.Value{core.NewCarrier(core.TInteger)}, ClosureInValue, true, false); !ok {
 		t.Error("a value-typed lambda param must keep admitting")
 	}
 }
@@ -830,6 +830,25 @@ func TestNotifyNameReboundBranches(t *testing.T) {
 	}
 	if other.poisoned {
 		t.Error("a ref not reading the rebound name must stay unpoisoned")
+	}
+	if es.Compilable {
+		t.Error("a module-scope rebind of a STORE-SITE ref's dep must refuse the program")
+	}
+
+	// An OPTIONAL ref (stampFnConst's optimisation stamp) poisons the same way
+	// but does NOT escalate: poisoning already restored the apply island, which
+	// is the exact behaviour the program had before anything stamped it.
+	// Refusing the whole program because an optimisation could not survive a
+	// rebind is strictly worse than declining the optimisation.
+	opt := NewEmitState()
+	optRef := &CompiledFnRef{depNames: map[string]bool{"files": true}, optional: true}
+	opt.storedFnRefs = []*CompiledFnRef{optRef}
+	opt.NotifyNameRebound("files")
+	if !optRef.poisoned {
+		t.Error("an optional ref reading the rebound name must still be poisoned")
+	}
+	if !opt.Compilable {
+		t.Error("an optional ref must NOT escalate a rebind to a program refusal")
 	}
 }
 

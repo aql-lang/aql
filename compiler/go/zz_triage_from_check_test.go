@@ -261,28 +261,56 @@ func TestRecordUserPolyCallGuards(t *testing.T) {
 
 func TestRecordDynApplyDeclines(t *testing.T) {
 	// Inactive → false.
-	if inactiveEmitState().RecordDynApply(nil, core.NewCarrier(core.TFunction), core.NewInteger(0), core.SrcPos{}) {
+	if _, ok := inactiveEmitState().RecordDynApply(nil, core.NewCarrier(core.TFunction), core.NewInteger(0), core.SrcPos{}); ok {
 		t.Fatal("inactive RecordDynApply should decline")
 	}
 	// Non-fn callee → false.
 	es := NewEmitState()
-	if es.RecordDynApply(nil, core.NewInteger(5), core.NewInteger(0), core.SrcPos{}) {
+	if _, ok := es.RecordDynApply(nil, core.NewInteger(5), core.NewInteger(0), core.SrcPos{}); ok {
 		t.Fatal("non-fn callee should decline")
 	}
 	// Fn-typed carrier but unresolvable → false.
-	if es.RecordDynApply(nil, core.NewCarrier(core.TFunction), core.NewInteger(0), core.SrcPos{}) {
+	if _, ok := es.RecordDynApply(nil, core.NewCarrier(core.TFunction), core.NewInteger(0), core.SrcPos{}); ok {
 		t.Fatal("unresolvable fn callee should decline")
 	}
 	// Fn resolves (a dynamic fn carrier resolves to an event operand), but an
 	// ARG is itself a fn value → false.
 	fn := core.NewDynamicCarrier(core.TFunction)
 	seedProduced(es, fn, 1)
-	if es.RecordDynApply([]core.Value{core.NewCarrier(core.TFunction)}, fn, core.NewInteger(0), core.SrcPos{}) {
+	if _, ok := es.RecordDynApply([]core.Value{core.NewCarrier(core.TFunction)}, fn, core.NewInteger(0), core.SrcPos{}); ok {
 		t.Fatal("fn-valued arg should decline")
 	}
 	// Fn resolves, an ARG is unresolvable → false.
-	if es.RecordDynApply([]core.Value{carrierVal(core.TInteger)}, fn, core.NewInteger(0), core.SrcPos{}) {
+	//
+	// The callee here must have a PROVABLE arity. Since the window trim moved
+	// the arity decision ahead of the operand build, an event lead with an
+	// unprovable arity refuses before any arg is resolved — so a carrier
+	// callee would exercise that refusal instead of this one.
+	single := core.NewFunction(core.FnDefInfo{Anonymous: true, Signatures: []core.Signature{{
+		Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+	}}})
+	single.Dynamic = true
+	esArg := NewEmitState()
+	seedProduced(esArg, single, 1)
+	if _, ok := esArg.RecordDynApply([]core.Value{carrierVal(core.TInteger)}, single, core.NewInteger(0), core.SrcPos{}); ok {
 		t.Fatal("unresolvable arg should decline")
+	}
+
+	// An OVERLOADED concrete callee has no static arity — which arm runs is a
+	// runtime question — so applyWindowArity declines and the window is left
+	// untrimmed. Paired with an event lead that means the standing refusal.
+	over := core.NewFunction(core.FnDefInfo{Anonymous: true, Signatures: []core.Signature{
+		{Args: []*core.Type{core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1},
+		{Args: []*core.Type{core.TInteger, core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1},
+	}})
+	over.Dynamic = true
+	esOver := NewEmitState()
+	seedProduced(esOver, over, 1)
+	if _, ok := esOver.RecordDynApply([]core.Value{core.NewInteger(1)}, over, core.NewCarrier(core.TInteger), core.SrcPos{}); ok {
+		t.Fatal("an overloaded callee has no provable arity — the event lead must refuse")
+	}
+	if esOver.Compilable {
+		t.Error("the overloaded event lead must mark the program uncompilable")
 	}
 }
 

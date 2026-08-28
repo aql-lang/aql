@@ -13,3 +13,5 @@ vm_rematch.go	eng
 compiled_runtime_vm.go	eng	
 vm_defer.go	eng	
 vm_callback_unit.go	eng
+vm_foreign_unit.go	eng
+vm_dyn_apply.go	eng

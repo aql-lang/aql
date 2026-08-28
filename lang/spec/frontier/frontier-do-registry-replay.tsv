@@ -12,3 +12,28 @@
 # natively and their ledger entries delete.
 # GRADUATED 2026-07-14 (do-def leak fidelity): both typed-def rows compile
 # natively as closure units and moved to lang/spec/bytecode-migrated.tsv.
+#
+# ── Added 2026-08-28 and REMOVED the same day; the note stays because the
+#    round trip is the finding. stampFnConst's container descent stamps the
+#    fn values inside a map const, which made these two mount-handler seeds
+#    refuse: compileStoredFnUnit analyses against the LIVE emit state, so the
+#    ENCLOSING compile inherited a dynamic-scope promotion decision and a dep
+#    record from a body it may never apply. Two rows landed here as ledgered
+#    refusals.
+#
+#    The justification for ledgering them was that without the descent the
+#    `for`-wrapped seed MISCOMPILES (a flex map captured by a mount handler
+#    loses its identity across loop iterations: the compiled run raises
+#    `expected a FlexMap, got FlexMap` where the interpreter round-trips),
+#    and a refusal beats a wrong answer. That justification was the mistake.
+#    The descent was not FIXING that miscompile, it was MASKING it — the
+#    stamp is an optimisation that declines for a capturing fn, for a body
+#    whose lowering refuses, and whenever runtime stamping is unarmed, so the
+#    wrong answer would have come back silently the first time any of those
+#    held.
+#
+#    The stamp now restores es.dynScopeNames and declines rather than perturb
+#    the enclosing program, and an optional ref no longer escalates a rebind
+#    to a program-level refusal. Both rows compile again, both buckets are
+#    gone, and the flex-map divergence is pinned honestly where divergences
+#    belong — varyKnownMiscompiles in test/go/langspec/vary_differential_test.go.

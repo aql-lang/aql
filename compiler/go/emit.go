@@ -1,6 +1,8 @@
 package compiler
 
 import (
+	"maps"
+
 	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
@@ -551,6 +553,26 @@ type EmitState struct {
 	// lowering later refused — the module-repl corpus rows).
 	storedGradualDepth int
 
+	// inStampCompile marks an EmitState that IS a stamp compile. It fences
+	// stampFnConst against re-entering itself: that helper stamps every fn
+	// const it interns, and a stamp compile interns, so a fn const inside a
+	// stamped body would compile to stamp it, and so on down — bounded only by
+	// fn nesting depth, which is not a bound. Nothing is lost: the inner fn
+	// compiles as part of the unit being stamped, and if it escapes to be
+	// applied dynamically the OUTER program stamps it where it interns it.
+	inStampCompile bool
+
+	// stampDeclined memoises the sig impls whose stamp already refused, keyed
+	// by the impl pointer the stamp would write to. The succeeding case
+	// memoises itself through impl.Compiled; without this the failing case
+	// re-paid a full body compile at every operand occurrence.
+	stampDeclined map[*core.BoruImpl]bool
+
+	// stampImpls maps a stamped sig impl to the unit backing its ref, so a
+	// stamp-only unit whose lowering refuses can find and clear the ref that
+	// would otherwise point at a trap stub.
+	stampImpls map[*core.BoruImpl]int
+
 	// reg is the registry the check pass runs against — set once at the top of
 	// Engine.Run while emit is active. It lets recorder-internal helpers reuse
 	// the lang-layer closure compiler (compileClosureBody) for a fn VALUE a body
@@ -859,6 +881,14 @@ type emitUnit struct {
 // OUT of tail marking, mirroring the interpreter's HasGen exclusion
 // from frame elision (plan Stage 4).
 type fnUnitRec struct {
+	// stampOnly marks a unit that exists ONLY to back a fn value's compiled
+	// ref (stampFnConst) — nothing in the program's code calls it. Its
+	// lowering is therefore NOT allowed to refuse the program: a stamp is an
+	// optimisation, and Finalize's per-unit lowering can decline a body the
+	// unit compile accepted. On refusal the unit becomes a trap stub, its ref
+	// is dropped, and the fn value interprets exactly as it did before
+	// anything stamped it.
+	stampOnly bool
 	// render is the interpreter's formatFnDef string for a RETURNED-closure
 	// unit (tryReturnedClosure) — stamped onto CompiledFn.Render and copied
 	// to the ClosurePayload at OpPushClosure, so a compiled closure VALUE
@@ -1132,6 +1162,7 @@ func (es *EmitState) forkForProbe() *EmitState {
 	// different unit (see compileStoredFnUnit / tryReturnedClosure). Same
 	// for the environment mode (dynEnv).
 	p.storedGradualDepth = es.storedGradualDepth
+	p.inStampCompile = es.inStampCompile
 	p.dynEnv = es.dynEnv
 	return p
 }
@@ -1835,6 +1866,7 @@ func (es *EmitState) resolveOperand(v core.Value) (EmitOperand, bool) {
 		}
 		es.freshenConst[idx] = true
 	}
+	es.stampFnConst(lit)
 	return ConstOperand(idx), true
 }
 
@@ -2397,6 +2429,219 @@ func StampCompiledRef(fd core.FnDefInfo, ref *CompiledFnRef) bool {
 	return false
 }
 
+// stampFnConst compiles a fn-value CONST's body to a unit of this program and
+// stamps the ref on the value's own sig impls, so a DYNAMIC APPLY of that value
+// runs on the VM instead of islanding.
+//
+// The gap this closes. `def twice fn [[f:Function x:Integer] [Integer] [f (f
+// x)]]  twice (…lambda…) 5` lowers to CALL_DYN_* with no OpFallback anywhere —
+// `fallbacks=0`, and TestCompiledCoverage calls it "0 islanded". At RUN time
+// the dynamic-apply opcodes islanded the callee through a sub-engine, because a
+// runtime fn value carrying no compiled unit has nothing else to run. The
+// disassembly metric cannot see that; the interp-entry census can, and it is
+// where 43 of the corpus's 66 `vm:island` entries came from.
+//
+// A dynamic apply's callee is unknown at compile time BY CONSTRUCTION, so the
+// only place its compiled body can live is on the VALUE. That is what makes
+// this the const chokepoint's business rather than any call site's.
+//
+// IN-PROGRAM, not detached — measured, not assumed. StampDetachedSig would
+// isolate each stamp on its own ForkConcurrent, which contains a refusal
+// neatly, and costs a registry fork plus a full compile pass PER fn const: 6x
+// on lang/go/modules and a transient OOM. compileStoredFnUnit lands the unit in
+// this program for the price of a body compile, and the refusal it exposes is
+// handled where it belongs — see fnUnitRec.stampOnly.
+//
+// Scope: a CAPTURING fn is skipped (its captures are the closure lowering's
+// business), an already-stamped value is left alone (first stamp wins — the
+// STORE-FN edge may have got there), and a declining sig stays plain. Every
+// decline is silent and per-sig: a missing ref costs speed, never an answer.
+// NO CONTAINER DESCENT — and the reason is measured, not a contract reading.
+//
+// Where the remaining work is: of the island rows this seam leaves, roughly
+// four in five are a fn read out of a container — `def m {f: (fn …)}  m.f 5`,
+// `def ops {f: inc/v}  ops.f 5`, a class field method, `def m {a:add/v}  m.a/u
+// 1 2`. So descending into list and map consts is the rest of the win, and it
+// WORKS: corpus census 141 -> 131, 0 refused, 0 islanded, differential green.
+//
+// It also makes some programs REFUSE that previously compiled. Measured on the
+// variation sampler, which the corpus alone does not reach:
+//
+//	                 before   after
+//	pass               403     401
+//	refused             33      36
+//
+// with three new buckets, and their names say what leaked: "dynamic-scope def
+// `files` of unpromoted computed value" and "module binding files rebound after
+// a stored handler captured it as a dep". Both come from the ENCLOSING compile,
+// not from the stamped body — so compileStoredFnUnit mutates shared emit state
+// (dep records, dynamic-scope promotion decisions) and not only the diagnostics
+// TruncateDiagnostics already restores. A stamp is a speculative compile of
+// code the program may never apply; it must leave the enclosing compile exactly
+// as it found it, and today it does not.
+//
+// AND IT LANDS ANYWAY, because the alternative is worse. Descent OFF, the same
+// sampler reports a MISCOMPILE on that seed — a flex map captured by a mount
+// handler loses its identity across loop iterations, and the compiled run
+// raises `[boru/set_error] expected a FlexMap, got FlexMap` where the
+// interpreter round-trips cleanly. It had been pinned since 2026-07-30. Descent
+// ON, that seed refuses instead. A refusal is a program that does not run; a
+// miscompile is a program that runs and lies, and this project's rule — stated
+// in every increment of this work — is that a fix producing a WRONG value is
+// worse than one producing none.
+//
+// So the three refusal buckets are ledgered rather than laundered
+// (varyRefusalLedger, with frontier rows), and the emit-state isolation above
+// is the named work that retires them. What is NOT acceptable is leaving the
+// miscompile in place to protect a refusal count.
+//
+// (An earlier note here blamed the clone contract — "StampFnValue clones, so
+// the user's spec value stays plain". That reading was wrong: the clone
+// protects a CALLER's input from the model module's stamp, not the compile
+// pass from stamping its own baked const. The real collision it caused was
+// ATTRIBUTION, and that is fixed at StampFnValue's already-stamped return.)
+func (es *EmitState) stampFnConst(v core.Value) { es.stampFnConstAt(v, 0) }
+
+// stampFnConstDepth bounds the container walk. A fn nested deeper than this
+// inside a const is not a shape the corpus writes, and an unbounded walk over
+// a value graph is how a compile pass acquires a pathological case.
+const stampFnConstDepth = 8
+
+func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
+	if depth > stampFnConstDepth || es.inStampCompile {
+		return
+	}
+	switch d := v.Data.(type) {
+	case core.ListPayload:
+		for _, e := range d.Elems {
+			es.stampFnConstAt(e, depth+1)
+		}
+		return
+	case core.MapPayload:
+		if d.M == nil {
+			return
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			es.stampFnConstAt(mv, depth+1)
+		}
+		return
+	}
+	fd, isFn := v.Data.(core.FnDefInfo)
+	if !isFn || !core.IsConcrete(v) || len(fd.Captured) > 0 {
+		return
+	}
+	for si := range fd.Signatures {
+		if !storedSigEligible(&fd.Signatures[si]) {
+			continue
+		}
+		impl, implOK := fd.Signatures[si].Impl.(*core.BoruImpl)
+		if !implOK || impl.Compiled != nil || es.stampDeclined[impl] {
+			continue // first stamp wins; a refusal is remembered, not re-paid
+		}
+		// EVERY unit the stamp compile creates is stamp-only, not just the
+		// entry one: a stamped body that defines a nested fn records that as a
+		// SUB-unit whose lowering can refuse where the entry unit's did not.
+		// Flagging only the entry left two corpus rows refusing on `fn vt-body:
+		// branch leaves extra values` — the same fatality one level down.
+		// DIAGNOSTIC ISOLATION. compileStoredFnUnit analyses the body against
+		// the LIVE check state, so a body whose analysis emits a finding leaks
+		// it into the enclosing program — and an error diagnostic REFUSES that
+		// program. Measured: `import "boru:math-util"  def n 0  if (n eq 0)
+		// MathUtil.sqrt [99] 16` went from compiling to "refused: check
+		// diagnostics" the moment fn consts started stamping.
+		//
+		// The store-fn edge never hit this because it stamps a curated
+		// population (CompileStoresFn slots); the const chokepoint sees every
+		// fn value in the program. A stamp is a speculative compile of code the
+		// program may never apply, so its findings are not the program's —
+		// TruncateDiagnostics drops exactly the ones this attempt added, the
+		// same seam the bounded fixed-point analyses use.
+		diagsBefore := len(es.reg.Check.Diagnostics)
+		unitsBefore := len(es.fnRecs)
+		// dynScopeNames is the OTHER channel the stamp writes through. A body
+		// whose free word cannot resolve locally takes dynScopeRescue, which
+		// adds that name here — and Finalize then installs an OpBindDynScope
+		// twin in every BINDING unit, so the ENCLOSING program's own `def` of
+		// that name must lower a dynamic bind it may have no promoted value
+		// for. Measured: `def files (flex {})` + a mount handler reading
+		// `files` went from compiling to "dynamic-scope def `files` of
+		// unpromoted computed value" the moment the handler stamped.
+		//
+		// A successful stamp genuinely NEEDS the name (its unit reads through
+		// OpLookupDynScope), so this cannot be restored under a live ref. The
+		// rule instead: a stamp that would change the enclosing program's own
+		// lowering is not worth taking. Decline it, restore the map, and let
+		// the apply island — the behaviour the program had before anything
+		// stamped, which is what the differential validates.
+		//
+		// maps.Clone, not a hand-rolled copy loop: the corpus has no program
+		// whose dynScopeNames is non-empty at a const-stamp site, so a copy
+		// loop's BODY is an unreachable statement. Cloning says the same thing
+		// in one always-executed call — the general restore below is unchanged,
+		// and nothing here assumes the map starts empty.
+		dynBefore := maps.Clone(es.dynScopeNames)
+		unit, ok := es.compileStoredFnUnit(fd, si, v.Pos())
+		es.reg.Check.TruncateDiagnostics(diagsBefore)
+		if ok && len(es.dynScopeNames) != len(dynBefore) {
+			for n := range es.dynScopeNames {
+				if !dynBefore[n] {
+					delete(es.dynScopeNames, n)
+				}
+			}
+			ok = false
+		}
+		if !ok {
+			if es.stampDeclined == nil {
+				es.stampDeclined = map[*core.BoruImpl]bool{}
+			}
+			es.stampDeclined[impl] = true
+			es.recordStamp(core.StampEvent{Name: fd.Name, Pos: v.Pos(), Reason: es.storedFnProbeReason})
+			continue
+		}
+		ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].Body()), optional: true}
+		impl.Compiled = ref
+		es.storedFnRefs = append(es.storedFnRefs, ref)
+		if es.stampImpls == nil {
+			es.stampImpls = map[*core.BoruImpl]int{}
+		}
+		es.stampImpls[impl] = unit
+		for u := unitsBefore; u < len(es.fnRecs); u++ {
+			if es.fnRecs[u] != nil {
+				es.fnRecs[u].stampOnly = true
+			}
+		}
+		es.recordStamp(core.StampEvent{Name: fd.Name, Pos: v.Pos(), Stamped: true})
+	}
+}
+
+// recordStamp files this stamp attempt in the registry's attribution log, so
+// -compile-report and the stamp-report gates see it.
+//
+// It is not bookkeeping. stampFnConst runs at the const chokepoint, which is
+// EARLIER than the store-site and model-action stamps, and first-stamp-wins
+// means those then skip. Without recording here, a value this stamped would
+// silently lose the attribution its own path used to produce — measured, as
+// TestFrontierLedger's "no stamp attempt recorded for gen".
+func (es *EmitState) recordStamp(ev core.StampEvent) {
+	if es != nil && es.reg != nil {
+		es.reg.RecordStampEvent(ev)
+	}
+}
+
+// dropStampRef clears the compiled ref that pointed at a stamp-only unit whose
+// lowering refused, so the fn value falls back to the interpreter exactly as it
+// would have if nothing had stamped it.
+func (es *EmitState) dropStampRef(unit int) {
+	for impl, u := range es.stampImpls {
+		if u == unit {
+			impl.Compiled = nil
+			delete(es.stampImpls, impl)
+			return
+		}
+	}
+}
+
 // storedHandlerDeps returns the MODULE-LEVEL names a stored handler / spawn body
 // reads — every body word bound as a user `def` at the store site. These are the
 // names whose later undef/redefinition (NotifyNameRebound) makes the frozen unit
@@ -2439,7 +2684,20 @@ func (es *EmitState) NotifyNameRebound(name string) {
 	for _, ref := range es.storedFnRefs {
 		if ref.depNames[name] {
 			ref.poisoned = true
-			depHit = true
+			// An OPTIONAL ref (stampFnConst's) does not escalate to the
+			// program-level refusal below. Poisoning already dropped it, and
+			// its fallback is the island the program used before the stamp
+			// existed — the behaviour the differential validates. Refusing the
+			// whole program because an OPTIMISATION could not survive a rebind
+			// is the same trade fnUnitRec.stampOnly rejects at Finalize.
+			//
+			// Measured: without this, container descent turned a compiling
+			// sampler seed into "module binding files rebound after a stored
+			// handler captured it as a dep" — a refusal caused entirely by the
+			// stamp having happened.
+			if !ref.optional {
+				depHit = true
+			}
 		}
 	}
 	// Poisoning alone is NOT enough for a module-scope rebind: the poisoned
@@ -3836,12 +4094,57 @@ func (es *EmitState) DynApplyLeadEligible(v core.Value) bool {
 // args below it deepest-last — exactly the stack OpCallDynTrailTop reads (it
 // reverses the arg window into forward order to match the interpreter's paren
 // auto-dispatch, where the fn's first param is the arg just below it).
-func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos core.SrcPos) bool {
+// applyWindowArity answers "how many values does this callee actually consume",
+// or declines when that is a runtime question.
+//
+// It is what the former "runtime quote state unknown" refusal was really
+// reaching for, and it applies to BOTH arrival kinds rather than only the event
+// lead — which is how it also fixes a silent miscompile the old gate never saw.
+//
+//   - UNDER-APPLICATION. `(1 2 (mk 4))` with a 1-arg adder nets [1, 6]
+//     interpreted: the adder takes the top value and the deeper 1 survives.
+//     Handing the op the whole window made it consume both, so the event lead
+//     refused outright. Handing it only the top `arity` reproduces the
+//     interpreter exactly, and the caller leaves the rest on the tape.
+//   - RESIDUAL ORDER, the miscompile. `(9 1 2 add2/v)` — a CONCRETE 2-arg
+//     callee under a 3-wide window — answered [3, 9] compiled against the
+//     interpreter's [9, 3]. The concrete path had no arity gate at all, so the
+//     survivor came out ABOVE the result instead of below it. Trimming the
+//     window puts it back where the interpreter leaves it.
+//
+// The arity claim is sound BY CONSTRUCTION, which is why trimming on it is
+// safe. producerReturnedClosureArity answers only when the producer is an
+// evCallUser whose unit has exactly ONE out-op and that op IS a closure unit,
+// so the runtime value is provably that one unit with that many params. The
+// shapes where a static arity could be wrong never reach the trim: a factory
+// whose branches return different arities refuses earlier ("if: then-branch
+// result of unknown provenance"), and an overloaded callee declines below.
+//
+// DECLINING IS NOT REFUSING. A fn-typed CARRIER (a `comp:Function` param — the
+// comparator convention) has no static arity and must keep compiling as it
+// does today, so the caller treats "unknown" as "no trim" on the concrete path
+// and keeps the standing refusal only on the event lead.
+func applyWindowArity(es *EmitState, fn core.Value) (int, bool) {
+	if arity, known := es.producerReturnedClosureArity(fn.ID); known {
+		return arity, true
+	}
+	fd, isFn := fn.Data.(core.FnDefInfo)
+	if !isFn {
+		return 0, false // a fn-typed CARRIER — no static arity, see the header
+	}
+	own := fd.OwnSigs()
+	if len(own) != 1 {
+		return 0, false // overloaded: which arm runs is a runtime question
+	}
+	return own[0].TotalArgs(), true
+}
+
+func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos core.SrcPos) (int, bool) {
 	if !es.Active() {
-		return false
+		return 0, false
 	}
 	if !core.IsFnValueResidual(fn) { // fn must be a genuine fn-value residual
-		return false
+		return 0, false
 	}
 	// A QUOTED fn value at the trailing position stays INERT in the
 	// interpreter (the paren never collapses — `(1 2 (quote (fn …)))` leaves
@@ -3850,7 +4153,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	// strips the STORED value's construction-time quote to mirror the read
 	// (callDynTrailTop), so an inline-quote must never record the apply.
 	if fn.Quoted {
-		return false
+		return 0, false
 	}
 	// The lowered apply (OpCallDynTrailTop) nets EXACTLY ONE value (nout: 1
 	// below). boru fns can return 0 or multiple values, so refuse the lowering
@@ -3862,29 +4165,20 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	// static return arity here; it stays lowered (the comparator convention),
 	// matching the interpreter's single-result paren auto-dispatch.
 	if !fnConcreteSingleValuedOrCarrier(fn) {
-		return false
+		return 0, false
 	}
 	fnOp, ok := es.resolveOperand(fn)
 	if !ok {
-		return false
-	}
-	ops := make([]EmitOperand, 0, len(args)+1)
-	ops = append(ops, fnOp)
-	for i := len(args) - 1; i >= 0; i-- {
-		if core.IsFnValueResidual(args[i]) {
-			return false
-		}
-		op, ok := es.resolveOperand(args[i])
-		if !ok {
-			return false
-		}
-		ops = append(ops, op)
+		return 0, false
 	}
 	// A paren-bounded apply that ALSO dispatched through the `apply` word
 	// (`(v comp/v apply)`) registered a pending unit apply before this event
 	// collapsed the tape — the event now owns the apply, so consume the
 	// pending entry rather than leaving it to refuse the unit at finish, and
 	// lower with the apply word's UNQUOTE semantics (OpCallDynApplyTop).
+	// Resolved BEFORE the operand build because the EVENT-lead arity gate
+	// below may TRIM the window, and the trim has to happen before the ops
+	// are laid out.
 	applyIdx := -1
 	if len(es.units) > 0 {
 		u := es.units[len(es.units)-1]
@@ -3894,6 +4188,49 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 				break
 			}
 		}
+	}
+	// WINDOW TRIM. The lowered apply consumes exactly as many window values as
+	// it is given operands, so that count must be the CALLEE'S OWN ARITY. When
+	// the arity is provably smaller than the window the interpreter
+	// UNDER-APPLIES, and the compiled lane must too — see applyWindowArity.
+	arity, arityKnown := applyWindowArity(es, fn)
+	refuse := ""
+	switch {
+	case arityKnown && arity > len(args):
+		// INSUFFICIENT ARGS: the interpreter leaves the fn UNAPPLIED in the
+		// residual (`(5 (mk2 10))` with a 2-arg callee nets [5, fn]). Nothing
+		// here models that, so it must REFUSE — and a bare decline is not
+		// enough: the collapse site's fallback (RegisterTrailingApply → the
+		// body-residual lowering) will lower the window anyway and answer a
+		// silent 15. Measured, declining quietly here turned the old
+		// event-lead refusal into a wrong answer.
+		refuse = "trailing fn-value apply with fewer args than the callee's arity"
+	case arityKnown:
+		args = args[len(args)-arity:] // keep the TOP arity; deeper values survive
+	case fnOp.kind == opEvent && applyIdx < 0:
+		// An EVENT lead with no provable arity keeps the standing refusal: the
+		// KeepQ lowering would consume the whole window on the unquoted path.
+		refuse = "trailing fn-value apply over a call result (runtime quote state unknown)"
+	}
+	// ONE refusal site for both arms, deliberately: the refusal-site census is
+	// a downward ratchet (test/go/langspec refusalSiteCeiling), so a second
+	// MarkUncompilable here would raise the count even though the shapes it
+	// refuses are strictly fewer than before.
+	if refuse != "" {
+		es.MarkUncompilable(refuse)
+		return 0, false
+	}
+	ops := make([]EmitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := len(args) - 1; i >= 0; i-- {
+		if core.IsFnValueResidual(args[i]) {
+			return 0, false
+		}
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return 0, false
+		}
+		ops = append(ops, op)
 	}
 	// An EVENT-provenance fn — the direct result of a compiled call — arrives
 	// WITHOUT the interpreter's read substitution, so its runtime quote
@@ -3907,28 +4244,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	// held while the only ops were the read-mirror strip and the apply
 	// word's unquote.) A local / const / dyn-scope arrival keeps the
 	// stripping op — a stored read IS substituted (the strip's contract).
-	keepQuote := false
-	if fnOp.kind == opEvent && applyIdx < 0 {
-		// The KeepQ lowering consumes EXACTLY len(args) window values on
-		// the unquoted path, so it is faithful only when the callee's own
-		// arity equals the window: a wider window under-applies in the
-		// interpreter (`(1 2 (mk 4))` nets [1, 6] — the 1-arg adder leaves
-		// the deeper value) where the op would consume both. A concrete
-		// single-sig callee proves its arity; anything else keeps the
-		// refusal (sound interpreter fallback).
-		proven := false
-		if arity, known := es.producerReturnedClosureArity(fn.ID); known {
-			proven = arity == len(args)
-		} else if fd, isFn := fn.Data.(core.FnDefInfo); isFn {
-			own := fd.OwnSigs()
-			proven = len(own) == 1 && own[0].TotalArgs() == len(args)
-		}
-		if !proven {
-			es.MarkUncompilable("trailing fn-value apply over a call result (runtime quote state unknown)")
-			return false
-		}
-		keepQuote = true
-	}
+	keepQuote := fnOp.kind == opEvent && applyIdx < 0
 	unquote := false
 	if applyIdx >= 0 {
 		u := es.units[len(es.units)-1]
@@ -3938,7 +4254,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote, dynApplyKeepQuote: keepQuote}})
 	es.setProduced(out, seq)
-	return true
+	return len(args), true
 }
 
 // RecordDynApplyName records the same fn-value apply as RecordDynApply, but
@@ -5040,13 +5356,24 @@ func (es *EmitState) RecordCallOperands(word string, sig *core.Signature, args [
 		}
 	}
 	for i, a := range args {
-		// A PREDICATE-TYPE NODE is the fn operand in node clothing: the
-		// name evaluates to its minted node (the Stage 2 flip), and a
-		// fn-invoking word (`5 is Positive`) runs the node's predicate
-		// body through CallBoru — exactly the re-step the VM cannot
-		// honour. Same refusal, same inert-slot exemptions.
-		_, isFnVal := a.Data.(core.FnDefInfo)
-		if !isFnVal && !core.IsPredicateTypeNode(a) {
+		// A PREDICATE-TYPE NODE used to be refused here alongside a raw fn
+		// value: the name evaluates to its minted node (the Stage 2 flip),
+		// and `5 is Positive` runs the node's predicate body — which read
+		// like the same re-step hazard.
+		//
+		// It never was one. A fn VALUE is refused because the handler puts
+		// it back on the tape, and the VM has no tape. A predicate node is
+		// a bare type literal: it rides as DATA, and the body runs through
+		// the CALLBACK seam (RunPredicate -> InvokeCallbackFn), never the
+		// tape. What actually blocked the graduation was that the seam's
+		// nested arm declined every detached unit, so the body interpreted
+		// and admitting these rows would have hidden an island inside a
+		// handler rather than removed one. That decline is gone
+		// (eng/go/vm_foreign_unit.go), so the node rides as an ordinary
+		// const and its body runs on the VM. A declined stamp still falls
+		// back to CallBoru — correct, slower, and visible to the
+		// interp-entry census, which is the gate that keeps this honest.
+		if _, isFnVal := a.Data.(core.FnDefInfo); !isFnVal {
 			continue
 		}
 		if inertFn || sig.FnInertArgs[i] {
@@ -7195,6 +7522,21 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// read — dynamic(FlexMap) — sitting under later statement results,
 	// edge-containers-2.tsv:76).
 	for i := 0; i+1 < len(residual); i++ {
+		// …and a value the COLLAPSE recorded as placed, which is the same
+		// argument from a recorded fact rather than a static type (the paren
+		// re-step rule, design/PAREN-RESTEP-RULE.0.md). The rewind that would
+		// have applied this value is the interpreter's own, and it declined:
+		// one survivor, so the pointer stepped past. Nothing downstream
+		// re-steps a program residual, so both engines leave it as data and
+		// the residual renders identically — `(mk 1) 2` is `fn (Integer) 2`
+		// on both lanes.
+		//
+		// Gated on NOT re-stepped, not merely on placed: an enclosing paren
+		// undoes the placement one level out (`((mk 1) 2)` is 3), and that
+		// shape is a real apply the machinery above owns.
+		if es.placedNotReStepped(residual[i]) {
+			continue
+		}
 		if residual[i].Dynamic &&
 			core.SigTypeMatches(residual[i], core.TFunction) {
 			if es.markWindowSeq != 0 {
@@ -7209,8 +7551,32 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 			return residual, 0, "fn value precedes residual args (auto-dispatch boundary)"
 		}
 	}
+	// An unconsumed fn-value CARRIER refuses on the stated grounds that "a VM
+	// closure renders unlike the interpreter's FnDefInfo".
+	//
+	// Measured 2026-08-27 (Stage 3): for a carrier a user paren PLACED and no
+	// enclosing paren re-stepped, that fear does not materialise — `(mk 1) 2`,
+	// `(mk2 5) 10` and a bare `(mk 5)` all render byte-identically on the two
+	// lanes. What the refusal was actually holding back is two OTHER hazards,
+	// and both are excluded here rather than assumed away:
+	//
+	//   - a bare-NAME read of a def-bound placed closure must DISPATCH, not
+	//     sit as data (ADR-011). Without the defReads exclusion
+	//     `def mk … def f (mk 7)  f` compiled `[fn]` against the
+	//     interpreter's `[7]` — a live divergence this relaxation introduced
+	//     and the exclusion removes. Placement is a LAYOUT fact; a read that
+	//     calls is a DISPATCH fact, and this loop needs both.
+	//   - a captured closure baked as a CONST loses its closure state
+	//     (TestEmitFnValueData). The placed-and-not-read carriers reaching
+	//     here do not take that path.
+	//
+	// What remains genuinely blocked is §6.3's universal fn value, and the
+	// residue is now visible rather than hidden behind a blanket refusal.
 	for i := range residual {
 		if core.IsFnTypedCarrier(residual[i]) {
+			if es.placedNotReStepped(residual[i]) && !es.isDefRead(residual[i]) {
+				continue
+			}
 			return residual, 0, "unconsumed fn-value carrier in residual (closure render)"
 		}
 	}
@@ -7742,6 +8108,25 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		}
 		flw.vm = flw.vm[:0]
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
+			if rec.stampOnly {
+				// A stamp-only unit is unreachable from the program's code —
+				// its only consumer is a fn value's compiled ref, which
+				// dropStampRef then clears. Refusing the whole PROGRAM because
+				// an optimisation could not lower is the wrong trade, and it is
+				// the one this arm prevents: two corpus rows went from
+				// compiling to "refused: fn storedfn$body: consumes loop
+				// results" the day stampFnConst was written without it. Emit the
+				// same defensive trap stub the unreachable-unit arm above uses,
+				// so unit indices stay aligned and any future reach fails loudly.
+				ti := len(p.Traps)
+				p.Traps = append(p.Traps, TrapSpec{Code: "internal_error",
+					Detail: "stamp-only fn unit " + rec.name + " entered after its lowering refused", Word: rec.name})
+				p.Fns = append(p.Fns, CompiledFn{Name: rec.name,
+					Code:  []Instr{{Op: OpTrap, Arg: int32(ti)}},
+					Debug: []core.SrcPos{rec.pos}})
+				es.dropStampRef(len(p.Fns) - 1)
+				continue
+			}
 			return nil, "fn " + rec.name + ": " + reason, false
 		}
 		// spillSeat may have allocated frame-local temps during lowering; grow
@@ -8225,6 +8610,30 @@ func (es *EmitState) leadPlacedNotRead(v core.Value) bool {
 	// interpreter places. Recorded at the collapse by recordParenReStep,
 	// because nothing downstream can still tell them apart.
 	return !es.parenReSteppedFn(v)
+}
+
+// placedNotReStepped reports whether the collapse recorded v as PLACED by a
+// user paren and NOT re-stepped by an enclosing one — the two facts that
+// together prove the interpreter leaves it as data where it now sits.
+//
+// This is the residual-layout twin of leadPlacedNotRead, and deliberately
+// does NOT consult read provenance: a def-read or member-read lead is a
+// DISPATCH question (does this name call?), while this is a LAYOUT question
+// (will anything re-step this value?). A read that dispatches is handled by
+// the apply arms above; by the time control reaches the refusal loop the
+// only question left is whether the value sits inert.
+func (es *EmitState) placedNotReStepped(v core.Value) bool {
+	return es.parenPlacedMemberFn(v) && !es.parenReSteppedFn(v)
+}
+
+// isDefRead reports whether v arrived through a read of a def-bound name —
+// the provenance that makes a value a DISPATCH rather than data, since a bare
+// name always calls (ADR-011). leadPlacedNotRead folds the same test into its
+// conjunction; the residual-layout loops ask for it separately because they
+// answer a different question and only some of them need it.
+func (es *EmitState) isDefRead(v core.Value) bool {
+	_, read := es.defReads[v.ID]
+	return read
 }
 
 func (es *EmitState) parenReSteppedFn(v core.Value) bool {

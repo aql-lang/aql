@@ -710,7 +710,7 @@ lambdas. Don't expect to capture caller args; pass them explicitly.
 > not hold at arity 0.
 >
 > **Mark, do not call — the seam is the lesson.** The first fix called
-> from `applyHandler` via `CallBoruFn`, which made apply a SECOND dispatch
+> from `applyHandler` via the since-retired `CallBoruFn`, which made apply a SECOND dispatch
 > path, and it diverged from the re-step three ways: a native 0-arg fn lost
 > its Go handler to an empty boru body, a body's `context` mutations landed
 > in a sub-engine instead of the caller's frame, and the check pass could

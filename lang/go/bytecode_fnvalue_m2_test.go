@@ -231,10 +231,19 @@ func TestIsFnValueOperandCompiles(t *testing.T) {
 		fnValueM2Native(t, c.name, c.src, c.want)
 	}
 
-	// NEGATIVE — the POSITIONAL boundary: a Function in `is`'s TYPE slot is a
-	// PREDICATE the handler INVOKES (RunPredicate), so it must keep refusing —
-	// whole-sig CompileReadsFn would run the predicate against a baked shape.
-	fnValueM2Refusal(t, "predicate fn in the TYPE slot stays refused",
+	// The former NEGATIVE, flipped 2026-08-28 and kept for what it got wrong.
+	//
+	// It read: a Function in `is`'s TYPE slot is a PREDICATE the handler
+	// INVOKES (RunPredicate), so it must keep refusing — "whole-sig
+	// CompileReadsFn would run the predicate against a baked shape". The
+	// premise is right and the inference is not. Invoking a predicate is not
+	// re-stepping it: the node rides as data and RunPredicate reaches the body
+	// through the CALLBACK seam. What was actually wrong was one level down —
+	// that seam declined every detached unit mid-run, so the body interpreted
+	// inside the handler. Fixed in eng/go/vm_foreign_unit.go; the row now
+	// compiles and answers what the interpreter answers, with no interpreter
+	// entry (design/FULL-COMPILATION.0.md §6.3).
+	fnValueM2Native(t, "predicate fn in the TYPE slot compiles",
 		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
-		"function value reaches is")
+		"[true]")
 }

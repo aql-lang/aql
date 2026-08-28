@@ -48,7 +48,7 @@ func TestFnConstructionCompiledParity(t *testing.T) {
 			if err != nil {
 				t.Fatalf("lang.New: %v", err)
 			}
-			interp, ierr := ai.Run(c.src)
+			interp, ierr := ai.RunInterp(c.src)
 			if ierr != nil {
 				t.Fatalf("interp: %v", ierr)
 			}

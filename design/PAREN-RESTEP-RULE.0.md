@@ -163,17 +163,57 @@ either agrees with `RunInterp` or refuses — it never answers differently.
 
 ## 6. Graduation
 
-Four shapes refuse where the interpreter answers, and they are the same
-shape in four positions: a paren-bounded carrier apply whose result is
-consumed somewhere the residual lowering does not reach — a list element, an
-`if` arm, or an un-rewound program residual that must stay placed.
+**Two of the four graduated 2026-08-27 with Stage 3's first increment, and
+neither needed the Apply kernel.** The refusals were called "the same shape in
+four positions". They are two different questions, and the answer to both
+turned out to be a record the collapse already takes:
 
-Recording the apply itself (rather than refusing) needs `RecordDynApply` to
-admit an EVENT lead, which `DynApplyLeadEligible` declines today. That is
-Stage 3's universal fn values plus the Apply kernel. When it lands,
-`TestParenReStepListElementRefusal` and the `nur101Refusal` fences graduate to
-parity rows, and the `ParenReSteppedFnIDs` side table can retire in favour of
-the recorded event.
+- **A LAYOUT question** — will anything re-step this value where it now
+  sits? At a program residual, no, and the records already prove it.
+  `placedNotReStepped` (`compiler/go/emit.go`) lets the residual refusal loop
+  skip such a value and simply lay it out, where before it refused, reading
+  the ABSENCE of a record as evidence of a hazard. `(inc/v) 7` and
+  `(tbl get k) 5` compile natively on that alone, and
+  `frontier-nur038-seal.tsv`'s explicit-paren row graduated into
+  `lang/spec/fn-value.tsv` §6 with them. A CONCRETE fn value joined the
+  record as its fourth placement shape for this reader; the two apply arms
+  gate on `Carrier` and `Dynamic` respectively and never see one, so the
+  widening was layout-only.
+- **A RENDERING question** — the second loop refused any unconsumed fn-value
+  carrier because "a VM closure renders unlike the interpreter's
+  `FnDefInfo`". **Measured, that fear does not materialise** for a carrier a
+  paren placed and nothing re-stepped: `(mk 1) 2`, `(mk2 5) 10`, `(mk 5) 10`
+  and a bare `(mk2 5)` all render byte-identically on the two lanes. They are
+  parity rows now, and `(mk2 5)` left `TestFactoryApplyCompiles`'s negative
+  list — whose own parity assertion had never fired for it.
+
+  What the blanket refusal was actually holding back is two OTHER hazards,
+  found by relaxing it and watching what broke:
+
+  1. **A bare-NAME read of a def-bound placed closure must DISPATCH**, not
+     sit as data (ADR-011). `def mk … def f (mk 7)  f` compiled `[fn]`
+     against the interpreter's `[7]` the moment the refusal came off — a
+     live divergence the relaxation introduced and a `defReads` exclusion
+     removes. Placement is a LAYOUT fact; a read that calls is a DISPATCH
+     fact, and this loop needs both.
+  2. **A captured closure baked as a CONST loses its closure state**
+     (`TestEmitFnValueData`). The placed-and-unread carriers reaching this
+     loop do not take that path.
+
+  Both are excluded explicitly rather than assumed away. What remains
+  genuinely blocked is §6.3's universal fn value — and the residue is now
+  visible instead of hidden behind one refusal covering three things.
+
+The two remaining arm/list shapes (`if true [(mk 1) 2]`, `[((mk 1) 2)]`) need
+the apply RECORDED rather than skipped, which needs `RecordDynApply` to admit
+an EVENT lead — `DynApplyLeadEligible` declines it today. When that lands,
+`TestParenReStepListElementRefusal` graduates to a parity row and
+`ParenReSteppedFnIDs` can retire in favour of the recorded event.
+
+The ratchet for what already graduated is
+`TestParenReStepPlacedLayoutCompiles`, pinned POSITIVE on purpose: the rule
+test tolerates refusals by design, which is what makes it safe to extend and
+useless for catching a regression back to one.
 
 ## 7. Four records this opened
 

@@ -19,6 +19,9 @@ def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end 5 m.p m.p 7	5 7	stack form t
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7	3 7	a computed first argument still seals before the second call
 def m {l: ([x:Any] => [x])} end m.l 5 m.l 7	5 7	afn lambda values seal too
 def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/v} end m.p 5 h 7	5 7	value call then bare-word call (the word barrier, unchanged)
-def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end (m.p 5) (m.p 7)	5 7	explicit parens as the seal (unchanged)
+# The explicit-paren row GRADUATED 2026-08-27 (Stage 3) and now lives in
+# lang/spec/fn-value.tsv §6: it compiles natively and answers `5 7` on both
+# lanes. Its siblings below still refuse — they are the UNSEALED spellings,
+# where the residual really does carry a dynamic value ahead of later args.
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 end m.p 7	5 7	explicit `end` as the seal (unchanged)
 def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7	5 7	an arg-bearing overload wins over its 0-arg twin, per statement (the NUR035 guard holds under the seal)

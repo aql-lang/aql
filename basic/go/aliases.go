@@ -600,6 +600,7 @@ var (
 	FullStack              = core.FullStack
 	CheckFullStack         = core.CheckFullStack
 	NextMarkID             = core.NextMarkID
+	MatchFnSig             = core.MatchFnSig
 	OpenUnifyMap           = core.OpenUnifyMap
 	RankSignatures         = core.RankSignatures
 	UnaryNumOpNative       = core.UnaryNumOpNative

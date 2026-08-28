@@ -9,12 +9,12 @@
 # compile != interpret miscompile, check-clean. compiler/go/callable_words.go's
 # foreignFnHome therefore DECLINES the lowering, and `filter` islands.
 #
-# The island is correct, just slow: the OpFallback span runs the callback seam,
-# which routes the body to its defining registry (core.CallBoruFn). The row is
-# here rather than in lang/spec/module-fnvalue-boundary.tsv §4 because it is the
-# one row of that section the compiler cannot yet model, and the main corpus
-# ratchets islands to zero.
-import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]	[3 4]	a cross-module predicate resolves `lim` in its OWN module (2), not the caller's (100)
+# GRADUATED 2026-08-27 (Stage 3) into lang/spec/module-fnvalue-boundary.tsv §4,
+# where the rest of that section always lived. The closure lowering now
+# compiles a foreign body against its DEFINING registry with the CALLER's
+# CheckState shared onto it, so the island is gone and `filter A.big` compiles
+# natively. The paragraphs above are kept as the record of what the island was
+# and why it was correct while it stood.
 #
 # ADR-016 / NUR077 §5 Hole 1 (2026-08-21): `apply` on a fn whose ONLY
 #   signatures are 0-arg now applies it at the apply site itself, so

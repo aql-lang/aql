@@ -49,13 +49,15 @@ import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [(args.0 1) 
 import module [def secret fn [[n:Integer] [Integer] [n add 1]] def pub fn [[n:Integer] [Integer] [secret n]] export "A" {pub: pub/v}] end def secret fn [[n:Integer] [Integer] [n mul 100]] A.pub 5	6	APPLYING an export resolves its free `secret` in the DEFINING module (500 = the caller's)
 import module [def secret fn [[n:Integer] [Integer] [n add 1]] def pub fn [[n:Integer] [Integer] [secret n]] export "A" {pub: pub/v}] end def g A.pub def secret fn [[n:Integer] [Integer] [n mul 100]] g 5	6	BINDING an export to a name keeps its scope too — `def g A.pub` must answer exactly as `A.pub`
 import module [def secret fn [[n:Integer] [Integer] [n add 1]] def pub fn [[n:Integer] [Integer] [secret n]] export "A" {pub: pub/v}] end def secret fn [[n:Integer] [Integer] [n mul 100]] def apply1 fn [[f:Function n:Integer] [Integer] [f n]] apply1 A.pub 5	6	a named `f:Function` PARAMETER — the commonest way a library takes a callback — keeps the argument's scope
-# The NATIVE callback seam (filter's Function form) belongs here too, but it
-# is the one row of this section the compiler cannot yet model: the closure
-# lowering declines a foreign fn value, so the call ISLANDS. It therefore
-# lives in lang/spec/frontier/frontier-fnvalue-scope.tsv, outside this
-# ratchet, with its graduation criterion pinned in the frontier ledger. Its
-# SEMANTICS are pinned on both engines by
+# The NATIVE callback seam (filter's Function form) GRADUATED here 2026-08-27
+# (Stage 3). It was the one row of this section the compiler could not model:
+# the closure lowering declined a foreign fn value and the call ISLANDED. The
+# lowering now compiles the body against the DEFINING registry with the
+# CALLER's CheckState shared onto it — bindings foreign, analysis local — so
+# `lim` resolves in module A and the unit still lands in the caller's program.
+# Its SEMANTICS are also pinned on both engines by
 # lang/go/function_value_scope_test.go ("filter Function form").
+import module [def lim fn [[n:Integer] [Integer] [2]] def big fn [[e:Map] [Boolean] [(e dot value) gt (lim 0)]] export "A" {big: big/v}] end def lim fn [[n:Integer] [Integer] [100]] filter A.big [1 2 3 4]	[3 4]	a cross-module predicate in a NATIVE callback slot resolves `lim` in its OWN module (2), not the caller's (100)
 #
 # The negative: scope travels with the VALUE, it does not open the module.
 import module [def hidden fn [[n:Integer] [Integer] [n add 1]] def only fn [[n:Integer] [Integer] [hidden n]] export "A" {only: only/v}] end hidden 5	ERROR:undefined_word	a module-private word stays private — the importer cannot reach `hidden`, only the exported value can
