@@ -92,7 +92,7 @@ keep the two in sync in the same commit.
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
 | [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
-| [NUR106](#nur106) | Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compares the compiled lane against itself and passes unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
+| [NUR106](#nur106) | RESOLVED 2026-08-28. Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compared the compiled lane against itself and passed unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them. A THIRD sweep round found four more in the sibling package `lang/go/test`, which the first two never reached; the guard `test/go/oraclegate` now pins bare `Run` calls per file, with counts, in any test file that also calls `RunCompiled` | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
 | [NUR107](#nur107) | RESOLVED 2026-08-28. A type-mismatched callee under a leading one-arg apply diverged: `ld ([k:String] => [k]) 14` raised `signature_error` interpreted and returned `[fn (String) 14]` compiled — with a two-value declared return, no error at all. `MatchFnSig` moved into core and the VM now raises for a Function whose overloads do not admit the args, keeping the data behaviour only for values that are genuinely not callable. The DETAIL half (the interpreter names the binding, the VM cannot) stays open under NUR108 | the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
@@ -393,8 +393,8 @@ without checking what that answer rested on.
 
 ## NUR106 — the parity harness stopped comparing lanes, and stayed green {#nur106}
 
-**Status:** Pending (verdict: resolve by fix — the sweep landed; the guard has
-not) · **Recorded:** 2026-08-27 · **Surfaced by:** measuring NUR101's ruling
+**Status:** Resolved 2026-08-28 (the sweep landed 2026-08-27 and was completed
+in a third round; the guard is `test/go/oraclegate`) · **Recorded:** 2026-08-27 · **Surfaced by:** measuring NUR101's ruling
 against `RunInterp` and finding the interpreter had never produced the answer
 its own tests asserted
 
@@ -442,6 +442,32 @@ the next Run-like flip from stranding its oracle uses again. Candidates,
 cheapest first — rename the oracle in test helpers to a single
 `interpOracle(t, src)` so there is one site to flip; or a lint/vet rule
 rejecting `.Run(` in a file that also calls `RunCompiled`.
+
+**GUARD LANDED 2026-08-28, as the second candidate:
+`test/go/oraclegate`.** In a test file that also calls `RunCompiled`, a bare
+`Run` is presumed to be an oracle read and must be justified BY FILE, with a
+COUNT — so adding one to a pinned file trips the count and adding one to an
+unpinned file trips the table. It ratchets like `fissiongate`: a count that
+falls must be lowered, and a pinned file with no calls left must be removed.
+Verified by reintroducing a swept site and watching it fail.
+
+**AND THE SWEEP HAD RESIDUE AGAIN — a third round, in a package the earlier
+two never reached.** `lang/go/test` is a sibling package, so a sweep of
+`lang/go` misses it entirely. Four sites, three of them reading `Run` into a
+variable literally named `interp` and comparing it against `RunCompiled`
+under an error message that says "(miscompile)":
+
+```
+lang/go/test/fn_triple_compiled_test.go:51      interp, ierr := ai.Run(c.src)
+lang/go/test/xml_interp_compiled_test.go:46     interp, ierr := ai.Run(c.src)
+lang/go/test/module_typed_exports_test.go:84    interp, err  := ai.Run(src)
+lang/go/bytecode_probe_widenings_test.go:35     _, errC := a.Run(src)   ← labelled "interp" in its own message
+```
+
+All four now read `RunInterp`, and all four still pass — those rows genuinely
+agree, so no new divergence came out of this round. That is the argument for
+the gate rather than a fourth sweep: **three sweeps found residue three
+times.** A sweep does not stay swept; a gate does.
 
 ---
 
