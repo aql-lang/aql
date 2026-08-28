@@ -5098,13 +5098,24 @@ func (es *EmitState) RecordCallOperands(word string, sig *core.Signature, args [
 		}
 	}
 	for i, a := range args {
-		// A PREDICATE-TYPE NODE is the fn operand in node clothing: the
-		// name evaluates to its minted node (the Stage 2 flip), and a
-		// fn-invoking word (`5 is Positive`) runs the node's predicate
-		// body through CallBoru — exactly the re-step the VM cannot
-		// honour. Same refusal, same inert-slot exemptions.
-		_, isFnVal := a.Data.(core.FnDefInfo)
-		if !isFnVal && !core.IsPredicateTypeNode(a) {
+		// A PREDICATE-TYPE NODE used to be refused here alongside a raw fn
+		// value: the name evaluates to its minted node (the Stage 2 flip),
+		// and `5 is Positive` runs the node's predicate body — which read
+		// like the same re-step hazard.
+		//
+		// It never was one. A fn VALUE is refused because the handler puts
+		// it back on the tape, and the VM has no tape. A predicate node is
+		// a bare type literal: it rides as DATA, and the body runs through
+		// the CALLBACK seam (RunPredicate -> InvokeCallbackFn), never the
+		// tape. What actually blocked the graduation was that the seam's
+		// nested arm declined every detached unit, so the body interpreted
+		// and admitting these rows would have hidden an island inside a
+		// handler rather than removed one. That decline is gone
+		// (eng/go/vm_foreign_unit.go), so the node rides as an ordinary
+		// const and its body runs on the VM. A declined stamp still falls
+		// back to CallBoru — correct, slower, and visible to the
+		// interp-entry census, which is the gate that keeps this honest.
+		if _, isFnVal := a.Data.(core.FnDefInfo); !isFnVal {
 			continue
 		}
 		if inertFn || sig.FnInertArgs[i] {

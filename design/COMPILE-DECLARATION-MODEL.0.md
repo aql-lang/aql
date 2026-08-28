@@ -85,7 +85,11 @@ higher-order refusals live in.
 ### 1.2 The frontier: 153 rows, and what blocks them
 
 `lang/spec/frontier/*.tsv` ledgers every spec row the interpreter answers
-correctly and the compiler does not. **153 rows across 28 files.** The
+correctly and the compiler does not. **153 rows across 28 files** at the time
+this section was written; **145 across 27** since the eight
+`function value reaches is` rows graduated (2026-08-28 — see §6.3 of
+design/FULL-COMPILATION.0.md; the histogram below is the original
+measurement, kept as the baseline the ratchet moves against). The
 `failsWith` histogram from `test/go/langspec/frontier_spec_test.go`:
 
 | Reason | Rows |
@@ -93,7 +97,7 @@ correctly and the compiler does not. **153 rows across 28 files.** The
 | `body result of unknown provenance` | 22 |
 | `operand of unknown provenance` | 12 |
 | `fn-value-call boundary` | 10 |
-| `function value reaches is` | 8 |
+| `function value reaches is` | 8 → **0** (graduated) |
 | `def-bound computed fn apply` | 8 |
 | `check diagnostics` | 8 |
 | `islanded: program embeds an OpFallback span` | 5 |

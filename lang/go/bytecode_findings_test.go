@@ -505,13 +505,26 @@ func TestFnValueIntrospectionLowers(t *testing.T) {
 		}
 	}
 
-	// Negative: `is` over a predicate fn INVOKES it (applies the predicate), so
-	// it must NOT be exempted — it still falls back (parity preserved).
+	// The former negative, kept as a POSITIVE with its history.
+	//
+	// This asserted that `is` over a predicate fn must not compile, "because
+	// it INVOKES the fn". The premise held and the conclusion did not follow:
+	// invoking is not re-stepping. A predicate NODE rides as data and its body
+	// runs through the callback seam, so the tape hazard introspection is
+	// exempted from was never present here either. What genuinely blocked it
+	// was that the callback seam interpreted the body — fixed in
+	// eng/go/vm_foreign_unit.go, after which these rows compile with no
+	// interpreter entry at all (design/FULL-COMPILATION.0.md §6.3).
 	const inv = `def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`
 	c, _ := New()
-	_, compiled, _ := c.RunCompiled(inv)
-	if compiled {
-		t.Errorf("`is` over a predicate fn must not compile as introspection (it invokes the fn)")
+	gotInv, compiled, errInv := c.RunCompiled(inv)
+	if !compiled || errInv != nil {
+		t.Errorf("`is` over a predicate fn: compiled=%v err=%v, want a compiled run", compiled, errInv)
+	}
+	d, _ := New()
+	wantInv, _ := d.RunInterp(inv)
+	if fmt.Sprint(gotInv) != fmt.Sprint(wantInv) {
+		t.Errorf("`is` over a predicate fn: compiled=%v interpreted=%v", gotInv, wantInv)
 	}
 }
 

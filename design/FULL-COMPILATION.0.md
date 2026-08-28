@@ -99,7 +99,7 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | Family | Rows | Essence |
 |---|---:|---|
 | A. Computed-fn / closure provenance | 45 | fn values whose shape the checker cannot know: Church/SKI/CPS chains, `FnUtil` results, computed closures at argument slots, curried chains |
-| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The 8 `is` rows COMPILE if the gate is relaxed and, until 2026-08-28, still must not have been: measured, the predicate body ran on the interpreter inside the handler, so admitting them would have hidden an island rather than removed one. **The body now runs on the VM** (§6.3, RESOLVED — the cause was a cross-program decline in `runUnitNested`, not the representation), so the stated condition for graduating these 8 is met |
+| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The 8 `is` rows COMPILE if the gate is relaxed and, until 2026-08-28, still must not have been: measured, the predicate body ran on the interpreter inside the handler, so admitting them would have hidden an island rather than removed one. **The body now runs on the VM** (§6.3, RESOLVED — the cause was a cross-program decline in `runUnitNested`, not the representation), and **all 8 GRADUATED 2026-08-28** into `lang/spec/fnpred.tsv` §7 with two shapes the ledger never carried. Family B is closed |
 | C. Multi-dynamic-result residual | 11 | two dynamic results live at once; the static seat model cannot address them |
 | D. Provenance totalization | 13 | operands with no producing event: `$module`/namespace synthetics, cross-registry captures |
 | E. Check-diagnostics sentinel | 8 | the checker rejects programs the interpreter runs (`lang/go/boru.go:459-472`) |
@@ -1447,6 +1447,27 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   row that moved onto the VM still answers what `RunInterp` answers. The
   pin flipped to `TestPredicateBodyRunsOnTheVM` and now fails if the
   interpreter arm comes back.
+
+  **The graduation, landed and PROVEN honest.** With the body on the VM the
+  refusal in `RecordCallOperands` had nothing left to defend, and the arm
+  that refused a predicate-type OPERAND is gone. What the first attempt
+  lacked was not a better argument but a detector: a program-level
+  `FALLBACK` check cannot see a `CallBoru` inside a handler, so "it compiles
+  and answers correctly" was compatible with an island. The interp-entry
+  census is that detector, and it is decisive here — **10 rows joined the
+  compiled corpus (7603 → 7613, compiled 7229 → 7239) and the census did not
+  move: 163 before, 163 after.** Had any of the new rows interpreted its
+  predicate, the count could only have risen. Two shapes graduated that the
+  frontier file never carried: the input-type gate (`"x" is Even` → `false`
+  without running the body) and the type literal itself
+  (`Even is Even` → `true`).
+
+  The ledger's stated cause was wrong in the same way §6.4's and NUR101's
+  were: "a predicate type's constraint IS a function value, so `is` walks
+  that value into the Stage 3 gate". It does not. A predicate NODE is a bare
+  type literal that rides as DATA; the body runs through the callback seam,
+  never the tape, so the re-step the gate defends against was never in play.
+  The gate was right by accident, for a reason nobody had written down.
 
   **The hazard the fix widened, closed with it.** `ClosurePayload` carried a
   `Unit` and no program. That was sound for as long as a closure could only

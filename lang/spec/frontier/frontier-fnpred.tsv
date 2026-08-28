@@ -1,26 +1,26 @@
-# `is` against a predicate type — the headline spelling for the membership
-# a `fnpred` declaration creates, and the one shape of it that does not
-# compile.
+# GRADUATED 2026-08-28 — this file is empty by design.
 #
-# A predicate type's constraint IS a function value, so asking `4 is Even`
-# walks that value into `is` and hits the Stage 3 refusal "function value
-# reaches is". The refusal is PRE-EXISTING and has nothing to do with
-# `fnpred`: the capitalised-fn form this word replaces
-# (`def Even fn n:Integer Boolean [...]`) refuses byte-identically, which is
-# why no `is <predicate-type>` row exists anywhere in the main corpus today
-# — the compiling shapes there reach membership through typed defs and
-# typed params instead (lang/spec/fnpred.tsv, lang/spec/record.tsv §177).
+# The eight `is <predicate-type>` rows it carried now live in
+# lang/spec/fnpred.tsv §7, beside the typed-def forms they mirror — which is
+# exactly where this file's own graduation note said they would go.
 #
-# They live here rather than being dropped because `4 is Even` is what a
-# reader will actually write, and the interpreter — the oracle — answers it
-# correctly. Graduation: Stage 3 admitting a function value at `is`, at
-# which point these rows move into lang/spec/fnpred.tsv beside the typed-def
-# forms they mirror.
-def Even fnpred n:Integer [eq 0 (mod 2 n)]  4 is Even	true	an even Integer is a member
-def Even fnpred n:Integer [eq 0 (mod 2 n)]  5 is Even	false	an odd one is not
-def Even fnpred [[n:Integer] [eq 0 (mod 2 n)]]  4 is Even	true	the spec-list form is the same type
-def Even fnpred [[n:Integer] [eq 0 (mod 2 n)]]  5 is Even	false	…and refuses the same values
-def Big fnpred n:Integer [n gt 10]  50 is Big	true	Boolean convention: true means member
-def Big fnpred n:Integer [n gt 10]  5 is Big	false	…and false means not
-def Positive fnpred n:Integer [if (n gt 0) [n] [None]]  5 is Positive	true	None-on-failure: a non-none result means member
-def Positive fnpred n:Integer [if (n gt 0) [n] [None]]  0 is Positive	false	…and none means not
+# The note's DIAGNOSIS was wrong in a way worth keeping. It read:
+#
+#   "A predicate type's constraint IS a function value, so asking `4 is Even`
+#    walks that value into `is` and hits the Stage 3 refusal."
+#
+# A predicate NODE is not a function value walking anywhere. It is a bare
+# type literal that rides as data; the body runs through the callback seam
+# (RunPredicate -> InvokeCallbackFn), never the tape, so the re-step the
+# refusal defends against was never in play. What DID block the graduation
+# was invisible from here: the callback seam's nested arm declined every
+# detached unit, so the body interpreted inside the handler and admitting the
+# rows would have hidden an island rather than removed one. Once foreign
+# units became hostable mid-run (eng/go/vm_foreign_unit.go) the rows compiled
+# with no interpreter entry at all.
+#
+# Two shapes the file never carried graduated with them — the input-type gate
+# (`"x" is Even`) and the type literal itself (`Even is Even`).
+#
+# Kept as a stub rather than deleted: the frontier ledger is a census, and a
+# file that vanishes reads as a file nobody measured.

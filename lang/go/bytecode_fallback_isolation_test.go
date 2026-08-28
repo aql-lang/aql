@@ -65,33 +65,37 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
 	cases := []string{
+		// EVERY row here pairs a rollback-sensitive SIDE EFFECT with a tail
+		// that still refuses, and the tail is the perishable half: it has been
+		// re-chosen three times as the subset widened. It was the predicate-fn
+		// `is` until 2026-08-28, on the reasoning that "the VM cannot re-step a
+		// fn body" — which was never why that row refused (a predicate node
+		// rides as data; §6.3), and it compiles now that predicate bodies run
+		// on the VM. The forward-lens `apply` no-match is the current tail: it
+		// takes dispatch recovery, is pure, and is short.
+		//
 		// type mint + undef, then reuse — a re-mint would clash. A flex default
 		// bakes (make freshens it per instance) AND a mutation of the flex field
 		// (`p.x push 1`) now compiles too (the class field's declared List type
 		// rides strict through gradual contagion — cross-module element typing),
-		// so this pairs the class-mint + `undef C` with a still-uncompilable
-		// predicate-fn `is` (the VM cannot re-step a fn body) to keep the whole
-		// row on the fallback path: the undef-C side effect must still be rolled
-		// back before the whole-program interpreter fallback re-runs.
-		`def C class {x:(flex [])} def p (make C {}) undef C end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] (p.x push 1) (5 is Positive)`,
+		// so the class-mint + `undef C` needs the refusing tail to keep the
+		// whole row on the fallback path: the undef-C side effect must still be
+		// rolled back before the whole-program interpreter fallback re-runs.
+		`def C class {x:(flex [])} def p (make C {}) undef C end (p.x push 1) ([10 20 30] apply $.1)`,
 		// fn registration under a capitalised name — a re-register clashes.
-		// `is` over the predicate fn INVOKES it (the VM cannot re-step a fn
-		// body), so this stays uncompilable even though `typeof`/`tcmp` over a
-		// fn value now compile (fn-value introspection).
-		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] [10 20 30] apply $.1`,
 		// native-module import whose namespace metadata a re-import degrades.
 		// The module-SYNTHETIC reads (`typeof MathUtil`, `MathUtil.$name`,
-		// `MathUtil.$module.name`) now const-fold and compile, so these pair the
-		// import with a still-uncompilable operation: the import side effect must
-		// still be rolled back before the whole-program fallback re-runs.
-		`import "boru:math-util" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		// `MathUtil.$module.name`) now const-fold and compile, so this pairs the
+		// import with the refusing tail: the import side effect must still be
+		// rolled back before the whole-program fallback re-runs.
+		`import "boru:math-util" [10 20 30] apply $.1`,
 		// boru:test import isolation: Test.test / Test.describe cases (closure
 		// path) AND the property words prop/check-prop/skip (their inert bodies
 		// bake as consts — the dot-access reach inside now an inert member) all
-		// compile, so pair the import with the predicate-fn `is` (still
-		// uncompilable — the VM cannot re-step the fn body, exactly as row 2/3)
-		// to keep the row on the fallback path and exercise the import rollback.
-		`import "boru:test" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		// compile, so this pairs the import with the refusing tail to exercise
+		// the import rollback.
+		`import "boru:test" [10 20 30] apply $.1`,
 	}
 	for _, src := range cases {
 		ac, err := New()
