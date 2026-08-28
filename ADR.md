@@ -341,3 +341,12 @@ fails to park a 0-arg fn bound to a param, yielding the call's result
 where the author asked for the function; and `execFnDefLiteral` treats a
 0-arg **anonymous** value as data where a named one dispatches.
 [FUNCTION-VALUE-SCOPE.0.md](design/FUNCTION-VALUE-SCOPE.0.md)
+
+**Enforcement** (2026-08-28): `test/go/aritygate` pins every comparison
+against the arity of a function being inspected, so a new exception fails
+the build instead of waiting to be noticed. It was built after a THIRD
+violation — the compiler's ARITY-1 BOUNDARY, which let a one-input
+callback compile and refused a two-input one — turned up during unrelated
+work, having survived unrecorded because it read as a coverage limit
+rather than a semantic exception. Live divergences are tracked as
+[NUR100](NUR.md#nur100).

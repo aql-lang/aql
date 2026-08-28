@@ -253,11 +253,25 @@ per-word permutation at the closure bind (`ClosureInStackPair`) reconciles
 them, and the rows compile at both arities with no boundary anywhere. Five
 ledger rows graduated with it (design/FULL-COMPILATION.0.md §6.3).
 
-Worth stating for the register's own sake: this site was found while fixing
-something else, not by looking for arity-keyed rules. A gate that COUNTS them
-— the way `fissiongate` counts kind-predicate call sites — would have named it
-on the day it was written. That is a cheap thing to build and this register
-has no equivalent.
+This site was found while fixing something else, not by looking for
+arity-keyed rules, which is the register's own weakness rather than an
+accident. **`test/go/aritygate` now counts them** (2026-08-28): it flags every
+comparison against the arity of a function being INSPECTED — `len(sig.Params)`,
+`x.Arity`, `sig.TotalArgs()` — and pins the census per file, so a new site
+fails the build and a retired one must be tightened away.
+
+Two design notes on it, because a gate that cries wolf gets disabled. It does
+NOT flag a handler bounds-checking the args IT received (`len(args) < 2`): a
+function reading its own declared positions is not an exception to anything,
+and an earlier draft that counted those found 298 sites across 100 files. And a
+PIN IS NOT AN ACCUSATION — most of the 148 pinned sites are the matcher and its
+machinery reading arities in order to MATCH a signature, which IS the argument
+rule. The pins exist so a CHANGE forces someone to say which kind it is. Sites
+1 and 2 above are marked in the table as the named divergences they are.
+
+Verified against a deliberate violation before landing: adding
+`len(s.Params) == 1` to a pinned file fails the gate, and removing it restores
+green.
 
 **No verdict on sites 1 and 2.** The predicate role does need to test ONE
 value, so removing site 1's gate needs a replacement contract, not a deletion
