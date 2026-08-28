@@ -873,6 +873,9 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 	if !core.IsAppliableFn(fnVal) {
 		return stack, nil // not callable: [args, fn] is already the interpreter's trailing residual
 	}
+	if err := noMatchIfSigged(reg, fnVal, args, curDebug, pc, r); err != nil {
+		return nil, err
+	}
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && core.IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
@@ -892,6 +895,56 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
+}
+
+// noMatchIfSigged raises when fnVal is a Function carrying OWN SIGNATURES none
+// of which admits args — NUR107.
+//
+// The distinction it draws is the whole point. Leaving `[args, fn]` on the
+// stack is RIGHT for a value that is not callable, and the interpreter does the
+// same. It is WRONG for a Function whose overloads simply do not take these
+// arguments: the interpreter's word dispatch raises signature_error there, and
+// the VM used to read "no overload matched" as "not callable" and answer data.
+// Measured, that produced a wrong answer with no error at all —
+//
+//	def ld fn [[g:Function x:Integer] [Function Integer] [(g x)]]
+//	ld ([k:String] => [k]) 14
+//	  interpreted  signature_error
+//	  compiled     [fn (String) 14]
+//
+// — because the frame's return-count check happened to accept the two-value
+// residual. Shapes whose return arity did NOT accept it merely surfaced a
+// type_error instead, which is why this looked like a taxonomy quibble rather
+// than a silent miscompile.
+//
+// A value with no FnDefInfo payload (a fn-typed carrier, a closure) has no own
+// signatures to consult, so it keeps the data behaviour: MatchFnSig's nil is
+// "no opinion" there, and the length check below is what separates the two
+// readings of nil.
+func noMatchIfSigged(reg *core.Registry, fnVal core.Value, args []core.Value, curDebug []core.SrcPos, pc int, r *core.Registry) error {
+	// Three ways a value has NO own signatures worth consulting here, all
+	// meaning the same thing — this guard has no opinion, leave the window to
+	// the paths below:
+	//
+	//   - no FnDefInfo payload at all (a bare `Function` type literal is
+	//     appliable by lattice TAG, with nothing to match against);
+	//   - an FnDefInfo carrying only fallback sigs;
+	//   - a module DELEGATION wrapper, the one fn value whose own signatures
+	//     are not the ones dispatch consults — execFnDefLiteral looks the
+	//     inner native up by NAME and matches against ITS signatures
+	//     (lang/go/CLAUDE.md, "Module FnDef wrappers — inner sig BarrierPos").
+	//     Asking MatchFnSig about the wrapper answers the wrong question, and
+	//     answering it rejected perfectly well-formed calls —
+	//     TestSeam7DelegationApplySuccess caught that immediately. The
+	//     delegation branch below does the real matching.
+	fnDef, ok := fnVal.Data.(core.FnDefInfo)
+	if !ok || len(fnDef.OwnSigs()) == 0 || core.IsDelegationFnDef(fnDef) {
+		return nil
+	}
+	if core.MatchFnSig(fnVal, args) != nil {
+		return nil
+	}
+	return stampAt(core.RuntimeNoMatch(reg, fnDef.Name, args), curDebug, pc, r)
 }
 
 // callDynApplyTop is callDynTrailTop under the `apply` WORD's semantics

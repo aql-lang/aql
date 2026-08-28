@@ -92,7 +92,7 @@ keep the two in sync in the same commit.
 | [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR106](#nur106) | Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compares the compiled lane against itself and passes unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
-| [NUR107](#nur107) | A type-mismatched callee under a leading one-arg apply diverges: `ld ([k:String] => [k]) 14` raises `signature_error` interpreted and returns `[fn (String) 14]` compiled. `TestLeadApplyNoMatchTwoReturnParity` pinned it as NON-reproducing on 2026-08-03 — against the vacuous oracle of NUR106 | the NUR106 oracle sweep, 2026-08-27 |
+| [NUR107](#nur107) | RESOLVED 2026-08-28. A type-mismatched callee under a leading one-arg apply diverged: `ld ([k:String] => [k]) 14` raised `signature_error` interpreted and returned `[fn (String) 14]` compiled — with a two-value declared return, no error at all. `MatchFnSig` moved into core and the VM now raises for a Function whose overloads do not admit the args, keeping the data behaviour only for values that are genuinely not callable. The DETAIL half (the interpreter names the binding, the VM cannot) stays open under NUR108 | the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
 | [NUR100](#nur100) | ADR-016 ("arity and origin never change function behaviour") is contradicted by live code: `RunPredicate` admits or refuses a function as a predicate purely on its parameter count, and `smallerArityOverload` gates a compile refusal the same way | the maintainer's ruling that the ADR-016 rule is absolute, 2026-08-25 |
@@ -377,8 +377,9 @@ rejecting `.Run(` in a file that also calls `RunCompiled`.
 
 ## NUR107 — a no-match callee raises interpreted and returns data compiled {#nur107}
 
-**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** the NUR106
-oracle sweep, on the very test that had pinned this claim as non-reproducing
+**Status:** Resolved 2026-08-28 · **Recorded:** 2026-08-27 · **Surfaced by:**
+the NUR106 oracle sweep, on the very test that had pinned this claim as
+non-reproducing
 
 **Rule:** the two lanes agree on errors as well as values — the same program
 raises the same taxonomy on both, which is what
@@ -409,6 +410,40 @@ is re-pinned to the measured behaviour with this record's number on it.
 function* from *a function no overload of which matches*, and raise for the
 second. The blast radius is every dynamic-apply opcode, so it wants its own
 increment rather than riding NUR101's.
+
+**RESOLVED 2026-08-28**, exactly as the verdict specified. `MatchFnSig` moved
+DOWN from `basic/go` into `core` (every operand was already a core type, and
+`eng` cannot import `basic`), and the VM's trailing apply now asks it before
+falling through to the island: a Function carrying own signatures none of which
+admits the args raises `core.RuntimeNoMatch` — the same builder the interpreter
+uses — instead of leaving `[fn, args]` as data. Both lanes answer
+`signature_error`.
+
+Two things the fix turned up that the record did not have:
+
+- **The naked shape.** With a TWO-value declared return
+  (`[Function Integer]`), the two-value residual `[fn, arg]` satisfies the
+  frame's return-count check, so the compiled lane raised *nothing at all*.
+  Narrower return arities merely surfaced a `type_error`, which is what made
+  this look like a taxonomy quibble rather than a silent wrong answer.
+- **Delegation wrappers are the one exception, and they are load-bearing.** A
+  module wrapper FnDef's own signatures are NOT the ones dispatch consults —
+  `execFnDefLiteral` looks the inner native up by name and matches against its
+  signatures. Asking `MatchFnSig` about the wrapper answers the wrong question
+  and rejects well-formed calls; `TestSeam7DelegationApplySuccess` caught it
+  immediately. The guard skips `IsDelegationFnDef` and lets the delegation
+  branch do the real matching.
+
+`TestLeadApplyNoMatchTwoReturnParity` and the 2-arg row of
+`TestLeadApplyArityMismatchParity` both flip from pinned-divergence to parity
+assertions — the latter rejoining the shared `fnValueM2NativeErrParity` helper
+exactly as its own note asked.
+
+**What is NOT closed is the DETAIL, and it belongs to NUR108.** The interpreter
+names the binding it dispatched (``cannot call `g` ``); the VM has only an
+anonymous fn value and renders ``cannot call `` ``. The taxonomy matches, the
+message does not. Carrying the source name to the apply site is plumbing the
+recorder does not do yet.
 
 ---
 
