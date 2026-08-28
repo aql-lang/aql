@@ -22,8 +22,10 @@ package langspec
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +112,28 @@ import (
 // perhaps three rows. Read the seam counts as a shape, never as a priority
 // order: a big number here can be one row in a loop.
 //
+// WHERE THE 130 ROWS ARE, by file AND the seams those rows touch (the per-file
+// lines the run logs; ROW counts, so they add up against the ceiling). Three
+// clusters are single-mechanism, which is what makes them worth picking:
+//
+//	reach.tsv                14 rows   Engine.Run 14, runPooledSub 14
+//	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
+//	module-parse/debug/log   26 rows   Engine.Run only
+//	bytecode-migrated.tsv    14 rows   RunResolved 6, vm:island 6, CallBoru 2, …
+//	fn-value.tsv              6 rows   vm:island 5
+//	module-fnvalue-boundary   6 rows   vm:island-resolved 6
+//	valof.tsv                 5 rows   vm:island 5
+//	module-test.tsv           7 rows   Engine.Run 7, CallBoru 3
+//
+// Engine.Run appears everywhere because every other seam runs a nested engine;
+// a row with ONLY Engine.Run is the interesting case — nothing islanded, the
+// whole body simply interpreted. That is the 26 module rows, and it is Stage
+// 6/7 work (module bodies compiling), not a seam flip.
+//
+// reach.tsv is the largest single-mechanism cluster: 14 rows, every one through
+// runPooledSub, the per-element sub-evaluation seam. path-modifier.tsv is 13
+// rows, every one through vm:island. Neither needs a survey to start on.
+//
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
@@ -123,6 +147,12 @@ func TestInterpEntryCensus(t *testing.T) {
 	}
 	seams := map[string]int{}
 	perFile := map[string]int{}
+	// fileSeamRows counts ROWS, not entries: file → seam → how many of that
+	// file's dirty rows touch that seam at all. Entry counts mislead (see the
+	// CallBoru note above — 224 of them were one word in a loop), and the
+	// ceiling is a row ratchet, so the attribution that picks the next fix has
+	// to be in the same unit the ceiling is.
+	fileSeamRows := map[string]map[string]int{}
 	rows, dirty, ran := 0, 0, 0
 
 	for _, e := range entries {
@@ -155,8 +185,12 @@ func TestInterpEntryCensus(t *testing.T) {
 			}
 			dirty++
 			perFile[e.Name()]++
+			if fileSeamRows[e.Name()] == nil {
+				fileSeamRows[e.Name()] = map[string]int{}
+			}
 			for s, c := range seen {
 				seams[s] += c
+				fileSeamRows[e.Name()][s]++ // once per ROW, whatever c is
 			}
 		}
 		f.Close()
@@ -169,7 +203,7 @@ func TestInterpEntryCensus(t *testing.T) {
 	}
 	for _, f := range sortedKeys(perFile) {
 		if perFile[f] >= 5 {
-			t.Logf("   file %-34s %d rows", f, perFile[f])
+			t.Logf("   file %-34s %d rows   via %s", f, perFile[f], seamBreakdown(fileSeamRows[f]))
 		}
 	}
 
@@ -213,4 +247,18 @@ func runWithEntryHook(t *testing.T, src string) (int, map[string]int, bool) {
 	mu.Lock()
 	defer mu.Unlock()
 	return total, seen, compiled
+}
+
+// seamBreakdown renders one file's seam→rows map as a stable, compact line —
+// "Engine.Run 14, CallBoru 9" — highest first, ties broken by name so a diff of
+// two census runs is readable. Empty maps cannot reach here (a file only lands
+// in perFile once a row recorded at least one seam).
+func seamBreakdown(bySeam map[string]int) string {
+	names := sortedKeys(bySeam)
+	sort.SliceStable(names, func(i, j int) bool { return bySeam[names[i]] > bySeam[names[j]] })
+	parts := make([]string, 0, len(names))
+	for _, n := range names {
+		parts = append(parts, fmt.Sprintf("%s %d", n, bySeam[n]))
+	}
+	return strings.Join(parts, ", ")
 }
