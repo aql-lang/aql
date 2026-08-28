@@ -288,6 +288,44 @@ its raise; the trap should blame the same token the interpreter does. Pinned
 meanwhile in `TestTypedDefBindCompiles`, which now compares Code and Detail
 and fences the position gap explicitly, so closing it fails the fence.
 
+**SHARPENED 2026-08-28, and one plausible fix measured and REJECTED.**
+
+Three things the record did not have:
+
+1. **It is NOT a general "compiled diagnostics lose positions" problem.**
+   Ordinary runtime errors carry exact, MATCHING positions on both lanes, at
+   top level and inside a fn body — `def n (2 add 3)  n div 0` and
+   `def f fn [[x:Integer] [Integer] [x div 0]]  f 5` both report `1:20` and
+   `1:36` respectively on each lane. The position machinery works; only the
+   typed-bind path is blind.
+2. **It is not fn-body-specific either**, which the record's example implies.
+   A TOP-LEVEL dynamic typed def loses it identically:
+   `def n (2 add 3)  def v:(Integer gt 10) n  v` renders no position compiled
+   against the interpreter's `1:18`.
+3. **The VM comment blaming `fmt.Errorf` is stale.** Traced at the raise, the
+   error IS a `*BoruError` and `stampAt` IS reached with a valid pc — but
+   `curDebug[pc]` is `0:0`, because the RECORD carried no position. The loss is
+   in the recorder, not the stamper.
+
+**Why the recorder has none, and why the obvious fix is wrong.** `def`'s args
+cannot supply it: the NAME arrives as a `/q`-captured Atom and the BODY as an
+already-collected value, and measured, BOTH are `0:0` at every typed-def record
+site. The interpreter does not read them either — the ENGINE stamps its error at
+the dispatch token after the handler returns.
+
+`r.Check.CurCallPos` looks like exactly the right source: it is that dispatch
+position, and the control words already use it for handler-built diagnostics.
+**Measured, it is not.** It is documented as "overwritten on every dispatch",
+and by the time the `def` handler runs it holds a NESTED call's position — the
+fix rendered `1:10` where the interpreter says `1:18`, and `1:62` where it says
+`1:34`. That trades a missing caret for a confidently wrong one, which is worse:
+"source position unknown" is at least honest. Reverted, unshipped.
+
+So the fix needs the `def` TOKEN's own position threaded to the record — a
+position the recorder does not currently receive from any of its three
+available sources. That is the work, and it is smaller than "compiled
+diagnostics" but larger than a fallback expression.
+
 ---
 
 ## NUR110 — a def in an untaken branch binds anyway {#nur110}
