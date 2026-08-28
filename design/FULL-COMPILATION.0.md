@@ -1250,11 +1250,23 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
 
   A compiled closure binds its inputs POSITIONALLY: `invokeClosureOn`
   (`eng/go/vm.go`) fills the unit's leading param slots from the handler's
-  `inputs` slice in order. The INTERPRETER does not — a Function-value
-  callback goes through `MatchFnSig`, which consumes the STACK top-down,
-  so the handler's push of (accumulator, element) makes the ELEMENT
-  `sig[0]`. **With one input the two rules cannot disagree**, which is why
-  list `each` compiles. With two they do:
+  `inputs` slice in order. The interpreter presents them in the CALLBACK
+  CONVENTION for the container, and the two conventions differ:
+
+  | form | sig[0] | sig[1] |
+  | --- | --- | --- |
+  | MAP fold/scan | ACCUMULATOR | entry (KeyVal) |
+  | LIST fold/scan | ELEMENT | accumulator |
+
+  Measured with AMBIGUOUS param types, so it is a real ordering convention
+  and not a by-type assignment that merely looks like one:
+  `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed, while
+  `fold ([x:Any y:Any] => [x]) [7] 0` answers the element. The MAP form
+  already agrees on both lanes — ambiguous types included — because the
+  handler's input order happens to match its convention.
+
+  **With one input no convention can disagree**, which is why list `each`
+  compiles. With two, the list form's do:
 
   ```
   fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
@@ -1263,12 +1275,17 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   ```
 
   Nine shapes diverged that way. Supplying the carriers in the other order
-  changed NOTHING — carriers TYPE the body; they do not set the runtime
-  order. So admitting a 2-input list callback needs the compiled frame to
-  reproduce `MatchFnSig`'s ASSIGNMENT rather than bind positionally. That
-  is the "modelled fn-value callback frame" the ledger asked for, and the
-  ledger was right about `fold`/`scan` in exactly the way it was wrong
-  about `each`. Fence: `lang/go`'s `TestListFoldCallbackOrderFence`.
+  changed NOTHING, and that is the most useful thing measured: carriers
+  only TYPE the body. The unit's param slots come from the LAMBDA's own
+  declared order, and what lands in each is the handler's push order — so
+  both carrier spellings produced 60.
+
+  Admitting a 2-input list callback therefore means making the two orders
+  agree at the seam that actually decides it: the handler's input order for
+  that form, or a per-word permutation at the closure bind. That is the
+  "modelled fn-value callback frame" the ledger asked for, and the ledger
+  was right about `fold`/`scan` in exactly the way it was wrong about
+  `each`. Fence: `lang/go`'s `TestListFoldCallbackOrderFence`.
 
   **Two probe lessons, each of which bought a wrong admission.**
 
@@ -1276,9 +1293,13 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
      matcher reassigns by type. `fn [[a:Integer b:String]…] fold f/v
      [1 2 3] 'seed'` matching, and its swap not matching, reads like "`a`
      is the element" and proves nothing of the kind — the matcher put the
-     Integer in whichever slot was declared Integer. Use SAME-TYPED params
-     or make no positional claim. The first reading of this convention was
-     built on that probe and was wrong.
+     Integer in whichever slot was declared Integer. Use SAME-TYPED or
+     `Any` params, or make no positional claim. The first reading of this
+     convention was built on that probe and was wrong; the correction then
+     over-shot the other way, asserting the accumulator is `sig[0]` for
+     BOTH containers, which the ambiguous-type probe above disproves. Both
+     errors came from reasoning about the matcher instead of running a body
+     that reports which argument it received.
   2. **The accumulator-stability guard was unnecessary.** The
      accumulator's runtime type after step 1 is the BODY'S RETURN, not the
      seed's, which looked like it needed a guard. It does not: the body

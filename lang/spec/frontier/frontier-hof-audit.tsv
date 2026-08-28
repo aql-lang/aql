@@ -221,26 +221,38 @@ def chainif fn [[a:Function b:Function s:Integer][Any][def r1 (a s) if (r1.ok) [
 #
 #     WHAT IS LEFT IS NOT THE SAME SHAPE, and the reason is ARITY. A
 #     compiled closure binds its inputs POSITIONALLY (invokeClosureOn fills
-#     the unit's leading param slots in order); the interpreter runs a
-#     Function-value callback through MatchFnSig, which consumes the STACK
-#     top-down, so the handler's push of (accumulator, element) makes the
-#     ELEMENT sig[0]. At ONE input the two rules cannot disagree — which is
-#     why each graduated. At TWO they do:
+#     the unit's leading param slots in order); the interpreter presents
+#     them in the CALLBACK CONVENTION for the container, and the two
+#     conventions differ:
+#
+#       MAP  fold/scan   sig[0] = ACCUMULATOR, sig[1] = entry
+#       LIST fold/scan   sig[0] = ELEMENT,     sig[1] = accumulator
+#
+#     Measured with AMBIGUOUS param types, so it is a real ordering
+#     convention rather than a by-type assignment that looks like one:
+#     `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed, while
+#     `fold ([x:Any y:Any] => [x]) [7] 0` answers the element. The MAP form
+#     already agrees on both lanes because the handler's input order
+#     matches its convention; at ONE input no convention can disagree,
+#     which is why each graduated. The LIST form at TWO does:
 #
 #       fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
 #         interpreted 123   (a accumulates: 0 -> 1 -> 12 -> 123)
 #         positional   60   (the pair arrives swapped)
 #
-#     Admitting fold/scan therefore needs the compiled callback frame to
-#     reproduce MatchFnSig's ASSIGNMENT, not more carriers — supplying them
-#     in the other order changes nothing. Fence: lang/go's
+#     Supplying the carriers in the other order changes NOTHING — carriers
+#     only TYPE the body; the unit's param slots come from the LAMBDA's own
+#     declared order and what lands in each is the handler's push order. So
+#     admitting fold/scan means making the two orders agree at the seam
+#     that decides it: the handler's input order for that form, or a
+#     per-word permutation at the closure bind. Fence: lang/go's
 #     TestListFoldCallbackOrderFence.
 #
 #     ON THE ROW COMMENTS BELOW: for the LIST form the callback's sig is
-#     (ELEMENT, ACCUMULATOR). Establishing that needs SAME-TYPED params —
-#     a probe with distinct types cannot see position, because MatchFnSig
-#     reassigns by type, and reading one as positional evidence is what
-#     produced the swapped admission above.
+#     (ELEMENT, ACCUMULATOR). Establishing that needs SAME-TYPED or `Any`
+#     params — a probe with distinct types cannot see position, because
+#     MatchFnSig reassigns by type, and reading one as positional evidence
+#     is what produced the swapped admission above.
 def dbl x:Integer => [mul 2 x]  for-each dbl/v [1 2 3]		for-each discards every result — the fn must still satisfy its OWN declared return arity (a void lambda breaks its contract, not for-each's)
 def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0	6	fold with an explicit seed: the callback's sig is (element, accumulator) — same-typed params, so `add` reads the same either way
 fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0	123	…and a NON-commutative body shows the order: `a` is the accumulator (0 -> 1 -> 12 -> 123), which a positional compiled binding gets backwards (60)

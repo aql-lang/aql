@@ -224,10 +224,15 @@ func TestForeignClosureCaptureResolvesInItsOwnRegistry(t *testing.T) {
 //
 // A compiled closure binds its inputs POSITIONALLY — invokeClosureOn fills the
 // unit's leading param slots from the handler's `inputs` slice in order. The
-// interpreter does not: a Function-value callback goes through MatchFnSig,
-// which consumes the STACK top-down, so the handler's push of (accumulator,
-// element) makes the ELEMENT sig[0]. With ONE input the two rules cannot
-// disagree, which is why list `each` is admitted. With two they do:
+// interpreter presents them in the CALLBACK CONVENTION for the container, and
+// the two conventions differ: a MAP fold takes (accumulator, entry) while a
+// LIST fold takes (element, accumulator). That is measured with AMBIGUOUS param
+// types — `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed and
+// `fold ([x:Any y:Any] => [x]) [7] 0` answers the element — so it is a real
+// ordering convention, not a by-type assignment that resembles one. The MAP
+// form already agrees on both lanes because the handler's order matches its
+// convention. With ONE input no convention can disagree, which is why list
+// `each` is admitted. The LIST form at two does:
 //
 //	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
 //	  interpreted  123      a accumulates: 0 → 1 → 12 → 123
@@ -235,9 +240,11 @@ func TestForeignClosureCaptureResolvesInItsOwnRegistry(t *testing.T) {
 //
 // An attempt to admit these by supplying carriers in lambdaCallbackInputs
 // produced exactly that, on nine shapes. Swapping the carrier order did NOT
-// change it — carriers TYPE the body, they do not set the runtime order — so
-// admitting fold/scan needs the compiled callback frame to reproduce
-// MatchFnSig's assignment instead of binding positionally.
+// change it: carriers only TYPE the body, the unit's param slots come from the
+// LAMBDA's declared order, and what lands in each is the handler's push order.
+// So admitting fold/scan means making the two orders agree at the seam that
+// decides it — the handler's input order for that form, or a per-word
+// permutation at the closure bind.
 //
 // The rows below use SAME-TYPED params on purpose. A typed probe cannot see
 // positional order at all, because the matcher reassigns by type; that is what

@@ -824,18 +824,33 @@ func lambdaCallbackInputs(r *core.Registry, word string, spec core.CallableSpec,
 //
 // A compiled closure binds its inputs POSITIONALLY: invokeClosureOn fills the
 // unit's leading param slots from the handler's `inputs` slice in order
-// (eng/go/vm.go). The INTERPRETER does not — a Function-value callback goes
-// through MatchFnSig, which assigns arguments to params by TYPE. With one input
-// the two cannot disagree. With two they can, and for a list fold they do:
+// (eng/go/vm.go). The interpreter presents them in the CALLBACK CONVENTION for
+// the container, and the two conventions are NOT the same:
+//
+//	MAP  fold/scan   sig[0] = ACCUMULATOR, sig[1] = entry
+//	LIST fold/scan   sig[0] = ELEMENT,     sig[1] = accumulator
+//
+// That asymmetry is measured, not inferred, and it holds with AMBIGUOUS param
+// types — `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed while
+// `fold ([x:Any y:Any] => [x]) [7] 0` answers the element — so it is a real
+// ordering convention and not a by-type assignment that merely looks like one.
+//
+// The MAP form already agrees on both lanes, ambiguous types included, because
+// the handler's input order happens to match its convention. The LIST form does
+// not, so the pair arrives swapped:
 //
 //	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
 //	  interpreted  123      (a accumulates: 0 → 1 → 12 → 123)
 //	  compiled      60      (the pair arrives swapped)
 //
-// Supplying the carriers in the other order does NOT fix it — the carriers only
-// TYPE the body; the runtime order is the handler's push order either way. So
-// admitting fold/scan needs the compiled callback frame to reproduce
-// MatchFnSig's ASSIGNMENT rather than bind positionally. That is the "modelled
+// Supplying the carriers in the other order does NOT fix it, and that is the
+// most useful thing measured here: carriers only TYPE the body. The unit's
+// param slots come from the LAMBDA's own declared order, and what lands in each
+// is the handler's push order — so both carrier spellings produced 60.
+//
+// Admitting fold/scan over a list therefore means making the two orders agree
+// at the seam that actually decides it: the handler's input order for that
+// form, or a per-word permutation at the closure bind. That is the "modelled
 // fn-value callback frame" the frontier ledger asked for, now located exactly,
 // and it is why the ledger was right about fold/scan and wrong about each.
 //
@@ -844,8 +859,12 @@ func lambdaCallbackInputs(r *core.Registry, word string, spec core.CallableSpec,
 //   - A TYPED probe cannot establish positional order, because the matcher
 //     reassigns by type. `fn [[a:Integer b:String]…] fold f/v [1 2 3] 'seed'`
 //     matching, and its swap not matching, reads like "a is the element" and
-//     proves nothing of the kind. Use SAME-TYPED params or make no positional
-//     claim.
+//     proves nothing of the kind. Use SAME-TYPED or Any params, or make no
+//     positional claim. A first version of THIS note then over-corrected the
+//     other way — asserting the accumulator is sig[0] for both containers, i.e.
+//     no asymmetry at all — which the ambiguous-type probe above disproves.
+//     Both errors came from reasoning about the matcher instead of running a
+//     body that reports which argument it got.
 //   - The accumulator's runtime type after step 1 is the BODY'S RETURN, not the
 //     seed's, so a single static carrier looked like it needed a stability
 //     guard. It does not: the body binds the accumulator at its DECLARED PARAM
