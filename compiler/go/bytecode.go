@@ -687,6 +687,20 @@ type CompiledFnRef struct {
 	// stamped ref always has poisoned=false).
 	depNames map[string]bool
 	poisoned bool
+	// optional marks a ref that exists ONLY as an optimisation — stampFnConst's
+	// fn-value consts, whose fallback is the island the program used before
+	// anything stamped them. It changes what a dep REBIND costs: poisoning
+	// drops the ref (Finalize leaves Prog nil, the apply islands), and for an
+	// optional ref that IS the whole remedy, because islanding restores the
+	// exact pre-stamp behaviour the differential already validates.
+	//
+	// A store-site ref is not optional and keeps the program-level refusal:
+	// its handler is invoked at RUNTIME, after module-scope def sites have all
+	// executed in the compile pass, so the CallBoru fallback reads the
+	// PASS-FINAL binding where the interpreter read the point-in-program one
+	// (design/RELOAD-INVALIDATION.0.md §3 F1). Nothing the compile pass can do
+	// makes that right, which is why the whole program falls back there.
+	optional bool
 	// DepSnap is the RUNTIME-stamped twin of the compile-time poisoning above
 	// (StampDetachedFn): a ref created OUTSIDE a whole-program pass has no
 	// recording EmitState alive to observe later rebinds, so freshness moves

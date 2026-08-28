@@ -831,6 +831,25 @@ func TestNotifyNameReboundBranches(t *testing.T) {
 	if other.poisoned {
 		t.Error("a ref not reading the rebound name must stay unpoisoned")
 	}
+	if es.Compilable {
+		t.Error("a module-scope rebind of a STORE-SITE ref's dep must refuse the program")
+	}
+
+	// An OPTIONAL ref (stampFnConst's optimisation stamp) poisons the same way
+	// but does NOT escalate: poisoning already restored the apply island, which
+	// is the exact behaviour the program had before anything stamped it.
+	// Refusing the whole program because an optimisation could not survive a
+	// rebind is strictly worse than declining the optimisation.
+	opt := NewEmitState()
+	optRef := &CompiledFnRef{depNames: map[string]bool{"files": true}, optional: true}
+	opt.storedFnRefs = []*CompiledFnRef{optRef}
+	opt.NotifyNameRebound("files")
+	if !optRef.poisoned {
+		t.Error("an optional ref reading the rebound name must still be poisoned")
+	}
+	if !opt.Compilable {
+		t.Error("an optional ref must NOT escalate a rebind to a program refusal")
+	}
 }
 
 func TestNoteLoopCarriedArms(t *testing.T) {

@@ -217,6 +217,43 @@ question worth gating was always "did the unit RUN" — which only the
 `InterpEntry` census can answer, and which did not exist when the four
 phases landed.
 
+## A stamp is an OPTIMISATION, and must behave like one (2026-08-28)
+
+The const-chokepoint stamp (`EmitState.stampFnConst`, at `resolveOperand`'s
+interning point) reaches a far larger population than the store-site edge: every
+fn value the program bakes as a const, including the ones nested in list and map
+consts. It also differs from `StampDetachedFn` in one way that matters — it uses
+`compileStoredFnUnit` IN-PROGRAM rather than forking, because a fork per const
+cost ~6x on `lang/go/modules` and transiently exhausted memory. In-program means
+it analyses against the LIVE emit state, and every write it leaves behind is a
+constraint the ENCLOSING program inherits from a body it may never apply.
+
+Three channels, and the tell is the same each time: **the symptom names the
+enclosing program's problem, not the stamped body's.**
+
+| channel | what leaks | remedy |
+|---|---|---|
+| `Check.Diagnostics` | an error finding refuses the program | `TruncateDiagnostics` back to the pre-attempt length |
+| `dynScopeNames` | a rescued free word makes Finalize install an `OpBindDynScope` twin in every binding unit, so the program's own `def` must lower a dynamic bind it has no promoted value for | snapshot, restore, and **decline the stamp** — a live unit reads through `OpLookupDynScope`, so only the whole stamp can go |
+| `storedHandlerDeps` | a later rebind of a captured name refuses the whole program via `NotifyNameRebound` | mark the ref `optional`: still poisoned (it islands), but no escalation |
+
+The rule underneath all three: **a stamp that would change the enclosing
+program's own lowering is not worth taking.** Declining costs exactly the island
+the program had before anything stamped it — the behaviour the differential
+already validates — while taking it costs a program that does not run.
+
+This was nearly got wrong in the other direction, and that is the part worth
+remembering. The first draft ledgered two of the refusals rather than fixing
+them, arguing that WITHOUT the descent one sampler seed miscompiles (a flex map
+captured by a mount handler loses its identity across loop iterations) and a
+refusal beats a wrong answer. It does — but the descent was not FIXING that
+divergence, it was MASKING it. A stamp declines for a capturing fn, for a body
+whose lowering refuses, for a body needing a dynamic-scope rescue, and whenever
+stamping is unarmed; a wrong answer that is correct only while an optimisation
+happens to apply is a wrong answer waiting to come back, silently, with its pin
+already deleted. **An optimisation may never be load-bearing for correctness** —
+if removing it changes an answer, the answer was wrong and the pin stays.
+
 ## Invariants pinned by tests
 
 - Mode contract: unarmed registries never stamp
@@ -230,7 +267,13 @@ phases landed.
   (`TestRunCompiledFallbackNoDuplicateStampReport`).
 - Isolation: a mid-run stamp leaves the parent's Defs depths/gens,
   CheckState identity, and diagnostics untouched
-  (`TestStampFnValueParentStateUntouched`).
+  (`TestStampFnValueParentStateUntouched`); the IN-PROGRAM const-chokepoint
+  stamp leaves the enclosing program's own lowering unchanged — a stamp that
+  would register a dynamic-scope name is declined and the map restored
+  (`TestStampConstDynScopeDeclineKeepsEnclosingCompile`, which refuses the
+  enclosing program if the restore is removed), and an `optional` ref poisons
+  on a dep rebind without escalating to a program refusal
+  (`TestNotifyNameReboundBranches`).
 - Fail-safe: refusing bodies, capturing fns, multi-overload fns, Go-backed
   fns all decline with byte-identical behaviour; a stale dep falls back to
   the LIVE interpreter resolution (`TestStampFnValueDepRebindFallsBackLive`,

@@ -1515,37 +1515,79 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   increment honestly. Its analysis leaks diagnostics into the enclosing
   program, and an error diagnostic REFUSES it — `TruncateDiagnostics` drops
   exactly what the attempt added, since a speculative compile's findings are
-  not the program's. And **container descent is out**: stamping a fn nested in
-  a map const mutates the shared `*BoruImpl` of a value inside USER DATA, which
-  is precisely what `StampFnValue`'s cloning form exists to avoid — a model
-  action's `{gen: …}` stamped here first, so `stampActionFn`'s clone-and-name
-  found a ref, declined, and the stamp report lost its attribution. That case
-  is its own increment; it needs the clone contract honoured, not a deeper walk.
+  not the program's. And descending into containers first read as OUT, on the
+  grounds that stamping a fn nested in a map const mutates the shared
+  `*BoruImpl` of a value inside USER DATA — precisely what `StampFnValue`'s
+  cloning form exists to avoid. The evidence was a model action's `{gen: …}`
+  stamped here first, after which `stampActionFn`'s clone-and-name found a ref,
+  declined, and the stamp report lost its attribution.
+
+  That reading of the clone contract was wrong, and it is the fourth documented
+  blocker in this work whose stated CAUSE named the wrong lane while the
+  symptom was real (§6.4, NUR101 and §7's "the body is never a unit" are the
+  others). The clone protects a CALLER's input from the model module's stamp;
+  it says nothing about the compile pass stamping a const it baked itself. What
+  actually broke was ATTRIBUTION — one report line, not one semantics — and it
+  is fixed where it was lost: `StampFnValue`'s already-stamped early return now
+  records the event before returning. Descent landed. The next section is what
+  it cost.
 
   Measured across the increments: census **184 → 131**, `vm:island` **66 → 39**,
   `vm:island-resolved` **21 → 10**, corpus 7622 rows / 7248 compiled / 0
   islanded / 0 refused, differential unchanged throughout.
 
-  **Container descent, and the trade it forced.** Of the island rows the
-  top-level stamp leaves, roughly four in five are a fn read out of a container
-  — `def m {f: (fn …)}  m.f 5`, `def ops {f: inc/v}  ops.f 5`, a class field
-  method. Descending into list and map consts takes them (census 141 → 131),
-  and it also makes three variation-sampler buckets REFUSE that previously
-  compiled (pass 403 → 401, refused 33 → 36). Their names locate the cause:
-  "dynamic-scope def `files` of unpromoted computed value" and "module binding
-  files rebound after a stored handler captured it as a dep" both indict the
-  ENCLOSING compile, not the stamped body — so `compileStoredFnUnit` mutates
-  shared emit state (dep records, dynamic-scope promotion decisions) beyond the
-  diagnostics `TruncateDiagnostics` already restores.
+  **Container descent, and the mask it nearly shipped.** Of the island rows
+  the top-level stamp leaves, roughly four in five are a fn read out of a
+  container — `def m {f: (fn …)}  m.f 5`, `def ops {f: inc/v}  ops.f 5`, a
+  class field method. Descending into list and map consts takes them (census
+  141 → 131). It also made three variation-sampler buckets REFUSE that
+  previously compiled (pass 403 → 401, refused 33 → 36), and their names
+  located the cause precisely: "dynamic-scope def `files` of unpromoted
+  computed value" and "module binding files rebound after a stored handler
+  captured it as a dep" both indict the ENCLOSING compile, not the stamped
+  body. `compileStoredFnUnit` analyses against the LIVE emit state, so it
+  leaks through two channels past the diagnostics `TruncateDiagnostics`
+  already restores: `dynScopeNames`, whose entries make Finalize install an
+  `OpBindDynScope` twin in every binding unit — so the enclosing program's own
+  `def` must now lower a dynamic bind it may have no promoted value for — and
+  `storedHandlerDeps`, whose records make a later rebind of that name refuse
+  the whole program through `NotifyNameRebound`.
 
-  It lands anyway, because the alternative is worse: WITHOUT the descent the
-  same seed **miscompiles** — a flex map captured by a mount handler loses its
-  identity across loop iterations, and the compiled run raises `expected a
-  FlexMap, got FlexMap` where the interpreter round-trips. That had been pinned
-  in `varyKnownMiscompiles` since 2026-07-30; it is now graduated, and the
-  table is empty. A refusal is a program that does not run; a miscompile is a
-  program that runs and lies. The two buckets are ledgered with frontier rows,
-  and the emit-state isolation is the named work that retires them.
+  The first draft ledgered both buckets and argued the trade was worth it:
+  WITHOUT the descent the same seed **miscompiles** — a flex map captured by a
+  mount handler loses its identity across loop iterations, and the compiled run
+  raises `expected a FlexMap, got FlexMap` where the interpreter round-trips —
+  and a refusal is a program that does not run, while a miscompile is a program
+  that runs and lies.
+
+  **That argument was wrong, and its wrongness is the lesson.** The descent was
+  not FIXING the flex-map divergence; it was MASKING it. A stamp is an
+  OPTIMISATION: it declines for a capturing fn, for a body whose lowering
+  refuses, for a body needing a dynamic-scope rescue, and whenever runtime
+  stamping is unarmed. A wrong answer that is correct only while an
+  optimisation happens to apply is a wrong answer waiting to come back — and it
+  would come back SILENTLY, because nothing in the gate ties that seed's
+  correctness to the stamp firing. Graduating the pin on that basis would have
+  deleted the only record that the defect exists.
+
+  So both channels are closed at the source and the pin is restored:
+
+  - `dynScopeNames` is snapshotted and restored, and a stamp that added a name
+    is DECLINED. A successful stamp genuinely reads through `OpLookupDynScope`,
+    so the name cannot be dropped under a live ref; the rule is instead that a
+    stamp which would change the enclosing program's own lowering is not worth
+    taking. Declining leaves the apply island — exactly the behaviour the
+    differential already validates.
+  - A stamp ref is marked `optional`. `NotifyNameRebound` still poisons it (the
+    apply islands, as before the stamp existed) but no longer escalates to the
+    program-level refusal. That escalation is right for a STORE-SITE ref, whose
+    `CallBoru` fallback would read the pass-final binding; for an optimisation
+    ref, islanding IS the whole remedy.
+
+  Result: pass 403, refused 33 — the pre-descent numbers, both buckets gone,
+  their frontier rows deleted — with the census increment kept, and the
+  flex-map divergence pinned where divergences belong rather than hidden behind
+  an optimisation that happened to fire.
 
   **A note on what the coverage gate found.** After the kernel took every
   reachable shape, `callDynApplyTop`'s ISLAND success return stopped being

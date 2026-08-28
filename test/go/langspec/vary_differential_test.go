@@ -141,29 +141,6 @@ var varyRefusalLedger = map[string]string{
 	"residual lowering (Stage 1 limit)":                           "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",
 	"stack discipline (lowering)":                                 "scheduling — dirty-stack prefixes the lowerer cannot arrange (prefix-stack transform)",
 	"variadic result promoted (exact-arity frame seat)":           "a MULTI-OUT variadic call result (a fallible or branch-variant do region) promoted to frame slots has no fixed arity to store — the raise/short path delivers fewer values than the static seat popped (PR #280 review; lowerCall's store-prologue gate, representative row in frontier-do-catch.tsv)",
-
-	// ── Both NEW 2026-08-28, and both are the SAME leak wearing two names.
-	//
-	// stampFnConst descends into map consts to stamp the fn values inside them
-	// (the Apply kernel), and compileStoredFnUnit runs its analysis against the
-	// LIVE emit state. Diagnostics are restored (TruncateDiagnostics); the dep
-	// records and dynamic-scope promotion decisions are not, so the enclosing
-	// compile inherits constraints from a body it may never apply and refuses.
-	// Note the buckets name the ENCLOSING program's problem, not the stamped
-	// body's — that is the tell.
-	//
-	// They are ledgered rather than avoided because the alternative is worse:
-	// without the descent the same seed MISCOMPILES (a flex map captured by a
-	// mount handler loses its identity across loop iterations — pinned since
-	// 2026-07-30 in varyKnownMiscompiles, now graduated). A refusal is a
-	// program that does not run; a miscompile is a program that runs and lies.
-	//
-	// Graduation for both: make the stamp leave the enclosing emit state
-	// exactly as it found it — the same snapshot/restore shape the diagnostics
-	// already get, over dep records and promotion decisions. Representative
-	// rows: frontier-do-registry-replay.tsv.
-	"other: dynamic-scope def `files` of unpromoted computed value":                   "the stamp's analysis of a mount handler forces a dynamic-scope read of the module binding it closes over, and the ENCLOSING compile then cannot promote that computed def — emit-state leak from a speculative stamp, not a property of the program",
-	"other: module binding files rebound after a stored handler captured it as a dep": "storedHandlerDeps records the module binding a stamped handler reads; a loop body that rebinds it then fails the enclosing compile's freshness model — the same emit-state leak, seen through the dep channel",
 }
 
 // Graduated 2026-07-14 (do-def leak fidelity): "code-body word
@@ -192,22 +169,28 @@ var varyRefusalLedger = map[string]string{
 // landed: the typed-def half refuses soundly, the import half compiles
 // natively as a closure unit.
 // varyKnownMiscompiles pins variants that diverge from the interpreter, so a
-// divergence is never left unrecorded. EMPTY since 2026-08-28, and the entry it
-// held is worth keeping in the history:
-//
-//	for 2 [import "boru:io"  def files (flex {})  IO.mount {read: (p:Pathon =>
-//	  [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data
-//	  drop])}  …]
-//
-//	"a flex-map captured by a mount handler loses its identity across loop
-//	 iterations under compilation: the compiled run raises [boru/set_error]
-//	 'expected a FlexMap, got FlexMap' (same type name, different instance)
-//	 where the interpreter round-trips cleanly"
-//
-// It was pinned 2026-07-30 as a long-standing gap the sampler had only just
-// reached. It graduated as a SIDE EFFECT of stampFnConst descending into map
-// consts (the Apply kernel): the mount handlers are fn values inside a map
-// const, and once they carry their own compiled unit the identity-losing path
-// is not taken. Nobody was working on it — the ratchet noticed, which is the
-// argument for a stale-arm check rather than a plain allowlist.
-var varyKnownMiscompiles = map[string]string{}
+// divergence is never left unrecorded.
+var varyKnownMiscompiles = map[string]string{
+	// Pinned 2026-07-30. NOT a regression: the project rename rewrote every
+	// corpus row, which reshuffles Sample()'s FNV priority and pulled
+	// module-io.tsv:241 into the default 32-seed breadth for the first time.
+	// Verified identical on the pre-rename tree, so this is a long-standing
+	// gap the sampler had never reached.
+	//
+	// BRIEFLY MASKED, 2026-08-28, and un-masked deliberately. stampFnConst's
+	// container descent stamps the mount handlers (they are fn values inside a
+	// map const), and a stamped handler does not take the identity-losing
+	// path — so the divergence disappeared. That is not a fix. The stamp is an
+	// OPTIMISATION: it declines for a body whose free words need a
+	// dynamic-scope rescue, for a body whose lowering refuses, for a capturing
+	// fn, and whenever runtime stamping is unarmed. A wrong answer that is
+	// correct only while an optimisation happens to apply is a wrong answer
+	// waiting to come back, and it would come back silently.
+	//
+	// So the stamp now declines rather than perturb the enclosing program (see
+	// stampFnConst's dynScopeNames restore), the three refusal buckets the
+	// descent had introduced are gone, and this stays pinned as the
+	// independent defect it is: a flex map captured by a mount handler loses
+	// its identity across loop iterations under compilation.
+	"for 2 [import \"boru:io\"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon \"n/a.txt\") \"hello mounted\" drop  IO.read (make Pathon \"n/a.txt\")]": "a flex-map captured by a mount handler loses its identity across loop iterations under compilation: the compiled run raises [boru/set_error] \"expected a FlexMap, got FlexMap\" (same type name, different instance) where the interpreter round-trips cleanly",
+}

@@ -1,6 +1,8 @@
 package compiler
 
 import (
+	"maps"
+
 	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
@@ -2557,8 +2559,38 @@ func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
 		// same seam the bounded fixed-point analyses use.
 		diagsBefore := len(es.reg.Check.Diagnostics)
 		unitsBefore := len(es.fnRecs)
+		// dynScopeNames is the OTHER channel the stamp writes through. A body
+		// whose free word cannot resolve locally takes dynScopeRescue, which
+		// adds that name here — and Finalize then installs an OpBindDynScope
+		// twin in every BINDING unit, so the ENCLOSING program's own `def` of
+		// that name must lower a dynamic bind it may have no promoted value
+		// for. Measured: `def files (flex {})` + a mount handler reading
+		// `files` went from compiling to "dynamic-scope def `files` of
+		// unpromoted computed value" the moment the handler stamped.
+		//
+		// A successful stamp genuinely NEEDS the name (its unit reads through
+		// OpLookupDynScope), so this cannot be restored under a live ref. The
+		// rule instead: a stamp that would change the enclosing program's own
+		// lowering is not worth taking. Decline it, restore the map, and let
+		// the apply island — the behaviour the program had before anything
+		// stamped, which is what the differential validates.
+		//
+		// maps.Clone, not a hand-rolled copy loop: the corpus has no program
+		// whose dynScopeNames is non-empty at a const-stamp site, so a copy
+		// loop's BODY is an unreachable statement. Cloning says the same thing
+		// in one always-executed call — the general restore below is unchanged,
+		// and nothing here assumes the map starts empty.
+		dynBefore := maps.Clone(es.dynScopeNames)
 		unit, ok := es.compileStoredFnUnit(fd, si, v.Pos())
 		es.reg.Check.TruncateDiagnostics(diagsBefore)
+		if ok && len(es.dynScopeNames) != len(dynBefore) {
+			for n := range es.dynScopeNames {
+				if !dynBefore[n] {
+					delete(es.dynScopeNames, n)
+				}
+			}
+			ok = false
+		}
 		if !ok {
 			if es.stampDeclined == nil {
 				es.stampDeclined = map[*core.BoruImpl]bool{}
@@ -2567,7 +2599,7 @@ func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
 			es.recordStamp(core.StampEvent{Name: fd.Name, Pos: v.Pos(), Reason: es.storedFnProbeReason})
 			continue
 		}
-		ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].Body())}
+		ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].Body()), optional: true}
 		impl.Compiled = ref
 		es.storedFnRefs = append(es.storedFnRefs, ref)
 		if es.stampImpls == nil {
@@ -2652,7 +2684,20 @@ func (es *EmitState) NotifyNameRebound(name string) {
 	for _, ref := range es.storedFnRefs {
 		if ref.depNames[name] {
 			ref.poisoned = true
-			depHit = true
+			// An OPTIONAL ref (stampFnConst's) does not escalate to the
+			// program-level refusal below. Poisoning already dropped it, and
+			// its fallback is the island the program used before the stamp
+			// existed — the behaviour the differential validates. Refusing the
+			// whole program because an OPTIMISATION could not survive a rebind
+			// is the same trade fnUnitRec.stampOnly rejects at Finalize.
+			//
+			// Measured: without this, container descent turned a compiling
+			// sampler seed into "module binding files rebound after a stored
+			// handler captured it as a dep" — a refusal caused entirely by the
+			// stamp having happened.
+			if !ref.optional {
+				depHit = true
+			}
 		}
 	}
 	// Poisoning alone is NOT enough for a module-scope rebind: the poisoned
