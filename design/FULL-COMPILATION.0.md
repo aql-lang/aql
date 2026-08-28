@@ -1628,6 +1628,74 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   is the ratchet for exactly that reason; the seam spread is a shape, and every
   seam worth acting on has to be attributed before it is worth acting on.
 
+  **The Apply kernel reaches LENSES, and the attribution is what found it.**
+  A `Reach` is a callable value exactly as a fn value is — `p $.name apply`,
+  `each $.name people`, `filter $.on xs`, `ArrayUtil.sortby $.age people`,
+  `StructUtil.getpath $.a.b m` — and every one of them funnels through a single
+  primitive, `core.ApplyReach`, which lowered the lens to a `[recv dot key …]`
+  token chain and ran it on a pooled sub-engine. Per application. That is an
+  interpreter entry inside a native handler: the exact shape the OpFallback
+  ceiling cannot see, since these programs disassemble with `fallbacks=0`.
+
+  It was picked by reading the per-file table, not by guessing: `reach.tsv`, 14
+  rows, every one through `runPooledSub` and nothing else. A probe confirmed all
+  14 reached `ApplyReach` before a line was written.
+
+  **Writing a second walker in Go was the wrong fix, and the codebase says so
+  in its own voice.** `getpathReachHandler` routes here deliberately — "so
+  per-segment getr strictness and computed keys behave exactly as bare `m.a.b`
+  — the same primitive `apply` uses". One dispatch path is the rule. So the
+  path stays and moves onto the VM instead.
+
+  The chain is already a one-parameter function body: bind the receiver, run the
+  dots. So the unit is compiled from *exactly the tokens `ApplyReach` would
+  otherwise have interpreted*, with the receiver value replaced by a reference
+  to the bound parameter — no hand-lowering, no second model of what a segment
+  means. Everything downstream (dep freshness, the JIT re-stamp, the effect
+  fence, the internal-error degrade) is the `CompiledRuntime` seam's, unchanged.
+
+  The unit is cached on the Reach PAYLOAD, as a pointer field, which is the same
+  trick `*BoruImpl` plays for a signature's compiled ref: every copy of the value
+  shares one cache, so a lens in `each $.name people` compiles once rather than
+  per element. That mattered — a per-application stamp is a fork and a whole
+  compile pass, the cost that sank the first per-const stamping attempt outright.
+  Canon renders a Reach from its `Segments`, so the field takes no part in
+  equality or serialisation.
+
+  One shape differs from the interpreted chain: the receiver arrives as a NAMED
+  parameter rather than a stack push. That was settled by measurement rather
+  than argument — the whole corpus, the spec differential, the variation sweep
+  and the frontier ledgers are unchanged. **Census 130 → 114**, `runPooledSub`
+  36 → 11, `reach.tsv` gone from the cluster table entirely; `path-modifier.tsv`
+  now leads it at 13 rows, every one through `vm:island`.
+
+  **And it split a ratchet, which is the more useful finding.** The defer census
+  rose 5 → 6: `5 $.name apply` — a lens on a receiver its first segment cannot
+  read — reaches `CALL_NATIVE_POLY` with no match and the VM defers. That census
+  is monotone-DOWN by rule, so the increment could not simply land.
+
+  The rule is right and the instrument was imprecise. `deferCeiling`'s own prose
+  says what it counts: a bail "resolving it by asking the caller to re-run the
+  whole program on the interpreter". Measured, all five of its bails do exactly
+  that — the row returns `wasCompiled=false`. This one does not: `ApplyReach`
+  has a complete fallback of its own, catches the `internal_error`, runs the
+  interpreted chain for that ONE application, and the program finishes
+  **compiled**. Two different events under one number.
+
+  So the walk now sorts each bail by what happened to its row. `deferCeiling`
+  keeps its exact meaning and its exact number — **5, unchanged** — and the
+  locally-resolved kind ratchets separately from 1. That is not relaxing a gate
+  to fit a change; the strict number is untouched and is now measured precisely
+  instead of approximately, and the weaker event is counted rather than hidden
+  inside it.
+
+  Why the VM cannot raise natively here: the site has a designed native-raise
+  arm, gated on a `PolyNoMatchSpec` — a faithfulness proof the check pass
+  records only at a dispatch it actually watched FAIL. A lens body is analysed
+  with an `Any` receiver, so its dispatch never fails at check time and no proof
+  exists to record. Both counts reach 0 at Stage 9 by the same work, not by a
+  lens-specific fix.
+
   **A note on what the coverage gate found.** After the kernel took every
   reachable shape, `callDynApplyTop`'s ISLAND success return stopped being
   covered — fourteen probed sources (usurp-built values, runtime-returned fns,

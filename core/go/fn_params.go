@@ -340,7 +340,8 @@ func dottedParamType(r *Registry, elem Value) (FnParam, bool) {
 	if !ok {
 		return FnParam{}, false
 	}
-	reached, rErr := ApplyReach(r, ReachInfo{Segments: info.Segments}, base)
+	// unit rides along: dropping it would rebuild the lens cache per call.
+	reached, rErr := ApplyReach(r, ReachInfo{Segments: info.Segments, unit: info.unit}, base)
 	if rErr != nil || !IsTypeLiteral(reached) {
 		return FnParam{}, false
 	}

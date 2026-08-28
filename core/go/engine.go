@@ -4343,8 +4343,25 @@ func expandReach(info ReachInfo) []Value {
 // are identical. It is the primitive behind the `apply` word and the
 // receiverless-reach-as-Function higher-order behaviour.
 func ApplyReach(r *Registry, info ReachInfo, recv Value) (Value, error) {
+	// The compiled lane first: a stamped lens runs its unit on the VM instead of
+	// re-entering the interpreter for every application (reach_unit.go). ran is
+	// false for an unarmed registry, a lens whose body declined, and a unit that
+	// bailed with no observable effect — all of which keep the chain below.
+	if sig := compiledLensSig(r, info.unit, info.Segments); sig != nil {
+		if vres, verr, ran := compiledRuntime.InvokeCompiled(r, sig, []Value{recv}); ran {
+			return lastReachResult(vres, verr)
+		}
+	}
 	toks := lowerReach(ReachInfo{Receiver: []Value{recv}, Segments: info.Segments})
 	res, err := RunPooledSub(r, expandParenExpr(toks), false)
+	return lastReachResult(res, err)
+}
+
+// lastReachResult is the shared tail of ApplyReach's two lanes: an error wins,
+// an empty result is the lens finding nothing to hand back, and otherwise the
+// chain's last value is the read. Shared so the compiled lane cannot drift from
+// the interpreted one on what "the value of a lens" means.
+func lastReachResult(res []Value, err error) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}

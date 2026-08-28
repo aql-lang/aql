@@ -2525,6 +2525,9 @@ func NewParenExpr(items []Value) Value {
 // receiverless reach); segments are the .key / !.key steps; eval marks it
 // evaluate-by-default. See design/REACH.10.md.
 func NewReach(info ReachInfo) Value {
+	if info.unit == nil {
+		info.unit = &lensUnit{} // one shared cache per constructed lens
+	}
 	return NewValueRaw(TReach, info)
 }
 

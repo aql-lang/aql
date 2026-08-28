@@ -213,6 +213,12 @@ type ReachInfo struct {
 	Receiver []Value
 	Segments []ReachSeg
 	Eval     bool // evaluate-by-default (like list Eval); quote/codequote suppress
+	// unit caches this lens's compiled one-param unit (reach_unit.go). A
+	// POINTER, so every copy of the Reach value shares one cache — the same
+	// trick *BoruImpl plays for a signature's compiled ref. Unexported and
+	// never rendered: canon builds a Reach's text from Segments alone, so this
+	// field takes no part in equality, canon, or serialisation.
+	unit *lensUnit
 }
 
 // ReachSeg is one step of a Reach: get (lenient) or getr (strict), with a
