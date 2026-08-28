@@ -1374,7 +1374,47 @@ Its contract implements the application model that NUR101 established:
 - **Under-application and count mismatches** follow the interpreter's own
   rules (`(1 2 (mk 4))` → `1 6`; return-count trims and their exact error
   taxonomy) because Apply calls the same `CallBoru` return-enforcement
-  helpers (`core/go/registry.go:1585-1752`) — with `CallBoru`'s internal
+  helpers (`core/go/registry.go:1585-1752`)
+
+  **LANDED 2026-08-28, ahead of the Apply kernel and without it.** Two
+  things had to be measured first, and both moved the target.
+
+  1. **§6.4's own refusal inventory was stale.** This section said "four
+     shapes refuse today … `RecordDynApply` must admit an EVENT lead,
+     which `DynApplyLeadEligible` declines". Enumerated against
+     `RunInterp`, the EVENT-lead shapes (`((mk 1) 2)`, `(mk 1) 2`, the
+     def-bound and trailing spellings, the curried chain) ALL COMPILE —
+     increments 2–3 graduated them. **Exactly one** Apply shape refused:
+     the wider window, `(1 2 (mk 4))`.
+  2. **A SEVENTH silent miscompile sat next to it**, unledgered, found by
+     probing the family rather than the refusal. `(9 1 2 add2/v)` — a
+     CONCRETE 2-arg callee under a 3-wide window — answered `[3, 9]`
+     compiled against the interpreter's `[9, 3]`. The survivor came out
+     ABOVE the result instead of below it. The event path had an arity
+     gate; the concrete path had none at all, so nothing was watching.
+
+  Both are one defect: the lowered apply consumed the WHOLE window
+  regardless of what the callee takes. The fix is to consume the callee's
+  own arity and leave the rest, which is what the interpreter does —
+  `RecordDynApply` now reports how many window values it CONSUMED, and the
+  collapse site removes only that suffix of the window. The arity is sound
+  by construction (`producerReturnedClosureArity` answers only for a unit
+  with exactly one closure out-op; a single-sig concrete callee otherwise),
+  so a branch-varying factory or an overloaded callee never reaches the
+  trim — they decline earlier or here.
+
+  The NARROWER window is the opposite shape and still refuses: the
+  interpreter leaves the fn UNAPPLIED (`(5 (mk2 10))` → `[5, fn]`) and
+  nothing models that. **That refusal must MARK, not merely decline** —
+  measured, a quiet decline let the collapse site's `RegisterTrailingApply`
+  fallback lower the window anyway and answer a silent `15`. Both arms
+  share ONE `MarkUncompilable` site on purpose: the refusal-site census is
+  a downward ratchet, and it caught the second site immediately (97 against
+  a ceiling of 96) even though the shapes refused are strictly fewer.
+
+  Four rows graduate into `lang/spec/fn-value.tsv` §11, including the
+  concrete-callee ordering row that had no ledger entry because nothing
+  knew it was wrong. — with `CallBoru`'s internal
   tape run replaced by unit entry for compiled bodies (it is already
   tape-free at its *interface*; the inside migrates per §6.8). Fidelity
   cuts both ways: Apply reproduces `execFnDefLiteral`'s landing rule *as

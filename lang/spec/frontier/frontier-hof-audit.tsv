@@ -110,9 +110,16 @@ def mkap g:Function => [v:Integer => [(g v)]] end def a (mkap (z:Integer => [add
 # §9c the event-lead trailing apply (2026-08-21): OpCallDynTrailKeepQ
 #     preserves an event-provenance fn's runtime quote state (no read
 #     substitution to mirror), retiring RecordDynApply's hard-refusal
-#     when the producer proves the closure arity equals the window.
+#     when the producer proves the closure arity.
+#
+#     THE WIDER-WINDOW ROW GRADUATED 2026-08-28 (Stage 3) into
+#     lang/spec/fn-value.tsv §11. It was ledgered on the reading that a
+#     wider window is a shape the lowering cannot model. It is not: the
+#     interpreter simply UNDER-APPLIES, and the faithful lowering hands
+#     the op only the callee's own arity and leaves the deeper values on
+#     the tape. RecordDynApply now reports how many window values it
+#     consumed so the collapse site removes exactly that suffix.
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (2 (mk 4))	6	an event-provenance trailing apply with producer-proven arity compiles
-def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))	1 6	a wider window than the closure's arity under-applies in the interpreter (refuses; ledgered)
 #
 # §9d the GRADUAL inner parameter (2026-08-21): the same
 #     apply-the-capture factory as §9b/§9, but the inner lambda's

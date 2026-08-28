@@ -7462,7 +7462,9 @@ func (e *Engine) recordParenLeadFnApply(es EmitRecorder, leadFn, lastIdx, closeI
 	out := NewCarrier(TAny)
 	out.ID = GenerateID(IDPrefixForType(TAny))
 	out.pos = lead.pos
-	if es.RecordDynApply([]Value{e.Tape.At(lastIdx)}, lead, out, lead.Pos()) {
+	// A one-value window: the callee either consumes it or the record
+	// declines, so there is no partial-consumption case to thread here.
+	if _, ok := es.RecordDynApply([]Value{e.Tape.At(lastIdx)}, lead, out, lead.Pos()); ok {
 		e.Tape.Set(leadFn, out)
 		e.Tape.Remove(lastIdx)
 		closeIdx--
@@ -7746,9 +7748,15 @@ func (e *Engine) stepCloseParen(reStepped bool) error {
 			out := NewCarrier(TAny)
 			out.ID = GenerateID(IDPrefixForType(TAny))
 			out.pos = last.pos
-			if es.RecordDynApply(argVals, last, out, last.Pos()) {
+			// consumed counts from the TOP of the window (the values
+			// nearest the fn). It is normally every arg, but a callee whose
+			// arity is provably smaller UNDER-APPLIES exactly as the
+			// interpreter does — `(1 2 (mk 4))` with a 1-arg adder nets
+			// [1, 6] — so only the consumed SUFFIX collapses and the deeper
+			// values stay on the tape as residual.
+			if consumed, ok := es.RecordDynApply(argVals, last, out, last.Pos()); ok {
 				e.Tape.Set(lastIdx, out)
-				for j := len(argIdxs) - 1; j >= 0; j-- {
+				for j := len(argIdxs) - 1; j >= len(argIdxs)-consumed; j-- {
 					e.Tape.Remove(argIdxs[j])
 					closeIdx--
 				}

@@ -107,7 +107,15 @@ type EmitRecorder interface {
 	RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool
 	RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos)
 	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, sigs []Signature, args, outs []Value, pos SrcPos)
-	RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool
+	// RecordDynApply records a paren-bounded TRAILING fn-value apply and
+	// reports how many of `args` the lowered apply CONSUMES, counted from the
+	// TOP of the window (the values nearest the fn). That is normally all of
+	// them, but a callee whose arity is provably SMALLER under-applies exactly
+	// as the interpreter does — `(1 2 (mk 4))` with a 1-arg adder nets [1, 6],
+	// the deeper 1 surviving — so the caller must collapse only the consumed
+	// suffix of the window and leave the rest on the tape. consumed is
+	// meaningful only when ok is true.
+	RecordDynApply(args []Value, fn, out Value, pos SrcPos) (consumed int, ok bool)
 	// RecordDynApplyName is RecordDynApply with the fn resolved through
 	// the NAME's recorded def-site operand (its evDynBind event) — the
 	// §4.3 capture fallback for calls of installed factory closures whose
@@ -245,7 +253,7 @@ func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry, 
 func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos) {}
 func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Signature, []Value, []Value, SrcPos) {
 }
-func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return false }
+func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) (int, bool) { return 0, false }
 func (inactiveEmit) RecordDynApplyName(string, []Value, Value, Value, SrcPos) bool {
 	return false
 }

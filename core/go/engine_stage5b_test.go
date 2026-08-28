@@ -23,13 +23,14 @@ import (
 // methods the stage-5b paths consult overridden and tallied.
 type s5bEmit struct {
 	EmitRecorder
-	activeOn     bool
-	memberRead   bool
-	dynMethodOK  bool
-	dynApplyOK   bool
-	leadEligible bool
-	trapOK       bool
-	rematchOK    bool
+	activeOn         bool
+	memberRead       bool
+	dynMethodOK      bool
+	dynApplyOK       bool
+	dynApplyConsumed int
+	leadEligible     bool
+	trapOK           bool
+	rematchOK        bool
 
 	uncompilable []string
 	trailing     []string
@@ -48,9 +49,12 @@ func (s *s5bEmit) RecordDynMethod(fn Value, args, outs []Value, word string, pos
 	s.dynMethods++
 	return s.dynMethodOK
 }
-func (s *s5bEmit) RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool {
+func (s *s5bEmit) RecordDynApply(args []Value, fn, out Value, pos SrcPos) (int, bool) {
 	s.dynApplies++
-	return s.dynApplyOK
+	if s.dynApplyConsumed > 0 {
+		return s.dynApplyConsumed, s.dynApplyOK
+	}
+	return len(args), s.dynApplyOK
 }
 func (s *s5bEmit) DynApplyLeadEligible(Value) bool { return s.leadEligible }
 func (s *s5bEmit) RegisterTrailingApply(id string, arity int) {

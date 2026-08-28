@@ -3836,12 +3836,57 @@ func (es *EmitState) DynApplyLeadEligible(v core.Value) bool {
 // args below it deepest-last — exactly the stack OpCallDynTrailTop reads (it
 // reverses the arg window into forward order to match the interpreter's paren
 // auto-dispatch, where the fn's first param is the arg just below it).
-func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos core.SrcPos) bool {
+// applyWindowArity answers "how many values does this callee actually consume",
+// or declines when that is a runtime question.
+//
+// It is what the former "runtime quote state unknown" refusal was really
+// reaching for, and it applies to BOTH arrival kinds rather than only the event
+// lead — which is how it also fixes a silent miscompile the old gate never saw.
+//
+//   - UNDER-APPLICATION. `(1 2 (mk 4))` with a 1-arg adder nets [1, 6]
+//     interpreted: the adder takes the top value and the deeper 1 survives.
+//     Handing the op the whole window made it consume both, so the event lead
+//     refused outright. Handing it only the top `arity` reproduces the
+//     interpreter exactly, and the caller leaves the rest on the tape.
+//   - RESIDUAL ORDER, the miscompile. `(9 1 2 add2/v)` — a CONCRETE 2-arg
+//     callee under a 3-wide window — answered [3, 9] compiled against the
+//     interpreter's [9, 3]. The concrete path had no arity gate at all, so the
+//     survivor came out ABOVE the result instead of below it. Trimming the
+//     window puts it back where the interpreter leaves it.
+//
+// The arity claim is sound BY CONSTRUCTION, which is why trimming on it is
+// safe. producerReturnedClosureArity answers only when the producer is an
+// evCallUser whose unit has exactly ONE out-op and that op IS a closure unit,
+// so the runtime value is provably that one unit with that many params. The
+// shapes where a static arity could be wrong never reach the trim: a factory
+// whose branches return different arities refuses earlier ("if: then-branch
+// result of unknown provenance"), and an overloaded callee declines below.
+//
+// DECLINING IS NOT REFUSING. A fn-typed CARRIER (a `comp:Function` param — the
+// comparator convention) has no static arity and must keep compiling as it
+// does today, so the caller treats "unknown" as "no trim" on the concrete path
+// and keeps the standing refusal only on the event lead.
+func applyWindowArity(es *EmitState, fn core.Value) (int, bool) {
+	if arity, known := es.producerReturnedClosureArity(fn.ID); known {
+		return arity, true
+	}
+	fd, isFn := fn.Data.(core.FnDefInfo)
+	if !isFn {
+		return 0, false // a fn-typed CARRIER — no static arity, see the header
+	}
+	own := fd.OwnSigs()
+	if len(own) != 1 {
+		return 0, false // overloaded: which arm runs is a runtime question
+	}
+	return own[0].TotalArgs(), true
+}
+
+func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos core.SrcPos) (int, bool) {
 	if !es.Active() {
-		return false
+		return 0, false
 	}
 	if !core.IsFnValueResidual(fn) { // fn must be a genuine fn-value residual
-		return false
+		return 0, false
 	}
 	// A QUOTED fn value at the trailing position stays INERT in the
 	// interpreter (the paren never collapses — `(1 2 (quote (fn …)))` leaves
@@ -3850,7 +3895,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	// strips the STORED value's construction-time quote to mirror the read
 	// (callDynTrailTop), so an inline-quote must never record the apply.
 	if fn.Quoted {
-		return false
+		return 0, false
 	}
 	// The lowered apply (OpCallDynTrailTop) nets EXACTLY ONE value (nout: 1
 	// below). boru fns can return 0 or multiple values, so refuse the lowering
@@ -3862,29 +3907,20 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	// static return arity here; it stays lowered (the comparator convention),
 	// matching the interpreter's single-result paren auto-dispatch.
 	if !fnConcreteSingleValuedOrCarrier(fn) {
-		return false
+		return 0, false
 	}
 	fnOp, ok := es.resolveOperand(fn)
 	if !ok {
-		return false
-	}
-	ops := make([]EmitOperand, 0, len(args)+1)
-	ops = append(ops, fnOp)
-	for i := len(args) - 1; i >= 0; i-- {
-		if core.IsFnValueResidual(args[i]) {
-			return false
-		}
-		op, ok := es.resolveOperand(args[i])
-		if !ok {
-			return false
-		}
-		ops = append(ops, op)
+		return 0, false
 	}
 	// A paren-bounded apply that ALSO dispatched through the `apply` word
 	// (`(v comp/v apply)`) registered a pending unit apply before this event
 	// collapsed the tape — the event now owns the apply, so consume the
 	// pending entry rather than leaving it to refuse the unit at finish, and
 	// lower with the apply word's UNQUOTE semantics (OpCallDynApplyTop).
+	// Resolved BEFORE the operand build because the EVENT-lead arity gate
+	// below may TRIM the window, and the trim has to happen before the ops
+	// are laid out.
 	applyIdx := -1
 	if len(es.units) > 0 {
 		u := es.units[len(es.units)-1]
@@ -3894,6 +3930,49 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 				break
 			}
 		}
+	}
+	// WINDOW TRIM. The lowered apply consumes exactly as many window values as
+	// it is given operands, so that count must be the CALLEE'S OWN ARITY. When
+	// the arity is provably smaller than the window the interpreter
+	// UNDER-APPLIES, and the compiled lane must too — see applyWindowArity.
+	arity, arityKnown := applyWindowArity(es, fn)
+	refuse := ""
+	switch {
+	case arityKnown && arity > len(args):
+		// INSUFFICIENT ARGS: the interpreter leaves the fn UNAPPLIED in the
+		// residual (`(5 (mk2 10))` with a 2-arg callee nets [5, fn]). Nothing
+		// here models that, so it must REFUSE — and a bare decline is not
+		// enough: the collapse site's fallback (RegisterTrailingApply → the
+		// body-residual lowering) will lower the window anyway and answer a
+		// silent 15. Measured, declining quietly here turned the old
+		// event-lead refusal into a wrong answer.
+		refuse = "trailing fn-value apply with fewer args than the callee's arity"
+	case arityKnown:
+		args = args[len(args)-arity:] // keep the TOP arity; deeper values survive
+	case fnOp.kind == opEvent && applyIdx < 0:
+		// An EVENT lead with no provable arity keeps the standing refusal: the
+		// KeepQ lowering would consume the whole window on the unquoted path.
+		refuse = "trailing fn-value apply over a call result (runtime quote state unknown)"
+	}
+	// ONE refusal site for both arms, deliberately: the refusal-site census is
+	// a downward ratchet (test/go/langspec refusalSiteCeiling), so a second
+	// MarkUncompilable here would raise the count even though the shapes it
+	// refuses are strictly fewer than before.
+	if refuse != "" {
+		es.MarkUncompilable(refuse)
+		return 0, false
+	}
+	ops := make([]EmitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := len(args) - 1; i >= 0; i-- {
+		if core.IsFnValueResidual(args[i]) {
+			return 0, false
+		}
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return 0, false
+		}
+		ops = append(ops, op)
 	}
 	// An EVENT-provenance fn — the direct result of a compiled call — arrives
 	// WITHOUT the interpreter's read substitution, so its runtime quote
@@ -3907,28 +3986,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	// held while the only ops were the read-mirror strip and the apply
 	// word's unquote.) A local / const / dyn-scope arrival keeps the
 	// stripping op — a stored read IS substituted (the strip's contract).
-	keepQuote := false
-	if fnOp.kind == opEvent && applyIdx < 0 {
-		// The KeepQ lowering consumes EXACTLY len(args) window values on
-		// the unquoted path, so it is faithful only when the callee's own
-		// arity equals the window: a wider window under-applies in the
-		// interpreter (`(1 2 (mk 4))` nets [1, 6] — the 1-arg adder leaves
-		// the deeper value) where the op would consume both. A concrete
-		// single-sig callee proves its arity; anything else keeps the
-		// refusal (sound interpreter fallback).
-		proven := false
-		if arity, known := es.producerReturnedClosureArity(fn.ID); known {
-			proven = arity == len(args)
-		} else if fd, isFn := fn.Data.(core.FnDefInfo); isFn {
-			own := fd.OwnSigs()
-			proven = len(own) == 1 && own[0].TotalArgs() == len(args)
-		}
-		if !proven {
-			es.MarkUncompilable("trailing fn-value apply over a call result (runtime quote state unknown)")
-			return false
-		}
-		keepQuote = true
-	}
+	keepQuote := fnOp.kind == opEvent && applyIdx < 0
 	unquote := false
 	if applyIdx >= 0 {
 		u := es.units[len(es.units)-1]
@@ -3938,7 +3996,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote, dynApplyKeepQuote: keepQuote}})
 	es.setProduced(out, seq)
-	return true
+	return len(args), true
 }
 
 // RecordDynApplyName records the same fn-value apply as RecordDynApply, but

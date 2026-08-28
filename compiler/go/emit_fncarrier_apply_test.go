@@ -131,7 +131,7 @@ func TestRecordDynApplyEventLeadKeepQ(t *testing.T) {
 	es.frames[0] = append(es.frames[0], EmitEvent{kind: evCall})
 	es.producedBy[carrier.ID] = producer{seq: 0}
 	out := core.NewCarrier(core.TInteger)
-	if es.RecordDynApply([]core.Value{core.NewInteger(5)}, carrier, out, core.SrcPos{}) {
+	if _, ok := es.RecordDynApply([]core.Value{core.NewInteger(5)}, carrier, out, core.SrcPos{}); ok {
 		t.Fatal("an unprovable event-provenance carrier lead must refuse")
 	}
 	if es.Compilable || es.Reason == "" {
@@ -140,9 +140,17 @@ func TestRecordDynApplyEventLeadKeepQ(t *testing.T) {
 
 	// The concrete single-sig arity proof: a capture-bearing (unbakeable)
 	// anonymous fn resolved through its producing event records the KeepQ
-	// apply when the window matches its declared arity, and refuses a
-	// wider window. Dynamic exempts the operand resolver's type-body
-	// screen, as a real event out is.
+	// apply, consuming exactly its declared arity out of the window.
+	// Dynamic exempts the operand resolver's type-body screen, as a real
+	// event out is.
+	//
+	// A WIDER window used to refuse here. It no longer does, and the change
+	// is measured rather than relaxed: the interpreter UNDER-APPLIES —
+	// `(1 2 (mk 4))` with a 1-arg adder nets [1, 6], the deeper 1 surviving
+	// — so the faithful lowering consumes the top `arity` values and leaves
+	// the rest, which is what the returned `consumed` tells the collapse
+	// site to remove. The NARROWER window is the shape that still refuses,
+	// asserted below.
 	mkFn := func() core.Value {
 		v := core.NewFunction(core.FnDefInfo{Anonymous: true,
 			Captured: []core.CapturedBinding{{Name: "c", Value: core.NewCarrier(core.TInteger)}},
@@ -156,21 +164,48 @@ func TestRecordDynApplyEventLeadKeepQ(t *testing.T) {
 	fn := mkFn()
 	es2.frames[0] = append(es2.frames[0], EmitEvent{kind: evCall})
 	es2.producedBy[fn.ID] = producer{seq: 0}
-	if !es2.RecordDynApply([]core.Value{core.NewInteger(5)}, fn, core.NewCarrier(core.TInteger), core.SrcPos{}) {
+	if _, ok := es2.RecordDynApply([]core.Value{core.NewInteger(5)}, fn, core.NewCarrier(core.TInteger), core.SrcPos{}); !ok {
 		t.Fatalf("a sig-proven event lead must record (reason %q)", es2.Reason)
 	}
 	rec := es2.frames[0][len(es2.frames[0])-1]
 	if rec.kind != evCall || !rec.call.dynApplyKeepQuote {
 		t.Error("the sig-proven event-lead apply must carry dynApplyKeepQuote")
 	}
+	// WIDER window: records, consuming only the callee's own arity.
 	es3 := NewEmitState()
 	fn3 := mkFn()
 	es3.frames[0] = append(es3.frames[0], EmitEvent{kind: evCall})
 	es3.producedBy[fn3.ID] = producer{seq: 0}
-	if es3.RecordDynApply([]core.Value{core.NewInteger(1), core.NewInteger(2)}, fn3, core.NewCarrier(core.TInteger), core.SrcPos{}) {
-		t.Fatal("a wider window than the sig arity must refuse")
+	consumed, ok := es3.RecordDynApply([]core.Value{core.NewInteger(1), core.NewInteger(2)}, fn3, core.NewCarrier(core.TInteger), core.SrcPos{})
+	if !ok {
+		t.Fatalf("a wider window must UNDER-APPLY, not refuse (reason %q)", es3.Reason)
 	}
-	if es3.Compilable {
-		t.Error("the wider window must mark the program uncompilable")
+	if consumed != 1 {
+		t.Errorf("consumed = %d, want 1 — the deeper window value must survive", consumed)
+	}
+	if !es3.Compilable {
+		t.Errorf("under-application must not mark the program uncompilable (reason %q)", es3.Reason)
+	}
+
+	// NARROWER window: the interpreter leaves the fn UNAPPLIED in the
+	// residual and nothing here models that, so it refuses — and the refusal
+	// must MARK, not merely decline. A bare decline lets the collapse site's
+	// RegisterTrailingApply fallback lower the window anyway and answer a
+	// silent wrong value (measured: `(5 (mk2 10))` answered 15 against the
+	// interpreter's [5, fn]).
+	two := core.NewFunction(core.FnDefInfo{Anonymous: true,
+		Captured: []core.CapturedBinding{{Name: "c", Value: core.NewCarrier(core.TInteger)}},
+		Signatures: []core.Signature{{
+			Args: []*core.Type{core.TInteger, core.TInteger}, Returns: []*core.Type{core.TInteger}, BarrierPos: -1,
+		}}})
+	two.Dynamic = true
+	es4 := NewEmitState()
+	es4.frames[0] = append(es4.frames[0], EmitEvent{kind: evCall})
+	es4.producedBy[two.ID] = producer{seq: 0}
+	if _, ok := es4.RecordDynApply([]core.Value{core.NewInteger(5)}, two, core.NewCarrier(core.TInteger), core.SrcPos{}); ok {
+		t.Fatal("a window NARROWER than the callee's arity must refuse")
+	}
+	if es4.Compilable {
+		t.Error("the narrower window must MARK the program uncompilable, not silently decline")
 	}
 }
