@@ -215,10 +215,29 @@ says**, so Stage 9 cannot honestly flip to total on the island ceiling alone.
 The census is a DOWNWARD ratchet like `refusalSiteCeiling` — it only falls,
 and a rise wants a design note rather than a bigger constant.
 
-The seam spread is also the work-list, and it is not one problem: `Engine.Run`
-and `CallBoru` dominate, `vm:island` shows OpFallback spans that DO execute,
-and `InvokeCallback:callboru` is the predicate/callback seam. Each retires
-against a different stage.
+The seam spread is also the work-list, and it is not one problem. Sampling the
+rows that produce each seam attributes the 959 entries to named stages rather
+than leaving them a number:
+
+| seam | what produces it (sampled) | retires with |
+| --- | --- | --- |
+| `InvokeCallback:callboru` | **predicate types**, every sampled row — `def Pos (fn [[n:Integer] [Boolean] [n gt 0]])` at a param, a typed def, or a return | §6.3 predicate bodies as units |
+| `CallBoru` | the same predicate rows, plus module fn bodies that `raise`, plus `Test.check-prop` | §6.3, then §6.8 |
+| `RunResolved` | `do` with a RAW-TOKEN body — `do [1 2 (if b [] [9 9])]`, `do [for 3 [1]]` | §6.8 units-not-tokens |
+| `Engine.Run` | the Reach/lens apply (`p $.name apply`, `[10 20 30] $.1 apply`) and `do` with a MAP body whose entries are code (`do {n:[a add 1]}`) | §6.8, plus a lens-apply lowering |
+| `runPooledSub` | the same lens-apply rows, and `Vm.run` / `canon` round-trips | §6.8 / §6.7 (runtime compilation) |
+| `vm:island-resolved` | the fn-value apply chains — `compose`/`twice`/`stage`, `fnsig`-typed params, module fn-value boundary rows | §6.3 universal fn values |
+| `vm:island` | OpFallback spans that DO execute: a fn value read from a container (`m.double 21`), `do`/`error` rows, `StructUtil.parse/v` | §6.3 + §6.10 |
+
+Two readings worth stating. First, **§6.3's predicate work is the single
+largest attributable cluster** — it owns `InvokeCallback:callboru` outright and
+much of `CallBoru` — which is the same conclusion the family-B `is` refusal
+reached from the opposite direction, and it is why that refusal must stand
+until the bodies compile. Second, **`Engine.Run` and `RunResolved` together are
+the `do`/code-body family**, so Stage 6's handler migration is a bigger
+contributor to the live residue than its ledger row (H, 6 rows) suggests: the
+ledger counts rows that REFUSE, and this counts rows that COMPILE and then
+interpret anyway.
 
 ---
 
