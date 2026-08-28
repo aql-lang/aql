@@ -828,8 +828,7 @@ func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, 
 	case compiler.OpCallDynApplyTop:
 		return vc.callDynApplyTop(reg, arg, stack, curDebug, pc)
 	case compiler.OpCallDynFrame:
-		st, err := vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
-		return st, nil, err
+		return vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
 	case compiler.OpCallDynMethod:
 		st, err := vc.callDynMethod(reg, &vc.p.DynMethods[arg], stack, curDebug, pc)
 		return st, nil, err
@@ -1158,21 +1157,58 @@ func (vc *vmContext) callDynamicMixed(reg *core.Registry, w int, stack []core.Va
 // turns out to have — and a non-callable value stays data. The run's residual
 // replaces the whole frame region; the following RET applies the fn's return
 // discipline (checkReturnContract, RetReplay).
-func (vc *vmContext) callDynFrame(reg *core.Registry, w, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+func (vc *vmContext) callDynFrame(reg *core.Registry, w, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
 	if w < 1 || len(stack)-frameBase < w {
-		return nil, vmErrAt(curDebug, pc, "CALL_DYN_FRAME underflow")
+		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYN_FRAME underflow")
 	}
 	base := len(stack) - w
 	prefix := append([]core.Value(nil), stack[frameBase:base]...)
 	tokens := append([]core.Value(nil), stack[base:]...)
+	// The Apply kernel reaches the replay window only in its SIMPLEST shape:
+	// an empty resolved prefix, and a token region that is a fn followed by
+	// plain data. Then the region is exactly [fn, args…] — the same thing
+	// CALL_DYNAMIC's leading form hands dynApplyEnter, and RunResolved would
+	// have auto-applied it in written order, which is the order the frame
+	// binds.
+	//
+	// A NON-EMPTY prefix is not that shape and must keep the island: the fn
+	// stack-collects from the prefix as well as forward-collecting the token
+	// region (callDynFrame's own contract), so the arg set the frame would
+	// bind is not the arg set the interpreter assembles. Likewise a token
+	// region carrying a second fn or a tape-coupled token — the interpreter
+	// re-steps those, and a frame push cannot.
+	if len(prefix) == 0 && len(tokens) > 0 && dynFrameSimpleWindow(tokens) {
+		if ent := vc.dynApplyEnter(tokens[0], tokens[1:]); ent != nil {
+			return stack[:frameBase], ent, nil
+		}
+	}
 	results, err := runIslandResolved(reg, prefix, tokens)
 	if err != nil {
-		return nil, stampAt(err, curDebug, pc, vc.r)
+		return nil, nil, stampAt(err, curDebug, pc, vc.r)
 	}
 	if err := vc.screenResults(results, "dynamic frame result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (the replay island's results are interpreter residuals, tape-coupled only on a compiler bug) (§compiler)
-		return nil, err
+		return nil, nil, err
 	}
-	return append(stack[:frameBase], results...), nil
+	return append(stack[:frameBase], results...), nil, nil
+}
+
+// dynFrameSimpleWindow reports whether a replay token region is a fn followed
+// by plain data — the one shape the Apply kernel can enter as a frame.
+//
+// Everything after the lead must be INERT: a second appliable fn would collect
+// its own neighbours when the interpreter re-stepped the region, and a
+// tape-coupled token (Word/Mark/Move/Forward/OpenParen/Splice) is re-stepped by
+// definition. A frame push does neither, so either one keeps the island.
+func dynFrameSimpleWindow(tokens []core.Value) bool {
+	if !core.IsAppliableFn(tokens[0]) || tokens[0].Quoted {
+		return false
+	}
+	for _, t := range tokens[1:] {
+		if core.IsAppliableFn(t) || tapeCoupled([]core.Value{t}) {
+			return false
+		}
+	}
+	return true
 }
 
 // escapedFlow reports (and clears) a break/continue signal that escaped an

@@ -35,19 +35,19 @@ import (
 // re-enter the interpreter through an unattributed seam.
 //
 // First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
-// entries). Now 151, after two fixes on the same day. The seam spread — the
+// entries). Now 141, after three fixes on the same day. The seam spread — the
 // shape of the debt, not a second ceiling — and what each moved:
 //
-//	                         first    (a)    (b)
-//	Engine.Run                 501    477    453
-//	CallBoru                   275    251    251
-//	vm:island                   66     66     48
-//	runPooledSub                37     37     35
-//	RunResolved                 31     31     31
-//	vm:island-resolved          21     21     21
-//	InvokeCallback:callboru     28      4      4
-//	                          ----   ----   ----
-//	rows                       184    163    151
+//	                         first    (a)    (b)    (c)
+//	Engine.Run                 501    477    453    443
+//	CallBoru                   275    251    251    251
+//	vm:island                   66     66     48     48
+//	runPooledSub                37     37     35     35
+//	RunResolved                 31     31     31     31
+//	vm:island-resolved          21     21     21     11
+//	InvokeCallback:callboru     28      4      4      4
+//	                          ----   ----   ----   ----
+//	rows                       184    163    151    141
 //
 // (a) Foreign detached units became hostable mid-run
 // (eng/go/vm_foreign_unit.go). The InvokeCallback column is that one: those 24
@@ -62,12 +62,19 @@ import (
 // programs disassemble with `fallbacks=0` and the island lives inside the
 // dynamic-apply opcode.
 //
-// Both drops carried Engine.Run with them, because an island is a nested Run.
+// (c) The Apply kernel reached CALL_DYN_FRAME's replay window in its simplest
+// shape — an empty resolved prefix and a token region that is a fn followed by
+// plain data. That is the `vm:island-resolved` column. A non-empty prefix keeps
+// the island by contract: the fn stack-collects from the prefix as well as
+// forward-collecting the region, so the frame would bind a different arg set
+// than the interpreter assembles.
+//
+// Every drop carried Engine.Run with it, because an island is a nested Run.
 //
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 151
+const interpEntryRowCeiling = 141
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

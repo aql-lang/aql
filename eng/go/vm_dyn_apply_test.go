@@ -130,3 +130,35 @@ func TestDynApplyFramePushChecksParamContract(t *testing.T) {
 		t.Fatalf("err = %v, want the callee's no-match", err)
 	}
 }
+
+// dynFrameSimpleWindow decides whether a replay token region is the one shape
+// the Apply kernel can enter: a fn followed by plain data. Every rejection
+// below is a region the INTERPRETER would re-step and a frame push cannot, so
+// each one keeps the island rather than answering differently.
+func TestDynFrameSimpleWindow(t *testing.T) {
+	prog := oneConstProg(1)
+	fn := dynApplyFn(nil, prog, 0)
+	quoted := fn
+	quoted.Quoted = true
+
+	for _, tc := range []struct {
+		name string
+		toks []core.Value
+		want bool
+	}{
+		{"fn then data", []core.Value{fn, core.NewInteger(1), core.NewString("x")}, true},
+		{"fn alone", []core.Value{fn}, true},
+		{"lead is not a fn", []core.Value{core.NewInteger(1), fn}, false},
+		{"lead is quoted", []core.Value{quoted, core.NewInteger(1)}, false},
+		// A SECOND fn in the region collects its own neighbours when the
+		// interpreter re-steps the window; the frame push would hand it to the
+		// first fn as an argument instead.
+		{"a second fn follows", []core.Value{fn, core.NewInteger(1), fn}, false},
+		// A tape-coupled token is re-stepped by definition.
+		{"a word follows", []core.Value{fn, core.NewWord("add")}, false},
+	} {
+		if got := dynFrameSimpleWindow(tc.toks); got != tc.want {
+			t.Errorf("%s: dynFrameSimpleWindow = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
