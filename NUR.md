@@ -237,11 +237,33 @@ fixed; the rule itself is unconditional.
    and the results agree), but the same shape, and introduced recently in
    PR #401.
 
-**No verdict.** The predicate role does need to test ONE value, so removing
-site 1's gate needs a replacement contract, not a deletion — and naming that
-contract is a design call the register should not pre-empt. Recorded so the
-divergence between an accepted ADR and the code is not lost; the fix is the
-maintainer's to direct.
+**A THIRD SITE existed and was not on this list; it is now gone (2026-08-28).**
+The compiler's `lambdaCallbackInputs` admitted a list `each` callback and
+refused list `fold`/`scan`, under a rule its own note called THE ARITY-1
+BOUNDARY: "at one input no convention can disagree, at two they can". Arity
+deciding what compiles is the same shape as sites 1 and 2, in the admission
+lane rather than the dispatch lane, and it survived unrecorded because it read
+as a compile-coverage limit rather than a semantic exception.
+
+It was also wrong on the facts. The two containers disagree because the MAP
+path binds POSITIONALLY (`CallBoruFn`, args in sig order) and the LIST path
+runs its inputs as a STACK (`InvokeBody` → `RunResolved`, `MatchSignature`
+filling top-down) — a per-path convention, not an arity threshold. One
+per-word permutation at the closure bind (`ClosureInStackPair`) reconciles
+them, and the rows compile at both arities with no boundary anywhere. Five
+ledger rows graduated with it (design/FULL-COMPILATION.0.md §6.3).
+
+Worth stating for the register's own sake: this site was found while fixing
+something else, not by looking for arity-keyed rules. A gate that COUNTS them
+— the way `fissiongate` counts kind-predicate call sites — would have named it
+on the day it was written. That is a cheap thing to build and this register
+has no equivalent.
+
+**No verdict on sites 1 and 2.** The predicate role does need to test ONE
+value, so removing site 1's gate needs a replacement contract, not a deletion
+— and naming that contract is a design call the register should not pre-empt.
+Recorded so the divergence between an accepted ADR and the code is not lost;
+the fix is the maintainer's to direct.
 
 ---
 
@@ -774,141 +796,6 @@ Apply kernel. Standing measurement:
 `lang/go/nur101_paren_restep_test.go`. Full account, with the measurement
 tables and the harness finding:
 [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md).
-
----
-
-## NUR099 — a fn body means a different thing under a capitalised name, and that is the only door to a predicate type {#nur099}
-
-**Status:** Pending (verdict: resolve by fix) · **Recorded:** 2026-08-25 ·
-**Surfaced by:** the maintainer's review of the §5.1 `stranded_type_call`
-diagnostic
-
-**Rule:** boru refuses loudly, and at the declaration. A declaration the
-engine can already prove unusable is not accepted and left to fail later —
-NUR091 is the same rule applied to a malformed `fn` triple.
-
-**Divergence:** the declaration is accepted and nothing reports it.
-
-```
-$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  K 1 2'
-K 1 2
-$ echo $?
-0
-$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  4 is K   "s" is K   true is K'
-false false false                     ← the bound type admits nothing at all
-$ boru do 'def K fn [[a:Any b:Any][Any][a]] end  def z:K 5 end z'
-error: def z: predicate type K: RunPredicate: predicate must take exactly one argument
-```
-
-The engine reaches a definite conclusion about `K` — but only when someone
-uses it AS A TYPE. It never reports at the declaration, and never at all for
-the spelling that actually happens: calling it.
-
-**Not the return type.** `def <Capitalised> <fn>` is the predicate-type
-declaration form and a non-Boolean body is legal — the **None-on-failure**
-convention returns the value for a member and `None` for a non-member
-(`lang/spec/record.tsv` §177: `def Positive fn [n:Integer Integer [if (n gt
-0) [n] [None]]]`, return type Integer). So `def I x:Integer => [add 1 x]` is
-a well-formed predicate admitting every Integer, and the return type cannot
-tell a mistake from a predicate.
-
-**The root cause is that one spelling carries two jobs.** The same fn body
-means different things according to the CASE of the name it is bound to:
-
-```
-def even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a callable function
-def Even fn n:Integer Boolean [eq 0 (mod 2 n)]   → a predicate type
-```
-
-and the capitalised form cannot be refused, because it is the ONLY way to
-declare an arbitrary predicate type. The type-constructing vocabulary —
-`convert typeof inspect make refine class surface exposes gen of extends
-default const base tor tand tany tall teq is as tis istype behave fnsig tnot
-pathof` — has no predicate constructor. `refine` declines the job (*"base
-must be Record, Table, or a class type, got Integer"*), and the comparison
-predicates have their own door (`def Big (Integer gt 10)`), but an arbitrary
-membership test has none. The capital is not something predicates want; it is
-the only entrance available.
-
-**Verdict (2026-08-25, maintainer): resolve by fix — add `fnpred`, the word
-analogous to `fnsig`.** `boru describe fnsig` reads *"a function TYPE — a
-function minus its body"*; `fnpred` is its mirror, a predicate TYPE — a
-function kept FOR its body. One drops the body and keeps the shape, the other
-drops the shape and keeps the body, and both bound to a capitalised name
-produce a type: `fnsig`'s enforces a function's shape, `fnpred`'s enforces a
-value's membership.
-
-Once predicates have their own spelling, `def <Capitalised> <fn-with-body>`
-denotes nothing legitimate and can be refused AT THE DECLARATION — the
-outcome the maintainer asked for originally, reached without counting
-parameters (compare NUR100, and ADR-016's absolute ban on arity-keyed
-exceptions). It also retires the case-keyed meaning: a fn body would mean one
-thing whatever the name's case.
-
-**Half landed, 2026-08-25.** `fnpred` ships with both of `fnsig`'s forms —
-the pair form `fnpred n:Integer [eq 0 (mod 2 n)]` and the spec-list form
-`fnpred [[n:Integer] [eq 0 (mod 2 n)]]` — and the output slot is supplied
-implicitly as `Any`, which is the honest declaration: both membership
-conventions are supported and they disagree on the return type, so pinning
-it to Boolean would refuse the None-on-failure form. `InstallType` now routes
-on the DECLARATION (`IsDeclaredPredicateFn`) before falling back to the
-parameter count, and `PredicateInputType` believes a declaration whatever the
-fn's shape. Pinned in `lang/spec/fnpred.tsv` (18 rows) and
-`core/go/fnpred_declared_test.go`.
-
-What remains, and why it is not in the same change: the arity route
-(`isPredicateFnValue`, and `PredicateInputType`'s count test) is still live,
-because ~150 sites across the corpus declare predicates the old way. Deleting
-it is a BREAKING change that needs those migrated to `fnpred` first. Both are
-marked DEPRECATED in place with a pointer here so neither is extended
-meanwhile. Only when they are gone does `def <Capitalised> <fn-with-body>`
-become refusable at the declaration — the outcome this record exists for.
-
-**Related.** The 1-argument cases (`def I …`, and the capitalised-constructor
-convention `def New fn opts:Map Service […]` used by `design/examples/`) stay
-reachable only at the USE site until this lands, which is what
-`stranded_type_call` reports (`design/HIGHER-ORDER-FUNCTIONS.0.md` §5.1).
-
----
-
-## NUR100 — ADR-016 forbids arity-keyed exceptions; two live sites use them {#nur100}
-
-**Status:** Pending (no verdict) · **Recorded:** 2026-08-25 · **Surfaced
-by:** the maintainer's ruling, 2026-08-25, that ADR-016's rule is absolute —
-"everything everywhere every time and always"
-
-**Rule:** ADR-016 — *"Every function behaves the same way whatever its arity
-and wherever it came from … this record forbids exceptions keyed on arity or
-origin."* Accepted 2026-08-15. The two exceptions it named as defects were
-fixed; the rule itself is unconditional.
-
-**Divergence:** two live sites decide behaviour by counting parameters.
-
-1. **`core/go/registry.go` `RunPredicate`** — whether a function may act as a
-   predicate at all is decided by its parameter count:
-
-   ```
-   error: predicate type K: RunPredicate: predicate must take exactly one argument
-   ```
-
-   A semantic exception: two functions that both express a membership test
-   are admitted or refused on arity alone.
-
-2. **`compiler/go/compiler_dispatch_record.go` `smallerArityOverload`** — a
-   poly window over dynamic operands is refused compilation when the word
-   registers an overload consuming FEWER operands. Lower stakes (a
-   compile-coverage conservatism, not an answer change — the lane falls back
-   and the results agree), but the same shape, and introduced recently in
-   PR #401.
-
-**No verdict.** The predicate role does need to test ONE value, so removing
-site 1's gate needs a replacement contract, not a deletion — and naming that
-contract is a design call the register should not pre-empt. Recorded so the
-divergence between an accepted ADR and the code is not lost; the fix is the
-maintainer's to direct.
-
----
-
 
 ---
 

@@ -144,3 +144,29 @@ func (vc *vmContext) closureProgram(cl core.ClosurePayload) (*compiler.Program, 
 	p, ok := cl.Prog.(*compiler.Program)
 	return p, ok && p != nil && p != vc.p
 }
+
+// shapeInputs applies a closure's declared input convention to the inputs a
+// higher-order handler hands it, returning the slice the param slots bind from.
+//
+// Only ClosureInStackPair does anything: the handler pushed in STACK order
+// (deeper first) and the body's params were declared in the top-down order the
+// interpreter's MatchSignature produces, so binding reverses them. Every other
+// shape is already positional — the handler's order IS the slot order — and is
+// returned untouched. The reverse is on a COPY: the caller's slice is a
+// handler's own buffer, reused across iterations of a fold.
+//
+// The reversal is UNCONDITIONAL on the shape, with no input-count guard. A
+// `len(inputs) < 2` early return would be a pure allocation saving — reversing
+// nothing or one thing is the identity — but it would read as an arity-keyed
+// branch in a kernel whose one argument rule holds at EVERY arity, and a
+// branch that reads like an exception eventually gets treated as one.
+func shapeInputs(cl core.ClosurePayload, inputs []core.Value) []core.Value {
+	if cl.InShape != compiler.ClosureInStackPair {
+		return inputs
+	}
+	out := make([]core.Value, len(inputs))
+	for i, v := range inputs {
+		out[len(inputs)-1-i] = v
+	}
+	return out
+}

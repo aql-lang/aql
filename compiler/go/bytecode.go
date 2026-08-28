@@ -600,6 +600,30 @@ const (
 	// ClosureInKeyVal wraps a map entry as a KeyVal {k v i n} before the (last)
 	// input — the map-iteration LAMBDA convention (`each (kv => …) {m}`).
 	ClosureInKeyVal
+	// ClosureInStackPair says the handler hands its inputs in STACK order
+	// (deeper first) while the body's params were declared in the order the
+	// interpreter's top-down assignment produces, so the bind REVERSES them.
+	//
+	// This is the list fold/scan lambda, and it is the one place the two
+	// engines' argument rules genuinely disagree rather than merely look like
+	// they might. Both handlers hand `(accumulator, element)`. The MAP path
+	// calls the lambda directly — CallBoruFn binds args positionally, so
+	// sig[0] is the ACCUMULATOR. The LIST path goes through InvokeBody, whose
+	// interpreter arm runs the inputs as a STACK (RunResolved), and
+	// MatchSignature fills from the top down — so sig[0] is the ELEMENT. Same
+	// handler order, opposite assignment, because one path is positional and
+	// the other is a stack.
+	//
+	// A compiled closure is positional like the map path, so without this the
+	// list pair arrives swapped:
+	//
+	//	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
+	//	  interpreted 123    compiled (unpermuted) 60
+	//
+	// Carriers cannot fix it — they TYPE the body, they do not choose which
+	// local receives what — which is why this rides as a per-word shape at the
+	// bind rather than as a carrier order.
+	ClosureInStackPair
 )
 
 // NewClosure builds a closure Value over prog's body unit (default value input

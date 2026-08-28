@@ -104,7 +104,7 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | D. Provenance totalization | 13 | operands with no producing event: `$module`/namespace synthetics, cross-registry captures |
 | E. Check-diagnostics sentinel | 8 | the checker rejects programs the interpreter runs (`lang/go/boru.go:459-472`) |
 | F. Dispatch recovery | 5 | `unmatched dispatch recovered at apply/…` — recovered windows have no trap lowering yet |
-| G. Working islands | 7 → 5 | compile and run correctly; ledgered only because the program embeds `OpFallback`. **2 graduated 2026-08-27** (list `each`, Function and lambda forms): `lambdaCallbackInputs` had a MAP case and no LIST case, so the lambda lowering declined at its first gate — a missing case, not the "modelled fn-value callback frame" the ledger asked for. `fold`/`scan` remain and DO need that frame: at 2 inputs the compiled closure's positional binding disagrees with `MatchFnSig`'s stack-order assignment (§6.3, the arity-1 boundary) |
+| G. Working islands | 7 → 5 | compile and run correctly; ledgered only because the program embeds `OpFallback`. **2 graduated 2026-08-27** (list `each`, Function and lambda forms): `lambdaCallbackInputs` had a MAP case and no LIST case, so the lambda lowering declined at its first gate — a missing case, not the "modelled fn-value callback frame" the ledger asked for. **5 more graduated 2026-08-28** (list `fold`/`scan`, Function and lambda, seeded and unseeded): they needed no frame either — both handlers hand `(accumulator, element)`, and the two engines disagree only because the MAP path binds POSITIONALLY (`CallBoruFn`) while the LIST path runs its inputs as a STACK (`InvokeBody` → `RunResolved`), where `MatchSignature` fills top-down. One per-word permutation at the closure bind (`ClosureInStackPair`) reconciles them (§6.3). The family is down to the `apply` island and the full-stack-word row |
 | H. `while` | 6 | no structured lowering; body words splice tape-coupled tokens |
 | I. Variadic no-static-seat | 5 | `await first/any` winner residuals: 0..N results exceed any static seat (NUR067) |
 | J. Pinned miscompiles | 2 | bare `Function`-param read — both lanes wrong vs the 2026-08-15 ruling |
@@ -1447,6 +1447,29 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   row that moved onto the VM still answers what `RunInterp` answers. The
   pin flipped to `TestPredicateBodyRunsOnTheVM` and now fails if the
   interpreter arm comes back.
+
+  **List `fold`/`scan`: the same shape, one seam lower (2026-08-28).** The
+  ledger asked for "a modelled fn-value callback frame" and §6.3 read the
+  divergence as an arity boundary — one input cannot disagree, two can. Both
+  descriptions were downstream of the real mechanism, which is neither arity
+  nor carriers: **both handlers hand `(accumulator, element)`**, and the two
+  engines assign it differently because the MAP path calls the lambda
+  POSITIONALLY (`mapBody.callLambda` → `CallBoruFn`, args in sig order) while
+  the LIST path goes through `InvokeBody`, whose interpreter arm runs the
+  inputs as a STACK (`RunResolved`) where `MatchSignature` fills top-down.
+  Same order in, opposite assignment out.
+
+  So the fix is ONE per-word permutation at the closure bind
+  (`ClosureInStackPair`), not a frame. Five ledger rows graduate into
+  `lang/spec/higher-order.tsv` §12 with four `Any`-param rows that report the
+  convention directly.
+
+  Worth naming precisely: these rows never REFUSED. They **islanded** — the
+  right answer, produced by the interpreter, inside a program the coverage
+  metric calls compiled. That is why the graduated pin asserts the
+  DISASSEMBLY: its parity half passed for the entire time the island existed,
+  so a value-only assertion here proves nothing and would keep passing the day
+  someone re-islands the callback.
 
   **The graduation, landed and PROVEN honest.** With the body on the VM the
   refusal in `RecordCallOperands` had nothing left to defend, and the arm

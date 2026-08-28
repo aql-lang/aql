@@ -457,13 +457,13 @@ func (vc *vmContext) invokeClosureOn(reg *core.Registry, body core.Value, inputs
 	// it runs in that program's own nested context rather than against vc.p
 	// (see closureProgram for why this became reachable).
 	if p, foreign := vc.closureProgram(cl); foreign {
-		return vc.hostForeign(p, reg, cl.Unit, inputs, cl.Captures)
+		return vc.hostForeign(p, reg, cl.Unit, shapeInputs(cl, inputs), cl.Captures)
 	}
 	// Inputs fill the leading param slots, captures the trailing ones
 	// (StartFnCompile registers params before captures) — the same split
 	// RunUnit and runUnitNested bind, so it uses the same helper rather than
 	// a second copy of the loop.
-	return vc.enterBodyUnit(reg, cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], inputs, cl.Captures))
+	return vc.enterBodyUnit(reg, cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], shapeInputs(cl, inputs), cl.Captures))
 }
 
 // pushFrameArgs is the DynEnv args bracket's frame-entry half: push the

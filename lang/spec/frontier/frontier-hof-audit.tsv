@@ -253,9 +253,13 @@ def chainif fn [[a:Function b:Function s:Integer][Any][def r1 (a s) if (r1.ok) [
 #     params — a probe with distinct types cannot see position, because
 #     MatchFnSig reassigns by type, and reading one as positional evidence
 #     is what produced the swapped admission above.
+#
+#     GRADUATED 2026-08-28 — the five list fold/scan rows that were here now
+#     live in lang/spec/hof.tsv §12. The gap was never carriers and never a
+#     "modelled callback frame": both handlers hand (accumulator, element),
+#     and the two engines disagree because the MAP path calls the lambda
+#     POSITIONALLY (CallBoruFn) while the LIST path runs the inputs as a
+#     STACK (InvokeBody -> RunResolved), where MatchSignature fills top-down.
+#     One per-word permutation at the closure bind (ClosureInStackPair) makes
+#     the two agree, and the rows compile NATIVE with no interpreter entry.
 def dbl x:Integer => [mul 2 x]  for-each dbl/v [1 2 3]		for-each discards every result — the fn must still satisfy its OWN declared return arity (a void lambda breaks its contract, not for-each's)
-def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3] 0	6	fold with an explicit seed: the callback's sig is (element, accumulator) — same-typed params, so `add` reads the same either way
-fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0	123	…and a NON-commutative body shows the order: `a` is the accumulator (0 -> 1 -> 12 -> 123), which a positional compiled binding gets backwards (60)
-scan ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3]	[1 12 123]	scan the same way — the running accumulator is sig[1]
-def add2 fn [[a:Integer b:Integer][Integer][add a b]]  fold add2/v [1 2 3]	6	…and unseeded, the first element seeds it
-def add2 fn [[a:Integer b:Integer][Integer][add a b]]  scan add2/v [1 2 3]	[1 3 6]	scan keeps the running accumulator

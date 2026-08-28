@@ -800,27 +800,54 @@ func lambdaCallbackInputs(r *core.Registry, word string, spec core.CallableSpec,
 			return []core.Value{check.NewElementCarrier(elem)}, ClosureInValue, true
 		}
 	case "fold":
-		// Init form only (`init fold (lambda) {m}` → args [lambda, map, init]):
+		// NOT an arity rule. `fold` declares TWO signatures — one taking a seed
+		// operand, one not — and the operand test below asks WHICH SIGNATURE
+		// this call site matched, exactly as any recorder reads its operands.
+		// The argument-binding rule itself is the kernel's single one and holds
+		// at every arity; nothing here keys off how many params the CALLBACK
+		// declares.
+		//
+		// Seeded map form (`init fold (lambda) {m}` → args [lambda, map, init]):
 		// the accumulator carries the seed's type, the entry rides as a KeyVal.
 		if isMap && len(args) > spec.BodyPos+2 {
 			acc := args[spec.BodyPos+2]
 			return []core.Value{core.NewCarrier(acc.Parent), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
-		// A LIST fold does NOT get a case — see the ARITY-1 BOUNDARY note.
+		// A LIST fold's lambda declares (element, accumulator) — the
+		// interpreter's top-down assignment over the stack InvokeBody hands it
+		// — while the handler pushes (accumulator, element). Carriers go in
+		// DECLARED order and ClosureInStackPair reverses at the bind; see its
+		// doc for why the two containers differ.
+		if isList {
+			// The seeded signature carries the accumulator at the seed's type;
+			// the unseeded one seeds from the first ELEMENT, so both slots carry
+			// the element type — the scan case exactly. Same signature question
+			// as the map branch above, same answer shape.
+			accT := elem
+			if len(args) > spec.BodyPos+2 {
+				accT = args[spec.BodyPos+2].Parent
+			}
+			return []core.Value{check.NewElementCarrier(elem), core.NewCarrier(accT)}, ClosureInStackPair, true
+		}
 	case "scan":
 		// scan seeds the accumulator from the first value (no init operand): the
 		// accumulator carries the value type, the entry rides as a KeyVal.
 		if isMap {
 			return []core.Value{core.NewCarrier(elem), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
-		// A LIST scan does NOT get a case — see the ARITY-1 BOUNDARY note.
+		// A LIST scan seeds the accumulator from the first ELEMENT, so both
+		// slots carry the element type; the order and the permutation are the
+		// list fold's.
+		if isList {
+			return []core.Value{check.NewElementCarrier(elem), core.NewCarrier(elem)}, ClosureInStackPair, true
+		}
 	}
 	return nil, ClosureInValue, false
 }
 
-// THE ARITY-1 BOUNDARY — why `each` over a list is admitted above and `fold` /
-// `scan` are not. Measured 2026-08-27; the first attempt admitted all three and
-// was wrong, which is the useful part of the record.
+// THE LIST CALLBACK CONVENTION — why the list fold/scan cases above carry
+// ClosureInStackPair while every other case is positional. Measured 2026-08-27,
+// admitted 2026-08-28; three readings, and the wrong two are the useful part.
 //
 // A compiled closure binds its inputs POSITIONALLY: invokeClosureOn fills the
 // unit's leading param slots from the handler's `inputs` slice in order
@@ -835,46 +862,49 @@ func lambdaCallbackInputs(r *core.Registry, word string, spec core.CallableSpec,
 // `fold ([x:Any y:Any] => [x]) [7] 0` answers the element — so it is a real
 // ordering convention and not a by-type assignment that merely looks like one.
 //
-// The MAP form already agrees on both lanes, ambiguous types included, because
-// the handler's input order happens to match its convention. The LIST form does
-// not, so the pair arrives swapped:
+// WHY they differ is the reading that took longest, and it is not in the
+// matcher. BOTH handlers hand `(accumulator, element)`. The MAP path calls the
+// lambda POSITIONALLY — mapBody.callLambda → CallBoruFn, which binds args in
+// sig order — so sig[0] is the accumulator. The LIST path goes through
+// InvokeBody, whose interpreter arm runs the inputs as a STACK (RunResolved),
+// and MatchSignature fills from the TOP DOWN — so sig[0] is the element. Same
+// order in, opposite assignment out, because one path is positional and the
+// other is a stack. Nothing about arity or about the accumulator's type is
+// involved.
 //
-//	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
-//	  interpreted  123      (a accumulates: 0 → 1 → 12 → 123)
-//	  compiled      60      (the pair arrives swapped)
+// So the compiled binding needs ONE per-word permutation, not a modelled
+// callback frame: ClosureInStackPair reverses at the bind, and the list rows
+// compile native. Before that they did not REFUSE — they ISLANDED, answering
+// correctly through the interpreter inside a compiled program, which is the
+// outcome the mission rules out and which no value-parity test can see.
 //
-// Supplying the carriers in the other order does NOT fix it, and that is the
-// most useful thing measured here: carriers only TYPE the body. The unit's
-// param slots come from the LAMBDA's own declared order, and what lands in each
-// is the handler's push order — so both carrier spellings produced 60.
-//
-// Admitting fold/scan over a list therefore means making the two orders agree
-// at the seam that actually decides it: the handler's input order for that
-// form, or a per-word permutation at the closure bind. That is the "modelled
-// fn-value callback frame" the frontier ledger asked for, now located exactly,
-// and it is why the ledger was right about fold/scan and wrong about each.
-//
-// TWO PROBE LESSONS, both of which cost a wrong admission:
+// THREE PROBE LESSONS, each of which cost a wrong turn:
 //
 //   - A TYPED probe cannot establish positional order, because the matcher
 //     reassigns by type. `fn [[a:Integer b:String]…] fold f/v [1 2 3] 'seed'`
 //     matching, and its swap not matching, reads like "a is the element" and
 //     proves nothing of the kind. Use SAME-TYPED or Any params, or make no
-//     positional claim. A first version of THIS note then over-corrected the
-//     other way — asserting the accumulator is sig[0] for both containers, i.e.
-//     no asymmetry at all — which the ambiguous-type probe above disproves.
-//     Both errors came from reasoning about the matcher instead of running a
-//     body that reports which argument it got.
+//     positional claim.
+//   - Correcting that, an earlier version of this note over-shot the other way
+//     — asserting the accumulator is sig[0] for BOTH containers, i.e. no
+//     asymmetry at all — which the ambiguous-type probe above disproves. Both
+//     errors came from reasoning about the matcher instead of running a body
+//     that reports which argument it got.
 //   - The accumulator's runtime type after step 1 is the BODY'S RETURN, not the
 //     seed's, so a single static carrier looked like it needed a stability
 //     guard. It does not: the body binds the accumulator at its DECLARED PARAM
 //     type, not the carrier's tag — `fold ([acc:Scalar kv:KeyVal] => [if (acc
-//     is Integer) ['I'] ['S']]) {a:1 b:2 c:3} 0` answers 'S' on BOTH lanes,
-//     and `typeof acc` answers Scalar on both. A step whose accumulator fails
-//     the declared param no-matches identically in both lanes, and an
-//     OVERLOADED callback is already refused (lambdaHookCompatible wants
-//     exactly one own signature). That guard would have refused valid programs
-//     for a hazard that is not there.
+//     is Integer) ['I'] ['S']]) {a:1 b:2 c:3}` answers 'S' on BOTH lanes, and
+//     `typeof acc` answers Scalar on both. A step whose accumulator fails the
+//     declared param no-matches identically in both lanes, and an OVERLOADED
+//     callback is already refused (lambdaHookCompatible wants exactly one own
+//     signature). That guard would have refused valid programs for a hazard
+//     that is not there.
+//
+// And one about the fix itself: supplying the carriers in the other order does
+// NOT permute anything. Carriers only TYPE the body; the unit's param slots
+// come from the LAMBDA's own declared order, and what lands in each is the
+// handler's push order. Both carrier spellings produced 60.
 //
 // pairCarrier builds a representative {key, value} pair Map carrier — the shape
 // filter's list Function form hands its callback (key = the index, value = the

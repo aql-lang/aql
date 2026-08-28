@@ -219,57 +219,73 @@ func TestForeignClosureCaptureResolvesInItsOwnRegistry(t *testing.T) {
 	}
 }
 
-// TestListFoldCallbackOrderFence is a FENCE, not a graduation: it pins the
-// parity that a positional admission of `fold` / `scan` over a LIST breaks.
+// TestListFoldCallbackOrderPin was a FENCE and is now a GRADUATION PIN, and it
+// asserts the DISASSEMBLY as well as the value — deliberately. Its parity half
+// passed for the whole time list fold/scan ISLANDED, because an island answers
+// with the interpreter: a value-only assertion here proves nothing and would go
+// on passing the day someone re-islands the callback.
 //
-// A compiled closure binds its inputs POSITIONALLY — invokeClosureOn fills the
-// unit's leading param slots from the handler's `inputs` slice in order. The
-// interpreter presents them in the CALLBACK CONVENTION for the container, and
-// the two conventions differ: a MAP fold takes (accumulator, entry) while a
-// LIST fold takes (element, accumulator). That is measured with AMBIGUOUS param
-// types — `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed and
+// THE CONVENTION. A MAP fold takes (accumulator, entry); a LIST fold takes
+// (element, accumulator). Measured with AMBIGUOUS param types —
+// `fold ([x:Any y:Any] => [x]) {a:1} 0` answers the seed and
 // `fold ([x:Any y:Any] => [x]) [7] 0` answers the element — so it is a real
-// ordering convention, not a by-type assignment that resembles one. The MAP
-// form already agrees on both lanes because the handler's order matches its
-// convention. With ONE input no convention can disagree, which is why list
-// `each` is admitted. The LIST form at two does:
+// ordering convention, not a by-type assignment that resembles one.
 //
-//	fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0
-//	  interpreted  123      a accumulates: 0 → 1 → 12 → 123
-//	  positional    60      the pair arrives swapped
+// WHY THEY DIFFER, which is the part that took three readings to get right.
+// BOTH handlers hand (accumulator, element). The MAP path calls the lambda
+// POSITIONALLY (mapBody.callLambda -> CallBoruFn, args bound in sig order), so
+// sig[0] is the accumulator. The LIST path goes through InvokeBody, whose
+// interpreter arm runs the inputs as a STACK (RunResolved) where
+// MatchSignature fills from the TOP DOWN, so sig[0] is the element. Same order
+// in, opposite assignment out — one path is positional, the other is a stack.
 //
-// An attempt to admit these by supplying carriers in lambdaCallbackInputs
-// produced exactly that, on nine shapes. Swapping the carrier order did NOT
-// change it: carriers only TYPE the body, the unit's param slots come from the
-// LAMBDA's declared order, and what lands in each is the handler's push order.
-// So admitting fold/scan means making the two orders agree at the seam that
-// decides it — the handler's input order for that form, or a per-word
-// permutation at the closure bind.
+// A compiled closure is positional like the map path, so the list pair arrived
+// swapped (123 interpreted, 60 positional) and the lowering declined, leaving
+// the whole call an island. ClosureInStackPair reverses at the bind, and these
+// compile native.
 //
-// The rows below use SAME-TYPED params on purpose. A typed probe cannot see
-// positional order at all, because the matcher reassigns by type; that is what
-// made the first reading of this convention wrong.
-func TestListFoldCallbackOrderFence(t *testing.T) {
+// Carriers were never the lever: swapping the carrier order changed nothing,
+// because carriers TYPE the body while the slot each input lands in comes from
+// the handler's push order. The rows below use SAME-TYPED params on purpose —
+// a typed probe cannot see positional order at all, since the matcher
+// reassigns by type, and that is what made the first reading wrong.
+func TestListFoldCallbackOrderPin(t *testing.T) {
 	for _, tc := range []struct{ src, want string }{
 		{`fold ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3] 0`, "[123]"},
 		{`scan ([e:Integer a:Integer] => [a mul 10 add e]) [1 2 3]`, "[[1 12 123]]"},
 		{`def f fn [[e:Integer a:Integer] [Integer] [a mul 10 add e]]  fold f/v [1 2 3] 0`, "[123]"},
 		{`def n 2  fold ([e:Integer a:Integer] => [a add (e mul n)]) [1 2 3] 0`, "[12]"},
+		// The unseeded twin: the first element seeds, so both slots carry the
+		// element type rather than a separate seed type.
+		{`def f fn [[e:Integer a:Integer] [Integer] [a mul 10 add e]]  fold f/v [1 2 3]`, "[123]"},
+		// The MAP twin, unchanged and here as the control: it agreed before
+		// this work and must still, so a permutation applied to the wrong
+		// container fails loudly instead of quietly.
+		{`fold ([a:Integer kv:KeyVal] => [a mul 10 add (kv.v)]) {x:1 y:2 z:3} 0`, "[123]"},
 	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(tc.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%s: refused: %s (err %v)", tc.src, reason, cerr)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%s: the callback ISLANDED — the parity below would pass anyway, "+
+				"because an island answers with the interpreter:\n%s", tc.src, prog.Disassemble())
+		}
 		gotC, ran, errC := mustNew(t).RunCompiled(tc.src)
 		gotI, errI := mustNew(t).RunInterp(tc.src)
 		if !ran || errC != nil || errI != nil {
 			t.Fatalf("%s: ran=%v errC=%v errI=%v", tc.src, ran, errC, errI)
 		}
 		if fmt.Sprint(gotI) != tc.want {
-			t.Fatalf("%s: interpreter answered %v, want %s — the oracle moved, re-derive this fence",
+			t.Fatalf("%s: interpreter answered %v, want %s — the oracle moved, re-derive this pin",
 				tc.src, gotI, tc.want)
 		}
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%s: compiled=%v interp=%v — the callback's (accumulator, element) pair "+
-				"arrived SWAPPED. A compiled closure binds inputs positionally; MatchFnSig "+
-				"consumes the stack top-down. Admitting a 2-input list callback needs the "+
-				"frame to reproduce the assignment, not more carriers", tc.src, gotC, gotI)
+				"arrived SWAPPED. The compiled closure binds positionally; the interpreter's "+
+				"list path fills from the stack top down. ClosureInStackPair is what reconciles "+
+				"them, and it is per-word: check the shape this word's lowering records",
+				tc.src, gotC, gotI)
 		}
 	}
 }
