@@ -99,7 +99,7 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | Family | Rows | Essence |
 |---|---:|---|
 | A. Computed-fn / closure provenance | 45 | fn values whose shape the checker cannot know: Church/SKI/CPS chains, `FnUtil` results, computed closures at argument slots, curried chains |
-| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The rest are `is` against a predicate type, which really does invoke |
+| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The 8 `is` rows COMPILE if the gate is relaxed and still must not be: measured, the predicate body runs on the interpreter inside the handler, so admitting them would hide an island rather than remove one (§6.3) |
 | C. Multi-dynamic-result residual | 11 | two dynamic results live at once; the static seat model cannot address them |
 | D. Provenance totalization | 13 | operands with no producing event: `$module`/namespace synthetics, cross-registry captures |
 | E. Check-diagnostics sentinel | 8 | the checker rejects programs the interpreter runs (`lang/go/boru.go:459-472`) |
@@ -161,6 +161,17 @@ still re-enters the interpreter at runtime on the compiled path:
   `Registry.RunPredicate` (`core/go/registry.go:1917`) → `CallBoru`, a
   sub-engine tape run for any unstamped predicate body — reachable from
   every "kernel" matching site, the VM's included.
+
+  **CONFIRMED BY MEASUREMENT 2026-08-27**, not just by reading: the
+  `InterpEntry` hook on a compiled `def Pos fnpred n:Integer [n gt 0]
+  def f fn [[x:Pos] [Integer] [x]]  f 5` records
+  `InvokeCallback:callboru` + `CallBoru`, both UNATTRIBUTED, with no `is`
+  and no ledger row anywhere in the program. `RunPredicate` does reach for
+  the VM first (`InvokeCallbackFn`: "the VM when the body compiled to a
+  unit, `CallBoru` otherwise") — the body is simply never a unit, so the
+  reach always falls through. This is the concrete shape of the residue,
+  and §6.3 records why it also blocks family B's 8 `is` rows from a
+  graduation that would otherwise look clean.
 - A callback arriving while the main registry is mid-run routes to the
   interpreter by *structure*, not analysis: `CanHostVM` declines
   (`core/go/registry.go:677-686`) and `InvokeCallback` falls to `CallBoru`
@@ -1266,6 +1277,44 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   VM invoker, mid-match raise semantics preserved. This is the
   registry-aware matching that doctrine item R3 deferred to "a separate
   later design, not assumed" — this section is that design (§3.2).
+
+  **MEASURED 2026-08-27, and the measurement stopped a graduation that
+  would have been laundering.** Family B's remaining 8 rows
+  (`function value reaches is (Stage 3)`) compile the moment
+  `RecordCallOperands` stops refusing a predicate-type operand: all ten
+  shapes probed — both `fnpred` spellings, the `None`-signalling body, the
+  input-type gate, a predicate reaching a free word — answer correctly on
+  BOTH lanes with no `FALLBACK` in the disassembly. A predicate is exactly
+  ONE input, so the arity-1 boundary that blocks `fold`/`scan` does not
+  apply. It reads like a clean graduation.
+
+  It is not one, and a program-level `FALLBACK` check cannot tell:
+  **`OpFallback` is invisible to a `CallBoru` made INSIDE a native
+  handler**, which is precisely where the predicate runs. `RunPredicate`
+  reaches the body through `InvokeCallbackFn`, whose contract is "the VM
+  when the body compiled to a unit, `CallBoru` otherwise". Measured
+  through the `InterpEntry` hook (Stage 1's own instrumentation, built for
+  this question), the body is NEVER a unit — every predicate invocation
+  takes the interpreter arm, emitting `InvokeCallback:callboru` +
+  `CallBoru`, both UNATTRIBUTED.
+
+  So relaxing the gate would trade an honest whole-program refusal for a
+  compiled program with an interpreter island hidden inside a handler —
+  the one outcome the directive rules out, and worse than the refusal
+  because it removes the row from the census while the interpretation
+  stays. The refusal stands until predicate bodies compile to units.
+
+  **The control is the part that matters beyond this decision.** A
+  predicate reached through ORDINARY DISPATCH — `def f fn [[x:Pos] …]  f 5`
+  — takes the same interpreter arm today, with no `is`, no gate, and no
+  ledger row. The same holds at a typed def. So this is **PRE-EXISTING
+  live-island debt in compiled programs**, not something the gate
+  prevents: the gate only keeps the census from under-reporting it. It
+  belongs with T2's "live island residue" debt in §2.3, and it is a
+  second, independent reason predicate-body units are Stage-3 work rather
+  than a flag. Pinned by `lang/go`'s
+  `TestPredicateBodyRunsOnInterpreter`, which fails — with the graduation
+  instructions — once the bodies do compile.
 
 With this representation, family A's "unknown provenance / closure shape
 unknown" dissolves for the *value* half: an unknown fn value is not a hole
