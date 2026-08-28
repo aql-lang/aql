@@ -364,8 +364,7 @@ func runVMEntry(p *compiler.Program, r *core.Registry, stepLimit int, enter func
 				src = r.Source
 			}
 			result = nil
-			runErr = core.MakeBoruError("internal_error",
-				fmt.Sprintf("internal bytecode VM error: %v", rec), "", src, "")
+			runErr = vmInternalError(rec, src)
 		}
 	}()
 	vc := &vmContext{p: p, r: r, ceiling: vmStackCeiling(r), stepLimit: stepLimit, argsFloor: r.Args.Depth()}
@@ -403,18 +402,28 @@ func runVMEntry(p *compiler.Program, r *core.Registry, stepLimit int, enter func
 // invoked synchronously during the run (vmRunning is already 1, so a fresh
 // RunUnit would be rejected by the concurrency guard). It re-enters vc.run on a
 // fresh operand stack exactly as invokeClosureOn does for a compiled closure, so
-// the outer run resumes cleanly when it returns. Returns handled=false (letting
-// InvokeCallback fall back to the interpreter) when the ref belongs to a
-// different program than the one running: a compile-time stamp baked by the
-// running program always matches, but a DETACHED stamp (StampDetachedFn — a
-// model action, a runtime-stamped codec) carries its own standalone Program
-// whose unit indices mean nothing against vc.p, so a mid-run invoke of one
-// takes the interpreter seam. Hosting a foreign program's unit nested is the
-// Phase 6 JIT detached-unit cache's territory.
+// the outer run resumes cleanly when it returns.
+//
+// Two cases, and the second is the one that used to be missing. A COMPILE-TIME
+// stamp baked by the running program shares vc.p, so its unit index is an index
+// into the table vc already holds and the body enters directly. A DETACHED
+// stamp (StampDetachedFn — a predicate type, a runtime-stamped codec, a service
+// handler) carries its own standalone Program, so vc.p is the wrong table for
+// it; runForeignUnit hosts it in a nested vmContext bound to ITS program
+// instead. This seam previously declined that case outright, which meant every
+// runtime-stamped body reached mid-run reported Stamped:true and then ran on
+// the interpreter — see vm_foreign_unit.go for what the decline cost.
+//
+// handled=false is reserved for a ref this seam genuinely cannot run: a non-ref
+// payload, or a unit index outside its own program's table (a compile/run
+// drift). InvokeCallback then falls back to the interpreter, unchanged.
 func (vc *vmContext) runUnitNested(h any, args []core.Value) ([]core.Value, bool, error) {
 	ref, ok := h.(*compiler.CompiledFnRef)
-	if !ok || ref.Prog != vc.p {
+	if !ok || ref.Prog == nil || ref.Unit < 0 || ref.Unit >= len(ref.Prog.Fns) {
 		return nil, false, nil
+	}
+	if ref.Prog != vc.p {
+		return vc.runForeignUnit(ref, args)
 	}
 	res, err := vc.enterBodyUnit(vc.r, ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures))
 	return res, true, err

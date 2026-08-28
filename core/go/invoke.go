@@ -46,11 +46,19 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 // dispatches through, so retiring the interpreter for reducible callback bodies
 // is one routing decision rather than an edit per word.
 //
-// Correctness is fail-safe: a nil CompiledRef, an un-stamped ref (a body the
-// compiler refused, or a run that never reached Finalize), or a busy registry
-// all fall to CallBoru, whose values and error taxonomy are unchanged. When the
-// VM path IS taken, RunUnit executes the exact unit the differential gates prove
-// equivalent to the interpreter.
+// Correctness is fail-safe: a nil CompiledRef, or an un-stamped ref (a body the
+// compiler refused, or a run that never reached Finalize), falls to CallBoru,
+// whose values and error taxonomy are unchanged. When the VM path IS taken it
+// executes the exact unit the differential gates prove equivalent to the
+// interpreter.
+//
+// A BUSY registry used to fall to CallBoru as well, and that was the seam's
+// quiet hole rather than a safety property: a runtime-stamped body reached from
+// inside a live compiled run — every predicate type in the corpus — recorded
+// Stamped:true in the stamp ledger and then interpreted, because the nested
+// runner declined any ref whose program was not the running one, which a
+// detached ref never is. It now hosts the foreign unit instead
+// (eng/go/vm_foreign_unit.go).
 //
 // A callback fires AFTER the enclosing RunProgram returned (serve-raw handling a
 // connection, a spawned process), so — unlike an in-program island — there is no

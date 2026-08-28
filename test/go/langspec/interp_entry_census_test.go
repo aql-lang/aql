@@ -34,22 +34,30 @@ import (
 // interpEntryRowCeiling is the number of corpus rows that, when RUN compiled,
 // re-enter the interpreter through an unattributed seam.
 //
-// Measured 2026-08-28 at 184 of 7180 rows that run compiled (959 entries), the
-// first time the corpus was walked this way. The seam spread at that
-// measurement — the shape of the debt, not a second ceiling:
+// First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
+// entries). Now 163 (887 entries), after foreign detached units became
+// hostable mid-run (eng/go/vm_foreign_unit.go). The seam spread — the shape of
+// the debt, not a second ceiling — and what the one fix moved:
 //
-//	Engine.Run                501
-//	CallBoru                  275
-//	vm:island                  66
-//	runPooledSub               37
-//	RunResolved                31
-//	InvokeCallback:callboru    28
-//	vm:island-resolved         21
+//	                         first   now
+//	Engine.Run                 501   477
+//	CallBoru                   275   251
+//	vm:island                   66    66
+//	runPooledSub                37    37
+//	RunResolved                 31    31
+//	vm:island-resolved          21    21
+//	InvokeCallback:callboru     28     4
+//
+// The InvokeCallback column is the one to read: those 24 entries were
+// predicate bodies that HAD compiled to units and ran on the interpreter
+// anyway, because the mid-run nested path declined every ref whose Program was
+// not the running one — which a detached ref never is. Each carried an
+// Engine.Run and a CallBoru with it, which is why three columns fell together.
 //
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 184
+const interpEntryRowCeiling = 163
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

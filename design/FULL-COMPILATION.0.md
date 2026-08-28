@@ -99,7 +99,7 @@ row than the ledger — a one-row re-audit of that pool is owed):
 | Family | Rows | Essence |
 |---|---:|---|
 | A. Computed-fn / closure provenance | 45 | fn values whose shape the checker cannot know: Church/SKI/CPS chains, `FnUtil` results, computed closures at argument slots, curried chains |
-| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The 8 `is` rows COMPILE if the gate is relaxed and still must not be: measured, the predicate body runs on the interpreter inside the handler, so admitting them would hide an island rather than remove one (§6.3) |
+| B. Fn value as data operand (Stage 3) | 22 → 10 | `is`/`eq`/`deq`/`canon`/`for-each` receiving a fn value the gate assumes would be re-stepped. **12 graduated 2026-08-27**: `eq`/`neq`/`deq`/`canon` only READ one, and had merely never declared `CompileReadsFn` — no representational change was needed (§6.3). The 8 `is` rows COMPILE if the gate is relaxed and, until 2026-08-28, still must not have been: measured, the predicate body ran on the interpreter inside the handler, so admitting them would have hidden an island rather than removed one. **The body now runs on the VM** (§6.3, RESOLVED — the cause was a cross-program decline in `runUnitNested`, not the representation), so the stated condition for graduating these 8 is met |
 | C. Multi-dynamic-result residual | 11 | two dynamic results live at once; the static seat model cannot address them |
 | D. Provenance totalization | 13 | operands with no producing event: `$module`/namespace synthetics, cross-registry captures |
 | E. Check-diagnostics sentinel | 8 | the checker rejects programs the interpreter runs (`lang/go/boru.go:459-472`) |
@@ -200,6 +200,12 @@ UNATTRIBUTED — interpreter execution the end-state invariant does not permit:
   runPooledSub             37                    959 entries total
 ```
 
+**163 as of the same day**, after §6.3's predicate finding was RUN rather
+than reasoned about (`eng/go/vm_foreign_unit.go`): `InvokeCallback:callboru`
+28 → 4, and `Engine.Run` / `CallBoru` each −24, because one declined
+predicate dragged all three seams behind it. The seam attribution below is
+otherwise unchanged, and its first row is now nearly retired.
+
 **Read that against `TestCompiledCoverage`'s `0 islanded`.** Both numbers are
 correct and they measure different things. The island ceiling counts programs
 whose DISASSEMBLY embeds an `OpFallback` span; it cannot see a `CallBoru` made
@@ -221,8 +227,8 @@ than leaving them a number:
 
 | seam | what produces it (sampled) | retires with |
 | --- | --- | --- |
-| `InvokeCallback:callboru` | **predicate types**, every sampled row — `def Pos (fn [[n:Integer] [Boolean] [n gt 0]])` at a param, a typed def, or a return | §6.3 predicate bodies as units |
-| `CallBoru` | the same predicate rows, plus module fn bodies that `raise`, plus `Test.check-prop` | §6.3, then §6.8 |
+| `InvokeCallback:callboru` | **predicate types**, every sampled row — `def Pos (fn [[n:Integer] [Boolean] [n gt 0]])` at a param, a typed def, or a return. **28 → 4: RETIRED for predicates 2026-08-28** (§6.3); the 4 that remain are a different, unsampled population | §6.3 predicate bodies as units |
+| `CallBoru` | the same predicate rows, plus module fn bodies that `raise`, plus `Test.check-prop`. **275 → 251** with the predicate half gone | §6.3, then §6.8 |
 | `RunResolved` | `do` with a RAW-TOKEN body — `do [1 2 (if b [] [9 9])]`, `do [for 3 [1]]` | §6.8 units-not-tokens |
 | `Engine.Run` | the Reach/lens apply (`p $.name apply`, `[10 20 30] $.1 apply`) and `do` with a MAP body whose entries are code (`do {n:[a add 1]}`) | §6.8, plus a lens-apply lowering |
 | `runPooledSub` | the same lens-apply rows, and `Vm.run` / `canon` round-trips | §6.8 / §6.7 (runtime compilation) |
@@ -233,7 +239,12 @@ Two readings worth stating. First, **§6.3's predicate work is the single
 largest attributable cluster** — it owns `InvokeCallback:callboru` outright and
 much of `CallBoru` — which is the same conclusion the family-B `is` refusal
 reached from the opposite direction, and it is why that refusal must stand
-until the bodies compile. Second, **`Engine.Run` and `RunResolved` together are
+until the bodies compile. That cluster is now retired, and the two independent
+measurements that converged on it are the reason it was found: the seam
+attribution said "predicates own this seam", the family-B refusal said "the
+predicate body is not a unit", and reading the seam they BOTH blamed turned up
+a four-line decline in the nested runner rather than the representation work
+both had scheduled (§6.3, RESOLVED). Second, **`Engine.Run` and `RunResolved` together are
 the `do`/code-body family**, so Stage 6's handler migration is a bigger
 contributor to the live residue than its ledger row (H, 6 rows) suggests: the
 ledger counts rows that REFUSE, and this counts rows that COMPILE and then
@@ -1388,6 +1399,64 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   than a flag. Pinned by `lang/go`'s
   `TestPredicateBodyRunsOnInterpreter`, which fails — with the graduation
   instructions — once the bodies do compile.
+
+  **RESOLVED 2026-08-28 — and the stated CAUSE above was wrong.** "The body
+  is never a unit" was an inference from the seam, not a reading of it. The
+  bodies compiled. `def Positive fn […]` stamped a detached unit at type
+  construction (`core/go/core_type.go` → `CompiledRuntime.StampDetached` →
+  `StampDetachedFn`) and recorded `Stamped:true` in the stamp ledger —
+  `-compile-report` said compiled, the runtime interpreted, and the two
+  had no shared gate to disagree at.
+
+  The decline was one line, `eng/go/vm.go`'s `runUnitNested`:
+
+  ```go
+  if !ok || ref.Prog != vc.p { return nil, false, nil }
+  ```
+
+  A DETACHED ref is compiled on an isolated `ForkConcurrent` into its own
+  standalone one-unit `Program` — that is what makes it detached — so
+  `ref.Prog != vc.p` is true for every one of them, always. The mid-run
+  nested path therefore rejected the entire class by construction, while
+  `InvokeCallback`'s contract read "the VM when it compiled to a unit
+  (nested in a live run, or fresh on an idle registry)". Only the idle half
+  was ever real: a callback firing AFTER `RunProgram` returned (serve-raw
+  on a connection, a spawned process) found `CanHostVM()` true and took
+  `RunUnit`; a callback reached from INSIDE a live run found it false, fell
+  to the nested runner, and was declined. Predicates are the second kind,
+  every time.
+
+  The fix is `eng/go/vm_foreign_unit.go`: host the foreign program's unit
+  in a nested `vmContext` bound to ITS program instead of declining it. Four
+  pieces of state stay shared with the enclosing run because each is a
+  runaway guard a per-callback reset would defeat — `steps` (copied in,
+  handed back), `frameDepth` (seeded, so recursion THROUGH a detached
+  callback hits the same ceiling and fails as `tape_exhausted` rather than
+  overflowing the Go stack), `ceiling` and `stepLimit`. Three are
+  deliberately NOT shared: `dynBinds`, `islandEng` (the enclosing island
+  engine may be mid-flight — exactly the re-entrancy its contract forbids),
+  and `foreignInvokers`. The panic guard is local rather than borrowed from
+  the enclosing `runVMEntry`, so a bailout inside one callback degrades
+  THAT callback to `CallBoru` through `InvokeCompiled`'s C1 fence instead
+  of aborting the whole enclosing program.
+
+  Measured, corpus-wide: unattributed interpreter-entry rows **184 → 163**,
+  `InvokeCallback:callboru` **28 → 4**, and `Engine.Run` and `CallBoru` each
+  −24 — the three fell together because one declined predicate dragged all
+  three seams behind it. `TestSpecCompiledDifferential` is unchanged: every
+  row that moved onto the VM still answers what `RunInterp` answers. The
+  pin flipped to `TestPredicateBodyRunsOnTheVM` and now fails if the
+  interpreter arm comes back.
+
+  **The pattern, ninth instance.** A documented blocker is a hypothesis
+  until RUN. The verdict here was right — relaxing the `is` gate on top of
+  a hidden island would have been laundering — and the reason given for it
+  was wrong, which made the remedy look like "Stage 3 representation work"
+  when it was a four-line predicate in the nested runner. Reading the seam
+  the measurement blamed, rather than trusting the measurement's account of
+  it, is what separated the two. The graduation the pin names — admit a
+  predicate-type operand in `RecordCallOperands`, move the 8 `is` rows into
+  `lang/spec/fnpred.tsv` — is now unblocked on its stated condition.
 
 With this representation, family A's "unknown provenance / closure shape
 unknown" dissolves for the *value* half: an unknown fn value is not a hole

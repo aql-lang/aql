@@ -1,8 +1,9 @@
 # RUNTIME-STAMPING — detached fn-unit compilation for runtime-constructed callbacks
 
-Status: **landed** (four phases, 2026-07-10). This note records the design,
-the discoveries that reshaped it mid-flight, and the invariants the
-implementation pins.
+Status: **landed** (four phases, 2026-07-10; one half of the seam was found
+UNLANDED 2026-08-28 and closed — see "The half that did not land"). This note
+records the design, the discoveries that reshaped it mid-flight, and the
+invariants the implementation pins.
 
 ## The problem
 
@@ -173,6 +174,48 @@ whole body compiles as one unit too. Known follow-ups, all out of scope here:
 mini-s3's `do`/`error` trap lowering and its higher-order LIST handler
 patterns beyond filter-lambda; Model/check-prop stamping (the store-word
 trigger likely covers Model actions nearly for free).
+
+## The half that did not land (found and closed 2026-08-28)
+
+This note's status line said **landed** for thirteen months, and for
+callbacks that fire on an IDLE registry it was true. For callbacks reached
+from INSIDE a live compiled run it was not, and nothing here said so.
+
+`InvokeCallback` chooses between two VM entries: `RunUnit` when
+`CanHostVM()` (a per-connection fork, a spawned process — the registry is
+idle), and the nested runner otherwise. The nested runner declined:
+
+```go
+if !ok || ref.Prog != vc.p { return nil, false, nil }   // eng/go/vm.go
+```
+
+A detached ref is compiled on an isolated fork into its **own standalone
+one-unit Program** — that is the primitive's whole point — so `ref.Prog`
+never equals the running program, and the nested arm rejected the entire
+class by construction. The stamp still ran, still succeeded, and still
+recorded `Stamped:true`: `-compile-report` said compiled and the runtime
+interpreted, with no gate anywhere that could notice the two disagreeing.
+
+The population this hid is not the one the note was written for. Codec fns
+and service handlers fire on idle forks, so they took `RunUnit` and the
+measured 4.4x held. **Predicate types** — every `def Pos fnpred …`,
+consulted at a param, a typed def, a return, or an `is` — are invoked from
+inside the live run, and every one of them interpreted. Measured over the
+spec corpus: 24 of the 28 `InvokeCallback:callboru` entries in
+`TestInterpEntryCensus`.
+
+`eng/go/vm_foreign_unit.go` hosts the foreign program's unit in a nested
+`vmContext` bound to that program instead of declining it, sharing the
+enclosing run's runaway guards (`steps`, `frameDepth`) and keeping its own
+`dynBinds` / `islandEng` / panic guard. Census: 184 → 163 rows,
+`InvokeCallback:callboru` 28 → 4, with `TestSpecCompiledDifferential`
+unchanged.
+
+The lesson for this note specifically: a stamp LEDGER records an attempt,
+not an execution. "Stamped:true" answers "did the compile succeed", and the
+question worth gating was always "did the unit RUN" — which only the
+`InterpEntry` census can answer, and which did not exist when the four
+phases landed.
 
 ## Invariants pinned by tests
 
