@@ -1471,6 +1471,60 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   so a value-only assertion here proves nothing and would keep passing the day
   someone re-islands the callback.
 
+  **The Apply kernel, first increment (2026-08-28).** §6.4 asks for "one
+  dedicated, arity-carrying Apply kernel routine, seamed where the interpreter
+  applies". What was there instead: the dynamic-apply opcodes islanded their
+  callee through a sub-engine, because a runtime fn value carrying no compiled
+  unit has nothing else to run. **75 corpus rows do that**, in programs whose
+  disassembly says `fallbacks=0` and which `TestCompiledCoverage` reports as
+  "0 islanded" — the same blindness the predicate seam had, one opcode family
+  over.
+
+  Two halves, and each was got wrong once first.
+
+  **The unit has to ride the VALUE.** A dynamic apply's callee is unknown at
+  compile time by construction, so `stampFnConst` compiles a fn-value CONST's
+  body to a unit at the const chokepoint (`resolveOperand`). In-program via
+  `compileStoredFnUnit`, not `StampDetachedSig`: the detached form isolates a
+  refusal neatly and costs a `ForkConcurrent` plus a full compile pass PER fn
+  const — measured at 6x on `lang/go/modules` and a transient OOM. The refusal
+  the cheap form exposes is handled where it belongs: `fnUnitRec.stampOnly`
+  makes a stamp unit's Finalize refusal produce a trap stub and a dropped ref
+  instead of refusing the program, because a stamp is an optimisation and must
+  never be able to refuse anything.
+
+  **A fn application is a CALL, not a body.** `enterBodyUnit` brackets a
+  per-body context frame for the three seams that re-enter the VM; `OpCallUser`
+  is deliberately not among them, and neither is the interpreter's own
+  `execFnDefLiteral`. Routing the apply through the callback seam therefore
+  added a frame the interpreter does not, and it showed up as a **silent wrong
+  answer** — `TestContextBoundaryDifferential/paren-grouped_map-slot_lambda_method`,
+  a `context set` escaping on one engine and not the other. The kernel now
+  models `OpCallUserPoly`, the existing precedent for entering a unit the loop
+  only learns at RUN time: match, pop args into frame locals, re-check the
+  param contract, push a frame. `dynApplyEnter` hands that decision back to the
+  loop (`*dynEnter`) because frames, locals and pc are the loop's.
+
+  Three declines are load-bearing rather than defensive. A **QUOTED** fn is
+  data — the island got that free from the tape, and a direct frame push does
+  not (`((mk) 2)` answered `[3]` against the interpreter's `[fn (Integer) 2]`).
+  A **cross-program** ref cannot be a frame of this program. A **shape
+  mismatch** between the matched sig and its unit is compile/run drift.
+
+  Two collisions the const chokepoint exposed, both of which narrowed the
+  increment honestly. Its analysis leaks diagnostics into the enclosing
+  program, and an error diagnostic REFUSES it — `TruncateDiagnostics` drops
+  exactly what the attempt added, since a speculative compile's findings are
+  not the program's. And **container descent is out**: stamping a fn nested in
+  a map const mutates the shared `*BoruImpl` of a value inside USER DATA, which
+  is precisely what `StampFnValue`'s cloning form exists to avoid — a model
+  action's `{gen: …}` stamped here first, so `stampActionFn`'s clone-and-name
+  found a ref, declined, and the stamp report lost its attribution. That case
+  is its own increment; it needs the clone contract honoured, not a deeper walk.
+
+  Measured: census **163 → 151**, `vm:island` **66 → 48**, corpus 7622 rows /
+  7248 compiled / 0 islanded / 0 refused, differential unchanged.
+
   **The graduation, landed and PROVEN honest.** With the body on the VM the
   refusal in `RecordCallOperands` had nothing left to defend, and the arm
   that refused a predicate-type OPERAND is gone. What the first attempt

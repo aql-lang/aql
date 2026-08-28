@@ -35,29 +35,39 @@ import (
 // re-enter the interpreter through an unattributed seam.
 //
 // First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
-// entries). Now 163 (887 entries), after foreign detached units became
-// hostable mid-run (eng/go/vm_foreign_unit.go). The seam spread — the shape of
-// the debt, not a second ceiling — and what the one fix moved:
+// entries). Now 151, after two fixes on the same day. The seam spread — the
+// shape of the debt, not a second ceiling — and what each moved:
 //
-//	                         first   now
-//	Engine.Run                 501   477
-//	CallBoru                   275   251
-//	vm:island                   66    66
-//	runPooledSub                37    37
-//	RunResolved                 31    31
-//	vm:island-resolved          21    21
-//	InvokeCallback:callboru     28     4
+//	                         first    (a)    (b)
+//	Engine.Run                 501    477    453
+//	CallBoru                   275    251    251
+//	vm:island                   66     66     48
+//	runPooledSub                37     37     35
+//	RunResolved                 31     31     31
+//	vm:island-resolved          21     21     21
+//	InvokeCallback:callboru     28      4      4
+//	                          ----   ----   ----
+//	rows                       184    163    151
 //
-// The InvokeCallback column is the one to read: those 24 entries were
-// predicate bodies that HAD compiled to units and ran on the interpreter
-// anyway, because the mid-run nested path declined every ref whose Program was
-// not the running one — which a detached ref never is. Each carried an
-// Engine.Run and a CallBoru with it, which is why three columns fell together.
+// (a) Foreign detached units became hostable mid-run
+// (eng/go/vm_foreign_unit.go). The InvokeCallback column is that one: those 24
+// entries were predicate bodies that HAD compiled to units and ran on the
+// interpreter anyway, because the mid-run nested path declined every ref whose
+// Program was not the running one — which a detached ref never is.
+//
+// (b) The Apply kernel (eng/go/vm_dyn_apply.go + compiler stampFnConst): a
+// fn-value CONST carries its compiled unit, and a dynamic apply ENTERS that
+// unit as a frame instead of islanding the callee. The `vm:island` column is
+// that one, and it is the column the OpFallback ceiling can never see — those
+// programs disassemble with `fallbacks=0` and the island lives inside the
+// dynamic-apply opcode.
+//
+// Both drops carried Engine.Run with them, because an island is a nested Run.
 //
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 163
+const interpEntryRowCeiling = 151
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

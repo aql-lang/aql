@@ -551,6 +551,26 @@ type EmitState struct {
 	// lowering later refused — the module-repl corpus rows).
 	storedGradualDepth int
 
+	// inStampCompile marks an EmitState that IS a stamp compile. It fences
+	// stampFnConst against re-entering itself: that helper stamps every fn
+	// const it interns, and a stamp compile interns, so a fn const inside a
+	// stamped body would compile to stamp it, and so on down — bounded only by
+	// fn nesting depth, which is not a bound. Nothing is lost: the inner fn
+	// compiles as part of the unit being stamped, and if it escapes to be
+	// applied dynamically the OUTER program stamps it where it interns it.
+	inStampCompile bool
+
+	// stampDeclined memoises the sig impls whose stamp already refused, keyed
+	// by the impl pointer the stamp would write to. The succeeding case
+	// memoises itself through impl.Compiled; without this the failing case
+	// re-paid a full body compile at every operand occurrence.
+	stampDeclined map[*core.BoruImpl]bool
+
+	// stampImpls maps a stamped sig impl to the unit backing its ref, so a
+	// stamp-only unit whose lowering refuses can find and clear the ref that
+	// would otherwise point at a trap stub.
+	stampImpls map[*core.BoruImpl]int
+
 	// reg is the registry the check pass runs against — set once at the top of
 	// Engine.Run while emit is active. It lets recorder-internal helpers reuse
 	// the lang-layer closure compiler (compileClosureBody) for a fn VALUE a body
@@ -859,6 +879,14 @@ type emitUnit struct {
 // OUT of tail marking, mirroring the interpreter's HasGen exclusion
 // from frame elision (plan Stage 4).
 type fnUnitRec struct {
+	// stampOnly marks a unit that exists ONLY to back a fn value's compiled
+	// ref (stampFnConst) — nothing in the program's code calls it. Its
+	// lowering is therefore NOT allowed to refuse the program: a stamp is an
+	// optimisation, and Finalize's per-unit lowering can decline a body the
+	// unit compile accepted. On refusal the unit becomes a trap stub, its ref
+	// is dropped, and the fn value interprets exactly as it did before
+	// anything stamped it.
+	stampOnly bool
 	// render is the interpreter's formatFnDef string for a RETURNED-closure
 	// unit (tryReturnedClosure) — stamped onto CompiledFn.Render and copied
 	// to the ClosurePayload at OpPushClosure, so a compiled closure VALUE
@@ -1132,6 +1160,7 @@ func (es *EmitState) forkForProbe() *EmitState {
 	// different unit (see compileStoredFnUnit / tryReturnedClosure). Same
 	// for the environment mode (dynEnv).
 	p.storedGradualDepth = es.storedGradualDepth
+	p.inStampCompile = es.inStampCompile
 	p.dynEnv = es.dynEnv
 	return p
 }
@@ -1835,6 +1864,7 @@ func (es *EmitState) resolveOperand(v core.Value) (EmitOperand, bool) {
 		}
 		es.freshenConst[idx] = true
 	}
+	es.stampFnConst(lit)
 	return ConstOperand(idx), true
 }
 
@@ -2395,6 +2425,137 @@ func StampCompiledRef(fd core.FnDefInfo, ref *CompiledFnRef) bool {
 		}
 	}
 	return false
+}
+
+// stampFnConst compiles a fn-value CONST's body to a unit of this program and
+// stamps the ref on the value's own sig impls, so a DYNAMIC APPLY of that value
+// runs on the VM instead of islanding.
+//
+// The gap this closes. `def twice fn [[f:Function x:Integer] [Integer] [f (f
+// x)]]  twice (…lambda…) 5` lowers to CALL_DYN_* with no OpFallback anywhere —
+// `fallbacks=0`, and TestCompiledCoverage calls it "0 islanded". At RUN time
+// the dynamic-apply opcodes islanded the callee through a sub-engine, because a
+// runtime fn value carrying no compiled unit has nothing else to run. The
+// disassembly metric cannot see that; the interp-entry census can, and it is
+// where 43 of the corpus's 66 `vm:island` entries came from.
+//
+// A dynamic apply's callee is unknown at compile time BY CONSTRUCTION, so the
+// only place its compiled body can live is on the VALUE. That is what makes
+// this the const chokepoint's business rather than any call site's.
+//
+// IN-PROGRAM, not detached — measured, not assumed. StampDetachedSig would
+// isolate each stamp on its own ForkConcurrent, which contains a refusal
+// neatly, and costs a registry fork plus a full compile pass PER fn const: 6x
+// on lang/go/modules and a transient OOM. compileStoredFnUnit lands the unit in
+// this program for the price of a body compile, and the refusal it exposes is
+// handled where it belongs — see fnUnitRec.stampOnly.
+//
+// Scope: a CAPTURING fn is skipped (its captures are the closure lowering's
+// business), an already-stamped value is left alone (first stamp wins — the
+// STORE-FN edge may have got there), and a declining sig stays plain. Every
+// decline is silent and per-sig: a missing ref costs speed, never an answer.
+// NO CONTAINER DESCENT, and the reason is a contract rather than a cost. Most
+// applied fn values do live inside a container — `def m {f: (fn …)}  m.f 5`, a
+// class field, a map of handlers — and descending into map and list consts to
+// stamp them WORKS and is worth roughly a third of this seam's win. It also
+// mutates the shared *BoruImpl of a fn value sitting inside USER DATA, and
+// StampFnValue exists in its cloning form precisely so that does not happen:
+// "StampFnValue clones, so the user's spec value stays plain"
+// (lang/go/modules/model.go). Measured, the collision is real: a model action's
+// `{gen: (…lambda…)}` stamped here first, so stampActionFn's clone-and-name
+// found an existing ref, declined, and the stamp report lost the attribution
+// the frontier ledger pins ("no stamp attempt recorded for gen").
+//
+// The container case is therefore its own increment — it needs the clone
+// contract honoured, not a deeper walk. What lands here is the shape that has
+// no such conflict: a fn value that IS the const.
+func (es *EmitState) stampFnConst(v core.Value) {
+	if es.inStampCompile {
+		return
+	}
+	fd, isFn := v.Data.(core.FnDefInfo)
+	if !isFn || !core.IsConcrete(v) || len(fd.Captured) > 0 {
+		return
+	}
+	for si := range fd.Signatures {
+		if !storedSigEligible(&fd.Signatures[si]) {
+			continue
+		}
+		impl, implOK := fd.Signatures[si].Impl.(*core.BoruImpl)
+		if !implOK || impl.Compiled != nil || es.stampDeclined[impl] {
+			continue // first stamp wins; a refusal is remembered, not re-paid
+		}
+		// EVERY unit the stamp compile creates is stamp-only, not just the
+		// entry one: a stamped body that defines a nested fn records that as a
+		// SUB-unit whose lowering can refuse where the entry unit's did not.
+		// Flagging only the entry left two corpus rows refusing on `fn vt-body:
+		// branch leaves extra values` — the same fatality one level down.
+		// DIAGNOSTIC ISOLATION. compileStoredFnUnit analyses the body against
+		// the LIVE check state, so a body whose analysis emits a finding leaks
+		// it into the enclosing program — and an error diagnostic REFUSES that
+		// program. Measured: `import "boru:math-util"  def n 0  if (n eq 0)
+		// MathUtil.sqrt [99] 16` went from compiling to "refused: check
+		// diagnostics" the moment fn consts started stamping.
+		//
+		// The store-fn edge never hit this because it stamps a curated
+		// population (CompileStoresFn slots); the const chokepoint sees every
+		// fn value in the program. A stamp is a speculative compile of code the
+		// program may never apply, so its findings are not the program's —
+		// TruncateDiagnostics drops exactly the ones this attempt added, the
+		// same seam the bounded fixed-point analyses use.
+		diagsBefore := len(es.reg.Check.Diagnostics)
+		unitsBefore := len(es.fnRecs)
+		unit, ok := es.compileStoredFnUnit(fd, si, v.Pos())
+		es.reg.Check.TruncateDiagnostics(diagsBefore)
+		if !ok {
+			if es.stampDeclined == nil {
+				es.stampDeclined = map[*core.BoruImpl]bool{}
+			}
+			es.stampDeclined[impl] = true
+			es.recordStamp(core.StampEvent{Name: fd.Name, Pos: v.Pos(), Reason: es.storedFnProbeReason})
+			continue
+		}
+		ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].Body())}
+		impl.Compiled = ref
+		es.storedFnRefs = append(es.storedFnRefs, ref)
+		if es.stampImpls == nil {
+			es.stampImpls = map[*core.BoruImpl]int{}
+		}
+		es.stampImpls[impl] = unit
+		for u := unitsBefore; u < len(es.fnRecs); u++ {
+			if es.fnRecs[u] != nil {
+				es.fnRecs[u].stampOnly = true
+			}
+		}
+		es.recordStamp(core.StampEvent{Name: fd.Name, Pos: v.Pos(), Stamped: true})
+	}
+}
+
+// recordStamp files this stamp attempt in the registry's attribution log, so
+// -compile-report and the stamp-report gates see it.
+//
+// It is not bookkeeping. stampFnConst runs at the const chokepoint, which is
+// EARLIER than the store-site and model-action stamps, and first-stamp-wins
+// means those then skip. Without recording here, a value this stamped would
+// silently lose the attribution its own path used to produce — measured, as
+// TestFrontierLedger's "no stamp attempt recorded for gen".
+func (es *EmitState) recordStamp(ev core.StampEvent) {
+	if es != nil && es.reg != nil {
+		es.reg.RecordStampEvent(ev)
+	}
+}
+
+// dropStampRef clears the compiled ref that pointed at a stamp-only unit whose
+// lowering refused, so the fn value falls back to the interpreter exactly as it
+// would have if nothing had stamped it.
+func (es *EmitState) dropStampRef(unit int) {
+	for impl, u := range es.stampImpls {
+		if u == unit {
+			impl.Compiled = nil
+			delete(es.stampImpls, impl)
+			return
+		}
+	}
 }
 
 // storedHandlerDeps returns the MODULE-LEVEL names a stored handler / spawn body
@@ -7850,6 +8011,25 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		}
 		flw.vm = flw.vm[:0]
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
+			if rec.stampOnly {
+				// A stamp-only unit is unreachable from the program's code —
+				// its only consumer is a fn value's compiled ref, which
+				// dropStampRef then clears. Refusing the whole PROGRAM because
+				// an optimisation could not lower is the wrong trade, and it is
+				// the one this arm prevents: two corpus rows went from
+				// compiling to "refused: fn storedfn$body: consumes loop
+				// results" the day stampFnConst was written without it. Emit the
+				// same defensive trap stub the unreachable-unit arm above uses,
+				// so unit indices stay aligned and any future reach fails loudly.
+				ti := len(p.Traps)
+				p.Traps = append(p.Traps, TrapSpec{Code: "internal_error",
+					Detail: "stamp-only fn unit " + rec.name + " entered after its lowering refused", Word: rec.name})
+				p.Fns = append(p.Fns, CompiledFn{Name: rec.name,
+					Code:  []Instr{{Op: OpTrap, Arg: int32(ti)}},
+					Debug: []core.SrcPos{rec.pos}})
+				es.dropStampRef(len(p.Fns) - 1)
+				continue
+			}
 			return nil, "fn " + rec.name + ": " + reason, false
 		}
 		// spillSeat may have allocated frame-local temps during lowering; grow

@@ -86,6 +86,9 @@ func StampDetachedSig(r *core.Registry, fd core.FnDefInfo, sigIdx int, pos core.
 		// owns its program and Finalize, so any gradual-caused failure is
 		// one silently declined stamp.
 		es.storedGradualDepth = 1
+		// Re-entrancy fence — see EmitState.inStampCompile. Measured before it
+		// existed: lang/go/modules went from 77s to not finishing.
+		es.inStampCompile = true
 	}
 	// An identity-less capture value (minted at pure runtime, where the
 	// mode-gated ID elision skips minting) cannot key its positional capture

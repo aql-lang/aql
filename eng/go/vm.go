@@ -731,10 +731,10 @@ func (vc *vmContext) matchUserPoly(pr *compiler.UserPolyRef, stack []core.Value,
 // ([value, args]); for a TRAILING fn (`5 m.f`, `[..] r.one-of`) the interpreter
 // leaves the value ON TOP of its args, so a non-callable trailing value is
 // rotated up from the base. The callable result is identical either way.
-func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
 	r := vc.r
 	if len(stack) < n+1 {
-		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC underflow")
+		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC underflow")
 	}
 	if trailing && n != 1 {
 		// OpCallDynamicTrailing is emitted only with arity 1 (bytecode.go): the
@@ -743,7 +743,7 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 		// opposite order to the interpreter's top-down stack collection. Assert
 		// it so a future lowering bug degrades to a loud internal_error →
 		// fallback rather than silently mis-ordering the residual.
-		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC_TRAILING with arity != 1")
+		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC_TRAILING with arity != 1")
 	}
 	base := len(stack) - n - 1
 	fnVal := stack[base]
@@ -754,9 +754,9 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 		// only fills param slots, but a downstream handler may read the shape).
 		results, err := vc.invokeClosure(vc.r, fnVal, append([]core.Value(nil), args...))
 		if err != nil {
-			return nil, stampAt(err, curDebug, pc, r)
+			return nil, nil, stampAt(err, curDebug, pc, r)
 		}
-		return append(stack[:base], results...), nil
+		return append(stack[:base], results...), nil, nil
 	}
 	if !core.IsAppliableFn(fnVal) {
 		// Not callable: leave the value as the residual, matching the interpreter
@@ -764,9 +764,9 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 		// args there, so rotate it up from the base; a leading fn stays below.
 		if trailing {
 			rotated := append(stack[:base:base], stack[base+1:]...)
-			return append(rotated, fnVal), nil
+			return append(rotated, fnVal), nil, nil
 		}
-		return stack, nil
+		return stack, nil, nil
 	}
 	// A trivial-delegation native method (its dispatchable sig is `[Word(name)]`
 	// — a module wrapper like rand-int) dispatches VM-NATIVE: MatchSignature
@@ -779,10 +779,16 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && core.IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
-				return nil, stampAt(err, curDebug, pc, r)
+				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
-			return append(stack[:base], results...), nil
+			return append(stack[:base], results...), nil, nil
 		}
+	}
+	// The Apply kernel: a callee carrying a compiled unit of this program is
+	// ENTERED as a frame, not islanded (vm_dyn_apply.go). The args leave the
+	// stack here exactly as OpCallUser's do; the unit's RET pushes the result.
+	if ent := vc.dynApplyEnter(fnVal, args); ent != nil {
+		return stack[:base], ent, nil
 	}
 	// Non-trivial fn (user body): apply via the island sub-engine, which
 	// auto-applies the Function to the forward args exactly as a nested Run.
@@ -791,19 +797,22 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 	island = append(island, args...)
 	results, err := vc.islandRun(reg, island)
 	if err != nil {
-		return nil, stampAt(err, curDebug, pc, r)
+		return nil, nil, stampAt(err, curDebug, pc, r)
 	}
 	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-		return nil, err
+		return nil, nil, err
 	}
-	return append(stack[:base], results...), nil
+	return append(stack[:base], results...), nil, nil
 }
 
 // callDynFamily routes every fn-value-call-boundary opcode to its handler —
 // the single run-loop case for the family. frameBase is the CURRENT frame's
 // operand-stack base (the whole-frame replay's resolved-prefix boundary);
 // only OpCallDynFrame reads it.
-func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+// The *dynEnter return is the Apply kernel's outcome: non-nil means the callee
+// carried a compiled unit of THIS program and the run loop should enter it as a
+// frame (vm_dyn_apply.go), rather than the handler having islanded it.
+func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
 	switch op {
 	case compiler.OpCallDynTrailTop:
 		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
@@ -813,15 +822,17 @@ func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, 
 		// [args, fn] window IS the interpreter's residual for a quoted
 		// call result — and an unquoted one applies via the shared body.
 		if top := len(stack) - 1; top >= 0 && stack[top].Quoted {
-			return stack, nil
+			return stack, nil, nil
 		}
 		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
 	case compiler.OpCallDynApplyTop:
 		return vc.callDynApplyTop(reg, arg, stack, curDebug, pc)
 	case compiler.OpCallDynFrame:
-		return vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
+		st, err := vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
+		return st, nil, err
 	case compiler.OpCallDynMethod:
-		return vc.callDynMethod(reg, &vc.p.DynMethods[arg], stack, curDebug, pc)
+		st, err := vc.callDynMethod(reg, &vc.p.DynMethods[arg], stack, curDebug, pc)
+		return st, nil, err
 	default:
 		return vc.callDynamicOp(reg, op, arg, stack, curDebug, pc)
 	}
@@ -830,9 +841,10 @@ func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, 
 // callDynamicOp routes a fn-value-call-boundary opcode to its handler, keeping
 // the VM's run loop a single case. Trailing only changes the non-callable
 // residual order (see callDynamic); mixed islands an interior-fn window.
-func (vc *vmContext) callDynamicOp(reg *core.Registry, op compiler.Opcode, arg int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+func (vc *vmContext) callDynamicOp(reg *core.Registry, op compiler.Opcode, arg int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
 	if op == compiler.OpCallDynamicMixed {
-		return vc.callDynamicMixed(reg, arg, stack, curDebug, pc)
+		st, err := vc.callDynamicMixed(reg, arg, stack, curDebug, pc)
+		return st, nil, err
 	}
 	return vc.callDynamic(reg, arg, op == compiler.OpCallDynamicTrailing, stack, curDebug, pc)
 }
@@ -846,10 +858,10 @@ func (vc *vmContext) callDynamicOp(reg *core.Registry, op compiler.Opcode, arg i
 // for ANY arity (unlike OpCallDynamicTrailing's 1-arg rotation). The args slice is
 // the same stack-order window callDynamic's leading case feeds, so the closure /
 // island binding matches the proven leading path.
-func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
 	r := vc.r
 	if len(stack) < n+1 {
-		return nil, vmErrAt(curDebug, pc, "CALL_DYN_TRAIL_TOP underflow")
+		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYN_TRAIL_TOP underflow")
 	}
 	top := len(stack) - 1
 	fnVal := stack[top]
@@ -881,35 +893,38 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 	if _, ok := fnVal.Data.(core.ClosurePayload); ok {
 		results, err := vc.invokeClosure(vc.r, fnVal, args)
 		if err != nil {
-			return nil, stampAt(err, curDebug, pc, r)
+			return nil, nil, stampAt(err, curDebug, pc, r)
 		}
-		return append(stack[:base], results...), nil
+		return append(stack[:base], results...), nil, nil
 	}
 	if !core.IsAppliableFn(fnVal) {
-		return stack, nil // not callable: [args, fn] is already the interpreter's trailing residual
+		return stack, nil, nil // not callable: [args, fn] is already the interpreter's trailing residual
 	}
 	if err := noMatchIfSigged(reg, fnVal, args, curDebug, pc, r); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && core.IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
-				return nil, stampAt(err, curDebug, pc, r)
+				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
-			return append(stack[:base], results...), nil
+			return append(stack[:base], results...), nil, nil
 		}
+	}
+	if ent := vc.dynApplyEnter(fnVal, args); ent != nil {
+		return stack[:base], ent, nil
 	}
 	island := make([]core.Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
 	results, err := vc.islandRun(reg, island)
 	if err != nil {
-		return nil, stampAt(err, curDebug, pc, r)
+		return nil, nil, stampAt(err, curDebug, pc, r)
 	}
 	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-		return nil, err
+		return nil, nil, err
 	}
-	return append(stack[:base], results...), nil
+	return append(stack[:base], results...), nil, nil
 }
 
 // noMatchIfSigged raises when fnVal is a Function carrying OWN SIGNATURES none
@@ -970,10 +985,10 @@ func noMatchIfSigged(reg *core.Registry, fnVal core.Value, args []core.Value, cu
 // param), identical to callDynTrailTop's reversed-window forward bind. A
 // non-FnDefInfo, non-closure payload raises applyHandler's own byte-identical
 // error — the same taxonomy the interpreter's dispatch of `apply` yields.
-func (vc *vmContext) callDynApplyTop(reg *core.Registry, n int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+func (vc *vmContext) callDynApplyTop(reg *core.Registry, n int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
 	r := vc.r
 	if len(stack) < n+1 {
-		return nil, vmErrAt(curDebug, pc, "CALL_DYN_APPLY_TOP underflow")
+		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYN_APPLY_TOP underflow")
 	}
 	top := len(stack) - 1
 	fnVal := stack[top]
@@ -985,36 +1000,39 @@ func (vc *vmContext) callDynApplyTop(reg *core.Registry, n int, stack []core.Val
 	if _, ok := fnVal.Data.(core.ClosurePayload); ok {
 		results, err := vc.invokeClosure(vc.r, fnVal, args)
 		if err != nil {
-			return nil, stampAt(err, curDebug, pc, r)
+			return nil, nil, stampAt(err, curDebug, pc, r)
 		}
-		return append(stack[:base], results...), nil
+		return append(stack[:base], results...), nil, nil
 	}
 	fnDef, ok := fnVal.Data.(core.FnDefInfo)
 	if !ok {
 		// applyHandler's own error, byte-identical (the interpreter dispatches
 		// `apply` over the same runtime value and raises exactly this).
-		return nil, stampAt(fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", fnVal.Data), curDebug, pc, r)
+		return nil, nil, stampAt(fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", fnVal.Data), curDebug, pc, r)
 	}
 	fnVal.Quoted = false // applyHandler: the parked value becomes a live call site
 	if core.IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
-				return nil, stampAt(err, curDebug, pc, r)
+				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
-			return append(stack[:base], results...), nil
+			return append(stack[:base], results...), nil, nil
 		}
+	}
+	if ent := vc.dynApplyEnter(fnVal, args); ent != nil {
+		return stack[:base], ent, nil
 	}
 	island := make([]core.Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
 	results, err := vc.islandRun(reg, island)
 	if err != nil {
-		return nil, stampAt(err, curDebug, pc, r)
+		return nil, nil, stampAt(err, curDebug, pc, r)
 	}
 	if err := vc.screenResults(results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-		return nil, err
+		return nil, nil, err
 	}
-	return append(stack[:base], results...), nil
+	return append(stack[:base], results...), nil, nil
 }
 
 // callDynMethod is the GUARDED mid-stream shaped-instance-method apply
@@ -1830,11 +1848,30 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			if len(frames) > 0 {
 				fb = frames[len(frames)-1].stackBase
 			}
-			ns, err := vc.callDynFamily(curReg, in.Op, int(in.Arg), fb, stack, curDebug, pc)
+			ns, ent, err := vc.callDynFamily(curReg, in.Op, int(in.Arg), fb, stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}
 			stack = ns
+			if ent != nil {
+				// The Apply kernel's frame push, modelled on OpCallUserPoly
+				// (the other site that learns its unit at RUN time): re-check
+				// the param contract, push a frame, enter. Deliberately NOT a
+				// nested run — a fn APPLICATION is a call, and bracketing it as
+				// a body added a per-body context frame the interpreter's call
+				// does not (vm_dyn_apply.go).
+				fn := &p.Fns[ent.unit]
+				if err := checkParamContract(r, fn, ent.locals); err != nil {
+					return nil, stampAt(err, curDebug, pc, r)
+				}
+				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds), argsBase: r.Args.Depth()})
+				vc.frameDepth++ // balanced by the matching RET, like OpCallUser
+				vc.pushFrameArgs(ent.locals, fn.NArgs)
+				locals = ent.locals
+				enterUnit(ent.unit)
+				pc = -1
+				break
+			}
 			if err := resolveEscapedFlow(); err != nil {
 				return nil, err
 			}

@@ -87,8 +87,16 @@ var pinnedAritySites = map[string]int{
 	"check/go/method_shape.go":   1,
 	"check/go/check_recovery.go": 1,
 	"eng/go/vm.go":               10,
-	"eng/go/vm_rematch.go":       2,
-	"eng/go/vm_poly_nomatch.go":  3,
+	// The Apply kernel's runtime entry: `fn.NParams != len(args)` checks that
+	// the compiled unit AGREES with the signature MatchFnSig already selected
+	// (compile/run drift detection — entering on a mismatch would bind the
+	// wrong locals silently), and the delivery loop bounds itself on the unit's
+	// own param count, verbatim from OpCallUserPoly. A function of any arity
+	// takes the same path. NOTE: this entry was added because the gate caught
+	// it — on the first change after the gate landed, which is the whole point.
+	"eng/go/vm_dyn_apply.go":    2,
+	"eng/go/vm_rematch.go":      2,
+	"eng/go/vm_poly_nomatch.go": 3,
 
 	// ── NUR100 §1, a NAMED DIVERGENCE: RunPredicate decides whether a
 	//    function may act as a predicate at all by counting its parameters.
