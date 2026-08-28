@@ -89,6 +89,7 @@ keep the two in sync in the same commit.
 | [NUR089](#nur089) | An inline `=>` lambda argument and a named `/v` reference to the SAME function are not equally checkable: the reference passes the check, the lambda draws `no_signature: cannot call g … got (Integer)`, and both run to the identical answer | the function-type prototype, 2026-08-19 (`design/HIGHER-ORDER-FUNCTIONS.0.md` §1.1) |
 | [NUR091](#nur091) | A malformed `fn` declaration fails LOUDLY or SILENTLY depending on its output slot: `fn List [Integer] [size]` raises signature_error, `fn List Any [1]` strands its operands and binds nothing, exit 0 | the function-type prototype, 2026-08-19 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
+| [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
 | [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR106](#nur106) | Stage J flipped `lang.Run` from the tree-walking interpreter to the COMPILED path — and 75 parity assertions across five test files still read it as their interpreter oracle, so each compares the compiled lane against itself and passes unconditionally. Five NUR101 miscompiles and one live divergence (NUR107) sat behind them | measuring NUR101's ruling against `RunInterp`, 2026-08-27 |
@@ -289,6 +290,57 @@ and fences the position gap explicitly, so closing it fails the fence.
 
 ---
 
+## NUR110 — a def in an untaken branch binds anyway {#nur110}
+
+**Status:** Pending · **Recorded:** 2026-08-28 · **Surfaced by:** checking what
+NUR109's compiled answer rested on
+
+**Rule:** a `def` runs when its branch runs. A name defined only inside a
+branch that was not taken is not bound afterwards — which is exactly what the
+interpreter does, and what both lanes already do for a zero-iteration loop.
+
+**Divergence:** the compiled lane binds it anyway.
+
+```
+if false [def op 1] [0]  end  op
+  compiled     [0 1]                 <- op is 1
+  interpreted  undefined_word        <- op was never defined
+
+if false [def op 1] []   end  op          → [1]           vs undefined_word
+if false [def op 1] [0]  end  typeof op   → [0 Integer]   vs undefined_word
+```
+
+**Why the existing gate misses it.** Family L already refuses the SHADOW case:
+a fn redefined inside a conditional body overlap-removes the enclosing overload
+in place, the depth-based rollback cannot revert it, and `installDef` marks the
+program uncompilable (`core/go/core_helpers.go`, gated on
+`analysisInCondBody`). But that refusal is reached only when the overlap filter
+actually DROPS an entry — `changed` is true. **A fresh `def` drops nothing**, so
+`changed` stays false and no refusal fires. The gate covers redefinition and not
+definition.
+
+Measured boundaries, so the fix knows its own edges:
+
+| shape | compiled | interpreted | |
+| --- | --- | --- | --- |
+| fresh def, untaken `if` branch | binds | unbound | **miscompile** |
+| shadowing a VALUE binding | refused (residual provenance) | correct | sound |
+| shadowing a FN overload | refused (family L, by name) | correct | sound |
+| zero-iteration `for` body | unbound | unbound | correct |
+| taken branch | binds | binds | correct |
+
+The zero-iteration loop row is the useful one: the same question is already
+answered correctly there, so the machinery to get this right exists.
+
+**Verdict: resolve by fix, compiler-side — and refusing is a fix.** Its two
+siblings above refuse, and a refusal is sound (the interpreter runs the program
+correctly); a silent wrong binding is not. Full graduation is the same one
+family L already names — "a runtime dispatch respecting the conditional
+binding" — which is Stage 4/5's def-twin work, not Stage 3's. Pinned as
+measured meanwhile by `lang/go`'s `TestCondBodyFreshDefBindsCompiledOnly`.
+
+---
+
 ## NUR109 — an unbound parser name is two different errors {#nur109}
 
 **Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** completing
@@ -318,6 +370,24 @@ read its interp side from `Run` — the compiled lane (NUR106) — so it compare
 distinction the compiled dispatch already makes: a name that resolved to a
 value which is not a usable parser is not a missing kind. Pinned as measured
 meanwhile.
+
+**THE VERDICT IS SUSPENDED, 2026-08-28 — its premise does not hold.** It rests
+on "the compiled answer is the specified one", and the compiled answer rests in
+turn on `op` being BOUND at the parse site. Measured, that binding is itself a
+miscompile: `op` is defined only inside a branch that does not run, and the
+compiled lane binds it anyway ([NUR110](#nur110)). The interpreter's
+`parse_unknown_lang` is the CONSISTENT answer for a name that is not bound —
+which is what both lanes say when the same `op` is read bare on the interpreter.
+
+So this is a SYMPTOM, not an independent divergence, and "fix the interpreter to
+agree" would have taught it to agree with a wrong binding. Re-derive the verdict
+once NUR110 is closed: with `op` correctly unbound, both lanes should reach the
+unregistered-kind path and the question may not survive at all.
+
+This is the third time in this stage that a record's verdict named the wrong
+lane — §6.4's "the interpreter is wrong" and NUR101's ruling premise were the
+others. The common cause each time was reasoning from the compiled lane's answer
+without checking what that answer rested on.
 
 ---
 
