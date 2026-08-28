@@ -162,3 +162,51 @@ func TestDynFrameSimpleWindow(t *testing.T) {
 		}
 	}
 }
+
+// The island is still the fallback, and this row keeps it exercised.
+//
+// Before the Apply kernel every apply-top of a user fn reached the island; now
+// a fn carrying a compiled unit is ENTERED instead, and the island's success
+// return stopped being reached by any corpus row — fourteen probed source
+// shapes (usurp-built values, runtime-returned fns, bodies whose stamp should
+// decline) all took the compiled path. That is worth a row rather than an
+// allowlist entry: "no program I could write reaches this" is the same
+// reasoning that hid a silent miscompile earlier in this work, and it is not a
+// proof of unreachability.
+//
+// The decline this row builds is the honest one: an appliable, NON-delegation
+// fn value whose signature carries no compiled ref. A Go-impl signature is used
+// because it dispatches inside the island without the language layer's frame
+// tokens, which a bare kernel registry does not have.
+func TestDynApplyTopIslandStillRuns(t *testing.T) {
+	r := stampReg(t)
+	sig := core.Signature{
+		Params:  []core.FnParam{{Name: "n", Type: core.TInteger}},
+		Returns: []*core.Type{core.TInteger}, BarrierPos: core.BarrierAllForward,
+		Impl: core.Go(func(a []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+			n, _ := core.AsInteger(a[0])
+			return []core.Value{core.NewInteger(n * 3)}, nil
+		}),
+	}
+	fd := core.FnDefInfo{Name: "zztriple", Signatures: []core.Signature{sig}}
+	fnVal := core.Value{Parent: core.TFunction, Data: fd}
+	if core.IsDelegationFnDef(fd) {
+		t.Fatal("fixture reads as a delegation — it would take tryNativeFnApply, not the island")
+	}
+
+	vc := &vmContext{p: oneConstProg(1), r: r, ceiling: vmStackCeiling(r), stepLimit: core.DefaultStepLimit}
+	// apply-top layout: the fn sits ON TOP of its single arg.
+	got, ent, err := vc.callDynApplyTop(r, 1, []core.Value{core.NewInteger(5), fnVal}, make([]core.SrcPos, 4), 0)
+	if err != nil {
+		t.Fatalf("callDynApplyTop: %v", err)
+	}
+	if ent != nil {
+		t.Fatal("a fn with no compiled unit has nothing to enter — it must take the island")
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want 1", len(got))
+	}
+	if n, _ := got[0].AsConcreteInteger(); n != 15 {
+		t.Fatalf("island apply zztriple(5) = %v, want 15", got[0])
+	}
+}

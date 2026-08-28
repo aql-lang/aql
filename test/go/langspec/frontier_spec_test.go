@@ -174,6 +174,18 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// every detached unit mid-run, so the rows would have compiled with an
 	// interpreter island hidden inside the handler. Closed by
 	// eng/go/vm_foreign_unit.go.)
+	// The two buckets stampFnConst's container descent introduced (2026-08-28).
+	// Both are the SAME leak: compileStoredFnUnit analyses against the LIVE
+	// emit state, so the ENCLOSING compile inherits dep records and
+	// dynamic-scope promotion decisions from a body it may never apply.
+	// Diagnostics are already restored (TruncateDiagnostics); these are not.
+	// Ledgered rather than avoided because without the descent the loop-wrapped
+	// seed MISCOMPILED — a flex map captured by a mount handler lost its
+	// identity across iterations, pinned in varyKnownMiscompiles since
+	// 2026-07-30 and graduated by this change. Graduation for both: the stamp
+	// leaves the enclosing emit state as it found it.
+	"if true [import \"boru:io\"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon \"n/a.txt\") \"hello mounted\" drop  IO.read (make Pathon \"n/a.txt\")] [0]": {why: "the stamp's analysis of a mount handler forces a dynamic-scope read of the module binding it closes over, blocking the ENCLOSING compile's promotion of that computed def; graduation = emit-state isolation for the stamp", failsWith: "dynamic-scope def `files` of unpromoted computed value"},
+	"for 2 [import \"boru:io\"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon \"n/a.txt\") \"hello mounted\" drop  IO.read (make Pathon \"n/a.txt\")]":       {why: "storedHandlerDeps records the module binding a stamped handler reads; a loop body that rebinds it then fails the enclosing compile's freshness model — the same emit-state leak through the dep channel. This seed MISCOMPILED before the descent", failsWith: "module binding files rebound after a stored handler captured it as a dep"},
 	`def p {name:'ada'}  p apply $.name`: {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
 	`[10 20 30] apply $.1`:               {why: "forward-lens no-match takes dispatch recovery (apply is stack-only, NUR098's fix); graduation = trap for a recovered window", failsWith: "unmatched dispatch recovered at apply"},
 	// (ADR-016 / NUR077 §5 Hole 1 was ledgered here and has GRADUATED —

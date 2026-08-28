@@ -35,19 +35,19 @@ import (
 // re-enter the interpreter through an unattributed seam.
 //
 // First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
-// entries). Now 141, after three fixes on the same day. The seam spread — the
+// entries). Now 131, after four fixes on the same day. The seam spread — the
 // shape of the debt, not a second ceiling — and what each moved:
 //
-//	                         first    (a)    (b)    (c)
-//	Engine.Run                 501    477    453    443
-//	CallBoru                   275    251    251    251
-//	vm:island                   66     66     48     48
-//	runPooledSub                37     37     35     35
-//	RunResolved                 31     31     31     31
-//	vm:island-resolved          21     21     21     11
-//	InvokeCallback:callboru     28      4      4      4
-//	                          ----   ----   ----   ----
-//	rows                       184    163    151    141
+//	                         first    (a)    (b)    (c)    (d)
+//	Engine.Run                 501    477    453    443    433
+//	CallBoru                   275    251    251    251    251
+//	vm:island                   66     66     48     48     39
+//	runPooledSub                37     37     35     35     35
+//	RunResolved                 31     31     31     31     31
+//	vm:island-resolved          21     21     21     11     10
+//	InvokeCallback:callboru     28      4      4      4      4
+//	                          ----   ----   ----   ----   ----
+//	rows                       184    163    151    141    131
 //
 // (a) Foreign detached units became hostable mid-run
 // (eng/go/vm_foreign_unit.go). The InvokeCallback column is that one: those 24
@@ -69,12 +69,18 @@ import (
 // forward-collecting the region, so the frame would bind a different arg set
 // than the interpreter assembles.
 //
+// (d) stampFnConst descends into list and map CONSTS, so a fn read out of a
+// container carries its unit too. Measured before it did: of the island rows
+// the top-level stamp left, roughly four in five were exactly that shape —
+// `def m {f: (fn …)}  m.f 5`, `def ops {f: inc/v}  ops.f 5`, a class field
+// method.
+//
 // Every drop carried Engine.Run with it, because an island is a nested Run.
 //
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 141
+const interpEntryRowCeiling = 131
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

@@ -2454,23 +2454,75 @@ func StampCompiledRef(fd core.FnDefInfo, ref *CompiledFnRef) bool {
 // business), an already-stamped value is left alone (first stamp wins — the
 // STORE-FN edge may have got there), and a declining sig stays plain. Every
 // decline is silent and per-sig: a missing ref costs speed, never an answer.
-// NO CONTAINER DESCENT, and the reason is a contract rather than a cost. Most
-// applied fn values do live inside a container — `def m {f: (fn …)}  m.f 5`, a
-// class field, a map of handlers — and descending into map and list consts to
-// stamp them WORKS and is worth roughly a third of this seam's win. It also
-// mutates the shared *BoruImpl of a fn value sitting inside USER DATA, and
-// StampFnValue exists in its cloning form precisely so that does not happen:
-// "StampFnValue clones, so the user's spec value stays plain"
-// (lang/go/modules/model.go). Measured, the collision is real: a model action's
-// `{gen: (…lambda…)}` stamped here first, so stampActionFn's clone-and-name
-// found an existing ref, declined, and the stamp report lost the attribution
-// the frontier ledger pins ("no stamp attempt recorded for gen").
+// NO CONTAINER DESCENT — and the reason is measured, not a contract reading.
 //
-// The container case is therefore its own increment — it needs the clone
-// contract honoured, not a deeper walk. What lands here is the shape that has
-// no such conflict: a fn value that IS the const.
-func (es *EmitState) stampFnConst(v core.Value) {
-	if es.inStampCompile {
+// Where the remaining work is: of the island rows this seam leaves, roughly
+// four in five are a fn read out of a container — `def m {f: (fn …)}  m.f 5`,
+// `def ops {f: inc/v}  ops.f 5`, a class field method, `def m {a:add/v}  m.a/u
+// 1 2`. So descending into list and map consts is the rest of the win, and it
+// WORKS: corpus census 141 -> 131, 0 refused, 0 islanded, differential green.
+//
+// It also makes some programs REFUSE that previously compiled. Measured on the
+// variation sampler, which the corpus alone does not reach:
+//
+//	                 before   after
+//	pass               403     401
+//	refused             33      36
+//
+// with three new buckets, and their names say what leaked: "dynamic-scope def
+// `files` of unpromoted computed value" and "module binding files rebound after
+// a stored handler captured it as a dep". Both come from the ENCLOSING compile,
+// not from the stamped body — so compileStoredFnUnit mutates shared emit state
+// (dep records, dynamic-scope promotion decisions) and not only the diagnostics
+// TruncateDiagnostics already restores. A stamp is a speculative compile of
+// code the program may never apply; it must leave the enclosing compile exactly
+// as it found it, and today it does not.
+//
+// AND IT LANDS ANYWAY, because the alternative is worse. Descent OFF, the same
+// sampler reports a MISCOMPILE on that seed — a flex map captured by a mount
+// handler loses its identity across loop iterations, and the compiled run
+// raises `[boru/set_error] expected a FlexMap, got FlexMap` where the
+// interpreter round-trips cleanly. It had been pinned since 2026-07-30. Descent
+// ON, that seed refuses instead. A refusal is a program that does not run; a
+// miscompile is a program that runs and lies, and this project's rule — stated
+// in every increment of this work — is that a fix producing a WRONG value is
+// worse than one producing none.
+//
+// So the three refusal buckets are ledgered rather than laundered
+// (varyRefusalLedger, with frontier rows), and the emit-state isolation above
+// is the named work that retires them. What is NOT acceptable is leaving the
+// miscompile in place to protect a refusal count.
+//
+// (An earlier note here blamed the clone contract — "StampFnValue clones, so
+// the user's spec value stays plain". That reading was wrong: the clone
+// protects a CALLER's input from the model module's stamp, not the compile
+// pass from stamping its own baked const. The real collision it caused was
+// ATTRIBUTION, and that is fixed at StampFnValue's already-stamped return.)
+func (es *EmitState) stampFnConst(v core.Value) { es.stampFnConstAt(v, 0) }
+
+// stampFnConstDepth bounds the container walk. A fn nested deeper than this
+// inside a const is not a shape the corpus writes, and an unbounded walk over
+// a value graph is how a compile pass acquires a pathological case.
+const stampFnConstDepth = 8
+
+func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
+	if depth > stampFnConstDepth || es.inStampCompile {
+		return
+	}
+	switch d := v.Data.(type) {
+	case core.ListPayload:
+		for _, e := range d.Elems {
+			es.stampFnConstAt(e, depth+1)
+		}
+		return
+	case core.MapPayload:
+		if d.M == nil {
+			return
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			es.stampFnConstAt(mv, depth+1)
+		}
 		return
 	}
 	fd, isFn := v.Data.(core.FnDefInfo)

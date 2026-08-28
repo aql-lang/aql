@@ -1522,8 +1522,38 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   found a ref, declined, and the stamp report lost its attribution. That case
   is its own increment; it needs the clone contract honoured, not a deeper walk.
 
-  Measured: census **163 → 151**, `vm:island` **66 → 48**, corpus 7622 rows /
-  7248 compiled / 0 islanded / 0 refused, differential unchanged.
+  Measured across the increments: census **184 → 131**, `vm:island` **66 → 39**,
+  `vm:island-resolved` **21 → 10**, corpus 7622 rows / 7248 compiled / 0
+  islanded / 0 refused, differential unchanged throughout.
+
+  **Container descent, and the trade it forced.** Of the island rows the
+  top-level stamp leaves, roughly four in five are a fn read out of a container
+  — `def m {f: (fn …)}  m.f 5`, `def ops {f: inc/v}  ops.f 5`, a class field
+  method. Descending into list and map consts takes them (census 141 → 131),
+  and it also makes three variation-sampler buckets REFUSE that previously
+  compiled (pass 403 → 401, refused 33 → 36). Their names locate the cause:
+  "dynamic-scope def `files` of unpromoted computed value" and "module binding
+  files rebound after a stored handler captured it as a dep" both indict the
+  ENCLOSING compile, not the stamped body — so `compileStoredFnUnit` mutates
+  shared emit state (dep records, dynamic-scope promotion decisions) beyond the
+  diagnostics `TruncateDiagnostics` already restores.
+
+  It lands anyway, because the alternative is worse: WITHOUT the descent the
+  same seed **miscompiles** — a flex map captured by a mount handler loses its
+  identity across loop iterations, and the compiled run raises `expected a
+  FlexMap, got FlexMap` where the interpreter round-trips. That had been pinned
+  in `varyKnownMiscompiles` since 2026-07-30; it is now graduated, and the
+  table is empty. A refusal is a program that does not run; a miscompile is a
+  program that runs and lies. The two buckets are ledgered with frontier rows,
+  and the emit-state isolation is the named work that retires them.
+
+  **A note on what the coverage gate found.** After the kernel took every
+  reachable shape, `callDynApplyTop`'s ISLAND success return stopped being
+  covered — fourteen probed sources (usurp-built values, runtime-returned fns,
+  bodies whose stamp should decline) all took the compiled path. It is pinned
+  with a constructed decline rather than a `//covergate:allow`: "no program I
+  could write reaches this" is the same reasoning that hid a silent miscompile
+  earlier in this work, and it is not a proof of unreachability.
 
   **The graduation, landed and PROVEN honest.** With the body on the VM the
   refusal in `RecordCallOperands` had nothing left to defend, and the arm

@@ -12,3 +12,25 @@
 # natively and their ledger entries delete.
 # GRADUATED 2026-07-14 (do-def leak fidelity): both typed-def rows compile
 # natively as closure units and moved to lang/spec/bytecode-migrated.tsv.
+#
+# ── Added 2026-08-28. The two refusal buckets stampFnConst's container
+#    descent introduced (varyRefusalLedger names them "dynamic-scope def
+#    `files` of unpromoted computed value" and "module binding files rebound
+#    after a stored handler captured it as a dep"). Both are the SAME leak:
+#    compileStoredFnUnit runs its analysis against the LIVE emit state, so
+#    the ENCLOSING compile inherits dep records and dynamic-scope promotion
+#    decisions from a body it may never apply. Diagnostics are already
+#    restored (TruncateDiagnostics); these are not.
+#
+#    They are ledgered rather than avoided because the alternative is worse:
+#    without the descent the `for`-wrapped seed MISCOMPILES — a flex map
+#    captured by a mount handler loses its identity across loop iterations,
+#    and the compiled run raises `expected a FlexMap, got FlexMap` where the
+#    interpreter round-trips. That was pinned in varyKnownMiscompiles from
+#    2026-07-30 and is now graduated.
+#
+#    Graduation for both rows: make the stamp leave the enclosing emit state
+#    exactly as it found it — the snapshot/restore shape the diagnostics have,
+#    extended over dep records and promotion decisions.
+if true [import "boru:io"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon "n/a.txt") "hello mounted" drop  IO.read (make Pathon "n/a.txt")] [0]	'hello mounted'	the branch-wrapped mount seed: the stamp's dynamic-scope read of `files` blocks the enclosing promotion
+for 2 [import "boru:io"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon "n/a.txt") "hello mounted" drop  IO.read (make Pathon "n/a.txt")]	'hello mounted' 'hello mounted'	…and the loop-wrapped one, where the rebound module binding fails the dep-freshness model — this seed MISCOMPILED before the descent
