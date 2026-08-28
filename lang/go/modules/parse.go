@@ -945,9 +945,11 @@ func callParseFn(r *native.Registry, fn native.Value, args []native.Value) ([]na
 	if fd, ok := fn.Data.(native.FnDefInfo); ok {
 		fnDef = &fd
 	}
-	// CallBoruFn, not r.CallBoru: a matcher/action written in the grammar's own
-	// module resolves its free words there (design/FUNCTION-VALUE-SCOPE.0.md).
-	return core.CallBoruFn(r, fnDef, sig, args)
+	// InvokeCallbackFn, not r.CallBoru: a matcher/action written in the grammar's
+	// own module resolves its free words there
+	// (design/FUNCTION-VALUE-SCOPE.0.md), and the body is offered to the VM before
+	// the interpreter fallback.
+	return core.InvokeCallbackFn(r, fnDef, sig, args)
 }
 
 // abnfOptsFrom reads the {start tag builtins marks} option map into the

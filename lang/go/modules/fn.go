@@ -16,8 +16,8 @@ import (
 // a handful of lines; shipping them native removes the friction AND the §5.8
 // compile refusals the user-space spellings draw — a native word's produced
 // wrapper is an ordinary Function value backed by a Go handler, invoked
-// through the same callback seam filter uses (MatchFnSig + CallBoruFn on the
-// fn's DEFINING registry, or InvokeBody for a compiled closure), so the
+// through the same callback seam filter uses (MatchFnSig + InvokeCallbackFn on
+// the fn's DEFINING registry, or InvokeBody for a compiled closure), so the
 // FUNCTION-VALUE-SCOPE rule holds: a callback's free words resolve where the
 // function was written.
 //
@@ -100,10 +100,11 @@ func fnUtilSingleSig(fd native.FnDefInfo, opName string, r *native.Registry) (*n
 	return &own[0], nil
 }
 
-// invokeFnUtil applies a fn operand to args — the filter/parse callback
-// seam's interpreter half: match a signature, run CallBoruFn on the fn's
-// DEFINING registry (design/FUNCTION-VALUE-SCOPE.0.md). The InvokeBody
-// closure half joins when a compiled closure can actually reach here.
+// invokeFnUtil applies a fn operand to args — the filter/parse callback seam's
+// fn-VALUE half: match a signature, run InvokeCallbackFn on the fn's DEFINING
+// registry (design/FUNCTION-VALUE-SCOPE.0.md), which offers a stamped body to
+// the VM and falls back to CallBoru. The InvokeBody closure half joins when a
+// compiled closure can actually reach here.
 func invokeFnUtil(r *native.Registry, opName string, fn native.Value, args []native.Value) ([]native.Value, error) {
 	sig := native.MatchFnSig(fn, args)
 	if sig == nil {
@@ -119,7 +120,7 @@ func invokeFnUtil(r *native.Registry, opName string, fn native.Value, args []nat
 	if fd, ok := fn.Data.(native.FnDefInfo); ok {
 		fnDef = &fd
 	}
-	return core.CallBoruFn(r, fnDef, sig, args)
+	return core.InvokeCallbackFn(r, fnDef, sig, args)
 }
 
 // invokeFnUtilOne is invokeFnUtil for the positions that feed a value
@@ -164,8 +165,8 @@ func goFnValue(name string, nParams int, h native.Handler) native.Value {
 
 // COMPILE EFFECT (the fn-util family). Every word here takes its fn operand
 // as INERT DATA: it stashes the value in the wrapper it returns and invokes it
-// LATER, from inside a Go handler (invokeFnUtil — MatchFnSig + CallBoruFn), so
-// the fn is never re-stepped on the VM tape. That is exactly the
+// LATER, from inside a Go handler (invokeFnUtil — MatchFnSig +
+// InvokeCallbackFn), so the fn is never re-stepped on the VM tape. That is exactly the
 // CompileStoresFn contract, and the same criterion parse.go states for its own
 // slots ("the fn is stored, not invoked on the tape"). Without the
 // declaration the recorder assumes the DEFAULT — a fn-valued operand means the

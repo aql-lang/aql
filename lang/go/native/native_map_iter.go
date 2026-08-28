@@ -107,9 +107,10 @@ func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
 	if sig == nil {
 		return Value{}, false, fmt.Errorf("no matching lambda signature for %d argument(s)", len(args))
 	}
-	// CallBoruFn, not reg.CallBoru: a lambda passed in from another module runs
-	// on its DEFINING registry (design/FUNCTION-VALUE-SCOPE.0.md).
-	res, err := CallBoruFn(reg, mb.fnDef, sig, args)
+	// InvokeCallbackFn, not reg.CallBoru: a lambda passed in from another module
+	// runs on its DEFINING registry (design/FUNCTION-VALUE-SCOPE.0.md), and a
+	// stamped body runs on the VM.
+	res, err := InvokeCallbackFn(reg, mb.fnDef, sig, args)
 	if err != nil {
 		return Value{}, false, err
 	}

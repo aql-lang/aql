@@ -228,7 +228,7 @@ the same shape:
 
 The fn-util case is the cleanest specimen because the correct declaration turned
 out to be a *transcription* of what the handler visibly does. `invokeFnUtil`
-calls `MatchFnSig` + `CallBoruFn` from inside a Go handler; that is
+calls `MatchFnSig` + `InvokeCallbackFn` from inside a Go handler; that is
 `CompileStoresFn` by the same criterion `parse.go:262` states for its own slot
 ("the fn is stored, not invoked on the tape"). Nothing had to be discovered —
 only written down. And because nobody wrote it down, the recorder refused every

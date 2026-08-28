@@ -79,8 +79,8 @@ func TestADR016ApplyKeepsArgTakingFnInert(t *testing.T) {
 // TestADR016AppliedMarkIsNotACall pins the SEAM the fix turns on: apply
 // states that a call was asked for and leaves the calling to the re-step.
 // An earlier revision called from the handler instead — through
-// CallBoruFn — and that second dispatch path is what produced the three
-// divergences the tests below cover. If this ever goes back to returning
+// the since-retired CallBoruFn — and that second dispatch path is what
+// produced the three divergences the tests below cover. If this ever goes back to returning
 // a non-Function, those regressions are back too.
 func TestADR016AppliedMarkIsNotACall(t *testing.T) {
 	r := seam5Reg(t)

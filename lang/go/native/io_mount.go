@@ -69,14 +69,14 @@ func (a *boruFileOps) call(op string, args []Value) (Value, error) {
 		return Value{}, &os.PathError{Op: op, Path: pathOfArgs(args),
 			Err: fmt.Errorf("mounted %s handler has no signature matching %d argument(s)", op, len(args))}
 	}
-	// CallBoruFn, not a.r.CallBoru: a mounted handler runs on the registry that
-	// DEFINED it, so its module-private helpers resolve
-	// (design/FUNCTION-VALUE-SCOPE.0.md).
+	// InvokeCallbackFn, not a.r.CallBoru: a mounted handler runs on the registry
+	// that DEFINED it, so its module-private helpers resolve
+	// (design/FUNCTION-VALUE-SCOPE.0.md), and a stamped handler runs on the VM.
 	var fnDef *FnDefInfo
 	if fd, ok := fnVal.Data.(FnDefInfo); ok {
 		fnDef = &fd
 	}
-	res, err := CallBoruFn(a.r, fnDef, sig, args)
+	res, err := InvokeCallbackFn(a.r, fnDef, sig, args)
 	if err != nil {
 		return Value{}, err
 	}

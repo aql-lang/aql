@@ -438,7 +438,8 @@ func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	// So state the application instead of performing it: mark the value
 	// Applied and hand it back. The gate reads the mark and yields, and
 	// the call runs down the ONE dispatch path every other arity already
-	// uses. Calling here instead — through CallBoruFn — was a SECOND path,
+	// uses. Calling here instead — through the since-retired CallBoruFn — was a
+	// SECOND path,
 	// and it diverged from the first in three ways the re-step gets right
 	// by construction: a native 0-arg fn (`valof context apply`) kept its
 	// Go handler instead of running an empty body; a body mutating the

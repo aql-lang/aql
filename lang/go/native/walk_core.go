@@ -162,9 +162,10 @@ func callWalkHook(r *Registry, h walkHook, arg Value) error {
 		if sig == nil {
 			return r.BoruError("walk_error", "walk: no matching hook signature", "walk")
 		}
-		// CallBoruFn, not r.CallBoru: a hook lambda written in another module
-		// resolves its free words THERE (design/FUNCTION-VALUE-SCOPE.0.md).
-		_, err := CallBoruFn(r, h.fnDef, sig, []Value{arg})
+		// InvokeCallbackFn, not r.CallBoru: a hook lambda written in another module
+		// resolves its free words THERE (design/FUNCTION-VALUE-SCOPE.0.md), and a
+		// stamped body runs on the VM rather than the interpreter.
+		_, err := InvokeCallbackFn(r, h.fnDef, sig, []Value{arg})
 		return err
 	}
 	if h.closure {

@@ -414,7 +414,7 @@ already was.
   level down. The obligation is structural: G-lane opcodes call the same
   `core` functions the Engine calls (`MatchSignature`, `signature.go:175`;
   `SigTypeMatches` incl. the dynamic-carrier rule, `:297-341`;
-  `CallBoruFn`/`InvokeCallbackFn`; `RunTypedBind`; `Registry.Lookup` +
+  `InvokeCallbackFn`; `RunTypedBind`; `Registry.Lookup` +
   `aggregateDispatch`; the `RuntimeNoMatch` diagnostic builders), and the
   Engine is refactored to call the newly extracted routines (§6.2) so
   there is exactly one implementation of every decision.
@@ -1588,6 +1588,45 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   their frontier rows deleted — with the census increment kept, and the
   flex-map divergence pinned where divergences belong rather than hidden behind
   an optimisation that happened to fire.
+
+  **The native-callback seam, and what the CallBoru column turned out to be.**
+  `core/go/invoke.go` carried two near-identical entries: `InvokeCallbackFn`
+  (offer the body to the VM, fall back to `CallBoru`) and `CallBoruFn` (the same
+  defining-registry routing, straight to `CallBoru`). Seven words used the
+  second — `filter`'s Function form, the map-lambda `each`/`fold` bodies, core
+  `walk` / `StructUtil.walk`, `IO.mount`'s fileops handlers, `boru:parse`'s
+  matcher and action callbacks, and the fn-util words. Its comment gave the
+  reason: *fixing WHERE free words resolve must not also change WHICH engine
+  resolves them.* That is the right scope fence for
+  design/FUNCTION-VALUE-SCOPE.0.md's change and precisely the fence this work
+  removes, so all seven now call `InvokeCallbackFn` and `CallBoruFn` is deleted
+  — a second dispatch path is a divergence source in its own right, and
+  design/FN-VALUE-OPEN-WORK.0.md records two it caused.
+
+  The measurement is the interesting half. `CallBoru` had sat at **251** through
+  four consecutive fixes — visibly the largest block of interpretation debt in
+  the census, and the reason this increment was picked next. The flip moved it
+  to 238 and the row count by exactly ONE. So the 224 that remain were probed:
+
+  | origin | entries |
+  |---|---|
+  | `Test.property`'s generator/property calls | 224 |
+  | `core_helpers` foreign-registry fn dispatch | 8 |
+  | `InvokeCallback`'s own interpreter fallback | 6 |
+
+  It was never broad debt. It is two or three `module-test.tsv` rows amplified
+  by an iteration count — `Test.property` runs its bodies ~100 times per row,
+  the seam counts INVOCATIONS, and the ceiling counts ROWS. Those bodies are raw
+  QUOTATIONS: the module already routes a compiled sig through `InvokeCallback`
+  and only falls back when the property was written as `[body]` tokens, which
+  carry no unit to offer. Compiling them is Stage 7's runtime-compilation work,
+  not a seam flip, and it is worth perhaps three rows.
+
+  **The lesson generalises past this seam.** A census whose counts mix per-row
+  and per-invocation events cannot be read as a priority order — a large number
+  can be one row in a loop, and a small one can be a whole family. The row count
+  is the ratchet for exactly that reason; the seam spread is a shape, and every
+  seam worth acting on has to be attributed before it is worth acting on.
 
   **A note on what the coverage gate found.** After the kernel took every
   reachable shape, `callDynApplyTop`'s ISLAND success return stopped being

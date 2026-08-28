@@ -136,9 +136,11 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 // filter natively, the body operand lowered to OpPushClosure) runs through the
 // InvokeBody seam — its named param binds to the cbArgs shape the closure was
 // compiled against ({key,value} pair for a list, KeyVal for a map). An
-// interpreter FnDefINFO lambda matches a signature and runs through CallBoruFn —
-// CallBoru on the fn's DEFINING registry, so a predicate written in another
-// module resolves its free words there (design/FUNCTION-VALUE-SCOPE.0.md). The
+// interpreter FnDefINFO lambda matches a signature and runs through
+// InvokeCallbackFn — the VM when the body carries a stamped unit, CallBoru
+// otherwise, either way on the fn's DEFINING registry so a predicate written in
+// another module resolves its free words there
+// (design/FUNCTION-VALUE-SCOPE.0.md). The
 // two shapes are byte-identical to the handler: both consume cbArgs and yield a
 // Boolean predicate result.
 func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
@@ -153,7 +155,7 @@ func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
 	if fd, ok := cb.Data.(FnDefInfo); ok {
 		fnDef = &fd
 	}
-	return CallBoruFn(r, fnDef, sig, cbArgs)
+	return InvokeCallbackFn(r, fnDef, sig, cbArgs)
 }
 
 // filterBodyHandler is the quotation form of filter: `filter [body] xs`

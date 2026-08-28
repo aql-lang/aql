@@ -35,19 +35,19 @@ import (
 // re-enter the interpreter through an unattributed seam.
 //
 // First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
-// entries). Now 131, after four fixes on the same day. The seam spread — the
+// entries). Now 130, after six changes on the same day. The seam spread — the
 // shape of the debt, not a second ceiling — and what each moved:
 //
-//	                         first    (a)    (b)    (c)    (d)
-//	Engine.Run                 501    477    453    443    433
-//	CallBoru                   275    251    251    251    251
-//	vm:island                   66     66     48     48     39
-//	runPooledSub                37     37     35     35     35
-//	RunResolved                 31     31     31     31     31
-//	vm:island-resolved          21     21     21     11     10
-//	InvokeCallback:callboru     28      4      4      4      4
-//	                          ----   ----   ----   ----   ----
-//	rows                       184    163    151    141    131
+//	                         first    (a)    (b)    (c)    (d)    (e)    (f)
+//	Engine.Run                 501    477    453    443    433    439    425
+//	CallBoru                   275    251    251    251    251    251    238
+//	vm:island                   66     66     48     48     39     39     39
+//	runPooledSub                37     37     35     35     35     37     36
+//	RunResolved                 31     31     31     31     31     31     31
+//	vm:island-resolved          21     21     21     11     10     10     10
+//	InvokeCallback:callboru     28      4      4      4      4      4      6
+//	                          ----   ----   ----   ----   ----   ----   ----
+//	rows                       184    163    151    141    131    131    130
 //
 // (a) Foreign detached units became hostable mid-run
 // (eng/go/vm_foreign_unit.go). The InvokeCallback column is that one: those 24
@@ -75,12 +75,45 @@ import (
 // `def m {f: (fn …)}  m.f 5`, `def ops {f: inc/v}  ops.f 5`, a class field
 // method.
 //
+// (e) Emit-state isolation for the stamp — the one column that goes UP, and it
+// should be read as the price of a correctness fix rather than a regression.
+// stampFnConst now declines a stamp that would register a dynamic-scope name in
+// the enclosing program, so a handful of bodies that used to carry a unit take
+// the apply island again: Engine.Run +6, runPooledSub +2, no row moved. The
+// alternative was keeping a stamp that MASKED a miscompile (see
+// design/FULL-COMPILATION.0.md, "Container descent, and the mask it nearly
+// shipped"). A seam count is not a score.
+//
+// (f) The seven native-callback sites that used CallBoruFn — `filter`'s
+// Function form, the map-lambda each/fold bodies, core walk / StructUtil.walk,
+// IO.mount's fileops handlers, boru:parse's matcher and action callbacks, and
+// the fn-util words — now call InvokeCallbackFn, so a stamped body runs on the
+// VM instead of never being offered to it. CallBoruFn is deleted: it existed to
+// keep those bodies OFF the VM, which is the fence full compilation removes.
+//
 // Every drop carried Engine.Run with it, because an island is a nested Run.
+//
+// WHAT THE CallBoru COLUMN ACTUALLY IS, measured by probe at (f) — because it
+// had not moved through four fixes and read as the largest block of debt:
+//
+//	Test.property's generator/property calls   224
+//	core_helpers foreign-registry fn dispatch    8
+//	InvokeCallback's own interpreter fallback    6
+//
+// So it is not broad interpretation debt. It is two or three `module-test.tsv`
+// rows amplified by an iteration count — Test.property runs its bodies ~100
+// times per row, and the seam counts INVOCATIONS while the ceiling counts ROWS.
+// Those bodies are raw QUOTATIONS, not fn values: the module already routes a
+// compiled sig through InvokeCallback and only falls back when the property was
+// written as `[body]` tokens, which carry no unit to offer. Compiling them is
+// Stage 7 (runtime compilation everywhere), not a seam flip, and it is worth
+// perhaps three rows. Read the seam counts as a shape, never as a priority
+// order: a big number here can be one row in a loop.
 //
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 131
+const interpEntryRowCeiling = 130
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

@@ -80,9 +80,10 @@ func makeWalkApply(cb Value, r *Registry, callErr *error) func(*string, any, any
 		if fd, ok := cb.Data.(FnDefInfo); ok {
 			cbDef = &fd
 		}
-		// CallBoruFn, not r.CallBoru: the callback resolves its free words in the
-		// module that DEFINED it (design/FUNCTION-VALUE-SCOPE.0.md).
-		cbResult, err := CallBoruFn(r, cbDef, cbSig, cbArgs)
+		// InvokeCallbackFn, not r.CallBoru: the callback resolves its free words in
+		// the module that DEFINED it (design/FUNCTION-VALUE-SCOPE.0.md), and a
+		// stamped body runs on the VM.
+		cbResult, err := InvokeCallbackFn(r, cbDef, cbSig, cbArgs)
 		if err != nil {
 			*callErr = err
 			return val

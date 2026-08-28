@@ -233,7 +233,7 @@ func TestForeignClosureCaptureResolvesInItsOwnRegistry(t *testing.T) {
 //
 // WHY THEY DIFFER, which is the part that took three readings to get right.
 // BOTH handlers hand (accumulator, element). The MAP path calls the lambda
-// POSITIONALLY (mapBody.callLambda -> CallBoruFn, args bound in sig order), so
+// POSITIONALLY (mapBody.callLambda -> InvokeCallbackFn, args bound in sig order), so
 // sig[0] is the accumulator. The LIST path goes through InvokeBody, whose
 // interpreter arm runs the inputs as a STACK (RunResolved) where
 // MatchSignature fills from the TOP DOWN, so sig[0] is the element. Same order
