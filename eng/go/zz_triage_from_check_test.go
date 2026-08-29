@@ -25,8 +25,7 @@ func TestTryNativeFnApplyForeignBoruBodyDeclines(t *testing.T) {
 		Returns: []*core.Type{core.TAny}, BarrierPos: -1, Impl: core.Boru([]core.Value{core.NewWord("z9borubody")}),
 	})
 	vc := seam7VC(main)
-	fd, _ := member.Data.(core.FnDefInfo)
-	res, done, err := vc.tryNativeFnApply(fd, nil)
+	res, done, err := vc.tryNativeFnApply(member, nil)
 	if done || err != nil || res != nil {
 		t.Errorf("foreign boru-bodied inner must decline the fast path (island territory): res=%v done=%v err=%v",
 			res, done, err)

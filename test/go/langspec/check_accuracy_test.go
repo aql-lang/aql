@@ -208,6 +208,17 @@ var unflaggedPins = map[string]int{
 	// whether it is an error depends on the COUNT, which is a plain Integer
 	// slot: n=0 runs the body zero times and answers [], n>0 raises. A
 	// value-dependent error the checker cannot decide without the value.
+	// path-modifier.tsv: ONE row, `def m {d:div/v} end m.d 0 10` — a division
+	// by zero reached through a parked native. The divisor is a plain Integer
+	// literal, and whether dividing by it errors is a fact about its VALUE, not
+	// its type; the checker types the row and stops there. Genuinely
+	// undecidable statically, unlike the fn-value.tsv pin above it.
+	//
+	// It is in the corpus for its DIAGNOSTIC, not its taxonomy: both engines
+	// have always agreed this raises arith_error, and what the row pins is that
+	// the compiled lane still points at 1:10. That is invisible to every gate
+	// but the compile-or-fallback walk, which compares positions.
+	"path-modifier.tsv": 1,
 	"module-rand.tsv":   1,
 	"module-sift.tsv":   24,
 	"module-struct.tsv": 2,

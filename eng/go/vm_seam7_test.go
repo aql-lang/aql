@@ -395,13 +395,13 @@ func TestSeam7IsDelegationFnDefEmpty(t *testing.T) {
 func TestSeam7TryNativeFnApplyNoSigs(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
 	// No registered inner and no own signatures → not applied (done=false).
-	_, done, err := vc.tryNativeFnApply(core.FnDefInfo{Name: "unregistered-xyz"}, nil)
+	_, done, err := vc.tryNativeFnApply(core.NewFunction(core.FnDefInfo{Name: "unregistered-xyz"}), nil)
 	if done || err != nil {
 		t.Errorf("no-sig fn: done=%v err=%v, want done=false err=nil", done, err)
 	}
 	// Own signatures present but no runtime match → still not applied.
 	fd := core.FnDefInfo{Name: "unregistered-xyz", Signatures: []core.Signature{{Args: []*core.Type{core.TInteger}, BarrierPos: -1}}}
-	_, done, err = vc.tryNativeFnApply(fd, []core.Value{core.NewString("x")})
+	_, done, err = vc.tryNativeFnApply(core.NewFunction(fd), []core.Value{core.NewString("x")})
 	if done || err != nil {
 		t.Errorf("own-sig no-match: done=%v err=%v, want done=false err=nil", done, err)
 	}
