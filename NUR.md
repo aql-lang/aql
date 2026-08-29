@@ -573,12 +573,34 @@ the `lowerReach` stamp, the Function-result stamp, and the dispatch site's
 program still records `0:0` on every op. (Pairs of these were tried before;
 this was the first run of all three.)
 
-So the value that reaches the pointer is NOT the one that was stamped.
-Something between `CarrierResults` returning `out` and the pointer reading
-that token replaces or rebuilds it — `spliceMatchResults` and the recorded-ID
-re-mapping around it are where to look next, and to WATCH rather than read:
-five arguments-from-code have now each cost a parity run, and the instrument
-settled in one what the reading got wrong four times.
+**And the last probe found why, which is not what any of the five guesses
+assumed.** Instrumenting the dispatch site itself — printing the pointer token
+and derived position whenever the dispatched name is `dot` or `not-equal`:
+
+```
+PROBE dispatch name=dot  ptr=3  tokParent=Word  tokPos=1:20  derivedPos=1:20
+```
+
+`not-equal` NEVER APPEARS. Only `dot` dispatches through that site, in both
+the module and the plain-map program. Yet the module program's recorded
+opcode IS `CALL_NATIVE` for `not-equal`.
+
+So the delegated module native is recorded by a path that never passes the
+position derivation every guess so far has been trying to fix.
+`spliceMatchResults` is exonerated too — it splices `results` onto the tape
+verbatim. The delegation branch builds its own `MatchResult` and calls
+`execMatch` directly (`core/go/engine.go`, the "ONE dispatch path, no
+exceptions" comment), and THAT is where the recorded event's position comes
+from — or fails to.
+
+**Next step, precisely:** find where `execMatch` supplies the recorded
+position for a `MatchResult` built by the delegation branch, and give it the
+fn value's own (which CAN be stamped — proved above). The three pieces
+already validated in isolation — the `lowerReach` stamp, the Function-result
+stamp in `CarrierResults`, the dispatch site's `IsWord` split — are necessary
+but not sufficient, and all three plus this fourth are likely needed
+together. Do not land any subset: the `lowerReach` stamp alone is the
+186-divergence regression.
 
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
