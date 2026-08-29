@@ -484,13 +484,31 @@ dispatches `dot` at all". That was inferred from `tryFoldModuleConst` and is
 wrong as stated — it holds for the compiled lane, not the interpreter, and
 the 1:20 above is the counter-example.)
 
-**So the remaining lead is the compiled lane's module-resolution elision** —
-not the lowering, and not the dispatch site. Whatever replaces the `dot`
-chain with a resolved const has to carry the position of the access it
-replaced. `tryFoldModuleConst` is the nearest named candidate but is NOT
-confirmed: its own doc scopes it to reads whose result is DATA, and an
-exported fn is elided on the get/getr resolution path it mentions instead.
-Confirm which before changing either.
+**What the compiled lane actually does with `Pkg.word`**, traced far enough
+to name the shape but not the whole mechanism:
+
+- `isModuleInnerSig` (`compiler/go/compiler_dispatch_record.go`) confirms the
+  recorder sees the INNER native — `not-equal` itself, reached through the
+  wrapper's sub-registry — rather than a `dot` result. So the read is gone by
+  the time anything is recorded.
+- That inner dispatch takes its position from the token at the pointer, which
+  for a VALUE dispatch is the Function literal (the dispatch site's own
+  comment says so: "a module wrapper's trivial-delegation short-circuit steps
+  the Function literal, not a Word").
+- Measured: taking that token's position changes nothing, so the Function
+  literal carries none — even with `lowerReach` stamped.
+
+**So the target is the module-export Function VALUE**: it has to carry the
+position of the access that produced it, and today it does not. That is a
+THIRD location, distinct from the two ruled out — not the lowering, not the
+dispatch site's guard.
+
+`tryFoldModuleConst` is a nearby named candidate and is NOT confirmed to be
+the site: its own doc scopes it to reads whose result is DATA, while an
+exported fn goes through the get/getr resolution it mentions separately.
+Confirm which path actually produces the value before changing either — this
+record has already been wrong once by reading a doc comment instead of
+measuring.
 
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
