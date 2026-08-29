@@ -493,6 +493,39 @@ import (
 // hole is the seam's, not the lens's. This is column (n)'s lesson again: an
 // attribution applied at one call site leaves its siblings behind.
 //
+// A SECOND INCREMENT BUILT, MEASURED AND REVERTED — the 11-row `do` cluster,
+// recorded because it rules out the cheap reading of that cluster.
+//
+// Those rows compile TODAY and island: the closure path probe-compiles the body
+// fine and then declines at closureResidualExact (callable_words.go), because a
+// BodyOutResidual dispatch seats exactly len(outs) results and a unit whose
+// runtime count could differ would mis-seat the simulated stack. `do` then falls
+// to tryRecordDynBody, which bakes the body as CONST TOKENS and marks the result
+// VARIADIC — and the handler runs those tokens on a sub-engine. That sub-engine
+// is the RunResolved entry the census counts.
+//
+// The obvious move is therefore to keep the compiled unit and borrow the
+// backstop's variadic mark: same dispatch, closure operand instead of const
+// tokens, result marked variadic so only variadic-absorbing positions consume
+// it. It is four lines. It makes things WORSE:
+//
+//	do [for 3 [1]]
+//	  before  compiled, seams Engine.Run+RunResolved, answer 1 1 1
+//	  after   compile_refused: "residual shape beyond Stage 1 (call results reordered)"
+//
+// A row that stops compiling LEAVES THE DENOMINATOR, so the census would have
+// fallen for the worst possible reason — the same trap the native-callee
+// increment fell into above, caught this time by A/B probing one row before
+// writing a test. The two lowerings are not interchangeable at the residual
+// planner: the backstop lowers to a plain CALL_NATIVE whose body is a const,
+// while the closure form pushes an OpPushClosure operand, and the planner then
+// sees the call's results reordered against the residual.
+//
+// So the cluster is not a gate to relax. Seating a region whose size is known
+// only at run time is the Stage 5 machinery (production-order regions and
+// generalized marks) by definition, and no amount of marking at the record site
+// substitutes for it.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
