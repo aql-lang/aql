@@ -378,6 +378,25 @@ import (
 // were already gone, and the fix was six lines in a handler. Read the
 // bytecode before believing a cluster's name.
 //
+// (p) `ArrayUtil.foldaxis` DECLARES its body callable. Two rows, 56 -> 54, and
+// no handler change at all: foldaxisHandler already reduces each lane through
+// the same doFold that `fold` uses, and doFold already drives the body through
+// InvokeBody. The word was seam-ready and simply never said so.
+//
+// The spec is fold's, with the inputs taken one rank deeper — a lane is a row
+// (or a transposed column), so each step sees two elements of an INNER list,
+// never a row. `rank2ElemType` reads the first row for that, exact against the
+// rectangular shape the handler enforces at run time, and answers Any for a
+// data argument with no element to take a type from. That arm is the new
+// `foldaxis 0 [add] []` corpus row, which is also the shape the handler
+// short-circuits to `[]`.
+//
+// Its sibling `eachrank` is NOT here, and the reason is the one that decides
+// whether a word is a declaration away or a change away: eachrankHandler slices
+// its body into raw TOKENS and walks them itself (eachrankWalk), so it has no
+// InvokeBody seam to declare over. Handler first, declaration second — never
+// the reverse.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -386,7 +405,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 56
+const interpEntryRowCeiling = 54
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

@@ -517,6 +517,16 @@ var allArrayNatives = []NativeFunc{
 		// lives in the boru:array module. The quoted body is captured via
 		// NoEvalArgs.
 		Name: "foldaxis",
+		// The body is `fold`'s body one rank down: foldaxisHandler reduces each
+		// LANE (a row, or a transposed column) through the same doFold, so each
+		// step sees (accumulator, element) where both are elements of an INNER
+		// list. Same spec as fold's therefore, with the inputs taken a level
+		// deeper — and no handler change at all, because doFold already drives
+		// the body through InvokeBody.
+		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
+			elem := rank2ElemType(a[2])
+			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}
+		}},
 
 		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList, TList},
@@ -1811,6 +1821,22 @@ func staticEmptyFoldDetail(coll Value) string {
 		}
 	}
 	return ""
+}
+
+// rank2ElemType is the element type one rank BELOW a rank-2 data argument —
+// what a foldaxis body sees per step, since it folds along a lane rather than
+// over the rows. Reading the first row is exact for the rectangular shape
+// foldaxisHandler enforces at run time.
+//
+// A data argument the check pass cannot open — non-concrete, or the empty list
+// the handler answers `[]` for — yields Any, which NewElementCarrier turns into
+// the gradual carrier. That is the honest answer: there is no element to take a
+// type from.
+func rank2ElemType(data Value) *Type {
+	if rows, err := AsList(data); err == nil && IsConcrete(data) && rows.Len() > 0 {
+		return DataListElemTypeFromValue(rows.Get(0))
+	}
+	return TAny
 }
 
 // doFold is the shared fold implementation used by both fold signatures.

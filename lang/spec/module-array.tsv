@@ -85,6 +85,7 @@ import "boru:array-util"  ArrayUtil.pairs [1 2 3 4]	[[1 2] [2 3] [3 4]]	pairs: c
 import "boru:array-util"  ArrayUtil.eachrank 0 [mul 2] [[1 2] [3 4]]	[[2 4] [6 8]]	eachrank: apply a body at cell-rank 0 (each scalar leaf)
 import "boru:array-util"  ArrayUtil.foldaxis 0 [add] [[1 2] [3 4]]	[4 6]	foldaxis 0: reduce down each column
 import "boru:array-util"  ArrayUtil.foldaxis 1 [add] [[1 2] [3 4]]	[3 7]	foldaxis 1: reduce along each row
+import "boru:array-util"  ArrayUtil.foldaxis 0 [add] []	[]	foldaxis over an EMPTY rank-2 list: no lane to reduce, so the result is empty — and the body's input carrier has no element to take a type from, which is the gradual-Any arm of the compiled body's shape
 #
 # §6  negative — a namespace word is undefined until the module is imported
 ArrayUtil.shape [[1 2 3]]	ERROR:undefined_word	`ArrayUtil` is unbound without `import`
