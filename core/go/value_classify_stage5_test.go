@@ -321,3 +321,59 @@ func TestTypeIsFnShapeAndFnShapeCarrier(t *testing.T) {
 		t.Error("a CONCRETE fnsig type literal is not a carrier")
 	}
 }
+
+// IsSteplessValue is an ALLOWLIST, and its test has to be one too: each admitted
+// payload proved individually, and the refusals proved for the three ways a
+// value stops being placed — a Word (a kind the switch does not name), an
+// Eval-marked list the loop evaluates, and a bare type node with no payload at
+// all. A denylist reading of this predicate is what would make a later token
+// kind silently become data, so the negative rows are the contract.
+func TestIsSteplessValue(t *testing.T) {
+	stepless := []struct {
+		name string
+		v    Value
+	}{
+		{"integer", NewInteger(1)},
+		{"float", NewFloat(1.5)},
+		{"string", NewString("x")},
+		{"boolean", NewBoolean(true)},
+		{"atom", NewAtom("a")},
+	}
+	for _, tc := range stepless {
+		if !IsSteplessValue(tc.v) {
+			t.Errorf("%s: IsSteplessValue = false, want true", tc.name)
+		}
+	}
+
+	if IsSteplessValue(NewWord("add")) {
+		t.Error("a Word dispatches — IsSteplessValue must not admit it")
+	}
+	if IsSteplessValue(NewTypeLiteral(TInteger)) {
+		t.Error("a bare type node carries no payload — IsSteplessValue must not admit it")
+	}
+	evalList := NewList([]Value{NewInteger(1)})
+	evalList.Eval = true
+	if IsSteplessValue(evalList) {
+		t.Error("a list is not a scalar leaf — IsSteplessValue must not admit it")
+	}
+	evalInt := NewInteger(1)
+	evalInt.Eval = true
+	if IsSteplessValue(evalInt) {
+		t.Error("Eval marks a value the loop EVALUATES — an admitted payload with it set is still active")
+	}
+}
+
+// The window predicate is the conjunction, and the empty window is the case
+// worth pinning: running nothing returns what it was given, which is exactly
+// why the callers may skip the engine.
+func TestIsSteplessWindow(t *testing.T) {
+	if !IsSteplessWindow(nil) {
+		t.Error("the empty window is stepless — running nothing is the identity")
+	}
+	if !IsSteplessWindow([]Value{NewInteger(1), NewString("x"), NewBoolean(false)}) {
+		t.Error("an all-scalar window is stepless")
+	}
+	if IsSteplessWindow([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}) {
+		t.Error("one active token makes the whole window active")
+	}
+}
