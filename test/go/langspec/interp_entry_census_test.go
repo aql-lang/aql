@@ -431,6 +431,22 @@ import (
 // and the corpus now pins both ranks compiling clean against the gradual one.
 // Precision nothing needs is a proof obligation nobody asked for.
 //
+// (s) An EMPTY quotation body stops starting an engine. 52 -> 51, and the
+// third instance of the same shape after (o) and (q): a run whose residual is
+// its own input.
+//
+// The row that found it is worth reading, because the row itself is a
+// surprise. `walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [...]) acc` looks
+// like a walk followed by a trailing `acc`; walk's four-argument overload
+// FORWARD-COLLECTS that `acc` into its optional ASCEND slot, so an empty flex
+// list becomes a hook, and the traversal ran it on an engine once per visited
+// node. Nothing was wrong with the answer — an empty hook does nothing on
+// either engine — but each node paid for a sub-engine to find that out.
+//
+// So the guard is not really about walk. runQuotationBody is shared, and no
+// caller of it needs an engine to discover that running nothing returns what
+// it was given.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -439,7 +455,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 52
+const interpEntryRowCeiling = 51
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
