@@ -546,12 +546,39 @@ either. Four locations are now eliminated by measurement — the lowering alone,
 the dispatch site's `IsWord` guard, those two together, and the check-path
 result stamp — against one confirmed producer, `moduleNSGetReturns`.
 
-**What is NOT yet known, and is the next thing to establish:** by what route
-the export value reaches the pointer, given that stamping neither its
-producer's inputs nor the dispatch result changes it. Instrument that path
-before writing another fix; four plausible-looking changes have now each cost
-a full parity run to disprove, and every one of them was argued from reading
-the code rather than from watching it run.
+**INSTRUMENTED, which moved this from argument to fact.** Temporary prints in
+`moduleNSGetReturns` and in `CarrierResults`, on
+`import "boru:test" Assert.not-equal 3 3`:
+
+```
+moduleNSGetReturns  key=not-equal  valPos=0:0  isFn=true  nsPos=0:0
+CarrierResults      word=dot       pos=1:20    outIsFn=true  outPos=0:0
+```
+
+Four things that reading could not settle:
+
+1. `nsPos=0:0` — the NAMESPACE value has no position either, so the
+   `core.WithPos(val, args[1])` fix an earlier revision of this record called
+   "likely" has no anchor to copy from. Withdrawn.
+2. Once `lowerReach` is stamped, the `dot` dispatch DOES arrive at
+   `CarrierResults` carrying the right position, `1:20` — the receiver's.
+3. `not-equal` never appears in that trace at all, confirming the inner
+   dispatch bypasses `CarrierResults` (the trivial-delegation short-circuit).
+4. Stamping the Function result there WORKS — `outPos` becomes `1:20`,
+   verified with the print moved after the stamp.
+
+**And the opcodes are still `0:0`.** With all THREE pieces applied together —
+the `lowerReach` stamp, the Function-result stamp, and the dispatch site's
+`IsWord` guard split so a value dispatch can read a position at all — the
+program still records `0:0` on every op. (Pairs of these were tried before;
+this was the first run of all three.)
+
+So the value that reaches the pointer is NOT the one that was stamped.
+Something between `CarrierResults` returning `out` and the pointer reading
+that token replaces or rebuilds it — `spliceMatchResults` and the recorded-ID
+re-mapping around it are where to look next, and to WATCH rather than read:
+five arguments-from-code have now each cost a parity run, and the instrument
+settled in one what the reading got wrong four times.
 
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
