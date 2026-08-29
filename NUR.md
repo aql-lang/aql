@@ -467,16 +467,30 @@ nothing here: the Function literal in a module export map carries no position
 either, because it is built at module-construction time, not read from source.
 
 *Both halves together.* Stamping `lowerReach` AND splitting that guard still
-leaves `import "boru:test" Assert.not-equal 3 3` at `0:0` on every opcode. The
-theory was that stamping `dot` would let `stampResultPos` stamp the Function
-RESULT, which the value dispatch would then read. It does not fire, and the
-reason is that a module-qualified read never dispatches `dot` at all: it is
-CONST-FOLDED by `tryFoldModuleConst`
-(`compiler/go/compiler_dispatch_record.go`) before any of that machinery runs.
+leaves `import "boru:test" Assert.not-equal 3 3` at `0:0` on every COMPILED
+opcode. The theory was that stamping `dot` would let `stampResultPos` stamp
+the Function RESULT, which the value dispatch would then read.
 
-**So the remaining lead is the fold site**, not the dispatch site and not the
-lowering: a const-folded module read has to carry the position of the access
-it replaced. That is where the compiled half lives.
+It half-fires, and the asymmetry is the finding. Measured on the unmodified
+tree, that program has NO position on either engine. With `lowerReach`
+stamped, the parity gate reports "interpreter at 1:20, compiled has no
+position" — so the INTERPRETER does expand the reach, dispatch `dot`, and
+pick the stamp up. The COMPILED lane does not: the module resolution is
+elided before it, so nothing downstream ever sees a `dot` event to take a
+position from.
+
+(An earlier revision of this record said a module-qualified read "never
+dispatches `dot` at all". That was inferred from `tryFoldModuleConst` and is
+wrong as stated — it holds for the compiled lane, not the interpreter, and
+the 1:20 above is the counter-example.)
+
+**So the remaining lead is the compiled lane's module-resolution elision** —
+not the lowering, and not the dispatch site. Whatever replaces the `dot`
+chain with a resolved const has to carry the position of the access it
+replaced. `tryFoldModuleConst` is the nearest named candidate but is NOT
+confirmed: its own doc scopes it to reads whose result is DATA, and an
+exported fn is elided on the get/getr resolution path it mentions instead.
+Confirm which before changing either.
 
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
