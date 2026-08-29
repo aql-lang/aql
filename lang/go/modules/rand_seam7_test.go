@@ -109,6 +109,24 @@ func TestS7B_RandListOfInterpreterArms(t *testing.T) {
 	if _, err := h([]native.Value{emptyBody, native.NewInteger(2)}, nil, nil, r); err == nil {
 		t.Error("rand-list-of: body producing no value should error")
 	}
+	// The SAME no-value error, one lane over. The interpreter path forks on
+	// IsSteplessWindow, and the empty body above is stepless — so after the
+	// stepless fast path landed it stops at that fork's own guard and no
+	// longer reaches the per-iteration loop's. `[1 drop]` holds a Word, so it
+	// is not stepless: it runs a sub-engine per iteration and nets nothing,
+	// which is the only shape that reaches the loop's guard.
+	//
+	// It has to be driven HERE rather than from the corpus, and that is a
+	// fact about the word, not a convenience. rand-list-of declares BodyOut 1,
+	// so compileClosureBody gives the closure a one-value contract and ANY
+	// zero-net body refuses to compile — a corpus row for this shape would
+	// therefore add a compile refusal, and TestCompiledCoverage pins refusals
+	// at 0. The guard stays live for user programs the compiler refuses;
+	// the handler test is what can reach it without moving that gate.
+	dropBody := native.NewList([]native.Value{native.NewInteger(1), native.NewWord("drop")})
+	if _, err := h([]native.Value{dropBody, native.NewInteger(2)}, nil, nil, r); err == nil {
+		t.Error("rand-list-of: a non-stepless body producing no value should error")
+	}
 }
 
 // TestS7B_RandMapFromArms drives rand-map-from's non-concrete schema,
