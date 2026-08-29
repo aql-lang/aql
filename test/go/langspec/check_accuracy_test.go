@@ -190,8 +190,14 @@ var unflaggedPins = map[string]int{
 	"module-parse.tsv":     4,
 	"module-parselang.tsv": 13,
 	"module-query.tsv":     1,
-	"module-sift.tsv":      24,
-	"module-struct.tsv":    2,
+	// module-rand.tsv: 0 -> 1. `Rand.list-of [] 2` — an EMPTY generator
+	// body with a positive count. The emptiness is visible statically, but
+	// whether it is an error depends on the COUNT, which is a plain Integer
+	// slot: n=0 runs the body zero times and answers [], n>0 raises. A
+	// value-dependent error the checker cannot decide without the value.
+	"module-rand.tsv":   1,
+	"module-sift.tsv":   24,
+	"module-struct.tsv": 2,
 	// module-test.tsv: 0 -> 3. The three check-prop count guards
 	// (runs < 1, max-shrinks < 0) are RUNTIME value checks — the
 	// signature slots are plain Integer, so the checker cannot see
