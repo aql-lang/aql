@@ -503,12 +503,41 @@ position of the access that produced it, and today it does not. That is a
 THIRD location, distinct from the two ruled out — not the lowering, not the
 dispatch site's guard.
 
-`tryFoldModuleConst` is a nearby named candidate and is NOT confirmed to be
-the site: its own doc scopes it to reads whose result is DATA, while an
-exported fn goes through the get/getr resolution it mentions separately.
-Confirm which path actually produces the value before changing either — this
-record has already been wrong once by reading a doc comment instead of
-measuring.
+**CONFIRMED SITE** — `moduleNSGetReturns`
+(`lang/go/native/native_module_types.go`), the check-mode read over a module
+namespace. It hands the export back verbatim:
+
+```go
+if val, ok := moduleExportGet(args[1], getKey(args[0])); ok {
+    return []Value{val}, true
+}
+```
+
+`val` is the value stored in the module's export map, built at
+module-construction time, so it carries no source position — and that is the
+Function literal the VALUE dispatch then reads its position from. Nothing on
+this path ever attributes it to the access that produced it.
+
+`tryFoldModuleConst` is NOT the site: its doc scopes it to reads whose result
+is data, and this is the get/getr resolution it names separately.
+
+The chain, each link measured or read rather than assumed:
+
+1. `Assert.not-equal` parses to a Reach with receiver `word(Assert)` at 1:20.
+2. With `lowerReach` stamped, the INTERPRETER reports exactly 1:20 — so the
+   receiver is the right anchor and that path works end to end.
+3. The compiled lane records the INNER native (`isModuleInnerSig`), taking
+   its position from the token at the pointer.
+4. For a VALUE dispatch that token is the Function literal — the dispatch
+   site's own comment says so.
+5. That literal comes from `moduleNSGetReturns` unstamped. Measured: reading
+   its position yields zero even with `lowerReach` stamped.
+
+**The likely fix is one call** — return the export with the access's position
+(`core.WithPos(val, args[1])`, the namespace receiver being the natural
+anchor) — but it is UNTESTED, and the two halves must still land together:
+stamping `lowerReach` alone is the 186-divergence regression above. Verify
+`args[1]` actually carries the receiver's position before relying on it.
 
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
