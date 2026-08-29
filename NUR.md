@@ -454,6 +454,30 @@ therefore fixed, and it is the opposite of the obvious one:
 Doing (2) alone is the regression above; doing it first and "fixing the
 fallout" would mean 186 rows chasing a moving target.
 
+**Two further hypotheses tried and RULED OUT**, recorded so the next attempt
+starts past them rather than at them.
+
+*Take the position from any token at the pointer.* The dispatch site
+(`core/go/engine.go`, the `name := match.Name` block) guarded the position and
+the name TOGETHER behind `IsWord`, so a VALUE dispatch — the module wrapper's
+trivial-delegation short-circuit, which steps a Function literal — took its
+name from the match and its position from nowhere. Splitting them is correct
+on its own terms (the inner `AsWord` already gates the name) and changes
+nothing here: the Function literal in a module export map carries no position
+either, because it is built at module-construction time, not read from source.
+
+*Both halves together.* Stamping `lowerReach` AND splitting that guard still
+leaves `import "boru:test" Assert.not-equal 3 3` at `0:0` on every opcode. The
+theory was that stamping `dot` would let `stampResultPos` stamp the Function
+RESULT, which the value dispatch would then read. It does not fire, and the
+reason is that a module-qualified read never dispatches `dot` at all: it is
+CONST-FOLDED by `tryFoldModuleConst`
+(`compiler/go/compiler_dispatch_record.go`) before any of that machinery runs.
+
+**So the remaining lead is the fold site**, not the dispatch site and not the
+lowering: a const-folded module read has to carry the position of the access
+it replaced. That is where the compiled half lives.
+
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
 same day. The corpus simply has no row that raises through a dot-sugar
