@@ -440,12 +440,128 @@ func parseFnDispatchHandler(args []native.Value, _ map[string]native.Value, _ []
 			"parse: "+why, "parse",
 			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
 	}
+	// The value-form expansion tail — the fn value followed by `source opts
+	// end` — used to be STEPPED in a sub-engine unconditionally, which is a
+	// whole interpreter run sitting inside a compiled program: every
+	// `parse <parser> …` corpus row carried one. Two lanes replace it, chosen
+	// by what the parser VALUE actually is, and the token run stays as the
+	// backstop for anything neither lane claims.
+	//
+	// callArgs are in SIG order, which for the enforced prefix is
+	// [source, opts]: MatchFnSig tests args[j] against Params[j], MatchSignature
+	// assigns the same way, and the token run reached that assignment by the
+	// other route — `fn source opts` is forward form, and forward args fill sig
+	// positions in written order (eng/go/CLAUDE.md §Signature Ordering).
+	callArgs := []native.Value{args[1], args[2]}
+	// A parser whose matched overload has a GO handler dispatches directly. Two
+	// shapes reach this, and neither is a boru body the callback seam could run:
+	//
+	//   - `Parse.parser` mints a TRIVIAL-DELEGATION wrapper whose body is the
+	//     single Word naming the Go native that runs the built grammar;
+	//   - `def myp (Parse.parser g)` REBINDS that wrapper, and InstallDef's
+	//     module-wrapper branch binds the inner native's Signatures verbatim
+	//     under the new name, so the value carries Go sigs outright.
+	//
+	// Sending either through the callback seam is wrong, and wrong SILENTLY for
+	// the second. Measured, with the callback seam taking every shape:
+	//
+	//	def acc (flex []) … Parse.matcher g lex 5 ([s:String] => [acc push {v:s} …])
+	//	  interpreted  [{v:'hello'}]
+	//	  compiled     []                       the matcher never ran
+	//
+	// and for the delegation wrapper, an error rather than a wrong answer —
+	// CallBoru splices the body and re-dispatches its word over a frame whose
+	// UNNAMED args sit stack-order, assigning the inner native's sig positions
+	// in the OPPOSITE order:
+	//
+	//	signature_error: cannot call `parse-parser-1` — no signature matches
+	//
+	// The interpreter takes neither route: execFnDefLiteral dispatches a module
+	// wrapper through execMatch on the matched signature (eng/go/CLAUDE.md
+	// §Trivial-delegation wrapper short-circuit), which is what the token run
+	// was reaching. parseFnNativeApply does the same.
+	if res, done, err := parseFnNativeApply(r, fnDef, callArgs); done {
+		return parseFnResult(r, res, err)
+	}
+	// A real boru parser body: the callback seam offers it to its compiled unit
+	// before falling back to CallBoru.
+	if sig := native.MatchFnSig(args[0], callArgs); sig != nil {
+		res, err := native.InvokeCallbackFn(r, &fnDef, sig, callArgs)
+		return parseFnResult(r, res, err)
+	}
+	// The token run, for what neither lane claims: a signature these two
+	// operands cannot fill (the prefix contract admits EXTRA params after
+	// [source opts], and MatchFnSig then answers nil), or a delegation wrapper
+	// whose inner native does not resolve. Both raise on the sub-engine exactly
+	// what the interpreter raises for the same call.
 	sub := native.NewTop(r)
 	res, err := sub.Run([]native.Value{args[0], args[1], args[2], native.NewEnd()})
+	return parseFnResult(r, res, err)
+}
+
+// parseFnNativeApply dispatches a parser whose matched overload carries a GO
+// handler, the way the interpreter's execFnDefLiteral wrapper branch and the
+// VM's own dyn-apply (eng/go/vm.go::tryNativeFnApply) both do — this mirrors
+// the latter arm for arm. done is false for a real BORU body (the callback seam
+// owns those) and for a value no overload admits (the token run stands).
+//
+// Name RESOLUTION prefers the fn's OWN registry — a parser minted inside a
+// module resolves its native there — and falls back to the value's own
+// signatures, which is where a REBOUND wrapper carries them (`def myp
+// (Parse.parser g)`: InstallDef's module-wrapper branch binds the inner
+// native's sigs verbatim under the new name). The handler then runs against the
+// DISPATCHING registry, which is what the interpreter's execMatch passes every
+// native handler, so host state — the clock, policy, output — resolves the same
+// on every lane.
+func parseFnNativeApply(r *native.Registry, fnDef native.FnDefInfo, args []native.Value) ([]native.Value, bool, error) {
+	reg := fnDef.Registry
+	if reg == nil {
+		reg = r
+	}
+	sigs := fnDef.Signatures
+	if inner := reg.Lookup(fnDef.Name); inner != nil && len(inner.Signatures) > 0 {
+		sigs = inner.Signatures
+	}
+	mr := native.MatchSignature(sigs, args, native.WordInfo{ArgCount: len(args)})
+	if !nativeDispatchable(mr) {
+		return nil, false, nil
+	}
+	res, err := mr.Sig.DispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
+	return res, true, err
+}
+
+// nativeDispatchable reports whether a match can run as a DIRECT native
+// dispatch: an overload must have matched, and it must carry a Go handler.
+//
+// A BORU body is declined even when it carries one — a module-preamble fn's
+// handler is a synthesized CallBoru, and running it from here would resolve the
+// body's free words in the wrong scope. Offering that body to the callback seam
+// (which routes through the fn's DEFINING registry) is the whole point of the
+// other lane.
+func nativeDispatchable(mr *native.MatchResult) bool {
+	if mr == nil || mr.Sig == nil || mr.Sig.DispatchHandler() == nil {
+		return false
+	}
+	_, isBoru := mr.Sig.Impl.(*native.BoruImpl)
+	return !isBoru
+}
+
+// parseFnResult is the single exit every dispatch lane shares: surface a run
+// error, else enforce the single-result contract (ParseLangFnSigWhy admits only
+// single-return signatures).
+func parseFnResult(r *native.Registry, res []native.Value, err error) ([]native.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(res) != 1 { //covergate:allow ParseLangFnSigWhy (checked above) admits only single-return signatures and the engine's fn return-count check enforces the declared count, so a conforming run cannot yield ≠1 results; kept as drift protection so a future contract change fails loudly instead of corrupting the operand stack (§modules)
+	// Reachable, and it took splitting the lanes to see how: the TOKEN RUN can
+	// leave three values when the parser does not apply at all. ParseLangFnSigWhy
+	// admits EXTRA params after the [source opts] prefix, and a sub-engine
+	// stepping `fn source opts end` over such a fn collects nothing and leaves
+	// the fn and both operands as data. The guard's previous covergate:allow
+	// claimed "a conforming run cannot yield ≠1 results" — true of the two
+	// dispatch lanes, which match a signature first, and not true of the run
+	// that stands when neither claims the call.
+	if len(res) != 1 {
 		return nil, r.BoruError("internal_error",
 			fmt.Sprintf("parse fn: expected one result, got %d", len(res)), "parse")
 	}

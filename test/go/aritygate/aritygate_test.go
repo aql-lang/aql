@@ -137,12 +137,19 @@ var pinnedAritySites = map[string]int{
 	"lang/go/native/help/help.go":     8,
 	"lang/go/native/native_macro.go":  5,
 	"lang/go/native/native_help.go":   3,
-	"lang/go/modules/parselang.go":    1,
-	"lang/go/modules/net_codec.go":    1,
-	"lang/go/modules/test.go":         1,
-	"lang/go/stackform/walk.go":       1,
-	"basic/go/native_control.go":      1,
-	"basic/go/native_definition.go":   1,
+	// 1 -> 2: the runtime `parse <fn>` dispatch reads whether a registry
+	// binding carries any overloads AT ALL before matching against them
+	// (parseFnNativeApply, mirroring eng/go/vm.go::tryNativeFnApply). It is an
+	// OVERLOAD-LIST presence test, not a parameter count, and it decides which
+	// signature TABLE to match — the value's own, or the one its name resolves
+	// to in the registry — never whether the parser may act. That is matching
+	// machinery, the argument rule's own, not a behaviour-by-arity exception.
+	"lang/go/modules/parselang.go":  2,
+	"lang/go/modules/net_codec.go":  1,
+	"lang/go/modules/test.go":       1,
+	"lang/go/stackform/walk.go":     1,
+	"basic/go/native_control.go":    1,
+	"basic/go/native_definition.go": 1,
 
 	// ── Tooling and fixtures.
 	"tools/piecetool/demethod.go": 1,

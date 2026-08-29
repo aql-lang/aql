@@ -121,20 +121,22 @@ import (
 // perhaps three rows. Read the seam counts as a shape, never as a priority
 // order: a big number here can be one row in a loop.
 //
-// WHERE THE 130 ROWS ARE, by file AND the seams those rows touch (the per-file
-// lines the run logs; ROW counts, so they add up against the ceiling). Three
-// clusters are single-mechanism, which is what makes them worth picking:
+// WHERE THE ROWS ARE, by file AND the seams those rows touch (the per-file
+// lines the run logs; ROW counts, so they add up against the ceiling). The
+// table below is the state at the current ceiling — every cluster the columns
+// after it took has left it. Rewrite it, do not append to it:
 //
 //	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
-//	module-parse             11 rows   Engine.Run only  (debug attributed at (h), log compiled at (i))
 //	bytecode-migrated.tsv    13 rows   RunResolved 6, vm:island 5, CallBoru 2, …
 //	module-fnvalue-boundary   6 rows   vm:island-resolved 6
 //	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
 //
 // Engine.Run appears everywhere because every other seam runs a nested engine;
 // a row with ONLY Engine.Run is the interesting case — nothing islanded, the
-// whole body simply interpreted. That is the 26 module rows, and it is Stage
-// 6/7 work (module bodies compiling), not a seam flip.
+// whole body simply interpreted. Two of the three module clusters that shape
+// described are gone (columns (i)-(l) took boru:log, boru:test's assertions and
+// the whole of boru:parse); what is left of it is module-test.tsv's five, which
+// are Stage 6/7 work (module bodies compiling), not a seam flip.
 //
 // reach.tsv led this table at 14 rows, every one through runPooledSub, and it
 // is gone: that is column (g).
@@ -272,6 +274,53 @@ import (
 // contract (dynMethodClaimOK) — a frame push has no results to count, and the
 // RET now guarantees the count the sig declares.
 //
+// (l) boru:parselang's runtime `parse <fn>` dispatch stops stepping its
+// expansion tail in a sub-engine. That tail — the parser value followed by
+// `source opts end` — was a whole interpreter run inside a compiled program,
+// one per `parse <parser> …` row: all eleven of module-parse.tsv and four more
+// elsewhere. 81 -> 66.
+//
+// It replaces one lane with two, and the question that picks between them is
+// not "is this a fn value" but "WHAT KIND of fn value is this":
+//
+//   - a matched overload carrying a GO handler dispatches directly, the way the
+//     interpreter's execFnDefLiteral wrapper branch does (this mirrors the VM's
+//     own tryNativeFnApply arm for arm);
+//   - a real boru body goes through the callback seam, where it is offered to
+//     its compiled unit before CallBoru.
+//
+// Getting that question wrong is what an earlier attempt did, and the two ways
+// it goes wrong are worth keeping, because they look nothing alike:
+//
+//  1. `Parse.parser` mints a TRIVIAL-DELEGATION wrapper — unnamed params, a body
+//     of one Word naming the inner Go native. Through the callback seam,
+//     CallBoru splices that body and re-dispatches its word over a frame whose
+//     unnamed args sit stack-order, so the inner native's sig positions come out
+//     REVERSED and nothing matches:
+//     `signature_error: cannot call parse-parser-1 — no signature matches`.
+//     Loud, and it had been recorded as an ARG-ORDER mistake. It is not one:
+//     [source, opts] is the sig order on every lane, and permuting it would
+//     have made this row pass and every other one wrong.
+//
+//  2. `def myp (Parse.parser g)` REBINDS that wrapper, and InstallDef's
+//     module-wrapper branch binds the inner native's Signatures verbatim under
+//     the new name — so the value carries GO sigs outright, and the callback
+//     seam ran them as though they had a body. SILENT:
+//
+//     def acc (flex []) … Parse.matcher g lex 5 ([s:String] => [acc push {v:s} …])
+//     interpreted  [{v:'hello'}]
+//     compiled     []                  the matcher never ran
+//
+//     Caught by lang/go's TestCompileParseOverEnclosingParserDef, which is a
+//     reminder that the census is not the gate — it cannot see a wrong answer,
+//     only an interpreter entry, and this change LOWERED it while breaking a
+//     program.
+//
+// The lesson generalises past this word. A fn VALUE is not one kind of thing,
+// and a seam that "runs a fn value" has to ask which kind before it picks a
+// mechanism. Two plausible-looking argument orders is the symptom of having
+// skipped that question — the order was never the variable.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -280,7 +329,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 81
+const interpEntryRowCeiling = 66
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
