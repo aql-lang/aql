@@ -66,6 +66,7 @@ keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
+| [NUR113](#nur113) | Every opcode lowered from a DOT-SUGAR access carries `SrcPos{0,0}`, so a runtime error raised through one loses its caret on the compiled lane: `def m {d:div/v} end m.d 0 10` points at `1:10` interpreted and `source position unknown` compiled. The explicit `m dot a` spelling keeps its positions — the sugar is the difference. Two layers deep: `lowerReach` mints its `dot` words with no position, AND the interpreter anchors on the fn VALUE's own position (the `div` token inside the map literal), which const-baking does not preserve — so positioning the dot tokens is necessary but not sufficient | writing a corpus row for the `/s` trailing apply, 2026-08-29 |
 | [NUR112](#nur112) | The checker's residual for a parked native word applied after its name was EXTENDED does not match what runs: `def Pos (refine Integer)  def m {a:size/v}  def size fn [[n:Pos] [Integer] [200]] end  def v:Pos 3  m.a v` is checked `[dynamic(Any) Pos]` — two values, one of them the argument left behind — and actually leaves `[Integer]`. Both ENGINES agree on the answer (3); it is the static model that differs, so no differential can see it — TestCheckTypeSoundness can, and did | writing a corpus row for the parked-native apply gate, 2026-08-29 |
 | [NUR111](#nur111) | The DECLARED RETURN of a fn value handed to a higher-order word is checked by nobody statically: `def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v` passes `boru check` clean, while the identical body as a code BLOCK (`each [cbad]`) and the identical fn called directly (`cbad 1`) are both flagged `type_error`. The end-of-pass pending-body drain ANALYSES the body (an undefined word inside it IS reported) but never holds the residual to the declaration — `declared` reaches `AnalyseFnBody` as the recursion hypothesis only, and the matching proof obligation is the interpreter's `__RC` marker, which the callback path never plants. Both ENGINES now raise (the runtime half is fixed, `lang/spec/fn-value.tsv` §13); it is the CHECKER that is silent | fixing the closure return-contract miscompile, 2026-08-29 |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
@@ -363,6 +364,81 @@ So the fix needs the `def` TOKEN's own position threaded to the record — a
 position the recorder does not currently receive from any of its three
 available sources. That is the work, and it is smaller than "compiled
 diagnostics" but larger than a fallback expression.
+
+---
+
+## NUR113 — a dot-sugar access loses its error position when compiled {#nur113}
+
+**Status:** Pending · **Recorded:** 2026-08-29 · **Surfaced by:** writing a
+corpus row for the `/s` trailing-apply increment; the row exposed this and
+the increment was held back behind it.
+
+**Rule:** the two engines point at the same place. A diagnostic that names
+the right error at the wrong location — or at no location — is a parity
+failure, and `TestSpecCompiledOrFallback` already treats it as a divergence.
+
+**Divergence.** Live on `main`, with no fn-value modifier involved:
+
+```
+$ boru --no-compile -e "def m {d:div/v} end m.d 0 10"
+error: [boru/arith_error]: division by zero
+  --> 1:10
+  1 | def m {d:div/v} end m.d 0 10
+
+$ boru --force-compile -e "def m {d:div/v} end m.d 0 10"
+error: [boru/arith_error]: division by zero
+  --> source position unknown
+```
+
+**The sugar is the difference, measured.** Disassembling with the `Debug`
+table shows every opcode from a dot chain at `0:0`, while the same access
+spelled with the explicit word keeps its positions:
+
+| program | opcode positions |
+|---|---|
+| `add 1 2` | `1:1` |
+| `10 0 div` | `1:6` |
+| `{a:1} dot a` | `1:7` |
+| `def m {a:1} end m dot a` | `1:19` |
+| `{a:1}.a` | **`0:0`** |
+| `def m {a:1} end m.a` | **`0:0`** |
+| `def m {a:1} end (m.a)` | **`0:0`** |
+| `def o {m:{a:1}} end o.m.a` | **`0:0`** |
+
+No `def` is required and no paren changes it: the dot SUGAR alone does it.
+
+**Layer one.** `lowerReach` (`core/go/engine.go:4294`) builds the chain with
+`NewWord("dot")` / `NewWord("dotr")` — a bare constructor, so the word that
+dispatches carries no position. The recorder takes its event position from
+that token, so every opcode downstream of a dot chain records `0:0`, and
+`stampAt` (`eng/go/vm.go`) then has nothing to stamp.
+
+**Layer two, and it is why the one-line fix is not the fix.** The
+interpreter's `1:10` is NOT the dot. Counting the source, column 10 is the
+`div` token INSIDE the map literal — the fn VALUE's own position, stamped at
+parse. Column 21 is where `m.d` starts. So giving the `dot` words positions
+would move the compiled caret to `1:21` and leave the two engines still
+disagreeing. Parity needs the fn value's own position to survive const-baking
+into the compiled program, which is the larger half of this record.
+
+**Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
+positions — it is what caught the closure-contract position loss earlier the
+same day. The corpus simply has no row that raises through a dot-sugar
+access. The shape is common in real code and absent from the corpus, which
+is the coverage hole this record also names.
+
+**Not pinned in the corpus, deliberately.** A row for this shape would fail
+the compile-or-fallback gate on landing, which is a pin behaving correctly
+and the wrong way to record a finding — the same call made for
+[NUR112](#nur112).
+
+**What it blocks.** The `/s` trailing-apply increment (3 census rows,
+46 → 43): its fast lane is correct and gate-green on values, but a raising
+handler on it inherits this position loss where the island had been masking
+it. PR #412's own body predicted the shape of this — "the dyn-apply opcodes
+lower with `SrcPos.Row == 0`, so the direct path loses the caret — positions
+are the prerequisite, not the increment" — and this record is that
+prerequisite, located and measured.
 
 ---
 
