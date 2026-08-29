@@ -37,7 +37,7 @@ import (
 // re-enter the interpreter through an unattributed seam.
 //
 // First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
-// entries). Now 114, after seven changes on the same day. The seam spread — the
+// entries). Now 114, after seven changes. The seam spread — the
 // shape of the debt, not a second ceiling — and what each moved:
 //
 //	                         first    (a)    (b)    (c)    (d)    (e)    (f)    (g)
@@ -139,9 +139,51 @@ import (
 // 6/7 work (module bodies compiling), not a seam flip.
 //
 // reach.tsv led this table at 14 rows, every one through runPooledSub, and it
-// is gone: that is column (g). path-modifier.tsv now leads at 13 rows, every
-// one through vm:island — the next single-mechanism cluster, and it needs no
-// survey to start on.
+// is gone: that is column (g).
+//
+// path-modifier.tsv is the cluster column (h) went after, and it is the honest
+// counter-example to "one mechanism, one fix". Twelve of its thirteen rows
+// still island, because the dispatch-modifier wrapper is built at RUN time out
+// of a fn the check pass only sees as a dynamic carrier (a dot-access read), so
+// there is nothing to compile at compile time. The BY-NAME forms already
+// compile clean — `usurp sub 10 3` has no seams at all — which locates the
+// blocker precisely: it is the dot-access hiding the callee, not the modifier.
+// That is Stage 6/7 work on dynamic carriers, not a seam fix.
+//
+// AN INCREMENT THAT WAS BUILT, MEASURED AND REJECTED — recorded because the
+// measurement is worth more than the code was. Dispatching a callee whose
+// matched sig carries its OWN Go handler (a native fn value read out of a
+// container, `def m {a:add/v}  m.a 1 2`) directly instead of islanding it:
+//
+//  1. It first looked like TWELVE rows, 114 -> 102, and was FLATTERING ITSELF.
+//     It also took the dispatch-modifier wrappers, and those handlers do not
+//     COMPUTE a result — usurp / stack-args / forward-args / force-arity return
+//     TOKENS for the engine to re-step (execMatch re-steps a handler's result by
+//     default; only Park() opts out). Pushed onto the operand stack as data they
+//     tripped screenResults, and ELEVEN corpus rows went from
+//     compiled-with-an-island to not compiled at all. A row that stops compiling
+//     leaves this census's DENOMINATOR, so the count fell for the worst possible
+//     reason. An A/B walk comparing wasCompiled per row found them.
+//
+//  2. Handing the rewrite's tokens to the island instead fixed that, with zero
+//     regressions — and the honest gain was ONE row.
+//
+//  3. That one row cost error fidelity. A handler that raises through the direct
+//     path loses its source position ("source position unknown" where the
+//     interpreter points a caret), because the dyn-apply opcodes are lowered
+//     with SrcPos.Row == 0 and stampAt has nothing to stamp. The island never
+//     needed it: its sub-engine re-ran the tokens and carried their positions.
+//     Closing that means giving those opcodes positions in the lowerer, which
+//     ripples through error rendering corpus-wide, where content parity is
+//     gated.
+//
+// One row, bought with a worse error message, is not the trade this mission
+// makes — the same judgement that un-masked the flex-map miscompile at (e).
+//
+// TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
+// change that stops rows compiling: read it against the corpus gate and the
+// compile-or-fallback walk, never alone. And the remaining path-modifier rows
+// do not need this seam at all — see the cluster note below.
 //
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
