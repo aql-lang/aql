@@ -1,62 +1,36 @@
-// Region-descriptor census — has the Stage 4 descriptor model ever seen a
-// real program? (design/FULL-COMPILATION.0.md §6.2, Stage 4.)
+// Region descriptors, measured against real programs — and against an
+// INDEPENDENT oracle (design/FULL-COMPILATION.0.md §6.2, Stage 4).
 //
-// WHY THIS EXISTS. The flag-day's central assumption is that a region
-// descriptor can express the statements a real program is made of. Nothing
-// tested it: RegionEnd, RegionSlotCount and CaptureRegionSlots have no
-// production caller, so until this file they were exercised by their own unit
-// tests alone — on windows those tests built. A model validated only against
-// its author's examples is the shape of assumption this project converts into
-// a number before betting a flag-day on it, exactly as the interp-entry census
-// converted "0 islanded".
+// WHY THIS FILE WAS REWRITTEN, because the first version is the lesson. It
+// walked each corpus row and reported 100%, and the number meant nothing:
 //
-// WHAT IT MEASURES, and what it deliberately does not. It walks each corpus
-// program's REAL token stream and partitions it into regions, checking the
-// three properties that make an extent usable as a descriptor unit:
+//	TAUTOLOGY      it compared CaptureRegionSlots' length against
+//	               `RegionEnd(w,at) - at`. CaptureRegionSlots takes its
+//	               length FROM RegionSlotCount, which IS that expression, so
+//	               both sides were the same call. Reversed or duplicated slot
+//	               contents of the same length passed. The coverage sum was
+//	               just the cursor advances RegionEnd itself had chosen.
+//	WRONG INPUT    lang.Parse leaves a paren group as ONE ParenExpr value and
+//	               executable bodies inside List values; the engine expands
+//	               those into OpenParen…CloseParen markers and runs bodies on
+//	               fresh tapes. Measured over the corpus: 0 of 7586 parsed
+//	               rows contained a paren MARKER at the level being walked, so
+//	               RegionEnd's paren-depth logic — depth++/depth--, and "a
+//	               close paren at depth 0 ends the region", which is the whole
+//	               subtlety of the function — never executed once. 89% of rows
+//	               were a single region where the walk asserts nothing.
 //
-//	TOTAL      the walk reaches the end — every step advances, so no
-//	           partition spins, and none runs past the window.
-//	EXACT      every token lands in exactly one region or is the DELIMITER
-//	           between two: the slot counts plus the delimiters sum to the
-//	           stream length, so there is no gap a dispatch could fall into
-//	           and no token claimed twice.
-//	AGREED     CaptureRegionSlots and RegionEnd agree about where each
-//	           region is — the captured slot count equals the extent.
+// Both were caught in review, both were right. The first version also HAD a
+// per-slot content check, and it was deleted when it failed — the comparator
+// was wrong (core.DeepEqual is not reflexive for an unevaluated
+// ParenExprPayload), but deleting the only non-tautological assertion was the
+// wrong repair. That is why the oracle below is written by hand.
 //
-// A region of ZERO width is not a failure when the walk is standing ON a
-// hard delimiter: `def k 'b' end {a:1 b:2} get k` has `end` at index 3, and
-// RegionEnd reports the region [0,3) then answers 3 again from 3, because a
-// delimiter belongs to no region. The caller steps over it. Getting that
-// wrong was this test's first result — 825 "zero width" failures that were
-// the walk's bug, not the model's.
-//
-// TWO THINGS THIS TEST GOT WRONG FIRST, both worth keeping. Its opening
-// measurement said 39.87%, and every one of those failures was the
-// instrument. 825 were "zero width" regions that were the walk standing on a
-// hard delimiter and not stepping over it. The other 4013 came from checking
-// each captured slot against the tape with core.DeepEqual — which is NOT
-// REFLEXIVE for an unevaluated ParenExprPayload, so `{a:1 b:2} get ('a')`
-// compared unequal to itself. That is not a user-visible defect (`deq ('x')
-// ('x')` is true, because the parens evaluate before deq sees them) and it is
-// not what this test is for; the check was near-vacuous anyway, since
-// CaptureRegionSlots reads the very indices it is compared against. Both are
-// recorded because a measurement whose first answer is dramatic is a
-// measurement to re-read before believing.
-//
-// It does NOT call RegionDesc.Validate, and that is not an omission.
-// CaptureRegionSlots leaves every slot's Source at SlotNone on purpose (the
-// operand model belongs to the lowerer, not the tape), so validating a raw
-// capture would assert the sentinel it exists to preserve. Extent and written
-// order are what the tape alone can establish, and they are what this
-// measures.
-//
-// THE ANSWER, 2026-08-29: 7585 of 7585 parsed corpus programs, 100.00%. The
-// extent half of the descriptor model holds against every real program the
-// corpus has. So the flag-day's risk is NOT in the region extents; it sits in
-// the collectHost adapter and the bind twins, which is where task #15 should
-// spend its care. What remains unmeasured is the SOURCE half — the operand
-// model the lowerer fills in — because nothing can measure that until a
-// lowerer exists to be measured.
+// SO THE CORRECTNESS CLAIM LIVES IN TestRegionDescriptorOracle, whose expected
+// boundaries are typed out rather than derived, and which fails if a boundary
+// moves. The corpus walk that follows it is a REACH check — it says the walk
+// terminates and covers a much richer input — and it no longer claims to
+// validate boundaries, because it cannot.
 package langspec
 
 import (
@@ -71,75 +45,241 @@ import (
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// regionWalkFailure names one way a program's region partition is unusable.
-type regionWalkFailure struct {
-	kind string
-	row  string
+// expandMarkers mirrors the engine's own expandParenExpr: a ParenExpr becomes
+// the OpenParen…CloseParen span the tape actually carries, recursively. Without
+// this the walk never sees a paren marker at all.
+func expandMarkers(vals []core.Value) []core.Value {
+	out := make([]core.Value, 0, len(vals))
+	for _, v := range vals {
+		items, err := core.AsParenExpr(v)
+		if core.IsParenExpr(v) && err == nil {
+			out = append(out, core.NewOpenParen())
+			out = append(out, expandMarkers(items)...)
+			out = append(out, core.NewCloseParen())
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
-// walkRegions partitions vals into regions and returns the failure kinds
-// found. An empty result means the partition is total, exact and ordered.
-func walkRegions(vals []core.Value) []string {
-	if len(vals) == 0 {
+// nestedBodies collects the executable LIST bodies inside a token stream. The
+// engine runs each on its own tape, so each is a separate region workload the
+// outer walk would otherwise never visit.
+func nestedBodies(vals []core.Value, depth int) [][]core.Value {
+	if depth > 8 {
 		return nil
 	}
-	var bad []string
-	w := core.NewTape(vals, 0)
+	var out [][]core.Value
+	for _, v := range vals {
+		if !core.IsConcrete(v) || !v.Parent.Equal(core.TList) {
+			continue
+		}
+		lst, err := core.AsList(v)
+		if err != nil || lst.IsNil() || lst.Len() == 0 {
+			continue
+		}
+		body := lst.Slice()
+		out = append(out, expandMarkers(body))
+		out = append(out, nestedBodies(body, depth+1)...)
+	}
+	return out
+}
+
+// regionSpans returns the [start,end) span of every region in w, plus the
+// indices of the hard delimiters between them. It is the walk under test; the
+// oracle compares its output against hand-written expectations.
+func regionSpans(w core.CollectWindow) (spans [][2]int, delims []int, ok bool) {
 	n := w.Len()
-	covered, at, guard := 0, 0, 0
+	at, guard := 0, 0
 	for at < n {
 		guard++
 		if guard > n+1 {
-			bad = append(bad, "walk did not terminate")
-			break
+			return spans, delims, false
 		}
 		end := core.RegionEnd(w, at)
+		if end < at || end > n {
+			return spans, delims, false
+		}
 		if end == at {
-			// Standing on a hard delimiter: it belongs to no region, so step
-			// over it and keep the partition total.
-			if v := w.At(at); core.IsEnd(v) || core.IsCloseParen(v) {
-				covered++
-				at++
-				continue
+			v := w.At(at)
+			if !core.IsEnd(v) && !core.IsCloseParen(v) {
+				return spans, delims, false
 			}
-			bad = append(bad, "zero-width region on a non-delimiter token")
-			break
+			delims = append(delims, at)
+			at++
+			continue
 		}
-		if end < at {
-			bad = append(bad, "region end before its start")
-			break
-		}
-		if end > n {
-			bad = append(bad, "region past the window end")
-			break
-		}
-		slots := compiler.CaptureRegionSlots(w, at)
-		if len(slots) != end-at {
-			bad = append(bad, "slot count disagrees with the extent")
-			break
-		}
-		covered += end - at
+		spans = append(spans, [2]int{at, end})
 		at = end
 	}
-	if len(bad) == 0 && covered != n {
-		bad = append(bad, "partition does not cover the stream")
-	}
-	return bad
+	return spans, delims, true
 }
 
-// TestRegionDescriptorCensus reports the share of corpus programs whose token
-// stream partitions into well-formed regions, and the failure modes of the
-// rest. It is a MEASUREMENT with a floor, not a pin: the floor only forbids
-// the share going backwards.
-func TestRegionDescriptorCensus(t *testing.T) {
+// TestRegionDescriptorOracle pins region boundaries against expectations
+// written out BY HAND. Nothing here is derived from RegionEnd, so a wrong
+// boundary fails — which is precisely what the tautological version could not
+// do. The cases are chosen to exercise the paren-depth logic the corpus walk
+// never reached.
+func TestRegionDescriptorOracle(t *testing.T) {
+	open, closep, end := core.NewOpenParen(), core.NewCloseParen(), core.NewEnd()
+	w := func(s string) core.Value { return core.NewWord(s) }
+	i := func(n int64) core.Value { return core.NewInteger(n) }
+
+	cases := []struct {
+		name       string
+		toks       []core.Value
+		from       int
+		wantSpans  [][2]int
+		wantDelims []int
+	}{{
+		name:      "a plain statement is one region",
+		toks:      []core.Value{w("add"), i(1), i(2)},
+		wantSpans: [][2]int{{0, 3}},
+	}, {
+		name:       "`end` is a hard delimiter and belongs to no region",
+		toks:       []core.Value{w("def"), w("x"), i(1), end, w("x")},
+		wantSpans:  [][2]int{{0, 3}, {4, 5}},
+		wantDelims: []int{3},
+	}, {
+		name:      "a CONTAINED group does not end the region",
+		toks:      []core.Value{open, w("add"), i(1), i(2), closep, i(5)},
+		wantSpans: [][2]int{{0, 6}},
+	}, {
+		name:      "starting INSIDE a group, the close paren ends the region",
+		toks:      []core.Value{open, w("add"), i(1), i(2), closep, i(5)},
+		from:      1,
+		wantSpans: [][2]int{{1, 4}},
+	}, {
+		name:      "`end` INSIDE a group does not end the OUTER region",
+		toks:      []core.Value{open, w("do"), end, closep, i(9)},
+		wantSpans: [][2]int{{0, 5}},
+	}, {
+		name:      "nested groups unwind to the right depth",
+		toks:      []core.Value{open, open, i(1), closep, i(2), closep, i(3)},
+		wantSpans: [][2]int{{0, 7}},
+	}, {
+		name:       "two statements either side of a delimiter, group in the first",
+		toks:       []core.Value{open, i(1), closep, end, w("z")},
+		wantSpans:  [][2]int{{0, 3}, {4, 5}},
+		wantDelims: []int{3},
+	}}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tape := core.NewTape(c.toks, 0)
+			if c.from != 0 {
+				// A walk that begins inside a group: assert the single extent
+				// directly, since the partition helper always starts at 0.
+				got := core.RegionEnd(tape, c.from)
+				if got != c.wantSpans[0][1] {
+					t.Errorf("RegionEnd(from=%d) = %d, want %d", c.from, got, c.wantSpans[0][1])
+				}
+				return
+			}
+			spans, delims, ok := regionSpans(tape)
+			if !ok {
+				t.Fatal("the walk did not terminate cleanly")
+			}
+			if !sameSpans(spans, c.wantSpans) {
+				t.Errorf("spans = %v, want %v", spans, c.wantSpans)
+			}
+			if !sameInts(delims, c.wantDelims) {
+				t.Errorf("delimiters = %v, want %v", delims, c.wantDelims)
+			}
+			// The slots a region captures must be ITS OWN tokens, in written
+			// order. Compared by rendered identity rather than DeepEqual, which
+			// is not reflexive for an unevaluated paren payload.
+			for _, sp := range spans {
+				slots := compiler.CaptureRegionSlots(tape, sp[0])
+				for k := range slots {
+					want := core.CanonValue(tape.At(sp[0] + k))
+					if got := core.CanonValue(slots[k].Token); got != want {
+						t.Errorf("region %v slot %d = %s, want %s", sp, k, got, want)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestRegionDescriptorValidateRejects is the negative control: a descriptor
+// that is malformed must be REFUSED, not quietly executed. Without this the
+// suite only ever proves that well-formed input is accepted, which is the
+// half that cannot catch a regression (AGENTS.md, test discipline).
+func TestRegionDescriptorValidateRejects(t *testing.T) {
+	pos := core.SrcPos{Row: 1, Col: 1}
+	// The invalid zero: a slot nobody gave a source to.
+	d := &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
+		Slots: []compiler.SlotDesc{{}}}
+	if err := d.Validate(1, 0); err == nil {
+		t.Error("a slot left at SlotNone must be refused — it is the invalid zero, not Consts[0]")
+	}
+	// An index that is in the struct but out of the table it addresses.
+	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
+		Slots: []compiler.SlotDesc{{Source: compiler.SlotConst, Idx: 7}}}
+	if err := d.Validate(1, 0); err == nil {
+		t.Error("a const index past the const table must be refused")
+	}
+	// A word lead with no name, and a name on a non-word lead: both malformed.
+	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Pos: pos}
+	if err := d.Validate(0, 0); err == nil {
+		t.Error("LeadWord with no word name must be refused")
+	}
+	d = &compiler.RegionDesc{Lead: compiler.LeadApply, Word: "add", Pos: pos}
+	if err := d.Validate(0, 0); err == nil {
+		t.Error("a word name on a non-word lead must be refused")
+	}
+	// The well-formed case still passes, so the rejections above are not
+	// vacuous — a Validate that refused everything would satisfy them all.
+	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
+		Slots: []compiler.SlotDesc{{Source: compiler.SlotConst, Idx: 0}}}
+	if err := d.Validate(1, 0); err != nil {
+		t.Errorf("a well-formed descriptor must pass: %v", err)
+	}
+}
+
+func sameSpans(a, b [][2]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestRegionDescriptorReach walks every corpus program — the EXPANDED token
+// stream, plus each nested executable body on its own tape, as the engine runs
+// them — and reports how far the region walk reaches.
+//
+// Read it as REACH, not as correctness. What it can fail on is a walk that
+// spins, runs past its window, or stops on a token that is not a delimiter.
+// What it deliberately does NOT claim is that the boundaries are right: the
+// only available cross-check for that would be RegionEnd against itself, which
+// is the tautology this file exists to have stopped making. Boundaries are
+// pinned by the oracle above.
+func TestRegionDescriptorReach(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
 	entries, err := os.ReadDir(specDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var rows, parsed, clean int
-	kinds := map[string]int{}
-	examples := map[string]regionWalkFailure{}
+	var rows, parsed, tapes, clean, withParen, multiRegion int
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
 			continue
@@ -160,41 +300,53 @@ func TestRegionDescriptorCensus(t *testing.T) {
 				continue
 			}
 			rows++
-			src := strings.TrimSpace(parts[0])
-			vals, err := lang.Parse(src)
+			vals, err := lang.Parse(strings.TrimSpace(parts[0]))
 			if err != nil {
-				continue // a parse-error row is the parser's business, not the model's
+				continue // a parse-error row is the parser's business
 			}
 			parsed++
-			bad := walkRegions(vals)
-			if len(bad) == 0 {
-				clean++
-				continue
-			}
-			for _, k := range bad {
-				kinds[k]++
-				if _, seen := examples[k]; !seen {
-					examples[k] = regionWalkFailure{kind: k, row: e.Name() + ": " + src}
+			streams := append([][]core.Value{expandMarkers(vals)}, nestedBodies(vals, 0)...)
+			for _, s := range streams {
+				if len(s) == 0 {
+					continue
 				}
+				tapes++
+				for _, v := range s {
+					if core.IsOpenParen(v) {
+						withParen++
+						break
+					}
+				}
+				tape := core.NewTape(s, 0)
+				spans, delims, ok := regionSpans(tape)
+				if !ok {
+					t.Errorf("%s: the region walk did not terminate cleanly on %q", e.Name(), strings.TrimSpace(parts[0]))
+					continue
+				}
+				if len(spans)+len(delims) > 1 {
+					multiRegion++
+				}
+				covered := len(delims)
+				for _, sp := range spans {
+					covered += sp[1] - sp[0]
+				}
+				if covered != tape.Len() {
+					t.Errorf("%s: partition covers %d of %d tokens on %q",
+						e.Name(), covered, tape.Len(), strings.TrimSpace(parts[0]))
+					continue
+				}
+				clean++
 			}
 		}
 		f.Close()
 	}
-
-	share := 0.0
-	if parsed > 0 {
-		share = 100 * float64(clean) / float64(parsed)
-	}
-	t.Logf("region-descriptor census: %d corpus rows, %d parsed, %d partition cleanly (%.2f%%)",
-		rows, parsed, clean, share)
-	for _, k := range sortedKeys(kinds) {
-		t.Logf("   failure %-52s %d   e.g. %s", k, kinds[k], examples[k].row)
-	}
-
-	if clean < parsed {
-		t.Errorf("region-descriptor census: %d of %d parsed programs do not partition into "+
-			"well-formed regions. The Stage 4 flag-day rests on descriptors expressing real "+
-			"statements; a failure here is the descriptor model, and it wants fixing BEFORE "+
-			"OpCollect rather than after", parsed-clean, parsed)
+	t.Logf("region-descriptor reach: %d corpus rows, %d parsed, %d tapes walked "+
+		"(outer + nested bodies), %d clean", rows, parsed, tapes, clean)
+	t.Logf("   tapes containing a paren MARKER: %d", withParen)
+	t.Logf("   tapes splitting into >1 region : %d", multiRegion)
+	if withParen == 0 {
+		t.Error("no tape carried a paren marker — the walk is not reaching the nesting " +
+			"it claims to cover, which is exactly how the first version of this census " +
+			"reported 100% while never running RegionEnd's paren-depth logic")
 	}
 }
