@@ -3074,7 +3074,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// which is what the emit pass keys its fn-value refusal on.
 		name := match.Name
 		var pos SrcPos
-		if e.Pointer < e.Tape.Len() && IsWord(e.Tape.At(e.Pointer)) {
+		if e.Pointer < e.Tape.Len() {
 			pos = e.Tape.At(e.Pointer).Pos()
 			if w, err := AsWord(e.Tape.At(e.Pointer)); err == nil {
 				name = w.Name
@@ -3147,6 +3147,18 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		tailConsumed := callEnd+1 < e.Tape.Len() &&
 			(IsCloseParen(e.Tape.At(callEnd+1)) || e.dynShuffleConsumerAt(callEnd+1))
 		results := e.Registry.analysisCarrierResults(name, match.Sig, match.Args, pos, match.Reg, tailConsumed)
+		// Stamp a positionless FUNCTION result with this call's position,
+		// AFTER the recorder has re-IDed the outputs — the interpreter's
+		// stampResultPos equivalent for the check pass. A module export
+		// (`Assert.not-equal`) is handed back verbatim by moduleNSGetReturns
+		// with no position of its own, and it is the token a later VALUE
+		// dispatch reads its own position from, so without this every opcode
+		// downstream records 0:0 (NUR113).
+		for i := range results {
+			if results[i].Parent != nil && results[i].Parent.Equal(TFunction) {
+				results[i] = WithPosAt(results[i], pos)
+			}
+		}
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 
@@ -4294,11 +4306,15 @@ func (e *Engine) expandParenExprScratch(items []Value) []Value {
 func lowerReach(info ReachInfo) []Value {
 	out := make([]Value, 0, len(info.Receiver)+len(info.Segments)*2)
 	out = append(out, info.Receiver...)
+	var anchor Value
+	if len(info.Receiver) > 0 {
+		anchor = info.Receiver[0]
+	}
 	for _, seg := range info.Segments {
 		if seg.Getr {
-			out = append(out, NewWord("dotr"))
+			out = append(out, WithPos(NewWord("dotr"), anchor))
 		} else {
-			out = append(out, NewWord("dot"))
+			out = append(out, WithPos(NewWord("dot"), anchor))
 		}
 		if seg.Computed {
 			out = append(out, NewParenExpr(seg.KeyExpr))
