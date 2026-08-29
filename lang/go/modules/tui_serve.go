@@ -45,6 +45,14 @@ const tuiWireLimit = 4 << 20
 // tuiMaxViewers caps the viewers: option.
 const tuiMaxViewers = 64
 
+// tuiAcceptLine is the handshake's accept reply. A package-level value because
+// promote writes it while holding the hub lock (see promote) and there is
+// nothing per-connection in it. It replaced a tuiWriteAccept helper that wrote
+// with NO deadline; going through hub.writeTo gives it the same broadcast
+// deadline every other hub write has, so a stuck client fails its accept
+// instead of holding the lock forever.
+var tuiAcceptLine = []byte(`{"tag":"accept","proto":1}` + "\n")
+
 type tuiSession struct {
 	cols int
 	rows int
@@ -142,33 +150,45 @@ func (h *tuiViewerHub) admitAs(conn net.Conn, pending bool) (id int, ok bool) {
 	return id, true
 }
 
-// promote publishes a pending viewer to the broadcast set and sends it the
-// chrome it missed — the title and the current frame — so late joiners resume
-// mid-session. It runs AFTER the accept reply, so the wire stays
-// hello → accept → chrome. An unknown id (already dropped, evicted, or never
-// admitted) does nothing.
+// promote writes a pending viewer's ACCEPT reply, publishes it to the
+// broadcast set, and sends it the chrome it missed — the title and the current
+// frame — so late joiners resume mid-session. All of it under ONE lock
+// acquisition, which is the point: the wire stays hello → accept → chrome and
+// no broadcast can interleave. A non-nil error is the accept write failing, and
+// the caller evicts. An unknown id (already dropped or evicted) does nothing.
 //
-// Clearing pending and replaying happen under ONE lock acquisition on purpose.
-// Split across two, a broadcast could land between them and the viewer would
-// then receive the stored chrome AFTER a newer frame — a duplicate rather than
-// a protocol violation, but the ordering this method exists to guarantee.
+// THE ACCEPT IS WRITTEN HERE, NOT BY THE CALLER, and that placement is load
+// bearing. Writing it outside the lock leaves a state the hub cannot observe —
+// "accepted, not yet promoted" — and goodbye running in that window would treat
+// an already-accepted viewer as unaccepted and close it with no `quit`. The
+// attach client reads EOF after accept as "server closed the connection"
+// (cmd/go/internal/attach/attack.go), so a shutdown racing a late attach would
+// surface as a spurious CLI failure. Under the lock the state is binary: a
+// viewer is pending iff its accept has not been written.
 //
-// Promoting a viewer admitted LIVE (plain admit) is well defined and is just
-// the replay: the pending delete is a no-op.
-func (h *tuiViewerHub) promote(id int) {
+// Promoting a viewer admitted LIVE (plain admit) sends the chrome and no
+// accept — it never had a handshake to answer. That keeps admit's contract and
+// is why the direct-admit tests read the title as their first line.
+func (h *tuiViewerHub) promote(id int) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	conn, ok := h.viewers[id]
 	if !ok {
-		return
+		return nil
 	}
-	delete(h.pending, id)
+	if h.pending[id] {
+		if err := h.writeTo(conn, tuiAcceptLine); err != nil {
+			return err // still pending, still in viewers: the caller's evict settles it
+		}
+		delete(h.pending, id)
+	}
 	if h.titleLine != nil {
 		_ = h.writeTo(conn, h.titleLine)
 	}
 	if h.lastLine != nil {
 		_ = h.writeTo(conn, h.lastLine)
 	}
+	return nil
 }
 
 // evict removes a viewer whose accept reply never landed — no reader
@@ -271,16 +291,26 @@ func (h *tuiViewerHub) goodbye() {
 	h.closed = true
 	line := []byte(`{"tag":"quit"}` + "\n")
 	for id, conn := range h.viewers {
-		if !h.pending[id] {
-			// A pending viewer has not had its accept yet, so `quit` would be
-			// the same protocol violation a frame would be. Closing is the
-			// honest end of that connection; the client sees EOF.
-			_ = h.writeTo(conn, line)
+		if h.pending[id] {
+			_ = conn.Close()
+			// A pending viewer's accept has provably not been written (promote
+			// writes it under this lock), so `quit` would be the same protocol
+			// violation a frame would be — closing is the honest end, and the
+			// client sees EOF before any accept.
+			//
+			// Its entry STAYS in both maps. It still holds the reader token
+			// admitAs took, and no wire reader was ever started for it, so the
+			// only thing that can balance that token is the caller's evict
+			// after its promote fails on this now-closed connection. Deleting
+			// it here would make that evict a no-op and leave the token
+			// outstanding forever — teardown's readers.Wait() would hang, and
+			// an app exiting while a viewer attaches would never return.
+			continue
 		}
+		_ = h.writeTo(conn, line)
 		_ = conn.Close()
+		delete(h.viewers, id)
 	}
-	h.viewers = map[int]net.Conn{}
-	h.pending = map[int]bool{}
 }
 
 func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -467,24 +497,17 @@ func tuiAcceptor(hub *tuiViewerHub, ln net.Listener, token string, firstCh chan<
 			_ = conn.Close()
 			continue
 		}
-		if wErr := tuiWriteAccept(conn); wErr != nil {
+		if wErr := hub.promote(id); wErr != nil {
 			hub.evict(id)
 			_ = conn.Close()
 			continue
 		}
-		hub.promote(id)
 		go tuiWireReader(hub, id, conn)
 		if !sentFirst {
 			sentFirst = true
 			firstCh <- tuiSession{cols: cols, rows: rows}
 		}
 	}
-}
-
-func tuiWriteAccept(conn net.Conn) error {
-	data, _ := json.Marshal(map[string]any{"tag": "accept", "proto": 1})
-	_, err := conn.Write(append(data, '\n'))
-	return err
 }
 
 func tuiWriteDeny(conn net.Conn, why string) error {

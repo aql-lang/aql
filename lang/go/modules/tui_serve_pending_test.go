@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The accept/broadcast race (CI failure on f2e95c4, PR #410):
@@ -59,16 +60,21 @@ func TestPendingViewerReceivesNoBroadcast(t *testing.T) {
 	default:
 	}
 
-	// Promotion delivers the chrome it missed, title first, then the frame —
-	// the hello -> accept -> chrome order the protocol requires.
-	hub.promote(id)
-	first := <-lines
-	if !strings.Contains(first, `"tag":"title"`) || !strings.Contains(first, `"text":"served"`) {
-		t.Fatalf("first line after promote = %s, want the title", first)
+	// Promotion writes the accept and THEN the chrome it missed, in one lock
+	// acquisition — the hello -> accept -> chrome order the protocol requires.
+	if err := hub.promote(id); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if got := <-lines; !strings.Contains(got, `"tag":"accept"`) {
+		t.Fatalf("first line after promote = %s, want the accept", got)
 	}
 	second := <-lines
-	if !strings.Contains(second, `"tag":"frame"`) || !strings.Contains(second, `"text":"x"`) {
-		t.Fatalf("second line after promote = %s, want the frame", second)
+	if !strings.Contains(second, `"tag":"title"`) || !strings.Contains(second, `"text":"served"`) {
+		t.Fatalf("second line after promote = %s, want the title", second)
+	}
+	third := <-lines
+	if !strings.Contains(third, `"tag":"frame"`) || !strings.Contains(third, `"text":"x"`) {
+		t.Fatalf("third line after promote = %s, want the frame", third)
 	}
 
 	// And once promoted it is an ordinary viewer.
@@ -129,8 +135,44 @@ func TestGoodbyeSkipsQuitForPendingViewer(t *testing.T) {
 	if got, open := <-pendingLines; open {
 		t.Fatalf("pending viewer received %q instead of a close", got)
 	}
-	if len(hub.pending) != 0 {
-		t.Errorf("goodbye left pending entries: %v", hub.pending)
+	// The pending entry SURVIVES goodbye on purpose — see the next test.
+	if len(hub.pending) != 1 {
+		t.Errorf("goodbye must leave the pending entry for its caller's evict, got %v", hub.pending)
+	}
+}
+
+// goodbye leaves a pending viewer in the maps so the caller's evict can still
+// balance the reader token admitAs took. Deleting it there would make that
+// evict a no-op, and teardown's readers.Wait() would block forever: an app
+// exiting while a viewer is mid-attach would hang instead of returning.
+//
+// Codex flagged this on PR #411 and it was real. It is also older than the
+// pending set — plain admit had the same shape — but nothing could FIX it
+// before, because goodbye had no way to tell a viewer whose reader had started
+// from one whose reader never would.
+func TestGoodbyeLeavesPendingForEvictToBalance(t *testing.T) {
+	hub := newTuiViewerHub(2, true)
+	c, s := net.Pipe()
+	defer c.Close()
+	id, ok := hub.admitPending(s)
+	if !ok {
+		t.Fatal("admitPending refused")
+	}
+
+	hub.goodbye()
+	// The accept now fails on the closed connection — the server path's cue to
+	// evict, exactly as it would for any failed accept.
+	if err := hub.promote(id); err == nil {
+		t.Error("promote must report the accept write failing on a closed conn")
+	}
+	hub.evict(id)
+
+	done := make(chan struct{})
+	go func() { hub.readers.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("readers.Wait() blocked — the pending viewer's reader token leaked")
 	}
 }
 
