@@ -617,10 +617,35 @@ import (
 // to this change and not something to fold into it. The row is gone; the
 // observation is in NUR.md so Stage 8 has it.
 //
+// (v) 46 -> 43. THE `/s` FAMILY, and it was one mechanism, not three rows.
+//
+// The three path-modifier.tsv rows column (u) left behind — `10 3 m.s/s`, its
+// paren twin, and `stack-args (force-arity 2 (m.s))` — did not need any of
+// that column's gates widened further. They lower to a DIFFERENT opcode.
+// `CALL_DYNAMIC` is what column (u) taught to apply a parked native;
+// force-stack lowers to `CALL_DYNAMIC_MIXED`, whose handler islands the whole
+// window because the compiler could not rule out a callable interior to it.
+// One line of disassembly said so, which is the same lesson column (o) already
+// recorded and the one I keep having to relearn: read the bytecode.
+//
+// The window is `[10 3 fn]` — inert data under a single TRAILING fn — and that
+// is not a general re-step, it is the trailing apply. The island runs
+// `Run([10 3 fn])`: it places the two literals, then steps the fn, which
+// collects them TOP-DOWN. That is exactly callDynTrailTop's binding, so the
+// same window handed to tryNativeFnApply in that order answers identically
+// with no sub-engine.
+//
+// Every condition on it is load-bearing. IsSteplessWindow over the PREFIX is
+// what rules out a second callable inside the window — the very thing the op
+// exists for. The fn must pass vmNativeApplicable, for the three reasons
+// column (u) settled. And a decline (no overload takes exactly this many args)
+// falls through to the island, which places the leftovers as the interpreter
+// does rather than guessing.
+//
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 46
+const interpEntryRowCeiling = 43
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

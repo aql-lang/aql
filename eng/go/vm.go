@@ -1217,6 +1217,40 @@ func (vc *vmContext) callDynamicMixed(reg *core.Registry, w int, stack []core.Va
 	if core.IsSteplessWindow(window) {
 		return stack, nil
 	}
+	// A window that is INERT DATA under a single TRAILING fn is the trailing
+	// apply, not a general re-step — `10 3 m.s/s` lowers here, and the island
+	// it runs is `Run([10 3 fn])`, which places the two literals and then steps
+	// the fn. The fn collects them TOP-DOWN (the top value fills its first
+	// param), which is callDynTrailTop's binding, so the same window handed to
+	// tryNativeFnApply in that order answers identically with no sub-engine.
+	//
+	// The conditions are all load-bearing. IsSteplessWindow over the PREFIX is
+	// what rules out a second callable interior to the window — the very thing
+	// the compiler could not rule out, which is why this op exists. The fn must
+	// pass vmNativeApplicable for the reasons that gate states (no boru body,
+	// not reshaped, the live name still native). And a decline from
+	// tryNativeFnApply — no overload takes exactly this many args — falls
+	// through to the island, which places the leftovers as the interpreter does.
+	if n := len(window); n >= 2 {
+		fnVal := window[n-1]
+		if fnDef, isFn := fnVal.Data.(core.FnDefInfo); isFn && !fnVal.Quoted &&
+			core.IsAppliableFn(fnVal) && vmNativeApplicable(vc.r, fnDef) &&
+			core.IsSteplessWindow(window[:n-1]) {
+			args := make([]core.Value, n-1)
+			for i := range args {
+				args[i] = window[n-2-i]
+			}
+			// Pass the fn VALUE, not its FnDefInfo: tryNativeFnApply anchors a
+			// raising handler on the value's own position (NUR113), which is
+			// what keeps this lane's diagnostics identical to the island's.
+			if results, done, err := vc.tryNativeFnApply(fnVal, args); done {
+				if err != nil {
+					return nil, stampAt(err, curDebug, pc, vc.r)
+				}
+				return append(stack[:base], results...), nil
+			}
+		}
+	}
 	results, err := vc.islandRun(reg, window)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
