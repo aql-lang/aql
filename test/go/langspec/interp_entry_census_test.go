@@ -37,19 +37,19 @@ import (
 // re-enter the interpreter through an unattributed seam.
 //
 // First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
-// entries). Now 107, after eight changes. The seam spread — the
+// entries). Now 100, after nine changes. The seam spread — the
 // shape of the debt, not a second ceiling — and what each moved:
 //
-//	                         first    (a)    (b)    (c)    (d)    (e)    (f)    (g)    (h)
-//	Engine.Run                 501    477    453    443    433    439    425    400    391
-//	CallBoru                   275    251    251    251    251    251    238    238    238
-//	vm:island                   66     66     48     48     39     39     39     39     39
-//	runPooledSub                37     37     35     35     35     37     36     11     11
-//	RunResolved                 31     31     31     31     31     31     31     31     31
-//	vm:island-resolved          21     21     21     11     10     10     10     10     10
-//	InvokeCallback:callboru     28      4      4      4      4      4      6      6      6
-//	                          ----   ----   ----   ----   ----   ----   ----   ----   ----
-//	rows                       184    163    151    141    131    131    130    114    107
+//	                         first    (a)    (b)    (c)    (d)    (e)    (f)    (g)    (h)    (i)
+//	Engine.Run                 501    477    453    443    433    439    425    400    391    383
+//	CallBoru                   275    251    251    251    251    251    238    238    238    238
+//	vm:island                   66     66     48     48     39     39     39     39     39     39
+//	runPooledSub                37     37     35     35     35     37     36     11     11     11
+//	RunResolved                 31     31     31     31     31     31     31     31     31     31
+//	vm:island-resolved          21     21     21     11     10     10     10     10     10     10
+//	InvokeCallback:callboru     28      4      4      4      4      4      6      6      6      6
+//	                          ----   ----   ----   ----   ----   ----   ----   ----   ----   ----
+//	rows                       184    163    151    141    131    131    130    114    107    100
 //
 // (a) Foreign detached units became hostable mid-run
 // (eng/go/vm_foreign_unit.go). The InvokeCallback column is that one: those 24
@@ -126,7 +126,7 @@ import (
 // clusters are single-mechanism, which is what makes them worth picking:
 //
 //	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
-//	module-parse/log         18 rows   Engine.Run only  (debug: attributed at (h))
+//	module-parse             11 rows   Engine.Run only  (debug attributed at (h), log compiled at (i))
 //	bytecode-migrated.tsv    14 rows   RunResolved 6, vm:island 6, CallBoru 2, …
 //	fn-value.tsv              6 rows   vm:island 5
 //	module-fnvalue-boundary   6 rows   vm:island-resolved 6
@@ -169,6 +169,17 @@ import (
 // some of the remaining rows are of this kind, and the honest end state is
 // "every entry attributed", not "no entries".
 //
+// (i) `Log.with-span NAME [body]` compiles its body. It DECLARES the body slot
+// callable (a CallableSpec with 0 inputs and BodyOutResidual, the shape
+// Test.describe already uses) and the handler drives the compiled closure
+// through InvokeBody, falling back to the token run when the body did not
+// compile. All 7 module-log rows, and the file left the cluster table.
+//
+// It is the same question (h) answers the other way: nothing about a span
+// depends on WHICH engine runs its body, so compiling changes no answer. The
+// two increments together are the rule — attribute where the engine IS the
+// answer, compile where it is not.
+//
 // AN INCREMENT THAT WAS BUILT, MEASURED AND REJECTED — recorded because the
 // measurement is worth more than the code was. Dispatching a callee whose
 // matched sig carries its OWN Go handler (a native fn value read out of a
@@ -207,7 +218,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 107
+const interpEntryRowCeiling = 100
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
