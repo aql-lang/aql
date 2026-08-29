@@ -533,11 +533,25 @@ The chain, each link measured or read rather than assumed:
 5. That literal comes from `moduleNSGetReturns` unstamped. Measured: reading
    its position yields zero even with `lowerReach` stamped.
 
-**The likely fix is one call** — return the export with the access's position
-(`core.WithPos(val, args[1])`, the namespace receiver being the natural
-anchor) — but it is UNTESTED, and the two halves must still land together:
-stamping `lowerReach` alone is the 186-divergence regression above. Verify
-`args[1]` actually carries the receiver's position before relying on it.
+**A FOURTH attempt, also ruled out.** The obvious pairing — stamp
+`lowerReach` AND mirror the interpreter's `stampResultPos` on the check
+dispatch path, stamping a positionless Function result with the call's own
+`pos` where `CarrierResults` already has one — leaves the program at `0:0`
+just the same. (It needs a `core.WithPosAt(v, SrcPos)` helper, since `WithPos`
+copies from another VALUE and `Value.pos` is unexported; that helper is not in
+the tree, having gone back with the attempt.)
+
+So the namespace read does not surface as a Function result at that point
+either. Four locations are now eliminated by measurement — the lowering alone,
+the dispatch site's `IsWord` guard, those two together, and the check-path
+result stamp — against one confirmed producer, `moduleNSGetReturns`.
+
+**What is NOT yet known, and is the next thing to establish:** by what route
+the export value reaches the pointer, given that stamping neither its
+producer's inputs nor the dispatch result changes it. Instrument that path
+before writing another fix; four plausible-looking changes have now each cost
+a full parity run to disprove, and every one of them was argued from reading
+the code rather than from watching it run.
 
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
