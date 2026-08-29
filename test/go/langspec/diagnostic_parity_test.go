@@ -77,7 +77,20 @@ import (
 // the corpus grew. Its sibling (the same program WITHOUT the `end`) does
 // not diverge: it RAISES on the check pass rather than reporting a finding,
 // and a raise is not a finding on either side.
-const diagnosticParityCeiling = 319 // 318 (2026-08-26, Stage-1 baseline) -> 317 (NUR103 record-field fix) -> 318 (+3 NUR104 spec rows, one diverging) -> 319 (+2 Stage-4 forward-barrier rows, one diverging) -> 0 (Stage 8)
+//
+// 319 -> 320, and accounted for the same way a third time. The Apply kernel's
+// return-contract fix added two rows to `fn-value.tsv` §12, and exactly one
+// diverges:
+// `def bad fn [[n:Any][Integer][n]] end def mk fn [[][Function][bad/v]] end ((mk) 'str')`
+// reports `type_error/bad` on the plain pass and nothing on the armed one,
+// while the program compiles and raises the identical error at run time. That
+// is the LOST-UNDER-COMPILATION class — the checker stricter than the compiler,
+// the largest shape in this ledger — and it is the benign direction: the
+// finding is real, `boru check` surfaces it, and the compiled program accepts
+// nothing silently. The whole point of the row is that it now RAISES where it
+// used to answer 'str'. Its sibling, the conforming `okr` row, is clean on
+// both passes.
+const diagnosticParityCeiling = 320 // 318 (2026-08-26, Stage-1 baseline) -> 317 (NUR103 record-field fix) -> 318 (+3 NUR104 spec rows, one diverging) -> 319 (+2 Stage-4 forward-barrier rows, one diverging) -> 320 (+2 fn-value §12 rows, one diverging) -> 0 (Stage 8)
 
 // armedOnlyCeiling is the sharpest of the three classes: rows the plain
 // check calls clean and the compile-armed pass finds fault with. It is the

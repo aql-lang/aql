@@ -127,10 +127,8 @@ import (
 //
 //	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
 //	module-parse             11 rows   Engine.Run only  (debug attributed at (h), log compiled at (i))
-//	bytecode-migrated.tsv    14 rows   RunResolved 6, vm:island 6, CallBoru 2, …
-//	fn-value.tsv              6 rows   vm:island 5
+//	bytecode-migrated.tsv    13 rows   RunResolved 6, vm:island 5, CallBoru 2, …
 //	module-fnvalue-boundary   6 rows   vm:island-resolved 6
-//	valof.tsv                 5 rows   vm:island 5
 //	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
 //
 // Engine.Run appears everywhere because every other seam runs a nested engine;
@@ -142,13 +140,22 @@ import (
 // is gone: that is column (g).
 //
 // path-modifier.tsv is the cluster column (h) went after, and it is the honest
-// counter-example to "one mechanism, one fix". Twelve of its thirteen rows
-// still island, because the dispatch-modifier wrapper is built at RUN time out
-// of a fn the check pass only sees as a dynamic carrier (a dot-access read), so
+// counter-example to "one mechanism, one fix". All thirteen of its rows still
+// island, because the dispatch-modifier wrapper is built at RUN time out of a
+// fn the check pass only sees as a dynamic carrier (a dot-access read), so
 // there is nothing to compile at compile time. The BY-NAME forms already
-// compile clean — `usurp sub 10 3` has no seams at all — which locates the
-// blocker precisely: it is the dot-access hiding the callee, not the modifier.
-// That is Stage 6/7 work on dynamic carriers, not a seam fix.
+// compile clean — `usurp sub 10 3` has no seams at all.
+//
+// This note used to read "the blocker is the dot-access hiding the callee, not
+// the modifier", and column (k) is the correction: the dot-access alone was
+// never the blocker. `m.f 5` over a boru fn value compiles now, thirteen other
+// rows with it, and every path-modifier row stayed put. What those rows have in
+// common is not the dot — it is the CALLEE. `def m {a:add/v}` stores a NATIVE,
+// which carries no unit for the Apply kernel to enter, and the modifier
+// wrappers on top of it return TOKENS for the engine to re-step (see the
+// rejected increment above). So the remaining cluster is the native-callee half
+// of the question, and its cost was already measured: one row, bought with a
+// worse error message.
 //
 // (h) boru:debug's body runs are ATTRIBUTED, not compiled — and the distinction
 // is the point, because it is the one place "compile everything" is the wrong
@@ -228,6 +235,43 @@ import (
 // boru error the sub-engine run would have), so the answer is engine-independent
 // and the body compiles.
 //
+// (k) The Apply kernel now takes the SHAPED-METHOD apply (OpCallDynMethod) —
+// the `m.f 5` shape where a dot-access reads a fn value out of a container and
+// applies it. That is the cluster (h) went after and could not close, and this
+// is the part of it that was never about the modifier: fourteen rows, all of
+// fn-value.tsv and valof.tsv plus one of bytecode-migrated's, 95 -> 81.
+//
+// callDynMethod had every other apply path — a compiled closure, a
+// trivial-delegation native — and fell through to the island for a plain boru
+// fn value, even though its unit was compiled and sitting in the same program.
+// It now asks dynApplyEnter first, exactly as callDynamic and callDynFrame do.
+//
+// WHAT MADE IT UNSOUND UNTIL NOW, and this is the increment's real content. A
+// stamped fn-value unit compiles COUNT-AGNOSTIC — compileStoredFnUnit goes
+// through compileClosureBody with bodyOut 0, whose `declared = nil` leaves
+// CompiledFn.Returns empty — so its RET enforces nothing. Entering such a unit
+// therefore SKIPPED the fn's declared return contract, which the island path
+// applies (the interpreter's __RC runs inside the CallBoru the nested Run
+// reaches). Measured on the EXISTING kernel, before this increment touched
+// anything:
+//
+//	def bad fn [[n:Any][Integer][n]] end
+//	def mk  fn [[][Function][bad/v]] end
+//	((mk) 'str')
+//	  interpreted  [boru/type_error] bad: return value 1: expected Integer, …
+//	  compiled     'str'
+//
+// A silent wrong answer on main, not a refusal — found by asking what the
+// entry would skip, not by a failing test. The fix is that the entry CARRIES
+// the applied value's contract (dynEnter.retFn, applyRetContract) and the
+// frame's RET applies it; lang/spec/fn-value.tsv §12 pins both halves. The
+// census rows are downstream of that: they are only takeable BECAUSE the entry
+// became contract-faithful.
+//
+// The shape claim's result half is discharged statically against that carried
+// contract (dynMethodClaimOK) — a frame push has no results to count, and the
+// RET now guarantees the count the sig declares.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -236,7 +280,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 95
+const interpEntryRowCeiling = 81
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
