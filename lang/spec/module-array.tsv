@@ -83,6 +83,7 @@ import "boru:array-util"  ArrayUtil.pairs [1 2 3 4]	[[1 2] [2 3] [3 4]]	pairs: c
 #
 # §5  rank polymorphism (quoted code body argument)
 import "boru:array-util"  ArrayUtil.eachrank 0 [mul 2] [[1 2] [3 4]]	[[2 4] [6 8]]	eachrank: apply a body at cell-rank 0 (each scalar leaf)
+import "boru:array-util"  ArrayUtil.eachrank 1 [reverse] [[1 2] [3 4]]	[[2 1] [4 3]]	eachrank at cell-rank 1: the body sees each INNERMOST LIST, not its scalars — the cell type is rank-dependent, which is why the compiled body takes a gradual carrier
 import "boru:array-util"  ArrayUtil.foldaxis 0 [add] [[1 2] [3 4]]	[4 6]	foldaxis 0: reduce down each column
 import "boru:array-util"  ArrayUtil.foldaxis 1 [add] [[1 2] [3 4]]	[3 7]	foldaxis 1: reduce along each row
 import "boru:array-util"  ArrayUtil.foldaxis 0 [add] []	[]	foldaxis over an EMPTY rank-2 list: no lane to reduce, so the result is empty — and the body's input carrier has no element to take a type from, which is the gradual-Any arm of the compiled body's shape

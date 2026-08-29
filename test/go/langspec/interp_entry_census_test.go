@@ -416,6 +416,21 @@ import (
 // was one at its old: an unrecognised shape must be treated as active, or a
 // token kind added later silently becomes data and a body stops running.
 //
+// (r) `ArrayUtil.eachrank` follows foldaxis, and needed the handler change
+// foldaxis did not. 53 -> 52.
+//
+// eachrankWalk sliced the body into raw TOKENS and ran them itself; it now
+// threads the body VALUE down and calls InvokeBody at the leaf, which is the
+// same seam every other code-body word uses. The declaration alone would have
+// done nothing — column (p) named that ordering and this is the case that
+// proves it: handler first, declaration second.
+//
+// Its input carrier is GRADUAL on purpose. The cell type is RANK-dependent —
+// `eachrank 0` sees each scalar leaf, `eachrank 1` each innermost list —
+// so a precise carrier would mean walking the data's spine by (depth - rank),
+// and the corpus now pins both ranks compiling clean against the gradual one.
+// Precision nothing needs is a proof obligation nobody asked for.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -424,7 +439,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 53
+const interpEntryRowCeiling = 52
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
