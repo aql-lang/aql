@@ -470,7 +470,40 @@ func (vc *vmContext) invokeClosureOn(reg *core.Registry, body core.Value, inputs
 	// (StartFnCompile registers params before captures) — the same split
 	// RunUnit and runUnitNested bind, so it uses the same helper rather than
 	// a second copy of the loop.
-	return vc.enterBodyUnit(reg, cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], shapeInputs(cl, inputs), cl.Captures))
+	res, err := vc.enterBodyUnit(reg, cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], shapeInputs(cl, inputs), cl.Captures))
+	if err != nil {
+		return res, err
+	}
+	return checkClosureReturn(vc.r, cl, res)
+}
+
+// checkClosureReturn applies a CALLBACK fn value's own declared return to the
+// results its closure produced.
+//
+// The check is on the VALUES, at invoke time, and that is the whole point:
+// the unit's RET cannot do it, because a shared closure unit has no single
+// contract and giving it one needs a per-fn memo key — which alone makes a
+// shared unit recompile and refuse on operand provenance, islanding CONFORMING
+// callbacks (measured: TestListFoldCallbackOrderPin). Checking produced values
+// needs no static provenance, so nothing stops compiling.
+//
+// What it closes, measured on main and bisected to the callback-seam move:
+//
+//	def cbad fn [[n:Integer][Boolean][n]] end  [1 2] each cbad/v
+//	  interpreted  each: element 0: [boru/type_error]: cbad: return value 1: …
+//	  compiled     [1 2]        — the declaration went unenforced
+//
+// A closure with no contract (a raw token body, or an anonymous lambda whose
+// Returns=[Any] is a placeholder) passes through untouched.
+func checkClosureReturn(r *core.Registry, cl core.ClosurePayload, res []core.Value) ([]core.Value, error) {
+	if len(cl.RetTypes) == 0 {
+		return res, nil
+	}
+	// The same contract check the frame path runs at RET, over the produced
+	// residual: an overlay CompiledFn is how applyRetContract already hands a
+	// value's contract to unit-shaped machinery.
+	fn := &compiler.CompiledFn{Name: cl.RetName, Returns: cl.RetTypes, ReturnPatterns: cl.RetPatterns, Decl: cl.RetDecl}
+	return checkReturnContract(r, fn, res, 0, false, cl.RetPos)
 }
 
 // pushFrameArgs is the DynEnv args bracket's frame-entry half: push the
@@ -1757,6 +1790,14 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 				stack = stack[:len(stack)-nc]
 			}
 			cl := core.ClosurePayload{Prog: p, Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape, Render: p.Fns[in.Arg].Render}
+			// The CALLBACK fn value's own declared return, keyed by THIS push's
+			// pc: the unit is shared across fn values with identical bodies and
+			// inputs, so the contract belongs to the value (see
+			// core.ClosurePayload.RetTypes).
+			if spec, has := p.ClosureRet[pc]; has {
+				cl.RetTypes, cl.RetPatterns = spec.Types, spec.Patterns
+				cl.RetDecl, cl.RetName, cl.RetPos = spec.Decl, spec.Name, spec.Pos
+			}
 			stack = append(stack, core.Value{Parent: core.TFunction, Data: cl})
 		case compiler.OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
@@ -2169,7 +2210,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 						contract = ov
 					}
 				}
-				trimmed, err := checkReturnContract(r, contract, stack, stackBase, len(frames) > 0)
+				trimmed, err := checkReturnContract(r, contract, stack, stackBase, len(frames) > 0, core.SrcPos{})
 				if err != nil {
 					return nil, stampAt(err, curDebug, pc, r)
 				}
@@ -2336,20 +2377,20 @@ func stampAt(err error, debug []core.SrcPos, pc int, r *core.Registry) error {
 // shared fn unit, the interpreter at the call site — the documented, gated
 // difference). The primary position is left unset here and stamped by stampAt
 // on the RET.
-func vmReturnTypeErr(r *core.Registry, fn *compiler.CompiledFn, index int, expected *core.Type, got core.Value) error {
+func vmReturnTypeErr(r *core.Registry, fn *compiler.CompiledFn, index int, expected *core.Type, got core.Value, at core.SrcPos) error {
 	src := ""
 	if r != nil {
 		src = r.Source
 	}
-	return core.BuildReturnTypeError(src, fn.Name, index, expected, got, core.SrcPos{}, fn.Decl)
+	return core.BuildReturnTypeError(src, fn.Name, index, expected, got, at, fn.Decl)
 }
 
-func vmReturnCountErr(r *core.Registry, fn *compiler.CompiledFn, expected, got int, values []core.Value) error {
+func vmReturnCountErr(r *core.Registry, fn *compiler.CompiledFn, expected, got int, values []core.Value, at core.SrcPos) error {
 	src := ""
 	if r != nil {
 		src = r.Source
 	}
-	return core.BuildReturnCountError(src, fn.Name, expected, got, values, core.SrcPos{}, fn.Decl)
+	return core.BuildReturnCountError(src, fn.Name, expected, got, values, at, fn.Decl)
 }
 
 // vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
@@ -2515,7 +2556,7 @@ func checkNativeParamContract(r *core.Registry, s *compiler.SigRef, args []core.
 	return nil
 }
 
-func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core.Value, stackBase int, hasFrame bool) ([]core.Value, error) {
+func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core.Value, stackBase int, hasFrame bool, at core.SrcPos) ([]core.Value, error) {
 	rets := fn.Returns
 	if len(rets) == 0 {
 		return stack, nil
@@ -2561,7 +2602,7 @@ func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core
 	if hasFrame {
 		produced := len(stack) - stackBase
 		if produced < len(rets) {
-			return stack, vmReturnCountErr(r, fn, len(rets), produced, stack[stackBase:])
+			return stack, vmReturnCountErr(r, fn, len(rets), produced, stack[stackBase:], at)
 		}
 		if extra := produced - len(rets); extra > 0 {
 			if extra > fn.NUnnamed {
@@ -2569,13 +2610,13 @@ func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core
 				// the same slice the interpreter reports
 				// (design/DIAGNOSTIC-VALUES.0.md).
 				return stack, vmReturnCountErr(r, fn, len(rets), produced-fn.NUnnamed,
-					stack[stackBase+fn.NUnnamed:])
+					stack[stackBase+fn.NUnnamed:], at)
 			}
 			stack = append(stack[:stackBase], stack[stackBase+extra:]...)
 		}
 	} else {
 		if len(stack) < len(rets) {
-			return stack, vmReturnCountErr(r, fn, len(rets), len(stack), stack)
+			return stack, vmReturnCountErr(r, fn, len(rets), len(stack), stack, at)
 		}
 		// Frameless (re-entrant closure / fn-root run): same trim over the
 		// whole residual — a closure unit has NUnnamed 0, so this is a
@@ -2591,7 +2632,7 @@ func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core
 	base := len(stack) - len(rets)
 	for k, exp := range rets {
 		if !stack[base+k].Is(core.CanonicalType(r, exp)) {
-			return stack, vmReturnTypeErr(r, fn, k+1, exp, stack[base+k])
+			return stack, vmReturnTypeErr(r, fn, k+1, exp, stack[base+k], at)
 		}
 		// A declared return whose *Type degraded to Any carries its real
 		// domain in the pattern — the RET-side twin of the ParamPatterns
@@ -2607,7 +2648,7 @@ func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core
 		// String` rather than the useless `expected Any`.
 		if pat := fn.ReturnPattern(k); pat != nil {
 			if _, ok := core.Unify(*pat, stack[base+k]); !ok {
-				return stack, vmReturnTypeErr(r, fn, k+1, pat, stack[base+k])
+				return stack, vmReturnTypeErr(r, fn, k+1, pat, stack[base+k], at)
 			}
 		}
 	}

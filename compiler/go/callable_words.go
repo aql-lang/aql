@@ -268,7 +268,7 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 	// typechecks, then record the dispatch with the body as a closure the
 	// handler drives through InvokeBody.
 	if fd, isFn := body.Data.(core.FnDefInfo); isFn {
-		return tryRecordLambdaClosure(r, word, spec, sig, args, &fd, extraLamSlots, outs, pos)
+		return tryRecordLambdaClosure(r, word, spec, sig, args, &fd, body.Pos(), extraLamSlots, outs, pos)
 	}
 
 	// A token-list body (`filter [body] data`): the body consumes its inputs
@@ -305,7 +305,7 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
 	captures := moduleScopeMutableCaptures(r, bodyToks, core.ComputeCaptures(r, &core.FnSig{Impl: core.Boru(bodyToks)}))
-	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, pos)
+	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos)
 }
 
 // tryRecordLambdaClosure compiles a higher-order word's LAMBDA argument
@@ -315,7 +315,7 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 // (`p.value`, `kv.v`, `acc`+`kv.v`) typechecks. Returns false — leaving the
 // refusal to stand — for a shape the word has no lambda convention for, an
 // arity mismatch, or a body that does not compile.
-func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args []core.Value, fd *core.FnDefInfo, extraLamSlots []int, outs []core.Value, pos core.SrcPos) bool {
+func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args []core.Value, fd *core.FnDefInfo, fnPos core.SrcPos, extraLamSlots []int, outs []core.Value, pos core.SrcPos) bool {
 	inputs, shape, ok := lambdaCallbackInputs(r, word, spec, args)
 	if !ok {
 		return false
@@ -380,9 +380,9 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	if foreignFnHome(r, fd) {
 		restore := check.ShareCheckStateFrom(fd.Registry, r)
 		defer restore()
-		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
+		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos)
 	}
-	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
+	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos)
 }
 
 // foreignFnHome reports whether fd is a fn VALUE that was DEFINED in another
@@ -517,6 +517,27 @@ func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Va
 	return lam, true
 }
 
+// fnValueRetSpec is the callback fn value's return contract, or nil when there
+// is none to carry.
+//
+// An ANONYMOUS lambda declines, and it is not a nicety: FnDefInfo.Anonymous
+// carries a deliberately conservative static Returns=[Any] placeholder
+// (lang/go/CLAUDE.md, "Lambda Syntax") rather than a user-written declaration,
+// and the analyser infers the real result instead. Only a NAMED fn's
+// declaration is a contract.
+func fnValueRetSpec(fd *core.FnDefInfo, lam *core.Signature, fnPos core.SrcPos) *ClosureRetSpec {
+	if fd == nil || fd.Anonymous || lam == nil || len(lam.Returns) == 0 {
+		return nil
+	}
+	return &ClosureRetSpec{
+		Types:    lam.Returns,
+		Patterns: lam.ReturnPatterns,
+		Decl:     lam.Decl,
+		Name:     fd.Name,
+		Pos:      fnPos,
+	}
+}
+
 // recordClosureDispatch is the shared tail of the token and lambda closure
 // paths: it resolves the lexical captures, probe-compiles the body in a
 // throwaway state (a refusal leaves the real program untouched), then
@@ -527,7 +548,7 @@ func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Va
 // M2d): each compiles to its OWN closure unit under the SAME shared token
 // shape (extraNoEvalHookSlots only nominates them on a LambdaSharesTokenShape
 // word) and rides as a second opClosure operand.
-func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, pos core.SrcPos) bool {
+func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, retSpec *ClosureRetSpec, pos core.SrcPos) bool {
 	// The probe fork below needs the CONCRETE EmitState; both callers only
 	// reach here through an active recording state, so a non-EmitState
 	// recorder (the inactive no-op) declining is the unreachable belt.
@@ -669,7 +690,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 		}
 		extraOps[ex.slot] = EmitOperand{kind: opClosure, closureUnit: exUnit, closureCaps: ex.ops}
 	}
-	return real.RecordClosureCall(word, sig, args, spec.BodyPos, unit, capOps, extraOps, outs, pos)
+	return real.RecordClosureCall(word, sig, args, spec.BodyPos, unit, capOps, extraOps, outs, retSpec, pos)
 }
 
 // closureResidualExact reports whether a probe-compiled closure unit's residual

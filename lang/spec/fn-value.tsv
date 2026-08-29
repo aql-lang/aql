@@ -216,3 +216,18 @@ def mk2 fn [[n:Integer] [Function] [([a:Integer b:Integer] => [a add b add n])]]
 #     in for the runtime contract.
 def bad fn [[n:Any][Integer][n]] end def mk fn [[][Function][bad/v]] end ((mk) 'str')	ERROR:type_error	an applied fn value's declared return TYPE is enforced on both engines
 def okr fn [[n:Any][Integer][n]] end def mk fn [[][Function][okr/v]] end ((mk) 7)	7	…and a conforming value passes through unchanged
+#
+# §13 RETURN CONTRACT ON THE CALLBACK PATH: the same enforcement, one seam
+#     down. A callback fn value handed to a higher-order word (`each`,
+#     `fold`, `filter`, …) runs as a CLOSURE, not through Apply — the VM
+#     enters the stamped unit directly at invokeClosureOn. The unit itself
+#     is compiled COUNT-AGNOSTIC on purpose (the callback seam wants the raw
+#     residual, and the WORD's count convention is not the CALLBACK's type
+#     contract), so the contract cannot ride on the unit: keying it there
+#     changes the FnAnalysisKey and a conforming `fold f/v` islands. It
+#     rides on the closure VALUE instead — Program.ClosureRet, keyed by the
+#     pc of the OpPushClosure that built it — and is checked against the
+#     values the body actually produced. Before that, the first row below
+#     answered [1 2] compiled and raised interpreted: a silent wrong answer.
+def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v	ERROR:type_error	a callback fn's declared return is enforced on the closure path too
+def cokr fn [[n:Integer][Boolean][n gt 0]] end [1 2] each cokr/v	[true true]	…and a conforming callback passes through unchanged

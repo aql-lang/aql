@@ -261,7 +261,7 @@ func TestCheckReturnContractNUnnamedArms(t *testing.T) {
 	fn := &compiler.CompiledFn{Name: "z9f", Returns: []*core.Type{core.TInteger}, NUnnamed: 1}
 
 	// hasFrame deficit: 0 produced above the base, 1 declared.
-	if _, err := checkReturnContract(r, fn, []core.Value{core.NewInteger(9)}, 1, true); err == nil {
+	if _, err := checkReturnContract(r, fn, []core.Value{core.NewInteger(9)}, 1, true, core.SrcPos{}); err == nil {
 		t.Error("frame deficit must error")
 	} else if !strings.Contains(err.Error(), "z9f") {
 		t.Errorf("deficit error %q should name the fn", err)
@@ -270,13 +270,13 @@ func TestCheckReturnContractNUnnamedArms(t *testing.T) {
 	// hasFrame surplus beyond the unnamed allowance: 3 produced, 1 declared,
 	// NUnnamed 1 → 1 extra tolerated, the second errors.
 	stack := []core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)}
-	if _, err := checkReturnContract(r, fn, stack, 0, true); err == nil {
+	if _, err := checkReturnContract(r, fn, stack, 0, true, core.SrcPos{}); err == nil {
 		t.Error("frame surplus beyond NUnnamed must error")
 	}
 
 	// hasFrame surplus within the allowance: trimmed from the frame bottom.
 	stack = []core.Value{core.NewInteger(1), core.NewInteger(2)}
-	out, err := checkReturnContract(r, fn, stack, 0, true)
+	out, err := checkReturnContract(r, fn, stack, 0, true, core.SrcPos{})
 	if err != nil {
 		t.Fatalf("frame trim: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestCheckReturnContractNUnnamedArms(t *testing.T) {
 	}
 
 	// Frameless trim: extra bottoms discarded up to NUnnamed.
-	out, err = checkReturnContract(r, fn, []core.Value{core.NewInteger(1), core.NewInteger(2)}, 0, false)
+	out, err = checkReturnContract(r, fn, []core.Value{core.NewInteger(1), core.NewInteger(2)}, 0, false, core.SrcPos{})
 	if err != nil {
 		t.Fatalf("frameless trim: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestCheckReturnContractNUnnamedArms(t *testing.T) {
 
 	// Frameless trim CAP: extra 2 but NUnnamed 1 — only one discards, the
 	// remaining surplus stays (the residual absorbs it).
-	out, err = checkReturnContract(r, fn, []core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)}, 0, false)
+	out, err = checkReturnContract(r, fn, []core.Value{core.NewInteger(1), core.NewInteger(2), core.NewInteger(3)}, 0, false, core.SrcPos{})
 	if err != nil {
 		t.Fatalf("frameless capped trim: %v", err)
 	}

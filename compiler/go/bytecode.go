@@ -952,7 +952,12 @@ type Program struct {
 	// region, recording what the interpreter would have read off the tape
 	// (region_desc.go). Peer to Dispatches. Nil for a program with no
 	// generically-lowered dispatch.
-	Regions    []RegionDesc
+	Regions []RegionDesc
+	// ClosureRet carries a pushed closure's CALLBACK return contract, keyed by
+	// the pc of its OpPushClosure. Keyed by pc rather than by unit because the
+	// unit is SHARED across fn values with identical bodies and inputs — the
+	// contract is the value's, not the body's.
+	ClosureRet map[int]ClosureRetSpec
 	TypedBinds []core.TypedBindSpec
 	// GlobalBinds backs OpBindGlobal: one entry per top-level computed `def`,
 	// naming the binding and the DEPTH its check-pass install recorded, so the

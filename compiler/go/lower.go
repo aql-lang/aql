@@ -443,6 +443,15 @@ func (lw *lowerer) pushOperand(op EmitOperand, pos core.SrcPos) {
 		for i := range op.closureCaps {
 			lw.pushOperand(op.closureCaps[i], pos)
 		}
+		// The contract rides on the VALUE, so it is keyed by THIS push's pc —
+		// the same unit pushed at another site may carry a different one, or
+		// none (see core.ClosurePayload's RetTypes comment).
+		if op.closureRet != nil {
+			if lw.p.ClosureRet == nil {
+				lw.p.ClosureRet = map[int]ClosureRetSpec{}
+			}
+			lw.p.ClosureRet[len(lw.p.Code)] = *op.closureRet
+		}
 		lw.emit(OpPushClosure, op.closureUnit, pos)
 		lw.vm = lw.vm[:len(lw.vm)-len(op.closureCaps)]
 		lw.vm = append(lw.vm, nonEventSlot)

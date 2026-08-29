@@ -517,6 +517,37 @@ type ClosurePayload struct {
 	// closure VALUE then renders byte-identically to the interpreter's fn
 	// value. Empty keeps the default rendering.
 	Render string
+	// RetTypes / RetPatterns / RetDecl / RetName / RetPos are the CALLBACK fn
+	// value's own declared return contract, carried on the VALUE rather than
+	// the unit.
+	//
+	// It has to be here, and the reason is measured. A named fn handed to a
+	// higher-order word (`[1 2] each cbad/v`) lowers its body to a shared
+	// closure unit, and that unit's RET knew nothing of the fn's declaration —
+	// so a body violating its own `[Boolean]` answered the violating value
+	// compiled where the interpreter raises type_error. Carrying the contract
+	// on the UNIT instead was built and reverted: it needs a per-fn memo key,
+	// and a distinct key alone (no contract at all) makes a SHARED closure unit
+	// recompile and refuse on operand provenance, islanding conforming
+	// callbacks and tripping TestListFoldCallbackOrderPin. Two fns with
+	// identical bodies and inputs SHOULD share a unit; they differ only in what
+	// their results must satisfy, which is a property of the value.
+	//
+	// Empty RetTypes means no contract (a raw token body, or an anonymous
+	// lambda whose Returns=[Any] is a conservative placeholder rather than a
+	// declaration).
+	RetTypes    []*Type
+	RetPatterns []*Value
+	RetDecl     DeclSite
+	RetName     string
+	// RetPos is where the callback REFERENCE was written (`cbad/v`), which is
+	// the position the interpreter anchors a return-contract error on: its
+	// ReturnCheckInfo.Pos, stamped onto the Function value by stampResultPos
+	// as the reference produces it. A compiled unit's RET has no call site to
+	// read, so the closure path carries it here — without it the compiled
+	// diagnostic agrees in value and taxonomy but loses the position, which
+	// the full-corpus parity gate compares.
+	RetPos SrcPos
 }
 
 // NewStoreShapeCarrier mints an abstract store-shaped carrier: a
