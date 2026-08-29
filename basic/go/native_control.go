@@ -503,6 +503,20 @@ func DoEvalList(r *Registry, elems []Value) ([]Value, error) {
 // data values whose text happens to name a word (`"if"`, `"get"`,
 // `"do"`) storable without boxing tricks (voxgig DX report T4).
 func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
+	// A STEPLESS list is its own residual, so the sub-engine run is the
+	// identity on it and is skipped.
+	//
+	// This exists because the COMPILED lane arrives here with the work already
+	// done. `do {n:[a add 1]}` inside a fn body records as the computation
+	// followed by MAKE_LIST over its RESULT — the disassembly is PUSH_LOCAL /
+	// CALL_NATIVE add / MAKE_LIST / MAKE_MAP — so the list this walks is `[6]`,
+	// and starting an engine to step the literal 6 is an interpreter entry
+	// inside a compiled program that buys nothing. The INTERPRETER reaches the
+	// same source as [Word(a) Word(add) 1], which is not stepless, so its lane
+	// is untouched and the two engines still agree.
+	if IsSteplessWindow(elems) {
+		return append([]Value(nil), elems...), nil
+	}
 	sub := New(r)
 	input := make([]Value, len(elems))
 	copy(input, elems)

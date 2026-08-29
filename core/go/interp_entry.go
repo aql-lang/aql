@@ -164,3 +164,24 @@ func (r *Registry) NoteBail(site, reason string) {
 	}
 	(*fp)(BailEvent{Site: site, Reason: reason})
 }
+
+// bailReplayAttribution brackets the interpreter replay that follows a stamped
+// unit's decline — and only when that decline was a DESIGNED VM defer.
+//
+// CompiledRuntime.InvokeCompiled declines with ran=false for two different
+// reasons, and only the error tells them apart (see its contract): a nil error
+// means the unit was never hosted, a non-nil one means it RAN and deferred —
+// the C1 internal-error degrade, which vmDefer has already written to the bail
+// ledger. The replay of that defer belongs to the same category RunCompiled's
+// top-level arm names, "fallback:runtime-bail".
+//
+// Leaving it unattributed counted one defer TWICE — once in the bail census as
+// the defer it is, and again in the interp-entry census as an island. The nil
+// case attributes nothing, so a lane that never reached the VM at all still
+// shows up as the island it is.
+func bailReplayAttribution(r *Registry, declined error) func() {
+	if declined == nil {
+		return func() {}
+	}
+	return r.SetInterpAttribution("fallback:runtime-bail")
+}

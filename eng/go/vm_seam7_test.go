@@ -286,7 +286,7 @@ func TestSeam7CheckReturnContractUnderflow(t *testing.T) {
 	r := seam7Reg(t)
 	fn := &compiler.CompiledFn{Name: "g", Returns: []*core.Type{core.TInteger}}
 	// Re-entrant (no frame) with too few values on the stack.
-	_, err := checkReturnContract(r, fn, nil, 0, false)
+	_, err := checkReturnContract(r, fn, nil, 0, false, core.SrcPos{})
 	wantErr(t, err, "g")
 	if err == nil {
 		t.Fatal("underflow return count did not error")

@@ -321,3 +321,123 @@ func TestTypeIsFnShapeAndFnShapeCarrier(t *testing.T) {
 		t.Error("a CONCRETE fnsig type literal is not a carrier")
 	}
 }
+
+// IsSteplessValue is an ALLOWLIST, and its test has to be one too: each admitted
+// payload proved individually, and the refusals proved for the three ways a
+// value stops being placed — a Word (a kind the switch does not name), an
+// Eval-marked list the loop evaluates, and a bare type node with no payload at
+// all. A denylist reading of this predicate is what would make a later token
+// kind silently become data, so the negative rows are the contract.
+func TestIsSteplessValue(t *testing.T) {
+	stepless := []struct {
+		name string
+		v    Value
+	}{
+		{"integer", NewInteger(1)},
+		{"float", NewFloat(1.5)},
+		{"string", NewString("x")},
+		{"boolean", NewBoolean(true)},
+		{"atom", NewAtom("a")},
+	}
+	for _, tc := range stepless {
+		if !IsSteplessValue(tc.v) {
+			t.Errorf("%s: IsSteplessValue = false, want true", tc.name)
+		}
+	}
+
+	if IsSteplessValue(NewWord("add")) {
+		t.Error("a Word dispatches — IsSteplessValue must not admit it")
+	}
+	if IsSteplessValue(NewTypeLiteral(TInteger)) {
+		t.Error("a bare type node carries no payload — IsSteplessValue must not admit it")
+	}
+	evalList := NewList([]Value{NewInteger(1)})
+	evalList.Eval = true
+	if IsSteplessValue(evalList) {
+		t.Error("a list is not a scalar leaf — IsSteplessValue must not admit it")
+	}
+	evalInt := NewInteger(1)
+	evalInt.Eval = true
+	if IsSteplessValue(evalInt) {
+		t.Error("Eval marks a value the loop EVALUATES — an admitted payload with it set is still active")
+	}
+
+	// A CARRIER is the case that needs the IsConcrete half specifically, and it
+	// needs both shapes. A scalar carrier has nil Data, so it is refused by the
+	// switch like a bare node; a carrier that DOES hold an admitted payload
+	// reaches the matched arm and must still be refused there — it stands for a
+	// value the analysis has not seen, which is the opposite of one the loop can
+	// place.
+	if IsSteplessValue(NewCarrier(TInteger)) {
+		t.Error("a scalar carrier carries no payload — IsSteplessValue must not admit it")
+	}
+	payloadCarrier := NewInteger(1)
+	payloadCarrier.Carrier = true
+	if IsSteplessValue(payloadCarrier) {
+		t.Error("a carrier over an admitted payload is still a carrier — IsConcrete is what refuses it")
+	}
+}
+
+// The window predicate is the conjunction, and the empty window is the case
+// worth pinning: running nothing returns what it was given, which is exactly
+// why the callers may skip the engine.
+func TestIsSteplessWindow(t *testing.T) {
+	if !IsSteplessWindow(nil) {
+		t.Error("the empty window is stepless — running nothing is the identity")
+	}
+	if !IsSteplessWindow([]Value{NewInteger(1), NewString("x"), NewBoolean(false)}) {
+		t.Error("an all-scalar window is stepless")
+	}
+	if IsSteplessWindow([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}) {
+		t.Error("one active token makes the whole window active")
+	}
+}
+
+// --- IsNativeWordFnDef / RegisteredWordIsNative ------------------------------
+
+// TestParkedNativeApplyGate pins the two halves of the VM's parked-native apply
+// gate. They ask the SAME question — "is there a boru body anywhere in the way?"
+// — of two different things, the parked VALUE and the live NAME, because the
+// language lets those drift apart.
+func TestParkedNativeApplyGate(t *testing.T) {
+	goSig := func() Signature {
+		return Signature{Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return nil, nil
+		})}
+	}
+	if IsNativeWordFnDef(FnDefInfo{}) {
+		t.Error("a sig-less value names no native")
+	}
+	if !IsNativeWordFnDef(FnDefInfo{Name: "add", Signatures: []Signature{goSig(), goSig()}}) {
+		t.Error("every own sig a Go handler IS a parked native word")
+	}
+	mixed := FnDefInfo{Name: "add", Signatures: []Signature{
+		goSig(),
+		{Impl: Boru([]Value{NewInteger(1)})},
+	}}
+	if IsNativeWordFnDef(mixed) {
+		t.Error("one boru-bodied own sig disqualifies the value — that body needs its dispatch frame")
+	}
+
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if RegisteredWordIsNative(nil, "add") {
+		t.Error("no registry, no answer")
+	}
+	if RegisteredWordIsNative(r, "no-such-word-here") {
+		t.Error("an unbound name is not a native word")
+	}
+	r.Register("gate-native", goSig())
+	if !RegisteredWordIsNative(r, "gate-native") {
+		t.Error("a purely Go-handled registration is native through and through")
+	}
+	// The drift the gate exists for: a boru overload EXTENDS the name (the one
+	// rebinding `extend_owner` permits), so a value parked while the word was
+	// purely native would otherwise reach that body by name.
+	r.Register("gate-extended", goSig(), Signature{Impl: Boru([]Value{NewInteger(1)})})
+	if RegisteredWordIsNative(r, "gate-extended") {
+		t.Error("a name carrying any boru overload must keep the interpreter")
+	}
+}

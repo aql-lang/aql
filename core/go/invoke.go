@@ -85,9 +85,16 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 	// and the internal-error degrade decision. ran=false — including a
 	// bailed unit with no observable effect — leaves the interpreter
 	// path to the code below.
-	if res, err, ran := compiledRuntime.InvokeCompiled(r, sig, args); ran {
+	res, err, ran := compiledRuntime.InvokeCompiled(r, sig, args)
+	if ran {
 		return res, err
 	}
+	// A unit that RAN and deferred is a designed bail, not an island: the
+	// replay below is the second sanctioned interpreter entry, already in the
+	// bail ledger (bailReplayAttribution). A ref that was never there declines
+	// with a nil error, attributes nothing, and stays visible as the island it
+	// is.
+	defer bailReplayAttribution(r, err)()
 	// Observability seam (interp_entry.go): the callback seam's interpreter
 	// fallback — its own name so the C4 decline tag can attach later without
 	// conflating it with a direct CallBoru.

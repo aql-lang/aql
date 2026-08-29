@@ -121,42 +121,64 @@ import (
 // perhaps three rows. Read the seam counts as a shape, never as a priority
 // order: a big number here can be one row in a loop.
 //
-// WHERE THE ROWS ARE, by file AND the seams those rows touch (the per-file
-// lines the run logs; ROW counts, so they add up against the ceiling). The
-// table below is the state at the current ceiling — every cluster the columns
-// after it took has left it. Rewrite it, do not append to it:
+// WHERE THE ROWS ARE, BY MECHANISM. The table used to be by FILE, and the
+// ledger's own (j) says why that was the wrong axis: a file table ranks
+// CONCENTRATIONS, and a mechanism spread two-and-three-at-a-time across several
+// files is invisible in it (Assert.throws was five rows in four files). This
+// one is by mechanism, swept row-by-row with the source printed, and it adds up
+// to the ceiling exactly. Rewrite it, do not append to it.
 //
-//	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
-//	bytecode-migrated.tsv    13 rows   RunResolved 6, vm:island 5, CallBoru 2, …
-//	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
+//	18  A CALLABLE VALUE READ OUT OF A CONTAINER, then applied     vm:island
+//	    path-modifier 13, usurp 2, fn-value 2, class 1
+//	11  `do` OVER A BODY WHOSE RESIDUAL COUNT IS NOT STATIC        RunResolved
+//	    control 4, bytecode-migrated 6, word-splice 1
+//	 8  Test.invoke / Test.prop / Test.check-prop                  CallBoru
+//	    module-test 5, corpus-modules 3
+//	 4  A FN VALUE CROSSING A MODULE BOUNDARY, applied inside      vm:island-resolved
+//	    module-fnvalue-boundary 4 — but only ONE is the boundary's doing.
+//	    Instrumenting dynApplyEnter's ref gate splits them: one declines
+//	    purely because ref.Prog is not the running program (a DELIBERATE
+//	    decline — vm_dyn_apply.go says a detached ref cannot be a frame of
+//	    this program and hosting it nested would reintroduce the body
+//	    bracket the file exists to avoid); one ALSO declines correctly at
+//	    MatchFnSig (a 1-param fn with 0 args); and two carry no ref at all
+//	    because storedSigEligible refuses a flow-sentinel body (`break` /
+//	    `continue`). Read a cluster's rows before costing its fix.
+//	 4  SERVER / MOUNT CALLBACKS (a live socket, a fileops map)    InvokeCallback:callboru
+//	    module-repl 3, module-io 1
+//	 4  MISC, one mechanism each                                   Engine.Run
+//	    canon 2 (Vm.run over canon output), module-rand 1, fn-value 1
+//	    (corpus-modules' Rand.list-of row left at (u))
 //
-// Engine.Run appears everywhere because every other seam runs a nested engine;
-// a row with ONLY Engine.Run is the interesting case — nothing islanded, the
-// whole body simply interpreted. Two of the three module clusters that shape
-// described are gone (columns (i)-(l) took boru:log, boru:test's assertions and
-// the whole of boru:parse); what is left of it is module-test.tsv's five, which
-// are Stage 6/7 work (module bodies compiling), not a seam flip.
+// Engine.Run appears in nearly every row because every other seam runs a nested
+// engine; a row with ONLY Engine.Run is the interesting case — nothing
+// islanded, the whole body simply interpreted.
 //
-// reach.tsv led this table at 14 rows, every one through runPooledSub, and it
-// is gone: that is column (g).
+// reach.tsv led the old table at 14 rows, every one through runPooledSub, and
+// it is gone: that is column (g).
 //
-// path-modifier.tsv is the cluster column (h) went after, and it is the honest
-// counter-example to "one mechanism, one fix". All thirteen of its rows still
-// island, because the dispatch-modifier wrapper is built at RUN time out of a
-// fn the check pass only sees as a dynamic carrier (a dot-access read), so
-// there is nothing to compile at compile time. The BY-NAME forms already
-// compile clean — `usurp sub 10 3` has no seams at all.
+// THE 18-ROW CLUSTER IS ONE SHAPE WITH FOUR CALLEES, and only the callee
+// decides whether it compiles today:
 //
-// This note used to read "the blocker is the dot-access hiding the callee, not
-// the modifier", and column (k) is the correction: the dot-access alone was
-// never the blocker. `m.f 5` over a boru fn value compiles now, thirteen other
-// rows with it, and every path-modifier row stayed put. What those rows have in
-// common is not the dot — it is the CALLEE. `def m {a:add/v}` stores a NATIVE,
-// which carries no unit for the Apply kernel to enter, and the modifier
-// wrappers on top of it return TOKENS for the engine to re-step (see the
-// rejected increment above). So the remaining cluster is the native-callee half
-// of the question, and its cost was already measured: one row, bought with a
-// worse error message.
+//   - a BORU FN in a container (`def m {f:(fn …)}  m.f 5`) — COMPILES, column
+//     (k), fourteen rows;
+//   - a NATIVE in a container (`def m {a:add/v}  m.a 1 2`) — islands: a native
+//     carries no unit for the Apply kernel to ENTER. Measured, and its price
+//     recorded in the rejected increment above: one row, bought with a worse
+//     error message, because the dyn-apply opcodes are lowered with
+//     SrcPos.Row == 0 and a handler raising through the direct path loses its
+//     caret. Give those opcodes positions in the lowerer and the trade changes;
+//     that is the prerequisite, not the increment.
+//   - a MODIFIER WRAPPER over either (`m.a/u`, `usurp (m.s)`) — islands for a
+//     different reason, and it is not fixable at the apply site at all: usurp /
+//     stack-args / forward-args / force-arity RETURN TOKENS for the engine to
+//     re-step. There is nothing for a frame to enter. These need the modifier
+//     words themselves to lower to a dispatch (Stage 5), not a wider apply.
+//   - a CLASS FIELD METHOD (`def C class {op:(fn …)}  c.op 5`) — one row, the
+//     boru-fn case reached through a class instance rather than a map.
+//
+// So "path-modifier.tsv, 13 rows" was never one fix. It is the native half and
+// the token-rewrite half of a cluster whose boru half already left.
 //
 // (h) boru:debug's body runs are ATTRIBUTED, not compiled — and the distinction
 // is the point, because it is the one place "compile everything" is the wrong
@@ -352,15 +374,253 @@ import (
 // attribution applied word-by-word leaves siblings behind. Putting it on the
 // shared entry point is what makes it exhaustive.
 //
+// (o) `do {key:[body]}` stops starting an engine to step values it has already
+// computed. Six bytecode-migrated rows, 62 -> 56, and the interesting part is
+// that NOTHING needed compiling — the compiler was already doing the work.
+//
+// The disassembly settles it. `def f fn [[a:Integer] [Map] [ do {n:[a add 1]} ]]`
+// lowers to
+//
+//	PUSH_LOCAL l0 / PUSH_CONST 1 / CALL_NATIVE add / MAKE_LIST / MAKE_MAP / CALL_NATIVE do
+//
+// so the map reaching DoEvalMapValue is `{n:[6]}` — the addition happened at
+// MAKE_LIST. The handler then ran `[6]` in a sub-engine to discover that
+// stepping the literal 6 yields 6. That is an interpreter entry inside a
+// compiled program buying precisely nothing, and doEvalDataList now returns a
+// STEPLESS list as its own residual instead.
+//
+// The interpreter's lane is untouched, which is what makes this safe rather
+// than clever: the same source arrives there as [Word(a) Word(add) 1], which is
+// not stepless, so it still runs. The two engines' answers are unchanged; only
+// the compiled lane's redundant engine is gone.
+//
+// Worth generalising from: a census row is not automatically a COMPILER
+// problem. The cluster table said "do {map} computed-map bodies" and read like
+// Stage 6 work on code bodies. Reading the actual disassembly said the bodies
+// were already gone, and the fix was six lines in a handler. Read the
+// bytecode before believing a cluster's name.
+//
+// (p) `ArrayUtil.foldaxis` DECLARES its body callable. Two rows, 56 -> 54, and
+// no handler change at all: foldaxisHandler already reduces each lane through
+// the same doFold that `fold` uses, and doFold already drives the body through
+// InvokeBody. The word was seam-ready and simply never said so.
+//
+// The spec is fold's, with the inputs taken one rank deeper — a lane is a row
+// (or a transposed column), so each step sees two elements of an INNER list,
+// never a row. `rank2ElemType` reads the first row for that, exact against the
+// rectangular shape the handler enforces at run time, and answers Any for a
+// data argument with no element to take a type from. That arm is the new
+// `foldaxis 0 [add] []` corpus row, which is also the shape the handler
+// short-circuits to `[]`.
+//
+// Its sibling `eachrank` is NOT here, and the reason is the one that decides
+// whether a word is a declaration away or a change away: eachrankHandler slices
+// its body into raw TOKENS and walks them itself (eachrankWalk), so it has no
+// InvokeBody seam to declare over. Handler first, declaration second — never
+// the reverse.
+//
+// (q) The mixed-apply island (CALL_DYNAMIC_MIXED) skips a STEPLESS window, on
+// the same predicate column (o) gave `do {key:[body]}` — now shared, in core.
+// One row, 54 -> 53, and the row count understates it: four more rows lost
+// their island while keeping other seams, so the vm:island total falls further
+// than the ceiling does.
+//
+// `1 2 3 do [7] error [drop 9] add 1` is the shape. Both bodies compile to
+// closures, the arithmetic runs native, and the window the mixed apply islands
+// is [1 2 3 8] — four literals. The island exists because the COMPILER could
+// not rule out a callable value interior to the window; when the runtime values
+// turn out to be plain data, the interpreter places every one of them and hands
+// the window straight back.
+//
+// The predicate moved to core.IsSteplessWindow rather than being copied,
+// because eng cannot import basic and a second copy of a rule this sharp is how
+// two engines drift. It stays an ALLOWLIST at its new home for the reason it
+// was one at its old: an unrecognised shape must be treated as active, or a
+// token kind added later silently becomes data and a body stops running.
+//
+// (r) `ArrayUtil.eachrank` follows foldaxis, and needed the handler change
+// foldaxis did not. 53 -> 52.
+//
+// eachrankWalk sliced the body into raw TOKENS and ran them itself; it now
+// threads the body VALUE down and calls InvokeBody at the leaf, which is the
+// same seam every other code-body word uses. The declaration alone would have
+// done nothing — column (p) named that ordering and this is the case that
+// proves it: handler first, declaration second.
+//
+// Its input carrier is GRADUAL on purpose. The cell type is RANK-dependent —
+// `eachrank 0` sees each scalar leaf, `eachrank 1` each innermost list —
+// so a precise carrier would mean walking the data's spine by (depth - rank),
+// and the corpus now pins both ranks compiling clean against the gradual one.
+// Precision nothing needs is a proof obligation nobody asked for.
+//
+// (s) An EMPTY quotation body stops starting an engine. 52 -> 51, and the
+// third instance of the same shape after (o) and (q): a run whose residual is
+// its own input.
+//
+// The row that found it is worth reading, because the row itself is a
+// surprise. `walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [...]) acc` looks
+// like a walk followed by a trailing `acc`; walk's four-argument overload
+// FORWARD-COLLECTS that `acc` into its optional ASCEND slot, so an empty flex
+// list becomes a hook, and the traversal ran it on an engine once per visited
+// node. Nothing was wrong with the answer — an empty hook does nothing on
+// either engine — but each node paid for a sub-engine to find that out.
+//
+// So the guard is not really about walk. runQuotationBody is shared, and no
+// caller of it needs an engine to discover that running nothing returns what
+// it was given.
+//
+// (t) A stamped unit that RAN and DEFERRED is a bail, not an island. 51 -> 50,
+// one row, and the row is the whole point: the census was counting one defer
+// twice.
+//
+// `5 $.name apply` (reach.tsv §7, an ERROR row) stamps its lens, enters the
+// unit, and CALL_NATIVE_POLY finds no `dot` for an Integer receiver. The VM
+// does exactly what it is designed to do there — vmDefer records the bail and
+// returns internal_error so the interpreter can raise the canonical
+// signature_error — and ApplyReach then ran the chain unattributed. So the same
+// event appeared once in the bail census as the designed defer it is, and again
+// here as an island. RunCompiled's top-level arm has named this category since
+// C4 ("fallback:runtime-bail"); the nested compiled lanes had not.
+//
+// What makes it measurable rather than a judgement call is that the SEAM now
+// says which decline it was. InvokeCompiled collapsed two outcomes into
+// ran=false — a unit that could not be hosted, and a unit that ran and deferred
+// — and threw away the internal error that told them apart. It returns that
+// error alongside ran=false instead, so bailReplayAttribution attributes the
+// replay only when the unit actually ran. A lane that never reached the VM
+// declines with a nil error and stays visible as the island it is.
+//
+// A bail COUNT on the registry was built first and is worth recording as the
+// rejected option: it read the ledger's own tally and compared it across the
+// attempt. It works, but the tally is SHARED with concurrent forks (the hook
+// holder is a pointer, deliberately), so one lane's defer could attribute
+// another lane's island — over-attribution, the direction that makes a
+// no-unattributed-entry assertion pass vacuously. The error is per-call and
+// cannot leak across lanes.
+//
+// Both compiled lanes take it — ApplyReach and InvokeCallback — because the
+// hole is the seam's, not the lens's. This is column (n)'s lesson again: an
+// attribution applied at one call site leaves its siblings behind.
+//
+// A SECOND INCREMENT BUILT, MEASURED AND REVERTED — the 11-row `do` cluster,
+// recorded because it rules out the cheap reading of that cluster.
+//
+// Those rows compile TODAY and island: the closure path probe-compiles the body
+// fine and then declines at closureResidualExact (callable_words.go), because a
+// BodyOutResidual dispatch seats exactly len(outs) results and a unit whose
+// runtime count could differ would mis-seat the simulated stack. `do` then falls
+// to tryRecordDynBody, which bakes the body as CONST TOKENS and marks the result
+// VARIADIC — and the handler runs those tokens on a sub-engine. That sub-engine
+// is the RunResolved entry the census counts.
+//
+// The obvious move is therefore to keep the compiled unit and borrow the
+// backstop's variadic mark: same dispatch, closure operand instead of const
+// tokens, result marked variadic so only variadic-absorbing positions consume
+// it. It is four lines. It makes things WORSE:
+//
+//	do [for 3 [1]]
+//	  before  compiled, seams Engine.Run+RunResolved, answer 1 1 1
+//	  after   compile_refused: "residual shape beyond Stage 1 (call results reordered)"
+//
+// A row that stops compiling LEAVES THE DENOMINATOR, so the census would have
+// fallen for the worst possible reason — the same trap the native-callee
+// increment fell into above, caught this time by A/B probing one row before
+// writing a test. The two lowerings are not interchangeable at the residual
+// planner: the backstop lowers to a plain CALL_NATIVE whose body is a const,
+// while the closure form pushes an OpPushClosure operand, and the planner then
+// sees the call's results reordered against the residual.
+//
+// So the cluster is not a gate to relax. Seating a region whose size is known
+// only at run time is the Stage 5 machinery (production-order regions and
+// generalized marks) by definition, and no amount of marking at the record site
+// substitutes for it.
+//
+// (u) `Rand.list-of` serves a STEPLESS generator body without an engine per
+// iteration. 50 -> 49, and it is the FOURTH instance of the shape (o), (q) and
+// (s) each found: a run whose residual is its own input.
+//
+// `Rand.list-of ['a','b'] 2` ran a sub-engine twice to discover that stepping
+// two string literals yields two string literals, then took the top of each.
+// The handler already had a compiled lane (IsCompiledClosure -> InvokeBody);
+// what it lacked was the observation that its INTERPRETER lane sometimes has
+// nothing to interpret.
+//
+// The boundary rows are the increment, not the happy path. n=0 runs the body
+// ZERO times, so an empty body is only an error when n > 0 — and the first cut
+// guarded on the body alone, which made `Rand.list-of [] 0` raise where both
+// engines answer []. Caught by probing the boundary before writing the rows,
+// and all four spellings are now corpus rows (module-rand.tsv): stepless-with-n,
+// stepless-with-zero, empty-with-zero, empty-with-n.
+//
+// Worth noting what this says about the shape's reach: it has now appeared in
+// basic's `do`, eng's mixed apply, native's shared quotation body, and a MODULE
+// handler. It is not a property of any one word, it is a property of running
+// placed values, and the next site that starts an engine over a literal window
+// is the next instance.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
 // do not need this seam at all — see the cluster note below.
 //
+// (u) 49 -> 46. A PARKED NATIVE WORD applies on the VM — but only an
+// UNWRAPPED one, and the gap between those two sentences is the whole entry.
+//
+// The apply gate asked `IsDelegationFnDef`: is this a trivial wrapper whose
+// every own sig is a `[Word(inner)]` pass-through? That names a SHAPE, and the
+// property it stood in for is `no boru body to run in a frame`. A bare `add/v`
+// has that property outright — 9 own sigs, every one a Go handler — and
+// answered `no`, because it delegates to nobody: it IS the native. So the gate
+// now names the property (vmNativeApplicable, at all four apply sites), and
+// tryNativeFnApply on the other side already handled the value.
+//
+// FIRST MEASUREMENT SAID 10 ROWS. IT WAS WRONG, and how it was wrong is the
+// part worth keeping. The gate admitted MODIFIER WRAPPERS too — `usurp`,
+// `force-arity`, `/u`, `/N` — and those are a different function under the
+// same Name: UsurpFunction REVERSES each sig's Params and hands the result a
+// Go handler that re-dispatches the original, expecting the engine's
+// collection around it. tryNativeFnApply resolves sigs by NAME, so it fetched
+// the unwrapped original and dropped the reversal:
+//
+//	def m {s:sub/v}  m.s/u 10 3
+//	  interpreted  7        (usurped: 10 - 3)
+//	  compiled    -7
+//
+// Three path-modifier.tsv rows, caught by TestSpecCompiledOrFallback. The
+// count 39 in this slot was measured WHILE those rows were wrong; excluding
+// them gives back most of the win, and 46 is the real number.
+//
+// THE FIX IS A MARKER, NOT A COMPARISON, and that too was measured. The first
+// exclusion compared the value's params against the registry's — which cannot
+// see the swap, because `sub(Number, Number)` reversed is itself. Every sig
+// `sub` has is homogeneous, so the comparison admitted exactly the rows it
+// existed to reject. FnDefInfo.ArgsReversed records the reversal at the point
+// it happens, and the composing wrappers propagate it: without that,
+// `force-arity 2 (usurp (m.s))` rebuilt the value and dropped the flag — one
+// more differential row.
+//
+// WHAT STAYS ISLANDED is therefore every reshaped value, for the same reason a
+// user fn does: its handler expects a dispatch it is not being given. That is
+// the honest boundary of this increment, not an oversight to close later.
+//
+// THE GATE ALSO NEEDS THE LIVE NAME, not just the parked value, and the two
+// can drift: `def size fn [[n:Pos] …]` EXTENDS a core word (the one rebinding
+// `extend_owner` permits), adding a boru overload to a name a value was parked
+// from earlier. RegisteredWordIsNative asks that second question, and such a
+// value islands exactly as a user fn does.
+//
+// That half is pinned by a HANDLER TEST (core/go, TestParkedNativeApplyGate),
+// not a corpus row, and the reason is worth recording. The corpus row I first
+// wrote for it tripped TestCheckTypeSoundness: the checker predicts
+// `[dynamic(Any) Pos]` where the program actually leaves `[Integer]` — a
+// static/dynamic mismatch on the parked-value-plus-extension shape, unrelated
+// to this change and not something to fold into it. The row is gone; the
+// observation is in NUR.md so Stage 8 has it.
+//
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 62
+const interpEntryRowCeiling = 46
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

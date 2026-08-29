@@ -215,11 +215,11 @@ func TestW9EachRankFoldAxisArms(t *testing.T) {
 		t.Fatalf("eachrank non-int rank: expected error")
 	}
 	// eachrankWalk: body error at a leaf.
-	if _, err := eachrankWalk(r, 0, []Value{NewWord("nope_word_xyz")}, NewInteger(5)); err == nil {
+	if _, err := eachrankWalk(r, 0, NewList([]Value{NewWord("nope_word_xyz")}), NewInteger(5)); err == nil {
 		t.Fatalf("eachrankWalk body error: expected error")
 	}
 	// eachrankWalk: rank exceeds nesting (non-list cell at depth>0).
-	if _, err := eachrankWalk(r, 1, []Value{}, NewInteger(3)); err == nil {
+	if _, err := eachrankWalk(r, 1, NewList(nil), NewInteger(3)); err == nil {
 		t.Fatalf("eachrankWalk depth exceeds: expected error")
 	}
 

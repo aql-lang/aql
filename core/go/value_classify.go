@@ -92,6 +92,50 @@ func FnValueZeroArg(v Value) bool {
 	return false // direct literal: the recorded events model the fire
 }
 
+// IsSteplessValue reports whether the step loop would leave v exactly as it is
+// — a value it PLACES rather than one it evaluates, dispatches or applies.
+//
+// It admits the five concrete scalar leaves and nothing else, and that is a
+// deliberate ALLOWLIST rather than a denylist of active token kinds. A shape it
+// does not recognise is treated as active, so a token kind added later stays
+// correct here by default; a denylist would silently begin treating it as data,
+// and the failure mode of that is a body that stops running — a wrong answer,
+// not an error. Eval marks a value the loop evaluates rather than places, so it
+// is excluded even on an admitted payload.
+//
+// The wider scalar leaves (BigInt, Decimal, None) would be equally sound and
+// are left out because nothing measured needs them yet: admitting a payload
+// costs a proof each time.
+func IsSteplessValue(v Value) bool {
+	switch v.Data.(type) {
+	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload:
+		return IsConcrete(v) && !v.Eval
+	}
+	return false
+}
+
+// IsSteplessWindow reports whether running vs through the interpreter would be
+// the IDENTITY on them: every value is placed, nothing dispatches, so the
+// residual is the window itself.
+//
+// Two callers, both skipping an engine that could only give back what it was
+// handed:
+//
+//   - `do {key:[body]}` (basic): the compiled lane reaches the handler with the
+//     body already computed — `do {n:[a add 1]}` lowers to CALL_NATIVE add /
+//     MAKE_LIST, so the list to "run" is [6];
+//   - CALL_DYNAMIC_MIXED (eng): the window islands because the compiler could
+//     not rule out a callable value INTERIOR to it, and when the runtime values
+//     turn out to be plain data the island returns the window verbatim.
+func IsSteplessWindow(vs []Value) bool {
+	for _, v := range vs {
+		if !IsSteplessValue(v) {
+			return false
+		}
+	}
+	return true
+}
+
 func IsInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -677,6 +721,66 @@ func IsDelegationFnDef(fd FnDefInfo) bool {
 	}
 	for i := range sigs {
 		if _, ok := trivialDelegationTarget(&sigs[i]); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// IsNativeWordFnDef reports whether a Function VALUE is a parked reference to a
+// REGISTERED NATIVE word — `add/v`, `sub/v`, the value a `def m {a:add/v}` map
+// hands back through `m.a`. No own sig carries a *BoruImpl body, which is
+// exactly the shape tryNativeFnApply can run without a sub-engine: a Go
+// handler reads host state off the dispatching registry and resolves no body
+// words. Whether a matched sig actually HAS a handler is checked where it is
+// called, not here — duplicating it would add an arm nothing can reach.
+//
+// The boru-body exclusion is the whole content of the predicate, and it is the
+// same line IsDelegationFnDef draws for a different reason. A user fn's handler
+// is InstallFnDef's body-splicing wrapper, which expects the dispatch frame the
+// interpreter builds around it; calling it directly diverges. So a value with
+// ANY boru-bodied own sig stays on the island, which runs the body faithfully
+// as a nested Run.
+//
+// Measured shape (the census's largest single cluster, path-modifier.tsv):
+//
+//	add/v                      -> 9 own sigs, every one a Go handler  -> true
+//	def d fn [[n:Integer]…]  d/v -> 1 own sig, *BoruImpl              -> false
+func IsNativeWordFnDef(fd FnDefInfo) bool {
+	sigs := fd.OwnSigs()
+	if len(sigs) == 0 {
+		return false
+	}
+	for i := range sigs {
+		if _, isBoru := sigs[i].Impl.(*BoruImpl); isBoru {
+			return false
+		}
+	}
+	return true
+}
+
+// RegisteredWordIsNative reports whether name's LIVE binding in r is native
+// through and through — it exists, and no overload carries a *BoruImpl body.
+//
+// It pairs with IsNativeWordFnDef, which asks the same question of a parked
+// VALUE. Both have to hold before that value may be dispatched straight to a Go
+// handler, because the two can disagree: a value parked while `size` was purely
+// native keeps six native sigs, and a later `def size fn [[n:Pos] …]` extension
+// (the only way the language lets a core word be rebound — see the
+// `extend_owner` guard) adds a boru overload to the NAME. A consumer that
+// resolves by name would then reach a boru body without the dispatch frame its
+// handler expects. Requiring both keeps such a word on the interpreter, which
+// runs it the way it was built to run.
+func RegisteredWordIsNative(r *Registry, name string) bool {
+	if r == nil {
+		return false
+	}
+	inner := r.Lookup(name)
+	if inner == nil {
+		return false
+	}
+	for i := range inner.Signatures {
+		if _, isBoru := inner.Signatures[i].Impl.(*BoruImpl); isBoru {
 			return false
 		}
 	}

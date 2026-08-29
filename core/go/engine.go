@@ -4348,9 +4348,15 @@ func ApplyReach(r *Registry, info ReachInfo, recv Value) (Value, error) {
 	// false for an unarmed registry, a lens whose body declined, and a unit that
 	// bailed with no observable effect — all of which keep the chain below.
 	if sig := compiledLensSig(r, info.unit, info.Segments); sig != nil {
-		if vres, verr, ran := compiledRuntime.InvokeCompiled(r, sig, []Value{recv}); ran {
+		vres, verr, ran := compiledRuntime.InvokeCompiled(r, sig, []Value{recv})
+		if ran {
 			return lastReachResult(vres, verr)
 		}
+		// A non-nil verr here says the unit RAN and DEFERRED (`5 $.name apply`:
+		// CALL_NATIVE_POLY finds no `dot` for an Integer receiver and defers for
+		// the canonical signature_error). The chain below is that defer's
+		// replay, not an island — see bailReplayAttribution.
+		defer bailReplayAttribution(r, verr)()
 	}
 	toks := lowerReach(ReachInfo{Receiver: []Value{recv}, Segments: info.Segments})
 	res, err := RunPooledSub(r, expandParenExpr(toks), false)

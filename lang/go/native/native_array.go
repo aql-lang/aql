@@ -504,6 +504,14 @@ var allArrayNatives = []NativeFunc{
 		// it lives in the boru:array module. The quoted body is captured
 		// via NoEvalArgs.
 		Name: "eachrank",
+		// One input per cell, and the cell's type is RANK-dependent: `eachrank 0`
+		// sees each scalar leaf, `eachrank 1` each innermost list. Deriving it
+		// would mean walking the data's spine by (depth - rank), and nothing
+		// measured needs that precision — the gradual carrier is the honest
+		// answer for a shape the call's own arguments decide.
+		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(_ []Value) []Value {
+			return []Value{NewElementCarrier(TAny)}
+		}},
 
 		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList, TList},
@@ -517,6 +525,16 @@ var allArrayNatives = []NativeFunc{
 		// lives in the boru:array module. The quoted body is captured via
 		// NoEvalArgs.
 		Name: "foldaxis",
+		// The body is `fold`'s body one rank down: foldaxisHandler reduces each
+		// LANE (a row, or a transposed column) through the same doFold, so each
+		// step sees (accumulator, element) where both are elements of an INNER
+		// list. Same spec as fold's therefore, with the inputs taken a level
+		// deeper — and no handler change at all, because doFold already drives
+		// the body through InvokeBody.
+		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
+			elem := rank2ElemType(a[2])
+			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}
+		}},
 
 		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList, TList},
@@ -1813,6 +1831,22 @@ func staticEmptyFoldDetail(coll Value) string {
 	return ""
 }
 
+// rank2ElemType is the element type one rank BELOW a rank-2 data argument —
+// what a foldaxis body sees per step, since it folds along a lane rather than
+// over the rows. Reading the first row is exact for the rectangular shape
+// foldaxisHandler enforces at run time.
+//
+// A data argument the check pass cannot open — non-concrete, or the empty list
+// the handler answers `[]` for — yields Any, which NewElementCarrier turns into
+// the gradual carrier. That is the honest answer: there is no element to take a
+// type from.
+func rank2ElemType(data Value) *Type {
+	if rows, err := AsList(data); err == nil && IsConcrete(data) && rows.Len() > 0 {
+		return DataListElemTypeFromValue(rows.Get(0))
+	}
+	return TAny
+}
+
 // doFold is the shared fold implementation used by both fold signatures.
 func doFold(reg *Registry, acc Value, body Value, data ReadList) ([]Value, error) {
 	for i := 0; i < data.Len(); i++ {
@@ -2070,8 +2104,6 @@ func eachrankHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	if err := requireConcreteArgs(reg, "eachrank", "concrete body and data lists", args[1], args[2]); err != nil {
 		return nil, err
 	}
-	_lst, _ := AsList(args[1])
-	bodySlice := _lst.Slice()
 	// `rank` is the J-style CELL rank, measured from the leaves: 0 is
 	// each scalar, 1 each innermost list, 2 each list-of-lists. Convert
 	// it to a descent depth from the top by subtracting from the data's
@@ -2081,7 +2113,7 @@ func eachrankHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	if descend < 0 {
 		return nil, reg.BoruError("eachrank_error", fmt.Sprintf("eachrank: rank %d exceeds data rank %d", depth, total), "eachrank")
 	}
-	return eachrankWalk(reg, descend, bodySlice, args[2])
+	return eachrankWalk(reg, descend, args[1], args[2])
 }
 
 // listDepth reports the nesting depth of v along its first-element
@@ -2102,9 +2134,12 @@ func listDepth(v Value) int {
 // eachrankWalk recurses into the structure until `depth` reaches 0,
 // then runs the body once per cell at that level. The cell value is
 // pushed and the body's top-of-stack result replaces it.
-func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Value, error) {
+func eachrankWalk(reg *Registry, depth int, body Value, cell Value) ([]Value, error) {
 	if depth == 0 {
-		res, err := RunResolved(reg, []Value{cell}, bodySlice)
+		// InvokeBody, not a raw token run: the body arrives as a compiled
+		// CLOSURE when the word's Callable spec let the recorder lower it, and
+		// falls back to the same resolved token run otherwise.
+		res, err := InvokeBody(reg, body, []Value{cell})
 		if err != nil {
 			return nil, fmt.Errorf("eachrank: %w", err)
 		}
@@ -2119,7 +2154,7 @@ func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Va
 	list, _ := AsList(cell)
 	out := make([]Value, list.Len())
 	for i := 0; i < list.Len(); i++ {
-		sub, err := eachrankWalk(reg, depth-1, bodySlice, list.Get(i))
+		sub, err := eachrankWalk(reg, depth-1, body, list.Get(i))
 		if err != nil {
 			return nil, err
 		}

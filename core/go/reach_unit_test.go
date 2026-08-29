@@ -213,3 +213,58 @@ func TestApplyReachLanes(t *testing.T) {
 		t.Error("expected the interpreted chain to run and reject `7.a`")
 	}
 }
+
+// A stamped unit that RAN and DEFERRED is a designed bail, not an island: the
+// runtime swallowed its internal error for the interpreter to resolve, and the
+// interpreted chain that follows is that defer's replay. It must carry the
+// attribution RunCompiled's top-level runtime-bail arm uses, or the ONE event
+// is counted twice — once in the bail census, again in the interp-entry census.
+//
+// The nil-error decline is pinned alongside it, and that pairing is the whole
+// contract: a lane that never reached the VM must stay UNATTRIBUTED, because
+// attributing it would make the frontier's no-unattributed-entry assertions
+// pass vacuously.
+func TestApplyReachBailReplayAttribution(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	r.EnableRuntimeStamping()
+	recv := NewInteger(7)
+
+	lane := func(declined error) []string {
+		t.Helper()
+		info, aErr := AsReach(NewReach(ReachInfo{Segments: lensSegs()}))
+		if aErr != nil {
+			t.Fatalf("AsReach: %v", aErr)
+		}
+		withStubLensRuntime(t, &stubLensRuntime{land: true, ran: false, err: declined})
+		var atts []string
+		disarm := r.ArmInterpEntryHook(func(ev InterpEntry) {
+			if !ev.CheckMode {
+				atts = append(atts, ev.Attribution)
+			}
+		})
+		// `7.a` is not a field read: the error proves the interpreted chain
+		// really ran rather than the stub answering for it.
+		if _, rErr := ApplyReach(r, info, recv); rErr == nil {
+			t.Error("expected the interpreted chain to run and reject `7.a`")
+		}
+		disarm()
+		if len(atts) == 0 {
+			t.Fatal("the interpreted chain recorded no entry — the lane changed shape")
+		}
+		return atts
+	}
+
+	for _, att := range lane(errNoLens) {
+		if att != "fallback:runtime-bail" {
+			t.Errorf("a deferred unit's replay attributed %q, want fallback:runtime-bail", att)
+		}
+	}
+	for _, att := range lane(nil) {
+		if att != "" {
+			t.Errorf("a unit that never ran attributed %q, want unattributed", att)
+		}
+	}
+}

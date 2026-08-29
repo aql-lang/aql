@@ -105,6 +105,24 @@ const (
 	LeadFnValue
 )
 
+// ClosureRetSpec is a callback fn value's declared return contract, applied to
+// the closure's RESULTS at invoke time (eng invokeClosureOn) rather than at the
+// unit's RET. Checking the produced VALUES needs no static provenance, which is
+// what lets a conforming callback keep its compiled unit — the property that
+// sank the unit-side attempt.
+type ClosureRetSpec struct {
+	Types    []*core.Type
+	Patterns []*core.Value
+	Decl     core.DeclSite
+	Name     string
+	// Pos is the fn VALUE's own source position — where the reference that
+	// produced this callback was written (`cbad/v`), not where the calling
+	// word sits. It is the interpreter's ReturnCheckInfo.Pos, stamped onto
+	// the Function value by stampResultPos, so carrying it here is what makes
+	// the compiled diagnostic point at the same token the interpreter's does.
+	Pos core.SrcPos
+}
+
 // RegionDesc is one G-lane region: what dispatches, and the slots it may
 // claim in written order to the next HARD delimiter. STATIC — it is part of
 // a shared Program, so everything here must be true of every execution of

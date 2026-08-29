@@ -11,6 +11,16 @@ type CompiledRuntime interface {
 	// signature (ref freshness, JIT re-stamp, the effect fence, and the
 	// internal-error fallback classification are the runtime's own
 	// business). ran=false → the caller owns the interpreter path.
+	//
+	// On ran=false the error is NOT the callee's answer — it is a report
+	// about the attempt, and it distinguishes the two declines the caller
+	// cannot otherwise tell apart. Nil: the unit was never hosted (no ref,
+	// nothing able to host it), so the interpreter path that follows is a
+	// plain island. Non-nil: the unit RAN and DEFERRED, and the runtime
+	// swallowed that internal error for the caller to resolve by
+	// interpreting — a designed bail, already in the bail ledger, so the
+	// replay is attributed rather than counted a second time
+	// (bailReplayAttribution).
 	InvokeCompiled(r *Registry, sig *Signature, args []Value) (res []Value, err error, ran bool)
 	// StampDetached compiles and stamps a detached fn at install time
 	// (InstallType's runtime-stamping route). A decline is silent: the
@@ -19,7 +29,8 @@ type CompiledRuntime interface {
 }
 
 // noCompiledRuntime is the interpreter-only default: every operation
-// declines, mirroring a build with no VM linked.
+// declines, mirroring a build with no VM linked. It declines with a NIL error
+// throughout — nothing ran, so there is no defer to attribute.
 type noCompiledRuntime struct{}
 
 func (noCompiledRuntime) InvokeCompiled(*Registry, *Signature, []Value) ([]Value, error, bool) {

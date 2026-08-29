@@ -124,9 +124,19 @@ func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
 // runs the body tokens on a pooled sub-engine, and returns the residual top
 // of stack.
 func runQuotationBody(reg *Registry, tokens []Value, pushed []Value) (Value, bool, error) {
-	res, err := RunResolved(reg, pushed, tokens)
-	if err != nil {
-		return Value{}, false, err
+	// An EMPTY quotation is the IDENTITY on its inputs — the engine would place
+	// them and hand them straight back — so its residual IS `pushed` and there
+	// is nothing to run. `walk`'s optional ascend slot reaches this whenever a
+	// trailing value gets forward-collected into it (`walk {…} data (hook) acc`
+	// binds `acc`, an empty flex list, as the ascend hook), and running that on
+	// an engine once per visited node is an interpreter entry inside a compiled
+	// program that buys nothing.
+	res := pushed
+	if len(tokens) > 0 {
+		var err error
+		if res, err = RunResolved(reg, pushed, tokens); err != nil {
+			return Value{}, false, err
+		}
 	}
 	if len(res) == 0 {
 		return Value{}, false, nil

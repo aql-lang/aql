@@ -390,6 +390,26 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						return nil, err
 					}
 					bodyTokens := body.Slice()
+					// A STEPLESS body is its own residual — the engine would place
+					// its values and hand them straight back — so N iterations of
+					// `Rand.list-of ['a','b'] 2` do not need N sub-engines to
+					// discover that. Same rule as `do {key:[body]}` and the mixed
+					// apply's window, at the site that owns this loop.
+					if native.IsSteplessWindow(bodyTokens) {
+						// n == 0 runs the body ZERO times, so an empty body is not
+						// an error there — the loop below never reaches its
+						// no-value check either. Measured: guarding on the body
+						// alone made `Rand.list-of [] 0` raise where both engines
+						// answer [].
+						if n > 0 && len(bodyTokens) == 0 {
+							return nil, r.BoruError("rand_error",
+								"Rand.list-of[0]: body produced no value", "Rand.list-of")
+						}
+						for i := int64(0); i < n; i++ {
+							out = append(out, bodyTokens[len(bodyTokens)-1])
+						}
+						return []native.Value{native.NewList(out)}, nil
+					}
 					for i := int64(0); i < n; i++ {
 						res, err := native.RunPooled(r, append([]native.Value(nil), bodyTokens...))
 						if err != nil {

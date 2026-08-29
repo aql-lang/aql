@@ -99,6 +99,10 @@ type EmitOperand struct {
 	// kind == opClosure.
 	closureUnit int
 	closureCaps []EmitOperand
+	// closureRet is the CALLBACK fn value's own return contract, carried to the
+	// pushed closure VALUE (core.ClosurePayload) rather than to the shared
+	// unit — see that type's field comment for why the unit is the wrong home.
+	closureRet *ClosureRetSpec
 }
 
 // ConstOperand / EventOperand / localOperand / typeOperand build the indexed
@@ -6783,7 +6787,7 @@ func (es *EmitState) RecordSpliceDyn(payload core.Value, pos core.SrcPos) bool {
 // to its own closure unit by recordClosureDispatch), which rides its prepared
 // opClosure operand. Returns false, leaving es UNTOUCHED, when an operand is
 // dynamic or of unknown provenance — the caller then keeps the island path.
-func (es *EmitState) RecordClosureCall(word string, sig *core.Signature, args []core.Value, bodyPos, unit int, capOps []EmitOperand, extraOps map[int]EmitOperand, outs []core.Value, pos core.SrcPos) bool {
+func (es *EmitState) RecordClosureCall(word string, sig *core.Signature, args []core.Value, bodyPos, unit int, capOps []EmitOperand, extraOps map[int]EmitOperand, outs []core.Value, retSpec *ClosureRetSpec, pos core.SrcPos) bool {
 	// A whole-residual word (CallableSpec.BodyOutResidual — `do`) may seat
 	// N > 1 results: recordClosureDispatch has already asserted the unit's
 	// compiled residual count equals len(outs), and the multi-result seating
@@ -6803,7 +6807,7 @@ func (es *EmitState) RecordClosureCall(word string, sig *core.Signature, args []
 	ops := make([]EmitOperand, len(args))
 	for i := range args {
 		if i == bodyPos {
-			ops[i] = EmitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}
+			ops[i] = EmitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps, closureRet: retSpec}
 			continue
 		}
 		if exOp, isExtra := extraOps[i]; isExtra {
