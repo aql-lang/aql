@@ -37,19 +37,19 @@ import (
 // re-enter the interpreter through an unattributed seam.
 //
 // First measured 2026-08-28 at 184 of 7180 rows that run compiled (959
-// entries). Now 114, after seven changes. The seam spread — the
+// entries). Now 107, after eight changes. The seam spread — the
 // shape of the debt, not a second ceiling — and what each moved:
 //
-//	                         first    (a)    (b)    (c)    (d)    (e)    (f)    (g)
-//	Engine.Run                 501    477    453    443    433    439    425    400
-//	CallBoru                   275    251    251    251    251    251    238    238
-//	vm:island                   66     66     48     48     39     39     39     39
-//	runPooledSub                37     37     35     35     35     37     36     11
-//	RunResolved                 31     31     31     31     31     31     31     31
-//	vm:island-resolved          21     21     21     11     10     10     10     10
-//	InvokeCallback:callboru     28      4      4      4      4      4      6      6
-//	                          ----   ----   ----   ----   ----   ----   ----   ----
-//	rows                       184    163    151    141    131    131    130    114
+//	                         first    (a)    (b)    (c)    (d)    (e)    (f)    (g)    (h)
+//	Engine.Run                 501    477    453    443    433    439    425    400    391
+//	CallBoru                   275    251    251    251    251    251    238    238    238
+//	vm:island                   66     66     48     48     39     39     39     39     39
+//	runPooledSub                37     37     35     35     35     37     36     11     11
+//	RunResolved                 31     31     31     31     31     31     31     31     31
+//	vm:island-resolved          21     21     21     11     10     10     10     10     10
+//	InvokeCallback:callboru     28      4      4      4      4      4      6      6      6
+//	                          ----   ----   ----   ----   ----   ----   ----   ----   ----
+//	rows                       184    163    151    141    131    131    130    114    107
 //
 // (a) Foreign detached units became hostable mid-run
 // (eng/go/vm_foreign_unit.go). The InvokeCallback column is that one: those 24
@@ -126,7 +126,7 @@ import (
 // clusters are single-mechanism, which is what makes them worth picking:
 //
 //	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
-//	module-parse/debug/log   26 rows   Engine.Run only
+//	module-parse/log         18 rows   Engine.Run only  (debug: attributed at (h))
 //	bytecode-migrated.tsv    14 rows   RunResolved 6, vm:island 6, CallBoru 2, …
 //	fn-value.tsv              6 rows   vm:island 5
 //	module-fnvalue-boundary   6 rows   vm:island-resolved 6
@@ -149,6 +149,25 @@ import (
 // compile clean — `usurp sub 10 3` has no seams at all — which locates the
 // blocker precisely: it is the dot-access hiding the callee, not the modifier.
 // That is Stage 6/7 work on dynamic carriers, not a seam fix.
+//
+// (h) boru:debug's body runs are ATTRIBUTED, not compiled — and the distinction
+// is the point, because it is the one place "compile everything" is the wrong
+// goal. Every one of those sites installs a TRACE HOOK and the word's ANSWER is
+// what the hook saw: Debug.steps returns the engine-step count, the profiler
+// returns a tally of observed dispatches, the stepper pauses at each step and
+// breakpoint. Compiling those bodies would not speed them up — it would empty
+// the tally, change the count, and leave the debugger nothing to step through.
+//
+// So this is interpretation the end state must PERMIT. It gets the same C4
+// attribution `module-load` already has ("debug-observe"), which is what this
+// census means by attributed: interpretation that is specified, named, and
+// therefore not debt. It is NOT an escape hatch — the test is whether COMPILING
+// the body would change the word's answer. For a step counter it plainly does;
+// for `filter`'s callback it plainly does not, which is why that one compiled.
+//
+// A number this census cannot reach by compiling alone is worth knowing early:
+// some of the remaining rows are of this kind, and the honest end state is
+// "every entry attributed", not "no entries".
 //
 // AN INCREMENT THAT WAS BUILT, MEASURED AND REJECTED — recorded because the
 // measurement is worth more than the code was. Dispatching a callee whose
@@ -188,7 +207,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 114
+const interpEntryRowCeiling = 107
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
