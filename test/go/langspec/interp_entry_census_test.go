@@ -341,6 +341,17 @@ import (
 // apply its argument at all. Neither is a barrier question, so neither is
 // reachable from here.
 //
+// (n) `Debug.trace` and `IO.trace` are ATTRIBUTED, on column (h)'s rule and by
+// the same reading of it. Both route through core.RunTrace, whose entire job is
+// to print what the interpreter did step by step; compiling the body would not
+// speed it up, it would leave nothing to print. Two rows, 64 -> 62, and the
+// attribution goes on RunTrace itself so the two words cannot drift apart.
+//
+// (h) attributed boru:debug's step counter, profiler and stepper and MISSED
+// these two, which is worth noting as a property of that kind of fix: an
+// attribution applied word-by-word leaves siblings behind. Putting it on the
+// shared entry point is what makes it exhaustive.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -349,7 +360,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 64
+const interpEntryRowCeiling = 62
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
