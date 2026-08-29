@@ -39,6 +39,24 @@ type dynEnter struct {
 	// place of the entered unit's own (which for a stamped fn value has none).
 	// Built by applyRetContract; never nil for an entry this file produces.
 	retFn *compiler.CompiledFn
+	// allForward reports that the matched signature collects every argument
+	// FORWARD — read by the replay window, which may only enter over a
+	// non-empty resolved prefix when the callee cannot reach into it.
+	allForward bool
+}
+
+// allForwardSig reports whether every parameter of a matched signature is
+// forward-eligible: the barrier sits at or past the last param, so the call
+// collects all of its arguments from the tokens written after it and none from
+// the stack below.
+//
+// -1 is the UNSET sentinel and means all-forward (upsertFnDef resolves it to
+// len(Params)); an explicit 0 is all-stack, a different call, and must not be
+// admitted. The documented Go-zero ambiguity on BarrierPos does not reach here
+// — every sig this file sees carries a compiled boru unit, and the boru source
+// path emits the sentinel.
+func allForwardSig(sig *core.Signature) bool {
+	return sig.BarrierPos == -1 || sig.BarrierPos >= len(sig.Params)
 }
 
 // applyRetContract is the return contract an APPLICATION of a fn value has to
@@ -134,5 +152,5 @@ func (vc *vmContext) dynApplyEnter(fnVal core.Value, args []core.Value) *dynEnte
 			locals[i].Quoted = true
 		}
 	}
-	return &dynEnter{unit: ref.Unit, locals: locals, retFn: applyRetContract(fn, fd.Name, sig)}
+	return &dynEnter{unit: ref.Unit, locals: locals, retFn: applyRetContract(fn, fd.Name, sig), allForward: allForwardSig(sig)}
 }

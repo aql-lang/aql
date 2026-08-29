@@ -1202,22 +1202,26 @@ func (vc *vmContext) callDynFrame(reg *core.Registry, w, frameBase int, stack []
 	base := len(stack) - w
 	prefix := append([]core.Value(nil), stack[frameBase:base]...)
 	tokens := append([]core.Value(nil), stack[base:]...)
-	// The Apply kernel reaches the replay window only in its SIMPLEST shape:
-	// an empty resolved prefix, and a token region that is a fn followed by
-	// plain data. Then the region is exactly [fn, args…] — the same thing
-	// CALL_DYNAMIC's leading form hands dynApplyEnter, and RunResolved would
-	// have auto-applied it in written order, which is the order the frame
-	// binds.
+	// The Apply kernel reaches the replay window when the token region is a fn
+	// followed by plain data. The region is then exactly [fn, args…] — the same
+	// thing CALL_DYNAMIC's leading form hands dynApplyEnter, and RunResolved
+	// would have auto-applied it in written order, which is the order the frame
+	// binds. A token region carrying a SECOND fn or a tape-coupled token keeps
+	// the island: the interpreter re-steps those and a frame push cannot.
 	//
-	// A NON-EMPTY prefix is not that shape and must keep the island: the fn
-	// stack-collects from the prefix as well as forward-collecting the token
-	// region (callDynFrame's own contract), so the arg set the frame would
-	// bind is not the arg set the interpreter assembles. Likewise a token
-	// region carrying a second fn or a tape-coupled token — the interpreter
-	// re-steps those, and a frame push cannot.
-	if len(prefix) == 0 && len(tokens) > 0 && dynFrameSimpleWindow(tokens) {
-		if ent := vc.dynApplyEnter(tokens[0], tokens[1:]); ent != nil {
-			return stack[:frameBase], ent, nil
+	// A NON-EMPTY prefix is admitted only when the callee is ALL-FORWARD. The
+	// prefix is the frame-bottom unnamed-param re-push, and a barrier'd callee
+	// STACK-collects from it as well as forward-collecting the token region
+	// (callDynFrame's own contract above), so the arg set a frame push would
+	// bind is not the arg set the interpreter assembles. All-forward, it cannot
+	// reach the prefix at all — dynApplyEnter has already established that the
+	// token args exactly fill its params — so the prefix survives underneath
+	// and the unit's result lands on top of it, which is the residual the island
+	// returns. Hence stack[:base], not stack[:frameBase]: the two coincide only
+	// when the prefix is empty.
+	if len(tokens) > 0 && dynFrameSimpleWindow(tokens) {
+		if ent := vc.dynApplyEnter(tokens[0], tokens[1:]); ent != nil && (len(prefix) == 0 || ent.allForward) {
+			return stack[:base], ent, nil
 		}
 	}
 	results, err := runIslandResolved(reg, prefix, tokens)

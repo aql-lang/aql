@@ -128,7 +128,6 @@ import (
 //
 //	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
 //	bytecode-migrated.tsv    13 rows   RunResolved 6, vm:island 5, CallBoru 2, …
-//	module-fnvalue-boundary   6 rows   vm:island-resolved 6
 //	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
 //
 // Engine.Run appears everywhere because every other seam runs a nested engine;
@@ -321,6 +320,27 @@ import (
 // mechanism. Two plausible-looking argument orders is the symptom of having
 // skipped that question — the order was never the variable.
 //
+// (m) The whole-frame replay window (OpCallDynFrame) admits the Apply kernel
+// over a NON-EMPTY resolved prefix, when the callee is all-forward. Two rows,
+// 66 -> 64 — small, and worth recording for where the boundary sits rather than
+// for the count.
+//
+// The prefix is the frame-bottom unnamed-param re-push; the token region is
+// what the interpreter's pointer would step. The window refused any prefix at
+// all because a BARRIER'd callee stack-collects from it as well as
+// forward-collecting the tokens, so a frame push would bind a different arg set.
+// That is true of a barrier'd callee and only of one: an all-forward callee
+// whose params the token args exactly fill cannot reach the prefix, so the
+// prefix survives underneath and the unit's result lands on top of it — which
+// is precisely the residual the island returns.
+//
+// What did NOT move says more than what did. `def looper fn [[Function]
+// [Integer] [def acc 0 for 5 [(args.0 1) …] acc]]` still islands, because the
+// apply sits inside a LOOP body and the window is not the frame's; and `def
+// keep fn [[Function] [Function] [args.0]]` still islands because it does not
+// apply its argument at all. Neither is a barrier question, so neither is
+// reachable from here.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -329,7 +349,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 66
+const interpEntryRowCeiling = 64
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

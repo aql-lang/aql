@@ -23,6 +23,27 @@ func TestCallDynFrameUnderflow(t *testing.T) {
 	}
 }
 
+// TestCallDynFrameIslandError pins the replay island's ERROR arm — the one the
+// Apply kernel's admission rule must not swallow. `cfail` is a
+// trivial-delegation wrapper with no compiled unit, so dynApplyEnter declines
+// it whether or not a prefix is present, the window islands, and whatever the
+// interpreter raises there has to come back out of callDynFrame.
+//
+// Both prefix shapes are driven, because the admission rule now branches on the
+// prefix: an empty one, and the [9] below that only an all-forward callee could
+// be entered over.
+func TestCallDynFrameIslandError(t *testing.T) {
+	r, _, fail := seam7DelegReg(t)
+	vc := seam7VC(r)
+	stack := []core.Value{core.NewInteger(9), fail, core.NewInteger(5)}
+	for _, frameBase := range []int{1, 0} {
+		_, _, err := vc.callDynFrame(vc.r, 2, frameBase, stack, seam7Dbg, 0)
+		if err == nil || !strings.Contains(err.Error(), "cfail") {
+			t.Errorf("replay island (frameBase %d) must surface the applied fn's error, got %v", frameBase, err)
+		}
+	}
+}
+
 func TestEscapedFlowArms(t *testing.T) {
 	r := seam7Reg(t)
 	vc := seam7VC(r)

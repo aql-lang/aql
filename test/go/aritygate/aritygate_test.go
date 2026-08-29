@@ -94,7 +94,14 @@ var pinnedAritySites = map[string]int{
 	// own param count, verbatim from OpCallUserPoly. A function of any arity
 	// takes the same path. NOTE: this entry was added because the gate caught
 	// it — on the first change after the gate landed, which is the whole point.
-	"eng/go/vm_dyn_apply.go":    2,
+	// 2 -> 3: allForwardSig compares a matched signature's BARRIER against its
+	// param count to answer where the call's arguments come from — all forward,
+	// or forward up to the barrier and the rest from the stack. That IS the
+	// argument rule, not a decision about what a function of a given arity may
+	// do: the replay window reads it to know whether the callee can reach the
+	// resolved prefix below the tokens, and a callee of any arity that cannot
+	// takes the same path.
+	"eng/go/vm_dyn_apply.go":    3,
 	"eng/go/vm_rematch.go":      2,
 	"eng/go/vm_poly_nomatch.go": 3,
 
