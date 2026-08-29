@@ -121,42 +121,55 @@ import (
 // perhaps three rows. Read the seam counts as a shape, never as a priority
 // order: a big number here can be one row in a loop.
 //
-// WHERE THE ROWS ARE, by file AND the seams those rows touch (the per-file
-// lines the run logs; ROW counts, so they add up against the ceiling). The
-// table below is the state at the current ceiling — every cluster the columns
-// after it took has left it. Rewrite it, do not append to it:
+// WHERE THE ROWS ARE, BY MECHANISM. The table used to be by FILE, and the
+// ledger's own (j) says why that was the wrong axis: a file table ranks
+// CONCENTRATIONS, and a mechanism spread two-and-three-at-a-time across several
+// files is invisible in it (Assert.throws was five rows in four files). This
+// one is by mechanism, swept row-by-row with the source printed, and it adds up
+// to the ceiling exactly. Rewrite it, do not append to it.
 //
-//	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
-//	bytecode-migrated.tsv     6 rows   Engine.Run 6, RunResolved 6, CallBoru 2, runPooledSub 1
-//	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
+//	18  A CALLABLE VALUE READ OUT OF A CONTAINER, then applied     vm:island
+//	    path-modifier 13, usurp 2, fn-value 2, class 1
+//	11  `do` OVER A BODY WHOSE RESIDUAL COUNT IS NOT STATIC        RunResolved
+//	    control 4, bytecode-migrated 6, word-splice 1
+//	 8  Test.invoke / Test.prop / Test.check-prop                  CallBoru
+//	    module-test 5, corpus-modules 3
+//	 4  A FN VALUE CROSSING A MODULE BOUNDARY, applied inside      vm:island-resolved
+//	    module-fnvalue-boundary 4
+//	 4  SERVER / MOUNT CALLBACKS (a live socket, a fileops map)    InvokeCallback:callboru
+//	    module-repl 3, module-io 1
+//	 5  MISC, one mechanism each                                   Engine.Run
+//	    canon 2 (Vm.run over canon output), module-rand 1, corpus-modules 1, fn-value 1
 //
-// Engine.Run appears everywhere because every other seam runs a nested engine;
-// a row with ONLY Engine.Run is the interesting case — nothing islanded, the
-// whole body simply interpreted. Two of the three module clusters that shape
-// described are gone (columns (i)-(l) took boru:log, boru:test's assertions and
-// the whole of boru:parse); what is left of it is module-test.tsv's five, which
-// are Stage 6/7 work (module bodies compiling), not a seam flip.
+// Engine.Run appears in nearly every row because every other seam runs a nested
+// engine; a row with ONLY Engine.Run is the interesting case — nothing
+// islanded, the whole body simply interpreted.
 //
-// reach.tsv led this table at 14 rows, every one through runPooledSub, and it
-// is gone: that is column (g).
+// reach.tsv led the old table at 14 rows, every one through runPooledSub, and
+// it is gone: that is column (g).
 //
-// path-modifier.tsv is the cluster column (h) went after, and it is the honest
-// counter-example to "one mechanism, one fix". All thirteen of its rows still
-// island, because the dispatch-modifier wrapper is built at RUN time out of a
-// fn the check pass only sees as a dynamic carrier (a dot-access read), so
-// there is nothing to compile at compile time. The BY-NAME forms already
-// compile clean — `usurp sub 10 3` has no seams at all.
+// THE 18-ROW CLUSTER IS ONE SHAPE WITH FOUR CALLEES, and only the callee
+// decides whether it compiles today:
 //
-// This note used to read "the blocker is the dot-access hiding the callee, not
-// the modifier", and column (k) is the correction: the dot-access alone was
-// never the blocker. `m.f 5` over a boru fn value compiles now, thirteen other
-// rows with it, and every path-modifier row stayed put. What those rows have in
-// common is not the dot — it is the CALLEE. `def m {a:add/v}` stores a NATIVE,
-// which carries no unit for the Apply kernel to enter, and the modifier
-// wrappers on top of it return TOKENS for the engine to re-step (see the
-// rejected increment above). So the remaining cluster is the native-callee half
-// of the question, and its cost was already measured: one row, bought with a
-// worse error message.
+//   - a BORU FN in a container (`def m {f:(fn …)}  m.f 5`) — COMPILES, column
+//     (k), fourteen rows;
+//   - a NATIVE in a container (`def m {a:add/v}  m.a 1 2`) — islands: a native
+//     carries no unit for the Apply kernel to ENTER. Measured, and its price
+//     recorded in the rejected increment above: one row, bought with a worse
+//     error message, because the dyn-apply opcodes are lowered with
+//     SrcPos.Row == 0 and a handler raising through the direct path loses its
+//     caret. Give those opcodes positions in the lowerer and the trade changes;
+//     that is the prerequisite, not the increment.
+//   - a MODIFIER WRAPPER over either (`m.a/u`, `usurp (m.s)`) — islands for a
+//     different reason, and it is not fixable at the apply site at all: usurp /
+//     stack-args / forward-args / force-arity RETURN TOKENS for the engine to
+//     re-step. There is nothing for a frame to enter. These need the modifier
+//     words themselves to lower to a dispatch (Stage 5), not a wider apply.
+//   - a CLASS FIELD METHOD (`def C class {op:(fn …)}  c.op 5`) — one row, the
+//     boru-fn case reached through a class instance rather than a map.
+//
+// So "path-modifier.tsv, 13 rows" was never one fix. It is the native half and
+// the token-rewrite half of a cluster whose boru half already left.
 //
 // (h) boru:debug's body runs are ATTRIBUTED, not compiled — and the distinction
 // is the point, because it is the one place "compile everything" is the wrong
