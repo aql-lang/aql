@@ -66,7 +66,7 @@ keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
-| [NUR113](#nur113) | Every opcode lowered from a DOT-SUGAR access carries `SrcPos{0,0}`, so a runtime error raised through one loses its caret on the compiled lane: `def m {d:div/v} end m.d 0 10` points at `1:10` interpreted and `source position unknown` compiled. The explicit `m dot a` spelling keeps its positions — the sugar is the difference. Two layers deep: `lowerReach` mints its `dot` words with no position, AND the interpreter anchors on the fn VALUE's own position (the `div` token inside the map literal), which const-baking does not preserve — so positioning the dot tokens is necessary but not sufficient | writing a corpus row for the `/s` trailing apply, 2026-08-29 |
+| [NUR113](#nur113) | A dot-sugar access lowers with NO source position — `lowerReach` builds `dot`/`dotr` with a bare constructor — so every opcode downstream of a dot chain records `0:0` and the compiled lane renders "source position unknown" where the interpreter has a caret. The one-line fix (anchor the synthesized tokens on the receiver) was built and MEASURED: it takes `TestSpecCompiledOrFallback` from 0 to **186 divergences**, because `lowerReach` is in core and both engines lose the position symmetrically today — stamping it fixes the interpreter and leaves the compiled lane behind on module-qualified access. The compiled half must land first | writing a corpus row for the `/s` trailing-apply increment, 2026-08-29 |
 | [NUR112](#nur112) | The checker's residual for a parked native word applied after its name was EXTENDED does not match what runs: `def Pos (refine Integer)  def m {a:size/v}  def size fn [[n:Pos] [Integer] [200]] end  def v:Pos 3  m.a v` is checked `[dynamic(Any) Pos]` — two values, one of them the argument left behind — and actually leaves `[Integer]`. Both ENGINES agree on the answer (3); it is the static model that differs, so no differential can see it — TestCheckTypeSoundness can, and did | writing a corpus row for the parked-native apply gate, 2026-08-29 |
 | [NUR111](#nur111) | The DECLARED RETURN of a fn value handed to a higher-order word is checked by nobody statically: `def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v` passes `boru check` clean, while the identical body as a code BLOCK (`each [cbad]`) and the identical fn called directly (`cbad 1`) are both flagged `type_error`. The end-of-pass pending-body drain ANALYSES the body (an undefined word inside it IS reported) but never holds the residual to the declaration — `declared` reaches `AnalyseFnBody` as the recursion hypothesis only, and the matching proof obligation is the interpreter's `__RC` marker, which the callback path never plants. Both ENGINES now raise (the runtime half is fixed, `lang/spec/fn-value.tsv` §13); it is the CHECKER that is silent | fixing the closure return-contract miscompile, 2026-08-29 |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
@@ -420,6 +420,39 @@ parse. Column 21 is where `m.d` starts. So giving the `dot` words positions
 would move the compiled caret to `1:21` and leave the two engines still
 disagreeing. Parity needs the fn value's own position to survive const-baking
 into the compiled program, which is the larger half of this record.
+
+**The one-line fix was BUILT AND MEASURED, and it is a parity regression.**
+Anchoring the synthesized `dot`/`dotr` (and a computed key's paren) on the
+RECEIVER via `core.WithPos` does exactly what it promises:
+
+```
+def m {s:1} end m.s              every op  0:0 -> 1:17
+def m {d:div/v} end 10 0 m.d/s   reach ops 0:0 -> 1:26   (the interpreter's own)
+```
+
+Then `TestSpecCompiledOrFallback` goes **0 -> 186 divergences**, every one
+reading "interpreter at N:M, compiled has no position", on module-qualified
+rows — `Assert.not-equal 3 3`, `StringUtil.replace …`, `ArrayUtil.insert-at …`.
+
+The reason is the whole lesson of this record. `lowerReach` lives in **core**,
+so BOTH engines lower through it, and today both lose the position
+IDENTICALLY — which is exactly why the gate reports agreement and the hole is
+invisible. Stamping it fixes the interpreter everywhere, and fixes the
+compiled lane only for a PLAIN dot access; a MODULE-qualified one
+(`Assert.not-equal`, which is a dot access too) is folded by the recorder into
+a direct `CALL_NATIVE` whose position does not come from the chain, so it
+stays at `0:0`. Measured on the unmodified tree, that program is `0:0` on
+every opcode.
+
+So a symmetric invisible defect becomes 186 visible ones. The fix ORDER is
+therefore fixed, and it is the opposite of the obvious one:
+
+1. give the recorder's folded module-qualified call a position (the
+   compiled-side half), then
+2. stamp `lowerReach` — at which point both engines move together.
+
+Doing (2) alone is the regression above; doing it first and "fixing the
+fallout" would mean 186 rows chasing a moving target.
 
 **Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
 positions — it is what caught the closure-contract position loss earlier the
