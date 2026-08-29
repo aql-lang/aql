@@ -47,7 +47,12 @@ func (vmCompiledRuntime) InvokeCompiled(r *core.Registry, sig *core.Signature, a
 	if r.Effects.Count() != effectsAt {
 		return nil, err, true
 	}
-	return nil, nil, false
+	// The swallowed internal error rides back WITH ran=false: it is the only
+	// thing that tells the caller its interpreter path is a designed defer's
+	// replay rather than an island (CompiledRuntime.InvokeCompiled's contract).
+	// The caller must not surface it — vmDefer already recorded the bail, and
+	// the interpreter is about to produce the canonical answer.
+	return nil, err, false
 }
 
 func (vmCompiledRuntime) StampDetached(r *core.Registry, fd core.FnDefInfo, pos core.SrcPos) {

@@ -127,7 +127,7 @@ import (
 // after it took has left it. Rewrite it, do not append to it:
 //
 //	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
-//	bytecode-migrated.tsv     7 rows   RunResolved 6, vm:island 5, CallBoru 2, …
+//	bytecode-migrated.tsv     6 rows   Engine.Run 6, RunResolved 6, CallBoru 2, runPooledSub 1
 //	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
 //
 // Engine.Run appears everywhere because every other seam runs a nested engine;
@@ -447,6 +447,39 @@ import (
 // caller of it needs an engine to discover that running nothing returns what
 // it was given.
 //
+// (t) A stamped unit that RAN and DEFERRED is a bail, not an island. 51 -> 50,
+// one row, and the row is the whole point: the census was counting one defer
+// twice.
+//
+// `5 $.name apply` (reach.tsv §7, an ERROR row) stamps its lens, enters the
+// unit, and CALL_NATIVE_POLY finds no `dot` for an Integer receiver. The VM
+// does exactly what it is designed to do there — vmDefer records the bail and
+// returns internal_error so the interpreter can raise the canonical
+// signature_error — and ApplyReach then ran the chain unattributed. So the same
+// event appeared once in the bail census as the designed defer it is, and again
+// here as an island. RunCompiled's top-level arm has named this category since
+// C4 ("fallback:runtime-bail"); the nested compiled lanes had not.
+//
+// What makes it measurable rather than a judgement call is that the SEAM now
+// says which decline it was. InvokeCompiled collapsed two outcomes into
+// ran=false — a unit that could not be hosted, and a unit that ran and deferred
+// — and threw away the internal error that told them apart. It returns that
+// error alongside ran=false instead, so bailReplayAttribution attributes the
+// replay only when the unit actually ran. A lane that never reached the VM
+// declines with a nil error and stays visible as the island it is.
+//
+// A bail COUNT on the registry was built first and is worth recording as the
+// rejected option: it read the ledger's own tally and compared it across the
+// attempt. It works, but the tally is SHARED with concurrent forks (the hook
+// holder is a pointer, deliberately), so one lane's defer could attribute
+// another lane's island — over-attribution, the direction that makes a
+// no-unattributed-entry assertion pass vacuously. The error is per-call and
+// cannot leak across lanes.
+//
+// Both compiled lanes take it — ApplyReach and InvokeCallback — because the
+// hole is the seam's, not the lens's. This is column (n)'s lesson again: an
+// attribution applied at one call site leaves its siblings behind.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -455,7 +488,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 51
+const interpEntryRowCeiling = 50
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

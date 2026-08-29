@@ -91,3 +91,49 @@ func TestLensDoesNotStampUnarmed(t *testing.T) {
 		t.Errorf("an unarmed run must not stamp a lens, got %+v", got)
 	}
 }
+
+// A stamped lens whose unit DEFERS is a bail, not an island. `5 $.name apply`
+// enters its unit and CALL_NATIVE_POLY finds no `dot` for an Integer receiver,
+// so the VM records the defer and hands back internal_error for the
+// interpreter to raise the canonical signature_error. The chain that follows is
+// that defer's replay: it must carry the same attribution RunCompiled's
+// top-level runtime-bail arm uses, or the one event is counted twice — once as
+// a bail and again as an unattributed interpreter entry.
+func TestLensBailReplayIsAttributed(t *testing.T) {
+	a := mustNew(t)
+	var bails int
+	disarmBail := a.ArmRuntimeBailHook(func(BailEvent) { bails++ })
+	var unattributed []string
+	var attributed []string
+	disarmEntry := a.ArmInterpEntryHook(func(ev InterpEntry) {
+		if ev.CheckMode {
+			return
+		}
+		if ev.Attribution == "" {
+			unattributed = append(unattributed, ev.Seam)
+			return
+		}
+		attributed = append(attributed, ev.Attribution)
+	})
+	_, _, err := a.RunCompiled(`5 $.name apply`)
+	disarmEntry()
+	disarmBail()
+
+	if err == nil {
+		t.Fatal("applying a field lens to an Integer must error")
+	}
+	if bails == 0 {
+		t.Fatal("no defer recorded — the unit did not run, so this test is measuring the wrong thing")
+	}
+	if len(unattributed) != 0 {
+		t.Errorf("bail replay left unattributed entries %v", unattributed)
+	}
+	for _, att := range attributed {
+		if att != "fallback:runtime-bail" {
+			t.Errorf("replay attributed %q, want fallback:runtime-bail", att)
+		}
+	}
+	if len(attributed) == 0 {
+		t.Error("the replay recorded no interpreter entry at all — the lane changed shape")
+	}
+}
