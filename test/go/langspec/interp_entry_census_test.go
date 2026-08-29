@@ -397,6 +397,25 @@ import (
 // InvokeBody seam to declare over. Handler first, declaration second — never
 // the reverse.
 //
+// (q) The mixed-apply island (CALL_DYNAMIC_MIXED) skips a STEPLESS window, on
+// the same predicate column (o) gave `do {key:[body]}` — now shared, in core.
+// One row, 54 -> 53, and the row count understates it: four more rows lost
+// their island while keeping other seams, so the vm:island total falls further
+// than the ceiling does.
+//
+// `1 2 3 do [7] error [drop 9] add 1` is the shape. Both bodies compile to
+// closures, the arithmetic runs native, and the window the mixed apply islands
+// is [1 2 3 8] — four literals. The island exists because the COMPILER could
+// not rule out a callable value interior to the window; when the runtime values
+// turn out to be plain data, the interpreter places every one of them and hands
+// the window straight back.
+//
+// The predicate moved to core.IsSteplessWindow rather than being copied,
+// because eng cannot import basic and a second copy of a rule this sharp is how
+// two engines drift. It stays an ALLOWLIST at its new home for the reason it
+// was one at its old: an unrecognised shape must be treated as active, or a
+// token kind added later silently becomes data and a body stops running.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -405,7 +424,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 54
+const interpEntryRowCeiling = 53
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

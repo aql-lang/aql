@@ -92,6 +92,50 @@ func FnValueZeroArg(v Value) bool {
 	return false // direct literal: the recorded events model the fire
 }
 
+// IsSteplessValue reports whether the step loop would leave v exactly as it is
+// — a value it PLACES rather than one it evaluates, dispatches or applies.
+//
+// It admits the five concrete scalar leaves and nothing else, and that is a
+// deliberate ALLOWLIST rather than a denylist of active token kinds. A shape it
+// does not recognise is treated as active, so a token kind added later stays
+// correct here by default; a denylist would silently begin treating it as data,
+// and the failure mode of that is a body that stops running — a wrong answer,
+// not an error. Eval marks a value the loop evaluates rather than places, so it
+// is excluded even on an admitted payload.
+//
+// The wider scalar leaves (BigInt, Decimal, None) would be equally sound and
+// are left out because nothing measured needs them yet: admitting a payload
+// costs a proof each time.
+func IsSteplessValue(v Value) bool {
+	switch v.Data.(type) {
+	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload:
+		return IsConcrete(v) && !v.Eval
+	}
+	return false
+}
+
+// IsSteplessWindow reports whether running vs through the interpreter would be
+// the IDENTITY on them: every value is placed, nothing dispatches, so the
+// residual is the window itself.
+//
+// Two callers, both skipping an engine that could only give back what it was
+// handed:
+//
+//   - `do {key:[body]}` (basic): the compiled lane reaches the handler with the
+//     body already computed — `do {n:[a add 1]}` lowers to CALL_NATIVE add /
+//     MAKE_LIST, so the list to "run" is [6];
+//   - CALL_DYNAMIC_MIXED (eng): the window islands because the compiler could
+//     not rule out a callable value INTERIOR to it, and when the runtime values
+//     turn out to be plain data the island returns the window verbatim.
+func IsSteplessWindow(vs []Value) bool {
+	for _, v := range vs {
+		if !IsSteplessValue(v) {
+			return false
+		}
+	}
+	return true
+}
+
 func IsInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false

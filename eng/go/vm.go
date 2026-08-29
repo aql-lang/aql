@@ -1172,6 +1172,18 @@ func (vc *vmContext) callDynamicMixed(reg *core.Registry, w int, stack []core.Va
 	}
 	base := len(stack) - w
 	window := append([]core.Value(nil), stack[base:]...)
+	// A STEPLESS window is its own residual. The island is here because the
+	// COMPILER could not rule out a callable value interior to the window; when
+	// the runtime values turn out to be plain data, the interpreter places every
+	// one of them and hands the window straight back, so running it is an
+	// interpreter entry inside a compiled program that changes nothing.
+	//
+	// `1 2 3 do [7] error [drop 9] add 1` is the shape: both bodies compile to
+	// closures, the arithmetic runs native, and the window the mixed apply
+	// islands is [1 2 3 8] — four literals.
+	if core.IsSteplessWindow(window) {
+		return stack, nil
+	}
 	results, err := vc.islandRun(reg, window)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
