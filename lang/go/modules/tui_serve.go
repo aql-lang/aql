@@ -45,6 +45,14 @@ const tuiWireLimit = 4 << 20
 // tuiMaxViewers caps the viewers: option.
 const tuiMaxViewers = 64
 
+// tuiAcceptLine is the handshake's accept reply. A package-level value because
+// promote writes it while holding the hub lock (see promote) and there is
+// nothing per-connection in it. It replaced a tuiWriteAccept helper that wrote
+// with NO deadline; going through hub.writeTo gives it the same broadcast
+// deadline every other hub write has, so a stuck client fails its accept
+// instead of holding the lock forever.
+var tuiAcceptLine = []byte(`{"tag":"accept","proto":1}` + "\n")
+
 type tuiSession struct {
 	cols int
 	rows int
@@ -62,12 +70,18 @@ type tuiServeOpts struct {
 // frame/title broadcast with per-write deadlines, unchanged-frame
 // suppression, late-joiner replay, and the last-viewer-gone verdict.
 type tuiViewerHub struct {
-	mu        sync.Mutex
-	viewers   map[int]net.Conn
-	nextID    int
-	max       int
-	reattach  bool
-	closed    bool // goodbye has run; no more admissions or writes
+	mu       sync.Mutex
+	viewers  map[int]net.Conn
+	nextID   int
+	max      int
+	reattach bool
+	closed   bool // goodbye has run; no more admissions or writes
+	// pending holds viewers that are ADMITTED but whose accept reply has not
+	// landed yet. They occupy a slot and hold a reader token — they are part of
+	// the session — but no broadcast may reach them, because the wire contract
+	// is hello -> accept -> chrome and a title or frame arriving first is a
+	// protocol violation the client rejects. See admitPending.
+	pending   map[int]bool
 	lastTree  []byte
 	lastLine  []byte
 	titleLine []byte
@@ -78,16 +92,49 @@ type tuiViewerHub struct {
 
 func newTuiViewerHub(max int, reattach bool) *tuiViewerHub {
 	return &tuiViewerHub{
-		viewers: map[int]net.Conn{}, max: max, reattach: reattach,
+		viewers: map[int]net.Conn{}, pending: map[int]bool{},
+		max: max, reattach: reattach,
 		events: make(chan tuikit.Event, 64),
 	}
 }
 
-// admit registers a handshaken connection. The false return means the
-// session is full (or over) — the caller denies busy. The reader's
-// WaitGroup slot is taken here, under the same lock that guards
+// admit registers a handshaken connection as immediately LIVE. The false
+// return means the session is full (or over) — the caller denies busy. The
+// reader's WaitGroup slot is taken here, under the same lock that guards
 // closed, so teardown's Wait cannot race a late Add.
-func (h *tuiViewerHub) admit(conn net.Conn) (id int, ok bool) {
+//
+// admit does not write: the accept reply is the caller's, so the caller owns
+// the failure path (evict + close). A server accepting a real connection wants
+// admitPending instead — see the race note there.
+func (h *tuiViewerHub) admit(conn net.Conn) (id int, ok bool) { return h.admitAs(conn, false) }
+
+// admitPending is admit for a connection whose accept reply has NOT been
+// written yet, and it exists because writing that reply outside the hub lock
+// is a race:
+//
+//	id, ok := hub.admit(conn)          // publishes conn into h.viewers, UNLOCKS
+//	...
+//	if wErr := tuiWriteAccept(conn)    // writes with the lock released
+//
+// setTitle and broadcastFrame take that same lock and write to every
+// connection in h.viewers, so between admit returning and the accept landing a
+// concurrent broadcast can reach the freshly published socket first — and the
+// client's next line is `title` or `frame` where the protocol requires
+// `accept`. replay's own comment states the invariant this breaks: "It runs
+// AFTER the accept reply so the wire stays hello -> accept -> chrome."
+//
+// The window is tiny, which is why it took CI contention to show:
+// TestTuiServeAllViewersGoneQuits failed with `handshake = map[tag:title
+// text:served]`, while 40 local runs and -race were all green.
+//
+// Writing the accept INSIDE admit would close the window and change admit's
+// contract — three tests call it directly and assert it does not write, one of
+// them pinning tuiWriteAccept's error path. So the connection is admitted
+// PENDING instead: it holds its slot and its reader token, broadcasts skip it,
+// and promote publishes it to the broadcast set once the accept has landed.
+func (h *tuiViewerHub) admitPending(conn net.Conn) (id int, ok bool) { return h.admitAs(conn, true) }
+
+func (h *tuiViewerHub) admitAs(conn net.Conn, pending bool) (id int, ok bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed || len(h.viewers) >= h.max {
@@ -96,19 +143,44 @@ func (h *tuiViewerHub) admit(conn net.Conn) (id int, ok bool) {
 	h.nextID++
 	id = h.nextID
 	h.viewers[id] = conn
+	if pending {
+		h.pending[id] = true
+	}
 	h.readers.Add(1)
 	return id, true
 }
 
-// replay sends a just-accepted viewer the chrome it missed — the title
-// and the current frame — so late joiners resume mid-session. It runs
-// AFTER the accept reply so the wire stays hello → accept → chrome.
-func (h *tuiViewerHub) replay(id int) {
+// promote writes a pending viewer's ACCEPT reply, publishes it to the
+// broadcast set, and sends it the chrome it missed — the title and the current
+// frame — so late joiners resume mid-session. All of it under ONE lock
+// acquisition, which is the point: the wire stays hello → accept → chrome and
+// no broadcast can interleave. A non-nil error is the accept write failing, and
+// the caller evicts. An unknown id (already dropped or evicted) does nothing.
+//
+// THE ACCEPT IS WRITTEN HERE, NOT BY THE CALLER, and that placement is load
+// bearing. Writing it outside the lock leaves a state the hub cannot observe —
+// "accepted, not yet promoted" — and goodbye running in that window would treat
+// an already-accepted viewer as unaccepted and close it with no `quit`. The
+// attach client reads EOF after accept as "server closed the connection"
+// (cmd/go/internal/attach/attack.go), so a shutdown racing a late attach would
+// surface as a spurious CLI failure. Under the lock the state is binary: a
+// viewer is pending iff its accept has not been written.
+//
+// Promoting a viewer admitted LIVE (plain admit) sends the chrome and no
+// accept — it never had a handshake to answer. That keeps admit's contract and
+// is why the direct-admit tests read the title as their first line.
+func (h *tuiViewerHub) promote(id int) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	conn, ok := h.viewers[id]
 	if !ok {
-		return
+		return nil
+	}
+	if h.pending[id] {
+		if err := h.writeTo(conn, tuiAcceptLine); err != nil {
+			return err // still pending, still in viewers: the caller's evict settles it
+		}
+		delete(h.pending, id)
 	}
 	if h.titleLine != nil {
 		_ = h.writeTo(conn, h.titleLine)
@@ -116,6 +188,7 @@ func (h *tuiViewerHub) replay(id int) {
 	if h.lastLine != nil {
 		_ = h.writeTo(conn, h.lastLine)
 	}
+	return nil
 }
 
 // evict removes a viewer whose accept reply never landed — no reader
@@ -128,6 +201,7 @@ func (h *tuiViewerHub) evict(id int) {
 		return
 	}
 	delete(h.viewers, id)
+	delete(h.pending, id)
 	h.readers.Done()
 }
 
@@ -148,6 +222,7 @@ func (h *tuiViewerHub) drop(id int) {
 		return
 	}
 	delete(h.viewers, id)
+	delete(h.pending, id)
 	if len(h.viewers) == 0 && !h.reattach && !h.closed {
 		select {
 		case h.events <- tuikit.Event{Tag: "__disconnect"}:
@@ -175,9 +250,13 @@ func (h *tuiViewerHub) broadcastFrame(treeJSON []byte) (alive bool) {
 	h.lastTree = treeJSON
 	h.lastLine = line
 	for id, conn := range h.viewers {
+		if h.pending[id] {
+			continue // no frame before its accept; promote replays this line
+		}
 		if err := h.writeTo(conn, line); err != nil {
 			_ = conn.Close()
 			delete(h.viewers, id)
+			delete(h.pending, id)
 		}
 	}
 	return h.reattach || len(h.viewers) > 0
@@ -190,9 +269,13 @@ func (h *tuiViewerHub) setTitle(text string) {
 	defer h.mu.Unlock()
 	h.titleLine = append(data, '\n')
 	for id, conn := range h.viewers {
+		if h.pending[id] {
+			continue // no title before its accept; promote replays it
+		}
 		if err := h.writeTo(conn, h.titleLine); err != nil {
 			_ = conn.Close()
 			delete(h.viewers, id)
+			delete(h.pending, id)
 		}
 	}
 }
@@ -207,11 +290,27 @@ func (h *tuiViewerHub) goodbye() {
 	}
 	h.closed = true
 	line := []byte(`{"tag":"quit"}` + "\n")
-	for _, conn := range h.viewers {
+	for id, conn := range h.viewers {
+		if h.pending[id] {
+			_ = conn.Close()
+			// A pending viewer's accept has provably not been written (promote
+			// writes it under this lock), so `quit` would be the same protocol
+			// violation a frame would be — closing is the honest end, and the
+			// client sees EOF before any accept.
+			//
+			// Its entry STAYS in both maps. It still holds the reader token
+			// admitAs took, and no wire reader was ever started for it, so the
+			// only thing that can balance that token is the caller's evict
+			// after its promote fails on this now-closed connection. Deleting
+			// it here would make that evict a no-op and leave the token
+			// outstanding forever — teardown's readers.Wait() would hang, and
+			// an app exiting while a viewer attaches would never return.
+			continue
+		}
 		_ = h.writeTo(conn, line)
 		_ = conn.Close()
+		delete(h.viewers, id)
 	}
-	h.viewers = map[int]net.Conn{}
 }
 
 func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -392,30 +491,23 @@ func tuiAcceptor(hub *tuiViewerHub, ln net.Listener, token string, firstCh chan<
 			_ = conn.Close()
 			continue
 		}
-		id, ok := hub.admit(conn)
+		id, ok := hub.admitPending(conn)
 		if !ok {
 			_ = tuiWriteDeny(conn, "busy")
 			_ = conn.Close()
 			continue
 		}
-		if wErr := tuiWriteAccept(conn); wErr != nil {
+		if wErr := hub.promote(id); wErr != nil {
 			hub.evict(id)
 			_ = conn.Close()
 			continue
 		}
-		hub.replay(id)
 		go tuiWireReader(hub, id, conn)
 		if !sentFirst {
 			sentFirst = true
 			firstCh <- tuiSession{cols: cols, rows: rows}
 		}
 	}
-}
-
-func tuiWriteAccept(conn net.Conn) error {
-	data, _ := json.Marshal(map[string]any{"tag": "accept", "proto": 1})
-	_, err := conn.Write(append(data, '\n'))
-	return err
 }
 
 func tuiWriteDeny(conn net.Conn, why string) error {

@@ -200,3 +200,19 @@ def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 (mk 4))
 def mk fn a:Integer Function [(fn b:Integer Integer [add a b])] end (1 2 3 (mk 4))	1 2 7	…and two deeper values survive, in order
 def add2 fn [[a:Integer b:Integer][Integer][add a b]]  (9 1 2 add2/v)	9 3	a CONCRETE 2-arg callee under a 3-wide window — the survivor stays BELOW the result, the order the compiled lane used to get backwards
 def mk2 fn [[n:Integer] [Function] [([a:Integer b:Integer] => [a add b add n])]]  (1 2 3 (mk2 10))	1 15	a 2-arg closure under a 3-wide window consumes the top two
+#
+# §12 RETURN CONTRACT UNDER APPLICATION: an applied fn value's DECLARED
+#     return is enforced by whichever engine runs it.
+#     A stamped fn-value unit compiles COUNT-AGNOSTIC — compileStoredFnUnit
+#     goes through compileClosureBody with bodyOut 0, so CompiledFn.Returns is
+#     empty and its RET enforces nothing. That is right for the unit (the
+#     callback seam wants the raw residual) and wrong for an APPLICATION,
+#     where the interpreter's __RC runs inside the CallBoru the island reaches.
+#     Until the Apply kernel carried the applied value's contract into the
+#     frame it enters, the first row below answered 'str' compiled and raised
+#     interpreted — a silent wrong answer, which is the class this project
+#     ranks strictly above a refusal. The violation is only visible at RUN
+#     time (the body returns its `n:Any` param), so no static pass can stand
+#     in for the runtime contract.
+def bad fn [[n:Any][Integer][n]] end def mk fn [[][Function][bad/v]] end ((mk) 'str')	ERROR:type_error	an applied fn value's declared return TYPE is enforced on both engines
+def okr fn [[n:Any][Integer][n]] end def mk fn [[][Function][okr/v]] end ((mk) 7)	7	…and a conforming value passes through unchanged

@@ -375,6 +375,19 @@ func withSpanReturnsFn(args []Value, r *Registry) []Value {
 func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-with-span",
+		// `Log.with-span NAME [body]` runs a user body and hands back its last
+		// value — nothing about the span depends on WHICH engine runs it, so the
+		// body compiles to a 0-input closure and the handler drives it through
+		// InvokeBody. (Contrast boru:debug, whose body runs are attributed
+		// rather than compiled: there the word's answer IS what a trace hook
+		// observed, so compiling would change it.)
+		//
+		// BodyOutResidual, not a fixed count: the handler takes the LAST value
+		// of whatever the body nets and returns nothing for an empty one, so the
+		// closure must compile count-agnostic.
+		Callable: &CallableSpec{BodyPos: 1, BodyOut: BodyOutResidual, Inputs: func(_ []Value) []Value {
+			return []Value{}
+		}},
 		Signatures: []Signature{{
 			Args:       []*Type{TString, TList},
 			Returns:    []*Type{TAny},
@@ -386,13 +399,24 @@ func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 				if err != nil {
 					return nil, r.BoruError("log_error", "span name must be a string", "Log.with-span")
 				}
-				body, err := RequireConcreteList(args[1], "Log.with-span body")
-				if err != nil {
-					return nil, err
+				// Validate BEFORE the span starts, so a malformed body raises
+				// without leaving a span open — the ordering the token path had.
+				compiled := IsCompiledClosure(args[1])
+				var body ReadList
+				if !compiled {
+					var err error
+					if body, err = RequireConcreteList(args[1], "Log.with-span body"); err != nil {
+						return nil, err
+					}
 				}
 				st := lsr.startSpan(r, name, nil)
-				sub := New(r)
-				out, runErr := sub.Run(append([]Value(nil), body.Slice()...))
+				var out []Value
+				var runErr error
+				if compiled {
+					out, runErr = InvokeBody(r, args[1], nil)
+				} else {
+					out, runErr = New(r).Run(append([]Value(nil), body.Slice()...))
+				}
 				if runErr != nil {
 					lsr.mu.Lock()
 					st.status = "error"

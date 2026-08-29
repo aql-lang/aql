@@ -35,6 +35,63 @@ import (
 type dynEnter struct {
 	unit   int
 	locals []core.Value
+	// retFn is the RETURN CONTRACT the entered frame's RET must apply, in
+	// place of the entered unit's own (which for a stamped fn value has none).
+	// Built by applyRetContract; never nil for an entry this file produces.
+	retFn *compiler.CompiledFn
+	// allForward reports that the matched signature collects every argument
+	// FORWARD — read by the replay window, which may only enter over a
+	// non-empty resolved prefix when the callee cannot reach into it.
+	allForward bool
+}
+
+// allForwardSig reports whether every parameter of a matched signature is
+// forward-eligible: the barrier sits at or past the last param, so the call
+// collects all of its arguments from the tokens written after it and none from
+// the stack below.
+//
+// -1 is the UNSET sentinel and means all-forward (upsertFnDef resolves it to
+// len(Params)); an explicit 0 is all-stack, a different call, and must not be
+// admitted. The documented Go-zero ambiguity on BarrierPos does not reach here
+// — every sig this file sees carries a compiled boru unit, and the boru source
+// path emits the sentinel.
+func allForwardSig(sig *core.Signature) bool {
+	return sig.BarrierPos == -1 || sig.BarrierPos >= len(sig.Params)
+}
+
+// applyRetContract is the return contract an APPLICATION of a fn value has to
+// carry into the frame it enters.
+//
+// A stamped stored-fn unit compiles COUNT-AGNOSTIC — compileStoredFnUnit goes
+// through compileClosureBody with bodyOut 0, whose `declared = nil` leaves
+// CompiledFn.Returns empty — so its RET enforces nothing. That is right for the
+// unit, whose other consumer (the callback seam) wants the raw residual, and
+// WRONG for an application: the fn VALUE carries a declared return contract,
+// and the island path applies it, because the interpreter's __RC runs inside
+// the CallBoru the island's nested Run reaches. Measured before this existed:
+//
+//	def bad fn [[n:Any][Integer][n]] end
+//	def mk  fn [[][Function][bad/v]] end
+//	((mk) 'str')
+//	  interpreted  [boru/type_error] bad: return value 1: expected Integer, got ProperString
+//	  compiled     'str'
+//
+// A silent wrong answer rather than an error — the class this project ranks
+// strictly above a refusal. The declared return is only checkable at RUN time
+// here (the body returns its `n:Any` param, so the check pass cannot rule the
+// String out statically), which is exactly why the runtime contract has to
+// ride along.
+//
+// Only the DECLARED contract comes from the sig. The frame-layout fields
+// (NUnnamed's trim allowance, RetReplay, Reg) come from the entered unit,
+// because they describe how that unit's own residual sits at RET.
+func applyRetContract(unit *compiler.CompiledFn, name string, sig *core.Signature) *compiler.CompiledFn {
+	ov := *unit
+	ov.Name = name
+	ov.Returns = sig.Returns
+	ov.ReturnPatterns = sig.ReturnPatterns
+	ov.Decl = sig.Decl
+	return &ov
 }
 
 // dynApplyEnter reports how to enter a dynamically-applied fn VALUE on the VM,
@@ -50,7 +107,8 @@ type dynEnter struct {
 // against p.Fns — and hosting it nested would reintroduce the body bracket this
 // file exists to avoid. Those keep the island.
 func (vc *vmContext) dynApplyEnter(fnVal core.Value, args []core.Value) *dynEnter {
-	if _, isFn := fnVal.Data.(core.FnDefInfo); !isFn {
+	fd, isFn := fnVal.Data.(core.FnDefInfo)
+	if !isFn {
 		return nil
 	}
 	// A QUOTED fn is DATA, not a callee. The island got this for free — the
@@ -94,5 +152,5 @@ func (vc *vmContext) dynApplyEnter(fnVal core.Value, args []core.Value) *dynEnte
 			locals[i].Quoted = true
 		}
 	}
-	return &dynEnter{unit: ref.Unit, locals: locals}
+	return &dynEnter{unit: ref.Unit, locals: locals, retFn: applyRetContract(fn, fd.Name, sig), allForward: allForwardSig(sig)}
 }

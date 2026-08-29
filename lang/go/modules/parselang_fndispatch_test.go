@@ -53,7 +53,9 @@ func TestFnDispatchArms(t *testing.T) {
 		t.Errorf("fn dispatch: a multi-return signature should be parse_bad_signature, got %v", err)
 	}
 
-	// The happy path: a conforming identity parser echoes its source.
+	// The happy path: a conforming identity parser echoes its source. This is
+	// also the CALLBACK lane — a real boru body, offered to its compiled unit
+	// before CallBoru.
 	fid := fdFn(t, r, `fn [[source:Any opts:Map] [Any] [source]]`)
 	out, err := parseFnDispatchHandler([]native.Value{fid, native.NewString("s"), opts}, nil, nil, r)
 	if err != nil || len(out) != 1 {
@@ -61,5 +63,53 @@ func TestFnDispatchArms(t *testing.T) {
 	}
 	if got, cerr := out[0].AsConcreteString(); cerr != nil || got != "s" {
 		t.Errorf("fn dispatch: identity parser = %v, want 's'", out[0])
+	}
+}
+
+// TestFnDispatchTokenRunLane pins the two shapes that still need the TOKEN RUN
+// — the sub-engine step of `fn source opts end` — now that a conforming parser
+// takes either the delegation lane or the callback lane. Both raise exactly what
+// the interpreter raises for the same call, which is the property that lets the
+// run stay a backstop rather than a third behaviour.
+func TestFnDispatchTokenRunLane(t *testing.T) {
+	r := mcovReg(t)
+	opts := s7bMap()
+
+	// (1) An OVER-WIDE signature. ParseLangFnSigWhy admits extra params after
+	// the [source opts] prefix, so a three-param parser passes the contract
+	// check and then matches nothing against the handler's two operands —
+	// MatchFnSig answers nil, the token run steps `fn source opts end`, the fn
+	// applies to nothing, and all THREE values survive as data. That is the
+	// single-result guard's real reachable case.
+	fwide := fdFn(t, r, `fn [[source:Any opts:Map extra:Integer] [Any] [source]]`)
+	if _, err := parseFnDispatchHandler([]native.Value{fwide, native.NewString("s"), opts}, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "expected one result, got 3") {
+		t.Errorf("fn dispatch: an over-wide parser signature should fail the single-result guard, got %v", err)
+	}
+
+	// (2) A DELEGATION wrapper whose inner native does not resolve. The shape
+	// is what Parse.parser mints — unnamed params, a body of one Word — but the
+	// word names nothing in the wrapper's registry, so parseFnNativeApply
+	// declines and the token run reports the missing word.
+	deleg := native.NewFunction(native.FnDefInfo{
+		Name:     "fd_missing_inner_xyz",
+		Registry: r,
+		Signatures: []native.Signature{{
+			Params:     []native.FnParam{{Type: native.TAny}, {Type: native.TMap}},
+			Returns:    []*native.Type{native.TAny},
+			Impl:       native.Boru([]native.Value{native.NewWord("fd_missing_inner_xyz")}),
+			BarrierPos: -1,
+		}},
+	})
+	if _, err := parseFnDispatchHandler([]native.Value{deleg, native.NewString("s"), opts}, nil, nil, r); err == nil {
+		t.Error("fn dispatch: a delegation wrapper with no inner native should error")
+	}
+
+	// (3) A conforming signature the OPERANDS do not fit: the declared
+	// source:String against an Integer. Neither lane matches, and the token run
+	// raises the interpreter's own dispatch error.
+	fstr := fdFn(t, r, `fn [[source:String opts:Map] [Any] [source]]`)
+	if _, err := parseFnDispatchHandler([]native.Value{fstr, native.NewInteger(5), opts}, nil, nil, r); err == nil {
+		t.Error("fn dispatch: a String-source parser given an Integer should error")
 	}
 }

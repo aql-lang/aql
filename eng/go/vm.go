@@ -80,6 +80,13 @@ type vmFrame struct {
 	locals         []core.Value
 	loopBase       int
 	stackBase      int
+	// retFn overrides the RETURN CONTRACT this frame's RET applies. Set only
+	// by the Apply kernel's frame push (vm_dyn_apply.go): the entered unit is
+	// a stamped fn-value body that declares no returns of its own, while the fn
+	// VALUE applied does — and the island path this replaces applies the
+	// value's contract. Nil on every ordinary CALL_USER frame, where the unit
+	// IS the contract.
+	retFn *compiler.CompiledFn
 	// argsBase is the r.Args depth at call entry (DynEnv programs only —
 	// the frame pushed its args list; RET / flow unwind truncate back).
 	argsBase int
@@ -830,8 +837,7 @@ func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, 
 	case compiler.OpCallDynFrame:
 		return vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
 	case compiler.OpCallDynMethod:
-		st, err := vc.callDynMethod(reg, &vc.p.DynMethods[arg], stack, curDebug, pc)
-		return st, nil, err
+		return vc.callDynMethod(reg, &vc.p.DynMethods[arg], stack, curDebug, pc)
 	default:
 		return vc.callDynamicOp(reg, op, arg, stack, curDebug, pc)
 	}
@@ -1050,14 +1056,14 @@ func (vc *vmContext) callDynApplyTop(reg *core.Registry, n int, stack []core.Val
 // interpreter's forward auto-dispatch of the same window. A genuine boru
 // error from the method surfaces as-is (the interpreter raises the same,
 // prior side effects included).
-func (vc *vmContext) callDynMethod(reg *core.Registry, spec *compiler.DynMethodSpec, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+func (vc *vmContext) callDynMethod(reg *core.Registry, spec *compiler.DynMethodSpec, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
 	if err := vc.gateWord(reg, spec.Word); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	r := vc.r
 	n := spec.NArgs
 	if len(stack) < n+1 {
-		return nil, vmErrAt(curDebug, pc, "CALL_DYN_METHOD underflow at "+spec.Word)
+		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYN_METHOD underflow at "+spec.Word)
 	}
 	top := len(stack) - 1
 	fnVal := stack[top]
@@ -1066,7 +1072,7 @@ func (vc *vmContext) callDynMethod(reg *core.Registry, spec *compiler.DynMethodS
 	for i := 0; i < n; i++ {
 		args[i] = stack[top-1-i]
 	}
-	guard := func(results []core.Value) ([]core.Value, error) {
+	guard := func(results []core.Value) ([]core.Value, *dynEnter, error) {
 		if len(results) != spec.NOut {
 			// A count differing from the shape claim indicts a HOST-CONTRACT
 			// violation, not compiler model debt: a boru-source method's
@@ -1077,19 +1083,19 @@ func (vc *vmContext) callDynMethod(reg *core.Registry, spec *compiler.DynMethodS
 			// (runtimeShouldFallback still resolves it by re-running on the
 			// tolerant interpreter, fenced as ever); the runtime-bail census
 			// counts DESIGNED model-miss defers only, and this is not one.
-			return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+			return nil, nil, vmErrAt(curDebug, pc, fmt.Sprintf(
 				"shaped method apply %s: result count %d violates the host-registered shape claim %d",
 				spec.Word, len(results), spec.NOut))
 		}
 		if err := vc.screenResults(results, "shaped method result at "+spec.Word, curDebug, pc); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return append(stack[:base], results...), nil
+		return append(stack[:base], results...), nil, nil
 	}
 	if _, ok := fnVal.Data.(core.ClosurePayload); ok && !fnVal.Quoted {
 		results, err := vc.invokeClosure(vc.r, fnVal, args)
 		if err != nil {
-			return nil, stampAt(err, curDebug, pc, r)
+			return nil, nil, stampAt(err, curDebug, pc, r)
 		}
 		return guard(results)
 	}
@@ -1098,25 +1104,57 @@ func (vc *vmContext) callDynMethod(reg *core.Registry, spec *compiler.DynMethodS
 		// method value. The interpreter would leave it as data and continue
 		// with a DIFFERENT stack shape, which this program cannot express —
 		// defer wholesale.
-		return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method-not-appliable", "shaped method apply "+spec.Word+
+		return nil, nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method-not-appliable", "shaped method apply "+spec.Word+
 			": value is not an appliable function at run time; deferring to the interpreter")
 	}
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && core.IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
-				return nil, stampAt(err, curDebug, pc, r)
+				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
 			return guard(results)
 		}
+	}
+	// The Apply kernel (vm_dyn_apply.go): a callee carrying a compiled unit of
+	// THIS program is entered as a frame instead of islanded. `args` is already
+	// in sig order here (the recorder lays ops[0] on top), which is the order
+	// dynApplyEnter binds and the order the island's forward auto-dispatch
+	// produces — so the two paths select and bind identically.
+	//
+	// The shape claim's RESULT half is discharged BEFORE the entry, because a
+	// frame push has no results to count — dynMethodClaimOK compares the applied
+	// value's DECLARED return count against the claim, and the contract the
+	// entry carries makes that count binding at RET. Everything it cannot
+	// promise keeps the island and the guard closure's runtime count, unchanged.
+	if ent := vc.dynApplyEnter(fnVal, args); ent != nil && dynMethodClaimOK(ent, spec.NOut) {
+		return stack[:base], ent, nil
 	}
 	island := make([]core.Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
 	results, err := vc.islandRun(reg, island)
 	if err != nil {
-		return nil, stampAt(err, curDebug, pc, r)
+		return nil, nil, stampAt(err, curDebug, pc, r)
 	}
 	return guard(results)
+}
+
+// dynMethodClaimOK reports whether an Apply-kernel entry agrees with the
+// shaped-method claim's RESULT half (DynMethodSpec.NOut).
+//
+// The claim has to be discharged BEFORE the entry, because a frame push has no
+// results to count. What makes a static answer sound is the contract the entry
+// CARRIES (applyRetContract): the frame's RET enforces exactly those declared
+// returns, so a frame entered under a matching claim pushes exactly NOut values
+// or raises the interpreter's own return error. Note the count is read off the
+// APPLIED VALUE's contract, not the entered unit's — a stamped fn-value unit
+// declares no returns of its own, which is the whole reason the contract has to
+// ride along.
+//
+// A sig with NO declared return has no count to promise and declines, keeping
+// the island and the guard closure's runtime count.
+func dynMethodClaimOK(ent *dynEnter, nout int) bool {
+	return len(ent.retFn.Returns) > 0 && len(ent.retFn.Returns) == nout
 }
 
 // callDynamicMixed handles the MIXED fn-value-call boundary (`3 m.f 2`): a
@@ -1164,22 +1202,26 @@ func (vc *vmContext) callDynFrame(reg *core.Registry, w, frameBase int, stack []
 	base := len(stack) - w
 	prefix := append([]core.Value(nil), stack[frameBase:base]...)
 	tokens := append([]core.Value(nil), stack[base:]...)
-	// The Apply kernel reaches the replay window only in its SIMPLEST shape:
-	// an empty resolved prefix, and a token region that is a fn followed by
-	// plain data. Then the region is exactly [fn, args…] — the same thing
-	// CALL_DYNAMIC's leading form hands dynApplyEnter, and RunResolved would
-	// have auto-applied it in written order, which is the order the frame
-	// binds.
+	// The Apply kernel reaches the replay window when the token region is a fn
+	// followed by plain data. The region is then exactly [fn, args…] — the same
+	// thing CALL_DYNAMIC's leading form hands dynApplyEnter, and RunResolved
+	// would have auto-applied it in written order, which is the order the frame
+	// binds. A token region carrying a SECOND fn or a tape-coupled token keeps
+	// the island: the interpreter re-steps those and a frame push cannot.
 	//
-	// A NON-EMPTY prefix is not that shape and must keep the island: the fn
-	// stack-collects from the prefix as well as forward-collecting the token
-	// region (callDynFrame's own contract), so the arg set the frame would
-	// bind is not the arg set the interpreter assembles. Likewise a token
-	// region carrying a second fn or a tape-coupled token — the interpreter
-	// re-steps those, and a frame push cannot.
-	if len(prefix) == 0 && len(tokens) > 0 && dynFrameSimpleWindow(tokens) {
-		if ent := vc.dynApplyEnter(tokens[0], tokens[1:]); ent != nil {
-			return stack[:frameBase], ent, nil
+	// A NON-EMPTY prefix is admitted only when the callee is ALL-FORWARD. The
+	// prefix is the frame-bottom unnamed-param re-push, and a barrier'd callee
+	// STACK-collects from it as well as forward-collecting the token region
+	// (callDynFrame's own contract above), so the arg set a frame push would
+	// bind is not the arg set the interpreter assembles. All-forward, it cannot
+	// reach the prefix at all — dynApplyEnter has already established that the
+	// token args exactly fill its params — so the prefix survives underneath
+	// and the unit's result lands on top of it, which is the residual the island
+	// returns. Hence stack[:base], not stack[:frameBase]: the two coincide only
+	// when the prefix is empty.
+	if len(tokens) > 0 && dynFrameSimpleWindow(tokens) {
+		if ent := vc.dynApplyEnter(tokens[0], tokens[1:]); ent != nil && (len(prefix) == 0 || ent.allForward) {
+			return stack[:base], ent, nil
 		}
 	}
 	results, err := runIslandResolved(reg, prefix, tokens)
@@ -1900,7 +1942,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 				if err := checkParamContract(r, fn, ent.locals); err != nil {
 					return nil, stampAt(err, curDebug, pc, r)
 				}
-				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds), argsBase: r.Args.Depth()})
+				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds), argsBase: r.Args.Depth(), retFn: ent.retFn})
 				vc.frameDepth++ // balanced by the matching RET, like OpCallUser
 				vc.pushFrameArgs(ent.locals, fn.NArgs)
 				locals = ent.locals
@@ -2104,10 +2146,18 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			// kept uniform with user-fn return enforcement.)
 			if curUnit >= 0 {
 				stackBase := 0
+				contract := &p.Fns[curUnit]
 				if len(frames) > 0 {
 					stackBase = frames[len(frames)-1].stackBase
+					// An Apply-kernel frame carries the APPLIED VALUE's declared
+					// contract, because the unit it entered declares none of its
+					// own (applyRetContract). Every other frame leaves this nil
+					// and the unit is the contract, as before.
+					if ov := frames[len(frames)-1].retFn; ov != nil {
+						contract = ov
+					}
 				}
-				trimmed, err := checkReturnContract(r, &p.Fns[curUnit], stack, stackBase, len(frames) > 0)
+				trimmed, err := checkReturnContract(r, contract, stack, stackBase, len(frames) > 0)
 				if err != nil {
 					return nil, stampAt(err, curDebug, pc, r)
 				}

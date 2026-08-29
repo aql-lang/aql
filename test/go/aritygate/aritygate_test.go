@@ -94,7 +94,14 @@ var pinnedAritySites = map[string]int{
 	// own param count, verbatim from OpCallUserPoly. A function of any arity
 	// takes the same path. NOTE: this entry was added because the gate caught
 	// it — on the first change after the gate landed, which is the whole point.
-	"eng/go/vm_dyn_apply.go":    2,
+	// 2 -> 3: allForwardSig compares a matched signature's BARRIER against its
+	// param count to answer where the call's arguments come from — all forward,
+	// or forward up to the barrier and the rest from the stack. That IS the
+	// argument rule, not a decision about what a function of a given arity may
+	// do: the replay window reads it to know whether the callee can reach the
+	// resolved prefix below the tokens, and a callee of any arity that cannot
+	// takes the same path.
+	"eng/go/vm_dyn_apply.go":    3,
 	"eng/go/vm_rematch.go":      2,
 	"eng/go/vm_poly_nomatch.go": 3,
 
@@ -137,12 +144,19 @@ var pinnedAritySites = map[string]int{
 	"lang/go/native/help/help.go":     8,
 	"lang/go/native/native_macro.go":  5,
 	"lang/go/native/native_help.go":   3,
-	"lang/go/modules/parselang.go":    1,
-	"lang/go/modules/net_codec.go":    1,
-	"lang/go/modules/test.go":         1,
-	"lang/go/stackform/walk.go":       1,
-	"basic/go/native_control.go":      1,
-	"basic/go/native_definition.go":   1,
+	// 1 -> 2: the runtime `parse <fn>` dispatch reads whether a registry
+	// binding carries any overloads AT ALL before matching against them
+	// (parseFnNativeApply, mirroring eng/go/vm.go::tryNativeFnApply). It is an
+	// OVERLOAD-LIST presence test, not a parameter count, and it decides which
+	// signature TABLE to match — the value's own, or the one its name resolves
+	// to in the registry — never whether the parser may act. That is matching
+	// machinery, the argument rule's own, not a behaviour-by-arity exception.
+	"lang/go/modules/parselang.go":  2,
+	"lang/go/modules/net_codec.go":  1,
+	"lang/go/modules/test.go":       1,
+	"lang/go/stackform/walk.go":     1,
+	"basic/go/native_control.go":    1,
+	"basic/go/native_definition.go": 1,
 
 	// ── Tooling and fixtures.
 	"tools/piecetool/demethod.go": 1,
