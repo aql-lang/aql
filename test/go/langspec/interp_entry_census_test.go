@@ -127,7 +127,7 @@ import (
 // after it took has left it. Rewrite it, do not append to it:
 //
 //	path-modifier.tsv        13 rows   Engine.Run 13, vm:island 13
-//	bytecode-migrated.tsv    13 rows   RunResolved 6, vm:island 5, CallBoru 2, …
+//	bytecode-migrated.tsv     7 rows   RunResolved 6, vm:island 5, CallBoru 2, …
 //	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
 //
 // Engine.Run appears everywhere because every other seam runs a nested engine;
@@ -352,6 +352,32 @@ import (
 // attribution applied word-by-word leaves siblings behind. Putting it on the
 // shared entry point is what makes it exhaustive.
 //
+// (o) `do {key:[body]}` stops starting an engine to step values it has already
+// computed. Six bytecode-migrated rows, 62 -> 56, and the interesting part is
+// that NOTHING needed compiling — the compiler was already doing the work.
+//
+// The disassembly settles it. `def f fn [[a:Integer] [Map] [ do {n:[a add 1]} ]]`
+// lowers to
+//
+//	PUSH_LOCAL l0 / PUSH_CONST 1 / CALL_NATIVE add / MAKE_LIST / MAKE_MAP / CALL_NATIVE do
+//
+// so the map reaching DoEvalMapValue is `{n:[6]}` — the addition happened at
+// MAKE_LIST. The handler then ran `[6]` in a sub-engine to discover that
+// stepping the literal 6 yields 6. That is an interpreter entry inside a
+// compiled program buying precisely nothing, and doEvalDataList now returns a
+// STEPLESS list as its own residual instead.
+//
+// The interpreter's lane is untouched, which is what makes this safe rather
+// than clever: the same source arrives there as [Word(a) Word(add) 1], which is
+// not stepless, so it still runs. The two engines' answers are unchanged; only
+// the compiled lane's redundant engine is gone.
+//
+// Worth generalising from: a census row is not automatically a COMPILER
+// problem. The cluster table said "do {map} computed-map bodies" and read like
+// Stage 6 work on code bodies. Reading the actual disassembly said the bodies
+// were already gone, and the fix was six lines in a handler. Read the
+// bytecode before believing a cluster's name.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -360,7 +386,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 62
+const interpEntryRowCeiling = 56
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

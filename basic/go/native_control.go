@@ -503,10 +503,57 @@ func DoEvalList(r *Registry, elems []Value) ([]Value, error) {
 // data values whose text happens to name a word (`"if"`, `"get"`,
 // `"do"`) storable without boxing tricks (voxgig DX report T4).
 func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
+	// A STEPLESS list is its own residual, so the sub-engine run is the
+	// identity on it and is skipped.
+	//
+	// This exists because the COMPILED lane arrives here with the work already
+	// done. `do {n:[a add 1]}` inside a fn body records as the computation
+	// followed by MAKE_LIST over its RESULT — the disassembly is PUSH_LOCAL /
+	// CALL_NATIVE add / MAKE_LIST / MAKE_MAP — so the list this walks is `[6]`,
+	// and starting an engine to step the literal 6 is an interpreter entry
+	// inside a compiled program that buys nothing. The INTERPRETER reaches the
+	// same source as [Word(a) Word(add) 1], which is not stepless, so its lane
+	// is untouched and the two engines still agree.
+	if doListIsStepless(elems) {
+		return append([]Value(nil), elems...), nil
+	}
 	sub := New(r)
 	input := make([]Value, len(elems))
 	copy(input, elems)
 	return sub.Run(input)
+}
+
+// doListIsStepless reports whether every element of a `do` map's list value is
+// a value the step loop would leave exactly as it is.
+//
+// The test is an ALLOWLIST of value shapes, deliberately, rather than a
+// denylist of active token kinds: a shape this does not recognise keeps the
+// sub-engine, so a token kind added later stays correct here by default. A
+// denylist would silently start treating it as data, and the failure mode of
+// that is a body that stops running — a wrong answer, not an error.
+func doListIsStepless(elems []Value) bool {
+	for _, e := range elems {
+		if !steplessValue(e) {
+			return false
+		}
+	}
+	return true
+}
+
+// steplessValue admits the five concrete scalar leaves and nothing else. Eval
+// marks a value the step loop EVALUATES rather than places, so it is excluded
+// even on an admitted payload.
+//
+// The wider scalar leaves (BigInt, Decimal, None) would be equally sound and
+// are left out because nothing measured needs them: the shape this serves is a
+// computed value the compiled lane already produced, and admitting a payload
+// costs a proof each time.
+func steplessValue(v Value) bool {
+	switch v.Data.(type) {
+	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload:
+		return IsConcrete(v) && !v.Eval
+	}
+	return false
 }
 
 // DoEvalMapValue recursively evaluates list values within a map. Used
