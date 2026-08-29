@@ -130,6 +130,12 @@ func UsurpFunction(v Value) (Value, bool) {
 		Signatures:     wrapped,
 		MaxForwardArgs: calcMaxForwardArgs(wrapped),
 		Registry:       fnDef.Registry,
+		// The reversal above is invisible to any later inspection of the
+		// value — same Name, and for a HOMOGENEOUS sig the same param types
+		// in the same order (`sub(Number, Number)` reversed is itself). Mark
+		// it so a consumer that would otherwise dispatch through the wrapped
+		// word's own live binding can decline instead of dropping the swap.
+		ArgsReversed: true,
 	}), true
 }
 
@@ -195,6 +201,12 @@ func rebarrierFunction(v Value, stack bool) (Value, bool) {
 		Signatures:     wrapped,
 		MaxForwardArgs: calcMaxForwardArgs(wrapped),
 		Registry:       fnDef.Registry,
+		// A wrapper composes: if the value it wraps already reverses its
+		// args (usurp), this one still does, and the marker has to survive
+		// or a consumer downstream sees an unmarked reversal. Measured:
+		// `force-arity 2 (usurp (m.s)) 10 3` answered -7 against the
+		// interpreter's 7 while this line was missing.
+		ArgsReversed: fnDef.ArgsReversed,
 	}), true
 }
 
@@ -233,6 +245,12 @@ func ForceArityFunction(v Value, n int) (Value, bool) {
 		Signatures:     []Signature{sig},
 		MaxForwardArgs: n,
 		Registry:       fnDef.Registry,
+		// A wrapper composes: if the value it wraps already reverses its
+		// args (usurp), this one still does, and the marker has to survive
+		// or a consumer downstream sees an unmarked reversal. Measured:
+		// `force-arity 2 (usurp (m.s)) 10 3` answered -7 against the
+		// interpreter's 7 while this line was missing.
+		ArgsReversed: fnDef.ArgsReversed,
 	}), true
 }
 

@@ -563,10 +563,64 @@ import (
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
 // do not need this seam at all — see the cluster note below.
 //
+// (u) 49 -> 46. A PARKED NATIVE WORD applies on the VM — but only an
+// UNWRAPPED one, and the gap between those two sentences is the whole entry.
+//
+// The apply gate asked `IsDelegationFnDef`: is this a trivial wrapper whose
+// every own sig is a `[Word(inner)]` pass-through? That names a SHAPE, and the
+// property it stood in for is `no boru body to run in a frame`. A bare `add/v`
+// has that property outright — 9 own sigs, every one a Go handler — and
+// answered `no`, because it delegates to nobody: it IS the native. So the gate
+// now names the property (vmNativeApplicable, at all four apply sites), and
+// tryNativeFnApply on the other side already handled the value.
+//
+// FIRST MEASUREMENT SAID 10 ROWS. IT WAS WRONG, and how it was wrong is the
+// part worth keeping. The gate admitted MODIFIER WRAPPERS too — `usurp`,
+// `force-arity`, `/u`, `/N` — and those are a different function under the
+// same Name: UsurpFunction REVERSES each sig's Params and hands the result a
+// Go handler that re-dispatches the original, expecting the engine's
+// collection around it. tryNativeFnApply resolves sigs by NAME, so it fetched
+// the unwrapped original and dropped the reversal:
+//
+//	def m {s:sub/v}  m.s/u 10 3
+//	  interpreted  7        (usurped: 10 - 3)
+//	  compiled    -7
+//
+// Three path-modifier.tsv rows, caught by TestSpecCompiledOrFallback. The
+// count 39 in this slot was measured WHILE those rows were wrong; excluding
+// them gives back most of the win, and 46 is the real number.
+//
+// THE FIX IS A MARKER, NOT A COMPARISON, and that too was measured. The first
+// exclusion compared the value's params against the registry's — which cannot
+// see the swap, because `sub(Number, Number)` reversed is itself. Every sig
+// `sub` has is homogeneous, so the comparison admitted exactly the rows it
+// existed to reject. FnDefInfo.ArgsReversed records the reversal at the point
+// it happens, and the composing wrappers propagate it: without that,
+// `force-arity 2 (usurp (m.s))` rebuilt the value and dropped the flag — one
+// more differential row.
+//
+// WHAT STAYS ISLANDED is therefore every reshaped value, for the same reason a
+// user fn does: its handler expects a dispatch it is not being given. That is
+// the honest boundary of this increment, not an oversight to close later.
+//
+// THE GATE ALSO NEEDS THE LIVE NAME, not just the parked value, and the two
+// can drift: `def size fn [[n:Pos] …]` EXTENDS a core word (the one rebinding
+// `extend_owner` permits), adding a boru overload to a name a value was parked
+// from earlier. RegisteredWordIsNative asks that second question, and such a
+// value islands exactly as a user fn does.
+//
+// That half is pinned by a HANDLER TEST (core/go, TestParkedNativeApplyGate),
+// not a corpus row, and the reason is worth recording. The corpus row I first
+// wrote for it tripped TestCheckTypeSoundness: the checker predicts
+// `[dynamic(Any) Pos]` where the program actually leaves `[Integer]` — a
+// static/dynamic mismatch on the parked-value-plus-extension shape, unrelated
+// to this change and not something to fold into it. The row is gone; the
+// observation is in NUR.md so Stage 8 has it.
+//
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 49
+const interpEntryRowCeiling = 46
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

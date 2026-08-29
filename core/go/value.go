@@ -788,6 +788,24 @@ type FnDefInfo struct {
 	// Macros are deliberately NOT covered: applying a macro is never a
 	// stack-value dispatch (design/MACROS-PHASE1.10.md §5, D4).
 	Applied bool
+
+	// ArgsReversed marks a value built by UsurpFunction (the `usurp` word and
+	// the `/u` modifier): its signatures' Params are the wrapped word's in
+	// REVERSE, and each carries a Go handler that re-dispatches the original.
+	//
+	// It exists because the reversal is otherwise UNDETECTABLE by inspection.
+	// A wrapper keeps the wrapped word's Name, and comparing its params
+	// against the registry's cannot see the swap whenever the sig is
+	// homogeneous — `sub(Number, Number)` reversed is still
+	// `sub(Number, Number)`. Measured the hard way: a param-type comparison
+	// admitted `m.s/u 10 3` to a VM fast path that then answered -7 against
+	// the interpreter's 7.
+	//
+	// Any future wrapper that changes the ARG-TO-PARAM mapping must set it
+	// too. Wrappers that only re-base the barrier (`/s`, `/f`) must not —
+	// they leave params alone, and the barrier is spent once the args are
+	// collected.
+	ArgsReversed bool
 	// Gen carries the generic-parameter spec for a generic fn
 	// (`def identity gen [T] fn [[x:T] [T] [x]]`). Nil for ordinary
 	// fns. Dispatch admission rides the placeholder nodes' Behaviors;

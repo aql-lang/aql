@@ -66,6 +66,7 @@ keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
+| [NUR112](#nur112) | The checker's residual for a parked native word applied after its name was EXTENDED does not match what runs: `def Pos (refine Integer)  def m {a:size/v}  def size fn [[n:Pos] [Integer] [200]] end  def v:Pos 3  m.a v` is checked `[dynamic(Any) Pos]` — two values, one of them the argument left behind — and actually leaves `[Integer]`. Both ENGINES agree on the answer (3); it is the static model that differs, so no differential can see it — TestCheckTypeSoundness can, and did | writing a corpus row for the parked-native apply gate, 2026-08-29 |
 | [NUR111](#nur111) | The DECLARED RETURN of a fn value handed to a higher-order word is checked by nobody statically: `def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v` passes `boru check` clean, while the identical body as a code BLOCK (`each [cbad]`) and the identical fn called directly (`cbad 1`) are both flagged `type_error`. The end-of-pass pending-body drain ANALYSES the body (an undefined word inside it IS reported) but never holds the residual to the declaration — `declared` reaches `AnalyseFnBody` as the recursion hypothesis only, and the matching proof obligation is the interpreter's `__RC` marker, which the callback path never plants. Both ENGINES now raise (the runtime half is fixed, `lang/spec/fn-value.tsv` §13); it is the CHECKER that is silent | fixing the closure return-contract miscompile, 2026-08-29 |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
@@ -362,6 +363,58 @@ So the fix needs the `def` TOKEN's own position threaded to the record — a
 position the recorder does not currently receive from any of its three
 available sources. That is the work, and it is smaller than "compiled
 diagnostics" but larger than a fallback expression.
+
+---
+
+## NUR112 — a parked native applied after its name was extended is checked as two values {#nur112}
+
+**Status:** Pending · **Recorded:** 2026-08-29 · **Surfaced by:** writing a
+corpus row to pin the VM's parked-native apply gate; the row never landed,
+the observation did.
+
+**Rule:** the checker's residual is a claim about what the program leaves.
+When it names more values than run, every consumer downstream of it — the
+compiler's stack model included — is planning against a shape that does not
+occur.
+
+**Divergence.** The program answers `3` on both engines. The checker says it
+leaves two values:
+
+```
+def Pos (refine Integer)
+def m {a:size/v}
+def size fn [[n:Pos] [Integer] [200]] end
+def v:Pos 3
+m.a v
+
+  checked  [dynamic(Any) Pos]
+  actual   [Integer]
+```
+
+**Why it is not a differential finding.** The two ENGINES agree — both run
+the parked value's own native sigs and answer `3`. What differs is the
+static model, so `TestSpecCompiledDifferential` and the compile-or-fallback
+walk are both blind to it by construction. `TestCheckTypeSoundness`
+(`test/go/langspec/check_accuracy_test.go`) is the gate that compares the
+checked residual against the real one, and it is what caught this.
+
+**The shape.** A fn value parked from a name (`size/v`) while that name was
+purely native, then applied after a boru overload EXTENDED the name — the
+one rebinding `extend_owner` permits. The checker appears to model the
+dispatch as not consuming its argument (`Pos` survives in the residual) and
+to type the result dynamically, where at run time the native sig consumes
+the argument and yields one Integer.
+
+**Scope.** Stage 8 (checker totality). Related to but distinct from
+[NUR111](#nur111): that one is the checker declining to enforce a
+declaration it can see, this one is the checker's residual disagreeing with
+the runtime's. Both are the static model, neither is an engine divergence.
+
+**Not pinned in the corpus.** A row for this shape would trip the
+type-soundness pin (0 violations) on landing, which is the correct
+behaviour for a pin and the wrong way to record a finding. The VM gate the
+row was written for is pinned by a handler test instead
+(`core/go/value_classify_stage5_test.go`, `TestParkedNativeApplyGate`).
 
 ---
 

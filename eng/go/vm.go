@@ -816,7 +816,7 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 	// InstallFnDef-registered Handler and call it outside the dispatch frame it
 	// expects — diverging. Those fall through to the island, which runs the body
 	// faithfully as a nested Run.
-	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && core.IsDelegationFnDef(fnDef) {
+	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && vmNativeApplicable(vc.r, fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
@@ -941,7 +941,7 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 	if err := noMatchIfSigged(reg, fnVal, args, curDebug, pc, r); err != nil {
 		return nil, nil, err
 	}
-	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && core.IsDelegationFnDef(fnDef) {
+	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && vmNativeApplicable(vc.r, fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
@@ -1049,7 +1049,7 @@ func (vc *vmContext) callDynApplyTop(reg *core.Registry, n int, stack []core.Val
 		return nil, nil, stampAt(fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", fnVal.Data), curDebug, pc, r)
 	}
 	fnVal.Quoted = false // applyHandler: the parked value becomes a live call site
-	if core.IsDelegationFnDef(fnDef) {
+	if vmNativeApplicable(vc.r, fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
@@ -1140,7 +1140,7 @@ func (vc *vmContext) callDynMethod(reg *core.Registry, spec *compiler.DynMethodS
 		return nil, nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method-not-appliable", "shaped method apply "+spec.Word+
 			": value is not an appliable function at run time; deferring to the interpreter")
 	}
-	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && core.IsDelegationFnDef(fnDef) {
+	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && vmNativeApplicable(vc.r, fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
@@ -1332,6 +1332,32 @@ func (vc *vmContext) escapedFlow(regs ...*core.Registry) compiler.Opcode {
 // when the fn has a non-trivial (user) body that needs the interpreter — the
 // caller then islands. The island stays the correctness backstop, so any
 // divergence from this fast path is caught by the differential gate.
+// vmNativeApplicable reports whether a runtime Function VALUE can be applied by
+// tryNativeFnApply — directly, on this VM — instead of through an island.
+//
+// Two shapes qualify, for ONE reason: neither has a boru body to run in a
+// frame. A trivial-delegation wrapper passes through to an inner native
+// (`rand-int`, `MathUtil.sqrt`); a parked native word reference IS one
+// (`add/v`, and the same value read back out of a map). A user fn is excluded
+// because its registered handler is InstallFnDef's body splicer, which expects
+// the dispatch frame the interpreter builds around it.
+//
+// The gate used to name delegation alone, and the omission was the census's
+// largest single cluster: 13 path-modifier.tsv rows, every one the shape
+// `def m {a:add/v}  m.a 1 2`, islanding for want of this line.
+func vmNativeApplicable(r *core.Registry, fd core.FnDefInfo) bool {
+	if core.IsDelegationFnDef(fd) {
+		return true
+	}
+	// tryNativeFnApply dispatches a parked native through the LIVE registry
+	// sigs, so admit one only while those sigs still describe this value. A
+	// modifier wrapper keeps the wrapped word's Name but rewrites its
+	// signatures, and its Go handler expects the engine's collection around it
+	// — the same reason a user fn is excluded. Those island.
+	return core.IsNativeWordFnDef(fd) && !fd.ArgsReversed &&
+		core.RegisteredWordIsNative(r, fd.Name)
+}
+
 func (vc *vmContext) tryNativeFnApply(fnDef core.FnDefInfo, args []core.Value) ([]core.Value, bool, error) {
 	reg := fnDef.Registry
 	if reg == nil {
