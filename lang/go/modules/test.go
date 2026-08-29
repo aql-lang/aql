@@ -476,15 +476,39 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "assert-throws",
+			// `Assert.throws [body]` runs a body for its RAISE and discards its
+			// residual. The word's answer is "did it raise", and a raise is a
+			// raise on either engine — the compiled body traps and returns the
+			// same boru error the sub-engine run would have. So the body compiles
+			// to a 0-input closure and the handler drives it through InvokeBody.
+			//
+			// BodyOutResidual because the residual is DISCARDED: a passing body
+			// nets whatever it nets before raising, a failing one nets its full
+			// value list, and neither count is a contract — so the closure must
+			// compile count-agnostic.
+			Callable: &native.CallableSpec{BodyPos: 0, BodyOut: native.BodyOutResidual, Inputs: func(_ []native.Value) []native.Value {
+				return []native.Value{}
+			}},
 			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					body, err := native.RequireConcreteList(args[0], "Assert.throws")
-					if err != nil {
-						return nil, err
+					// Validate BEFORE running, so a non-concrete body raises the
+					// same shape error on both engines.
+					compiled := native.IsCompiledClosure(args[0])
+					var body native.ReadList
+					if !compiled {
+						var err error
+						if body, err = native.RequireConcreteList(args[0], "Assert.throws"); err != nil {
+							return nil, err
+						}
 					}
-					_, runErr := native.New(r).Run(body.Slice())
+					var runErr error
+					if compiled {
+						_, runErr = native.InvokeBody(r, args[0], nil)
+					} else {
+						_, runErr = native.New(r).Run(body.Slice())
+					}
 					if runErr == nil {
 						return nil, r.BoruError("assertion_failure",
 							"Assert.throws: body did not throw",

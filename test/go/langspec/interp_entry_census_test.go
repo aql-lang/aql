@@ -131,7 +131,7 @@ import (
 //	fn-value.tsv              6 rows   vm:island 5
 //	module-fnvalue-boundary   6 rows   vm:island-resolved 6
 //	valof.tsv                 5 rows   vm:island 5
-//	module-test.tsv           7 rows   Engine.Run 7, CallBoru 3
+//	module-test.tsv           5 rows   Engine.Run 5, CallBoru 3   (2 assertion rows compiled at (j))
 //
 // Engine.Run appears everywhere because every other seam runs a nested engine;
 // a row with ONLY Engine.Run is the interesting case — nothing islanded, the
@@ -210,6 +210,24 @@ import (
 // One row, bought with a worse error message, is not the trade this mission
 // makes — the same judgement that un-masked the flex-map miscompile at (e).
 //
+// (j) `Assert.throws [body]` compiles its body — the same CallableSpec + drive-
+// through-InvokeBody shape as (i), at BodyPos 0 with the residual DISCARDED.
+// Every corpus row that runs an assertion body left the census: five of them,
+// two in module-test.tsv and three in the edge-errors files, which is three
+// more than the cluster table showed. The table only lists files at 5+ rows, so
+// a word used two-or-three-at-a-time across several files is INVISIBLE in it.
+// Worth remembering when reading the table as a work queue: it ranks
+// concentrations, not mechanisms, and a mechanism can be spread thin.
+//
+// It is worth naming why a word whose whole purpose is to OBSERVE AN ERROR is a
+// compile and not an attribution, since (h) attributes on exactly that kind of
+// reasoning. The distinction is what the word observes. boru:debug observes the
+// ENGINE — steps taken, dispatches seen — so the engine is the answer and
+// compiling erases it. Assert.throws observes the PROGRAM: whether the body
+// raised. A raise is a raise on either engine (the VM traps and returns the same
+// boru error the sub-engine run would have), so the answer is engine-independent
+// and the body compiles.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -218,7 +236,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 100
+const interpEntryRowCeiling = 95
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
