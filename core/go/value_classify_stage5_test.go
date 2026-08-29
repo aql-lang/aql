@@ -361,6 +361,21 @@ func TestIsSteplessValue(t *testing.T) {
 	if IsSteplessValue(evalInt) {
 		t.Error("Eval marks a value the loop EVALUATES — an admitted payload with it set is still active")
 	}
+
+	// A CARRIER is the case that needs the IsConcrete half specifically, and it
+	// needs both shapes. A scalar carrier has nil Data, so it is refused by the
+	// switch like a bare node; a carrier that DOES hold an admitted payload
+	// reaches the matched arm and must still be refused there — it stands for a
+	// value the analysis has not seen, which is the opposite of one the loop can
+	// place.
+	if IsSteplessValue(NewCarrier(TInteger)) {
+		t.Error("a scalar carrier carries no payload — IsSteplessValue must not admit it")
+	}
+	payloadCarrier := NewInteger(1)
+	payloadCarrier.Carrier = true
+	if IsSteplessValue(payloadCarrier) {
+		t.Error("a carrier over an admitted payload is still a carrier — IsConcrete is what refuses it")
+	}
 }
 
 // The window predicate is the conjunction, and the empty window is the case
