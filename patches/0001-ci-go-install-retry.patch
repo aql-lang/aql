@@ -1,0 +1,115 @@
+From 8cd50bc5ac32d487fb891e49396993f5ea046925 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 29 Aug 2026 00:47:11 +0000
+Subject: [PATCH] CI: wire the toolchain-install retry, both halves this time
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+`go install <tool>@<version>` verifies every module in the TOOL's own
+dependency graph against sum.golang.org — one un-retried network round trip per
+checksum tile — and a single failure among them fails build-and-test before a
+line of this repository is built. It has cost this repo four runs across #409
+and #410, on different modules and different tiles each time, with clean runs
+in between: a degraded service, not anything in the tree.
+
+The history is the point. be4f9b0 added scripts/go-install-retry.sh with no
+ci.yml half, because that session had no `workflow` scope and the API's
+file-write endpoints refused. a372519 then deleted the script, correctly: a
+script nothing invokes reads as a solved problem, which is worse than an honest
+gap. #410 merged that deletion, so main has neither half.
+
+Both land together here. ci.yml's two `go install` steps call the script; the
+script retries twice with a 15s/30s backoff and then runs the LAST attempt
+UNGUARDED, so a genuine failure — a version that does not exist, a withdrawn
+module, a real checksum mismatch — still fails with go's own diagnostic rather
+than a summary that buries it.
+
+Deliberately NOT the alternative: GONOSUMDB / GONOSUMCHECK / GOPRIVATE widening
+/ GOFLAGS -insecure would each buy a green run by not verifying checksums,
+trading a transient CI failure for a supply-chain hole.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+---
+ .github/workflows/ci.yml    |  4 +--
+ scripts/go-install-retry.sh | 49 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 51 insertions(+), 2 deletions(-)
+ create mode 100755 scripts/go-install-retry.sh
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index d874845..45ed209 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -51,12 +51,12 @@ jobs:
+         # running `golangci-lint run` itself, which we don't want here
+         # — we run it ourselves later, against every module.
+         run: |
+-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
++          scripts/go-install-retry.sh github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+ 
+       - name: Install govulncheck
+         run: |
+-          go install golang.org/x/vuln/cmd/govulncheck@latest
++          scripts/go-install-retry.sh golang.org/x/vuln/cmd/govulncheck@latest
+           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+ 
+       - name: Build CLI
+diff --git a/scripts/go-install-retry.sh b/scripts/go-install-retry.sh
+new file mode 100755
+index 0000000..2097a0a
+--- /dev/null
++++ b/scripts/go-install-retry.sh
+@@ -0,0 +1,49 @@
++#!/usr/bin/env bash
++# Install a Go tool, retrying transient module-fetch failures.
++#
++# `go install <pkg>@<version>` verifies every module in the tool's own
++# dependency graph against sum.golang.org. That is one network round trip per
++# checksum tile, none of them retried, and any single one of them failing
++# fails the whole CI job before a line of this repository is built.
++#
++# It happens. On 2026-08-27 the golangci-lint install failed twice in three
++# minutes with
++#
++#   <module>: verifying module: reading https://sum.golang.org/tile/8/…:
++#   stream error: stream ID …; INTERNAL_ERROR; received from peer
++#
++# on DIFFERENT modules and different tiles each time — the signature of a
++# degraded service rather than of anything wrong in the tree, since a real
++# problem (a bad go.sum, a wrong pin, a deleted module) fails on the same
++# module every time. Both runs died in the toolchain install, having never
++# reached `make build`.
++#
++# The fix is a bounded retry, and deliberately nothing more. Suppressing the
++# error instead — GONOSUMDB, GONOSUMCHECK, GOPRIVATE widening, GOFLAGS
++# -insecure — buys a green run by not verifying checksums, which trades a
++# transient CI failure for a supply-chain hole.
++#
++# Usage:
++#   scripts/go-install-retry.sh <package@version> [attempts]
++#
++# attempts defaults to 3: two retried, then a final unguarded one.
++set -euo pipefail
++
++pkg=${1:?usage: scripts/go-install-retry.sh <package@version> [attempts]}
++attempts=${2:-3}
++
++for (( attempt = 1; attempt < attempts; attempt++ )); do
++  if go install "$pkg"; then
++    exit 0
++  fi
++  delay=$(( attempt * 15 ))
++  printf 'go install %s failed (attempt %d/%d) — retrying in %ds\n' \
++    "$pkg" "$attempt" "$attempts" "$delay" >&2
++  sleep "$delay"
++done
++
++# The LAST attempt runs UNGUARDED on purpose. A genuine failure — a version
++# that does not exist, a module that was withdrawn, a real checksum mismatch —
++# must still fail the job with go's own diagnostic, not with a summary from
++# this script that buries what actually went wrong.
++go install "$pkg"
+-- 
+2.43.0
+
