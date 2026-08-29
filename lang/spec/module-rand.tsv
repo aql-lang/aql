@@ -30,6 +30,13 @@ import "boru:rand"  Rand.one-of [10 20 30]	10	pick one element of a list
 import "boru:rand"  Rand.string "abc" 4	'abcb'	4 chars drawn from a charset
 # list-of runs a quoted generator body n times into a List
 import "boru:rand"  Rand.list-of [Rand.int 0 100] 3	[87 75 74]	3 generated ints
+# A STEPLESS generator body is its own residual, so the count is served without
+# a sub-engine per iteration. The boundary rows are what make that safe: n=0
+# runs the body ZERO times, so an empty body is only an error when n > 0.
+import "boru:rand"  Rand.list-of ['a','b'] 2	['b' 'b']	a stepless body needs no engine — the residual top, repeated
+import "boru:rand"  Rand.list-of ['a','b'] 0	[]	n=0 runs the body zero times
+import "boru:rand"  Rand.list-of [] 0	[]	an empty body with n=0 is NOT an error — nothing runs
+import "boru:rand"  Rand.list-of [] 2	ERROR:rand_error	an empty body with n>0 produces no value
 # map-from builds a Map by running each value's quoted generator body
 import "boru:rand"  Rand.map-from {a:[Rand.int 0 10]}	{a:7}	schema of generators
 #

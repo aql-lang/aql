@@ -135,11 +135,20 @@ import (
 //	 8  Test.invoke / Test.prop / Test.check-prop                  CallBoru
 //	    module-test 5, corpus-modules 3
 //	 4  A FN VALUE CROSSING A MODULE BOUNDARY, applied inside      vm:island-resolved
-//	    module-fnvalue-boundary 4
+//	    module-fnvalue-boundary 4 — but only ONE is the boundary's doing.
+//	    Instrumenting dynApplyEnter's ref gate splits them: one declines
+//	    purely because ref.Prog is not the running program (a DELIBERATE
+//	    decline — vm_dyn_apply.go says a detached ref cannot be a frame of
+//	    this program and hosting it nested would reintroduce the body
+//	    bracket the file exists to avoid); one ALSO declines correctly at
+//	    MatchFnSig (a 1-param fn with 0 args); and two carry no ref at all
+//	    because storedSigEligible refuses a flow-sentinel body (`break` /
+//	    `continue`). Read a cluster's rows before costing its fix.
 //	 4  SERVER / MOUNT CALLBACKS (a live socket, a fileops map)    InvokeCallback:callboru
 //	    module-repl 3, module-io 1
-//	 5  MISC, one mechanism each                                   Engine.Run
-//	    canon 2 (Vm.run over canon output), module-rand 1, corpus-modules 1, fn-value 1
+//	 4  MISC, one mechanism each                                   Engine.Run
+//	    canon 2 (Vm.run over canon output), module-rand 1, fn-value 1
+//	    (corpus-modules' Rand.list-of row left at (u))
 //
 // Engine.Run appears in nearly every row because every other seam runs a nested
 // engine; a row with ONLY Engine.Run is the interesting case — nothing
@@ -526,6 +535,29 @@ import (
 // generalized marks) by definition, and no amount of marking at the record site
 // substitutes for it.
 //
+// (u) `Rand.list-of` serves a STEPLESS generator body without an engine per
+// iteration. 50 -> 49, and it is the FOURTH instance of the shape (o), (q) and
+// (s) each found: a run whose residual is its own input.
+//
+// `Rand.list-of ['a','b'] 2` ran a sub-engine twice to discover that stepping
+// two string literals yields two string literals, then took the top of each.
+// The handler already had a compiled lane (IsCompiledClosure -> InvokeBody);
+// what it lacked was the observation that its INTERPRETER lane sometimes has
+// nothing to interpret.
+//
+// The boundary rows are the increment, not the happy path. n=0 runs the body
+// ZERO times, so an empty body is only an error when n > 0 — and the first cut
+// guarded on the body alone, which made `Rand.list-of [] 0` raise where both
+// engines answer []. Caught by probing the boundary before writing the rows,
+// and all four spellings are now corpus rows (module-rand.tsv): stepless-with-n,
+// stepless-with-zero, empty-with-zero, empty-with-n.
+//
+// Worth noting what this says about the shape's reach: it has now appeared in
+// basic's `do`, eng's mixed apply, native's shared quotation body, and a MODULE
+// handler. It is not a property of any one word, it is a property of running
+// placed values, and the next site that starts an engine over a literal window
+// is the next instance.
+//
 // TWO LESSONS. A census whose denominator is "rows that ran compiled" REWARDS a
 // change that stops rows compiling: read it against the corpus gate and the
 // compile-or-fallback walk, never alone. And the remaining path-modifier rows
@@ -534,7 +566,7 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 50
+const interpEntryRowCeiling = 49
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

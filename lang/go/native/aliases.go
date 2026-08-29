@@ -336,6 +336,7 @@ var (
 	NewReach                  = core.NewReach
 	NewReachFromKeys          = core.NewReachFromKeys
 	ApplyReach                = core.ApplyReach
+	IsSteplessWindow          = core.IsSteplessWindow
 	IsPathon                  = core.IsPathon
 	IsRecordType              = core.IsRecordType
 	IsReturnCheck             = core.IsReturnCheck
