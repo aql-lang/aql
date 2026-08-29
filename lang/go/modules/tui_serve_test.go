@@ -472,11 +472,11 @@ func TestTuiWirePaintViewerLoss(t *testing.T) {
 	if !ok {
 		t.Fatal("late joiner refused")
 	}
-	hub2.replay(id3)
+	hub2.promote(id3)
 	if got := <-lines3; !strings.Contains(got, "\"text\":\"back\"") {
 		t.Fatalf("replayed title = %s", got)
 	}
-	hub2.replay(0) // an unknown id replays nothing: the no-op arm
+	hub2.promote(0) // an unknown id replays nothing: the no-op arm
 	if got := <-lines3; !strings.Contains(got, "\"tree\":{\"text\":\"w\"") {
 		t.Fatalf("replayed frame = %s", got)
 	}
