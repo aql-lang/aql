@@ -1141,6 +1141,49 @@ wraps: it can tell THAT a value reverses (`ArgsReversed`) but not what to
 dispatch instead. Exposing the wrapped value on `FnDefInfo` is what turns
 this from an island into a permutation and a call.
 
+**WHAT IS LEFT AT 36, named and split.** After the wrapper lane graduated, the
+island seams stand at `vm:island` 5 and `vm:island-resolved` 8, and the rows
+behind them are two different problems rather than a residue of one:
+
+```
+vm:island (5) — a fn value read out of a CONTAINER, dispatched at the pointer
+  class.tsv:L122   def C class {op:(fn …)}  def c (make C {})  c.op 21
+  fn-value.tsv:L19 def m {f: (fn …)}  3 m.f 2
+  fn-value.tsv:L28 def m {f: (fn …)}  m.f 'x'
+  usurp.tsv:L33    def ops {rev: (usurp (valof sub2))}  ops.rev 10 3
+  usurp.tsv:L45    def ops {rev: (usurp sub2)}  ops.rev 10 3
+
+vm:island-resolved (8) — a fn value crossing a MODULE boundary
+  module-fnvalue-boundary.tsv L24, L32, L33, L51
+```
+
+The second cluster is not a hole: the apply seam's foreign-unit decline is
+deliberate, and the reasoning is recorded against it.
+
+The first has ONE cause, and the disassembly says so. Two of the five reach
+`CALL_DYNAMIC` and one reaches `CALL_DYNAMIC_MIXED`, so the site differs —
+but every one of them fails at the same test inside `dynApplyEnter`
+(`eng/go/vm_dyn_apply.go:132`):
+
+```go
+ref := compiler.CompiledRef(sig)
+if ref == nil || ref.Prog != vc.p || ref.Unit < 0 || … { return nil }
+```
+
+A fn value read out of a container carries no `CompiledRef` to a unit of
+this program, so the Apply kernel cannot enter it and the island answers.
+Unwrapping does not help even where it applies: `usurp.tsv:L45` DOES reach
+the new unwrap path, resolves to `sub2`, and still declines — because it is
+`sub2`'s own value that lacks the ref, not the wrapper.
+
+So the next target is not another dispatch site. It is the fn-stamping seam
+that gives a container-read value its unit — the one whose own note
+predicted this cluster (*"roughly four in five are a fn read out of a
+container … So descending into list and map consts is the rest of the
+win"*). The question to answer first, by reading rather than measuring: why
+the stamp does not reach these five, when that descent is already
+implemented.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this
