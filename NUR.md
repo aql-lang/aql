@@ -534,14 +534,41 @@ Sweeping the refusing rows says why, and it is not a tuning problem:
   does.
 
 So the join site is the wrong place: it knows a name was bound conditionally,
-and cannot know whether anything will READ it afterwards. The condition belongs
-at the READ, which is also where the better fix lives — a conditionally-bound
-name should not bake as a const at all, it should route to the live dynamic
-lookup (`dynScopeRescue` → `OpLookupDynScope`) so the runtime resolves it
-against the real def stack and raises `undefined_word` itself when the arm did
-not run. That is a REPAIR rather than a refusal, and it is the same thing
-family L calls the full graduation: "a runtime dispatch respecting the
-conditional binding".
+and cannot know whether anything will READ it afterwards.
+
+**THE READ SITE WAS THEN BUILT TOO, AND REJECTED FOR A SHARPER REASON.** Marking
+the name at the join (with its DefTable generation, so a later unconditional
+`def` clears it) and refusing at `resolveOperand` — after first trying
+`dynScopeRescue`, which repairs the in-fn case outright — took the corpus from
+131 refusals to **0**, closed every shape in the table above, and looked done.
+
+`lang/go`'s unit tests said otherwise, and the reason is structural rather than
+tunable. Three tests failed; one was NUR110's own pin graduating, and two were
+genuine false positives of a class the marking cannot see:
+
+```
+def out (if (3 gt 1) [ def t2 {a: 1}  (m set "k" t2) drop  t2 ] [ {a: 0} ])  out
+                          ^^ refused on `t2`
+```
+
+`t2` is the arm's OWN LOCAL. It is bound conditionally — that much is true — and
+it escapes as the arm's RESULT, seated by the branch exactly as the compiler
+already models. A post-branch read of the NAME is unsound; the arm's result
+VALUE flowing onward is sound; and both arrive at `resolveOperand` as "a value
+whose `defReads` name is conditionally bound". The signal cannot separate them,
+and neither can ordering: the arm's fragment is lowered at Finalize, after the
+join has marked.
+
+Nor is constant-folding the discriminator. `3 gt 1` is not literal-folded, so
+the shape takes the general branch path; splitting `InstallJoinedDefs` into
+definite and conditional variants was tried and changed nothing.
+
+**So the verdict stands as resolve-by-fix, and the fix is the def twins.** What
+is needed is per-read provenance that distinguishes a name read after the branch
+from a value produced inside it — which is exactly "a runtime dispatch
+respecting the conditional binding", family L's stated full graduation, and
+Stage 5 work. Two attempts are now recorded as rejected, both with their
+measurement, so the next one does not re-derive them.
 
 ---
 

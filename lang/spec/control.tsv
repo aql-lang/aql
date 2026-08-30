@@ -80,25 +80,3 @@ add 10 (if (1 eq 1) (add 1 2) (sub 9 4))	13	both-computed result consumed downst
 # fn's result as always).
 def n 0 if (n eq 0) [99] def sq fn [[x:Integer] [Integer] [mul x x]] sq 5	99 25	guard fires first, then the def-fn idiom proceeds
 def n 5 if (n eq 0) [99] def sq fn [[x:Integer] [Integer] [mul x x]] sq 5	25	false guard: definition and call unaffected
-#
-# ─── a def inside ONE branch arm is bound if and only if that arm ran ───
-#
-# NUR110. The interpreter binds a branch-arm `def` only when the arm runs, and
-# the compiled lane used to bind it either way — `if false [def op 1] [0] end op`
-# answered `0 1` compiled against the interpreter's undefined_word, with NO
-# diagnostic on any lane (the check pass modelled it as bound too). The join
-# that folds each arm's net def additions back (InstallJoinedDefs) pushes a
-# one-arm-only fresh name as a DEFINITE binding, and it must: dropping the push
-# would report undefined_word on every legitimate post-branch read.
-#
-# So the fact is recorded at the join and acted on at the READ. Inside a fn unit
-# the read lowers to OpLookupDynScope and the runtime resolves the live binding
-# — the recursion.tsv row below the fold depends on exactly that. At top level
-# the rescue does not apply and the arm's `def` lowers to no instruction at all,
-# so the program refuses and the interpreter runs it correctly.
-def c false  if c [def op 1] [0] end op	ERROR:undefined_word	a then-arm def is NOT bound when the arm did not run
-def c true   if c [def op 1] [0] end op	1	…and IS bound when it did
-def c false  if c [def op 1] [] end op	ERROR:undefined_word	same, with an empty else arm
-def c false  if c [def op 1] [0] end typeof op	ERROR:undefined_word	reading it through typeof is the same unbound read
-def c false  if c [def op 1] [] end def op 2 op	2	a later UNCONDITIONAL def clears the condition — the read is of that binding
-def c false  if c [0] [def op 1] end op	1	the ELSE arm is the same rule, mirrored
