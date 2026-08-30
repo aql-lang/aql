@@ -212,29 +212,29 @@ func TestRegionDescriptorValidateRejects(t *testing.T) {
 	// The invalid zero: a slot nobody gave a source to.
 	d := &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
 		Slots: []compiler.SlotDesc{{}}}
-	if err := d.Validate(1, 0); err == nil {
+	if err := d.Validate(1, 0, 0); err == nil {
 		t.Error("a slot left at SlotNone must be refused — it is the invalid zero, not Consts[0]")
 	}
 	// An index that is in the struct but out of the table it addresses.
 	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
 		Slots: []compiler.SlotDesc{{Source: compiler.SlotConst, Idx: 7}}}
-	if err := d.Validate(1, 0); err == nil {
+	if err := d.Validate(1, 0, 0); err == nil {
 		t.Error("a const index past the const table must be refused")
 	}
 	// A word lead with no name, and a name on a non-word lead: both malformed.
 	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Pos: pos}
-	if err := d.Validate(0, 0); err == nil {
+	if err := d.Validate(0, 0, 0); err == nil {
 		t.Error("LeadWord with no word name must be refused")
 	}
 	d = &compiler.RegionDesc{Lead: compiler.LeadApply, Word: "add", Pos: pos}
-	if err := d.Validate(0, 0); err == nil {
+	if err := d.Validate(0, 0, 0); err == nil {
 		t.Error("a word name on a non-word lead must be refused")
 	}
 	// The well-formed case still passes, so the rejections above are not
 	// vacuous — a Validate that refused everything would satisfy them all.
 	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
 		Slots: []compiler.SlotDesc{{Source: compiler.SlotConst, Idx: 0}}}
-	if err := d.Validate(1, 0); err != nil {
+	if err := d.Validate(1, 0, 0); err != nil {
 		t.Errorf("a well-formed descriptor must pass: %v", err)
 	}
 }
