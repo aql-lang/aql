@@ -42,7 +42,7 @@ func TestTryNativeFnApplyForeignBoruDeclines(t *testing.T) {
 	args := []core.Value{core.NewInteger(1)}
 
 	// Foreign boru body: decline (done=false) so the caller islands.
-	_, done, err := vc.tryNativeFnApply(core.FnDefInfo{Name: "greet", Registry: foreign}, args)
+	_, done, err := vc.tryNativeFnApply(core.NewFunction(core.FnDefInfo{Name: "greet", Registry: foreign}), args)
 	if err != nil {
 		t.Fatalf("foreign decline: unexpected error %v", err)
 	}
@@ -52,7 +52,7 @@ func TestTryNativeFnApplyForeignBoruDeclines(t *testing.T) {
 
 	// Same-registry boru body: the fast path may proceed — the dispatching
 	// registry IS the owning registry, so module scope cannot be lost.
-	_, done, err = vc.tryNativeFnApply(core.FnDefInfo{Name: "greet", Registry: main}, args)
+	_, done, err = vc.tryNativeFnApply(core.NewFunction(core.FnDefInfo{Name: "greet", Registry: main}), args)
 	if err != nil {
 		t.Fatalf("same-registry apply: %v", err)
 	}

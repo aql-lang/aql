@@ -323,6 +323,14 @@ func WithPos(v, src Value) Value {
 	return v
 }
 
+func WithPosAt(v Value, p SrcPos) Value {
+	if p.Row == 0 || v.Pos().Row != 0 {
+		return v
+	}
+	v.pos = &p
+	return v
+}
+
 // ReparentValue returns a copy of v with its Parent rebound to def.
 // The single primitive every typed-def reparent path uses (predicate
 // types, ObjectInstance dispatch on Person, FnUndef function-shape

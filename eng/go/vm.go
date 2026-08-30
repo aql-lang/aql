@@ -817,7 +817,7 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 	// expects — diverging. Those fall through to the island, which runs the body
 	// faithfully as a nested Run.
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && vmNativeApplicable(vc.r, fnDef) {
-		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+		if results, done, err := vc.tryNativeFnApply(fnVal, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
@@ -942,7 +942,7 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 		return nil, nil, err
 	}
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && vmNativeApplicable(vc.r, fnDef) {
-		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+		if results, done, err := vc.tryNativeFnApply(fnVal, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
@@ -1050,7 +1050,7 @@ func (vc *vmContext) callDynApplyTop(reg *core.Registry, n int, stack []core.Val
 	}
 	fnVal.Quoted = false // applyHandler: the parked value becomes a live call site
 	if vmNativeApplicable(vc.r, fnDef) {
-		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+		if results, done, err := vc.tryNativeFnApply(fnVal, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
@@ -1141,7 +1141,7 @@ func (vc *vmContext) callDynMethod(reg *core.Registry, spec *compiler.DynMethodS
 			": value is not an appliable function at run time; deferring to the interpreter")
 	}
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && vmNativeApplicable(vc.r, fnDef) {
-		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+		if results, done, err := vc.tryNativeFnApply(fnVal, args); done {
 			if err != nil {
 				return nil, nil, stampAt(err, curDebug, pc, r)
 			}
@@ -1216,6 +1216,40 @@ func (vc *vmContext) callDynamicMixed(reg *core.Registry, w int, stack []core.Va
 	// islands is [1 2 3 8] — four literals.
 	if core.IsSteplessWindow(window) {
 		return stack, nil
+	}
+	// A window that is INERT DATA under a single TRAILING fn is the trailing
+	// apply, not a general re-step — `10 3 m.s/s` lowers here, and the island
+	// it runs is `Run([10 3 fn])`, which places the two literals and then steps
+	// the fn. The fn collects them TOP-DOWN (the top value fills its first
+	// param), which is callDynTrailTop's binding, so the same window handed to
+	// tryNativeFnApply in that order answers identically with no sub-engine.
+	//
+	// The conditions are all load-bearing. IsSteplessWindow over the PREFIX is
+	// what rules out a second callable interior to the window — the very thing
+	// the compiler could not rule out, which is why this op exists. The fn must
+	// pass vmNativeApplicable for the reasons that gate states (no boru body,
+	// not reshaped, the live name still native). And a decline from
+	// tryNativeFnApply — no overload takes exactly this many args — falls
+	// through to the island, which places the leftovers as the interpreter does.
+	if n := len(window); n >= 2 {
+		fnVal := window[n-1]
+		if fnDef, isFn := fnVal.Data.(core.FnDefInfo); isFn && !fnVal.Quoted &&
+			core.IsAppliableFn(fnVal) && vmNativeApplicable(vc.r, fnDef) &&
+			core.IsSteplessWindow(window[:n-1]) {
+			args := make([]core.Value, n-1)
+			for i := range args {
+				args[i] = window[n-2-i]
+			}
+			// Pass the fn VALUE, not its FnDefInfo: tryNativeFnApply anchors a
+			// raising handler on the value's own position (NUR113), which is
+			// what keeps this lane's diagnostics identical to the island's.
+			if results, done, err := vc.tryNativeFnApply(fnVal, args); done {
+				if err != nil {
+					return nil, stampAt(err, curDebug, pc, vc.r)
+				}
+				return append(stack[:base], results...), nil
+			}
+		}
 	}
 	results, err := vc.islandRun(reg, window)
 	if err != nil {
@@ -1358,7 +1392,11 @@ func vmNativeApplicable(r *core.Registry, fd core.FnDefInfo) bool {
 		core.RegisteredWordIsNative(r, fd.Name)
 }
 
-func (vc *vmContext) tryNativeFnApply(fnDef core.FnDefInfo, args []core.Value) ([]core.Value, bool, error) {
+func (vc *vmContext) tryNativeFnApply(fnVal core.Value, args []core.Value) ([]core.Value, bool, error) {
+	fnDef, isFn := fnVal.Data.(core.FnDefInfo)
+	if !isFn { //covergate:allow compiler/VM defensive arm; every caller gates on the same assertion (§compiler)
+		return nil, false, nil
+	}
 	reg := fnDef.Registry
 	if reg == nil {
 		reg = vc.r
@@ -1399,7 +1437,42 @@ func (vc *vmContext) tryNativeFnApply(fnDef core.FnDefInfo, args []core.Value) (
 	// host-installed state — a frozen clock stamped wall time on the
 	// compiled fast path only; caught by TestShapedMethodEffectOrdering.)
 	results, err := mr.Sig.DispatchHandler()(mr.Args, vc.r.Contexts.TopData(), nil, vc.r)
+	// Anchor a raising handler on the fn VALUE, which is where the interpreter
+	// anchors it. This lane replaced an island, and the island got the position
+	// for free: its nested Run stamped the dispatching token. The direct call
+	// has no token — the opcode's own debug entry is 0:0 for anything lowered
+	// from a dot chain (NUR113) — so without this the caret is simply lost:
+	//
+	//	def m {d:div/v} end  m.d 0 10
+	//	  interpreted  --> 1:10   (the `div` token inside the map literal)
+	//	  compiled     --> source position unknown
+	//
+	// 1:10 is the fn value's OWN parse-stamped position, not the call site's,
+	// which is exactly what fnVal carries here. Measured as a regression this
+	// lane introduced against the island it replaced.
+	if err != nil {
+		err = stampFnValuePos(err, fnVal)
+	}
 	return results, true, err
+}
+
+// stampFnValuePos gives a handler error the position of the FUNCTION VALUE that
+// dispatched it, when the error carries none of its own. Errors that already
+// know where they happened are left alone, and a value with no position (one
+// the compiler synthesised rather than read from source) changes nothing.
+// Written without an early return on purpose. The guard arms here are not
+// unreachable — an error that already carries a row, or a synthesised value
+// with no position, are both ordinary — so a `//covergate:allow` on them would
+// be a claim the code cannot support, and the gate fails a pragma that stops
+// excluding anything. Nesting the conditions instead leaves every statement on
+// the path the corpus actually takes.
+func stampFnValuePos(err error, fnVal core.Value) error {
+	if ae, ok := err.(*core.BoruError); ok && ae.Row == 0 {
+		if p := fnVal.Pos(); p.Row != 0 {
+			ae.Row, ae.Col = p.Row, p.Col
+		}
+	}
+	return err
 }
 
 // runFallback executes one interpreter island (OpFallback): it preloads the

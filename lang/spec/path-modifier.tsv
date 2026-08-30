@@ -65,3 +65,21 @@ def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] def
 def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] sf/v {x:1} wa	{x:1}	stack form (already worked) is unchanged
 def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] def hr (sf/v) wa {x:1} hr/v	{x:1}	a def-bound reference passes as hr/v (bare hr is a call, per the model)
 def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] wa {x:1} sf	{x:1}	a bare fn name before a Function-TYPED slot resolves as a reference — the slot declares the intent (the planner's designed TFunction intercept, un-broken by the ADR-011 collapse); before a non-Function slot a bare fn word remains a call/barrier
+#
+# A RAISING handler on the parked-native fast path keeps its position. That
+# path replaced an island, and the island got the caret for free — its nested
+# Run stamped the dispatching token. The direct call has no token to stamp
+# (the opcodes lowered from a dot chain carry SrcPos{0,0}, NUR113), so the
+# position has to come from the fn VALUE, which is where the interpreter
+# anchors it: `1:10` is the `div` inside the map literal, not the call site.
+# Without this row the loss is invisible — it is a diagnostic difference, so
+# both engines still agree on the value and the error taxonomy.
+def m {d:div/v} end m.d 0 10	ERROR:arith_error	a raising handler on the fast path keeps the fn value's own position
+#
+# The trailing-apply fast lane RAISES faithfully, position included. `10 0
+# m.d/s` reaches the same window the rows above take — inert data under a
+# trailing fn — and its handler errors. This row exists because cover-gate
+# flagged that lane's error arm as unreached, and writing it is what exposed
+# NUR113: the compiled lane answered with the right error and no caret, where
+# the island it replaced had one. Both engines now say 1:26.
+def m {d:div/v} end 10 0 m.d/s	ERROR:arith_error	a raising handler on the trailing-apply lane errors identically, position included

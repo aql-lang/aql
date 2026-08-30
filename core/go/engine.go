@@ -3074,7 +3074,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// which is what the emit pass keys its fn-value refusal on.
 		name := match.Name
 		var pos SrcPos
-		if e.Pointer < e.Tape.Len() && IsWord(e.Tape.At(e.Pointer)) {
+		if e.Pointer < e.Tape.Len() {
 			pos = e.Tape.At(e.Pointer).Pos()
 			if w, err := AsWord(e.Tape.At(e.Pointer)); err == nil {
 				name = w.Name
@@ -3147,6 +3147,14 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		tailConsumed := callEnd+1 < e.Tape.Len() &&
 			(IsCloseParen(e.Tape.At(callEnd+1)) || e.dynShuffleConsumerAt(callEnd+1))
 		results := e.Registry.analysisCarrierResults(name, match.Sig, match.Args, pos, match.Reg, tailConsumed)
+		// Stamp a positionless FUNCTION result with this call's position,
+		// AFTER the recorder has re-IDed the outputs — the interpreter's
+		// stampResultPos equivalent for the check pass. A module export
+		// (`Assert.not-equal`) is handed back verbatim by moduleNSGetReturns
+		// with no position of its own, and it is the token a later VALUE
+		// dispatch reads its own position from, so without this every opcode
+		// downstream records 0:0 (NUR113).
+		stampCallResultPositions(results, pos)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 
@@ -3292,6 +3300,40 @@ func (e *Engine) maybeAddFnShapeHint(err error) error {
 // spliceMatchResults replaces the word and its matched args on the
 // stack with the supplied results. Shared between handler execution
 // and carrier-based check-mode execution so both paths stay in parity.
+// stampCallResultPositions gives each positionless FUNCTION or dynamic-Any
+// result the position of the call that produced it — the check-pass
+// equivalent of the interpreter's stampResultPos, and the compiled half of
+// NUR113.
+//
+// Both shapes are load-bearing, and neither is obvious:
+//
+//	FUNCTION      a module export (`Assert.not-equal`) is handed back verbatim
+//	              by moduleNSGetReturns, built at module-construction time with
+//	              no position, and it is the token a later VALUE dispatch reads
+//	              its own position from.
+//	dynamic(Any)  a dispatch-bearing field read (`m.d`) is deliberately NOT
+//	              narrowed by getNodeReturns, so it arrives as a dynamic Any
+//	              carrier — which is what a modifier word (`/s`, `/u`) takes as
+//	              its subject, and what recordGradualWrap reads the recorded
+//	              position from.
+//
+// Without either, every opcode downstream of a dot-access recorded 0:0 and
+// the compiled lane rendered "source position unknown" where the interpreter
+// has a caret. Extracted from execMatch rather than inlined: the loop pushed
+// that function past the gocyclo ceiling, and it reads better named.
+//
+// It must run AFTER the recorder has re-IDed the outputs. Stamping earlier
+// (inside CarrierResults) does set the position and is still useless — the
+// re-ID replaces the value before it reaches the tape.
+func stampCallResultPositions(results []Value, pos SrcPos) {
+	for i := range results {
+		if p := results[i].Parent; p != nil &&
+			(p.Equal(TFunction) || (results[i].Dynamic && p.Equal(TAny))) {
+			results[i] = WithPosAt(results[i], pos)
+		}
+	}
+}
+
 func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n int, results []Value) error {
 	if len(sortedIndices) == n && n > 0 {
 		firstArgIdx := sortedIndices[0]
@@ -4294,11 +4336,15 @@ func (e *Engine) expandParenExprScratch(items []Value) []Value {
 func lowerReach(info ReachInfo) []Value {
 	out := make([]Value, 0, len(info.Receiver)+len(info.Segments)*2)
 	out = append(out, info.Receiver...)
+	var anchor Value
+	if len(info.Receiver) > 0 {
+		anchor = info.Receiver[0]
+	}
 	for _, seg := range info.Segments {
 		if seg.Getr {
-			out = append(out, NewWord("dotr"))
+			out = append(out, WithPos(NewWord("dotr"), anchor))
 		} else {
-			out = append(out, NewWord("dot"))
+			out = append(out, WithPos(NewWord("dot"), anchor))
 		}
 		if seg.Computed {
 			out = append(out, NewParenExpr(seg.KeyExpr))

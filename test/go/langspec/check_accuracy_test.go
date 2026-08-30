@@ -208,6 +208,26 @@ var unflaggedPins = map[string]int{
 	// whether it is an error depends on the COUNT, which is a plain Integer
 	// slot: n=0 runs the body zero times and answers [], n>0 raises. A
 	// value-dependent error the checker cannot decide without the value.
+	// path-modifier.tsv: 1 -> 2, and BOTH rows are the same undecidable shape —
+	// a division by a zero the checker sees only as an Integer. The second is
+	// `def m {d:div/v} end 10 0 m.d/s`, added with the /s trailing-apply fast
+	// lane to cover that lane's ERROR arm, which cover-gate had flagged as
+	// unreached. Writing it is what exposed NUR113: the compiled lane answered
+	// with the right error and NO caret where the island it replaced had one.
+	// Both engines now report 1:26, so the row pins the position as well as
+	// the taxonomy.
+	//
+	// path-modifier.tsv: the first row, `def m {d:div/v} end m.d 0 10` — a division
+	// by zero reached through a parked native. The divisor is a plain Integer
+	// literal, and whether dividing by it errors is a fact about its VALUE, not
+	// its type; the checker types the row and stops there. Genuinely
+	// undecidable statically, unlike the fn-value.tsv pin above it.
+	//
+	// It is in the corpus for its DIAGNOSTIC, not its taxonomy: both engines
+	// have always agreed this raises arith_error, and what the row pins is that
+	// the compiled lane still points at 1:10. That is invisible to every gate
+	// but the compile-or-fallback walk, which compares positions.
+	"path-modifier.tsv": 2,
 	"module-rand.tsv":   1,
 	"module-sift.tsv":   24,
 	"module-struct.tsv": 2,

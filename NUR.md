@@ -66,6 +66,7 @@ keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
+| [NUR113](#nur113) | RESOLVED 2026-08-30. A dot-sugar access lowered with NO source position, so every opcode downstream recorded `0:0` and the compiled lane rendered "source position unknown" where the interpreter has a caret. Fixed in two halves at one seam — a module export arrives as a positionless `Function`, a dispatch-bearing field read as `dynamic(Any)` — by stamping the call's own position onto both, AFTER `dispatchRecordOutcome` re-IDs the outputs. Five fixes argued from reading the code each failed a gate; four instrumentation rounds each produced a fact | writing a corpus row for the `/s` trailing-apply increment, 2026-08-29 |
 | [NUR112](#nur112) | The checker's residual for a parked native word applied after its name was EXTENDED does not match what runs: `def Pos (refine Integer)  def m {a:size/v}  def size fn [[n:Pos] [Integer] [200]] end  def v:Pos 3  m.a v` is checked `[dynamic(Any) Pos]` — two values, one of them the argument left behind — and actually leaves `[Integer]`. Both ENGINES agree on the answer (3); it is the static model that differs, so no differential can see it — TestCheckTypeSoundness can, and did | writing a corpus row for the parked-native apply gate, 2026-08-29 |
 | [NUR111](#nur111) | The DECLARED RETURN of a fn value handed to a higher-order word is checked by nobody statically: `def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v` passes `boru check` clean, while the identical body as a code BLOCK (`each [cbad]`) and the identical fn called directly (`cbad 1`) are both flagged `type_error`. The end-of-pass pending-body drain ANALYSES the body (an undefined word inside it IS reported) but never holds the residual to the declaration — `declared` reaches `AnalyseFnBody` as the recursion hypothesis only, and the matching proof obligation is the interpreter's `__RC` marker, which the callback path never plants. Both ENGINES now raise (the runtime half is fixed, `lang/spec/fn-value.tsv` §13); it is the CHECKER that is silent | fixing the closure return-contract miscompile, 2026-08-29 |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
@@ -363,6 +364,343 @@ So the fix needs the `def` TOKEN's own position threaded to the record — a
 position the recorder does not currently receive from any of its three
 available sources. That is the work, and it is smaller than "compiled
 diagnostics" but larger than a fallback expression.
+
+---
+
+## NUR113 — a dot-sugar access loses its error position when compiled {#nur113}
+
+**Status:** RESOLVED 2026-08-30 — the module-qualified and paren-nested halves
+in `6f1ee71`, the `/s` sugar chain in `439f7ec` · **Originally**: Pending · **Recorded:** 2026-08-29 · **Surfaced by:** writing a
+corpus row for the `/s` trailing-apply increment; the row exposed this and
+the increment was held back behind it.
+
+**Rule:** the two engines point at the same place. A diagnostic that names
+the right error at the wrong location — or at no location — is a parity
+failure, and `TestSpecCompiledOrFallback` already treats it as a divergence.
+
+**Divergence.** Live on `main`, with no fn-value modifier involved:
+
+```
+$ boru --no-compile -e "def m {d:div/v} end m.d 0 10"
+error: [boru/arith_error]: division by zero
+  --> 1:10
+  1 | def m {d:div/v} end m.d 0 10
+
+$ boru --force-compile -e "def m {d:div/v} end m.d 0 10"
+error: [boru/arith_error]: division by zero
+  --> source position unknown
+```
+
+**The sugar is the difference, measured.** Disassembling with the `Debug`
+table shows every opcode from a dot chain at `0:0`, while the same access
+spelled with the explicit word keeps its positions:
+
+| program | opcode positions |
+|---|---|
+| `add 1 2` | `1:1` |
+| `10 0 div` | `1:6` |
+| `{a:1} dot a` | `1:7` |
+| `def m {a:1} end m dot a` | `1:19` |
+| `{a:1}.a` | **`0:0`** |
+| `def m {a:1} end m.a` | **`0:0`** |
+| `def m {a:1} end (m.a)` | **`0:0`** |
+| `def o {m:{a:1}} end o.m.a` | **`0:0`** |
+
+No `def` is required and no paren changes it: the dot SUGAR alone does it.
+
+**Layer one.** `lowerReach` (`core/go/engine.go:4294`) builds the chain with
+`NewWord("dot")` / `NewWord("dotr")` — a bare constructor, so the word that
+dispatches carries no position. The recorder takes its event position from
+that token, so every opcode downstream of a dot chain records `0:0`, and
+`stampAt` (`eng/go/vm.go`) then has nothing to stamp.
+
+**Layer two, and it is why the one-line fix is not the fix.** The
+interpreter's `1:10` is NOT the dot. Counting the source, column 10 is the
+`div` token INSIDE the map literal — the fn VALUE's own position, stamped at
+parse. Column 21 is where `m.d` starts. So giving the `dot` words positions
+would move the compiled caret to `1:21` and leave the two engines still
+disagreeing. Parity needs the fn value's own position to survive const-baking
+into the compiled program, which is the larger half of this record.
+
+**The one-line fix was BUILT AND MEASURED, and it is a parity regression.**
+Anchoring the synthesized `dot`/`dotr` (and a computed key's paren) on the
+RECEIVER via `core.WithPos` does exactly what it promises:
+
+```
+def m {s:1} end m.s              every op  0:0 -> 1:17
+def m {d:div/v} end 10 0 m.d/s   reach ops 0:0 -> 1:26   (the interpreter's own)
+```
+
+Then `TestSpecCompiledOrFallback` goes **0 -> 186 divergences**, every one
+reading "interpreter at N:M, compiled has no position", on module-qualified
+rows — `Assert.not-equal 3 3`, `StringUtil.replace …`, `ArrayUtil.insert-at …`.
+
+The reason is the whole lesson of this record. `lowerReach` lives in **core**,
+so BOTH engines lower through it, and today both lose the position
+IDENTICALLY — which is exactly why the gate reports agreement and the hole is
+invisible. Stamping it fixes the interpreter everywhere, and fixes the
+compiled lane only for a PLAIN dot access; a MODULE-qualified one
+(`Assert.not-equal`, which is a dot access too) is folded by the recorder into
+a direct `CALL_NATIVE` whose position does not come from the chain, so it
+stays at `0:0`. Measured on the unmodified tree, that program is `0:0` on
+every opcode.
+
+So a symmetric invisible defect becomes 186 visible ones. The fix ORDER is
+therefore fixed, and it is the opposite of the obvious one:
+
+1. give the recorder's folded module-qualified call a position (the
+   compiled-side half), then
+2. stamp `lowerReach` — at which point both engines move together.
+
+Doing (2) alone is the regression above; doing it first and "fixing the
+fallout" would mean 186 rows chasing a moving target.
+
+**Two further hypotheses tried and RULED OUT**, recorded so the next attempt
+starts past them rather than at them.
+
+*Take the position from any token at the pointer.* The dispatch site
+(`core/go/engine.go`, the `name := match.Name` block) guarded the position and
+the name TOGETHER behind `IsWord`, so a VALUE dispatch — the module wrapper's
+trivial-delegation short-circuit, which steps a Function literal — took its
+name from the match and its position from nowhere. Splitting them is correct
+on its own terms (the inner `AsWord` already gates the name) and changes
+nothing here: the Function literal in a module export map carries no position
+either, because it is built at module-construction time, not read from source.
+
+*Both halves together.* Stamping `lowerReach` AND splitting that guard still
+leaves `import "boru:test" Assert.not-equal 3 3` at `0:0` on every COMPILED
+opcode. The theory was that stamping `dot` would let `stampResultPos` stamp
+the Function RESULT, which the value dispatch would then read.
+
+It half-fires, and the asymmetry is the finding. Measured on the unmodified
+tree, that program has NO position on either engine. With `lowerReach`
+stamped, the parity gate reports "interpreter at 1:20, compiled has no
+position" — so the INTERPRETER does expand the reach, dispatch `dot`, and
+pick the stamp up. The COMPILED lane does not: the module resolution is
+elided before it, so nothing downstream ever sees a `dot` event to take a
+position from.
+
+(An earlier revision of this record said a module-qualified read "never
+dispatches `dot` at all". That was inferred from `tryFoldModuleConst` and is
+wrong as stated — it holds for the compiled lane, not the interpreter, and
+the 1:20 above is the counter-example.)
+
+**What the compiled lane actually does with `Pkg.word`**, traced far enough
+to name the shape but not the whole mechanism:
+
+- `isModuleInnerSig` (`compiler/go/compiler_dispatch_record.go`) confirms the
+  recorder sees the INNER native — `not-equal` itself, reached through the
+  wrapper's sub-registry — rather than a `dot` result. So the read is gone by
+  the time anything is recorded.
+- That inner dispatch takes its position from the token at the pointer, which
+  for a VALUE dispatch is the Function literal (the dispatch site's own
+  comment says so: "a module wrapper's trivial-delegation short-circuit steps
+  the Function literal, not a Word").
+- Measured: taking that token's position changes nothing, so the Function
+  literal carries none — even with `lowerReach` stamped.
+
+**So the target is the module-export Function VALUE**: it has to carry the
+position of the access that produced it, and today it does not. That is a
+THIRD location, distinct from the two ruled out — not the lowering, not the
+dispatch site's guard.
+
+**CONFIRMED SITE** — `moduleNSGetReturns`
+(`lang/go/native/native_module_types.go`), the check-mode read over a module
+namespace. It hands the export back verbatim:
+
+```go
+if val, ok := moduleExportGet(args[1], getKey(args[0])); ok {
+    return []Value{val}, true
+}
+```
+
+`val` is the value stored in the module's export map, built at
+module-construction time, so it carries no source position — and that is the
+Function literal the VALUE dispatch then reads its position from. Nothing on
+this path ever attributes it to the access that produced it.
+
+`tryFoldModuleConst` is NOT the site: its doc scopes it to reads whose result
+is data, and this is the get/getr resolution it names separately.
+
+The chain, each link measured or read rather than assumed:
+
+1. `Assert.not-equal` parses to a Reach with receiver `word(Assert)` at 1:20.
+2. With `lowerReach` stamped, the INTERPRETER reports exactly 1:20 — so the
+   receiver is the right anchor and that path works end to end.
+3. The compiled lane records the INNER native (`isModuleInnerSig`), taking
+   its position from the token at the pointer.
+4. For a VALUE dispatch that token is the Function literal — the dispatch
+   site's own comment says so.
+5. That literal comes from `moduleNSGetReturns` unstamped. Measured: reading
+   its position yields zero even with `lowerReach` stamped.
+
+**A FOURTH attempt, also ruled out.** The obvious pairing — stamp
+`lowerReach` AND mirror the interpreter's `stampResultPos` on the check
+dispatch path, stamping a positionless Function result with the call's own
+`pos` where `CarrierResults` already has one — leaves the program at `0:0`
+just the same. (It needs a `core.WithPosAt(v, SrcPos)` helper, since `WithPos`
+copies from another VALUE and `Value.pos` is unexported; that helper is not in
+the tree, having gone back with the attempt.)
+
+So the namespace read does not surface as a Function result at that point
+either. Four locations are now eliminated by measurement — the lowering alone,
+the dispatch site's `IsWord` guard, those two together, and the check-path
+result stamp — against one confirmed producer, `moduleNSGetReturns`.
+
+**INSTRUMENTED, which moved this from argument to fact.** Temporary prints in
+`moduleNSGetReturns` and in `CarrierResults`, on
+`import "boru:test" Assert.not-equal 3 3`:
+
+```
+moduleNSGetReturns  key=not-equal  valPos=0:0  isFn=true  nsPos=0:0
+CarrierResults      word=dot       pos=1:20    outIsFn=true  outPos=0:0
+```
+
+Four things that reading could not settle:
+
+1. `nsPos=0:0` — the NAMESPACE value has no position either, so the
+   `core.WithPos(val, args[1])` fix an earlier revision of this record called
+   "likely" has no anchor to copy from. Withdrawn.
+2. Once `lowerReach` is stamped, the `dot` dispatch DOES arrive at
+   `CarrierResults` carrying the right position, `1:20` — the receiver's.
+3. `not-equal` never appears in that trace at all, confirming the inner
+   dispatch bypasses `CarrierResults` (the trivial-delegation short-circuit).
+4. Stamping the Function result there WORKS — `outPos` becomes `1:20`,
+   verified with the print moved after the stamp.
+
+**And the opcodes are still `0:0`.** With all THREE pieces applied together —
+the `lowerReach` stamp, the Function-result stamp, and the dispatch site's
+`IsWord` guard split so a value dispatch can read a position at all — the
+program still records `0:0` on every op. (Pairs of these were tried before;
+this was the first run of all three.)
+
+**And the last probe found why, which is not what any of the five guesses
+assumed.** Instrumenting the dispatch site itself — printing the pointer token
+and derived position whenever the dispatched name is `dot` or `not-equal`:
+
+```
+PROBE dispatch name=dot  ptr=3  tokParent=Word  tokPos=1:20  derivedPos=1:20
+```
+
+`not-equal` NEVER APPEARS. Only `dot` dispatches through that site, in both
+the module and the plain-map program. Yet the module program's recorded
+opcode IS `CALL_NATIVE` for `not-equal`.
+
+So the delegated module native is recorded by a path that never passes the
+position derivation every guess so far has been trying to fix.
+`spliceMatchResults` is exonerated too — it splices `results` onto the tape
+verbatim. The delegation branch builds its own `MatchResult` and calls
+`execMatch` directly (`core/go/engine.go`, the "ONE dispatch path, no
+exceptions" comment), and THAT is where the recorded event's position comes
+from — or fails to.
+
+**Next step, precisely:** find where `execMatch` supplies the recorded
+position for a `MatchResult` built by the delegation branch, and give it the
+fn value's own (which CAN be stamped — proved above). The three pieces
+already validated in isolation — the `lowerReach` stamp, the Function-result
+stamp in `CarrierResults`, the dispatch site's `IsWord` split — are necessary
+but not sufficient, and all three plus this fourth are likely needed
+together. Do not land any subset: the `lowerReach` stamp alone is the
+186-divergence regression.
+
+**Why no gate caught it.** `TestSpecCompiledOrFallback` DOES compare error
+positions — it is what caught the closure-contract position loss earlier the
+same day. The corpus simply has no row that raises through a dot-sugar
+access. The shape is common in real code and absent from the corpus, which
+is the coverage hole this record also names.
+
+**Not pinned in the corpus, deliberately.** A row for this shape would fail
+the compile-or-fallback gate on landing, which is a pin behaving correctly
+and the wrong way to record a finding — the same call made for
+[NUR112](#nur112).
+
+**THE FIX, and placement is the whole of it** (`6f1ee71`). A positionless
+FUNCTION result is stamped with the call's own position at the analysis seam —
+the check-pass equivalent of the interpreter's `stampResultPos` — plus
+`core.WithPosAt`, the twin of `WithPos` for a caller holding a `SrcPos` rather
+than a value to copy from.
+
+It has to happen at the CALLER, after `dispatchRecordOutcome`. Stamping inside
+`CarrierResults` genuinely works — `outPos` becomes `1:20`, verified with the
+print moved after the stamp — and is still useless, because the recorder
+re-IDs the outputs afterwards and the stamped value never reaches the tape.
+
+```
+import "boru:test" Assert.not-equal 3 3
+  before   interp 1:20   compiled "source position unknown"
+  after    interp 1:20   compiled 1:20
+```
+
+**Pinned by `TestDotAccessKeepsSourcePosition`**, which asserts the position is
+PRESENT rather than merely equal — the compile-or-fallback gate cannot catch
+this class, because before the fix the two engines agreed by both being wrong.
+Mutation-checked: 3 failures with the fix stashed, 0 with it restored. Two
+core-side tests carry the standalone gate, which the merged one hides: every
+one of the six statements this added was invisible to `cover-gate-core` until
+they existed, since core's own suite never reaches the check-mode analysis path
+with a module dot-access.
+
+**The `/s` half, FIXED TOO** (`439f7ec`) — a different value shape at the
+same seam, measured after the first half landed:
+
+```
+0002 CALL_NATIVE_POLY  1:26  -> dot          fixed here
+0003 CALL_NATIVE_POLY  0:0   -> stack-args   still the hole
+```
+
+The sugar is not the culprit: the parsed marker carries `1:26`, and both
+`SugarExpansion` and `sugarBoundWord` stamp their output with it.
+
+**Root-caused to one line** — `recordGradualWrap` in
+`lang/go/native/native_valof.go`:
+
+```go
+pos := core.SrcPos{}
+if len(args) > 0 {
+    pos = args[len(args)-1].Pos()
+}
+reg.Check.Recorder().RecordPolyCall(word, args, outs, pos, nil, nil)
+```
+
+The position comes from the LAST ARGUMENT'S VALUE, and for `/s` over a
+dot-access that argument is the non-concrete function-value CARRIER
+(`checkModeGradualFn`'s own subject — dynamic(Any), because `getNodeReturns`
+deliberately cannot narrow a dispatch-bearing field). Its `Parent` is `TAny`,
+not `TFunction`, so the stamp above — which keys on `TFunction` — never
+reaches it.
+
+Worth recording how it was found, because three greps missed it: probes in
+the analysis seam, in `tryRecordPoly` and in `tryRecordDynBody` all failed to
+fire for `stack-args` while a PolyRef for it was demonstrably recorded, and
+`RecordPolyCall` did fire. Its only caller within core/check/compiler is
+`tryRecordPoly` — the real caller lives in `lang/go/native`, the modifier
+word's own implementation, outside every module being searched.
+
+The fix is the same stamp, widened to cover a dynamic Any carrier as well as
+a Function. Both shapes are load-bearing and neither is guessable: a module
+export arrives as a positionless `Function`, and a dispatch-bearing field read
+arrives as `dynamic(Any)` because `getNodeReturns` deliberately will not narrow
+it. The loop moved out of `execMatch` into `stampCallResultPositions` — inline
+it pushed that function to gocyclo 71 against a ceiling of 70.
+
+This is the SAME broadening class that cost 186 divergences when applied to
+`lowerReach`, so it was measured before it was believed: parity 0 divergences,
+differential 0 mismatches, refusals 0, type-soundness 0 violations, census 46
+at ceiling, merged cover-gate 72224/72224, cover-gate-core 15438/15438.
+
+`cover-gate-core` caught this one as well — the nil-`Parent` guard's `continue`
+was an arm only a synthesised value could reach, folded into one condition
+rather than tested into existence. Twice in one evening the standalone gate was
+red on freshly-written statements the merged gate covered and CI's `make test`
+would have passed.
+
+**What it blocks.** The `/s` trailing-apply increment (3 census rows,
+46 → 43): its fast lane is correct and gate-green on values, but a raising
+handler on it inherits this position loss where the island had been masking
+it. PR #412's own body predicted the shape of this — "the dyn-apply opcodes
+lower with `SrcPos.Row == 0`, so the direct path loses the caret — positions
+are the prerequisite, not the increment" — and this record is that
+prerequisite, located and measured.
 
 ---
 

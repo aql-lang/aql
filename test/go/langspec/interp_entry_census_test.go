@@ -617,10 +617,35 @@ import (
 // to this change and not something to fold into it. The row is gone; the
 // observation is in NUR.md so Stage 8 has it.
 //
+// (v) 46 -> 43. THE `/s` FAMILY, and it was one mechanism, not three rows.
+//
+// The three path-modifier.tsv rows column (u) left behind — `10 3 m.s/s`, its
+// paren twin, and `stack-args (force-arity 2 (m.s))` — did not need any of
+// that column's gates widened further. They lower to a DIFFERENT opcode.
+// `CALL_DYNAMIC` is what column (u) taught to apply a parked native;
+// force-stack lowers to `CALL_DYNAMIC_MIXED`, whose handler islands the whole
+// window because the compiler could not rule out a callable interior to it.
+// One line of disassembly said so, which is the same lesson column (o) already
+// recorded and the one I keep having to relearn: read the bytecode.
+//
+// The window is `[10 3 fn]` — inert data under a single TRAILING fn — and that
+// is not a general re-step, it is the trailing apply. The island runs
+// `Run([10 3 fn])`: it places the two literals, then steps the fn, which
+// collects them TOP-DOWN. That is exactly callDynTrailTop's binding, so the
+// same window handed to tryNativeFnApply in that order answers identically
+// with no sub-engine.
+//
+// Every condition on it is load-bearing. IsSteplessWindow over the PREFIX is
+// what rules out a second callable inside the window — the very thing the op
+// exists for. The fn must pass vmNativeApplicable, for the three reasons
+// column (u) settled. And a decline (no overload takes exactly this many args)
+// falls through to the island, which places the leftovers as the interpreter
+// does rather than guessing.
+//
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 46
+const interpEntryRowCeiling = 43
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
@@ -648,7 +673,9 @@ func TestInterpEntryCensus(t *testing.T) {
 		}
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+		lineNo := 0
 		for sc.Scan() {
+			lineNo++
 			line := strings.TrimRight(sc.Text(), " \t")
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
@@ -667,6 +694,19 @@ func TestInterpEntryCensus(t *testing.T) {
 				continue
 			}
 			dirty++
+			// BORU_LOG_CENSUS_ROWS=1 names every dirty row and the seams it
+			// entered through. The file × seam table above ranks CLUSTERS,
+			// which is what you want when choosing a mechanism — but once a
+			// cluster is chosen you need the rows themselves, and without this
+			// the only way to get them was to re-derive them by hand (and get
+			// it wrong: `--compile-report` prints a line containing the word
+			// "interpreter" for every program, islanded or not, so grepping
+			// for it names rows that compile perfectly well).
+			// Mirrors BORU_LOG_UNFLAGGED in check_accuracy_test.go.
+			if os.Getenv("BORU_LOG_CENSUS_ROWS") != "" {
+				t.Logf("CENSUS ROW %s:L%d via %s: %s",
+					e.Name(), lineNo, seamBreakdown(rowSeams(seen)), strings.TrimSpace(parts[0]))
+			}
 			perFile[e.Name()]++
 			if fileSeamRows[e.Name()] == nil {
 				fileSeamRows[e.Name()] = map[string]int{}
@@ -736,6 +776,17 @@ func runWithEntryHook(t *testing.T, src string) (int, map[string]int, bool) {
 // "Engine.Run 14, CallBoru 9" — highest first, ties broken by name so a diff of
 // two census runs is readable. Empty maps cannot reach here (a file only lands
 // in perFile once a row recorded at least one seam).
+// rowSeams collapses one row's per-seam ENTRY COUNTS to a once-per-seam map,
+// so a row's listing reads like the file table's (which counts rows, not
+// entries) rather than double-reporting a seam a row entered twice.
+func rowSeams(seen map[string]int) map[string]int {
+	out := make(map[string]int, len(seen))
+	for s := range seen {
+		out[s] = 1
+	}
+	return out
+}
+
 func seamBreakdown(bySeam map[string]int) string {
 	names := sortedKeys(bySeam)
 	sort.SliceStable(names, func(i, j int) bool { return bySeam[names[i]] > bySeam[names[j]] })
