@@ -66,7 +66,7 @@ keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
-| [NUR113](#nur113) | RESOLVED 2026-08-30. A dot-sugar access lowered with NO source position — `lowerReach` builds `dot`/`dotr` bare, and a module-qualified one resolves to a Function `moduleNSGetReturns` hands back verbatim — so every opcode downstream recorded `0:0` and the compiled lane rendered "source position unknown" where the interpreter has a caret. Fixed by stamping a positionless Function result with the call's own position at the analysis seam, AFTER `dispatchRecordOutcome` re-IDs the outputs. Five fixes argued from reading the code each failed a gate; three instrumentation rounds each produced a fact | writing a corpus row for the `/s` trailing-apply increment, 2026-08-29 |
+| [NUR113](#nur113) | RESOLVED 2026-08-30. A dot-sugar access lowered with NO source position, so every opcode downstream recorded `0:0` and the compiled lane rendered "source position unknown" where the interpreter has a caret. Fixed in two halves at one seam — a module export arrives as a positionless `Function`, a dispatch-bearing field read as `dynamic(Any)` — by stamping the call's own position onto both, AFTER `dispatchRecordOutcome` re-IDs the outputs. Five fixes argued from reading the code each failed a gate; four instrumentation rounds each produced a fact | writing a corpus row for the `/s` trailing-apply increment, 2026-08-29 |
 | [NUR112](#nur112) | The checker's residual for a parked native word applied after its name was EXTENDED does not match what runs: `def Pos (refine Integer)  def m {a:size/v}  def size fn [[n:Pos] [Integer] [200]] end  def v:Pos 3  m.a v` is checked `[dynamic(Any) Pos]` — two values, one of them the argument left behind — and actually leaves `[Integer]`. Both ENGINES agree on the answer (3); it is the static model that differs, so no differential can see it — TestCheckTypeSoundness can, and did | writing a corpus row for the parked-native apply gate, 2026-08-29 |
 | [NUR111](#nur111) | The DECLARED RETURN of a fn value handed to a higher-order word is checked by nobody statically: `def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v` passes `boru check` clean, while the identical body as a code BLOCK (`each [cbad]`) and the identical fn called directly (`cbad 1`) are both flagged `type_error`. The end-of-pass pending-body drain ANALYSES the body (an undefined word inside it IS reported) but never holds the residual to the declaration — `declared` reaches `AnalyseFnBody` as the recursion hypothesis only, and the matching proof obligation is the interpreter's `__RC` marker, which the callback path never plants. Both ENGINES now raise (the runtime half is fixed, `lang/spec/fn-value.tsv` §13); it is the CHECKER that is silent | fixing the closure return-contract miscompile, 2026-08-29 |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
@@ -369,9 +369,8 @@ diagnostics" but larger than a fallback expression.
 
 ## NUR113 — a dot-sugar access loses its error position when compiled {#nur113}
 
-**Status:** RESOLVED 2026-08-30 (`6f1ee71`) — the module-qualified and
-paren-nested halves. The `/s` sugar chain is a SEPARATE hole and stays open on
-its own task · **Originally**: Pending · **Recorded:** 2026-08-29 · **Surfaced by:** writing a
+**Status:** RESOLVED 2026-08-30 — the module-qualified and paren-nested halves
+in `6f1ee71`, the `/s` sugar chain in `439f7ec` · **Originally**: Pending · **Recorded:** 2026-08-29 · **Surfaced by:** writing a
 corpus row for the `/s` trailing-apply increment; the row exposed this and
 the increment was held back behind it.
 
@@ -641,8 +640,8 @@ one of the six statements this added was invisible to `cover-gate-core` until
 they existed, since core's own suite never reaches the check-mode analysis path
 with a module dot-access.
 
-**What is still open:** the `/s` sugar chain (`10 0 m.d/s`) still loses its
-caret, and it is a DIFFERENT mechanism — measured after this fix landed:
+**The `/s` half, FIXED TOO** (`439f7ec`) — a different value shape at the
+same seam, measured after the first half landed:
 
 ```
 0002 CALL_NATIVE_POLY  1:26  -> dot          fixed here
@@ -677,7 +676,23 @@ fire for `stack-args` while a PolyRef for it was demonstrably recorded, and
 `tryRecordPoly` — the real caller lives in `lang/go/native`, the modifier
 word's own implementation, outside every module being searched.
 
-Two candidate fixes, neither tried, on the task.
+The fix is the same stamp, widened to cover a dynamic Any carrier as well as
+a Function. Both shapes are load-bearing and neither is guessable: a module
+export arrives as a positionless `Function`, and a dispatch-bearing field read
+arrives as `dynamic(Any)` because `getNodeReturns` deliberately will not narrow
+it. The loop moved out of `execMatch` into `stampCallResultPositions` — inline
+it pushed that function to gocyclo 71 against a ceiling of 70.
+
+This is the SAME broadening class that cost 186 divergences when applied to
+`lowerReach`, so it was measured before it was believed: parity 0 divergences,
+differential 0 mismatches, refusals 0, type-soundness 0 violations, census 46
+at ceiling, merged cover-gate 72224/72224, cover-gate-core 15438/15438.
+
+`cover-gate-core` caught this one as well — the nil-`Parent` guard's `continue`
+was an arm only a synthesised value could reach, folded into one condition
+rather than tested into existence. Twice in one evening the standalone gate was
+red on freshly-written statements the merged gate covered and CI's `make test`
+would have passed.
 
 **What it blocks.** The `/s` trailing-apply increment (3 census rows,
 46 → 43): its fast lane is correct and gate-green on values, but a raising
