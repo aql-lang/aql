@@ -1032,6 +1032,21 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, r.BoruError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
+
+	// The typed-name map is SYNTHESISED by the `name:Type` desugar and carries
+	// no position — measured 0:0 at every site below — so `def`'s own token is
+	// the position of this definition. It is the one the interpreter reports:
+	// stampErrPos stamps an unpositioned handler error with e.currentPos(),
+	// which is exactly what CurWordPos publishes.
+	//
+	// A FALLBACK, not an override: a map that does carry a position keeps it.
+	// This is what closes NUR108's first half — the compiled lane's BIND_TYPED
+	// raise had no position to stamp because the RECORD had none, and rendered
+	// "source position unknown" where the interpreter underlines the `def`.
+	defPos := args[0].Pos()
+	if defPos.Row == 0 {
+		defPos = r.Check.CurWordPos
+	}
 	// An angle/type-bound annotation — `def b:Box<Integer> {…}` —
 	// arrives as a sugar marker; lower it to its paren form so the
 	// ParenExpr arm below evaluates it like the spelt-out
@@ -1127,7 +1142,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			pred = pb
 		}
 		if pred.Data != nil {
-			return defFnPredicateBind(r, name, typeName, pred, body, describeType, args[0].Pos())
+			return defFnPredicateBind(r, name, typeName, pred, body, describeType, defPos)
 		}
 	}
 
@@ -1152,21 +1167,21 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// instance has the same provenance an explicit make gives it (a
 			// downstream `b typeof` then compiles). Outside emit mode this is a
 			// no-op and the concrete instance is bound.
-			if carrier, ok := core.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
-				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
+			if carrier, ok := core.RecordTypedDefMake(r, constraint, body, defPos); ok {
+				return InstallAndRecordDef(r, name, carrier, defPos)
 			}
 			result, err := core.MakeObject(info, body, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
-			return InstallAndRecordDef(r, name, result[0], args[0].Pos())
+			return InstallAndRecordDef(r, name, result[0], defPos)
 		}
 		if IsClassInstance(body) {
 			oi, _ := AsClassInstance(body)
 			// Accept if the instance's nominal type matches the
 			// declared one (covers `def x:Person make Person {…}`).
 			if oi.TypeRef != nil && oi.TypeRef.ID == info.ID {
-				return InstallAndRecordDef(r, name, body, args[0].Pos())
+				return InstallAndRecordDef(r, name, body, defPos)
 			}
 		}
 	}
@@ -1181,8 +1196,8 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// looks the schema up by name when the constraint carries no body.
 	if resInfo, isRes := ResolveResourceTypeInfo(r, constraint); isRes {
 		if body.Parent.Equal(TMap) {
-			if carrier, ok := core.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
-				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
+			if carrier, ok := core.RecordTypedDefMake(r, constraint, body, defPos); ok {
+				return InstallAndRecordDef(r, name, carrier, defPos)
 			}
 			provided, merr := AsMutableMap(body)
 			if merr != nil {
@@ -1192,13 +1207,13 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
-			return InstallAndRecordDef(r, name, result[0], args[0].Pos())
+			return InstallAndRecordDef(r, name, result[0], defPos)
 		}
 		if IsResourceInstance(body) {
 			ri, _ := AsResourceInstance(body)
 			// Accept a pre-made instance whose nominal type matches.
 			if ri.TypeRef != nil && ri.TypeRef.ID == resInfo.ID {
-				return InstallAndRecordDef(r, name, body, args[0].Pos())
+				return InstallAndRecordDef(r, name, body, defPos)
 			}
 		}
 	}
@@ -1228,12 +1243,12 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				return core.TypedBindSpec{
 					Kind: core.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
 				}
-			}, body, body, args[0].Pos(), func() {
+			}, body, body, defPos, func() {
 				if es := r.Check.Recorder(); es.Active() {
 					es.MarkUncompilable("typed-def `" + name + "`: DepScalar predicate validation is interpreter-only")
 				}
 			})
-			return InstallAndRecordDef(r, name, bound, args[0].Pos())
+			return InstallAndRecordDef(r, name, bound, defPos)
 		}
 	}
 	// User-minted bare-refine subtype (`def Foo refine Integer`): the
@@ -1285,9 +1300,9 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 					return core.TypedBindSpec{
 						Kind: core.TypedBindRefine, Name: name, Describe: describeType(), Def: def,
 					}
-				}, body, ReparentValue(body, def), args[0].Pos(),
+				}, body, ReparentValue(body, def), defPos,
 					func() { markRefineDefUncompilable(r, name, body) })
-				return InstallAndRecordDef(r, name, bound, args[0].Pos())
+				return InstallAndRecordDef(r, name, bound, defPos)
 			}
 			if r.Check.IsActive() {
 				// A CONCRETE body is an exactly-known operand, so the failed
@@ -1300,8 +1315,8 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				// Mirror discipline lives in typedDefUnifyMirror (NUR058).
 				typedDefUnifyMirror(r, name,
 					fmt.Sprintf("def %s: value %s does not unify with declared type %s",
-						name, body.String(), describeType()), body, args[0].Pos())
-				return InstallAndRecordDef(r, name, NewCarrier(def), args[0].Pos())
+						name, body.String(), describeType()), body, defPos)
+				return InstallAndRecordDef(r, name, NewCarrier(def), defPos)
 			}
 			return nil, r.BoruError("type_error",
 				fmt.Sprintf("def %s: value %s does not unify with declared type %s",
@@ -1320,8 +1335,8 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// carrier body keeps the unstamped, compile-refusing emission.
 			typedDefUnifyMirror(r, name,
 				fmt.Sprintf("def %s: value %s does not unify with declared type %s",
-					name, body.String(), describeType()), body, args[0].Pos())
-			return InstallAndRecordDef(r, name, NewCarrier(constraint.Parent), args[0].Pos())
+					name, body.String(), describeType()), body, defPos)
+			return InstallAndRecordDef(r, name, NewCarrier(constraint.Parent), defPos)
 		}
 		return nil, r.BoruError("type_error",
 			fmt.Sprintf("def %s: value %s does not unify with declared type %s",
@@ -1349,7 +1364,7 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			unified = ReparentValue(unified, def)
 		}
 	}
-	return InstallAndRecordDef(r, name, unified, args[0].Pos())
+	return InstallAndRecordDef(r, name, unified, defPos)
 }
 
 // ---- undef ----

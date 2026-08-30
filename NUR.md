@@ -91,7 +91,7 @@ keep the two in sync in the same commit.
 | [NUR096](#nur096) | The check pass did not move with NUR095: a fn stored through a fn-SHAPE-typed member is APPLIED by both engines but still modelled by the checker as the inert fn it was before that retirement, so `TestCheckTypeSoundness` fails on the two multi-return `class.tsv` rows that pin it | adding the NUR095 retirement rows to `lang/spec/class.tsv`, 2026-08-20 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
-| [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
+| [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
@@ -280,86 +280,46 @@ the fix is the maintainer's to direct.
 
 ---
 
-## NUR108 — the compiled lane's diagnostics point somewhere else {#nur108}
+## NUR114 — a compiled caret underlines one character where the interpreter underlines the token {#nur114}
 
-**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** completing
-the NUR106 oracle sweep
+**Status:** Pending · **Recorded:** 2026-08-30 · **Surfaced by:** closing
+NUR108
 
-**Rule:** the two lanes agree on errors, and a diagnostic's POSITION is part
-of the error — it is the half a user reads first.
+**Rule:** the two lanes agree on errors, and the RENDERED diagnostic is the
+error as a user meets it — NUR108 established that the position is part of
+it, and the underline is the same claim about "where do I look".
 
-**Divergence:** the code and the message match exactly; the position does not,
-in two different ways.
-
-```
-def f fn [[x:Integer] [Integer] [def v:(Integer gt 10) x v]] f 5
-
-compiled → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
-           --> source position unknown
-interp   → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
-           --> 1:34   …with the `def v` underlined
-```
+**Divergence:** same code, same message, same row and column; different
+underline.
 
 ```
 def x:(Integer gt 10) 5 x
 
-compiled → --> 1:23   …pointing at the VALUE
-interp   → --> 1:1    …pointing at the `def`
+compiled → 1 | def x:(Integer gt 10) 5 x
+               ^   def x: value 5 does not unify with declared type (Integer gt 10)
+interp   → 1 | def x:(Integer gt 10) 5 x
+               ^^^ def x: value 5 does not unify with declared type (Integer gt 10)
 ```
 
-The first is a LOSS — `BIND_TYPED`'s validate failure carries no position at
-all, so the renderer falls back to "source position unknown". The second is a
-DISAGREEMENT: the terminal trap fires at the value it rejected, the
-interpreter blames the binding.
+**Where it comes from, traced not guessed.** `renderSite` sets
+`caretCount = len(sub)` from `BoruError.Src` — the TOKEN TEXT — with a floor
+of 1. The interpreter's `stampErrPos` copies that text out of the `SrcPos` it
+stamps with (`pos.Src`, e.g. `"def"`). The VM's `stampAt` cannot: the
+compiler's debug table is `Debug []core.SrcPos` built from event positions,
+and although `core.SrcPos` HAS a `Src` field, nothing on the compile path
+fills it — every entry is row/col only.
 
-**Not cosmetic.** A user who compiles and a user who interprets get different
-answers to "where do I look", and the first gets none. It also makes every
-error-parity assertion that compares `err.Error()` — the rendered form,
-position folded in — untrustworthy as a lane comparison, which is how this
-stayed invisible under NUR106's vacuous oracle.
+**So it is not a one-line mirror of `stampErrPos`.** Adding the `Src` copy to
+`stampAt` was written and measured: it changes nothing, because
+`debug[pc].Src` is empty at every site. Inert code, reverted rather than
+shipped. The work is upstream — carrying the token text through the recorder
+into the debug table — and it is worth costing against how much of the table
+it widens before it is done.
 
-**Verdict: resolve by fix.** `BIND_TYPED` must carry the def's position into
-its raise; the trap should blame the same token the interpreter does. Pinned
-meanwhile in `TestTypedDefBindCompiles`, which now compares Code and Detail
-and fences the position gap explicitly, so closing it fails the fence.
-
-**SHARPENED 2026-08-28, and one plausible fix measured and REJECTED.**
-
-Three things the record did not have:
-
-1. **It is NOT a general "compiled diagnostics lose positions" problem.**
-   Ordinary runtime errors carry exact, MATCHING positions on both lanes, at
-   top level and inside a fn body — `def n (2 add 3)  n div 0` and
-   `def f fn [[x:Integer] [Integer] [x div 0]]  f 5` both report `1:20` and
-   `1:36` respectively on each lane. The position machinery works; only the
-   typed-bind path is blind.
-2. **It is not fn-body-specific either**, which the record's example implies.
-   A TOP-LEVEL dynamic typed def loses it identically:
-   `def n (2 add 3)  def v:(Integer gt 10) n  v` renders no position compiled
-   against the interpreter's `1:18`.
-3. **The VM comment blaming `fmt.Errorf` is stale.** Traced at the raise, the
-   error IS a `*BoruError` and `stampAt` IS reached with a valid pc — but
-   `curDebug[pc]` is `0:0`, because the RECORD carried no position. The loss is
-   in the recorder, not the stamper.
-
-**Why the recorder has none, and why the obvious fix is wrong.** `def`'s args
-cannot supply it: the NAME arrives as a `/q`-captured Atom and the BODY as an
-already-collected value, and measured, BOTH are `0:0` at every typed-def record
-site. The interpreter does not read them either — the ENGINE stamps its error at
-the dispatch token after the handler returns.
-
-`r.Check.CurCallPos` looks like exactly the right source: it is that dispatch
-position, and the control words already use it for handler-built diagnostics.
-**Measured, it is not.** It is documented as "overwritten on every dispatch",
-and by the time the `def` handler runs it holds a NESTED call's position — the
-fix rendered `1:10` where the interpreter says `1:18`, and `1:62` where it says
-`1:34`. That trades a missing caret for a confidently wrong one, which is worse:
-"source position unknown" is at least honest. Reverted, unshipped.
-
-So the fix needs the `def` TOKEN's own position threaded to the record — a
-position the recorder does not currently receive from any of its three
-available sources. That is the work, and it is smaller than "compiled
-diagnostics" but larger than a fallback expression.
+**Not urgent, and the reason is worth stating.** Unlike NUR108, this cannot
+send a user to the wrong place; it under-marks the right one. It is recorded
+because "the diagnostics match" is a claim this project makes, and after
+NUR108 the caret is the last thing about these two renderings that does not.
 
 ---
 

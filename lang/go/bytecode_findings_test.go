@@ -4233,18 +4233,24 @@ func TestTypedDefBindCompiles(t *testing.T) {
 			t.Errorf("%s: error divergence:\n  compiled: [%s] %s\n  interp:   [%s] %s",
 				c.name, aeC.Code, aeC.Detail, aeI.Code, aeI.Detail)
 		}
-		// NUR108, measured 2026-08-27: the compiled lane loses the position on
-		// a BIND_TYPED validate failure — Row 0, rendered "source position
-		// unknown" — where the interpreter points at the `def`. Pinned so the
-		// day it is fixed this fence fails and graduates into the equality
-		// above.
-		if aeC.Row != 0 {
-			t.Errorf("%s: NUR108 CLOSED? compiled now carries row %d (interp %d) — "+
-				"fold the position into the equality above and delete this fence",
-				c.name, aeC.Row, aeI.Row)
+		// NUR108 RESOLVED 2026-08-30: the compiled lane's BIND_TYPED validate
+		// failure now points where the interpreter does — at the `def`. It used
+		// to render "source position unknown", because the RECORD carried no
+		// position: the typed-name map is synthesised by the `name:Type`
+		// desugar and is 0:0 at every typed-def site, so nothing reached
+		// stampAt to stamp. CheckState.CurWordPos publishes the dispatching
+		// word's position — the same value stampErrPos gives the interpreter —
+		// and the def handler falls back to it.
+		//
+		// The fence this replaces was written to fail the day it was fixed.
+		// Position is now part of the equality, both row AND column, so a
+		// future drift in either lane is a failure rather than a shrug.
+		if aeC.Row != aeI.Row || aeC.Col != aeI.Col {
+			t.Errorf("%s: diagnostic position divergence: compiled %d:%d, interp %d:%d",
+				c.name, aeC.Row, aeC.Col, aeI.Row, aeI.Col)
 		}
 		if aeI.Row == 0 {
-			t.Errorf("%s: the interpreter lost its position too — that is a regression, not NUR108", c.name)
+			t.Errorf("%s: neither lane carries a position — a raise inside a fn body must point somewhere", c.name)
 		}
 	}
 
@@ -4291,12 +4297,14 @@ func TestTypedDefBindCompiles(t *testing.T) {
 		t.Errorf("failing typed-def trap parity: compiled=[%s] %s interp=[%s] %s",
 			aeFC.Code, aeFC.Detail, aeFI.Code, aeFI.Detail)
 	}
-	// NUR108 again, the other way round: here BOTH lanes carry a position and
-	// they point at different tokens — the trap fires at the VALUE (1:23), the
-	// interpreter at the `def` (1:1). Same code, same message, same fix.
-	if aeFC.Col == aeFI.Col && aeFC.Row == aeFI.Row {
-		t.Errorf("NUR108 CLOSED? the trap and the interpreter now agree at %d:%d — "+
-			"fold the position into the equality above and delete this fence", aeFC.Row, aeFC.Col)
+	// NUR108's other half, also RESOLVED 2026-08-30. This one was never a
+	// LOSS — both lanes carried a position and disagreed about which token to
+	// blame: the terminal trap fired at the VALUE it rejected (1:23), the
+	// interpreter at the `def` (1:1). The same CurWordPos fallback settles it,
+	// because the trap is serialized from the same handler-side record.
+	if aeFC.Row != aeFI.Row || aeFC.Col != aeFI.Col {
+		t.Errorf("failing typed-def trap position divergence: compiled %d:%d, interp %d:%d",
+			aeFC.Row, aeFC.Col, aeFI.Row, aeFI.Col)
 	}
 }
 

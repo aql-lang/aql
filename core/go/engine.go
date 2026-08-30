@@ -3184,6 +3184,15 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Compute context (cheap O(1) call).
 	ctx := e.Registry.Contexts.TopData()
 
+	// Publish the dispatching word's position for the handler about to run
+	// (CheckState.CurWordPos). Set HERE, above the FullStack branch, so both
+	// dispatch arms below are covered by one assignment — and set for every
+	// dispatch, not only in check mode, so no caller has to reason about
+	// which lane it is on. It is the same value stampErrPos would stamp an
+	// unpositioned error with after the handler returns; a handler that
+	// RECORDS a position for the compiled lane needs it before that.
+	e.Registry.Check.CurWordPos = e.currentPos()
+
 	var fullStack []Value
 	if match.Sig.FullStack() {
 		// Find the nearest open-paren barrier so that FullStack handlers
