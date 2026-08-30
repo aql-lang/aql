@@ -1,10 +1,6 @@
 package compiler
 
-import (
-	"sort"
-
-	core "github.com/boru-lang/boru/core/go"
-)
+import core "github.com/boru-lang/boru/core/go"
 
 // Region capture, PHASE A — the compiler's seat on core's RegionRecorder seam
 // (design/FULL-COMPILATION.0.md §6.2, Stage 4).
@@ -112,28 +108,4 @@ func (es *EmitState) TakePendingRegion(word string, pos core.SrcPos) (*RegionDes
 	}
 	d, ok := es.pendingRegions[keyOf(word, pos)]
 	return d, ok
-}
-
-// PendingRegions returns the Phase-A captures in a stable order (by position,
-// then word), so a caller can inspect what was recorded without depending on
-// map iteration order. For tests and for Phase B's eventual drain.
-func (es *EmitState) PendingRegions() []*RegionDesc {
-	if es == nil || len(es.pendingRegions) == 0 {
-		return nil
-	}
-	out := make([]*RegionDesc, 0, len(es.pendingRegions))
-	for _, d := range es.pendingRegions {
-		out = append(out, d)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if a.Pos.Row != b.Pos.Row {
-			return a.Pos.Row < b.Pos.Row
-		}
-		if a.Pos.Col != b.Pos.Col {
-			return a.Pos.Col < b.Pos.Col
-		}
-		return a.Word < b.Word
-	})
-	return out
 }

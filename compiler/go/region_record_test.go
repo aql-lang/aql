@@ -188,3 +188,17 @@ func TestJoinKeyIgnoresSourceText(t *testing.T) {
 		t.Fatal("a different column is a different region and must not join")
 	}
 }
+
+// TestPendingRegionCountOnNil covers the nil receiver. It is not ceremony:
+// the count is read from test helpers and from Phase B's eventual drain, and
+// a nil EmitState is the ordinary state on any path where recording never
+// armed — a compiler-less build, a suspended pass. Returning 0 rather than
+// panicking is the contract.
+func TestPendingRegionCountOnNil(t *testing.T) {
+	if n := (*EmitState)(nil).PendingRegionCount(); n != 0 {
+		t.Fatalf("nil EmitState reported %d pending regions, want 0", n)
+	}
+	if n := NewEmitState().PendingRegionCount(); n != 0 {
+		t.Fatalf("a fresh EmitState reported %d pending regions, want 0", n)
+	}
+}
