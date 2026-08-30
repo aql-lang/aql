@@ -360,6 +360,141 @@ func posBefore(row, col int, p core.SrcPos) bool {
 	return row < p.Row || (row == p.Row && col < p.Col)
 }
 
+// generalisedResidualModelsReturn reports whether a GENERALISED body
+// analysis — one run against the declared params' carriers rather than a
+// call's real arguments — produced a residual sound enough to hold the body
+// to its declared return (NUR111).
+//
+// It is deliberately narrow, because the generalised residual is NOT a return
+// model in general; that is why the dispatch path runs the conformance mirror
+// on its real-argument residual and never on the `stkGen` one beside it. Two
+// ways the generalised analysis leaves something on the stack that is not a
+// return:
+//
+//   - It could not perform an application, and the operands it had already
+//     pushed stay behind. `def h fn g:(fnsig Integer String) String [(g 5)]`
+//     residuals as [dynamic(Any) 5] — `g` is a carrier, so the call is not
+//     modelled and the literal 5 is stranded, not returned.
+//   - A param carrier is itself a concrete stand-in. A `Map` param generalises
+//     to a concrete `{}`, so a body reading it computes over the empty map and
+//     the stand-in can survive to the residual as a fake return value.
+//
+// Both leave a CONCRETE value in the residual, and neither is distinguishable
+// here from a body that honestly returns a literal — so a concrete slot
+// disqualifies the whole residual.
+//
+// Length alone would not catch the second shape, and carrier-ness alone would
+// not catch a third: when an unmodelled application strands only CARRIERS and
+// their count happens to equal the declared count, every slot is a carrier at
+// exactly the right arity. What gives that shape away is the stranded CALLEE
+// — the fn-typed operand the analysis could not apply is still sitting in the
+// residual — so an fn-typed carrier slot disqualifies it too. This is a
+// conservative proxy for provenance, not a proof: carrier-ness genuinely does
+// not distinguish a derived return from a stranded operand, and closing that
+// properly needs the analysis to report whether it modelled the application.
+// Until it does, the cost of the proxy is a lost detection (a body declared to
+// return a NON-fn type that really does produce an fn value), never a false
+// rejection.
+//
+// What remains is the case the analysis definitely derived: exactly as many
+// slots as the declaration, every one a non-fn carrier propagated from a param
+// through the body's own operations. A body returning a source literal is
+// thereby NOT held to its declaration by this seam; the dispatch path still
+// catches it wherever the fn is actually called, and silence is the right
+// failure direction for a checker.
+func generalisedResidualModelsReturn(stk []core.Value, declared []*core.Type,
+	patterns []*core.Value, bodyIsLiteral bool) bool {
+	if len(declared) == 0 || len(stk) != len(declared) {
+		return false
+	}
+	// A LITERAL return pattern cannot be modelled by a generalised residual,
+	// and the reason is the generalisation itself: a literal PARAM pattern is
+	// widened to its parent type before the body runs, so a body that simply
+	// passes that param through residuals as the parent. Comparing it to the
+	// literal the declaration names then reports a mismatch that does not
+	// exist at run time.
+	//
+	//	def f fn [[1] [1] [dup drop]] end     -> `f 1` is 1 on both engines
+	//
+	// The first version of this seam rejected exactly that, with "expected 1,
+	// got Integer" — a false positive, found by review rather than by the
+	// accuracy ratchet, because no corpus row pairs a literal param pattern
+	// with a literal return. Preserving the constraint through generalisation
+	// would be the fuller fix; declining the residual is the sound one, and
+	// its cost is the usual lost detection rather than a wrong answer.
+	for _, pat := range patterns {
+		if pat != nil && core.IsConcrete(*pat) {
+			return false
+		}
+	}
+	for i := range stk {
+		if core.IsFnTypedCarrier(stk[i]) {
+			return false
+		}
+		// A CONCRETE slot is disqualifying only when the body could have put
+		// one there WITHOUT returning it — which needs an application to
+		// strand an operand, or a param stand-in to survive. A body that is
+		// nothing but inert literals has neither: there is no application and
+		// no param read, so the residual IS the return.
+		//
+		//	def cbad fn [[n:Integer] [Boolean] [1]] end  [1 2] each cbad/v
+		//
+		// checked clean while both engines raised "expected Boolean, got
+		// Integer" — the last live half of NUR111, and the shape this
+		// exception exists for. Measured: a computed body (`[1 add 2]`) and a
+		// param body (`[n]`) were already caught; the bare literal was the
+		// only hole.
+		if core.IsConcrete(stk[i]) && !bodyIsLiteral {
+			return false
+		}
+	}
+	return true
+}
+
+// bodyIsInertLiteral reports whether a fn body is nothing but inert constant
+// tokens — no word to dispatch, no group to evaluate, no interpolation to
+// build. Such a body cannot strand an operand (there is no application) and
+// cannot surface a param stand-in (there is no param read), which is what
+// makes a concrete residual from it a faithful return rather than debris.
+//
+// An EMPTY body is not one: it returns nothing, and the residual-length check
+// above is what should speak for it.
+func bodyIsInertLiteral(body []core.Value) bool {
+	if len(body) == 0 {
+		return false
+	}
+	for _, v := range body {
+		if !core.IsInertConst(v) || core.BearsActiveTokens(v) {
+			return false
+		}
+	}
+	return true
+}
+
+// bodyStartPos is the position a return-contract diagnostic anchors on: the
+// body's FIRST token. It pairs with bodySpanEnd to bound the body's source
+// span, and is the position the interpreter's ReturnCheck reports from, so
+// the check and runtime surfaces agree. Zero for an empty body.
+func bodyStartPos(body []core.Value) core.SrcPos {
+	if len(body) == 0 {
+		return core.SrcPos{}
+	}
+	return body[0].Pos()
+}
+
+// unnamedParamCount is a signature's count of UNNAMED params — the fn's
+// unconsumed unnamed-arg allowance, which the return-count mirror subtracts
+// before calling a residual too long (see checkBodyReturnConformance).
+func unnamedParamCount(params []core.FnParam) int {
+	n := 0
+	for i := range params {
+		if params[i].Name == "" {
+			n++
+		}
+	}
+	return n
+}
+
 // bodySpanEnd walks a parsed fn body's tokens (paren exprs, reaches, lists,
 // map values — the exprRefsCarrier shapes) and returns the maximum source
 // position seen, i.e. the start of the body's LAST token at any depth.
