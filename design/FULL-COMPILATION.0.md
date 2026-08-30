@@ -1050,11 +1050,42 @@ complete and self-contained: each carries a Go handler
 than the registry's is therefore well-defined where dispatching it through
 the registry's is not.
 
-What still has to be established before that becomes a fix: whether
-`usurpDispatchHandler`'s re-dispatch of the original itself re-enters the
-interpreter. If it does, using the value's sigs only MOVES the entry rather
-than removing it, and the seven rows need the collection machine after all.
-That is one read of one function, and it is the next step.
+**And reading that handler settles it: it does not dispatch at all — it
+returns TOKENS.** `usurpDispatchHandler` (`core/go/core_ref.go:333-354`)
+builds
+
+```
+( a0 … a(N-1-B)   orig   a(N-1) … a(N-B) )
+```
+
+— an open paren, the stack-part args in order, the ORIGINAL fn value, the
+forward-part args reversed, a close paren — and returns that sequence as its
+result. The engine then steps it. That is what "its Go handler expects the
+engine's collection around it" means, stated exactly: the handler's output is
+a paren group, and a group has to be EVALUATED by something with a tape. The
+VM has none, so it islands.
+
+So these rows are not primarily a §6.2 collection problem. They are a §6.8
+one — **the tape-coupled handler class** — and the two meet here, because the
+window the handler returns IS a region: a paren group whose lead is a fn
+value, with a specific forward/stack split. The collection machine is the
+right executor for it; the handler returning tokens is the coupling that has
+to go first.
+
+**Which also explains why only the CONTAINER spelling islands.** The
+`UsurpFunction` comment notes that `RunInCheck` lets the carrier compiler
+step the re-dispatch and compile the original call directly — *"`usurp (valof
+f) a b` lowers exactly like `f b a`"*. That works when the wrapped value is
+statically known. In all seven rows it is read out of a map (`m.a`, `o.m.a`),
+so at check time it is dynamic, the carrier compiler cannot step it, and the
+token window survives to run time with nothing but the interpreter able to
+walk it.
+
+The fix therefore has two halves, and the first is the one to establish
+first: the handler's output is a PURE FUNCTION of `n` and `origBarrier`, so
+its shape is knowable at record time without running it. That makes it
+describable as a region rather than emitted as tokens — which is exactly what
+retiring a tape-coupled handler means for this word.
 
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
