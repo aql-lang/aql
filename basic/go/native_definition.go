@@ -326,6 +326,15 @@ var DefinitionNatives = []NativeFunc{
 // `return nil, nil`, so it is consolidated here. The optional stackOnly flag
 // is forwarded to InstallDef (only the plain `def` path sets it).
 func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stackOnly ...bool) ([]Value, error) {
+	// Stage the def SITE for the bind ledger: this is the only frame that knows
+	// it (§6.5). SAVE/RESTORE rather than set — a fn's construction body
+	// analysis installs its own body-locals inside this call, and each must see
+	// its own site without disturbing this one.
+	if r != nil && r.Check != nil {
+		prevBindPos := r.Check.PendingBindPos
+		r.Check.PendingBindPos = pos
+		defer func() { r.Check.PendingBindPos = prevBindPos }()
+	}
 	// A def's own INSTALL must not count as a USE of the name. Installing a
 	// fn runs its construction-time body pass, which resolves the fn's own
 	// name (recursion support) and records a spurious self-use; an uncalled
@@ -1416,6 +1425,11 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		if entry.TypeDef != nil && entry.Minted {
 			r.Types.Retire(entry.TypeDef)
 		}
+		// A capitalised undef pops through PopEntry, not UninstallDef, so it
+		// needs its own ledger note (§6.5). The RETIREMENT above is already
+		// covered by BindingSandbox's partition — this records the BINDING
+		// removal, which is the half a twin has to replay.
+		r.NoteBindTransition(core.BindUndef, name, core.SrcPos{})
 		return nil, nil
 	}
 	// An undef of a LOOP-CARRIED def exposes the previous binding while the

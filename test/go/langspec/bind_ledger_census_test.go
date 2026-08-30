@@ -35,6 +35,8 @@ func bindKindName(k core.BindKind) string {
 	switch k {
 	case core.BindDef:
 		return "def"
+	case core.BindDefReplace:
+		return "def-replace"
 	case core.BindUndef:
 		return "undef"
 	case core.BindTypeInstall:
@@ -118,5 +120,48 @@ func TestBindLedgerCensus(t *testing.T) {
 	// `def`, and a zero here means the notes are not firing.
 	if byKind["def"] == 0 {
 		t.Error("no `def` transitions recorded — the ledger is not wired to installDef")
+	}
+}
+
+// TestBindLedgerEntriesArePositioned pins the half of the ledger a twin cannot
+// do without: WHERE to emit.
+//
+// Every entry must name a real source site. A zero position is not a cosmetic
+// gap — §6.5's twin is emitted "at its source position", so an unpositioned
+// transition is one the regime cannot place. Codex raised this on the first
+// cut, where `def x 1` was attributed to the value token and every `undef` to
+// nothing at all; CurWordPos (added for NUR108) supplies the dispatching word.
+func TestBindLedgerEntriesArePositioned(t *testing.T) {
+	srcs := []string{
+		`def x 1  x`,
+		`def f fn [[a:Integer] [Integer] [a add 1]]  f 1`,
+		`def x 1  undef x  1`,
+		`def P (refine Integer)  undef P  1`,
+		`def c false  if c [def op 1] [0] end 1`,
+		`def T fnsig Integer Integer  1`,
+		// The four sites the first cut missed entirely (Codex, 2026-08-30).
+		// Each passes NO value position of its own, so each is a live test of
+		// the CurWordPos floor rather than of the value token.
+		`def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  1`,
+		`def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  ` +
+			`undef add (fnsig [[Flag Flag] [Boolean]])  1`,
+		`import "boru:math-util"  def mymin MathUtil.min  1`,
+	}
+	for _, src := range srcs {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _, res, _ := a.CompileCheck(src)
+		if len(res.BindLedger) == 0 {
+			t.Errorf("no ledger entries for %q", src)
+			continue
+		}
+		for _, tr := range res.BindLedger {
+			if tr.Pos.Row == 0 {
+				t.Errorf("%q: %s transition on %q has no source position — a twin cannot be placed",
+					src, bindKindName(tr.Kind), tr.Name)
+			}
+		}
 	}
 }

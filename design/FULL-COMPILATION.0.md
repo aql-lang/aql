@@ -2433,6 +2433,7 @@ two of those three need no twin at all. Read the sites, not the counts:
 | `core_helpers.go` `installDef` / `UninstallDef` | 7 | **twin** — the def/undef core |
 | `carrier_join.go` `InstallJoinedDefs` | 5 | **twin** — the branch-arm push, NUR110's site |
 | `core_type.go` `PushType` / `PushTypeAdopted` | 2 | **twin**, paired with the retirement half `BindingSandbox` already partitions |
+| `word_extend.go` `InstallWordExtension` / `TransplantExtension` | 2 | **twin** — a dispatch binding pushed WITHOUT passing through `installDef`; this row is a correction, see below |
 | `modules/modules.go` export installs | 11 | no — `Install*Exports` are TEST-SETUP helpers, and their own comments say so ("equivalent to what happens when boru code runs `import`"). The real path is `installExports` → `InstallDef`, so a module namespace binding IS a `def` |
 | `native_behave.go` | 18 | no — every one is `Push("a", …)` + `defer Pop("a")`, a behaviour body's parameter binding |
 | `guard_narrow.go` | 4 | no — `ApplyGuardNarrowing` / `ApplyComplementNarrowing` each return a restore func that pops what they pushed |
@@ -2440,8 +2441,29 @@ two of those three need no twin at all. Read the sites, not the counts:
 
 So it is **three transition kinds**, not thirty: `def`, `undef`, type install —
 the branch-arm push and the module namespace install both being `def` rather
-than kinds of their own. `word_extend.go` is not among them either: no direct
-`Defs` mutation, it reaches the table through `installDef`.
+than kinds of their own. A fourth, `def-replace`, was added by measurement
+rather than reading: see below.
+
+**CORRECTION — `word_extend.go` IS a site, and this table said otherwise.** The
+first version of this row read "no direct `Defs` mutation, it reaches the table
+through `installDef`". It does not: `InstallWordExtension` and
+`TransplantExtension` push clones directly (`word_extend.go:365`, `:466`), so a
+source-level `def add fn […]` extension and every extension transplanted at
+import were invisible. Four further sites were missing for the same reason —
+each bypasses the function the reading assumed was the funnel:
+
+| missed site | shape it made invisible |
+|---|---|
+| `InstallJoinedDefs` (never instrumented at all) | `if c [def x 1] []` — the branch-arm population NUR110 is about |
+| `word_extend.go:365`, `:466` | `def add fn […]`, and import-time transplants |
+| capitalised `undef` → `Defs.PopEntry` | `def P (refine Integer)  undef P` |
+| signature undef → `UninstallFnSigs` → `Defs.Set` | removing one overload of a word |
+| `installDef`'s module-wrapper rebind (early return) | `def mymin MathUtil.min` |
+
+Together they were **1750 transitions, 23% of the population** — 5705 → 7455,
+before the rolled-back-body exclusion below took it to 7453. The lesson is the
+one this section already carries about counts, turned on its author: a reading
+of the call graph is a hypothesis, and only instrumenting it is evidence.
 
 **The module row is in that table because the READING got it wrong and the
 MEASUREMENT corrected it**, which is the reason to measure before building
@@ -2453,19 +2475,92 @@ plausible reading of them.
 
 **Measured over `lang/spec`** (`TestBindLedgerCensus`), 7644 rows:
 
-	rows with transitions   4286
-	transitions total      69254
-	  def                  68180
-	  type-install          1052
-	  undef                   22
-	deepest single row      1672   —  import "boru:sift"  Sift.check {family:'kv'}
+	rows with transitions   4291
+	transitions total       7453
+	  def                    6371
+	  type-install           1048
+	  undef                    30
+	  def-replace               4
+	deepest single row         36   —  unpack 'boru:math-util' sqrt 16.0
 
-Three things that shape the twin work. `def` is 98.4% of it, so the twin op for
-`def` is the one whose cost matters and the other two can be straightforward.
-`undef` is 22 across the entire corpus — rare enough that its twin can be the
-simple, obviously-correct one. And a single module import is 1672 transitions,
-so the per-transition cost of a twin is a real budget: module bodies dominate
-the volume even though they are ordinary `def`s.
+**What the ledger must EXCLUDE, and it is most of what a naive instrument
+catches.** The first wiring recorded 69254 transitions, and 49382 of them were
+incoherent — the depths did not compose, which
+`TestBindLedgerDepthsCompose` reports by replaying each name symbolically. Three
+exclusions, each measured rather than assumed:
+
+- **`FnBodyDepth > 0`** — a fn body's `def` is a FRAME-LOCAL, pushed per call
+  and popped by the frame teardown, which never reaches `UninstallDef`. 69254 →
+  6110.
+- **shadowing installs** (`installDef`'s `!shadow`) — `InstallFrameBinding`'s
+  own contract is that it "shadows — never removes — an outer same-named
+  binding", so a macro or fn PARAMETER is not a transition that outlives the
+  pass. 6110 → 5705, and incoherence 274 → 2.
+- **`BindDefReplace`** — the last two were one shape: `def f fn […] def f fn […]`.
+  `installDef`'s overlap filter DROPS the colliding entry before pushing, so the
+  net depth is unchanged. A twin replaying that as a plain push lands one level
+  too deep and a later `undef` exposes the wrong binding — the hazard this
+  section names, and family L's refusal with it. It is a kind of its own so the
+  twin reproduces the replace instead of inferring it. Incoherence 2 → 0.
+- **speculative installs in a ROLLED-BACK body** (`RolledBackBodyDepth`) — an
+  install inside any `keep=false` run of `runCarrierBodyDefsAdds` is undone by
+  that function's own truncation on the way out. The binding the pass LEAVES is
+  whatever `InstallJoinedDefs` puts back afterwards, or nothing at all; the
+  speculative install is a third thing, and recording it double-counts. Wider
+  than `CondBodyDepth` on purpose — a condition fragment is truncated too, even
+  though it is not conditional.
+
+**AND THE CORPUS COULD NOT SEE THAT LAST ONE**, which is the part worth
+carrying forward. `lang/spec` contains exactly three `if …[def …]` rows and all
+three are inside a fn body, where `FnBodyDepth` suppresses them. So
+`TestBindLedgerDepthsCompose` reported a clean **0 incoherent over 7644 rows**
+while the shape this census exists to size — NUR110's own, a top-level
+branch-arm `def` — was recorded TWICE at the same depth on every occurrence. A
+twin built against that ledger would have pushed the binding twice, and the
+differential would have reported it much later as a mysterious divergence.
+
+`TestBindLedgerBranchArmDepthsCompose` closes the blind spot with synthetic
+top-level rows (both arms, one arm, a pre-existing outer binding, two `if`s in
+sequence, and a `while` body). Verified to FAIL without the exclusion — eight
+incoherent transitions across the six rows — and pass with it. A corpus is
+evidence about the programs it contains and silence about the rest; when the
+population being measured is a shape the corpus lacks, the gate has to supply
+it.
+
+**A STRONGER ORACLE EXISTS AND IS NOT YET GREEN.** The composition check is
+self-contained by construction (§ the file header), but `Boru.NativeRegistry()`
+exposes the live registry, so the ledger's final depth per name can be compared
+against the depth the check pass ACTUALLY left — which is precisely the
+assertion §6.5's staging calls for before the flip to rollback-and-replay.
+Built and run: **9 mismatches over 4291 rows**, in two classes.
+
+| class | rows | shape |
+|---|---|---|
+| macro-expansion gensym temps | 8 | `tmp$g1`, `t`, `g` — a macro's CONSTRUCTION-time expansion mints and installs a hygiene temp that is later torn down; the install is recorded, the teardown is not. The real expansion's temp (`tmp$g2`) is live and correctly recorded |
+| a doubled module-io install | 1 | `module-io.tsv:223`, `def l (IO.lock …)` — ledger 1, live 2, so a second install is unaccounted |
+
+Neither is fixed here, and neither is allowed away: the oracle is **not** landed
+as a gate with an allowance. It is recorded as the next measurement to close,
+with its two classes named, because a gate that reports a number it tolerates
+teaches the next author to tolerate it.
+
+Three things that shape the twin work. `def` is 85% of it, so its twin is the
+one whose cost matters and the other three can be straightforward. `undef` and
+`def-replace` are 34 transitions COMBINED across the entire corpus — rare enough
+that theirs can be the simple, obviously-correct ones. And the deepest single
+row is 36, not thousands: with frame-locals excluded, no corpus program performs
+more than a few dozen twin-replayable transitions, so per-transition cost is not
+a budget concern.
+
+**Positions are the other half of a twin, and getting them right took three
+tries**, each wrong in a way worth recording because the next author will reach
+for the same two sources. The value's own `Pos` is the VALUE token (`def x 1`
+gives 1:7, the `1`). `CurWordPos` has already MOVED by install time whenever the
+body was analysed first (`def f fn [… [def y x y]]` gives the INNER `def`).
+Staging the site in `CheckState.PendingBindPos` and clearing it on every note
+let a SUPPRESSED body-local note steal the position its enclosing `def` had
+staged. Save/restore around each install is what nesting actually needs, and
+`TestBindLedgerEntriesArePositioned` pins that every entry names a real site.
 
 **The partial twins that already exist**, and what changes about them.
 `OpBindGlobal` is the value half under TODAY's keep-the-installs regime: it
