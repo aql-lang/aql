@@ -240,6 +240,28 @@ type CheckState struct {
 	// keeps compiled == interpreter (slow, not wrong).
 	CondBodyDepth int
 
+	// RolledBackBodyDepth, when > 0, marks analysis running inside a body
+	// whose def growth is TRUNCATED on the way out — every `keep=false` run
+	// of runCarrierBodyDefsAdds, which is the branch arms and loop bodies
+	// CondBodyDepth covers PLUS the condition/scrutinee fragments it exempts.
+	// The bind ledger consults it, and needs the wider set: what makes an
+	// install unrecordable is the truncation, not the conditionality.
+	//
+	// An install inside such a body is SPECULATIVE. Either the construct
+	// re-installs it afterwards through InstallJoinedDefs — in which case
+	// that call records the binding the pass actually leaves — or nothing
+	// does, and the pass leaves no binding at all. Recording the install
+	// itself is wrong both ways: measured on `def c false  if c [def op 1]
+	// [0] end 1`, the ledger held TWO `op` entries at depth 1, so a twin
+	// replaying it would push the binding twice.
+	//
+	// The corpus could not catch this. lang/spec has exactly three
+	// branch-arm defs and all three are inside fn bodies, so FnBodyDepth
+	// suppresses them and TestBindLedgerDepthsCompose saw a clean 0 over
+	// 7644 rows while the shape the census exists to size — NUR110's —
+	// was double-recorded. Its synthetic sources cover it now.
+	RolledBackBodyDepth int
+
 	// InflightBails counts Any-placeholder bail-outs taken by
 	// recursive calls of UNCHECKED fns (declared returns use the
 	// declaration instead and don't count). AnalyseFnBody compares
@@ -373,6 +395,36 @@ type CheckState struct {
 	// simple-value substitution in check mode. Used to filter out
 	// defs that were referenced at least once.
 	DefsUsed map[string]bool
+
+	// BindLedger records the RUNTIME-VISIBLE binding transitions the check
+	// pass performs, in source order — the population the bind twins
+	// (design/FULL-COMPILATION.0.md §6.5) have to replay.
+	//
+	// INERT. Nothing reads it to decide anything; it exists so the twin work
+	// can be measured before it is built, the way Stage 1's censuses preceded
+	// every seam this project has since closed. §6.5's enumeration says which
+	// transitions belong here and, just as importantly, which do not: a
+	// behaviour body's `Push("a", …)` + `defer Pop("a")`, guard narrowing's
+	// restore-func pairs, and generic instantiation's balanced Push/Pop are all
+	// self-restoring or compile-time products and are NOT recorded.
+	BindLedger []BindTransition
+
+	// PendingBindPos is the def SITE for the transition about to be recorded,
+	// set by the def word's handler (InstallAndRecordDef) which is the only
+	// caller that knows it, and SAVE/RESTORED around each install so nesting
+	// works. Both simpler disciplines were built and measured wrong on
+	// `def f fn [[x:Integer] [Integer] [def y x y]]`: leaving it set let the
+	// suppressed body-local `def y` leak its position onto `f`, and clearing it
+	// on every note let that same suppressed note STEAL the position `f` had
+	// already staged. Scoping is what a nested construct needs.
+	//
+	// Neither of the two positions available deeper down is the binding site.
+	// The VALUE's own Pos is the value token — `def x 1` yields 1:7, the `1`,
+	// not the definition. And CurWordPos has MOVED by install time whenever the
+	// body was analysed first: `def f fn [[x:Integer] [Integer] [def y x y]]`
+	// reports 1:34, the INNER def. Both were measured; this field is what makes
+	// a twin placeable at the transition it replays.
+	PendingBindPos SrcPos
 
 	// ContextTypes is a best-effort record of keys that user code
 	// wrote to a Store during a check run. The value is the
@@ -807,6 +859,9 @@ func (c *CheckState) Clone() *CheckState {
 	if c.Diagnostics != nil {
 		cp.Diagnostics = append([]CheckDiagnostic(nil), c.Diagnostics...)
 	}
+	// Branchless deep copy: append to a nil slice with no elements yields
+	// nil, so a nil ledger clones as nil without a guard to keep covered.
+	cp.BindLedger = append([]BindTransition(nil), c.BindLedger...)
 	cp.ParenPlacedFnIDs = cloneMap(c.ParenPlacedFnIDs)
 	cp.ParenReSteppedFnIDs = cloneMap(c.ParenReSteppedFnIDs)
 	cp.FnSummaries = cloneMap(c.FnSummaries)
@@ -881,6 +936,8 @@ func (c *CheckState) Begin() func() {
 	c.SuppressedRuntimeError = false
 	c.AmbiguousGradualSplit = false
 	c.DefsInstalled = nil
+	c.BindLedger = nil
+	c.PendingBindPos = SrcPos{}
 	c.DefsUsed = nil
 	c.FnNameStack = nil
 	c.FnBinders = nil
@@ -901,6 +958,7 @@ func (c *CheckState) Begin() func() {
 	c.CaughtBodyDepth = 0
 	c.NestedBodyDepth = 0
 	c.CondBodyDepth = 0
+	c.RolledBackBodyDepth = 0
 	c.LoopBodyDepth = 0
 	c.SpecBaselines = nil
 	c.ArgsFrameUnnamed = false
@@ -1456,4 +1514,113 @@ func CheckAddUnique(r *Registry, d CheckDiagnostic) {
 		}
 	}
 	r.Check.AddDiagnostic(d)
+}
+
+// BindKind names a runtime-visible binding transition. §6.5's reading-based
+// enumeration proposed four kinds; the census measured THREE, and the one it
+// removed is worth keeping as a note: a module export install is not its own
+// transition. The real import path is installExports -> InstallDef, so a module
+// namespace binding IS a def and needs no separate twin. (The `Install*Exports`
+// functions in lang/go/modules are test-setup convenience helpers — their own
+// comments say "equivalent to what happens when boru code runs import" — and
+// instrumenting them measured ZERO, which is how the mistake surfaced.)
+//
+// The branch-arm push is likewise a BindDef variant rather than a kind of its
+// own: it IS a def, only its reachability differs.
+type BindKind uint8
+
+const (
+	// BindDef is a `def` install: installDef's push, including the branch-arm
+	// push InstallJoinedDefs performs when one arm binds a name fresh.
+	BindDef BindKind = iota
+	// BindUndef is an `undef`: UninstallDef's pop.
+	BindUndef
+	// BindDefReplace is a fn REDEFINITION whose overlap filter dropped the
+	// colliding entry first: a drop-then-push whose NET depth change is zero.
+	// A twin must replace, not push — see installDef's note at the site.
+	BindDefReplace
+	// BindTypeInstall is a type binding push (PushType / PushTypeAdopted). Its
+	// retirement counterpart is not a ledger entry: BindingSandbox already
+	// partitions the TypeTable so retirements roll back and mints stay baked.
+	BindTypeInstall
+)
+
+// BindTransition is one entry of CheckState.BindLedger.
+//
+// Depth is the def-stack depth AFTER the transition, which is what makes a
+// replay checkable: a twin that re-installs at its source position must leave
+// the same depth the check pass did, or shadowing and a later `undef` expose a
+// different binding (§6.5's "replay, never re-execution").
+type BindTransition struct {
+	Kind  BindKind
+	Name  string
+	Pos   SrcPos
+	Depth int
+}
+
+// NoteBindTransition appends to the ledger.
+//
+// A no-op outside a check pass, on the empty name (a synthetic install with no
+// name has nothing for a twin to address), and — the condition that matters —
+// INSIDE A FN BODY.
+//
+// FnBodyDepth > 0 is code that runs at CALL time, not at the point of analysis,
+// so a `def` there is a FRAME-LOCAL: pushed per call and popped by the frame
+// teardown, which does not go through UninstallDef. The twins do not replay
+// those; the compiled lane gives them slots, not registry bindings. Recording
+// them anyway was measured and it is not a small effect — adding this arm took
+// the ledger from 69254 entries to 6110, and TestBindLedgerDepthsCompose had
+// reported 49382 of those 69254 as depths that do not compose
+// (`def f fn [[a:Integer] [Map] [def m {…} m]]` records `m` at depth 1 on every
+// call, because the teardown pop is invisible here).
+//
+// RolledBackBodyDepth > 0 is the second: an install inside a body whose def
+// growth is truncated on the way out is SPECULATIVE. The binding the pass
+// leaves behind is whatever InstallJoinedDefs puts back afterwards, or nothing
+// at all; recording the speculative install as well double-counts it. Measured
+// on `def c false  if c [def op 1] [0] end 1`: two `op` entries, both at depth
+// 1, so a twin replaying the ledger would push the binding twice.
+//
+// NestedBodyDepth is deliberately NOT the field used for that. It counts EVERY
+// nested body including `do` (keep=true), whose defs leak by design and must be
+// recorded — the runtime leaves them, so a twin has to.
+//
+// The other exclusion lives at the call site rather than here, because the
+// signal does: installDef notes only when !shadow. A SHADOWING install is a
+// frame binding — InstallFrameBinding's own contract is that it "shadows —
+// never removes — an outer same-named binding, so the caller's binding is
+// restored intact when the frame's teardown pops this entry" — which is a macro
+// or fn parameter, not a transition that outlives the pass. Measured: with
+// FnBodyDepth alone the ledger still carried 274 incoherent entries, nearly all
+// of them macro parameters (`macro [[e] [quote […]]]` pushing `e` per
+// expansion).
+func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
+	if r == nil || r.Check == nil {
+		return
+	}
+	pending := r.Check.PendingBindPos
+	if !r.Check.Mode || name == "" || r.Check.FnBodyDepth > 0 ||
+		r.Check.RolledBackBodyDepth > 0 {
+		return
+	}
+	// POSITION. The value's own Pos is the right answer when it has one, but it
+	// frequently does not: a fn or type BODY commonly carries 0:0, an `undef`
+	// supplies nothing to take a position from, and a word-extension install
+	// has no value position at all. Falling back to CurWordPos — the position
+	// of the word currently dispatching, published for NUR108 and correct for
+	// exactly this kind of question — gives every entry a real site.
+	//
+	// What each case then yields, stated rather than assumed: a `def` lands on
+	// the `def` token, an `undef` on the `undef` token, and a JOINED branch
+	// binding on the `if` — the join runs after that dispatch, so the arm's own
+	// def token is already gone. The last is the one to revisit when the twin
+	// op needs a finer position than the construct that produced the binding.
+	if pending.Row != 0 {
+		pos = pending
+	} else if pos.Row == 0 {
+		pos = r.Check.CurWordPos
+	}
+	r.Check.BindLedger = append(r.Check.BindLedger, BindTransition{
+		Kind: kind, Name: name, Pos: pos, Depth: r.Defs.Depth(name),
+	})
 }

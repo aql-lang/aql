@@ -218,6 +218,10 @@ func joinBranchDef(a, b Value) Value {
 // pushed. If only one branch defined it, that def is pushed back —
 // but joined with the pre-branch carrier (if any) since the other
 // branch's path kept the original binding.
+// Every arm push here is a runtime-visible transition and is noted for the bind
+// ledger (§6.5): the joined binding is what the check model LEAVES BEHIND, and a
+// twin has to reproduce it. Recording only the speculative arm's own installDef
+// would undercount exactly the branch-arm population NUR110 is about.
 func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 	seen := make(map[string]bool)
 	for k, tv := range then {
@@ -232,6 +236,7 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 		} else {
 			r.Defs.Push(k, tv)
 		}
+		r.NoteBindTransition(BindDef, k, tv.Pos())
 	}
 	for k, ev := range else_ {
 		if seen[k] {
@@ -243,6 +248,7 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 		} else {
 			r.Defs.Push(k, ev)
 		}
+		r.NoteBindTransition(BindDef, k, ev.Pos())
 	}
 }
 

@@ -110,6 +110,9 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 						ident: inner.ident,
 					}
 					r.Defs.Push(name, NewFunction(rebound))
+					if !shadow {
+						r.NoteBindTransition(BindDef, name, body.Pos())
+					}
 					if r.ready && r.OnRegisterHook != nil {
 						r.OnRegisterHook(name)
 					}
@@ -136,6 +139,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// path (BuildWordExtension) intercepts fn defs over locked-bearing
 		// words before InstallDef, so this guard is defence in depth for
 		// direct InstallDef callers.
+		replaced := false
 		if stack := r.Defs.Stack(name); !shadow && len(stack) > 0 {
 			filtered := stack[:0:0]
 			changed := false
@@ -165,6 +169,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 					r.analysisRecorder().MarkUncompilable("fn '" + name + "' redefined inside a conditional body (branch/loop) shadows an outer overload")
 				}
 				r.Defs.Set(name, filtered)
+				replaced = true
 			}
 		}
 
@@ -172,6 +177,19 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// DefStack entry. The 0-arg fallback and cross-stack overloading
 		// are synthesised on demand by Registry.Lookup → aggregateDispatch.
 		InstallFnDef(r, name, fnDef, isStackOnly)
+		if !shadow {
+			// A REDEFINITION whose overlap filter dropped the colliding entry
+			// is a drop-then-push: the net depth is unchanged, so a twin that
+			// replays it as a plain push lands one level too deep and a later
+			// `undef` exposes the wrong binding — the hazard §6.5 names and the
+			// one family L's refusal exists for. Recorded as its own kind so
+			// the twin can reproduce the replace rather than infer it.
+			kind := BindDef
+			if replaced {
+				kind = BindDefReplace
+			}
+			r.NoteBindTransition(kind, name, body.Pos())
+		}
 		return
 	}
 
@@ -212,10 +230,16 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		}
 		body = NewClassType(def, info)
 		r.Defs.Push(name, body)
+		if !shadow {
+			r.NoteBindTransition(BindTypeInstall, name, body.Pos())
+		}
 		return
 	}
 
 	r.Defs.Push(name, body)
+	if !shadow {
+		r.NoteBindTransition(BindDef, name, body.Pos())
+	}
 }
 
 // UninstallDef removes the most recent def for a word, exposing whatever
@@ -225,6 +249,9 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 // is needed.
 func UninstallDef(r *Registry, name string) {
 	r.Defs.Pop(name)
+	// Recorded AFTER the pop so Depth is the post-transition depth, which is
+	// what a twin has to reproduce (§6.5).
+	r.NoteBindTransition(BindUndef, name, SrcPos{})
 }
 
 // buildFnBodyHandler produces the dispatch Handler for one boru fn
@@ -753,6 +780,11 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 	}
 
 	r.Defs.Set(name, stack)
+	// A SIGNATURE-specific undef rewrites the stack in place rather than
+	// popping, so it never reaches UninstallDef. It is still a runtime-visible
+	// removal a twin must replay — recorded as BindDefReplace because, like a
+	// redefinition's drop-then-push, the name's DEPTH is unchanged.
+	r.NoteBindTransition(BindDefReplace, name, SrcPos{})
 }
 
 // CoerceBoolean converts any value to a boolean by presence, not by

@@ -111,6 +111,15 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	// run unconditionally exactly once before the branch decision, so a
 	// redefinition there is not path-dependent.
 	r.Check.NestedBodyDepth++
+	// A keep=false body's def growth is TRUNCATED below, so every install
+	// inside it is SPECULATIVE and the bind ledger must not record it — the
+	// binding the pass actually leaves is whatever InstallJoinedDefs puts
+	// back, or nothing. Wider than raiseCond on purpose: a condition
+	// fragment is truncated too, even though it is not conditional.
+	if !keep {
+		r.Check.RolledBackBodyDepth++
+		defer func() { r.Check.RolledBackBodyDepth-- }()
+	}
 	raiseCond := !keep && !condFrag
 	if raiseCond {
 		r.Check.CondBodyDepth++
