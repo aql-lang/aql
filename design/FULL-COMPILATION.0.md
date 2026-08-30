@@ -2422,6 +2422,43 @@ fn-local-fn refusal (the name is looked up live, so the never-executed-def
 hazard disappears). Family F — dispatch *recovery* — is §6.9(1)'s to
 close, not the twins'.
 
+**WHICH TRANSITIONS ACTUALLY NEED A TWIN — enumerated 2026-08-30, because the
+raw site count is misleading by an order of magnitude.** Grepping `r.Defs`
+mutation points during a check pass ranks `native_behave.go` first with 18,
+`modules.go` second with 11, and `generics_instantiate.go` third with 7 — and
+two of those three need no twin at all. Read the sites, not the counts:
+
+| site | sites | verdict |
+|---|---|---|
+| `core_helpers.go` `installDef` / `UninstallDef` | 7 | **twin** — the def/undef core |
+| `carrier_join.go` `InstallJoinedDefs` | 5 | **twin** — the branch-arm push, NUR110's site |
+| `modules/modules.go` export installs | 11 | **twin** — one `Defs.Push(name, exportMap)` per module; imported ONCE in the front end, the twin re-binds the produced instance |
+| `core_type.go` `PushType` / `PushTypeAdopted` | 2 | **twin**, paired with the retirement half `BindingSandbox` already partitions |
+| `native_behave.go` | 18 | no — every one is `Push("a", …)` + `defer Pop("a")`, a behaviour body's parameter binding |
+| `guard_narrow.go` | 4 | no — `ApplyGuardNarrowing` / `ApplyComplementNarrowing` each return a restore func that pops what they pushed |
+| `generics_instantiate.go` | 7 | no — `PushGenBindings`/`PopGenBindings` and `InstantiateSchema`'s key are balanced pairs, and type instantiation is a compile-time product |
+
+So it is **four transition kinds**, not thirty: `def`, `undef`, module install,
+type install/retire — the branch-arm push being a `def` variant rather than a
+fifth. `word_extend.go` is not among them: it carries no direct `Defs` mutation
+and reaches the table through `installDef`.
+
+**The partial twins that already exist**, and what changes about them.
+`OpBindGlobal` is the value half under TODAY's keep-the-installs regime: it
+`SetAt`s into the kept check-pass slot at the recorded depth, deliberately never
+a push, so shadowing depth and undef behaviour match the interpreter. Under the
+twin regime that inverts — the slot is gone after the rollback, and the twin
+pushes at its source position. `OpBindDynScope` makes a frame binding
+registry-visible and is unaffected.
+
+**Staging, and it must not be inverted.** Emit the twins FIRST, while the
+check-pass installs are still kept, so every twin is inert; assert that the
+replayed binding state matches what the pass left; THEN flip to
+rollback-and-replay. Rollback-first breaks every program until the last
+transition has a twin, and offers no intermediate state where the differential
+means anything — the same reasoning that made Stage 2 land its three re-seats
+separately.
+
 Three consistency obligations come with the twins, and they interlock.
 
 **Replay, never re-execution.** Today the compiled path deliberately
