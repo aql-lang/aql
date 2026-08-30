@@ -830,6 +830,45 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 	if ent := vc.dynApplyEnter(fnVal, args); ent != nil {
 		return stack[:base], ent, nil
 	}
+	// A MODIFIER WRAPPER re-dispatches what it wraps, and it does so by
+	// returning TOKENS — `( stack-part  orig  forward-part )` for the engine
+	// to step. That is why it lands here: a paren group needs a tape, and the
+	// VM has none. But the group is a pure RESHUFFLE, and it collapses to a
+	// permutation that does not depend on the barrier (core.WrapKind):
+	// `usurp` reverses the arg vector, the rebarrier family leaves it alone.
+	// So the wrapper can be resolved to what it wraps and dispatched here,
+	// with no tokens and no island.
+	//
+	// The chain is WALKED rather than read off ArgsReversed, which is a
+	// one-way mark and reports reversed for `usurp (usurp f)` where the
+	// composed permutation is the identity — safe for declining a fast path,
+	// wrong for performing one.
+	//
+	// Both tiers above are retried against the unwrapped value, in the same
+	// order: a wrapped native reaches tryNativeFnApply (where the wrapper
+	// itself could not, since vmNativeApplicable excludes it), and a wrapped
+	// user fn reaches the Apply kernel. Anything still unresolved islands as
+	// before.
+	if inner, reverse, wrapped := core.UnwrapModifierChain(fnVal); wrapped {
+		iargs := args
+		if reverse {
+			iargs = make([]core.Value, n)
+			for i := range args {
+				iargs[i] = args[n-1-i]
+			}
+		}
+		if ifd, isFn := inner.Data.(core.FnDefInfo); isFn && vmNativeApplicable(vc.r, ifd) {
+			if results, done, err := vc.tryNativeFnApply(inner, iargs); done {
+				if err != nil {
+					return nil, nil, stampAt(err, curDebug, pc, r)
+				}
+				return append(stack[:base], results...), nil, nil
+			}
+		}
+		if ent := vc.dynApplyEnter(inner, iargs); ent != nil {
+			return stack[:base], ent, nil
+		}
+	}
 	// Non-trivial fn (user body): apply via the island sub-engine, which
 	// auto-applies the Function to the forward args exactly as a nested Run.
 	island := make([]core.Value, 0, n+1)

@@ -42,9 +42,14 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 	}
 	// Fields Begin() deliberately does NOT reset.
 	persistent := map[string]string{
-		"Mode":        "set true by Begin itself; cleared by the returned done()",
-		"StepBudget":  "configuration with the -1 sentinel, resolved per run",
-		"CurCallPos":  "transient cursor overwritten per dispatch",
+		"Mode":       "set true by Begin itself; cleared by the returned done()",
+		"StepBudget": "configuration with the -1 sentinel, resolved per run",
+		"CurCallPos": "transient cursor overwritten per dispatch",
+		"CurWordPos": "transient cursor overwritten per dispatch, and the write is " +
+			"unconditional and immediately adjacent: execMatch sets it from " +
+			"e.currentPos() on the line above the handler call, and a handler is the " +
+			"only reader. So no read can ever observe a previous pass's value, which " +
+			"is what resetting it would protect against",
 		"FnSummaries": "caller-managed memo: CompileCheck nils it per emit pass and SetStrictCheck nils it on a mode change; a plain Check / bare Begin reuses them intentionally",
 		"FnInflight":  "caller-managed alongside FnSummaries",
 		"Strict":      "strict-mode configuration set by the caller before Begin",

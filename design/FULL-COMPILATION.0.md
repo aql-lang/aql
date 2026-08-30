@@ -862,6 +862,328 @@ change as costly. Only the interleaved A/B above is load-fair, and the
 +9.9% figure is that one. A performance number from a file measured under a
 different machine load is not a measurement.
 
+**WHERE A REGION DISPATCH MAY BE USED IS CONSTRAINED BY THE LANGUAGE, not
+just by what the descriptor can express.** A first executing slice was built
+end to end — descriptor claim, routing predicate, `OpDispatchRegion`, a VM
+path modelled on `callPolyIn` — and it worked: `10 sub 3` lowered to
+
+```
+0000 PUSH_CONST  k1   ; 10 (Integer)
+0001 DISPATCH_REGION r0   ; sub fwd=1/2 slots=1 (region)
+```
+
+one push for the stack half, the forward operand `3` taken from the
+descriptor, answering 7. It was reverted anyway, because two tests that were
+doing their job said the target was wrong.
+
+`TestEmitSplitFormsIdentical` (`lang/go/bytecode_emit_test.go`) states the
+rule: *"One split rule, one bytecode per ASSIGNMENT: every split of the same
+sig-order assignment lowers identically."* `1 add 2`, `1 2 add` and
+`add 2 1` all assign sig[0]=2, sig[1]=1, and must produce the same program.
+CLAUDE.md says the same thing at language level — *"a call form only chooses
+where the split falls"* — so the forward/stack split is SURFACE SYNTAX, and
+the compiler deliberately normalises it away.
+
+A region descriptor carries that split, in `NFwd`. Routing a forward or
+mixed dispatch and leaving the stack-only form on `CALL_NATIVE` therefore
+lets syntax survive into the bytecode, and the three spellings diverge. This
+is not fixable by widening the routing: a stack-only dispatch has no region
+to capture (a region IS a forward-collecting dispatch), and synthesising an
+empty one still yields a different push sequence. The only shape that
+preserves the rule is to push every operand as before and use the descriptor
+solely for re-derivation — which spends a live lookup and a live match on
+every dispatch to buy nothing the baked signature was not already giving.
+
+**So the target is not "dispatches that can be described". It is dispatches
+the ordinary lowering CANNOT HANDLE.** The invariant above does not apply to
+them, because there is no compiled form for the routed one to be identical
+to, and the live re-derivation buys exactly what it costs.
+
+But §6.5's latches are NOT one class, and treating them as one was this
+note's first mistake. Only the FROZEN-READ shape is a region's business:
+`module binding k rebound after a fn unit baked its value` refuses because a
+unit baked a value whose token classification a live re-derivation would
+change — `region_desc.go`'s `k` pair, where the same token is a value slot
+or a collection barrier depending on the binding. That is exactly what
+OpCollect answers.
+
+Its stored-handler twin is a different failure. `NotifyNameRebound`
+(`compiler/go/emit.go:2721-2736`) refuses because module-scope def sites
+execute only in the CHECK pass, so by VM time the def table already holds
+the pass-final binding and calls sequenced BEFORE the rebind read the wrong
+definition. Nothing about that program's split is value-dependent, and no
+amount of live re-matching restores program-order state. **The bind twins
+(§5.6) fix it; a region dispatch cannot.**
+
+Two further facts from that slice, both worth keeping:
+
+- **A region route must REPLACE a special form's lowering, never run
+  alongside it.** `lowerCall`'s special forms (typed bind, dyn-apply, drift
+  window, dyn-method, make-list, make-map, splice, interpolation, XML) each
+  build their own operand window. The slice skipped the forward operands
+  while one of those arms still emitted its own opcode expecting them, and
+  the result was a wrong ANSWER rather than a crash: a corpus assertion came
+  back "expected 3, got 2".
+  Stated as "a routed call must be a plain dispatch" — which is how the
+  first version of this note put it — the constraint would be WRONG, and
+  wrong in the direction that matters most: T2 names the drift window's
+  `OpCallDynamicMixed` as an island to delete, and the paragraph above makes
+  that island Stage 4's target. A rule excluding `dynMixed` from routing
+  would forbid the one route this stage most needs. The real constraint is
+  about co-existence, not eligibility: whichever arm owns the operand
+  layout must be the arm that emits.
+- **A MODULE-QUALIFIED dispatch cannot route on a bare word.** A module word
+  re-matches over its OWN sub-registry's signatures — `PolyRef` carries that
+  registry for exactly this reason — while a descriptor names only the word.
+  Resolving it against the dispatch registry finds the wrong overload set or
+  none, and the module-gate parity tests catch it.
+
+**AND THE DECLINE SITES ARE COLD — so "route what the ordinary lowering
+cannot handle" needs one more step to be actionable.** Tallied over the
+corpus (7638 rows, each compiled and its refusal reason collapsed to a
+shape):
+
+| refusal shape | rows |
+|---|---:|
+| check diagnostics | 191 |
+| check error | 134 |
+| parse error | 47 |
+| def-bound computed fn apply (closure shape unknown) | 1 |
+| unconsumed fn-value carrier in residual | 1 |
+
+374 refused of 7638, and 372 of those are programs that are SUPPOSED to
+fail. The compiler's own refusal surface on this corpus is **two rows**, and
+neither is a rebind-staleness latch: `module binding … rebound after a fn
+unit baked its value` and its stored-handler twin fire **zero** times.
+
+That is not an argument that the latches do not matter — they are
+correctness under rebinding, and a corpus of literal programs will not
+exercise them. It is an argument about what can be VALIDATED: a region
+dispatch built for those sites has no corpus evidence to stand on, and this
+stage has already spent three attempts on models that passed everything
+available to them.
+
+So the target that is both correct and measurable is the third one:
+**the mixed-window island**. `OpCallDynamicMixed` islands its token window
+through an interpreter sub-run (`eng/go/vm.go` `islandRun`, reached from
+`drift_window.go`'s model), which is interpretation running INSIDE compiled
+code — the thing this document exists to remove, not a fallback outside it.
+It is also one of the four mechanisms the interpreter-entry census still
+counts at 43 ("a fn value in a container at the pointer"), so progress on it
+is visible in a number that already exists. The region descriptor is the
+right replacement for that island precisely because such a program has no
+ordinary compiled form to be identical to — the split-identity rule above
+does not bind, and the live re-derivation is the whole point.
+
+**THE ISLAND TARGET, NAMED DOWN TO THE ROW.** The interpreter-entry census
+(7638 rows, 7215 compiled, 43 with unattributed entries, ceiling 43) puts
+`vm:island` at 12 entries and `vm:island-resolved` at 8. Its largest single
+file cluster is `path-modifier.tsv` — **7 rows, every one of them islanding**
+— and with `BORU_LOG_CENSUS_ROWS=1` they are:
+
+```
+L17  def m {a:add/v} end  m.a/u 1 2
+L18  def m {s:sub/v} end  m.s/u 10 3
+L19  def o {m:{a:add/v}} end  o.m.a/u 1 2
+L20  def m {a:add/v} end  (m.a)/u 1 2
+L52  def m {s:sub/v} end  usurp (forward-args (m.s)) 10 3
+L53  def m {s:sub/v} end  force-arity 2 (usurp (m.s)) 10 3
+L55  def m {a:add/v} end  force-arity 2 (usurp (forward-args (m.a))) 1 2
+```
+
+One shape, seven spellings: **a fn value read out of a container, dispatched
+under a modifier** (`/u`, `forward-args`, `force-arity`). That is exactly the
+"fn value in a container at the pointer" mechanism the census attribution
+assigns to Stage 4, and exactly what `emit.go`'s stamping note predicted —
+*"of the island rows this seam leaves, roughly four in five are a fn read out
+of a container … `def m {a:add/v}  m.a/u 1 2`"*. L17 is that example
+verbatim.
+
+**And the island is NOT the drift window** — that guess came from the census
+seam name, and the disassembly refutes it. All seven lower to the same
+shape: the wrapper words fold into `CALL_NATIVE_POLY`, and the apply is a
+plain `CALL_DYNAMIC`.
+
+```
+0000 PUSH_CONST  k1   ; {s:fn …} (Map)
+0001 PUSH_CONST  k0   ; s/q (Atom)
+0002 CALL_NATIVE_POLY p0   ; dot/2 (poly)
+0003 CALL_NATIVE_POLY p1   ; usurp/1 (poly)
+0004 PUSH_CONST  k2   ; 10 (Integer)
+0005 PUSH_CONST  k3   ; 3 (Integer)
+0006 CALL_DYNAMIC /2 ; apply fn-value
+```
+
+So the island is `callDynamic`'s third tier (`eng/go/vm.go:834-838`). That
+function tries a native apply, then the Apply kernel's frame entry, then
+islands. A modifier-wrapped native falls past both: it is not a plain native
+because `vmNativeApplicable` excludes it, and it carries no compiled unit
+because it is a native rather than a user fn.
+
+**The exclusion is one clause, and it is there because admitting these
+already produced a wrong answer once.** `vmNativeApplicable`
+(`eng/go/vm.go:1382-1392`) reads `IsNativeWordFnDef(fd) && !fd.ArgsReversed
+&& RegisteredWordIsNative(r, fd.Name)`, and `ArgsReversed`'s own doc records
+the incident: *"a param-type comparison admitted `m.s/u 10 3` to a VM fast
+path that then answered -7 against the interpreter's 7"*. The flag exists so
+the decline is possible at all, because `sub(Number, Number)` reversed is
+still `sub(Number, Number)` and the swap is invisible to inspection.
+
+**But the cause is narrower than the decline.** `tryNativeFnApply` resolves
+its signatures registry-first:
+
+```go
+if inner := reg.Lookup(fnDef.Name); inner != nil {
+    sigs = inner.Signatures
+} else if len(fnDef.Signatures) > 0 {
+    sigs = fnDef.Signatures
+}
+```
+
+For a wrapper that is the wrong source — the wrapper keeps the wrapped
+word's NAME, so the lookup finds the UNWRAPPED signatures and the reversal
+is dropped. That is precisely the -7. `UsurpFunction`
+(`core/go/core_ref.go:110-140`) builds a value whose own `Signatures` are
+complete and self-contained: each carries a Go handler
+(`usurpDispatchHandler`) that re-dispatches the original, declared
+`RunInCheck`. Dispatching a wrapper through the VALUE'S signatures rather
+than the registry's is therefore well-defined where dispatching it through
+the registry's is not.
+
+**And reading that handler settles it: it does not dispatch at all — it
+returns TOKENS.** `usurpDispatchHandler` (`core/go/core_ref.go:333-354`)
+builds
+
+```
+( a0 … a(N-1-B)   orig   a(N-1) … a(N-B) )
+```
+
+— an open paren, the stack-part args in order, the ORIGINAL fn value, the
+forward-part args reversed, a close paren — and returns that sequence as its
+result. The engine then steps it. That is what "its Go handler expects the
+engine's collection around it" means, stated exactly: the handler's output is
+a paren group, and a group has to be EVALUATED by something with a tape. The
+VM has none, so it islands.
+
+So these rows are not primarily a §6.2 collection problem. They are a §6.8
+one — **the tape-coupled handler class** — and the two meet here, because the
+window the handler returns IS a region: a paren group whose lead is a fn
+value, with a specific forward/stack split. The collection machine is the
+right executor for it; the handler returning tokens is the coupling that has
+to go first.
+
+**Which also explains why only the CONTAINER spelling islands.** The
+`UsurpFunction` comment notes that `RunInCheck` lets the carrier compiler
+step the re-dispatch and compile the original call directly — *"`usurp (valof
+f) a b` lowers exactly like `f b a`"*. That works when the wrapped value is
+statically known. In all seven rows it is read out of a map (`m.a`, `o.m.a`),
+so at check time it is dynamic, the carrier compiler cannot step it, and the
+token window survives to run time with nothing but the interpreter able to
+walk it.
+
+**The purity holds, for all three wrapper families, and by inspection.** Both
+handlers take `(args []Value, _ map[string]Value, _ []Value, _ *Registry)` —
+three ignored parameters, so no context data, no extra values, no registry —
+and read nothing but `len(args)`, the captured `origBarrier`, and the
+captured `orig`:
+
+```go
+usurpDispatchHandler:      ( args[0 … n-b-1]   orig   args[n-1 … n-b] )
+rebarrierDispatchHandler:  ( args[n-1 … b]     orig   args[0 … b-1]   )
+```
+
+`rebarrier` covers `forward-args` / `stack-args` (`ForceForwardFunction` /
+`ForceStackFunction`) and `force-arity` (`ForceArityFunction`), so between
+the two every one of the seven rows is accounted for. Each is a pure
+RESHUFFLE: a paren group whose lead is a fn VALUE, a stack part before it, a
+forward part after it, and the split fixed entirely by `n` and
+`origBarrier` — both static at record time, since the arity is the recorded
+call's and the barrier is baked into the wrapper at construction.
+
+**And working the permutation through collapses it further than a descriptor
+— to a PERMUTATION OF THE ARG VECTOR, independent of the barrier.** Apply
+CLAUDE.md's argument-order rule to each window (forward tokens fill sig
+positions `0 … k-1` in written order, the rest come off the stack top-first):
+
+```
+usurp,     any b:  sig[i] = args[n-1-i]     — a full REVERSAL
+rebarrier, any b:  sig[i] = args[i]         — the IDENTITY
+```
+
+The barrier cancels out of both. That is not obvious from the handlers and
+it is the whole economy of the fix, so it is checked rather than asserted —
+three derivations (b=0, b=1, b=n) and then the runtime, with a case chosen
+to come out WRONG if the claim were backwards:
+
+```
+m.s/u 10 3                          →  7    usurp reverses
+usurp (forward-args (m.s)) 10 3     →  7    …at any inner barrier
+usurp (stack-args (m.s)) 10 3       →  7    …at any inner barrier
+force-arity 2 (usurp (m.s)) 10 3    →  7    …and under composition
+forward-args (m.s) 10 3             → -7    rebarrier alone is the IDENTITY
+10 3 stack-args (m.s)               →  7    …in either call form
+```
+
+`-7` is the load-bearing row: `sub` computes `args[1] - args[0]`, so an
+identity mapping must answer `3 - 10`. Had rebarrier reversed too, it would
+read 7 like the others and the whole table would prove nothing.
+
+So the seven rows need neither a tape nor a region: they need the arg vector
+permuted and the WRAPPED value dispatched. `RegionDesc`'s `LeadFnValue` is
+still the right shape for the general tape-coupled handler — a paren group
+led by a fn value — but this particular family is a special case that
+resolves statically, and building the general machine to serve it would be
+building past the evidence.
+
+**What blocks it is one missing field.** `orig` and `origBarrier` are Go
+closure captures inside the handler, so the VM cannot see what a wrapper
+wraps: it can tell THAT a value reverses (`ArgsReversed`) but not what to
+dispatch instead. Exposing the wrapped value on `FnDefInfo` is what turns
+this from an island into a permutation and a call.
+
+**WHAT IS LEFT AT 36, named and split.** After the wrapper lane graduated, the
+island seams stand at `vm:island` 5 and `vm:island-resolved` 8, and the rows
+behind them are two different problems rather than a residue of one:
+
+```
+vm:island (5) — a fn value read out of a CONTAINER, dispatched at the pointer
+  class.tsv:L122   def C class {op:(fn …)}  def c (make C {})  c.op 21
+  fn-value.tsv:L19 def m {f: (fn …)}  3 m.f 2
+  fn-value.tsv:L28 def m {f: (fn …)}  m.f 'x'
+  usurp.tsv:L33    def ops {rev: (usurp (valof sub2))}  ops.rev 10 3
+  usurp.tsv:L45    def ops {rev: (usurp sub2)}  ops.rev 10 3
+
+vm:island-resolved (8) — a fn value crossing a MODULE boundary
+  module-fnvalue-boundary.tsv L24, L32, L33, L51
+```
+
+The second cluster is not a hole: the apply seam's foreign-unit decline is
+deliberate, and the reasoning is recorded against it.
+
+The first has ONE cause, and the disassembly says so. Two of the five reach
+`CALL_DYNAMIC` and one reaches `CALL_DYNAMIC_MIXED`, so the site differs —
+but every one of them fails at the same test inside `dynApplyEnter`
+(`eng/go/vm_dyn_apply.go:132`):
+
+```go
+ref := compiler.CompiledRef(sig)
+if ref == nil || ref.Prog != vc.p || ref.Unit < 0 || … { return nil }
+```
+
+A fn value read out of a container carries no `CompiledRef` to a unit of
+this program, so the Apply kernel cannot enter it and the island answers.
+Unwrapping does not help even where it applies: `usurp.tsv:L45` DOES reach
+the new unwrap path, resolves to `sub2`, and still declines — because it is
+`sub2`'s own value that lacks the ref, not the wrapper.
+
+So the next target is not another dispatch site. It is the fn-stamping seam
+that gives a container-read value its unit — the one whose own note
+predicted this cluster (*"roughly four in five are a fn read out of a
+container … So descending into list and map consts is the rest of the
+win"*). The question to answer first, by reading rather than measuring: why
+the stamp does not reach these five, when that descent is already
+implemented.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this
@@ -1757,6 +2079,38 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   their frontier rows deleted — with the census increment kept, and the
   flex-map divergence pinned where divergences belong rather than hidden behind
   an optimisation that happened to fire.
+
+  **The descent's own blind spots, found by finishing the cluster.** The
+  paragraph above names three shapes and the descent takes two of them; the
+  third — "a class field method" — it never reached, and neither did it reach a
+  fn behind a MODIFIER WRAPPER. Both are containers the walk does not recognise
+  as containers, and each needs a different key:
+
+  - A class type carries its methods as FIELD DEFAULTS, and the type operand
+    leaves `resolveOperand` BEFORE the const chokepoint's stamp. The node there
+    is BARE (`IsBareTypeNode` means `Data == nil`), so the schema is not on the
+    value: it has to be resolved the way `make` resolves it, through
+    `ResolveTypeLiteralDef` against the live registry, and read through
+    `AllFields` so an inherited default is reached through the parent chain.
+  - A modifier wrapper (`usurp`, `stack-args`, `forward-args`, `force-arity`)
+    is a container of exactly one fn. It REBUILDS the value with a Go handler on
+    every own sig, so `storedSigEligible` refuses them all; the boru body sits
+    one level down, behind `FnDefInfo.Wraps`.
+
+  The wrapper case settles a question the apply site could not. `def sub2 fn […]
+  def ops {rev: (usurp sub2)}` disassembles to `fns=0`: the map const folds the
+  wrapper in, and nothing in the program compiles `sub2`'s body, because `sub2`
+  is never called by name either. No widening of the apply gate could have taken
+  that row — there was no unit to enter. Reading the bytecode said so in one
+  line; the seam name (`vm:island`) had suggested a dispatch-site problem for
+  two increments.
+
+  Which is the correction worth keeping: the five rows left at census 36 were
+  filed as "one cause". Probing the decline arms one row at a time gives FOUR —
+  two stamp-reach holes (these), one deliberate `MatchFnSig` decline on a
+  genuine type mismatch, and one `CALL_DYNAMIC_MIXED` window that needs the
+  split rule and therefore Stage 5. A shared symptom is not a shared cause, and
+  a seam name is not a diagnosis.
 
   **The native-callback seam, and what the CallBoru column turned out to be.**
   `core/go/invoke.go` carried two near-identical entries: `InvokeCallbackFn`

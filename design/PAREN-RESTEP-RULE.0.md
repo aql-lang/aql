@@ -226,7 +226,14 @@ useless for catching a regression back to one.
 - **NUR108** — the compiled lane's diagnostics point somewhere else: a
   `BIND_TYPED` validate failure carries no position at all, and a
   statically-failing typed-def trap blames the value where the interpreter
-  blames the `def`. Same code, same message.
+  blames the `def`. Same code, same message. **RESOLVED 2026-08-30** — the
+  record carried no position because the typed-name map is synthesised by the
+  `name:Type` desugar and is 0:0 at every typed-def site;
+  `CheckState.CurWordPos` publishes the dispatching word's position (what
+  `stampErrPos` gives the interpreter) and the def handler falls back to it.
+  Both halves now agree, row and column, and the fence in
+  `TestTypedDefBindCompiles` graduated into an equality. What is left is the
+  caret WIDTH, recorded separately as NUR114.
 - **NUR109** — `parse` over an unbound def-scoped parser name is `parse_error`
   compiled and `parse_unknown_lang` interpreted. The compiled answer is the
   specified one; the interpreter still falls back to the kind-name miss.

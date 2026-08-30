@@ -806,6 +806,30 @@ type FnDefInfo struct {
 	// they leave params alone, and the barrier is spent once the args are
 	// collected.
 	ArgsReversed bool
+	// Wrap and Wraps expose what a MODIFIER WRAPPER re-dispatches, so a
+	// consumer without a tape can do the re-dispatch itself.
+	//
+	// Every wrapper's handler returns TOKENS — a paren group
+	// `( stack-part  orig  forward-part )` for the engine to step — which is
+	// why a compiled dispatch of one has to island: a group needs a tape and
+	// the VM has none. But the group is a pure RESHUFFLE, and working it
+	// through CLAUDE.md's argument-order rule collapses it to a permutation
+	// that does not depend on the barrier at all:
+	//
+	//	WrapReverse    sig[i] = args[n-1-i]   (usurp, `/u`)
+	//	WrapRebarrier  sig[i] = args[i]       (forward-args, stack-args,
+	//	                                       force-arity)
+	//
+	// So a consumer that can see through the wrapper can permute the args and
+	// dispatch Wraps directly, with no tokens and no tape.
+	//
+	// ArgsReversed does NOT answer this. It is a one-way MARK — UsurpFunction
+	// sets it true and the others propagate it — so `usurp (usurp f)` reports
+	// reversed where the composed permutation is the identity. That is safe
+	// for its own job (declining a fast path) and wrong for this one, which
+	// is why the chain is walked rather than the flag read.
+	Wrap  WrapKind
+	Wraps *Value
 	// Gen carries the generic-parameter spec for a generic fn
 	// (`def identity gen [T] fn [[x:T] [T] [x]]`). Nil for ordinary
 	// fns. Dispatch admission rides the placeholder nodes' Behaviors;
@@ -1368,6 +1392,51 @@ type ModuleDesc struct {
 	// Ideal across, so a facade module re-exporting a constructible
 	// type keeps `make` working. In-process only — never serialized.
 	Src *Registry
+}
+
+// WrapKind names what a modifier wrapper does to the ARG-TO-PARAM mapping of
+// the value it wraps. The zero is "not a wrapper", which is the honest
+// reading of an absent Wraps.
+type WrapKind uint8
+
+const (
+	WrapNone WrapKind = iota
+	// WrapReverse reverses the arg-to-param mapping: `usurp` and `/u`.
+	WrapReverse
+	// WrapRebarrier leaves the mapping alone and only re-bases the barrier:
+	// `forward-args` / `/f`, `stack-args` / `/s`, and `force-arity` / `/N`.
+	// The barrier is spent once the args are collected, so by the time a
+	// consumer holds them in sig order this wrapper is the identity.
+	WrapRebarrier
+)
+
+// UnwrapModifierChain resolves a stack of modifier wrappers to the value they
+// ultimately re-dispatch, and to the permutation the whole chain applies.
+//
+// It walks rather than reading ArgsReversed because that flag does not
+// compose: it is set true by UsurpFunction and propagated by the others, so
+// two usurps report reversed where they cancel. Parity is the property that
+// matters here, and only the walk has it.
+//
+// ok is false when v is not a wrapper, in which case base is v unchanged.
+func UnwrapModifierChain(v Value) (base Value, reverse bool, ok bool) {
+	base = v
+	for depth := 0; depth < 64; depth++ {
+		fd, isFn := base.Data.(FnDefInfo)
+		if !isFn || fd.Wraps == nil {
+			return base, reverse, ok
+		}
+		if fd.Wrap == WrapReverse {
+			reverse = !reverse
+		}
+		base = *fd.Wraps
+		ok = true
+	}
+	// A cycle is impossible by construction (each wrapper captures an
+	// ALREADY-BUILT value, so the chain is a finite tree path), but a bound
+	// costs nothing and a runaway walk in the VM would be far worse than a
+	// declined fast path.
+	return v, false, false
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.

@@ -29,6 +29,25 @@ type CheckState struct {
 	// ReturnsFunc signature carries no pos. Overwritten on every dispatch; not
 	// persistent state. Zero = unknown (synthetic/top-level).
 	CurCallPos SrcPos
+	// CurWordPos is the position of the WORD TOKEN whose dispatch handler is
+	// currently running — what `e.currentPos()` reads, written once per
+	// dispatch just before the handler is invoked.
+	//
+	// It exists because a handler cannot ask the engine. Handlers receive a
+	// *Registry, not an *Engine, and the engine's own answer to "where did
+	// this fail" is exactly this position: stampErrPos stamps a handler's
+	// unpositioned BoruError with e.currentPos() after the handler returns.
+	// A handler that must RECORD a position for the compiled lane to raise at
+	// later — the typed-def bind, NUR108 — needs the same value at record
+	// time, when nothing has been raised yet.
+	//
+	// NOT CurCallPos, and the difference is measured rather than stylistic.
+	// CurCallPos is written by carrierResults immediately before a sig's
+	// ReturnsFn, so by the time an OUTER word's handler runs it holds an
+	// INNER call's position: for `def n (2 add 3)  def v:(Integer gt 10) n`
+	// it reads 1:10 (`add`) where the def is at 1:18. Using it rendered a
+	// confidently wrong caret, which is worse than none.
+	CurWordPos SrcPos
 	// Mode toggles static type-checking execution. When true, the
 	// engine runs the same dispatch/matching machinery but carries
 	// type-only Carrier values instead of concrete payloads, and

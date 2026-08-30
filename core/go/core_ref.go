@@ -136,6 +136,10 @@ func UsurpFunction(v Value) (Value, bool) {
 		// it so a consumer that would otherwise dispatch through the wrapped
 		// word's own live binding can decline instead of dropping the swap.
 		ArgsReversed: true,
+		// …and what it wraps, so a consumer WITHOUT a tape can perform the
+		// re-dispatch itself rather than stepping the handler's tokens.
+		Wrap:  WrapReverse,
+		Wraps: &orig,
 	}), true
 }
 
@@ -207,6 +211,11 @@ func rebarrierFunction(v Value, stack bool) (Value, bool) {
 		// `force-arity 2 (usurp (m.s)) 10 3` answered -7 against the
 		// interpreter's 7 while this line was missing.
 		ArgsReversed: fnDef.ArgsReversed,
+		// A rebarrier leaves the arg-to-param mapping alone — the barrier is
+		// spent once the args are collected — so a tape-less consumer can
+		// dispatch Wraps with the args UNCHANGED.
+		Wrap:  WrapRebarrier,
+		Wraps: &orig,
 	}), true
 }
 
@@ -251,6 +260,11 @@ func ForceArityFunction(v Value, n int) (Value, bool) {
 		// `force-arity 2 (usurp (m.s)) 10 3` answered -7 against the
 		// interpreter's 7 while this line was missing.
 		ArgsReversed: fnDef.ArgsReversed,
+		// A rebarrier leaves the arg-to-param mapping alone — the barrier is
+		// spent once the args are collected — so a tape-less consumer can
+		// dispatch Wraps with the args UNCHANGED.
+		Wrap:  WrapRebarrier,
+		Wraps: &orig,
 	}), true
 }
 

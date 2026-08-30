@@ -91,7 +91,7 @@ keep the two in sync in the same commit.
 | [NUR096](#nur096) | The check pass did not move with NUR095: a fn stored through a fn-SHAPE-typed member is APPLIED by both engines but still modelled by the checker as the inert fn it was before that retirement, so `TestCheckTypeSoundness` fails on the two multi-return `class.tsv` rows that pin it | adding the NUR095 retirement rows to `lang/spec/class.tsv`, 2026-08-20 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
-| [NUR108](#nur108) | The compiled lane's diagnostics do not point where the interpreter's do: a `BIND_TYPED` validate failure renders "source position unknown" against the interpreter's `1:34`, and a statically-failing typed-def trap points at the VALUE (`1:23`) where the interpreter points at the `def` (`1:1`). Same code, same message, different place | completing the NUR106 oracle sweep, 2026-08-27 |
+| [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
@@ -280,86 +280,46 @@ the fix is the maintainer's to direct.
 
 ---
 
-## NUR108 — the compiled lane's diagnostics point somewhere else {#nur108}
+## NUR114 — a compiled caret underlines one character where the interpreter underlines the token {#nur114}
 
-**Status:** Pending · **Recorded:** 2026-08-27 · **Surfaced by:** completing
-the NUR106 oracle sweep
+**Status:** Pending · **Recorded:** 2026-08-30 · **Surfaced by:** closing
+NUR108
 
-**Rule:** the two lanes agree on errors, and a diagnostic's POSITION is part
-of the error — it is the half a user reads first.
+**Rule:** the two lanes agree on errors, and the RENDERED diagnostic is the
+error as a user meets it — NUR108 established that the position is part of
+it, and the underline is the same claim about "where do I look".
 
-**Divergence:** the code and the message match exactly; the position does not,
-in two different ways.
-
-```
-def f fn [[x:Integer] [Integer] [def v:(Integer gt 10) x v]] f 5
-
-compiled → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
-           --> source position unknown
-interp   → [boru/type_error]: def v: value 5 does not unify with declared type (Integer gt 10)
-           --> 1:34   …with the `def v` underlined
-```
+**Divergence:** same code, same message, same row and column; different
+underline.
 
 ```
 def x:(Integer gt 10) 5 x
 
-compiled → --> 1:23   …pointing at the VALUE
-interp   → --> 1:1    …pointing at the `def`
+compiled → 1 | def x:(Integer gt 10) 5 x
+               ^   def x: value 5 does not unify with declared type (Integer gt 10)
+interp   → 1 | def x:(Integer gt 10) 5 x
+               ^^^ def x: value 5 does not unify with declared type (Integer gt 10)
 ```
 
-The first is a LOSS — `BIND_TYPED`'s validate failure carries no position at
-all, so the renderer falls back to "source position unknown". The second is a
-DISAGREEMENT: the terminal trap fires at the value it rejected, the
-interpreter blames the binding.
+**Where it comes from, traced not guessed.** `renderSite` sets
+`caretCount = len(sub)` from `BoruError.Src` — the TOKEN TEXT — with a floor
+of 1. The interpreter's `stampErrPos` copies that text out of the `SrcPos` it
+stamps with (`pos.Src`, e.g. `"def"`). The VM's `stampAt` cannot: the
+compiler's debug table is `Debug []core.SrcPos` built from event positions,
+and although `core.SrcPos` HAS a `Src` field, nothing on the compile path
+fills it — every entry is row/col only.
 
-**Not cosmetic.** A user who compiles and a user who interprets get different
-answers to "where do I look", and the first gets none. It also makes every
-error-parity assertion that compares `err.Error()` — the rendered form,
-position folded in — untrustworthy as a lane comparison, which is how this
-stayed invisible under NUR106's vacuous oracle.
+**So it is not a one-line mirror of `stampErrPos`.** Adding the `Src` copy to
+`stampAt` was written and measured: it changes nothing, because
+`debug[pc].Src` is empty at every site. Inert code, reverted rather than
+shipped. The work is upstream — carrying the token text through the recorder
+into the debug table — and it is worth costing against how much of the table
+it widens before it is done.
 
-**Verdict: resolve by fix.** `BIND_TYPED` must carry the def's position into
-its raise; the trap should blame the same token the interpreter does. Pinned
-meanwhile in `TestTypedDefBindCompiles`, which now compares Code and Detail
-and fences the position gap explicitly, so closing it fails the fence.
-
-**SHARPENED 2026-08-28, and one plausible fix measured and REJECTED.**
-
-Three things the record did not have:
-
-1. **It is NOT a general "compiled diagnostics lose positions" problem.**
-   Ordinary runtime errors carry exact, MATCHING positions on both lanes, at
-   top level and inside a fn body — `def n (2 add 3)  n div 0` and
-   `def f fn [[x:Integer] [Integer] [x div 0]]  f 5` both report `1:20` and
-   `1:36` respectively on each lane. The position machinery works; only the
-   typed-bind path is blind.
-2. **It is not fn-body-specific either**, which the record's example implies.
-   A TOP-LEVEL dynamic typed def loses it identically:
-   `def n (2 add 3)  def v:(Integer gt 10) n  v` renders no position compiled
-   against the interpreter's `1:18`.
-3. **The VM comment blaming `fmt.Errorf` is stale.** Traced at the raise, the
-   error IS a `*BoruError` and `stampAt` IS reached with a valid pc — but
-   `curDebug[pc]` is `0:0`, because the RECORD carried no position. The loss is
-   in the recorder, not the stamper.
-
-**Why the recorder has none, and why the obvious fix is wrong.** `def`'s args
-cannot supply it: the NAME arrives as a `/q`-captured Atom and the BODY as an
-already-collected value, and measured, BOTH are `0:0` at every typed-def record
-site. The interpreter does not read them either — the ENGINE stamps its error at
-the dispatch token after the handler returns.
-
-`r.Check.CurCallPos` looks like exactly the right source: it is that dispatch
-position, and the control words already use it for handler-built diagnostics.
-**Measured, it is not.** It is documented as "overwritten on every dispatch",
-and by the time the `def` handler runs it holds a NESTED call's position — the
-fix rendered `1:10` where the interpreter says `1:18`, and `1:62` where it says
-`1:34`. That trades a missing caret for a confidently wrong one, which is worse:
-"source position unknown" is at least honest. Reverted, unshipped.
-
-So the fix needs the `def` TOKEN's own position threaded to the record — a
-position the recorder does not currently receive from any of its three
-available sources. That is the work, and it is smaller than "compiled
-diagnostics" but larger than a fallback expression.
+**Not urgent, and the reason is worth stating.** Unlike NUR108, this cannot
+send a user to the wrong place; it under-marks the right one. It is recorded
+because "the diagnostics match" is a claim this project makes, and after
+NUR108 the caret is the last thing about these two renderings that does not.
 
 ---
 
@@ -465,6 +425,180 @@ correctly); a silent wrong binding is not. Full graduation is the same one
 family L already names — "a runtime dispatch respecting the conditional
 binding" — which is Stage 4/5's def-twin work, not Stage 3's. Pinned as
 measured meanwhile by `lang/go`'s `TestCondBodyFreshDefBindsCompiledOnly`.
+
+**SHARPENED 2026-08-30, and the diagnosis above is not the one that matters.**
+Three things the record did not have.
+
+1. **THE CHECK PASS AND THE COMPILE PASS DISAGREE WITH EACH OTHER**, which is a
+   larger finding than the compiled/interpreted split this record was filed
+   under. Same program, same front end:
+
+   ```
+   def c false  if c [def op 1] [0] end op
+
+   boru check          check: 1:38: [error] undefined_word: undefined word: op
+   boru check --emit   (no diagnostics at all)
+   ```
+
+   The checker's model rolls the branch binding back correctly and says `op` is
+   unbound — agreeing with the interpreter. The compile pass keeps it, reports
+   nothing, and the disassembly shows why:
+
+   ```
+   0000 PUSH_CONST  k0   ; false        0003 PUSH_CONST k1 ; 0
+   0001 JMP_IF_FALSE -> 0003            0004 PUSH_CONST k2 ; 1   <- `op`
+   0002 JMP -> 0004
+   ```
+
+   `op` is CONSTANT-FOLDED to the value the untaken branch installed. So this is
+   not "a gate that fires on `changed` and should also fire on fresh" — the
+   rollback the checker performs is already right, and the recorder's view of
+   the same pass survives it. Fixing the recorder's rollback is a repair;
+   refusing is the fallback if it is not reachable.
+
+2. **THE BOUNDARY TABLE ABOVE IS INCOMPLETE.** Re-measured at `-no-check`,
+   `if` is not the only shape:
+
+   | shape | compiled | interpreted | |
+   | --- | --- | --- | --- |
+   | `if false [def op 1] [0] end op` | `0 1` | undefined_word | **miscompile** |
+   | `[] each [def op 1] end op` | `[] 1` | undefined_word | **miscompile** |
+   | `0 [] fold [def op 1] end op` | `0 1` | undefined_word | **miscompile** |
+   | `case 9 [1] [def op 1] [0] end op` | undefined_word | undefined_word | correct |
+   | `for 0 [def op 1] end op` | undefined_word | undefined_word | correct |
+   | `[] filter [def op 1 true] end op` | undefined_word | undefined_word | correct |
+
+   Two higher-order bodies diverge and a third does not, which is the useful
+   asymmetry: `each` and `fold` leak the binding, `filter` does not, and all
+   three raise CondBodyDepth through the same `native_array.go` seam. Whatever
+   `filter` does differently is the mechanism to copy.
+
+3. **CORRECTION, same day: the default CLI path is NOT safe.** The first
+   version of this note said `boru run`'s check pre-flight catches it. That was
+   measured only on the record's own CONSTANT-condition shape, where the
+   `unreachable_branch` analysis happens to also emit `undefined_word` — the
+   benign case, which masked the general one. With a condition the checker
+   cannot fold, nothing fires anywhere:
+
+   ```
+   def f fn [[n:Integer][Boolean][n gt 5]]  if (f 1) [def op 1] [0] end op
+
+   boru check             0 error(s), 0 warning(s), 0 info
+   boru run               0 1                                    <- compiled
+   boru run -no-compile   [boru/undefined_word]: undefined word: op
+   ```
+
+   So this is a SILENT WRONG ANSWER on the default path, with no diagnostic on
+   any lane — the class this project ranks above every refusal. It is not an
+   `-no-check` curiosity.
+
+   Worth keeping as a method note: the record supplied `if false`, and
+   measuring only what a record hands you reproduces its blind spot. The
+   constant-condition shapes are the ones where a SECOND analysis (the
+   unreachable-branch pass) independently notices the unbound name; they say
+   nothing about whether the binding leak is caught.
+
+4. **THE MECHANISM, located exactly.** `InstallJoinedDefs`
+   (`core/go/carrier_join.go`) folds each arm's net def additions back after the
+   branch. A name bound in ONE arm with no pre-branch binding to join against
+   takes the bare `r.Defs.Push(k, tv)` arm — a DEFINITE binding. Instrumented,
+   that arm is reached by `if` and by nothing else: `case`, `for`, `each`,
+   `fold` and `filter` never touch it, which is why they were measured correct
+   and why `each`/`fold` (which have no `r.Defs` snapshot in
+   `analyseHigherOrderBodyVals` at all) are a SECOND, separate leak.
+
+   The push is not simply wrong. Dropping it would report `undefined_word` on
+   every legitimate post-branch read — the false positive the join exists to
+   prevent. What the push cannot express is that the binding is CONDITIONAL,
+   and the model has no third state between bound and unbound.
+
+**A REFUSAL AT THE JOIN WAS BUILT, MEASURED AND REJECTED — 131 corpus rows.**
+Marking the program uncompilable at that fresh-push arm (family L's pattern,
+which is what this record's verdict proposes) restores parity on every shape
+above and costs far too much:
+
+	compiled coverage: 7644 rows — 7139 compiled, 131 refused   (gate: 0)
+	  85  `r` …defined only inside a conditional branch
+	  38  `i1` …
+	   8  others
+
+Sweeping the refusing rows says why, and it is not a tuning problem:
+
+- **The name is never read after the branch.** `def mk fn [[i:Integer] [Map]
+  [if (i lte 0) [do {…}] [def more (mk (i sub 1)) do {…more…}]]]` defines
+  `more` in an arm and reads it INSIDE that same arm. No divergence exists;
+  the refusal is a pure false positive.
+- **The shape is inside an imported MODULE.** The 85 `r` and 38 `i1` rows are
+  `import "boru:cli"` rows whose own source contains such an `if`. A user
+  program that never writes the shape loses compilation because a library
+  does.
+
+So the join site is the wrong place: it knows a name was bound conditionally,
+and cannot know whether anything will READ it afterwards.
+
+**THE READ SITE WAS THEN BUILT TOO, AND REJECTED FOR A SHARPER REASON.** Marking
+the name at the join (with its DefTable generation, so a later unconditional
+`def` clears it) and refusing at `resolveOperand` — after first trying
+`dynScopeRescue`, which repairs the in-fn case outright — took the corpus from
+131 refusals to **0**, closed every shape in the table above, and looked done.
+
+`lang/go`'s unit tests said otherwise, and the reason is structural rather than
+tunable. Three tests failed; one was NUR110's own pin graduating, and two were
+genuine false positives of a class the marking cannot see:
+
+```
+def out (if (3 gt 1) [ def t2 {a: 1}  (m set "k" t2) drop  t2 ] [ {a: 0} ])  out
+                          ^^ refused on `t2`
+```
+
+`t2` is the arm's OWN LOCAL. It is bound conditionally — that much is true — and
+it escapes as the arm's RESULT, seated by the branch exactly as the compiler
+already models. A post-branch read of the NAME is unsound; the arm's result
+VALUE flowing onward is sound; and both arrive at `resolveOperand` as "a value
+whose `defReads` name is conditionally bound". The signal cannot separate them,
+and neither can ordering: the arm's fragment is lowered at Finalize, after the
+join has marked.
+
+Nor is constant-folding the discriminator. `3 gt 1` is not literal-folded, so
+the shape takes the general branch path; splitting `InstallJoinedDefs` into
+definite and conditional variants was tried and changed nothing.
+
+**A THIRD ATTEMPT, AND THE RULE THIS RECORD HAD WRONG.** The `each` / `fold`
+half was filed above as a SECOND, separate leak — `analyseHigherOrderBodyVals`
+raises CondBodyDepth and pushes a spec baseline but never snapshots `r.Defs`,
+where every branch/loop body has always rolled back (`runCarrierBodyDefsAdds`,
+keep=false). Adding that rollback fixes `[] each [def op 1] end op` and BREAKS
+the non-empty case, because the leak is the interpreter's actual semantics:
+
+```
+def j 999  def _ ([1] each [def j (5 add 1) j])  j   →  6      not 999
+[1] each [def j 6 j] end j                           →  [6] 6
+[1 2] each [def op 1] end op                         →  [1 2] 1
+[]    each [def op 1] end op                         →  undefined_word
+```
+
+A body-local `def` LEAKS, like `do`, and SHADOWS an enclosing binding of the
+same name. It exists after the construct if and only if the body actually RAN.
+
+So `each`/`fold` is not a smaller sibling of the `if` half — it is the SAME
+question, and the rule both need is a THIRD binding state: *bound iff that body
+ran*. Every fix that picks one of the two existing states is right for one case
+and wrong for the other. There is no rollback-shaped fix, and no refusal-shaped
+fix that is not either unsound or over-broad.
+
+`filter` stays correct under all three attempts, and it is worth naming why
+without over-reading it: `filterReturnsFn` NEVER RUNS THE BODY — it types the
+result only, and the predicate goes through the declared Callable spec's closure
+path. That is not a mechanism `each` can copy; `each` needs the body's
+diagnostics.
+
+**So the verdict stands as resolve-by-fix, and the fix is the def twins.** What
+is needed is per-read provenance distinguishing a name read after the construct
+from a value produced inside it, plus a binding state that survives as
+conditional — which is exactly "a runtime dispatch respecting the conditional
+binding", family L's stated full graduation, and Stage 5 work. Three attempts
+are now recorded as rejected, each with its measurement, so the next one does
+not re-derive them.
 
 ---
 
