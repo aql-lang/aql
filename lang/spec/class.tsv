@@ -120,6 +120,7 @@ def Foo class {items:(flex [])} def s (flex []) def a (make Foo {items:s}) def b
 #     core.IsFnTypedCarrier close that). Field typing is sound
 #     everywhere: a wrong-shaped fn is refused at make.
 def C class {op:(fn [[x:Integer] [Integer] [x mul 2]])} def c (make C {}) c.op 21	42	a named class's fn DEFAULT member is callable through dot access (BROAD respelling: a paren PLACES the fetched fn, so the member call is spelled as the dot read it always was)
+def C class {op:(fn [[x:Integer] [Integer] [x mul 2]])} def D refine C {} def d (make D {}) d.op 21	42	an INHERITED fn default is callable through the subclass — the default lives on C, reached through D's parent link
 def T fnsig Integer Integer def c (make (class {op:T}) {op:(fn [[x:Integer] [Integer] [x add 1]])}) c.op 5	6	an ANONYMOUS class's fnsig-typed member, provided at make, is callable
 def T fnsig Integer Integer def C class {op:T} def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) c.op 5	6	a NAMED class's NAMED-fnsig member, provided at make, is callable (NUR095 retired)
 def C class {op:(fnsig Integer Integer)} def c (make C {op:(fn [[x:Integer] [Integer] [x add 1]])}) c.op 5	6	a NAMED class's ANONYMOUS-fnsig member, provided at make, is callable (NUR095 retired)

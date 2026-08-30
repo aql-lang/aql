@@ -1797,6 +1797,12 @@ func (es *EmitState) resolveOperand(v core.Value) (EmitOperand, bool) {
 	// stale against behaviour/field installs), so it gets its own
 	// table, resolved by ID at run time via OpPushType.
 	if core.IsBareTypeNode(v) && v.ID != "" {
+		// A CLASS TYPE carries fn values too — its field DEFAULTS — and this
+		// return is before the const chokepoint's stamp below, so they used to
+		// reach no stamp at all. `def C class {op:(fn …)}  (make C {}).op 21`
+		// disassembles to `fns=0`: the fn is not in any value const, it is on
+		// the type node, and `make` copies it into the instance by pointer.
+		es.stampFnConstType(v)
 		return typeOperand(es.internType(v)), true
 	}
 	// A MUTABLE reference value (a `flex` map/list, a Store) read from an
@@ -2525,6 +2531,21 @@ func (es *EmitState) stampFnConst(v core.Value) { es.stampFnConstAt(v, 0) }
 // a value graph is how a compile pass acquires a pathological case.
 const stampFnConstDepth = 8
 
+// stampFnConstType stamps the fn values a TYPE NODE carries — today a class's
+// field DEFAULTS.
+//
+// The node reaching the type-operand path is BARE (IsBareTypeNode means
+// Data == nil), so the schema is not on the value: it has to be resolved the
+// way `make` resolves it, through ResolveTypeLiteralDef against the live
+// registry. That resolution is the whole reason this is a separate entry rather
+// than another case inside the walk — the walk switches on v.Data, and here
+// there is none.
+func (es *EmitState) stampFnConstType(v core.Value) {
+	if body := core.ResolveTypeLiteralDef(v, es.reg); body.Data != nil {
+		es.stampFnConstAt(body, 1)
+	}
+}
+
 func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
 	if depth > stampFnConstDepth || es.inStampCompile {
 		return
@@ -2544,9 +2565,59 @@ func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
 			es.stampFnConstAt(mv, depth+1)
 		}
 		return
+	case core.ClassTypeInfo:
+		// A class type's FIELD DEFAULTS are a container of values exactly as a
+		// map literal is; `make` copies a concrete default into the instance,
+		// sharing the fn's *BoruImpl, so a stamp here is the stamp the instance
+		// reads. The declared-type entries are bare type nodes and fall out of
+		// the fn test below.
+		//
+		// The PARENT CHAIN is walked with it, because a subclass INHERITS its
+		// parent's defaults rather than copying them: `def D refine C {}` holds
+		// an empty own Fields and reaches C's `op` only through Parent, so
+		// stopping at this node would leave every inherited method islanded.
+		//
+		// Walked by hand rather than through AllFields, which answers the same
+		// question: AllFields MEMOISES onto the parent node it walks, and this
+		// is a compile pass reading a type that concurrent forks may share. A
+		// read-only walk owes them nothing. Fields is dereferenced unguarded for
+		// the same reason AllFields dereferences it unguarded — a class node
+		// always has one.
+		for info := &d; info != nil; info = info.Parent {
+			for _, k := range info.Fields.Keys() {
+				fv, _ := info.Fields.Get(k)
+				es.stampFnConstAt(fv, depth+1)
+			}
+		}
+		return
 	}
 	fd, isFn := v.Data.(core.FnDefInfo)
-	if !isFn || !core.IsConcrete(v) || len(fd.Captured) > 0 {
+	if !isFn {
+		return
+	}
+	// A MODIFIER WRAPPER is a container too — of exactly one fn — and the walk
+	// above cannot see it because the wrapper is not a list or a map.
+	//
+	// `usurp` / `stack-args` / `forward-args` / `force-arity` REBUILD the value:
+	// each own sig gets a GO handler that re-dispatches the original, so
+	// storedSigEligible refuses every one of them and the loop below stamps
+	// nothing. The boru body is one level down, behind FnDefInfo.Wraps, which is
+	// where the value keeps the fn it modifies.
+	//
+	// Measured: `def sub2 fn […]  def ops {rev: (usurp sub2)}  ops.rev 10 3`
+	// disassembles to `fns=0` — the map const folds the usurped value in and
+	// NOTHING in the program compiles sub2's body, because sub2 is never called
+	// by name either. So the apply had no unit to enter no matter how the apply
+	// site was widened, and the two usurp.tsv census rows were a STAMP-REACH
+	// hole, not an apply-kernel one.
+	//
+	// The recursion stamps the INNER value, which is what eng's
+	// UnwrapModifierChain hands dynApplyEnter at run time; the wrapper's own
+	// sigs stay unstamped, correctly — there is no boru body there to run.
+	if fd.Wraps != nil {
+		es.stampFnConstAt(*fd.Wraps, depth+1)
+	}
+	if !core.IsConcrete(v) || len(fd.Captured) > 0 {
 		return
 	}
 	for si := range fd.Signatures {

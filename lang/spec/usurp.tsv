@@ -43,6 +43,9 @@ if true [99] [88]	99	baseline if: if cond then else
 usurp if [88] [99] true	99	by-name usurp of `if` — cond-first (else then cond)
 def f ([a:Integer b:Integer] => [a sub b])  usurp f 10 3	-7	by-name usurp of a bound anonymous fn
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp sub2)}  ops.rev 10 3	-7	by-name wrapper captured in a map dispatches
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (force-arity 2 (usurp sub2))}  ops.rev 10 3	-7	a COMPOSED wrapper in a map dispatches — the stamp follows the whole chain to sub2's body
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp (usurp sub2))}  ops.rev 10 3	7	two usurps cancel; the map-captured wrapper still reaches the one body underneath
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops [(usurp sub2)]  ops.0 10 3	-7	a wrapper captured in a LIST dispatches the same way
 usurp nope	ERROR:undefined_word	by-name usurp of an unbound name
 def x 5  usurp x	ERROR:illegal_ref	by-name usurp of a non-fn binding — unlike valof, usurp still gates on fn-ness
 usurp 5	ERROR:signature_error	usurp of a non-word literal matches neither overload

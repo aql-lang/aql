@@ -645,7 +645,63 @@ import (
 // Lower it whenever it falls. Raising it means a change put interpretation
 // back into compiled programs, which is the one thing the compilation mission
 // rules out — so a rise wants a design note, not a bigger number.
-const interpEntryRowCeiling = 36
+//
+// (w) 36 -> 33. THE STAMP REACHES TWO MORE KINDS OF CONTAINER — and the
+// correction matters more than the count, because the previous entry in this
+// ledger asserted the five remaining `vm:island` rows were "one cause, and it
+// is not the dispatch site". They are FOUR causes. Probing dynApplyEnter's
+// decline arms one row at a time, rather than reading the seam name, splits
+// them:
+//
+//	class.tsv:L122     no-ref        the fn is a class FIELD DEFAULT
+//	usurp.tsv:L33,L45  no-ref        the fn is behind a MODIFIER WRAPPER
+//	fn-value.tsv:L19   never reached lowers to CALL_DYNAMIC_MIXED
+//	fn-value.tsv:L28   no-sig-match  a DELIBERATE decline (String vs Integer)
+//
+// A shared symptom is not a shared cause. `no-ref` was three rows and two
+// mechanisms; the other two rows do not go through that gate at all.
+//
+// The two this column fixes are both the same SHAPE of hole — stampFnConst
+// walks list and map consts, and neither of these is a list or a map:
+//
+//   - A MODIFIER WRAPPER is a container of exactly one fn. `usurp` rebuilds the
+//     value with a GO handler on every own sig, so storedSigEligible refuses
+//     them all and the walk stamps nothing; the boru body is one level down,
+//     behind FnDefInfo.Wraps. `def sub2 fn […]  def ops {rev: (usurp sub2)}`
+//     disassembled to `fns=0` — the map const folded the wrapper in and NOTHING
+//     in the program compiled sub2's body, because sub2 is never called by name
+//     either. So no widening of the apply site could have taken these rows:
+//     there was no unit to enter. The walk follows Wraps, and eng's
+//     UnwrapModifierChain (column (u)'s marker) hands dynApplyEnter the value
+//     the walk stamped.
+//
+//   - A CLASS TYPE carries its methods as FIELD DEFAULTS, and the type operand
+//     returns from resolveOperand BEFORE the const chokepoint's stamp. The node
+//     is BARE there (IsBareTypeNode means Data == nil), so the schema has to be
+//     resolved the way `make` resolves it — ResolveTypeLiteralDef against the
+//     live registry — which is why this is its own entry point rather than
+//     another case in the walk. The PARENT chain is walked with it: a subclass
+//     inherits its parent's defaults rather than copying them, so stopping at
+//     the node would leave every inherited method islanded.
+//
+// WHAT IS LEFT IN THE COLUMN IS TWO ROWS, AND NEITHER IS A STAMP QUESTION —
+// both fn-value.tsv rows now compile their body (`fns=1`) and island anyway:
+//
+//   - `3 m.f 2` lowers to CALL_DYNAMIC_MIXED with the fn INTERIOR to the window
+//     [3 fn 2]. Column (q) takes a stepless window and column (v) takes a
+//     stepless prefix under a TRAILING fn; this is neither, it is the SPLIT
+//     RULE — one forward token fills param 0, the stack supplies param 1, and
+//     203 rather than 302 is the whole content of that sentence. Deriving that
+//     binding at the apply site is re-deriving the collection kernel, which is
+//     Stage 5's production-order regions by definition; column (l) is the
+//     standing warning about guessing an argument order instead.
+//
+//   - `m.f 'x'` declines at MatchFnSig, CORRECTLY — a String does not fill an
+//     Integer param — and the island's answer is the unapplied residual
+//     `fn (Integer) x`. Taking it means reproducing the interpreter's park rule
+//     for an unmatched callee without an engine, which is a different question
+//     from every other row here and worth one row at most.
+const interpEntryRowCeiling = 33
 
 func TestInterpEntryCensus(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

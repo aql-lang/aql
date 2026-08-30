@@ -2080,6 +2080,38 @@ Morrisett & Harper, POPL 1996, is the formal warrant that one uniform
   flex-map divergence pinned where divergences belong rather than hidden behind
   an optimisation that happened to fire.
 
+  **The descent's own blind spots, found by finishing the cluster.** The
+  paragraph above names three shapes and the descent takes two of them; the
+  third — "a class field method" — it never reached, and neither did it reach a
+  fn behind a MODIFIER WRAPPER. Both are containers the walk does not recognise
+  as containers, and each needs a different key:
+
+  - A class type carries its methods as FIELD DEFAULTS, and the type operand
+    leaves `resolveOperand` BEFORE the const chokepoint's stamp. The node there
+    is BARE (`IsBareTypeNode` means `Data == nil`), so the schema is not on the
+    value: it has to be resolved the way `make` resolves it, through
+    `ResolveTypeLiteralDef` against the live registry, and read through
+    `AllFields` so an inherited default is reached through the parent chain.
+  - A modifier wrapper (`usurp`, `stack-args`, `forward-args`, `force-arity`)
+    is a container of exactly one fn. It REBUILDS the value with a Go handler on
+    every own sig, so `storedSigEligible` refuses them all; the boru body sits
+    one level down, behind `FnDefInfo.Wraps`.
+
+  The wrapper case settles a question the apply site could not. `def sub2 fn […]
+  def ops {rev: (usurp sub2)}` disassembles to `fns=0`: the map const folds the
+  wrapper in, and nothing in the program compiles `sub2`'s body, because `sub2`
+  is never called by name either. No widening of the apply gate could have taken
+  that row — there was no unit to enter. Reading the bytecode said so in one
+  line; the seam name (`vm:island`) had suggested a dispatch-site problem for
+  two increments.
+
+  Which is the correction worth keeping: the five rows left at census 36 were
+  filed as "one cause". Probing the decline arms one row at a time gives FOUR —
+  two stamp-reach holes (these), one deliberate `MatchFnSig` decline on a
+  genuine type mismatch, and one `CALL_DYNAMIC_MIXED` window that needs the
+  split rule and therefore Stage 5. A shared symptom is not a shared cause, and
+  a seam name is not a diagnosis.
+
   **The native-callback seam, and what the CallBoru column turned out to be.**
   `core/go/invoke.go` carried two near-identical entries: `InvokeCallbackFn`
   (offer the body to the VM, fall back to `CallBoru`) and `CallBoruFn` (the same
