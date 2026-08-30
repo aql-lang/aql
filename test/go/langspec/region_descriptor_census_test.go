@@ -420,6 +420,7 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 	}
 	kinds, leads := map[string]int{}, map[string]int{}
 	var regions, slots, regionsWithGroup, regionsAllSimple, slotsAllSimple int
+	var regionsCompletable, slotsCompletable int
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
 			continue
@@ -461,7 +462,7 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 					regions++
 					slots += len(got)
 					leads[slotKind(got[0].Token)]++
-					hasGroup, allSimple := false, len(got) > 1
+					hasGroup, allSimple, completable := false, len(got) > 1, len(got) > 1
 					for k := range got {
 						kind := slotKind(got[k].Token)
 						kinds[kind]++
@@ -479,6 +480,15 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 						if kind != "const" && kind != "atom" && kind != "type" {
 							allSimple = false
 						}
+						// COMPLETABLE is the wider claim SlotWordRef opens up:
+						// every slot has a source the model can express today.
+						// A word joins the simple kinds here because its source
+						// is "resolve it live", which needs no table and no
+						// lowering. Only a group (no fragment yet) and a mod
+						// (not an operand at all) fall outside.
+						if kind == "group" || kind == "mod" {
+							completable = false
+						}
 					}
 					if hasGroup {
 						regionsWithGroup++
@@ -486,6 +496,10 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 					if allSimple {
 						regionsAllSimple++
 						slotsAllSimple += len(got) - 1
+					}
+					if completable {
+						regionsCompletable++
+						slotsCompletable += len(got) - 1
 					}
 				}
 			}
@@ -512,6 +526,9 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 	t.Logf("   regions ENTIRELY simple (every slot after the lead is its own value): "+
 		"%d (%.1f%%), %d slots", regionsAllSimple,
 		100*float64(regionsAllSimple)/float64(regions), slotsAllSimple)
+	t.Logf("   regions COMPLETABLE (adding wordRef: no group slot, no mod slot): "+
+		"%d (%.1f%%), %d slots", regionsCompletable,
+		100*float64(regionsCompletable)/float64(regions), slotsCompletable)
 	// The buckets must account for every slot. A census whose parts do not
 	// sum to its whole is measuring something other than what it reports.
 	if sum != slots {

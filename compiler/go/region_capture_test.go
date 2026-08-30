@@ -85,14 +85,73 @@ func TestCaptureRegionSlotsReadsQuote(t *testing.T) {
 	}
 }
 
-// Source is left at its zero for the lowerer to fill: it is not knowable
-// from the token, and guessing it here would be the frozen-class mistake in
-// a different place.
+// A NON-WORD slot's Source is left at its zero for the lowerer to fill: it
+// is not knowable from the token, and guessing it here would be the
+// frozen-class mistake in a different place. (A word IS knowable — see
+// TestCaptureRegionSlotsFinishesAWordSlot — because "resolve it live" is a
+// complete answer rather than a guess.)
 func TestCaptureRegionSlotsLeavesSourceToLowerer(t *testing.T) {
 	w := capTape([]core.Value{core.NewInteger(1)})
 	got := CaptureRegionSlots(w, 0)
 	if len(got) != 1 || got[0].Source != SlotNone {
 		t.Errorf("Source = %v, want the INVALID SlotNone zero — a capture must not "+
 			"look like a reference to Consts[0]", got[0].Source)
+	}
+}
+
+// A WORD slot is FINISHED at capture, and every other kind is not. This is
+// the pair that keeps the split honest: it fails if capture stops finishing
+// words (the largest slot class in the corpus, 45.6% of region tokens), and
+// it fails just as loudly if capture starts guessing a source for a token
+// whose source the lowerer owns.
+//
+// The word case is not an optimisation. A word's binding is resolved LIVE on
+// every execution — `k` is a value slot or a collection barrier depending on
+// what it is bound to NOW — so a later pass has nothing to learn and nothing
+// to freeze. See SlotWordRef.
+func TestCaptureRegionSlotsFinishesAWordSlot(t *testing.T) {
+	w := capTape([]core.Value{
+		core.NewWord("f"), core.NewWord("k"), core.NewInteger(1),
+	})
+	got := CaptureRegionSlots(w, 0)
+	if len(got) != 3 {
+		t.Fatalf("captured %d slots, want 3", len(got))
+	}
+	for _, i := range []int{0, 1} {
+		if got[i].Source != SlotWordRef {
+			t.Errorf("slot %d source = %v, want SlotWordRef", i, got[i].Source)
+		}
+		if got[i].Idx != 0 {
+			t.Errorf("slot %d idx = %d, want 0 — a wordRef addresses no table", i, got[i].Idx)
+		}
+	}
+	if got[2].Source != SlotNone {
+		t.Errorf("the integer slot = %v, want SlotNone: its source is the lowerer's", got[2].Source)
+	}
+}
+
+// A region of nothing but words validates STRAIGHT OUT OF CAPTURE, with no
+// lowering at all. That is the concrete payoff of SlotWordRef and the reason
+// it is worth a member: before it, a word slot had no source of its own, so
+// the only way to give one was to match the slot against the dispatch's
+// already-resolved operands — the written-order to sig-order join that three
+// reverted attempts were built around.
+func TestAllWordRegionValidatesUnlowered(t *testing.T) {
+	w := capTape([]core.Value{core.NewWord("g"), core.NewWord("x"), core.NewWord("y")})
+	d := &RegionDesc{Lead: LeadWord, Word: "f", Pos: core.SrcPos{Row: 1, Col: 1},
+		Slots: CaptureRegionSlots(w, 0)}
+	if err := d.Validate(0, 0, 0); err != nil {
+		t.Errorf("an all-word region must validate unlowered: %v", err)
+	}
+}
+
+// The negative control for the rule above: a wordRef that acquired an index
+// is refused. Without this the Idx==0 requirement is a comment, and whatever
+// read the index would be addressing a table this source never meant.
+func TestValidateRejectsIndexedWordRef(t *testing.T) {
+	d := &RegionDesc{Lead: LeadWord, Word: "f", Pos: core.SrcPos{Row: 1, Col: 1},
+		Slots: []SlotDesc{{Source: SlotWordRef, Idx: 3, Token: core.NewWord("x")}}}
+	if err := d.Validate(0, 0, 0); err == nil {
+		t.Error("a wordRef carrying an index must be refused")
 	}
 }

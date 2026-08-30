@@ -60,6 +60,14 @@ func (s *SlotDesc) validate(i int, pos core.SrcPos, nConsts, nFns, nTypes int) e
 			return fmt.Errorf("region at %v: slot %d type index %d out of range (%d types)",
 				pos, i, s.Idx, nTypes)
 		}
+	case SlotWordRef:
+		// A wordRef addresses no table: the name is in Token. A non-zero Idx
+		// is a lowerer that thought it was writing an address, and whatever
+		// read it would be indexing a table this source never meant.
+		if s.Idx != 0 {
+			return fmt.Errorf("region at %v: slot %d is a wordRef with index %d "+
+				"(a wordRef addresses no table — its name is in Token)", pos, i, s.Idx)
+		}
 	case SlotLocal, SlotEvent:
 		// Frame-local and event indices are validated by the lowerer against
 		// the unit being built, which knows its own local count and event

@@ -693,6 +693,75 @@ and a matching opcode pair:
   curry-list construction (`curryOrStack`'s compiled twin) / the
   interpreter's exact no-match raise.
 
+**The two-phase model was solving a problem this model does not have
+(measured 2026-08-30).** The recorder side landed as a two-phase capture —
+extent and Tokens at collection time, `SlotDesc.Source` at `RecordCall` —
+because a region SLOT is a written-order TOKEN while a dispatch's OPERANDS
+are sig-order ARGS, so filling Source appeared to need a join between the
+two. Three implementations of that join were built and reverted. Model 1
+read tape positions and got `[-1 -1]` for `add 1 2`, because
+`rearrangeForForward` (`core/go/engine.go:3419`) moves forward args BEFORE
+the word during collection, destroying written order by dispatch time.
+Model 2 keyed on `funcIdx`, which MOVES during collection (0 → 1 across two
+arrivals). Model 3 counted arrivals, and both measurements built to validate
+it were themselves wrong — each caught by its own internal consistency
+check, neither by its headline number.
+
+The census that settled it asks what none of the three asked: **is the join
+needed?** Over the corpus — 14521 regions, 69474 tokens, leads included
+(`test/go/langspec` `TestRegionSlotTokenKinds`):
+
+| token kind | count | share | of which LEAD |
+|---|---:|---:|---:|
+| word | 31682 | 45.6% | 8974 |
+| const | 27448 | 39.5% | 4910 |
+| group | 9830 | 14.1% | 550 |
+| atom | 483 | 0.7% | 87 |
+| type | 24 | 0.0% | 0 |
+| mod | 7 | 0.0% | 0 |
+
+Zero unclassified, and **not one of the six kinds is an operand lookup**. A
+const or an atom interns its own token — the token IS the value. A type
+interns the canonical registry node. A group becomes a conditionally-run
+compiled fragment. A `mod` is not an operand at all: the collection walk
+CONSUMES the marker (`CollectArrival`'s `win.Remove(valIdx+1)`), and it is
+already captured as the slot's `Quote`. And a word is derived LIVE, which is
+this section's own `wordRef(name)` class and which the descriptor model
+mandates anyway — a word's class is contextual, so a record-time freeze is
+the miscompile `region_desc.go`'s type doc opens by refusing.
+
+So the join came from treating the descriptor as a record of what a dispatch
+CLAIMED. It is a record of what the region CONTAINS; deciding what is
+claimed is `OpCollect`'s job, live. Phase B, as a phase, does not exist.
+
+**`wordRef` was specified here and missing from the implementation.** The
+`SlotDesc` sketch above lists `wordRef(name)` among the classes;
+`region_desc.go`'s `SlotSource` enum shipped without it, and that omission
+is the whole reason a word slot appeared to need a join — with no source of
+its own, the only way to give it one was to match it against an already
+resolved operand. `SlotWordRef` is now a member, it addresses no table (the
+name is in `Token`), and `CaptureRegionSlots` finishes a word slot outright.
+What that reaches, on the same corpus:
+
+| completable at capture | regions | share | slots |
+|---|---:|---:|---:|
+| every slot is const / atom / type | 4046 | 27.9% | 8058 |
+| …adding wordRef (no group, no mod) | **8491** | **58.5%** | **22409** |
+
+More than half the corpus's regions therefore have a descriptor the model
+can express with no further machinery. What is still owed is a compiled
+fragment per `group` slot — 21.2% of regions carry one — and a decision on
+the `mod` marker, which is 7 slots and not an operand.
+
+**Capture must stay side-effect-free, and that is a constraint on where
+sources get filled.** `es.intern` NEVER pools compounds: two source `[1]`
+literals must stay two constants, because `eq` on compounds is identity. A
+region is offered to the recorder on EVERY execution of its dispatch, so a
+capture that interned would append a fresh const per loop iteration —
+unbounded const-table growth, silent. `SlotWordRef` is safe to fill at
+capture precisely because it costs nothing and cannot drift; const, type and
+group sources must be filled once, by the lowerer, not once per execution.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this

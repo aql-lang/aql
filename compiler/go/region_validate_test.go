@@ -105,9 +105,12 @@ func TestRegionDescValidateRejectsUnknownSource(t *testing.T) {
 	}
 }
 
-// A captured descriptor is malformed until the lowerer fills Source in —
-// which is exactly the state CaptureRegionSlots leaves it in, so the two
-// halves of the contract are pinned against each other.
+// A captured descriptor is malformed until the lowerer fills Source in, for
+// every slot whose source the lowerer actually owns — which is every kind
+// but a WORD (finished at capture as SlotWordRef, since a word is resolved
+// live and there is nothing to add). The subject here is an integer, so the
+// two halves of the contract are still pinned against each other; the word
+// case is pinned by TestCaptureRegionSlotsFinishesAWordSlot.
 func TestCapturedRegionIsMalformedUntilLowered(t *testing.T) {
 	w := core.NewTape([]core.Value{core.NewInteger(1)}, core.StackHeadroom)
 	d := &RegionDesc{Lead: LeadWord, Word: "f", Slots: CaptureRegionSlots(w, 0)}

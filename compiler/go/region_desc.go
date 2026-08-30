@@ -81,6 +81,28 @@ const (
 	// clientless machinery than it should. Twelve known occurrences is a
 	// bounded, countable cost to decline; an unfilled member is not.
 	SlotType
+	// SlotWordRef is a WORD token whose binding is resolved LIVE, at every
+	// execution, against the def stack the interpreter reads — never frozen.
+	//
+	// It is §6.2's own `wordRef(name)` class, and its absence is what made
+	// Phase B look like it needed a join. Without it a word slot had no
+	// source of its own, so the only way to give one was to match the slot
+	// against the dispatch's already-RESOLVED operands — a written-order to
+	// sig-order join. Three attempts were built around that join and
+	// reverted (task #15). The census that settled it says words are 45.6%
+	// of region tokens (31682 of 69474): not an edge to be joined around,
+	// the largest class in the model.
+	//
+	// A frozen source would ALSO be wrong, which is the argument this type's
+	// doc opens with: `k` is a value slot or a collection barrier depending
+	// on what it is bound to NOW, and the two answers differ (5 versus a
+	// raise). Live resolution is not a concession to missing information —
+	// it is the semantics.
+	//
+	// It addresses no table, so Idx is unused and must stay 0: the NAME is
+	// in Token, where OpCollect re-reads it, and a second copy in an index
+	// would be a second thing to keep in sync.
+	SlotWordRef
 )
 
 // SlotQuote is the static dispatch-control modifier the tape carried at this

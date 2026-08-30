@@ -11,13 +11,28 @@ import core "github.com/boru-lang/boru/core/go"
 // record what is THERE, not to decide what a dispatch would claim. Deciding
 // is OpCollect's, at run time, against the live binding set.
 //
-// Every slot is captured with its Token and its Source left at SlotNone —
-// the INVALID zero, not a valid-looking SlotConst. The operand source is not
-// knowable from the token alone (it comes from the recorder's own operand
-// model: which values are interned, which are frame locals, which are prior
-// events), so the lowerer fills it in, and a slot that reaches execution
+// A WORD slot is finished here, as SlotWordRef. That is not an optimisation:
+// a word's binding is resolved LIVE on every execution (see SlotWordRef, and
+// the `k` pair in region_desc.go's type doc), so there is nothing for a
+// lowerer to add and nothing a later pass could learn. The name is in Token,
+// which is where OpCollect reads it.
+//
+// Every OTHER slot is captured with its Source left at SlotNone — the
+// INVALID zero, not a valid-looking SlotConst — because its source does come
+// from the recorder's own operand model: which values are interned, which
+// are frame locals, which are prior events, which paren spans became
+// fragments. The lowerer fills those in, and a slot that reaches execution
 // still holding SlotNone is a missed initialisation rather than a silent
-// reference to constant 0. What this establishes is the region's EXTENT and
+// reference to constant 0.
+//
+// This function stays PURE, which is why the word case belongs here and the
+// rest does not: interning is not idempotent for compounds (es.intern never
+// pools a list or a map, so two source literals stay two constants), and a
+// region is offered to the recorder on EVERY execution of its dispatch. A
+// capture that interned would grow the const table once per loop iteration.
+// SlotWordRef costs nothing and cannot drift.
+//
+// What this establishes besides the word slots is the region's EXTENT and
 // its written order, which are properties of the tape and nothing else.
 //
 // Returns nil for an empty region, so a caller can distinguish "no region"
@@ -32,10 +47,12 @@ func CaptureRegionSlots(w core.CollectWindow, from int) []SlotDesc {
 	}
 	slots := make([]SlotDesc, 0, n)
 	for i := from; i < from+n; i++ {
-		slots = append(slots, SlotDesc{
-			Quote: quoteOfToken(w.At(i)),
-			Token: w.At(i),
-		})
+		tok := w.At(i)
+		d := SlotDesc{Quote: quoteOfToken(tok), Token: tok}
+		if core.IsWord(tok) {
+			d.Source = SlotWordRef
+		}
+		slots = append(slots, d)
 	}
 	return slots
 }
