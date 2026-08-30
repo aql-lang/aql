@@ -215,7 +215,16 @@ var unflaggedPins = map[string]int{
 	// have always agreed this raises arith_error, and what the row pins is that
 	// the compiled lane still points at 1:10. That is invisible to every gate
 	// but the compile-or-fallback walk, which compares positions.
-	"path-modifier.tsv": 2,
+	//
+	// path-modifier.tsv: 2 -> 3, and the third is the SAME undecidable shape
+	// once more — `def m {d:div/v} end m.d/u 4 0`, a division by a zero the
+	// checker sees only as an Integer. It exists for the same reason the /s row
+	// above does: cover-gate flagged the USURP lane's error arm as unreached
+	// once that lane stopped islanding, and the arm is only reachable through a
+	// handler that actually raises. Three rows, one shape, three lanes — parked
+	// native, trailing apply, usurp — which is the pattern to expect as each
+	// remaining lane graduates off the island.
+	"path-modifier.tsv": 3,
 	"module-rand.tsv":   1,
 	"module-sift.tsv":   24,
 	"module-struct.tsv": 2,
