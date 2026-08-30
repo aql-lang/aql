@@ -37,6 +37,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -348,5 +349,163 @@ func TestRegionDescriptorReach(t *testing.T) {
 		t.Error("no tape carried a paren marker — the walk is not reaching the nesting " +
 			"it claims to cover, which is exactly how the first version of this census " +
 			"reported 100% while never running RegionEnd's paren-depth logic")
+	}
+}
+
+// slotKind names what a captured region slot's TOKEN is, syntactically. It is
+// deliberately a property of the token alone: no binding is consulted, nothing
+// is evaluated, and the classification is therefore stable across executions —
+// which is the whole question TestRegionSlotTokenKinds exists to answer.
+func slotKind(v core.Value) string {
+	switch {
+	case core.IsOpenParen(v) || core.IsCloseParen(v) || core.IsParenExpr(v):
+		return "group"
+	case core.IsDispatchMod(v):
+		return "mod"
+	case core.IsAtom(v):
+		return "atom"
+	case core.IsBareTypeNode(v):
+		return "type"
+	case core.IsWord(v):
+		return "word"
+	case core.IsConcrete(v):
+		return "const"
+	}
+	if v.Parent == nil {
+		return "OTHER:<no parent>"
+	}
+	return "OTHER:" + core.CanonValue(*v.Parent)
+}
+
+// TestRegionSlotTokenKinds censuses what region slots ARE, and it is here to
+// settle a design question rather than to guard a behaviour.
+//
+// WHAT IT WALKS, stated precisely because the previous censuses in this file
+// were wrong about exactly this. Production captures from at+1, where `at` is
+// the DISPATCHING WORD — a fact that needs the live binding set to find. This
+// walk has no binding set, so it captures from the region START and reports
+// the LEAD token separately. Every token of every region is therefore visited
+// (which is what the kind-coverage assertion needs), and the reader can
+// subtract the leads to get production's window (which is what the
+// percentages describe). Neither number is quietly standing in for the other.
+//
+// THE QUESTION. A slot is a WRITTEN-ORDER token; a dispatch's operands are
+// SIG-ORDER args. Filling SlotDesc.Source by matching one against the other
+// needs a join, and three attempts at that join have now been built and
+// reverted (task #15). This census asks whether the join is needed at all —
+// i.e. for how many slots the source is derivable from the TOKEN, with no
+// reference to the operand model:
+//
+//	const / atom  -> intern the token; it IS the value
+//	type          -> intern the canonical registry node
+//	word          -> LIVE derivation, which the descriptor model already
+//	                 mandates (a word's class is contextual, region_desc.go)
+//	group         -> a compiled fragment, run conditionally (SlotGroup)
+//	mod           -> read as the slot's Quote, already captured
+//
+// None of those five is an operand lookup. If they account for the corpus,
+// the join is not a hard problem the next attempt must solve — it is a
+// problem the descriptor model does not have.
+//
+// THE CONSISTENCY CHECK, built in rather than bolted on (the lesson from two
+// measurements that were wrong in ways their headline number could not show):
+// the buckets must SUM to the slot total, and an unclassified token must name
+// its own type rather than land in a silent remainder. A residue that hides
+// is exactly how the previous numbers passed.
+func TestRegionSlotTokenKinds(t *testing.T) {
+	specDir := filepath.Join("..", "..", "..", "lang", "spec")
+	entries, err := os.ReadDir(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds, leads := map[string]int{}, map[string]int{}
+	var regions, slots, regionsWithGroup int
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		f, err := os.Open(filepath.Join(specDir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+		for sc.Scan() {
+			line := sc.Text()
+			if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.Split(line, "\t")
+			if len(parts) < 2 {
+				continue
+			}
+			vals, err := lang.Parse(strings.TrimSpace(parts[0]))
+			if err != nil {
+				continue
+			}
+			streams := append([][]core.Value{expandMarkers(vals)}, nestedBodies(vals, 0)...)
+			for _, s := range streams {
+				if len(s) == 0 {
+					continue
+				}
+				tape := core.NewTape(s, 0)
+				spans, _, ok := regionSpans(tape)
+				if !ok {
+					continue
+				}
+				for _, sp := range spans {
+					got := compiler.CaptureRegionSlots(tape, sp[0])
+					if got == nil {
+						continue
+					}
+					regions++
+					slots += len(got)
+					leads[slotKind(got[0].Token)]++
+					hasGroup := false
+					for k := range got {
+						kind := slotKind(got[k].Token)
+						kinds[kind]++
+						if k > 0 && kind == "group" {
+							hasGroup = true
+						}
+					}
+					if hasGroup {
+						regionsWithGroup++
+					}
+				}
+			}
+		}
+		f.Close()
+	}
+	if regions == 0 {
+		t.Fatal("no region captured a slot — the census has no subject")
+	}
+	sum := 0
+	names := make([]string, 0, len(kinds))
+	for k := range kinds {
+		names = append(names, k)
+		sum += kinds[k]
+	}
+	sort.Strings(names)
+	t.Logf("region tokens: %d regions, %d tokens (leads included)", regions, slots)
+	for _, n := range names {
+		t.Logf("   %-10s %7d  (%.1f%%)   of which LEAD: %d",
+			n, kinds[n], 100*float64(kinds[n])/float64(slots), leads[n])
+	}
+	t.Logf("   regions with a group slot after the lead: %d (%.1f%%)",
+		regionsWithGroup, 100*float64(regionsWithGroup)/float64(regions))
+	// The buckets must account for every slot. A census whose parts do not
+	// sum to its whole is measuring something other than what it reports.
+	if sum != slots {
+		t.Errorf("buckets sum to %d but %d slots were captured", sum, slots)
+	}
+	// Nothing may hide in an unnamed remainder: an OTHER bucket names the
+	// token's own type, so a class the model has not considered surfaces as
+	// a failure here rather than as a wrong Source later.
+	for _, n := range names {
+		if strings.HasPrefix(n, "OTHER:") {
+			t.Errorf("%d slots carry an unclassified token kind %s — the descriptor "+
+				"model has no source for it", kinds[n], n)
+		}
 	}
 }
