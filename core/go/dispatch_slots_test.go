@@ -66,3 +66,26 @@ func TestInactiveDriftWindowRecorder(t *testing.T) {
 		t.Fatal("inactive drift-window recorder must decline")
 	}
 }
+
+// TestInactiveRegionRecorder pins the compiler-less default behind the
+// region-descriptor hook. Unlike the drift recorder there is no verdict to
+// check — the slot returns nothing — so what this proves is that the default
+// is REACHABLE and inert: it must not panic on the arguments a real dispatch
+// hands it, including the degenerate ones a compiler-less build never
+// filters (a nil window, a nil registry, an index past the end).
+//
+// The named default exists for exactly this. An anonymous func(...){} assigned
+// at init would be unreachable in core's own profile and fail the merged
+// ADR-008 gate, which is the rule every seam slot here follows.
+func TestInactiveRegionRecorder(t *testing.T) {
+	inactiveRegionRecorder(nil, nil, WordInfo{}, 0)
+	inactiveRegionRecorder(NewTape(nil, 0), nil, WordInfo{Name: "add"}, -1)
+
+	// And the live slot defaults to it, so a build with no compiler linked
+	// collects exactly as it did before the seam existed.
+	tape := NewTape([]Value{NewWord("add"), NewInteger(1)}, 0)
+	RegionRecorder(tape, nil, WordInfo{Name: "add", ArgCount: -1}, 0)
+	if tape.Len() != 2 {
+		t.Fatalf("the inactive recorder must not touch the window: len = %d, want 2", tape.Len())
+	}
+}

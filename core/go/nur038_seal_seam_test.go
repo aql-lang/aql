@@ -54,14 +54,14 @@ func TestNur038ReachFnWouldClaim(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			e.Tape = NewTape([]Value{c.tok}, StackHeadroom)
-			if got := e.reachFnWouldClaim(c.fn, 0); got != c.want {
+			if got := e.ReachFnWouldClaim(c.fn, 0); got != c.want {
 				t.Errorf("claim = %v, want %v", got, c.want)
 			}
 		})
 	}
 	// Past the end of the tape: nothing to claim.
 	e.Tape = NewTape([]Value{NewInteger(1)}, StackHeadroom)
-	if e.reachFnWouldClaim(anyFn, 5) {
+	if e.ReachFnWouldClaim(anyFn, 5) {
 		t.Error("out-of-range index must not claim")
 	}
 }

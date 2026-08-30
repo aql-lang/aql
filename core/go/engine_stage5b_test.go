@@ -4,7 +4,7 @@ package core
 // execFnDefLiteral tails, ExecFnDefSigStackMatch check-value arms,
 // execFnDefSig cross-registry analysis, forward-scan helpers
 // (dispatchModAt, tagReachCollapsedFn, expandScanSugar,
-// reachCallHeadBarrier, reachFnWouldClaim), policyGateWord,
+// reachCallHeadBarrier, ReachFnWouldClaim), policyGateWord,
 // strandedForwardError, unwindFrameTailOnError, mark/move + flow-ctrl
 // resolvers, stepCloseParen's check-mode fn-value boundary
 // (recordParenLeadingApply / parenLeadFnApplyIdx /
@@ -382,7 +382,7 @@ func TestS5BReachFnWouldClaimSkipsBarrierZero(t *testing.T) {
 		{Args: []*Type{TInteger}, BarrierPos: 0},
 		{Args: []*Type{TInteger}, BarrierPos: 1},
 	}}
-	if !e.reachFnWouldClaim(NewFunction(fd), 0) {
+	if !e.ReachFnWouldClaim(NewFunction(fd), 0) {
 		t.Error("the forward-eligible overload must claim the Integer probe")
 	}
 }
@@ -400,7 +400,7 @@ func TestS5BExpandScanSugar(t *testing.T) {
 	// A /q viable slot selects the Angle HEAD form (line 6168); its
 	// unavailable head surfaces the user's error (line 6178).
 	qsig := &Signature{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}}
-	viable := []viableSig{{sig: qsig, barrier: 1}}
+	viable := []ViableSig{{Sig: qsig, Barrier: 1}}
 	tok := NewSugar(SugarInfo{Kind: SugarAngle, Name: "Box", HeadErr: "bad head"})
 	if ok, err := e.expandScanSugar(tok, 0, 0, viable); ok || err == nil || !strings.Contains(err.Error(), "bad head") {
 		t.Errorf("head-form failure: ok=%v err=%v", ok, err)
@@ -408,7 +408,7 @@ func TestS5BExpandScanSugar(t *testing.T) {
 
 	// A bindable marker expands in place (line 6189).
 	r.BindSugarWord(SugarStackArgs, "cadd")
-	plain := []viableSig{{sig: &Signature{Args: []*Type{TInteger}}, barrier: 1}}
+	plain := []ViableSig{{Sig: &Signature{Args: []*Type{TInteger}}, Barrier: 1}}
 	e.Tape = NewTape([]Value{NewSugar(SugarInfo{Kind: SugarStackArgs})}, StackHeadroom)
 	ok, err := e.expandScanSugar(e.Tape.At(0), 0, 0, plain)
 	if !ok || err != nil {
@@ -427,7 +427,7 @@ func TestS5BReachCallHeadBarrier(t *testing.T) {
 	tok.ReachGroup = true
 
 	// A Function-conforming viable slot exempts the fn (line 6206).
-	fnSlot := []viableSig{{sig: &Signature{Args: []*Type{TFunction}}, barrier: 1}}
+	fnSlot := []ViableSig{{Sig: &Signature{Args: []*Type{TFunction}}, Barrier: 1}}
 	e.Tape = NewTape([]Value{tok, NewInteger(5)}, StackHeadroom)
 	if e.reachCallHeadBarrier(tok, fnSlot, 0, 0) {
 		t.Error("a Function slot takes the fn as data, no barrier")

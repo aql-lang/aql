@@ -57,7 +57,52 @@ const (
 	// overload consumes the position — the interpreter's conditional
 	// evaluation order, which the VM must preserve rather than
 	// pre-evaluating every group.
+	//
+	// It has ZERO occurrences in today's corpus (measured: 51419
+	// forward-collected regions, none with a closure operand), and that is
+	// CONSISTENT rather than dead. A paren group in a forward position is
+	// EVALUATED during collection, so by record time it is already a value and
+	// arrives as SlotEvent or SlotConst. SlotGroup exists for the compiled
+	// lane's CONDITIONAL evaluation, and its first filler is the recorder
+	// change that stops evaluating groups eagerly. Do not prune it on the
+	// strength of that zero.
 	SlotGroup
+	// SlotType is a canonical type interned in Program.Types.
+	//
+	// Added on measurement, not on symmetry: opType is 3840 of the 51419
+	// forward-collected operands in the corpus — a large fraction of real
+	// dispatches, not an edge case, so a descriptor model without it would
+	// have to decline them.
+	//
+	// The same census DECLINED two siblings, and the numbers are the whole
+	// argument. opDynScope (12 occurrences) and opDataScope (0) are runtime
+	// dynamic-scope lookups by name; giving each a member would add
+	// enumerations that nothing fills, in a file that already carries more
+	// clientless machinery than it should. Twelve known occurrences is a
+	// bounded, countable cost to decline; an unfilled member is not.
+	SlotType
+	// SlotWordRef is a WORD token whose binding is resolved LIVE, at every
+	// execution, against the def stack the interpreter reads — never frozen.
+	//
+	// It is §6.2's own `wordRef(name)` class, and its absence is what made
+	// Phase B look like it needed a join. Without it a word slot had no
+	// source of its own, so the only way to give one was to match the slot
+	// against the dispatch's already-RESOLVED operands — a written-order to
+	// sig-order join. Three attempts were built around that join and
+	// reverted (task #15). The census that settled it says words are 45.6%
+	// of region tokens (31682 of 69474): not an edge to be joined around,
+	// the largest class in the model.
+	//
+	// A frozen source would ALSO be wrong, which is the argument this type's
+	// doc opens with: `k` is a value slot or a collection barrier depending
+	// on what it is bound to NOW, and the two answers differ (5 versus a
+	// raise). Live resolution is not a concession to missing information —
+	// it is the semantics.
+	//
+	// It addresses no table, so Idx is unused and must stay 0: the NAME is
+	// in Token, where OpCollect re-reads it, and a second copy in an index
+	// would be a second thing to keep in sync.
+	SlotWordRef
 )
 
 // SlotQuote is the static dispatch-control modifier the tape carried at this
@@ -83,9 +128,23 @@ type SlotDesc struct {
 	Source SlotSource
 	Quote  SlotQuote
 	// Idx addresses Source: a Consts index, a frame-local slot, an event
-	// index, or a compiled-fragment index. Unused for sources that need no
-	// address.
+	// index, a compiled-fragment index, or a Types index. Unused for sources
+	// that need no address.
 	Idx int
+	// ResIdx names WHICH result of a multi-result producing event this slot
+	// takes, 0..N-1, matching the order the VM pushes a handler's results
+	// (results[0] deepest). Meaningful only for SlotEvent; 0 for every other
+	// source, and 0 is also the correct value for a single-result event.
+	//
+	// It exists because EmitOperand carries idx AND resIdx (the P5
+	// multi-result lowering) while SlotDesc carried only one index, so an
+	// operand taken from `swap` or any multi-return fn was not expressible.
+	// Measured: 33 of the corpus's forward-collected operands are
+	// multi-result. That is small enough that declining them was a real
+	// option; the totality goal is what settles it — Stage 9 flips
+	// CompileCheck to total, so every decline built now is a decline to be
+	// deleted later, and the field is cheaper than the round trip.
+	ResIdx int
 	// Token is the tape token this slot stood for, kept for live
 	// re-derivation (see the type doc). It is READ, never dispatched.
 	Token core.Value

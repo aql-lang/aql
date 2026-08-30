@@ -37,12 +37,12 @@ func TestS7RawForwardNilFn(t *testing.T) {
 	}
 }
 
-// --- staticForwardType ----------------------------------------------------
+// --- StaticForwardType ----------------------------------------------------
 
 func TestS7StaticForwardTypeGroup(t *testing.T) {
 	e := &Engine{}
-	if _, kind := e.staticForwardType(NewOpenParen()); kind != fwdGroup {
-		t.Errorf("open paren classified as %v, want fwdGroup", kind)
+	if _, kind := e.StaticForwardType(NewOpenParen()); kind != FwdGroup {
+		t.Errorf("open paren classified as %v, want FwdGroup", kind)
 	}
 }
 

@@ -15,3 +15,4 @@ vm_defer.go	eng
 vm_callback_unit.go	eng
 vm_foreign_unit.go	eng
 vm_dyn_apply.go	eng
+collect_seam_host_test.go	eng	foreign-host proof for core's exported collection seam (Stage 4)

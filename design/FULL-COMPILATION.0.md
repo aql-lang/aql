@@ -693,6 +693,175 @@ and a matching opcode pair:
   curry-list construction (`curryOrStack`'s compiled twin) / the
   interpreter's exact no-match raise.
 
+**The two-phase model was solving a problem this model does not have
+(measured 2026-08-30).** The recorder side landed as a two-phase capture —
+extent and Tokens at collection time, `SlotDesc.Source` at `RecordCall` —
+because a region SLOT is a written-order TOKEN while a dispatch's OPERANDS
+are sig-order ARGS, so filling Source appeared to need a join between the
+two. Three implementations of that join were built and reverted. Model 1
+read tape positions and got `[-1 -1]` for `add 1 2`, because
+`rearrangeForForward` (`core/go/engine.go:3419`) moves forward args BEFORE
+the word during collection, destroying written order by dispatch time.
+Model 2 keyed on `funcIdx`, which MOVES during collection (0 → 1 across two
+arrivals). Model 3 counted arrivals, and both measurements built to validate
+it were themselves wrong — each caught by its own internal consistency
+check, neither by its headline number.
+
+The census that settled it asks what none of the three asked: **is the join
+needed?** Over the corpus — 14521 regions, 69474 tokens, leads included
+(`test/go/langspec` `TestRegionSlotTokenKinds`):
+
+| token kind | count | share | of which LEAD |
+|---|---:|---:|---:|
+| word | 31682 | 45.6% | 8974 |
+| const | 16847 | 24.2% | 2755 |
+| active | 10601 | 15.3% | 2155 |
+| group | 9830 | 14.1% | 550 |
+| atom | 483 | 0.7% | 87 |
+| type | 24 | 0.0% | 0 |
+| mod | 7 | 0.0% | 0 |
+
+Zero unclassified, and **not one of the seven kinds is an operand lookup**. A
+const or an atom interns its own token — the token IS the value. A type
+interns the canonical registry node. A group becomes a conditionally-run
+compiled fragment. A `mod` is not an operand at all: the collection walk
+CONSUMES the marker (`CollectArrival`'s `win.Remove(valIdx+1)`), and it is
+already captured as the slot's `Quote`. And a word is derived LIVE, which is
+this section's own `wordRef(name)` class and which the descriptor model
+mandates anyway — a word's class is contextual, so a record-time freeze is
+the miscompile `region_desc.go`'s type doc opens by refusing.
+
+`active` is a correction to this census's own first version, which folded it
+into `const` and so over-reported what the model reaches by more than
+double. A compound literal whose MEMBERS are active tokens is not its own
+value: `[true true true]` is a list of three WORDS until they run, and an
+interpolated string is a template until its holes do. Freezing one as a
+const is the frozen-class mistake one level down, INSIDE the literal, and it
+puts `active` with `group` — a fragment in disguise — rather than with
+`const`. The live probe below is what caught it.
+
+So the join came from treating the descriptor as a record of what a dispatch
+CLAIMED. It is a record of what the region CONTAINS; deciding what is
+claimed is `OpCollect`'s job, live. Phase B, as a phase, does not exist.
+
+**`wordRef` was specified here and missing from the implementation.** The
+`SlotDesc` sketch above lists `wordRef(name)` among the classes;
+`region_desc.go`'s `SlotSource` enum shipped without it, and that omission
+is the whole reason a word slot appeared to need a join — with no source of
+its own, the only way to give it one was to match it against an already
+resolved operand. `SlotWordRef` is now a member, it addresses no table (the
+name is in `Token`), and `CaptureRegionSlots` finishes a word slot outright.
+What that reaches, on the same corpus:
+
+| completable at capture | regions | share | slots |
+|---|---:|---:|---:|
+| every slot is const / atom / type | 1899 | 13.1% | 2850 |
+| …adding wordRef (no group, mod or active) | **4859** | **33.5%** | **9546** |
+
+A third of the corpus's regions therefore have a descriptor the model can
+express with no further machinery, up from an eighth. What is still owed is
+a compiled fragment for the two kinds that need one — `group` (21.2% of
+regions carry one) and `active` — and a decision on the `mod` marker, which
+is 7 slots and not an operand.
+
+**The written-order rule holds at 99.83%, measured live rather than read off
+the docs.** A temporary probe in `RecordCall` compared each captured
+region's slots against the args the dispatch actually received, over the
+whole corpus gate (`TestSpecCompiledOrFallback`). The rule under test is
+CLAUDE.md's: matching fills sig positions from the FORWARD tokens in WRITTEN
+order, then fills every remaining position from the value stack — so for
+`k = min(slots, args)`, `slot[i]` must be `args[i]` for every `i < k`,
+whatever the split.
+
+| outcome | count | share of simple regions |
+|---|---:|---:|
+| prefix matches, every arg came forward | 2125 | 14.7% |
+| prefix matches, further args from the STACK | 12327 | 85.1% |
+| MISMATCH | 25 | 0.17% |
+
+Two things follow, and the second is the one that changes the build.
+
+First: **the mixed forward/stack dispatch is the MAJORITY, not an edge** —
+85% of simple regions take some args from the value stack. A `RegionDesc`
+describes only the forward half, so `OpCollect` must fill the remaining sig
+positions from the runtime stack. That is not a gap in the model (the rule
+says exactly this) but it does mean a region descriptor alone never
+determines the operand set.
+
+Second: **the lowerer must VERIFY the prefix, not assume it.** 25 cases in
+14477 do not satisfy it — a `none` word rendering against a `None` value, a
+record type against its expanded object form, and a handful whose slots and
+args genuinely disagree. The lowerer holds both the slots and the args at
+the routing decision, so comparing them costs nothing and turns the
+ordering rule from an assumption into a checked precondition. Three
+reverted models assumed an ordering; the one that survives checks it.
+
+**Capture must stay side-effect-free, and that is a constraint on where
+sources get filled.** `es.intern` NEVER pools compounds: two source `[1]`
+literals must stay two constants, because `eq` on compounds is identity. A
+region is offered to the recorder on EVERY execution of its dispatch, so a
+capture that interned would append a fresh const per loop iteration —
+unbounded const-table growth, silent. `SlotWordRef` is safe to fill at
+capture precisely because it costs nothing and cannot drift; const, type and
+group sources must be filled once, by the lowerer, not once per execution.
+
+**What routes, measured, and what the routing predicate must NOT do.** A
+first cut of the region-dispatch lowering was built and reverted; the
+numbers it produced are the design brief for the next one.
+
+The predicate it tested: the lead is a word, every slot is const / atom /
+type / wordRef, and — the precondition, CHECKED rather than assumed —
+`slot[i] == args[i]` over the overlap. Attributed over the corpus (7634
+rows, 82670 mono dispatches), of the 40070 dispatches that reach it:
+
+| outcome | count | share |
+|---|---:|---:|
+| routable | 3045 | 7.6% |
+| declined: **inside a fn unit** | **30873** | **77.0%** |
+| declined: prefix mismatch | 2871 | 7.2% |
+| declined: slot kind (group / active / mod) | 1699 | 4.2% |
+| declined: no region (a stack-only dispatch) | 1162 | 2.9% |
+| declined: no args | 420 | 1.0% |
+
+**The fn-unit exclusion is four fifths of the gap** — not one restriction
+among five. It is there because a word slot inside a compiled fn body names
+a PARAM, which lives in the frame rather than in the def stack the VM's live
+lookup reads, so a live re-derivation would miss it. Lifting it is worth
+more than every other relaxation combined, and it is bounded work: a
+name-to-slot map per unit, and a word slot that resolves to a param lowering
+as `SlotLocal` rather than `SlotWordRef`.
+
+**And the predicate must scan only the CLAIM, not the region.** Requiring
+every slot to be routable measured **+9.9%** on
+`BenchmarkPerfCompile/arith_chain64` (interleaved A/B, four rounds of two
+compiled binaries; `PerfCheck/arith_chain64` and `PerfCompile/for_tight`
+were flat, which is the tell — the cost appears only where the recorder is
+active and the region is long). The cause is structural rather than
+incidental: a region runs to the next hard delimiter, so it is as long as
+its STATEMENT, and a 64-term arithmetic chain hands its first dispatch a
+128-token region. Classifying all of them, once per dispatch, is quadratic.
+
+Caching the classification on the slot does not fix it — the capture walk is
+itself per-dispatch — and neither does moving the scan to lowering, since
+each dispatch has its own descriptor. What fixes it is noticing that the
+scan is unnecessary: **a slot beyond the recorded claim is not this
+dispatch's operand.** It matters only if a LIVE collection claims further
+than the recording did, and that case is already covered — the arity check
+defers, and a slot the runtime cannot resolve defers too. So the predicate
+scans `slots[0:NFwd]`, and `Validate` permits `SlotNone` at `i >= NFwd`,
+documented as "beyond the recorded claim; the runtime defers if collection
+reaches it". That is the one place the invalid zero is not a defect, and it
+is worth stating rather than discovering.
+
+One correction to how this was measured, because it nearly caused a wrong
+decision. The first comparison used a benchmark file recorded earlier in the
+session, and it reported the FIRST-WINS capture fix — a change that
+strictly does less work — as 1.4% to 7.9% SLOWER across every case. That is
+impossible, and it is what exposed the baseline as stale rather than the
+change as costly. Only the interleaved A/B above is load-fair, and the
++9.9% figure is that one. A performance number from a file measured under a
+different machine load is not a measurement.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this

@@ -391,7 +391,7 @@ func TestS5ASigsHaveKeywordSlot(t *testing.T) {
 		QuoteArgs: map[int]bool{0: true},
 		Patterns:  map[int]Value{0: NewAtom("s5akw")},
 	}
-	if !sigsHaveKeywordSlot([]viableSig{{sig: kw, barrier: 1}}) {
+	if !sigsHaveKeywordSlot([]ViableSig{{Sig: kw, Barrier: 1}}) {
 		t.Error("sigsHaveKeywordSlot = false, want true")
 	}
 }
@@ -402,20 +402,20 @@ func TestS5APruneKeywordViable(t *testing.T) {
 		QuoteArgs: map[int]bool{0: true},
 		Patterns:  map[int]Value{0: NewAtom("s5akw")},
 	}
-	viable := []viableSig{{sig: kw, barrier: 1}}
+	viable := []ViableSig{{Sig: kw, Barrier: 1}}
 	// The matching keyword word keeps the sig.
 	kept := pruneKeywordViable(viable, 0, NewWord("s5akw"))
 	if len(kept) != 1 {
 		t.Errorf("matching keyword pruned: %d", len(kept))
 	}
 	// A different word drops it.
-	viable = []viableSig{{sig: kw, barrier: 1}}
+	viable = []ViableSig{{Sig: kw, Barrier: 1}}
 	kept = pruneKeywordViable(viable, 0, NewWord("other"))
 	if len(kept) != 0 {
 		t.Errorf("mismatching keyword kept: %d", len(kept))
 	}
 	// A non-word token drops it too.
-	viable = []viableSig{{sig: kw, barrier: 1}}
+	viable = []ViableSig{{Sig: kw, Barrier: 1}}
 	kept = pruneKeywordViable(viable, 0, NewInteger(3))
 	if len(kept) != 0 {
 		t.Errorf("non-word token kept: %d", len(kept))
@@ -663,12 +663,12 @@ func TestS5AForwardScanReachCallHeadAfterCollapse(t *testing.T) {
 	}
 }
 
-// --- staticForwardType ----------------------------------------------------
+// --- StaticForwardType ----------------------------------------------------
 
 func TestS5AStaticForwardTypeCarrierBoundary(t *testing.T) {
 	e := engWithTape(t, nil, 0)
-	if _, kind := e.staticForwardType(NewCarrier(TInteger)); kind != fwdBoundary {
-		t.Errorf("carrier classified %d, want fwdBoundary", kind)
+	if _, kind := e.StaticForwardType(NewCarrier(TInteger)); kind != FwdBoundary {
+		t.Errorf("carrier classified %d, want FwdBoundary", kind)
 	}
 }
 

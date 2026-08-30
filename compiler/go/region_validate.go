@@ -19,7 +19,7 @@ import (
 // compiler defect, and the design's own Stage 9 note says such a case
 // becomes a structured internal_error return, never a panic (ADR-005 has no
 // exception for "this should be impossible").
-func (d *RegionDesc) Validate(nConsts, nFns int) error {
+func (d *RegionDesc) Validate(nConsts, nFns, nTypes int) error {
 	if d == nil {
 		return fmt.Errorf("region descriptor is nil")
 	}
@@ -30,7 +30,7 @@ func (d *RegionDesc) Validate(nConsts, nFns int) error {
 		return fmt.Errorf("region at %v: word name %q on a non-word lead", d.Pos, d.Word)
 	}
 	for i := range d.Slots {
-		if err := d.Slots[i].validate(i, d.Pos, nConsts, nFns); err != nil {
+		if err := d.Slots[i].validate(i, d.Pos, nConsts, nFns, nTypes); err != nil {
 			return err
 		}
 	}
@@ -40,7 +40,7 @@ func (d *RegionDesc) Validate(nConsts, nFns int) error {
 // validate checks one slot. The bounds are checked against the tables the
 // index actually addresses, because an in-range-but-wrong index is the
 // failure a sentinel cannot catch.
-func (s *SlotDesc) validate(i int, pos core.SrcPos, nConsts, nFns int) error {
+func (s *SlotDesc) validate(i int, pos core.SrcPos, nConsts, nFns, nTypes int) error {
 	switch s.Source {
 	case SlotNone:
 		return fmt.Errorf("region at %v: slot %d was never given a source "+
@@ -55,6 +55,19 @@ func (s *SlotDesc) validate(i int, pos core.SrcPos, nConsts, nFns int) error {
 			return fmt.Errorf("region at %v: slot %d fragment index %d out of range (%d fns)",
 				pos, i, s.Idx, nFns)
 		}
+	case SlotType:
+		if s.Idx < 0 || s.Idx >= nTypes {
+			return fmt.Errorf("region at %v: slot %d type index %d out of range (%d types)",
+				pos, i, s.Idx, nTypes)
+		}
+	case SlotWordRef:
+		// A wordRef addresses no table: the name is in Token. A non-zero Idx
+		// is a lowerer that thought it was writing an address, and whatever
+		// read it would be indexing a table this source never meant.
+		if s.Idx != 0 {
+			return fmt.Errorf("region at %v: slot %d is a wordRef with index %d "+
+				"(a wordRef addresses no table — its name is in Token)", pos, i, s.Idx)
+		}
 	case SlotLocal, SlotEvent:
 		// Frame-local and event indices are validated by the lowerer against
 		// the unit being built, which knows its own local count and event
@@ -65,6 +78,18 @@ func (s *SlotDesc) validate(i int, pos core.SrcPos, nConsts, nFns int) error {
 		}
 	default:
 		return fmt.Errorf("region at %v: slot %d has an unknown source %d", pos, i, s.Source)
+	}
+	// ResIdx names a result WITHIN a producing event, so it is meaningless
+	// anywhere else. A non-zero value on another source is a lowerer defect
+	// that would otherwise be read as "result N" by whatever consumes the
+	// slot — the same class of silent wrong answer SlotNone exists to stop,
+	// one field over.
+	if s.ResIdx < 0 {
+		return fmt.Errorf("region at %v: slot %d has a negative result index %d", pos, i, s.ResIdx)
+	}
+	if s.ResIdx != 0 && s.Source != SlotEvent {
+		return fmt.Errorf("region at %v: slot %d carries result index %d on a non-event source %d",
+			pos, i, s.ResIdx, s.Source)
 	}
 	return nil
 }

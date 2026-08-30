@@ -18,6 +18,35 @@ var DriftWindowRecorder = inactiveDriftWindowRecorder
 
 func inactiveDriftWindowRecorder(*Engine, WordInfo, *Signature, []int) bool { return false }
 
+// RegionRecorder is the compiler's region-descriptor hook: offered every
+// forward-collecting dispatch, with the window, the registry, the dispatching
+// word and its INDEX in that window — everything CaptureRegionSlots needs to
+// read a region's extent and written order.
+//
+// It fires at collection time on purpose, because that is the only place the
+// extent is knowable. A region's two halves are known at DIFFERENT times, and
+// this is the earlier one:
+//
+//   - HERE: the extent and the written-order Tokens, which are properties of
+//     the tape. No operands exist yet.
+//   - LATER, at the recorder's own call site: SlotDesc.Source — which values
+//     are consts, frame locals, prior events, compiled fragments. No tape
+//     index exists there.
+//
+// The two are joined on (word, SrcPos), which both sides already hold; it was
+// measured across the corpus rather than assumed. Two asymmetries came with
+// that measurement and the compiler side must honour them: not every recorded
+// call has a region (`concat "a" "b"` never reaches forward collection, and a
+// region is by definition a forward-collecting dispatch), and not every region
+// becomes a recorded call (`def` is a check-mode word). Neither is an error.
+//
+// The compiler installs the real recorder at init; the NAMED default below is
+// what a compiler-less build runs, so the decline path is reachable and pinned
+// like every other slot (TestInactiveRegionRecorder).
+var RegionRecorder = inactiveRegionRecorder
+
+func inactiveRegionRecorder(CollectWindow, *Registry, WordInfo, int) {}
+
 // CheckBraid is the S9 dispatch-hook table for the check piece's
 // dispatch-recovery braid: the step loop OFFERS each recovery/model
 // point through these slots, and the check piece installs its
