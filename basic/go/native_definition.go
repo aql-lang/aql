@@ -984,18 +984,21 @@ func LookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 // value. A carrier body likewise stays unstamped — the static refusal is
 // an approximation the runtime value could still satisfy.
 func typedDefUnifyMirror(r *Registry, name, detail string, body Value, pos SrcPos) {
-	// The name token's Pos can be unset (a synthesized pair), and an
-	// auto-evaluated LIST body is rebuilt without one while its elements
-	// keep theirs — fall back down the chain so the compiled trap reports
-	// a real position like the interpreter's raise.
-	if pos.Row == 0 {
-		pos = body.Pos()
-	}
-	if pos.Row == 0 {
-		if lst, err := AsList(body); err == nil && !lst.IsNil() && lst.Len() > 0 {
-			pos = lst.Get(0).Pos()
-		}
-	}
+	// pos is always set now, and the fallback chain that used to stand here
+	// is deleted rather than allowlisted. It read: the name token's Pos can
+	// be unset (a synthesized pair), so fall back to the body's position, then
+	// to the body's first element's.
+	//
+	// That was NUR108's second half, diagnosed correctly and rescued in the
+	// wrong place. The rescue DID produce a position — the BODY's — which is
+	// precisely why the compiled trap blamed the value at 1:23 where the
+	// interpreter blames the `def` at 1:1. A local rescue can only choose
+	// among the positions it can see, and the right one was never one of them.
+	//
+	// DefTypedHandler now supplies the `def` token's own position
+	// (CheckState.CurWordPos) at the source, so every caller here passes a set
+	// pos and the chain is unreachable — measured, all three statements, over
+	// the whole corpus and every unit suite.
 	if core.IsInertConst(body) && (!r.Check.Compiling ||
 		r.Check.Recorder().RecordTrap("type_error", detail, name, "", pos)) {
 		CheckAddUniqueDiagnostic(r, "type_error", detail, name, pos)
