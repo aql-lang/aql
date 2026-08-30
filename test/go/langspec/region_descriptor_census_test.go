@@ -419,7 +419,7 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 	kinds, leads := map[string]int{}, map[string]int{}
-	var regions, slots, regionsWithGroup int
+	var regions, slots, regionsWithGroup, regionsAllSimple, slotsAllSimple int
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
 			continue
@@ -461,16 +461,31 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 					regions++
 					slots += len(got)
 					leads[slotKind(got[0].Token)]++
-					hasGroup := false
+					hasGroup, allSimple := false, len(got) > 1
 					for k := range got {
 						kind := slotKind(got[k].Token)
 						kinds[kind]++
-						if k > 0 && kind == "group" {
+						if k == 0 {
+							continue
+						}
+						if kind == "group" {
 							hasGroup = true
+						}
+						// SIMPLE means the slot's value IS its own token, so
+						// the source needs nothing but interning: no live
+						// binding lookup, no compiled fragment, no marker to
+						// consume. That is the subset a first OpCollect can
+						// execute end to end.
+						if kind != "const" && kind != "atom" && kind != "type" {
+							allSimple = false
 						}
 					}
 					if hasGroup {
 						regionsWithGroup++
+					}
+					if allSimple {
+						regionsAllSimple++
+						slotsAllSimple += len(got) - 1
 					}
 				}
 			}
@@ -494,6 +509,9 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 	}
 	t.Logf("   regions with a group slot after the lead: %d (%.1f%%)",
 		regionsWithGroup, 100*float64(regionsWithGroup)/float64(regions))
+	t.Logf("   regions ENTIRELY simple (every slot after the lead is its own value): "+
+		"%d (%.1f%%), %d slots", regionsAllSimple,
+		100*float64(regionsAllSimple)/float64(regions), slotsAllSimple)
 	// The buckets must account for every slot. A census whose parts do not
 	// sum to its whole is measuring something other than what it reports.
 	if sum != slots {
