@@ -66,7 +66,7 @@ keep the two in sync in the same commit.
 
 | # | Title | Surfaced by / provenance |
 |---|-------|--------------------------|
-| [NUR113](#nur113) | A dot-sugar access lowers with NO source position — `lowerReach` builds `dot`/`dotr` with a bare constructor — so every opcode downstream of a dot chain records `0:0` and the compiled lane renders "source position unknown" where the interpreter has a caret. The one-line fix (anchor the synthesized tokens on the receiver) was built and MEASURED: it takes `TestSpecCompiledOrFallback` from 0 to **186 divergences**, because `lowerReach` is in core and both engines lose the position symmetrically today — stamping it fixes the interpreter and leaves the compiled lane behind on module-qualified access. The compiled half must land first | writing a corpus row for the `/s` trailing-apply increment, 2026-08-29 |
+| [NUR113](#nur113) | RESOLVED 2026-08-30. A dot-sugar access lowered with NO source position — `lowerReach` builds `dot`/`dotr` bare, and a module-qualified one resolves to a Function `moduleNSGetReturns` hands back verbatim — so every opcode downstream recorded `0:0` and the compiled lane rendered "source position unknown" where the interpreter has a caret. Fixed by stamping a positionless Function result with the call's own position at the analysis seam, AFTER `dispatchRecordOutcome` re-IDs the outputs. Five fixes argued from reading the code each failed a gate; three instrumentation rounds each produced a fact | writing a corpus row for the `/s` trailing-apply increment, 2026-08-29 |
 | [NUR112](#nur112) | The checker's residual for a parked native word applied after its name was EXTENDED does not match what runs: `def Pos (refine Integer)  def m {a:size/v}  def size fn [[n:Pos] [Integer] [200]] end  def v:Pos 3  m.a v` is checked `[dynamic(Any) Pos]` — two values, one of them the argument left behind — and actually leaves `[Integer]`. Both ENGINES agree on the answer (3); it is the static model that differs, so no differential can see it — TestCheckTypeSoundness can, and did | writing a corpus row for the parked-native apply gate, 2026-08-29 |
 | [NUR111](#nur111) | The DECLARED RETURN of a fn value handed to a higher-order word is checked by nobody statically: `def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v` passes `boru check` clean, while the identical body as a code BLOCK (`each [cbad]`) and the identical fn called directly (`cbad 1`) are both flagged `type_error`. The end-of-pass pending-body drain ANALYSES the body (an undefined word inside it IS reported) but never holds the residual to the declaration — `declared` reaches `AnalyseFnBody` as the recursion hypothesis only, and the matching proof obligation is the interpreter's `__RC` marker, which the callback path never plants. Both ENGINES now raise (the runtime half is fixed, `lang/spec/fn-value.tsv` §13); it is the CHECKER that is silent | fixing the closure return-contract miscompile, 2026-08-29 |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
@@ -369,7 +369,9 @@ diagnostics" but larger than a fallback expression.
 
 ## NUR113 — a dot-sugar access loses its error position when compiled {#nur113}
 
-**Status:** Pending · **Recorded:** 2026-08-29 · **Surfaced by:** writing a
+**Status:** RESOLVED 2026-08-30 (`6f1ee71`) — the module-qualified and
+paren-nested halves. The `/s` sugar chain is a SEPARATE hole and stays open on
+its own task · **Originally**: Pending · **Recorded:** 2026-08-29 · **Surfaced by:** writing a
 corpus row for the `/s` trailing-apply increment; the row exposed this and
 the increment was held back behind it.
 
@@ -612,6 +614,35 @@ is the coverage hole this record also names.
 the compile-or-fallback gate on landing, which is a pin behaving correctly
 and the wrong way to record a finding — the same call made for
 [NUR112](#nur112).
+
+**THE FIX, and placement is the whole of it** (`6f1ee71`). A positionless
+FUNCTION result is stamped with the call's own position at the analysis seam —
+the check-pass equivalent of the interpreter's `stampResultPos` — plus
+`core.WithPosAt`, the twin of `WithPos` for a caller holding a `SrcPos` rather
+than a value to copy from.
+
+It has to happen at the CALLER, after `dispatchRecordOutcome`. Stamping inside
+`CarrierResults` genuinely works — `outPos` becomes `1:20`, verified with the
+print moved after the stamp — and is still useless, because the recorder
+re-IDs the outputs afterwards and the stamped value never reaches the tape.
+
+```
+import "boru:test" Assert.not-equal 3 3
+  before   interp 1:20   compiled "source position unknown"
+  after    interp 1:20   compiled 1:20
+```
+
+**Pinned by `TestDotAccessKeepsSourcePosition`**, which asserts the position is
+PRESENT rather than merely equal — the compile-or-fallback gate cannot catch
+this class, because before the fix the two engines agreed by both being wrong.
+Mutation-checked: 3 failures with the fix stashed, 0 with it restored. Two
+core-side tests carry the standalone gate, which the merged one hides: every
+one of the six statements this added was invisible to `cover-gate-core` until
+they existed, since core's own suite never reaches the check-mode analysis path
+with a module dot-access.
+
+**What is still open:** the `/s` sugar chain (`10 0 m.d/s`) still loses its
+caret. Different mechanism, recorded on its own task.
 
 **What it blocks.** The `/s` trailing-apply increment (3 census rows,
 46 → 43): its fast lane is correct and gate-green on values, but a raising
