@@ -533,6 +533,20 @@ type EmitState struct {
 	Compilable bool
 	Reason     string
 
+	// pendingRegions holds PHASE-A region captures — extent and written-order
+	// Tokens, taken at collection time by tryRecordRegion — keyed by the
+	// (word, position) join the record side shares. Phase B (SlotDesc.Source,
+	// from the operand model) completes them; only a COMPLETED descriptor is
+	// fit to emit, because Phase A leaves every Source at SlotNone and
+	// RegionDesc.Validate rejects that by design.
+	//
+	// A key can be re-captured: the same source position dispatches again on
+	// every loop iteration and every call of an enclosing fn. Overwriting is
+	// correct rather than merely tolerable — RegionDesc is STATIC ("true of
+	// every execution of the region", its own doc), so the extent at one
+	// position does not vary, and the last capture equals the first.
+	pendingRegions map[regionKey]*RegionDesc
+
 	// pendingLoopBind carries a SplitLoopRegionBind verdict to the
 	// RecordDynBind of the same installAndRecordDef call (S5).
 	pendingLoopBind *pendingLoopBind
