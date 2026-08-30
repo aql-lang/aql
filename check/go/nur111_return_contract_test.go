@@ -60,6 +60,13 @@ func TestGeneralisedResidualModelsReturn(t *testing.T) {
 			why:      "module-emitlang.tsv:L93 — a Map param generalises to a concrete {}, which can survive to the residual as a fake return value; length alone would not catch it",
 		},
 		{
+			name:     "a stranded CALLEE disqualifies an all-carrier residual",
+			stk:      []core.Value{carrier(core.TFunction), carrier(core.TInteger), carrier(core.TInteger)},
+			declared: []*core.Type{core.TBoolean, core.TBoolean, core.TBoolean},
+			want:     false,
+			why:      "an unmodelled application can strand ONLY carriers at exactly the declared arity (`def h fn [[g:T a:Integer b:Integer] [Boolean Boolean Boolean] [(g a b)]]`); the fn-typed slot is the callee left behind, and without this arm the gate admits the shape and reports three type_errors",
+		},
+		{
 			name:     "an undeclared (anonymous) fn is never held to a return",
 			stk:      []core.Value{carrier(core.TInteger)},
 			declared: nil,

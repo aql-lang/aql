@@ -68,7 +68,6 @@ keep the two in sync in the same commit.
 |---|-------|--------------------------|
 | [NUR113](#nur113) | RESOLVED 2026-08-30. A dot-sugar access lowered with NO source position, so every opcode downstream recorded `0:0` and the compiled lane rendered "source position unknown" where the interpreter has a caret. Fixed in two halves at one seam — a module export arrives as a positionless `Function`, a dispatch-bearing field read as `dynamic(Any)` — by stamping the call's own position onto both, AFTER `dispatchRecordOutcome` re-IDs the outputs. Five fixes argued from reading the code each failed a gate; four instrumentation rounds each produced a fact | writing a corpus row for the `/s` trailing-apply increment, 2026-08-29 |
 | [NUR112](#nur112) | The checker's residual for a parked native word applied after its name was EXTENDED does not match what runs: `def Pos (refine Integer)  def m {a:size/v}  def size fn [[n:Pos] [Integer] [200]] end  def v:Pos 3  m.a v` is checked `[dynamic(Any) Pos]` — two values, one of them the argument left behind — and actually leaves `[Integer]`. Both ENGINES agree on the answer (3); it is the static model that differs, so no differential can see it — TestCheckTypeSoundness can, and did | writing a corpus row for the parked-native apply gate, 2026-08-29 |
-| [NUR111](#nur111) | RESOLVED 2026-08-30. The DECLARED RETURN of a fn value handed to a higher-order word was checked by nobody statically: `def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v` passed `boru check` clean, while the identical body as a code BLOCK (`each [cbad]`) and the identical fn called directly (`cbad 1`) were both flagged `type_error`. The end-of-pass pending-body drain ANALYSED the body (an undefined word inside it WAS reported) but never held the residual to the declaration — `declared` reaches `AnalyseFnBody` as the recursion hypothesis only, and the matching proof obligation is the interpreter's `__RC` marker, which the callback path never plants. Both ENGINES already raised (the runtime half was fixed in `lang/spec/fn-value.tsv` §13); the CHECKER was silent. Fixed by holding the DRAIN's own residual to the declaration — but only where that residual is a sound model: the generalised pass runs on param CARRIERS, so a CONCRETE slot is either a source literal or an operand stranded by an application it could not perform, and it cannot tell those apart. Gating on "exactly as many slots as declared, every one a carrier" took the false positives from 3 back to 0 and the `fn-value.tsv` unflagged pin from 1 to retired | fixing the closure return-contract miscompile, 2026-08-29 |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases — VERDICT 2026-08-15: WAIT for the ADR-012 `types/go` consolidation to close this through the refinement-base capability; no narrow fix meanwhile | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates — NARROWED 2026-08-15: the escape VOCABULARY is resolved by fix (templates take the quoted-string set: \b \f \v \xNN \uNNNN, and an unknown escape drops its backslash); what remains is the malformed-input REPORTING difference, which needs an error channel the template lexer seam does not have | 2026-07-22 uniformity review |
 | [NUR072](#nur072) | Three sugar kinds (mini, type-bound, lambda) still canon in DEBUG form after NUR059 — withdrawn there because the renders do not round-trip: SugarInfo does not retain the mini delimiter, and type-bound renders its Items rather than the bound's text; also carries the undecided bare-word question (`word(foo)` vs `foo`, 175 corpus rows) | NUR059's fix, 2026-08-15 |
@@ -743,133 +742,18 @@ dispatch as not consuming its argument (`Pos` survives in the residual) and
 to type the result dynamically, where at run time the native sig consumes
 the argument and yields one Integer.
 
-**Scope.** Stage 8 (checker totality). Related to but distinct from
-[NUR111](#nur111): that one was the checker declining to enforce a
-declaration it can see (resolved 2026-08-30), this one is the checker's
-residual disagreeing with the runtime's. Both are the static model, neither is an engine divergence.
+**Scope.** Stage 8 (checker totality). Related to but distinct from the
+retired NUR111 (resolved 2026-08-30, record deleted per this file's
+lifecycle rule): that one was the checker declining to enforce a
+declaration it can see, this one is the checker's residual disagreeing
+with the runtime's. Both are the static model, neither is an engine
+divergence.
 
 **Not pinned in the corpus.** A row for this shape would trip the
 type-soundness pin (0 violations) on landing, which is the correct
 behaviour for a pin and the wrong way to record a finding. The VM gate the
 row was written for is pinned by a handler test instead
 (`core/go/value_classify_stage5_test.go`, `TestParkedNativeApplyGate`).
-
----
-
-## NUR111 — a callback fn value's declared return was checked by nobody {#nur111}
-
-**Status:** RESOLVED 2026-08-30 — both halves · **Recorded:** 2026-08-29
-· **Surfaced by:** fixing the closure return-contract miscompile
-(`lang/spec/fn-value.tsv` §13), whose new `ERROR:` row was the first in
-that file the checker could not flag.
-
-**Rule:** one analysis, one answer. A declaration the checker is
-demonstrably able to enforce is not skipped because of where the
-function was written. This is NUR105 one level down: NUR105 asks
-whether the body is analysed at all, and this asks whether the analysed
-body is held to its own declaration.
-
-**Divergence.** `boru check` reports clean, and the program dies:
-
-```
-$ boru check -e "def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v"
-check: 0 error(s), 0 warning(s), 0 info
-check: List
-
-$ boru -e "def cbad fn [[n:Integer][Boolean][n]] end [1 2] each cbad/v"
-error: each: element 0: [boru/type_error]: cbad: return value 1: expected Boolean, got Integer
-```
-
-**Measured, and the boundary is sharp.** Same `def`, same body, same
-declared return; only the CALL SHAPE varies.
-
-| shape | check names it | runs |
-|---|---|---|
-| `cbad 1` — called directly | yes (`1:35 type_error`) | raises |
-| `[1 2] each [cbad]` — code BLOCK body | yes | raises |
-| `[1 2] each cbad/v` — **fn VALUE callback** | **no** | **raises** |
-| `def cbad … end 1` — never called | no | not called |
-
-The last row is consistent (nothing is reached), and the third is the
-defect. Note it is NOT a coverage hole in the sense NUR105 described:
-the body IS analysed on this path — put an undefined word in it and
-`each cbad/v` reports it. What is missing is the RETURN obligation.
-
-**Why.** The end-of-pass pending-fn-body drain
-(`check/go/check_fnbody.go`) calls `AnalyseFnBody(…, declared, …)` with
-the signature's declared returns for a named fn. But `declared` there is
-only the **recursion hypothesis** — its own doc says so: "an in-flight
-recursive call yields carriers of the DECLARED returns — the end-of-body
-return check is the matching proof obligation". That matching obligation
-is the interpreter's `__RC` ReturnCheck marker, planted by the ordinary
-dispatch path (`fn_frame.go`). The callback path never dispatches the fn
-during the check pass — it hands the value to a higher-order word — so
-no `__RC` is planted and the residual is never compared to `Returns`.
-
-**Not to be confused with the compile half, which is FIXED.** The same
-declaration was also unenforced by the COMPILED engine, which is the
-strictly worse failure — a silent wrong answer (`[1 2]`) against the
-interpreter's raise. That is closed: the contract now rides on the
-closure VALUE (`core.ClosurePayload.RetTypes`, keyed by the pc of the
-`OpPushClosure` that built it) and is checked at `invokeClosureOn`
-against the values the body produced. Both engines now raise
-identically, position included. This record is only about the checker
-still being silent about a program both engines reject.
-
-**Why the contract cannot simply move to the unit.** Recorded here
-because the obvious checker fix has the same trap. The closure UNIT is
-shared by every fn value with an identical body, inputs and captures
-(`check.FnAnalysisKey`), and it is compiled COUNT-AGNOSTIC on purpose —
-the callback seam wants the raw residual, and the calling WORD's count
-convention is not the CALLBACK's type contract. Giving the unit a
-contract needs a per-fn memo key, and a distinct key ALONE (carrying no
-contract at all) was measured to make a shared unit recompile and refuse
-on operand provenance: the census went 49 → 54, `filter A.big` became
-`compile_refused`, and a CONFORMING `fold f/v` islanded
-(`TestListFoldCallbackOrderPin`). Any checker fix has to hold the
-residual to the VALUE's declaration without disturbing the unit's key.
-
-**The fix, and the wall it hit first.** The drain already had the
-residual; it threw it away. Capturing it and calling
-`checkBodyReturnConformance` — the same mirror the dispatch path runs —
-flags the callback row immediately. It also produced **three false
-positives** on correct corpus rows, which is the more interesting half:
-
-| row | residual | why it is not a return |
-|---|---|---|
-| `fnsig.tsv:L49` `def h fn g:(fnsig Integer String) String [(g 5)]` | `[dynamic(Any) 5]` | `g` is a carrier, so the call is not modelled and the literal `5` is stranded |
-| `fnsig.tsv:L50` `def h fn g:T Integer [(g 2 3)]` | `[T 2 3]` | same, three slots for one declared return |
-| `module-emitlang.tsv:L93` `def px fn [[value:Any opts:Map] [String] …]` | `[{}]` | a `Map` param generalises to a CONCRETE `{}`, which survives to the residual as a fake return |
-
-The generalised residual is not a return model in general — which is why
-the dispatch path runs the mirror on its real-argument residual and never
-on the `stkGen` one sitting beside it. What separates the two groups is
-measurable: the drain analyses against param CARRIERS, so a slot it
-genuinely derived is a carrier, while a CONCRETE slot is either a source
-literal or an operand stranded by an application the analysis could not
-perform — and the drain cannot distinguish those. So
-`generalisedResidualModelsReturn` admits only *exactly as many slots as
-the declaration, every one a carrier*. False positives went back to
-**0/6353**, and `fn-value.tsv`'s unflagged pin retired.
-
-The cost is named rather than hidden: a body returning a source LITERAL
-against a contradictory declaration is no longer held to it by this seam.
-The dispatch path still catches it wherever the fn is called, and silence
-is the right failure direction for a checker.
-
-**The widening, made deliberately.** The drain runs for every named fn,
-so the fourth row above — an uncalled `def` whose body contradicts its
-declaration — is now flagged too. That is the change this record
-anticipated, and it is right: a body that can never satisfy its
-declaration is a static error wherever it sits. It is pinned in
-`test/go/langspec/nur111_callback_return_test.go` rather than the corpus
-on purpose — the program RUNS fine, so a spec row for it would register
-as a checker false positive in `TestCheckAccuracyRatchet`'s model, and
-there is no honest pin value for it there.
-
-**Scope.** Was Stage 8 (checker totality) of
-`design/FULL-COMPILATION.0.md`: the mandate is that the check aligns with
-both engines, and here both engines agreed while the checker did not.
 
 ---
 

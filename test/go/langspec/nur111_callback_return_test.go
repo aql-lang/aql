@@ -66,6 +66,15 @@ func TestGeneralisedResidualStaysSilent(t *testing.T) {
 			"a Map param's concrete stand-in survives to the residual",
 			`import "boru:emitlang"  def px fn [[value:Any opts:Map] [String] [(opts get 'p') add (emit value)]]  emit px {p:'X:'} {a:1}`,
 		},
+		{
+			// Raised in review on #414: an unmodelled application can strand
+			// ONLY carriers, and at exactly the declared arity, so neither
+			// the concrete check nor the length check sees it. The stranded
+			// CALLEE is what gives it away. Without that arm this reports
+			// three type_errors here.
+			"an unmodelled application strands only carriers at the declared arity",
+			`def T (fnsig [[Integer Integer] [Boolean Boolean Boolean]])  def h fn [[g:T a:Integer b:Integer] [Boolean Boolean Boolean] [(g a b)]]  1`,
+		},
 	}
 
 	for _, tc := range cases {

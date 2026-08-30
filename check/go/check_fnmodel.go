@@ -381,18 +381,33 @@ func posBefore(row, col int, p core.SrcPos) bool {
 //
 // Both leave a CONCRETE value in the residual, and neither is distinguishable
 // here from a body that honestly returns a literal — so a concrete slot
-// disqualifies the whole residual. What remains is the case the analysis
-// definitely derived: exactly as many slots as the declaration, every one a
-// carrier propagated from a param through the body's own operations. A body
-// returning a source literal is thereby NOT held to its declaration by this
-// seam; the dispatch path still catches it wherever the fn is actually
-// called, and silence is the right failure direction for a checker.
+// disqualifies the whole residual.
+//
+// Length alone would not catch the second shape, and carrier-ness alone would
+// not catch a third: when an unmodelled application strands only CARRIERS and
+// their count happens to equal the declared count, every slot is a carrier at
+// exactly the right arity. What gives that shape away is the stranded CALLEE
+// — the fn-typed operand the analysis could not apply is still sitting in the
+// residual — so an fn-typed carrier slot disqualifies it too. This is a
+// conservative proxy for provenance, not a proof: carrier-ness genuinely does
+// not distinguish a derived return from a stranded operand, and closing that
+// properly needs the analysis to report whether it modelled the application.
+// Until it does, the cost of the proxy is a lost detection (a body declared to
+// return a NON-fn type that really does produce an fn value), never a false
+// rejection.
+//
+// What remains is the case the analysis definitely derived: exactly as many
+// slots as the declaration, every one a non-fn carrier propagated from a param
+// through the body's own operations. A body returning a source literal is
+// thereby NOT held to its declaration by this seam; the dispatch path still
+// catches it wherever the fn is actually called, and silence is the right
+// failure direction for a checker.
 func generalisedResidualModelsReturn(stk []core.Value, declared []*core.Type) bool {
 	if len(declared) == 0 || len(stk) != len(declared) {
 		return false
 	}
 	for i := range stk {
-		if core.IsConcrete(stk[i]) {
+		if core.IsConcrete(stk[i]) || core.IsFnTypedCarrier(stk[i]) {
 			return false
 		}
 	}
