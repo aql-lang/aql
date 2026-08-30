@@ -862,6 +862,62 @@ change as costly. Only the interleaved A/B above is load-fair, and the
 +9.9% figure is that one. A performance number from a file measured under a
 different machine load is not a measurement.
 
+**WHERE A REGION DISPATCH MAY BE USED IS CONSTRAINED BY THE LANGUAGE, not
+just by what the descriptor can express.** A first executing slice was built
+end to end — descriptor claim, routing predicate, `OpDispatchRegion`, a VM
+path modelled on `callPolyIn` — and it worked: `10 sub 3` lowered to
+
+```
+0000 PUSH_CONST  k1   ; 10 (Integer)
+0001 DISPATCH_REGION r0   ; sub fwd=1/2 slots=1 (region)
+```
+
+one push for the stack half, the forward operand `3` taken from the
+descriptor, answering 7. It was reverted anyway, because two tests that were
+doing their job said the target was wrong.
+
+`TestEmitSplitFormsIdentical` (`lang/go/bytecode_emit_test.go`) states the
+rule: *"One split rule, one bytecode per ASSIGNMENT: every split of the same
+sig-order assignment lowers identically."* `1 add 2`, `1 2 add` and
+`add 2 1` all assign sig[0]=2, sig[1]=1, and must produce the same program.
+CLAUDE.md says the same thing at language level — *"a call form only chooses
+where the split falls"* — so the forward/stack split is SURFACE SYNTAX, and
+the compiler deliberately normalises it away.
+
+A region descriptor carries that split, in `NFwd`. Routing a forward or
+mixed dispatch and leaving the stack-only form on `CALL_NATIVE` therefore
+lets syntax survive into the bytecode, and the three spellings diverge. This
+is not fixable by widening the routing: a stack-only dispatch has no region
+to capture (a region IS a forward-collecting dispatch), and synthesising an
+empty one still yields a different push sequence. The only shape that
+preserves the rule is to push every operand as before and use the descriptor
+solely for re-derivation — which spends a live lookup and a live match on
+every dispatch to buy nothing the baked signature was not already giving.
+
+**So the target is not "dispatches that can be described". It is dispatches
+the ordinary lowering CANNOT HANDLE** — §6.5's rebind-staleness latches,
+where the compiler today DECLINES rather than risk a stale binding
+(`emit.go:2474`, "module binding k rebound after a fn unit baked its
+value"). There the split is genuinely value-dependent, the invariant above
+does not apply because there is no compiled form to be identical to, and the
+live re-derivation buys exactly what it costs. `region_desc.go`'s `k` pair is
+the acceptance test for precisely those sites, and it is worth re-reading as
+a statement about WHICH sites rather than about mechanism.
+
+Two further facts from that slice, both worth keeping:
+
+- **A routed call must be a PLAIN dispatch.** `lowerCall`'s special forms
+  (typed bind, dyn-apply, drift window, dyn-method, make-list, make-map,
+  splice, interpolation, XML) each build their own operand window, so
+  changing the layout under one of them removes values its opcode still
+  expects. Measured as a wrong ANSWER rather than a crash: a corpus
+  assertion came back "expected 3, got 2".
+- **A MODULE-QUALIFIED dispatch cannot route on a bare word.** A module word
+  re-matches over its OWN sub-registry's signatures — `PolyRef` carries that
+  registry for exactly this reason — while a descriptor names only the word.
+  Resolving it against the dispatch registry finds the wrong overload set or
+  none, and the module-gate parity tests catch it.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this
