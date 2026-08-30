@@ -559,18 +559,9 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 			r.Defs.Pop(genNames[i])
 		}
 		if genSpec == nil {
-			var retPos core.SrcPos
-			if len(bodyCopy) > 0 {
-				retPos = bodyCopy[0].Pos()
-			}
-			unnamedCount := 0
-			for _, p := range sigParams {
-				if p.Name == "" {
-					unnamedCount++
-				}
-			}
 			checkBodyReturnConformance(r, nameCopy, declaredReturns, declaredReturnPatterns,
-				unnamedCount, allConcreteArgs(args), stk, retPos, bodySpanEnd(bodyCopy))
+				unnamedParamCount(sigParams), allConcreteArgs(args), stk,
+				bodyStartPos(bodyCopy), bodySpanEnd(bodyCopy))
 		}
 		if len(declaredReturns) > 0 {
 			out := make([]core.Value, len(declaredReturns))
@@ -905,8 +896,31 @@ func checkFnBodyAtConstruction(r *core.Registry, name string, fnDef core.FnDefIn
 		// diagnostics-only contract this pass needs.
 		restore := r.Check.IsolateEmit()
 		before := len(r.Check.Diagnostics)
-		AnalyseFnBody(r, name, paramNames, s.Body(), genArgs, fnDef.Captured, declared, fnDef.Anonymous)
+		stk := AnalyseFnBody(r, name, paramNames, s.Body(), genArgs, fnDef.Captured, declared, fnDef.Anonymous)
 		restore()
+		// NUR111: hold the analysed body to its OWN declaration. The dispatch
+		// path runs this same mirror when it analyses a CALL, so a fn that is
+		// called is covered; a fn VALUE handed to a higher-order word
+		// (`[1 2] each cbad/v`) never dispatches during the pass, and without
+		// this its declared return is enforced by nobody statically while both
+		// engines raise. One analysis, one answer: the body reached here has
+		// already been analysed, so this adds an obligation, not a pass.
+		//
+		// argsConcrete is FALSE by construction: genArgs are the declared
+		// params' carriers, not a call's real values. That keeps the
+		// empty-residual "the call always errors" arm — which is sound only
+		// for a concrete-argument call — with the dispatch path, and leaves
+		// this seam reporting exactly the provably-impossible returns.
+		//
+		// The gate is what makes that sound: a residual from CARRIER args is
+		// not a return model whenever the analysis could not perform an
+		// application, because the operands it already pushed stay behind.
+		// generalisedResidualModelsReturn spells out the two shapes and the
+		// three corpus rows that proved them.
+		if generalisedResidualModelsReturn(stk, declared) {
+			checkBodyReturnConformance(r, name, declared, s.ReturnPatterns,
+				unnamedParamCount(s.Params), false, stk, bodyStartPos(s.Body()), bodySpanEnd(s.Body()))
+		}
 		// A SPECULATIVE analysis that cannot run reports nothing. The
 		// end-of-pass drain analyses bodies nobody asked about — fn values
 		// nothing ever named (NUR105) — and it analyses them in ISOLATION,

@@ -360,6 +360,69 @@ func posBefore(row, col int, p core.SrcPos) bool {
 	return row < p.Row || (row == p.Row && col < p.Col)
 }
 
+// generalisedResidualModelsReturn reports whether a GENERALISED body
+// analysis — one run against the declared params' carriers rather than a
+// call's real arguments — produced a residual sound enough to hold the body
+// to its declared return (NUR111).
+//
+// It is deliberately narrow, because the generalised residual is NOT a return
+// model in general; that is why the dispatch path runs the conformance mirror
+// on its real-argument residual and never on the `stkGen` one beside it. Two
+// ways the generalised analysis leaves something on the stack that is not a
+// return:
+//
+//   - It could not perform an application, and the operands it had already
+//     pushed stay behind. `def h fn g:(fnsig Integer String) String [(g 5)]`
+//     residuals as [dynamic(Any) 5] — `g` is a carrier, so the call is not
+//     modelled and the literal 5 is stranded, not returned.
+//   - A param carrier is itself a concrete stand-in. A `Map` param generalises
+//     to a concrete `{}`, so a body reading it computes over the empty map and
+//     the stand-in can survive to the residual as a fake return value.
+//
+// Both leave a CONCRETE value in the residual, and neither is distinguishable
+// here from a body that honestly returns a literal — so a concrete slot
+// disqualifies the whole residual. What remains is the case the analysis
+// definitely derived: exactly as many slots as the declaration, every one a
+// carrier propagated from a param through the body's own operations. A body
+// returning a source literal is thereby NOT held to its declaration by this
+// seam; the dispatch path still catches it wherever the fn is actually
+// called, and silence is the right failure direction for a checker.
+func generalisedResidualModelsReturn(stk []core.Value, declared []*core.Type) bool {
+	if len(declared) == 0 || len(stk) != len(declared) {
+		return false
+	}
+	for i := range stk {
+		if core.IsConcrete(stk[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// bodyStartPos is the position a return-contract diagnostic anchors on: the
+// body's FIRST token. It pairs with bodySpanEnd to bound the body's source
+// span, and is the position the interpreter's ReturnCheck reports from, so
+// the check and runtime surfaces agree. Zero for an empty body.
+func bodyStartPos(body []core.Value) core.SrcPos {
+	if len(body) == 0 {
+		return core.SrcPos{}
+	}
+	return body[0].Pos()
+}
+
+// unnamedParamCount is a signature's count of UNNAMED params — the fn's
+// unconsumed unnamed-arg allowance, which the return-count mirror subtracts
+// before calling a residual too long (see checkBodyReturnConformance).
+func unnamedParamCount(params []core.FnParam) int {
+	n := 0
+	for i := range params {
+		if params[i].Name == "" {
+			n++
+		}
+	}
+	return n
+}
+
 // bodySpanEnd walks a parsed fn body's tokens (paren exprs, reaches, lists,
 // map values — the exprRefsCarrier shapes) and returns the maximum source
 // position seen, i.e. the start of the body's LAST token at any depth.

@@ -91,19 +91,6 @@ var unflaggedPins = map[string]int{
 	// check optimistically (the tree lattice cannot refute it) and the
 	// as handler's runtime validation raises as_error over the concrete
 	// Integer.
-	// fn-value.tsv: ONE row, §13's `[1 2] each cbad/v`, and the pin is
-	// HONEST about what it is — not an error the checker cannot decide, but
-	// one it declines to look for. NUR111: the end-of-pass pending-body drain
-	// ANALYSES the callback body (an undefined word inside it IS reported) and
-	// passes the declared returns to AnalyseFnBody as the RECURSION HYPOTHESIS
-	// only; the matching proof obligation is the interpreter's __RC marker,
-	// which the ordinary dispatch path plants and the callback path never
-	// does. Measured boundary: the same fn called directly (`cbad 1`) and the
-	// same body as a code BLOCK (`each [cbad]`) are both flagged. Both ENGINES
-	// raise on this row — the compiled half was the silent wrong answer this
-	// pin's commit fixed — so the divergence left is checker-only, and it is
-	// Stage 8 work. Retiring NUR111 retires this entry.
-	"fn-value.tsv":          1,
 	"as.tsv":                2,
 	"case.tsv":              2,
 	"class.tsv":             1,
@@ -221,7 +208,8 @@ var unflaggedPins = map[string]int{
 	// by zero reached through a parked native. The divisor is a plain Integer
 	// literal, and whether dividing by it errors is a fact about its VALUE, not
 	// its type; the checker types the row and stops there. Genuinely
-	// undecidable statically, unlike the fn-value.tsv pin above it.
+	// undecidable statically — unlike the retired fn-value.tsv entry, which
+	// pinned an error the checker merely declined to look for (NUR111).
 	//
 	// It is in the corpus for its DIAGNOSTIC, not its taxonomy: both engines
 	// have always agreed this raises arith_error, and what the row pins is that
