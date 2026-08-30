@@ -975,6 +975,37 @@ right replacement for that island precisely because such a program has no
 ordinary compiled form to be identical to — the split-identity rule above
 does not bind, and the live re-derivation is the whole point.
 
+**THE ISLAND TARGET, NAMED DOWN TO THE ROW.** The interpreter-entry census
+(7638 rows, 7215 compiled, 43 with unattributed entries, ceiling 43) puts
+`vm:island` at 12 entries and `vm:island-resolved` at 8. Its largest single
+file cluster is `path-modifier.tsv` — **7 rows, every one of them islanding**
+— and with `BORU_LOG_CENSUS_ROWS=1` they are:
+
+```
+L17  def m {a:add/v} end  m.a/u 1 2
+L18  def m {s:sub/v} end  m.s/u 10 3
+L19  def o {m:{a:add/v}} end  o.m.a/u 1 2
+L20  def m {a:add/v} end  (m.a)/u 1 2
+L52  def m {s:sub/v} end  usurp (forward-args (m.s)) 10 3
+L53  def m {s:sub/v} end  force-arity 2 (usurp (m.s)) 10 3
+L55  def m {a:add/v} end  force-arity 2 (usurp (forward-args (m.a))) 1 2
+```
+
+One shape, seven spellings: **a fn value read out of a container, dispatched
+under a modifier** (`/u`, `forward-args`, `force-arity`). That is exactly the
+"fn value in a container at the pointer" mechanism the census attribution
+assigns to Stage 4, and exactly what `emit.go`'s stamping note predicted —
+*"of the island rows this seam leaves, roughly four in five are a fn read out
+of a container … `def m {a:add/v}  m.a/u 1 2`"*. L17 is that example
+verbatim.
+
+The modifier is what makes them collection problems rather than apply
+problems: `/u` reverses the signature's argument order and `force-arity`
+changes how many operands the dispatch claims, so the split is decided by
+the modifier at the dispatch site rather than by the recorded match. A
+descriptor is the right carrier for that, and the island is what stands in
+for it today.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this
