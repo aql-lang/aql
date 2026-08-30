@@ -473,12 +473,30 @@ Three things the record did not have.
    three raise CondBodyDepth through the same `native_array.go` seam. Whatever
    `filter` does differently is the mechanism to copy.
 
-3. **The default CLI path is SAFE and that is not a reason to relax.** `boru
-   run` does a check pre-flight, which catches this and refuses; the miscompile
-   is reached through `-no-check`, and through any embedder that calls
-   `CompileCheck` and trusts its (empty) diagnostics. The second is the real
-   exposure: the compile pass does not merely fail to refuse, it fails to
-   REPORT.
+3. **CORRECTION, same day: the default CLI path is NOT safe.** The first
+   version of this note said `boru run`'s check pre-flight catches it. That was
+   measured only on the record's own CONSTANT-condition shape, where the
+   `unreachable_branch` analysis happens to also emit `undefined_word` — the
+   benign case, which masked the general one. With a condition the checker
+   cannot fold, nothing fires anywhere:
+
+   ```
+   def f fn [[n:Integer][Boolean][n gt 5]]  if (f 1) [def op 1] [0] end op
+
+   boru check             0 error(s), 0 warning(s), 0 info
+   boru run               0 1                                    <- compiled
+   boru run -no-compile   [boru/undefined_word]: undefined word: op
+   ```
+
+   So this is a SILENT WRONG ANSWER on the default path, with no diagnostic on
+   any lane — the class this project ranks above every refusal. It is not an
+   `-no-check` curiosity.
+
+   Worth keeping as a method note: the record supplied `if false`, and
+   measuring only what a record hands you reproduces its blind spot. The
+   constant-condition shapes are the ones where a SECOND analysis (the
+   unreachable-branch pass) independently notices the unbound name; they say
+   nothing about whether the binding leak is caught.
 
 ---
 
