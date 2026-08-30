@@ -63,7 +63,7 @@ func TestW9TransplantExtensionAllForwardBarrier(t *testing.T) {
 			Impl:   Boru([]Value{NewWord("a")}),
 		}},
 	})
-	// A host-authored clone with an all-forward barrier: TransplantExtension
+	// A host-authored clone with an all-forward Barrier: TransplantExtension
 	// resolves BarrierAllForward to the sig's arg count. We only require it to
 	// run without panicking (merge outcome is incidental to this arm).
 	_ = TransplantExtension(r, FnDefInfo{

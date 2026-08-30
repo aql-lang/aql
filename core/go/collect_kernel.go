@@ -5,7 +5,7 @@ package core
 //
 // Forward collection is not one algorithm. It is THREE loops over the same
 // tokens with three different stop-condition sets and three different
-// position countings: the phase-1 plan walk (collectForward here, once per
+// position countings: the phase-1 plan walk (CollectForward here, once per
 // dispatch, over the UNION of viable barriers — it EVALUATES), the
 // per-candidate scan inside MatchSignature (once per candidate signature,
 // over that signature's OWN BarrierPos — it CLASSIFIES), and the arrival
@@ -41,23 +41,27 @@ package core
 //     window is live-length and the walk re-reads Len() after every
 //     mutation instead of trusting a computed extent.
 //
-// Scope note. Today the interpreter is the sole implementation of the HOST
-// half: *Engine, with its *Tape as the window. The WINDOW half is exported
-// (Stage 4) because the region recorder walks a window it does not host —
-// it reads tokens and their extent to build a descriptor, and never
-// evaluates — so it needs the window type without needing collectHost. The
-// host half stays unexported until the VM adapter that implements it lands
-// with OpCollect; exporting it earlier would put an unused public API on
-// *Engine, which is what this note warned against. The VM's region-descriptor
-// adapter is the second, and it arrives WITH ITS CLIENT in Stage 4, not
-// before — core/go is held to 100% coverage BY ITS OWN SUITE
-// (cover-gate-core), so a seam arm only the VM adapter reaches would be
-// dead code in core's profile and fail the gate. The host methods are
-// unexported for exactly that reason: nothing outside core can implement
-// this yet, and pretending otherwise would put an unused public API on
-// *Engine. Stage 4 exports the interface, its methods, and the two helper
-// types they name (viableSig, fwdKind) when the second implementation
-// makes that real.
+// Scope note. The seam is EXPORTED as of Stage 4: CollectHost, its methods,
+// the three loop entry points, and the helper types they name (ViableSig,
+// FwdKind). The interpreter is one implementation — *Engine, with its *Tape
+// as the window — and the VM's region-descriptor adapter is the second.
+//
+// Why exporting the INTERFACE is the right shape, and a func-struct is not.
+// core/go is held to 100% coverage BY ITS OWN SUITE (cover-gate-core), so
+// the question is what each option costs in core statements. Exporting the
+// interface RENAMES methods that already exist on *Engine and are already
+// covered: zero new statements. A struct of function fields would add one
+// delegator per method — statements core's own suite would then have to
+// cover for a seam only an outside caller uses. An earlier note here
+// recommended the func-struct on a coverage argument that was exactly
+// backwards; this is the correction.
+//
+// The constraint that note was really defending still holds and is not this
+// one: no arm of the SHARED ROUTINES below may exist only for the VM. A
+// branch core's own suite cannot reach is dead code in its profile and
+// fails the gate, whoever calls it. Exporting the seam does not create such
+// an arm — the adapter lives in eng and is covered by eng's tests driving
+// these same entry points.
 
 // CollectWindow is the token window a collection walk reads and mutates: a
 // live-length, spliceable sequence, NOT a frozen slot array. The
@@ -76,62 +80,62 @@ type CollectWindow interface {
 	Remove(i int)
 }
 
-// collectHost is the evaluator half of the seam: what a collection walk
+// CollectHost is the evaluator half of the seam: what a collection walk
 // cannot do for itself. The two groups are deliberately distinct — the
 // EVALUATIONS mutate the window and may raise, the CLASSIFICATIONS are pure
 // questions about a token against the live binding set — because the second
 // implementation builds them from different material.
-type collectHost interface {
-	// collectWindow is the token window this host collects over.
-	collectWindow() CollectWindow
+type CollectHost interface {
+	// Window is the token window this host collects over.
+	Window() CollectWindow
 
 	// --- evaluations: these mutate the window and may raise ---
 
-	// evalGroupAt collapses the paren group whose OpenParen sits at i, in
+	// EvalGroupAt collapses the paren group whose OpenParen sits at i, in
 	// place, to its result value(s).
-	evalGroupAt(i int) error
-	// evalInterp evaluates an interpolated template string to its String
+	EvalGroupAt(i int) error
+	// EvalInterp evaluates an interpolated template string to its String
 	// value. It does not write the window; the caller does.
-	evalInterp(tok Value) (Value, error)
-	// evalXml evaluates an interpolated XML literal to its Node/Xml value.
+	EvalInterp(tok Value) (Value, error)
+	// EvalXml evaluates an interpolated XML literal to its Node/Xml value.
 	// It does not write the window; the caller does.
-	evalXml(tok Value) (Value, error)
-	// expandSugarAt lowers a sugar marker at i in place, reporting whether
+	EvalXml(tok Value) (Value, error)
+	// ExpandSugarAt lowers a sugar marker at i in place, reporting whether
 	// it expanded (false means the marker is a boundary). A lowering that
 	// is a function of the marker ALONE may commit; one that is a function
 	// of the VIABLE SET may not, which is why the viable slice is a
 	// parameter rather than host state.
-	expandSugarAt(tok Value, pos, i int, viable []viableSig) (bool, error)
-	// flowInterrupted reports whether flow control (break / continue /
+	ExpandSugarAt(tok Value, pos, i int, viable []ViableSig) (bool, error)
+	// FlowInterrupted reports whether flow control (break / continue /
 	// return) was raised inside an evaluation, which abandons the walk to
 	// the enclosing frame.
-	flowInterrupted() bool
-	// scratchParenSpan wraps items in paren markers using the host's
+	FlowInterrupted() bool
+	// ScratchParenSpan wraps items in paren markers using the host's
 	// reusable span buffer — valid only until the caller splices it.
-	scratchParenSpan(items []Value) []Value
+	ScratchParenSpan(items []Value) []Value
 
 	// --- classifications: pure questions against the live binding set ---
 
-	// defTop resolves a name to its active binding, if any.
-	defTop(name string) (Value, bool)
-	// isFnWordBarrier reports whether tok is a bare function word acting as
+	// DefTop resolves a name to its active binding, if any.
+	DefTop(name string) (Value, bool)
+	// IsFnWordBarrier reports whether tok is a bare function word acting as
 	// a forward-collection barrier.
-	isFnWordBarrier(tok Value) bool
-	// isReachCallHead reports whether a reach-collapsed named fn at i is a
+	IsFnWordBarrier(tok Value) bool
+	// IsReachCallHead reports whether a reach-collapsed named fn at i is a
 	// CALL head rather than an operand — the fn-word barrier's value twin
 	// (NUR038).
-	isReachCallHead(tok Value, viable []viableSig, pos, i int) bool
-	// staticForwardType classifies a token by what it presents to signature
+	IsReachCallHead(tok Value, viable []ViableSig, pos, i int) bool
+	// StaticForwardType classifies a token by what it presents to signature
 	// matching WITHOUT evaluation.
-	staticForwardType(tok Value) (Value, fwdKind)
-	// lookupWord resolves a name to its function binding, if any.
-	lookupWord(name string) *FnDefInfo
-	// reachFnWouldClaim reports whether a reach-read fn at i would collect
+	StaticForwardType(tok Value) (Value, FwdKind)
+	// LookupWord resolves a name to its function binding, if any.
+	LookupWord(name string) *FnDefInfo
+	// ReachFnWouldClaim reports whether a reach-read fn at i would collect
 	// from the tokens after it — the call-vs-data decision.
-	reachFnWouldClaim(tok Value, i int) bool
-	// expandSugarTokens lowers a sugar marker to its tokens WITHOUT writing
+	ReachFnWouldClaim(tok Value, i int) bool
+	// ExpandSugarTokens lowers a sugar marker to its tokens WITHOUT writing
 	// the window; the caller splices. head selects the binder's name form.
-	expandSugarTokens(sinfo SugarInfo, tok Value, head bool) ([]Value, error)
+	ExpandSugarTokens(sinfo SugarInfo, tok Value, head bool) ([]Value, error)
 }
 
 // The interpreter's seat, asserted at compile time: *Engine is the host and
@@ -139,11 +143,11 @@ type collectHost interface {
 // sibling; until then this is what makes "the Engine is re-seated on the
 // kernel" a fact the compiler checks rather than a claim in a comment.
 var (
-	_ collectHost   = (*Engine)(nil)
+	_ CollectHost   = (*Engine)(nil)
 	_ CollectWindow = (*Tape)(nil)
 )
 
-// collectForward is the PHASE-1 plan walk, seated on the seam: once per
+// CollectForward is the PHASE-1 plan walk, seated on the seam: once per
 // dispatch, over the union of the viable signatures' barriers, evaluating
 // the groups a still-viable overload consumes and pruning the viable set on
 // what it finds. start is the first window index after the dispatching word.
@@ -151,12 +155,12 @@ var (
 // It is the first of the three loops to be re-seated; the per-candidate scan
 // and the arrival loop follow separately, because a differential failure has
 // to name one re-seat to be worth anything.
-func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
-	win := h.collectWindow()
+func CollectForward(h CollectHost, fn *FnDefInfo, w WordInfo, start int) error {
+	win := h.Window()
 	// Forward-eligible signatures paired with their effective barrier
 	// (the /s and /f modifiers override the declared BarrierPos, mirroring
 	// matchSignature's forwardLimit computation).
-	viable := make([]viableSig, 0, len(fn.Signatures))
+	viable := make([]ViableSig, 0, len(fn.Signatures))
 	maxBarrier := 0
 	for si := range fn.Signatures {
 		sig := &fn.Signatures[si]
@@ -165,7 +169,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		}
 		barrier := effectiveForwardLimit(sig, w)
 		if barrier > 0 {
-			viable = append(viable, viableSig{sig, barrier})
+			viable = append(viable, ViableSig{Sig: sig, Barrier: barrier})
 			if barrier > maxBarrier {
 				maxBarrier = barrier
 			}
@@ -193,10 +197,10 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		kept := viable[:0]
 		for _, vs := range viable {
 			keep := true
-			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) {
-				if et := SigArgType(vs.sig, pos); !et.Equal(TAny) && !SigArgMatches(vs.sig, pos, v) {
+			if pos < vs.Barrier && !sigRawSlot(vs.Sig, pos) {
+				if et := SigArgType(vs.Sig, pos); !et.Equal(TAny) && !SigArgMatches(vs.Sig, pos, v) {
 					keep = false
-				} else if forwardPatternRejects(vs.sig, pos, v) {
+				} else if forwardPatternRejects(vs.Sig, pos, v) {
 					keep = false
 				}
 			}
@@ -225,9 +229,9 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		kept := viable[:0]
 		for _, vs := range viable {
 			keep := true
-			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) &&
-				!(vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos]) &&
-				forwardPatternRejects(vs.sig, pos, v) {
+			if pos < vs.Barrier && !sigRawSlot(vs.Sig, pos) &&
+				!(vs.Sig.QuoteArgs != nil && vs.Sig.QuoteArgs[pos]) &&
+				forwardPatternRejects(vs.Sig, pos, v) {
 				keep = false
 			}
 			if keep {
@@ -244,7 +248,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 	pruneResolvedPatterns := func(pos int, tok Value) {
 		if IsWord(tok) {
 			if wi, werr := AsWord(tok); werr == nil {
-				if top, ok := h.defTop(wi.Name); ok {
+				if top, ok := h.DefTop(wi.Name); ok {
 					prunePatterns(pos, top)
 				}
 			}
@@ -269,7 +273,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		// boundary; a selected-head expansion failure is the user's
 		// syntax error, surfaced now.
 		if IsSugar(tok) {
-			expanded, serr := h.expandSugarAt(tok, pos, scanIdx, viable)
+			expanded, serr := h.ExpandSugarAt(tok, pos, scanIdx, viable)
 			if serr != nil {
 				return serr
 			}
@@ -298,12 +302,12 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 			if !viableConsumes(pos) {
 				break
 			}
-			if err := h.evalGroupAt(scanIdx); err != nil {
+			if err := h.EvalGroupAt(scanIdx); err != nil {
 				return err
 			}
 			// Flow-control raised inside the paren: let the outer Run
 			// frame resolve it (parity with the former preEvalParens).
-			if h.flowInterrupted() {
+			if h.FlowInterrupted() {
 				return nil
 			}
 			// The paren collapsed to its result value(s) at scanIdx; count
@@ -327,7 +331,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 			// (`usurp (m dot a)` — the higher-order consumer wants the
 			// fn itself; Any slots stay barred).
 			res := win.At(scanIdx)
-			if h.isReachCallHead(res, viable, pos, scanIdx) {
+			if h.IsReachCallHead(res, viable, pos, scanIdx) {
 				break
 			}
 			pruneResolvedPatterns(pos, res)
@@ -348,7 +352,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 			if !viableConsumes(pos) {
 				break
 			}
-			result, err := h.evalInterp(tok)
+			result, err := h.EvalInterp(tok)
 			if err != nil {
 				return err
 			}
@@ -367,7 +371,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 			if !viableConsumes(pos) {
 				break
 			}
-			result, err := h.evalXml(tok)
+			result, err := h.EvalXml(tok)
 			if err != nil {
 				return err
 			}
@@ -393,7 +397,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 				continue
 			}
 			peItems, _ := AsParenExpr(tok)
-			win.Splice(scanIdx, 1, h.scratchParenSpan(peItems)...)
+			win.Splice(scanIdx, 1, h.ScratchParenSpan(peItems)...)
 			continue
 		}
 
@@ -438,7 +442,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		// the splice — see bindsReferent).
 		if IsWord(tok) && viableConsumes(pos) && !bindsReferent(fn.Name) && !capturesForwardToken(fn, pos, tok) {
 			if wi, werr := AsWord(tok); werr == nil {
-				if top, ok := h.defTop(wi.Name); ok && IsSplice(top) {
+				if top, ok := h.DefTop(wi.Name); ok && IsSplice(top) {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
 						pe := NewParenExpr([]Value{tok})
 						pe.pos = tok.pos
@@ -467,7 +471,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		// `undef foo`, a raw/form/type slot, a matching KEYWORD literal like
 		// def's `fn`) — there the function word is the argument, not a
 		// barrier, and the scan must walk past it.
-		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) && h.isFnWordBarrier(tok) {
+		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) && h.IsFnWordBarrier(tok) {
 			break
 		}
 
@@ -476,7 +480,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		// CLAIM its next token is a CALL head — the fn-word barrier's
 		// value twin (NUR038): stop. A claim-less one is an operand, and
 		// so is one filling a FUNCTION slot of the collecting word.
-		if h.isReachCallHead(tok, viable, pos, scanIdx) {
+		if h.IsReachCallHead(tok, viable, pos, scanIdx) {
 			break
 		}
 
@@ -486,7 +490,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 		// un-pruned (their matchSignature treatment is contextual) but are
 		// still counted as one resolved position — so, exactly like the
 		// former scan, groups beyond a NON-FUNCTION word remain reachable.
-		if mt, kind := h.staticForwardType(tok); kind == fwdValue {
+		if mt, kind := h.StaticForwardType(tok); kind == FwdValue {
 			pruneViable(pos, mt)
 		} else if IsWord(tok) {
 			// A def-bound word's TYPE stays un-pruned (contextual), but
@@ -504,7 +508,7 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 	return nil
 }
 
-// collectCandidateScan is the PER-CANDIDATE scan, seated on the seam: once
+// CollectCandidateScan is the PER-CANDIDATE scan, seated on the seam: once
 // per candidate signature, over THAT signature's own forward limit, it
 // CLASSIFIES the tokens a match would claim and records where each one
 // landed. It is the loop that actually matches, and — unlike the phase-1
@@ -534,8 +538,8 @@ func collectForward(h collectHost, fn *FnDefInfo, w WordInfo, start int) error {
 // host methods for the same reason: a seam method that only one arm calls,
 // under a condition the rest of the walk does not reach, is a method whose
 // only proof of life is that one arm.
-func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, positions []int, start int, checkActive, compiling bool) (fwd, specAt int) {
-	win := h.collectWindow()
+func CollectCandidateScan(h CollectHost, sig *Signature, forwardLimit int, positions []int, start int, checkActive, compiling bool) (fwd, specAt int) {
+	win := h.Window()
 	specAt = -1
 	scanIdx := start
 
@@ -595,7 +599,7 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 			}
 
 			// Defined word: resolves to its def type.
-			if top, ok := h.defTop(ww.Name); ok {
+			if top, ok := h.DefTop(ww.Name); ok {
 				// Gradual typing: an Any-typed forward operand — a value
 				// flowed from a dynamic `get`, or a param bound to Any at
 				// a gradual call site — is optimistically accepted for a
@@ -663,7 +667,7 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 			// exactly like its unmarked twin. (Lookup and Defs.Top
 			// read the same store, so this arm is only reached on
 			// the def-binding branch's typed fall-through.)
-			if h.lookupWord(ww.Name) != nil {
+			if h.LookupWord(ww.Name) != nil {
 				break
 			}
 
@@ -720,7 +724,7 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 		// does one filling this sig's own Function slot.
 		if tok.ReachGroup && !tok.Quoted && isFnDefValue(tok) &&
 			!sigWantsFunctionAt(sig, fwd) &&
-			h.reachFnWouldClaim(tok, scanIdx+1) {
+			h.ReachFnWouldClaim(tok, scanIdx+1) {
 			break
 		}
 
@@ -761,7 +765,7 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 			if sinfo.Kind == SugarAngle {
 				break
 			}
-			exp, serr := h.expandSugarTokens(sinfo, tok, false)
+			exp, serr := h.ExpandSugarTokens(sinfo, tok, false)
 			if serr != nil {
 				break
 			}
@@ -786,7 +790,7 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 	return fwd, specAt
 }
 
-// arrivalVerdict is what the ARRIVAL decision concludes about a value that
+// ArrivalVerdict is what the ARRIVAL decision concludes about a value that
 // has reached the pointer with a forward collection pending. It is a
 // verdict and not an action on purpose: the three non-collect outcomes are
 // DISPATCHES — entering a function, committing a parked forward, resolving
@@ -796,30 +800,30 @@ func collectCandidateScan(h collectHost, sig *Signature, forwardLimit int, posit
 // the fn-value sealer through the seam with it: an interface wide enough to
 // carry those would be the Engine wearing a different name, and the second
 // implementation could not satisfy it from its own material.
-type arrivalVerdict int
+type ArrivalVerdict int
 
 const (
-	// arrivalCollect — the value fills the pending slot. The host commits
+	// ArrivalCollect — the value fills the pending slot. The host commits
 	// it into the window and advances the collection counters.
-	arrivalCollect arrivalVerdict = iota
-	// arrivalDispatchFn — the value is a reach-read fn with a 0-arg
+	ArrivalCollect ArrivalVerdict = iota
+	// ArrivalDispatchFn — the value is a reach-read fn with a 0-arg
 	// overload, so the dot-read is a PROPERTY call. The host dispatches it
 	// in place; it consumes nothing, so no cross-statement swallow is
 	// possible, and its RESULT arrives at this still-pending window.
-	arrivalDispatchFn
-	// arrivalBarrierClose — the value is a reach-read fn that WOULD CLAIM
+	ArrivalDispatchFn
+	// ArrivalBarrierClose — the value is a reach-read fn that WOULD CLAIM
 	// the tokens after it, so it is the NEXT dispatch (NUR038, the value
 	// twin of the fn-word collection barrier). The host commits the parked
 	// forward with what it already holds, or resolves it from the stack
 	// when no smaller-arity overload can fire; either way the window closes
 	// here and the fn re-steps as its own statement.
-	arrivalBarrierClose
-	// arrivalImplicitEnd — the value does not match the slot. The host
+	ArrivalBarrierClose
+	// ArrivalImplicitEnd — the value does not match the slot. The host
 	// resolves the forward from the stack.
-	arrivalImplicitEnd
+	ArrivalImplicitEnd
 )
 
-// collectArrival is the ARRIVAL decision, seated on the seam: once per value
+// CollectArrival is the ARRIVAL decision, seated on the seam: once per value
 // reaching the pointer with a collection pending, does this value fill the
 // next slot?
 //
@@ -837,11 +841,11 @@ const (
 // in-place window mutations it DOES own (the /q Word→Atom conversion and
 // the `/v` marker consumption) are exactly the ones a match verdict depends
 // on, and the host re-reads the window afterwards to see them.
-func collectArrival(h collectHost, fwd ForwardInfo, valIdx int) arrivalVerdict {
+func CollectArrival(h CollectHost, fwd ForwardInfo, valIdx int) ArrivalVerdict {
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
-		return arrivalCollect
+		return ArrivalCollect
 	}
-	win := h.collectWindow()
+	win := h.Window()
 	val := win.At(valIdx)
 	nextIdx := fwd.CollectedArgs
 	matches := SigArgMatches(fwd.Sig, nextIdx, val)
@@ -888,13 +892,13 @@ func collectArrival(h collectHost, fwd ForwardInfo, valIdx int) arrivalVerdict {
 		case marked:
 			// `/v` data intent — collected as the reference.
 		case fnValueHasZeroArgSig(val):
-			return arrivalDispatchFn
-		case h.reachFnWouldClaim(val, valIdx+1):
-			return arrivalBarrierClose
+			return ArrivalDispatchFn
+		case h.ReachFnWouldClaim(val, valIdx+1):
+			return ArrivalBarrierClose
 		}
 	}
 	if !matches {
-		return arrivalImplicitEnd
+		return ArrivalImplicitEnd
 	}
-	return arrivalCollect
+	return ArrivalCollect
 }

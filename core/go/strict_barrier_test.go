@@ -149,7 +149,7 @@ func registerCollector(r *Registry) {
 
 func TestStrictForwardScanReachExpands(t *testing.T) {
 	// A dot-access chain is implicitly-parenthesized navigation, NOT a
-	// barrier: under strict the forward scan expands it into the collecting
+	// Barrier: under strict the forward scan expands it into the collecting
 	// word's slot exactly like a paren group (identical to gate-off).
 	for _, on := range []bool{true, false} {
 		setStrict(t, on)
