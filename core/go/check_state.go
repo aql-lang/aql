@@ -374,6 +374,19 @@ type CheckState struct {
 	// defs that were referenced at least once.
 	DefsUsed map[string]bool
 
+	// BindLedger records the RUNTIME-VISIBLE binding transitions the check
+	// pass performs, in source order — the population the bind twins
+	// (design/FULL-COMPILATION.0.md §6.5) have to replay.
+	//
+	// INERT. Nothing reads it to decide anything; it exists so the twin work
+	// can be measured before it is built, the way Stage 1's censuses preceded
+	// every seam this project has since closed. §6.5's enumeration says which
+	// transitions belong here and, just as importantly, which do not: a
+	// behaviour body's `Push("a", …)` + `defer Pop("a")`, guard narrowing's
+	// restore-func pairs, and generic instantiation's balanced Push/Pop are all
+	// self-restoring or compile-time products and are NOT recorded.
+	BindLedger []BindTransition
+
 	// ContextTypes is a best-effort record of keys that user code
 	// wrote to a Store during a check run. The value is the
 	// last-seen carrier type for that key, joined via JoinCarriers
@@ -881,6 +894,7 @@ func (c *CheckState) Begin() func() {
 	c.SuppressedRuntimeError = false
 	c.AmbiguousGradualSplit = false
 	c.DefsInstalled = nil
+	c.BindLedger = nil
 	c.DefsUsed = nil
 	c.FnNameStack = nil
 	c.FnBinders = nil
@@ -1456,4 +1470,54 @@ func CheckAddUnique(r *Registry, d CheckDiagnostic) {
 		}
 	}
 	r.Check.AddDiagnostic(d)
+}
+
+// BindKind names a runtime-visible binding transition. §6.5's reading-based
+// enumeration proposed four kinds; the census measured THREE, and the one it
+// removed is worth keeping as a note: a module export install is not its own
+// transition. The real import path is installExports -> InstallDef, so a module
+// namespace binding IS a def and needs no separate twin. (The `Install*Exports`
+// functions in lang/go/modules are test-setup convenience helpers — their own
+// comments say "equivalent to what happens when boru code runs import" — and
+// instrumenting them measured ZERO, which is how the mistake surfaced.)
+//
+// The branch-arm push is likewise a BindDef variant rather than a kind of its
+// own: it IS a def, only its reachability differs.
+type BindKind uint8
+
+const (
+	// BindDef is a `def` install: installDef's push, including the branch-arm
+	// push InstallJoinedDefs performs when one arm binds a name fresh.
+	BindDef BindKind = iota
+	// BindUndef is an `undef`: UninstallDef's pop.
+	BindUndef
+	// BindTypeInstall is a type binding push (PushType / PushTypeAdopted). Its
+	// retirement counterpart is not a ledger entry: BindingSandbox already
+	// partitions the TypeTable so retirements roll back and mints stay baked.
+	BindTypeInstall
+)
+
+// BindTransition is one entry of CheckState.BindLedger.
+//
+// Depth is the def-stack depth AFTER the transition, which is what makes a
+// replay checkable: a twin that re-installs at its source position must leave
+// the same depth the check pass did, or shadowing and a later `undef` expose a
+// different binding (§6.5's "replay, never re-execution").
+type BindTransition struct {
+	Kind  BindKind
+	Name  string
+	Pos   SrcPos
+	Depth int
+}
+
+// NoteBindTransition appends to the ledger. A no-op outside a check pass, and
+// on the empty name — a synthetic install with no name has nothing for a twin
+// to address.
+func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
+	if r == nil || r.Check == nil || !r.Check.Mode || name == "" {
+		return
+	}
+	r.Check.BindLedger = append(r.Check.BindLedger, BindTransition{
+		Kind: kind, Name: name, Pos: pos, Depth: r.Defs.Depth(name),
+	})
 }

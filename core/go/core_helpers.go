@@ -172,6 +172,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// DefStack entry. The 0-arg fallback and cross-stack overloading
 		// are synthesised on demand by Registry.Lookup → aggregateDispatch.
 		InstallFnDef(r, name, fnDef, isStackOnly)
+		r.NoteBindTransition(BindDef, name, body.Pos())
 		return
 	}
 
@@ -212,10 +213,12 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		}
 		body = NewClassType(def, info)
 		r.Defs.Push(name, body)
+		r.NoteBindTransition(BindTypeInstall, name, body.Pos())
 		return
 	}
 
 	r.Defs.Push(name, body)
+	r.NoteBindTransition(BindDef, name, body.Pos())
 }
 
 // UninstallDef removes the most recent def for a word, exposing whatever
@@ -225,6 +228,9 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 // is needed.
 func UninstallDef(r *Registry, name string) {
 	r.Defs.Pop(name)
+	// Recorded AFTER the pop so Depth is the post-transition depth, which is
+	// what a twin has to reproduce (§6.5).
+	r.NoteBindTransition(BindUndef, name, SrcPos{})
 }
 
 // buildFnBodyHandler produces the dispatch Handler for one boru fn

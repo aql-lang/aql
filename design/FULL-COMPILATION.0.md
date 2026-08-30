@@ -2432,16 +2432,40 @@ two of those three need no twin at all. Read the sites, not the counts:
 |---|---|---|
 | `core_helpers.go` `installDef` / `UninstallDef` | 7 | **twin** — the def/undef core |
 | `carrier_join.go` `InstallJoinedDefs` | 5 | **twin** — the branch-arm push, NUR110's site |
-| `modules/modules.go` export installs | 11 | **twin** — one `Defs.Push(name, exportMap)` per module; imported ONCE in the front end, the twin re-binds the produced instance |
 | `core_type.go` `PushType` / `PushTypeAdopted` | 2 | **twin**, paired with the retirement half `BindingSandbox` already partitions |
+| `modules/modules.go` export installs | 11 | no — `Install*Exports` are TEST-SETUP helpers, and their own comments say so ("equivalent to what happens when boru code runs `import`"). The real path is `installExports` → `InstallDef`, so a module namespace binding IS a `def` |
 | `native_behave.go` | 18 | no — every one is `Push("a", …)` + `defer Pop("a")`, a behaviour body's parameter binding |
 | `guard_narrow.go` | 4 | no — `ApplyGuardNarrowing` / `ApplyComplementNarrowing` each return a restore func that pops what they pushed |
 | `generics_instantiate.go` | 7 | no — `PushGenBindings`/`PopGenBindings` and `InstantiateSchema`'s key are balanced pairs, and type instantiation is a compile-time product |
 
-So it is **four transition kinds**, not thirty: `def`, `undef`, module install,
-type install/retire — the branch-arm push being a `def` variant rather than a
-fifth. `word_extend.go` is not among them: it carries no direct `Defs` mutation
-and reaches the table through `installDef`.
+So it is **three transition kinds**, not thirty: `def`, `undef`, type install —
+the branch-arm push and the module namespace install both being `def` rather
+than kinds of their own. `word_extend.go` is not among them either: no direct
+`Defs` mutation, it reaches the table through `installDef`.
+
+**The module row is in that table because the READING got it wrong and the
+MEASUREMENT corrected it**, which is the reason to measure before building
+rather than after. Instrumenting the eleven `modules.go` sites recorded ZERO
+transitions across the whole corpus — including `import "boru:sift"`, the
+deepest row there is — because those functions are not on the import path at
+all. A count of call sites is not a count of transitions, and neither is a
+plausible reading of them.
+
+**Measured over `lang/spec`** (`TestBindLedgerCensus`), 7644 rows:
+
+	rows with transitions   4286
+	transitions total      69254
+	  def                  68180
+	  type-install          1052
+	  undef                   22
+	deepest single row      1672   —  import "boru:sift"  Sift.check {family:'kv'}
+
+Three things that shape the twin work. `def` is 98.4% of it, so the twin op for
+`def` is the one whose cost matters and the other two can be straightforward.
+`undef` is 22 across the entire corpus — rare enough that its twin can be the
+simple, obviously-correct one. And a single module import is 1672 transitions,
+so the per-transition cost of a twin is a real budget: module bodies dominate
+the volume even though they are ordinary `def`s.
 
 **The partial twins that already exist**, and what changes about them.
 `OpBindGlobal` is the value half under TODAY's keep-the-installs regime: it

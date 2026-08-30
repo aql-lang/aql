@@ -348,6 +348,7 @@ func installTypeBinding(r *Registry, name string, def *Type, pushed Value) {
 		def.SetTypeBody(pushed)
 	}
 	r.Defs.PushType(name, def, pushed)
+	r.NoteBindTransition(BindTypeInstall, name, pushed.Pos())
 }
 
 func InstallType(r *Registry, name string, body Value) error {
@@ -616,6 +617,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			return err
 		}
 		r.Defs.PushTypeAdopted(name, canon, body)
+		r.NoteBindTransition(BindTypeInstall, name, body.Pos())
 	} else {
 		// Structural / singleton bodies (record shape, `def One 1`,
 		// typed-container literals, refine Record/Options/Table bodies,

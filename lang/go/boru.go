@@ -448,6 +448,7 @@ func (a *Boru) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	res := CheckResult{
 		Diagnostics:              a.registry.Check.Diagnostics,
 		FnCarrierReadSubstituted: a.registry.Check.FnCarrierReadSubstituted,
+		BindLedger:               a.registry.Check.BindLedger,
 	}
 	if sites := a.registry.Check.Recorder().Sites(); len(sites) > 0 {
 		res.SiteCounts = make(map[string]int, len(sites))
@@ -1341,6 +1342,12 @@ type CheckResult struct {
 	// for it, and the census suites classify it with the sentinel rather
 	// than as a hard refusal. Populated only by CompileCheck.
 	FnCarrierReadSubstituted bool `json:"fn_carrier_read_substituted,omitempty"`
+	// BindLedger is the RUNTIME-VISIBLE binding transitions the check pass
+	// performed, in source order — the population the bind twins
+	// (design/FULL-COMPILATION.0.md §6.5) have to replay. Populated only by
+	// CompileCheck, and INERT: nothing consumes it to decide anything, it
+	// exists so the twin work can be sized before it is built.
+	BindLedger []core.BindTransition `json:"-"`
 }
 
 // CheckSummary reports the per-severity count of diagnostics from
