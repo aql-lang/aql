@@ -83,28 +83,31 @@ func (h *seamHost) DefTop(name string) (core.Value, bool) {
 	return h.reg.Defs.Top(name)
 }
 
+// The four classifications below delegate to core's SHARED implementations
+// rather than restating them. That is the point of the extraction, not a
+// convenience: "compiled code must work exactly the same as interpreted" is
+// not a property that survives two parallel copies of a rule as subtle as
+// "an fn word is a barrier but `/v` opts out", or "a WORD is deliberately
+// not a prunable value". A host that reads the same code cannot drift from
+// the interpreter; one that reimplements can only be checked by testing
+// every shape, forever.
+//
+// An earlier draft of this file DID reimplement them, and it is what showed
+// the extraction was needed.
+
 func (h *seamHost) IsFnWordBarrier(tok core.Value) bool {
 	h.note("IsFnWordBarrier")
-	wi, err := core.AsWord(tok)
-	return err == nil && h.reg.Lookup(wi.Name) != nil && !wi.ForceVal
+	return core.FnWordBarrierOn(h.reg, tok)
 }
 
 func (h *seamHost) IsReachCallHead(tok core.Value, viable []core.ViableSig, pos, i int) bool {
 	h.note("IsReachCallHead")
-	return false
+	return core.ReachCallHeadBarrierOn(h.win, h.reg, tok, viable, pos, i)
 }
 
 func (h *seamHost) StaticForwardType(tok core.Value) (core.Value, core.FwdKind) {
 	h.note("StaticForwardType")
-	switch {
-	case core.IsOpenParen(tok) || core.IsParenExpr(tok) || core.IsReach(tok):
-		return core.Value{}, core.FwdGroup
-	case core.IsWord(tok):
-		return core.Value{}, core.FwdBoundary
-	case core.IsConcrete(tok):
-		return tok, core.FwdValue
-	}
-	return core.Value{}, core.FwdBoundary
+	return core.StaticForwardTypeOf(tok)
 }
 
 func (h *seamHost) LookupWord(name string) *core.FnDefInfo {
@@ -114,7 +117,7 @@ func (h *seamHost) LookupWord(name string) *core.FnDefInfo {
 
 func (h *seamHost) ReachFnWouldClaim(tok core.Value, i int) bool {
 	h.note("ReachFnWouldClaim")
-	return false
+	return core.ReachFnWouldClaimOn(h.win, h.reg, tok, i)
 }
 
 func (h *seamHost) ExpandSugarTokens(sinfo core.SugarInfo, tok core.Value, head bool) ([]core.Value, error) {
@@ -210,5 +213,44 @@ func TestSeamHostDrivesArrival(t *testing.T) {
 	case core.ArrivalCollect, core.ArrivalDispatchFn, core.ArrivalBarrierClose, core.ArrivalImplicitEnd:
 	default:
 		t.Fatalf("CollectArrival returned an unnamed verdict %v", v)
+	}
+}
+
+// TestSharedClassificationsAgreeWithTheInterpreter is the anti-drift pin. It
+// asserts the property the extraction exists to guarantee: a foreign host
+// and the interpreter give the SAME answer because they run the same code,
+// not because both were written to.
+//
+// The cases are the ones whose docs say the rule is subtle — an fn word is a
+// barrier, `/v` opts out of that, and a WORD is deliberately NOT a prunable
+// forward value even when it is bound.
+func TestSharedClassificationsAgreeWithTheInterpreter(t *testing.T) {
+	h := newSeamHost(t)
+
+	// A word bound to a dispatching definition is a collection barrier.
+	fd := core.FnDefInfo{Name: "w", Signatures: []core.Signature{{
+		Args: []*core.Type{core.TInteger}, BarrierPos: 1,
+	}}}
+	h.reg.Defs.Push("w", core.Value{Parent: core.TFunction, Data: fd})
+
+	bare := core.NewWord("w")
+	if !h.IsFnWordBarrier(bare) {
+		t.Error("a bare word bound to an fn is a barrier; the shared rule says so")
+	}
+
+	// `/v` takes the VALUE rather than calling, so it is NOT a barrier.
+	forceVal := core.NewWordRef("w")
+	if h.IsFnWordBarrier(forceVal) {
+		t.Error("`/v` opts out of the fn-word barrier — the half a reimplementation drops")
+	}
+
+	// A WORD is fwdBoundary, never fwdValue, even bound: matchSignature's
+	// treatment of a word is contextual, so pruning on its binding would
+	// diverge from the binder.
+	if _, kind := h.StaticForwardType(bare); kind != core.FwdBoundary {
+		t.Errorf("a bound word classified %v, want FwdBoundary", kind)
+	}
+	if _, kind := h.StaticForwardType(core.NewInteger(1)); kind != core.FwdValue {
+		t.Error("a concrete literal is the one prunable forward value")
 	}
 }

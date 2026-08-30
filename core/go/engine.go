@@ -1927,8 +1927,16 @@ func (e *Engine) ExpandSugarTokens(sinfo SugarInfo, tok Value, head bool) ([]Val
 // Function value to the parked forward at arrival (the phase-2 half of
 // this rule — keep in sync per design/FORWARD-COLLECTION-PHASES.10.md).
 func (e *Engine) fnWordBarrierAt(tok Value) bool {
+	return FnWordBarrierOn(e.Registry, tok)
+}
+
+// FnWordBarrierOn is the fn-word collection barrier over an explicit
+// registry: a bare word BOUND to a dispatching definition stops forward
+// collection, and `/v` opts out because it takes the value rather than
+// calling. Registry-only — it never needed a window.
+func FnWordBarrierOn(reg *Registry, tok Value) bool {
 	wi, werr := AsWord(tok)
-	return werr == nil && e.Registry.Lookup(wi.Name) != nil && !wi.ForceVal
+	return werr == nil && reg.Lookup(wi.Name) != nil && !wi.ForceVal
 }
 
 // sigRawSlot reports whether signature sig captures position pos structurally
@@ -1964,7 +1972,16 @@ const (
 // would diverge from the binder, so a word is classified as FwdBoundary:
 // counted as one resolved position with the viable set left intact, exactly
 // as the former eager scan treated it.
-func (e *Engine) StaticForwardType(tok Value) (match Value, kind FwdKind) {
+func (e *Engine) StaticForwardType(tok Value) (Value, FwdKind) {
+	return StaticForwardTypeOf(tok)
+}
+
+// StaticForwardTypeOf is StaticForwardType as a free function. It needed
+// NOTHING from the Engine — not even a window — which is worth stating,
+// because it is the classification whose doc explains at length why a WORD
+// is deliberately NOT prunable. A second host reading a different copy of
+// that reasoning is how the two lanes would drift.
+func StaticForwardTypeOf(tok Value) (match Value, kind FwdKind) {
 	if IsOpenParen(tok) || IsParenExpr(tok) || IsReach(tok) {
 		return Value{}, FwdGroup
 	}
@@ -5938,11 +5955,20 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 // token has an unknowable result type and counts as claimable (the
 // runtime would collect it optimistically).
 func (e *Engine) ReachFnWouldClaim(fnVal Value, idx int) bool {
+	return ReachFnWouldClaimOn(e.Tape, e.Registry, fnVal, idx)
+}
+
+// ReachFnWouldClaimOn is ReachFnWouldClaim over an explicit window and
+// registry — the same one-implementation-two-hosts rule as
+// ForwardClaimProbeOn, and for the same reason: this is the NUR038
+// call-vs-data decision, and a VM adapter that answered it differently would
+// diverge from the interpreter on exactly the shapes the census still holds.
+func ReachFnWouldClaimOn(win CollectWindow, reg *Registry, fnVal Value, idx int) bool {
 	fd, isFn := fnVal.Data.(FnDefInfo)
 	if !isFn || !fnHasForwardSigPast(fd, 0) {
 		return false
 	}
-	probe, kind := e.forwardClaimProbe(idx)
+	probe, kind := ForwardClaimProbeOn(win, reg, idx)
 	switch kind {
 	case probeNone:
 		return false
@@ -6396,6 +6422,13 @@ func (e *Engine) expandScanSugar(tok Value, pos, scanIdx int, viable []ViableSig
 // Any slots stay barred: Any also admits a fn value, but as a swallowed
 // call head, which is the misfire the barrier exists for).
 func (e *Engine) reachCallHeadBarrier(tok Value, viable []ViableSig, pos, scanIdx int) bool {
+	return ReachCallHeadBarrierOn(e.Tape, e.Registry, tok, viable, pos, scanIdx)
+}
+
+// ReachCallHeadBarrierOn is the fn-word barrier's VALUE twin (NUR038) over an
+// explicit window and registry, so the interpreter and the VM's region
+// adapter share one answer rather than two that agree until they do not.
+func ReachCallHeadBarrierOn(win CollectWindow, reg *Registry, tok Value, viable []ViableSig, pos, scanIdx int) bool {
 	if !tok.ReachGroup || tok.Quoted || !isFnDefValue(tok) {
 		return false
 	}
@@ -6404,7 +6437,7 @@ func (e *Engine) reachCallHeadBarrier(tok Value, viable []ViableSig, pos, scanId
 			return false // the fn is this overload's own Function operand
 		}
 	}
-	return e.ReachFnWouldClaim(tok, scanIdx+1)
+	return ReachFnWouldClaimOn(win, reg, tok, scanIdx+1)
 }
 
 // sigWantsFunctionAt reports whether sig position pos declares a
@@ -6436,10 +6469,29 @@ const (
 // token would contribute (a literal, a binding's value, a `/v`
 // reference).
 func (e *Engine) forwardClaimProbe(idx int) (Value, int) {
-	if idx >= e.Tape.Len() {
+	return ForwardClaimProbeOn(e.Tape, e.Registry, idx)
+}
+
+// ForwardClaimProbeOn is forwardClaimProbe over an explicit window and
+// registry rather than an Engine's own.
+//
+// The extraction is what keeps ONE implementation for TWO hosts. The VM's
+// region adapter has to answer this question identically to the interpreter
+// — "compiled code must work exactly the same as interpreted" is not a
+// property that survives a second, parallel implementation of a
+// classification this subtle (an fn word is a barrier, a plain binding steps
+// to its value, `/v` is one Function datum, true/false/none are reserved
+// literals). Reading the same code is the only version of that guarantee
+// that cannot drift.
+//
+// Nothing beyond (window, registry) was ever needed: the method body used
+// e.Tape and e.Registry and no other Engine state, so this is a
+// receiver-to-parameter change and not a refactor of the logic.
+func ForwardClaimProbeOn(win CollectWindow, reg *Registry, idx int) (Value, int) {
+	if idx >= win.Len() {
 		return Value{}, probeNone
 	}
-	v := e.Tape.At(idx)
+	v := win.At(idx)
 	switch {
 	case IsEnd(v) || IsCloseParen(v) || IsForward(v):
 		return Value{}, probeNone
@@ -6454,7 +6506,7 @@ func (e *Engine) forwardClaimProbe(idx int) (Value, int) {
 			// `/v`: one Function reference datum
 			return Value{Parent: TFunction, Data: FnDefInfo{}}, probeValue
 		}
-		top, bound := e.Registry.Defs.Top(wi.Name)
+		top, bound := reg.Defs.Top(wi.Name)
 		switch {
 		case bound:
 			if _, topFn := top.Data.(FnDefInfo); topFn {
