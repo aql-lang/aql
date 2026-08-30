@@ -230,7 +230,12 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 		if pre, ok := r.Defs.Top(k); ok {
 			r.Defs.Push(k, joinBranchDef(tv, pre))
 		} else {
+			// No pre-branch binding: the name exists after the branch only if
+			// this arm ran. Mark it so the compiled lane cannot bake the read
+			// as a const (NUR110); the push itself stays, or every legitimate
+			// post-branch read would report undefined_word.
 			r.Defs.Push(k, tv)
+			r.analysisRecorder().NoteCondBoundDef(k, r.Defs.Gen(k))
 		}
 	}
 	for k, ev := range else_ {
@@ -242,6 +247,7 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 			r.Defs.Push(k, joinBranchDef(ev, pre))
 		} else {
 			r.Defs.Push(k, ev)
+			r.analysisRecorder().NoteCondBoundDef(k, r.Defs.Gen(k))
 		}
 	}
 }

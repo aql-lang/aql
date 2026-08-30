@@ -673,6 +673,12 @@ type EmitState struct {
 	// value ID) so the get-family read guards can exempt a read whose
 	// landing the shaped-method model owns. See NoteShapedRead.
 	shapedReads map[string]bool
+	// condBoundGens maps a NAME a BRANCH ARM bound fresh — no pre-branch
+	// binding, so after the branch it is bound if and only if that arm ran —
+	// to the DefTable generation it had at the join. A read is refused only
+	// while the generation still matches, so a later unconditional rebind
+	// clears the condition. See NoteCondBoundDef / resolveOperand (NUR110).
+	condBoundGens map[string]int64
 	// defReads maps a value ID to the BINDING NAME the check pass read it
 	// from (stepWord's simple-value substitution). When such a value later
 	// fails operand resolution inside a fn unit — no param/capture/local/
@@ -1791,6 +1797,44 @@ func (es *EmitState) resolveOperand(v core.Value) (EmitOperand, bool) {
 	}
 	if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
 		return localOperand(slot), true
+	}
+	// A value one BRANCH ARM bound fresh is bound if and only if that arm ran,
+	// and nothing downstream can express that: the arm's `def` lowers to NO
+	// instruction at all (measured — `if (f 9) [def op 1] [0] end op`
+	// disassembles to a bare JMP over the then arm), so there is no runtime
+	// binding for a dynamic lookup to find on either path, and baking the read
+	// as a const answers with the arm's value even when the arm did not run.
+	//
+	//	def f fn [[n:Integer][Boolean][n gt 5]]  if (f 1) [def op 1] [0] end op
+	//	  boru check             0 error(s)
+	//	  boru run               0 1                 <- folded to PUSH_CONST 1
+	//	  boru run -no-compile   undefined_word: op
+	//
+	// A silent wrong answer on the DEFAULT path (NUR110). Refuse: the
+	// interpreter runs the program correctly, so this is slow, not wrong — the
+	// trade family L already makes for a shadowed value binding and a redefined
+	// fn overload. The full repair is the def twins (a runtime bind inside the
+	// arm plus a dynamic read), which is Stage 5 work.
+	//
+	// AT THE READ, not at the join, and the difference is 131 corpus rows: the
+	// join knows the binding is conditional but not whether anything will read
+	// it after the branch, and almost every corpus use defines a name in an arm
+	// and reads it INSIDE that arm.
+	if es.condBoundRead(v) {
+		// REPAIR FIRST. Inside a fn unit the read lowers to OpLookupDynScope,
+		// which resolves the name against the LIVE def stack per call — so a
+		// conditional binding is answered by the runtime exactly as the
+		// interpreter answers it, including raising undefined_word when the arm
+		// did not run. That is the whole fix, and it already existed.
+		if op, ok := es.dynScopeRescue(v); ok {
+			return op, true
+		}
+		// The rescue self-guards off at TOP LEVEL (len(units) <= 1), which is
+		// where NUR110's shape lives, and there is nothing to look up there
+		// anyway: the arm's `def` lowers to no instruction at all. Refuse —
+		// slow, not wrong.
+		es.MarkUncompilable("a value read here is defined only inside a conditional branch (bound if and only if that arm runs)")
+		return EmitOperand{}, false
 	}
 	// A bare type node is a TYPE operand: it must reach the runtime
 	// as the CANONICAL registry node (a pooled by-value copy goes
@@ -6216,6 +6260,49 @@ func (es *EmitState) NoteShapedRead(id string) {
 	es.shapedReads[id] = true
 }
 
+// NoteCondBoundDef marks a value that ONE arm of a branch bound fresh — there
+// was no pre-branch binding to join against, so after the branch the name is
+// bound if and only if that arm ran.
+//
+// The marking is at the JOIN because that is where the fact is known, and the
+// REFUSAL is at the read (resolveOperand) because that is where it matters. A
+// refusal at the join was built and measured: 131 corpus rows, almost all of
+// them programs that define a name in an arm and read it INSIDE that same arm,
+// or that merely IMPORT a module whose source does. The join cannot know
+// whether anything will read the name afterwards; the read site knows exactly.
+func (es *EmitState) NoteCondBoundDef(name string, gen int64) {
+	if !es.Active() || name == "" {
+		return
+	}
+	if es.condBoundGens == nil {
+		es.condBoundGens = map[string]int64{}
+	}
+	es.condBoundGens[name] = gen
+}
+
+// condBoundRead reports whether v is a read of a name some branch arm bound
+// FRESH, and whose binding has not been replaced since.
+//
+// By NAME, not by value ID, and that is not a preference: the read substitutes
+// a fresh value (stepWord's simple-value substitution mints a new ID), so the
+// join-side ID never reaches the read — measured, marked S_9cd9…, resolved
+// S_5dc4…. NoteDefRead already carries the ID -> name mapping this needs.
+//
+// The GENERATION is the invalidation. `if c [def op 1] [] end def op 2 op` must
+// compile: the second def binds unconditionally, moves the DefTable generation
+// on, and the read is of that binding, not the arm's.
+func (es *EmitState) condBoundRead(v core.Value) bool {
+	if len(es.condBoundGens) == 0 || es.reg == nil {
+		return false
+	}
+	name := es.defReads[v.ID]
+	if name == "" {
+		return false
+	}
+	gen, ok := es.condBoundGens[name]
+	return ok && gen == es.reg.Defs.Gen(name)
+}
+
 // zeroArgMemberFnLandingOut reports whether any dispatch out is a
 // PINPOINTED container-member fn read (noteMemberFnRead with the member
 // value) whose member carries a GENUINE 0-arg overload — the break-2
@@ -7809,6 +7896,16 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value)
 	}
 	ops := make([]EmitOperand, 0, len(residual))
 	for _, rv := range residual {
+		// The same conditional-binding refusal resolveOperand makes, repeated
+		// here because a trailing read is the PROGRAM RESIDUAL and never
+		// reaches that function — which is exactly the shape NUR110 reports
+		// (`… end op`), so a guard in only one of the two places closes
+		// nothing.
+		if es.condBoundRead(rv) {
+			// No dynScopeRescue attempt here, unlike resolveOperand: a residual
+			// is resolved at frame 0, where the rescue declines by construction.
+			return nil, "a value read here is defined only inside a conditional branch (bound if and only if that arm runs)"
+		}
 		if pr, ok := es.producedBy[rv.ID]; ok {
 			if es.eventInfo[pr.seq].zeroOut {
 				continue

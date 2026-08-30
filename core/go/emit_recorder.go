@@ -144,6 +144,12 @@ type EmitRecorder interface {
 	FoldFullStack(word string, args, preserved []Value) ([]Value, bool)
 	RecordSpliceDyn(payload Value, pos SrcPos) bool
 	NoteShapedRead(id string)
+	// NoteCondBoundDef marks a NAME as bound by ONE arm of a branch with no
+	// pre-branch binding to join against — bound if and only if that arm ran
+	// (NUR110). gen is the binding's DefTable generation at the join, so a
+	// later UNCONDITIONAL rebind of the same name clears the condition by
+	// moving the generation on. The recorder refuses to compile a read of it.
+	NoteCondBoundDef(name string, gen int64)
 	MemberFnReadValue(id string) (Value, bool)
 	DynInputsProven(sig *Signature, args []Value) bool
 	Materialise(v Value) (Value, bool)
@@ -221,6 +227,7 @@ func (inactiveEmit) StoredGradualActive() bool                              { re
 func (inactiveEmit) FoldFullStack(string, []Value, []Value) ([]Value, bool) { return nil, false }
 func (inactiveEmit) RecordSpliceDyn(Value, SrcPos) bool                     { return false }
 func (inactiveEmit) NoteShapedRead(string)                                  {}
+func (inactiveEmit) NoteCondBoundDef(string, int64)                         {}
 func (inactiveEmit) MemberFnReadValue(string) (Value, bool)                 { return Value{}, false }
 func (inactiveEmit) Active() bool                                           { return false }
 func (inactiveEmit) Armed() bool                                            { return false }
