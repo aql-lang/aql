@@ -14,7 +14,7 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO bundle_meta VALUES ('schema_version', 'boru-kg/1');
 INSERT INTO bundle_meta VALUES ('generated_at', '2026-08-07T00:00:00Z');
 INSERT INTO bundle_meta VALUES ('input_digest_algorithm', 'fnv64');
-INSERT INTO bundle_meta VALUES ('input_digest_combined', '5724752097533664829');
+INSERT INTO bundle_meta VALUES ('input_digest_combined', '7290986283204826500');
 INSERT INTO input_files VALUES ('../AGENTS.md', '5746437182943957856', 12139);
 INSERT INTO input_files VALUES ('../CLI.md', '3434391071839442713', 83578);
 INSERT INTO input_files VALUES ('../README.md', '6312173284019959426', 13333);
@@ -40,6 +40,7 @@ INSERT INTO input_files VALUES ('../design/DIAGNOSTIC-VALUES.0.md', '40506076665
 INSERT INTO input_files VALUES ('../design/ENG-COVERAGE-PARITY.0.md', '2541301273793164298', 20169);
 INSERT INTO input_files VALUES ('../design/FN-OUTPUT-SIG.0.md', '5680123931664569575', 11346);
 INSERT INTO input_files VALUES ('../design/FN-VALUE-OPEN-WORK.0.md', '7570822714448974016', 32328);
+INSERT INTO input_files VALUES ('../design/FULL-COMPILATION-HANDOFF.0.md', '6150043551397951652', 11267);
 INSERT INTO input_files VALUES ('../design/FULL-COMPILATION.0.md', '6047087068327692654', 226842);
 INSERT INTO input_files VALUES ('../design/FUNCTION-VALUE-SCOPE.0.md', '7595781404221644092', 65616);
 INSERT INTO input_files VALUES ('../design/GO-MODULE-GRAPH.0.md', '4124035938153723972', 28792);
@@ -68,7 +69,7 @@ INSERT INTO input_files VALUES ('../test/specfix/go.mod', '7601104241745438425',
 INSERT INTO input_files VALUES ('../tools/piecetool/go.mod', '3890078019736541119', 539);
 INSERT INTO input_files VALUES ('../wpg/go.mod', '6010678691882061351', 2627);
 INSERT INTO input_files VALUES ('<go tree: modules + packages>', '1926872259734760970', 595);
-INSERT INTO input_files VALUES ('project/boru-project.jsonic', '3323874133807229803', 67592);
+INSERT INTO input_files VALUES ('project/boru-project.jsonic', '6623840493646221511', 70521);
 INSERT INTO sources VALUES ('src:adr-004-refinement', 'text', 'design/ADR-004-REFINEMENT.0.md', 'ADR-004 refinement — argument-handling categories', NULL, 'adr-004-refinement-2026-08-15', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -127,6 +128,9 @@ INSERT INTO sources VALUES ('src:fn-value-open-work', 'text', 'design/FN-VALUE-O
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:full-compilation', 'text', 'design/FULL-COMPILATION.0.md', 'full compilation: the total lowering design', NULL, 'full-compilation-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
+INSERT INTO sources VALUES ('src:full-compilation-handoff', 'text', 'design/FULL-COMPILATION-HANDOFF.0.md', 'full compilation: handoff for the bind-twin line', NULL, 'full-compilation-handoff-2026-08-30', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO sources VALUES ('src:function-value-scope', 'text', 'design/FUNCTION-VALUE-SCOPE.0.md', 'function value scope: where a fn value''s free words resolve', NULL, 'function-value-scope-2026-08', 'primary', '{
@@ -334,6 +338,8 @@ INSERT INTO entity_attributes VALUES ('ent:Document:8799605016341004740', 'role'
 INSERT INTO entities VALUES ('ent:Document:8875579216819453768', 'Document', 'design/GO-TS-PARITY.0.md', 'design/go-ts-parity.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:8875579216819453768', 'role', 'the Go/TS parity program for core, parser and basic: the three shared TSV corpora and their two-runner rule, the capability table that forces core/ts before basic/ts, the divergence ledger, and the finding that an uncovered branch in one port is where a divergence hides');
 INSERT INTO entities VALUES ('ent:Document:9071667555031388966', 'Document', 'parser/go/CLAUDE.md', 'parser/go/claude.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:9178480464718060712', 'Document', 'design/FULL-COMPILATION-HANDOFF.0.md', 'design/full-compilation-handoff.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:9178480464718060712', 'role', 'the point-in-time handoff for Stage 4''s remaining piece, the bind twins (FULL-COMPILATION.0.md §6.5), recording state rather than restating design: the measured population (7644 lang/spec rows, 4291 with transitions, 7453 total — def 6371 at 85%, type-install 1048, undef 30, def-replace 4, deepest single row 36 not 1672, which reverses the earlier claim that per-transition twin cost is a budget concern); the ordered next increment (close the live-depth oracle, then emit the def twin while the check-pass installs are still KEPT so it is inert, then and only then flip to rollback-and-replay onto binding_sandbox.go, a staging that must not be inverted); the strong oracle built, run and deliberately NOT landed as a gate with an allowance, at 9 mismatches over 4291 rows in two named classes — 8 macro-expansion gensym temps whose teardown goes unrecorded, and one doubled module-io install whose first hypothesis is that the ORACLE is wrong rather than the ledger, since Begin resets the ledger per pass while the registry accumulates across them; the four measured exclusions with their effects; the three-attempt derivation of entry POSITIONS, both obvious sources being wrong; and two lessons the line paid for — that a green gate over a corpus which cannot contain the case is not evidence (TestBindLedgerDepthsCompose read a clean 0 incoherent over 7644 rows while every top-level branch-arm def was double-recorded, because lang/spec''s only three such rows sit inside fn bodies where FnBodyDepth suppresses them), and that a count of call sites is not a count of transitions, a lesson this section already carried about modules.go and then had to apply to its own author when a review found five missing instrumentation sites, 1750 transitions and 23% of the population, plus one site-table row that was not merely incomplete but false');
 INSERT INTO entities VALUES ('ent:Document:99160569689578192', 'Document', 'design/TYPE-REPRESENTATION.0.md', 'design/type-representation.0.md', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Document:99160569689578192', 'role', 'the issue #392 / NUR090 audit: the three-layer diagnosis (uniform lattice, 18-shape type-as-value, InstallType''s 11 branches and 3 binding strategies), why the minted node is invisible to evaluation, the measured spelling table, the ResolveSigType fix that was built and backed out, and the §6 bring-(b)-and-(c)-onto-(a) recommendation');
 INSERT INTO entities VALUES ('ent:Organization:8832543031059216933', 'Organization', 'boru-lang', 'boru-lang', 'accepted');
@@ -704,6 +710,8 @@ INSERT INTO assertions VALUES ('ast:4235718707717393125', 'ent:SoftwareModule:46
 INSERT INTO assertion_evidence VALUES ('ast:4235718707717393125', 'src:go-tree', 'editors/tree-sitter/bindings/go/go.mod', NULL, 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:4247002761012787571', 'ent:Document:4529681846923033548', 'supports', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4247002761012787571', 'src:module-views', 'Context', 'the renderer''s kind set is **closed**', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:425620154868774420', 'ent:Document:9178480464718060712', 'related_to', 'entity', 'ent:Document:373024332343379636', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:425620154868774420', 'src:full-compilation-handoff', 'Where the work is', 'What remains of Stage 4 is the bind twins', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4299279342547359938', 'ent:Document:5175176782070740682', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4299279342547359938', 'src:boru-infoview', 'title', 'boru infoview — the stack at the cursor', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4367944145334365650', 'ent:SoftwareModule:4559967244660037230', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
@@ -848,6 +856,8 @@ INSERT INTO assertions VALUES ('ast:8360168369078766404', 'ent:Document:88755792
 INSERT INTO assertion_evidence VALUES ('ast:8360168369078766404', 'src:go-ts-parity', 'title', 'GO-TS-PARITY.0 — full functional parity on core, parser and basic', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8427787091950146539', 'ent:SoftwareModule:4116347247488215916', 'part_of', 'entity', 'ent:SoftwareModule:5138375578915662736', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8427787091950146539', 'src:go-tree', 'test/go/covergate', NULL, 'rule', 'kg-gomod');
+INSERT INTO assertions VALUES ('ast:8451494454919042754', 'ent:Document:9178480464718060712', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:8451494454919042754', 'src:full-compilation-handoff', 'title', 'Full compilation — handoff for the bind-twin line', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8559088752918568803', 'ent:SoftwareModule:5138375578915662736', 'depends_on', 'entity', 'ent:SoftwareModule:8275629451197117420', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8559088752918568803', 'src:gomod:test-go', 'require block', 'github.com/boru-lang/boru/lang/go v0.0.0', 'rule', 'kg-gomod');
 INSERT INTO assertions VALUES ('ast:859379005577864411', 'ent:SoftwareModule:5138375578915662736', 'depends_on', 'entity', 'ent:SoftwareModule:2013670336276694550', NULL, NULL, NULL, NULL, 1, 'asserted', NULL, NULL, '2026-08-07T00:00:00Z', NULL);
