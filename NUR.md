@@ -498,6 +498,51 @@ Three things the record did not have.
    unreachable-branch pass) independently notices the unbound name; they say
    nothing about whether the binding leak is caught.
 
+4. **THE MECHANISM, located exactly.** `InstallJoinedDefs`
+   (`core/go/carrier_join.go`) folds each arm's net def additions back after the
+   branch. A name bound in ONE arm with no pre-branch binding to join against
+   takes the bare `r.Defs.Push(k, tv)` arm — a DEFINITE binding. Instrumented,
+   that arm is reached by `if` and by nothing else: `case`, `for`, `each`,
+   `fold` and `filter` never touch it, which is why they were measured correct
+   and why `each`/`fold` (which have no `r.Defs` snapshot in
+   `analyseHigherOrderBodyVals` at all) are a SECOND, separate leak.
+
+   The push is not simply wrong. Dropping it would report `undefined_word` on
+   every legitimate post-branch read — the false positive the join exists to
+   prevent. What the push cannot express is that the binding is CONDITIONAL,
+   and the model has no third state between bound and unbound.
+
+**A REFUSAL AT THE JOIN WAS BUILT, MEASURED AND REJECTED — 131 corpus rows.**
+Marking the program uncompilable at that fresh-push arm (family L's pattern,
+which is what this record's verdict proposes) restores parity on every shape
+above and costs far too much:
+
+	compiled coverage: 7644 rows — 7139 compiled, 131 refused   (gate: 0)
+	  85  `r` …defined only inside a conditional branch
+	  38  `i1` …
+	   8  others
+
+Sweeping the refusing rows says why, and it is not a tuning problem:
+
+- **The name is never read after the branch.** `def mk fn [[i:Integer] [Map]
+  [if (i lte 0) [do {…}] [def more (mk (i sub 1)) do {…more…}]]]` defines
+  `more` in an arm and reads it INSIDE that same arm. No divergence exists;
+  the refusal is a pure false positive.
+- **The shape is inside an imported MODULE.** The 85 `r` and 38 `i1` rows are
+  `import "boru:cli"` rows whose own source contains such an `if`. A user
+  program that never writes the shape loses compilation because a library
+  does.
+
+So the join site is the wrong place: it knows a name was bound conditionally,
+and cannot know whether anything will READ it afterwards. The condition belongs
+at the READ, which is also where the better fix lives — a conditionally-bound
+name should not bake as a const at all, it should route to the live dynamic
+lookup (`dynScopeRescue` → `OpLookupDynScope`) so the runtime resolves it
+against the real def stack and raises `undefined_word` itself when the arm did
+not run. That is a REPAIR rather than a refusal, and it is the same thing
+family L calls the full graduation: "a runtime dispatch respecting the
+conditional binding".
+
 ---
 
 ## NUR109 — an unbound parser name is two different errors {#nur109}
