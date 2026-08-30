@@ -1879,6 +1879,12 @@ func pruneKeywordViable(viable []ViableSig, pos int, tok Value) []ViableSig {
 // The walk itself lives in collect_kernel.go, where the three collection
 // loops meet one seam (design/FULL-COMPILATION.0.md §6.2).
 func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
+	// Offer the region to the descriptor recorder BEFORE collecting: the
+	// walk mutates the window (a group collapses, sugar lowers), so the
+	// written-order extent a descriptor must record is the one that exists
+	// now. Reading it afterwards would record the post-collection shape,
+	// which is not what a later execution re-derives from.
+	RegionRecorder(e.Tape, e.Registry, w, e.Pointer)
 	return CollectForward(e, fn, w, e.Pointer+1)
 }
 
