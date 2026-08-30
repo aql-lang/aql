@@ -999,12 +999,62 @@ assigns to Stage 4, and exactly what `emit.go`'s stamping note predicted —
 of a container … `def m {a:add/v}  m.a/u 1 2`"*. L17 is that example
 verbatim.
 
-The modifier is what makes them collection problems rather than apply
-problems: `/u` reverses the signature's argument order and `force-arity`
-changes how many operands the dispatch claims, so the split is decided by
-the modifier at the dispatch site rather than by the recorded match. A
-descriptor is the right carrier for that, and the island is what stands in
-for it today.
+**And the island is NOT the drift window** — that guess came from the census
+seam name, and the disassembly refutes it. All seven lower to the same
+shape: the wrapper words fold into `CALL_NATIVE_POLY`, and the apply is a
+plain `CALL_DYNAMIC`.
+
+```
+0000 PUSH_CONST  k1   ; {s:fn …} (Map)
+0001 PUSH_CONST  k0   ; s/q (Atom)
+0002 CALL_NATIVE_POLY p0   ; dot/2 (poly)
+0003 CALL_NATIVE_POLY p1   ; usurp/1 (poly)
+0004 PUSH_CONST  k2   ; 10 (Integer)
+0005 PUSH_CONST  k3   ; 3 (Integer)
+0006 CALL_DYNAMIC /2 ; apply fn-value
+```
+
+So the island is `callDynamic`'s third tier (`eng/go/vm.go:834-838`). That
+function tries a native apply, then the Apply kernel's frame entry, then
+islands. A modifier-wrapped native falls past both: it is not a plain native
+because `vmNativeApplicable` excludes it, and it carries no compiled unit
+because it is a native rather than a user fn.
+
+**The exclusion is one clause, and it is there because admitting these
+already produced a wrong answer once.** `vmNativeApplicable`
+(`eng/go/vm.go:1382-1392`) reads `IsNativeWordFnDef(fd) && !fd.ArgsReversed
+&& RegisteredWordIsNative(r, fd.Name)`, and `ArgsReversed`'s own doc records
+the incident: *"a param-type comparison admitted `m.s/u 10 3` to a VM fast
+path that then answered -7 against the interpreter's 7"*. The flag exists so
+the decline is possible at all, because `sub(Number, Number)` reversed is
+still `sub(Number, Number)` and the swap is invisible to inspection.
+
+**But the cause is narrower than the decline.** `tryNativeFnApply` resolves
+its signatures registry-first:
+
+```go
+if inner := reg.Lookup(fnDef.Name); inner != nil {
+    sigs = inner.Signatures
+} else if len(fnDef.Signatures) > 0 {
+    sigs = fnDef.Signatures
+}
+```
+
+For a wrapper that is the wrong source — the wrapper keeps the wrapped
+word's NAME, so the lookup finds the UNWRAPPED signatures and the reversal
+is dropped. That is precisely the -7. `UsurpFunction`
+(`core/go/core_ref.go:110-140`) builds a value whose own `Signatures` are
+complete and self-contained: each carries a Go handler
+(`usurpDispatchHandler`) that re-dispatches the original, declared
+`RunInCheck`. Dispatching a wrapper through the VALUE'S signatures rather
+than the registry's is therefore well-defined where dispatching it through
+the registry's is not.
+
+What still has to be established before that becomes a fix: whether
+`usurpDispatchHandler`'s re-dispatch of the original itself re-enters the
+interpreter. If it does, using the value's sigs only MOVES the entry rather
+than removing it, and the seven rows need the collection machine after all.
+That is one read of one function, and it is the next step.
 
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
