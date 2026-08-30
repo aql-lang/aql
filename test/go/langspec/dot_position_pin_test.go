@@ -28,6 +28,12 @@ func TestDotAccessKeepsSourcePosition(t *testing.T) {
 		{"module-qualified call", `import "boru:test" Assert.not-equal 3 3`},
 		{"plain map dot access", `def m {s:1} end m.s`},
 		{"dot access inside a paren operand", `def m {a:1} end 10 div (m.a sub 1)`},
+		// The /s modifier over a dot-access: the subject is a dynamic(Any)
+		// carrier, not a Function, because getNodeReturns deliberately does
+		// not narrow a dispatch-bearing field. recordGradualWrap takes the
+		// recorded position from that argument, so the whole sugar chain
+		// downstream recorded 0:0 until the stamp covered dynamic carriers.
+		{"the /s modifier over a dot access", `def m {d:div/v} end 10 0 m.d/s`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -40,12 +46,12 @@ func TestDotAccessKeepsSourcePosition(t *testing.T) {
 				t.Fatalf("expected a compiled program, got %v", cerr)
 			}
 			for pc, in := range p.Code {
-				if in.Op != compiler.OpCallNative {
+				if in.Op != compiler.OpCallNative && in.Op != compiler.OpCallNativePoly {
 					continue
 				}
 				if pc >= len(p.Debug) || p.Debug[pc].Row == 0 {
-					t.Errorf("CALL_NATIVE at pc %d has no source position — a dot-sugar "+
-						"access lost its caret on the compiled lane (NUR113)", pc)
+					t.Errorf("%s at pc %d has no source position — a dot-sugar "+
+						"access lost its caret on the compiled lane (NUR113)", in.Op.String(), pc)
 				}
 			}
 		})
