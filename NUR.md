@@ -650,11 +650,34 @@ caret, and it is a DIFFERENT mechanism — measured after this fix landed:
 ```
 
 The sugar is not the culprit: the parsed marker carries `1:26`, and both
-`SugarExpansion` and `sugarBoundWord` stamp their output with it. Instrumenting
-the analysis seam shows `stack-args` NEVER ARRIVES there, in any program, while
-a PolyRef for it is nonetheless recorded — so it is recorded by a path that
-bypasses the seam this fix stamps. Tracked on its own task; the next step is to
-instrument forward collection rather than assume it.
+`SugarExpansion` and `sugarBoundWord` stamp their output with it.
+
+**Root-caused to one line** — `recordGradualWrap` in
+`lang/go/native/native_valof.go`:
+
+```go
+pos := core.SrcPos{}
+if len(args) > 0 {
+    pos = args[len(args)-1].Pos()
+}
+reg.Check.Recorder().RecordPolyCall(word, args, outs, pos, nil, nil)
+```
+
+The position comes from the LAST ARGUMENT'S VALUE, and for `/s` over a
+dot-access that argument is the non-concrete function-value CARRIER
+(`checkModeGradualFn`'s own subject — dynamic(Any), because `getNodeReturns`
+deliberately cannot narrow a dispatch-bearing field). Its `Parent` is `TAny`,
+not `TFunction`, so the stamp above — which keys on `TFunction` — never
+reaches it.
+
+Worth recording how it was found, because three greps missed it: probes in
+the analysis seam, in `tryRecordPoly` and in `tryRecordDynBody` all failed to
+fire for `stack-args` while a PolyRef for it was demonstrably recorded, and
+`RecordPolyCall` did fire. Its only caller within core/check/compiler is
+`tryRecordPoly` — the real caller lives in `lang/go/native`, the modifier
+word's own implementation, outside every module being searched.
+
+Two candidate fixes, neither tried, on the task.
 
 **What it blocks.** The `/s` trailing-apply increment (3 census rows,
 46 → 43): its fast lane is correct and gate-green on values, but a raising
