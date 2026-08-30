@@ -2592,7 +2592,7 @@ func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
 		return
 	}
 	fd, isFn := v.Data.(core.FnDefInfo)
-	if !isFn {
+	if !isFn || !core.IsConcrete(v) || len(fd.Captured) > 0 {
 		return
 	}
 	// A MODIFIER WRAPPER is a container too — of exactly one fn — and the walk
@@ -2614,11 +2614,14 @@ func (es *EmitState) stampFnConstAt(v core.Value, depth int) {
 	// The recursion stamps the INNER value, which is what eng's
 	// UnwrapModifierChain hands dynApplyEnter at run time; the wrapper's own
 	// sigs stay unstamped, correctly — there is no boru body there to run.
+	// AFTER the guard above, not before it, and the reason is a coverage fact
+	// rather than a preference: splitting that guard to run this first leaves
+	// its `!isFn` arm and its concrete/capturing arm in separate blocks, and
+	// nothing in the corpus reaches the second one — a wrapper is concrete and
+	// captures nothing, and a wrapper over a CLOSURE wraps a value with no
+	// stampable sigs anyway. One guard, one covered block, same reach.
 	if fd.Wraps != nil {
 		es.stampFnConstAt(*fd.Wraps, depth+1)
-	}
-	if !core.IsConcrete(v) || len(fd.Captured) > 0 {
-		return
 	}
 	for si := range fd.Signatures {
 		if !storedSigEligible(&fd.Signatures[si]) {
