@@ -426,6 +426,60 @@ family L already names — "a runtime dispatch respecting the conditional
 binding" — which is Stage 4/5's def-twin work, not Stage 3's. Pinned as
 measured meanwhile by `lang/go`'s `TestCondBodyFreshDefBindsCompiledOnly`.
 
+**SHARPENED 2026-08-30, and the diagnosis above is not the one that matters.**
+Three things the record did not have.
+
+1. **THE CHECK PASS AND THE COMPILE PASS DISAGREE WITH EACH OTHER**, which is a
+   larger finding than the compiled/interpreted split this record was filed
+   under. Same program, same front end:
+
+   ```
+   def c false  if c [def op 1] [0] end op
+
+   boru check          check: 1:38: [error] undefined_word: undefined word: op
+   boru check --emit   (no diagnostics at all)
+   ```
+
+   The checker's model rolls the branch binding back correctly and says `op` is
+   unbound — agreeing with the interpreter. The compile pass keeps it, reports
+   nothing, and the disassembly shows why:
+
+   ```
+   0000 PUSH_CONST  k0   ; false        0003 PUSH_CONST k1 ; 0
+   0001 JMP_IF_FALSE -> 0003            0004 PUSH_CONST k2 ; 1   <- `op`
+   0002 JMP -> 0004
+   ```
+
+   `op` is CONSTANT-FOLDED to the value the untaken branch installed. So this is
+   not "a gate that fires on `changed` and should also fire on fresh" — the
+   rollback the checker performs is already right, and the recorder's view of
+   the same pass survives it. Fixing the recorder's rollback is a repair;
+   refusing is the fallback if it is not reachable.
+
+2. **THE BOUNDARY TABLE ABOVE IS INCOMPLETE.** Re-measured at `-no-check`,
+   `if` is not the only shape:
+
+   | shape | compiled | interpreted | |
+   | --- | --- | --- | --- |
+   | `if false [def op 1] [0] end op` | `0 1` | undefined_word | **miscompile** |
+   | `[] each [def op 1] end op` | `[] 1` | undefined_word | **miscompile** |
+   | `0 [] fold [def op 1] end op` | `0 1` | undefined_word | **miscompile** |
+   | `case 9 [1] [def op 1] [0] end op` | undefined_word | undefined_word | correct |
+   | `for 0 [def op 1] end op` | undefined_word | undefined_word | correct |
+   | `[] filter [def op 1 true] end op` | undefined_word | undefined_word | correct |
+
+   Two higher-order bodies diverge and a third does not, which is the useful
+   asymmetry: `each` and `fold` leak the binding, `filter` does not, and all
+   three raise CondBodyDepth through the same `native_array.go` seam. Whatever
+   `filter` does differently is the mechanism to copy.
+
+3. **The default CLI path is SAFE and that is not a reason to relax.** `boru
+   run` does a check pre-flight, which catches this and refuses; the miscompile
+   is reached through `-no-check`, and through any embedder that calls
+   `CompileCheck` and trusts its (empty) diagnostics. The second is the real
+   exposure: the compile pass does not merely fail to refuse, it fails to
+   REPORT.
+
 ---
 
 ## NUR109 — an unbound parser name is two different errors {#nur109}
