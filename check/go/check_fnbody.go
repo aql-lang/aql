@@ -917,7 +917,7 @@ func checkFnBodyAtConstruction(r *core.Registry, name string, fnDef core.FnDefIn
 		// application, because the operands it already pushed stay behind.
 		// generalisedResidualModelsReturn spells out the two shapes and the
 		// three corpus rows that proved them.
-		if generalisedResidualModelsReturn(stk, declared) {
+		if generalisedResidualModelsReturn(stk, declared, s.ReturnPatterns, bodyIsInertLiteral(s.Body())) {
 			checkBodyReturnConformance(r, name, declared, s.ReturnPatterns,
 				unnamedParamCount(s.Params), false, stk, bodyStartPos(s.Body()), bodySpanEnd(s.Body()))
 		}
