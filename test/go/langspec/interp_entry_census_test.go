@@ -673,7 +673,9 @@ func TestInterpEntryCensus(t *testing.T) {
 		}
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+		lineNo := 0
 		for sc.Scan() {
+			lineNo++
 			line := strings.TrimRight(sc.Text(), " \t")
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
@@ -692,6 +694,19 @@ func TestInterpEntryCensus(t *testing.T) {
 				continue
 			}
 			dirty++
+			// BORU_LOG_CENSUS_ROWS=1 names every dirty row and the seams it
+			// entered through. The file × seam table above ranks CLUSTERS,
+			// which is what you want when choosing a mechanism — but once a
+			// cluster is chosen you need the rows themselves, and without this
+			// the only way to get them was to re-derive them by hand (and get
+			// it wrong: `--compile-report` prints a line containing the word
+			// "interpreter" for every program, islanded or not, so grepping
+			// for it names rows that compile perfectly well).
+			// Mirrors BORU_LOG_UNFLAGGED in check_accuracy_test.go.
+			if os.Getenv("BORU_LOG_CENSUS_ROWS") != "" {
+				t.Logf("CENSUS ROW %s:L%d via %s: %s",
+					e.Name(), lineNo, seamBreakdown(rowSeams(seen)), strings.TrimSpace(parts[0]))
+			}
 			perFile[e.Name()]++
 			if fileSeamRows[e.Name()] == nil {
 				fileSeamRows[e.Name()] = map[string]int{}
@@ -761,6 +776,17 @@ func runWithEntryHook(t *testing.T, src string) (int, map[string]int, bool) {
 // "Engine.Run 14, CallBoru 9" — highest first, ties broken by name so a diff of
 // two census runs is readable. Empty maps cannot reach here (a file only lands
 // in perFile once a row recorded at least one seam).
+// rowSeams collapses one row's per-seam ENTRY COUNTS to a once-per-seam map,
+// so a row's listing reads like the file table's (which counts rows, not
+// entries) rather than double-reporting a seam a row entered twice.
+func rowSeams(seen map[string]int) map[string]int {
+	out := make(map[string]int, len(seen))
+	for s := range seen {
+		out[s] = 1
+	}
+	return out
+}
+
 func seamBreakdown(bySeam map[string]int) string {
 	names := sortedKeys(bySeam)
 	sort.SliceStable(names, func(i, j int) bool { return bySeam[names[i]] > bySeam[names[j]] })
