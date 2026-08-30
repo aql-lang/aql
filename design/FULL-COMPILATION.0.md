@@ -1081,11 +1081,39 @@ so at check time it is dynamic, the carrier compiler cannot step it, and the
 token window survives to run time with nothing but the interpreter able to
 walk it.
 
-The fix therefore has two halves, and the first is the one to establish
-first: the handler's output is a PURE FUNCTION of `n` and `origBarrier`, so
-its shape is knowable at record time without running it. That makes it
-describable as a region rather than emitted as tokens — which is exactly what
-retiring a tape-coupled handler means for this word.
+**The purity holds, for all three wrapper families, and by inspection.** Both
+handlers take `(args []Value, _ map[string]Value, _ []Value, _ *Registry)` —
+three ignored parameters, so no context data, no extra values, no registry —
+and read nothing but `len(args)`, the captured `origBarrier`, and the
+captured `orig`:
+
+```go
+usurpDispatchHandler:      ( args[0 … n-b-1]   orig   args[n-1 … n-b] )
+rebarrierDispatchHandler:  ( args[n-1 … b]     orig   args[0 … b-1]   )
+```
+
+`rebarrier` covers `forward-args` / `stack-args` (`ForceForwardFunction` /
+`ForceStackFunction`) and `force-arity` (`ForceArityFunction`), so between
+the two every one of the seven rows is accounted for. Each is a pure
+RESHUFFLE: a paren group whose lead is a fn VALUE, a stack part before it, a
+forward part after it, and the split fixed entirely by `n` and
+`origBarrier` — both static at record time, since the arity is the recorded
+call's and the barrier is baked into the wrapper at construction.
+
+**So the window is exactly a `RegionDesc` with `Lead: LeadFnValue`** — a lead
+kind the model already has and nothing yet fills. For a wrapper at arity `n`
+with barrier `b`:
+
+| | stack part | forward slots (`NFwd`) |
+|---|---|---|
+| usurp | `n-b` values | `b`, in REVERSE arg order |
+| rebarrier | `n-b` values | `b`, in arg order |
+
+with `NArgs = n`. Nothing about that needs a tape; it needs a descriptor and
+something that can execute one, which is what §6.2 builds. Retiring this
+tape-coupled handler is therefore not a rewrite of `usurp` — it is moving
+the same reshuffle from a token sequence the engine must step to a
+descriptor the VM can run.
 
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
