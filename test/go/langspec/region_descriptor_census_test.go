@@ -368,6 +368,15 @@ func slotKind(v core.Value) string {
 		return "type"
 	case core.IsWord(v):
 		return "word"
+	case core.BearsActiveTokens(v):
+		// A compound literal whose MEMBERS are active tokens is not its own
+		// value: `[true true true]` is a list of three WORDS until they run,
+		// and an interpolated string is a template until its holes do. This
+		// bucket was folded into `const` in this census's first version, and
+		// the live probe that caught it is recorded in §6.2 — a token that
+		// merely LOOKS concrete is the same frozen-class mistake one level
+		// down, inside the literal.
+		return "active"
 	case core.IsConcrete(v):
 		return "const"
 	}
@@ -401,6 +410,8 @@ func slotKind(v core.Value) string {
 //	word          -> LIVE derivation, which the descriptor model already
 //	                 mandates (a word's class is contextual, region_desc.go)
 //	group         -> a compiled fragment, run conditionally (SlotGroup)
+//	active        -> a compound literal whose MEMBERS are active tokens, so
+//	                 it is a fragment in disguise rather than a const
 //	mod           -> read as the slot's Quote, already captured
 //
 // None of those five is an operand lookup. If they account for the corpus,
@@ -484,9 +495,16 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 						// every slot has a source the model can express today.
 						// A word joins the simple kinds here because its source
 						// is "resolve it live", which needs no table and no
-						// lowering. Only a group (no fragment yet) and a mod
-						// (not an operand at all) fall outside.
-						if kind == "group" || kind == "mod" {
+						// lowering.
+						//
+						// Three kinds fall outside. A group has no compiled
+						// fragment yet. A mod is not an operand at all — the
+						// collection walk consumes it. And an ACTIVE compound
+						// is a fragment in disguise: `[true true true]` is a
+						// list of three WORDS whose members are evaluated, so
+						// freezing it as a const is the frozen-class mistake
+						// one level down, inside the literal.
+						if kind == "group" || kind == "mod" || kind == "active" {
 							completable = false
 						}
 					}
@@ -526,7 +544,7 @@ func TestRegionSlotTokenKinds(t *testing.T) {
 	t.Logf("   regions ENTIRELY simple (every slot after the lead is its own value): "+
 		"%d (%.1f%%), %d slots", regionsAllSimple,
 		100*float64(regionsAllSimple)/float64(regions), slotsAllSimple)
-	t.Logf("   regions COMPLETABLE (adding wordRef: no group slot, no mod slot): "+
+	t.Logf("   regions COMPLETABLE (adding wordRef: no group, mod or active slot): "+
 		"%d (%.1f%%), %d slots", regionsCompletable,
 		100*float64(regionsCompletable)/float64(regions), slotsCompletable)
 	// The buckets must account for every slot. A census whose parts do not

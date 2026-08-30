@@ -714,13 +714,14 @@ needed?** Over the corpus — 14521 regions, 69474 tokens, leads included
 | token kind | count | share | of which LEAD |
 |---|---:|---:|---:|
 | word | 31682 | 45.6% | 8974 |
-| const | 27448 | 39.5% | 4910 |
+| const | 16847 | 24.2% | 2755 |
+| active | 10601 | 15.3% | 2155 |
 | group | 9830 | 14.1% | 550 |
 | atom | 483 | 0.7% | 87 |
 | type | 24 | 0.0% | 0 |
 | mod | 7 | 0.0% | 0 |
 
-Zero unclassified, and **not one of the six kinds is an operand lookup**. A
+Zero unclassified, and **not one of the seven kinds is an operand lookup**. A
 const or an atom interns its own token — the token IS the value. A type
 interns the canonical registry node. A group becomes a conditionally-run
 compiled fragment. A `mod` is not an operand at all: the collection walk
@@ -729,6 +730,15 @@ already captured as the slot's `Quote`. And a word is derived LIVE, which is
 this section's own `wordRef(name)` class and which the descriptor model
 mandates anyway — a word's class is contextual, so a record-time freeze is
 the miscompile `region_desc.go`'s type doc opens by refusing.
+
+`active` is a correction to this census's own first version, which folded it
+into `const` and so over-reported what the model reaches by more than
+double. A compound literal whose MEMBERS are active tokens is not its own
+value: `[true true true]` is a list of three WORDS until they run, and an
+interpolated string is a template until its holes do. Freezing one as a
+const is the frozen-class mistake one level down, INSIDE the literal, and it
+puts `active` with `group` — a fragment in disguise — rather than with
+`const`. The live probe below is what caught it.
 
 So the join came from treating the descriptor as a record of what a dispatch
 CLAIMED. It is a record of what the region CONTAINS; deciding what is
@@ -745,13 +755,46 @@ What that reaches, on the same corpus:
 
 | completable at capture | regions | share | slots |
 |---|---:|---:|---:|
-| every slot is const / atom / type | 4046 | 27.9% | 8058 |
-| …adding wordRef (no group, no mod) | **8491** | **58.5%** | **22409** |
+| every slot is const / atom / type | 1899 | 13.1% | 2850 |
+| …adding wordRef (no group, mod or active) | **4859** | **33.5%** | **9546** |
 
-More than half the corpus's regions therefore have a descriptor the model
-can express with no further machinery. What is still owed is a compiled
-fragment per `group` slot — 21.2% of regions carry one — and a decision on
-the `mod` marker, which is 7 slots and not an operand.
+A third of the corpus's regions therefore have a descriptor the model can
+express with no further machinery, up from an eighth. What is still owed is
+a compiled fragment for the two kinds that need one — `group` (21.2% of
+regions carry one) and `active` — and a decision on the `mod` marker, which
+is 7 slots and not an operand.
+
+**The written-order rule holds at 99.83%, measured live rather than read off
+the docs.** A temporary probe in `RecordCall` compared each captured
+region's slots against the args the dispatch actually received, over the
+whole corpus gate (`TestSpecCompiledOrFallback`). The rule under test is
+CLAUDE.md's: matching fills sig positions from the FORWARD tokens in WRITTEN
+order, then fills every remaining position from the value stack — so for
+`k = min(slots, args)`, `slot[i]` must be `args[i]` for every `i < k`,
+whatever the split.
+
+| outcome | count | share of simple regions |
+|---|---:|---:|
+| prefix matches, every arg came forward | 2125 | 14.7% |
+| prefix matches, further args from the STACK | 12327 | 85.1% |
+| MISMATCH | 25 | 0.17% |
+
+Two things follow, and the second is the one that changes the build.
+
+First: **the mixed forward/stack dispatch is the MAJORITY, not an edge** —
+85% of simple regions take some args from the value stack. A `RegionDesc`
+describes only the forward half, so `OpCollect` must fill the remaining sig
+positions from the runtime stack. That is not a gap in the model (the rule
+says exactly this) but it does mean a region descriptor alone never
+determines the operand set.
+
+Second: **the lowerer must VERIFY the prefix, not assume it.** 25 cases in
+14477 do not satisfy it — a `none` word rendering against a `None` value, a
+record type against its expanded object form, and a handful whose slots and
+args genuinely disagree. The lowerer holds both the slots and the args at
+the routing decision, so comparing them costs nothing and turns the
+ordering rule from an assumption into a checked precondition. Three
+reverted models assumed an ordering; the one that survives checks it.
 
 **Capture must stay side-effect-free, and that is a constraint on where
 sources get filled.** `es.intern` NEVER pools compounds: two source `[1]`
