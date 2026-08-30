@@ -402,12 +402,69 @@ func posBefore(row, col int, p core.SrcPos) bool {
 // thereby NOT held to its declaration by this seam; the dispatch path still
 // catches it wherever the fn is actually called, and silence is the right
 // failure direction for a checker.
-func generalisedResidualModelsReturn(stk []core.Value, declared []*core.Type) bool {
+func generalisedResidualModelsReturn(stk []core.Value, declared []*core.Type,
+	patterns []*core.Value, bodyIsLiteral bool) bool {
 	if len(declared) == 0 || len(stk) != len(declared) {
 		return false
 	}
+	// A LITERAL return pattern cannot be modelled by a generalised residual,
+	// and the reason is the generalisation itself: a literal PARAM pattern is
+	// widened to its parent type before the body runs, so a body that simply
+	// passes that param through residuals as the parent. Comparing it to the
+	// literal the declaration names then reports a mismatch that does not
+	// exist at run time.
+	//
+	//	def f fn [[1] [1] [dup drop]] end     -> `f 1` is 1 on both engines
+	//
+	// The first version of this seam rejected exactly that, with "expected 1,
+	// got Integer" — a false positive, found by review rather than by the
+	// accuracy ratchet, because no corpus row pairs a literal param pattern
+	// with a literal return. Preserving the constraint through generalisation
+	// would be the fuller fix; declining the residual is the sound one, and
+	// its cost is the usual lost detection rather than a wrong answer.
+	for _, pat := range patterns {
+		if pat != nil && core.IsConcrete(*pat) {
+			return false
+		}
+	}
 	for i := range stk {
-		if core.IsConcrete(stk[i]) || core.IsFnTypedCarrier(stk[i]) {
+		if core.IsFnTypedCarrier(stk[i]) {
+			return false
+		}
+		// A CONCRETE slot is disqualifying only when the body could have put
+		// one there WITHOUT returning it — which needs an application to
+		// strand an operand, or a param stand-in to survive. A body that is
+		// nothing but inert literals has neither: there is no application and
+		// no param read, so the residual IS the return.
+		//
+		//	def cbad fn [[n:Integer] [Boolean] [1]] end  [1 2] each cbad/v
+		//
+		// checked clean while both engines raised "expected Boolean, got
+		// Integer" — the last live half of NUR111, and the shape this
+		// exception exists for. Measured: a computed body (`[1 add 2]`) and a
+		// param body (`[n]`) were already caught; the bare literal was the
+		// only hole.
+		if core.IsConcrete(stk[i]) && !bodyIsLiteral {
+			return false
+		}
+	}
+	return true
+}
+
+// bodyIsInertLiteral reports whether a fn body is nothing but inert constant
+// tokens — no word to dispatch, no group to evaluate, no interpolation to
+// build. Such a body cannot strand an operand (there is no application) and
+// cannot surface a param stand-in (there is no param read), which is what
+// makes a concrete residual from it a faithful return rather than debris.
+//
+// An EMPTY body is not one: it returns nothing, and the residual-length check
+// above is what should speak for it.
+func bodyIsInertLiteral(body []core.Value) bool {
+	if len(body) == 0 {
+		return false
+	}
+	for _, v := range body {
+		if !core.IsInertConst(v) || core.BearsActiveTokens(v) {
 			return false
 		}
 	}
