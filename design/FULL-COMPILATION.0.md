@@ -805,6 +805,63 @@ unbounded const-table growth, silent. `SlotWordRef` is safe to fill at
 capture precisely because it costs nothing and cannot drift; const, type and
 group sources must be filled once, by the lowerer, not once per execution.
 
+**What routes, measured, and what the routing predicate must NOT do.** A
+first cut of the region-dispatch lowering was built and reverted; the
+numbers it produced are the design brief for the next one.
+
+The predicate it tested: the lead is a word, every slot is const / atom /
+type / wordRef, and — the precondition, CHECKED rather than assumed —
+`slot[i] == args[i]` over the overlap. Attributed over the corpus (7634
+rows, 82670 mono dispatches), of the 40070 dispatches that reach it:
+
+| outcome | count | share |
+|---|---:|---:|
+| routable | 3045 | 7.6% |
+| declined: **inside a fn unit** | **30873** | **77.0%** |
+| declined: prefix mismatch | 2871 | 7.2% |
+| declined: slot kind (group / active / mod) | 1699 | 4.2% |
+| declined: no region (a stack-only dispatch) | 1162 | 2.9% |
+| declined: no args | 420 | 1.0% |
+
+**The fn-unit exclusion is four fifths of the gap** — not one restriction
+among five. It is there because a word slot inside a compiled fn body names
+a PARAM, which lives in the frame rather than in the def stack the VM's live
+lookup reads, so a live re-derivation would miss it. Lifting it is worth
+more than every other relaxation combined, and it is bounded work: a
+name-to-slot map per unit, and a word slot that resolves to a param lowering
+as `SlotLocal` rather than `SlotWordRef`.
+
+**And the predicate must scan only the CLAIM, not the region.** Requiring
+every slot to be routable measured **+9.9%** on
+`BenchmarkPerfCompile/arith_chain64` (interleaved A/B, four rounds of two
+compiled binaries; `PerfCheck/arith_chain64` and `PerfCompile/for_tight`
+were flat, which is the tell — the cost appears only where the recorder is
+active and the region is long). The cause is structural rather than
+incidental: a region runs to the next hard delimiter, so it is as long as
+its STATEMENT, and a 64-term arithmetic chain hands its first dispatch a
+128-token region. Classifying all of them, once per dispatch, is quadratic.
+
+Caching the classification on the slot does not fix it — the capture walk is
+itself per-dispatch — and neither does moving the scan to lowering, since
+each dispatch has its own descriptor. What fixes it is noticing that the
+scan is unnecessary: **a slot beyond the recorded claim is not this
+dispatch's operand.** It matters only if a LIVE collection claims further
+than the recording did, and that case is already covered — the arity check
+defers, and a slot the runtime cannot resolve defers too. So the predicate
+scans `slots[0:NFwd]`, and `Validate` permits `SlotNone` at `i >= NFwd`,
+documented as "beyond the recorded claim; the runtime defers if collection
+reaches it". That is the one place the invalid zero is not a defect, and it
+is worth stating rather than discovering.
+
+One correction to how this was measured, because it nearly caused a wrong
+decision. The first comparison used a benchmark file recorded earlier in the
+session, and it reported the FIRST-WINS capture fix — a change that
+strictly does less work — as 1.4% to 7.9% SLOWER across every case. That is
+impossible, and it is what exposed the baseline as stale rather than the
+change as costly. Only the interleaved A/B above is load-fair, and the
++9.9% figure is that one. A performance number from a file measured under a
+different machine load is not a measurement.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this
