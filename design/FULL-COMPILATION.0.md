@@ -1100,20 +1100,46 @@ forward part after it, and the split fixed entirely by `n` and
 `origBarrier` — both static at record time, since the arity is the recorded
 call's and the barrier is baked into the wrapper at construction.
 
-**So the window is exactly a `RegionDesc` with `Lead: LeadFnValue`** — a lead
-kind the model already has and nothing yet fills. For a wrapper at arity `n`
-with barrier `b`:
+**And working the permutation through collapses it further than a descriptor
+— to a PERMUTATION OF THE ARG VECTOR, independent of the barrier.** Apply
+CLAUDE.md's argument-order rule to each window (forward tokens fill sig
+positions `0 … k-1` in written order, the rest come off the stack top-first):
 
-| | stack part | forward slots (`NFwd`) |
-|---|---|---|
-| usurp | `n-b` values | `b`, in REVERSE arg order |
-| rebarrier | `n-b` values | `b`, in arg order |
+```
+usurp,     any b:  sig[i] = args[n-1-i]     — a full REVERSAL
+rebarrier, any b:  sig[i] = args[i]         — the IDENTITY
+```
 
-with `NArgs = n`. Nothing about that needs a tape; it needs a descriptor and
-something that can execute one, which is what §6.2 builds. Retiring this
-tape-coupled handler is therefore not a rewrite of `usurp` — it is moving
-the same reshuffle from a token sequence the engine must step to a
-descriptor the VM can run.
+The barrier cancels out of both. That is not obvious from the handlers and
+it is the whole economy of the fix, so it is checked rather than asserted —
+three derivations (b=0, b=1, b=n) and then the runtime, with a case chosen
+to come out WRONG if the claim were backwards:
+
+```
+m.s/u 10 3                          →  7    usurp reverses
+usurp (forward-args (m.s)) 10 3     →  7    …at any inner barrier
+usurp (stack-args (m.s)) 10 3       →  7    …at any inner barrier
+force-arity 2 (usurp (m.s)) 10 3    →  7    …and under composition
+forward-args (m.s) 10 3             → -7    rebarrier alone is the IDENTITY
+10 3 stack-args (m.s)               →  7    …in either call form
+```
+
+`-7` is the load-bearing row: `sub` computes `args[1] - args[0]`, so an
+identity mapping must answer `3 - 10`. Had rebarrier reversed too, it would
+read 7 like the others and the whole table would prove nothing.
+
+So the seven rows need neither a tape nor a region: they need the arg vector
+permuted and the WRAPPED value dispatched. `RegionDesc`'s `LeadFnValue` is
+still the right shape for the general tape-coupled handler — a paren group
+led by a fn value — but this particular family is a special case that
+resolves statically, and building the general machine to serve it would be
+building past the evidence.
+
+**What blocks it is one missing field.** `orig` and `origBarrier` are Go
+closure captures inside the handler, so the VM cannot see what a wrapper
+wraps: it can tell THAT a value reverses (`ArgsReversed`) but not what to
+dispatch instead. Exposing the wrapped value on `FnDefInfo` is what turns
+this from an island into a permutation and a call.
 
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
