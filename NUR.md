@@ -642,7 +642,19 @@ they existed, since core's own suite never reaches the check-mode analysis path
 with a module dot-access.
 
 **What is still open:** the `/s` sugar chain (`10 0 m.d/s`) still loses its
-caret. Different mechanism, recorded on its own task.
+caret, and it is a DIFFERENT mechanism — measured after this fix landed:
+
+```
+0002 CALL_NATIVE_POLY  1:26  -> dot          fixed here
+0003 CALL_NATIVE_POLY  0:0   -> stack-args   still the hole
+```
+
+The sugar is not the culprit: the parsed marker carries `1:26`, and both
+`SugarExpansion` and `sugarBoundWord` stamp their output with it. Instrumenting
+the analysis seam shows `stack-args` NEVER ARRIVES there, in any program, while
+a PolyRef for it is nonetheless recorded — so it is recorded by a path that
+bypasses the seam this fix stamps. Tracked on its own task; the next step is to
+instrument forward collection rather than assume it.
 
 **What it blocks.** The `/s` trailing-apply increment (3 census rows,
 46 → 43): its fast lane is correct and gate-green on values, but a raising
