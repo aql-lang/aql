@@ -563,12 +563,42 @@ Nor is constant-folding the discriminator. `3 gt 1` is not literal-folded, so
 the shape takes the general branch path; splitting `InstallJoinedDefs` into
 definite and conditional variants was tried and changed nothing.
 
+**A THIRD ATTEMPT, AND THE RULE THIS RECORD HAD WRONG.** The `each` / `fold`
+half was filed above as a SECOND, separate leak — `analyseHigherOrderBodyVals`
+raises CondBodyDepth and pushes a spec baseline but never snapshots `r.Defs`,
+where every branch/loop body has always rolled back (`runCarrierBodyDefsAdds`,
+keep=false). Adding that rollback fixes `[] each [def op 1] end op` and BREAKS
+the non-empty case, because the leak is the interpreter's actual semantics:
+
+```
+def j 999  def _ ([1] each [def j (5 add 1) j])  j   →  6      not 999
+[1] each [def j 6 j] end j                           →  [6] 6
+[1 2] each [def op 1] end op                         →  [1 2] 1
+[]    each [def op 1] end op                         →  undefined_word
+```
+
+A body-local `def` LEAKS, like `do`, and SHADOWS an enclosing binding of the
+same name. It exists after the construct if and only if the body actually RAN.
+
+So `each`/`fold` is not a smaller sibling of the `if` half — it is the SAME
+question, and the rule both need is a THIRD binding state: *bound iff that body
+ran*. Every fix that picks one of the two existing states is right for one case
+and wrong for the other. There is no rollback-shaped fix, and no refusal-shaped
+fix that is not either unsound or over-broad.
+
+`filter` stays correct under all three attempts, and it is worth naming why
+without over-reading it: `filterReturnsFn` NEVER RUNS THE BODY — it types the
+result only, and the predicate goes through the declared Callable spec's closure
+path. That is not a mechanism `each` can copy; `each` needs the body's
+diagnostics.
+
 **So the verdict stands as resolve-by-fix, and the fix is the def twins.** What
-is needed is per-read provenance that distinguishes a name read after the branch
-from a value produced inside it — which is exactly "a runtime dispatch
-respecting the conditional binding", family L's stated full graduation, and
-Stage 5 work. Two attempts are now recorded as rejected, both with their
-measurement, so the next one does not re-derive them.
+is needed is per-read provenance distinguishing a name read after the construct
+from a value produced inside it, plus a binding state that survives as
+conditional — which is exactly "a runtime dispatch respecting the conditional
+binding", family L's stated full graduation, and Stage 5 work. Three attempts
+are now recorded as rejected, each with its measurement, so the next one does
+not re-derive them.
 
 ---
 
