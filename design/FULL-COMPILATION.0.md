@@ -918,6 +918,43 @@ Two further facts from that slice, both worth keeping:
   Resolving it against the dispatch registry finds the wrong overload set or
   none, and the module-gate parity tests catch it.
 
+**AND THE DECLINE SITES ARE COLD — so "route what the ordinary lowering
+cannot handle" needs one more step to be actionable.** Tallied over the
+corpus (7638 rows, each compiled and its refusal reason collapsed to a
+shape):
+
+| refusal shape | rows |
+|---|---:|
+| check diagnostics | 191 |
+| check error | 134 |
+| parse error | 47 |
+| def-bound computed fn apply (closure shape unknown) | 1 |
+| unconsumed fn-value carrier in residual | 1 |
+
+374 refused of 7638, and 372 of those are programs that are SUPPOSED to
+fail. The compiler's own refusal surface on this corpus is **two rows**, and
+neither is a rebind-staleness latch: `module binding … rebound after a fn
+unit baked its value` and its stored-handler twin fire **zero** times.
+
+That is not an argument that the latches do not matter — they are
+correctness under rebinding, and a corpus of literal programs will not
+exercise them. It is an argument about what can be VALIDATED: a region
+dispatch built for those sites has no corpus evidence to stand on, and this
+stage has already spent three attempts on models that passed everything
+available to them.
+
+So the target that is both correct and measurable is the third one:
+**the mixed-window island**. `OpCallDynamicMixed` islands its token window
+through an interpreter sub-run (`eng/go/vm.go` `islandRun`, reached from
+`drift_window.go`'s model), which is interpretation running INSIDE compiled
+code — the thing this document exists to remove, not a fallback outside it.
+It is also one of the four mechanisms the interpreter-entry census still
+counts at 43 ("a fn value in a container at the pointer"), so progress on it
+is visible in a number that already exists. The region descriptor is the
+right replacement for that island precisely because such a program has no
+ordinary compiled form to be identical to — the split-identity rule above
+does not bind, and the live re-derivation is the whole point.
+
 **F2's carried-state list is INCOMPLETE — by three readers, all
 region-local.** Probed 2026-08-26, enumerating what the no-match raise path
 actually reads rather than trusting the list. F2 fired once and widened this
