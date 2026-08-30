@@ -895,23 +895,43 @@ solely for re-derivation — which spends a live lookup and a live match on
 every dispatch to buy nothing the baked signature was not already giving.
 
 **So the target is not "dispatches that can be described". It is dispatches
-the ordinary lowering CANNOT HANDLE** — §6.5's rebind-staleness latches,
-where the compiler today DECLINES rather than risk a stale binding
-(`emit.go:2474`, "module binding k rebound after a fn unit baked its
-value"). There the split is genuinely value-dependent, the invariant above
-does not apply because there is no compiled form to be identical to, and the
-live re-derivation buys exactly what it costs. `region_desc.go`'s `k` pair is
-the acceptance test for precisely those sites, and it is worth re-reading as
-a statement about WHICH sites rather than about mechanism.
+the ordinary lowering CANNOT HANDLE.** The invariant above does not apply to
+them, because there is no compiled form for the routed one to be identical
+to, and the live re-derivation buys exactly what it costs.
+
+But §6.5's latches are NOT one class, and treating them as one was this
+note's first mistake. Only the FROZEN-READ shape is a region's business:
+`module binding k rebound after a fn unit baked its value` refuses because a
+unit baked a value whose token classification a live re-derivation would
+change — `region_desc.go`'s `k` pair, where the same token is a value slot
+or a collection barrier depending on the binding. That is exactly what
+OpCollect answers.
+
+Its stored-handler twin is a different failure. `NotifyNameRebound`
+(`compiler/go/emit.go:2721-2736`) refuses because module-scope def sites
+execute only in the CHECK pass, so by VM time the def table already holds
+the pass-final binding and calls sequenced BEFORE the rebind read the wrong
+definition. Nothing about that program's split is value-dependent, and no
+amount of live re-matching restores program-order state. **The bind twins
+(§5.6) fix it; a region dispatch cannot.**
 
 Two further facts from that slice, both worth keeping:
 
-- **A routed call must be a PLAIN dispatch.** `lowerCall`'s special forms
-  (typed bind, dyn-apply, drift window, dyn-method, make-list, make-map,
-  splice, interpolation, XML) each build their own operand window, so
-  changing the layout under one of them removes values its opcode still
-  expects. Measured as a wrong ANSWER rather than a crash: a corpus
-  assertion came back "expected 3, got 2".
+- **A region route must REPLACE a special form's lowering, never run
+  alongside it.** `lowerCall`'s special forms (typed bind, dyn-apply, drift
+  window, dyn-method, make-list, make-map, splice, interpolation, XML) each
+  build their own operand window. The slice skipped the forward operands
+  while one of those arms still emitted its own opcode expecting them, and
+  the result was a wrong ANSWER rather than a crash: a corpus assertion came
+  back "expected 3, got 2".
+  Stated as "a routed call must be a plain dispatch" — which is how the
+  first version of this note put it — the constraint would be WRONG, and
+  wrong in the direction that matters most: T2 names the drift window's
+  `OpCallDynamicMixed` as an island to delete, and the paragraph above makes
+  that island Stage 4's target. A rule excluding `dynMixed` from routing
+  would forbid the one route this stage most needs. The real constraint is
+  about co-existence, not eligibility: whichever arm owns the operand
+  layout must be the arm that emits.
 - **A MODULE-QUALIFIED dispatch cannot route on a bare word.** A module word
   re-matches over its OWN sub-registry's signatures — `PolyRef` carries that
   registry for exactly this reason — while a descriptor names only the word.
