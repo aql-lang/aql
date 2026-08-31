@@ -3258,7 +3258,25 @@ to exercise it**: Stage 2 ships the interface and the Engine re-seat, and
 the second adapter arrives with its client, not before. Two further
 implementation constraints from the same probe: `MatchSignature` already
 sits at gocyclo 87 / gocognit 211 under a `//nolint` against caps of
-70/200, so a merged routine cannot be one function; and the two largest
+70/200, so a merged routine cannot be one function — **corrected
+2026-08-31: that reading was itself paid down by re-seat 2 (54d8830);
+the live measure is 68/131, UNDER the caps, the `//nolint` is deleted,
+and `gocognit` ratchets 200 → 170**. The constraint's surviving form is
+its inverse: the planner now has TWO gocyclo points of headroom, so
+Stage-4 work that grows it extracts rather than expands, on written
+triggers — (T1) a Stage-4 change needs new arms in the planner or would
+breach a cap → extract the block it grows (stack-phase fill first, the
+inside-forward fill SEPARATELY — its weaker per-position test is
+behavior, not duplication), textually identically modulo parameter
+substitution, in its OWN commit landing beside (never merged with) the
+semantic commit, under the Stage-2 gate set; (T2) the admission-agreement
+census (the Tier-1 instrument: engine-planner fill vs the kernel
+`MatchSignature` at signature.go the G-lane opcodes call, with the
+opposite window conventions mapped explicitly) ledgers a divergence that
+needs a shared predicate → unify that predicate divergence-by-divergence,
+one commit and one spec row per closure, never wholesale — these
+closures move the interpreter's own answers, so the differential is
+blind to them by construction and the spec rows are the gate; and the two largest
 collection loops are 13.4% and 18.0% of interpreter CPU, which is the
 budget any re-seat has to stay inside. **Read those two figures with
 their basis in mind** — the probe recorded them without one, and "share"

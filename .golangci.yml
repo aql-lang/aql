@@ -44,10 +44,15 @@ linters:
         - -ST1022
         - -QF*
     # gocyclo / gocognit / dupl thresholds (see comment near `enable`).
+    # 2026-08-31 re-measure: MatchSignature's historical 87/211 exemption
+    # recorded the pre-carve eng/go/match.go version; Stage 2's re-seat
+    # (54d8830) cut it to 68/131, so its nolint is DELETED and the caps
+    # bind on it for real. The one remaining nolint pair is eng vm.run
+    # (148/278) — the VM instruction switch, which Stage 4 grows by design.
     gocyclo:
-      min-complexity: 70    # current worst: matchSignature (87) — nolinted
+      min-complexity: 70    # worst non-exempt: DefTypedHandler (exactly 70 — passes, strictly-greater), execFnDefLiteral/Finalize (69)
     gocognit:
-      min-complexity: 200   # current worst: matchSignature (211) — nolinted
+      min-complexity: 170   # worst non-exempt: check BuildFnBodyReturnsFn (165), core stepCloseParen (161)
     dupl:
       threshold: 400        # current 4 grandfathered groups are ≤ 350 tokens
   exclusions:

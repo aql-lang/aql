@@ -8284,7 +8284,7 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 	return false
 }
 
-// matchSignature is the unified signature matching function.
+// MatchSignature is the unified signature matching function.
 //
 // Algorithm:
 //
@@ -8318,7 +8318,15 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 // the arrival side can observe it. See
 // design/FORWARD-COLLECTION-PHASES.10.md.
 //
-//nolint:gocyclo,gocognit // dispatch is inherently a big switch; see STATIC_ANALYSIS_REPORT.10.md
+// COMPLEXITY: this function once carried //nolint:gocyclo,gocognit at
+// 87/211 — a reading of the pre-carve eng/go/match.go version. Stage 2's
+// re-seat 2 (54d8830) extracted the per-candidate scan to
+// CollectCandidateScan and the live measure is 68/131, UNDER the repo
+// caps (70/200), so the exemption is deleted and the caps now bind here
+// for real. Headroom is thin by design (2 gocyclo points): a change that
+// would breach a cap extracts the block it grew — textually identically,
+// in its own commit, per the §10 triggers in design/FULL-COMPILATION.0.md
+// — rather than re-earning an exemption.
 func (e *Engine) MatchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int, int) {
 
 	// Unified dispatch (post §1.4 fix): no more stackOnly/forward-prec
