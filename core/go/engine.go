@@ -2715,6 +2715,10 @@ func (e *Engine) stepWord(val Value) error {
 		wDeep.ForceStack = true
 		sig, positions, specAt = e.MatchSignature(fn, wDeep, resolved)
 	}
+	// The word-dispatch commit, as planned (dispatch_probe.go): the
+	// admission-agreement census reads it here, before the check-mode
+	// Fallback recovery below, which analysis alone reaches.
+	e.probeDispatch(fn, w, sig, positions, specAt)
 
 	// In check mode, if matchSignature fell through to the 0-arg /
 	// Fallback handler because no typed signature matched (but
@@ -5082,6 +5086,14 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		stkCount := len(positions) - fwdCount
 		return e.insertForward(w, sig, fwdCount, stkCount, specAt)
 	}
+
+	// The fn-value dispatch COMMIT (dispatch_probe.go): past every
+	// non-dispatch exit — the handler-less/nil reroute, the
+	// anonymous-lambda/macro parking (the value stays DATA; probing there
+	// counted non-dispatches, Codex P2 on PR #420), and the insertForward
+	// deferral (which re-enters here with args on the stack, so a parked
+	// dispatch is probed exactly once, at its real commit).
+	e.probeDispatch(fn, w, sig, positions, specAt)
 
 	// All args resolved on the stack. Anonymous FnDefs (no Go
 	// Handler) take the legacy stack-match path, which splices the
