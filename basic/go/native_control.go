@@ -16,7 +16,11 @@ var ControlNatives = []NativeFunc{
 		// literal body (`do [10 20 30]`) lowers to a true closure whose unit
 		// RETs all N values — no longer a baked-const list re-run through an
 		// interpreter sub-engine at run time.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: BodyOutResidual, Inputs: func(_ []Value) []Value {
+		// BodyOnceKeepsDefs: DoListHandler runs the body exactly once and
+		// its defs leak to the enclosing scope (RunCarrierBodyKeepDefs is
+		// the check-mode twin), which licenses the twin regime to replay
+		// body-noted bind twins after the call — see the field's doc.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: BodyOutResidual, BodyOnceKeepsDefs: true, Inputs: func(_ []Value) []Value {
 			return []Value{}
 		}},
 

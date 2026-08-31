@@ -90,7 +90,16 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	// property that already makes CONSUMED-arg container recording safe
 	// in a fn body.
 	recordable := r.Check.Recorder().PeekCaptureArm()
-	defer r.Check.Recorder().BodyAnalysisGuard()()
+	// A KEEP-DEFS run (`do`'s scoping) takes the keep-aware guard so the
+	// recorder can bracket the run's bind twins for do-body adoption; every
+	// other body (branch / loop / quotation — conditional or multi-run)
+	// takes the plain guard, which inside a keep run marks its twins as a
+	// tainted sub-range no adoption may place.
+	if keep {
+		defer r.Check.Recorder().KeepDefsBodyGuard()()
+	} else {
+		defer r.Check.Recorder().BodyAnalysisGuard()()
+	}
 
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()

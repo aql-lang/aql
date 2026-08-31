@@ -126,34 +126,61 @@ reverses an earlier plan:
    regime-compiled vs fresh interpreter): 6411 rows compiled, 0
    divergences, no allowance.** The default recorder compiled 6416 the
    same day: the full-placement gate costs exactly 5 rows (classified in
-   the lane by the `twin regime:` refusal reason), and they were
-   enumerated rather than assumed — FOUR are island-discarded do-body
-   defs (`do [def Big Integer …]`, `do [def x 5 raise …]`, the quoted
-   `[def zz 5 …] do`), exactly the class the island-re-execution hazard
-   below names: the island re-runs the def for real at VM time, the
-   discarded twin is semantically satisfied, and the count-based gate
-   refuses CONSERVATIVELY (sound fallback, never a double-install).
-   ONE is a suspended-recorder each-body leaking def
-   (`bytecode-migrated.tsv:41`), the class with no stream home until
-   arm-residency.
+   the lane by the `twin regime:` refusal reason). The flip-era analysis
+   called four of them "island-discarded" — **that mechanism label was
+   WRONG, and the 2026-08-31 recovery instrumented rather than assumed**:
+   all five rows record through the CLOSURE path (`tryRecordClosure` —
+   `RecordFallback` never fires for any of them), so the do bodies
+   compile to closure units whose defs are frame-local, and the
+   interpreter's leak is what the rollback loses. Island-discard
+   accounting in Finalize would have recovered NOTHING — and worse, an
+   island-re-execution account is unsound for a capitalised def (the
+   regime retains minted type IDs, so a VM-time re-run of
+   `def Big Integer` re-mints against the surviving name-part — the
+   bodyHasReplayHazard class). The landed recovery is §6.5-faithful
+   instead (replay, never re-execution): **do-body twin ADOPTION** —
+   `CallableSpec.BodyOnceKeepsDefs` (set on `do` alone: handler runs
+   the body exactly once, defs leak; check-mode twin is
+   `RunCarrierBodyKeepDefs`) licenses `EmitState.AdoptBodyTwins` after
+   the closure record to PLACE each suspended twin whose noted position
+   is a token site in that body's tree as a real `evBindTwin` after the
+   call event, so the lowered `OpBindTwin` replays the captured
+   identical entry once the unit returns. Adoption is FENCED (the
+   Codex P1 round on #421, each fence verified by repro): only twins
+   noted inside the dispatch's own outermost keep-defs body run
+   (KeepDefsBodyGuard's bracket — an aliased quotation's earlier
+   multi-run twins stay out), excluding sub-ranges noted under a
+   nested non-keep body run (a nested each's per-element transitions
+   — analyseHigherOrderBodyVals now suspends through
+   BodyAnalysisGuard so the taint sees it), and only at the root
+   stream (a do nested in a callback's compiled unit keeps its sound
+   refusal). Each fenced-out shape refuses to the interpreter; the
+   fences cost zero corpus rows. That recovered the four
+   do-body rows (`do [def Big Integer …]`, the predicate variant,
+   `do [def x 5 raise …]`, the quoted `[def zz 5 …] do`). The ONE
+   remaining regime-only refusal is the suspended-recorder each-body
+   leaking def (`bytecode-migrated.tsv:41`) — deliberately unflagged:
+   a multi-run body's runtime re-runs the body per element where the
+   ledger noted one generalized transition with carrier-valued
+   captures, so a single replay would be wrong in count and value; it
+   waits for arm-residency.
    Cross-request persistence — keep-on-compile's contract, now delivered
    by replay — is pinned by `TestTwinRegimeSmoke` (a replayed binding is
-   readable by the next request's check pass on the same instance).
+   readable by the next request's check pass on the same instance), and
+   holds for adopted twins too (`do [def x 5] x add 1` then `x add 10`
+   → 15 on the same instance).
    `Program.TwinRegime` also drives the disasm mode tags
    (`(inert)`/`(replay)`, `(push)` on global binds).
 
    What remains for the DEFAULT flip, in order: (a) run the regime lane
    long enough to trust it (it is committed and green — every push of
-   this PR now exercises the flip corpus-wide); (b) recover the 5
-   refused rows — island-discard accounting in Finalize for the four
-   do-body rows (track which table indices were discarded with an
-   island and count them as satisfied), arm-resident twins for the
-   each-body row (which also closes NUR110 by replacing join twins
-   with per-arm twins); (c) flip the default, delete the keep-regime
-   latches the payoff list names (frozen-read/NotifyNameRebound gates,
-   emit.go's rebind latches, family L's CondBodyDepth refusal, NUR037),
-   and collapse `GlobalBindSpec.Push`/the twin-regime branches into the
-   only path.
+   this PR now exercises the flip corpus-wide); (b) arm-resident twins
+   for the each-body row (which also closes NUR110 by replacing join
+   twins with per-arm twins); (c) flip the default, delete the
+   keep-regime latches the payoff list names (frozen-read/
+   NotifyNameRebound gates, emit.go's rebind latches, family L's
+   CondBodyDepth refusal, NUR037), and collapse `GlobalBindSpec.Push`/
+   the twin-regime branches into the only path.
 
    The sandbox's first client and the data-level proof that preceded the
    flip: `TestBindingSandboxRollbackAndReplay`

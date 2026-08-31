@@ -29,19 +29,20 @@ import (
 )
 
 // minTwinRegimeRows is the regime lane's own compiled floor — measured at
-// 6411 on landing (the corpus-wide compiled population, sensitive to test
-// grouping like minCompiledRows' caveat, hence the small headroom), against
-// 6416 for the default recorder on the same day: the regime's
-// full-placement gate costs exactly 5 rows, each with a table-only twin.
-// Four are ISLAND-DISCARDED do-body defs — the fallback island re-executes
-// the def for real at VM time, so the discarded twin is semantically
-// satisfied and the count-based gate refuses CONSERVATIVELY (sound
-// interpreter fallback, never a double-install; teaching Finalize
-// island-discard accounting recovers them). One is a suspended-recorder
-// each-body leaking def, which has no stream home until the
-// arm-resident-twin increment. Raise the floor as those close; never lower
+// 6415 after the do-body adoption increment (the corpus-wide compiled
+// population, sensitive to test grouping like minCompiledRows' caveat,
+// hence the small headroom), against 6416 for the default recorder: the
+// full-placement gate now costs exactly 1 row, the suspended-recorder
+// each-body leaking def (bytecode-migrated.tsv:41), which has no stream
+// home until the arm-resident-twin increment. The other four table-only
+// rows (the do-body class) were recovered by ADOPTION, not by island
+// accounting — instrumentation showed all five record through the CLOSURE
+// path, so `do`'s spec flag (CallableSpec.BodyOnceKeepsDefs) licenses
+// AdoptBodyTwins to place each suspended body twin as a real twin op
+// after the call, replaying the captured entry (§6.5: replay, never
+// re-execution). Raise the floor as the each-body row closes; never lower
 // it.
-const minTwinRegimeRows = 6400
+const minTwinRegimeRows = 6405
 
 // TestTwinRegimeSmoke pins the flip's mechanics on four shapes small enough
 // to reason through by hand before the corpus lane runs: a concrete def

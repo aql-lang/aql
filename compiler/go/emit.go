@@ -599,6 +599,42 @@ type EmitState struct {
 	// corpus from these recorded captures, which is the exact contract the
 	// twin ops will execute at the flip.
 	bindTwinEntries []core.DefEntry
+	// twinPlaced is 1:1 with bindTwins: true when the transition got a
+	// stream event — appended live by RecordBindTwin, or ADOPTED after the
+	// fact by AdoptBodyTwins when a once-run defs-keeping body word (`do`)
+	// records its body as a closure unit (the unit makes the body's defs
+	// frame-local, so the leak the interpreter delivers is re-delivered by
+	// a placed twin op after the call — §6.5's replay, never
+	// re-execution). A table-only twin is unplaced; under the regime the
+	// program refuses unless every twin has a placed op. What stays
+	// UNPLACED — and refused — is the multi-run body's twin (the each-body
+	// class, whose runtime re-runs the body per element where the ledger
+	// noted one generalized transition; arm-residency's territory).
+	twinPlaced []bool
+	// twinAdoptions logs the twin indices AdoptBodyTwins marked placed, in
+	// adoption order, so Rollback can un-mark exactly the flags whose
+	// adopted events its truncation discards (the adopted seqs ride the
+	// frames like any event; the flags need their own undo).
+	twinAdoptions []int
+	// keepBodyDepth / keepTwinFloor / keepTaints bracket the OUTERMOST
+	// keep-defs body run in flight (KeepDefsBodyGuard — `do`'s check-mode
+	// body run): the floor is the twin-table length when it opened, and
+	// keepTaints collects the sub-ranges noted under a nested NON-keep
+	// body run inside it (BodyAnalysisGuard while keepBodyDepth > 0 — an
+	// each/fold/branch body, whose runtime multiplicity a single replay
+	// cannot represent; Codex P1 ×2 on #421). A nested KEEP run (do
+	// inside do) deliberately does not taint: once-run composed with
+	// once-run is still once-run, and the outer adoption replays its
+	// leaks in note order.
+	keepBodyDepth int
+	keepTwinFloor int
+	keepTaints    [][2]int
+	// lastKeepRange / lastKeepTaints publish the bracket when the
+	// outermost keep run closes, for the dispatch record that follows
+	// immediately (AdoptBodyTwins). The zero range is in-band: it is
+	// empty, so an adoption with no bracketed run adopts nothing.
+	lastKeepRange  [2]int
+	lastKeepTaints [][2]int
 	// twinRegime arms §6.5's rollback-and-replay for THIS pass's Program
 	// (BORU_TWIN_REGIME=1, read once at NewEmitState so one pass is one
 	// regime): Finalize stamps it onto Program.TwinRegime and enforces the
@@ -1545,12 +1581,54 @@ func (es *EmitState) beginFragment() func() {
 
 // bodyAnalysisGuard is called by RunCarrierBodyWithDefs: capture a
 // fragment when armed, otherwise suspend recording for the nested
-// body. Nil-safe.
+// body. Inside an open keep-defs bracket (a `do` body run), the
+// suspended sub-run's bind twins are recorded as a TAINTED range —
+// a non-keep body (branch / loop / quotation) is conditional or
+// multi-run, so a twin noted under it must never be adopted as a
+// single replay (see keepTaints). Nil-safe.
 func (es *EmitState) BodyAnalysisGuard() func() {
 	if es.consumeCaptureArm() {
 		return es.beginFragment()
 	}
-	return es.Suspend()
+	if es == nil || es.keepBodyDepth == 0 {
+		return es.Suspend()
+	}
+	start := len(es.bindTwins)
+	resume := es.Suspend()
+	return func() {
+		if end := len(es.bindTwins); end > start {
+			es.keepTaints = append(es.keepTaints, [2]int{start, end})
+		}
+		resume()
+	}
+}
+
+// KeepDefsBodyGuard is BodyAnalysisGuard's keep-defs flavor (`do`'s
+// check-mode body run, runCarrierBodyDefsAdds keep=true): the same
+// suspension, plus the adoption bracket — the OUTERMOST keep run's twin
+// range and its tainted sub-ranges are published on close for the
+// dispatch record that follows (AdoptBodyTwins). Fragment capture never
+// arms for a do body (ArmBranchCapture is the `if` hook), so this guard
+// does not consult the capture arm. Nil-safe.
+func (es *EmitState) KeepDefsBodyGuard() func() {
+	if es == nil {
+		return func() {}
+	}
+	es.keepBodyDepth++
+	if es.keepBodyDepth == 1 {
+		es.keepTwinFloor = len(es.bindTwins)
+		es.keepTaints = nil
+	}
+	resume := es.Suspend()
+	return func() {
+		resume()
+		es.keepBodyDepth--
+		if es.keepBodyDepth == 0 {
+			es.lastKeepRange = [2]int{es.keepTwinFloor, len(es.bindTwins)}
+			es.lastKeepTaints = es.keepTaints
+			es.keepTaints = nil
+		}
+	}
 }
 
 // TakeFragment returns the last captured fragment (nil when the
@@ -3592,6 +3670,120 @@ func (es *EmitState) RecordBindTwin(tr core.BindTransition, entry core.DefEntry)
 	if es.Active() {
 		es.appendEvent(EmitEvent{kind: evBindTwin,
 			twin: &emitBindTwin{idx: len(es.bindTwins) - 1, pos: tr.Pos}})
+		es.twinPlaced = append(es.twinPlaced, true)
+	} else {
+		es.twinPlaced = append(es.twinPlaced, false)
+	}
+}
+
+// AdoptBodyTwins is the closure path's twin accounting, the §6.5-faithful
+// recovery of the do-body class (replay, never re-execution). It runs
+// right after a ONCE-RUN, DEFS-KEEPING body word (CallableSpec.
+// BodyOnceKeepsDefs — `do`, whose check-mode body run is
+// RunCarrierBodyKeepDefs and whose runtime defs LEAK to the enclosing
+// scope) records its body as a compiled closure unit. The unit makes
+// body defs frame-local, so the leak the interpreter delivers would be
+// lost under the regime's rollback — the exact hole the full-placement
+// gate refuses. Adoption closes it by PLACEMENT: every unplaced twin
+// whose noted position is a token site inside this body's tree gets an
+// evBindTwin event HERE, after the call event, so the lowered OpBindTwin
+// replays the check pass's captured identical entry once the unit
+// returns. That is observationally the interpreter's order at root
+// granularity — nothing outside the do can read the registry between the
+// body's own install and the dispatch's return. (Finer grain, and the
+// one divergence this placement accepts: a unit that RAISES mid-body
+// aborts before the twin op runs, so a leak-then-raise body leaves the
+// name unbound where the interpreter leaves it bound — observable only
+// by a later request on the same erroring instance, the post-trap-twin
+// class the regime already tolerates at Finalize's trap truncation.)
+//
+// Adoption is FENCED four ways, and each fence answers a real
+// miscompile (the first three are Codex's P1 round on #421):
+//
+//   - THE BRACKET: only twins inside lastKeepRange — the ones noted by
+//     this dispatch's own outermost keep-defs body run — are eligible.
+//     Without it, token ALIASING lets a do adopt an earlier multi-run
+//     driver's twin noted at the same sites (`def q quote [def x 5]
+//     ([1 2] each q) q do`): the each's runtime installs twice where
+//     one generalized note exists, so replaying it once under-counts;
+//     bracketed, the each's twins stay unplaced and the regime refuses
+//     the program (sound fallback).
+//   - THE TAINT: sub-ranges noted under a nested NON-keep body run
+//     (lastKeepTaints) are excluded even inside the bracket. A nested
+//     each/fold inside the do body (`do [[1 2] each [def x 5]]`) runs
+//     its body per element at runtime while the check pass noted one
+//     generalized transition — a single replay is wrong in count, so
+//     the twin stays unplaced and the regime refuses. A nested KEEP run
+//     (do inside do) is not tainted: once-run composes.
+//   - THE ROOT FENCE: adoption only at the root stream (no open unit,
+//     no open fragment). A do nested in a callback's compiled body
+//     (`[1 2] each [do [def x 5]]`) would otherwise place its twin
+//     inside the per-invocation unit and convert a sound regime refusal
+//     into execution of that closure shape; declined, the twin stays
+//     unplaced and the refusal stands. (That shape's DEFAULT compile
+//     diverges today — each_error vs the interpreter's [1 2] — a
+//     pre-existing closure-lowering bug this fence keeps the regime
+//     strictly sounder than.)
+//   - THE SITE TEST: exact membership of tr.Pos in the body tree's
+//     token sites (a transition's noted position is a token of its own
+//     def expression — the bound value's token, or the transition word
+//     via the CurWordPos fallback), never a positional range, which
+//     would overclaim through baked data. Zero positions never match
+//     (a synthesized token has no source home).
+//
+// Multi-run body words (each/fold) must never adopt AT ALL — which is
+// why the caller's gate is the word's spec flag, not the closure record
+// itself; their twins stay table-only and refuse toward the
+// arm-residency increment.
+//
+// Rollback safety is two-layered: adopted event seqs are truncated with
+// their frame like any event, and twinAdoptions lets Rollback un-mark
+// the twinPlaced flags so a re-recorded dispatch on the next loop round
+// can adopt again; even a stale flag only under-places, and Finalize's
+// accounting counts REAL OpBindTwin ops, so any miss refuses (sound).
+func (es *EmitState) AdoptBodyTwins(body core.Value) {
+	if es == nil || !es.Active() {
+		return
+	}
+	if len(es.openUnitRecs) != 0 || len(es.frames) != 1 {
+		return
+	}
+	sites := make(map[core.SrcPos]bool)
+	collectTokenSites(body, sites)
+	tainted := func(i int) bool {
+		for _, r := range es.lastKeepTaints {
+			if i >= r[0] && i < r[1] {
+				return true
+			}
+		}
+		return false
+	}
+	for i := es.lastKeepRange[0]; i < es.lastKeepRange[1] && i < len(es.bindTwins); i++ {
+		tr := es.bindTwins[i]
+		if es.twinPlaced[i] || tainted(i) || tr.Pos.Row == 0 || !sites[tr.Pos] {
+			continue
+		}
+		es.appendEvent(EmitEvent{kind: evBindTwin, twin: &emitBindTwin{idx: i, pos: tr.Pos}})
+		es.twinPlaced[i] = true
+		es.twinAdoptions = append(es.twinAdoptions, i)
+	}
+}
+
+// collectTokenSites gathers every source position in a code-body token
+// tree: the token's own, then list interiors recursively (a paren group
+// and a nested body are both list-shaped, so this reaches a twin noted
+// anywhere down the body). Non-list tokens — words, literals, sugar
+// markers — contribute their own position only; a construct this walk
+// cannot see into leaves its twins unadopted, which refuses the regime
+// program (the sound direction).
+func collectTokenSites(v core.Value, sites map[core.SrcPos]bool) {
+	if p := v.Pos(); p.Row != 0 {
+		sites[p] = true
+	}
+	if rl, err := core.AsList(v); err == nil {
+		for i := 0; i < rl.Len(); i++ {
+			collectTokenSites(rl.Get(i), sites)
+		}
 	}
 }
 
@@ -3660,12 +3852,13 @@ func (es *EmitState) RefuseCarriedUndef(name string) {
 // and by VALUE for the small SiteCounts map.
 type emitCheckpoint struct {
 	core.EmitCheckpointBase
-	seq        int
-	consts     int
-	types      int
-	fallbacks  int
-	fnRecs     int
-	siteCounts map[string]int
+	seq           int
+	consts        int
+	types         int
+	fallbacks     int
+	fnRecs        int
+	twinAdoptions int
+	siteCounts    map[string]int
 }
 
 // Checkpoint captures the rollback point. Nil-safe (returns a zero checkpoint
@@ -3680,12 +3873,13 @@ func (es *EmitState) Checkpoint() core.EmitCheckpoint {
 		sc[k] = v
 	}
 	return emitCheckpoint{
-		seq:        es.seq,
-		consts:     len(es.consts),
-		types:      len(es.types),
-		fallbacks:  len(es.fallbacks),
-		fnRecs:     len(es.fnRecs),
-		siteCounts: sc,
+		seq:           es.seq,
+		consts:        len(es.consts),
+		types:         len(es.types),
+		fallbacks:     len(es.fallbacks),
+		fnRecs:        len(es.fnRecs),
+		twinAdoptions: len(es.twinAdoptions),
+		siteCounts:    sc,
 	}
 }
 
@@ -3729,6 +3923,14 @@ func (es *EmitState) Rollback(h core.EmitCheckpoint) {
 	}
 	es.types = es.types[:cp.types]
 	es.fallbacks = es.fallbacks[:cp.fallbacks]
+	// Adoptions are append-only, so every adoption past the checkpoint
+	// placed an event this rollback's frame truncation discards — un-mark
+	// its flag with it, so a dispatch re-recorded on the next round can
+	// adopt the twin again (and a twin left unplaced refuses, sound).
+	for _, idx := range es.twinAdoptions[cp.twinAdoptions:] {
+		es.twinPlaced[idx] = false
+	}
+	es.twinAdoptions = es.twinAdoptions[:cp.twinAdoptions]
 	// Provenance entries minted after cp belong to the discarded round's
 	// carriers (fresh ids never referenced again); drop them, mirroring
 	// StartFnCompile's fn-unit cleanup so the live map stays tight.
@@ -8394,37 +8596,42 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 	lw.p.storedFnRefs = es.storedFnRefs
 	lw.p.TwinRegime = es.twinRegime
 	if es.twinRegime && !twinsFullyPlaced(lw.p) {
-		return nil, "twin regime: a bind transition has no stream placement (suspended-recording, island-discarded, or post-trap twin), so the rollback would lose it", false
+		return nil, "twin regime: a bind transition has no stream placement (a multi-run-body or post-trap twin), so the rollback would lose it", false
 	}
 	return lw.p, "", true
 }
 
-// twinsFullyPlaced is the regime's FULL-PLACEMENT gate, the strengthening of
-// the ordered-subset invariant Finalize applies when TwinRegime is armed:
-// with the installs rolled back before the run, every twin-table entry NEEDS
-// a stream home — a table-only twin (noted while recording was suspended,
-// discarded with a fallback island's events, or truncated by a terminal
-// trap) is a transition the rollback would otherwise silently lose, so the
-// program refuses to the interpreter. The count is deliberately CONSERVATIVE
-// about the island case (measured: 4 of the corpus's 5 regime refusals): an
-// island RE-EXECUTES its do-body def at VM time, so its discarded twin is
-// semantically satisfied — refusing is sound (never a double-install), and
-// island-discard accounting can recover those rows as its own increment.
+// twinsFullyPlaced is the regime's FULL-PLACEMENT gate, the strengthening
+// of the ordered-subset invariant Finalize applies when TwinRegime is
+// armed: with the installs rolled back before the run, every twin-table
+// entry needs a placed OpBindTwin — recorded live at its own position,
+// or adopted after a once-run defs-keeping body's closure record
+// (AdoptBodyTwins) — to replay its transition. A twin with none — a
+// multi-run body's (the each-body class, arm-residency's territory), or
+// one whose op a terminal trap truncated — is a transition the rollback
+// would silently lose, so the program refuses to the interpreter. The
+// scan counts REAL ops in the lowered code, table index by table index,
+// never the recorder's intent flags: an op a rollback or trap dropped
+// refuses no matter what was once marked.
 func twinsFullyPlaced(p *Program) bool {
-	placed := 0
-	for _, in := range p.Code {
-		if in.Op == OpBindTwin {
-			placed++
-		}
-	}
-	for i := range p.Fns {
-		for _, in := range p.Fns[i].Code {
-			if in.Op == OpBindTwin {
-				placed++
+	placed := make([]bool, len(p.BindTwins))
+	mark := func(code []Instr) {
+		for _, in := range code {
+			if in.Op == OpBindTwin && int(in.Arg) < len(placed) {
+				placed[in.Arg] = true
 			}
 		}
 	}
-	return placed == len(p.BindTwins)
+	mark(p.Code)
+	for i := range p.Fns {
+		mark(p.Fns[i].Code)
+	}
+	for _, ok := range placed {
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // noteApplyLoopReplay classifies a fn-body residual holding a per-iteration

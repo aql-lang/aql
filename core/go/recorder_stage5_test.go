@@ -20,6 +20,7 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 		t.Fatal("inactive SuspendedNow must be false")
 	}
 	e.BodyAnalysisGuard()()
+	e.KeepDefsBodyGuard()()
 	e.FnBodyGuard()()
 
 	// --- refusal + site accounting.

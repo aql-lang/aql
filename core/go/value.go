@@ -634,6 +634,23 @@ type CallableSpec struct {
 	// or its seed (fold's accumulator). Returns an empty slice for a 0-input body
 	// (do / a test case). nil declines the compile (an unexpected operand shape).
 	Inputs func(args []Value) []Value
+	// BodyOnceKeepsDefs marks a word whose driving handler runs the body
+	// EXACTLY ONCE per dispatch and KEEPS the bindings that run installs —
+	// `do`, whose runtime defs leak to the enclosing scope and whose
+	// check-mode body run is RunCarrierBodyKeepDefs (the keep=true
+	// NestedBodyDepth class the bind ledger records). The twin regime's
+	// compiler reads it as a replay license (AdoptBodyTwins): a bind twin
+	// noted during this word's suspended body run may be placed as a twin
+	// op after the dispatch's call event, because the one check-time run
+	// IS the one runtime transition and the captured entry replays it
+	// verbatim. Never set it on a multi-run body word (each/fold/scan):
+	// the runtime re-runs such a body per element while the ledger noted
+	// ONE generalized transition with carrier-valued captures — a single
+	// replay would be wrong in count and in value, so their twins must
+	// stay unplaced (refusing the regime program) until they are
+	// arm-resident. Verified against the handler: DoListHandler drives
+	// InvokeBody once and returns the whole residual.
+	BodyOnceKeepsDefs bool
 	// BodyResultTop marks a driving handler that reads only the TOP of each
 	// invocation's body residual (`res[len(res)-1]`) — each / fold / scan / filter.
 	// The body may then leave UNCONSUMED values below that top (notably the
