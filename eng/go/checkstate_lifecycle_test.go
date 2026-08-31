@@ -20,7 +20,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"Diagnostics": true, "StepCount": true, "BudgetTripped": true,
 		"SuppressedRuntimeError": true, "AmbiguousGradualSplit": true,
 		"DefsInstalled": true, "DefsUsed": true, "FnNameStack": true,
-		"BindLedger": true, "PendingBindPos": true,
+		"BindLedger": true, "PendingBindPos": true, "PassEndCleanups": true,
 		"FnBinders": true, "FnCallGraph": true, "ContextTypes": true, "CtxShapes": true,
 		"MethodShapes": true, "PendingMethodApply": true,
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,

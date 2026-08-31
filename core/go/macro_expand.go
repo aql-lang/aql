@@ -147,6 +147,13 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	// param resolves too. Body-locals created while running the template (e.g.
 	// `def g (gensym)`) leak into the scope and stay live for the walk.
 	snap := r.Defs.Snapshot()
+	// Everything installed from here to the Restore calls below — a template
+	// body-local like `def t (gensym)`, and anything an `unquote (expr)` runs —
+	// is torn down by that Restore, so the bind ledger must not record it: the
+	// pass leaves no such binding, and the live-depth oracle read the recorded
+	// installs as phantom depth (the gensym-temp class, 8 of its 9 mismatches
+	// across edge-quote-3.tsv and macro.tsv).
+	defer r.Check.SuppressBindLedger()()
 	bindings := make(map[string]Value, len(sig.Params))
 	for i, p := range sig.Params {
 		if i >= len(operands) || p.Name == "" {

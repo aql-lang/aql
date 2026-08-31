@@ -77,7 +77,14 @@ var syntheticBranchArmSources = []string{
 	`def c false  def op 0  if c [def op 1] [0] end op`,
 	`def c false  if c [def op 1] [def op 2] end op`,
 	`def c false  if c [def op 1] [0] end  if c [def op2 2] [0] end 1`,
-	`def n 3  while (n gt 0) [def acc n  def n (n sub 1)] end 1`,
+	// List-form condition — the paren form `(n gt 0)` evaluates to a Boolean
+	// and while's (List, List) signature refuses it, so the paren spelling
+	// never exercised a loop at all: its body list survived to the end-of-run
+	// drain instead, and the row "passed" composition without ever measuring
+	// the shape it was written for. The live-depth oracle caught it: a REAL
+	// while leaves the loop-join pushes (n at 2, acc at 1) that AnalyseLoopBody
+	// must ledger.
+	`def n 3  while [n gt 0] [def acc n  def n (n sub 1)] end 1`,
 }
 
 // composeLedger replays one ledger symbolically and reports the incoherent

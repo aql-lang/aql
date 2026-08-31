@@ -2473,11 +2473,14 @@ deepest row there is — because those functions are not on the import path at
 all. A count of call sites is not a count of transitions, and neither is a
 plausible reading of them.
 
-**Measured over `lang/spec`** (`TestBindLedgerCensus`), 7644 rows:
+**Measured over `lang/spec`** (`TestBindLedgerCensus`), 7644 rows — as of the
+2026-08-31 oracle closure (ten phantom truncated-region entries removed; the
+corpus contributes no top-level loop-join entries — both its loop-body-def
+rows sit inside fn bodies, where `FnBodyDepth` suppresses them):
 
 	rows with transitions   4291
-	transitions total       7453
-	  def                    6371
+	transitions total       7443
+	  def                    6361
 	  type-install           1048
 	  undef                    30
 	  def-replace               4
@@ -2527,22 +2530,53 @@ evidence about the programs it contains and silence about the rest; when the
 population being measured is a shape the corpus lacks, the gate has to supply
 it.
 
-**A STRONGER ORACLE EXISTS AND IS NOT YET GREEN.** The composition check is
-self-contained by construction (§ the file header), but `Boru.NativeRegistry()`
-exposes the live registry, so the ledger's final depth per name can be compared
-against the depth the check pass ACTUALLY left — which is precisely the
-assertion §6.5's staging calls for before the flip to rollback-and-replay.
-Built and run: **9 mismatches over 4291 rows**, in two classes.
+**THE STRONGER ORACLE IS LANDED AND GREEN** (2026-08-31,
+`test/go/langspec/bind_ledger_live_oracle_test.go`, `TestBindLedgerLiveDepths`,
+**no allowance**). The composition check is self-contained by construction
+(§ the file header), but `Boru.NativeRegistry()` exposes the live registry, so
+the ledger's final depth per name is compared against the depth the check pass
+ACTUALLY left — the assertion the inert-twin step needs. First run: 9
+mismatches over 4291 rows, in two apparent classes; closing them took THREE
+fixes, because each apparent class hid a different mechanism than its reading
+suggested:
 
-| class | rows | shape |
-|---|---|---|
-| macro-expansion gensym temps | 8 | `tmp$g1`, `t`, `g` — a macro's CONSTRUCTION-time expansion mints and installs a hygiene temp that is later torn down; the install is recorded, the teardown is not. The real expansion's temp (`tmp$g2`) is live and correctly recorded |
-| a doubled module-io install | 1 | `module-io.tsv:223`, `def l (IO.lock …)` — ledger 1, live 2, so a second install is unaccounted |
+- **The gensym-temp class (8 rows) was not macro construction — it was two
+  snapshot/restore-TRUNCATED evaluation regions recording installs their own
+  restore tears down.** `expandMacroWith` runs the template body with its
+  locals live (`def t (gensym)`) and then `r.Defs.Restore(snap)`s them away;
+  the "construction-time expansion" was the DYNAMIC-HELP example eval
+  (`makeDynamicEval`), which fires mid-pass from the fn-registration hook,
+  runs example code against the live registry — expanding the freshly-defined
+  macro — and restores its defs on exit. Both now bracket with
+  `CheckState.SuppressBindLedger` (the `RolledBackBodyDepth` arm): what makes
+  an install unrecordable is the truncation, the same rule the body runner
+  already carried.
+- **The module-io row's multi-pass hypothesis was tested FIRST and
+  disproven** — the doubling reproduces inside a single pass, and at plain
+  runtime. The real mechanism: `narrowDynamicUses`' analysis push (a dynamic
+  binding tightened at a typed use) has no top-level popper, so the pass LEFT
+  it — a genuine defect the oracle exposed, not an oracle artifact: a later
+  `Run` on the same instance read the leaked `dynamic(Ideal)` carrier instead
+  of the bound Lock. Fixed by a guarded pass-end pop
+  (`CheckState.PassEndCleanups`, run LIFO by the Begin closer; the pop guards
+  on the entry still being on top, so a narrowing truncated with its branch or
+  buried under a later real rebind is left alone). Neither the ledger nor the
+  oracle was bent to match — the pass was leaking.
+- **Running the oracle over the SYNTHETIC rows found a ninth-plus-one the
+  corpus run could not:** the while row in `syntheticBranchArmSources` was
+  MALFORMED (`while (n gt 0) …` hands while a Boolean; its `(List, List)`
+  signature refuses it), so the row never exercised a loop and "passed"
+  composition while measuring nothing. Corrected, it showed
+  `AnalyseLoopBody`'s final joined post-loop pushes bypassing the ledger
+  entirely (raw `r.Defs.Push`, no note). The final round's installs are now
+  ledgered — the loop's "may run zero times" join is `InstallJoinedDefs`' own
+  one-branch rule, so it records like one.
 
-Neither is fixed here, and neither is allowed away: the oracle is **not** landed
-as a gate with an allowance. It is recorded as the next measurement to close,
-with its two classes named, because a gate that reports a number it tolerates
-teaches the next author to tolerate it.
+After the three fixes the oracle reads **0 mismatches over the corpus and the
+synthetics**, and it is a standing gate with no allowance — a gate that
+reports a number it tolerates teaches the next author to tolerate it. The
+census shifts 7453 → 7443: the ten phantom truncated-region entries leave, the
+loop-join entries arrive.
 
 Three things that shape the twin work. `def` is 85% of it, so its twin is the
 one whose cost matters and the other three can be straightforward. `undef` and

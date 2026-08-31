@@ -409,6 +409,19 @@ type CheckState struct {
 	// self-restoring or compile-time products and are NOT recorded.
 	BindLedger []BindTransition
 
+	// PassEndCleanups are closures the Begin closer runs (LIFO, exactly once)
+	// when the pass ends — the seam for analysis-only registry state that must
+	// not outlive the pass. The first client is narrowDynamicUses' narrowing
+	// pushes: a dynamic binding tightened at a typed use is re-pushed as an
+	// analysis carrier so branch truncation can roll it back, but at the top
+	// level nothing popped it, so the carrier SHADOWED the real binding for
+	// every later Run on the same instance (the live-depth oracle caught it as
+	// `module-io.tsv:223` — ledger 1, live 2 — and a later read of the name
+	// answered the leaked dynamic carrier instead of the bound Lock). Each
+	// closure guards its own pop, so a cleanup whose entry was already
+	// truncated away — or buried under a later real binding — is a no-op.
+	PassEndCleanups []func()
+
 	// PendingBindPos is the def SITE for the transition about to be recorded,
 	// set by the def word's handler (InstallAndRecordDef) which is the only
 	// caller that knows it, and SAVE/RESTORED around each install so nesting
@@ -862,6 +875,7 @@ func (c *CheckState) Clone() *CheckState {
 	// Branchless deep copy: append to a nil slice with no elements yields
 	// nil, so a nil ledger clones as nil without a guard to keep covered.
 	cp.BindLedger = append([]BindTransition(nil), c.BindLedger...)
+	cp.PassEndCleanups = append([]func(){}, c.PassEndCleanups...)
 	cp.ParenPlacedFnIDs = cloneMap(c.ParenPlacedFnIDs)
 	cp.ParenReSteppedFnIDs = cloneMap(c.ParenReSteppedFnIDs)
 	cp.FnSummaries = cloneMap(c.FnSummaries)
@@ -937,6 +951,7 @@ func (c *CheckState) Begin() func() {
 	c.AmbiguousGradualSplit = false
 	c.DefsInstalled = nil
 	c.BindLedger = nil
+	c.PassEndCleanups = nil
 	c.PendingBindPos = SrcPos{}
 	c.DefsUsed = nil
 	c.FnNameStack = nil
@@ -984,8 +999,46 @@ func (c *CheckState) Begin() func() {
 		if !ended {
 			ended = true
 			checkPassDepth.Add(-1)
+			// Run the pass-end cleanups LIFO — chained analysis pushes on one
+			// name tear down top-first — and exactly once: closers ride defer
+			// AND t.Cleanup in places, and a second run would pop bindings the
+			// first run already accounted for.
+			for i := len(c.PassEndCleanups) - 1; i >= 0; i-- {
+				c.PassEndCleanups[i]()
+			}
+			c.PassEndCleanups = nil
 		}
 	}
+}
+
+// AddPassEndCleanup schedules fn to run when the current pass ends (the
+// Begin closer; LIFO, exactly once). For analysis-only registry state that
+// must not outlive the pass — see the PassEndCleanups field. A no-op outside
+// check mode: there is no pass end to attach to, and the caller's push is
+// then a runtime mutation, not an analysis artifact.
+func (c *CheckState) AddPassEndCleanup(fn func()) {
+	if c == nil || !c.Mode {
+		return
+	}
+	c.PassEndCleanups = append(c.PassEndCleanups, fn)
+}
+
+// SuppressBindLedger marks a snapshot/restore-truncated evaluation region:
+// every def-stack change inside it is undone by the region's own restore, so
+// the bind ledger must not record its installs (NoteBindTransition's
+// RolledBackBodyDepth arm — what makes an install unrecordable is the
+// truncation). The two clients outside the branch/loop body runner are the
+// macro template run (expandMacroWith snapshots, runs the template with its
+// body-locals live, then restores — the gensym-temp class the live-depth
+// oracle caught) and the dynamic-help example eval (makeDynamicEval, which
+// fires mid-pass from the fn-registration hook and restores its defs).
+// Returns the balancing decrement, for `defer c.SuppressBindLedger()()`.
+func (c *CheckState) SuppressBindLedger() func() {
+	if c == nil {
+		return func() {}
+	}
+	c.RolledBackBodyDepth++
+	return func() { c.RolledBackBodyDepth-- }
 }
 
 // AddDiagnostic appends a diagnostic to the active check run. Safe to

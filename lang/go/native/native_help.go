@@ -80,6 +80,12 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		defer r.Check.TruncateDiagnostics(diagBase)
 		defsSnap := r.Defs.Snapshot()
 		defer r.Defs.Restore(defsSnap)
+		// The Restore above truncates every def the example run installs, so
+		// the bind ledger must not record them (the hook fires mid-pass from
+		// the program's own fn registrations — an example that expands a macro
+		// installed the expansion's `def tmp$g…` as a phantom ledger entry,
+		// the live-depth oracle's gensym-temp class).
+		defer r.Check.SuppressBindLedger()()
 
 		prevOps, hadOps, _ := r.Capabilities.Get(CapFileOps)
 		prevMem, hadMem, _ := r.Capabilities.Get(CapMemFileOps)

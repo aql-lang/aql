@@ -1,11 +1,11 @@
 # Full compilation — handoff for the bind-twin line
 
-**Point in time: 2026-08-30, `007ac5c`.** This is a state-of-play note for
-whoever picks up Stage 4's remaining piece. The design is
-[FULL-COMPILATION.0.md](FULL-COMPILATION.0.md); §6.5 is the section that
-matters here. This document does not restate the design — it records where
-the work stands, what has been measured, and the three or four things that
-will waste a day if they are re-derived from scratch.
+**Point in time: 2026-08-31; first written 2026-08-30 at `007ac5c`.** This is
+a state-of-play note for whoever picks up Stage 4's remaining piece. The
+design is [FULL-COMPILATION.0.md](FULL-COMPILATION.0.md); §6.5 is the section
+that matters here. This document does not restate the design — it records
+where the work stands, what has been measured, and the three or four things
+that will waste a day if they are re-derived from scratch.
 
 ## Where the work is
 
@@ -22,9 +22,13 @@ it can only size the next increment.
 
 ### The population, measured over `lang/spec` (7644 rows)
 
+As of the 2026-08-31 oracle closure (ten phantom truncated-region entries
+removed; the corpus contributes no top-level loop-join entries — both its
+loop-body-def rows sit inside fn bodies, where `FnBodyDepth` suppresses them):
+
 	rows with transitions   4291
-	transitions total       7453
-	  def                    6371   85%
+	transitions total       7443
+	  def                    6361   85%
 	  type-install           1048
 	  undef                    30
 	  def-replace               4
@@ -45,9 +49,11 @@ reverses an earlier plan:
 
 ## The next increment, in order
 
-1. **Close the live-depth oracle's 9 mismatches** (below). §6.5's staging
-   requires asserting that the replayed binding state matches what the pass
-   left, and that assertion is the oracle.
+1. ~~**Close the live-depth oracle's 9 mismatches**~~ **DONE 2026-08-31** —
+   the oracle is landed green with no allowance
+   (`test/go/langspec/bind_ledger_live_oracle_test.go`); see the section
+   below for what the 9 actually were, because both prior readings of them
+   were wrong in instructive ways.
 2. **Emit the `def` twin while the check-pass installs are still KEPT**, so
    it is inert, and assert the replay matches.
 3. **Only then** flip to rollback-and-replay onto
@@ -60,34 +66,48 @@ the last transition has a twin, and offers no intermediate state where the
 differential means anything. This is the same reasoning that made Stage 2
 land its three re-seats separately.
 
-## The strong oracle: built, run, and NOT green
+## The strong oracle: landed, GREEN, no allowance (2026-08-31)
 
 `Boru.NativeRegistry()` exposes the live registry, so the ledger's final
-depth per name can be compared against the depth the check pass **actually
+depth per name is compared against the depth the check pass **actually
 left**. That is a strictly stronger check than `TestBindLedgerDepthsCompose`'s
-self-composition, and it is the assertion step 2 above needs.
+self-composition, and it is the assertion step 2 above needs. It is landed as
+`TestBindLedgerLiveDepths` (`test/go/langspec/bind_ledger_live_oracle_test.go`),
+over the corpus AND the synthetic rows, at **0 mismatches with no allowance**.
 
-Run at `007ac5c`: **9 mismatches over 4291 rows**, in two classes.
+The 9 mismatches closed as THREE fixes, and both prior readings of them were
+wrong in ways worth keeping:
 
-| class | rows | shape |
-|---|---|---|
-| macro-expansion gensym temps | 8 | `edge-quote-3.tsv:39-42`, `macro.tsv:24-25`. A macro's CONSTRUCTION-time expansion installs a hygiene temp (`tmp$g1`, `t`, `g`) that is later torn down; the install is recorded, the teardown is not. The REAL expansion's temp (`tmp$g2`) is live and correctly recorded |
-| a doubled module-io install | 1 | `module-io.tsv:223`, `def l (IO.lock …)` — ledger 1, live 2, so a second install is unaccounted |
+- **Gensym temps were not "macro construction"** — they were two
+  snapshot/restore-truncated eval regions whose installs the ledger recorded
+  while their own `Restore` tore them down: `expandMacroWith`'s template run,
+  and the DYNAMIC-HELP example eval (`makeDynamicEval`), which fires mid-pass
+  from the fn-registration hook and was the phantom "construction-time
+  expansion" (found by stack-tracing the note, not by reading). Both now
+  bracket with `CheckState.SuppressBindLedger` — the truncation rule the body
+  runner already carried, applied at two more truncation sites.
+- **The module-io multi-pass hypothesis was tested first, and it was wrong**
+  — the doubling reproduces in a single pass and at plain runtime. The real
+  cause was a genuine leak: `narrowDynamicUses`' analysis push had no
+  top-level popper, so the leaked carrier SHADOWED the real binding for later
+  Runs on the same instance (`typeof l` answered `dynamic(Ideal)`, not
+  `Lock`). Fixed with a guarded pass-end pop (`CheckState.PassEndCleanups`);
+  pinned by `lang/go/narrow_leak_test.go` and `check/go/narrow_passend_test.go`.
+  So the warning above ("the oracle may be the fault") had the right posture
+  and the wrong mechanism: the oracle was RIGHT, and what it found was a
+  user-visible bug, not a bookkeeping gap.
+- **The synthetic while row was itself malformed** — `while (n gt 0) […]`
+  hands `while` a Boolean its `(List, List)` signature refuses, so the row
+  never exercised a loop and "passed" composition while measuring nothing
+  (the same lesson as the corpus blind spot, one level up: a gate's OWN
+  synthetic input can be the thing that cannot contain the case). Corrected
+  to `[n gt 0]`, the oracle immediately showed `AnalyseLoopBody`'s final
+  joined post-loop pushes bypassing the ledger (raw `r.Defs.Push`, no note).
+  They are now ledgered — the loop join is `InstallJoinedDefs`' one-branch
+  rule and records like it.
 
-It is **deliberately not landed as a gate with an allowance**. A gate that
-reports a number it tolerates teaches the next author to tolerate it.
-
-Two warnings for whoever closes these:
-
-- For the gensym class, find the teardown site and decide record-the-pop
-  versus suppress-the-install **by measuring which one the runtime leaves**.
-  A first probe of this class produced a reading that contradicted the
-  per-row dump; the dump was right. Reading the call graph is a hypothesis.
-- For the module-io row, **test the multi-pass hypothesis first**:
-  `CheckState.Begin` resets the ledger per pass while the registry
-  accumulates across passes. If that is the cause then the ORACLE is wrong,
-  not the ledger, and "fixing" the ledger to match would be a fabricated
-  result.
+Census after: 7453 → 7443 (ten phantom truncated-region entries out,
+loop-join entries in).
 
 ## What the ledger excludes, and why each exclusion was measured
 
@@ -205,5 +225,9 @@ position than the construct that produced the binding.
 |---|---|
 | `test/go/langspec/bind_ledger_census_test.go` | the census, and that every entry names a real source site |
 | `test/go/langspec/bind_replay_equivalence_test.go` | depth composition over the corpus, and over the synthetic branch-arm rows the corpus lacks |
+| `test/go/langspec/bind_ledger_live_oracle_test.go` | the STRONG oracle: final ledger depth per name == the depth the pass left in the live registry, corpus + synthetics, no allowance |
 | `core/go/bind_ledger_note_test.go` | `NoteBindTransition`'s arms directly — suppressions, position precedence, kind/name/depth |
+| `core/go/check_state_passend_test.go` | the pass-end cleanup seam (LIFO, exactly once, reset by `Begin`, Clone-isolated) and the `SuppressBindLedger` bracket |
+| `check/go/narrow_passend_test.go` | the narrowing pop at pass end (popped on top, left alone when buried) and that `AnalyseLoopBody` ledgers its joined installs |
+| `lang/go/narrow_leak_test.go` | the user-visible half of the narrowing leak: a later `Run` reads the bound Lock, not the leaked carrier |
 | `eng/go/checkstate_lifecycle_test.go` | that every new `CheckState` field is classified reset-by-`Begin` or persistent |

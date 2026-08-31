@@ -1790,7 +1790,26 @@ func narrowDynamicUses(r *core.Registry, word string, sig *core.Signature, args 
 		// the recorder's producedBy still resolves the rebound name to its
 		// original producer.
 		narrowed.ID = cur.ID
-		r.Defs.Push(a.DynFrom(), core.NewDynamicCarrierValue(narrowed))
+		name := a.DynFrom()
+		pushed := core.NewDynamicCarrierValue(narrowed)
+		r.Defs.Push(name, pushed)
+		// The push is an ANALYSIS artifact — the same runtime value under a
+		// tighter static bound, not a binding transition (the bind ledger
+		// rightly never records it) — so it must not outlive the pass: left
+		// in place it SHADOWED the real binding for every later Run on the
+		// same instance (a later read of module-io's `def l (IO.lock …)`
+		// answered the leaked dynamic carrier instead of the Lock), and the
+		// live-depth oracle read it as ledger-vs-live drift. The pop is
+		// guarded on the entry still being on top: a narrowing truncated away
+		// with its branch, or buried under a later real binding, is left
+		// alone — LIFO cleanup ordering tears chained narrowings down
+		// top-first.
+		r.Check.AddPassEndCleanup(func() {
+			if top, ok := r.Defs.TopEntry(name); ok && top.TypeDef == nil &&
+				core.ValuesEqual(top.Body, pushed) {
+				r.Defs.Pop(name)
+			}
+		})
 	}
 }
 
@@ -2380,6 +2399,23 @@ func AnalyseLoopBody(r *core.Registry, body core.Value, bindNames []string, bind
 		if stable {
 			break
 		}
+	}
+	// The FINAL round's joined pushes are the post-loop environment — the
+	// bindings the pass actually LEAVES — so the bind ledger records them,
+	// exactly as InstallJoinedDefs records a branch join (§6.5: the loop's
+	// "may run zero times" join is that function's one-branch rule). Noted
+	// here, after the rounds settle, because a non-final round's pushes are
+	// popped at the top of the next round and never leave the pass. Recorded
+	// in `installed` (push) order so chained depths compose. The position
+	// falls to NoteBindTransition's CurWordPos floor — measured, that is a
+	// def token INSIDE the body (CurWordPos has moved by join time), a real
+	// site but not the construct's own: the same join-position limitation
+	// §6.5 already names for the `if`, to revisit with the twin op. The
+	// corpus could not see the gap: like NUR110's branch-arm class, every
+	// loop-body def it holds sits inside a fn body, where FnBodyDepth
+	// suppresses the note; the synthetic while row supplies it.
+	for _, k := range installed {
+		r.NoteBindTransition(core.BindDef, k, core.SrcPos{})
 	}
 	return stk
 }
