@@ -2611,7 +2611,8 @@ staged. Save/restore around each install is what nesting actually needs, and
 `SetAt`s into the kept check-pass slot at the recorded depth, deliberately never
 a push, so shadowing depth and undef behaviour match the interpreter. Under the
 twin regime that inverts — the slot is gone after the rollback, and the twin
-pushes at its source position. `OpBindDynScope` makes a frame binding
+pushes at its source position (`GlobalBindSpec.Push`, stamped by lowerDynBind
+when the regime is armed). `OpBindDynScope` makes a frame binding
 registry-visible and is unaffected.
 
 **Staging, and it must not be inverted.** Emit the twins FIRST, while the
@@ -2621,6 +2622,20 @@ rollback-and-replay. Rollback-first breaks every program until the last
 transition has a twin, and offers no intermediate state where the differential
 means anything — the same reasoning that made Stage 2 land its three re-seats
 separately.
+
+**Status (2026-08-31): the flip itself is BUILT and corpus-green behind
+`BORU_TWIN_REGIME=1`** (default off — byte-identical until flipped): recorder
+stamp `Program.TwinRegime` + Finalize's full-placement refusal, lang's
+`SnapshotBindings` → `RestoreBindingsForReplay` rollback at the between-phases
+point (module ledger pass-final — imports run once), `OpBindTwin` →
+`core.ApplyBindTwin` per kind with the carrier-class skip pairing computed
+defs to their Push-mode `OpBindGlobal`. The regime lane
+(`test/go/langspec/bind_twin_regime_test.go`) measures 6411 corpus rows
+compiled vs 6416 under keep, ZERO divergences; the 5-row cost is 4
+island-discarded do-body defs (conservatively refused — the island re-executes
+them) and 1 suspended-recorder each-body def awaiting arm-residency. The
+handoff (design/FULL-COMPILATION-HANDOFF.0.md) carries the remaining
+default-flip checklist and the payoff deletions.
 
 Three consistency obligations come with the twins, and they interlock.
 

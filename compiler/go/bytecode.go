@@ -874,6 +874,14 @@ type GlobalBindSpec struct {
 	// value, at the region's statically-known depth (REFUSAL-CLOSURE S5).
 	Splice        bool
 	SpliceFromTop int
+	// Push selects the twin-regime write mode (§6.5 rollback-and-replay,
+	// Program.TwinRegime): the check-pass install this spec used to
+	// overwrite was ROLLED BACK before the run, so the write PUSHES the
+	// runtime value — the interpreter's own `def` — instead of SetAt into a
+	// kept slot. The def's bind twin skips its own push for exactly this
+	// class (core.ApplyBindTwin's carrier-class skip mirrors lowerDynBind's
+	// needGlobal), so the pair still nets one binding at the recorded depth.
+	Push bool
 }
 
 // ConstLocalRef backs OpPushConstFreshLocal (see the opcode doc): ConstIdx names
@@ -988,7 +996,18 @@ type Program struct {
 	// then-live entry). Proven against the pass-left registry, corpus-wide,
 	// by the sandbox harness (test/go/langspec/bind_replay_sandbox_test.go).
 	BindTwinEntries []core.DefEntry
-	DynMethods      []DynMethodSpec
+	// TwinRegime marks a program compiled with the rollback-and-replay
+	// regime armed (BORU_TWIN_REGIME=1 at recording time — §6.5's flip,
+	// staged behind the flag): the runner rolls the check pass's
+	// runtime-visible installs back (core.RestoreBindingsForReplay) before
+	// the run, each placed OpBindTwin re-installs its recorded transition at
+	// its source position (core.ApplyBindTwin), and OpBindGlobal writes in
+	// Push mode. False — today's default — keeps the installs and the twin
+	// ops inert, byte-identical to the pre-flag behaviour. Finalize refuses
+	// a regime program whose twin table is not fully stream-placed: an
+	// unplaced twin is a transition the rollback would simply lose.
+	TwinRegime bool
+	DynMethods []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the
 	// pooled const to deep-clone and the frame-local slot to seat it in, for a
 	// multi-read compound body literal that needs one per-call construction shared
@@ -1247,10 +1266,18 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " y%-3d ; typed bind %s:%s", in.Arg, tb.Name, tb.Describe)
 		case OpBindGlobal:
 			gb := p.GlobalBinds[in.Arg]
-			fmt.Fprintf(sb, " g%-3d ; global bind %s @depth %d", in.Arg, gb.Name, gb.Depth)
+			mode := ""
+			if gb.Push {
+				mode = " (push)"
+			}
+			fmt.Fprintf(sb, " g%-3d ; global bind %s @depth %d%s", in.Arg, gb.Name, gb.Depth, mode)
 		case OpBindTwin:
 			tw := p.BindTwins[in.Arg]
-			fmt.Fprintf(sb, " w%-3d ; bind twin %s %s @depth %d (inert)", in.Arg, tw.Kind, tw.Name, tw.Depth)
+			mode := "inert"
+			if p.TwinRegime {
+				mode = "replay"
+			}
+			fmt.Fprintf(sb, " w%-3d ; bind twin %s %s @depth %d (%s)", in.Arg, tw.Kind, tw.Name, tw.Depth, mode)
 		case OpCallDynMethod:
 			dm := p.DynMethods[in.Arg]
 			fmt.Fprintf(sb, " d%-3d ; %s/%d -> %d (shaped method)", in.Arg, dm.Word, dm.NArgs, dm.NOut)

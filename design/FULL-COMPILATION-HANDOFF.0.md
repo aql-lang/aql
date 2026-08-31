@@ -95,9 +95,68 @@ reverses an earlier plan:
 3. **Only then** flip to rollback-and-replay onto
    `core/go/binding_sandbox.go`, which is already built with the exact
    mints-retained / retirements-rolled-back partition §6.5 requires.
-   **The sandbox now has its first client (2026-08-31), and the flip's
-   central mechanism is proven at data level**:
-   `TestBindingSandboxRollbackAndReplay`
+   **FLIP v1 LANDED (2026-08-31), staged behind `BORU_TWIN_REGIME=1` —
+   default OFF stays byte-identical.** The machinery, end to end: the
+   recorder reads the flag once per pass (`compiler.TwinRegimeEnabled` →
+   `EmitState.twinRegime`), stamps `Program.TwinRegime` at Finalize, and
+   under the regime refuses any program whose twin table is not FULLY
+   stream-placed (the subset-to-equality tightening this step always
+   promised: an unplaced twin is a transition the rollback would lose).
+   lang's compiled entries (`RunAutoValues`, `RunCompiledStrict`) take a
+   `SnapshotBindings` before the pass under the same switch and, for a
+   stamped Program, roll back via the new
+   `core.RestoreBindingsForReplay` at the one safe between-phases point —
+   RestoreBindings minus the module-ledger rollback, because imports ran
+   once on the pass and must NOT re-run on the next request; the
+   namespace BINDING is what the def twin replays. At run time each
+   placed `OpBindTwin` calls `core.ApplyBindTwin` (bind_twin_apply.go):
+   push kinds re-install the captured entry (Push / PushType /
+   PushTypeAdopted by Minted), an undef pops-then-retires-if-minted, a
+   sig-undef removes the captured entry by identity (ID, else value
+   equality — never by position), a def-replace pops then pushes. The
+   COMPUTED-def pairing landed exactly as the needGlobal-coincidence
+   fact below predicted: `ApplyBindTwin` skips a captured entry matching
+   `TypeDef == nil && !IsConcrete && !IsBareTypeNode`, and that def's
+   `OpBindGlobal` (its `GlobalBindSpec.Push` stamped by lowerDynBind
+   under the regime) PUSHES the runtime value instead of SetAt — twin
+   before bind in stream order, so replace-twins net zero with the push.
+
+   **Measured on landing, whole corpus
+   (`test/go/langspec/bind_twin_regime_test.go`, the regime lane —
+   regime-compiled vs fresh interpreter): 6411 rows compiled, 0
+   divergences, no allowance.** The default recorder compiled 6416 the
+   same day: the full-placement gate costs exactly 5 rows (classified in
+   the lane by the `twin regime:` refusal reason), and they were
+   enumerated rather than assumed — FOUR are island-discarded do-body
+   defs (`do [def Big Integer …]`, `do [def x 5 raise …]`, the quoted
+   `[def zz 5 …] do`), exactly the class the island-re-execution hazard
+   below names: the island re-runs the def for real at VM time, the
+   discarded twin is semantically satisfied, and the count-based gate
+   refuses CONSERVATIVELY (sound fallback, never a double-install).
+   ONE is a suspended-recorder each-body leaking def
+   (`bytecode-migrated.tsv:41`), the class with no stream home until
+   arm-residency.
+   Cross-request persistence — keep-on-compile's contract, now delivered
+   by replay — is pinned by `TestTwinRegimeSmoke` (a replayed binding is
+   readable by the next request's check pass on the same instance).
+   `Program.TwinRegime` also drives the disasm mode tags
+   (`(inert)`/`(replay)`, `(push)` on global binds).
+
+   What remains for the DEFAULT flip, in order: (a) run the regime lane
+   long enough to trust it (it is committed and green — every push of
+   this PR now exercises the flip corpus-wide); (b) recover the 5
+   refused rows — island-discard accounting in Finalize for the four
+   do-body rows (track which table indices were discarded with an
+   island and count them as satisfied), arm-resident twins for the
+   each-body row (which also closes NUR110 by replacing join twins
+   with per-arm twins); (c) flip the default, delete the keep-regime
+   latches the payoff list names (frozen-read/NotifyNameRebound gates,
+   emit.go's rebind latches, family L's CondBodyDepth refusal, NUR037),
+   and collapse `GlobalBindSpec.Push`/the twin-regime branches into the
+   only path.
+
+   The sandbox's first client and the data-level proof that preceded the
+   flip: `TestBindingSandboxRollbackAndReplay`
    (`test/go/langspec/bind_replay_sandbox_test.go`) runs snapshot →
    compile pass → `RestoreBindings` → replay **from the Program's own
    recorded captures**: each note captures the `DefEntry` it installed
@@ -390,6 +449,9 @@ position than the construct that produced the binding.
 | `compiler/go/bind_twin_test.go` | `RecordBindTwin`'s contract directly: unconditional append (suspension must not filter), nil-receiver safe, the finalized Program carries a copy |
 | `test/go/langspec/bind_twin_emission_test.go` (`TestBindTwinOpsArePlacedOrderedSubset`) | the placement gate: every OpBindTwin indexes a real entry, strictly increasing per unit; placement ⊆ table until the flip's refusal tightens it |
 | `test/go/langspec/bind_replay_sandbox_test.go` | the sandbox's first client: rollback + ledger replay reproduces the pass-left registry over every push-only corpus row (depths per transition, entry identity per name) |
+| `test/go/langspec/bind_twin_regime_test.go` | THE FLIP's lane (`BORU_TWIN_REGIME=1` via t.Setenv): regime-compiled vs fresh interpreter over the corpus, divergences gated at 0, refusals classified, compiled floor 6400; plus the hand-checkable smoke (concrete def, computed def, cross-request persistence, type install) |
+| `core/go/bind_twin_apply_test.go` | `ApplyBindTwin`'s arms directly — each kind, the carrier-class skip, sig-undef identity match, `RestoreBindingsForReplay`'s pass-final module ledger |
+| `compiler/go/bind_twin_test.go` (`TestFinalizeTwinRegimeStampAndPlacementGate`) | the regime stamp and the full-placement refusal (a table-only twin refuses; flag off tolerates) |
 | `core/go/bind_ledger_note_test.go` | `NoteBindTransition`'s arms directly — suppressions, position precedence, kind/name/depth |
 | `core/go/check_state_passend_test.go` | the pass-end cleanup seam (LIFO, exactly once, reset by `Begin`, Clone-isolated) and the `SuppressBindLedger` bracket |
 | `check/go/narrow_passend_test.go` | the narrowing pop at pass end (popped on top, left alone when buried) and that `AnalyseLoopBody` ledgers its joined installs |

@@ -44,16 +44,18 @@ package core
 // product or has no twin to re-apply it; capturing it here would roll back
 // state nothing would put back.
 //
-// NO RUNTIME CLIENT YET, and that is the staging discipline this repo already
-// applies to the collection kernel's second adapter: the twin OPS arrive with
-// the regime that applies them, and this is the primitive they roll back
-// onto. It is exported (rather than kept unexported until then) because the
-// caller is lang's compiled entry point, outside this module. The FIRST
-// client is the corpus-scale harness
+// TWO CLIENTS, in arrival order. The FIRST is the corpus-scale harness
 // (test/go/langspec/bind_replay_sandbox_test.go): snapshot → compile pass →
 // RestoreBindings → replay the pass's ledger — proven to land exactly the
 // registry the pass left (depths per transition, entry identity per name)
-// over every push-only corpus row, before any VM semantics change.
+// over every push-only corpus row, before any VM semantics changed. The
+// SECOND is the runtime regime itself (BORU_TWIN_REGIME=1, staged): lang's
+// compiled entry points snapshot before the check pass and, for a Program
+// stamped TwinRegime, roll back through RestoreBindingsForReplay below at
+// the one safe point — BETWEEN the pass and the run, where no enclosing
+// pass holds references into the swapped table — before the placed
+// OpBindTwin ops (core.ApplyBindTwin) replay the transitions in stream
+// order.
 
 // BindingSandbox captures the RUNTIME-VISIBLE binding state a check pass can
 // move: the def table, the module ledger, and enough of the type table to undo
@@ -113,4 +115,25 @@ func (r *Registry) RestoreBindings(s BindingSandbox) {
 		r.Modules.seq = s.modSeq
 		r.Modules.Loaded = s.modLoaded
 	}
+}
+
+// RestoreBindingsForReplay is the twin regime's runtime rollback: identical
+// to RestoreBindings EXCEPT that the module ledger stays PASS-FINAL. The
+// full restore exists for abandonment — a refused compile whose interpreter
+// fallback re-runs the source, imports included, so the ledger must forget
+// them. Here nothing is abandoned: the run that follows replays each module
+// namespace BINDING through its def twin (the identical namespace instance
+// — §6.5's imported-exactly-once), while the import itself already ran on
+// the check pass and must never run again, on this request or the next one
+// on the same instance. Rolling the ledger back would claim otherwise and
+// re-import (re-running module-body effects) on the next request. The type
+// partition and the cache reset are unchanged: mints retained, retirements
+// readmitted for the undef twins to re-apply, cached dispatch dropped.
+func (r *Registry) RestoreBindingsForReplay(s BindingSandbox) {
+	if r == nil || !s.valid {
+		return
+	}
+	r.Defs = s.defs
+	r.dispatchCache.reset()
+	r.Types.readmitRetired(s.typeIDs)
 }

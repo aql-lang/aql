@@ -2,10 +2,21 @@ package compiler
 
 import (
 	"maps"
+	"os"
 
 	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
+
+// TwinRegimeEnabled reports whether the bind-twin rollback-and-replay regime
+// (design/FULL-COMPILATION.0.md §6.5) is armed for passes started NOW —
+// the BORU_TWIN_REGIME=1 staging flag. Read per pass (NewEmitState) rather
+// than once at init so a test can arm one lane with t.Setenv; exported so
+// lang's compiled entry points take their pre-pass binding snapshot under
+// exactly the same switch the recorder stamps into Program.TwinRegime.
+func TwinRegimeEnabled() bool {
+	return os.Getenv("BORU_TWIN_REGIME") == "1"
+}
 
 // The bytecode recording pass — Stage 1 of design/boru-bytecode-plan.0.md.
 //
@@ -588,6 +599,14 @@ type EmitState struct {
 	// corpus from these recorded captures, which is the exact contract the
 	// twin ops will execute at the flip.
 	bindTwinEntries []core.DefEntry
+	// twinRegime arms §6.5's rollback-and-replay for THIS pass's Program
+	// (BORU_TWIN_REGIME=1, read once at NewEmitState so one pass is one
+	// regime): Finalize stamps it onto Program.TwinRegime and enforces the
+	// full-placement refusal, and lowerDynBind emits its GlobalBindSpecs in
+	// Push mode. Everything else — the table, the events, the ledger funnel
+	// — is regime-independent by design: the flag changes what the RUNNER
+	// does with the recorded twins, never what is recorded.
+	twinRegime bool
 
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
@@ -1073,6 +1092,7 @@ type fnUnitRec struct {
 func NewEmitState() *EmitState {
 	return &EmitState{
 		Compilable: true,
+		twinRegime: TwinRegimeEnabled(),
 		SiteCounts: map[string]int{},
 		frames:     [][]EmitEvent{nil},
 		units:      []*emitUnit{{localByID: map[string]int{}}},
@@ -8372,7 +8392,39 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		ref.Prog = lw.p
 	}
 	lw.p.storedFnRefs = es.storedFnRefs
+	lw.p.TwinRegime = es.twinRegime
+	if es.twinRegime && !twinsFullyPlaced(lw.p) {
+		return nil, "twin regime: a bind transition has no stream placement (suspended-recording, island-discarded, or post-trap twin), so the rollback would lose it", false
+	}
 	return lw.p, "", true
+}
+
+// twinsFullyPlaced is the regime's FULL-PLACEMENT gate, the strengthening of
+// the ordered-subset invariant Finalize applies when TwinRegime is armed:
+// with the installs rolled back before the run, every twin-table entry NEEDS
+// a stream home — a table-only twin (noted while recording was suspended,
+// discarded with a fallback island's events, or truncated by a terminal
+// trap) is a transition the rollback would otherwise silently lose, so the
+// program refuses to the interpreter. The count is deliberately CONSERVATIVE
+// about the island case (measured: 4 of the corpus's 5 regime refusals): an
+// island RE-EXECUTES its do-body def at VM time, so its discarded twin is
+// semantically satisfied — refusing is sound (never a double-install), and
+// island-discard accounting can recover those rows as its own increment.
+func twinsFullyPlaced(p *Program) bool {
+	placed := 0
+	for _, in := range p.Code {
+		if in.Op == OpBindTwin {
+			placed++
+		}
+	}
+	for i := range p.Fns {
+		for _, in := range p.Fns[i].Code {
+			if in.Op == OpBindTwin {
+				placed++
+			}
+		}
+	}
+	return placed == len(p.BindTwins)
 }
 
 // noteApplyLoopReplay classifies a fn-body residual holding a per-iteration
