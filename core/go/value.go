@@ -651,6 +651,23 @@ type CallableSpec struct {
 	// arm-resident. Verified against the handler: DoListHandler drives
 	// InvokeBody once and returns the whole residual.
 	BodyOnceKeepsDefs bool
+	// BodyMultiRunKeepsDefs marks a word whose driving handler runs the
+	// body ONCE PER ELEMENT and keeps each run's installs — `each`, whose
+	// runtime leaks one install per element per body def site, stacked in
+	// element order with the per-element runtime value (measured:
+	// `[10 20] each [var [[r] def x r x]]` leaves x = [20, 10] top-down;
+	// the parity oracle's refused rows pin the full population). The twin
+	// regime's compiler reads it as the ARM-RESIDENCY license: a bind
+	// twin noted during this word's suspended body analysis may be
+	// satisfied by a resident install op INSIDE the compiled
+	// per-invocation unit — executing per element with the runtime value,
+	// which the check pass's one generalized carrier-valued capture
+	// cannot replay. Mutually exclusive with BodyOnceKeepsDefs (a body
+	// runs once or per element, never both); never set it on a word
+	// whose handler tears its body installs down. Verified against the
+	// handler: eachHandler drives InvokeBody per element on the shared
+	// registry with no def cleanup.
+	BodyMultiRunKeepsDefs bool
 	// BodyResultTop marks a driving handler that reads only the TOP of each
 	// invocation's body residual (`res[len(res)-1]`) — each / fold / scan / filter.
 	// The body may then leave UNCONSUMED values below that top (notably the

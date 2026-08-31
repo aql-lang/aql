@@ -143,6 +143,51 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // def site immediately follows the producing dispatch; a promoted producer
 // was rewritten to a local operand); any other layout refuses — a sound
 // interpreter fallback, never a wrong store.
+// lowerResidentBind emits an ARM-RESIDENT twin's install at its def site
+// inside a per-invocation unit (§6.5's each-body recovery — the event was
+// stamped by AdoptResidentTwins): the op executes once per element with
+// the RUNTIME value, installing through the interpreter's own installer
+// and riding no unwind trail. The value operand mirrors lowerDynBind's
+// resolution, with the peek/pop split GlobalBindSpec pioneered: a live
+// sim-top producer is PEEKED in place (its downstream readers are
+// untouched — the interpreter's def consumes nothing the compiled model
+// still needs), a promoted local or param re-pushes a copy the op pops,
+// and an inert literal bakes unpooled. Any other provenance refuses the
+// whole program — the sound interpreter fallback, never a wrong install.
+func (lw *lowerer) lowerResidentBind(d *emitDynBind) string {
+	pop := false
+	src := d.src
+	switch {
+	case d.srcSeq >= 0 && len(lw.vm) > 0 && lw.vm[len(lw.vm)-1].seq == d.srcSeq &&
+		lw.vm[len(lw.vm)-1].idx == 0 && !lw.variadic[d.srcSeq]:
+		// The computed value is live on the sim top: peek in place.
+	case d.srcSeq >= 0:
+		slot, ok := lw.promoted[d.srcSeq]
+		if !ok {
+			return "arm-resident def `" + d.name + "` of unpromoted computed value"
+		}
+		src, pop = localOperand(slot), true
+	case src.kind == opLocal:
+		pop = true
+	case src.kind == opNone && core.IsInertConst(d.val):
+		src, pop = ConstOperand(lw.es.internUnpooled(d.val)), true
+	default:
+		return "arm-resident def `" + d.name + "` of unknown provenance"
+	}
+	if pop {
+		lw.pushOperand(src, d.pos)
+	}
+	idx := len(lw.p.ResidentBinds)
+	lw.p.ResidentBinds = append(lw.p.ResidentBinds, ResidentBindSpec{
+		Name: d.name, Twin: d.residentTwin, Pop: pop,
+	})
+	lw.emit(OpBindResident, idx, d.pos)
+	if pop {
+		lw.vm = lw.vm[:len(lw.vm)-1]
+	}
+	return ""
+}
+
 // lowerDynBind emits the registry-visible twin of a `def` whose name some
 // OpLookupDynScope reads (the DynScopeNames set): push the bound value's
 // operand, then OpBindDynScope pops it into r.Defs under the name (the VM
@@ -151,6 +196,9 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // nothing here — its value flows by provenance exactly as before.
 func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 	d := ev.dyn
+	if d.residentTwin >= 0 {
+		return lw.lowerResidentBind(d)
+	}
 	needDyn := lw.es != nil && (lw.es.dynEnv || (lw.es.dynScopeNames != nil && lw.es.dynScopeNames[d.name]))
 	// A ROOT-unit def of a NON-concrete value additionally needs the
 	// cross-request write-back (OpBindGlobal): its binding persists past the

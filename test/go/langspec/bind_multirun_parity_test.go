@@ -75,22 +75,26 @@ var parityShapes = []parityShape{
 	{name: "do-adoption-shadow", src: "def x 1 do [def x 2] x", probes: []string{"x"}},
 	{name: "do-adoption-quoted", src: "quote [def zz 5 zz add 1] do", probes: []string{"zz"}},
 
-	// --- The multi-run-body population: refused today (the each-body
-	// class, arm-residency's target). Each row pins the refusal AND proves
-	// interpreter well-formedness; graduation is a reviewed edit to
-	// parity. The interpreter semantics these rows will have to match:
-	// one install per element per site, stacked in element order with
-	// per-element runtime values; var params net zero.
+	// --- The multi-run-body population (the each-body class,
+	// arm-residency's target). GRADUATED rows carry parity — the
+	// arm-resident bridge places a per-element runtime-value install
+	// (OpBindResident) at each def site inside the compiled unit, so
+	// count, values, order, and zero-iteration definedness are measured
+	// interpreter-equal. Still-refused rows pin the population the bridge
+	// declines: the var-param Pos-0:0 def/undef pair (until the undef
+	// seam lands), nested multi-run bodies (the latch's bodyID fence),
+	// and any root read of an arm-bound name (body-run-dependent
+	// definedness — its own refusal reason, not the placement gate's).
 	{name: "each-literal-def", src: "[1 2 3] each [def x 5]",
-		probes: []string{"x"}, refused: "twin regime:"},
+		probes: []string{"x"}},
 	{name: "each-elem-valued-def", src: "[10 20] each [ var [[r] def x r x] ]",
 		probes: []string{"x", "r"}, refused: "twin regime:"},
 	{name: "each-zero-iterations", src: "[] each [def x 5]",
-		probes: []string{"x"}, refused: "twin regime:"},
+		probes: []string{"x"}},
 	{name: "each-read-after", src: "[1 2] each [def x 5] x add 1",
-		probes: []string{"x"}, refused: "twin regime:"},
+		probes: []string{"x"}, refused: "read of `x` after a multi-run body binds it"},
 	{name: "each-underscore-def", src: "[1 2] each [def _u 5]",
-		probes: []string{"_u"}, refused: "twin regime:"},
+		probes: []string{"_u"}},
 	{name: "each-nested-multirun", src: "[1] each [[2 3] each [def x 5] 0]",
 		probes: []string{"x"}, refused: "twin regime:"},
 	{name: "row-41-verbatim",

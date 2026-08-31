@@ -301,7 +301,12 @@ var allArrayNatives = []NativeFunc{
 		// A 0-net body is each's own each_error ("body produced no result"), raised
 		// faithfully from InvokeBody, so EmptyBodyErrors compiles it natively rather
 		// than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []Value) []Value {
+		// BodyMultiRunKeepsDefs: eachHandler drives InvokeBody once per
+		// element on the shared registry with no def cleanup, so a body def
+		// leaks one install per element with the per-element runtime value
+		// (the parity oracle's measured population) — the twin regime's
+		// arm-residency license; see the field's doc in core.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, BodyMultiRunKeepsDefs: true, Inputs: func(a []Value) []Value {
 			return []Value{NewElementCarrier(DataListElemTypeFromValue(a[1]))}
 		}},
 
@@ -1635,13 +1640,15 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value {
 	// Higher-order bodies run nested sub-engines — pause bytecode
 	// recording for their duration (they are not part of the enclosing
-	// straight line). Through the ANALYSIS GUARD, not a plain Suspend:
-	// inside a keep-defs bracket (a `do` body run) the guard records this
-	// sub-run's bind twins as a TAINTED range, so the twin regime's
-	// do-body adoption never places a single replay for a transition a
-	// multi-run body performs per element at runtime
-	// (`do [[1 2] each [def x 5]]` — Codex P1 on #421).
-	defer r.Check.Recorder().BodyAnalysisGuard()()
+	// straight line). Through the MULTI-RUN GUARD, which delegates to the
+	// analysis guard — inside a keep-defs bracket (a `do` body run) the
+	// sub-run's bind twins still taint, so the twin regime's do-body
+	// adoption never places a single replay for a transition a multi-run
+	// body performs per element at runtime (`do [[1 2] each [def x 5]]` —
+	// Codex P1 on #421) — and additionally latches this run's twin-table
+	// range keyed by the body's identity, the seat the arm-residency
+	// bridge pairs against the compiled per-invocation unit's def sites.
+	defer r.Check.Recorder().MultiRunBodyGuard(r, body.ID)()
 	if !IsConcrete(body) {
 		return nil
 	}

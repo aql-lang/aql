@@ -212,6 +212,36 @@ reverses an earlier plan:
    params net zero per iteration via a balanced Pos-0:0 def/undef
    pair; mid-iteration raise leaves earlier elements' installs.
 
+   **Arm-residency's MECHANISM is LANDED for `each`'s non-var-pair
+   population.** `OpBindResident` (Program.ResidentBinds) executes
+   inside the compiled per-invocation unit, once per element, with the
+   RUNTIME value — install through `core.InstallDef` (the
+   interpreter's own installer: per-element repeats stack), peek/pop
+   value modes mirroring GlobalBindSpec, no unwind trail (a
+   mid-iteration raise leaves earlier installs), regime-only emission.
+   The bridge: `CallableSpec.BodyMultiRunKeepsDefs` (each alone,
+   handler-verified) + `MultiRunBodyGuard` (a body-identity-keyed
+   twin-range latch delegating to BodyAnalysisGuard, so #421's taint
+   holds) + `AdoptResidentTwins` (strict total NAME+ORDER pairing of
+   the bracket's BindDef twins against the fresh unit's def events —
+   any mismatch, leftover, stale memo unit, or foreign registry
+   declines everything, sound) + `lowerResidentBind` (sim-top peek /
+   pushed-copy pop / inert-literal bake; anything else refuses) +
+   `twinsFullyPlaced` counting real resident ops via
+   ResidentBinds[arg].Twin. Two extra fences: root reads of arm-bound
+   names REFUSE (NoteDefRead — definedness is body-run-dependent at
+   zero iterations; a later live root install lifts it), and the
+   `_`/`$` name gate opens inside arm-resident body compiles so
+   `def _2 …` gets its event seat. Graduated with measured parity in
+   the oracle: each-literal-def, each-zero-iterations,
+   each-underscore-def; read-after re-pinned to its own refusal.
+   STILL REFUSED, deliberately: the var-param pair class (row 41 — the
+   `RecordDynUndef` seam is stubbed sound; wiring it through
+   `__varundef` and bridging the BindUndef half is the NEXT step, and
+   graduates row 41), nested multi-run bodies (the bodyID fence), and
+   fold/scan/filter/outer/inner (unflagged until their handlers'
+   leak semantics are verified with oracle rows per word).
+
    The sandbox's first client and the data-level proof that preceded the
    flip: `TestBindingSandboxRollbackAndReplay`
    (`test/go/langspec/bind_replay_sandbox_test.go`) runs snapshot →

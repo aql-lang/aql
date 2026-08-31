@@ -21,6 +21,8 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 	}
 	e.BodyAnalysisGuard()()
 	e.KeepDefsBodyGuard()()
+	e.MultiRunBodyGuard(nil, "b")()
+	e.RecordDynUndef("x", SrcPos{})
 	e.FnBodyGuard()()
 
 	// --- refusal + site accounting.

@@ -472,6 +472,24 @@ const (
 	// re-install the recorded transition at this position, against the
 	// rolled-back registry. Zero stack effect either way.
 	OpBindTwin
+	// OpBindResident is the ARM-RESIDENT twin (§6.5's each-body recovery):
+	// a bind transition whose runtime home is INSIDE a compiled
+	// per-invocation unit, executing once per invocation with the RUNTIME
+	// value — the semantics no existing op has (OpBindTwin replays the
+	// check pass's one generalized carrier-valued capture; OpBindDynScope
+	// has the value but tears down at RET via the dynBinds trail;
+	// OpBindGlobal's Push mode has the lifetime but is a root-stream op).
+	// Arg indexes Program.ResidentBinds. The install arm pops the runtime
+	// value and installs it through core.InstallDef — the interpreter's
+	// own installer, so per-element repeats stack exactly as the
+	// interpreter's leak does — into the CURRENT registry, riding no
+	// unwind trail (leak persistence IS the semantics: a mid-iteration
+	// raise leaves earlier elements' installs, interpreter-identical).
+	// The undef arm (a var param's balanced per-iteration teardown) pops
+	// the name's live top entry instead, consuming no stack. Emitted only
+	// under the twin regime (the lowering gates on es.twinRegime), so
+	// default programs never carry it.
+	OpBindResident
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -528,6 +546,7 @@ var opcodeNames = [...]string{
 	OpBindGlobal:           "BIND_GLOBAL",
 	OpLookupDynScopeData:   "LOOKUP_DYN_SCOPE_DATA",
 	OpBindTwin:             "BIND_TWIN",
+	OpBindResident:         "BIND_RESIDENT",
 }
 
 func (o Opcode) String() string {
@@ -860,6 +879,24 @@ type XmlInterpSpec struct {
 // records depths 1 and 2; each write-back hits its own level). A slot popped
 // by a later check-time undef makes the write a no-op — the interpreter would
 // have discarded the binding the same way.
+// ResidentBindSpec describes one OpBindResident — see the opcode's doc.
+// Name is the binding; Twin indexes Program.BindTwins (the satisfied
+// ledger entry — provenance and placement accounting, never a value
+// source); Undef selects the teardown arm of a balanced per-iteration
+// pair (a var param's def/undef, both executing per element so the pair
+// nets zero per completed iteration and a mid-body raise leaves the def
+// half installed, interpreter-identical). Pop mirrors GlobalBindSpec's
+// mode split: the install arm PEEKS by default — a computed def's value
+// sits live on the unit sim for its downstream readers (the def consumes
+// nothing the compiled model still needs) — and POPS when the lowering
+// pushed a copy for the install (a baked literal, a promoted local).
+type ResidentBindSpec struct {
+	Name  string
+	Twin  int
+	Undef bool
+	Pop   bool
+}
+
 type GlobalBindSpec struct {
 	Name  string
 	Depth int
@@ -996,6 +1033,14 @@ type Program struct {
 	// then-live entry). Proven against the pass-left registry, corpus-wide,
 	// by the sandbox harness (test/go/langspec/bind_replay_sandbox_test.go).
 	BindTwinEntries []core.DefEntry
+	// ResidentBinds backs OpBindResident (the arm-resident twins —
+	// §6.5's each-body recovery): one entry per resident install/teardown
+	// site inside a compiled per-invocation unit. Twin indexes BindTwins
+	// — the ledger entry the resident op satisfies for the full-placement
+	// scan; the entry's captured generalized value is deliberately NOT
+	// replayed (the op carries the runtime value instead, which is the
+	// whole point). Only a twin-regime program carries entries.
+	ResidentBinds []ResidentBindSpec
 	// TwinRegime marks a program compiled with the rollback-and-replay
 	// regime armed (BORU_TWIN_REGIME=1 at recording time — §6.5's flip,
 	// staged behind the flag): the runner rolls the check pass's
@@ -1278,6 +1323,13 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 				mode = "replay"
 			}
 			fmt.Fprintf(sb, " w%-3d ; bind twin %s %s @depth %d (%s)", in.Arg, tw.Kind, tw.Name, tw.Depth, mode)
+		case OpBindResident:
+			rb := p.ResidentBinds[in.Arg]
+			arm := "install"
+			if rb.Undef {
+				arm = "undef"
+			}
+			fmt.Fprintf(sb, " a%-3d ; resident bind %s (%s, twin %d)", in.Arg, rb.Name, arm, rb.Twin)
 		case OpCallDynMethod:
 			dm := p.DynMethods[in.Arg]
 			fmt.Fprintf(sb, " d%-3d ; %s/%d -> %d (shaped method)", in.Arg, dm.Word, dm.NArgs, dm.NOut)

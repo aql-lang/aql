@@ -13,7 +13,7 @@ import (
 // non-inert arms.
 
 func dsBindEvent(name string) EmitEvent {
-	return EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: name, srcSeq: -1}}
+	return EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: name, srcSeq: -1, residentTwin: -1}}
 }
 
 func TestEventsBindDynScopeWalksFragments(t *testing.T) {
@@ -77,7 +77,7 @@ func TestLowerDynBindArms(t *testing.T) {
 
 	// Promoted computed value: pushes the promoted local, then the bind.
 	lw, cf := newLW(es, map[int]int{7: 3})
-	ev := EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: 7}}
+	ev := EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: 7, residentTwin: -1}}
 	if reason := lw.lowerDynBind(&ev); reason != "" {
 		t.Fatalf("promoted bind refused: %s", reason)
 	}
@@ -87,14 +87,14 @@ func TestLowerDynBindArms(t *testing.T) {
 
 	// Unpromoted computed value: refuses.
 	lw, _ = newLW(es, map[int]int{})
-	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: 9}}
+	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: 9, residentTwin: -1}}
 	if reason := lw.lowerDynBind(&ev); !strings.Contains(reason, "unpromoted computed value") {
 		t.Errorf("unpromoted bind reason = %q", reason)
 	}
 
 	// Literal binding: bakes the recorded value verbatim (unpooled).
 	lw, cf = newLW(es, nil)
-	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: -1, val: core.NewInteger(5)}}
+	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: -1, val: core.NewInteger(5), residentTwin: -1}}
 	if reason := lw.lowerDynBind(&ev); reason != "" {
 		t.Fatalf("literal bind refused: %s", reason)
 	}
@@ -104,14 +104,14 @@ func TestLowerDynBindArms(t *testing.T) {
 
 	// A non-inert (tape-coupled) value refuses.
 	lw, _ = newLW(es, nil)
-	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: -1, val: core.NewWord("live")}}
+	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "dsl", srcSeq: -1, val: core.NewWord("live"), residentTwin: -1}}
 	if reason := lw.lowerDynBind(&ev); !strings.Contains(reason, "unknown provenance") {
 		t.Errorf("non-inert bind reason = %q", reason)
 	}
 
 	// A name no lookup reads lowers to nothing.
 	lw, cf = newLW(es, nil)
-	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "unread", srcSeq: -1}}
+	ev = EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "unread", srcSeq: -1, residentTwin: -1}}
 	if reason := lw.lowerDynBind(&ev); reason != "" || len(cf.Code) != 0 {
 		t.Errorf("unread bind must be a no-op: reason=%q code=%v", reason, cf.Code)
 	}
