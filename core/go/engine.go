@@ -2715,6 +2715,10 @@ func (e *Engine) stepWord(val Value) error {
 		wDeep.ForceStack = true
 		sig, positions, specAt = e.MatchSignature(fn, wDeep, resolved)
 	}
+	// The word-dispatch commit, as planned (dispatch_probe.go): the
+	// admission-agreement census reads it here, before the check-mode
+	// Fallback recovery below, which analysis alone reaches.
+	e.probeDispatch(fn, w, sig, positions, specAt)
 
 	// In check mode, if matchSignature fell through to the 0-arg /
 	// Fallback handler because no typed signature matched (but
@@ -5016,6 +5020,9 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	if sig != nil && sig.Fallback {
 		sig = nil
 	}
+	// The fn-value dispatch commit (dispatch_probe.go) — after the
+	// Fallback discard above, so a value left as data reads as nil here.
+	e.probeDispatch(fn, w, sig, positions, specAt)
 
 	// Count forward vs stack positions of the matched sig (nil-safe:
 	// positions is empty when sig == nil).
