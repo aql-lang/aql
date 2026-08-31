@@ -135,6 +135,30 @@ reverses an earlier plan:
      runtime value changes per iteration while the interpreter PUSHES per
      iteration, so the write-back is not behavior-neutral there — the flip
      changes semantics coherently or not at all.
+   - The COMPUTED-value twin class coincides exactly with lowerDynBind's
+     `needGlobal` predicate (root && !IsConcrete && !IsBareTypeNode): a
+     const-folded `def x (1 add 2)` records a concrete 3 (verbatim class),
+     and a bare-node body is self-representing — so at the flip, "skip the
+     BIND_TWIN whose captured entry matches needGlobal's predicate, and
+     flip that def's OpBindGlobal from SetAt to Push" partitions the def
+     population with no third case.
+   - **`BindDefReplace` has TWO producers with DIFFERENT replay
+     semantics**, and a single twin arm would silently corrupt one of
+     them: installDef's redefinition (drop the colliding overload, PUSH
+     the captured new entry) versus `UninstallFnSigs`' signature undef
+     (REMOVE the most-recent matching entry — possibly mid-stack — and
+     push NOTHING; its note-time captured entry is just whatever sits on
+     top, not a value to install). The kinds must split, or the spec must
+     carry the discriminator, before the def-replace twin is written.
+   - **Islands re-execute; twins must not double-apply there.** A do-body
+     compiled as a FALLBACK island re-runs its tokens in a sub-engine at
+     VM time, executing any `def` inside it for real — so a twin event
+     discarded with the island's events is CORRECT, not a placement gap.
+     The unplaced-twin refusal the flip needs must therefore distinguish
+     "discarded into an island that re-executes the transition" (sound —
+     do not refuse, do not re-apply) from "noted under a suspended
+     recorder with nothing to apply it" (refuse). Conflating them either
+     double-installs do-body defs or refuses every islanded program.
 
 **Do not invert that staging.** Rollback-first breaks every program until
 the last transition has a twin, and offers no intermediate state where the
