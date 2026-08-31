@@ -99,10 +99,17 @@ spec-test:
 
 # ---- per-module fan-out -------------------------------------------------
 
+# The per-module timeout is a CEILING for the slowest package on the
+# slowest supported machine, not a target: test/go's langspec corpus
+# lanes (differential + twin-regime + oracle + sandbox + property) now
+# measure ~16-20 min on a 2-core container — 990s one run, a 1207s
+# timeout the next — so 20m flapped on wall-clock variance alone. Raise
+# it if a corpus lane addition pushes the slowest package within ~25%
+# of the cap again; never tune a lane down to fit the cap.
 test:
 	@set -e; for m in $(MODULES); do \
 	  echo "==> test $$m"; \
-	  ( cd $$m && go test -timeout 20m ./... ); \
+	  ( cd $$m && go test -timeout 35m ./... ); \
 	done
 
 # test-race is the data-race gate (design/TEST-SEAMS.10.md). `make test` does
@@ -598,7 +605,7 @@ cover-profile:
 	  n=$$((n + 1)); tm=$$(date +%s); \
 	  echo "==> cover-profile $$m [$$n/$$total, $$((100 * (n - 1) / total))% done, $$((tm - t0))s elapsed]"; \
 	  out="$(abspath $(COVER_DIR))/$$(echo $$m | tr '/' '_').xout"; \
-	  ( cd $$m && go test -timeout 25m -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > "$$out.log" 2>&1 ) \
+	  ( cd $$m && go test -timeout 45m -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > "$$out.log" 2>&1 ) \
 	    || { echo "==> cover-profile $$m FAILED — last lines of $$out.log:"; tail -40 "$$out.log"; exit 1; }; \
 	  te=$$(date +%s); \
 	  echo "    $$m profiled in $$((te - tm))s [$$((100 * n / total))% done, $$((te - t0))s elapsed]"; \

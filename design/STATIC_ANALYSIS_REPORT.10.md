@@ -291,6 +291,25 @@ unified dispatch algorithm and is intrinsically a big decision tree.
 It carries `//nolint:gocyclo,gocognit` with a comment pointing here.
 Everything else clears the current gate (cyclo 70 / cognit 200).
 
+> **Correction (2026-08-31).** The tables above are the first-run
+> snapshot and their locations pre-date the four-piece module carve
+> (`eng/go/match.go` no longer exists — the function is
+> `(*Engine).MatchSignature` at `core/go/engine.go`). More importantly
+> the 87/211 outlier reading is DEAD: Stage 2's collection-kernel
+> re-seat (54d8830) extracted the ~250-line per-candidate scan to
+> `CollectCandidateScan`, and the live measure is **cyclo 68 /
+> cognit 131** — under the caps — so its `//nolint` is deleted and the
+> gate binds on it for real. `gocognit.min-complexity` is ratcheted
+> 200 → 170 (worst non-exempt: `check/go BuildFnBodyReturnsFn` 165;
+> `core stepCloseParen` 161); `gocyclo` stays 70 (worst non-exempt:
+> `basic DefTypedHandler` at exactly 70, which passes under the
+> strictly-greater semantics). The one remaining
+> `//nolint:gocyclo,gocognit` pair in the tree is `eng vm.run`
+> (148/278) — the VM instruction switch, which Stage 4 grows by
+> design. The lesson this correction encodes: complexity figures in
+> comments and docs go stale silently — measure before planning
+> against them (`gocyclo`/`gocognit` standalone, commands below).
+
 ### Duplication — `dupl`, clone groups at ≥ 300 tokens
 
 | Where |
@@ -355,3 +374,8 @@ scc      --no-cocomo                   eng/go lang cmd/go util/go
    catastrophic regression); useful next steps are splitting
    `matchSignature` (the only function carrying both nolints) and the
    2,000-line-class engine helpers.
+   *(2026-08-31: the `matchSignature` half of this step happened as a
+   side effect of Stage 2's re-seat and the gocognit ratchet landed at
+   170 — see the correction above. Further planner decomposition is
+   deliberately trigger-gated on Stage 4; the triggers live in
+   design/FULL-COMPILATION.0.md §10.)*
