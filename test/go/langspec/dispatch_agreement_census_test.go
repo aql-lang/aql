@@ -79,6 +79,20 @@ var agreementLedger = map[string]string{
 	"kernel-no-match/use":              "pattern-admission difference (pattern sig over a map operand)",
 }
 
+// timingDependentShapes marks ledger entries whose witness rows are
+// MACHINE-SPEED-DEPENDENT (interval/await-flavored corpus rows iterate a
+// different number of times per host — the probed-dispatch total itself
+// varies by ~0.5% between this container and CI), so their occurrence
+// count can legitimately reach zero on a fast host. The STALE direction
+// of the gate skips exactly these (measured: CI saw 18 of the 20 local
+// divergences, with kernel-no-match/remove absent and use at ×1); the
+// UNLEDGERED direction — the safety one — still fails everywhere, for
+// every shape.
+var timingDependentShapes = map[string]bool{
+	"kernel-no-match/remove": true,
+	"kernel-no-match/use":    true,
+}
+
 // censusGoid parses the current goroutine's id from runtime.Stack's
 // header — a census-only cost (~1µs per probed dispatch), and the price
 // of suppressing EXACTLY the census's own artifacts: the kernel rematch
@@ -282,7 +296,7 @@ func TestDispatchAdmissionAgreementCensus(t *testing.T) {
 		}
 	}
 	for k, why := range agreementLedger {
-		if s.diverged[k] == 0 {
+		if s.diverged[k] == 0 && !timingDependentShapes[k] {
 			t.Errorf("stale ledger entry %q (%s): the divergence no longer occurs — delete the entry so the ledger stays exact", k, why)
 		}
 	}
