@@ -6313,8 +6313,26 @@ func (es *EmitState) recordCodeBodyClosureRead(args []core.Value) bool {
 }
 
 func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
-	if !es.Active() || name == "" || name[0] == '_' || name[0] == '$' || core.IsCapitalisedName(name) {
+	if !es.Active() || name == "" || core.IsCapitalisedName(name) {
 		return
+	}
+	if name[0] == '_' || name[0] == '$' {
+		// The historical skip for these names is a keep-installs-era economy:
+		// under the default regime the check pass's install IS the kept
+		// binding, so a name nobody dyn-reads needs no op. Under the TWIN
+		// REGIME it is a correctness hole at the root: the rollback removes
+		// the install, a computed def's placed twin captures a CARRIER that
+		// ApplyBindTwin's carrier-class skip consumes, and with no Push-mode
+		// OpBindGlobal partner the binding is silently LOST cross-request —
+		// measured before the fix as `def _ ([1 2] each [1]) 9` then `_` →
+		// undefined_word against the interpreter's [[1 1]] (the parity
+		// oracle's founding row, bind_multirun_parity_test.go). So a ROOT
+		// def of such a name records under the regime; everywhere else — the
+		// default regime, fn bodies, nested units — the historical skip
+		// stands and default bytecode stays byte-identical.
+		if !es.twinRegime || len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 {
+			return
+		}
 	}
 	// NOTE a name bound to a COMPILED CLOSURE. The value is invokable only
 	// through the VM's re-entrant runner, never the interpreter

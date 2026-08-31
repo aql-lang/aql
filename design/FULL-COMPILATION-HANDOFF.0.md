@@ -175,12 +175,42 @@ reverses an earlier plan:
    What remains for the DEFAULT flip, in order: (a) run the regime lane
    long enough to trust it (it is committed and green — every push of
    this PR now exercises the flip corpus-wide); (b) arm-resident twins
-   for the each-body row (which also closes NUR110 by replacing join
-   twins with per-arm twins); (c) flip the default, delete the
+   for the each-body row (whose design review re-scoped the NUR110
+   claim: per-arm twins are NUR110's mechanism half only — the read
+   side still const-folds from the joined check model, so NUR110's
+   close is a follow-on with its own read-side lowering, and the
+   if-arm half has zero corpus rows); (c) flip the default, delete the
    keep-regime latches the payoff list names (frozen-read/
    NotifyNameRebound gates, emit.go's rebind latches, family L's
    CondBodyDepth refusal, NUR037), and collapse `GlobalBindSpec.Push`/
    the twin-regime branches into the only path.
+
+   **Arm-residency step 0 is LANDED: the cross-request parity oracle**
+   (`test/go/langspec/bind_multirun_parity_test.go`). The increment
+   switches part of the twins' contract from pass-left fidelity (the
+   sandbox-proven invariant every existing gate pins) to INTERPRETER
+   fidelity with runtime-dependent count/value/order — and no lane
+   measured that: the regime differential compares same-request
+   results only, and the full-placement gate is syntactic. The oracle
+   enumerates every probed name's full install stack on a fresh
+   interpreter instance vs a fresh regime instance (read/undef
+   alternation — undef of a missing name is a silent no-op, so reads
+   are the drain detector) and pins each shape as measured-parity or
+   refused-by-substring; graduation is a reviewed classification edit,
+   never drift. Its founding catch was a LIVE regime hole, fixed in
+   the same commit: RecordDynBind's historical `_`/`$` name skip left
+   a root computed `def _` with a placed carrier-entry twin
+   (carrier-class-skipped) and no Push-mode OpBindGlobal partner — the
+   binding silently lost cross-request (`def _ ([1 2] each [1]) 9`
+   then `_` → undefined_word vs the interpreter's [[1 1]]). The gate
+   now admits root `_`/`$` defs under es.twinRegime only; default
+   bytecode is byte-identical. The measured each-body semantics the
+   graduation must match, from the same instrumentation: one install
+   per element per site, stacked in element order with per-element
+   runtime values (the ledger's one generalized carrier-valued entry
+   cannot replay it — the arm op must carry the runtime value); var
+   params net zero per iteration via a balanced Pos-0:0 def/undef
+   pair; mid-iteration raise leaves earlier elements' installs.
 
    The sandbox's first client and the data-level proof that preceded the
    flip: `TestBindingSandboxRollbackAndReplay`
