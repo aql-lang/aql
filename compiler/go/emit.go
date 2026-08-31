@@ -2,10 +2,21 @@ package compiler
 
 import (
 	"maps"
+	"os"
 
 	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
+
+// TwinRegimeEnabled reports whether the bind-twin rollback-and-replay regime
+// (design/FULL-COMPILATION.0.md §6.5) is armed for passes started NOW —
+// the BORU_TWIN_REGIME=1 staging flag. Read per pass (NewEmitState) rather
+// than once at init so a test can arm one lane with t.Setenv; exported so
+// lang's compiled entry points take their pre-pass binding snapshot under
+// exactly the same switch the recorder stamps into Program.TwinRegime.
+func TwinRegimeEnabled() bool {
+	return os.Getenv("BORU_TWIN_REGIME") == "1"
+}
 
 // The bytecode recording pass — Stage 1 of design/boru-bytecode-plan.0.md.
 //
@@ -352,6 +363,7 @@ const (
 	evTrap
 	evStore
 	evDynBind
+	evBindTwin
 )
 
 // emitUserCall is a recorded call of a compiled boru fn: the target
@@ -436,6 +448,18 @@ type EmitEvent struct {
 	trap  EmitTrap
 	store *emitStore
 	dyn   *emitDynBind
+	twin  *emitBindTwin
+}
+
+// emitBindTwin marks one bind-ledger transition's STREAM POSITION (§6.5's
+// inert-emission stage): idx indexes EmitState.bindTwins / the finalized
+// Program.BindTwins. No operands and no outputs — the event exists purely so
+// the lowering emits an OpBindTwin at the point in production order where the
+// check pass performed the transition, which is the placement the
+// rollback-and-replay flip will rely on.
+type emitBindTwin struct {
+	idx int
+	pos core.SrcPos
 }
 
 // emitDynBind is one recorded `def` site (every value def records one,
@@ -556,6 +580,33 @@ type EmitState struct {
 	// defReadGens snapshots each def-read's binding generation
 	// (residualReadStable — the end-of-program re-push soundness gate).
 	defReadGens map[string]int64
+
+	// bindTwins is the pass's bind-twin table: one entry per bind-ledger
+	// transition, appended by RecordBindTwin as NoteBindTransition fires
+	// (§6.5's inert-emission stage). Deliberately OUTSIDE the event stream
+	// and the Checkpoint/Rollback pools: the population is the ledger's, the
+	// ledger's own suppressions are the single filter, and no note fires
+	// inside a rolled-back loop round — so the table mirrors the ledger
+	// verbatim, which is exactly what the emission gate asserts. Copied to
+	// Program.BindTwins at Finalize; carries no instruction until the
+	// rollback-and-replay flip gives each entry an op at its position.
+	bindTwins []core.BindTransition
+	// bindTwinEntries is 1:1 with bindTwins: the DefEntry each push
+	// transition INSTALLED, captured at the note (the identical binding
+	// object §6.5's replay re-installs — the same FnDefInfo, module
+	// instance, minted node). Zero for a BindUndef, whose twin pops the
+	// then-live entry at its own position. The sandbox harness replays the
+	// corpus from these recorded captures, which is the exact contract the
+	// twin ops will execute at the flip.
+	bindTwinEntries []core.DefEntry
+	// twinRegime arms §6.5's rollback-and-replay for THIS pass's Program
+	// (BORU_TWIN_REGIME=1, read once at NewEmitState so one pass is one
+	// regime): Finalize stamps it onto Program.TwinRegime and enforces the
+	// full-placement refusal, and lowerDynBind emits its GlobalBindSpecs in
+	// Push mode. Everything else — the table, the events, the ledger funnel
+	// — is regime-independent by design: the flag changes what the RUNNER
+	// does with the recorded twins, never what is recorded.
+	twinRegime bool
 
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
@@ -1041,6 +1092,7 @@ type fnUnitRec struct {
 func NewEmitState() *EmitState {
 	return &EmitState{
 		Compilable: true,
+		twinRegime: TwinRegimeEnabled(),
 		SiteCounts: map[string]int{},
 		frames:     [][]EmitEvent{nil},
 		units:      []*emitUnit{{localByID: map[string]int{}}},
@@ -3512,6 +3564,35 @@ func (es *EmitState) NoteLoopCarried(name string, joined, pre core.Value) {
 		}
 	}
 	u.localByID[joined.ID] = slot
+}
+
+// RecordBindTwin appends one bind-ledger transition to the pass's twin table
+// (§6.5's inert-emission stage; the table's contract is on the bindTwins
+// field). UNCONDITIONAL by design — no Active()/Suspend gate: the twin
+// population is the ledger's, NoteBindTransition already applied every
+// suppression before calling here, and a second filter would be a second
+// source of truth for the emission gate to drift against. In particular a
+// transition noted while recording is SUSPENDED (an each/fold body run whose
+// def genuinely leaks) still belongs to the table, exactly as it belongs to
+// the ledger.
+func (es *EmitState) RecordBindTwin(tr core.BindTransition, entry core.DefEntry) {
+	if es == nil {
+		return
+	}
+	es.bindTwins = append(es.bindTwins, tr)
+	es.bindTwinEntries = append(es.bindTwinEntries, entry)
+	// STREAM PLACEMENT, the narrower half: an evBindTwin event marks where in
+	// production order the transition happened, so the lowering emits an
+	// (inert) OpBindTwin there. Recorded only while the recorder is LIVE —
+	// unlike the table append above, which is the census. A transition noted
+	// while recording is suspended (an each/fold body's leaking def) has no
+	// stream home until the twin becomes arm-resident, so it stays
+	// table-only; the emission gate counts placed ops as a strictly-ordered
+	// subset of the table for exactly this reason.
+	if es.Active() {
+		es.appendEvent(EmitEvent{kind: evBindTwin,
+			twin: &emitBindTwin{idx: len(es.bindTwins) - 1, pos: tr.Pos}})
+	}
 }
 
 // RecordDefRebind records a `def` dispatch of a loop-carried name: the
@@ -7965,7 +8046,12 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		es.frames[0] = eventsThroughSeq(es.frames[0], es.trapAt)
 		residual = nil
 	}
-	p := &Program{DynEnv: es.dynEnv}
+	p := &Program{DynEnv: es.dynEnv,
+		// The twin table travels with the finalized Program verbatim (a copy,
+		// so a later pass on the same EmitState cannot mutate a delivered
+		// Program). Inert until the rollback-and-replay flip — see the field.
+		BindTwins:       append([]core.BindTransition(nil), es.bindTwins...),
+		BindTwinEntries: append([]core.DefEntry(nil), es.bindTwinEntries...)}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*core.Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
 	// (counting the program residual) is promoted to a frame local so the
@@ -8306,7 +8392,39 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		ref.Prog = lw.p
 	}
 	lw.p.storedFnRefs = es.storedFnRefs
+	lw.p.TwinRegime = es.twinRegime
+	if es.twinRegime && !twinsFullyPlaced(lw.p) {
+		return nil, "twin regime: a bind transition has no stream placement (suspended-recording, island-discarded, or post-trap twin), so the rollback would lose it", false
+	}
 	return lw.p, "", true
+}
+
+// twinsFullyPlaced is the regime's FULL-PLACEMENT gate, the strengthening of
+// the ordered-subset invariant Finalize applies when TwinRegime is armed:
+// with the installs rolled back before the run, every twin-table entry NEEDS
+// a stream home — a table-only twin (noted while recording was suspended,
+// discarded with a fallback island's events, or truncated by a terminal
+// trap) is a transition the rollback would otherwise silently lose, so the
+// program refuses to the interpreter. The count is deliberately CONSERVATIVE
+// about the island case (measured: 4 of the corpus's 5 regime refusals): an
+// island RE-EXECUTES its do-body def at VM time, so its discarded twin is
+// semantically satisfied — refusing is sound (never a double-install), and
+// island-discard accounting can recover those rows as its own increment.
+func twinsFullyPlaced(p *Program) bool {
+	placed := 0
+	for _, in := range p.Code {
+		if in.Op == OpBindTwin {
+			placed++
+		}
+	}
+	for i := range p.Fns {
+		for _, in := range p.Fns[i].Code {
+			if in.Op == OpBindTwin {
+				placed++
+			}
+		}
+	}
+	return placed == len(p.BindTwins)
 }
 
 // noteApplyLoopReplay classifies a fn-body residual holding a per-iteration
@@ -8616,6 +8734,8 @@ func eventPos(ev EmitEvent) core.SrcPos {
 		return ev.store.pos
 	case evDynBind:
 		return ev.dyn.pos
+	case evBindTwin:
+		return ev.twin.pos
 	}
 	return ev.br.pos
 }

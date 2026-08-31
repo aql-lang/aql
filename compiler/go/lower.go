@@ -195,6 +195,7 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 			gi := len(lw.p.GlobalBinds)
 			lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{
 				Name: d.name, Depth: d.depth, Splice: true, SpliceFromTop: d.spliceDepth,
+				Push: lw.es.twinRegime,
 			})
 			lw.emit(OpBindGlobal, gi, d.pos)
 			lw.note()
@@ -210,6 +211,7 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 			gi := len(lw.p.GlobalBinds)
 			lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{
 				Name: d.name, Depth: d.depth, Splice: true, SpliceFromTop: d.spliceDepth,
+				Push: lw.es.twinRegime,
 			})
 			lw.emit(OpBindGlobal, gi, d.pos)
 			for i := len(lw.vm) - 1; i >= 0; i-- {
@@ -266,7 +268,8 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 		// is peeked in place for its downstream consumers.
 		pop := !fastGlobal || lw.dead[d.srcSeq]
 		gi := len(lw.p.GlobalBinds)
-		lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{Name: d.name, Depth: d.depth, Pop: pop})
+		lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{Name: d.name, Depth: d.depth, Pop: pop,
+			Push: lw.es.twinRegime})
 		if !fastGlobal {
 			// Re-push a copy from its resolved home; the bind consumes it
 			// (Pop mode — one op, no separate DROP in the stream).
@@ -606,6 +609,11 @@ func (lw *lowerer) lowerEvents(events []EmitEvent, scopeFloor int) string {
 			reason = lw.lowerStore(ev)
 		case evDynBind:
 			reason = lw.lowerDynBind(ev)
+		case evBindTwin:
+			// Zero stack effect, no operands: the op only marks the
+			// transition's stream position (inert until the flip), so neither
+			// the sim nor the residual accounting moves.
+			lw.emit(OpBindTwin, ev.twin.idx, ev.twin.pos)
 		default:
 			reason = "unknown event kind"
 		}
@@ -693,6 +701,8 @@ func forEachOperand(ev *EmitEvent, fn func(EmitOperand)) {
 		visit(ev.store.src)
 	case evDynBind:
 		visit(ev.dyn.src)
+	case evBindTwin:
+		// no operands — the twin references nothing and produces nothing
 	default: // evBranch
 		// thenVal / elsVal are the value-arm operands — meaningful only when
 		// thenIsVal / elsIsVal, and an opEvent only for the computed-arm shapes

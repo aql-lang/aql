@@ -1029,13 +1029,14 @@ func (es *EmitState) emptyFlexHookOperand(v core.Value) bool {
 		return false
 	}
 	evs := es.frames[0]
-	// Trailing evDynBind events are def-site BOOKKEEPING (the dynamic-scope
-	// binder trail): their only runtime effect is a registry install, which
-	// cannot touch the flex contents — skip them when locating the last
+	// Trailing evDynBind and evBindTwin events are def-site BOOKKEEPING (the
+	// dynamic-scope binder trail, and the bind-twin position marker — inert
+	// today, and at the flip its only runtime effect is a registry install):
+	// neither can touch the flex contents — skip them when locating the last
 	// EFFECTFUL event, which must still be this flex's construction (the
-	// "no event recorded since" proof, dyn-bind-tolerant).
+	// "no event recorded since" proof, bookkeeping-tolerant).
 	i := len(evs) - 1
-	for i >= 0 && evs[i].kind == evDynBind {
+	for i >= 0 && (evs[i].kind == evDynBind || evs[i].kind == evBindTwin) {
 		i--
 	}
 	if i < 0 {

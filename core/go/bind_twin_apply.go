@@ -1,0 +1,97 @@
+package core
+
+// ApplyBindTwin — the runtime half of §6.5's rollback-and-replay regime
+// (design/FULL-COMPILATION.0.md; the rollback half is binding_sandbox.go).
+//
+// One OpBindTwin executes here: re-perform ONE recorded bind-ledger
+// transition against the rolled-back registry, at the twin's own stream
+// position. Replay, never re-execution — a push kind re-installs the
+// IDENTICAL binding object the check pass captured at its note (the same
+// FnDefInfo, the same module namespace instance, the same minted node),
+// so nothing runs twice; the removal kinds re-remove against whatever the
+// replay has built so far, which — by the corpus-proven sandbox contract
+// (test/go/langspec/bind_replay_sandbox_test.go) — is exactly the stack
+// the check pass saw at that moment.
+//
+// THE CARRIER-CLASS SKIP is the one deliberate divergence from a verbatim
+// replay, and it is a PAIRING, not an omission. A top-level def of a
+// non-concrete, non-bare-node value (the captured entry is the check
+// pass's CARRIER, not the runtime value) is exactly lowerDynBind's
+// needGlobal class: that def also emitted an OpBindGlobal, which under the
+// regime runs in Push mode (GlobalBindSpec.Push) and installs the RUNTIME
+// value where the interpreter's `def` would. Twin-then-bind is the stream
+// order (InstallDef notes before RecordDynBind stamps), so the skip leaves
+// the push to the op that has the real value — replaying the carrier AND
+// pushing the runtime value would double-install, and replaying the
+// carrier alone would resurrect the very keep-the-installs staleness the
+// flip exists to remove. The same predicate on the same entry decides both
+// sides, so the pair cannot drift apart.
+func ApplyBindTwin(r *Registry, tr BindTransition, entry DefEntry) {
+	if r == nil {
+		return
+	}
+	switch tr.Kind {
+	case BindUndef:
+		// The twin pops whatever is live at ITS position — the capture is
+		// deliberately zero (check_state.go). Retirement mirrors basic's
+		// undef: only a node THIS binding minted; an adopted alias node
+		// stays in the lattice.
+		if e, ok := r.Defs.PopEntry(tr.Name); ok && e.TypeDef != nil && e.Minted {
+			r.Types.Retire(e.TypeDef)
+		}
+	case BindSigUndef:
+		applyTwinSigUndef(r, tr.Name, entry.Body)
+	case BindDefReplace:
+		// InstallDef's same-scope overlap filter: drop the standing entry,
+		// then install the replacement — net zero, exactly the delta the
+		// ledger records for this kind. The push half pairs with the def's
+		// own Push-mode OpBindGlobal via the carrier-class skip above, so
+		// a computed replacement still nets zero: twin pops, bind pushes.
+		r.Defs.PopEntry(tr.Name)
+		applyTwinPush(r, tr.Name, entry)
+	default: // BindDef, BindTypeInstall
+		applyTwinPush(r, tr.Name, entry)
+	}
+}
+
+// applyTwinPush re-installs one captured push entry, honouring the
+// carrier-class skip documented on ApplyBindTwin. The three install arms
+// are the sandbox harness's proven replay verbatim: a plain value pushes,
+// a minted type binding re-pushes its node (the mint itself was retained
+// through the rollback — a compile-time product), an adopted alias
+// re-adopts the canonical node.
+func applyTwinPush(r *Registry, name string, entry DefEntry) {
+	if entry.TypeDef == nil && !IsConcrete(entry.Body) && !IsBareTypeNode(entry.Body) {
+		return
+	}
+	switch {
+	case entry.TypeDef == nil:
+		r.Defs.Push(name, entry.Body)
+	case entry.Minted:
+		r.Defs.PushType(name, entry.TypeDef, entry.Body)
+	default:
+		r.Defs.PushTypeAdopted(name, entry.TypeDef, entry.Body)
+	}
+}
+
+// applyTwinSigUndef re-removes the captured entry a check-time signature
+// undef took out (UninstallFnSigs — possibly MID-stack, which is why the
+// note carries the removed entry rather than letting the twin pop the
+// top). The removed value is located by identity, most-recent first: the
+// carrier ID when the capture has one, else value equality (a fn value
+// constructed outside the recorder carries no ID). A twin that cannot
+// find its entry removes NOTHING — a twin never guesses by position.
+func applyTwinSigUndef(r *Registry, name string, removed Value) {
+	stack := r.Defs.Stack(name)
+	for j := len(stack) - 1; j >= 0; j-- {
+		if stack[j].ID != removed.ID {
+			continue
+		}
+		if removed.ID == "" && !ValuesEqual(stack[j], removed) {
+			continue
+		}
+		rest := append([]Value(nil), stack[:j]...)
+		r.Defs.Set(name, append(rest, stack[j+1:]...))
+		return
+	}
+}

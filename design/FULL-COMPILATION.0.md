@@ -2442,7 +2442,14 @@ two of those three need no twin at all. Read the sites, not the counts:
 So it is **three transition kinds**, not thirty: `def`, `undef`, type install —
 the branch-arm push and the module namespace install both being `def` rather
 than kinds of their own. A fourth, `def-replace`, was added by measurement
-rather than reading: see below.
+rather than reading: see below. A fifth, `sig-undef`, was SPLIT out of
+`def-replace` by a live probe (2026-08-31): a signature-specific undef
+removes one matching entry — possibly MID-stack, delta -1 per removal, the
+note carrying the removed entry — where a redefinition's replace nets zero;
+conflated, a two-overload fn's sig-undef took a name from depth 2 to 1 while
+recording delta 0, and the corpus lacks the shape so the composition gate
+could not see it (the synthetic rows now supply it, with the locked no-op
+counterpart, which notes nothing at all).
 
 **CORRECTION — `word_extend.go` IS a site, and this table said otherwise.** The
 first version of this row read "no direct `Defs` mutation, it reaches the table
@@ -2473,14 +2480,20 @@ deepest row there is — because those functions are not on the import path at
 all. A count of call sites is not a count of transitions, and neither is a
 plausible reading of them.
 
-**Measured over `lang/spec`** (`TestBindLedgerCensus`), 7644 rows:
+**Measured over `lang/spec`** (`TestBindLedgerCensus`), 7644 rows — as of the
+2026-08-31 oracle closure and the sig-undef split (ten phantom
+truncated-region entries removed; two of the old def-replace entries were
+locked-match sig-undef NO-OPS and no longer note; the corpus contributes no
+top-level loop-join entries and no real sig-undef removal — the synthetic
+rows supply both):
 
-	rows with transitions   4291
-	transitions total       7453
-	  def                    6371
+	rows with transitions   4290
+	transitions total       7441
+	  def                    6361
 	  type-install           1048
 	  undef                    30
-	  def-replace               4
+	  def-replace               2
+	  sig-undef                 0   (corpus; synthetic-covered)
 	deepest single row         36   —  unpack 'boru:math-util' sqrt 16.0
 
 **What the ledger must EXCLUDE, and it is most of what a naive instrument
@@ -2527,22 +2540,53 @@ evidence about the programs it contains and silence about the rest; when the
 population being measured is a shape the corpus lacks, the gate has to supply
 it.
 
-**A STRONGER ORACLE EXISTS AND IS NOT YET GREEN.** The composition check is
-self-contained by construction (§ the file header), but `Boru.NativeRegistry()`
-exposes the live registry, so the ledger's final depth per name can be compared
-against the depth the check pass ACTUALLY left — which is precisely the
-assertion §6.5's staging calls for before the flip to rollback-and-replay.
-Built and run: **9 mismatches over 4291 rows**, in two classes.
+**THE STRONGER ORACLE IS LANDED AND GREEN** (2026-08-31,
+`test/go/langspec/bind_ledger_live_oracle_test.go`, `TestBindLedgerLiveDepths`,
+**no allowance**). The composition check is self-contained by construction
+(§ the file header), but `Boru.NativeRegistry()` exposes the live registry, so
+the ledger's final depth per name is compared against the depth the check pass
+ACTUALLY left — the assertion the inert-twin step needs. First run: 9
+mismatches over 4291 rows, in two apparent classes; closing them took THREE
+fixes, because each apparent class hid a different mechanism than its reading
+suggested:
 
-| class | rows | shape |
-|---|---|---|
-| macro-expansion gensym temps | 8 | `tmp$g1`, `t`, `g` — a macro's CONSTRUCTION-time expansion mints and installs a hygiene temp that is later torn down; the install is recorded, the teardown is not. The real expansion's temp (`tmp$g2`) is live and correctly recorded |
-| a doubled module-io install | 1 | `module-io.tsv:223`, `def l (IO.lock …)` — ledger 1, live 2, so a second install is unaccounted |
+- **The gensym-temp class (8 rows) was not macro construction — it was two
+  snapshot/restore-TRUNCATED evaluation regions recording installs their own
+  restore tears down.** `expandMacroWith` runs the template body with its
+  locals live (`def t (gensym)`) and then `r.Defs.Restore(snap)`s them away;
+  the "construction-time expansion" was the DYNAMIC-HELP example eval
+  (`makeDynamicEval`), which fires mid-pass from the fn-registration hook,
+  runs example code against the live registry — expanding the freshly-defined
+  macro — and restores its defs on exit. Both now bracket with
+  `CheckState.SuppressBindLedger` (the `RolledBackBodyDepth` arm): what makes
+  an install unrecordable is the truncation, the same rule the body runner
+  already carried.
+- **The module-io row's multi-pass hypothesis was tested FIRST and
+  disproven** — the doubling reproduces inside a single pass, and at plain
+  runtime. The real mechanism: `narrowDynamicUses`' analysis push (a dynamic
+  binding tightened at a typed use) has no top-level popper, so the pass LEFT
+  it — a genuine defect the oracle exposed, not an oracle artifact: a later
+  `Run` on the same instance read the leaked `dynamic(Ideal)` carrier instead
+  of the bound Lock. Fixed by a guarded pass-end pop
+  (`CheckState.PassEndCleanups`, run LIFO by the Begin closer; the pop guards
+  on the entry still being on top, so a narrowing truncated with its branch or
+  buried under a later real rebind is left alone). Neither the ledger nor the
+  oracle was bent to match — the pass was leaking.
+- **Running the oracle over the SYNTHETIC rows found a ninth-plus-one the
+  corpus run could not:** the while row in `syntheticBranchArmSources` was
+  MALFORMED (`while (n gt 0) …` hands while a Boolean; its `(List, List)`
+  signature refuses it), so the row never exercised a loop and "passed"
+  composition while measuring nothing. Corrected, it showed
+  `AnalyseLoopBody`'s final joined post-loop pushes bypassing the ledger
+  entirely (raw `r.Defs.Push`, no note). The final round's installs are now
+  ledgered — the loop's "may run zero times" join is `InstallJoinedDefs`' own
+  one-branch rule, so it records like one.
 
-Neither is fixed here, and neither is allowed away: the oracle is **not** landed
-as a gate with an allowance. It is recorded as the next measurement to close,
-with its two classes named, because a gate that reports a number it tolerates
-teaches the next author to tolerate it.
+After the three fixes the oracle reads **0 mismatches over the corpus and the
+synthetics**, and it is a standing gate with no allowance — a gate that
+reports a number it tolerates teaches the next author to tolerate it. The
+census shifts 7453 → 7443: the ten phantom truncated-region entries leave, the
+loop-join entries arrive.
 
 Three things that shape the twin work. `def` is 85% of it, so its twin is the
 one whose cost matters and the other three can be straightforward. `undef` and
@@ -2567,7 +2611,8 @@ staged. Save/restore around each install is what nesting actually needs, and
 `SetAt`s into the kept check-pass slot at the recorded depth, deliberately never
 a push, so shadowing depth and undef behaviour match the interpreter. Under the
 twin regime that inverts — the slot is gone after the rollback, and the twin
-pushes at its source position. `OpBindDynScope` makes a frame binding
+pushes at its source position (`GlobalBindSpec.Push`, stamped by lowerDynBind
+when the regime is armed). `OpBindDynScope` makes a frame binding
 registry-visible and is unaffected.
 
 **Staging, and it must not be inverted.** Emit the twins FIRST, while the
@@ -2577,6 +2622,20 @@ rollback-and-replay. Rollback-first breaks every program until the last
 transition has a twin, and offers no intermediate state where the differential
 means anything — the same reasoning that made Stage 2 land its three re-seats
 separately.
+
+**Status (2026-08-31): the flip itself is BUILT and corpus-green behind
+`BORU_TWIN_REGIME=1`** (default off — byte-identical until flipped): recorder
+stamp `Program.TwinRegime` + Finalize's full-placement refusal, lang's
+`SnapshotBindings` → `RestoreBindingsForReplay` rollback at the between-phases
+point (module ledger pass-final — imports run once), `OpBindTwin` →
+`core.ApplyBindTwin` per kind with the carrier-class skip pairing computed
+defs to their Push-mode `OpBindGlobal`. The regime lane
+(`test/go/langspec/bind_twin_regime_test.go`) measures 6411 corpus rows
+compiled vs 6416 under keep, ZERO divergences; the 5-row cost is 4
+island-discarded do-body defs (conservatively refused — the island re-executes
+them) and 1 suspended-recorder each-body def awaiting arm-residency. The
+handoff (design/FULL-COMPILATION-HANDOFF.0.md) carries the remaining
+default-flip checklist and the payoff deletions.
 
 Three consistency obligations come with the twins, and they interlock.
 

@@ -1635,6 +1635,19 @@ func (vc *vmContext) bindDynScope(curReg *core.Registry, p *compiler.Program, ar
 // interpreter). A slot a later check-time undef popped skips the write: the
 // interpreter would have discarded the binding too.
 func bindGlobal(curReg *core.Registry, gb *compiler.GlobalBindSpec, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
+	// The write itself is mode-split (GlobalBindSpec.Push): under the twin
+	// regime the check-pass install was rolled back before the run, so there
+	// is no kept slot to overwrite — the bind PUSHES, the interpreter's own
+	// `def`, and the twin table's carrier-class skip guarantees exactly one
+	// of {this push, the def's twin} installs. Outside the regime the kept
+	// slot is live and SetAt replaces in place as ever.
+	write := func(v core.Value) {
+		if gb.Push {
+			curReg.Defs.Push(gb.Name, core.StripAscribed(v))
+			return
+		}
+		curReg.Defs.SetAt(gb.Name, gb.Depth, core.StripAscribed(v))
+	}
 	if gb.Splice {
 		// The S5 first-value loop bind: the region's first value sits at a
 		// static depth below the top — bind it and splice it out, exactly
@@ -1643,7 +1656,7 @@ func bindGlobal(curReg *core.Registry, gb *compiler.GlobalBindSpec, stack []core
 		if idx < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return nil, vmErrAt(curDebug, pc, "BIND_GLOBAL splice underflow")
 		}
-		curReg.Defs.SetAt(gb.Name, gb.Depth, core.StripAscribed(stack[idx]))
+		write(stack[idx])
 		return append(stack[:idx], stack[idx+1:]...), nil
 	}
 	if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
@@ -1651,7 +1664,7 @@ func bindGlobal(curReg *core.Registry, gb *compiler.GlobalBindSpec, stack []core
 	}
 	// Ascription hygiene on both bind arms: a stored binding holds the REAL
 	// value (interpreter def parity).
-	curReg.Defs.SetAt(gb.Name, gb.Depth, core.StripAscribed(stack[len(stack)-1]))
+	write(stack[len(stack)-1])
 	if gb.Pop {
 		return stack[:len(stack)-1], nil
 	}
@@ -2277,6 +2290,18 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 				return nil, err
 			}
 			stack = ns
+		case compiler.OpBindTwin:
+			// Under the keep-the-installs regime (TwinRegime false — today's
+			// default) the op is INERT: the check pass's install is already
+			// in the registry, and applying it again would double-install,
+			// the exact hazard §6.5 names. Under the rollback-and-replay
+			// regime the installs were rolled back before this run
+			// (RestoreBindingsForReplay), so the op re-performs its recorded
+			// transition (Arg indexes Program.BindTwins) at this — its
+			// source — position.
+			if p.TwinRegime {
+				core.ApplyBindTwin(curReg, p.BindTwins[in.Arg], p.BindTwinEntries[in.Arg])
+			}
 		case compiler.OpLookupDynScope:
 			// The interpreter's stepWord simple-value substitution, at run
 			// time: read the name's live binding. A miss, or a binding the

@@ -642,3 +642,42 @@ func TestDeadSignaturesSkipsFallbackShadower(t *testing.T) {
 		t.Error("two identical plain overloads must still report one dead")
 	}
 }
+
+// The narrowing-only skip (Codex P2, PR #418): an arm add whose ID equals the
+// pre-branch binding's — narrowDynamicUses preserves the value's ID — is the
+// pass's own refinement of the SAME runtime value and must be neither pushed
+// nor noted, at every arm shape. A both-arms GENUINE join, conversely, must
+// now be NOTED (its push previously carried no ledger entry at all).
+func TestInstallJoinedDefsNarrowingSkipAndBothArmsNote(t *testing.T) {
+	r := w8reg(t)
+	r.Check.Mode = true
+
+	pre := NewDynamicCarrier(TAny)
+	r.Defs.Push("njq", pre)
+	narrowed := NewDynamicCarrierValue(NewCarrier(TList))
+	narrowed.ID = pre.ID
+
+	base := len(r.Check.BindLedger)
+	// then-only, else-only, and both-arms narrowing: no push, no note.
+	InstallJoinedDefs(r, map[string]Value{"njq": narrowed}, nil)
+	InstallJoinedDefs(r, nil, map[string]Value{"njq": narrowed})
+	InstallJoinedDefs(r, map[string]Value{"njq": narrowed}, map[string]Value{"njq": narrowed})
+	if d := r.Defs.Depth("njq"); d != 1 {
+		t.Fatalf("a narrowing-only add must not be re-pushed at the join: depth = %d, want 1", d)
+	}
+	if len(r.Check.BindLedger) != base {
+		t.Fatalf("a narrowing-only add must not be ledgered: %+v", r.Check.BindLedger[base:])
+	}
+
+	// A genuine both-arms binding pushes AND notes.
+	InstallJoinedDefs(r,
+		map[string]Value{"bjq": NewCarrier(TInteger)},
+		map[string]Value{"bjq": NewCarrier(TFloat)})
+	if d := r.Defs.Depth("bjq"); d != 1 {
+		t.Fatalf("a genuine both-arms join must push: depth = %d", d)
+	}
+	led := r.Check.BindLedger[base:]
+	if len(led) != 1 || led[0].Kind != BindDef || led[0].Name != "bjq" || led[0].Depth != 1 {
+		t.Fatalf("the both-arms join must note its push (this note was missing); got %+v", led)
+	}
+}

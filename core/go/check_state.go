@@ -8,7 +8,10 @@ package core
 // analysis algorithms above them stay check) — and Stage 4b moved the
 // CheckState methods here beside their type.
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // CheckState aggregates the static type-checking state that used to
 // live as ten loose fields on Registry. Bundling them serves two
@@ -408,6 +411,19 @@ type CheckState struct {
 	// restore-func pairs, and generic instantiation's balanced Push/Pop are all
 	// self-restoring or compile-time products and are NOT recorded.
 	BindLedger []BindTransition
+
+	// PassEndCleanups are closures the Begin closer runs (LIFO, exactly once)
+	// when the pass ends — the seam for analysis-only registry state that must
+	// not outlive the pass. The first client is narrowDynamicUses' narrowing
+	// pushes: a dynamic binding tightened at a typed use is re-pushed as an
+	// analysis carrier so branch truncation can roll it back, but at the top
+	// level nothing popped it, so the carrier SHADOWED the real binding for
+	// every later Run on the same instance (the live-depth oracle caught it as
+	// `module-io.tsv:223` — ledger 1, live 2 — and a later read of the name
+	// answered the leaked dynamic carrier instead of the bound Lock). Each
+	// closure guards its own pop, so a cleanup whose entry was already
+	// truncated away — or buried under a later real binding — is a no-op.
+	PassEndCleanups []func()
 
 	// PendingBindPos is the def SITE for the transition about to be recorded,
 	// set by the def word's handler (InstallAndRecordDef) which is the only
@@ -862,6 +878,7 @@ func (c *CheckState) Clone() *CheckState {
 	// Branchless deep copy: append to a nil slice with no elements yields
 	// nil, so a nil ledger clones as nil without a guard to keep covered.
 	cp.BindLedger = append([]BindTransition(nil), c.BindLedger...)
+	cp.PassEndCleanups = append([]func(){}, c.PassEndCleanups...)
 	cp.ParenPlacedFnIDs = cloneMap(c.ParenPlacedFnIDs)
 	cp.ParenReSteppedFnIDs = cloneMap(c.ParenReSteppedFnIDs)
 	cp.FnSummaries = cloneMap(c.FnSummaries)
@@ -937,6 +954,7 @@ func (c *CheckState) Begin() func() {
 	c.AmbiguousGradualSplit = false
 	c.DefsInstalled = nil
 	c.BindLedger = nil
+	c.PassEndCleanups = nil
 	c.PendingBindPos = SrcPos{}
 	c.DefsUsed = nil
 	c.FnNameStack = nil
@@ -984,8 +1002,46 @@ func (c *CheckState) Begin() func() {
 		if !ended {
 			ended = true
 			checkPassDepth.Add(-1)
+			// Run the pass-end cleanups LIFO — chained analysis pushes on one
+			// name tear down top-first — and exactly once: closers ride defer
+			// AND t.Cleanup in places, and a second run would pop bindings the
+			// first run already accounted for.
+			for i := len(c.PassEndCleanups) - 1; i >= 0; i-- {
+				c.PassEndCleanups[i]()
+			}
+			c.PassEndCleanups = nil
 		}
 	}
+}
+
+// AddPassEndCleanup schedules fn to run when the current pass ends (the
+// Begin closer; LIFO, exactly once). For analysis-only registry state that
+// must not outlive the pass — see the PassEndCleanups field. A no-op outside
+// check mode: there is no pass end to attach to, and the caller's push is
+// then a runtime mutation, not an analysis artifact.
+func (c *CheckState) AddPassEndCleanup(fn func()) {
+	if c == nil || !c.Mode {
+		return
+	}
+	c.PassEndCleanups = append(c.PassEndCleanups, fn)
+}
+
+// SuppressBindLedger marks a snapshot/restore-truncated evaluation region:
+// every def-stack change inside it is undone by the region's own restore, so
+// the bind ledger must not record its installs (NoteBindTransition's
+// RolledBackBodyDepth arm — what makes an install unrecordable is the
+// truncation). The two clients outside the branch/loop body runner are the
+// macro template run (expandMacroWith snapshots, runs the template with its
+// body-locals live, then restores — the gensym-temp class the live-depth
+// oracle caught) and the dynamic-help example eval (makeDynamicEval, which
+// fires mid-pass from the fn-registration hook and restores its defs).
+// Returns the balancing decrement, for `defer c.SuppressBindLedger()()`.
+func (c *CheckState) SuppressBindLedger() func() {
+	if c == nil {
+		return func() {}
+	}
+	c.RolledBackBodyDepth++
+	return func() { c.RolledBackBodyDepth-- }
 }
 
 // AddDiagnostic appends a diagnostic to the active check run. Safe to
@@ -1543,7 +1599,38 @@ const (
 	// retirement counterpart is not a ledger entry: BindingSandbox already
 	// partitions the TypeTable so retirements roll back and mints stay baked.
 	BindTypeInstall
+	// BindSigUndef is a SIGNATURE-specific undef's removal of one matching
+	// DefStack entry (UninstallFnSigs) — possibly MID-stack, so it is neither
+	// an undef (a top pop) nor a def-replace (net-zero drop-then-push): its
+	// depth delta is -1 per removed entry, and the note's captured entry is
+	// the REMOVED one, so a twin can remove that identical entry rather than
+	// guess by position. One note per removal; a sig-undef whose every match
+	// is locked removes nothing and notes NOTHING — a no-op is not a
+	// transition. This kind was split out of BindDefReplace after a probe
+	// showed the conflation live: a plain two-overload fn's sig-undef took a
+	// name from depth 2 to 1 while recording delta 0, and the corpus never
+	// contained the shape, so the composition gate could not see it — the
+	// synthetic rows now supply it.
+	BindSigUndef
 )
+
+// String names the kind for census output and the disassembler's BIND_TWIN
+// argument rendering.
+func (k BindKind) String() string {
+	switch k {
+	case BindDef:
+		return "def"
+	case BindUndef:
+		return "undef"
+	case BindDefReplace:
+		return "def-replace"
+	case BindTypeInstall:
+		return "type-install"
+	case BindSigUndef:
+		return "sig-undef"
+	}
+	return "bind-kind(" + strconv.Itoa(int(k)) + ")"
+}
 
 // BindTransition is one entry of CheckState.BindLedger.
 //
@@ -1595,6 +1682,25 @@ type BindTransition struct {
 // of them macro parameters (`macro [[e] [quote […]]]` pushing `e` per
 // expansion).
 func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
+	// A PUSH kind (def / def-replace / type-install) captures the entry it
+	// just installed — TopEntry here, at the note, is the only moment the
+	// IDENTICAL binding object is knowably on top; the twin replays that
+	// object, never a reconstruction (§6.5). An undef captures nothing: its
+	// twin pops whatever is live at its own position. (A sig-undef's caller
+	// supplies the REMOVED entry via NoteBindTransitionEntry — the removal
+	// can be mid-stack, where TopEntry is the wrong object.)
+	var entry DefEntry
+	if r != nil && kind != BindUndef {
+		entry, _ = r.Defs.TopEntry(name)
+	}
+	r.NoteBindTransitionEntry(kind, name, pos, entry)
+}
+
+// NoteBindTransitionEntry is NoteBindTransition with the transition's OWN
+// entry supplied by the caller — the entry the transition installed (a push
+// kind) or removed (a sig-undef, whose mid-stack removal makes the top the
+// wrong capture). Every suppression and the position rule are identical.
+func (r *Registry) NoteBindTransitionEntry(kind BindKind, name string, pos SrcPos, entry DefEntry) {
 	if r == nil || r.Check == nil {
 		return
 	}
@@ -1620,7 +1726,12 @@ func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
 	} else if pos.Row == 0 {
 		pos = r.Check.CurWordPos
 	}
-	r.Check.BindLedger = append(r.Check.BindLedger, BindTransition{
-		Kind: kind, Name: name, Pos: pos, Depth: r.Defs.Depth(name),
-	})
+	tr := BindTransition{Kind: kind, Name: name, Pos: pos, Depth: r.Defs.Depth(name)}
+	r.Check.BindLedger = append(r.Check.BindLedger, tr)
+	// Mirror the entry into the compile pass's twin table THROUGH the same
+	// funnel, after the same suppressions — the one-source-of-truth property
+	// the emission gate (TestBindTwinsEqualLedger) then verifies end to end:
+	// a divergence means a recorder-lifecycle hole (an isolated or swapped
+	// recorder ate a twin), not a second filter to keep in sync.
+	r.Check.Recorder().RecordBindTwin(tr, entry)
 }

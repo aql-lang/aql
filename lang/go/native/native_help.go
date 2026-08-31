@@ -78,8 +78,22 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		defer r.Check.IsolateBudget()()
 		diagBase := len(r.Check.Diagnostics)
 		defer r.Check.TruncateDiagnostics(diagBase)
-		defsSnap := r.Defs.Snapshot()
-		defer r.Defs.Restore(defsSnap)
+		// A CONTENT-preserving snapshot (SnapshotEntries), not the depth-based
+		// Defs.Snapshot: the depth restore can only truncate, so an example
+		// that ran `undef` on a pre-existing name — or an overlapping
+		// redefinition — escaped the region while the ledger bracket below
+		// suppressed its note (Codex P2, PR #418). The entries restore is IN
+		// PLACE and gen-guarded — a table swap (RestoreBindings) breaks every
+		// reference the enclosing pass holds across this hook, which fires
+		// mid-install.
+		defsSnap := r.Defs.SnapshotEntries()
+		defer r.Defs.RestoreEntriesSnapshot(defsSnap)
+		// The restore above tears down every def the example run installs, so
+		// the bind ledger must not record them (the hook fires mid-pass from
+		// the program's own fn registrations — an example that expands a macro
+		// installed the expansion's `def tmp$g…` as a phantom ledger entry,
+		// the live-depth oracle's gensym-temp class).
+		defer r.Check.SuppressBindLedger()()
 
 		prevOps, hadOps, _ := r.Capabilities.Get(CapFileOps)
 		prevMem, hadMem, _ := r.Capabilities.Get(CapMemFileOps)
