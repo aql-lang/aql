@@ -24,6 +24,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 	// Suspend / guards return callable no-op funcs.
 	e.Suspend()()
 	e.BodyAnalysisGuard()()
+	e.KeepDefsBodyGuard()()
 	e.FnBodyGuard()()
 	e.BindRegistry(nil)
 

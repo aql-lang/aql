@@ -616,6 +616,25 @@ type EmitState struct {
 	// adopted events its truncation discards (the adopted seqs ride the
 	// frames like any event; the flags need their own undo).
 	twinAdoptions []int
+	// keepBodyDepth / keepTwinFloor / keepTaints bracket the OUTERMOST
+	// keep-defs body run in flight (KeepDefsBodyGuard — `do`'s check-mode
+	// body run): the floor is the twin-table length when it opened, and
+	// keepTaints collects the sub-ranges noted under a nested NON-keep
+	// body run inside it (BodyAnalysisGuard while keepBodyDepth > 0 — an
+	// each/fold/branch body, whose runtime multiplicity a single replay
+	// cannot represent; Codex P1 ×2 on #421). A nested KEEP run (do
+	// inside do) deliberately does not taint: once-run composed with
+	// once-run is still once-run, and the outer adoption replays its
+	// leaks in note order.
+	keepBodyDepth int
+	keepTwinFloor int
+	keepTaints    [][2]int
+	// lastKeepRange / lastKeepTaints publish the bracket when the
+	// outermost keep run closes, for the dispatch record that follows
+	// immediately (AdoptBodyTwins). The zero range is in-band: it is
+	// empty, so an adoption with no bracketed run adopts nothing.
+	lastKeepRange  [2]int
+	lastKeepTaints [][2]int
 	// twinRegime arms §6.5's rollback-and-replay for THIS pass's Program
 	// (BORU_TWIN_REGIME=1, read once at NewEmitState so one pass is one
 	// regime): Finalize stamps it onto Program.TwinRegime and enforces the
@@ -1562,12 +1581,54 @@ func (es *EmitState) beginFragment() func() {
 
 // bodyAnalysisGuard is called by RunCarrierBodyWithDefs: capture a
 // fragment when armed, otherwise suspend recording for the nested
-// body. Nil-safe.
+// body. Inside an open keep-defs bracket (a `do` body run), the
+// suspended sub-run's bind twins are recorded as a TAINTED range —
+// a non-keep body (branch / loop / quotation) is conditional or
+// multi-run, so a twin noted under it must never be adopted as a
+// single replay (see keepTaints). Nil-safe.
 func (es *EmitState) BodyAnalysisGuard() func() {
 	if es.consumeCaptureArm() {
 		return es.beginFragment()
 	}
-	return es.Suspend()
+	if es == nil || es.keepBodyDepth == 0 {
+		return es.Suspend()
+	}
+	start := len(es.bindTwins)
+	resume := es.Suspend()
+	return func() {
+		if end := len(es.bindTwins); end > start {
+			es.keepTaints = append(es.keepTaints, [2]int{start, end})
+		}
+		resume()
+	}
+}
+
+// KeepDefsBodyGuard is BodyAnalysisGuard's keep-defs flavor (`do`'s
+// check-mode body run, runCarrierBodyDefsAdds keep=true): the same
+// suspension, plus the adoption bracket — the OUTERMOST keep run's twin
+// range and its tainted sub-ranges are published on close for the
+// dispatch record that follows (AdoptBodyTwins). Fragment capture never
+// arms for a do body (ArmBranchCapture is the `if` hook), so this guard
+// does not consult the capture arm. Nil-safe.
+func (es *EmitState) KeepDefsBodyGuard() func() {
+	if es == nil {
+		return func() {}
+	}
+	es.keepBodyDepth++
+	if es.keepBodyDepth == 1 {
+		es.keepTwinFloor = len(es.bindTwins)
+		es.keepTaints = nil
+	}
+	resume := es.Suspend()
+	return func() {
+		resume()
+		es.keepBodyDepth--
+		if es.keepBodyDepth == 0 {
+			es.lastKeepRange = [2]int{es.keepTwinFloor, len(es.bindTwins)}
+			es.lastKeepTaints = es.keepTaints
+			es.keepTaints = nil
+		}
+	}
 }
 
 // TakeFragment returns the last captured fragment (nil when the
@@ -3636,27 +3697,44 @@ func (es *EmitState) RecordBindTwin(tr core.BindTransition, entry core.DefEntry)
 // by a later request on the same erroring instance, the post-trap-twin
 // class the regime already tolerates at Finalize's trap truncation.)
 //
-// The position test is EXACT membership of tr.Pos in the body tree's
-// token sites, never a range: a transition's noted position is a token
-// of its own def expression (the bound value's token, or the transition
-// word via the CurWordPos fallback — NoteBindTransitionEntry's position
-// rule), so membership in THIS body means the transition was performed
-// by THIS body's one check-time run and by nothing else: a later
-// dispatch's twins do not exist yet at this record, and an earlier
-// body's live in a different source region. The one shape that defeats
-// position identity is TOKEN ALIASING — the same quote-bound list driven
-// by a multi-run word first and a flagged word after (`def q [def x 5]
-// (xs each q) q do`) would let the do adopt the each-run twin noted at
-// the same sites; the corpus holds no such row (the lane's zero-
-// divergence gate is the watchdog), and the honest fix if one appears is
-// bracketing adoption by the table length at the dispatch's own body
-// run. Zero positions never match (a synthesized token has no source
-// home). Multi-run body words (each/fold) must never adopt — their
-// runtime re-runs the body per element where the ledger noted ONE
-// generalized transition, with carrier-valued captures no replay can
-// deliver — which is why the gate is the word's spec flag, not the
-// closure record itself; their twins stay table-only and refuse toward
-// the arm-residency increment.
+// Adoption is FENCED four ways, and each fence answers a real
+// miscompile (the first three are Codex's P1 round on #421):
+//
+//   - THE BRACKET: only twins inside lastKeepRange — the ones noted by
+//     this dispatch's own outermost keep-defs body run — are eligible.
+//     Without it, token ALIASING lets a do adopt an earlier multi-run
+//     driver's twin noted at the same sites (`def q quote [def x 5]
+//     ([1 2] each q) q do`): the each's runtime installs twice where
+//     one generalized note exists, so replaying it once under-counts;
+//     bracketed, the each's twins stay unplaced and the regime refuses
+//     the program (sound fallback).
+//   - THE TAINT: sub-ranges noted under a nested NON-keep body run
+//     (lastKeepTaints) are excluded even inside the bracket. A nested
+//     each/fold inside the do body (`do [[1 2] each [def x 5]]`) runs
+//     its body per element at runtime while the check pass noted one
+//     generalized transition — a single replay is wrong in count, so
+//     the twin stays unplaced and the regime refuses. A nested KEEP run
+//     (do inside do) is not tainted: once-run composes.
+//   - THE ROOT FENCE: adoption only at the root stream (no open unit,
+//     no open fragment). A do nested in a callback's compiled body
+//     (`[1 2] each [do [def x 5]]`) would otherwise place its twin
+//     inside the per-invocation unit and convert a sound regime refusal
+//     into execution of that closure shape; declined, the twin stays
+//     unplaced and the refusal stands. (That shape's DEFAULT compile
+//     diverges today — each_error vs the interpreter's [1 2] — a
+//     pre-existing closure-lowering bug this fence keeps the regime
+//     strictly sounder than.)
+//   - THE SITE TEST: exact membership of tr.Pos in the body tree's
+//     token sites (a transition's noted position is a token of its own
+//     def expression — the bound value's token, or the transition word
+//     via the CurWordPos fallback), never a positional range, which
+//     would overclaim through baked data. Zero positions never match
+//     (a synthesized token has no source home).
+//
+// Multi-run body words (each/fold) must never adopt AT ALL — which is
+// why the caller's gate is the word's spec flag, not the closure record
+// itself; their twins stay table-only and refuse toward the
+// arm-residency increment.
 //
 // Rollback safety is two-layered: adopted event seqs are truncated with
 // their frame like any event, and twinAdoptions lets Rollback un-mark
@@ -3667,10 +3745,22 @@ func (es *EmitState) AdoptBodyTwins(body core.Value) {
 	if es == nil || !es.Active() {
 		return
 	}
+	if len(es.openUnitRecs) != 0 || len(es.frames) != 1 {
+		return
+	}
 	sites := make(map[core.SrcPos]bool)
 	collectTokenSites(body, sites)
-	for i, tr := range es.bindTwins {
-		if es.twinPlaced[i] || tr.Pos.Row == 0 || !sites[tr.Pos] {
+	tainted := func(i int) bool {
+		for _, r := range es.lastKeepTaints {
+			if i >= r[0] && i < r[1] {
+				return true
+			}
+		}
+		return false
+	}
+	for i := es.lastKeepRange[0]; i < es.lastKeepRange[1] && i < len(es.bindTwins); i++ {
+		tr := es.bindTwins[i]
+		if es.twinPlaced[i] || tainted(i) || tr.Pos.Row == 0 || !sites[tr.Pos] {
 			continue
 		}
 		es.appendEvent(EmitEvent{kind: evBindTwin, twin: &emitBindTwin{idx: i, pos: tr.Pos}})

@@ -145,7 +145,17 @@ reverses an earlier plan:
    the closure record to PLACE each suspended twin whose noted position
    is a token site in that body's tree as a real `evBindTwin` after the
    call event, so the lowered `OpBindTwin` replays the captured
-   identical entry once the unit returns. That recovered the four
+   identical entry once the unit returns. Adoption is FENCED (the
+   Codex P1 round on #421, each fence verified by repro): only twins
+   noted inside the dispatch's own outermost keep-defs body run
+   (KeepDefsBodyGuard's bracket — an aliased quotation's earlier
+   multi-run twins stay out), excluding sub-ranges noted under a
+   nested non-keep body run (a nested each's per-element transitions
+   — analyseHigherOrderBodyVals now suspends through
+   BodyAnalysisGuard so the taint sees it), and only at the root
+   stream (a do nested in a callback's compiled unit keeps its sound
+   refusal). Each fenced-out shape refuses to the interpreter; the
+   fences cost zero corpus rows. That recovered the four
    do-body rows (`do [def Big Integer …]`, the predicate variant,
    `do [def x 5 raise …]`, the quoted `[def zz 5 …] do`). The ONE
    remaining regime-only refusal is the suspended-recorder each-body

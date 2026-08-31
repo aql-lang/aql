@@ -64,6 +64,14 @@ type EmitRecorder interface {
 	TopFrameOnly() bool
 	SuspendedNow() bool
 	BodyAnalysisGuard() func()
+	// KeepDefsBodyGuard is BodyAnalysisGuard for a KEEP-DEFS body run
+	// (runCarrierBodyDefsAdds keep=true — `do`'s check-mode scoping,
+	// where body defs leak): same suspension, but the recorder may
+	// additionally bracket the run — the twin regime's do-body adoption
+	// adopts only bind twins noted inside the dispatch's own outermost
+	// keep-defs run, excluding sub-ranges noted under a nested NON-keep
+	// (multi-run / conditional) body run. Inactive: plain no-op.
+	KeepDefsBodyGuard() func()
 	FnBodyGuard() func()
 
 	// --- refusal + site accounting --------------------------------------
@@ -246,6 +254,7 @@ func (inactiveEmit) BindRegistry(*Registry)                                 {}
 func (inactiveEmit) TopFrameOnly() bool                                     { return true }
 func (inactiveEmit) SuspendedNow() bool                                     { return false }
 func (inactiveEmit) BodyAnalysisGuard() func()                              { return func() {} }
+func (inactiveEmit) KeepDefsBodyGuard() func()                              { return func() {} }
 func (inactiveEmit) FnBodyGuard() func()                                    { return func() {} }
 
 func (inactiveEmit) TakeFragment() EmitFragmentRef { return nil }

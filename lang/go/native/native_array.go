@@ -1634,9 +1634,14 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 // between rounds.
 func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value {
 	// Higher-order bodies run nested sub-engines — pause bytecode
-	// recording for their duration (they are not part of the
-	// enclosing straight line).
-	defer r.Check.Recorder().Suspend()()
+	// recording for their duration (they are not part of the enclosing
+	// straight line). Through the ANALYSIS GUARD, not a plain Suspend:
+	// inside a keep-defs bracket (a `do` body run) the guard records this
+	// sub-run's bind twins as a TAINTED range, so the twin regime's
+	// do-body adoption never places a single replay for a transition a
+	// multi-run body performs per element at runtime
+	// (`do [[1 2] each [def x 5]]` — Codex P1 on #421).
+	defer r.Check.Recorder().BodyAnalysisGuard()()
 	if !IsConcrete(body) {
 		return nil
 	}
