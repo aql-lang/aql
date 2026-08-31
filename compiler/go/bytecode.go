@@ -980,8 +980,15 @@ type Program struct {
 	// exists so the emission is complete and gated (the langspec gate asserts
 	// table == ledger for every compiled corpus program) before the
 	// rollback-and-replay flip gives each entry an op at its source position.
-	BindTwins  []core.BindTransition
-	DynMethods []DynMethodSpec
+	BindTwins []core.BindTransition
+	// BindTwinEntries is 1:1 with BindTwins: the DefEntry each push
+	// transition installed, captured at the note — the identical binding
+	// object the twin re-installs under rollback-and-replay (§6.5 "replay,
+	// never re-execution"). Zero for a BindUndef (its twin pops the
+	// then-live entry). Proven against the pass-left registry, corpus-wide,
+	// by the sandbox harness (test/go/langspec/bind_replay_sandbox_test.go).
+	BindTwinEntries []core.DefEntry
+	DynMethods      []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the
 	// pooled const to deep-clone and the frame-local slot to seat it in, for a
 	// multi-read compound body literal that needs one per-call construction shared

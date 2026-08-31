@@ -580,6 +580,14 @@ type EmitState struct {
 	// Program.BindTwins at Finalize; carries no instruction until the
 	// rollback-and-replay flip gives each entry an op at its position.
 	bindTwins []core.BindTransition
+	// bindTwinEntries is 1:1 with bindTwins: the DefEntry each push
+	// transition INSTALLED, captured at the note (the identical binding
+	// object §6.5's replay re-installs — the same FnDefInfo, module
+	// instance, minted node). Zero for a BindUndef, whose twin pops the
+	// then-live entry at its own position. The sandbox harness replays the
+	// corpus from these recorded captures, which is the exact contract the
+	// twin ops will execute at the flip.
+	bindTwinEntries []core.DefEntry
 
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
@@ -3547,11 +3555,12 @@ func (es *EmitState) NoteLoopCarried(name string, joined, pre core.Value) {
 // transition noted while recording is SUSPENDED (an each/fold body run whose
 // def genuinely leaks) still belongs to the table, exactly as it belongs to
 // the ledger.
-func (es *EmitState) RecordBindTwin(tr core.BindTransition) {
+func (es *EmitState) RecordBindTwin(tr core.BindTransition, entry core.DefEntry) {
 	if es == nil {
 		return
 	}
 	es.bindTwins = append(es.bindTwins, tr)
+	es.bindTwinEntries = append(es.bindTwinEntries, entry)
 	// STREAM PLACEMENT, the narrower half: an evBindTwin event marks where in
 	// production order the transition happened, so the lowering emits an
 	// (inert) OpBindTwin there. Recorded only while the recorder is LIVE —
@@ -8021,7 +8030,8 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		// The twin table travels with the finalized Program verbatim (a copy,
 		// so a later pass on the same EmitState cannot mutate a delivered
 		// Program). Inert until the rollback-and-replay flip — see the field.
-		BindTwins: append([]core.BindTransition(nil), es.bindTwins...)}
+		BindTwins:       append([]core.BindTransition(nil), es.bindTwins...),
+		BindTwinEntries: append([]core.DefEntry(nil), es.bindTwinEntries...)}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*core.Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
 	// (counting the program residual) is promoted to a frame local so the

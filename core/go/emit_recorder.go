@@ -157,9 +157,17 @@ type EmitRecorder interface {
 	// suppression, so the twin population and the ledger share a single
 	// funnel by construction — the corpus gate then asserts the finalized
 	// Program's table equals the pass's ledger elementwise, which is what
-	// the rollback-and-replay flip will trust. Inactive: no-op (a plain
-	// check pass builds no program).
-	RecordBindTwin(tr BindTransition)
+	// the rollback-and-replay flip will trust.
+	//
+	// entry is the DefEntry the transition INSTALLED, captured at the note —
+	// the only moment the identical binding object is knowably on top —
+	// because "replay, never re-execution" re-installs that object: the same
+	// FnDefInfo, the same module instance, the same minted node. A BindUndef
+	// carries the zero DefEntry: its twin needs nothing captured — at VM
+	// time it pops whatever is then live and retires a minted type from the
+	// popped entry itself. Inactive: no-op (a plain check pass builds no
+	// program).
+	RecordBindTwin(tr BindTransition, entry DefEntry)
 	MarkValueDef(v Value)
 	RecordDefRebind(name string, v Value, pos SrcPos)
 	RecordDynBind(name string, v Value, pos SrcPos)
@@ -293,7 +301,7 @@ func (inactiveEmit) Materialise(v Value) (Value, bool)                      { re
 func (inactiveEmit) ZeroOutProduced(string) bool                            { return false }
 func (inactiveEmit) AlreadyProduced(string) bool                            { return false }
 
-func (inactiveEmit) RecordBindTwin(BindTransition)              {}
+func (inactiveEmit) RecordBindTwin(BindTransition, DefEntry)    {}
 func (inactiveEmit) MarkValueDef(Value)                         {}
 func (inactiveEmit) RecordDefRebind(string, Value, SrcPos)      {}
 func (inactiveEmit) RefuseCarriedUndef(string)                  {}

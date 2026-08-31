@@ -1699,5 +1699,15 @@ func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
 	// the emission gate (TestBindTwinsEqualLedger) then verifies end to end:
 	// a divergence means a recorder-lifecycle hole (an isolated or swapped
 	// recorder ate a twin), not a second filter to keep in sync.
-	r.Check.Recorder().RecordBindTwin(tr)
+	//
+	// A PUSH kind (def / def-replace / type-install) captures the entry it
+	// just installed — TopEntry here, at the note, is the only moment the
+	// IDENTICAL binding object is knowably on top; the twin replays that
+	// object, never a reconstruction (§6.5). An undef captures nothing: its
+	// twin pops whatever is live at its own position.
+	var entry DefEntry
+	if kind != BindUndef {
+		entry, _ = r.Defs.TopEntry(name)
+	}
+	r.Check.Recorder().RecordBindTwin(tr, entry)
 }

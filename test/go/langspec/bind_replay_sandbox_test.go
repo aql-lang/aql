@@ -2,8 +2,11 @@
 // CLIENT, and proves §6.5's central mechanism at corpus scale before any VM
 // semantics change: SNAPSHOT the runtime-visible bindings, run the compile
 // pass (installs kept, as today), ROLL BACK with RestoreBindings, then REPLAY
-// the pass's ledger — re-installing at each transition the IDENTICAL entry
-// the pass left at that depth — and land exactly the registry the pass left.
+// the transitions FROM THE PROGRAM'S OWN RECORDED CAPTURES
+// (Program.BindTwinEntries — the DefEntry each note installed, captured at
+// the note) — and land exactly the registry the pass left. Replaying the
+// recorded captures, not a post-hoc read of the pass-left stacks, makes this
+// the exact contract the twin ops will execute at the flip.
 //
 // Two assertions carry the weight, per transition and per name:
 //
@@ -17,11 +20,12 @@
 //     the same module instance, the same minted node, reconnected rather
 //     than reproduced.
 //
-// SCOPE: rows whose ledger holds only PUSH transitions (def, type-install) —
-// 99.5% of the corpus population. An undef or def-replace transition needs
-// state the pass-left registry no longer holds (the popped entry), which is
-// exactly what the twin OP will carry; those rows are counted and skipped
-// here, not silently ignored.
+// SCOPE: compiled rows whose ledger holds only PUSH transitions (def,
+// type-install) — 99.5% of the corpus population. An undef pops the
+// then-live entry (nothing to capture); a def-replace must reproduce the
+// overlap-drop; both change the stack in ways this data-level replay does
+// not model, so those rows are counted and skipped here, not silently
+// ignored — their exactness is the twin OP's own work at the flip.
 package langspec
 
 import (
@@ -45,24 +49,30 @@ func replaySandboxRow(src, where string) string {
 	}
 	reg := a.NativeRegistry()
 	snap := reg.SnapshotBindings()
-	_, _, res, _ := a.CompileCheck(src)
-	if len(res.BindLedger) == 0 {
+	prog, _, res, _ := a.CompileCheck(src)
+	if prog == nil || len(prog.BindTwins) == 0 {
 		return ""
 	}
-	for _, tr := range res.BindLedger {
+	for _, tr := range prog.BindTwins {
 		if tr.Kind == core.BindUndef || tr.Kind == core.BindDefReplace {
 			return "skip"
 		}
+	}
+	// Table == ledger is TestBindTwinsEqualLedger's own gate; this belt only
+	// keeps a broken table from mis-attributing a replay failure here.
+	if len(res.BindLedger) != len(prog.BindTwins) {
+		return fmt.Sprintf("%s table %d != ledger %d (TestBindTwinsEqualLedger owns this)", where, len(prog.BindTwins), len(res.BindLedger))
 	}
 	s := src
 	if len(s) > 70 {
 		s = s[:70] + "…"
 	}
 
-	// Capture the pass-left entry stacks for every ledgered name.
+	// The pass-left entry stacks, for the final identity comparison; and the
+	// pre-pass depths, for the rollback assertion.
 	left := map[string][]core.DefEntry{}
 	preDepth := map[string]int{}
-	for _, tr := range res.BindLedger {
+	for _, tr := range prog.BindTwins {
 		if _, ok := left[tr.Name]; !ok {
 			left[tr.Name] = reg.Defs.Entries(tr.Name)
 			// The depth BEFORE the pass touched the name: its first recorded
@@ -79,15 +89,9 @@ func replaySandboxRow(src, where string) string {
 		}
 	}
 
-	// Replay the ledger in order, re-installing the pass-left entry at each
-	// transition's depth.
-	for i, tr := range res.BindLedger {
-		entries := left[tr.Name]
-		if tr.Depth < 1 || tr.Depth > len(entries) {
-			return fmt.Sprintf("%s transition %d: recorded depth %d outside the pass-left stack (%d entries) for %q  %s",
-				where, i, tr.Depth, len(entries), tr.Name, s)
-		}
-		e := entries[tr.Depth-1]
+	// Replay the RECORDED captures in table order — what a twin op executes.
+	for i, tr := range prog.BindTwins {
+		e := prog.BindTwinEntries[i]
 		switch {
 		case e.TypeDef == nil:
 			reg.Defs.Push(tr.Name, e.Body)

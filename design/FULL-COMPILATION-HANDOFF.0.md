@@ -95,16 +95,25 @@ reverses an earlier plan:
    central mechanism is proven at data level**:
    `TestBindingSandboxRollbackAndReplay`
    (`test/go/langspec/bind_replay_sandbox_test.go`) runs snapshot →
-   compile pass → `RestoreBindings` → replay the ledger (re-installing the
-   IDENTICAL pass-left `DefEntry` at each transition, via the new
-   `DefTable.Entries`) over the whole corpus: 7644 rows cycled, 0
-   failures — after every replayed transition the live depth equals the
+   compile pass → `RestoreBindings` → replay **from the Program's own
+   recorded captures**: each note captures the `DefEntry` it installed
+   (`RecordBindTwin(tr, entry)`; `Program.BindTwinEntries`, 1:1 with the
+   table), and the harness re-installs those captures in table order —
+   the exact contract a twin op executes. Whole corpus: 7644 rows cycled,
+   0 failures — after every replayed transition the live depth equals the
    ledger's recorded depth, and the final stacks match the pass-left
-   stacks in entry identity (TypeDef pointer, Minted). 33 rows skip by
-   design: an undef or def-replace transition needs the POPPED entry,
-   which the pass-left registry no longer holds — that is precisely the
-   state the twin OP must carry, so those two kinds' operand design is the
-   flip's first real decision.
+   stacks in entry identity (TypeDef pointer, Minted; compared via the
+   new `DefTable.Entries`). The skipped rows (undef / def-replace) are by
+   design: an undef twin captures NOTHING — at VM time it pops whatever
+   is then live and retires a minted type from the popped entry itself —
+   and a def-replace twin must reproduce the overlap-drop; both are
+   VM-op work, not data-replay work. One operand decision is thereby
+   already made and proven: PUSH-kind twins carry their entry, captured
+   at the note (the only moment the identical object is knowably on
+   top). The remaining operand decision is the COMPUTED value-def class,
+   whose captured body is a check-pass carrier, not the runtime value —
+   those twins must ride the evDynBind/OpBindGlobal seat machinery in
+   push mode instead of replaying the capture.
 
    Facts established for the flip, each paid for:
    - `OpBindGlobal` today covers only ROOT defs of NON-concrete values
