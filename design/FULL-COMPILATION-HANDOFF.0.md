@@ -229,8 +229,13 @@ reverses an earlier plan:
    pushed-copy pop / inert-literal bake; anything else refuses) +
    `twinsFullyPlaced` counting real resident ops via
    ResidentBinds[arg].Twin. Two extra fences: root reads of arm-bound
-   names REFUSE (NoteDefRead — definedness is body-run-dependent at
-   zero iterations; a later live root install lifts it), and the
+   names REFUSE (NoteDefRead poisons `armReadRefusal`, surfaced at
+   Finalize's placement seam under the `twin regime:` prefix — the
+   fence is regime-only machinery, so it lives in the placement-gate
+   layer, NOT as a recorder MarkUncompilable site: the refusal-site
+   census counts that layer and its count only falls; definedness is
+   body-run-dependent at zero iterations; a later live root install
+   lifts it), and the
    `_`/`$` name gate opens inside arm-resident body compiles so
    `def _2 …` gets its event seat. Graduated with measured parity in
    the oracle: each-literal-def, each-zero-iterations,

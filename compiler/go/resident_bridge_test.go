@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"strings"
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
@@ -13,8 +14,11 @@ import (
 // mismatch — name, kind, leftover on either side, stale memoized unit,
 // wrong body identity, non-regime — adopts nothing, leaving the twins
 // unplaced and the regime program refused (the sound direction the
-// parity oracle pins). Adopted names fence later root reads
-// (NoteDefRead refuses) until a live root install re-binds them.
+// parity oracle pins). Adopted names fence later root reads —
+// NoteDefRead poisons the placement gate (armReadRefusal, refused at
+// Finalize's seam, NOT a recorder-layer MarkUncompilable: the
+// refusal-site census counts that layer and its count only falls) —
+// until a live root install re-binds them.
 func TestAdoptResidentTwinsFences(t *testing.T) {
 	t.Setenv("BORU_TWIN_REGIME", "1")
 
@@ -72,18 +76,22 @@ func TestAdoptResidentTwinsFences(t *testing.T) {
 	if !es.armBoundNames["x"] || !es.armBoundNames["y"] {
 		t.Fatal("adopted names must join the read fence")
 	}
-	// The read fence refuses, and a live root install lifts it.
+	// The read fence poisons the placement gate (the recorder itself stays
+	// Compilable — the refusal is Finalize's seam), and a live root
+	// install lifts it.
 	es.NoteDefRead("some-id", "x")
-	if es.Compilable {
-		t.Fatal("a root read of an arm-bound name must refuse the program")
+	if !es.Compilable || !strings.Contains(es.armReadRefusal, "read of `x` after a multi-run body binds it") ||
+		!strings.HasPrefix(es.armReadRefusal, "twin regime: ") {
+		t.Fatalf("a root read of an arm-bound name must poison the placement gate (Compilable=%v, refusal %q)",
+			es.Compilable, es.armReadRefusal)
 	}
 	es2 := build([]string{"z"}, []string{"z"})
 	es2.AdoptResidentTwins(body)
 	es2.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "z", Depth: 1, Pos: pos},
 		core.DefEntry{Body: core.NewInteger(7)}) // live root install re-binds
 	es2.NoteDefRead("some-id", "z")
-	if !es2.Compilable {
-		t.Fatal("a live root install must lift the read fence")
+	if !es2.Compilable || es2.armReadRefusal != "" {
+		t.Fatalf("a live root install must lift the read fence (refusal %q)", es2.armReadRefusal)
 	}
 
 	// Name mismatch: nothing adopted.

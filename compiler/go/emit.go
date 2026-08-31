@@ -679,10 +679,20 @@ type EmitState struct {
 	// even definedness (a zero-iteration collection) are body-run-
 	// dependent, so a later root read would bake the check model's
 	// generalized value where the interpreter reads the runtime state.
-	// NoteDefRead refuses such reads; a later LIVE root install of the
-	// name (RecordBindTwin's placed arm) clears it — the new binding is
-	// the read's referent again.
+	// NoteDefRead poisons armReadRefusal on such reads; a later LIVE
+	// root install of the name (RecordBindTwin's placed arm) clears it —
+	// the new binding is the read's referent again.
 	armBoundNames map[string]bool
+	// armReadRefusal is the placement-gate poison a root read of an
+	// arm-bound name latches (first read wins, mirroring
+	// MarkUncompilable's first-reason rule). The fence is the REGIME's
+	// own machinery — the default recorder compiles the same read by
+	// const-folding the kept install — so it refuses through Finalize's
+	// placement seam under the "twin regime:" prefix, the layer the
+	// full-placement gate already owns, not through a recorder-layer
+	// MarkUncompilable site (the refusal-site census counts that layer,
+	// and its count only falls).
+	armReadRefusal string
 	// twinRegime arms §6.5's rollback-and-replay for THIS pass's Program
 	// (BORU_TWIN_REGIME=1, read once at NewEmitState so one pass is one
 	// regime): Finalize stamps it onto Program.TwinRegime and enforces the
@@ -3905,9 +3915,10 @@ type closureLatch struct {
 //   - REGIME ONLY: the resident op exists only under the regime, so
 //     adoption outside it would mark placements nothing lowers.
 //
-// Matched names join armBoundNames — later root reads refuse
-// (NoteDefRead), because the runtime binding's count, values, and
-// definedness are body-run-dependent. Rollback safety mirrors
+// Matched names join armBoundNames — a later root read poisons the
+// placement gate (NoteDefRead → armReadRefusal, refused at Finalize's
+// seam), because the runtime binding's count, values, and definedness
+// are body-run-dependent. Rollback safety mirrors
 // AdoptBodyTwins: stamps live on event pointers inside the unit's
 // fragment (discarded with it), twinAdoptions un-marks the flags, and
 // Finalize's placement scan counts REAL resident ops, so any miss
@@ -6436,11 +6447,17 @@ func (es *EmitState) NoteDefRead(id, name string) {
 		// installs — count, values, and definedness are body-run-dependent
 		// (`[] each [def x 5] x`: the interpreter raises undefined_word
 		// where the check model still holds x) — so a read here would bake
-		// the model's generalized value. Refuse; the interpreter owns the
-		// shape (the parity oracle pins it).
-		es.MarkUncompilable("read of `" + name + "` after a multi-run body binds it: the runtime " +
-			"binding is per-element (or absent at zero iterations), so the check model's value cannot " +
-			"stand in (arm-resident twins, §6.5)")
+		// the model's generalized value. Poison the placement gate: the
+		// regime's Finalize seam refuses, and the interpreter owns the
+		// shape (the parity oracle pins it). After a terminal top-level
+		// trap the read is unreachable — the compiled program truncates at
+		// the trap — so it poisons nothing, MarkUncompilable's own trap
+		// discipline.
+		if es.trapAt == 0 && es.armReadRefusal == "" {
+			es.armReadRefusal = "twin regime: read of `" + name + "` after a multi-run body binds it: " +
+				"the runtime binding is per-element (or absent at zero iterations), so the check " +
+				"model's value cannot stand in (arm-resident twins, §6.5)"
+		}
 		return
 	}
 	if es.defReads == nil {
@@ -8847,6 +8864,9 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 	}
 	lw.p.storedFnRefs = es.storedFnRefs
 	lw.p.TwinRegime = es.twinRegime
+	if es.armReadRefusal != "" {
+		return nil, es.armReadRefusal, false
+	}
 	if es.twinRegime && !twinsFullyPlaced(lw.p) {
 		return nil, "twin regime: a bind transition has no stream placement (a multi-run-body or post-trap twin), so the rollback would lose it", false
 	}
