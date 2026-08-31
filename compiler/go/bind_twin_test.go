@@ -109,6 +109,90 @@ func TestFinalizeTwinRegimeStampAndPlacementGate(t *testing.T) {
 	}
 }
 
+// tokAt builds a body token carrying a source position, for the adoption
+// tests.
+func tokAt(row, col int) core.Value {
+	v := core.NewInteger(1)
+	v.SetPos(core.SrcPos{Row: row, Col: col})
+	return v
+}
+
+// The do-body adoption account (§10's recovery of the do-body class,
+// §6.5's replay-never-re-execution): a table-only twin whose noted
+// position is a token site inside a once-run defs-keeping body's tree is
+// PLACED by AdoptBodyTwins after the closure record, so the regime
+// finalizes and the lowered op replays the captured entry; a twin at no
+// body site stays unplaced and refuses (the multi-run each-body class);
+// and a Rollback that discards the adopting round un-marks the flag with
+// the truncated event, so the still-unplaced twin refuses again.
+func TestFinalizeTwinRegimeBodyAdoption(t *testing.T) {
+	t.Setenv("BORU_TWIN_REGIME", "1")
+
+	suspendedTwin := func(es *EmitState, row, col int) {
+		resume := es.Suspend()
+		es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "big", Depth: 1,
+			Pos: core.SrcPos{Row: row, Col: col}},
+			core.DefEntry{Body: core.NewInteger(7)})
+		resume()
+	}
+	// The do's code body: a nested list tree whose leaf sits at (1,6),
+	// pinning the recursive site walk.
+	body := func() core.Value {
+		b := core.NewList([]core.Value{tokAt(1, 4), core.NewList([]core.Value{tokAt(1, 6)})})
+		b.SetPos(core.SrcPos{Row: 1, Col: 3})
+		return b
+	}
+
+	// Nil and inactive receivers are no-ops, like every EmitState method.
+	var nilES *EmitState
+	nilES.AdoptBodyTwins(body())
+
+	// At a body site: adopted (a real placed op), finalizes. A second
+	// adoption pass is a no-op — the twin is already placed.
+	es := NewEmitState()
+	suspendedTwin(es, 1, 6)
+	es.AdoptBodyTwins(body())
+	es.AdoptBodyTwins(body())
+	prog, reason, ok := es.Finalize(nil)
+	if !ok {
+		t.Fatalf("an adopted twin must finalize under the regime: %s", reason)
+	}
+	if got := countBindTwinOps(prog); got != 1 {
+		t.Fatalf("adoption placed %d twin ops, want 1", got)
+	}
+
+	// At no body site — and a positionless twin at ANY site — still
+	// unplaced, refuses (the each-body class; a synthesized transition).
+	es = NewEmitState()
+	suspendedTwin(es, 2, 1)
+	suspendedTwin(es, 0, 0)
+	es.AdoptBodyTwins(body())
+	if _, _, ok := es.Finalize(nil); ok {
+		t.Fatal("a twin at no body site must still refuse the regime program")
+	}
+	resume := es.Suspend()
+	es.AdoptBodyTwins(body()) // suspended recorder: adopt must decline
+	resume()
+
+	// A rolled-back round un-marks the adopted flag with its discarded
+	// events. Mirrors the loop-analysis bracket (carrier.go loopCapture):
+	// the round's events record into a fragment frame, and Rollback drops
+	// the fragment and the pools together.
+	es = NewEmitState()
+	suspendedTwin(es, 1, 6)
+	cp := es.Checkpoint()
+	end := es.beginFragment()
+	es.AdoptBodyTwins(body())
+	end()
+	es.Rollback(cp)
+	if _, _, ok := es.Finalize(nil); ok {
+		t.Fatal("a discarded adoption places nothing — the twin must refuse again")
+	}
+	if es.twinPlaced[0] {
+		t.Fatal("Rollback must un-mark the adopted flag so a re-recorded round can adopt again")
+	}
+}
+
 // The placement scan counts twin ops in FN-UNIT code too. No twin lands
 // there today — FnBodyDepth suppresses fn-body transitions at the ledger, so
 // only root code carries them — but the arm-resident increment will place

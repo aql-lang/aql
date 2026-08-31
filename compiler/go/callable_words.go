@@ -305,7 +305,17 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
 	captures := moduleScopeMutableCaptures(r, bodyToks, core.ComputeCaptures(r, &core.FnSig{Impl: core.Boru(bodyToks)}))
-	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos)
+	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos) {
+		return false
+	}
+	// A once-run defs-keeping body (`do`) compiled to a closure unit makes
+	// its defs frame-local, so the leak the interpreter delivers needs its
+	// twins PLACED after the call — the regime's replay account
+	// (AdoptBodyTwins; a no-op for the flag-less multi-run words).
+	if spec.BodyOnceKeepsDefs {
+		es.AdoptBodyTwins(body)
+	}
+	return true
 }
 
 // tryRecordLambdaClosure compiles a higher-order word's LAMBDA argument

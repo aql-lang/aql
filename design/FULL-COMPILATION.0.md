@@ -2630,12 +2630,18 @@ stamp `Program.TwinRegime` + Finalize's full-placement refusal, lang's
 point (module ledger pass-final — imports run once), `OpBindTwin` →
 `core.ApplyBindTwin` per kind with the carrier-class skip pairing computed
 defs to their Push-mode `OpBindGlobal`. The regime lane
-(`test/go/langspec/bind_twin_regime_test.go`) measures 6411 corpus rows
-compiled vs 6416 under keep, ZERO divergences; the 5-row cost is 4
-island-discarded do-body defs (conservatively refused — the island re-executes
-them) and 1 suspended-recorder each-body def awaiting arm-residency. The
-handoff (design/FULL-COMPILATION-HANDOFF.0.md) carries the remaining
-default-flip checklist and the payoff deletions.
+(`test/go/langspec/bind_twin_regime_test.go`) measured 6411 corpus rows
+compiled vs 6416 under keep on landing, ZERO divergences; the 5-row cost was
+first labeled "4 island-discarded do-body defs + 1 each-body def", but
+instrumentation showed ALL FIVE record through the closure path (no island
+fires), so the four do-body rows were recovered the §6.5-faithful way —
+do-body twin ADOPTION (`CallableSpec.BodyOnceKeepsDefs` on `do`;
+`EmitState.AdoptBodyTwins` places the suspended body twins as real twin ops
+after the closure call, replaying the captured entries), never island
+re-execution, which the retained-mints partition makes unsound for
+capitalised defs. The one remaining regime-only refusal is the each-body def
+awaiting arm-residency. The handoff (design/FULL-COMPILATION-HANDOFF.0.md)
+carries the remaining default-flip checklist and the payoff deletions.
 
 Three consistency obligations come with the twins, and they interlock.
 
