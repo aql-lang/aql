@@ -318,6 +318,26 @@ func (dt *DefTable) Set(name string, bodies []Value) {
 	dt.stacks[name] = entries
 }
 
+// Entries returns a snapshot of the full DefEntry stack for name,
+// oldest-first — Body plus the type-binding half (TypeDef, Minted) that
+// Stack's bodies-only view drops. Returns nil if name is unbound; the
+// returned slice is owned by the caller. This is the read the bind-twin
+// replay needs (§6.5 "replay, never re-execution"): re-installing a
+// transition means reconstructing the ENTRY the pass left — a value push,
+// a minted type binding, or an adopted alias — not just its body.
+func (dt *DefTable) Entries(name string) []DefEntry {
+	if dt == nil {
+		return nil
+	}
+	ds := dt.stacks[name]
+	if len(ds) == 0 {
+		return nil
+	}
+	out := make([]DefEntry, len(ds))
+	copy(out, ds)
+	return out
+}
+
 // Stack returns a snapshot of the bodies currently stacked for name,
 // oldest-first. Returns nil if name is unbound. The returned slice is
 // owned by the caller.

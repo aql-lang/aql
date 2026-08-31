@@ -44,11 +44,16 @@ package core
 // product or has no twin to re-apply it; capturing it here would roll back
 // state nothing would put back.
 //
-// NO CLIENT YET, and that is the staging discipline this repo already applies
-// to the collection kernel's second adapter: the twin OPS arrive with the
-// regime that emits them, and this is the primitive they roll back onto. It is
-// exported (rather than kept unexported until then) because the caller is
-// lang's compiled entry point, outside this module.
+// NO RUNTIME CLIENT YET, and that is the staging discipline this repo already
+// applies to the collection kernel's second adapter: the twin OPS arrive with
+// the regime that applies them, and this is the primitive they roll back
+// onto. It is exported (rather than kept unexported until then) because the
+// caller is lang's compiled entry point, outside this module. The FIRST
+// client is the corpus-scale harness
+// (test/go/langspec/bind_replay_sandbox_test.go): snapshot → compile pass →
+// RestoreBindings → replay the pass's ledger — proven to land exactly the
+// registry the pass left (depths per transition, entry identity per name)
+// over every push-only corpus row, before any VM semantics change.
 
 // BindingSandbox captures the RUNTIME-VISIBLE binding state a check pass can
 // move: the def table, the module ledger, and enough of the type table to undo

@@ -90,16 +90,42 @@ reverses an earlier plan:
      BIND_TWIN line in a golden documents where a twin lands.
 3. **Only then** flip to rollback-and-replay onto
    `core/go/binding_sandbox.go`, which is already built with the exact
-   mints-retained / retirements-rolled-back partition §6.5 requires, and
-   whose header says "NO CLIENT YET" for precisely this reason. Two facts
-   for that stage, established while building the table: `OpBindGlobal`
-   today covers only ROOT defs of NON-concrete values (lowerDynBind's
-   needGlobal — a concrete `def x 1` emits NO op at all, so under rollback
-   every value-def twin needs an op, not just the write-back class), and the
-   flip's twin for a JOINED binding cannot be the ledger's join entry
-   replayed unconditionally — that would re-create NUR110's leak at the VM
-   level; the join entries are the pass's summary, and the runtime twin
-   must live in the arm.
+   mints-retained / retirements-rolled-back partition §6.5 requires.
+   **The sandbox now has its first client (2026-08-31), and the flip's
+   central mechanism is proven at data level**:
+   `TestBindingSandboxRollbackAndReplay`
+   (`test/go/langspec/bind_replay_sandbox_test.go`) runs snapshot →
+   compile pass → `RestoreBindings` → replay the ledger (re-installing the
+   IDENTICAL pass-left `DefEntry` at each transition, via the new
+   `DefTable.Entries`) over the whole corpus: 7644 rows cycled, 0
+   failures — after every replayed transition the live depth equals the
+   ledger's recorded depth, and the final stacks match the pass-left
+   stacks in entry identity (TypeDef pointer, Minted). 33 rows skip by
+   design: an undef or def-replace transition needs the POPPED entry,
+   which the pass-left registry no longer holds — that is precisely the
+   state the twin OP must carry, so those two kinds' operand design is the
+   flip's first real decision.
+
+   Facts established for the flip, each paid for:
+   - `OpBindGlobal` today covers only ROOT defs of NON-concrete values
+     (lowerDynBind's needGlobal — a concrete `def x 1` emits NO op at
+     all), so under rollback every value-def twin needs an operand story,
+     not just the write-back class. The def twin's value resolution wants
+     to ride the evDynBind machinery (src/srcSeq/val + the promotion
+     seats), which already exists per value def — not a second resolver.
+   - A JOINED binding's twin replayed unconditionally at the join re-creates
+     NUR110's leak at the VM level, but it also exactly REPRODUCES today's
+     keep-regime behavior — so flip v1 may replay joins unconditionally
+     with no regression, and arm-residency then closes NUR110 as its own
+     increment.
+   - The ledger's absolute depths are exactly reproducible over the
+     rolled-back registry (the harness's per-transition assertion), so a
+     twin op can trust its recorded depth at VM time.
+   - A SetAt-based interim (widening OpBindGlobal to concrete defs under
+     the keep regime) was considered and rejected: for a loop-body def the
+     runtime value changes per iteration while the interpreter PUSHES per
+     iteration, so the write-back is not behavior-neutral there — the flip
+     changes semantics coherently or not at all.
 
 **Do not invert that staging.** Rollback-first breaks every program until
 the last transition has a twin, and offers no intermediate state where the
@@ -268,6 +294,8 @@ position than the construct that produced the binding.
 | `test/go/langspec/bind_ledger_live_oracle_test.go` | the STRONG oracle: final ledger depth per name == the depth the pass left in the live registry, corpus + synthetics, no allowance |
 | `test/go/langspec/bind_twin_emission_test.go` | the emission gate: every compiled Program's `BindTwins` table == the pass's ledger elementwise — what a recorder-lifecycle hole would break |
 | `compiler/go/bind_twin_test.go` | `RecordBindTwin`'s contract directly: unconditional append (suspension must not filter), nil-receiver safe, the finalized Program carries a copy |
+| `test/go/langspec/bind_twin_emission_test.go` (`TestBindTwinOpsArePlacedOrderedSubset`) | the placement gate: every OpBindTwin indexes a real entry, strictly increasing per unit; placement ⊆ table until the flip's refusal tightens it |
+| `test/go/langspec/bind_replay_sandbox_test.go` | the sandbox's first client: rollback + ledger replay reproduces the pass-left registry over every push-only corpus row (depths per transition, entry identity per name) |
 | `core/go/bind_ledger_note_test.go` | `NoteBindTransition`'s arms directly — suppressions, position precedence, kind/name/depth |
 | `core/go/check_state_passend_test.go` | the pass-end cleanup seam (LIFO, exactly once, reset by `Begin`, Clone-isolated) and the `SuppressBindLedger` bracket |
 | `check/go/narrow_passend_test.go` | the narrowing pop at pass end (popped on top, left alone when buried) and that `AnalyseLoopBody` ledgers its joined installs |
