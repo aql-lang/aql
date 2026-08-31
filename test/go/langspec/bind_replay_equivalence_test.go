@@ -49,10 +49,11 @@ import (
 
 // bindDelta is the depth change a transition makes to its own name. A
 // BindDefReplace is a drop-then-push and nets ZERO — that is the whole reason
-// it is a kind of its own rather than a BindDef.
+// it is a kind of its own rather than a BindDef — and a BindSigUndef removes
+// one entry (possibly mid-stack), so it nets -1 like an undef.
 func bindDelta(k core.BindKind) int {
 	switch k {
-	case core.BindUndef:
+	case core.BindUndef, core.BindSigUndef:
 		return -1
 	case core.BindDefReplace:
 		return 0
@@ -85,6 +86,18 @@ var syntheticBranchArmSources = []string{
 	// while leaves the loop-join pushes (n at 2, acc at 1) that AnalyseLoopBody
 	// must ledger.
 	`def n 3  while [n gt 0] [def acc n  def n (n sub 1)] end 1`,
+	// A SIGNATURE undef of a plain two-overload fn removes the matching
+	// entry — depth 2 to 1 — and must compose as its own -1 kind
+	// (BindSigUndef). The corpus lacks the shape entirely: while it was
+	// conflated into net-zero BindDefReplace, the composition gate read
+	// clean while the ledger misstated the depth by one.
+	`def f fn [[a:Integer] [Integer] [a]]  def f fn [[s:String] [String] [s]]  ` +
+		`undef f (fnsig [[String] [String]])  f 1`,
+	// The LOCKED counterpart: a sig-undef aimed at a word-extension clone
+	// (which carries the locked base sigs) removes nothing and must note
+	// nothing — a no-op is not a transition.
+	`def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  ` +
+		`undef add (fnsig [[Flag Flag] [Boolean]])  1`,
 }
 
 // composeLedger replays one ledger symbolically and reports the incoherent

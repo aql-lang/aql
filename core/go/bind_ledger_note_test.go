@@ -135,3 +135,45 @@ func TestCheckStateCloneDeepCopiesBindLedger(t *testing.T) {
 		t.Errorf("an empty ledger cloned as %v, want nil", empty.BindLedger)
 	}
 }
+
+// A signature-specific undef's ledger contract, split out of BindDefReplace
+// after a live probe showed the conflation misstating depth by one: each
+// REMOVAL notes BindSigUndef (delta -1) with the post-removal depth and the
+// REMOVED entry as its capture, and a sig-undef whose match is locked (or
+// absent) notes NOTHING — a no-op is not a transition.
+func TestSigUndefLedgerSemantics(t *testing.T) {
+	r := newTestRegistry(t)
+	r.Check.Mode = true
+	sig := func(pt, rt *Type, pn string) Signature {
+		return Signature{
+			Params:     []FnParam{{Name: pn, Type: pt}},
+			Returns:    []*Type{rt},
+			Impl:       Boru([]Value{NewWord(pn)}),
+			BarrierPos: BarrierAllForward,
+		}
+	}
+	InstallFnDef(r, "suq", FnDefInfo{Signatures: []Signature{sig(TInteger, TInteger, "n")}})
+	InstallFnDef(r, "suq", FnDefInfo{Signatures: []Signature{sig(TString, TString, "s")}})
+	base := len(r.Check.BindLedger)
+
+	UninstallFnSigs(r, "suq", FnUndefInfo{Sigs: []FnSigSpec{{
+		Params:  []FnParam{{Type: TString}},
+		Returns: []*Type{TString},
+	}}})
+	led := r.Check.BindLedger[base:]
+	if len(led) != 1 || led[0].Kind != BindSigUndef || led[0].Depth != 1 {
+		t.Fatalf("removal must note one BindSigUndef at the post-removal depth 1; got %+v", led)
+	}
+	if r.Defs.Depth("suq") != 1 {
+		t.Fatalf("live depth = %d, want 1", r.Defs.Depth("suq"))
+	}
+
+	// A spec matching nothing notes nothing.
+	UninstallFnSigs(r, "suq", FnUndefInfo{Sigs: []FnSigSpec{{
+		Params:  []FnParam{{Type: TBoolean}},
+		Returns: []*Type{TBoolean},
+	}}})
+	if len(r.Check.BindLedger) != base+1 {
+		t.Fatalf("a no-op sig-undef must not note; ledger grew to %d entries past base", len(r.Check.BindLedger)-base)
+	}
+}

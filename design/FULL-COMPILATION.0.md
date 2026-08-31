@@ -2442,7 +2442,14 @@ two of those three need no twin at all. Read the sites, not the counts:
 So it is **three transition kinds**, not thirty: `def`, `undef`, type install —
 the branch-arm push and the module namespace install both being `def` rather
 than kinds of their own. A fourth, `def-replace`, was added by measurement
-rather than reading: see below.
+rather than reading: see below. A fifth, `sig-undef`, was SPLIT out of
+`def-replace` by a live probe (2026-08-31): a signature-specific undef
+removes one matching entry — possibly MID-stack, delta -1 per removal, the
+note carrying the removed entry — where a redefinition's replace nets zero;
+conflated, a two-overload fn's sig-undef took a name from depth 2 to 1 while
+recording delta 0, and the corpus lacks the shape so the composition gate
+could not see it (the synthetic rows now supply it, with the locked no-op
+counterpart, which notes nothing at all).
 
 **CORRECTION — `word_extend.go` IS a site, and this table said otherwise.** The
 first version of this row read "no direct `Defs` mutation, it reaches the table
@@ -2474,16 +2481,19 @@ all. A count of call sites is not a count of transitions, and neither is a
 plausible reading of them.
 
 **Measured over `lang/spec`** (`TestBindLedgerCensus`), 7644 rows — as of the
-2026-08-31 oracle closure (ten phantom truncated-region entries removed; the
-corpus contributes no top-level loop-join entries — both its loop-body-def
-rows sit inside fn bodies, where `FnBodyDepth` suppresses them):
+2026-08-31 oracle closure and the sig-undef split (ten phantom
+truncated-region entries removed; two of the old def-replace entries were
+locked-match sig-undef NO-OPS and no longer note; the corpus contributes no
+top-level loop-join entries and no real sig-undef removal — the synthetic
+rows supply both):
 
-	rows with transitions   4291
-	transitions total       7443
+	rows with transitions   4290
+	transitions total       7441
 	  def                    6361
 	  type-install           1048
 	  undef                    30
-	  def-replace               4
+	  def-replace               2
+	  sig-undef                 0   (corpus; synthetic-covered)
 	deepest single row         36   —  unpack 'boru:math-util' sqrt 16.0
 
 **What the ledger must EXCLUDE, and it is most of what a naive instrument

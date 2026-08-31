@@ -54,7 +54,8 @@ func replaySandboxRow(src, where string) string {
 		return ""
 	}
 	for _, tr := range prog.BindTwins {
-		if tr.Kind == core.BindUndef || tr.Kind == core.BindDefReplace {
+		if tr.Kind == core.BindUndef || tr.Kind == core.BindDefReplace ||
+			tr.Kind == core.BindSigUndef {
 			return "skip"
 		}
 	}
@@ -177,7 +178,7 @@ func TestBindingSandboxRollbackAndReplay(t *testing.T) {
 		_ = f.Close()
 	}
 
-	t.Logf("binding-sandbox rollback+replay: %d rows cycled, %d skipped (undef/def-replace), %d failed",
+	t.Logf("binding-sandbox rollback+replay: %d rows cycled, %d skipped (undef/def-replace/sig-undef), %d failed",
 		replayed, skipped, failed)
 	for _, w := range worst {
 		t.Logf("    %s", w)

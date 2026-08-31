@@ -41,6 +41,8 @@ func bindKindName(k core.BindKind) string {
 		return "undef"
 	case core.BindTypeInstall:
 		return "type-install"
+	case core.BindSigUndef:
+		return "sig-undef"
 	}
 	return fmt.Sprintf("kind(%d)", uint8(k))
 }

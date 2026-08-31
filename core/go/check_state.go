@@ -1599,6 +1599,19 @@ const (
 	// retirement counterpart is not a ledger entry: BindingSandbox already
 	// partitions the TypeTable so retirements roll back and mints stay baked.
 	BindTypeInstall
+	// BindSigUndef is a SIGNATURE-specific undef's removal of one matching
+	// DefStack entry (UninstallFnSigs) — possibly MID-stack, so it is neither
+	// an undef (a top pop) nor a def-replace (net-zero drop-then-push): its
+	// depth delta is -1 per removed entry, and the note's captured entry is
+	// the REMOVED one, so a twin can remove that identical entry rather than
+	// guess by position. One note per removal; a sig-undef whose every match
+	// is locked removes nothing and notes NOTHING — a no-op is not a
+	// transition. This kind was split out of BindDefReplace after a probe
+	// showed the conflation live: a plain two-overload fn's sig-undef took a
+	// name from depth 2 to 1 while recording delta 0, and the corpus never
+	// contained the shape, so the composition gate could not see it — the
+	// synthetic rows now supply it.
+	BindSigUndef
 )
 
 // String names the kind for census output and the disassembler's BIND_TWIN
@@ -1613,6 +1626,8 @@ func (k BindKind) String() string {
 		return "def-replace"
 	case BindTypeInstall:
 		return "type-install"
+	case BindSigUndef:
+		return "sig-undef"
 	}
 	return "bind-kind(" + strconv.Itoa(int(k)) + ")"
 }
@@ -1667,6 +1682,25 @@ type BindTransition struct {
 // of them macro parameters (`macro [[e] [quote […]]]` pushing `e` per
 // expansion).
 func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
+	// A PUSH kind (def / def-replace / type-install) captures the entry it
+	// just installed — TopEntry here, at the note, is the only moment the
+	// IDENTICAL binding object is knowably on top; the twin replays that
+	// object, never a reconstruction (§6.5). An undef captures nothing: its
+	// twin pops whatever is live at its own position. (A sig-undef's caller
+	// supplies the REMOVED entry via NoteBindTransitionEntry — the removal
+	// can be mid-stack, where TopEntry is the wrong object.)
+	var entry DefEntry
+	if r != nil && kind != BindUndef {
+		entry, _ = r.Defs.TopEntry(name)
+	}
+	r.NoteBindTransitionEntry(kind, name, pos, entry)
+}
+
+// NoteBindTransitionEntry is NoteBindTransition with the transition's OWN
+// entry supplied by the caller — the entry the transition installed (a push
+// kind) or removed (a sig-undef, whose mid-stack removal makes the top the
+// wrong capture). Every suppression and the position rule are identical.
+func (r *Registry) NoteBindTransitionEntry(kind BindKind, name string, pos SrcPos, entry DefEntry) {
 	if r == nil || r.Check == nil {
 		return
 	}
@@ -1699,15 +1733,5 @@ func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
 	// the emission gate (TestBindTwinsEqualLedger) then verifies end to end:
 	// a divergence means a recorder-lifecycle hole (an isolated or swapped
 	// recorder ate a twin), not a second filter to keep in sync.
-	//
-	// A PUSH kind (def / def-replace / type-install) captures the entry it
-	// just installed — TopEntry here, at the note, is the only moment the
-	// IDENTICAL binding object is knowably on top; the twin replays that
-	// object, never a reconstruction (§6.5). An undef captures nothing: its
-	// twin pops whatever is live at its own position.
-	var entry DefEntry
-	if kind != BindUndef {
-		entry, _ = r.Defs.TopEntry(name)
-	}
 	r.Check.Recorder().RecordBindTwin(tr, entry)
 }

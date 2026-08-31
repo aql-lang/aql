@@ -22,16 +22,20 @@ it can only size the next increment.
 
 ### The population, measured over `lang/spec` (7644 rows)
 
-As of the 2026-08-31 oracle closure (ten phantom truncated-region entries
-removed; the corpus contributes no top-level loop-join entries — both its
-loop-body-def rows sit inside fn bodies, where `FnBodyDepth` suppresses them):
+As of the 2026-08-31 oracle closure and the BindSigUndef split (ten phantom
+truncated-region entries removed; two of the four old def-replace entries
+were sig-undef NO-OPS — locked matches that remove nothing — and no longer
+note at all, taking one row's only transition with them; the corpus
+contributes no top-level loop-join entries and no REAL sig-undef removal —
+the synthetic rows supply both shapes):
 
-	rows with transitions   4291
-	transitions total       7443
+	rows with transitions   4290
+	transitions total       7441
 	  def                    6361   85%
 	  type-install           1048
 	  undef                    30
-	  def-replace               4
+	  def-replace               2
+	  sig-undef                 0   (corpus; the synthetic row supplies it)
 	deepest single row         36   —  unpack 'boru:math-util' sqrt 16.0
 
 `TestBindLedgerCensus` produces this. Three consequences, and the third
@@ -142,14 +146,19 @@ reverses an earlier plan:
      BIND_TWIN whose captured entry matches needGlobal's predicate, and
      flip that def's OpBindGlobal from SetAt to Push" partitions the def
      population with no third case.
-   - **`BindDefReplace` has TWO producers with DIFFERENT replay
-     semantics**, and a single twin arm would silently corrupt one of
-     them: installDef's redefinition (drop the colliding overload, PUSH
-     the captured new entry) versus `UninstallFnSigs`' signature undef
-     (REMOVE the most-recent matching entry — possibly mid-stack — and
-     push NOTHING; its note-time captured entry is just whatever sits on
-     top, not a value to install). The kinds must split, or the spec must
-     carry the discriminator, before the def-replace twin is written.
+   - **`BindDefReplace` HAD two producers with different replay semantics
+     — split DONE (2026-08-31, `BindSigUndef`).** The conflation was not
+     theoretical: probed live, a plain two-overload fn's signature undef
+     removed an entry (depth 2 → 1) while recording delta 0, and the
+     composition gate read clean because the corpus lacks the shape
+     entirely (the blind-spot class again; the synthetic rows now supply
+     both it and the locked no-op counterpart). `UninstallFnSigs` now
+     commits and notes each removal individually as `BindSigUndef`
+     (delta -1, the note carrying the REMOVED entry via
+     `NoteBindTransitionEntry` so a twin can remove that identical entry
+     mid-stack), and notes NOTHING when every match is locked — a no-op
+     is not a transition. `BindDefReplace` keeps exactly one producer:
+     installDef's drop-then-push redefinition.
    - **Islands re-execute; twins must not double-apply there.** A do-body
      compiled as a FALLBACK island re-runs its tokens in a sub-engine at
      VM time, executing any `def` inside it for real — so a twin event

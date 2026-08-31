@@ -752,6 +752,17 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 	stack = append([]Value(nil), stack...)
 
 	// For each spec, find and remove the most recent matching DefStack entry.
+	// Each removal is COMMITTED and NOTED individually: a sig-undef never
+	// reaches UninstallDef (it rewrites the stack in place, possibly
+	// mid-stack), yet every removal is a runtime-visible transition of its
+	// own — depth delta -1, Depth recorded after the commit so it is the
+	// post-transition depth, and the note carrying the REMOVED entry so a
+	// twin can remove that identical entry rather than guess by position.
+	// A sig-undef whose every match is locked commits and notes NOTHING — a
+	// no-op is not a transition. (Both arms used to record one net-zero
+	// BindDefReplace; the conflation hid a live depth incoherence the corpus
+	// could not show — a plain two-overload fn's sig-undef took the name
+	// from depth 2 to 1 while recording delta 0.)
 	for _, spec := range specs.Sigs {
 		for j := len(stack) - 1; j >= 0; j-- {
 			fnDef, ok := stack[j].Data.(FnDefInfo)
@@ -773,18 +784,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 				}
 			}
 			if matched {
+				rm := stack[j]
 				stack = append(stack[:j], stack[j+1:]...)
+				r.Defs.Set(name, stack)
+				r.NoteBindTransitionEntry(BindSigUndef, name, SrcPos{},
+					DefEntry{Body: rm})
 				break
 			}
 		}
 	}
-
-	r.Defs.Set(name, stack)
-	// A SIGNATURE-specific undef rewrites the stack in place rather than
-	// popping, so it never reaches UninstallDef. It is still a runtime-visible
-	// removal a twin must replay — recorded as BindDefReplace because, like a
-	// redefinition's drop-then-push, the name's DEPTH is unchanged.
-	r.NoteBindTransition(BindDefReplace, name, SrcPos{})
 }
 
 // CoerceBoolean converts any value to a boolean by presence, not by

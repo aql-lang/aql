@@ -103,6 +103,7 @@ func TestBindKindString(t *testing.T) {
 	cases := map[BindKind]string{
 		BindDef: "def", BindUndef: "undef",
 		BindDefReplace: "def-replace", BindTypeInstall: "type-install",
+		BindSigUndef: "sig-undef",
 		BindKind(99): "bind-kind(99)",
 	}
 	for k, want := range cases {
