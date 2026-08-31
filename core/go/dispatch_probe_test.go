@@ -93,6 +93,30 @@ func TestDispatchProbeFnValueSite(t *testing.T) {
 	}
 }
 
+// A 0-arg anonymous lambda alone at the pointer is DATA — the parking
+// gate leaves it inert (ADR-016's `def f ([] => [body])` contract) — so
+// no dispatch commits and the probe must see NOTHING from the fn-value
+// site (Codex P2, PR #420: probing before the gate counted
+// non-dispatches as agreements).
+func TestDispatchProbeInertZeroArgLambdaSilent(t *testing.T) {
+	r := covRegistry(t, nil)
+	e := NewTop(r)
+	events := installRecordingProbe(t)
+
+	fnv := anonFnVal(nil, []*Type{TInteger}, parenBody(NewInteger(42)))
+	e.Tape = NewTape([]Value{fnv}, StackHeadroom)
+	e.Pointer = 0
+	if err := e.execFnDefLiteral(0); err != nil {
+		t.Fatalf("execFnDefLiteral: %v", err)
+	}
+	if e.Pointer != 1 {
+		t.Fatalf("the inert lambda must park (pointer advanced), got pointer %d", e.Pointer)
+	}
+	if len(*events) != 0 {
+		t.Errorf("an inert (parked) fn value is not a dispatch commit; probe saw %+v", *events)
+	}
+}
+
 // A failed dispatch fires the probe with a nil sig (the census counts
 // these rather than comparing them), and the uninstaller disarms the
 // seam cleanly.

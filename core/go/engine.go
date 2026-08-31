@@ -5020,9 +5020,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	if sig != nil && sig.Fallback {
 		sig = nil
 	}
-	// The fn-value dispatch commit (dispatch_probe.go) — after the
-	// Fallback discard above, so a value left as data reads as nil here.
-	e.probeDispatch(fn, w, sig, positions, specAt)
 
 	// Count forward vs stack positions of the matched sig (nil-safe:
 	// positions is empty when sig == nil).
@@ -5089,6 +5086,14 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		stkCount := len(positions) - fwdCount
 		return e.insertForward(w, sig, fwdCount, stkCount, specAt)
 	}
+
+	// The fn-value dispatch COMMIT (dispatch_probe.go): past every
+	// non-dispatch exit — the handler-less/nil reroute, the
+	// anonymous-lambda/macro parking (the value stays DATA; probing there
+	// counted non-dispatches, Codex P2 on PR #420), and the insertForward
+	// deferral (which re-enters here with args on the stack, so a parked
+	// dispatch is probed exactly once, at its real commit).
+	e.probeDispatch(fn, w, sig, positions, specAt)
 
 	// All args resolved on the stack. Anonymous FnDefs (no Go
 	// Handler) take the legacy stack-match path, which splices the
