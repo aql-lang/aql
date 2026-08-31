@@ -500,9 +500,17 @@ type emitDynBind struct {
 	// recovery): AdoptResidentTwins stamped this in-unit event with the
 	// twin-table index its per-invocation install satisfies, and the
 	// lowering emits the value operand + OpBindResident here instead of
-	// the (root-only) global write-back. -1 — the sentinel set at the one
-	// construction site — is every unstamped def.
+	// the (root-only) global write-back. -1 — the sentinel set at the two
+	// construction sites — is every unstamped def.
 	residentTwin int
+	// undef marks the TEARDOWN half of a var param's balanced
+	// per-iteration pair (`__varundef r` — RecordDynUndef's event, riding
+	// the dyn-bind kind so every event walk already routes it): no value
+	// operand, no stack effect; stamped, it lowers to OpBindResident's
+	// undef arm popping the live binding per element; unstamped it lowers
+	// to nothing, and the name-keyed walks (the dyn-scope bind detector,
+	// the def-site fn resolver) skip it — an undef binds nothing.
+	undef bool
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -1701,12 +1709,21 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 }
 
 // RecordDynUndef notes an `undef`-shaped teardown at its stream position
-// (the interface doc in core/go/emit_recorder.go). The event seat lands
-// with the var-pair bridging step of the arm-residency increment; until a
-// consumer exists this records nothing — the balanced pair's twins stay
-// unplaced and the regime refuses their programs, which is the sound
-// standing state. Nil-safe.
-func (es *EmitState) RecordDynUndef(string, core.SrcPos) {}
+// (the interface doc in core/go/emit_recorder.go) — today only inside an
+// arm-resident body compile (armResidentDepth, the each-unit bracket),
+// where the var-param pair's undef half needs its event seat so the
+// bridge can pair the BindUndef twin and the unit can tear the binding
+// down per element. Everywhere else this records nothing: no other
+// consumer exists, and the event's absence keeps every other lane's
+// event streams untouched. Nil-safe.
+func (es *EmitState) RecordDynUndef(name string, pos core.SrcPos) {
+	if es == nil || !es.Active() || es.armResidentDepth == 0 || name == "" {
+		return
+	}
+	es.appendEvent(EmitEvent{kind: evDynBind, dyn: &emitDynBind{
+		name: name, srcSeq: -1, pos: pos, residentTwin: -1, undef: true,
+	}})
+}
 
 // TakeFragment returns the last captured fragment (nil when the
 // capture never armed — plain check runs, suspended recordings).
@@ -3911,16 +3928,18 @@ func (es *EmitState) AdoptResidentTwins(body core.Value) {
 		rec.reg != es.reg || rec.frag == nil {
 		return
 	}
-	// The bracket's twins: every one must be an eligible value def, or the
-	// whole bridge declines (a var-param pair, a replace, a type install —
-	// shapes this increment does not carry).
+	// The bracket's twins: every one must be an eligible value def or an
+	// undef (a var param's balanced teardown half), or the whole bridge
+	// declines (a replace, a type install — shapes this increment does
+	// not carry).
 	var twins []int
 	for i := ml.from; i < ml.to && i < len(es.bindTwins); i++ {
 		if es.twinPlaced[i] {
 			return
 		}
 		tr := es.bindTwins[i]
-		if tr.Kind != core.BindDef || es.bindTwinEntries[i].TypeDef != nil {
+		if (tr.Kind != core.BindDef && tr.Kind != core.BindUndef) ||
+			es.bindTwinEntries[i].TypeDef != nil {
 			return
 		}
 		twins = append(twins, i)
@@ -3943,19 +3962,27 @@ func (es *EmitState) AdoptResidentTwins(body core.Value) {
 		if d.name != tr.Name || d.residentTwin >= 0 {
 			return
 		}
+		// Kind correspondence: a BindDef twin pairs with an install site,
+		// a BindUndef twin with a teardown site — never crossed.
+		if d.undef != (tr.Kind == core.BindUndef) {
+			return
+		}
 		if tr.Pos.Row != 0 && d.pos.Row != 0 && tr.Pos != d.pos {
 			return
 		}
 	}
-	// Total match: stamp, mark, and fence the reads.
+	// Total match: stamp, mark, and fence the reads (the def halves drive
+	// the fence; an undef half re-fences nothing).
 	for k, i := range twins {
 		events[k].residentTwin = i
 		es.twinPlaced[i] = true
 		es.twinAdoptions = append(es.twinAdoptions, i)
-		if es.armBoundNames == nil {
-			es.armBoundNames = map[string]bool{}
+		if es.bindTwins[i].Kind == core.BindDef {
+			if es.armBoundNames == nil {
+				es.armBoundNames = map[string]bool{}
+			}
+			es.armBoundNames[es.bindTwins[i].Name] = true
 		}
-		es.armBoundNames[es.bindTwins[i].Name] = true
 	}
 }
 
@@ -4851,7 +4878,7 @@ func (es *EmitState) RecordDynApplyName(name string, args []core.Value, fn, out 
 	found := false
 	for i := len(es.frames[0]) - 1; i >= 0 && !found; i-- {
 		ev := &es.frames[0][i]
-		if ev.kind != evDynBind || ev.dyn == nil || ev.dyn.name != name {
+		if ev.kind != evDynBind || ev.dyn == nil || ev.dyn.name != name || ev.dyn.undef {
 			continue
 		}
 		switch {
@@ -8382,7 +8409,7 @@ func eventsBindDynScope(events []EmitEvent, names map[string]bool) bool {
 			ev := &evs[i]
 			switch ev.kind {
 			case evDynBind:
-				if names[ev.dyn.name] {
+				if !ev.dyn.undef && names[ev.dyn.name] {
 					return true
 				}
 			case evBranch:
@@ -8702,7 +8729,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			// an ordinary fn falls through to curReg == vc.r (the fork).
 			cf.Reg = rec.reg
 		}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, bindConsumes: collectResidentBindConsumes(rec.frag.events, rec.dead), isFnUnit: true}
 		es.emitDynParamBinds(flw, rec)
 		// The apply-loop replay's unnamed-param re-pushes seat at UNIT START —
 		// they must sit BELOW the loop's runtime value region, which exists only

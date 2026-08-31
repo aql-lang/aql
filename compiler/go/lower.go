@@ -155,26 +155,41 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // and an inert literal bakes unpooled. Any other provenance refuses the
 // whole program — the sound interpreter fallback, never a wrong install.
 func (lw *lowerer) lowerResidentBind(d *emitDynBind) string {
-	pop := false
+	if d.undef {
+		// The teardown half: no value operand, no stack effect — the op
+		// pops the name's live binding per element.
+		idx := len(lw.p.ResidentBinds)
+		lw.p.ResidentBinds = append(lw.p.ResidentBinds, ResidentBindSpec{
+			Name: d.name, Twin: d.residentTwin, Undef: true,
+		})
+		lw.emit(OpBindResident, idx, d.pos)
+		return ""
+	}
+	pop, pushCopy := false, false
 	src := d.src
 	switch {
 	case d.srcSeq >= 0 && len(lw.vm) > 0 && lw.vm[len(lw.vm)-1].seq == d.srcSeq &&
 		lw.vm[len(lw.vm)-1].idx == 0 && !lw.variadic[d.srcSeq]:
-		// The computed value is live on the sim top: peek in place.
+		// The computed value is on the sim top. A LIVE source is peeked in
+		// place (its downstream readers consume it later); a DEAD one was
+		// kept only for this bind (collectResidentBindConsumes suppressed
+		// the producer's drop) — the install consumes it, the interpreter's
+		// own def semantics.
+		pop = lw.dead[d.srcSeq]
 	case d.srcSeq >= 0:
 		slot, ok := lw.promoted[d.srcSeq]
 		if !ok {
 			return "arm-resident def `" + d.name + "` of unpromoted computed value"
 		}
-		src, pop = localOperand(slot), true
+		src, pop, pushCopy = localOperand(slot), true, true
 	case src.kind == opLocal:
-		pop = true
+		pop, pushCopy = true, true
 	case src.kind == opNone && core.IsInertConst(d.val):
-		src, pop = ConstOperand(lw.es.internUnpooled(d.val)), true
+		src, pop, pushCopy = ConstOperand(lw.es.internUnpooled(d.val)), true, true
 	default:
 		return "arm-resident def `" + d.name + "` of unknown provenance"
 	}
-	if pop {
+	if pushCopy {
 		lw.pushOperand(src, d.pos)
 	}
 	idx := len(lw.p.ResidentBinds)
@@ -198,6 +213,12 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 	d := ev.dyn
 	if d.residentTwin >= 0 {
 		return lw.lowerResidentBind(d)
+	}
+	if d.undef {
+		// An unstamped teardown event (a var pair the bridge declined, or
+		// the default lane) lowers to nothing — an undef binds nothing, so
+		// neither the dyn-scope nor the global write-back arms may fire.
+		return ""
 	}
 	needDyn := lw.es != nil && (lw.es.dynEnv || (lw.es.dynScopeNames != nil && lw.es.dynScopeNames[d.name]))
 	// A ROOT-unit def of a NON-concrete value additionally needs the
@@ -1763,7 +1784,13 @@ func (lw *lowerer) seatResults(ops []EmitOperand, rejectVariadic, allowVariadicT
 // 1)`). Gated to a SINGLE-value merge so the store seats exactly one value —
 // a multi-value / variadic merge is refused at the store hook.
 func (es *EmitState) planBranchPromotion(ev *EmitEvent, unit *emitUnit, refs map[int]int, buried, fragRef, fragInternal, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
-	if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
+	// A forceOrder branch source is NEVER dead: its binding is a real
+	// runtime consumer (a dyn-bound name's OpBindDynScope re-push, or an
+	// arm-resident install re-pushing per element — possibly for TWO defs
+	// off one merge, row 41's `def res (if …) def _2 res`), so it takes
+	// the store-once / re-push-per-use promotion below instead.
+	if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 &&
+		!es.dynEnv && !forceOrder[ev.seq] {
 		if dead == nil {
 			dead = map[int]bool{}
 		}
@@ -1771,7 +1798,8 @@ func (es *EmitState) planBranchPromotion(ev *EmitEvent, unit *emitUnit, refs map
 		return promoted, dead
 	}
 	if branchSingleValue(ev.br) && (es.eventInfo[ev.seq].valueDef || forceOrder[ev.seq]) &&
-		(refs[ev.seq] >= 2 || buried[ev.seq] || (fragRef[ev.seq] && !fragInternal[ev.seq]) || es.dynEnv) {
+		(refs[ev.seq] >= 2 || buried[ev.seq] || (fragRef[ev.seq] && !fragInternal[ev.seq]) ||
+			es.dynEnv || forceOrder[ev.seq]) {
 		if promoted == nil {
 			promoted = map[int]int{}
 		}
@@ -1789,6 +1817,28 @@ func (es *EmitState) planBranchPromotion(ev *EmitEvent, unit *emitUnit, refs map
 // dead-branch arm) so the value stays on the stack for the immediately-
 // following evDynBind to pop into the kept binding slot. The gate mirrors
 // lowerDynBind's needGlobal exactly.
+// collectResidentBindConsumes is collectRootBindConsumes' fn-unit twin
+// for ARM-RESIDENT def sites (§6.5's each-body recovery): a stamped
+// resident def whose computed source is refcount-DEAD (a def whose only
+// "reader" is the binding itself — `def res (if ok [1] [2])` read once
+// through the registry, never by provenance) needs the producer's drop
+// suppressed so the resident install can consume the value from the sim
+// top, exactly the root OpBindGlobal write-back's bind-consumes
+// discipline.
+func collectResidentBindConsumes(events []EmitEvent, dead map[int]bool) map[int]bool {
+	all, _, _ := collectPromotableEvents(events)
+	out := map[int]bool{}
+	for _, ev := range all {
+		if ev.kind != evDynBind || ev.dyn == nil {
+			continue
+		}
+		if d := ev.dyn; d.residentTwin >= 0 && d.srcSeq >= 0 && dead[d.srcSeq] {
+			out[d.srcSeq] = true
+		}
+	}
+	return out
+}
+
 func collectRootBindConsumes(events []EmitEvent, dead map[int]bool) map[int]bool {
 	all, _, _ := collectPromotableEvents(events)
 	out := map[int]bool{}
@@ -1827,7 +1877,17 @@ func (es *EmitState) collectDynBindSources(events []EmitEvent) map[int]bool {
 		// event, so the peek fast path reads the live top and every lowering
 		// shape stays byte-identical; a source promoted by the ordinary
 		// triggers re-pushes in Pop mode instead.)
-		if es.dynEnv || (es.dynScopeNames != nil && es.dynScopeNames[events[i].dyn.name]) {
+		if es.dynEnv || (es.dynScopeNames != nil && es.dynScopeNames[events[i].dyn.name]) ||
+			// An ARM-RESIDENT body compile (the each-unit bracket, regime
+			// only): every def's computed source is force-promoted so the
+			// resident install can re-push it from a frame slot — a body
+			// like row 41's binds one def's value from another's read
+			// (`def res (if …) def _2 res`), where the shared source can
+			// sit under later pushes at the second install site. Same
+			// store-once / re-push-per-use discipline as the dyn-bound
+			// sources above; regime-gated, so default unit code is
+			// byte-identical.
+			(es.twinRegime && es.armResidentDepth > 0) {
 			dynBindSrc[events[i].dyn.srcSeq] = true
 		}
 	}

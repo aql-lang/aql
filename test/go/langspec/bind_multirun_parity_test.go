@@ -88,7 +88,7 @@ var parityShapes = []parityShape{
 	{name: "each-literal-def", src: "[1 2 3] each [def x 5]",
 		probes: []string{"x"}},
 	{name: "each-elem-valued-def", src: "[10 20] each [ var [[r] def x r x] ]",
-		probes: []string{"x", "r"}, refused: "twin regime:"},
+		probes: []string{"x", "r"}},
 	{name: "each-zero-iterations", src: "[] each [def x 5]",
 		probes: []string{"x"}},
 	{name: "each-read-after", src: "[1 2] each [def x 5] x add 1",
@@ -97,9 +97,14 @@ var parityShapes = []parityShape{
 		probes: []string{"_u"}},
 	{name: "each-nested-multirun", src: "[1] each [[2 3] each [def x 5] 0]",
 		probes: []string{"x"}, refused: "twin regime:"},
+	// The regime's LAST corpus refusal, graduated: the var-param pair
+	// places both halves in-arm (RecordDynUndef's teardown event pairs
+	// the BindUndef twin), element-dependent defs re-push from
+	// force-promoted slots, and every probe — count, values, order, the
+	// pair's net zero — is measured interpreter-equal.
 	{name: "row-41-verbatim",
 		src:    `def xs [{ok:true} {ok:false}] def _ (xs each [ var [[r] def ok (r "ok" get) def res (if ok [1] [2]) def _2 res 0 ] ]) 9`,
-		probes: []string{"xs", "_", "ok", "res", "_2", "r"}, refused: "twin regime:"},
+		probes: []string{"xs", "_", "ok", "res", "_2", "r"}},
 }
 
 // probeInstalls enumerates name's install stack top-down on one instance

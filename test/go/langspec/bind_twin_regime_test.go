@@ -29,20 +29,20 @@ import (
 )
 
 // minTwinRegimeRows is the regime lane's own compiled floor — measured at
-// 6415 after the do-body adoption increment (the corpus-wide compiled
-// population, sensitive to test grouping like minCompiledRows' caveat,
-// hence the small headroom), against 6416 for the default recorder: the
-// full-placement gate now costs exactly 1 row, the suspended-recorder
-// each-body leaking def (bytecode-migrated.tsv:41), which has no stream
-// home until the arm-resident-twin increment. The other four table-only
-// rows (the do-body class) were recovered by ADOPTION, not by island
-// accounting — instrumentation showed all five record through the CLOSURE
-// path, so `do`'s spec flag (CallableSpec.BodyOnceKeepsDefs) licenses
-// AdoptBodyTwins to place each suspended body twin as a real twin op
-// after the call, replaying the captured entry (§6.5: replay, never
-// re-execution). Raise the floor as the each-body row closes; never lower
-// it.
-const minTwinRegimeRows = 6405
+// 6416 after the arm-resident increment closed the LAST regime-only
+// refusal (bytecode-migrated.tsv:41, the each-body leaking def): the
+// regime now compiles the SAME population as the default recorder, with
+// zero placement refusals and zero divergences. The recovery arc, each
+// step measured: four do-body rows by ADOPTION (BodyOnceKeepsDefs /
+// AdoptBodyTwins — placed replay ops after the call), and the each-body
+// row by ARM-RESIDENCY (BodyMultiRunKeepsDefs / AdoptResidentTwins /
+// OpBindResident — per-element runtime-value installs inside the
+// compiled unit, the var pair's both halves included), with the
+// cross-request parity oracle (bind_multirun_parity_test.go) pinning
+// count/value/order/definedness against a fresh interpreter. The small
+// headroom below 6416 is the usual grouping sensitivity
+// (minCompiledRows' caveat). Never lower it.
+const minTwinRegimeRows = 6410
 
 // TestTwinRegimeSmoke pins the flip's mechanics on four shapes small enough
 // to reason through by hand before the corpus lane runs: a concrete def

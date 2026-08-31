@@ -235,12 +235,28 @@ reverses an earlier plan:
    `def _2 …` gets its event seat. Graduated with measured parity in
    the oracle: each-literal-def, each-zero-iterations,
    each-underscore-def; read-after re-pinned to its own refusal.
-   STILL REFUSED, deliberately: the var-param pair class (row 41 — the
-   `RecordDynUndef` seam is stubbed sound; wiring it through
-   `__varundef` and bridging the BindUndef half is the NEXT step, and
-   graduates row 41), nested multi-run bodies (the bodyID fence), and
-   fold/scan/filter/outer/inner (unflagged until their handlers'
-   leak semantics are verified with oracle rows per word).
+
+   **ROW 41 IS GRADUATED — the regime reaches FULL CORPUS PARITY:
+   6416 rows compiled (equal to the default recorder), ZERO
+   regime-only refusals, zero divergences.** The final two pieces:
+   the var-param pair places BOTH halves in-arm (`__varundef`'s
+   handler notes the teardown through `RecordDynUndef` — an
+   undef-flagged dyn-bind event recorded only inside arm brackets;
+   the bridge pairs kinds strictly, BindDef↔install and
+   BindUndef↔teardown; the op's undef arm pops per element — net
+   zero per completed iteration, def-half leaked on a mid-body
+   raise, interpreter-identical), and element-dependent def CHAINS
+   (`def res (if …) def _2 res` — two installs off one producer)
+   lower via regime-gated force-promotion: arm-resident body
+   compiles force-promote every def's computed source
+   (collectDynBindSources' bracket arm), and planBranchPromotion
+   treats a forceOrder branch source as a promotion trigger rather
+   than dead. STILL REFUSED, deliberately: nested multi-run bodies
+   (the bodyID fence), root reads of arm-bound names (their own
+   refusal), and fold/scan/filter/outer/inner (unflagged until
+   their handlers' leak semantics are verified with oracle rows per
+   word — each such graduation is one flag + oracle rows, the
+   mechanism is done).
 
    The sandbox's first client and the data-level proof that preceded the
    flip: `TestBindingSandboxRollbackAndReplay`
