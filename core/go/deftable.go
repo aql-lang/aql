@@ -338,6 +338,71 @@ func (dt *DefTable) Entries(name string) []DefEntry {
 	return out
 }
 
+// EntriesSnapshot captures every name's FULL entry stack plus its generation
+// counter, for RestoreEntriesSnapshot. Unlike the depth-based Snapshot /
+// Restore pair — whose restore can only TRUNCATE, so a pop or a same-depth
+// replacement inside the region escapes it — this pair restores CONTENT
+// exactly. Unlike Clone + a table swap (RestoreBindings), the restore below
+// mutates IN PLACE, so code holding the *DefTable across the region keeps a
+// valid reference, which is what a region nested INSIDE a pass (a macro
+// template run, the dynamic-help eval firing mid-install) requires.
+type EntriesSnapshot struct {
+	stacks map[string][]DefEntry
+	gens   map[string]int64
+	valid  bool
+}
+
+// SnapshotEntries captures the table's current entry stacks for a later
+// RestoreEntriesSnapshot.
+func (dt *DefTable) SnapshotEntries() EntriesSnapshot {
+	if dt == nil {
+		return EntriesSnapshot{}
+	}
+	s := EntriesSnapshot{
+		stacks: make(map[string][]DefEntry, len(dt.stacks)),
+		gens:   make(map[string]int64, len(dt.stacks)),
+		valid:  true,
+	}
+	for name, ds := range dt.stacks {
+		cp := make([]DefEntry, len(ds))
+		copy(cp, ds)
+		s.stacks[name] = cp
+		s.gens[name] = dt.gen[name]
+	}
+	return s
+}
+
+// RestoreEntriesSnapshot restores the table to a SnapshotEntries capture, in
+// place. Only names whose GENERATION moved since the snapshot are touched —
+// the per-name gen counter records every mutation, so an untouched name needs
+// (and gets) no churn, keeping dispatch-cache invalidation proportional to
+// what the region actually changed. Restored and deleted names are touched,
+// so their gens move FORWARD — never rewound — which is what keeps a stale
+// cache entry from colliding with a re-advanced timeline (the hazard
+// RestoreBindings' wholesale cache reset exists for).
+func (dt *DefTable) RestoreEntriesSnapshot(s EntriesSnapshot) {
+	if dt == nil || !s.valid {
+		return
+	}
+	for name := range dt.stacks {
+		if _, ok := s.stacks[name]; !ok {
+			dt.mutations++
+			dt.touch(name)
+			delete(dt.stacks, name)
+		}
+	}
+	for name, want := range s.stacks {
+		if dt.gen[name] == s.gens[name] {
+			continue
+		}
+		cp := make([]DefEntry, len(want))
+		copy(cp, want)
+		dt.mutations++
+		dt.touch(name)
+		dt.stacks[name] = cp
+	}
+}
+
 // Stack returns a snapshot of the bodies currently stacked for name,
 // oldest-first. Returns nil if name is unbound. The returned slice is
 // owned by the caller.

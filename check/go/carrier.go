@@ -1803,9 +1803,16 @@ func narrowDynamicUses(r *core.Registry, word string, sig *core.Signature, args 
 		// guarded on the entry still being on top: a narrowing truncated away
 		// with its branch, or buried under a later real binding, is left
 		// alone — LIFO cleanup ordering tears chained narrowings down
-		// top-first.
+		// top-first. The DEPTH is part of the guard's identity token (Codex
+		// P1, PR #418): a later check-mode rebind of the same name can bind a
+		// carrier ValuesEqual deems equal to this one — value equality alone
+		// would pop that REAL binding and re-expose the narrowing beneath —
+		// but such a rebind sits at a DEEPER level, so requiring the depth at
+		// which this narrowing was pushed rules the impostor out.
+		depthAtPush := r.Defs.Depth(name)
 		r.Check.AddPassEndCleanup(func() {
 			if top, ok := r.Defs.TopEntry(name); ok && top.TypeDef == nil &&
+				r.Defs.Depth(name) == depthAtPush &&
 				core.ValuesEqual(top.Body, pushed) {
 				r.Defs.Pop(name)
 			}
@@ -2360,6 +2367,18 @@ func AnalyseLoopBody(r *core.Registry, body core.Value, bindNames []string, bind
 		for _, k := range names {
 			v := adds[k]
 			if pre, ok := r.Defs.Top(k); ok {
+				// An add that is only a NARROWING of the enclosing binding —
+				// narrowDynamicUses preserves the value's ID, so same ID as
+				// the pre binding means the same runtime value under a
+				// tighter static bound — is the pass's own refinement, not a
+				// binding the loop leaves: no join, no carried slot, no
+				// ledger note (core.InstallJoinedDefs applies the identical
+				// rule at the branch join; Codex P2, PR #418 — a body that
+				// merely consumed a dynamic name through a typed slot
+				// recorded a phantom `def` a twin would replay).
+				if v.Dynamic && v.ID != "" && v.ID == pre.ID {
+					continue
+				}
 				j := core.JoinCarriers(v, pre)
 				joined[k] = j
 				if loopCapture {
@@ -2373,7 +2392,12 @@ func AnalyseLoopBody(r *core.Registry, body core.Value, bindNames []string, bind
 			}
 		}
 		for _, k := range names {
-			r.Defs.Push(k, joined[k])
+			jv, ok := joined[k]
+			if !ok {
+				// A narrowing-only add was skipped above — nothing to install.
+				continue
+			}
+			r.Defs.Push(k, jv)
 			installed = append(installed, k)
 		}
 		// Stabilised when the body adds no bindings (the common single-round

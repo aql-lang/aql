@@ -212,6 +212,27 @@ func joinBranchDef(a, b Value) Value {
 	return out
 }
 
+// narrowedSameBinding reports whether an arm's `add` for a name is a
+// NARROWING of the enclosing binding rather than a rebind: narrowDynamicUses
+// preserves the value's ID when it tightens a dynamic binding at a typed use,
+// so an add whose ID equals the pre-branch binding's ID is the SAME runtime
+// value under a tighter static bound — an analysis artifact, not a binding
+// transition. A genuine arm `def` mints a fresh ID and never matches. Codex
+// (P2, PR #418) caught the consequence of pushing these: an arm that merely
+// CONSUMED a dynamic name through a typed slot grew the def stack, the join
+// re-pushed it, the ledger recorded a phantom `def` for a name the source
+// never defines, and the joined carrier leaked past the pass. Skipping the
+// push only loosens downstream matching to the pre-branch bound — sound, per
+// narrowing's own doctrine — and every reference keeps its seat, because the
+// pre binding carries the same ID.
+func narrowedSameBinding(r *Registry, k string, v Value) bool {
+	if !v.Dynamic || v.ID == "" {
+		return false
+	}
+	pre, ok := r.Defs.Top(k)
+	return ok && pre.ID == v.ID
+}
+
 // InstallJoinedDefs merges the `adds` maps from two branches back
 // into r.DefStacks. If both branches defined the same name, their
 // carriers are joined via joinBranchDef and the joined carrier is
@@ -221,17 +242,32 @@ func joinBranchDef(a, b Value) Value {
 // Every arm push here is a runtime-visible transition and is noted for the bind
 // ledger (§6.5): the joined binding is what the check model LEAVES BEHIND, and a
 // twin has to reproduce it. Recording only the speculative arm's own installDef
-// would undercount exactly the branch-arm population NUR110 is about.
+// would undercount exactly the branch-arm population NUR110 is about. An arm
+// add that is only a NARROWING of the enclosing binding (narrowedSameBinding)
+// is neither pushed nor noted — it is the pass's own refinement, not a binding
+// the runtime leaves.
 func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 	seen := make(map[string]bool)
 	for k, tv := range then {
 		seen[k] = true
 		if ev, ok := else_[k]; ok {
+			if narrowedSameBinding(r, k, tv) && narrowedSameBinding(r, k, ev) {
+				continue
+			}
 			r.Defs.Push(k, joinBranchDef(tv, ev))
+			// The both-arms join is a transition exactly like the one-arm
+			// joins below — this note was MISSING (the doc above claimed
+			// every push noted; a both-arms `def op` left a live binding
+			// with no ledger entry, which the ledgered-names-only oracle
+			// could not see).
+			r.NoteBindTransition(BindDef, k, tv.Pos())
 			continue
 		}
 		// then-only: join with the pre-branch top-of-stack if any.
 		if pre, ok := r.Defs.Top(k); ok {
+			if narrowedSameBinding(r, k, tv) {
+				continue
+			}
 			r.Defs.Push(k, joinBranchDef(tv, pre))
 		} else {
 			r.Defs.Push(k, tv)
@@ -244,6 +280,9 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 		}
 		// else-only: join with pre-branch top-of-stack.
 		if pre, ok := r.Defs.Top(k); ok {
+			if narrowedSameBinding(r, k, ev) {
+				continue
+			}
 			r.Defs.Push(k, joinBranchDef(ev, pre))
 		} else {
 			r.Defs.Push(k, ev)

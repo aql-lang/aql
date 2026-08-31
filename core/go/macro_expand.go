@@ -146,10 +146,18 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	// installed (quoted) in the def scope so an `unquote (expr)` referencing a
 	// param resolves too. Body-locals created while running the template (e.g.
 	// `def g (gensym)`) leak into the scope and stay live for the walk.
-	snap := r.Defs.Snapshot()
-	// Everything installed from here to the Restore calls below — a template
+	// A CONTENT-preserving snapshot (SnapshotEntries), not the depth-based
+	// Defs.Snapshot: the depth restore can only TRUNCATE, so a template that
+	// ran `undef` on a pre-existing name — or an overlapping redefinition —
+	// escaped the region while the ledger bracket below suppressed its note
+	// (Codex P2, PR #418). The entries restore is IN PLACE and gen-guarded —
+	// a table SWAP (RestoreBindings) breaks every reference the enclosing
+	// pass holds across this nested region, measured as ledgered defs
+	// vanishing from the post-pass registry.
+	snap := r.Defs.SnapshotEntries()
+	// Everything installed from here to the restore calls below — a template
 	// body-local like `def t (gensym)`, and anything an `unquote (expr)` runs —
-	// is torn down by that Restore, so the bind ledger must not record it: the
+	// is torn down by that restore, so the bind ledger must not record it: the
 	// pass leaves no such binding, and the live-depth oracle read the recorded
 	// installs as phantom depth (the gensym-temp class, 8 of its 9 mismatches
 	// across edge-quote-3.tsv and macro.tsv).
@@ -173,11 +181,11 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	copy(body, sig.Body())
 	res, runErr := New(r).Run(body)
 	if runErr != nil {
-		r.Defs.Restore(snap)
+		r.Defs.RestoreEntriesSnapshot(snap)
 		return nil, fmt.Errorf("macro %s: template: %w", fnDef.Name, runErr)
 	}
 	if len(res) == 0 {
-		r.Defs.Restore(snap)
+		r.Defs.RestoreEntriesSnapshot(snap)
 		return nil, &BoruError{Code: "macro_error",
 			Detail: fmt.Sprintf("macro %s: template produced no value", fnDef.Name)}
 	}
@@ -206,7 +214,7 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	}
 
 	expanded, expErr := expandTemplate(r, tmpl, bindings, renames)
-	r.Defs.Restore(snap)
+	r.Defs.RestoreEntriesSnapshot(snap)
 	if expErr != nil {
 		return nil, fmt.Errorf("macro %s: %w", fnDef.Name, expErr)
 	}

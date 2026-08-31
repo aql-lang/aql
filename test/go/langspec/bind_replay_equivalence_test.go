@@ -98,6 +98,13 @@ var syntheticBranchArmSources = []string{
 	// nothing — a no-op is not a transition.
 	`def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  ` +
 		`undef add (fnsig [[Flag Flag] [Boolean]])  1`,
+	// NARROWING-ONLY bodies (Codex P2, PR #418): a branch arm / loop body
+	// that merely CONSUMES a dynamic name through a typed slot must leave NO
+	// join push and NO ledger entry beyond the def itself — narrowing
+	// preserves the value's ID, and an add whose ID equals the pre-binding's
+	// is the pass's own refinement, not a binding the runtime leaves.
+	`def m (do {a: 1})  def c false  if c [keys m drop] [0] end 1`,
+	`def m (do {a: 1})  while [false] [keys m drop] end 1`,
 }
 
 // composeLedger replays one ledger symbolically and reports the incoherent

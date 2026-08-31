@@ -215,7 +215,59 @@ wrong in ways worth keeping:
   rule and records like it.
 
 Census after: 7453 → 7443 (ten phantom truncated-region entries out,
-loop-join entries in).
+loop-join entries in); → 7441 after the BindSigUndef split (two locked-match
+no-op notes gone).
+
+**STRENGTHENED 2026-08-31 (Codex review round on PR #418), and the stronger
+form found four more real defects.** The oracle now checks BOTH directions:
+ledgered names against live depth (as before), and — for rows that COMPILED
+— every name whose live depth changed across the pass with NO ledger entry
+(the direction the first cut could not see; a wholly-missed transition
+reported as success). Two documented scopings keep it honest rather than
+tolerant: the unledgered direction runs only where a Program exists (a
+refused or erroring row legitimately abandons partial state no twin will
+replay — `gen [T] gen [U] …` raises with the outer binder still pushed, in
+both engines), and `__`-prefixed interner bindings (`__const:`, `__gen:`)
+are §6.5's own compile-time products. What the stronger form caught, each
+fixed rather than excluded:
+
+- **The both-arms branch join never noted.** `InstallJoinedDefs`' both-arms
+  push (`if c [def op 1] [def op 2]`) had no `NoteBindTransition` at all —
+  the function's own doc claimed every push noted — so a live binding with
+  no ledger entry, invisible to the ledgered-names-only walk.
+- **Narrowing-only "adds" recorded phantom defs at BOTH joins.** An arm or
+  loop body that merely CONSUMED a dynamic name through a typed slot grew
+  the def stack via `narrowDynamicUses`; the join re-pushed it and noted a
+  `def` for a name the source never defines — and the joined carrier leaked
+  past the pass (the staleness bug's join-level sibling). The discriminator
+  is exact because narrowing preserves the value's ID: an add whose ID
+  equals the pre-binding's ID is the same runtime value under a tighter
+  bound — skipped at both `InstallJoinedDefs` and `AnalyseLoopBody`, no
+  push, no note (`narrowedSameBinding`).
+- **The truncated-region restores could not undo pops.** `Defs.Snapshot` /
+  `Restore` is depth-based — restore can only TRUNCATE — so a macro
+  template or help-eval that ran `undef` on a pre-existing name (or an
+  overlapping redefinition) escaped the region while `SuppressBindLedger`
+  suppressed its note. Fixed with the new CONTENT-preserving, IN-PLACE
+  `DefTable.SnapshotEntries` / `RestoreEntriesSnapshot` (gen-guarded, so
+  untouched names see zero cache churn and restored gens move forward).
+  **A hazard paid for on the way: `RestoreBindings` — the table SWAP — is
+  only safe at the between-phases point.** Used inside these nested
+  regions it broke every reference the enclosing pass holds across the
+  region, measured as ~200 corpus rows' ledgered defs vanishing from the
+  post-pass registry. The flip's runtime client uses it exactly once,
+  between CompileCheck and RunProgram, never nested.
+- **The narrowing cleanup's pop guard needed the push-time DEPTH in its
+  identity token** (Codex's P1): a later check-mode rebind can bind a
+  carrier `ValuesEqual` cannot tell from the narrowing's own value, and
+  value equality alone would pop that real binding; the depth rules the
+  impostor out.
+
+The loop-join POSITION limitation stands as recorded (every joined name
+gets the note-time CurWordPos floor — a real site inside the body, not each
+def's own): §6.5 already names the join position as the one to revisit, and
+the flip's arm-resident twins replace join twins wholesale, at which point
+each arm def carries its own position.
 
 ## What the ledger excludes, and why each exclusion was measured
 

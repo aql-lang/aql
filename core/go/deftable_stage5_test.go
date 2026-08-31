@@ -166,3 +166,64 @@ func TestDefTableEntries(t *testing.T) {
 		t.Fatalf("the returned slice must be a copy; table saw %v", fresh[0].Body)
 	}
 }
+
+// SnapshotEntries / RestoreEntriesSnapshot is the CONTENT-preserving region
+// restore (macro template runs, the dynamic-help eval): unlike the depth
+// restore it recreates popped entries and same-depth replacements, unlike a
+// table swap it mutates in place, and its gen guard touches only names the
+// region actually changed.
+func TestSnapshotEntriesRestore(t *testing.T) {
+	var nilDT *DefTable
+	nilDT.RestoreEntriesSnapshot(nilDT.SnapshotEntries()) // both nil-safe
+	dt := NewDefTable()
+	dt.RestoreEntriesSnapshot(EntriesSnapshot{}) // invalid snapshot: no-op
+
+	dt.Push("keep", NewInteger(1))
+	dt.Push("popme", NewInteger(2))
+	dt.PushType("ty", TInteger, NewInteger(3))
+	keepGen := dt.Gen("keep")
+	snap := dt.SnapshotEntries()
+
+	// The region: pops an entry (the depth restore could NOT undo this),
+	// replaces one at the same depth, and introduces a new name.
+	dt.Pop("popme")
+	dt.Pop("ty")
+	dt.Push("ty", NewInteger(9))
+	dt.Push("fresh", NewInteger(4))
+
+	dt.RestoreEntriesSnapshot(snap)
+	if dt.Depth("popme") != 1 {
+		t.Fatalf("a popped entry must be restored: depth = %d", dt.Depth("popme"))
+	}
+	if e, _ := dt.TopEntry("ty"); e.TypeDef != TInteger || !e.Minted {
+		t.Fatalf("a same-depth replacement must be restored: %+v", e)
+	}
+	if dt.Has("fresh") {
+		t.Fatal("a region-introduced name must be deleted")
+	}
+	if dt.Gen("keep") != keepGen {
+		t.Fatal("an untouched name must not be gen-churned by the restore")
+	}
+	if dt.Gen("popme") == snap.gens["popme"] {
+		t.Fatal("a restored name's gen must move FORWARD, never rewind")
+	}
+}
+
+// The depth-based Snapshot / Restore pair, exercised directly: its former
+// main in-package callers (the macro template run, the help eval) moved to
+// the content-preserving SnapshotEntries, but the depth pair remains the
+// fn-body / carrier-merge sandboxing primitive and keeps its own pin.
+func TestStage5DefTableDepthSnapshotRestore(t *testing.T) {
+	dt := NewDefTable()
+	dt.Push("x", NewInteger(1))
+	snap := dt.Snapshot()
+	dt.Push("x", NewInteger(2))
+	dt.Push("z", NewInteger(3))
+	dt.Restore(snap)
+	if dt.Depth("x") != 1 {
+		t.Fatalf("Restore must truncate x to its snapshot depth: %d", dt.Depth("x"))
+	}
+	if dt.Has("z") {
+		t.Fatal("Restore must delete a name absent from the snapshot")
+	}
+}
