@@ -2277,6 +2277,13 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 				return nil, err
 			}
 			stack = ns
+		case compiler.OpBindTwin:
+			// INERT (§6.5's staged emission): the op marks where the check
+			// pass performed a binding transition (Arg indexes
+			// Program.BindTwins), and under the keep-the-installs regime that
+			// install is already in the registry — applying it again would
+			// double-install, the exact hazard §6.5 names. The
+			// rollback-and-replay flip gives this arm its semantics.
 		case compiler.OpLookupDynScope:
 			// The interpreter's stepWord simple-value substitution, at run
 			// time: read the name's live binding. A miss, or a binding the

@@ -55,24 +55,39 @@ reverses an earlier plan:
    below for what the 9 actually were, because both prior readings of them
    were wrong in instructive ways.
 2. **Emit the `def` twin while the check-pass installs are still KEPT**, so
-   it is inert, and assert the replay matches. **The TABLE half is DONE
-   (2026-08-31):** every compiled Program now carries `Program.BindTwins` —
-   the pass's ledger mirrored entry for entry through `NoteBindTransition`'s
-   own funnel (`EmitRecorder.RecordBindTwin`, fired after every ledger
-   suppression, appended unconditionally — no Active/Suspend gate, because a
-   second filter would be a second source of truth), and
-   `TestBindTwinsEqualLedger` asserts table == ledger elementwise over every
-   compiled corpus row, no allowance (first run: 7270 compiled rows, 4100
-   with twins, 0 mismatched). What step 2 still lacks is the POSITIONED
-   inert op: an OpBindTwin per entry at its stream position, no-op under the
-   keep regime, so the placement machinery is proven before the flip trusts
-   it. Placement classes to treat separately when building that: top-level
-   transitions land naturally in production order; branch-join twins fire
-   AFTER TakeFragment (enclosing stream, after the branch event); loop-join
-   twins fire inside AnalyseLoopBody BEFORE its caller's RecordLoop; an
-   each/fold body's leaking def is noted while the recorder is SUSPENDED and
-   has no stream home until the twin becomes arm-resident — the same
-   arm-residency work NUR110's runtime half needs at the flip.
+   it is inert, and assert the replay matches. **DONE (2026-08-31), in two
+   halves.** The TABLE half: every compiled Program carries
+   `Program.BindTwins` — the pass's ledger mirrored entry for entry through
+   `NoteBindTransition`'s own funnel (`EmitRecorder.RecordBindTwin`, fired
+   after every ledger suppression, table-appended unconditionally — no
+   Active/Suspend gate, because a second filter would be a second source of
+   truth), and `TestBindTwinsEqualLedger` asserts table == ledger
+   elementwise over every compiled corpus row, no allowance (7270 compiled
+   rows, 4100 with twins, 0 mismatched). The POSITIONED half: an
+   `evBindTwin` event is appended at note time whenever the recorder is
+   LIVE, and lowers to an `OpBindTwin` instruction (arg = table index; a VM
+   no-op under the keep regime) at the transition's production-order
+   position; `TestBindTwinOpsArePlacedOrderedSubset` gates it — every op
+   indexes a real entry, indices strictly increase within each unit, and
+   placement is a SUBSET of the table by design (7124 of 7154 compiled-row
+   entries placed; the ~30 unplaced are the suspended-recorder class —
+   each/fold body defs, which have no stream home until the twin is
+   arm-resident — plus ops discarded with an island). The FLIP's refusal
+   logic is what will tighten subset to equality: a program with an
+   unplaced twin must refuse rather than replay incompletely.
+
+   Two lessons from the positioned half, paid for in one corpus row each:
+   - `emptyFlexHookOperand`'s "no event recorded since the construction"
+     proof enumerates BOOKKEEPING event kinds to skip (evDynBind, and now
+     evBindTwin). Any future bookkeeping event kind must join that skip or
+     it silently refuses `walk`'s empty-flex accumulator row
+     (`corpus-core.tsv:50` went 7270 → 7269 compiled; found by diffing the
+     compiled-row LIST against the previous commit, which is faster and
+     sharper than re-running the census — keep that probe in the toolbox).
+   - Golden churn was 4 tests, all hand-written disasm strings in
+     `lang/go/bytecode_emit_test.go` — small because BIND_TWIN emits only
+     at def/undef/type/join sites, and worth re-pinning by hand: each new
+     BIND_TWIN line in a golden documents where a twin lands.
 3. **Only then** flip to rollback-and-replay onto
    `core/go/binding_sandbox.go`, which is already built with the exact
    mints-retained / retirements-rolled-back partition §6.5 requires, and

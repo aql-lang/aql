@@ -8,7 +8,10 @@ package core
 // analysis algorithms above them stay check) — and Stage 4b moved the
 // CheckState methods here beside their type.
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // CheckState aggregates the static type-checking state that used to
 // live as ten loose fields on Registry. Bundling them serves two
@@ -1597,6 +1600,22 @@ const (
 	// partitions the TypeTable so retirements roll back and mints stay baked.
 	BindTypeInstall
 )
+
+// String names the kind for census output and the disassembler's BIND_TWIN
+// argument rendering.
+func (k BindKind) String() string {
+	switch k {
+	case BindDef:
+		return "def"
+	case BindUndef:
+		return "undef"
+	case BindDefReplace:
+		return "def-replace"
+	case BindTypeInstall:
+		return "type-install"
+	}
+	return "bind-kind(" + strconv.Itoa(int(k)) + ")"
+}
 
 // BindTransition is one entry of CheckState.BindLedger.
 //

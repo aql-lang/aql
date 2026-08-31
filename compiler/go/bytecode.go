@@ -463,6 +463,15 @@ const (
 	// still defers on a genuine miss, an active token, and a class binding (a
 	// class read as data is not a parser).
 	OpLookupDynScopeData
+	// OpBindTwin marks ONE bind-ledger transition's position in the
+	// instruction stream (§6.5's inert-emission stage): Arg indexes
+	// Program.BindTwins. INERT under the keep-the-installs regime — the VM
+	// executes it as a no-op, because the check pass's install is already in
+	// the registry and applying the twin too would double-install (the exact
+	// hazard §6.5 names). The rollback-and-replay flip gives it semantics:
+	// re-install the recorded transition at this position, against the
+	// rolled-back registry. Zero stack effect either way.
+	OpBindTwin
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -518,6 +527,7 @@ var opcodeNames = [...]string{
 	OpCallDynMixedFromMark: "CALL_DYN_MIXED_FROM_MARK",
 	OpBindGlobal:           "BIND_GLOBAL",
 	OpLookupDynScopeData:   "LOOKUP_DYN_SCOPE_DATA",
+	OpBindTwin:             "BIND_TWIN",
 }
 
 func (o Opcode) String() string {
@@ -1231,6 +1241,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		case OpBindGlobal:
 			gb := p.GlobalBinds[in.Arg]
 			fmt.Fprintf(sb, " g%-3d ; global bind %s @depth %d", in.Arg, gb.Name, gb.Depth)
+		case OpBindTwin:
+			tw := p.BindTwins[in.Arg]
+			fmt.Fprintf(sb, " w%-3d ; bind twin %s %s @depth %d (inert)", in.Arg, tw.Kind, tw.Name, tw.Depth)
 		case OpCallDynMethod:
 			dm := p.DynMethods[in.Arg]
 			fmt.Fprintf(sb, " d%-3d ; %s/%d -> %d (shaped method)", in.Arg, dm.Word, dm.NArgs, dm.NOut)

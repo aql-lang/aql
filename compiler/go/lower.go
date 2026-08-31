@@ -606,6 +606,11 @@ func (lw *lowerer) lowerEvents(events []EmitEvent, scopeFloor int) string {
 			reason = lw.lowerStore(ev)
 		case evDynBind:
 			reason = lw.lowerDynBind(ev)
+		case evBindTwin:
+			// Zero stack effect, no operands: the op only marks the
+			// transition's stream position (inert until the flip), so neither
+			// the sim nor the residual accounting moves.
+			lw.emit(OpBindTwin, ev.twin.idx, ev.twin.pos)
 		default:
 			reason = "unknown event kind"
 		}
@@ -693,6 +698,8 @@ func forEachOperand(ev *EmitEvent, fn func(EmitOperand)) {
 		visit(ev.store.src)
 	case evDynBind:
 		visit(ev.dyn.src)
+	case evBindTwin:
+		// no operands — the twin references nothing and produces nothing
 	default: // evBranch
 		// thenVal / elsVal are the value-arm operands — meaningful only when
 		// thenIsVal / elsIsVal, and an opEvent only for the computed-arm shapes

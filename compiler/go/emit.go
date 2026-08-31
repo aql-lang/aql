@@ -352,6 +352,7 @@ const (
 	evTrap
 	evStore
 	evDynBind
+	evBindTwin
 )
 
 // emitUserCall is a recorded call of a compiled boru fn: the target
@@ -436,6 +437,18 @@ type EmitEvent struct {
 	trap  EmitTrap
 	store *emitStore
 	dyn   *emitDynBind
+	twin  *emitBindTwin
+}
+
+// emitBindTwin marks one bind-ledger transition's STREAM POSITION (§6.5's
+// inert-emission stage): idx indexes EmitState.bindTwins / the finalized
+// Program.BindTwins. No operands and no outputs — the event exists purely so
+// the lowering emits an OpBindTwin at the point in production order where the
+// check pass performed the transition, which is the placement the
+// rollback-and-replay flip will rely on.
+type emitBindTwin struct {
+	idx int
+	pos core.SrcPos
 }
 
 // emitDynBind is one recorded `def` site (every value def records one,
@@ -3539,6 +3552,18 @@ func (es *EmitState) RecordBindTwin(tr core.BindTransition) {
 		return
 	}
 	es.bindTwins = append(es.bindTwins, tr)
+	// STREAM PLACEMENT, the narrower half: an evBindTwin event marks where in
+	// production order the transition happened, so the lowering emits an
+	// (inert) OpBindTwin there. Recorded only while the recorder is LIVE —
+	// unlike the table append above, which is the census. A transition noted
+	// while recording is suspended (an each/fold body's leaking def) has no
+	// stream home until the twin becomes arm-resident, so it stays
+	// table-only; the emission gate counts placed ops as a strictly-ordered
+	// subset of the table for exactly this reason.
+	if es.Active() {
+		es.appendEvent(EmitEvent{kind: evBindTwin,
+			twin: &emitBindTwin{idx: len(es.bindTwins) - 1, pos: tr.Pos}})
+	}
 }
 
 // RecordDefRebind records a `def` dispatch of a loop-carried name: the
@@ -8647,6 +8672,8 @@ func eventPos(ev EmitEvent) core.SrcPos {
 		return ev.store.pos
 	case evDynBind:
 		return ev.dyn.pos
+	case evBindTwin:
+		return ev.twin.pos
 	}
 	return ev.br.pos
 }

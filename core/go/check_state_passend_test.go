@@ -96,3 +96,18 @@ func TestCloneCopiesPassEndCleanups(t *testing.T) {
 		t.Fatalf("the original's closer runs both cleanups exactly once, got %d", ran)
 	}
 }
+
+// BindKind.String names every kind (census output, the disassembler's
+// BIND_TWIN rendering); an out-of-range kind still renders identifiably.
+func TestBindKindString(t *testing.T) {
+	cases := map[BindKind]string{
+		BindDef: "def", BindUndef: "undef",
+		BindDefReplace: "def-replace", BindTypeInstall: "type-install",
+		BindKind(99): "bind-kind(99)",
+	}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Errorf("BindKind(%d).String() = %q, want %q", uint8(k), got, want)
+		}
+	}
+}

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	compiler "github.com/boru-lang/boru/compiler/go"
 	core "github.com/boru-lang/boru/core/go"
 	lang "github.com/boru-lang/boru/lang/go"
 )
@@ -140,4 +141,102 @@ func TestBindTwinsEqualLedger(t *testing.T) {
 			"a recorder-lifecycle hole ate or duplicated a twin (§6.5)", mismatched)
 	}
 	_ = core.BindDef // keep the core import for the shared helpers' package
+}
+
+// twinOpIdxs collects each OpBindTwin instruction's table index from one code
+// unit, in instruction order.
+func twinOpIdxs(code []compiler.Instr) []int {
+	var idxs []int
+	for _, in := range code {
+		if in.Op == compiler.OpBindTwin {
+			idxs = append(idxs, int(in.Arg))
+		}
+	}
+	return idxs
+}
+
+// TestBindTwinOpsArePlacedOrderedSubset gates the PLACEMENT half of the inert
+// emission: every OpBindTwin instruction indexes a real table entry, and the
+// placed indices are STRICTLY INCREASING within each code unit — the stream
+// order is the table's (= the ledger's = the pass's) order. Placement is a
+// SUBSET of the table by design at this stage: a transition noted while
+// recording was suspended (an each/fold body's leaking def) has no stream
+// home until its twin becomes arm-resident, and an op recorded inside a
+// discarded island vanishes with it — the FLIP is where every unplaced twin
+// must either gain an op or refuse the program, and this gate is what that
+// refusal logic will tighten.
+func TestBindTwinOpsArePlacedOrderedSubset(t *testing.T) {
+	specDir := filepath.Join("..", "..", "..", "lang", "spec")
+	entries, err := os.ReadDir(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rowsWithOps, opsTotal, twinsTotal, bad := 0, 0, 0, 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		f, ferr := os.Open(filepath.Join(specDir, e.Name()))
+		if ferr != nil {
+			t.Fatal(ferr)
+		}
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+		lineNo := 0
+		for sc.Scan() {
+			lineNo++
+			line := strings.TrimRight(sc.Text(), " \t")
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.Split(line, "\t")
+			if len(parts) < 2 {
+				continue
+			}
+			src := strings.TrimSpace(parts[0])
+			a, aerr := lang.New()
+			if aerr != nil {
+				continue
+			}
+			prog, _, _, _ := a.CompileCheck(src)
+			if prog == nil {
+				continue
+			}
+			twinsTotal += len(prog.BindTwins)
+			units := [][]compiler.Instr{prog.Code}
+			for i := range prog.Fns {
+				units = append(units, prog.Fns[i].Code)
+			}
+			sawOp := false
+			for _, code := range units {
+				idxs := twinOpIdxs(code)
+				if len(idxs) > 0 {
+					sawOp = true
+				}
+				opsTotal += len(idxs)
+				for i, idx := range idxs {
+					if idx < 0 || idx >= len(prog.BindTwins) {
+						bad++
+						t.Errorf("%s:%d: BIND_TWIN arg %d outside the %d-entry table",
+							e.Name(), lineNo, idx, len(prog.BindTwins))
+					} else if i > 0 && idx <= idxs[i-1] {
+						bad++
+						t.Errorf("%s:%d: BIND_TWIN order broken (%d after %d) — the stream must "+
+							"replay transitions in the pass's order", e.Name(), lineNo, idx, idxs[i-1])
+					}
+				}
+			}
+			if sawOp {
+				rowsWithOps++
+			}
+		}
+		_ = f.Close()
+	}
+	t.Logf("bind-twin placement: %d rows with ops, %d ops placed over %d table entries", rowsWithOps, opsTotal, twinsTotal)
+	if rowsWithOps == 0 || opsTotal == 0 {
+		t.Fatal("no OpBindTwin was placed anywhere — the placement is not wired")
+	}
+	if bad > 0 {
+		t.Errorf("%d placement violations", bad)
+	}
 }
