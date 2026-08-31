@@ -116,6 +116,7 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 	}
 
 	// --- defs / locals.
+	e.RecordBindTwin(BindTransition{})
 	e.MarkValueDef(Value{})
 	e.RecordDefRebind("n", Value{}, SrcPos{})
 	e.RecordDynBind("n", Value{}, SrcPos{})

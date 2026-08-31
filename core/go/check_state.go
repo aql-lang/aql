@@ -1673,7 +1673,12 @@ func (r *Registry) NoteBindTransition(kind BindKind, name string, pos SrcPos) {
 	} else if pos.Row == 0 {
 		pos = r.Check.CurWordPos
 	}
-	r.Check.BindLedger = append(r.Check.BindLedger, BindTransition{
-		Kind: kind, Name: name, Pos: pos, Depth: r.Defs.Depth(name),
-	})
+	tr := BindTransition{Kind: kind, Name: name, Pos: pos, Depth: r.Defs.Depth(name)}
+	r.Check.BindLedger = append(r.Check.BindLedger, tr)
+	// Mirror the entry into the compile pass's twin table THROUGH the same
+	// funnel, after the same suppressions — the one-source-of-truth property
+	// the emission gate (TestBindTwinsEqualLedger) then verifies end to end:
+	// a divergence means a recorder-lifecycle hole (an isolated or swapped
+	// recorder ate a twin), not a second filter to keep in sync.
+	r.Check.Recorder().RecordBindTwin(tr)
 }

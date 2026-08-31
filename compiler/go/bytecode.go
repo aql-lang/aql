@@ -963,7 +963,15 @@ type Program struct {
 	// naming the binding and the DEPTH its check-pass install recorded, so the
 	// runtime value replaces the kept carrier binding in place (never a push).
 	GlobalBinds []GlobalBindSpec
-	DynMethods  []DynMethodSpec
+	// BindTwins is the program's bind-twin table (design/FULL-COMPILATION.0.md
+	// §6.5): the check pass's bind ledger, mirrored entry for entry through
+	// NoteBindTransition's own funnel and finalized with the Program. INERT
+	// under today's keep-the-installs regime — no instruction consumes it; it
+	// exists so the emission is complete and gated (the langspec gate asserts
+	// table == ledger for every compiled corpus program) before the
+	// rollback-and-replay flip gives each entry an op at its source position.
+	BindTwins  []core.BindTransition
+	DynMethods []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the
 	// pooled const to deep-clone and the frame-local slot to seat it in, for a
 	// multi-read compound body literal that needs one per-call construction shared

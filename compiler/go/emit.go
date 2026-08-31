@@ -557,6 +557,17 @@ type EmitState struct {
 	// (residualReadStable — the end-of-program re-push soundness gate).
 	defReadGens map[string]int64
 
+	// bindTwins is the pass's bind-twin table: one entry per bind-ledger
+	// transition, appended by RecordBindTwin as NoteBindTransition fires
+	// (§6.5's inert-emission stage). Deliberately OUTSIDE the event stream
+	// and the Checkpoint/Rollback pools: the population is the ledger's, the
+	// ledger's own suppressions are the single filter, and no note fires
+	// inside a rolled-back loop round — so the table mirrors the ledger
+	// verbatim, which is exactly what the emission gate asserts. Copied to
+	// Program.BindTwins at Finalize; carries no instruction until the
+	// rollback-and-replay flip gives each entry an op at its position.
+	bindTwins []core.BindTransition
+
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
 	// buildFnBodyReturnsFn generalises an Any arg into an Any param as a
@@ -3512,6 +3523,22 @@ func (es *EmitState) NoteLoopCarried(name string, joined, pre core.Value) {
 		}
 	}
 	u.localByID[joined.ID] = slot
+}
+
+// RecordBindTwin appends one bind-ledger transition to the pass's twin table
+// (§6.5's inert-emission stage; the table's contract is on the bindTwins
+// field). UNCONDITIONAL by design — no Active()/Suspend gate: the twin
+// population is the ledger's, NoteBindTransition already applied every
+// suppression before calling here, and a second filter would be a second
+// source of truth for the emission gate to drift against. In particular a
+// transition noted while recording is SUSPENDED (an each/fold body run whose
+// def genuinely leaks) still belongs to the table, exactly as it belongs to
+// the ledger.
+func (es *EmitState) RecordBindTwin(tr core.BindTransition) {
+	if es == nil {
+		return
+	}
+	es.bindTwins = append(es.bindTwins, tr)
 }
 
 // RecordDefRebind records a `def` dispatch of a loop-carried name: the
@@ -7965,7 +7992,11 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		es.frames[0] = eventsThroughSeq(es.frames[0], es.trapAt)
 		residual = nil
 	}
-	p := &Program{DynEnv: es.dynEnv}
+	p := &Program{DynEnv: es.dynEnv,
+		// The twin table travels with the finalized Program verbatim (a copy,
+		// so a later pass on the same EmitState cannot mutate a delivered
+		// Program). Inert until the rollback-and-replay flip — see the field.
+		BindTwins: append([]core.BindTransition(nil), es.bindTwins...)}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*core.Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
 	// (counting the program residual) is promoted to a frame local so the

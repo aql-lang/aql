@@ -55,11 +55,36 @@ reverses an earlier plan:
    below for what the 9 actually were, because both prior readings of them
    were wrong in instructive ways.
 2. **Emit the `def` twin while the check-pass installs are still KEPT**, so
-   it is inert, and assert the replay matches.
+   it is inert, and assert the replay matches. **The TABLE half is DONE
+   (2026-08-31):** every compiled Program now carries `Program.BindTwins` —
+   the pass's ledger mirrored entry for entry through `NoteBindTransition`'s
+   own funnel (`EmitRecorder.RecordBindTwin`, fired after every ledger
+   suppression, appended unconditionally — no Active/Suspend gate, because a
+   second filter would be a second source of truth), and
+   `TestBindTwinsEqualLedger` asserts table == ledger elementwise over every
+   compiled corpus row, no allowance (first run: 7270 compiled rows, 4100
+   with twins, 0 mismatched). What step 2 still lacks is the POSITIONED
+   inert op: an OpBindTwin per entry at its stream position, no-op under the
+   keep regime, so the placement machinery is proven before the flip trusts
+   it. Placement classes to treat separately when building that: top-level
+   transitions land naturally in production order; branch-join twins fire
+   AFTER TakeFragment (enclosing stream, after the branch event); loop-join
+   twins fire inside AnalyseLoopBody BEFORE its caller's RecordLoop; an
+   each/fold body's leaking def is noted while the recorder is SUSPENDED and
+   has no stream home until the twin becomes arm-resident — the same
+   arm-residency work NUR110's runtime half needs at the flip.
 3. **Only then** flip to rollback-and-replay onto
    `core/go/binding_sandbox.go`, which is already built with the exact
    mints-retained / retirements-rolled-back partition §6.5 requires, and
-   whose header says "NO CLIENT YET" for precisely this reason.
+   whose header says "NO CLIENT YET" for precisely this reason. Two facts
+   for that stage, established while building the table: `OpBindGlobal`
+   today covers only ROOT defs of NON-concrete values (lowerDynBind's
+   needGlobal — a concrete `def x 1` emits NO op at all, so under rollback
+   every value-def twin needs an op, not just the write-back class), and the
+   flip's twin for a JOINED binding cannot be the ledger's join entry
+   replayed unconditionally — that would re-create NUR110's leak at the VM
+   level; the join entries are the pass's summary, and the runtime twin
+   must live in the arm.
 
 **Do not invert that staging.** Rollback-first breaks every program until
 the last transition has a twin, and offers no intermediate state where the
@@ -226,6 +251,8 @@ position than the construct that produced the binding.
 | `test/go/langspec/bind_ledger_census_test.go` | the census, and that every entry names a real source site |
 | `test/go/langspec/bind_replay_equivalence_test.go` | depth composition over the corpus, and over the synthetic branch-arm rows the corpus lacks |
 | `test/go/langspec/bind_ledger_live_oracle_test.go` | the STRONG oracle: final ledger depth per name == the depth the pass left in the live registry, corpus + synthetics, no allowance |
+| `test/go/langspec/bind_twin_emission_test.go` | the emission gate: every compiled Program's `BindTwins` table == the pass's ledger elementwise — what a recorder-lifecycle hole would break |
+| `compiler/go/bind_twin_test.go` | `RecordBindTwin`'s contract directly: unconditional append (suspension must not filter), nil-receiver safe, the finalized Program carries a copy |
 | `core/go/bind_ledger_note_test.go` | `NoteBindTransition`'s arms directly — suppressions, position precedence, kind/name/depth |
 | `core/go/check_state_passend_test.go` | the pass-end cleanup seam (LIFO, exactly once, reset by `Begin`, Clone-isolated) and the `SuppressBindLedger` bracket |
 | `check/go/narrow_passend_test.go` | the narrowing pop at pass end (popped on top, left alone when buried) and that `AnalyseLoopBody` ledgers its joined installs |

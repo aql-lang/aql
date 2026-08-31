@@ -99,6 +99,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive produced probes should be false")
 	}
 
+	e.RecordBindTwin(core.BindTransition{})
 	e.MarkValueDef(in)
 	e.RecordDefRebind("n", in, core.SrcPos{})
 	e.RefuseCarriedUndef("n")

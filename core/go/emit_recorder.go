@@ -151,6 +151,15 @@ type EmitRecorder interface {
 	AlreadyProduced(id string) bool
 
 	// --- defs / locals ---------------------------------------------------
+	// RecordBindTwin mirrors ONE bind-ledger entry into the compile pass's
+	// twin table (design/FULL-COMPILATION.0.md §6.5, the inert-emission
+	// stage). Fired by NoteBindTransition itself, AFTER every ledger
+	// suppression, so the twin population and the ledger share a single
+	// funnel by construction — the corpus gate then asserts the finalized
+	// Program's table equals the pass's ledger elementwise, which is what
+	// the rollback-and-replay flip will trust. Inactive: no-op (a plain
+	// check pass builds no program).
+	RecordBindTwin(tr BindTransition)
 	MarkValueDef(v Value)
 	RecordDefRebind(name string, v Value, pos SrcPos)
 	RecordDynBind(name string, v Value, pos SrcPos)
@@ -284,6 +293,7 @@ func (inactiveEmit) Materialise(v Value) (Value, bool)                      { re
 func (inactiveEmit) ZeroOutProduced(string) bool                            { return false }
 func (inactiveEmit) AlreadyProduced(string) bool                            { return false }
 
+func (inactiveEmit) RecordBindTwin(BindTransition)              {}
 func (inactiveEmit) MarkValueDef(Value)                         {}
 func (inactiveEmit) RecordDefRebind(string, Value, SrcPos)      {}
 func (inactiveEmit) RefuseCarriedUndef(string)                  {}
