@@ -13,6 +13,10 @@ import (
 // finalized Program carries a COPY, so a later append on the same EmitState
 // cannot mutate a delivered Program.
 func TestRecordBindTwinAppendsUnconditionally(t *testing.T) {
+	// The table-only twin below is a legal inert residue only OUTSIDE the
+	// regime (inside it the placement gate refuses), so pin the flag off
+	// explicitly instead of inheriting the ambient environment.
+	t.Setenv("BORU_TWIN_REGIME", "")
 	var nilES *EmitState
 	nilES.RecordBindTwin(core.BindTransition{Name: "x"}, core.DefEntry{}) // must not panic
 
@@ -71,6 +75,10 @@ func countBindTwinOps(p *Program) int {
 // residue, which is the invariant the ordered-subset gate already pins.
 func TestFinalizeTwinRegimeStampAndPlacementGate(t *testing.T) {
 	// Default: the flag off, the stamp false, table-only twins tolerated.
+	// Set EXPLICITLY rather than relying on the ambient environment — this
+	// arm is about the flag being off, so it must read that way under a run
+	// that exports BORU_TWIN_REGIME=1 (the flip rehearsal).
+	t.Setenv("BORU_TWIN_REGIME", "")
 	es := NewEmitState()
 	resume := es.Suspend()
 	es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "a", Depth: 1},
@@ -267,11 +275,21 @@ func TestTwinsFullyPlacedCountsFnUnitOps(t *testing.T) {
 		BindTwins: []core.BindTransition{{Kind: core.BindDef, Name: "a", Depth: 1}},
 		Fns:       []CompiledFn{{Name: "f", Code: []Instr{{Op: OpBindTwin}}}},
 	}
-	if !twinsFullyPlaced(p) {
+	if !twinsFullyPlaced(p, nil) {
 		t.Fatal("a twin op inside a fn unit must count toward placement")
 	}
 	p.BindTwins = append(p.BindTwins, core.BindTransition{Kind: core.BindUndef, Name: "a"})
-	if twinsFullyPlaced(p) {
+	if twinsFullyPlaced(p, nil) {
 		t.Fatal("a table wider than the placed ops must fail the scan")
+	}
+	// A twin the TRAP truncation dropped is an unreachable transition, not a
+	// lost one: the interpreter raises at the trap and never performs it, so
+	// the rollback leaving it uninstalled is the matching runtime state and
+	// the scan must not demand an op for it.
+	if !twinsFullyPlaced(p, map[int]bool{1: true}) {
+		t.Fatal("a trap-dropped twin must satisfy the scan without an op")
+	}
+	if twinsFullyPlaced(p, map[int]bool{0: true}) {
+		t.Fatal("the exemption is per index — an unrelated index must not excuse twin 1")
 	}
 }

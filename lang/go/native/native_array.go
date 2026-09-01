@@ -379,7 +379,12 @@ var allArrayNatives = []NativeFunc{
 		// 2-arg form) to the element type, since the accumulator starts as the
 		// first element. A 0-net body is fold's own fold_error, raised faithfully,
 		// so EmptyBodyErrors keeps it native rather than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []Value) []Value {
+		// BodyMultiRunKeepsDefs: doFold drives InvokeBody once per element on
+		// the shared registry with no def cleanup — the same seam and the same
+		// leak eachHandler has (verified at the handler, not inferred from the
+		// word's family), so a body def installs once per element with that
+		// element's runtime value. Arm-residency's license; see core's field doc.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, BodyMultiRunKeepsDefs: true, Inputs: func(a []Value) []Value {
 			elem := DataListElemTypeFromValue(a[1])
 			if len(a) >= 3 {
 				return []Value{foldAccCarrier(a[2]), NewElementCarrier(elem)}
@@ -434,7 +439,10 @@ var allArrayNatives = []NativeFunc{
 		// starts as the first element, so both inputs carry the element type. A
 		// 0-net body is scan's own scan_error, raised faithfully, so EmptyBodyErrors
 		// keeps it native rather than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []Value) []Value {
+		// BodyMultiRunKeepsDefs: scanHandler's own per-element loop calls
+		// InvokeBody on the shared registry with no cleanup (handler-verified,
+		// like each's) — one leaked install per element, per-element value.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, BodyMultiRunKeepsDefs: true, Inputs: func(a []Value) []Value {
 			e := DataListElemTypeFromValue(a[1])
 			return []Value{NewElementCarrier(e), NewElementCarrier(e)}
 		}},
@@ -469,7 +477,12 @@ var allArrayNatives = []NativeFunc{
 		// pair, producing a 2D list. The body compiles to a closure unit that
 		// outerHandler drives per pair via InvokeBody; CompileFallbackBody is
 		// the fallback when the body cannot compile.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(a []Value) []Value {
+		// BodyMultiRunKeepsDefs: that per-PAIR InvokeBody loop runs on the
+		// shared registry with no cleanup (handler-verified), so a body def
+		// leaks one install per pair — the multi-run population is the pair
+		// grid rather than a flat element list, which changes the COUNT the
+		// oracle measures but not the mechanism.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, BodyMultiRunKeepsDefs: true, Inputs: func(a []Value) []Value {
 			le := DataListElemTypeFromValue(a[1])
 			re := DataListElemTypeFromValue(a[2])
 			return []Value{NewElementCarrier(le), NewElementCarrier(re)}
@@ -514,6 +527,11 @@ var allArrayNatives = []NativeFunc{
 		// would mean walking the data's spine by (depth - rank), and nothing
 		// measured needs that precision — the gradual carrier is the honest
 		// answer for a shape the call's own arguments decide.
+		// No BodyMultiRunKeepsDefs, deliberately: eachrankHandler does drive
+		// InvokeBody per cell with the same leak its siblings have, but the
+		// word refuses EARLIER as a Stage-2 code-body word, so the flag would
+		// never fire and nothing could measure it. Flag it when eachrank
+		// itself graduates — an unmeasurable graduation is not one.
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(_ []Value) []Value {
 			return []Value{NewElementCarrier(TAny)}
 		}},
@@ -536,6 +554,15 @@ var allArrayNatives = []NativeFunc{
 		// list. Same spec as fold's therefore, with the inputs taken a level
 		// deeper — and no handler change at all, because doFold already drives
 		// the body through InvokeBody.
+		// No BodyMultiRunKeepsDefs, and NOT because the handler differs — it is
+		// the same doFold `fold` carries the flag for. MEASURED (the parity
+		// oracle, 2026-09-01): a def in a foldaxis body installs twice on the
+		// interpreter and NOT AT ALL under the twin regime, with no twin
+		// recorded for the body, so the placement gate cannot see the loss.
+		// The flag makes no difference to that — the divergence reproduces
+		// with and without it — so this word's body class is an open FLIP
+		// BLOCKER (the regime must refuse it, or record its twins) rather than
+		// a graduation. Tracked in design/FULL-COMPILATION-HANDOFF.0.md.
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
 			elem := rank2ElemType(a[2])
 			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}

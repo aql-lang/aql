@@ -105,6 +105,41 @@ var parityShapes = []parityShape{
 	{name: "row-41-verbatim",
 		src:    `def xs [{ok:true} {ok:false}] def _ (xs each [ var [[r] def ok (r "ok" get) def res (if ok [1] [2]) def _2 res 0 ] ]) 9`,
 		probes: []string{"xs", "_", "ok", "res", "_2", "r"}},
+
+	// --- The sibling multi-run words, graduated on the same mechanism.
+	// `each` was flagged first because its body population is the simplest
+	// (one run per element); these carry BodyMultiRunKeepsDefs for the same
+	// handler-verified reason — each drives InvokeBody per element/pair on
+	// the shared registry with no def cleanup — and the rows below MEASURE
+	// that the installs land interpreter-identically rather than assuming
+	// the family shares a mechanism.
+	{name: "fold-literal-def", src: "fold [ def x 5 ] [10 20] 0",
+		probes: []string{"x"}},
+	{name: "fold-elem-valued-def", src: "fold [ var [[a b] def x b (a add b)] ] [10 20] 0",
+		probes: []string{"x", "a", "b"}},
+	// The fold ACCUMULATOR FIXED POINT: a list accumulator widens between
+	// analysis rounds, so the body is analysed more than once and every
+	// round records the var pair's twins afresh. Only the surviving round
+	// is placed; the superseded rows describe no runtime transition and the
+	// placement gate exempts them (MultiRunBodyGuard). Before that, this
+	// shape refused — the row is the regression pin.
+	{name: "fold-list-accumulator", src: "fold [ var [[k acc] (push k acc) ]] [1 2] []",
+		probes: []string{"k", "acc"}},
+	{name: "scan-elem-valued-def", src: "scan [ var [[a b] def x 5 (a add b)] ] [10 20]",
+		probes: []string{"x", "a", "b"}},
+	// outer's multi-run population is the PAIR GRID, not a flat element
+	// list — a different count through the same mechanism.
+	{name: "outer-pair-def", src: "outer [ var [[a b] def x 5 (a add b)] ] [1 2] [3 4]",
+		probes: []string{"x"}},
+	// NOT graduated, and the reason is a FINDING rather than a decision:
+	// `ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]`
+	// installs `x` twice on the interpreter and ZERO times under the regime,
+	// with or without the spec flag — no twin is recorded for that body, so
+	// the placement gate is blind to the loss and the program compiles
+	// silently wrong. It is a flip blocker (today's keep-installs default
+	// hides it: the pass's own install answers the read), so it is written
+	// up in the handoff rather than pinned here — a row must be measured
+	// parity or pinned refusal, and this shape is neither yet.
 }
 
 // probeInstalls enumerates name's install stack top-down on one instance

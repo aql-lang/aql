@@ -683,6 +683,12 @@ type EmitState struct {
 	// root install of the name (RecordBindTwin's placed arm) clears it —
 	// the new binding is the read's referent again.
 	armBoundNames map[string]bool
+	// supersededTwins are twin-table indices recorded by an analysis round
+	// a LATER round of the same body replaced (the fold-accumulator fixed
+	// point re-runs its body until the accumulator type settles). They
+	// describe no runtime transition — only the surviving round's ops
+	// execute — so the placement gate exempts them; see MultiRunBodyGuard.
+	supersededTwins map[int]bool
 	// armReadRefusal is the placement-gate poison a root read of an
 	// arm-bound name latches (first read wins, mirroring
 	// MarkUncompilable's first-reason rule). The fence is the REGIME's
@@ -1714,6 +1720,24 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 	inner := es.BodyAnalysisGuard()
 	return func() {
 		inner()
+		// A SUPERSEDED ROUND's twins are speculative, not real. Some
+		// higher-order analyses re-run the same body to a fixed point (fold's
+		// accumulator widens between rounds — analyseHigherOrderBodyVals'
+		// contract), and every round records the body's transitions afresh.
+		// Only the LAST round describes the unit the bridge pairs against, so
+		// the earlier rounds' entries are artifacts of the analysis, the same
+		// category the ledger already excludes for a rolled-back body run.
+		// Mark them exempt from the placement gate rather than demanding an op
+		// no lowering will ever emit: at runtime only the surviving round's ops
+		// execute, so the dead rows install nothing.
+		if es.lastMultiRun.bodyID == bodyID && es.lastMultiRun.to <= from {
+			for i := es.lastMultiRun.from; i < es.lastMultiRun.to; i++ {
+				if es.supersededTwins == nil {
+					es.supersededTwins = map[int]bool{}
+				}
+				es.supersededTwins[i] = true
+			}
+		}
 		es.lastMultiRun = multiRunLatch{bodyID: bodyID, from: from, to: len(es.bindTwins), reg: r}
 	}
 }
@@ -8501,6 +8525,48 @@ func (es *EmitState) emitDynParamBinds(flw *lowerer, rec *fnUnitRec) {
 	}
 }
 
+// truncateAtTrap ends the root event stream at a recorded TERMINAL TRAP and
+// returns the twin-table rows the regime's full-placement gate must not
+// demand an op for, because they describe no runtime transition at all.
+//
+// The trap (a check-mode-suppressed runtime error compiled as an OpTrap)
+// ends the program: the events up to and including it are kept — their side
+// effects run first, exactly as in the interpreter — and everything after is
+// dropped as unreachable. The twins that truncation drops are UNREACHABLE
+// transitions, not lost ones: the check pass walks past a trap where
+// execution would not, so it records twins for defs the interpreter never
+// performs. With the installs rolled back and no op to replay them those
+// bindings correctly do not exist at runtime, which is stricter than the
+// keep-installs default — that strands the pass's post-trap install in the
+// registry. Collected by twin INDEX, not by position: an adopted twin's
+// event carries its body's position, not the trap's.
+//
+// Rows a SUPERSEDED analysis round recorded join the same set — see
+// MultiRunBodyGuard. Returns nil when there is nothing to exempt.
+func (es *EmitState) truncateAtTrap() map[int]bool {
+	var exempt map[int]bool
+	mark := func(i int) {
+		if exempt == nil {
+			exempt = map[int]bool{}
+		}
+		exempt[i] = true
+	}
+	for i := range es.supersededTwins {
+		mark(i)
+	}
+	if es.trapAt == 0 {
+		return exempt
+	}
+	kept := eventsThroughSeq(es.frames[0], es.trapAt)
+	for _, ev := range es.frames[0][len(kept):] {
+		if ev.kind == evBindTwin && ev.twin != nil {
+			mark(ev.twin.idx)
+		}
+	}
+	es.frames[0] = kept
+	return exempt
+}
+
 func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 	if es == nil {
 		return nil, "no emit state", false
@@ -8508,13 +8574,8 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 	if !es.Compilable {
 		return nil, es.Reason, false
 	}
+	twinExempt := es.truncateAtTrap()
 	if es.trapAt != 0 {
-		// A terminal trap (a check-mode-suppressed runtime error compiled as an
-		// OpTrap) ends the program: keep the events up to and including the trap
-		// — their side effects run first, exactly as in the interpreter — and
-		// drop everything after it plus the residual (both unreachable: the trap
-		// aborts the run, and no result is produced).
-		es.frames[0] = eventsThroughSeq(es.frames[0], es.trapAt)
 		residual = nil
 	}
 	p := &Program{DynEnv: es.dynEnv,
@@ -8867,7 +8928,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 	if es.armReadRefusal != "" {
 		return nil, es.armReadRefusal, false
 	}
-	if es.twinRegime && !twinsFullyPlaced(lw.p) {
+	if es.twinRegime && !twinsFullyPlaced(lw.p, twinExempt) {
 		return nil, "twin regime: a bind transition has no stream placement (a multi-run-body or post-trap twin), so the rollback would lose it", false
 	}
 	return lw.p, "", true
@@ -8879,13 +8940,19 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 // entry needs a placed OpBindTwin — recorded live at its own position,
 // or adopted after a once-run defs-keeping body's closure record
 // (AdoptBodyTwins) — to replay its transition. A twin with none — a
-// multi-run body's (the each-body class, arm-residency's territory), or
-// one whose op a terminal trap truncated — is a transition the rollback
-// would silently lose, so the program refuses to the interpreter. The
-// scan counts REAL ops in the lowered code, table index by table index,
-// never the recorder's intent flags: an op a rollback or trap dropped
-// refuses no matter what was once marked.
-func twinsFullyPlaced(p *Program) bool {
+// multi-run body's, where no single op can stand for a per-element
+// transition — is one the rollback would silently lose, so the program
+// refuses to the interpreter. The scan counts REAL ops in the lowered
+// code, table index by table index, never the recorder's intent flags:
+// an op a rollback dropped refuses no matter what was once marked.
+//
+// exempt names the twins that describe no runtime transition at all, so
+// demanding an op for them would refuse a program the regime models
+// exactly right (Finalize builds the set): rows a TERMINAL TRAP truncated
+// away — unreachable, because the interpreter raises at the trap and never
+// performs them — and rows a SUPERSEDED analysis round recorded, which the
+// surviving round's ops replace.
+func twinsFullyPlaced(p *Program, exempt map[int]bool) bool {
 	placed := make([]bool, len(p.BindTwins))
 	mark := func(code []Instr) {
 		for _, in := range code {
@@ -8907,8 +8974,8 @@ func twinsFullyPlaced(p *Program) bool {
 	for i := range p.Fns {
 		mark(p.Fns[i].Code)
 	}
-	for _, ok := range placed {
-		if !ok {
+	for i, ok := range placed {
+		if !ok && !exempt[i] {
 			return false
 		}
 	}
