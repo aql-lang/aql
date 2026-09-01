@@ -276,6 +276,50 @@ reverses an earlier plan:
    any "this gate is obsolete now" claim — `-compile` falls back
    silently and will tell you the gate is deletable when it is not.
 
+   **SECOND REHEARSAL (2026-09-01, on merged main): 7 failures, all in
+   `lang/go`, and the first one root-caused was a REAL BUG in the
+   bridge.** `AdoptResidentTwins`' registry fence compared the noting
+   and unit registries against `es.reg` — which is LAST-BIND-WINS,
+   re-bound at the top of every `Engine.Run` including module-body and
+   island sub-engines, and never restored — where its own doc says
+   "the program registry". So a body that merely CALLED a
+   module-defined boru fn (the whole `Test.prop` surface: the each
+   body calls `Test.run-property`, whose body analysis re-binds
+   `es.reg` to the `boru:test` sub-registry) left the fence comparing
+   against a foreign pointer, declined an adoption whose registries
+   actually agreed, and the program refused for want of the placement.
+   Fixed by comparing against `progReg`, captured once at the first
+   bind and never re-bound — the same pointer Finalize's `CompiledFn.Reg`
+   stamp already uses for this exact hazard. Three `Test.prop` tests
+   go green; rehearsal failures 7 → 4.
+
+   Also settled: the `expected 3, got 2` line is NOT a divergence. It
+   is `boru:test`'s own stderr report from a DELIBERATELY failing
+   fixture (`TestTestBodyFailingAssertParity`), printed twice because
+   the harness runs the source on both surfaces and byte-identical
+   failure text is what that test asserts. It passes with the flag on
+   and off; it merely sat next to the real failures in combined output.
+
+   **And the refusal-REASON item was hiding a live DEFAULT-lane
+   miscompile — NUR116.** `def _ (for [1 4] [i]) _` answers `1 2 3`
+   compiled and `2 3 1` interpreted, under `-force-compile`, today,
+   with no flag involved. `SplitLoopRegionBind` still declines the
+   first-value split for `_`/`$` on the premise that such a name
+   "records no dyn-bind event" — which the regime's `RecordDynBind`
+   falsified. The regime is the SOUND side here, so the fix rides with
+   the flip: admit `_`/`$` at the root under the regime, keep
+   capitalised names declining (they still record nothing). The
+   corpus cannot see it — zero `def _ (for` rows in 124 TSVs.
+
+   The three GOLDEN failures are annotation-only and must be edited
+   WITH the flip, not before it: the goldens are inline raw strings in
+   `lang/go/bytecode_emit_test.go`, the instruction streams are
+   byte-identical between modes (same opcodes, offsets, const indices,
+   jump targets), and the only differences are the disassembler's own
+   mode tags — `(inert)` → `(replay)` on bind twins and a `(push)`
+   suffix on global binds. Editing them before the flip would break the
+   default lane, which still emits `(inert)`.
+
    Still open at the rehearsal's end, for whoever takes the flip:
    golden bytecode diffs (`TestEmitGoldens`,
    `TestEmitMacroExpansionGolden`, `TestEmitModuleCallLowering`,
