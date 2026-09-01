@@ -532,6 +532,10 @@ var allArrayNatives = []NativeFunc{
 		// word refuses EARLIER as a Stage-2 code-body word, so the flag would
 		// never fire and nothing could measure it. Flag it when eachrank
 		// itself graduates — an unmeasurable graduation is not one.
+		// It shares foldaxis's structural ReturnsFn (and so its unanalysed
+		// body — see the root cause noted there), but NOT its silent
+		// divergence: refusing early sends the whole program to the
+		// interpreter, which is the sound direction.
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(_ []Value) []Value {
 			return []Value{NewElementCarrier(TAny)}
 		}},
@@ -557,12 +561,19 @@ var allArrayNatives = []NativeFunc{
 		// No BodyMultiRunKeepsDefs, and NOT because the handler differs — it is
 		// the same doFold `fold` carries the flag for. MEASURED (the parity
 		// oracle, 2026-09-01): a def in a foldaxis body installs twice on the
-		// interpreter and NOT AT ALL under the twin regime, with no twin
-		// recorded for the body, so the placement gate cannot see the loss.
-		// The flag makes no difference to that — the divergence reproduces
-		// with and without it — so this word's body class is an open FLIP
-		// BLOCKER (the regime must refuse it, or record its twins) rather than
-		// a graduation. Tracked in design/FULL-COMPILATION-HANDOFF.0.md.
+		// interpreter and NOT AT ALL under the twin regime, and the flag makes
+		// no difference — the divergence reproduces with and without it.
+		//
+		// ROOT CAUSE, and it is in the line below rather than in the handler:
+		// ReturnsPreserveListAt is a STRUCTURAL ReturnsFn, so unlike
+		// eachReturnsFn / foldReturnsFn it never calls
+		// analyseHigherOrderBodyVals. The check pass therefore never RUNS this
+		// body, records no bind twins for it, and the regime's placement gate
+		// — which can only check twins that exist — is blind by construction.
+		// Today's keep-installs default hides the loss because the pass's own
+		// install answers the read. The fix is to analyse the body (which also
+		// earns the flag) or to refuse the shape; until then this is a FLIP
+		// BLOCKER, tracked in design/FULL-COMPILATION-HANDOFF.0.md.
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
 			elem := rank2ElemType(a[2])
 			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}

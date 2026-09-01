@@ -235,8 +235,27 @@ reverses an earlier plan:
    `import "boru:array-util"  ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]`,
    then read `x`. The flip must either record that body's twins or
    refuse the shape; until then it is the regime's one known SILENT
-   divergence, and the class deserves a sweep — any body whose
-   analysis records no twins is invisible to the gate by construction.
+   divergence.
+
+   **The sweep is done, and the class is BOUNDED AT TWO WORDS.** The
+   root cause is not in the handler — foldaxis reduces through the very
+   `doFold` that `fold` carries the flag for — it is the RETURNS
+   FUNCTION. `foldaxis` and `eachrank` alone use the structural
+   `ReturnsPreserveListAt`, which never calls
+   `analyseHigherOrderBodyVals`; every other Callable body word
+   (`each`, `fold`, `scan`, `outer`) has a ReturnsFn that analyses its
+   body, and all four are now flagged and oracle-pinned. A body the
+   check pass never RUNS records no bind twins, and a gate that can
+   only check twins that exist is blind BY CONSTRUCTION — which is the
+   general statement of the hazard, and the thing to test for when any
+   new body word is added: if its ReturnsFn does not analyse the body,
+   the twin machinery cannot see it. Of the two, only `foldaxis`
+   diverges silently; `eachrank` refuses earlier as a Stage-2
+   code-body word, which sends the whole program to the interpreter —
+   the sound direction. So the flip's remaining work here is one word,
+   with a known mechanism: give foldaxis an analysing ReturnsFn (which
+   also earns it the flag, measured through a new oracle row), or
+   refuse the shape.
 
    **The payoff list's frozen-read deletion is NOT licensed by the
    flip alone — measured, not argued.** Disabling the stored-handler
