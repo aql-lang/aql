@@ -1927,11 +1927,17 @@ func (es *EmitState) SplitLoopRegionBind(name string, v core.Value) (core.Value,
 		return core.Value{}, false
 	}
 	// Only split when RecordDynBind will actually EMIT the splice for this
-	// name: a filtered name (`_`/`$`-prefixed, capitalised, empty) records no
-	// dyn-bind event, so splitting would drop one check-residual value with
-	// no splice instruction to remove it at run time (`def _ (for 3 [1])`
-	// compiled [1 1 1] vs the interpreter's [1 1]).
-	if name == "" || name[0] == '_' || name[0] == '$' || core.IsCapitalisedName(name) {
+	// name: without the event there is no splice instruction to remove the
+	// spare value at run time (`def _ (for 3 [1])` compiled [1 1 1] vs the
+	// interpreter's [1 1]). An empty or capitalised name never records, so
+	// those still decline outright; `_`/`$` DO record at the regime's root
+	// seat, and asking recordsFilteredDynBind is what keeps this gate and
+	// RecordDynBind's from drifting apart again — they did, and the drift
+	// was NUR116's silent miscompile.
+	if name == "" || core.IsCapitalisedName(name) {
+		return core.Value{}, false
+	}
+	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() {
 		return core.Value{}, false
 	}
 	// The split binds the region's FIRST-arrived value, so the element
@@ -1963,7 +1969,15 @@ func (es *EmitState) SplitEventRegionBind(name string, v core.Value) (core.Value
 		es.reg.Check.NestedBodyDepth != 0 {
 		return core.Value{}, false
 	}
-	if name == "" || name[0] == '_' || name[0] == '$' || core.IsCapitalisedName(name) {
+	// The same single-sourced premise as SplitLoopRegionBind's (see there):
+	// this sibling carried the identical stale spelling. It is not
+	// divergence-bearing today — both lanes refuse the do-catch region shape
+	// for other reasons — but a gate that agrees with RecordDynBind only by
+	// coincidence is the bug NUR116 already was once.
+	if name == "" || core.IsCapitalisedName(name) {
+		return core.Value{}, false
+	}
+	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() {
 		return core.Value{}, false
 	}
 	pr, ok := es.producedBy[v.ID]
@@ -6608,6 +6622,27 @@ func (es *EmitState) recordCodeBodyClosureRead(args []core.Value) bool {
 	return false
 }
 
+// recordsFilteredDynBind reports whether RecordDynBind will actually record
+// an event for a `_`/`$`-prefixed name in the CURRENT recorder state — the
+// root twin-regime seat, or an arm-resident body compile.
+//
+// It exists because TWO gates need the same answer and drifted apart when
+// only one of them was updated: RecordDynBind opened for these names under
+// the regime, while SplitLoopRegionBind kept declining them on the premise
+// that they "record no dyn-bind event" — which by then was false. The split
+// then never happened, the def bound the whole region instead of its first
+// value, and `def _ (for [1 4] [i]) _` compiled to `1 2 3` where the
+// interpreter answers `2 3 1` (NUR116, silent, on the DEFAULT lane too).
+// Asking one predicate is what keeps the answer single-sourced; never
+// re-spell this condition at a call site.
+func (es *EmitState) recordsFilteredDynBind() bool {
+	if es == nil {
+		return false
+	}
+	rootRegime := es.twinRegime && len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0
+	return rootRegime || es.armResidentDepth > 0
+}
+
 func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 	if !es.Active() || name == "" || core.IsCapitalisedName(name) {
 		return
@@ -6629,8 +6664,7 @@ func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 		// name); everywhere else — the default regime, fn bodies, nested
 		// units — the historical skip stands and default bytecode stays
 		// byte-identical.
-		rootRegime := es.twinRegime && len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0
-		if !rootRegime && es.armResidentDepth == 0 {
+		if !es.recordsFilteredDynBind() {
 			return
 		}
 	}

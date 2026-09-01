@@ -2,6 +2,7 @@ package lang
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -571,13 +572,25 @@ func TestEdgeFindingLoopCollectDefCompiles(t *testing.T) {
 	mustRefuseWithParity(t,
 		`def m {n: 3} def xs (for (m get "n") [1]) xs`,
 		"consumes loop results")
-	// A FILTERED name (`_`/`$`/capitalised) records no dyn-bind event, so the
-	// split would drop a check-residual value with no splice to remove it at
-	// run time — SplitLoopRegionBind declines it, and the dead-`_` def then
-	// refuses soundly (PR #278 review P1-c: `def _ (for 3 [1])` compiled
-	// [1 1 1] vs interp [1 1]).
-	mustRefuseWithParity(t, `def _ (for 3 [1])`, "residual shape beyond Stage 1")
-	mustRefuseWithParity(t, `def _ (for 2 [7 8])`, "residual shape beyond Stage 1")
+	// A FILTERED name splits only where RecordDynBind actually records the
+	// event — the two gates now ask ONE predicate (recordsFilteredDynBind),
+	// which is the fix for them having drifted apart.
+	//
+	// Under the DEFAULT regime `_`/`$` still record nothing, so the split
+	// would drop a check-residual value with no splice to remove it at run
+	// time; the decline stands and the dead-`_` def refuses soundly (PR #278
+	// review P1-c). Under the TWIN REGIME the root seat DOES record, so the
+	// same sources compile — and must, because declining there is what
+	// produced NUR116's silent miscompile (`def _ (for [1 4] [i]) _`
+	// answering `1 2 3` against the interpreter's `2 3 1`). After the flip
+	// both rows become unconditional mustCompileWithParity.
+	if os.Getenv("BORU_TWIN_REGIME") == "1" {
+		mustCompileWithParity(t, `def _ (for 3 [1])`, "[1 1]")
+		mustCompileWithParity(t, `def _ (for 2 [7 8])`, "[8 7 8]")
+	} else {
+		mustRefuseWithParity(t, `def _ (for 3 [1])`, "residual shape beyond Stage 1")
+		mustRefuseWithParity(t, `def _ (for 2 [7 8])`, "residual shape beyond Stage 1")
+	}
 	// A CONDITIONALLY-REACHED split (inside a branch arm) is declined by the
 	// NestedBodyDepth gate, so the branch's analysis-only binding never
 	// leaks: `if false [def xs …] [] xs` refuses and the interpreter's
