@@ -185,6 +185,109 @@ reverses an earlier plan:
    CondBodyDepth refusal, NUR037), and collapse `GlobalBindSpec.Push`/
    the twin-regime branches into the only path.
 
+   **THE FLIP REHEARSAL, and what it found (2026-09-01).** The corpus
+   lane is not the flip's whole exposure, and the cheapest way to see
+   the rest is to RUN THE SUITES WITH THE FLAG ON —
+   `BORU_TWIN_REGIME=1 go test ./...` per module. The corpus rows are
+   `lang/spec` TSVs; the Go suites carry shapes the corpus has none
+   of, and they are where the flip actually bites. Three classes were
+   closed by that rehearsal, each with a principled account rather
+   than a widened allowance:
+
+   - **Post-trap twins are UNREACHABLE, not lost.** Finalize truncates
+     the stream at a terminal trap, dropping any `evBindTwin` after it;
+     the placement gate then refused (NUR058's typed-def trap row). But
+     the check pass walks past a trap where EXECUTION stops, so those
+     twins describe defs the interpreter never performs — with the
+     installs rolled back and no op to replay them, the bindings
+     correctly do not exist. `truncateAtTrap` collects them and the
+     gate exempts them. This is STRICTER than the keep-installs
+     default, which strands the pass's post-trap install in the
+     registry.
+   - **Superseded analysis rounds record speculative twins.** Some
+     higher-order analyses re-run a body to a fixed point (fold's
+     accumulator widens between rounds — `analyseHigherOrderBodyVals`'
+     own contract). Every round recorded the body's transitions afresh
+     while only the last was latched, so `fold [ var [[k acc] (push k
+     acc) ]] [1 2] []` refused. `MultiRunBodyGuard` now marks a
+     superseded range exempt: only the surviving round's ops execute,
+     so the dead rows install nothing. Same category as the ledger's
+     rolled-back-body exclusion.
+   - **The sibling multi-run words graduate on the measured
+     mechanism.** `fold`, `scan` and `outer` carry
+     `BodyMultiRunKeepsDefs` — each handler-verified (all drive
+     `InvokeBody` per element/pair on the shared registry with no def
+     cleanup, exactly as `eachHandler` does) and each pinned by its own
+     oracle row, including outer's PAIR-GRID population and the
+     fold-accumulator fixed point.
+
+   **Two words were deliberately NOT flagged, and one is a new
+   BLOCKER.** `eachrank` refuses earlier as a Stage-2 code-body word,
+   so its flag could never fire and nothing could measure it — an
+   unmeasurable graduation is not one. `foldaxis` is worse and more
+   important: measured through the parity oracle, a def in a foldaxis
+   body installs TWICE on the interpreter and NOT AT ALL under the
+   regime, **with or without the flag** — no twin is recorded for that
+   body, so the placement gate is blind and the program compiles
+   silently wrong. Today's keep-installs default hides it (the pass's
+   own install answers the read), which is exactly why it surfaced
+   only under the rehearsal. Repro:
+   `import "boru:array-util"  ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]`,
+   then read `x`. The flip must either record that body's twins or
+   refuse the shape; until then it is the regime's one known SILENT
+   divergence.
+
+   **The sweep is done, and the class is BOUNDED AT TWO WORDS.** The
+   root cause is not in the handler — foldaxis reduces through the very
+   `doFold` that `fold` carries the flag for — it is the RETURNS
+   FUNCTION. `foldaxis` and `eachrank` alone use the structural
+   `ReturnsPreserveListAt`, which never calls
+   `analyseHigherOrderBodyVals`; every other Callable body word
+   (`each`, `fold`, `scan`, `outer`) has a ReturnsFn that analyses its
+   body, and all four are now flagged and oracle-pinned. A body the
+   check pass never RUNS records no bind twins, and a gate that can
+   only check twins that exist is blind BY CONSTRUCTION — which is the
+   general statement of the hazard, and the thing to test for when any
+   new body word is added: if its ReturnsFn does not analyse the body,
+   the twin machinery cannot see it. Of the two, only `foldaxis`
+   diverges silently; `eachrank` refuses earlier as a Stage-2
+   code-body word, which sends the whole program to the interpreter —
+   the sound direction. So the flip's remaining work here is one word,
+   with a known mechanism: give foldaxis an analysing ReturnsFn (which
+   also earns it the flag, measured through a new oracle row), or
+   refuse the shape. Registered as **NUR115** — the register's job is
+   that a divergence is never silently baselined, and this one is
+   invisible to every existing gate.
+
+   **The payoff list's frozen-read deletion is NOT licensed by the
+   flip alone — measured, not argued.** Disabling the stored-handler
+   dep-rebind refusal (`NotifyNameRebound`'s `depHit` arm) fails the
+   same tests IDENTICALLY with the regime on and off, so replay is not
+   what those tests turn on. The design's F1 counterexample
+   (interpreter `6 105 12` vs compiled `12 12 12`) no longer
+   reproduces at the VALUE level — but the control that matters is
+   `-force-compile`: with the gate disabled those programs do not run
+   compiled at all, they hit a VM `CALL_NATIVE_POLY no match`
+   internal_error and fall back, so the correct-looking numbers come
+   from the INTERPRETER. Deleting the refusal therefore trades a cheap
+   early refusal for a wasted VM run plus a fallback, and the deletion
+   needs the runtime-lookup half (§6.9's `OpDispatchGeneric` work),
+   not the twins'. Re-measure with `-force-compile` before believing
+   any "this gate is obsolete now" claim — `-compile` falls back
+   silently and will tell you the gate is deletable when it is not.
+
+   Still open at the rehearsal's end, for whoever takes the flip:
+   golden bytecode diffs (`TestEmitGoldens`,
+   `TestEmitMacroExpansionGolden`, `TestEmitModuleCallLowering`,
+   `TestZZScratchDisB1` — the regime adds twin ops and push-mode
+   binds, so the goldens must be REGENERATED, not patched), the
+   `Test.prop` surface (`TestPropSpec*`, three tests, an
+   `expected 3, got 2` assertion divergence worth its own
+   root-cause), the nested multi-run bodyID fence, and one
+   refusal-REASON precedence change (`TestEdgeFindingLoopCollectDefCompiles`
+   sees the loop-consume reason where it expects the residual-shape
+   one — cosmetic, but the test pins the string).
+
    **Arm-residency step 0 is LANDED: the cross-request parity oracle**
    (`test/go/langspec/bind_multirun_parity_test.go`). The increment
    switches part of the twins' contract from pass-left fidelity (the
