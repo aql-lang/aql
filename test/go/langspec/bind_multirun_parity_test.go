@@ -131,6 +131,26 @@ var parityShapes = []parityShape{
 	// list — a different count through the same mechanism.
 	{name: "outer-pair-def", src: "outer [ var [[a b] def x 5 (a add b)] ] [1 2] [3 4]",
 		probes: []string{"x"}},
+	// The graduations' NEGATIVE half: enabling arm-resident compilation for
+	// a word must not weaken the fences that keep its unsupported
+	// populations out. Each sibling gets the two refusals `each` carries —
+	// a root read of an arm-bound name (body-run-dependent definedness) and
+	// a nested multi-run body (the latch's bodyID fence) — so the lane
+	// proves the fences still REJECT, not merely that the happy path binds.
+	{name: "fold-read-after", src: "fold [ def x 5 ] [10 20] 0  x add 1",
+		probes: []string{"x"}, refused: "read of `x` after a multi-run body binds it"},
+	{name: "scan-read-after", src: "scan [ def x 5 ] [10 20]  x add 1",
+		probes: []string{"x"}, refused: "read of `x` after a multi-run body binds it"},
+	// outer's body must consume BOTH inputs, so its refusal rows take the
+	// var form: a bare body refuses earlier as a Stage-2 code-body word,
+	// which would pin the wrong gate. (Its nested-multi-run shape refuses
+	// there too, so the bodyID fence is pinned on fold below rather than
+	// twice-over on a word that never reaches it.)
+	{name: "outer-read-after", src: "outer [ var [[a b] def x 5 (a add b)] ] [1 2] [3 4]  x add 1",
+		probes: []string{"x"}, refused: "read of `x` after a multi-run body binds it"},
+	{name: "fold-nested-multirun",
+		src:    "fold [ var [[a b] ([1] each [def x 5]) (a add b)] ] [1 2] 0",
+		probes: []string{"x"}, refused: "twin regime:"},
 	// NOT graduated, and the reason is a FINDING rather than a decision:
 	// `ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]`
 	// installs `x` twice on the interpreter and ZERO times under the regime,

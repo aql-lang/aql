@@ -573,7 +573,7 @@ var allArrayNatives = []NativeFunc{
 		// Today's keep-installs default hides the loss because the pass's own
 		// install answers the read. The fix is to analyse the body (which also
 		// earns the flag) or to refuse the shape; until then this is a FLIP
-		// BLOCKER, tracked in design/FULL-COMPILATION-HANDOFF.0.md.
+		// BLOCKER — NUR115, and design/FULL-COMPILATION-HANDOFF.0.md.
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
 			elem := rank2ElemType(a[2])
 			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}

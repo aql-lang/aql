@@ -1705,6 +1705,11 @@ type multiRunLatch struct {
 	bodyID   string
 	from, to int
 	reg      *core.Registry
+	// evSeq is the event counter at the moment this latch closed. It is the
+	// FIXED-POINT IDENTITY the superseding rule needs: body-ID adjacency
+	// alone cannot tell consecutive rounds of one analysis from two separate
+	// dispatches that happen to share a body value.
+	evSeq int
 }
 
 // MultiRunBodyGuard is BodyAnalysisGuard for a higher-order body analysis
@@ -1730,7 +1735,19 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 		// Mark them exempt from the placement gate rather than demanding an op
 		// no lowering will ever emit: at runtime only the surviving round's ops
 		// execute, so the dead rows install nothing.
-		if es.lastMultiRun.bodyID == bodyID && es.lastMultiRun.to <= from {
+		//
+		// The identity has to be the fixed-point ANALYSIS, not the body value:
+		// two separate dispatches can share one body (a memoized unit, a body
+		// read from a binding), and both perform their installs at runtime, so
+		// superseding the first would silently drop them — the exact hazard
+		// this increment exists to remove. Rounds of one fixed point run
+		// back-to-back with recording SUSPENDED, so no event is appended
+		// between them; a second dispatch necessarily records its own call
+		// event first. An unmoved event counter is therefore the precise
+		// witness, and body-ID adjacency alone is not.
+		sameFixedPoint := es.lastMultiRun.bodyID == bodyID &&
+			es.lastMultiRun.evSeq == es.seq && es.lastMultiRun.to <= from
+		if sameFixedPoint {
 			for i := es.lastMultiRun.from; i < es.lastMultiRun.to; i++ {
 				if es.supersededTwins == nil {
 					es.supersededTwins = map[int]bool{}
@@ -1738,7 +1755,7 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 				es.supersededTwins[i] = true
 			}
 		}
-		es.lastMultiRun = multiRunLatch{bodyID: bodyID, from: from, to: len(es.bindTwins), reg: r}
+		es.lastMultiRun = multiRunLatch{bodyID: bodyID, from: from, to: len(es.bindTwins), reg: r, evSeq: es.seq}
 	}
 }
 

@@ -61,3 +61,54 @@ func TestMultiRunBodyGuardLatch(t *testing.T) {
 		t.Fatalf("keep taints = %v, want the multi-run sub-range [0,1)", es.lastKeepTaints)
 	}
 }
+
+// The superseding rule's IDENTITY, in both directions. A fixed point
+// (fold's accumulator widening) re-runs one body back-to-back with
+// recording suspended, so no event lands between the rounds and the
+// earlier round's twins are artifacts the placement gate must exempt.
+// Two separate DISPATCHES can share a body value too — a memoized unit,
+// a body read from a binding — and there both runs install at runtime,
+// so superseding the first would silently drop its installs. An unmoved
+// event counter is what tells the two apart; body-ID adjacency alone
+// cannot, which is the hole this pins shut.
+func TestMultiRunSupersedeNeedsOneFixedPoint(t *testing.T) {
+	r, err := core.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := func(es *EmitState, name string) {
+		es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: name, Depth: 1},
+			core.DefEntry{Body: core.NewInteger(1)})
+	}
+
+	// Consecutive rounds of ONE fixed point: nothing recorded in between,
+	// so the first round's twins are superseded.
+	es := NewEmitState()
+	end := es.MultiRunBodyGuard(r, "body")
+	note(es, "x")
+	end()
+	end = es.MultiRunBodyGuard(r, "body")
+	note(es, "x")
+	end()
+	if !es.supersededTwins[0] {
+		t.Fatal("a re-run of the same body with no event in between is a fixed-point round — twin 0 must be exempt")
+	}
+	if es.supersededTwins[1] {
+		t.Fatal("the SURVIVING round must never be exempt — its op is the one that installs")
+	}
+
+	// Two DISPATCHES sharing a body value: the second dispatch's own call
+	// event lands between the runs, so neither round may be superseded.
+	es = NewEmitState()
+	end = es.MultiRunBodyGuard(r, "body")
+	note(es, "x")
+	end()
+	es.appendEvent(EmitEvent{kind: evDynBind, dyn: &emitDynBind{name: "sep", srcSeq: -1, residentTwin: -1}})
+	end = es.MultiRunBodyGuard(r, "body")
+	note(es, "x")
+	end()
+	if len(es.supersededTwins) != 0 {
+		t.Fatalf("a second DISPATCH of the same body installs at runtime too — nothing may be exempt, got %v",
+			es.supersededTwins)
+	}
+}

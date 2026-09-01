@@ -255,7 +255,9 @@ reverses an earlier plan:
    the sound direction. So the flip's remaining work here is one word,
    with a known mechanism: give foldaxis an analysing ReturnsFn (which
    also earns it the flag, measured through a new oracle row), or
-   refuse the shape.
+   refuse the shape. Registered as **NUR115** — the register's job is
+   that a divergence is never silently baselined, and this one is
+   invisible to every existing gate.
 
    **The payoff list's frozen-read deletion is NOT licensed by the
    flip alone — measured, not argued.** Disabling the stored-handler
