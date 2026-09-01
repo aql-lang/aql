@@ -3976,8 +3976,17 @@ func (es *EmitState) AdoptResidentTwins(body core.Value) {
 		return
 	}
 	rec := es.fnRecs[cl.unit]
-	if body.ID == "" || ml.bodyID != body.ID || ml.reg == nil || ml.reg != es.reg ||
-		rec.reg != es.reg || rec.frag == nil {
+	// Compared against progReg, the TOP-LEVEL program registry, and NOT against
+	// es.reg: es.reg is last-bind-wins (BindRegistry re-binds it at the top of
+	// every Engine.Run, module-body and island sub-engines included, and never
+	// restores it), so a body that merely CALLS a module-defined boru fn left
+	// es.reg pointing at that module's sub-registry and this fence declined an
+	// adoption whose own registries were perfectly in agreement. The whole
+	// program then refused for want of the placement. progReg is captured once
+	// and never re-bound, which is what "the program registry" above means —
+	// the Finalize stamp site uses it for this same reason.
+	if body.ID == "" || ml.bodyID != body.ID || ml.reg == nil || ml.reg != es.progReg ||
+		rec.reg != es.progReg || rec.frag == nil {
 		return
 	}
 	// The bracket's twins: every one must be an eligible value def or an
