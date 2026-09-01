@@ -175,12 +175,93 @@ reverses an earlier plan:
    What remains for the DEFAULT flip, in order: (a) run the regime lane
    long enough to trust it (it is committed and green — every push of
    this PR now exercises the flip corpus-wide); (b) arm-resident twins
-   for the each-body row (which also closes NUR110 by replacing join
-   twins with per-arm twins); (c) flip the default, delete the
+   for the each-body row (whose design review re-scoped the NUR110
+   claim: per-arm twins are NUR110's mechanism half only — the read
+   side still const-folds from the joined check model, so NUR110's
+   close is a follow-on with its own read-side lowering, and the
+   if-arm half has zero corpus rows); (c) flip the default, delete the
    keep-regime latches the payoff list names (frozen-read/
    NotifyNameRebound gates, emit.go's rebind latches, family L's
    CondBodyDepth refusal, NUR037), and collapse `GlobalBindSpec.Push`/
    the twin-regime branches into the only path.
+
+   **Arm-residency step 0 is LANDED: the cross-request parity oracle**
+   (`test/go/langspec/bind_multirun_parity_test.go`). The increment
+   switches part of the twins' contract from pass-left fidelity (the
+   sandbox-proven invariant every existing gate pins) to INTERPRETER
+   fidelity with runtime-dependent count/value/order — and no lane
+   measured that: the regime differential compares same-request
+   results only, and the full-placement gate is syntactic. The oracle
+   enumerates every probed name's full install stack on a fresh
+   interpreter instance vs a fresh regime instance (read/undef
+   alternation — undef of a missing name is a silent no-op, so reads
+   are the drain detector) and pins each shape as measured-parity or
+   refused-by-substring; graduation is a reviewed classification edit,
+   never drift. Its founding catch was a LIVE regime hole, fixed in
+   the same commit: RecordDynBind's historical `_`/`$` name skip left
+   a root computed `def _` with a placed carrier-entry twin
+   (carrier-class-skipped) and no Push-mode OpBindGlobal partner — the
+   binding silently lost cross-request (`def _ ([1 2] each [1]) 9`
+   then `_` → undefined_word vs the interpreter's [[1 1]]). The gate
+   now admits root `_`/`$` defs under es.twinRegime only; default
+   bytecode is byte-identical. The measured each-body semantics the
+   graduation must match, from the same instrumentation: one install
+   per element per site, stacked in element order with per-element
+   runtime values (the ledger's one generalized carrier-valued entry
+   cannot replay it — the arm op must carry the runtime value); var
+   params net zero per iteration via a balanced Pos-0:0 def/undef
+   pair; mid-iteration raise leaves earlier elements' installs.
+
+   **Arm-residency's MECHANISM is LANDED for `each`'s non-var-pair
+   population.** `OpBindResident` (Program.ResidentBinds) executes
+   inside the compiled per-invocation unit, once per element, with the
+   RUNTIME value — install through `core.InstallDef` (the
+   interpreter's own installer: per-element repeats stack), peek/pop
+   value modes mirroring GlobalBindSpec, no unwind trail (a
+   mid-iteration raise leaves earlier installs), regime-only emission.
+   The bridge: `CallableSpec.BodyMultiRunKeepsDefs` (each alone,
+   handler-verified) + `MultiRunBodyGuard` (a body-identity-keyed
+   twin-range latch delegating to BodyAnalysisGuard, so #421's taint
+   holds) + `AdoptResidentTwins` (strict total NAME+ORDER pairing of
+   the bracket's BindDef twins against the fresh unit's def events —
+   any mismatch, leftover, stale memo unit, or foreign registry
+   declines everything, sound) + `lowerResidentBind` (sim-top peek /
+   pushed-copy pop / inert-literal bake; anything else refuses) +
+   `twinsFullyPlaced` counting real resident ops via
+   ResidentBinds[arg].Twin. Two extra fences: root reads of arm-bound
+   names REFUSE (NoteDefRead poisons `armReadRefusal`, surfaced at
+   Finalize's placement seam under the `twin regime:` prefix — the
+   fence is regime-only machinery, so it lives in the placement-gate
+   layer, NOT as a recorder MarkUncompilable site: the refusal-site
+   census counts that layer and its count only falls; definedness is
+   body-run-dependent at zero iterations; a later live root install
+   lifts it), and the
+   `_`/`$` name gate opens inside arm-resident body compiles so
+   `def _2 …` gets its event seat. Graduated with measured parity in
+   the oracle: each-literal-def, each-zero-iterations,
+   each-underscore-def; read-after re-pinned to its own refusal.
+
+   **ROW 41 IS GRADUATED — the regime reaches FULL CORPUS PARITY:
+   6416 rows compiled (equal to the default recorder), ZERO
+   regime-only refusals, zero divergences.** The final two pieces:
+   the var-param pair places BOTH halves in-arm (`__varundef`'s
+   handler notes the teardown through `RecordDynUndef` — an
+   undef-flagged dyn-bind event recorded only inside arm brackets;
+   the bridge pairs kinds strictly, BindDef↔install and
+   BindUndef↔teardown; the op's undef arm pops per element — net
+   zero per completed iteration, def-half leaked on a mid-body
+   raise, interpreter-identical), and element-dependent def CHAINS
+   (`def res (if …) def _2 res` — two installs off one producer)
+   lower via regime-gated force-promotion: arm-resident body
+   compiles force-promote every def's computed source
+   (collectDynBindSources' bracket arm), and planBranchPromotion
+   treats a forceOrder branch source as a promotion trigger rather
+   than dead. STILL REFUSED, deliberately: nested multi-run bodies
+   (the bodyID fence), root reads of arm-bound names (their own
+   refusal), and fold/scan/filter/outer/inner (unflagged until
+   their handlers' leak semantics are verified with oracle rows per
+   word — each such graduation is one flag + oracle rows, the
+   mechanism is done).
 
    The sandbox's first client and the data-level proof that preceded the
    flip: `TestBindingSandboxRollbackAndReplay`

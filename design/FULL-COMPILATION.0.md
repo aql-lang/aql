@@ -2639,9 +2639,16 @@ do-body twin ADOPTION (`CallableSpec.BodyOnceKeepsDefs` on `do`;
 `EmitState.AdoptBodyTwins` places the suspended body twins as real twin ops
 after the closure call, replaying the captured entries), never island
 re-execution, which the retained-mints partition makes unsound for
-capitalised defs. The one remaining regime-only refusal is the each-body def
-awaiting arm-residency. The handoff (design/FULL-COMPILATION-HANDOFF.0.md)
-carries the remaining default-flip checklist and the payoff deletions.
+capitalised defs. The each-body def then closed via ARM-RESIDENT TWINS
+(OpBindResident: per-element runtime-value installs inside the compiled
+per-invocation unit — install through the interpreter's own installer, no
+unwind trail; the var pair's both halves in-arm; a cross-request
+interpreter-parity oracle, bind_multirun_parity_test.go, measuring install
+count/values/order/definedness landed FIRST), bringing the regime to FULL
+CORPUS PARITY with the default recorder: 6416 rows compiled, zero
+regime-only refusals, zero divergences. The handoff
+(design/FULL-COMPILATION-HANDOFF.0.md) carries the remaining default-flip
+checklist and the payoff deletions.
 
 Three consistency obligations come with the twins, and they interlock.
 

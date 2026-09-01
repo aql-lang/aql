@@ -305,6 +305,14 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
 	captures := moduleScopeMutableCaptures(r, bodyToks, core.ComputeCaptures(r, &core.FnSig{Impl: core.Boru(bodyToks)}))
+	// A multi-run defs-keeping body (`each`) opens the arm-resident
+	// bracket around its compiles: `_`-named body defs get their event
+	// seats (RecordDynBind's gate), and the probe fork inherits the
+	// bracket so probe and real admit the same population.
+	if spec.BodyMultiRunKeepsDefs && es != nil {
+		es.armResidentDepth++
+		defer func() { es.armResidentDepth-- }()
+	}
 	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos) {
 		return false
 	}
@@ -314,6 +322,12 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 	// (AdoptBodyTwins; a no-op for the flag-less multi-run words).
 	if spec.BodyOnceKeepsDefs {
 		es.AdoptBodyTwins(body)
+	}
+	// A multi-run body's twins instead bridge INTO the unit — per-element
+	// installs with runtime values (AdoptResidentTwins; every fence
+	// declines to the standing refusal).
+	if spec.BodyMultiRunKeepsDefs {
+		es.AdoptResidentTwins(body)
 	}
 	return true
 }
@@ -685,10 +699,17 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
+	recsBefore := len(real.fnRecs)
 	unit, realOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	if !realOk || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return false
 	}
+	// The closure latch for the arm-residency bridge: THIS unit, and
+	// whether it is fresh (a memo hit reuses a unit another dispatch's
+	// twins already own — the bridge declines on stale). Set before the
+	// extra-hook compiles below so a walk hook's unit never masquerades as
+	// the body's.
+	real.lastClosure = closureLatch{unit: unit, fresh: unit == recsBefore && len(real.fnRecs) > recsBefore}
 	var extraOps map[int]EmitOperand
 	for _, ex := range extras {
 		exUnit, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)

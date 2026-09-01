@@ -2302,6 +2302,29 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			if p.TwinRegime {
 				core.ApplyBindTwin(curReg, p.BindTwins[in.Arg], p.BindTwinEntries[in.Arg])
 			}
+		case compiler.OpBindResident:
+			// The arm-resident twin (§6.5's each-body recovery): executes
+			// inside a compiled per-invocation unit, once per invocation,
+			// with the RUNTIME value — the install arm pops it and installs
+			// through the interpreter's own installer; the undef arm (a var
+			// param's balanced teardown) pops the live binding instead.
+			// Emitted only under the twin regime, rides no unwind trail
+			// (leak persistence is the semantics — see core.ApplyResidentBind).
+			rb := &p.ResidentBinds[in.Arg]
+			if rb.Undef {
+				core.ApplyResidentBind(curReg, rb.Name, true, core.Value{})
+				break
+			}
+			if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+				return nil, vmErrAt(curDebug, pc, "BIND_RESIDENT underflow")
+			}
+			// Peek by default (a live computed value stays for its downstream
+			// readers); pop when the lowering pushed a copy (rb.Pop) —
+			// GlobalBindSpec's mode split, same reason.
+			core.ApplyResidentBind(curReg, rb.Name, false, core.StripAscribed(stack[len(stack)-1]))
+			if rb.Pop {
+				stack = stack[:len(stack)-1]
+			}
 		case compiler.OpLookupDynScope:
 			// The interpreter's stepWord simple-value substitution, at run
 			// time: read the name's live binding. A miss, or a binding the

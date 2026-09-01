@@ -72,6 +72,28 @@ type EmitRecorder interface {
 	// keep-defs run, excluding sub-ranges noted under a nested NON-keep
 	// (multi-run / conditional) body run. Inactive: plain no-op.
 	KeepDefsBodyGuard() func()
+	// MultiRunBodyGuard is BodyAnalysisGuard for a HIGHER-ORDER body
+	// analysis run (analyseHigherOrderBodyVals — each/fold/scan…, the
+	// bodies the runtime re-runs per element): the same suspension and
+	// keep-bracket taint, plus a latch — on close the recorder remembers
+	// {bodyID, the twin-table range this run noted, r} so the dispatch
+	// record that follows can bridge those table-only twins to the
+	// compiled per-invocation unit's def sites (arm-resident twins,
+	// §6.5's each-body recovery). bodyID is the body Value's ID — the
+	// latch's identity guard: a nested body's analysis during the outer
+	// unit's compile overwrites the latch, and the mismatched ID makes
+	// the outer bridge decline to a sound refusal instead of pairing
+	// against the wrong run. r is the noting registry, for the
+	// module-registry fence. Inactive: plain no-op.
+	MultiRunBodyGuard(r *Registry, bodyID string) func()
+	// RecordDynUndef notes an `undef`-shaped teardown at its stream
+	// position — today only the var-param cleanup (`__varundef`) inside
+	// a multi-run body's compiled unit, where the balanced per-iteration
+	// def/undef pair must both execute per element for interpreter
+	// parity (the pair's ledger notes carry Pos 0:0, so position-based
+	// bridging cannot see them; the recorder pairs them by name and
+	// order instead). Inactive: no-op.
+	RecordDynUndef(name string, pos SrcPos)
 	FnBodyGuard() func()
 
 	// --- refusal + site accounting --------------------------------------
@@ -255,6 +277,8 @@ func (inactiveEmit) TopFrameOnly() bool                                     { re
 func (inactiveEmit) SuspendedNow() bool                                     { return false }
 func (inactiveEmit) BodyAnalysisGuard() func()                              { return func() {} }
 func (inactiveEmit) KeepDefsBodyGuard() func()                              { return func() {} }
+func (inactiveEmit) MultiRunBodyGuard(*Registry, string) func()             { return func() {} }
+func (inactiveEmit) RecordDynUndef(string, SrcPos)                          {}
 func (inactiveEmit) FnBodyGuard() func()                                    { return func() {} }
 
 func (inactiveEmit) TakeFragment() EmitFragmentRef { return nil }

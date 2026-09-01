@@ -101,14 +101,14 @@ var DefinitionNatives = []NativeFunc{
 		Signatures: []Signature{
 			{
 				Args:       []*Type{TString},
-				Impl:       Go(undefHandler, RunInCheck()),
+				Impl:       Go(varUndefHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TAtom},
 				QuoteArgs:  map[int]bool{0: true},
-				Impl:       Go(undefHandler, RunInCheck()),
+				Impl:       Go(varUndefHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
@@ -1380,6 +1380,18 @@ func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 }
 
 // ---- undef ----
+
+// varUndefHandler is __varundef's own thin front over undefHandler: it
+// notes the teardown on the recorder (RecordDynUndef — the event seat
+// the twin regime's arm-residency bridge pairs with a var param's
+// BindUndef twin; a no-op everywhere the recorder has no arm-resident
+// bracket open) and then unbinds byte-identically to `undef name`.
+func varUndefHandler(args []Value, named map[string]Value, future []Value, r *Registry) ([]Value, error) {
+	if name := DefName(args[0]); name != "" {
+		r.Check.Recorder().RecordDynUndef(name, args[0].Pos())
+	}
+	return undefHandler(args, named, future, r)
+}
 
 func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := DefName(args[0])
