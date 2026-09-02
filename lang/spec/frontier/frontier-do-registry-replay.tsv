@@ -37,3 +37,17 @@
 #    to a program-level refusal. Both rows compile again, both buckets are
 #    gone, and the flex-map divergence is pinned honestly where divergences
 #    belong — varyKnownMiscompiles in test/go/langspec/vary_differential_test.go.
+#
+# ── GRADUATED 2026-09-02, with the §6.5 DEFAULT FLIP (rollback-and-replay
+#    is the only regime). The pinned divergence — the `for 2 [import
+#    "boru:io" def files (flex {}) IO.mount {…} …]` variant raising
+#    `expected a FlexMap, got FlexMap` compiled — stopped reproducing:
+#    every compiled request now rolls the check pass's binding installs
+#    back before the run and replays them from placed twins, so `files`
+#    binds ONE runtime instance that the loop body and the mount handlers
+#    capturing it agree on, where the keep-installs default left the check
+#    pass's own flex map behind for the handlers' dep while the loop
+#    re-bound the name. Measured with -force-compile (never -compile, which
+#    falls back silently): `hello mounted hello mounted` on both engines.
+#    The varyKnownMiscompiles pin is deleted (its stale arm fired), and the
+#    map is empty for the first time since 2026-07-30.

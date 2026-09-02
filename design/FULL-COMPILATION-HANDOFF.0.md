@@ -291,6 +291,52 @@ reverses an earlier plan:
    oracle rows test bindings, the corpus rows test values, and a new
    body-word typing needs both.
 
+   **(e) The VARIATION LANE's exposure (2026-09-02, CI on the flip PR).**
+   The rehearsal ran every module suite with the flag on and the corpus
+   lane at full parity, and still missed one population: the variation
+   differential (`TestVariationDifferential`, test/go/langspec) re-embeds
+   sampled corpus rows in every wrapping context (each-body, do-body,
+   do-catch, for-body …) and classifies each variant — a lane the
+   selective local belt never reached and the 10-minute default `go test`
+   timeout hides (the langspec package needs `make test`'s 35m). It found
+   two things, both the flip's and both settled honestly rather than
+   widened around:
+   - **Fifteen variants now REFUSE where the old default compiled them on
+     the check pass's kept install** — one new bucket, `twin regime
+     (unplaced bind transition)`, four shapes: an `import` inside a
+     multi-run body (a module bind is not a BindDef the arm-residency
+     bridge installs), a TYPE def inside a multi-run body (the bridge
+     pairs BindDef twins only), a `do` body whose closure compile
+     declines to a Stage-3 residual shape so its twins are never adopted
+     (`do [def b true 1 2 (if b [] [9 9])]` — its `1 2 b` and
+     `(if b …)`-only siblings compile), and a call into a
+     boru-IMPLEMENTED module (`Sift.parse`, sift.boru) inside the do body
+     that imported it — measured, not yet root-caused: the same call
+     with the import outside the do compiles, and the import without the
+     call compiles; it is the import-and-call pair inside one once-run
+     body that leaves a twin the adoption declines.
+     Every one is the sound direction: a replay the rollback would lose is
+     exactly what the placement gate refuses. Pinned in
+     `varyRefusalLedger` with one representative row per shape in
+     lang/spec/frontier/frontier-twin-placement.tsv (each ledgered with
+     its failure mode, so a silent graduation or a drift fails). Each
+     shape names its graduation: resident module binds and resident type
+     twins inside compiled units, a closure lowering that admits the
+     declined do body, and the root cause of the import-and-call pair.
+   - **One KNOWN MISCOMPILE graduated.** The mount-handler loop variant
+     pinned in `varyKnownMiscompiles` since 2026-07-30 (a flex map
+     captured by a mount handler lost its identity across loop
+     iterations: `expected a FlexMap, got FlexMap`) no longer diverges —
+     measured with `-force-compile`, `hello mounted hello mounted` on
+     both engines. The account that fits the error text: the keep-installs
+     default left the check pass's own `files` instance behind for the
+     handlers' dep to see while the loop re-bound the name; the regime
+     rolls that install back, so one runtime instance is all there is.
+     The pin is deleted (its stale arm fired, as designed) and the map is
+     empty for the first time since it was created.
+   The lesson for the next flip-sized change: the belt is `make test`,
+   not the suites one remembers to run.
+
    **THE FLIP REHEARSAL, and what it found (2026-09-01).** The corpus
    lane is not the flip's whole exposure, and the cheapest way to see
    the rest is to RUN THE SUITES WITH THE FLAG ON —
