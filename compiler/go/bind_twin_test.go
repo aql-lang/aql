@@ -108,6 +108,15 @@ func tokAt(row, col int) core.Value {
 // a Rollback that discards the adopting round un-marks the flag with the
 // truncated event.
 func TestFinalizeBodyAdoption(t *testing.T) {
+	// A real registry at FnBodyDepth 0: the keep bracket PUBLISHES only for
+	// a run that could have noted a twin, so a direct-drive test has to
+	// stand where production stands (the sibling multi-run guard's tests
+	// already do).
+	reg, err := core.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Check.Begin()()
 
 	noteTwin := func(es *EmitState, row, col int) {
 		es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "big", Depth: 1,
@@ -118,7 +127,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// production shape (`do`'s check body run suspends via the keep
 	// guard, and the note fires inside it).
 	keepRunTwin := func(es *EmitState, row, col int) {
-		end := es.KeepDefsBodyGuard()
+		end := es.KeepDefsBodyGuard(reg)
 		noteTwin(es, row, col)
 		end()
 	}
@@ -133,7 +142,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// Nil and inactive receivers are no-ops, like every EmitState method.
 	var nilES *EmitState
 	nilES.AdoptBodyTwins(body())
-	nilES.KeepDefsBodyGuard()()
+	nilES.KeepDefsBodyGuard(nil)()
 
 	// Bracketed, at a body site: adopted (a real placed op), finalizes. A
 	// second adoption pass is a no-op — the twin is already placed.
@@ -152,7 +161,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// At no body site — and a positionless twin at ANY site — still
 	// unplaced, refuses (the each-body class; a synthesized transition).
 	es = NewEmitState()
-	es.KeepDefsBodyGuard()()
+	es.KeepDefsBodyGuard(reg)()
 	keepRunTwin(es, 2, 1)
 	keepRunTwin(es, 0, 0)
 	es.AdoptBodyTwins(body())
@@ -171,7 +180,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	resume = es.Suspend()
 	noteTwin(es, 1, 6) // the each-analysis note: suspended, no keep bracket
 	resume()
-	es.KeepDefsBodyGuard()() // the do's own body run notes nothing
+	es.KeepDefsBodyGuard(reg)() // the do's own body run notes nothing
 	es.AdoptBodyTwins(body())
 	if _, _, ok := es.Finalize(nil); ok {
 		t.Fatal("a twin noted outside the dispatch's own keep-defs run must not be adopted")
@@ -182,7 +191,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// one replay is wrong in count, so it must stay unplaced. A nested
 	// KEEP sub-run (do inside do) still adopts.
 	es = NewEmitState()
-	end := es.KeepDefsBodyGuard()
+	end := es.KeepDefsBodyGuard(reg)
 	sub := es.BodyAnalysisGuard() // the nested each's body analysis
 	noteTwin(es, 1, 6)
 	sub()
@@ -192,8 +201,8 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 		t.Fatal("a twin noted under a nested non-keep sub-run must not be adopted")
 	}
 	es = NewEmitState()
-	end = es.KeepDefsBodyGuard()
-	inner := es.KeepDefsBodyGuard() // do inside do: once-run composes
+	end = es.KeepDefsBodyGuard(reg)
+	inner := es.KeepDefsBodyGuard(reg) // do inside do: once-run composes
 	noteTwin(es, 1, 6)
 	inner()
 	end()

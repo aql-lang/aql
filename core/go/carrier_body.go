@@ -96,7 +96,7 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	// takes the plain guard, which inside a keep run marks its twins as a
 	// tainted sub-range no adoption may place.
 	if keep {
-		defer r.Check.Recorder().KeepDefsBodyGuard()()
+		defer r.Check.Recorder().KeepDefsBodyGuard(r)()
 	} else {
 		defer r.Check.Recorder().BodyAnalysisGuard()()
 	}

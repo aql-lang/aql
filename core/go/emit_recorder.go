@@ -71,7 +71,13 @@ type EmitRecorder interface {
 	// adopts only bind twins noted inside the dispatch's own outermost
 	// keep-defs run, excluding sub-ranges noted under a nested NON-keep
 	// (multi-run / conditional) body run. Inactive: plain no-op.
-	KeepDefsBodyGuard() func()
+	//
+	// Takes the registry for the same reason MultiRunBodyGuard does: the
+	// bracket may only be PUBLISHED by a run that could note a twin at
+	// all, which is FnBodyDepth == 0. A do body re-analysed at depth
+	// inside a called fn's body has an empty bracket by construction, and
+	// publishing it would overwrite the outer do's.
+	KeepDefsBodyGuard(r *Registry) func()
 	// MultiRunBodyGuard is BodyAnalysisGuard for a HIGHER-ORDER body
 	// analysis run (analyseHigherOrderBodyVals — each/fold/scan…, the
 	// bodies the runtime re-runs per element): the same suspension and
@@ -276,7 +282,7 @@ func (inactiveEmit) BindRegistry(*Registry)                                 {}
 func (inactiveEmit) TopFrameOnly() bool                                     { return true }
 func (inactiveEmit) SuspendedNow() bool                                     { return false }
 func (inactiveEmit) BodyAnalysisGuard() func()                              { return func() {} }
-func (inactiveEmit) KeepDefsBodyGuard() func()                              { return func() {} }
+func (inactiveEmit) KeepDefsBodyGuard(*Registry) func()                     { return func() {} }
 func (inactiveEmit) MultiRunBodyGuard(*Registry, string) func()             { return func() {} }
 func (inactiveEmit) RecordDynUndef(string, SrcPos)                          {}
 func (inactiveEmit) FnBodyGuard() func()                                    { return func() {} }

@@ -6,8 +6,8 @@
 # wrapped body that no compiled op replays or installs, so the rollback
 # would lose it. The old keep-installs default compiled these on the check
 # pass's own leftover install — which is the divergence class the regime
-# exists to eliminate, so the refusal is the sound direction. Four shapes,
-# each its own graduation:
+# exists to eliminate, so the refusal is the sound direction. It opened with
+# four shapes; three remain, each its own graduation:
 #
 #   1. an `import` inside a MULTI-RUN body — a module bind is not one of
 #      the BindDef twins the arm-residency bridge installs per element;
@@ -17,18 +17,24 @@
 #      shape: literals under a branch result), so the once-run body's
 #      twins are never adopted — `do [def b true (if b [] [9 9])]` and
 #      `do [def b true 1 2 b]` compile, this one does not;
-#   4. a call into a boru-IMPLEMENTED module (`Sift.parse`, sift.boru)
-#      inside the `do` body that imported it leaves a twin the do-body
-#      adoption declines. MEASURED, not yet root-caused: `import
-#      "boru:sift" do [(Sift.parse …)]` compiles (import outside), and
-#      so does `do [import "boru:sift" Sift.parse]` (no call) — it is
-#      the import-and-call pair inside one once-run body that refuses.
 #
 # Graduation = resident module binds / resident type twins inside compiled
-# units (1, 2), a closure lowering that admits the declined body (3), and
-# the root cause of (4) found and closed; each row then moves to the main
-# corpus.
+# units (1, 2), and a closure lowering that admits the declined body (3);
+# each row then moves to the main corpus.
+#
+# SHAPE 4 GRADUATED 2026-09-02, and how it was written here is the part
+# worth keeping. It read: a call into a boru-IMPLEMENTED module inside the
+# `do` body that imported it "leaves a twin the do-body adoption declines",
+# MEASURED but not root-caused. The guess buried in "declines" was that the
+# twin had no body site. It had one. The do's keep bracket is a SINGLE
+# LATCH, and tryRecordClosure's body compile RE-RUNS the body — so a `do`
+# inside a fn that the body CALLS (sift-parse-do's) opened its own bracket
+# during that re-run and overwrote the outer one, publishing an EMPTY range
+# whose floor already sat past the import's own `Sift` twin. AdoptBodyTwins
+# then had nothing to walk. Fixed by the same publication gate the
+# multi-run guard had just taken: publish only at FnBodyDepth == 0, the
+# exact condition under which a twin can be noted at all. The row moved to
+# lang/spec/module-sift.tsv.
 [10 20] each [drop import "boru:math-util" end MathUtil.cbrt 2]	[1.2599210498948732 1.2599210498948732]	shape 1: an import inside an each body
 [10 20] each [drop def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 15 x]	[15 15]	shape 2: type defs inside an each body
 do [def b true  do [1 2 (if b [] [9 9])]]	1 2	shape 3: a do body whose closure compile declines, so its def twin is never adopted
-do [import "boru:sift"  (Sift.parse kv/q {} "a: 1")]	{a:'1'}	shape 4: a boru-implemented module fn called inside the do body that imported it
