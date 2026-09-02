@@ -341,6 +341,11 @@ func TestW3FoldaxisEdges(t *testing.T) {
 	w3ArrayWant(t, `foldaxis 0 [add] []`, `[]`)
 	w3ArrayErr(t, `foldaxis 0 [add] [1 2]`, "rank-2")
 	w3ArrayErr(t, `foldaxis 0 [add] [[1 2] [3]]`, "rectangular")
+	// One row, zero columns: axis 0 has no lane (empty result), axis 1 has
+	// one EMPTY lane — nothing to seed the accumulator from, so the word
+	// raises its own error where it used to panic on lane[0].
+	w3ArrayWant(t, `foldaxis 0 [add] [[]]`, `[]`)
+	w3ArrayErr(t, `foldaxis 1 [add] [[]]`, "empty")
 }
 
 // ---- compress ----
@@ -407,20 +412,24 @@ func TestW3CheckIotaLen(t *testing.T) {
 
 func TestW3CheckArrayReturns(t *testing.T) {
 	srcs := []string{
-		`range 1 4`,                     // returnsCarrierTypedListInteger
-		`member [1] [1 2]`,              // returnsCarrierTypedListBoolean
-		`at [0] [10 20]`,                // returnsAtChecked
-		`window 2 [1 2 3]`,              // windowReturnsFn
-		`pairs [1 2 3]`,                 // pairsReturnsFn
-		`each [mul 2] [1 2 3]`,          // eachReturnsFn
-		`each [drop] [1 2]`,             // eachReturnsFn empty-residual arm
-		`fold [add] [1 2 3] 0`,          // foldWithInitReturnsFn
-		`fold [add 0.5] [1 2] 0`,        // accumulator widening fixed point
-		`fold [add] [1 2 3]`,            // foldNoInitReturnsFn
-		`fold [push] [1 2] []`,          // list-seed accumulator carrier
-		`fold [drop] [1 2] {}`,          // map-seed accumulator carrier
-		`scan [add] [1 2 3]`,            // scanReturnsFn
-		`scan [add] []`,                 // static-empty scan skip
+		`range 1 4`,                          // returnsCarrierTypedListInteger
+		`member [1] [1 2]`,                   // returnsCarrierTypedListBoolean
+		`at [0] [10 20]`,                     // returnsAtChecked
+		`window 2 [1 2 3]`,                   // windowReturnsFn
+		`pairs [1 2 3]`,                      // pairsReturnsFn
+		`each [mul 2] [1 2 3]`,               // eachReturnsFn
+		`each [drop] [1 2]`,                  // eachReturnsFn empty-residual arm
+		`fold [add] [1 2 3] 0`,               // foldWithInitReturnsFn
+		`fold [add 0.5] [1 2] 0`,             // accumulator widening fixed point
+		`fold [add] [1 2 3]`,                 // foldNoInitReturnsFn
+		`fold [push] [1 2] []`,               // list-seed accumulator carrier
+		`fold [drop] [1 2] {}`,               // map-seed accumulator carrier
+		`scan [add] [1 2 3]`,                 // scanReturnsFn
+		`scan [add] []`,                      // static-empty scan skip
+		`foldaxis 1 [add] [[1 2] [3 4]]`,     // foldaxisReturnsFn (analysing, NUR115)
+		`foldaxis 1 [add 0.5] [[1 2] [3 4]]`, // foldaxis accumulator widening fixed point
+		`foldaxis 0 [add] []`,                // foldaxis empty rank-2: gradual-Any element arm
+		`foldaxis 1 [var [[a b] (if (b gt 1) ["s"] [b])]] [[1 2] [3 4]]`, // foldaxis disjunct accumulator arm
 		`outer [mul] [1 2] [3 4]`,       // outerReturnsFn
 		`inner [mul] [add] [1 2] [3 4]`, // innerReturnsFn
 	}
@@ -448,6 +457,33 @@ func TestW3CheckEmptyFoldDiagnostic(t *testing.T) {
 	if !found {
 		t.Errorf("check `fold [add] []`: expected fold_error diagnostic, got %+v",
 			r.Check.Diagnostics)
+	}
+}
+
+// foldaxis mirrors its empty-lane error at check time as fold does for the
+// statically-empty no-init list: `[[]]` reduced along axis 1 has one EMPTY
+// lane and the handler's error is guaranteed, so the check pass records the
+// byte-identical finding (a RuntimeMirror — the program still compiles). The
+// negatives: axis 0 over the same data has no lane at all (the result is
+// `[]`, nothing to flag), and a non-literal axis is not exactly known.
+func TestW3CheckFoldaxisEmptyLaneDiagnostic(t *testing.T) {
+	flagged := func(src string) bool {
+		_, r := w3ArrayCheck(t, src)
+		for _, d := range r.Check.Diagnostics {
+			if d.Code == "foldaxis_error" && strings.Contains(d.Detail, "lane 0 is empty") {
+				return true
+			}
+		}
+		return false
+	}
+	if !flagged(`foldaxis 1 [add] [[]]`) {
+		t.Error("check `foldaxis 1 [add] [[]]`: expected the empty-lane foldaxis_error mirror")
+	}
+	if flagged(`foldaxis 0 [add] [[]]`) {
+		t.Error("check `foldaxis 0 [add] [[]]`: axis 0 has no lane over zero columns — nothing to flag")
+	}
+	if flagged(`foldaxis (0 add 1) [add] [[]]`) {
+		t.Error("check with a computed axis: the shape is not exactly known — nothing to flag")
 	}
 }
 

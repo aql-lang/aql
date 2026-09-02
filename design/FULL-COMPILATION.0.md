@@ -2662,7 +2662,10 @@ rehearsal running every module suite with the flag forced on had reduced
 the exposure to three annotation-only goldens — which is what let it be a
 deletion rather than a migration; the same rehearsal surfaced and closed
 NUR116 (a default-lane miscompile the regime was the sound side of) and
-bounded NUR115. The payoff-list latch deletions are NOT in the flip: the
+bounded NUR115 — discharged 2026-09-02: `foldaxis` now analyses its body
+(`foldaxisReturnsFn`, fold's fixed point one rank down) and carries
+`BodyMultiRunKeepsDefs`, measured by six parity-oracle rows whose negative
+control reproduces the silent loss. The payoff-list latch deletions are NOT in the flip: the
 rehearsal measured the stored-handler dep-rebind refusal as load-bearing
 with the regime on (its removal yields a VM internal_error and a
 fallback, not correct compiled code), so each gate goes only after its

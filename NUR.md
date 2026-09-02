@@ -92,7 +92,6 @@ keep the two in sync in the same commit.
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
 | [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
-| [NUR115](#nur115) | A body word whose `ReturnsFn` does not ANALYSE its body is invisible to the bind twins: `foldaxis` (and `eachrank`) use the structural `ReturnsPreserveListAt`, so the check pass never runs their bodies, records no twins for them, and the twin regime's full-placement gate — which can only check twins that exist — is blind by construction. `ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]` then installs `x` twice interpreted and NOT AT ALL compiled, silently, because the program is not refused. Keep-installs hides it; only rollback-and-replay exposes it | the twin-regime flip rehearsal, 2026-09-01 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
@@ -4335,58 +4334,3 @@ analysed — a different route (the map's values evaluate in a sub-engine).
 It is the never-called position, so nothing raises at run time, but the
 record's rule is about where the body was WRITTEN, and one position still
 decides the answer.
-
-## NUR115 — a body word whose ReturnsFn does not analyse its body is invisible to the bind twins {#nur115}
-
-**Status:** Pending — the mechanism is understood and bounded; the fix
-belongs to the §6.5 default flip · **Recorded:** 2026-09-01 ·
-**Surfaced by:** the twin-regime FLIP REHEARSAL (running every module
-suite with `BORU_TWIN_REGIME=1`), whose new parity-oracle rows measured
-`foldaxis` losing binding installs the interpreter performs.
-
-**Rule:** one analysis, one answer. Every higher-order word's body is
-analysed by the check pass, and the bind-twin machinery records the
-transitions that analysis performs — so the compiled program can replay
-them. A word does not opt out of that by how its return type happens to
-be computed.
-
-**Divergence.** A `def` inside a `foldaxis` body installs twice on the
-interpreter and NOT AT ALL under the twin regime:
-
-```
-import "boru:array-util"
-ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]
-x                       # interpreter: 5 (twice, one per lane element)
-                        # regime:      undefined_word
-```
-
-The program COMPILES — it is not refused — so the loss is silent. The
-default keep-installs build hides it, because the check pass's own
-install answers the read; only the rollback-and-replay regime exposes
-it, which is why the rehearsal found it and the corpus lane never could.
-
-**Cause, and it is not where it looks.** The handler is not at fault:
-`foldaxis` reduces through the very `doFold` that `fold` drives, and
-`fold` replays correctly. The deciding difference is the RETURNS
-FUNCTION. `foldaxis` and `eachrank` alone use the structural
-`ReturnsPreserveListAt`, which never calls `analyseHigherOrderBodyVals`;
-every other Callable body word (`each`, `fold`, `scan`, `outer`) has a
-ReturnsFn that analyses its body. A body the check pass never RUNS
-records no bind twins, and the regime's full-placement gate — which can
-only check twins that exist — is blind **by construction**.
-
-**Bound.** Exactly two words share the structural ReturnsFn, and only
-one of them diverges: `eachrank` refuses earlier as a Stage-2 code-body
-word, sending the whole program to the interpreter, which is the sound
-direction. So the exposure is `foldaxis` alone.
-
-**General statement, which is the part to carry forward.** When a body
-word is added, if its ReturnsFn does not analyse the body, the twin
-machinery cannot see it — and no gate will say so. This is a hazard of
-the SEAM, not of any one word.
-
-**Discharge.** Resolved by giving `foldaxis` an analysing ReturnsFn
-(which also earns it `BodyMultiRunKeepsDefs`, measured through a new
-parity-oracle row), or by refusing the shape under the regime. Tracked
-against the default flip in
-[design/FULL-COMPILATION-HANDOFF.0.md](design/FULL-COMPILATION-HANDOFF.0.md).

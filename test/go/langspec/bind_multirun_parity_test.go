@@ -151,15 +151,41 @@ var parityShapes = []parityShape{
 	{name: "fold-nested-multirun",
 		src:    "fold [ var [[a b] ([1] each [def x 5]) (a add b)] ] [1 2] 0",
 		probes: []string{"x"}, refused: "twin regime:"},
-	// NOT graduated, and the reason is a FINDING rather than a decision:
-	// `ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]`
-	// installs `x` twice on the interpreter and ZERO times under the regime,
-	// with or without the spec flag — no twin is recorded for that body, so
-	// the placement gate is blind to the loss and the program compiles
-	// silently wrong. It is a flip blocker (today's keep-installs default
-	// hides it: the pass's own install answers the read), so it is written
-	// up in the handoff rather than pinned here — a row must be measured
-	// parity or pinned refusal, and this shape is neither yet.
+	// foldaxis — the rows that could NOT be written before NUR115's discharge
+	// (2026-09-02). The word's structural ReturnsFn never analysed its body,
+	// so no twin was recorded and the placement gate was blind: a def in the
+	// body installed twice interpreted and ZERO times compiled, silently —
+	// with or without the spec flag. foldaxisReturnsFn analyses the body,
+	// which makes the twins visible and earns the flag; these rows MEASURE
+	// it. A lane is a column (axis 0) or a row (axis 1) and the body runs
+	// once per lane element past the seed, so the elem-valued row pins
+	// count, values AND order (measured top-down 9 4 3 1 for two three-wide
+	// rows: the pair's `b` half is the accumulator, so x records the running
+	// accumulator — 1 then 3 in the first lane, 4 then 9 in the second);
+	// the one-element lanes run the body ZERO times, so the install count
+	// must be zero on both sides (a replayed check-pass twin would install
+	// once); the empty rank-2 list is the gradual-Any element arm.
+	{name: "foldaxis-axis0-def",
+		src:    `import "boru:array-util"  ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]`,
+		probes: []string{"x", "a", "b"}},
+	{name: "foldaxis-axis1-elem-valued-def",
+		src:    `import "boru:array-util"  ArrayUtil.foldaxis 1 [var [[a b] def x b (a add b)]] [[1 2 3] [4 5 6]]`,
+		probes: []string{"x", "a", "b"}},
+	{name: "foldaxis-zero-run-lanes",
+		src:    `import "boru:array-util"  ArrayUtil.foldaxis 1 [var [[a b] def x 5 (a add b)]] [[1] [2]]`,
+		probes: []string{"x", "a", "b"}},
+	{name: "foldaxis-empty",
+		src:    `import "boru:array-util"  ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] []`,
+		probes: []string{"x", "a", "b"}},
+	// The graduation's NEGATIVE half, as for every sibling: the fences must
+	// still REJECT a root read of an arm-bound name and a nested multi-run
+	// body.
+	{name: "foldaxis-read-after",
+		src:    `import "boru:array-util"  ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]  x add 1`,
+		probes: []string{"x"}, refused: "read of `x` after a multi-run body binds it"},
+	{name: "foldaxis-nested-multirun",
+		src:    `import "boru:array-util"  ArrayUtil.foldaxis 1 [var [[a b] ([1] each [def x 5]) (a add b)]] [[1 2] [3 4]]`,
+		probes: []string{"x"}, refused: "twin regime:"},
 }
 
 // probeInstalls enumerates name's install stack top-down on one instance

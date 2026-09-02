@@ -705,6 +705,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unreachable_branch":    SeverityWarning,
 	"record_shape_mismatch": SeverityError,
 	"fold_error":            SeverityError,
+	"foldaxis_error":        SeverityError, // the empty-lane mirror (staticEmptyLaneDetail), fold_error's one-rank-down twin
 	// A typed Patrun (`patrun T`) whose `add` stores a CONCRETE value the
 	// checker can prove is not a T (native_patrun.go — the static mirror of
 	// the runtime add guard).

@@ -532,10 +532,14 @@ var allArrayNatives = []NativeFunc{
 		// word refuses EARLIER as a Stage-2 code-body word, so the flag would
 		// never fire and nothing could measure it. Flag it when eachrank
 		// itself graduates — an unmeasurable graduation is not one.
-		// It shares foldaxis's structural ReturnsFn (and so its unanalysed
-		// body — see the root cause noted there), but NOT its silent
-		// divergence: refusing early sends the whole program to the
-		// interpreter, which is the sound direction.
+		// eachrank alone still carries the structural ReturnsPreserveListAt,
+		// which never analyses its body — the hazard NUR115 named and foldaxis
+		// discharged (foldaxisReturnsFn): a body the check pass never runs
+		// records no bind twins, so the twin regime cannot see its defs. Safe
+		// here ONLY because the early refusal sends the whole program to the
+		// interpreter, the sound direction; the day eachrank graduates, an
+		// analysing ReturnsFn comes first (with its parity-oracle rows), the
+		// flag second.
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(_ []Value) []Value {
 			return []Value{NewElementCarrier(TAny)}
 		}},
@@ -558,32 +562,34 @@ var allArrayNatives = []NativeFunc{
 		// list. Same spec as fold's therefore, with the inputs taken a level
 		// deeper — and no handler change at all, because doFold already drives
 		// the body through InvokeBody.
-		// No BodyMultiRunKeepsDefs, and NOT because the handler differs — it is
-		// the same doFold `fold` carries the flag for. MEASURED (the parity
-		// oracle, 2026-09-01): a def in a foldaxis body installs twice on the
-		// interpreter and NOT AT ALL under the twin regime, and the flag makes
-		// no difference — the divergence reproduces with and without it.
+		// BodyMultiRunKeepsDefs: the same doFold `fold` carries the flag for —
+		// InvokeBody once per lane element past the seed, on the shared
+		// registry, no def cleanup — verified at the handler (foldaxisHandler
+		// reduces every lane through doFold) and MEASURED by the parity
+		// oracle's foldaxis rows: both axes, the elem-valued install order, the
+		// one-element lanes that run the body ZERO times, the empty rank-2
+		// list, and the read-after / nested-multi-run refusals.
 		//
-		// ROOT CAUSE, and it is in the line below rather than in the handler:
-		// ReturnsPreserveListAt is a STRUCTURAL ReturnsFn, so unlike
-		// eachReturnsFn / foldReturnsFn it never calls
-		// analyseHigherOrderBodyVals. The check pass therefore never RUNS this
-		// body, records no bind twins for it, and the regime's placement gate
-		// — which can only check twins that exist — is blind by construction.
-		// Today's keep-installs default hides the loss because the pass's own
-		// install answers the read. The fix is to analyse the body (which also
-		// earns the flag) or to refuse the shape; until then this is a FLIP
-		// BLOCKER — NUR115, and design/FULL-COMPILATION-HANDOFF.0.md.
-		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
-			elem := rank2ElemType(a[2])
-			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}
+		// The flag alone was NOT enough, and that is the lesson NUR115 recorded
+		// (resolved 2026-09-02): a body the check pass never RUNS records no
+		// bind twins, and the twin regime's placement gate can only check twins
+		// that exist. The structural ReturnsPreserveListAt this word used to
+		// carry never called analyseHigherOrderBodyVals, so a def in a foldaxis
+		// body installed twice on the interpreter and NOT AT ALL compiled —
+		// silently, because nothing refused. foldaxisReturnsFn analyses the
+		// body (fold's accumulator fixed point one rank down), which is what
+		// makes the twins visible — and is the test for any new body word: if
+		// its ReturnsFn does not analyse the body, the twin machinery cannot
+		// see it, and no gate will say so.
+		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, BodyMultiRunKeepsDefs: true, Inputs: func(a []Value) []Value {
+			return []Value{rank2ElemCarrier(a[2]), rank2ElemCarrier(a[2])}
 		}},
 
 		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList, TList},
 			NoEvalArgs: map[int]bool{1: true},
 			Impl:       Go(foldaxisHandler),
-			ReturnsFn:  ReturnsPreserveListAt(2), BarrierPos: -1,
+			ReturnsFn:  foldaxisReturnsFn, BarrierPos: -1,
 		}},
 	},
 }
@@ -1881,20 +1887,110 @@ func staticEmptyFoldDetail(coll Value) string {
 	return ""
 }
 
-// rank2ElemType is the element type one rank BELOW a rank-2 data argument —
-// what a foldaxis body sees per step, since it folds along a lane rather than
-// over the rows. Reading the first row is exact for the rectangular shape
-// foldaxisHandler enforces at run time.
-//
-// A data argument the check pass cannot open — non-concrete, or the empty list
-// the handler answers `[]` for — yields Any, which NewElementCarrier turns into
-// the gradual carrier. That is the honest answer: there is no element to take a
-// type from.
-func rank2ElemType(data Value) *Type {
-	if rows, err := AsList(data); err == nil && IsConcrete(data) && rows.Len() > 0 {
-		return DataListElemTypeFromValue(rows.Get(0))
+// rank2ElemCarrier is the per-step carrier a foldaxis body sees: the element
+// carrier one rank BELOW a rank-2 data argument, joined over EVERY element of
+// EVERY row. A lane is a row (axis 1) or a column (axis 0), so a step's
+// (accumulator, element) can come from any row — reading one row, which the
+// first-row `rank2ElemType` this replaces did, typed a body over
+// `[[1 2] ["a" "b"]]` as Integer and BAKED that overload into the compiled
+// body and, once the ReturnsFn analysed the body, into its consumers
+// (measured 2026-09-02, found in review: `foldaxis 1 [add] …` answered
+// `[3 0]` compiled against the interpreter's `[3 'ab']`). Rectangular means
+// equal LENGTH, not equal type. The join is scan's own
+// (ElementCarrierFromValue over the flattened elements): a mixed population
+// is a strict Disjunct the body dispatch distributes per alternative, a
+// uniform one its plain type. A data argument the check pass cannot open —
+// non-concrete, a non-list row, or no element at all — is the gradual Any
+// carrier: the honest answer when there is no element to take a type from.
+func rank2ElemCarrier(data Value) Value {
+	rows, err := AsList(data)
+	if err != nil || !IsConcrete(data) {
+		return NewElementCarrier(TAny)
 	}
-	return TAny
+	var elems []Value
+	for i := 0; i < rows.Len(); i++ {
+		row := rows.Get(i)
+		if !row.Parent.ConformsTo(TList) || !IsConcrete(row) {
+			return NewElementCarrier(TAny)
+		}
+		rl, _ := AsList(row)
+		elems = append(elems, rl.Slice()...)
+	}
+	if len(elems) == 0 {
+		return NewElementCarrier(TAny)
+	}
+	return ElementCarrierFromValue(NewList(elems))
+}
+
+// foldaxisReturnsFn is fold's accumulator fixed point one rank down. Each
+// lane seeds its accumulator from its own first element and folds the rest,
+// so the body is analysed with (lane element, lane element) —
+// rank2ElemCarrier for both, exactly the carriers the Callable's Inputs hand
+// the compiled body — and the result is the list of per-lane accumulators,
+// scan's list-of-accumulator shape. Analysing the body here, where the
+// structural ReturnsPreserveListAt the word carried before never did, is
+// what records the body's bind twins for the twin regime (NUR115's
+// discharge; see the spec comment).
+//
+// A statically-EMPTY rank-2 list runs no lane and so no body — the handler
+// answers `[]` — so, as scan does, the body is NOT analysed over it:
+// analysing it would flag operand-starved words (`foldaxis 0 [add add] []`)
+// that can never run, refusing at check a program both engines answer `[]`
+// (found in review, 2026-09-02). The bare List carrier is the sound answer.
+func foldaxisReturnsFn(args []Value, r *Registry) []Value {
+	if n, ok := StaticListLen(args[2]); ok && n == 0 {
+		return []Value{NewCarrier(TList)}
+	}
+	// The empty-lane error, mirrored at check time exactly as fold's own
+	// statically-empty no-init case is (staticEmptyFoldDetail, NUR058's
+	// routing): a GUARANTEED runtime error over exactly-known operands, so
+	// the finding is a RuntimeMirror — the program compiles and the handler
+	// raises the byte-identical text — and the check-accuracy ratchet sees
+	// the row flagged rather than pinned as a checker blind spot.
+	if detail := staticEmptyLaneDetail(args); detail != "" {
+		// A module-qualified call (ArrayUtil.foldaxis) reaches the ReturnsFn
+		// through the module's fn wrapper, whose operands carry no source
+		// position — the call site the checker exposed (CurCallPos) is the
+		// honest location then, exactly as `make Array` reads it.
+		pos := args[2].Pos()
+		if pos.Row == 0 {
+			pos = r.Check.CurCallPos
+		}
+		core.CheckAddUniqueDiagnostic(r, "foldaxis_error", detail, "foldaxis", pos)
+		return []Value{NewCarrier(TList)}
+	}
+	elemC := rank2ElemCarrier(args[2])
+	acc, ok := foldAccumFixedPoint(r, args[1], elemC, elemC)
+	if !ok {
+		return []Value{NewCarrier(TList)}
+	}
+	if IsDisjunct(acc) {
+		return []Value{NewCarrierTypedListValue(acc)}
+	}
+	return []Value{NewCarrierTypedList(acc.Parent)}
+}
+
+// staticEmptyLaneDetail is the runtime error text foldaxis raises over a
+// rank-2 literal whose rows are EMPTY when reduced along axis 1 — one row,
+// zero columns, one empty lane with nothing to seed its accumulator — or ""
+// when the shape is not exactly known (a non-concrete axis or data argument)
+// or does not raise (axis 0 has no lane at all over such data: the result is
+// `[]`). Only the FIRST row decides: the handler enforces rectangularity, so
+// zero columns in row 0 is zero columns everywhere, and lane 0 is the row
+// that raises.
+func staticEmptyLaneDetail(args []Value) string {
+	axis, err := args[0].AsConcreteInteger()
+	if err != nil || axis != 1 {
+		return ""
+	}
+	rows, err := AsList(args[2])
+	if err != nil || !IsConcrete(args[2]) || rows.Len() == 0 {
+		return ""
+	}
+	if n, ok := StaticListLen(rows.Get(0)); ok && n == 0 {
+		return "foldaxis: lane 0 is empty (no initial value)"
+	}
+	return ""
 }
 
 // doFold is the shared fold implementation used by both fold signatures.
@@ -2260,6 +2356,14 @@ func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	}
 	result := make([]Value, len(lanes))
 	for i, lane := range lanes {
+		// A lane with no element has nothing to seed its accumulator from —
+		// fold's own no-init rule (`fold: empty list with no initial
+		// value`), raised as this word's error. `[[]]` reduced along axis 1
+		// is the shape: one row, zero columns, one empty lane. Indexing
+		// lane[0] here panicked before (2026-09-02; panics are forbidden).
+		if len(lane) == 0 {
+			return nil, reg.BoruError("foldaxis_error", fmt.Sprintf("foldaxis: lane %d is empty (no initial value)", i), "foldaxis")
+		}
 		acc := lane[0]
 		res, err := doFold(reg, acc, args[1], NewReadList(lane[1:]))
 		if err != nil {

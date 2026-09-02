@@ -219,6 +219,78 @@ reverses an earlier plan:
    ReturnsFn) and nested multi-run bodies (the latch-to-stack design
    the second rehearsal wrote up).
 
+   **(d) NUR115 DISCHARGED (2026-09-02): foldaxis analyses its body.**
+   The regime's one known silent divergence is closed the way the
+   rehearsal prescribed — not by refusing the shape but by giving
+   `foldaxis` an analysing ReturnsFn. `foldaxisReturnsFn` is fold's
+   accumulator fixed point one rank down (both carriers from
+   `rank2ElemType`, the same carriers the Callable's Inputs hand the
+   compiled body; the result is scan's list-of-accumulators shape, where
+   the structural `ReturnsPreserveListAt(2)` had answered the data's ROW
+   type — wrong for a reduction that returns one value per lane).
+   Analysing the body is what records its bind twins, and with the twins
+   visible the word earns `BodyMultiRunKeepsDefs` on the handler-verified
+   ground its siblings have (foldaxisHandler reduces every lane through
+   doFold: InvokeBody once per lane element past the seed, on the shared
+   registry, no def cleanup). Six parity-oracle rows measure it: both
+   axes; the elem-valued row's install ORDER (top-down `9 4 3 1` — the
+   var pair's `b` half is the accumulator); one-element lanes, where the
+   body runs ZERO times and the install count must be zero on both sides
+   (a replayed check-pass twin would install once — arm-residency is
+   what makes zero right); the empty rank-2 list (the gradual-Any
+   element arm); and the two sibling refusals (root read of an arm-bound
+   name; nested multi-run body). The NEGATIVE CONTROL ran before the
+   record was deleted: with the structural ReturnsFn restored and the
+   flag kept, the parity rows lose every install (`[5 5]` against `[]`),
+   the read-after row fails check with `undefined_word` instead of
+   refusing at the fence, and the nested row COMPILES silently wrong —
+   the divergence exactly as NUR115 described it, now pinned by rows
+   that fail without the fix. `eachrank` alone still carries the
+   structural ReturnsFn; it is safe only because it refuses early, and
+   its comment now says an analysing ReturnsFn comes before its flag.
+   The general test stands: a new body word whose ReturnsFn does not
+   analyse the body is invisible to the twins, and no gate will say so.
+
+   **What the review of that change found (2026-09-02), and it was
+   bigger than the change.** An adversarial review of the analysing
+   ReturnsFn measured, on both engines, that `rank2ElemType` — the
+   first-row element type foldaxis had used since its Callable landed —
+   was WRONG for any data whose rows differ in type: a lane draws its
+   elements from every row, and "rectangular" means equal length, not
+   equal type. Two consequences. The PRE-EXISTING one: the compiled body
+   was baked for the first row's type, so `ArrayUtil.foldaxis 1 [add]
+   [[1 2] ['a' 'b']]` answered `[3 0]` compiled against the
+   interpreter's `[3 'ab']` — a second silent foldaxis divergence that
+   NUR115 never named, reproducing identically before the change. The
+   NEW one: the analysing ReturnsFn typed the RESULT from the first row
+   too and the compiler baked that into the result's consumers, so a
+   check-refused program became a wrong-answering one. Both close at the
+   one root: `rank2ElemCarrier` joins EVERY row's elements through
+   scan's own `ElementCarrierFromValue` (a mixed population is a strict
+   Disjunct the body dispatch distributes per alternative; a shape the
+   pass cannot open is the gradual Any), and both the Callable's Inputs
+   and the ReturnsFn take it. Corpus rows in module-array.tsv pin the
+   mixed-row and heterogeneous-row answers on both engines; a direct
+   unit test pins each carrier arm and the result join. Two more from
+   the same review: a statically-empty rank-2 list is no longer analysed
+   (scan's `StaticListLen` guard — an operand-starved body over `[]`
+   runs on both engines and must not refuse at check), and
+   `foldaxis 1 [add] [[]]` — one row, zero columns, one EMPTY lane —
+   PANICKED in the handler on `lane[0]`; it now raises `foldaxis_error`
+   as fold's no-init rule does, mirrored at check time exactly as fold's
+   statically-empty case is (`staticEmptyLaneDetail`, a RuntimeMirror at
+   the call site the checker exposes — `foldaxis_error` had to be
+   registered as an error-severity code first, or the check-accuracy
+   ratchet counted the row as a checker blind spot), with a corpus row
+   and wave3 pins. None
+   of these is a NUR record: each surfaced and closed inside this PR,
+   the register deletes a Resolved record, and the rows are the trace.
+   The method note is the one worth keeping: the divergence the twin
+   regime exposed (NUR115) sat NEXT TO a divergence it did not, and only
+   a reviewer who measured mixed-type data found the second — the
+   oracle rows test bindings, the corpus rows test values, and a new
+   body-word typing needs both.
+
    **THE FLIP REHEARSAL, and what it found (2026-09-01).** The corpus
    lane is not the flip's whole exposure, and the cheapest way to see
    the rest is to RUN THE SUITES WITH THE FLAG ON —
