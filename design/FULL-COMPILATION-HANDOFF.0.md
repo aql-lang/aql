@@ -1,24 +1,34 @@
 # Full compilation — handoff for the bind-twin line
 
-**Point in time: 2026-08-31; first written 2026-08-30 at `007ac5c`.** This is
+**Point in time: 2026-09-02; first written 2026-08-30 at `007ac5c`.** This is
 a state-of-play note for whoever picks up Stage 4's remaining piece. The
 design is [FULL-COMPILATION.0.md](FULL-COMPILATION.0.md); §6.5 is the section
 that matters here. This document does not restate the design — it records
 where the work stands, what has been measured, and the three or four things
 that will waste a day if they are re-derived from scratch.
 
+**Read it as a running log, not a snapshot.** Sections are appended as work
+lands and the earlier ones are left standing with their dates, because what
+a measurement said BEFORE a fix is half of why the fix is what it is. Where
+an early section states a plan the later ones overtook, the later one wins;
+each says so explicitly.
+
 ## Where the work is
 
 Stages 0, 1 and 2 are landed. Stage 4's recorder and apply kernel are
-landed. **What remains of Stage 4 is the bind twins**, and they are the
-named fix for NUR110, for family L's conditional fn shadow, and for the
-unledgered rebind-staleness gates.
+landed. **The bind twins are landed too, and FLIPPED** (2026-09-01/02):
+rollback-and-replay is the only regime, the keep-installs path is deleted,
+and the rollback base rides with the Program. What that did and did not buy
+is the whole subject of the blocks below — in particular it did NOT license
+the keep-regime latch deletions the payoff list names, which are measured
+one gate at a time in "The payoff gates, measured".
 
-The twins are not written yet. What exists is the measurement that has to
-precede them: `CheckState.BindLedger`, an **inert** record of every
+The rest of this section is the state BEFORE the twins existed, kept because
+the population measurement is what sized every increment that followed.
+What existed then was `CheckState.BindLedger`, an **inert** record of every
 runtime-visible binding transition the check pass performs, in source
-order. Nothing reads it to decide anything, so it cannot regress a program;
-it can only size the next increment.
+order. Nothing read it to decide anything, so it could not regress a program;
+it could only size the next increment.
 
 ### The population, measured over `lang/spec` (7644 rows)
 

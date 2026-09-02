@@ -1,6 +1,13 @@
 # Full compilation — the total lowering design
 
-**Status:** proposal, no code. **Recorded:** 2026-08-25.
+**Status:** the programme of record, in implementation. **Recorded:**
+2026-08-25 as a proposal; adopted and under way since 2026-08-26. Stage 2 is
+landed; Stages 3 and 4 are partly landed (Stage 4's bind twins reached their
+end state on 2026-09-02 — rollback-and-replay is the only regime); Stages 5
+to 9 are not started beyond instruments and worklist measurements. §10's
+stage table carries the per-stage detail and is the authority on what has
+landed; the running state-of-play is
+[FULL-COMPILATION-HANDOFF.0.md](FULL-COMPILATION-HANDOFF.0.md).
 **Provenance:** the directive that closes the question
 `design/COMPILE-DECLARATION-MODEL.0.md` left open: interpreter islands are
 not acceptable, the interpreter is not an escape hatch, failure to compile
@@ -8,7 +15,9 @@ is a hard error, and compiled code must behave exactly as interpreted code
 with the checker aligned with both. This note designs the compiler that
 satisfies those four sentences.
 
-> Authority: this is a proposal. `design/COMPILABLE-SUBSET.md` remains the
+> Authority: this note is the DESIGN, not the record of what is built —
+> §10's stage table and the handoff are that.
+> `design/COMPILABLE-SUBSET.md` remains the
 > statement of the current subset; `design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md`
 > remains the record of the doctrine this note extends. Where this note and
 > the code disagree, the code wins. Code citations were verified against the
