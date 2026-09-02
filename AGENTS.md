@@ -133,12 +133,19 @@ Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
 
 ## Build, test, verify
 
-From the repo root, the **pre-commit checklist** (run all four before every
+From the repo root, the **pre-commit checklist** (run all five before every
 commit — `make lint` catches what `vet` and `test` miss):
 
 ```bash
-make fmt && make vet && make lint && make test
+make fmt && make vet && make lint && make test && make cover-gate
 ```
+
+`make cover-gate` enforces **ADR-008**: 100% unit-test coverage of every
+reachable Go statement, the sole exclusions being provably-unreachable
+guards carrying a proof-carrying `//covergate:allow <reason>` comment on the
+guard's opening line (`design/COVERAGE-ALLOWLIST.10.md`). It is the
+slowest of the five and the one most often skipped; skipping it is how a
+merged PR turns CI red.
 
 Faster, scoped iteration:
 

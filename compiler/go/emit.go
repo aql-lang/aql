@@ -1711,10 +1711,35 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 	if es == nil {
 		return func() {}
 	}
+	// THE PUBLICATION GATE. A body run at FnBodyDepth > 0 has nothing to
+	// say about the latch, and saying it anyway is what declines every
+	// nested multi-run shape. NoteBindTransitionEntry suppresses on
+	// FnBodyDepth > 0 (fn-body defs are frame-locals, not registry
+	// bindings), so such a run records NO twin and its range is empty by
+	// construction — the condition is exact, not a heuristic. But
+	// tryRecordClosure's body COMPILE re-runs the outer body inside
+	// AnalyseFnBody, and every nested higher-order ReturnsFn fires again
+	// there: without this gate the nested word's guard close OVERWRITES the
+	// slot the analysis phase left correct, and AdoptResidentTwins then
+	// fails its identity fence and adopts nothing.
+	//
+	// The clobber is not about what the nested body BINDS — measured
+	// 2026-09-02, `fold [ var [[a b] ([1] each [add 1]) (a add b)] ] [1 2] 0`
+	// refused although the nested body binds nothing at all, and the same
+	// shape with `filter` (which does not route through
+	// analyseHigherOrderBodyVals) compiled. Every caller of that function
+	// writes this latch, flagged word or not; only the flagged few read it.
+	//
+	// A nil registry publishes nothing: the guard is called with one in the
+	// recorder's own settled tests.
+	publish := r != nil && r.Check != nil && r.Check.FnBodyDepth == 0
 	from := len(es.bindTwins)
 	inner := es.BodyAnalysisGuard()
 	return func() {
 		inner()
+		if !publish {
+			return
+		}
 		// A SUPERSEDED ROUND's twins are speculative, not real. Some
 		// higher-order analyses re-run the same body to a fixed point (fold's
 		// accumulator widens between rounds — analyseHigherOrderBodyVals'

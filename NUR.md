@@ -600,6 +600,49 @@ binding", family L's stated full graduation, and Stage 5 work. Three attempts
 are now recorded as rejected, each with its measurement, so the next one does
 not re-derive them.
 
+**THE DEF TWINS LANDED AND FLIPPED (2026-09-01/02), AND THIS RECORD IS STILL
+OPEN — with a NEW mechanism.** The sentence above ("the fix is the def twins")
+is now overtaken: rollback-and-replay is the only regime, and the divergence
+survived it. Recording the change, because the symptom is identical and the
+mechanism is not, and a reader who checks only the symptom will conclude
+nothing moved.
+
+BEFORE the flip, the compiled lane KEPT the check pass's installs, so the
+arm's `def` simply survived the pass into the run. AFTER it, the pass's
+installs are rolled back and each transition is REPLAYED from a placed op —
+and the arm's twin is placed OUTSIDE the branch. Measured
+(`boru check --emit -e 'if false [def op 1] [0] end op'`):
+
+```
+0000 BIND_TWIN   w0   ; bind twin def op @depth 1 (replay)   <- unconditional
+0001 PUSH_CONST  k0   ; false (Boolean)
+0002 JMP_IF_FALSE -> 0004
+0003 JMP         -> 0005
+0004 PUSH_CONST  k1   ; 0 (Integer)
+0005 PUSH_CONST  k2   ; 1 (Integer)                          <- the read, folded
+```
+
+So the record now has TWO independent wrongs where it had one, and either
+alone reproduces it: the twin replays unconditionally because it sits before
+`JMP_IF_FALSE`, and the read of `op` const-folds at check time to the arm's
+value. A conditional PLACEMENT fixes the first and leaves the second.
+
+The measured boundaries in the table above all still hold — the value-shadow
+row still refuses (`residual value of unknown provenance`), family L still
+refuses the fn-shadow, the zero-iteration loop is still correct. The
+divergence is reachable only with the checker bypassed (`-no-check`): both
+lanes report `undefined_word` for the bare shape under a normal run, which is
+the third disagreement this record already carries — check and compile
+disagreeing with each other.
+
+**The graduation path is re-filed.** Not "the def twins", which are done:
+§6.9's `OpDispatchGeneric` for the read half, plus a BINDER half that makes a
+conditionally-bound name registry-visible at VM time and a placement that puts
+the twin INSIDE the arm's region. That is the same re-filing the four
+payoff-list gates took on 2026-09-02 (design/FULL-COMPILATION-HANDOFF.0.md,
+"The payoff gates, measured"), and for the same reason: the twins fix where
+the registry is, not what is in the bytecode.
+
 ---
 
 ## NUR109 — an unbound parser name is two different errors {#nur109}
