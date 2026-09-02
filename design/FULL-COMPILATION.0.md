@@ -916,6 +916,17 @@ change — `region_desc.go`'s `k` pair, where the same token is a value slot
 or a collection barrier depending on the binding. That is exactly what
 OpCollect answers.
 
+> **CORRECTED 2026-09-02.** Right about that shape, wrong as a description
+> of the gate, which covers three structurally different divergences and
+> only one of them is a region's. In `def x 1 … [x add y] … def x 2` the
+> token `x` PRECEDES the word, so it is a value-stack operand that no
+> forward-collecting window ever sees — its slot is an ordinary
+> `PUSH_CONST`. And a splice payload bakes an INSTRUCTION SEQUENCE, which no
+> descriptor re-derives. OpCollect answers the `k` pair and nothing else
+> here. (It also does not exist yet: `Program.Regions` has zero writers and
+> zero readers, and `OpCollect`/`OpDispatchGeneric` appear only in
+> comments.)
+
 Its stored-handler twin is a different failure. `NotifyNameRebound`
 (`compiler/go/emit.go:2721-2736`) refuses because module-scope def sites
 execute only in the CHECK pass, so by VM time the def table already holds
@@ -2420,8 +2431,8 @@ comments (`emit.go:2460/2474` — "until the §5.6 bind twins make VM-time
 def order real"). Every check-mode `def`/`undef`/module install that
 affects runtime-visible bindings emits a twin op so the VM's registry state
 at instruction *i* equals the interpreter's tape state at the corresponding
-token. This deletes the unledgered **rebind-staleness gates** — the frozen-read
-refusals (`NoteFrozenRead`/`NotifyNameRebound`) and the interim
+token. This was expected to delete the unledgered **rebind-staleness gates** — the
+frozen-read refusals (`NoteFrozenRead`/`NotifyNameRebound`) and the interim
 stored-handler latches (`emit.go:2460-2478`) — family L (conditional fn
 shadow: the refusal site is `core/go/core_helpers.go:165`, and the
 ledger's graduation note asks for exactly this — "a runtime dispatch
@@ -2430,6 +2441,33 @@ respecting the conditional binding",
 fn-local-fn refusal (the name is looked up live, so the never-executed-def
 hazard disappears). Family F — dispatch *recovery* — is §6.9(1)'s to
 close, not the twins'.
+
+> **MEASURED 2026-09-02, after the twins landed and flipped: that paragraph
+> is WRONG, for all four gates. None of them is the twins' to delete.** The
+> reason is one sentence, and it applies to each of them differently: the
+> twins fix WHERE THE REGISTRY IS, and these gates defend against WHAT IS IN
+> THE BYTECODE. Rollback-and-replay makes VM-time binding state equal the
+> interpreter's tape state at the corresponding token; it does not un-bake a
+> const, un-inline a splice, or re-resolve a call target the lowering
+> already chose.
+>
+> Frozen-read: the stale value is a `PUSH_CONST` inside a compiled unit —
+> verified by disassembly, with the twin already replaying beside it —
+> so deleting the gate yields a SILENT wrong answer (`1 1` for the
+> interpreter's `1 2`). Stored-handler: needs a runtime LOOKUP at the call,
+> which is §6.9's `OpDispatchGeneric`; without it the fallback reads the
+> pass-final binding. Family L: the check pass records NO transition for a
+> rolled-back arm, so there is nothing to replay — and the rollback now makes
+> the registry (outer overload) disagree with the baked `OpCallUser` (shadow
+> unit), where the old default at least had them agree. NUR037: fn-body defs
+> are excluded from the ledger BY CONSTRUCTION (`FnBodyDepth > 0`), a
+> deliberate exclusion that took it from 69254 entries to 6110, so no twin
+> exists to place.
+>
+> All four re-file under §6.9's lookup half, and family L and NUR037
+> additionally need a BINDER half that makes a conditionally- or
+> frame-locally-bound name registry-visible at VM time. The gate-by-gate
+> measurement is in the handoff's "The payoff gates, measured".
 
 **WHICH TRANSITIONS ACTUALLY NEED A TWIN — enumerated 2026-08-30, because the
 raw site count is misleading by an order of magnitude.** Grepping `r.Defs`

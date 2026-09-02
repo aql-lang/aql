@@ -374,6 +374,224 @@ reverses an earlier plan:
    one PR, and the register deletes a Resolved record; this note and the
    commit are its trace.
 
+## The payoff gates, measured (2026-09-02)
+
+§6.5 names four gates the bind twins were supposed to delete: the
+frozen-read refusals (`NoteFrozenRead` / `NotifyNameRebound`), the interim
+stored-handler latches, family L's conditional fn shadow, and NUR037's
+fn-local-fn refusal. **All four are load-bearing. The claim is wrong for
+every one of them, and wrong differently each time** — which is why the
+measurement had to be gate by gate rather than a single sweep.
+
+The common root, stated once because each gate rediscovers it: **the twins
+fix WHERE THE REGISTRY IS; every one of these gates defends against WHAT IS
+IN THE BYTECODE.** Rollback-and-replay makes VM-time binding state equal
+the interpreter's tape state at the corresponding token. It does not
+un-bake a const, un-inline a splice, or re-resolve a call target the
+lowering already chose. Any gate whose hazard lives in an emitted
+instruction is untouched by it, and three of these four do.
+
+- **FROZEN-READ — load-bearing, and it would fail SILENTLY.** Measured:
+  `def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  def x 2  f 0`
+  answers `1 2` interpreted. `boru check --emit` on the no-rebind twin
+  shows the unit as `PUSH_CONST k0 ; 1 / PUSH_LOCAL l0 / CALL_NATIVE add /
+  RET` with `BIND_TWIN … (replay)` already present in the root and
+  `fallbacks=0`. The twin replays; the const does not move. Delete the
+  hammer and both calls run that same unit — `1 1`, with no VM error to
+  notice. The `undef` variant is worse: the interpreter RAISES
+  `undefined_word`, the baked const answers `1`.
+  The design's own diagnosis at §6.5 line 903 — "Only the FROZEN-READ shape
+  is a region's business … That is exactly what OpCollect answers" — is
+  right about ONE of the three shapes the gate covers and wrong as a
+  description of the gate. Shape (2), the `region_desc.go` `k` pair where a
+  rebind flips a forward token between value-slot and barrier, is a region
+  problem. Shape (1) is not: in `x add y` the token PRECEDES the word, so it
+  is a value-stack operand that no forward-collecting region window ever
+  sees. Shape (3), a splice payload, is not either: a rebind changes the
+  INSTRUCTION SEQUENCE, and no descriptor re-derives that. **And OpCollect
+  does not exist** — `Program.Regions` (`compiler/go/bytecode.go`) has zero
+  writers and zero readers in the tree (`grep -rn "\.Regions"`), and
+  `OpCollect`/`OpDispatchGeneric` appear only in comments.
+- **STORED-HANDLER DEP-REBIND — load-bearing, and already measured so in
+  the rehearsal.** Re-verified against the code: the gate is
+  `NotifyNameRebound`'s `depHit` arm, and the counterexample is
+  `design/RELOAD-INVALIDATION.0.md` §3's F1 (interpreter `6 105 12`,
+  compiled-with-poisoning-only `12 12 12`). Poisoning alone falls back to
+  `CallBoru`, which resolves the LIVE def table — and module-scope def
+  sites all execute in the check pass, so by VM time the table holds the
+  pass-final binding for calls sequenced BEFORE the rebind too. The twins
+  make VM-time def order real, which is the necessary half; the sufficient
+  half is a runtime LOOKUP at the call, i.e. §6.9's `OpDispatchGeneric`.
+  Until then, disabling it buys a VM `CALL_NATIVE_POLY no match`
+  internal_error and a fallback, not compiled code.
+- **FAMILY L — load-bearing, and the flip made the shape WORSE.** For an
+  `if`/`case`/`for` arm the check pass records NO transition at all:
+  `runCarrierBodyDefsAdds` raises `RolledBackBodyDepth` and
+  `NoteBindTransitionEntry` returns early on it. No ledger row, no twin, no
+  op — there is nothing for the replay to replay, so deleting the gate
+  produces a silent miscompile rather than a graduation. And the half the
+  rollback DOES fix now cuts the other way: the registry ends up holding the
+  outer overload while the already-lowered `OpCallUser` still names the
+  shadow unit, so bytecode and registry disagree with each other. Under the
+  old keep-installs default they at least agreed. Measured on the
+  gate-exempt cond-fragment sibling: one `BIND_TWIN` naming the OUTER
+  `def g`, and `CALL_USER f0` where `f0` is the SHADOW body.
+- **NUR037 — load-bearing, and excluded from the twins BY CONSTRUCTION.**
+  `NoteBindTransitionEntry` returns early whenever `FnBodyDepth > 0`, and
+  that is exactly this gate's population: a `def … fn` inside a fn body.
+  The exclusion is deliberate and measured (it took the ledger from 69254
+  entries to 6110 — fn-body defs are frame-locals, and the compiled lane
+  gives them slots, not registry bindings). No twin exists to place; the
+  arm-residency bridge is root-fenced out of fn units anyway; and
+  `RunFnBodyOnce` already restores its snapshot, so the old default and the
+  new rollback leave the VM registry identical for this shape. The design
+  credits the deletion to "the name is looked up live" — that is
+  `OpDispatchGeneric` again, and a live lookup without a BINDER half finds
+  either nothing (the original NUR037 bug) or an outer same-named binding
+  the twins did replay, which is worse than the refusal.
+
+**What this changes about the plan.** The four gates leave the twins'
+payoff list and re-file under §6.9 (`OpDispatchGeneric` — the lookup half)
+plus, for family L and NUR037, a BINDER half that makes a conditionally- or
+frame-locally-bound name registry-visible at VM time. §6.5's payoff
+sentence is corrected in the design accordingly. The honest summary of the
+flip's dividend is the one the corpus already showed: full parity with the
+old default, NUR116 discharged, NUR115 discharged, one known miscompile
+graduated, and the rebind gates untouched.
+
+**Method note, because it generalises.** Three of the four verdicts came
+from `boru check --emit` rather than from running anything: if the hazard is
+a baked instruction, the disassembly settles the question before any gate is
+disabled. Reach for it first — and never for `-compile`, which falls back
+silently and reports a gate deletable when it is not.
+
+## Nested multi-run bodies: the latch-to-stack design
+
+The (c) block above promised "the latch-to-stack design the second
+rehearsal wrote up". **No such write-up existed** — it lived in session
+notes and nowhere in `design/`, `NUR.md` or the history. This section is
+that design, reconstructed from the code on 2026-09-02 and measured. Three
+of the sketch's four remembered parts turned out to be wrong or incomplete;
+those corrections are the reason it is worth writing down rather than
+re-deriving.
+
+**`fold-nested-multirun` is FOUR declines, not one**, and the first fires
+on a nested body that binds nothing at all:
+
+- **The compile-phase clobber (primary).** `MultiRunBodyGuard` is invoked
+  from `analyseHigherOrderBodyVals`, i.e. from EVERY higher-order ReturnsFn
+  — `each`, `for-each`, `fold`/`scan` (through the accumulator fixed
+  point), `outer`, `inner` (twice per dispatch), `eachrank`, `foldaxis` —
+  not only the words carrying `BodyMultiRunKeepsDefs`. The latch is written
+  by all of them and read for the flagged few. The analysis phase leaves it
+  CORRECT; then `tryRecordClosure`'s body compile RE-RUNS the outer body,
+  the nested word's ReturnsFn fires again, and its guard close overwrites
+  the single slot. `AdoptResidentTwins` then fails the identity fence and
+  adopts nothing. Measured three ways: `fold [ var [[a b] ([1] each [add
+  1]) (a add b)] ] [1 2] 0` refuses although the nested body binds NOTHING;
+  the same shape with `for-each` (which can never adopt) refuses too; and
+  the same shape with `filter` — which does not route through
+  `analyseHigherOrderBodyVals` — COMPILES. The clobber is precisely "any
+  `analyseHigherOrderBodyVals` caller inside the body".
+- **Count.** The outer bracket's `[from,to)` CONTAINS the inner body's
+  twins, but the outer unit's fragment holds no def event for them — they
+  live in the nested unit's own fragment — so the strict
+  `len(events) != len(twins)` fence declines. This is what owned-set
+  subtraction is for.
+- **Supersede.** The fixed-point exemption compares against the single
+  slot, which by the time an outer round-2 guard closes holds the CHILD's
+  latch. A fold accumulator around a nested body therefore never exempts
+  its dead rounds.
+- **The inner dispatch can never adopt.** Its `AdoptResidentTwins` runs
+  mid-way through the outer body compile, where the root fence sees an open
+  unit recording and returns immediately.
+
+**Part 1 — the publication gate. LANDED 2026-09-02, and it is the
+highest-value piece.** At guard OPEN compute `publish := r != nil &&
+r.Check != nil && r.Check.FnBodyDepth == 0`; when false, suspend and taint
+exactly as today but publish nothing. This is exact rather than heuristic:
+`FnBodyDepth == 0` is precisely the condition under which a twin can be
+noted at all, so a gated run has an empty range by construction and has
+nothing to say. Nil-safety is not optional — existing tests call the guard
+with a nil registry.
+
+What it bought, measured: **two shapes graduated from refusal to parity**
+and are now oracle rows —
+`fold [ var [[a b] ([1] each [add 1]) (a add b)] ] [1 2] 0` (`3`) and
+`[1 2] each [ var [[r] def x r (for-each [add 1] [1 2]) x] ]` (`[1 2]`),
+the second being a nested word that carries no `BodyMultiRunKeepsDefs` and
+so could never have adopted anyway; it declined purely by writing the latch
+on its way past. Parity here means the install stacks were measured equal
+on both engines, not merely that the programs compile. The `filter` control
+that never refused stays as the attribution.
+
+What it did NOT buy, also measured: `fold-nested-multirun` and
+`each-nested-multirun` still refuse — those are the count, supersede and
+inner-adopt declines, which need Parts 2 to 4. So does
+`aliased-body-memo-hit`, which is the point of that row.
+
+**Part 2 — the stack, and the tree it leaves behind.** "A stack of open
+brackets" is necessary but NOT sufficient, and this is the sketch's first
+real error: by the time any adoption runs, every bracket has closed (the
+analysis phase precedes the record phase), so a stack of open brackets is
+empty exactly when it is needed. The stack's job is to build a persistent
+TREE — nodes carrying `bodyID`, `from`/`to`, `reg`, `evSeq`, their
+surviving `children`, the ranges of EVERY closed child (superseded ones
+included), and a descent cursor — which a second, compile-time stack then
+walks.
+
+**Per-level supersede — the sketch omits it, and it is required.** The
+fixed-point test must compare a closing node against the previous SIBLING
+at its own nesting level, not against the last bracket closed anywhere.
+With any nested body word the global comparison target is the child, so the
+outer fixed point never supersedes its dead rounds. The `evSeq` witness
+still holds at sibling level: analysis rounds run with recording suspended,
+so the event counter cannot move between them.
+
+**Part 3 — owned-set subtraction, and it must subtract TWO things.** The
+sketch names only child ranges. `owned(n)` is `[n.from, n.to)` minus every
+child range AND minus the superseded indices: an inner fixed point nested
+inside a SURVIVING outer round leaves dead twins inside the outer's range
+but outside the surviving child's range, and subtracting only the survivors
+drags them into the outer's owned set and breaks the strict count.
+
+**Part 4 — the root fence, and the sketch is literally wrong here.** There
+is no `armResidentDepth > 0` condition in `AdoptResidentTwins` to relax;
+the fence is `len(openUnitRecs) != 0 || len(frames) != 1`. A bare
+"`> 1`" permission would never check WHAT the open unit is. The counting
+form is the shape to aim at — the open-unit count matching the bracket
+depth, so an adoption is permitted exactly when the unit being adopted into
+is the one this bracket's dispatch compiled.
+
+**What must NOT be relaxed, and the row that enforces it.** The
+`closureLatch.fresh` memo fence looks like a single-latch relic once a
+descent stack exists. It is not. `aliased-body-memo-hit` in the parity
+oracle (landed 2026-09-02, ahead of any stack work) pins the shape: one
+quoted body dispatched twice shares a body ID AND an analysis key, so the
+second dispatch memo-hits the first's unit; the body is a var pair whose
+notes carry Pos 0:0, which makes the position cross-check inert while names
+and order are identical. Neither position nor name+order can separate the
+two brackets — `fresh` and the per-event `residentTwin >= 0` staleness belt
+are the only fences left. A stack that resolves a node by `bodyID` and lets
+a bracket claim a unit it did not compile pairs bracket 2's twins against
+bracket 1's stamped events; turn `residentTwin` into a list (the natural
+move, since that field is accounting and not a value source) and the last
+belt goes with it — and the program COMPILES, silently, two twins satisfied
+by one op inside a unit neither bracket owns. The row's single-dispatch
+control compiles today, which is what attributes the refusal to the memo
+hit rather than to the aliasing.
+
+**Four more hazards the implementation must answer.** The probe fork copies
+`armResidentDepth` but deliberately not the latch — share the tree or the
+cursors by reference and the probe, which recompiles the same body, consumes
+the real state's cursors. The tree is built by the analysis descent and
+walked by the compile descent, so any dispatch that opens a bracket in one
+pass but not the other drifts them. `armBoundNames` would start gaining
+names mid-unit-compile, so the read fence begins poisoning from an inner
+dispatch's stream position. And the emit checkpoint snapshots
+`twinAdoptions` but nothing of the tree's cursors — latent today because
+rollback bails whole once an adoption has appended a unit.
+
    **THE FLIP REHEARSAL, and what it found (2026-09-01).** The corpus
    lane is not the flip's whole exposure, and the cheapest way to see
    the rest is to RUN THE SUITES WITH THE FLAG ON —

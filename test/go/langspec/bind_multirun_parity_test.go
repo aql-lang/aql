@@ -151,6 +151,69 @@ var parityShapes = []parityShape{
 	{name: "fold-nested-multirun",
 		src:    "fold [ var [[a b] ([1] each [def x 5]) (a add b)] ] [1 2] 0",
 		probes: []string{"x"}, refused: "twin regime:"},
+
+	// --- The NESTED multi-run frontier, and the trap set for its fix.
+	//
+	// `fold-nested-multirun` above is not ONE decline; measurement (2026-09-02)
+	// found FOUR stacked behind it, and the first fired on a nested body that
+	// binds nothing at all: every `analyseHigherOrderBodyVals` caller writes
+	// the multi-run latch, and the CLOSURE COMPILE re-runs the outer body, so
+	// the nested word's ReturnsFn clobbered the outer bracket after the
+	// analysis phase had set it correctly.
+	//
+	// GRADUATED the same day by the PUBLICATION GATE (MultiRunBodyGuard
+	// publishes only at FnBodyDepth == 0, which is exactly when a twin can be
+	// noted at all, so a compile-phase re-analysis has an empty range by
+	// construction and no longer overwrites anything). These three rows are
+	// its measurement: two shapes that now COMPILE where they refused, and
+	// one that never refused, so the graduation is attributed to the gate and
+	// not to the words involved.
+	{name: "nested-multirun-binds-nothing",
+		src:    "fold [ var [[a b] ([1] each [add 1]) (a add b)] ] [1 2] 0",
+		probes: []string{"a", "b"}},
+	// The nested word here carries NO BodyMultiRunKeepsDefs and so can never
+	// adopt — it declined purely by writing the latch on its way past.
+	{name: "nested-unflagged-multirun-word",
+		src:    "[1 2] each [ var [[r] def x r (for-each [add 1] [1 2]) x] ]",
+		probes: []string{"x", "r"}},
+	// The control that was never affected: `filter` types its result without
+	// running the body, so it does not route through
+	// analyseHigherOrderBodyVals and never touched the latch.
+	{name: "nested-non-multirun-word-compiles",
+		src:    "[1 2] each [ var [[r] def x r (filter [gt 1] [1 2]) x] ]",
+		probes: []string{"x", "r"}},
+
+	// THE MEMO HAZARD — this row exists to fail a WRONG fix, and it is the
+	// reason it lands before any stack work rather than beside it.
+	//
+	// One quoted body value `q`, dispatched twice. Both dispatches therefore
+	// carry the SAME body.ID, so any structure keyed on body identity holds
+	// two brackets under one key — ambiguity by construction. Worse, the two
+	// dispatches also share one FnAnalysisKey (the body component is only the
+	// first token's POSITION), so the second MEMO-HITS the first's compiled
+	// unit: no frame pushed, no events re-recorded, no fnRec appended. And
+	// the body is a VAR PAIR, whose ledger notes carry Pos 0:0, which makes
+	// AdoptResidentTwins' position cross-check inert while the names and
+	// their order are identical — so neither position nor name+order can tell
+	// the two brackets apart. The ONLY fences left standing are
+	// `closureLatch.fresh` and the per-event `residentTwin >= 0` staleness
+	// belt, and both look like single-latch relics once a descent stack
+	// exists. A stack that resolves a node by bodyID and lets a bracket claim
+	// a unit it did not compile would pair the second bracket's twins against
+	// the first's already-stamped events; turning `residentTwin` into a list
+	// (the natural move, since ResidentBindSpec.Twin is accounting and not a
+	// value source) removes the last belt, and the program COMPILES —
+	// silently, two twins satisfied by one op, inside a unit neither bracket
+	// owns. That is the shape this row makes impossible to reach quietly.
+	//
+	// The single-dispatch control is the attribution: it COMPILES, so the
+	// refusal below is the memo hit and not the aliasing.
+	{name: "aliased-body-single-dispatch",
+		src:    "def q quote [ var [[r] def x r x] ]  ([10 20] each q)",
+		probes: []string{"x", "r", "q"}},
+	{name: "aliased-body-memo-hit",
+		src:    "def q quote [ var [[r] def x r x] ]  ([10 20] each q)  ([30 40] each q)",
+		probes: []string{"x", "r", "q"}, refused: "twin regime:"},
 	// foldaxis — the rows that could NOT be written before NUR115's discharge
 	// (2026-09-02). The word's structural ReturnsFn never analysed its body,
 	// so no twin was recorded and the placement gate was blind: a def in the
