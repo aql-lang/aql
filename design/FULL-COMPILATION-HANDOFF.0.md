@@ -337,6 +337,33 @@ reverses an earlier plan:
    The lesson for the next flip-sized change: the belt is `make test`,
    not the suites one remembers to run.
 
+   **(f) The rollback rides WITH the Program (2026-09-02, Codex P1 on the
+   flip PR).** The flip put the snapshot/rollback pair in lang's two
+   compiled entry points — which left every OTHER compile-then-run caller
+   without one: the documented low-level `CompileCheck` then
+   `eng.RunProgram` flow, and eng's own compile-then-run tests
+   (`compileTokens` + `RunProgram`). With the replay now unconditional,
+   that flow stacked a second install on the check pass's kept one —
+   `def X (refine Integer)` at depth 2, a later `undef X` leaving a
+   binding and its type live. Fixed by making the base the PROGRAM's:
+   `EmitState.BindRegistry` snapshots the program registry's bindings at
+   its first bind (the same moment `progReg` is captured, before the
+   check pass performs a transition), `Finalize` stamps
+   `Program.ReplayBase` / `ReplayReg`, and `eng.runProgram` restores it
+   before executing — only when run ON that registry (a foreign DefTable
+   must never be installed; a base-less hand-built Program restores
+   nothing). `RestoreBindingsForReplay` now restores from a CLONE so a
+   Program can run more than once and every run rolls back to the same
+   base. lang's explicit pair is deleted: one mechanism, and every
+   caller inherits it. Pinned at every layer — core (the clone keeps the
+   snapshot pristine), compiler (first bind captures, a sub-registry
+   re-bind neither re-captures nor re-targets), eng (hand-built program:
+   depth 1 not 2, a second run still 1, foreign base and no base both
+   restore nothing), lang (Codex's exact low-level flow, def then
+   undef). Not a NUR record: the divergence surfaced and closed inside
+   one PR, and the register deletes a Resolved record; this note and the
+   commit are its trace.
+
    **THE FLIP REHEARSAL, and what it found (2026-09-01).** The corpus
    lane is not the flip's whole exposure, and the cheapest way to see
    the rest is to RUN THE SUITES WITH THE FLAG ON —

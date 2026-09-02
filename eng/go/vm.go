@@ -242,6 +242,21 @@ func runProgram(p *compiler.Program, r *core.Registry, stepLimit int) (result []
 	if p == nil {
 		return nil, fmt.Errorf("bytecode: nil program")
 	}
+	// §6.5's rollback, carried by the Program: roll this registry's bindings
+	// back to the base the recorder captured before the check pass, so the
+	// placed twins replay onto it instead of stacking a second install on
+	// the pass's kept one. Only on the registry the base was captured from —
+	// a program run elsewhere has nothing of its own to roll back there, and
+	// a foreign DefTable must never be installed; a base-less hand-built
+	// program restores nothing (the caller owns its registry). And only for
+	// a program that RECORDED a transition: the twin table mirrors the
+	// pass's bind ledger entry for entry (the langspec gate), so an empty
+	// table means the pass moved no binding and the registry already stands
+	// at the base — the restore would clone the whole def table for nothing,
+	// on every run (the compiled-mode alloc guard runs one program 65 times).
+	if p.ReplayReg == r && len(p.BindTwins) > 0 {
+		r.RestoreBindingsForReplay(p.ReplayBase)
+	}
 	return runVMEntry(p, r, stepLimit, func(vc *vmContext) ([]core.Value, error) {
 		// The top-level program runs at unit -1 (its own Code), with the
 		// program's declared locals and an operand stack pre-sized to the

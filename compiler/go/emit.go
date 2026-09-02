@@ -735,6 +735,16 @@ type EmitState struct {
 	// sub-registry fn (a module preamble body, rec.reg != progReg) and stamp
 	// CompiledFn.Reg only for the latter — see the Finalize stamp site.
 	progReg *core.Registry
+	// bindSnap is the twin regime's ROLLBACK BASE: progReg's runtime-visible
+	// bindings as they stood at that first bind, before the check pass
+	// performed a single transition. Finalize stamps it on the Program
+	// (ReplayBase / ReplayReg) and RunProgram restores it before executing,
+	// so the rollback travels WITH the program and every compile-then-run
+	// caller inherits it — lang's entry points and the low-level
+	// CompileCheck-then-RunProgram flow alike (Codex P1 on #426: that flow,
+	// and eng's own compile-then-run tests, had no rollback, so the replay
+	// stacked a second install on the pass's kept one).
+	bindSnap core.BindingSandbox
 	// SiteCounts tallies dispatches per site class while recording is
 	// active (counting stops once the program is marked
 	// uncompilable, with the rest of the recording).
@@ -1405,6 +1415,7 @@ func (es *EmitState) BindRegistry(r *core.Registry) {
 	// re-binds reg to a foreign sub-registry. Captured once, never re-bound.
 	if es.progReg == nil {
 		es.progReg = r
+		es.bindSnap = r.SnapshotBindings()
 	}
 	es.reg = r
 }
@@ -8620,9 +8631,12 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 	p := &Program{DynEnv: es.dynEnv,
 		// The twin table travels with the finalized Program verbatim (a copy,
 		// so a later pass on the same EmitState cannot mutate a delivered
-		// Program). Inert until the rollback-and-replay flip — see the field.
+		// Program), with the rollback base the run restores before the
+		// placed twins replay onto it (§6.5 — see the fields).
 		BindTwins:       append([]core.BindTransition(nil), es.bindTwins...),
-		BindTwinEntries: append([]core.DefEntry(nil), es.bindTwinEntries...)}
+		BindTwinEntries: append([]core.DefEntry(nil), es.bindTwinEntries...),
+		ReplayBase:      es.bindSnap,
+		ReplayReg:       es.progReg}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*core.Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
 	// (counting the program residual) is promoted to a frame local so the

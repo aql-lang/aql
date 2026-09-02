@@ -1005,16 +1005,17 @@ type Program struct {
 	ClosureRet map[int]ClosureRetSpec
 	TypedBinds []core.TypedBindSpec
 	// GlobalBinds backs OpBindGlobal: one entry per top-level computed `def`,
-	// naming the binding and the DEPTH its check-pass install recorded, so the
-	// runtime value replaces the kept carrier binding in place (never a push).
+	// naming the binding and the DEPTH its check-pass install recorded. The
+	// runtime value is PUSHED: the pass's install was rolled back to
+	// ReplayBase before the run, so there is no kept carrier to replace.
 	GlobalBinds []GlobalBindSpec
 	// BindTwins is the program's bind-twin table (design/FULL-COMPILATION.0.md
 	// §6.5): the check pass's bind ledger, mirrored entry for entry through
-	// NoteBindTransition's own funnel and finalized with the Program. INERT
-	// under today's keep-the-installs regime — no instruction consumes it; it
-	// exists so the emission is complete and gated (the langspec gate asserts
-	// table == ledger for every compiled corpus program) before the
-	// rollback-and-replay flip gives each entry an op at its source position.
+	// NoteBindTransition's own funnel and finalized with the Program. Every
+	// entry has an op at its source position (Finalize's full-placement gate
+	// refuses otherwise) — OpBindTwin replays it, OpBindResident installs it
+	// per invocation — and the langspec gate asserts table == ledger for
+	// every compiled corpus program.
 	BindTwins []core.BindTransition
 	// BindTwinEntries is 1:1 with BindTwins: the DefEntry each push
 	// transition installed, captured at the note — the identical binding
@@ -1031,7 +1032,27 @@ type Program struct {
 	// replayed (the op carries the runtime value instead, which is the
 	// whole point). Only a twin-regime program carries entries.
 	ResidentBinds []ResidentBindSpec
-	DynMethods    []DynMethodSpec
+	// ReplayBase is the twin regime's ROLLBACK BASE (§6.5): the program
+	// registry's runtime-visible bindings as they stood when the recorder
+	// first bound it (EmitState.BindRegistry — before the check pass
+	// performed a single transition). RunProgram restores it before
+	// executing, so the placed twins replay onto the pre-pass state instead
+	// of stacking a second install on the pass's kept one. Carried BY THE
+	// PROGRAM so every compile-then-run caller inherits the rollback —
+	// lang's entry points and the low-level CompileCheck-then-RunProgram
+	// flow alike (Codex P1 on #426: the direct flow left `def X (refine
+	// Integer)` at depth 2, and a later `undef X` a binding and its type
+	// live). Zero (invalid) for a hand-built Program: the restore is a no-op
+	// and the caller owns its registry. Restored only when BindTwins is
+	// non-empty — an empty table means the pass moved no binding (table ==
+	// ledger), so there is nothing to roll back and no def-table clone to pay.
+	ReplayBase core.BindingSandbox
+	// ReplayReg is the registry ReplayBase was captured from — the program
+	// registry (EmitState.progReg). RunProgram restores only when it runs
+	// ON that registry: a program run elsewhere has nothing of its own to
+	// roll back there, and a foreign DefTable must never be installed.
+	ReplayReg  *core.Registry
+	DynMethods []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the
 	// pooled const to deep-clone and the frame-local slot to seat it in, for a
 	// multi-read compound body literal that needs one per-call construction shared
