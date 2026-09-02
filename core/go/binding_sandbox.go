@@ -49,10 +49,9 @@ package core
 // RestoreBindings → replay the pass's ledger — proven to land exactly the
 // registry the pass left (depths per transition, entry identity per name)
 // over every push-only corpus row, before any VM semantics changed. The
-// SECOND is the runtime regime itself (BORU_TWIN_REGIME=1, staged): lang's
-// compiled entry points snapshot before the check pass and, for a Program
-// stamped TwinRegime, roll back through RestoreBindingsForReplay below at
-// the one safe point — BETWEEN the pass and the run, where no enclosing
+// SECOND is the runtime regime itself — since the flip, the ONLY runtime
+// regime: lang's compiled entry points snapshot before the check pass and
+// roll back through RestoreBindingsForReplay below at the one safe point — BETWEEN the pass and the run, where no enclosing
 // pass holds references into the swapped table — before the placed
 // OpBindTwin ops (core.ApplyBindTwin) replay the transitions in stream
 // order.
@@ -129,11 +128,17 @@ func (r *Registry) RestoreBindings(s BindingSandbox) {
 // re-import (re-running module-body effects) on the next request. The type
 // partition and the cache reset are unchanged: mints retained, retirements
 // readmitted for the undef twins to re-apply, cached dispatch dropped.
+//
+// It restores from a CLONE, so the snapshot stays pristine: the snapshot is
+// a Program's rollback base (compiler.Program.ReplayBase, restored by
+// RunProgram), a program may run more than once, and every run must roll
+// back to the SAME base — not to the table the previous run mutated after
+// the restore installed it live.
 func (r *Registry) RestoreBindingsForReplay(s BindingSandbox) {
 	if r == nil || !s.valid {
 		return
 	}
-	r.Defs = s.defs
+	r.Defs = s.defs.Clone()
 	r.dispatchCache.reset()
 	r.Types.readmitRetired(s.typeIDs)
 }

@@ -87,6 +87,17 @@ import "boru:array-util"  ArrayUtil.eachrank 1 [reverse] [[1 2] [3 4]]	[[2 1] [4
 import "boru:array-util"  ArrayUtil.foldaxis 0 [add] [[1 2] [3 4]]	[4 6]	foldaxis 0: reduce down each column
 import "boru:array-util"  ArrayUtil.foldaxis 1 [add] [[1 2] [3 4]]	[3 7]	foldaxis 1: reduce along each row
 import "boru:array-util"  ArrayUtil.foldaxis 0 [add] []	[]	foldaxis over an EMPTY rank-2 list: no lane to reduce, so the result is empty — and the body's input carrier has no element to take a type from, which is the gradual-Any arm of the compiled body's shape
+# Mixed-type ROWS (2026-09-02, found in review of the analysing ReturnsFn): a
+# lane draws its elements from EVERY row, so the body's carrier is the join
+# over all rows' elements. Typing it from the first row alone baked an
+# Integer overload into the compiled body — `[3 0]` where the interpreter
+# answers `[3 'ab']` — and, once the ReturnsFn analysed the body, into the
+# result's consumers too. Rectangular means equal LENGTH, not equal type.
+import "boru:array-util"  ArrayUtil.foldaxis 1 [add] [[1 2] ['a' 'b']]	[3 'ab']	mixed rows, axis 1: the body meets an Integer lane and a String lane
+import "boru:array-util"  ArrayUtil.foldaxis 0 [add] [[1 'a'] [2 'b']]	[3 'ab']	a heterogeneous row: the carrier is a Disjunct the body distributes over, not the Scalar ancestor
+import "boru:array-util"  ArrayUtil.foldaxis 0 [add add] []	[]	an operand-starved body over the statically-empty list is never run, so it is never analysed (scan's guard)
+import "boru:array-util"  ArrayUtil.foldaxis 0 [add] [[]]	[]	one row, zero columns, axis 0: no lane at all
+import "boru:array-util"  ArrayUtil.foldaxis 1 [add] [[]]	ERROR:foldaxis_error	one row, zero columns, axis 1: one EMPTY lane — nothing seeds the accumulator (was a lane[0] panic)
 #
 # §6  negative — a namespace word is undefined until the module is imported
 ArrayUtil.shape [[1 2 3]]	ERROR:undefined_word	`ArrayUtil` is unbound without `import`

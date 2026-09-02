@@ -257,4 +257,9 @@ func TestW9BodyAnalysisFailures(t *testing.T) {
 	if out := scanReturnsFn([]Value{w9ErrBody(), nonEmpty}, r); len(out) != 1 {
 		t.Fatalf("scanReturnsFn fallback: %v", out)
 	}
+	// foldaxis's analysing ReturnsFn (NUR115) shares the fixed point and the
+	// fallback: an unanalysable lane body answers the bare List carrier.
+	if out := foldaxisReturnsFn([]Value{NewInteger(1), w9ErrBody(), w9List(w9List(NewInteger(1)))}, r); len(out) != 1 || !out[0].Parent.ConformsTo(TList) {
+		t.Fatalf("foldaxisReturnsFn fallback: %v", out)
+	}
 }

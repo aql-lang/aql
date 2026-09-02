@@ -2,8 +2,8 @@ package core
 
 // Stage-5 coverage tests for deftable.go: the nil-receiver guard on every
 // DefTable method (each is documented as nil-safe, so the guards are part
-// of the contract), plus SetAt (whole function), the Truncate negative /
-// zero-want arms, and Set's empty-bodies arm. All tests use fresh local
+// of the contract), plus the Truncate negative / zero-want arms and Set's
+// empty-bodies arm. All tests use fresh local
 // tables — no globals touched.
 
 import "testing"
@@ -40,9 +40,6 @@ func TestStage5DefTableNilReceiverGuards(t *testing.T) {
 	if dt.Replace("x", NewInteger(1)) {
 		t.Error("nil Replace must be false")
 	}
-	if dt.SetAt("x", 1, NewInteger(1)) {
-		t.Error("nil SetAt must be false")
-	}
 	dt.Truncate("x", 0)                 // no-op, must not panic
 	dt.Delete("x")                      // no-op
 	dt.Set("x", []Value{NewInteger(1)}) // no-op
@@ -60,55 +57,6 @@ func TestStage5DefTableNilReceiverGuards(t *testing.T) {
 	cl.Push("y", NewInteger(2))
 	if !cl.Has("y") {
 		t.Error("clone of a nil table must be usable")
-	}
-}
-
-func TestStage5DefTableSetAt(t *testing.T) {
-	dt := NewDefTable()
-
-	// depth < 1 is refused outright.
-	if dt.SetAt("v", 0, NewInteger(9)) {
-		t.Error("SetAt depth 0 must be refused")
-	}
-
-	// depth beyond the stack is a no-op false.
-	dt.Push("v", NewInteger(1))
-	if dt.SetAt("v", 2, NewInteger(9)) {
-		t.Error("SetAt past the stack depth must be refused")
-	}
-
-	// A valid depth overwrites the body at that 1-based level and
-	// preserves the entry's TypeDef.
-	dt.PushType("v", TInteger, NewTypeLiteral(TInteger))
-	if !dt.SetAt("v", 1, NewInteger(7)) {
-		t.Fatal("SetAt depth 1 should succeed")
-	}
-	stack := dt.Stack("v")
-	if len(stack) != 2 {
-		t.Fatalf("stack depth = %d, want 2", len(stack))
-	}
-	if n, err := AsInteger(stack[0]); err != nil || n != 7 {
-		t.Errorf("oldest body = %v (%v), want 7", stack[0], err)
-	}
-	if !dt.SetAt("v", 2, NewInteger(8)) {
-		t.Fatal("SetAt depth 2 should succeed")
-	}
-	e, ok := dt.TopEntry("v")
-	if !ok {
-		t.Fatal("top entry missing")
-	}
-	if e.TypeDef == nil || !e.TypeDef.Equal(TInteger) {
-		t.Error("SetAt must preserve the entry's TypeDef")
-	}
-	if n, err := AsInteger(e.Body); err != nil || n != 8 {
-		t.Errorf("top body = %v (%v), want 8", e.Body, err)
-	}
-
-	// SetAt bumps the generation counter (dispatch-cache invalidation).
-	gen := dt.Gen("v")
-	dt.SetAt("v", 1, NewInteger(6))
-	if dt.Gen("v") <= gen {
-		t.Error("SetAt must touch the name's generation")
 	}
 }
 

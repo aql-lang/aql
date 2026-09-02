@@ -1,0 +1,34 @@
+# The twin regime's placement frontier (entered 2026-09-02 with the §6.5
+# DEFAULT FLIP — rollback-and-replay is the only regime; found by the
+# variation lane, test/go/langspec/vary_differential_test.go). Every row
+# is GREEN on the interpreter and refuses to compile at Finalize's
+# full-placement gate: the check pass performs a bind transition inside a
+# wrapped body that no compiled op replays or installs, so the rollback
+# would lose it. The old keep-installs default compiled these on the check
+# pass's own leftover install — which is the divergence class the regime
+# exists to eliminate, so the refusal is the sound direction. Four shapes,
+# each its own graduation:
+#
+#   1. an `import` inside a MULTI-RUN body — a module bind is not one of
+#      the BindDef twins the arm-residency bridge installs per element;
+#   2. a TYPE def inside a multi-run body — the bridge pairs BindDef twins
+#      only (a type twin declines the whole bridge);
+#   3. a `do` body whose CLOSURE compile declines (a Stage-3 residual
+#      shape: literals under a branch result), so the once-run body's
+#      twins are never adopted — `do [def b true (if b [] [9 9])]` and
+#      `do [def b true 1 2 b]` compile, this one does not;
+#   4. a call into a boru-IMPLEMENTED module (`Sift.parse`, sift.boru)
+#      inside the `do` body that imported it leaves a twin the do-body
+#      adoption declines. MEASURED, not yet root-caused: `import
+#      "boru:sift" do [(Sift.parse …)]` compiles (import outside), and
+#      so does `do [import "boru:sift" Sift.parse]` (no call) — it is
+#      the import-and-call pair inside one once-run body that refuses.
+#
+# Graduation = resident module binds / resident type twins inside compiled
+# units (1, 2), a closure lowering that admits the declined body (3), and
+# the root cause of (4) found and closed; each row then moves to the main
+# corpus.
+[10 20] each [drop import "boru:math-util" end MathUtil.cbrt 2]	[1.2599210498948732 1.2599210498948732]	shape 1: an import inside an each body
+[10 20] each [drop def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 15 x]	[15 15]	shape 2: type defs inside an each body
+do [def b true  do [1 2 (if b [] [9 9])]]	1 2	shape 3: a do body whose closure compile declines, so its def twin is never adopted
+do [import "boru:sift"  (Sift.parse kv/q {} "a: 1")]	{a:'1'}	shape 4: a boru-implemented module fn called inside the do body that imported it

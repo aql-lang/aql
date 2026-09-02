@@ -413,6 +413,21 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// module-export row keep their sound refusals (a PROMOTED def read /
 	// a non-event region entry decline the window).
 
+	// The twin regime's placement frontier (frontier-twin-placement.tsv,
+	// entered 2026-09-02 with the §6.5 default flip; the variation lane's
+	// find, pinned there as the "twin regime (unplaced bind transition)"
+	// bucket). Each row performs a bind transition inside a wrapped body
+	// that no compiled op replays or installs — refused at Finalize's
+	// full-placement gate rather than compiled on the check pass's kept
+	// install, which is what the old default did. Sound; the interpreter
+	// owns every row. Graduation per shape: resident module binds / type
+	// twins inside compiled units, a closure lowering that admits the
+	// declined do body, and the root cause of the import-and-call pair.
+	`[10 20] each [drop import "boru:math-util" end MathUtil.cbrt 2]`:                       {why: "twin placement: an import inside a multi-run body is a module bind, not a BindDef the arm-residency bridge installs per element", failsWith: "no stream placement"},
+	`[10 20] each [drop def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 15 x]`: {why: "twin placement: a type def inside a multi-run body — the bridge pairs BindDef twins only", failsWith: "no stream placement"},
+	`do [def b true  do [1 2 (if b [] [9 9])]]`:                                             {why: "twin placement: the do body's closure compile declines (Stage-3 residual shape), so the once-run body's def twin is never adopted", failsWith: "no stream placement"},
+	`do [import "boru:sift"  (Sift.parse kv/q {} "a: 1")]`:                                  {why: "twin placement: a boru-implemented module fn (Sift.parse) called inside the do body that imported it leaves a twin the adoption declines — measured, not yet root-caused; the same call with the import outside the do compiles, and the import without the call compiles", failsWith: "no stream placement"},
+
 	// NUR031 Module-descriptor equality (frontier-nur031-module-eq.tsv):
 	// semantically green — the descriptor is an identity-equal opaque
 	// handle since 2026-08-02 — but a `$module` synthetic read has no

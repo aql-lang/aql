@@ -407,11 +407,12 @@ import (
 //
 // The spec is fold's, with the inputs taken one rank deeper — a lane is a row
 // (or a transposed column), so each step sees two elements of an INNER list,
-// never a row. `rank2ElemType` reads the first row for that, exact against the
-// rectangular shape the handler enforces at run time, and answers Any for a
-// data argument with no element to take a type from. That arm is the new
-// `foldaxis 0 [add] []` corpus row, which is also the shape the handler
-// short-circuits to `[]`.
+// never a row. `rank2ElemCarrier` joins EVERY row's elements for that (its
+// first-row predecessor typed a mixed-row body from row 0 alone and baked the
+// wrong overload — module-array.tsv's mixed-row rows, 2026-09-02), and answers
+// the gradual Any for a data argument with no element to take a type from.
+// That arm is the `foldaxis 0 [add] []` corpus row, which is also the shape
+// the handler short-circuits to `[]`.
 //
 // Its sibling `eachrank` is NOT here, and the reason is the one that decides
 // whether a word is a declaration away or a change away: eachrankHandler slices

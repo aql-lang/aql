@@ -2,21 +2,10 @@ package compiler
 
 import (
 	"maps"
-	"os"
 
 	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
-
-// TwinRegimeEnabled reports whether the bind-twin rollback-and-replay regime
-// (design/FULL-COMPILATION.0.md §6.5) is armed for passes started NOW —
-// the BORU_TWIN_REGIME=1 staging flag. Read per pass (NewEmitState) rather
-// than once at init so a test can arm one lane with t.Setenv; exported so
-// lang's compiled entry points take their pre-pass binding snapshot under
-// exactly the same switch the recorder stamps into Program.TwinRegime.
-func TwinRegimeEnabled() bool {
-	return os.Getenv("BORU_TWIN_REGIME") == "1"
-}
 
 // The bytecode recording pass — Stage 1 of design/boru-bytecode-plan.0.md.
 //
@@ -699,15 +688,6 @@ type EmitState struct {
 	// MarkUncompilable site (the refusal-site census counts that layer,
 	// and its count only falls).
 	armReadRefusal string
-	// twinRegime arms §6.5's rollback-and-replay for THIS pass's Program
-	// (BORU_TWIN_REGIME=1, read once at NewEmitState so one pass is one
-	// regime): Finalize stamps it onto Program.TwinRegime and enforces the
-	// full-placement refusal, and lowerDynBind emits its GlobalBindSpecs in
-	// Push mode. Everything else — the table, the events, the ledger funnel
-	// — is regime-independent by design: the flag changes what the RUNNER
-	// does with the recorded twins, never what is recorded.
-	twinRegime bool
-
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
 	// buildFnBodyReturnsFn generalises an Any arg into an Any param as a
@@ -755,6 +735,16 @@ type EmitState struct {
 	// sub-registry fn (a module preamble body, rec.reg != progReg) and stamp
 	// CompiledFn.Reg only for the latter — see the Finalize stamp site.
 	progReg *core.Registry
+	// bindSnap is the twin regime's ROLLBACK BASE: progReg's runtime-visible
+	// bindings as they stood at that first bind, before the check pass
+	// performed a single transition. Finalize stamps it on the Program
+	// (ReplayBase / ReplayReg) and RunProgram restores it before executing,
+	// so the rollback travels WITH the program and every compile-then-run
+	// caller inherits it — lang's entry points and the low-level
+	// CompileCheck-then-RunProgram flow alike (Codex P1 on #426: that flow,
+	// and eng's own compile-then-run tests, had no rollback, so the replay
+	// stacked a second install on the pass's kept one).
+	bindSnap core.BindingSandbox
 	// SiteCounts tallies dispatches per site class while recording is
 	// active (counting stops once the program is marked
 	// uncompilable, with the rest of the recording).
@@ -1192,7 +1182,6 @@ type fnUnitRec struct {
 func NewEmitState() *EmitState {
 	return &EmitState{
 		Compilable: true,
-		twinRegime: TwinRegimeEnabled(),
 		SiteCounts: map[string]int{},
 		frames:     [][]EmitEvent{nil},
 		units:      []*emitUnit{{localByID: map[string]int{}}},
@@ -1426,6 +1415,7 @@ func (es *EmitState) BindRegistry(r *core.Registry) {
 	// re-binds reg to a foreign sub-registry. Captured once, never re-bound.
 	if es.progReg == nil {
 		es.progReg = r
+		es.bindSnap = r.SnapshotBindings()
 	}
 	es.reg = r
 }
@@ -1937,7 +1927,7 @@ func (es *EmitState) SplitLoopRegionBind(name string, v core.Value) (core.Value,
 	if name == "" || core.IsCapitalisedName(name) {
 		return core.Value{}, false
 	}
-	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() {
+	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() { //covergate:allow the guard above already requires len(units)==1 && reg!=nil && FnBodyDepth==0 — recordsFilteredDynBind's root disjunct — so the predicate is true here by construction; asked anyway so this gate and RecordDynBind's stay one predicate (NUR116) (§compiler)
 		return core.Value{}, false
 	}
 	// The split binds the region's FIRST-arrived value, so the element
@@ -1977,7 +1967,7 @@ func (es *EmitState) SplitEventRegionBind(name string, v core.Value) (core.Value
 	if name == "" || core.IsCapitalisedName(name) {
 		return core.Value{}, false
 	}
-	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() {
+	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() { //covergate:allow the guard above already requires len(units)==1 && reg!=nil && FnBodyDepth==0 — recordsFilteredDynBind's root disjunct — so the predicate is true here by construction; asked anyway so this gate and RecordDynBind's stay one predicate (NUR116) (§compiler)
 		return core.Value{}, false
 	}
 	pr, ok := es.producedBy[v.ID]
@@ -3979,7 +3969,7 @@ type closureLatch struct {
 // Finalize's placement scan counts REAL resident ops, so any miss
 // refuses.
 func (es *EmitState) AdoptResidentTwins(body core.Value) {
-	if es == nil || !es.Active() || !es.twinRegime {
+	if es == nil || !es.Active() {
 		return
 	}
 	if len(es.openUnitRecs) != 0 || len(es.frames) != 1 {
@@ -6639,8 +6629,8 @@ func (es *EmitState) recordsFilteredDynBind() bool {
 	if es == nil {
 		return false
 	}
-	rootRegime := es.twinRegime && len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0
-	return rootRegime || es.armResidentDepth > 0
+	root := len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0
+	return root || es.armResidentDepth > 0
 }
 
 func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
@@ -8641,9 +8631,12 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 	p := &Program{DynEnv: es.dynEnv,
 		// The twin table travels with the finalized Program verbatim (a copy,
 		// so a later pass on the same EmitState cannot mutate a delivered
-		// Program). Inert until the rollback-and-replay flip — see the field.
+		// Program), with the rollback base the run restores before the
+		// placed twins replay onto it (§6.5 — see the fields).
 		BindTwins:       append([]core.BindTransition(nil), es.bindTwins...),
-		BindTwinEntries: append([]core.DefEntry(nil), es.bindTwinEntries...)}
+		BindTwinEntries: append([]core.DefEntry(nil), es.bindTwinEntries...),
+		ReplayBase:      es.bindSnap,
+		ReplayReg:       es.progReg}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*core.Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
 	// (counting the program residual) is promoted to a frame local so the
@@ -8984,11 +8977,10 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		ref.Prog = lw.p
 	}
 	lw.p.storedFnRefs = es.storedFnRefs
-	lw.p.TwinRegime = es.twinRegime
 	if es.armReadRefusal != "" {
 		return nil, es.armReadRefusal, false
 	}
-	if es.twinRegime && !twinsFullyPlaced(lw.p, twinExempt) {
+	if !twinsFullyPlaced(lw.p, twinExempt) {
 		return nil, "twin regime: a bind transition has no stream placement (a multi-run-body or post-trap twin), so the rollback would lose it", false
 	}
 	return lw.p, "", true

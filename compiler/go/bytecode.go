@@ -486,9 +486,7 @@ const (
 	// unwind trail (leak persistence IS the semantics: a mid-iteration
 	// raise leaves earlier elements' installs, interpreter-identical).
 	// The undef arm (a var param's balanced per-iteration teardown) pops
-	// the name's live top entry instead, consuming no stack. Emitted only
-	// under the twin regime (the lowering gates on es.twinRegime), so
-	// default programs never carry it.
+	// the name's live top entry instead, consuming no stack.
 	OpBindResident
 )
 
@@ -911,14 +909,6 @@ type GlobalBindSpec struct {
 	// value, at the region's statically-known depth (REFUSAL-CLOSURE S5).
 	Splice        bool
 	SpliceFromTop int
-	// Push selects the twin-regime write mode (§6.5 rollback-and-replay,
-	// Program.TwinRegime): the check-pass install this spec used to
-	// overwrite was ROLLED BACK before the run, so the write PUSHES the
-	// runtime value — the interpreter's own `def` — instead of SetAt into a
-	// kept slot. The def's bind twin skips its own push for exactly this
-	// class (core.ApplyBindTwin's carrier-class skip mirrors lowerDynBind's
-	// needGlobal), so the pair still nets one binding at the recorded depth.
-	Push bool
 }
 
 // ConstLocalRef backs OpPushConstFreshLocal (see the opcode doc): ConstIdx names
@@ -1015,16 +1005,17 @@ type Program struct {
 	ClosureRet map[int]ClosureRetSpec
 	TypedBinds []core.TypedBindSpec
 	// GlobalBinds backs OpBindGlobal: one entry per top-level computed `def`,
-	// naming the binding and the DEPTH its check-pass install recorded, so the
-	// runtime value replaces the kept carrier binding in place (never a push).
+	// naming the binding and the DEPTH its check-pass install recorded. The
+	// runtime value is PUSHED: the pass's install was rolled back to
+	// ReplayBase before the run, so there is no kept carrier to replace.
 	GlobalBinds []GlobalBindSpec
 	// BindTwins is the program's bind-twin table (design/FULL-COMPILATION.0.md
 	// §6.5): the check pass's bind ledger, mirrored entry for entry through
-	// NoteBindTransition's own funnel and finalized with the Program. INERT
-	// under today's keep-the-installs regime — no instruction consumes it; it
-	// exists so the emission is complete and gated (the langspec gate asserts
-	// table == ledger for every compiled corpus program) before the
-	// rollback-and-replay flip gives each entry an op at its source position.
+	// NoteBindTransition's own funnel and finalized with the Program. Every
+	// entry has an op at its source position (Finalize's full-placement gate
+	// refuses otherwise) — OpBindTwin replays it, OpBindResident installs it
+	// per invocation — and the langspec gate asserts table == ledger for
+	// every compiled corpus program.
 	BindTwins []core.BindTransition
 	// BindTwinEntries is 1:1 with BindTwins: the DefEntry each push
 	// transition installed, captured at the note — the identical binding
@@ -1041,17 +1032,26 @@ type Program struct {
 	// replayed (the op carries the runtime value instead, which is the
 	// whole point). Only a twin-regime program carries entries.
 	ResidentBinds []ResidentBindSpec
-	// TwinRegime marks a program compiled with the rollback-and-replay
-	// regime armed (BORU_TWIN_REGIME=1 at recording time — §6.5's flip,
-	// staged behind the flag): the runner rolls the check pass's
-	// runtime-visible installs back (core.RestoreBindingsForReplay) before
-	// the run, each placed OpBindTwin re-installs its recorded transition at
-	// its source position (core.ApplyBindTwin), and OpBindGlobal writes in
-	// Push mode. False — today's default — keeps the installs and the twin
-	// ops inert, byte-identical to the pre-flag behaviour. Finalize refuses
-	// a regime program whose twin table is not fully stream-placed: an
-	// unplaced twin is a transition the rollback would simply lose.
-	TwinRegime bool
+	// ReplayBase is the twin regime's ROLLBACK BASE (§6.5): the program
+	// registry's runtime-visible bindings as they stood when the recorder
+	// first bound it (EmitState.BindRegistry — before the check pass
+	// performed a single transition). RunProgram restores it before
+	// executing, so the placed twins replay onto the pre-pass state instead
+	// of stacking a second install on the pass's kept one. Carried BY THE
+	// PROGRAM so every compile-then-run caller inherits the rollback —
+	// lang's entry points and the low-level CompileCheck-then-RunProgram
+	// flow alike (Codex P1 on #426: the direct flow left `def X (refine
+	// Integer)` at depth 2, and a later `undef X` a binding and its type
+	// live). Zero (invalid) for a hand-built Program: the restore is a no-op
+	// and the caller owns its registry. Restored only when BindTwins is
+	// non-empty — an empty table means the pass moved no binding (table ==
+	// ledger), so there is nothing to roll back and no def-table clone to pay.
+	ReplayBase core.BindingSandbox
+	// ReplayReg is the registry ReplayBase was captured from — the program
+	// registry (EmitState.progReg). RunProgram restores only when it runs
+	// ON that registry: a program run elsewhere has nothing of its own to
+	// roll back there, and a foreign DefTable must never be installed.
+	ReplayReg  *core.Registry
 	DynMethods []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the
 	// pooled const to deep-clone and the frame-local slot to seat it in, for a
@@ -1311,18 +1311,10 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " y%-3d ; typed bind %s:%s", in.Arg, tb.Name, tb.Describe)
 		case OpBindGlobal:
 			gb := p.GlobalBinds[in.Arg]
-			mode := ""
-			if gb.Push {
-				mode = " (push)"
-			}
-			fmt.Fprintf(sb, " g%-3d ; global bind %s @depth %d%s", in.Arg, gb.Name, gb.Depth, mode)
+			fmt.Fprintf(sb, " g%-3d ; global bind %s @depth %d", in.Arg, gb.Name, gb.Depth)
 		case OpBindTwin:
 			tw := p.BindTwins[in.Arg]
-			mode := "inert"
-			if p.TwinRegime {
-				mode = "replay"
-			}
-			fmt.Fprintf(sb, " w%-3d ; bind twin %s %s @depth %d (%s)", in.Arg, tw.Kind, tw.Name, tw.Depth, mode)
+			fmt.Fprintf(sb, " w%-3d ; bind twin %s %s @depth %d (replay)", in.Arg, tw.Kind, tw.Name, tw.Depth)
 		case OpBindResident:
 			rb := p.ResidentBinds[in.Arg]
 			arm := "install"

@@ -418,7 +418,12 @@ func registerEngSpecDefinition(r *core.Registry) {
 			core.InstallFnDef(reg, name, info)
 			return nil, nil
 		}
-		reg.Defs.Push(name, args[1])
+		// Through the LEDGERED installer, never a bare Defs.Push: the twin
+		// regime rolls the check pass's installs back before the run and
+		// replays them from the recorded transitions, so an install the
+		// ledger never saw is simply lost (the standalone lanes went
+		// `undefined word: x` the day RunProgram inherited the rollback).
+		core.InstallDef(reg, name, args[1])
 		return nil, nil
 	}
 	typedDef := func(args []core.Value, _ map[string]core.Value, _ []core.Value, reg *core.Registry) ([]core.Value, error) {
@@ -448,7 +453,7 @@ func registerEngSpecDefinition(r *core.Registry) {
 			core.InstallFnDef(reg, name, info)
 			return nil, nil
 		}
-		reg.Defs.Push(name, body)
+		core.InstallDef(reg, name, body) // ledgered — see plainDef
 		return nil, nil
 	}
 	// `def name word BODY` — the Forth-style splice binder. `word` is a
@@ -462,7 +467,7 @@ func registerEngSpecDefinition(r *core.Registry) {
 			return nil, err
 		}
 		reg.Check.RecordDef(name, core.SrcPos{})
-		reg.Defs.Push(name, core.NewSplice(args[2]))
+		core.InstallDef(reg, name, core.NewSplice(args[2])) // ledgered — see plainDef
 		return nil, nil
 	}
 	// `def name fn [triples]` — the fn KEYWORD SLOT. Captures `fn`
@@ -656,6 +661,10 @@ func registerEngSpecDefinition(r *core.Registry) {
 					if entry.TypeDef != nil {
 						reg.Types.Retire(entry.TypeDef)
 					}
+					// Ledgered after the pop, as basic's undef and
+					// core.UninstallDef record it (the twin reproduces the
+					// post-transition depth).
+					reg.NoteBindTransition(core.BindUndef, name, core.SrcPos{})
 					return nil, nil
 				}
 				core.UninstallDef(reg, name)

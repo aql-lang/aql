@@ -185,6 +185,185 @@ reverses an earlier plan:
    CondBodyDepth refusal, NUR037), and collapse `GlobalBindSpec.Push`/
    the twin-regime branches into the only path.
 
+   **(c) THE FLIP LANDED (2026-09-01): rollback-and-replay is the ONLY
+   regime.** `BORU_TWIN_REGIME`, `compiler.TwinRegimeEnabled`,
+   `EmitState.twinRegime` and `Program.TwinRegime` are gone; lang's
+   compiled entry points snapshot before every check pass and roll back
+   through `RestoreBindingsForReplay` unconditionally; every placed
+   `OpBindTwin` replays (the inert arm is deleted); `GlobalBindSpec.Push`
+   is deleted because a global bind can only PUSH now — the SetAt arm
+   went with it, and with it `DefTable.SetAt` itself, which had no other
+   production caller. The disassembler tags every twin `(replay)` and
+   tags global binds with nothing, because there is no second mode for
+   either tag to contrast with. The flag-armed corpus lane
+   (`TestSpecCompiledDifferentialTwinRegime`) is retired as a duplicate
+   of the default differential, which inherits its floor (6410); the
+   hand-checkable `TestTwinRegimeSmoke` stays. The three golden
+   failures the rehearsal predicted resolved exactly as predicted —
+   four `(inert)`→`(replay)` annotation lines, instruction streams
+   untouched — and the NUR116 pin rows became unconditional
+   compile-with-parity assertions, which DISCHARGES NUR116 (the
+   default lane no longer exists to carry it; the record is deleted per
+   the register's rule and this commit names it).
+
+   What the flip did NOT do, deliberately: the keep-regime latches the
+   payoff list names are NOT deleted here. The rehearsal measured
+   (above) that the stored-handler dep-rebind refusal is load-bearing
+   with the regime on — disabling it sends those programs into a VM
+   internal_error and a fallback, not into correct compiled code — so
+   its deletion needs §6.9's runtime-lookup half, and the frozen-read /
+   NotifyNameRebound / family-L / NUR037 gates each want the same
+   `-force-compile` measurement before they go. That is the next
+   increment's list, gate by gate, each with its own measurement.
+   Two follow-ons also stay separate: NUR115 (foldaxis's analysing
+   ReturnsFn) and nested multi-run bodies (the latch-to-stack design
+   the second rehearsal wrote up).
+
+   **(d) NUR115 DISCHARGED (2026-09-02): foldaxis analyses its body.**
+   The regime's one known silent divergence is closed the way the
+   rehearsal prescribed — not by refusing the shape but by giving
+   `foldaxis` an analysing ReturnsFn. `foldaxisReturnsFn` is fold's
+   accumulator fixed point one rank down (both carriers from
+   `rank2ElemType`, the same carriers the Callable's Inputs hand the
+   compiled body; the result is scan's list-of-accumulators shape, where
+   the structural `ReturnsPreserveListAt(2)` had answered the data's ROW
+   type — wrong for a reduction that returns one value per lane).
+   Analysing the body is what records its bind twins, and with the twins
+   visible the word earns `BodyMultiRunKeepsDefs` on the handler-verified
+   ground its siblings have (foldaxisHandler reduces every lane through
+   doFold: InvokeBody once per lane element past the seed, on the shared
+   registry, no def cleanup). Six parity-oracle rows measure it: both
+   axes; the elem-valued row's install ORDER (top-down `9 4 3 1` — the
+   var pair's `b` half is the accumulator); one-element lanes, where the
+   body runs ZERO times and the install count must be zero on both sides
+   (a replayed check-pass twin would install once — arm-residency is
+   what makes zero right); the empty rank-2 list (the gradual-Any
+   element arm); and the two sibling refusals (root read of an arm-bound
+   name; nested multi-run body). The NEGATIVE CONTROL ran before the
+   record was deleted: with the structural ReturnsFn restored and the
+   flag kept, the parity rows lose every install (`[5 5]` against `[]`),
+   the read-after row fails check with `undefined_word` instead of
+   refusing at the fence, and the nested row COMPILES silently wrong —
+   the divergence exactly as NUR115 described it, now pinned by rows
+   that fail without the fix. `eachrank` alone still carries the
+   structural ReturnsFn; it is safe only because it refuses early, and
+   its comment now says an analysing ReturnsFn comes before its flag.
+   The general test stands: a new body word whose ReturnsFn does not
+   analyse the body is invisible to the twins, and no gate will say so.
+
+   **What the review of that change found (2026-09-02), and it was
+   bigger than the change.** An adversarial review of the analysing
+   ReturnsFn measured, on both engines, that `rank2ElemType` — the
+   first-row element type foldaxis had used since its Callable landed —
+   was WRONG for any data whose rows differ in type: a lane draws its
+   elements from every row, and "rectangular" means equal length, not
+   equal type. Two consequences. The PRE-EXISTING one: the compiled body
+   was baked for the first row's type, so `ArrayUtil.foldaxis 1 [add]
+   [[1 2] ['a' 'b']]` answered `[3 0]` compiled against the
+   interpreter's `[3 'ab']` — a second silent foldaxis divergence that
+   NUR115 never named, reproducing identically before the change. The
+   NEW one: the analysing ReturnsFn typed the RESULT from the first row
+   too and the compiler baked that into the result's consumers, so a
+   check-refused program became a wrong-answering one. Both close at the
+   one root: `rank2ElemCarrier` joins EVERY row's elements through
+   scan's own `ElementCarrierFromValue` (a mixed population is a strict
+   Disjunct the body dispatch distributes per alternative; a shape the
+   pass cannot open is the gradual Any), and both the Callable's Inputs
+   and the ReturnsFn take it. Corpus rows in module-array.tsv pin the
+   mixed-row and heterogeneous-row answers on both engines; a direct
+   unit test pins each carrier arm and the result join. Two more from
+   the same review: a statically-empty rank-2 list is no longer analysed
+   (scan's `StaticListLen` guard — an operand-starved body over `[]`
+   runs on both engines and must not refuse at check), and
+   `foldaxis 1 [add] [[]]` — one row, zero columns, one EMPTY lane —
+   PANICKED in the handler on `lane[0]`; it now raises `foldaxis_error`
+   as fold's no-init rule does, mirrored at check time exactly as fold's
+   statically-empty case is (`staticEmptyLaneDetail`, a RuntimeMirror at
+   the call site the checker exposes — `foldaxis_error` had to be
+   registered as an error-severity code first, or the check-accuracy
+   ratchet counted the row as a checker blind spot), with a corpus row
+   and wave3 pins. None
+   of these is a NUR record: each surfaced and closed inside this PR,
+   the register deletes a Resolved record, and the rows are the trace.
+   The method note is the one worth keeping: the divergence the twin
+   regime exposed (NUR115) sat NEXT TO a divergence it did not, and only
+   a reviewer who measured mixed-type data found the second — the
+   oracle rows test bindings, the corpus rows test values, and a new
+   body-word typing needs both.
+
+   **(e) The VARIATION LANE's exposure (2026-09-02, CI on the flip PR).**
+   The rehearsal ran every module suite with the flag on and the corpus
+   lane at full parity, and still missed one population: the variation
+   differential (`TestVariationDifferential`, test/go/langspec) re-embeds
+   sampled corpus rows in every wrapping context (each-body, do-body,
+   do-catch, for-body …) and classifies each variant — a lane the
+   selective local belt never reached and the 10-minute default `go test`
+   timeout hides (the langspec package needs `make test`'s 35m). It found
+   two things, both the flip's and both settled honestly rather than
+   widened around:
+   - **Fifteen variants now REFUSE where the old default compiled them on
+     the check pass's kept install** — one new bucket, `twin regime
+     (unplaced bind transition)`, four shapes: an `import` inside a
+     multi-run body (a module bind is not a BindDef the arm-residency
+     bridge installs), a TYPE def inside a multi-run body (the bridge
+     pairs BindDef twins only), a `do` body whose closure compile
+     declines to a Stage-3 residual shape so its twins are never adopted
+     (`do [def b true 1 2 (if b [] [9 9])]` — its `1 2 b` and
+     `(if b …)`-only siblings compile), and a call into a
+     boru-IMPLEMENTED module (`Sift.parse`, sift.boru) inside the do body
+     that imported it — measured, not yet root-caused: the same call
+     with the import outside the do compiles, and the import without the
+     call compiles; it is the import-and-call pair inside one once-run
+     body that leaves a twin the adoption declines.
+     Every one is the sound direction: a replay the rollback would lose is
+     exactly what the placement gate refuses. Pinned in
+     `varyRefusalLedger` with one representative row per shape in
+     lang/spec/frontier/frontier-twin-placement.tsv (each ledgered with
+     its failure mode, so a silent graduation or a drift fails). Each
+     shape names its graduation: resident module binds and resident type
+     twins inside compiled units, a closure lowering that admits the
+     declined do body, and the root cause of the import-and-call pair.
+   - **One KNOWN MISCOMPILE graduated.** The mount-handler loop variant
+     pinned in `varyKnownMiscompiles` since 2026-07-30 (a flex map
+     captured by a mount handler lost its identity across loop
+     iterations: `expected a FlexMap, got FlexMap`) no longer diverges —
+     measured with `-force-compile`, `hello mounted hello mounted` on
+     both engines. The account that fits the error text: the keep-installs
+     default left the check pass's own `files` instance behind for the
+     handlers' dep to see while the loop re-bound the name; the regime
+     rolls that install back, so one runtime instance is all there is.
+     The pin is deleted (its stale arm fired, as designed) and the map is
+     empty for the first time since it was created.
+   The lesson for the next flip-sized change: the belt is `make test`,
+   not the suites one remembers to run.
+
+   **(f) The rollback rides WITH the Program (2026-09-02, Codex P1 on the
+   flip PR).** The flip put the snapshot/rollback pair in lang's two
+   compiled entry points — which left every OTHER compile-then-run caller
+   without one: the documented low-level `CompileCheck` then
+   `eng.RunProgram` flow, and eng's own compile-then-run tests
+   (`compileTokens` + `RunProgram`). With the replay now unconditional,
+   that flow stacked a second install on the check pass's kept one —
+   `def X (refine Integer)` at depth 2, a later `undef X` leaving a
+   binding and its type live. Fixed by making the base the PROGRAM's:
+   `EmitState.BindRegistry` snapshots the program registry's bindings at
+   its first bind (the same moment `progReg` is captured, before the
+   check pass performs a transition), `Finalize` stamps
+   `Program.ReplayBase` / `ReplayReg`, and `eng.runProgram` restores it
+   before executing — only when run ON that registry (a foreign DefTable
+   must never be installed; a base-less hand-built Program restores
+   nothing). `RestoreBindingsForReplay` now restores from a CLONE so a
+   Program can run more than once and every run rolls back to the same
+   base. lang's explicit pair is deleted: one mechanism, and every
+   caller inherits it. Pinned at every layer — core (the clone keeps the
+   snapshot pristine), compiler (first bind captures, a sub-registry
+   re-bind neither re-captures nor re-targets), eng (hand-built program:
+   depth 1 not 2, a second run still 1, foreign base and no base both
+   restore nothing), lang (Codex's exact low-level flow, def then
+   undef). Not a NUR record: the divergence surfaced and closed inside
+   one PR, and the register deletes a Resolved record; this note and the
+   commit are its trace.
+
    **THE FLIP REHEARSAL, and what it found (2026-09-01).** The corpus
    lane is not the flip's whole exposure, and the cheapest way to see
    the rest is to RUN THE SUITES WITH THE FLAG ON —

@@ -12,16 +12,13 @@ import (
 // isolation): a total name+order match between the guard bracket's
 // twins and the fresh unit's def events stamps and places; EVERY
 // mismatch — name, kind, leftover on either side, stale memoized unit,
-// wrong body identity, non-regime — adopts nothing, leaving the twins
-// unplaced and the regime program refused (the sound direction the
-// parity oracle pins). Adopted names fence later root reads —
+// wrong body identity — adopts nothing, leaving the twins unplaced and
+// the program refused (the sound direction the parity oracle pins). Adopted names fence later root reads —
 // NoteDefRead poisons the placement gate (armReadRefusal, refused at
 // Finalize's seam, NOT a recorder-layer MarkUncompilable: the
 // refusal-site census counts that layer and its count only falls) —
 // until a live root install re-binds them.
 func TestAdoptResidentTwinsFences(t *testing.T) {
-	t.Setenv("BORU_TWIN_REGIME", "1")
-
 	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -136,14 +133,31 @@ func TestAdoptResidentTwinsFences(t *testing.T) {
 		t.Fatal("a bodyID mismatch must decline the bridge")
 	}
 
-	// Outside the regime: never adopts (the resident op only exists there).
-	t.Setenv("BORU_TWIN_REGIME", "")
+	// A bracket twin ALREADY placed (an earlier adoption or a placed op):
+	// the bridge declines rather than stamping a second placement.
+	es = build([]string{"x", "y"}, []string{"x", "y"})
+	es.twinPlaced[0] = true
+	es.AdoptResidentTwins(body)
+	if placed(es) != 1 || es.fnRecs[0].frag.events[0].dyn.residentTwin != -1 {
+		t.Fatal("an already-placed bracket twin must decline the bridge without stamping")
+	}
+
+	// Kind crossed: a BindDef twin against a TEARDOWN site (or the reverse)
+	// never pairs.
 	es = build([]string{"x"}, []string{"x"})
+	es.fnRecs[0].frag.events[0].dyn.undef = true
 	es.AdoptResidentTwins(body)
 	if placed(es) != 0 {
-		t.Fatal("adoption outside the regime must decline")
+		t.Fatal("a def twin against an undef site must decline the bridge")
 	}
-	t.Setenv("BORU_TWIN_REGIME", "1")
+
+	// Position crossed: both sides positioned, at different sites.
+	es = build([]string{"x"}, []string{"x"})
+	es.fnRecs[0].frag.events[0].dyn.pos = core.SrcPos{Row: 2, Col: 2}
+	es.AdoptResidentTwins(body)
+	if placed(es) != 0 {
+		t.Fatal("a twin and a def site at different positions must decline the bridge")
+	}
 
 	// Nil receiver: no-op.
 	var nilES *EmitState

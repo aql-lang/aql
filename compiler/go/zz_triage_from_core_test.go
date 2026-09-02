@@ -250,22 +250,12 @@ func TestDisassembleOpcodeArms(t *testing.T) {
 	if !strings.Contains(out, "fn f0") || !strings.Contains(out, "[x _]") {
 		t.Errorf("Disassemble missing fn header/local names:\n%s", out)
 	}
-	// The twin/global-bind mode tags follow the program's regime stamp: a
-	// default program disassembles its twin as inert and its global bind
-	// bare; a regime program shows replay + push.
-	if !strings.Contains(out, "bind twin def tw @depth 1 (inert)") ||
-		strings.Contains(out, "(push)") {
-		t.Errorf("default-regime disassembly mode tags wrong:\n%s", out)
-	}
-	rp := &Program{
-		TwinRegime:  true,
-		GlobalBinds: []GlobalBindSpec{{Name: "g", Depth: 1, Push: true}},
-		BindTwins:   []core.BindTransition{{Kind: core.BindDef, Name: "tw", Depth: 1}},
-		Code:        []Instr{{Op: OpBindGlobal}, {Op: OpBindTwin}},
-	}
-	rout := rp.Disassemble()
-	if !strings.Contains(rout, "(replay)") || !strings.Contains(rout, "(push)") {
-		t.Errorf("regime disassembly must tag replay twins and push binds:\n%s", rout)
+	// Since the flip there is ONE bind regime: every twin replays, every
+	// global bind pushes, and the disassembler says so — no inert tag, no
+	// push tag, because there is no other mode for either to contrast with.
+	if !strings.Contains(out, "bind twin def tw @depth 1 (replay)") ||
+		strings.Contains(out, "(inert)") || strings.Contains(out, "(push)") {
+		t.Errorf("disassembly bind tags wrong:\n%s", out)
 	}
 	if !strings.Contains(out, "polyrefs=1") || !strings.Contains(out, "userpolys=1") {
 		t.Errorf("Disassemble missing poly summaries:\n%s", out)

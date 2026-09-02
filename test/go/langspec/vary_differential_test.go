@@ -18,8 +18,8 @@ import (
 // fuzzer). The gate asserts:
 //
 //   - NO unpinned variant diverges (a divergence is a miscompile — a NEW one
-//     always fails; the known do-unit registry-replay class is pinned in
-//     varyKnownMiscompiles with a stale arm forcing graduation on fix);
+//     always fails; a KNOWN one is pinned in varyKnownMiscompiles with a
+//     stale arm forcing graduation on fix — empty since the 2026-09-02 flip);
 //   - every compile refusal / island falls in a KNOWN reason bucket
 //     (varyBucket) pinned in varyRefusalLedger — a new bucket is a new
 //     frontier class that must be triaged (fix, or pin here + add a
@@ -114,6 +114,10 @@ func varyBucket(detail string) string {
 		return "variadic result promoted (exact-arity frame seat)"
 	case strings.HasPrefix(detail, "program embeds an OpFallback island"):
 		return "islanded"
+	case strings.HasPrefix(detail, "twin regime:"):
+		// The rollback-and-replay regime's placement gate (Finalize): a bind
+		// transition the check pass performed that no op replays or installs.
+		return "twin regime (unplaced bind transition)"
 	default:
 		return normaliseReason(detail)
 	}
@@ -141,6 +145,7 @@ var varyRefusalLedger = map[string]string{
 	"residual lowering (Stage 1 limit)":                           "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",
 	"stack discipline (lowering)":                                 "scheduling — dirty-stack prefixes the lowerer cannot arrange (prefix-stack transform)",
 	"variadic result promoted (exact-arity frame seat)":           "a MULTI-OUT variadic call result (a fallible or branch-variant do region) promoted to frame slots has no fixed arity to store — the raise/short path delivers fewer values than the static seat popped (PR #280 review; lowerCall's store-prologue gate, representative row in frontier-do-catch.tsv)",
+	"twin regime (unplaced bind transition)":                      "ENTERED 2026-09-02 with the §6.5 default flip (rollback-and-replay is the only regime): a bind transition the check pass performs inside a wrapped body that no compiled op replays or installs — an `import` inside a multi-run body (a module bind is not a resident install), a TYPE def inside a multi-run body (the arm-residency bridge pairs BindDef twins only), and a `do` body whose closure compile declines (a Stage-3 residual shape), so its twins are never adopted — refuses at Finalize's full-placement gate instead of compiling on the check pass's kept installs, which the old default did. Sound: the interpreter owns every one, and a replay the rollback would lose is exactly what the gate exists to refuse. Graduation, shape by shape: resident module binds, resident type twins, and a closure lowering that admits the declined do bodies. Representative rows: frontier-twin-placement.tsv",
 }
 
 // Graduated 2026-07-14 (do-def leak fidelity): "code-body word
@@ -171,26 +176,20 @@ var varyRefusalLedger = map[string]string{
 // varyKnownMiscompiles pins variants that diverge from the interpreter, so a
 // divergence is never left unrecorded.
 var varyKnownMiscompiles = map[string]string{
-	// Pinned 2026-07-30. NOT a regression: the project rename rewrote every
-	// corpus row, which reshuffles Sample()'s FNV priority and pulled
-	// module-io.tsv:241 into the default 32-seed breadth for the first time.
-	// Verified identical on the pre-rename tree, so this is a long-standing
-	// gap the sampler had never reached.
-	//
-	// BRIEFLY MASKED, 2026-08-28, and un-masked deliberately. stampFnConst's
-	// container descent stamps the mount handlers (they are fn values inside a
-	// map const), and a stamped handler does not take the identity-losing
-	// path — so the divergence disappeared. That is not a fix. The stamp is an
-	// OPTIMISATION: it declines for a body whose free words need a
-	// dynamic-scope rescue, for a body whose lowering refuses, for a capturing
-	// fn, and whenever runtime stamping is unarmed. A wrong answer that is
-	// correct only while an optimisation happens to apply is a wrong answer
-	// waiting to come back, and it would come back silently.
-	//
-	// So the stamp now declines rather than perturb the enclosing program (see
-	// stampFnConst's dynScopeNames restore), the three refusal buckets the
-	// descent had introduced are gone, and this stays pinned as the
-	// independent defect it is: a flex map captured by a mount handler loses
-	// its identity across loop iterations under compilation.
-	"for 2 [import \"boru:io\"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon \"n/a.txt\") \"hello mounted\" drop  IO.read (make Pathon \"n/a.txt\")]": "a flex-map captured by a mount handler loses its identity across loop iterations under compilation: the compiled run raises [boru/set_error] \"expected a FlexMap, got FlexMap\" (same type name, different instance) where the interpreter round-trips cleanly",
+	// EMPTY since 2026-09-02, and the graduation is worth its record. The one
+	// pin — the mount-handler loop seed (module-io.tsv:241 under `for 2`,
+	// pinned 2026-07-30; briefly masked by stampFnConst's container descent on
+	// 2026-08-28 and un-masked deliberately, because a stamp is an
+	// optimisation and a wrong answer that is right only while one applies
+	// comes back silently) — stopped diverging with the §6.5 DEFAULT FLIP:
+	// every compiled request now rolls the check pass's binding installs back
+	// before the run and replays them from the placed twins, so `def files
+	// (flex {})` binds ONE runtime instance that the loop body and the mount
+	// handlers capturing it agree on, where the old keep-installs default left
+	// the check pass's own flex map behind for the handlers' dep to see while
+	// the loop re-bound the name (`expected a FlexMap, got FlexMap` — same
+	// type name, different instance). Measured with -force-compile: the
+	// variant now answers `hello mounted hello mounted` on both engines. The
+	// stale arm did its job: the pin failed the day the divergence went, and
+	// this map stays so the next one is never left unrecorded.
 }

@@ -1017,16 +1017,12 @@ func (a *Boru) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	// the mutable scopes before the check pass and roll them back on the
 	// fallback path; keep them on the compiled path.
 	snap := a.registry.SnapshotForCompile()
-	// Twin regime (§6.5 rollback-and-replay, staged behind BORU_TWIN_REGIME):
-	// the narrow binding snapshot is the rollback target for a Program the
-	// recorder stamps TwinRegime — taken under the SAME switch the recorder
-	// reads, so the pair cannot disagree within one call. Zero cost when the
-	// flag is off (the default): no clone is taken and the zero sandbox
-	// restores nothing.
-	var bindSnap core.BindingSandbox
-	if compiler.TwinRegimeEnabled() {
-		bindSnap = a.registry.SnapshotBindings()
-	}
+	// §6.5 rollback-and-replay needs no snapshot here: the compiled program
+	// carries its own rollback base (Program.ReplayBase — captured by the
+	// recorder at its first bind, before the check pass performs a
+	// transition), and RunProgram restores it before executing, so the
+	// pass's runtime-visible installs are rolled back at the one safe
+	// between-phases point and re-installed by the run's placed twins.
 	// C1 effect fence (eng effects.go): a silent interpreter re-run — on
 	// either fallback arm below — is sound only while NO observable effect
 	// has escaped, because RestoreForCompile rolls back registry scopes but
@@ -1159,17 +1155,15 @@ func (a *Boru) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 		}
 		return out, false, reason, nil
 	}
-	if prog.TwinRegime {
-		// The regime's flip: roll the check pass's runtime-visible installs
-		// back at the one safe between-phases point, and let the run's
-		// placed twins (OpBindTwin → core.ApplyBindTwin) re-install each
-		// transition at its source position, with Push-mode OpBindGlobal
-		// writing the runtime values. The module ledger stays pass-final —
-		// imports ran once on the pass and must not run again (the method's
-		// contract). On a VM error below, the partial replay is rolled back
-		// with everything else by the runtime-bail arm's RestoreForCompile.
-		a.registry.RestoreBindingsForReplay(bindSnap)
-	}
+	// RunProgram rolls the check pass's runtime-visible installs back to the
+	// base the Program carries (ReplayBase) at the one safe between-phases
+	// point, and lets the run's placed twins (OpBindTwin → core.ApplyBindTwin)
+	// re-install each transition at its source position, with OpBindGlobal
+	// pushing the runtime values. The module ledger stays pass-final —
+	// imports ran once on the pass and must not run again
+	// (RestoreBindingsForReplay's contract). On a VM error below, the partial
+	// replay is rolled back with everything else by the runtime-bail arm's
+	// RestoreForCompile.
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
 		// An INTERNAL compiled-mode error — a VM/lowering soundness assertion
@@ -1226,12 +1220,6 @@ func (a *Boru) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 // registry is rolled back to its pre-check state.
 func (a *Boru) RunCompiledStrict(src string) ([]any, error) {
 	snap := a.registry.SnapshotForCompile()
-	// Twin regime: same pre-pass binding snapshot as RunAutoValues, under
-	// the same switch the recorder stamps into Program.TwinRegime.
-	var bindSnap core.BindingSandbox
-	if compiler.TwinRegimeEnabled() {
-		bindSnap = a.registry.SnapshotBindings()
-	}
 	// Same arming as RunCompiled: force mode is compiled execution, so
 	// runtime-constructed callbacks stamp at their store sites too. Restored to
 	// its prior state on return so the armed flag never leaks into a later plain
@@ -1250,11 +1238,8 @@ func (a *Boru) RunCompiledStrict(src string) ([]any, error) {
 		a.registry.RestoreForCompile(snap)
 		return nil, errors.New("force-compile: " + forceCompileReason(reason) + checkDiagnosticsDetail(reason, res))
 	}
-	if prog.TwinRegime {
-		// The regime's flip — see RunAutoValues: rollback at the
-		// between-phases point, replay by the run's placed twins.
-		a.registry.RestoreBindingsForReplay(bindSnap)
-	}
+	// See RunAutoValues: RunProgram rolls back to the Program's own base at
+	// the between-phases point, then the run's placed twins replay.
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
 		// Force mode does NOT fall back: surface the error (including an
