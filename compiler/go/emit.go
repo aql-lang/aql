@@ -1668,10 +1668,29 @@ func (es *EmitState) BodyAnalysisGuard() func() {
 // dispatch record that follows (AdoptBodyTwins). Fragment capture never
 // arms for a do body (ArmBranchCapture is the `if` hook), so this guard
 // does not consult the capture arm. Nil-safe.
-func (es *EmitState) KeepDefsBodyGuard() func() {
+func (es *EmitState) KeepDefsBodyGuard(r *core.Registry) func() {
 	if es == nil {
 		return func() {}
 	}
+	// THE PUBLICATION GATE, exactly MultiRunBodyGuard's and for the same
+	// reason. A keep run at FnBodyDepth > 0 can note NO twin
+	// (NoteBindTransitionEntry suppresses fn-body transitions — they are
+	// frame-locals, not registry bindings), so its bracket is empty by
+	// construction and it has nothing to publish. Publishing it anyway is
+	// what loses the OUTER do's bracket: tryRecordClosure's body compile
+	// RE-RUNS the do body, and any `do` inside a fn the body CALLS opens
+	// its own keep bracket during that re-run and overwrites the one the
+	// analysis phase had set correctly. Measured 2026-09-02 on
+	// `do [import "boru:sift" (Sift.parse kv/q {} "a: 1")]`: the published
+	// range came back [1 1] — empty, floor already past the import's own
+	// `Sift` twin — so AdoptBodyTwins had nothing to walk and the program
+	// refused for want of a placement it could have made. Its neighbours
+	// `do [import "boru:sift" Sift.parse]` (no call) and
+	// `do [import "boru:sift" (Sift.kinds)]` (a call that reaches no `do`)
+	// compiled throughout, which is what isolated the cause.
+	//
+	// A nil registry publishes nothing, like the multi-run gate.
+	publish := r != nil && r.Check != nil && r.Check.FnBodyDepth == 0
 	es.keepBodyDepth++
 	if es.keepBodyDepth == 1 {
 		es.keepTwinFloor = len(es.bindTwins)
@@ -1681,7 +1700,7 @@ func (es *EmitState) KeepDefsBodyGuard() func() {
 	return func() {
 		resume()
 		es.keepBodyDepth--
-		if es.keepBodyDepth == 0 {
+		if es.keepBodyDepth == 0 && publish {
 			es.lastKeepRange = [2]int{es.keepTwinFloor, len(es.bindTwins)}
 			es.lastKeepTaints = es.keepTaints
 			es.keepTaints = nil

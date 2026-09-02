@@ -20,7 +20,7 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 		t.Fatal("inactive SuspendedNow must be false")
 	}
 	e.BodyAnalysisGuard()()
-	e.KeepDefsBodyGuard()()
+	e.KeepDefsBodyGuard(nil)()
 	e.MultiRunBodyGuard(nil, "b")()
 	e.RecordDynUndef("x", SrcPos{})
 	e.FnBodyGuard()()

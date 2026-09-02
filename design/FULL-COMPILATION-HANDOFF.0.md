@@ -581,6 +581,41 @@ by one op inside a unit neither bracket owns. The row's single-dispatch
 control compiles today, which is what attributes the refusal to the memo
 hit rather than to the aliasing.
 
+**THE GATE HAD A SIBLING, and finding it root-caused an open question
+(2026-09-02).** `frontier-twin-placement.tsv` shape 4 — a `do` that imports
+a module and then CALLS into it — was recorded here and in its ledger as
+MEASURED BUT NOT ROOT-CAUSED, with a guess buried in the wording: "a twin
+the do-body adoption declines", i.e. a twin with no body site. It had a
+body site. Instrumenting the placement gate showed the do's published keep
+bracket coming back EMPTY (`[1 1]`, its floor already past the import's own
+`Sift` twin), so `AdoptBodyTwins` had nothing to walk.
+
+The cause is `MultiRunBodyGuard`'s clobber exactly, one guard over:
+`KeepDefsBodyGuard` published from a single latch
+(`lastKeepRange`/`lastKeepTaints`), and `tryRecordClosure`'s body compile
+RE-RUNS the do body — so a `do` inside a fn that the body CALLS
+(`sift-parse-do`'s) opened its own keep bracket during that re-run and
+overwrote the outer one. The same publication gate fixes it: publish only at
+`FnBodyDepth == 0`. The guard takes a registry now, as its multi-run sibling
+already did.
+
+Measured: both sift shapes compile with parity, the frontier row graduated
+into `lang/spec/module-sift.tsv`, and the variation lane went pass 388 → 390
+with the twin-regime bucket 15 → 13. The other three placement shapes still
+refuse, correctly — they are genuinely different (multi-run bodies, and a do
+whose closure compile declines).
+
+**The class, stated once so the next one is cheap to find.** A single-slot
+latch published at a guard close is unsound whenever a LATER phase re-runs
+the same body, because the re-run's nested guards write the same slot. Three
+such latches exist; two had the bug and are now gated. `lastClosure` does
+not, and the reason is worth knowing: it is assigned AFTER the compile it
+describes, so a nested dispatch's write during that compile is itself
+overwritten. `lastUserPoly` is cleared rather than published and is not in
+this class. When a fourth appears, the question to ask is not "is it keyed
+correctly" but "who else writes it between the phase that sets it and the
+phase that reads it".
+
 **Four more hazards the implementation must answer.** The probe fork copies
 `armResidentDepth` but deliberately not the latch — share the tree or the
 cursors by reference and the probe, which recompiles the same body, consumes

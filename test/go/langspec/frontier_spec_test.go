@@ -426,7 +426,17 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`[10 20] each [drop import "boru:math-util" end MathUtil.cbrt 2]`:                       {why: "twin placement: an import inside a multi-run body is a module bind, not a BindDef the arm-residency bridge installs per element", failsWith: "no stream placement"},
 	`[10 20] each [drop def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 15 x]`: {why: "twin placement: a type def inside a multi-run body — the bridge pairs BindDef twins only", failsWith: "no stream placement"},
 	`do [def b true  do [1 2 (if b [] [9 9])]]`:                                             {why: "twin placement: the do body's closure compile declines (Stage-3 residual shape), so the once-run body's def twin is never adopted", failsWith: "no stream placement"},
-	`do [import "boru:sift"  (Sift.parse kv/q {} "a: 1")]`:                                  {why: "twin placement: a boru-implemented module fn (Sift.parse) called inside the do body that imported it leaves a twin the adoption declines — measured, not yet root-caused; the same call with the import outside the do compiles, and the import without the call compiles", failsWith: "no stream placement"},
+	// (The fourth shape — `do [import "boru:sift" (Sift.parse kv/q {} "a: 1")]`
+	// — GRADUATED 2026-09-02 and its entry is deleted. It was the one this
+	// ledger recorded as "measured, not yet root-caused", and the cause was
+	// not what the entry guessed: the twin had a body site. The do's keep
+	// bracket is a SINGLE LATCH, and tryRecordClosure's body compile RE-RUNS
+	// the body, so a `do` inside a fn that the body CALLS — sift-parse-do's,
+	// here — opened its own bracket during the re-run and overwrote the outer
+	// one. The published range came back EMPTY ([1 1], floor already past the
+	// import's own `Sift` twin), so AdoptBodyTwins had nothing to walk.
+	// KeepDefsBodyGuard now publishes only at FnBodyDepth == 0, exactly as
+	// its multi-run sibling does, and the row compiles with parity.)
 
 	// NUR031 Module-descriptor equality (frontier-nur031-module-eq.tsv):
 	// semantically green — the descriptor is an identity-equal opaque

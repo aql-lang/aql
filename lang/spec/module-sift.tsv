@@ -111,3 +111,4 @@ import "boru:sift"  Sift.parse pattern/q {re:'([bad'} "x"	ERROR:sift_spec_error	
 import "boru:sift"  Sift.parse {family:'kv' opts:{sep:':'}} {sep:'='} "a=1"	{a:'1'}	call-site opts overlay the spec's opts
 import "boru:sift"  size (Sift.parse blocks/q {table:true} "a: 1\nb: 2\n\na: 3\nb: 4")	2	blocks table:true builds a table (list of unified-column row maps)
 import "boru:sift"  Sift.parse {family:'fn'} "x"	ERROR:sift_spec_error	family:'fn' (the fn escape hatch) is deferred to a follow-up (design/SIFT.0.md §16)
+do [import "boru:sift"  (Sift.parse kv/q {} "a: 1")]	{a:'1'}	an import AND a call into that module inside one `do` body: the once-run body's twins are adopted, so the whole thing compiles (graduated from frontier-twin-placement.tsv, 2026-09-02)
