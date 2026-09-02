@@ -66,7 +66,7 @@ var parityShapes = []parityShape{
 	{name: "root-computed-def", src: "def q ([1 2] each [1]) 9", probes: []string{"q"}},
 	// The lane's founding catch: an underscore-named root computed def
 	// needs its Push-mode partner under the regime (RecordDynBind's name
-	// gate is relaxed for root defs under es.twinRegime — the fix landed
+	// gate admits root `_`/`$` defs — the fix landed
 	// with this lane).
 	{name: "root-underscore-computed-def", src: "def _ ([1 2] each [1]) 9", probes: []string{"_"}},
 	// do-body adoption (#421): the adopted twin replays the captured entry
@@ -189,7 +189,6 @@ func probeInstalls(t *testing.T, run func(string) ([]any, error), name string) [
 }
 
 func TestMultiRunBindParityOracle(t *testing.T) {
-	t.Setenv("BORU_TWIN_REGIME", "1")
 
 	for _, sh := range parityShapes {
 		sh := sh

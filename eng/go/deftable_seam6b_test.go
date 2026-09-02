@@ -76,59 +76,6 @@ func TestS6b2DefTableReplaceEmptyStack(t *testing.T) {
 	}
 }
 
-// SetAt — the OpBindGlobal write-back primitive: replace at a specific
-// 1-based depth, preserving the entry's TypeDef; out-of-range depths (a slot
-// a check-time undef popped) are a false no-op, never a panic or a push.
-func TestDefTableSetAt(t *testing.T) {
-	var nilDT *core.DefTable
-	if nilDT.SetAt("x", 1, core.NewInteger(1)) {
-		t.Error("nil SetAt must be false")
-	}
-
-	dt := core.NewDefTable()
-	if dt.SetAt("x", 1, core.NewInteger(1)) {
-		t.Error("SetAt on an unbound name must be false")
-	}
-	dt.Push("x", core.NewInteger(10))
-	dt.Push("x", core.NewInteger(20))
-	if dt.SetAt("x", 0, core.NewInteger(99)) {
-		t.Error("SetAt depth 0 must be false (depths are 1-based)")
-	}
-	if dt.SetAt("x", 3, core.NewInteger(99)) {
-		t.Error("SetAt past the stack depth must be false (popped slot skips)")
-	}
-	if !dt.SetAt("x", 1, core.NewInteger(11)) || !dt.SetAt("x", 2, core.NewInteger(22)) {
-		t.Fatal("SetAt at live depths must succeed")
-	}
-	if top, _ := dt.Top("x"); mustInt(t, top) != 22 {
-		t.Errorf("top after SetAt = %v, want 22", top)
-	}
-	if !dt.Pop("x") {
-		t.Fatal("pop")
-	}
-	if top, _ := dt.Top("x"); mustInt(t, top) != 11 {
-		t.Errorf("depth-1 slot after SetAt = %v, want 11", top)
-	}
-
-	// TypeDef preservation: a type binding's minted def survives the body swap.
-	dt.PushType("T", core.TInteger, core.NewTypeLiteral(core.TInteger))
-	if !dt.SetAt("T", 1, core.NewTypeLiteral(core.TNumber)) {
-		t.Fatal("SetAt on a type binding must succeed")
-	}
-	if e, ok := dt.TopEntry("T"); !ok || e.TypeDef != core.TInteger {
-		t.Errorf("SetAt must preserve TypeDef, got %+v", e)
-	}
-}
-
-func mustInt(t *testing.T, v core.Value) int64 {
-	t.Helper()
-	n, err := core.AsInteger(v)
-	if err != nil {
-		t.Fatalf("not an integer: %v (%v)", v, err)
-	}
-	return n
-}
-
 func TestS6b2DefTableTruncateNegativeWant(t *testing.T) {
 	dt := core.NewDefTable()
 	dt.Push("s6b2t", core.NewInteger(1))

@@ -12,16 +12,13 @@ import (
 // isolation): a total name+order match between the guard bracket's
 // twins and the fresh unit's def events stamps and places; EVERY
 // mismatch — name, kind, leftover on either side, stale memoized unit,
-// wrong body identity, non-regime — adopts nothing, leaving the twins
-// unplaced and the regime program refused (the sound direction the
-// parity oracle pins). Adopted names fence later root reads —
+// wrong body identity — adopts nothing, leaving the twins unplaced and
+// the program refused (the sound direction the parity oracle pins). Adopted names fence later root reads —
 // NoteDefRead poisons the placement gate (armReadRefusal, refused at
 // Finalize's seam, NOT a recorder-layer MarkUncompilable: the
 // refusal-site census counts that layer and its count only falls) —
 // until a live root install re-binds them.
 func TestAdoptResidentTwinsFences(t *testing.T) {
-	t.Setenv("BORU_TWIN_REGIME", "1")
-
 	r, err := core.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -135,15 +132,6 @@ func TestAdoptResidentTwinsFences(t *testing.T) {
 	if placed(es) != 0 {
 		t.Fatal("a bodyID mismatch must decline the bridge")
 	}
-
-	// Outside the regime: never adopts (the resident op only exists there).
-	t.Setenv("BORU_TWIN_REGIME", "")
-	es = build([]string{"x"}, []string{"x"})
-	es.AdoptResidentTwins(body)
-	if placed(es) != 0 {
-		t.Fatal("adoption outside the regime must decline")
-	}
-	t.Setenv("BORU_TWIN_REGIME", "1")
 
 	// Nil receiver: no-op.
 	var nilES *EmitState

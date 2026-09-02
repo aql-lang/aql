@@ -185,6 +185,40 @@ reverses an earlier plan:
    CondBodyDepth refusal, NUR037), and collapse `GlobalBindSpec.Push`/
    the twin-regime branches into the only path.
 
+   **(c) THE FLIP LANDED (2026-09-01): rollback-and-replay is the ONLY
+   regime.** `BORU_TWIN_REGIME`, `compiler.TwinRegimeEnabled`,
+   `EmitState.twinRegime` and `Program.TwinRegime` are gone; lang's
+   compiled entry points snapshot before every check pass and roll back
+   through `RestoreBindingsForReplay` unconditionally; every placed
+   `OpBindTwin` replays (the inert arm is deleted); `GlobalBindSpec.Push`
+   is deleted because a global bind can only PUSH now — the SetAt arm
+   went with it, and with it `DefTable.SetAt` itself, which had no other
+   production caller. The disassembler tags every twin `(replay)` and
+   tags global binds with nothing, because there is no second mode for
+   either tag to contrast with. The flag-armed corpus lane
+   (`TestSpecCompiledDifferentialTwinRegime`) is retired as a duplicate
+   of the default differential, which inherits its floor (6410); the
+   hand-checkable `TestTwinRegimeSmoke` stays. The three golden
+   failures the rehearsal predicted resolved exactly as predicted —
+   four `(inert)`→`(replay)` annotation lines, instruction streams
+   untouched — and the NUR116 pin rows became unconditional
+   compile-with-parity assertions, which DISCHARGES NUR116 (the
+   default lane no longer exists to carry it; the record is deleted per
+   the register's rule and this commit names it).
+
+   What the flip did NOT do, deliberately: the keep-regime latches the
+   payoff list names are NOT deleted here. The rehearsal measured
+   (above) that the stored-handler dep-rebind refusal is load-bearing
+   with the regime on — disabling it sends those programs into a VM
+   internal_error and a fallback, not into correct compiled code — so
+   its deletion needs §6.9's runtime-lookup half, and the frozen-read /
+   NotifyNameRebound / family-L / NUR037 gates each want the same
+   `-force-compile` measurement before they go. That is the next
+   increment's list, gate by gate, each with its own measurement.
+   Two follow-ons also stay separate: NUR115 (foldaxis's analysing
+   ReturnsFn) and nested multi-run bodies (the latch-to-stack design
+   the second rehearsal wrote up).
+
    **THE FLIP REHEARSAL, and what it found (2026-09-01).** The corpus
    lane is not the flip's whole exposure, and the cheapest way to see
    the rest is to RUN THE SUITES WITH THE FLAG ON —

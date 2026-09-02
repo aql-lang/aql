@@ -93,7 +93,6 @@ keep the two in sync in the same commit.
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
 | [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
 | [NUR115](#nur115) | A body word whose `ReturnsFn` does not ANALYSE its body is invisible to the bind twins: `foldaxis` (and `eachrank`) use the structural `ReturnsPreserveListAt`, so the check pass never runs their bodies, records no twins for them, and the twin regime's full-placement gate — which can only check twins that exist — is blind by construction. `ArrayUtil.foldaxis 0 [var [[a b] def x 5 (a add b)]] [[1 2] [3 4]]` then installs `x` twice interpreted and NOT AT ALL compiled, silently, because the program is not refused. Keep-installs hides it; only rollback-and-replay exposes it | the twin-regime flip rehearsal, 2026-09-01 |
-| [NUR116](#nur116) | An underscore/`$`-named `def` over a LOOP REGION binds the wrong value on the DEFAULT compiled lane: `def _ (for [1 4] [i]) _` answers `1 2 3` compiled and `2 3 1` interpreted (confirmed with `-force-compile`), because `SplitLoopRegionBind` still declines the first-value split for filtered names on a premise — "records no dyn-bind event" — that the twin regime falsified for `_`/`$`. NUR115's shape with the polarity reversed: the regime is the sound side | settling a refusal-reason precedence change under the flip rehearsal, 2026-09-01 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
 | [NUR099](#nur099) | `def <Capitalised> <fn>` is the ONLY door to an arbitrary predicate type, so it must stay ambiguous: the same fn body means a callable function under a lowercase name and a membership test under a capitalised one, and `def K fn [[a:Any b:Any][Any][a]] end K 1 2` therefore binds an uninhabitable type in silence — VERDICT 2026-08-25: resolve by fix, a `fnpred` word analogous to `fnsig` — **HALF LANDED 2026-08-25**: `fnpred` ships and the explicit route is live; what remains is migrating the 150 corpus sites off the capitalised-fn form and deleting the arity route behind it | reviewing the §5.1 diagnostic, 2026-08-25 |
@@ -4391,54 +4390,3 @@ the SEAM, not of any one word.
 parity-oracle row), or by refusing the shape under the regime. Tracked
 against the default flip in
 [design/FULL-COMPILATION-HANDOFF.0.md](design/FULL-COMPILATION-HANDOFF.0.md).
-
-## NUR116 — a loop-region `def _` binds the wrong value on the DEFAULT compiled lane {#nur116}
-
-**Status:** Pending — the divergence is on today's default lane; the
-twin regime is the SOUND side, so the fix rides with §6.5's flip ·
-**Recorded:** 2026-09-01 · **Surfaced by:** settling a refusal-REASON
-precedence change under the flip rehearsal, which turned out to be
-sitting on top of a live miscompile.
-
-**Rule:** one program, one answer. A `def` binds the value the
-interpreter binds, whatever the name is spelled.
-
-**Divergence.** An underscore-named def over a LOOP REGION compiles to
-a different answer than it interprets — silently, and on the shipping
-default lane (measured with `-force-compile`, so these are compiled
-answers and not interpreter fallbacks):
-
-```
-def _ (for [1 4] [i]) _     # interpreter: 2 3 1   compiled: 1 2 3
-def _ (for 3 [i]) _         # interpreter: 1 2 0   compiled: 0 1 2
-def $a (for 3 [i]) $a       # the same
-```
-
-The interpreter binds `_` to the region's FIRST value and leaves the
-rest on the stack; the compiled lane does not split, so every value
-stays and the read contributes nothing. Cross-request the default lane
-additionally leaves `_` bound to the check pass's CARRIER (`[:Integer]`)
-rather than a value.
-
-**Cause.** `SplitLoopRegionBind` (`compiler/go/emit.go`) declines the
-loop-region first-value split for `_`/`$`/capitalised names, and its
-comment gives the reason: such a name "records no dyn-bind event, so
-splitting would drop one check-residual value with no splice
-instruction to remove it at run time". That premise was FALSIFIED for
-`_`/`$` by the twin regime, whose `RecordDynBind` now records a root
-`_`/`$` def (the parity oracle's founding fix). The two gates
-disagree: the event exists, but the split still declines. Capitalised
-names still record nothing, so their decline remains correct.
-
-**Family.** This is NUR115's shape with the polarity reversed — a gate
-resting on a premise nothing re-checks — except that here the REGIME is
-the sound side and the default lane carries the defect.
-
-**Discharge.** Resolved by regime-splitting the filtered-name decline
-exactly as `RecordDynBind`'s was: keep declining empty and capitalised
-names, admit `_`/`$` at the root under the regime. The same stale
-premise is carried by `SplitEventRegionBind` and should be corrected
-with it (not divergence-bearing today — both lanes refuse that shape).
-The corpus cannot see any of this: there are zero `def _ (for` rows in
-the 124 spec TSVs, so the pins must be Go-suite rows plus parity-oracle
-rows probing `_` cross-request.

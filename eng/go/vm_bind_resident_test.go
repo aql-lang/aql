@@ -40,7 +40,6 @@ func TestVMBindResident(t *testing.T) {
 			{Name: "x", Twin: 0, Undef: true},
 			{Name: "y", Twin: 0},
 		},
-		TwinRegime: true,
 	}
 	out, err := RunProgram(p, r)
 	if err != nil {

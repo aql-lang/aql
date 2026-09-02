@@ -95,7 +95,7 @@ func TestEmitGoldens(t *testing.T) {
 0006 CALL_NATIVE s1   ; add (Number, Number)
 0007 JMP         -> 0009
 0008 PUSH_CONST  k2   ; 9 (Integer)
-0009 BIND_TWIN   w0   ; bind twin def y @depth 1 (inert)
+0009 BIND_TWIN   w0   ; bind twin def y @depth 1 (replay)
 0010 BIND_GLOBAL g0   ; global bind y @depth 1
 0011 PUSH_CONST  k1   ; 2 (Integer)
 0012 CALL_NATIVE s2   ; mul (Number, Number)
@@ -105,7 +105,7 @@ func TestEmitGoldens(t *testing.T) {
 		// through value provenance — the report's §5.2 inline case. The
 		// BIND_TWIN marks the def's ledger transition in the stream (inert
 		// until the rollback-and-replay flip; §6.5).
-		{`def x 1 x add 2`, `0000 BIND_TWIN   w0   ; bind twin def x @depth 1 (inert)
+		{`def x 1 x add 2`, `0000 BIND_TWIN   w0   ; bind twin def x @depth 1 (replay)
 0001 PUSH_CONST  k1   ; 1 (Integer)
 0002 PUSH_CONST  k0   ; 2 (Integer)
 0003 CALL_NATIVE s0   ; add (Number, Number)
@@ -1313,7 +1313,7 @@ func TestEmitMacroExpansionGolden(t *testing.T) {
 	// The BIND_TWIN is the macro's own `def twice` install (a runtime-visible
 	// binding transition of the check pass — the ledger's, so the stream's;
 	// inert until the flip). The EXPANSION's tokens follow.
-	want := `0000 BIND_TWIN   w0   ; bind twin def twice @depth 1 (inert)
+	want := `0000 BIND_TWIN   w0   ; bind twin def twice @depth 1 (replay)
 0001 PUSH_CONST  k0   ; 5 (Integer)
 0002 PUSH_CONST  k0   ; 5 (Integer)
 0003 CALL_NATIVE s0   ; add (Number, Number)
@@ -1351,7 +1351,7 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	// runtime-visible binding transition of the check pass; inert until the
 	// flip) — the import's EXECUTION stays elided, per the front-end
 	// carve-out: the twin re-binds, never re-imports.
-	want := `0000 BIND_TWIN   w0   ; bind twin def MathUtil @depth 1 (inert)
+	want := `0000 BIND_TWIN   w0   ; bind twin def MathUtil @depth 1 (replay)
 0001 PUSH_CONST  k0   ; 16.0 (Float)
 0002 CALL_NATIVE s0   ; sqrt (Float)
 ; consts=1 types=0 sigs=1 fallbacks=0 fns=0 max-stack=1 locals=0

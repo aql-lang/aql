@@ -2650,12 +2650,31 @@ regime-only refusals, zero divergences. The handoff
 (design/FULL-COMPILATION-HANDOFF.0.md) carries the remaining default-flip
 checklist and the payoff deletions.
 
+**Status (2026-09-01): FLIPPED. Rollback-and-replay is the ONLY regime.**
+`BORU_TWIN_REGIME`, `compiler.TwinRegimeEnabled`, `EmitState.twinRegime`
+and `Program.TwinRegime` are deleted; every compiled request snapshots
+before its check pass and rolls back before its run; every placed
+`OpBindTwin` replays; a global bind can only PUSH (`GlobalBindSpec.Push`
+and the VM's SetAt arm are gone, and `DefTable.SetAt` with them). The
+flag-armed corpus lane retired into the default differential, which
+inherits its 6410 floor. The flip was measured before it was made — a
+rehearsal running every module suite with the flag forced on had reduced
+the exposure to three annotation-only goldens — which is what let it be a
+deletion rather than a migration; the same rehearsal surfaced and closed
+NUR116 (a default-lane miscompile the regime was the sound side of) and
+bounded NUR115. The payoff-list latch deletions are NOT in the flip: the
+rehearsal measured the stored-handler dep-rebind refusal as load-bearing
+with the regime on (its removal yields a VM internal_error and a
+fallback, not correct compiled code), so each gate goes only after its
+own `-force-compile` measurement, and the frozen-read family needs §6.9's
+runtime-lookup half first.
+
 Three consistency obligations come with the twins, and they interlock.
 
-**Replay, never re-execution.** Today the compiled path deliberately
-*keeps* the check pass's `RunInCheckMode` installs and runs the Program on
-that registry (`lang/go/boru.go:1200-1202`); replaying the same
-transitions through twins would double-apply them (duplicate `DefTable`
+**Replay, never re-execution.** Before the flip the compiled path
+deliberately *kept* the check pass's `RunInCheckMode` installs and ran the
+Program on that registry; replaying the same transitions through twins
+would have double-applied them (duplicate `DefTable`
 entries, so a later `undef` exposes the duplicate instead of the prior
 binding). The twin regime therefore rolls the *runtime-visible binding
 transitions* back to the pre-check snapshot before `RunProgram`, and each

@@ -49,10 +49,9 @@ package core
 // RestoreBindings → replay the pass's ledger — proven to land exactly the
 // registry the pass left (depths per transition, entry identity per name)
 // over every push-only corpus row, before any VM semantics changed. The
-// SECOND is the runtime regime itself (BORU_TWIN_REGIME=1, staged): lang's
-// compiled entry points snapshot before the check pass and, for a Program
-// stamped TwinRegime, roll back through RestoreBindingsForReplay below at
-// the one safe point — BETWEEN the pass and the run, where no enclosing
+// SECOND is the runtime regime itself — since the flip, the ONLY runtime
+// regime: lang's compiled entry points snapshot before the check pass and
+// roll back through RestoreBindingsForReplay below at the one safe point — BETWEEN the pass and the run, where no enclosing
 // pass holds references into the swapped table — before the placed
 // OpBindTwin ops (core.ApplyBindTwin) replay the transitions in stream
 // order.

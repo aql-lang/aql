@@ -264,7 +264,6 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 			gi := len(lw.p.GlobalBinds)
 			lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{
 				Name: d.name, Depth: d.depth, Splice: true, SpliceFromTop: d.spliceDepth,
-				Push: lw.es.twinRegime,
 			})
 			lw.emit(OpBindGlobal, gi, d.pos)
 			lw.note()
@@ -280,7 +279,6 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 			gi := len(lw.p.GlobalBinds)
 			lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{
 				Name: d.name, Depth: d.depth, Splice: true, SpliceFromTop: d.spliceDepth,
-				Push: lw.es.twinRegime,
 			})
 			lw.emit(OpBindGlobal, gi, d.pos)
 			for i := len(lw.vm) - 1; i >= 0; i-- {
@@ -337,8 +335,7 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 		// is peeked in place for its downstream consumers.
 		pop := !fastGlobal || lw.dead[d.srcSeq]
 		gi := len(lw.p.GlobalBinds)
-		lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{Name: d.name, Depth: d.depth, Pop: pop,
-			Push: lw.es.twinRegime})
+		lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{Name: d.name, Depth: d.depth, Pop: pop})
 		if !fastGlobal {
 			// Re-push a copy from its resolved home; the bind consumes it
 			// (Pop mode — one op, no separate DROP in the stream).
@@ -1885,9 +1882,8 @@ func (es *EmitState) collectDynBindSources(events []EmitEvent) map[int]bool {
 			// (`def res (if …) def _2 res`), where the shared source can
 			// sit under later pushes at the second install site. Same
 			// store-once / re-push-per-use discipline as the dyn-bound
-			// sources above; regime-gated, so default unit code is
-			// byte-identical.
-			(es.twinRegime && es.armResidentDepth > 0) {
+			// sources above.
+			es.armResidentDepth > 0 {
 			dynBindSrc[events[i].dyn.srcSeq] = true
 		}
 	}

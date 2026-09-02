@@ -244,25 +244,6 @@ func (dt *DefTable) Replace(name string, v Value) bool {
 	return true
 }
 
-// SetAt overwrites the body of name's binding at the given 1-based depth
-// (depth 1 = the oldest binding), preserving the entry's type def — Replace
-// for a specific level. Returns false (and no-op) when no binding exists at
-// that depth: the OpBindGlobal write-back uses this so a slot the check pass
-// recorded but a later check-time undef popped is skipped, matching the
-// interpreter (which would have discarded the binding too).
-func (dt *DefTable) SetAt(name string, depth int, v Value) bool {
-	if dt == nil || depth < 1 {
-		return false
-	}
-	ds := dt.stacks[name]
-	if depth > len(ds) {
-		return false
-	}
-	dt.touch(name)
-	ds[depth-1].Body = v
-	return true
-}
-
 // Truncate pops bindings from the top of name's stack until its depth
 // equals want. If want >= current depth, no-op. If the stack becomes
 // empty the entry is removed from the map.

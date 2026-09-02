@@ -1635,18 +1635,14 @@ func (vc *vmContext) bindDynScope(curReg *core.Registry, p *compiler.Program, ar
 // interpreter). A slot a later check-time undef popped skips the write: the
 // interpreter would have discarded the binding too.
 func bindGlobal(curReg *core.Registry, gb *compiler.GlobalBindSpec, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, error) {
-	// The write itself is mode-split (GlobalBindSpec.Push): under the twin
-	// regime the check-pass install was rolled back before the run, so there
-	// is no kept slot to overwrite — the bind PUSHES, the interpreter's own
-	// `def`, and the twin table's carrier-class skip guarantees exactly one
-	// of {this push, the def's twin} installs. Outside the regime the kept
-	// slot is live and SetAt replaces in place as ever.
+	// The write PUSHES — the interpreter's own `def`: the check pass's
+	// install was rolled back before the run (core.RestoreBindingsForReplay),
+	// so there is no kept slot to overwrite, and the twin table's
+	// carrier-class skip guarantees exactly one of {this push, the def's
+	// twin} installs (§6.5's rollback-and-replay, the only regime since the
+	// flip).
 	write := func(v core.Value) {
-		if gb.Push {
-			curReg.Defs.Push(gb.Name, core.StripAscribed(v))
-			return
-		}
-		curReg.Defs.SetAt(gb.Name, gb.Depth, core.StripAscribed(v))
+		curReg.Defs.Push(gb.Name, core.StripAscribed(v))
 	}
 	if gb.Splice {
 		// The S5 first-value loop bind: the region's first value sits at a
@@ -2291,25 +2287,20 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			}
 			stack = ns
 		case compiler.OpBindTwin:
-			// Under the keep-the-installs regime (TwinRegime false — today's
-			// default) the op is INERT: the check pass's install is already
-			// in the registry, and applying it again would double-install,
-			// the exact hazard §6.5 names. Under the rollback-and-replay
-			// regime the installs were rolled back before this run
+			// The installs were rolled back before this run
 			// (RestoreBindingsForReplay), so the op re-performs its recorded
 			// transition (Arg indexes Program.BindTwins) at this — its
-			// source — position.
-			if p.TwinRegime {
-				core.ApplyBindTwin(curReg, p.BindTwins[in.Arg], p.BindTwinEntries[in.Arg])
-			}
+			// source — position. Replay, never re-execution: the IDENTICAL
+			// entry the check pass produced goes back in (§6.5).
+			core.ApplyBindTwin(curReg, p.BindTwins[in.Arg], p.BindTwinEntries[in.Arg])
 		case compiler.OpBindResident:
 			// The arm-resident twin (§6.5's each-body recovery): executes
 			// inside a compiled per-invocation unit, once per invocation,
 			// with the RUNTIME value — the install arm pops it and installs
 			// through the interpreter's own installer; the undef arm (a var
-			// param's balanced teardown) pops the live binding instead.
-			// Emitted only under the twin regime, rides no unwind trail
-			// (leak persistence is the semantics — see core.ApplyResidentBind).
+			// param's balanced teardown) pops the live binding instead. Rides
+			// no unwind trail (leak persistence is the semantics — see
+			// core.ApplyResidentBind).
 			rb := &p.ResidentBinds[in.Arg]
 			if rb.Undef {
 				core.ApplyResidentBind(curReg, rb.Name, true, core.Value{})

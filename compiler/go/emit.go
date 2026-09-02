@@ -2,21 +2,10 @@ package compiler
 
 import (
 	"maps"
-	"os"
 
 	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
 )
-
-// TwinRegimeEnabled reports whether the bind-twin rollback-and-replay regime
-// (design/FULL-COMPILATION.0.md §6.5) is armed for passes started NOW —
-// the BORU_TWIN_REGIME=1 staging flag. Read per pass (NewEmitState) rather
-// than once at init so a test can arm one lane with t.Setenv; exported so
-// lang's compiled entry points take their pre-pass binding snapshot under
-// exactly the same switch the recorder stamps into Program.TwinRegime.
-func TwinRegimeEnabled() bool {
-	return os.Getenv("BORU_TWIN_REGIME") == "1"
-}
 
 // The bytecode recording pass — Stage 1 of design/boru-bytecode-plan.0.md.
 //
@@ -699,15 +688,6 @@ type EmitState struct {
 	// MarkUncompilable site (the refusal-site census counts that layer,
 	// and its count only falls).
 	armReadRefusal string
-	// twinRegime arms §6.5's rollback-and-replay for THIS pass's Program
-	// (BORU_TWIN_REGIME=1, read once at NewEmitState so one pass is one
-	// regime): Finalize stamps it onto Program.TwinRegime and enforces the
-	// full-placement refusal, and lowerDynBind emits its GlobalBindSpecs in
-	// Push mode. Everything else — the table, the events, the ledger funnel
-	// — is regime-independent by design: the flag changes what the RUNNER
-	// does with the recorded twins, never what is recorded.
-	twinRegime bool
-
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
 	// buildFnBodyReturnsFn generalises an Any arg into an Any param as a
@@ -1192,7 +1172,6 @@ type fnUnitRec struct {
 func NewEmitState() *EmitState {
 	return &EmitState{
 		Compilable: true,
-		twinRegime: TwinRegimeEnabled(),
 		SiteCounts: map[string]int{},
 		frames:     [][]EmitEvent{nil},
 		units:      []*emitUnit{{localByID: map[string]int{}}},
@@ -3979,7 +3958,7 @@ type closureLatch struct {
 // Finalize's placement scan counts REAL resident ops, so any miss
 // refuses.
 func (es *EmitState) AdoptResidentTwins(body core.Value) {
-	if es == nil || !es.Active() || !es.twinRegime {
+	if es == nil || !es.Active() {
 		return
 	}
 	if len(es.openUnitRecs) != 0 || len(es.frames) != 1 {
@@ -6639,8 +6618,8 @@ func (es *EmitState) recordsFilteredDynBind() bool {
 	if es == nil {
 		return false
 	}
-	rootRegime := es.twinRegime && len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0
-	return rootRegime || es.armResidentDepth > 0
+	root := len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0
+	return root || es.armResidentDepth > 0
 }
 
 func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
@@ -8984,11 +8963,10 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		ref.Prog = lw.p
 	}
 	lw.p.storedFnRefs = es.storedFnRefs
-	lw.p.TwinRegime = es.twinRegime
 	if es.armReadRefusal != "" {
 		return nil, es.armReadRefusal, false
 	}
-	if es.twinRegime && !twinsFullyPlaced(lw.p, twinExempt) {
+	if !twinsFullyPlaced(lw.p, twinExempt) {
 		return nil, "twin regime: a bind transition has no stream placement (a multi-run-body or post-trap twin), so the rollback would lose it", false
 	}
 	return lw.p, "", true

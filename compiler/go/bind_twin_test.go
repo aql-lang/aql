@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"strings"
 	"testing"
 
 	core "github.com/boru-lang/boru/core/go"
@@ -13,10 +14,6 @@ import (
 // finalized Program carries a COPY, so a later append on the same EmitState
 // cannot mutate a delivered Program.
 func TestRecordBindTwinAppendsUnconditionally(t *testing.T) {
-	// The table-only twin below is a legal inert residue only OUTSIDE the
-	// regime (inside it the placement gate refuses), so pin the flag off
-	// explicitly instead of inheriting the ambient environment.
-	t.Setenv("BORU_TWIN_REGIME", "")
 	var nilES *EmitState
 	nilES.RecordBindTwin(core.BindTransition{Name: "x"}, core.DefEntry{}) // must not panic
 
@@ -31,21 +28,16 @@ func TestRecordBindTwinAppendsUnconditionally(t *testing.T) {
 			len(es.bindTwins), len(es.bindTwinEntries))
 	}
 
-	prog, _, ok := es.Finalize(nil)
-	if !ok {
-		t.Fatal("an empty compilable state must finalize")
+	// The suspended-recording twin has no placed op, and since the flip
+	// that REFUSES: an unplaced twin is a transition the rollback would lose
+	// (the full-placement gate). The table half is still unconditional —
+	// both entries are there for the gate to find.
+	if prog, reason, ok := es.Finalize(nil); ok || prog != nil ||
+		!strings.Contains(reason, "no stream placement") {
+		t.Fatalf("a table-only twin must refuse at the placement gate, got ok=%v prog=%v reason=%q", ok, prog, reason)
 	}
-	if len(prog.BindTwins) != 2 || prog.BindTwins[0].Name != "a" ||
-		prog.BindTwins[0].Kind != core.BindDef || prog.BindTwins[1].Kind != core.BindUndef {
-		t.Fatalf("finalized twin table = %v, want the recorded entries verbatim", prog.BindTwins)
-	}
-	if len(prog.BindTwinEntries) != 2 || !core.IsConcrete(prog.BindTwinEntries[0].Body) ||
-		core.IsConcrete(prog.BindTwinEntries[1].Body) {
-		t.Fatalf("finalized twin entries = %+v, want the captured push entry and the undef zero", prog.BindTwinEntries)
-	}
-	es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "late", Depth: 1}, core.DefEntry{})
-	if len(prog.BindTwins) != 2 || len(prog.BindTwinEntries) != 2 {
-		t.Fatal("the Program's tables are copies; a later append must not reach them")
+	if es.bindTwins[0].Name != "a" || es.bindTwins[0].Kind != core.BindDef || es.bindTwins[1].Kind != core.BindUndef {
+		t.Fatalf("twin table = %v, want the recorded entries verbatim", es.bindTwins)
 	}
 }
 
@@ -67,40 +59,18 @@ func countBindTwinOps(p *Program) int {
 	return placed
 }
 
-// The regime's Finalize contract (§6.5's flip, staged behind BORU_TWIN_REGIME):
-// the flag is stamped onto the Program at the recorder's own reading, and a
-// regime program refuses unless EVERY twin-table entry has a placed op — a
-// table-only twin (suspended recording) is a transition the rollback would
-// lose. Outside the regime the same table-only twin stays a legal inert
-// residue, which is the invariant the ordered-subset gate already pins.
-func TestFinalizeTwinRegimeStampAndPlacementGate(t *testing.T) {
-	// Default: the flag off, the stamp false, table-only twins tolerated.
-	// Set EXPLICITLY rather than relying on the ambient environment — this
-	// arm is about the flag being off, so it must read that way under a run
-	// that exports BORU_TWIN_REGIME=1 (the flip rehearsal).
-	t.Setenv("BORU_TWIN_REGIME", "")
+// Finalize's placement contract (§6.5's rollback-and-replay, the only
+// regime since the flip): a program refuses unless EVERY twin-table entry
+// has a placed op — a table-only twin (suspended recording) is a
+// transition the rollback would lose.
+func TestFinalizePlacementGate(t *testing.T) {
+	// Fully-placed twins finalize.
 	es := NewEmitState()
-	resume := es.Suspend()
-	es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "a", Depth: 1},
-		core.DefEntry{Body: core.NewInteger(7)})
-	resume()
-	prog, _, ok := es.Finalize(nil)
-	if !ok || prog.TwinRegime {
-		t.Fatalf("flag-off finalize = %v, TwinRegime = %v; want ok and unstamped", ok, prog != nil && prog.TwinRegime)
-	}
-
-	t.Setenv("BORU_TWIN_REGIME", "1")
-
-	// Fully-placed twins finalize, stamped.
-	es = NewEmitState()
 	es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "a", Depth: 1},
 		core.DefEntry{Body: core.NewInteger(7)})
 	prog, reason, ok := es.Finalize(nil)
 	if !ok {
 		t.Fatalf("fully-placed regime finalize refused: %s", reason)
-	}
-	if !prog.TwinRegime {
-		t.Fatal("the regime recorder must stamp Program.TwinRegime")
 	}
 	if got := countBindTwinOps(prog); got != len(prog.BindTwins) || got != 1 {
 		t.Fatalf("placed %d twin ops for a %d-entry table, want full placement", got, len(prog.BindTwins))
@@ -108,7 +78,7 @@ func TestFinalizeTwinRegimeStampAndPlacementGate(t *testing.T) {
 
 	// A table-only twin refuses under the regime.
 	es = NewEmitState()
-	resume = es.Suspend()
+	resume := es.Suspend()
 	es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "b", Depth: 1},
 		core.DefEntry{Body: core.NewInteger(9)})
 	resume()
@@ -137,8 +107,7 @@ func tokAt(row, col int) core.Value {
 // adoption attempted off the root stream (an open unit — Codex P1), and
 // a Rollback that discards the adopting round un-marks the flag with the
 // truncated event.
-func TestFinalizeTwinRegimeBodyAdoption(t *testing.T) {
-	t.Setenv("BORU_TWIN_REGIME", "1")
+func TestFinalizeBodyAdoption(t *testing.T) {
 
 	noteTwin := func(es *EmitState, row, col int) {
 		es.RecordBindTwin(core.BindTransition{Kind: core.BindDef, Name: "big", Depth: 1,
