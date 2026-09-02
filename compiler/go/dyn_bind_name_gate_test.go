@@ -52,3 +52,46 @@ func TestRecordDynBindNameGate(t *testing.T) {
 		t.Fatal("a `_` fn-body def must stay skipped")
 	}
 }
+
+// The two region-split gates share RecordDynBind's name premise through the
+// same predicate, and refuse an empty or capitalised name outright before
+// consulting it — pinned directly, with the producer/event setup each split
+// needs to reach its gate. The nil receiver answers "records nothing".
+func TestRegionSplitNameGates(t *testing.T) {
+	var nilES *EmitState
+	if nilES.recordsFilteredDynBind() {
+		t.Fatal("a nil recorder records no filtered dyn-bind")
+	}
+	r, err := core.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := core.NewInteger(3)
+	v.ID = "v-split"
+
+	// The loop-region split: a variadic loop result produced at idx 0.
+	es := NewEmitState()
+	es.BindRegistry(r)
+	es.producedBy[v.ID] = producer{seq: 7, idx: 0}
+	if es.eventInfo == nil {
+		es.eventInfo = map[int]eventFlags{}
+	}
+	es.eventInfo[7] = eventFlags{variadicResult: true, regionN: 1, firstElemType: core.TInteger}
+	if _, ok := es.SplitLoopRegionBind("", v); ok {
+		t.Fatal("an empty name must not split a loop region")
+	}
+	if _, ok := es.SplitLoopRegionBind("Big", v); ok {
+		t.Fatal("a capitalised name must not split a loop region")
+	}
+
+	// The event-region split reaches its name gate straight after the root
+	// guard.
+	es = NewEmitState()
+	es.BindRegistry(r)
+	if _, ok := es.SplitEventRegionBind("", v); ok {
+		t.Fatal("an empty name must not split an event region")
+	}
+	if _, ok := es.SplitEventRegionBind("Big", v); ok {
+		t.Fatal("a capitalised name must not split an event region")
+	}
+}

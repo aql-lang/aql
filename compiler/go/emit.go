@@ -1927,7 +1927,7 @@ func (es *EmitState) SplitLoopRegionBind(name string, v core.Value) (core.Value,
 	if name == "" || core.IsCapitalisedName(name) {
 		return core.Value{}, false
 	}
-	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() {
+	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() { //covergate:allow the guard above already requires len(units)==1 && reg!=nil && FnBodyDepth==0 — recordsFilteredDynBind's root disjunct — so the predicate is true here by construction; asked anyway so this gate and RecordDynBind's stay one predicate (NUR116) (§compiler)
 		return core.Value{}, false
 	}
 	// The split binds the region's FIRST-arrived value, so the element
@@ -1967,7 +1967,7 @@ func (es *EmitState) SplitEventRegionBind(name string, v core.Value) (core.Value
 	if name == "" || core.IsCapitalisedName(name) {
 		return core.Value{}, false
 	}
-	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() {
+	if (name[0] == '_' || name[0] == '$') && !es.recordsFilteredDynBind() { //covergate:allow the guard above already requires len(units)==1 && reg!=nil && FnBodyDepth==0 — recordsFilteredDynBind's root disjunct — so the predicate is true here by construction; asked anyway so this gate and RecordDynBind's stay one predicate (NUR116) (§compiler)
 		return core.Value{}, false
 	}
 	pr, ok := es.producedBy[v.ID]

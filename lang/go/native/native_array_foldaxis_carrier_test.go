@@ -63,4 +63,13 @@ func TestFoldaxisReturnsFnJoinsRowsIntoTheResult(t *testing.T) {
 		r.Check.Diagnostics[base].Row != 3 || r.Check.Diagnostics[base].Col != 9 {
 		t.Fatalf("expected one foldaxis_error mirror at the exposed call site, got %+v", r.Check.Diagnostics[base:])
 	}
+	// And the mirror's own negatives: a data argument the check pass cannot
+	// open (a carrier), or one with no row, is not exactly known — no error
+	// text, nothing flagged.
+	if d := staticEmptyLaneDetail([]Value{NewInteger(1), w9AddBody(), NewCarrier(TList)}); d != "" {
+		t.Fatalf("a non-concrete data argument must not mirror, got %q", d)
+	}
+	if d := staticEmptyLaneDetail([]Value{NewInteger(1), w9AddBody(), NewList([]Value{})}); d != "" {
+		t.Fatalf("an empty rank-2 list has no lane to raise on, got %q", d)
+	}
 }

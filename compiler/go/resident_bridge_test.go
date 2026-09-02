@@ -133,6 +133,32 @@ func TestAdoptResidentTwinsFences(t *testing.T) {
 		t.Fatal("a bodyID mismatch must decline the bridge")
 	}
 
+	// A bracket twin ALREADY placed (an earlier adoption or a placed op):
+	// the bridge declines rather than stamping a second placement.
+	es = build([]string{"x", "y"}, []string{"x", "y"})
+	es.twinPlaced[0] = true
+	es.AdoptResidentTwins(body)
+	if placed(es) != 1 || es.fnRecs[0].frag.events[0].dyn.residentTwin != -1 {
+		t.Fatal("an already-placed bracket twin must decline the bridge without stamping")
+	}
+
+	// Kind crossed: a BindDef twin against a TEARDOWN site (or the reverse)
+	// never pairs.
+	es = build([]string{"x"}, []string{"x"})
+	es.fnRecs[0].frag.events[0].dyn.undef = true
+	es.AdoptResidentTwins(body)
+	if placed(es) != 0 {
+		t.Fatal("a def twin against an undef site must decline the bridge")
+	}
+
+	// Position crossed: both sides positioned, at different sites.
+	es = build([]string{"x"}, []string{"x"})
+	es.fnRecs[0].frag.events[0].dyn.pos = core.SrcPos{Row: 2, Col: 2}
+	es.AdoptResidentTwins(body)
+	if placed(es) != 0 {
+		t.Fatal("a twin and a def site at different positions must decline the bridge")
+	}
+
 	// Nil receiver: no-op.
 	var nilES *EmitState
 	nilES.AdoptResidentTwins(body)
