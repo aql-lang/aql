@@ -47,7 +47,8 @@ func (es *EmitState) completeRegion(word string, pos core.SrcPos, args []core.Va
 	if es == nil {
 		return nil
 	}
-	d, ok := es.TakePendingRegion(word, pos)
+	off, ok := es.takePendingRegion(word, pos)
+	d := off.desc
 	if !ok || d == nil || len(d.Slots) == 0 {
 		return nil
 	}
@@ -61,7 +62,7 @@ func (es *EmitState) completeRegion(word string, pos core.SrcPos, args []core.Va
 		n = len(args)
 	}
 	for i := 0; i < n; i++ {
-		if !es.slotIsOperand(out.Slots[i], args[i]) {
+		if !es.slotIsOperand(out.Slots[i], off.reg, args[i]) {
 			break
 		}
 		src, idx, resIdx, ok := regionSourceOf(ops[i])
@@ -74,16 +75,28 @@ func (es *EmitState) completeRegion(word string, pos core.SrcPos, args []core.Va
 		// whole point of SlotWordRef is that the next execution may find a
 		// different one (region_desc.go's `k` pair).
 		//
-		// EXCEPT when the operand is a FRAME LOCAL, and that exception is the
-		// fn-unit hazard rather than an exception to the rule. Inside a fn
-		// body the analysis binds each param into the def stack so the body
-		// can be analysed, so a param's word slot resolves here — but the
-		// emitted body reads it from the FRAME, and at run time the def stack
-		// holds no such binding. Live re-derivation would miss it or, worse,
-		// find an outer binding of the same name. The frame slot is the
-		// truth, and it is not a frozen class: no module-scope rebind can
-		// move a param or a loop iterator between executions.
-		if out.Slots[i].Source != SlotWordRef || src == SlotLocal {
+		// EXCEPT when the name is FN-SCOPED, and that exception is the fn-unit
+		// hazard rather than an exception to the rule. Inside a fn body the
+		// analysis binds params and body-local defs into the def stack so the
+		// body can be analysed, so they resolve here — but the emitted body
+		// reads them from the FRAME or bakes them, and at run time the def
+		// stack holds no such binding. Live re-derivation would miss the name
+		// or, worse, find an outer binding of the same one.
+		//
+		// A MODULE-scope name read from inside a fn body is not in that class
+		// and must stay live: it is exactly region_desc.go's `k` pair, the
+		// shape OpCollect exists to answer.
+		if out.Slots[i].Source == SlotWordRef {
+			if fnScopedWord(off.reg, out.Slots[i].Token) {
+				// A frame-bound name: describable only if the operand says
+				// which slot, which a param or loop iterator does and a
+				// body-local `def` does not.
+				if src != SlotLocal {
+					break
+				}
+				out.Slots[i].Source, out.Slots[i].Idx, out.Slots[i].ResIdx = src, idx, resIdx
+			}
+		} else {
 			out.Slots[i].Source, out.Slots[i].Idx, out.Slots[i].ResIdx = src, idx, resIdx
 		}
 		out.NFwd = i + 1
@@ -102,9 +115,16 @@ func (es *EmitState) completeRegion(word string, pos core.SrcPos, args []core.Va
 // match would extend the claim past what the dispatch really took forward.
 //
 // A WORD slot is the one indirection. Its operand is the BINDING, not the
-// word token, so the comparison resolves the name through the live def stack
+// word token, so the comparison resolves the name through the def stack
 // exactly as the matcher's own patternsOk does before unifying. An unbound
 // word never corresponds: it cannot have supplied an operand.
+//
+// The registry is the DISPATCH's, carried on the Phase-A offer, not es.reg.
+// es.reg is the last registry BindRegistry saw, which after a call into a
+// boru-implemented module is that module's sub-registry — resolving a later
+// main-registry dispatch's words there finds nothing, and the claim stops
+// short of operands that did come forward.
+//
 // An EMPTY id never corresponds, and that guard is load-bearing rather than
 // defensive. core.NewValueRaw stamps an id only for a payload-less value or
 // one minted inside the check pass, so a value built outside a pass carries
@@ -114,22 +134,46 @@ func (es *EmitState) completeRegion(word string, pos core.SrcPos, args []core.Va
 // (the parser stamps them, measured), so the guard costs nothing; what it
 // buys is that the failure mode is an UNDER-claim, which defers, rather than
 // an over-claim, which miscompiles.
-func (es *EmitState) slotIsOperand(s SlotDesc, arg core.Value) bool {
+func (es *EmitState) slotIsOperand(s SlotDesc, reg *core.Registry, arg core.Value) bool {
 	if arg.ID == "" {
 		return false
 	}
 	if s.Source == SlotWordRef {
-		if es.reg == nil {
+		if reg == nil {
 			return false
 		}
 		wi, err := core.AsWord(s.Token)
 		if err != nil {
 			return false
 		}
-		top, ok := es.reg.Defs.Top(wi.Name)
+		top, ok := reg.Defs.Top(wi.Name)
 		return ok && top.ID == arg.ID
 	}
 	return s.Token.ID == arg.ID
+}
+
+// fnScopedWord reports whether a word token names a binding that lives inside
+// an enclosing fn — a param, a loop iterator, or a body-local `def` — rather
+// than at module scope.
+//
+// The test is the closure-capture rule, verbatim and deliberately: Registry's
+// own doc for FnBaselines says a referenced name with Defs.Depth(name) >
+// baseline[name] lives inside an enclosing fn, and depth == baseline means it
+// lives at module/global scope and stays dynamic. Captures and descriptors are
+// asking the same question — will this name still be reachable by a live
+// lookup where the body actually runs — so they must not answer it two ways.
+//
+// An empty baseline stack means the dispatch is at top level, where nothing is
+// fn-scoped.
+func fnScopedWord(reg *core.Registry, tok core.Value) bool {
+	if reg == nil || len(reg.FnBaselines) == 0 {
+		return false
+	}
+	wi, err := core.AsWord(tok)
+	if err != nil {
+		return false
+	}
+	return reg.Defs.Depth(wi.Name) > reg.FnBaselines[len(reg.FnBaselines)-1][wi.Name]
 }
 
 // regionSourceOf translates one operand of the recorder's model into the

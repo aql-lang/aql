@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // TestRegionCaptureFiresOnRealPrograms is the end-to-end pin for Stage 4's
@@ -156,5 +157,167 @@ func TestRegionTableIsInLoweringOrder(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("descriptors %v, want %v — the table is not in lowering order", got, want)
 		}
+	}
+}
+
+// findRegion returns the descriptor for word, or nil.
+func findRegion(prog *compiler.Program, word string) *compiler.RegionDesc {
+	for i := range prog.Regions {
+		if prog.Regions[i].Word == word {
+			return &prog.Regions[i]
+		}
+	}
+	return nil
+}
+
+// findRegionLeading returns the descriptor for word whose FIRST slot is the
+// named word token. One source can hold several dispatches of the same word —
+// `def x (1 add 2) … add x 2` has two — so picking the first by name alone
+// selects the wrong one, and the assertion then reads as a pass or a failure
+// about a dispatch the test never meant.
+func findRegionLeading(prog *compiler.Program, word, tok string) *compiler.RegionDesc {
+	for i := range prog.Regions {
+		d := &prog.Regions[i]
+		if d.Word != word || len(d.Slots) == 0 {
+			continue
+		}
+		if wi, err := core.AsWord(d.Slots[0].Token); err == nil && wi.Name == tok {
+			return d
+		}
+	}
+	return nil
+}
+
+// A MODULE-scope name read from inside a fn body must stay LIVE, and a
+// body-local one of the SAME NAME at the SAME POSITION must not. This pair is
+// the whole discriminator: what decides a word slot is not where the dispatch
+// sits but where the binding lives, which is the closure-capture rule
+// (Registry.FnBaselines) asked of a descriptor instead of a capture.
+//
+// It matters because the live half is the shape OpCollect exists for. A rule
+// that stopped every word slot inside a fn unit would pass the negative half
+// alone and quietly delete the model's whole point.
+func TestModuleScopeWordStaysLiveInsideAFnBody(t *testing.T) {
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, _, _, cerr := b.CompileCheck(`def k 5 end def f fn [[][Integer][add k 2]] end f`)
+	if cerr != nil || prog == nil {
+		t.Fatalf("compile: %v", cerr)
+	}
+	d := findRegionLeading(prog, "add", "k")
+	if d == nil {
+		t.Fatal("no descriptor for `add k 2`")
+	}
+	if d.NFwd != 2 {
+		t.Errorf("NFwd = %d, want 2 — a module binding read inside a fn body is still "+
+			"reachable by the live lookup the VM performs", d.NFwd)
+	}
+	if d.Slots[0].Source != compiler.SlotWordRef {
+		t.Errorf("slot 0 = %v, want SlotWordRef", d.Slots[0].Source)
+	}
+
+	// The same name, shadowed by a body-local def: the binding now lives in
+	// the body, so the claim stops.
+	prog, _, _, cerr = b.CompileCheck(`def k 5 end def f fn [[][Integer][def k 9 end add k 2]] end f`)
+	if cerr != nil || prog == nil {
+		t.Fatalf("compile: %v", cerr)
+	}
+	d = findRegionLeading(prog, "add", "k")
+	if d == nil {
+		t.Fatal("no descriptor for the shadowed `add k 2`")
+	}
+	if d.NFwd != 0 {
+		t.Errorf("NFwd = %d, want 0 — the body-local shadow is not what a live lookup "+
+			"would find where this body runs", d.NFwd)
+	}
+}
+
+// A fn-body's own `def` is describable by NOTHING the descriptor model has.
+// The name exists in neither the runtime def stack (so SlotWordRef would
+// resolve to an unrelated outer binding, or to nothing) nor in a frame slot
+// fixed at record time — a computed one is promoted to a local only AFTER
+// completion, so any source taken here would be stale. The claim stops.
+//
+// This is the param rule's boundary, and the pair below is the point: a PARAM
+// keeps its claim as SlotLocal because its frame slot is settled, while a
+// body-local of either kind does not. Both halves are asserted, because a fix
+// that stopped the claim for every word inside a fn unit would pass the
+// negative half alone while silently discarding 5807 corpus slots.
+func TestFnBodyLocalDefStopsTheClaim(t *testing.T) {
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range []string{
+		`def f fn [[][Integer][def x 1 end add x 2]] end f`,
+		`def f fn [[][Integer][def x (1 add 2) end add x 2]] end f`,
+	} {
+		prog, _, _, cerr := b.CompileCheck(src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("compile %q: %v", src, cerr)
+		}
+		d := findRegionLeading(prog, "add", "x")
+		if d == nil {
+			t.Fatalf("%q: no descriptor for the `add x 2` dispatch", src)
+		}
+		if d.NFwd != 0 {
+			t.Errorf("%q: NFwd = %d, want 0 — a fn-body local is describable by neither "+
+				"a live lookup nor a settled frame slot", src, d.NFwd)
+		}
+		if err := d.Validate(len(prog.Consts), len(prog.Fns), len(prog.Types)); err != nil {
+			t.Errorf("%q: %v", src, err)
+		}
+	}
+
+	// The positive half: a PARAM still claims, as a frame slot.
+	prog, _, _, cerr := b.CompileCheck(`def f fn [[a:Integer b:Integer][Integer][add a b]] end f 1 2`)
+	if cerr != nil || prog == nil {
+		t.Fatalf("compile: %v", cerr)
+	}
+	d := findRegion(prog, "add")
+	if d == nil || d.NFwd != 2 {
+		t.Fatalf("a param's claim must survive; got %+v", d)
+	}
+	for i := range []int{0, 1} {
+		if d.Slots[i].Source != compiler.SlotLocal {
+			t.Errorf("slot %d = %v, want SlotLocal", i, d.Slots[i].Source)
+		}
+	}
+}
+
+// A word slot resolves against the registry the DISPATCH collected in, not
+// against whichever registry the recorder last bound. After a call into a
+// boru-implemented module, es.reg points at that module's sub-registry; a
+// later main-registry dispatch looked up there finds nothing, and the claim
+// stops short of operands that did come forward.
+//
+// The visible symptom is an under-claim rather than a wrong answer, which is
+// exactly why it needs a test: it would never have surfaced as a failure.
+func TestWordSlotUsesTheDispatchRegistry(t *testing.T) {
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, _, _, cerr := b.CompileCheck(
+		`import module [def m fn [[n:Integer][Integer][n 1 add]] export "M" {m:m/v}] end ` +
+			`def x 1 end M.m 5 end add x 2`)
+	if cerr != nil || prog == nil {
+		t.Fatalf("compile: %v", cerr)
+	}
+	d := findRegionLeading(prog, "add", "x")
+	if d == nil {
+		t.Fatal("no descriptor for the main-registry `add x 2`")
+	}
+	if d.NFwd != 2 {
+		t.Fatalf("NFwd = %d, want 2 — both operands came forward; a module sub-registry "+
+			"left in the recorder must not decide where `x` is looked up", d.NFwd)
+	}
+	if d.Slots[0].Source != compiler.SlotWordRef {
+		t.Errorf("slot 0 = %v, want SlotWordRef — `x` is a module-scope binding", d.Slots[0].Source)
+	}
+	if err := d.Validate(len(prog.Consts), len(prog.Fns), len(prog.Types)); err != nil {
+		t.Errorf("%v", err)
 	}
 }

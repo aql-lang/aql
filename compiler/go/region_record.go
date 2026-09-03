@@ -54,6 +54,23 @@ type regionKey struct {
 	col  int
 }
 
+// pendingRegion is one Phase-A offer: the capture, plus the REGISTRY the
+// dispatch was collecting against.
+//
+// The registry is carried here and nowhere else. Completion has to resolve a
+// word slot against the def table the DISPATCH read, and es.reg is the last
+// registry BindRegistry saw — after a call into a boru-implemented module it
+// is that module's sub-registry, so a later main-registry dispatch would look
+// its words up in the wrong table (measured: `M.m 5 end add x 2` recorded
+// `add` with NFwd 0 because `x` was sought in M's registry). It must NOT
+// reach RegionDesc: a Program is shared and a run may be handed a DIFFERENT
+// registry — ForkConcurrent gives each concurrent execution its own fork —
+// which is why Finalize declines to stamp one onto ordinary fn units.
+type pendingRegion struct {
+	desc *RegionDesc
+	reg  *core.Registry
+}
+
 func keyOf(word string, pos core.SrcPos) regionKey {
 	return regionKey{word: word, row: pos.Row, col: pos.Col}
 }
@@ -78,14 +95,17 @@ func tryRecordRegion(win core.CollectWindow, reg *core.Registry, w core.WordInfo
 		return
 	}
 	if es.pendingRegions == nil {
-		es.pendingRegions = map[regionKey]*RegionDesc{}
+		es.pendingRegions = map[regionKey]pendingRegion{}
 	}
 	pos := win.At(at).Pos()
-	es.pendingRegions[keyOf(w.Name, pos)] = &RegionDesc{
-		Lead:  LeadWord,
-		Word:  w.Name,
-		Slots: slots,
-		Pos:   pos,
+	es.pendingRegions[keyOf(w.Name, pos)] = pendingRegion{
+		desc: &RegionDesc{
+			Lead:  LeadWord,
+			Word:  w.Name,
+			Slots: slots,
+			Pos:   pos,
+		},
+		reg: reg,
 	}
 }
 
@@ -111,13 +131,20 @@ func (es *EmitState) PendingRegionCount() int {
 // (the dispatch simply carries no descriptor); a stale hit is a descriptor
 // describing a tape the dispatch did not walk.
 func (es *EmitState) TakePendingRegion(word string, pos core.SrcPos) (*RegionDesc, bool) {
+	p, ok := es.takePendingRegion(word, pos)
+	return p.desc, ok
+}
+
+// takePendingRegion is the same claim with the offer's registry attached —
+// what completion needs and what the emitted descriptor must never carry.
+func (es *EmitState) takePendingRegion(word string, pos core.SrcPos) (pendingRegion, bool) {
 	if es == nil || es.pendingRegions == nil {
-		return nil, false
+		return pendingRegion{}, false
 	}
 	k := keyOf(word, pos)
-	d, ok := es.pendingRegions[k]
+	p, ok := es.pendingRegions[k]
 	if ok {
 		delete(es.pendingRegions, k)
 	}
-	return d, ok
+	return p, ok
 }

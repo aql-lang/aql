@@ -769,13 +769,28 @@ claimed is `OpCollect`'s job, live. Phase B, as a phase, does not exist.
 > Three consequences the corpus then showed, none of them predictable from
 > the design:
 >
-> - A word slot inside a fn body is NOT live. The analysis binds each param
->   into the def stack so the body can be analysed, so it resolves during
->   the pass — but the emitted body reads it from the FRAME. **5807 of the
->   9322 claimed word-token slots (62%) are params or loop iterators**, and they
->   take `SlotLocal` from the operand instead. That is the fn-unit exclusion
->   this document names below, closed at the source rather than declined.
-> - `SlotConst` 16861, `SlotWordRef` 3515, `SlotLocal` 5807, `SlotEvent` 1,
+> - **A word slot's answer is decided by where its BINDING lives, not by where
+>   the dispatch sits.** Inside a fn body the analysis binds params and
+>   body-local defs into the def stack so the body can be analysed, so they
+>   resolve during the pass — but the emitted body reads them from the FRAME
+>   or bakes them, and at run time the def stack holds no such binding. The
+>   discriminator is the closure-capture rule verbatim
+>   (`Defs.Depth(name) > FnBaselines[top][name]`), because captures and
+>   descriptors ask the same question. A frame-bound name takes `SlotLocal`
+>   when the operand names its slot (a param, a loop iterator) and STOPS the
+>   claim otherwise (a body-local `def`, whose computed form is promoted to a
+>   local only after completion). A module-scope name read from inside a fn
+>   body stays LIVE — that is the `k` pair, the shape OpCollect exists for.
+>   Measured: of 6361 claimed word-token slots only **848 are live wordRefs**;
+>   5513 are frame slots.
+> - **A word slot resolves against the DISPATCH's registry.** The recorder's
+>   own `es.reg` is the last registry `BindRegistry` saw, which after a call
+>   into a boru-implemented module is that module's sub-registry; resolving a
+>   later main-registry dispatch's words there finds nothing and silently
+>   shortens the claim. The registry rides the Phase-A offer, and must never
+>   reach `RegionDesc` — a Program is shared, and a run may be handed a
+>   different registry fork.
+> - `SlotConst` 16596, `SlotLocal` 5513, `SlotWordRef` 848, `SlotEvent` 1,
 >   `SlotType` 0, `SlotGroup` 0 over 38734 descriptors from 5629 programs.
 > - The descriptor rides its call EVENT and is appended to `Program.Regions`
 >   by the LOWERER, like `DispatchSpec`. A recorder-side table is not
@@ -896,10 +911,10 @@ is worth stating rather than discovering.
 
 > **LANDED 2026-09-03.** `RegionDesc.NFwd` and the `Validate` relaxation are
 > in the tree, and the corpus says the bound is not a micro-optimisation:
-> **26184 of 65959 span slots are claimed**, so 60% of every region a
+> **22958 of 65959 span slots are claimed**, so 60% of every region a
 > descriptor describes is beyond its own dispatch. The claim's shape is just
-> as skewed — 15515 descriptors claim nothing forward at all (every operand
-> came off the value stack), 5041 claim a prefix, 18178 claim the whole span.
+> as skewed — 17650 descriptors claim nothing forward at all, 5292 claim a
+> prefix, 15792 claim the whole span.
 > A reader that assumed its window IS the dispatch window would be wrong far
 > more often than right.
 >

@@ -174,11 +174,10 @@ func TestCompleteRegionDeclinesAMalformedWordSlot(t *testing.T) {
 
 	v := core.NewInteger(1)
 	s := SlotDesc{Source: SlotWordRef, Token: v}
-	if es.slotIsOperand(s, v) {
+	if es.slotIsOperand(s, es.reg, v) {
 		t.Error("a wordRef whose token is not a Word must not correspond")
 	}
-	es.reg = nil
-	if es.slotIsOperand(s, v) {
+	if es.slotIsOperand(s, nil, v) {
 		t.Error("a wordRef cannot be resolved with no registry")
 	}
 }
@@ -250,8 +249,8 @@ func TestCompleteRegionMisses(t *testing.T) {
 	// A capture whose slot list is empty is stored as nil by Phase A; drive
 	// the empty-slot arm directly, since Phase A cannot produce it.
 	pos := core.SrcPos{Row: 2, Col: 2}
-	es.pendingRegions = map[regionKey]*RegionDesc{
-		keyOf("empty", pos): {Lead: LeadWord, Word: "empty"},
+	es.pendingRegions = map[regionKey]pendingRegion{
+		keyOf("empty", pos): {desc: &RegionDesc{Lead: LeadWord, Word: "empty"}, reg: reg},
 	}
 	if d := es.completeRegion("empty", pos, nil, nil); d != nil {
 		t.Error("a region of zero slots must complete to nil")
@@ -260,7 +259,6 @@ func TestCompleteRegionMisses(t *testing.T) {
 	if d := nilES.completeRegion("x", pos, nil, nil); d != nil {
 		t.Error("a nil recorder must complete to nil")
 	}
-	_ = reg
 }
 
 // Completion must not write through to the pending capture. The same source
@@ -274,7 +272,7 @@ func TestCompleteRegionDoesNotMutateTheCapture(t *testing.T) {
 	a := core.NewInteger(1)
 	pos := capture(t, es, reg, "pair", a)
 	held, _ := es.TakePendingRegion("pair", pos)
-	es.pendingRegions[keyOf("pair", pos)] = held
+	es.pendingRegions[keyOf("pair", pos)] = pendingRegion{desc: held, reg: reg}
 
 	d := es.completeRegion("pair", pos, []core.Value{a}, []EmitOperand{ConstOperand(2)})
 	if d == nil || d.Slots[0].Source != SlotConst {
@@ -333,15 +331,91 @@ func TestSlotIsOperandRefusesIdlessValues(t *testing.T) {
 	if a.ID != "" || b.ID != "" {
 		t.Skip("values minted here carry ids; the hazard this pins cannot arise")
 	}
-	if es.slotIsOperand(SlotDesc{Token: a}, b) {
+	if es.slotIsOperand(SlotDesc{Token: a}, nil, b) {
 		t.Error("two id-less values must not correspond — a claim would extend over a slot the dispatch never took")
 	}
-	if es.slotIsOperand(SlotDesc{Token: a}, a) {
+	if es.slotIsOperand(SlotDesc{Token: a}, nil, a) {
 		t.Error("even the same id-less value must not correspond: identity is unprovable without an id")
 	}
 	// A word slot takes the same guard before any registry work, so an
 	// id-less operand cannot be matched by a live resolution either.
-	if es.slotIsOperand(SlotDesc{Source: SlotWordRef, Token: core.NewWord("k")}, a) {
+	if es.slotIsOperand(SlotDesc{Source: SlotWordRef, Token: core.NewWord("k")}, nil, a) {
 		t.Error("an id-less operand must not correspond to a word slot")
+	}
+}
+
+// fnScopedWord is the discriminator the whole word-slot rule turns on, and its
+// arms are driven directly because the corpus reaches them only through
+// programs that also exercise everything else. The rule is the closure-capture
+// one: depth > the enclosing fn's baseline means the binding lives inside that
+// fn; equal means module scope.
+func TestFnScopedWord(t *testing.T) {
+	reg, err := core.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := core.NewWord("k")
+	// No baseline stack at all: a top-level dispatch, where nothing is
+	// fn-scoped however deep the binding is.
+	reg.Defs.Push("k", core.NewInteger(1))
+	if fnScopedWord(reg, k) {
+		t.Error("with no fn on the baseline stack nothing is fn-scoped")
+	}
+	if fnScopedWord(nil, k) {
+		t.Error("a nil registry cannot answer the question")
+	}
+	// A token that is not a word is not a name to scope.
+	reg.FnBaselines = append(reg.FnBaselines, map[string]int{"k": 1})
+	if fnScopedWord(reg, core.NewInteger(1)) {
+		t.Error("a non-word token must not be treated as a scoped name")
+	}
+	// depth == baseline: the binding predates the fn, so it is module scope
+	// and a live lookup still finds it where the body runs.
+	if fnScopedWord(reg, k) {
+		t.Error("depth == baseline is module scope and must stay live")
+	}
+	// depth > baseline: bound inside the fn.
+	reg.Defs.Push("k", core.NewInteger(9))
+	if !fnScopedWord(reg, k) {
+		t.Error("a binding pushed inside the fn is fn-scoped")
+	}
+}
+
+// A fn-scoped word whose operand does not name a frame slot STOPS the claim.
+// The operand is a baked const (a body-local `def x 1`) or an event that will
+// be promoted to a local only after completion; either source would describe
+// something the runtime does not have where the body runs.
+func TestCompleteRegionStopsOnAFnScopedWordWithoutAFrameSlot(t *testing.T) {
+	es, reg, done := beginRegionPass(t)
+	defer done()
+
+	bound := core.NewInteger(1)
+	reg.FnBaselines = append(reg.FnBaselines, map[string]int{})
+	reg.Defs.Push("x", bound)
+	pos := capture(t, es, reg, "add", core.NewWord("x"))
+
+	d := es.completeRegion("add", pos, []core.Value{bound}, []EmitOperand{ConstOperand(0)})
+	if d == nil {
+		t.Fatal("completion must produce the descriptor")
+	}
+	if d.NFwd != 0 {
+		t.Errorf("NFwd = %d, want 0 — a fn-scoped name with a baked operand is "+
+			"describable neither live nor by a frame slot", d.NFwd)
+	}
+	if d.Slots[0].Source != SlotWordRef {
+		t.Errorf("slot 0 = %v, want the capture's SlotWordRef left in place", d.Slots[0].Source)
+	}
+
+	// The positive half at the same seam: the SAME fn-scoped name whose
+	// operand DOES name a frame slot takes it. A param's slot is settled at
+	// record time and no module-scope rebind can move it, which is what
+	// separates the two halves — not the scope, which is identical here.
+	pos2 := capture(t, es, reg, "add", core.NewWord("x"))
+	d2 := es.completeRegion("add", pos2, []core.Value{bound}, []EmitOperand{localOperand(3)})
+	if d2 == nil || d2.NFwd != 1 {
+		t.Fatalf("a fn-scoped name with a frame slot must claim; got %+v", d2)
+	}
+	if d2.Slots[0].Source != SlotLocal || d2.Slots[0].Idx != 3 {
+		t.Errorf("slot 0 = %v/%d, want SlotLocal/3", d2.Slots[0].Source, d2.Slots[0].Idx)
 	}
 }

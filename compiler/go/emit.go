@@ -585,7 +585,7 @@ type EmitState struct {
 	// correct rather than merely tolerable — RegionDesc is STATIC ("true of
 	// every execution of the region", its own doc), so the extent at one
 	// position does not vary, and the last capture equals the first.
-	pendingRegions map[regionKey]*RegionDesc
+	pendingRegions map[regionKey]pendingRegion
 
 	// pendingLoopBind carries a SplitLoopRegionBind verdict to the
 	// RecordDynBind of the same installAndRecordDef call (S5).

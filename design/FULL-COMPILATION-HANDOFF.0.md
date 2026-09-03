@@ -1077,19 +1077,47 @@ table is not code.
    each slot to its operand by VALUE IDENTITY (not structural equality: `add
    1 1` would coincide) and stops at the first that does not.
 
-2. **62% of claimed word slots are not live, and keeping them live would
-   have been a miscompile.** Inside a fn body the analysis binds each param
-   into the def stack so the body can be analysed, so `a` in `[add a b]`
-   resolves during the pass — but the emitted body reads it from the FRAME,
-   and at run time the def stack holds no such binding. 5807 of the 9322
-   claimed word-token slots (62%) are params or loop iterators. They take `SlotLocal` from the
-   operand. This is §6.2's fn-unit exclusion — "four fifths of the gap",
-   the largest single relaxation it names — closed at the source rather than
-   declined, and it cost one condition.
+2. **A word slot's answer is decided by where its BINDING lives, not by
+   where the dispatch sits — and getting that wrong is a miscompile.** Inside
+   a fn body the analysis binds params and body-local defs into the def stack
+   so the body can be analysed, so `a` in `[add a b]` resolves during the
+   pass — but the emitted body reads it from the FRAME, and at run time the
+   def stack holds no such binding.
 
-   It was found by a test, not by reading: the e2e pin asserted `add a b`'s
-   descriptor and got two confident `SlotWordRef` slots. An inert table that
-   is WRONG is worse than no table, because the next step trusts it.
+   The first cut keyed the exception on the OPERAND (take the source when it
+   is a frame local), which was right for params and wrong twice over, both
+   found in review. A body-local `def x 1` emits `PUSH_CONST` while the name
+   exists nowhere at run time, and a computed one is promoted to a frame slot
+   only AFTER completion — either way the slot kept a confident `SlotWordRef`
+   describing a lookup that will miss or find an unrelated outer binding. And
+   keying it on "inside a fn unit" instead would have been worse in the other
+   direction: it deletes the `k` pair's own descriptor, which is the shape
+   OpCollect exists for.
+
+   The discriminator is the CLOSURE-CAPTURE rule, verbatim:
+   `Defs.Depth(name) > FnBaselines[top][name]` means the name lives inside an
+   enclosing fn; equal means module scope. Captures and descriptors ask the
+   same question — will a live lookup still find this name where the body
+   runs — so they must not answer it two ways. A frame-bound name takes
+   `SlotLocal` when the operand names its slot and STOPS the claim otherwise;
+   a module-scope name stays live. The pair that pins it is one name at one
+   position with two scopes:
+
+	def k 5  def f fn [[][Integer][add k 2]]              → NFwd 2, slot 0 wordRef
+	def k 5  def f fn [[][Integer][def k 9  add k 2]]     → NFwd 0
+
+   Measured: of 6361 claimed word-token slots only **848 are live wordRefs**,
+   5513 are frame slots, and roughly 2960 more stopped the claim rather than
+   describe a binding the runtime will not have.
+
+2b. **A word slot resolves against the DISPATCH's registry**, not the
+   recorder's `es.reg` — which is the last registry `BindRegistry` saw, and
+   after a call into a boru-implemented module that is the module's
+   sub-registry. Measured: `M.m 5 end add x 2` recorded `add` with NFwd 0
+   because `x` was sought in M's table. The registry now rides the Phase-A
+   offer. It must never reach `RegionDesc`: a Program is shared and a run may
+   be handed a different registry fork, which is why `Finalize` declines to
+   stamp one onto ordinary fn units.
 
 3. **A recorder-side table is not rollback-safe.** The first cut appended
    descriptors to a slice on the `EmitState`. `Rollback` does not truncate
@@ -1101,9 +1129,9 @@ table is not code.
    puts it under the existing rollback and gives the lowering site the link
    from a call in unit K to its own descriptor.
 
-4. **The claim is a small prefix of the region.** 26184 of 65959 span slots
-   claimed; 15515 descriptors claim nothing forward at all, 5041 a prefix,
-   18178 the whole span. `NFwd` is not a micro-optimisation — §6.2 measured
+4. **The claim is a small prefix of the region.** 22958 of 65959 span slots
+   claimed; 17650 descriptors claim nothing forward at all, 5292 a prefix,
+   15792 the whole span. `NFwd` is not a micro-optimisation — §6.2 measured
    the alternative at +9.9% on `arith_chain64`, because a region runs to the
    next hard delimiter and classifying all of it once per dispatch is
    quadratic.
