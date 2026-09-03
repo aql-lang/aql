@@ -1174,8 +1174,8 @@ and what it is holding up is directly observable.
 
 | program | interpreter | compiled, guard lifted |
 |---|---|---|
-| `def k 5  def f fn [[] [Integer] [add k 2]]  f  def k 9  f` | `7 11` | **`7 7`** |
-| the same with `undef k` | raises `signature_error` | **`7 7`** |
+| `def k 5  def f fn [[] [Integer] [k add 2]]  f  def k 9  f` | `7 11` | **`7 7`** |
+| the same with `undef k` | raises `undefined_word` | **`7 7`** |
 | the same with `def k "x"` | raises `type_error` on f's return | **`7 7`** |
 
 **The guard is holding up THREE miscompiles, not one.** The plan above
@@ -1186,7 +1186,8 @@ first row, guard lifted:
 
 	0003 BIND_TWIN   w2   ; bind twin def k @depth 2 (replay)
 	fn f0 f/0 (locals=0):
-	0001 PUSH_CONST  k0   ; 5 (Integer)
+	0000 PUSH_CONST  k1   ; 5 (Integer)
+	0001 PUSH_CONST  k0   ; 2 (Integer)
 	0002 CALL_NATIVE s0   ; add (Number, Number)
 	; sites: mono=3 poly=0
 
@@ -1196,15 +1197,21 @@ Two facts fall out, and the second is the expensive one.
   time — pc 0003 is the twin doing its job. It is the READ that was baked.
   So the missing piece is narrower than "make the rebound value reachable";
   that half is finished and was finished before this line started.
-- **The call site is MONO.** `add (Number, Number)` was selected at compile
-  time FROM the frozen `5`. An `OpCollect` that supplies a live operand and
-  leaves the recorded signature alone answers the third row by CONCATENATING
-  — `add` carries a String overload, so a rebound `k` does not fail to
-  dispatch, it matches a different arm. So `OpCollect` owes a signature
-  DECISION as well as an operand, and it may not re-derive that decision
-  from the bare window: `dispatch_agreement_census_test.go` states the
-  generic lane must re-create the planner's selection from the descriptor,
-  never from the window.
+- **The call site is MONO,** and this is the half the plan had not priced.
+  `add (Number, Number)` was selected at compile time FROM the frozen `5`,
+  and `OpCallNative` invokes THAT signature's handler directly (`eng/go/vm.go`
+  — `s := p.Sigs[in.Arg]`, then `s.Sig.DispatchHandler()`); it never
+  rematches. So an `OpCollect` that supplies a live operand and leaves the
+  recorded signature alone does not reproduce the interpreter on the third
+  row by any route: it either trips `checkNativeParamContract` into a
+  `signature_error` where the sig carries `Guard`, or hands a String to the
+  numeric handler where it does not. The INTERPRETER rematches, finds
+  `add`'s String arm, concatenates to `'x2'`, and is caught only by f's
+  declared `[Integer]` return. Selecting that arm is precisely the extra
+  decision `OpCollect` owes — and it may not re-derive it from the bare
+  window: `dispatch_agreement_census_test.go` states the generic lane must
+  re-create the planner's selection from the descriptor, never from the
+  window.
 
 **The corpus cannot see any of this.** Running
 `TestSpecCompiledDifferential` with the guard suppressed **passes** — no

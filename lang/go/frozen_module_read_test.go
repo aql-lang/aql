@@ -41,25 +41,27 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		// (basic/go/native_definition.go), and until 2026-09-03 no case here
 		// exercised it. Measured by suppressing the guard at emit.go and
 		// rebuilding: the program compiles to `7 7` where the interpreter
-		// raises `signature_error: cannot call add` — the unit's baked const
-		// outlives the very binding that produced it, so the compiled body
-		// cannot tell that `k` stopped existing.
-		`def k 5  def f fn [[] [Integer] [add k 2]]  f  undef k  f`,
+		// raises `undefined_word` — the unit's baked const outlives the very
+		// binding that produced it, so the compiled body cannot tell that `k`
+		// stopped existing.
+		`def k 5  def f fn [[] [Integer] [k add 2]]  f  undef k  f`,
 		// The CROSS-FAMILY twin, and the one a live operand ALONE cannot fix.
 		// Measured the same way: compiles to `7 7` where the interpreter
 		// raises `type_error: f: return value 1: expected Integer, got
-		// ProperString`.
+		// ProperString` over the value `'x2'`.
 		//
 		// What separates it from the first case is the EMITTED SHAPE. The unit
-		// lowers to `PUSH_CONST 5` feeding a MONO `CALL_NATIVE add (Number,
+		// lowers to two `PUSH_CONST`s feeding a MONO `CALL_NATIVE add (Number,
 		// Number)` — a signature chosen at compile time FROM the frozen value.
-		// `add` carries a String overload (lang/go/native/native_math.go), so
-		// a rebound `k` does not fail to dispatch; the window MATCHES a
-		// different arm, and only f's declared `[Integer]` return catches it.
-		// Whatever eventually makes this read live therefore owes a signature
-		// DECISION as well as an operand, and this row is what refuses to let
-		// that step supply the operand while keeping the stale selection.
-		`def k 5  def f fn [[] [Integer] [add k 2]]  f  def k "x"  f`,
+		// `OpCallNative` invokes that BAKED signature's handler directly
+		// (eng/go/vm.go) and never rematches, so making the read live without
+		// re-deciding the signature does not reproduce the interpreter at all:
+		// the interpreter rematches to `add`'s String arm and concatenates,
+		// and only f's declared `[Integer]` return catches it. Whatever
+		// eventually makes this read live therefore owes a signature DECISION
+		// as well as an operand, and this row is what refuses to let that step
+		// supply the operand while keeping the stale selection.
+		`def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f`,
 	}
 	for _, src := range cases {
 		a, err := New()
