@@ -1160,6 +1160,78 @@ them as `nowCovered`, and they must be graduated in the same change; and
 producer, so a first `OpCollect` that produces a WINDOW must not claim the
 raise path.
 
+## Stage 4a-2: what lifting the frozen-read guard actually shows (2026-09-03)
+
+Item (b) above is landed — `eng/go/region_host.go`, the VM's `CollectHost`
+over a `RegionDesc`, classifications delegated to core and every evaluation
+declining. Item (c) is where this section corrects the plan, because the
+measurement contradicts the premise (c) was written on.
+
+**The experiment.** Suppress the `MarkUncompilable` at
+`compiler/go/emit.go:3158-3160`, rebuild the CLI, run under
+`-force-compile`, revert. Not a thought experiment — the guard is one `if`,
+and what it is holding up is directly observable.
+
+| program | interpreter | compiled, guard lifted |
+|---|---|---|
+| `def k 5  def f fn [[] [Integer] [add k 2]]  f  def k 9  f` | `7 11` | **`7 7`** |
+| the same with `undef k` | raises `signature_error` | **`7 7`** |
+| the same with `def k "x"` | raises `type_error` on f's return | **`7 7`** |
+
+**The guard is holding up THREE miscompiles, not one.** The plan above
+named only the first.
+
+**And the answer is not one an operand can supply.** The disassembly of the
+first row, guard lifted:
+
+	0003 BIND_TWIN   w2   ; bind twin def k @depth 2 (replay)
+	fn f0 f/0 (locals=0):
+	0001 PUSH_CONST  k0   ; 5 (Integer)
+	0002 CALL_NATIVE s0   ; add (Number, Number)
+	; sites: mono=3 poly=0
+
+Two facts fall out, and the second is the expensive one.
+
+- **The bind twin already replays the rebind correctly.** `k` IS live at run
+  time — pc 0003 is the twin doing its job. It is the READ that was baked.
+  So the missing piece is narrower than "make the rebound value reachable";
+  that half is finished and was finished before this line started.
+- **The call site is MONO.** `add (Number, Number)` was selected at compile
+  time FROM the frozen `5`. An `OpCollect` that supplies a live operand and
+  leaves the recorded signature alone answers the third row by CONCATENATING
+  — `add` carries a String overload, so a rebound `k` does not fail to
+  dispatch, it matches a different arm. So `OpCollect` owes a signature
+  DECISION as well as an operand, and it may not re-derive that decision
+  from the bare window: `dispatch_agreement_census_test.go` states the
+  generic lane must re-create the planner's selection from the descriptor,
+  never from the window.
+
+**The corpus cannot see any of this.** Running
+`TestSpecCompiledDifferential` with the guard suppressed **passes** — no
+corpus row carries a frozen read followed by a rebind, exactly as the
+population measurement predicted. This is the "green gate over a corpus
+that cannot contain the case" lesson in its purest form: the only thing in
+the tree that catches the guard's removal is
+`lang/go/frozen_module_read_test.go`, a hand-written pin.
+
+That pin covered two shapes (the scalar read and the splice twin). It now
+covers four — the `undef` arm of `NotifyNameRebound`, which nothing
+exercised, and the cross-family rebind, which is the row that will refuse
+to let a future routing step supply an operand while keeping a stale mono
+selection. Each was verified non-vacuous the only way that means anything:
+suppress the guard and watch the new row fail.
+
+**Revised order for (c).** Not `OpCollect` first. `Finalize` returns at
+`emit.go:8685` on a latched refusal, BEFORE the lowerer runs, so while the
+latch stands it blinds every descriptor from anything downstream. The
+order is: pin the guard (done, above); then give `frozenReads` — today a
+`map[string]bool` that throws away WHICH site the name fed — enough
+structure for a router to ask "which operand froze `k`?"; then convert the
+latch into an obligation discharged at `Finalize` against the finished
+artifact, which is behaviour-identical and is the only state in which a
+corpus differential over this shape means anything; then `OpCollect`.
+
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
