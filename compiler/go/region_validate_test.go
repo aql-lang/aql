@@ -7,10 +7,16 @@ import (
 	core "github.com/boru-lang/boru/core/go"
 )
 
+// okDesc is a well-formed one-slot descriptor whose slot is INSIDE the
+// recorded claim (NFwd 1). The claim bound matters to almost every case
+// below: outside it a slot is not this dispatch's operand and carries no
+// source by design, so a fixture that left NFwd at zero would be asserting
+// the relaxation rather than the rule (see TestValidateBeyondTheClaim).
 func okDesc() *RegionDesc {
 	return &RegionDesc{
 		Lead:  LeadWord,
 		Word:  "f",
+		NFwd:  1,
 		Slots: []SlotDesc{{Source: SlotConst, Idx: 0}},
 	}
 }
@@ -113,9 +119,44 @@ func TestRegionDescValidateRejectsUnknownSource(t *testing.T) {
 // case is pinned by TestCaptureRegionSlotsFinishesAWordSlot.
 func TestCapturedRegionIsMalformedUntilLowered(t *testing.T) {
 	w := core.NewTape([]core.Value{core.NewInteger(1)}, core.StackHeadroom)
-	d := &RegionDesc{Lead: LeadWord, Word: "f", Slots: CaptureRegionSlots(w, 0)}
+	slots := CaptureRegionSlots(w, 0)
+	// The claim covers the slot, which is what makes the missing Source a
+	// defect: Phase B said this slot WAS the dispatch's operand.
+	d := &RegionDesc{Lead: LeadWord, Word: "f", NFwd: len(slots), Slots: slots}
 	if err := d.Validate(1, 0, 0); err == nil {
 		t.Error("a freshly captured descriptor must not validate: the lowerer has not set Source")
+	}
+}
+
+// The one place the invalid zero is not a defect. A slot beyond the recorded
+// claim is inside the region's syntactic span but was not this dispatch's
+// operand, so no source was ever owed — the runtime defers if a live
+// collection reaches it. The negative half is in the same test, because a
+// relaxation with no boundary is just a hole: an INDEX out there is still a
+// lowerer writing past its own claim, and the claim bound itself is checked.
+func TestValidateBeyondTheClaim(t *testing.T) {
+	d := okDesc()
+	d.Slots = append(d.Slots, SlotDesc{Source: SlotNone})
+	if err := d.Validate(1, 0, 0); err != nil {
+		t.Errorf("SlotNone beyond the claim must validate, got %v", err)
+	}
+
+	d2 := okDesc()
+	d2.Slots = append(d2.Slots, SlotDesc{Source: SlotNone, Idx: 3})
+	err := d2.Validate(1, 0, 0)
+	if err == nil {
+		t.Fatal("an unsourced slot carrying an index must be rejected even beyond the claim")
+	}
+	if !strings.Contains(err.Error(), "beyond the claim") {
+		t.Errorf("error should name the claim, got %v", err)
+	}
+
+	for _, n := range []int{-1, 2} {
+		d3 := okDesc()
+		d3.NFwd = n
+		if err := d3.Validate(1, 0, 0); err == nil {
+			t.Errorf("claim bound %d outside the descriptor's 1 slot must be rejected", n)
+		}
 	}
 }
 

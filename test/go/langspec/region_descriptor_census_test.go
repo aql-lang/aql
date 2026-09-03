@@ -210,11 +210,33 @@ func TestRegionDescriptorOracle(t *testing.T) {
 // half that cannot catch a regression (AGENTS.md, test discipline).
 func TestRegionDescriptorValidateRejects(t *testing.T) {
 	pos := core.SrcPos{Row: 1, Col: 1}
-	// The invalid zero: a slot nobody gave a source to.
+	// The invalid zero: a slot nobody gave a source to. NFwd 1 puts it INSIDE
+	// the recorded claim, which is what makes the missing source a defect —
+	// beyond the claim a slot is not the dispatch's operand and is owed none
+	// (the relaxation is pinned just below, so this fixture is not silently
+	// asserting the wrong half).
 	d := &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
-		Slots: []compiler.SlotDesc{{}}}
+		NFwd: 1, Slots: []compiler.SlotDesc{{}}}
 	if err := d.Validate(1, 0, 0); err == nil {
 		t.Error("a slot left at SlotNone must be refused — it is the invalid zero, not Consts[0]")
+	}
+	// …and the relaxation's own boundary: unsourced BEYOND the claim is legal,
+	// unsourced-but-indexed is a lowerer writing past its own claim, and the
+	// claim bound may not point outside the slots.
+	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
+		NFwd: 0, Slots: []compiler.SlotDesc{{}}}
+	if err := d.Validate(1, 0, 0); err != nil {
+		t.Errorf("an unsourced slot beyond the claim is legal, got %v", err)
+	}
+	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
+		NFwd: 0, Slots: []compiler.SlotDesc{{Idx: 3}}}
+	if err := d.Validate(1, 0, 0); err == nil {
+		t.Error("an unsourced slot carrying an index must be refused even beyond the claim")
+	}
+	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,
+		NFwd: 2, Slots: []compiler.SlotDesc{{Source: compiler.SlotConst}}}
+	if err := d.Validate(1, 0, 0); err == nil {
+		t.Error("a claim bound past the slot count must be refused")
 	}
 	// An index that is in the struct but out of the table it addresses.
 	d = &compiler.RegionDesc{Lead: compiler.LeadWord, Word: "add", Pos: pos,

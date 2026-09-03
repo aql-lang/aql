@@ -753,6 +753,53 @@ So the join came from treating the descriptor as a record of what a dispatch
 CLAIMED. It is a record of what the region CONTAINS; deciding what is
 claimed is `OpCollect`'s job, live. Phase B, as a phase, does not exist.
 
+> **CORRECTED 2026-09-03, and the correction is the difference between a
+> SEARCH and an INDEX.** Phase B exists and has landed
+> (`compiler/go/region_complete.go`) — but not as the join three models were
+> reverted for. Those searched a written-order slot for its already-resolved
+> operand. The rule makes searching unnecessary: matching fills sig positions
+> from the forward tokens in written order, so over the LEADING positions the
+> two orders are the same order and slot *i* is sig position *i*. The source
+> is then `ops[i]`, a direct index.
+>
+> What the reverted models really got wrong was ASSUMING that, and the
+> checked version is what this note's own measurement asked for: completion
+> walks the slots against the operands, compares each by VALUE IDENTITY, and
+> stops at the first that does not correspond. Where it stops is `NFwd`.
+> Three consequences the corpus then showed, none of them predictable from
+> the design:
+>
+> - **A word slot's answer is decided by where its BINDING lives, not by where
+>   the dispatch sits.** Inside a fn body the analysis binds params and
+>   body-local defs into the def stack so the body can be analysed, so they
+>   resolve during the pass — but the emitted body reads them from the FRAME
+>   or bakes them, and at run time the def stack holds no such binding. The
+>   discriminator is the closure-capture rule verbatim
+>   (`Defs.Depth(name) > FnBaselines[top][name]`), because captures and
+>   descriptors ask the same question. A frame-bound name takes `SlotLocal`
+>   when the operand names its slot (a param, a loop iterator) and STOPS the
+>   claim otherwise (a body-local `def`, whose computed form is promoted to a
+>   local only after completion). A module-scope name read from inside a fn
+>   body stays LIVE — that is the `k` pair, the shape OpCollect exists for.
+>   Measured: of 6361 claimed word-token slots only **848 are live wordRefs**;
+>   5513 are frame slots.
+> - **A word slot resolves against the DISPATCH's registry.** The recorder's
+>   own `es.reg` is the last registry `BindRegistry` saw, which after a call
+>   into a boru-implemented module is that module's sub-registry; resolving a
+>   later main-registry dispatch's words there finds nothing and silently
+>   shortens the claim. The registry rides the Phase-A offer, and must never
+>   reach `RegionDesc` — a Program is shared, and a run may be handed a
+>   different registry fork.
+> - `SlotConst` 16596, `SlotLocal` 5513, `SlotWordRef` 848, `SlotEvent` 1,
+>   `SlotType` 0, `SlotGroup` 0 over 38734 descriptors from 5629 programs.
+> - The descriptor rides its call EVENT and is appended to `Program.Regions`
+>   by the LOWERER, like `DispatchSpec`. A recorder-side table is not
+>   rollback-safe: measured, moving the append removed 55 descriptors that
+>   belonged to discarded loop-analysis rounds.
+>
+> Gated inert by `TestRegionTableWellFormed` over the whole corpus. Nothing
+> reads the table yet.
+
 **`wordRef` was specified here and missing from the implementation.** The
 `SlotDesc` sketch above lists `wordRef(name)` among the classes;
 `region_desc.go`'s `SlotSource` enum shipped without it, and that omission
@@ -861,6 +908,20 @@ scans `slots[0:NFwd]`, and `Validate` permits `SlotNone` at `i >= NFwd`,
 documented as "beyond the recorded claim; the runtime defers if collection
 reaches it". That is the one place the invalid zero is not a defect, and it
 is worth stating rather than discovering.
+
+> **LANDED 2026-09-03.** `RegionDesc.NFwd` and the `Validate` relaxation are
+> in the tree, and the corpus says the bound is not a micro-optimisation:
+> **22958 of 65959 span slots are claimed**, so 60% of every region a
+> descriptor describes is beyond its own dispatch. The claim's shape is just
+> as skewed — 17650 descriptors claim nothing forward at all, 5292 claim a
+> prefix, 15792 claim the whole span.
+> A reader that assumed its window IS the dispatch window would be wrong far
+> more often than right.
+>
+> The relaxation has a boundary, and it needs one: an unsourced slot beyond
+> the claim is legal, an unsourced slot carrying an INDEX is still a lowerer
+> writing past its own claim, and `NFwd` itself is range-checked against the
+> slot count.
 
 One correction to how this was measured, because it nearly caused a wrong
 decision. The first comparison used a benchmark file recorded earlier in the
@@ -1490,11 +1551,25 @@ seam is the line between them. Stage 4's adapter inherits that line for
 free — it implements four verdict responses, not seventeen engine
 internals.
 
-The host methods are deliberately UNEXPORTED. Nothing outside core can
-implement this yet — `cover-gate-core` would make any adapter-only arm dead
-code — so exporting now would put an unused public API on `*Engine`. Stage
-4 exports the interface, its methods, and the two helper types they name
-(`viableSig`, `fwdKind`) when the second implementation makes that real.
+The host methods were deliberately UNEXPORTED while nothing outside core
+could implement the seam. **That is done: the seam is EXPORTED** —
+`CollectHost`, its methods, the three loop entry points and the helper
+types they name (`ViableSig`, `FwdKind`) — and `eng/go/collect_seam_host_test.go`
+is a foreign host driving all three from outside core, which is what makes
+"sufficient from outside" a fact rather than a claim.
+
+The coverage worry that argued for keeping them private was answered rather
+than deferred, and the answer is worth stating because it decides where
+Stage 4's adapter LIVES. Exporting the interface renames methods that
+already exist on `*Engine` and are already covered: zero new core
+statements. A struct of function fields would have added one delegator per
+method — statements core's own suite must then cover for a seam only an
+outside caller uses. What still holds is the narrower constraint: no arm of
+the SHARED routines may exist only for the VM, because an arm core's own
+suite cannot reach is dead code in its profile whoever calls it. The
+adapter therefore lives in `eng`, above `cover-gate-core`, and is covered
+by eng's tests driving these same entry points.
+
 The per-candidate scan and the arrival loop re-seat separately, for the
 reason §10 gives: a differential failure has to name one re-seat to be
 worth anything.

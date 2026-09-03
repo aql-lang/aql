@@ -171,21 +171,37 @@ func TestJoinKeyIgnoresSourceText(t *testing.T) {
 	// does.
 	withText := core.SrcPos{Row: 4, Col: 9, Src: "pair"}
 	word := core.WithPosAt(core.NewWord("pair"), withText)
-	tryRecordRegion(regionTape(word, core.NewInteger(1)), reg,
-		core.WordInfo{Name: "pair", ArgCount: -1}, 0)
+	// A take CLAIMS the offer, so each probe of the key gets its own capture —
+	// the same state a real re-execution leaves, and the reason the subject
+	// here stays the key rather than the lifetime.
+	recapture := func() {
+		tryRecordRegion(regionTape(word, core.NewInteger(1)), reg,
+			core.WordInfo{Name: "pair", ArgCount: -1}, 0)
+	}
 
 	// Look it up with the SAME LOCATION but no source text — the shape a
 	// caller that reconstructed a position would have.
+	recapture()
 	if _, ok := es.TakePendingRegion("pair", core.SrcPos{Row: 4, Col: 9}); !ok {
 		t.Fatal("the join must key on location alone; Src must not participate")
 	}
 	// And with different text at the same location.
+	recapture()
 	if _, ok := es.TakePendingRegion("pair", core.SrcPos{Row: 4, Col: 9, Src: "other"}); !ok {
 		t.Fatal("differing Src at one location must still join")
 	}
 	// A genuinely different location must still miss.
+	recapture()
 	if _, ok := es.TakePendingRegion("pair", core.SrcPos{Row: 4, Col: 10}); ok {
 		t.Fatal("a different column is a different region and must not join")
+	}
+	// The claim is what makes a miss safe: after taking, the offer is gone, so
+	// a record with no capture of its own cannot inherit an earlier one.
+	if _, ok := es.TakePendingRegion("pair", core.SrcPos{Row: 4, Col: 9}); !ok {
+		t.Fatal("the last recapture must still be claimable")
+	}
+	if _, ok := es.TakePendingRegion("pair", core.SrcPos{Row: 4, Col: 9}); ok {
+		t.Fatal("a claimed capture must not be offered twice")
 	}
 }
 
