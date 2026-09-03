@@ -4,15 +4,16 @@
 # stand between them was retired once nothing referenced it. This map now
 # tracks only the eng piece itself — the bytecode VM.
 # See design/ENG-FOUR-PIECE.0.md.
+collect_seam_host_test.go	eng	foreign-host proof for core's exported collection seam (Stage 4)
+compiled_runtime_vm.go	eng	
+region_host.go	eng	
 vm.go	eng	
 vm_args_debug.go	eng	
 vm_args_release.go	eng	
+vm_callback_unit.go	eng
+vm_defer.go	eng	
+vm_dyn_apply.go	eng
+vm_foreign_unit.go	eng
 vm_markwindow.go	eng	
 vm_poly_nomatch.go	eng	
 vm_rematch.go	eng	
-compiled_runtime_vm.go	eng	
-vm_defer.go	eng	
-vm_callback_unit.go	eng
-vm_foreign_unit.go	eng
-vm_dyn_apply.go	eng
-collect_seam_host_test.go	eng	foreign-host proof for core's exported collection seam (Stage 4)
