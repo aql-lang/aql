@@ -60,12 +60,21 @@ import (
 // cannot drive, and the dispatch defers to the interpreter, which can.
 var errRegionCannotEval = errors.New("region host: collection needs an evaluation this host cannot perform")
 
+// errRegionExhausted is the window's growth ceiling, surfaced as a decline.
+//
+// It is separate from the evaluation decline because it is a different fact —
+// the walk could be driven, and the WINDOW ran out — but it takes the same
+// response, so RegionCannotEval covers both.
+var errRegionExhausted = errors.New("region host: the descriptor window hit its growth ceiling mid-collection")
+
 // RegionCannotEval reports whether err is the decline above, so a caller can
 // tell "this host cannot finish" from a real collection error the kernel
 // raised. They demand opposite responses — defer versus surface — and a
 // caller that could not distinguish them would report an internal decline to
 // the user as their program's error.
-func RegionCannotEval(err error) bool { return errors.Is(err, errRegionCannotEval) }
+func RegionCannotEval(err error) bool {
+	return errors.Is(err, errRegionCannotEval) || errors.Is(err, errRegionExhausted)
+}
 
 // regionHost is the descriptor-backed CollectHost.
 type regionHost struct {
@@ -95,6 +104,32 @@ func newRegionHost(reg *core.Registry, d *compiler.RegionDesc) *regionHost {
 }
 
 func (h *regionHost) Window() core.CollectWindow { return h.win }
+
+// Collected wraps a completed walk and converts a silently TRUNCATED window
+// into the decline.
+//
+// The hazard is real and specific. core.Tape.Splice consumes its `count`
+// tokens BEFORE attempting to grow, and on hitting the ceiling it returns
+// early — leaving the window short and only a latch to say so; its own
+// comment says "engine aborts loudly on the next step". The interpreter has
+// that next step and tests the latch (engine.go's step loop, twice). This
+// host has no step loop, so nothing would notice: a walk that spliced past
+// the ceiling could return nil over a window missing the very tokens the
+// splice was replacing, and the caller would route a dispatch against it.
+//
+// Every entry into the kernel from this host must pass its result through
+// here. Wrapping rather than checking at each call site is deliberate: a
+// check the caller can forget is a check that will be forgotten, and the
+// failure it guards is silent.
+func (h *regionHost) Collected(err error) error {
+	if err != nil {
+		return err
+	}
+	if h.win.Exhausted() {
+		return errRegionExhausted
+	}
+	return nil
+}
 
 // --- evaluations: all declined, see the type doc ---
 

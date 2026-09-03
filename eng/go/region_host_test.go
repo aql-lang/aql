@@ -184,36 +184,71 @@ func TestRegionHostResolvesWordSlotsLive(t *testing.T) {
 }
 
 // The classifications delegate to core's shared free functions rather than
-// restating the rules. This asserts the DELEGATION by moving the registry
-// underneath and watching the answer follow: a host that had reimplemented
-// "an fn word is a barrier" against a frozen view would not.
+// restating the rules. The assertion is that the answers MOVE when the
+// registry moves: an adapter that hardcoded false/nil would satisfy an
+// unbound-only check, which is what makes the bound half load-bearing rather
+// than decorative.
 func TestRegionHostClassificationsFollowTheRegistry(t *testing.T) {
 	h, reg := newHost(t, core.NewWord("f"))
 	tok := core.NewWord("f")
 
+	// Negative half: nothing is bound, so nothing classifies.
 	if h.IsFnWordBarrier(tok) {
 		t.Error("an unbound word is not an fn-word barrier")
 	}
 	if h.LookupWord("f") != nil {
 		t.Error("an unbound word must not resolve to a fn")
 	}
-	// StaticForwardType is PURE — it needs neither registry nor window, which
-	// is why it is the one classification that cannot drift between hosts.
-	// Asserted against core's own answer rather than a transcribed constant,
-	// so the delegation is what is pinned.
+
+	// Positive half: bind `f` as a fn and BOTH answers must change. This is
+	// the half a hardcoded implementation fails.
+	reg.Register("f", core.Signature{Args: []*core.Type{core.TAny}, BarrierPos: 1})
+	if !h.IsFnWordBarrier(tok) {
+		t.Error("a bound fn word IS a barrier — the classification must follow the registry")
+	}
+	if got := h.LookupWord("f"); got == nil || got.Name != "f" {
+		t.Errorf("LookupWord after binding = %v, want the fn", got)
+	}
+	// …and `/v` opts out, which is the exact subtlety the seam exists to keep
+	// in one implementation. A host that read only "is it bound" would miss it.
+	vTok := core.NewWord("f")
+	if wi, err := core.AsWord(vTok); err == nil {
+		wi.ForceVal = true
+		vTok.Data = wi
+	}
+	if h.IsFnWordBarrier(vTok) {
+		t.Error("`f/v` parks the fn as data and must NOT be a barrier")
+	}
+
+	// StaticForwardType is PURE — no registry, no window — which is why it is
+	// the one classification that cannot drift between hosts. Asserted against
+	// core's own answer rather than a transcribed constant.
 	gotV, gotK := h.StaticForwardType(core.NewInteger(1))
 	wantV, wantK := core.StaticForwardTypeOf(core.NewInteger(1))
 	if core.CanonValue(gotV) != core.CanonValue(wantV) || gotK != wantK {
 		t.Errorf("StaticForwardType = %s/%v, want core's own answer %s/%v",
 			core.CanonValue(gotV), gotK, core.CanonValue(wantV), wantK)
 	}
-	_ = reg
+}
+
+// reachFnValue builds a reach-collapsed named fn VALUE — a Function carrying
+// FnDefInfo with the transient ReachGroup tag — which is the only shape the
+// two reach classifications look past their opening guards for. Without it
+// ReachFnWouldClaimOn returns false at its FnDefInfo assert and
+// ReachCallHeadBarrierOn at its ReachGroup guard, so a host that hardcoded
+// either to false would pass every test that only ever showed it a literal.
+func reachFnValue(name string) core.Value {
+	fd := core.FnDefInfo{
+		Name:       name,
+		Signatures: []core.Signature{{Args: []*core.Type{core.TAny}, BarrierPos: 1}},
+	}
+	v := core.NewValueRaw(core.TFunction, fd)
+	v.ReachGroup = true
+	return v
 }
 
 // The three kernel entry points, driven end to end through this host over a
-// real descriptor. The subject is that the walks TERMINATE, classify through
-// the host, and mutate only this host's private window — not what they decide,
-// which is core's business and core's tests'.
+// real descriptor, each asserting what it CLAIMED rather than that it ran.
 //
 // The fn is hand-built rather than looked up, for the reason the seam-host
 // test builds one too: a bare core registry carries no natives (they are the
@@ -229,7 +264,7 @@ func TestRegionHostDrivesTheKernelLoops(t *testing.T) {
 		}},
 	}
 
-	if err := core.CollectForward(h, fn, core.WordInfo{Name: "pair", ArgCount: -1}, 0); err != nil {
+	if err := h.Collected(core.CollectForward(h, fn, core.WordInfo{Name: "pair", ArgCount: -1}, 0)); err != nil {
 		t.Fatalf("CollectForward over a descriptor window: %v", err)
 	}
 	if got := h.Window().Len(); got != 2 {
@@ -237,24 +272,66 @@ func TestRegionHostDrivesTheKernelLoops(t *testing.T) {
 			"literals has nothing to rewrite", got)
 	}
 
-	fwd, specAt := core.CollectCandidateScan(h, &fn.Signatures[0], 2, []int{0, 0}, 0, false, false)
-	if fwd < 0 {
-		t.Errorf("CollectCandidateScan returned fwd=%d, want >= 0", fwd)
+	// The candidate scan must CLAIM both integer slots and record where it took
+	// them. `fwd` starts at zero and only increments, so asserting `fwd >= 0`
+	// would be unfalsifiable — the count and the positions are the assertion.
+	positions := []int{-1, -1}
+	fwd, specAt := core.CollectCandidateScan(h, &fn.Signatures[0], 2, positions, 0, false, false)
+	if fwd != 2 {
+		t.Errorf("CollectCandidateScan claimed fwd=%d, want 2 — both slots match Integer", fwd)
+	}
+	if positions[0] != 0 || positions[1] != 1 {
+		t.Errorf("positions = %v, want [0 1] — the window indexes the scan took", positions)
 	}
 	if specAt != -1 {
 		t.Errorf("specAt = %d, want -1 — no slot here is speculative", specAt)
 	}
 
-	// The arrival decision, the third loop and the one no benchmark or
-	// differential in the tree exercises (the Stage-2 CPU gate recorded zero
-	// samples on both sides of it), so a purpose-built driver is the only
-	// coverage it gets from this side of the seam.
-	// The verdict itself is core's to decide; what is asserted here is that a
-	// foreign host can be asked for one at all, and that asking does not
-	// disturb the window.
-	_ = core.CollectArrival(h, core.ForwardInfo{FuncName: "pair"}, 0)
-	if got := h.Window().Len(); got > 2 {
-		t.Errorf("the arrival decision grew the window to %d", got)
+	// The paired negative: a signature the tokens do NOT satisfy must claim
+	// less. Without it, a scan that claimed everything unconditionally would
+	// pass the positive half.
+	strHost, _ := newHost(t, core.NewInteger(1), core.NewInteger(2))
+	strSig := core.Signature{Args: []*core.Type{core.TString, core.TString}, BarrierPos: 2}
+	strPos := []int{-1, -1}
+	if got, _ := core.CollectCandidateScan(strHost, &strSig, 2, strPos, 0, false, false); got == 2 {
+		t.Error("a String signature must not claim two Integer slots")
+	}
+}
+
+// The ARRIVAL decision, driven past its completed-collection guard.
+//
+// CollectArrival returns ArrivalCollect immediately when CollectedArgs >=
+// ExpectedArgs, so a zero ForwardInfo never reaches the window at all — the
+// loop would be "driven" only in the sense that the function was called. The
+// ForwardInfo below has a real deficit, which is what makes the walk ask this
+// host anything.
+//
+// This is the loop the design records as having had ZERO samples on both
+// sides of the Stage-2 CPU gate, so no benchmark or differential in the tree
+// exercises it; a purpose-built driver is the only coverage it gets from
+// outside core.
+func TestRegionHostDrivesArrival(t *testing.T) {
+	sig := &core.Signature{Args: []*core.Type{core.TInteger, core.TInteger}, BarrierPos: 2}
+
+	// A value that MATCHES the pending slot fills it.
+	h, _ := newHost(t, core.NewInteger(7))
+	fwd := core.ForwardInfo{FuncName: "pair", Sig: sig, CollectedArgs: 0, ExpectedArgs: 2}
+	before := h.Window().Len()
+	if v := core.CollectArrival(h, fwd, 0); v != core.ArrivalCollect {
+		t.Errorf("verdict = %v, want ArrivalCollect — an Integer fills an Integer slot", v)
+	}
+	if got := h.Window().Len(); got != before {
+		t.Errorf("the arrival decision changed the window length %d -> %d for a plain "+
+			"literal; only the /q and /v rewrites may mutate", before, got)
+	}
+
+	// The paired negative, and the half that proves the guard was passed at
+	// all: a value that does NOT match the slot ends the collection instead.
+	// A zero ForwardInfo would have returned ArrivalCollect for both.
+	sh, _ := newHost(t, core.NewString("no"))
+	sfwd := core.ForwardInfo{FuncName: "pair", Sig: sig, CollectedArgs: 0, ExpectedArgs: 2}
+	if v := core.CollectArrival(sh, sfwd, 0); v != core.ArrivalImplicitEnd {
+		t.Errorf("verdict = %v, want ArrivalImplicitEnd — a String does not fill an Integer slot", v)
 	}
 }
 
@@ -272,28 +349,82 @@ func TestRegionHostDeclineSurfacesThroughTheWalk(t *testing.T) {
 			BarrierPos: 1,
 		}},
 	}
-	err := core.CollectForward(h, fn, core.WordInfo{Name: "one", ArgCount: -1}, 0)
+	err := h.Collected(core.CollectForward(h, fn, core.WordInfo{Name: "one", ArgCount: -1}, 0))
 	if !RegionCannotEval(err) {
 		t.Fatalf("CollectForward over a group = %v, want the decline: a viable overload "+
 			"consumes the position, so the walk must ask this host to evaluate it", err)
 	}
 }
 
-// ReachFnWouldClaim is the call-vs-data decision for a reach-collapsed named
-// fn, and the plan walk only reaches it for a Reach token — a shape a
-// literal-only window never presents. Driven directly so the delegation is
-// covered by eng's own suite rather than waiting on a corpus row, which is
-// the same reason the other classifications are asserted against core's
-// answer rather than a transcribed one.
-func TestRegionHostReachFnWouldClaimDelegates(t *testing.T) {
-	h, _ := newHost(t, core.NewWord("f"), core.NewInteger(1))
-	tok := core.NewWord("f")
-	got := h.ReachFnWouldClaim(tok, 0)
-	want := core.ReachFnWouldClaimOn(h.Window(), h.reg, tok, 0)
+// The two REACH classifications, shown a shape that gets past their guards.
+//
+// Both open by asserting the value is a reach-collapsed fn — ReachFnWouldClaimOn
+// on its FnDefInfo payload, ReachCallHeadBarrierOn on the ReachGroup tag — so a
+// test that only ever passed a Word or an Integer proves nothing: an adapter
+// hardcoding either to false would pass it. Each is asserted against core's own
+// answer over the same window, which is what pins the DELEGATION rather than a
+// transcribed verdict.
+func TestRegionHostReachClassificationsSeeARealFn(t *testing.T) {
+	fnVal := reachFnValue("g")
+	h, _ := newHost(t, fnVal, core.NewInteger(1))
+
+	got := h.ReachFnWouldClaim(fnVal, 1)
+	want := core.ReachFnWouldClaimOn(h.Window(), h.reg, fnVal, 1)
 	if got != want {
 		t.Errorf("ReachFnWouldClaim = %v, want core's own answer %v", got, want)
 	}
-	if got {
-		t.Error("an unbound word claims nothing")
+	if !got {
+		t.Error("a reach-collapsed fn with a forward sig and a following literal must claim it")
+	}
+
+	viable := []core.ViableSig{{Sig: &fnVal.Data.(core.FnDefInfo).Signatures[0], Barrier: 1}}
+	gotHead := h.IsReachCallHead(fnVal, viable, 0, 0)
+	wantHead := core.ReachCallHeadBarrierOn(h.Window(), h.reg, fnVal, viable, 0, 0)
+	if gotHead != wantHead {
+		t.Errorf("IsReachCallHead = %v, want core's own answer %v", gotHead, wantHead)
+	}
+
+	// The paired negative, and the reason the guards exist: a plain Word is not
+	// a reach-collapsed fn, so neither classification looks past its guard.
+	plain := core.NewWord("g")
+	if h.ReachFnWouldClaim(plain, 1) {
+		t.Error("a plain word is not a reach-collapsed fn and claims nothing")
+	}
+	if h.IsReachCallHead(plain, viable, 0, 0) {
+		t.Error("a plain word is not a reach call head")
+	}
+}
+
+// The window's growth ceiling, surfaced as the decline.
+//
+// core.Tape.Splice consumes its tokens BEFORE attempting to grow and returns
+// early when the ceiling is hit, leaving the window short with only a latch to
+// say so — its own comment defers to "the next step", which the interpreter
+// has and this host does not. Without Collected, a walk that spliced past the
+// ceiling would return nil over a truncated window and the caller would route
+// against it.
+func TestRegionHostSurfacesWindowExhaustion(t *testing.T) {
+	h, _ := newHost(t, core.NewInteger(1))
+
+	// A clean window is not exhausted, so the wrapper is transparent.
+	if err := h.Collected(nil); err != nil {
+		t.Errorf("Collected over a healthy window = %v, want nil", err)
+	}
+	// A real error passes through unchanged rather than being relabelled.
+	sentinel := errors.New("a real collection failure")
+	if err := h.Collected(sentinel); !errors.Is(err, sentinel) {
+		t.Errorf("Collected must not swallow a real error, got %v", err)
+	}
+	// Exhaust the window: splice past the growth ceiling.
+	big := make([]core.Value, h.win.MaxCap()+1)
+	for i := range big {
+		big[i] = core.NewInteger(int64(i))
+	}
+	h.win.Splice(0, 1, big...)
+	if !h.win.Exhausted() {
+		t.Fatal("the window did not latch exhaustion; the fixture no longer reaches the ceiling")
+	}
+	if err := h.Collected(nil); !RegionCannotEval(err) {
+		t.Errorf("Collected over an exhausted window = %v, want the decline", err)
 	}
 }
