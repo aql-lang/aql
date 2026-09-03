@@ -198,6 +198,32 @@ type RegionDesc struct {
 	Word  string
 	Slots []SlotDesc
 	Pos   core.SrcPos
+	// NFwd is the RECORDED CLAIM: how many leading slots the recording
+	// dispatch actually took forward, in written order. Slots at i >= NFwd
+	// are inside the region's syntactic span but were not this dispatch's
+	// operands, so they carry no source and Validate permits SlotNone there.
+	//
+	// It exists because the region's extent is the STATEMENT — a region runs
+	// to the next hard delimiter — while a dispatch's claim is usually far
+	// shorter. Classifying every slot rather than every CLAIMED slot measured
+	// +9.9% on BenchmarkPerfCompile/arith_chain64: a 64-term arithmetic chain
+	// hands its first dispatch a 128-token region, and doing that once per
+	// dispatch is quadratic. Caching on the slot does not help — the capture
+	// walk is itself per-dispatch.
+	//
+	// A slot beyond the claim is not a hole in the model. It matters only if
+	// a LIVE collection claims further than the recording did, and that case
+	// is already covered: the arity check defers, and a slot the runtime
+	// cannot resolve defers too.
+	//
+	// NFwd is a CHECKED fact, never an assumed one. completeRegion walks the
+	// written-order slots against the sig-order operands and stops at the
+	// first that do not correspond; three earlier models assumed the ordering
+	// and were reverted, and the corpus carries real disagreements (a `none`
+	// word rendering against a `None` value, a record type against its
+	// expanded object form). Zero is a legitimate value: a dispatch that
+	// filled every position from the value stack claimed nothing forward.
+	NFwd int
 }
 
 // RegionState is the raise-selection state a collection carries, built

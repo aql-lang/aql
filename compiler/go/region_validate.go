@@ -29,7 +29,24 @@ func (d *RegionDesc) Validate(nConsts, nFns, nTypes int) error {
 	if d.Lead != LeadWord && d.Word != "" {
 		return fmt.Errorf("region at %v: word name %q on a non-word lead", d.Pos, d.Word)
 	}
+	if d.NFwd < 0 || d.NFwd > len(d.Slots) {
+		return fmt.Errorf("region at %v: claim bound %d outside the region's %d slots",
+			d.Pos, d.NFwd, len(d.Slots))
+	}
 	for i := range d.Slots {
+		// Beyond the recorded claim the invalid zero is not a defect: the slot
+		// is inside the region's syntactic span but was not this dispatch's
+		// operand, so no source was ever owed (see RegionDesc.NFwd). The
+		// runtime defers if a live collection reaches it. Everything else
+		// about the slot is still checked — a source that IS set out there is
+		// a lowerer writing past its own claim.
+		if i >= d.NFwd && d.Slots[i].Source == SlotNone {
+			if d.Slots[i].Idx != 0 || d.Slots[i].ResIdx != 0 {
+				return fmt.Errorf("region at %v: slot %d is beyond the claim (NFwd %d) "+
+					"but carries index %d/%d", d.Pos, i, d.NFwd, d.Slots[i].Idx, d.Slots[i].ResIdx)
+			}
+			continue
+		}
 		if err := d.Slots[i].validate(i, d.Pos, nConsts, nFns, nTypes); err != nil {
 			return err
 		}

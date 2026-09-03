@@ -2009,6 +2009,16 @@ func (lw *lowerer) lowerCall(ev *EmitEvent) string {
 	}); reason != "" {
 		return reason
 	}
+	// The region descriptor lands HERE, not on the recorder, so it shares the
+	// event's rollback: a discarded loop-analysis round takes its descriptors
+	// with it. Appended before the opcode is chosen because it describes the
+	// DISPATCH, whichever arm below emits for it — the index is the region's,
+	// not any one opcode's. Nothing reads Program.Regions yet (§6.5's OpCollect
+	// is the client); this is the inert table, gated over the corpus by
+	// TestRegionTableWellFormed before anything executes one.
+	if c.region != nil {
+		lw.p.Regions = append(lw.p.Regions, *c.region)
+	}
 	if c.typedBind != nil {
 		// A typed value-def's runtime validate/reparent step: pop the body
 		// operand (laid out above), run the interpreter-mirroring RunTypedBind,

@@ -227,6 +227,18 @@ type emitCall struct {
 	// (claim failure → internal_error → interpreter re-run). Riding emitCall
 	// keeps the generic evCall machinery working unchanged for the result.
 	dynMethod *DynMethodSpec
+	// region, when non-nil, is the COMPLETED region descriptor for this
+	// dispatch (region_complete.go): what the interpreter read off the tape at
+	// this position, and which of those slots the dispatch claimed.
+	//
+	// It rides the EVENT rather than a table on the recorder, for the same
+	// reason DispatchSpec is appended in lowerCall: a recorder-side table is
+	// not rollback-safe. A non-final loop-analysis round is discarded by
+	// truncating the event slice, so a descriptor appended beside it would
+	// survive its own round and shift every later index. Riding the event puts
+	// it under the existing rollback, and gives the lowering site the link
+	// from a call in unit K to its own descriptor.
+	region *RegionDesc
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -5627,6 +5639,11 @@ func (es *EmitState) RecordCall(word string, sig *core.Signature, args, outs []c
 	if !ok {
 		return
 	}
+	// Phase B: claim this dispatch's region capture, if it has one, and fill
+	// the sources of the slots it actually took forward. Inert — nothing reads
+	// Program.Regions yet; what it buys now is that the descriptor model is
+	// exercised and gated over the whole corpus before OpCollect executes one.
+	region := es.completeRegion(word, pos, args, ops)
 	es.SiteCounts[SiteMono]++
 	// A CompileValueDiverges word (div/mod) raises value-dependently: its
 	// check-mode ReturnsFn drops the declared result (len(outs)==0) exactly on
@@ -5635,7 +5652,7 @@ func (es *EmitState) RecordCall(word string, sig *core.Signature, args, outs []c
 	// and the catching word wraps the raised error, instead of islanding.
 	diverges := sig.CompileEffect.Has(core.CompileDiverges) ||
 		(sig.CompileEffect.Has(core.CompileValueDiverges) && len(outs) == 0)
-	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: diverges}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: diverges, region: region}})
 	// A fallible multi-value catch body reaching the generic path (the
 	// closure probe declined): same variadic mark as RecordClosureCall —
 	// the caught path nets 1 where the static seat expects N (L-DO).
@@ -8914,8 +8931,16 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			flw.pushOperand(op, rec.pos)
 		}
 		flw.vm = flw.vm[:0]
+		// Where this unit's region descriptors start. The stamp-only recovery
+		// below replaces the unit's whole body with a trap, so descriptors
+		// lowerCall already appended for it describe code that no longer
+		// exists; they would be unreachable rather than wrong, but the census
+		// counts descriptors, and a table that carries entries for discarded
+		// code is a table whose count means something else.
+		regionFloor := len(p.Regions)
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			if rec.stampOnly {
+				p.Regions = p.Regions[:regionFloor]
 				// A stamp-only unit is unreachable from the program's code —
 				// its only consumer is a fn value's compiled ref, which
 				// dropStampRef then clears. Refusing the whole PROGRAM because

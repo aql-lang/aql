@@ -102,10 +102,22 @@ func (es *EmitState) PendingRegionCount() int {
 // TakePendingRegion claims the Phase-A capture for (word, pos), reporting
 // whether one existed. Phase B calls it to complete a descriptor; a miss is
 // ordinary, not an error, per the asymmetries above.
+//
+// It REMOVES the capture, and that is a correctness property rather than
+// tidiness. Phase A is offered before every collection, so a live dispatch
+// always re-captures before it records — but the recorder can be SUSPENDED
+// over a capture while the record still fires, and a non-removing take would
+// then hand that record an offer from an EARLIER execution. A miss is safe
+// (the dispatch simply carries no descriptor); a stale hit is a descriptor
+// describing a tape the dispatch did not walk.
 func (es *EmitState) TakePendingRegion(word string, pos core.SrcPos) (*RegionDesc, bool) {
 	if es == nil || es.pendingRegions == nil {
 		return nil, false
 	}
-	d, ok := es.pendingRegions[keyOf(word, pos)]
+	k := keyOf(word, pos)
+	d, ok := es.pendingRegions[k]
+	if ok {
+		delete(es.pendingRegions, k)
+	}
 	return d, ok
 }

@@ -1025,6 +1025,113 @@ def's own): §6.5 already names the join position as the one to revisit, and
 the flip's arm-resident twins replace join twins wholesale, at which point
 each arm def carries its own position.
 
+## Stage 4a: the region table, inert (2026-09-03)
+
+The twin line is finished; this is the first increment of Stage 4's
+dispatch half, and it deliberately repeats the twins' own method — **emit
+the table while nothing reads it, and assert it against the whole corpus**
+— so the first descriptor `OpCollect` executes is one the corpus has
+already exercised.
+
+**What the target was NOT, and why that matters more than what it was.**
+The obvious first slice is "collect the simplest dispatches" — every slot a
+const, hand the window to the existing opcodes. That slice was already
+built once and reverted, and §6.2 records why: `TestEmitSplitFormsIdentical`
+requires `1 add 2`, `1 2 add` and `add 2 1` to lower identically, because
+the forward/stack split is SURFACE SYNTAX the compiler normalises away. A
+descriptor carries that split, so routing the forward spelling and leaving
+the stack spelling on `CALL_NATIVE` lets syntax survive into the bytecode.
+The design's conclusion is the one to build against: **the target is not
+dispatches that can be described, it is dispatches the ordinary lowering
+CANNOT HANDLE** — and of §6.5's latches, exactly one is a region's
+business, the frozen-read `k` pair. Verified at the CLI before any code was
+written:
+
+	def w fn [[a:Any b:Any][Any][a]]  def k 5  def go fn [[][Any][w k 1]]  go
+	→ 5 on both lanes
+	… then `def k fn [[][Integer][9]]  go`
+	→ compiled: REFUSED, "module binding k rebound after a fn unit baked its value"
+	→ interpreted: raises, `w` is still waiting for 2 arguments when `k` begins its own dispatch
+
+That pair is `OpCollect`'s acceptance test and it is still open. This
+increment is the table it will read.
+
+**What landed.** `Program.Regions` has its first writer. Phase B
+(`compiler/go/region_complete.go`) claims the Phase-A capture at
+`RecordCall` and fills the sources of the slots the dispatch actually took
+forward; `RegionDesc.NFwd` records where the claim stopped; `Validate`
+permits the invalid zero beyond it, with a boundary (an unsourced slot
+carrying an INDEX is still a defect, and `NFwd` is range-checked). Nothing
+reads any of it. `make verify-bytecode` stays byte-identical because a side
+table is not code.
+
+**Four things the corpus said that the design did not.**
+
+1. **Phase B is an INDEX, not a search, and that is why it works.** Three
+   models were reverted for searching a written-order slot for its
+   already-resolved operand. The rule removes the search: matching fills sig
+   positions from the forward tokens IN WRITTEN ORDER, so over the leading
+   positions the two orders are the same order and slot *i* is sig position
+   *i*. The source is `ops[i]`. What the reverted models got wrong was
+   assuming the correspondence instead of checking it — completion compares
+   each slot to its operand by VALUE IDENTITY (not structural equality: `add
+   1 1` would coincide) and stops at the first that does not.
+
+2. **62% of claimed word slots are not live, and keeping them live would
+   have been a miscompile.** Inside a fn body the analysis binds each param
+   into the def stack so the body can be analysed, so `a` in `[add a b]`
+   resolves during the pass — but the emitted body reads it from the FRAME,
+   and at run time the def stack holds no such binding. 5807 of the 9322
+   claimed word-token slots (62%) are params or loop iterators. They take `SlotLocal` from the
+   operand. This is §6.2's fn-unit exclusion — "four fifths of the gap",
+   the largest single relaxation it names — closed at the source rather than
+   declined, and it cost one condition.
+
+   It was found by a test, not by reading: the e2e pin asserted `add a b`'s
+   descriptor and got two confident `SlotWordRef` slots. An inert table that
+   is WRONG is worse than no table, because the next step trusts it.
+
+3. **A recorder-side table is not rollback-safe.** The first cut appended
+   descriptors to a slice on the `EmitState`. `Rollback` does not truncate
+   it — a discarded loop-analysis round leaves its descriptors behind, and
+   once the table is indexed that shifts every later index. Moving the
+   append to `lowerCall`, where `DispatchSpec` already lives, removed **55
+   descriptors** from the corpus table, every one of them a round that was
+   never lowered. The descriptor now rides its call EVENT, which is what
+   puts it under the existing rollback and gives the lowering site the link
+   from a call in unit K to its own descriptor.
+
+4. **The claim is a small prefix of the region.** 26184 of 65959 span slots
+   claimed; 15515 descriptors claim nothing forward at all, 5041 a prefix,
+   18178 the whole span. `NFwd` is not a micro-optimisation — §6.2 measured
+   the alternative at +9.9% on `arith_chain64`, because a region runs to the
+   next hard delimiter and classifying all of it once per dispatch is
+   quadratic.
+
+**The table's stated bound.** Phase B is seated on `RecordCall` alone — the
+mono native dispatch. `RecordUserCall`, `RecordPolyCall`,
+`RecordUserPolyCall`, `RecordDynApply`, `RecordDynMethod` and the drift
+window each record an event with no descriptor. Corpus-wide that is 38734 descriptors
+over 5629 programs — a fraction of the dispatches Phase A offers a capture
+to. The bound is pinned, not merely noted: `lang/go/region_capture_e2e_test.go`
+fails if a user-fn call starts producing a descriptor without the census's
+claim being widened with it.
+
+**What is next, in order.** (a) Lift the seat to the other record families,
+or decide per family that it stays out. (b) The eng-side `CollectHost`
+adapter over the descriptor — `eng/go/collect_seam_host_test.go` is already
+a foreign host driving all three kernel entry points, and it is the
+template; the adapter goes in `eng`, above `cover-gate-core`, because a
+descriptor-typed function in core is a module cycle, not merely a coverage
+problem. (c) `OpCollect` executing, routed ONLY at the frozen-read refusal,
+with the `k` pair as its acceptance test. Two traps waiting there:
+`core/go/collect_kernel.go:714` and `:757` are `//covergate:allow` guards
+that a descriptor-backed window can make reachable — the merged gate fails
+them as `nowCovered`, and they must be graduated in the same change; and
+`RegionState`, the per-execution raise-selection state, still has no
+producer, so a first `OpCollect` that produces a WINDOW must not claim the
+raise path.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
