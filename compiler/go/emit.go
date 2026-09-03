@@ -7973,6 +7973,29 @@ func (es *EmitState) internUnpooled(v core.Value) int {
 // with their two distinct IDs — pooling them made `[1] eq [1]` true
 // under the VM where the interpreter says false (the report's
 // gotcha #13, caught by the differential gate).
+// constPoolKey is the canon pool's key, and it carries the value's TYPE as
+// well as its rendering.
+//
+// core.CanonValue renders a value through its nearest base-type arm
+// (core/go/canon.go — a Pos that refines Integer renders as the digits), so
+// canon ALONE merges values whose only difference is their nominal type. That
+// is wrong for a const pool: the survivor donates its Parent to every other
+// site that shares the rendering, and `def Pos (refine Integer)  def x:Pos 42
+// typeof 42  typeof x` answered `Integer Integer` compiled against the
+// interpreter's `Integer Pos`.
+//
+// Keying on the type ID as well keeps a refinement, a newtype and their base
+// in separate slots. It costs nothing for the overwhelmingly common case:
+// every plain Integer literal shares one Parent, so it shares one prefix.
+// Parent is dereferenced unguarded here for the same reason intern's own
+// identity gate does it two branches above (`v.Parent.Equal(core.TList)`):
+// any value reaching this line has already been through that test, so a nil
+// Parent would have failed there first. A guard here would be an unreachable
+// branch carrying a pragma to say so.
+func constPoolKey(v core.Value) string {
+	return v.Parent.ID + "\x00" + core.CanonValue(v)
+}
+
 func (es *EmitState) intern(v core.Value) int {
 	if _, isFn := v.Data.(core.FnDefInfo); isFn {
 		// A fn value (introspection operand): never pool — CanonValue is not a
@@ -8015,7 +8038,7 @@ func (es *EmitState) intern(v core.Value) int {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
-	key := core.CanonValue(v)
+	key := constPoolKey(v)
 	if i, ok := es.constIdx[key]; ok {
 		return i
 	}

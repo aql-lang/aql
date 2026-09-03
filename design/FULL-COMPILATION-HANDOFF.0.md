@@ -1239,6 +1239,133 @@ artifact, which is behaviour-identical and is the only state in which a
 corpus differential over this shape means anything; then `OpCollect`.
 
 
+## Stage 4a-3: seven claims sent for verification, seven came back PARTIAL (2026-09-03)
+
+The revised order above names the next increment as "give `frozenReads` its
+site structure". Before any of it was written, the load-bearing claims behind
+it were sent out to be checked against the tree rather than transcribed.
+**Every one came back PARTIAL** — none simply wrong, none simply right — and
+one of the corrections was not a design note at all but a live miscompile.
+The corrected statements are below; the original readings are recorded with
+them, because in four cases the original is the reading a later increment
+would naturally re-derive.
+
+### The one that was not a design finding: a const-pool type collision
+
+`core.CanonValue` renders a value through its nearest BASE-type arm
+(`core/go/canon.go` — the `v.Parent.ConformsTo(TInteger)` case returns the
+digits and nothing else). That is right for canon's own jobs, and wrong as a
+const-pool key: two values whose only difference is their nominal type render
+identically, so `intern`'s canon pool merged them into one `Consts` slot and
+whichever was interned FIRST donated its `Parent` to the other site.
+
+	def Pos (refine Integer)  def x:Pos 42  typeof 42  typeof x
+	  interpreted -> Integer Pos        compiled -> Integer Integer
+
+Not a `-force-compile` curiosity: `-compile` falls back only on a REFUSAL and
+this program never refused, so the wrong answer was what `boru run` printed.
+Both orderings diverge, and so do two distinct refinements of one base
+(`Pos`/`Neg` both rendering as `7`). Fixed here by keying the canon pool on
+the type ID as well as the rendering (`constPoolKey`, compiler/go/emit.go),
+pinned by `lang/go/const_pool_type_test.go` in both orderings plus a negative
+that fails if the fix ever degenerates into "stop pooling".
+
+Worth stating because it is the second time this has bitten in the same
+place: **`CanonValue` is a VALUE identity, never a type identity, and never a
+site identity.** The comment at compiler/go/emit.go:2207 still asserts
+"Compounds are never pooled (intern), so idx belongs to exactly this
+materialise context" — false since `constIDIdx` landed, and any reasoning
+that cites it as a per-site guarantee is unsound.
+
+### The six corrections that stay design findings
+
+**1. A const index cannot be a baked-site identity.** Confirmed, and the
+classification is wider than "scalars pool by canon": `intern` has FOUR
+classes — `FnDefInfo` unpooled unconditionally; the identity class (extension
+/ xml payloads, List, Map, type bodies, ParenExpr) pooled by `Value.ID` ONLY
+when the ID is non-empty and unpooled when it is; everything else pooled by
+the canon key; and `internUnpooled` as a separate entry point for the
+`OpBindDynScope` name. So a const index is a value identity under two
+different rules and a site identity under none.
+
+**2. The open-unit index is the sound anchor — on the state that will be
+Finalized, and nowhere else.** `openUnitRecs[len-1]` is an index into
+`fnRecs`, which is append-only, which `Rollback` refuses to unwind once a
+round has grown, and which `Finalize` walks one-for-one into `Program.Fns`.
+That all holds. What the original reading missed is that the RECORDER IS
+SWAPPED at five probe boundaries, and two of them install a fresh
+`NewEmitState()` whose `fnRecs` is empty — so an index taken during such a
+probe is `0`, numerically colliding with a real and unrelated Program unit.
+Any per-unit structure must therefore be written only on the state that will
+be Finalized, or explicitly merged back on probe success. There is no such
+merge today.
+
+**3. `frozenReads` outliving a `Rollback` is DELIBERATE, not a gap — and the
+earlier note in this file had the sign backwards.** It is absent from both
+the checkpoint and `Rollback`, and the discard shape is reachable. But it has
+exactly one consumer, whose only effect is `MarkUncompilable`; `Rollback`
+never deletes from it; so a retained entry can only ever cause OVER-REFUSAL,
+never a miscompile. The miscompile direction is a MISSING entry, which
+`Rollback` structurally cannot produce. Adding `frozenReads` to the
+checkpoint as a "gap fix" is therefore FORBIDDEN: it would convert a
+conservative refusal into a silent wrong answer. The same holds for every
+other monotone refusal-direction field.
+
+**4. The latch is guarded by nothing that names it.** No test in the tree
+pins its reason string — the text appears only at the `MarkUncompilable`
+call, one comment in `compiler/go/region_desc.go`, and three design docs.
+`MarkUncompilable` is FIRST-REASON-WINS, so the latch could be deleted
+outright and `TestModuleReadRebindRefusesAndMatches` would still pass,
+provided any other refusal fired first on those four rows — including a
+refusal introduced by the very change under review. The pin added earlier
+today closes the shapes; it does not close this. (Also: the "96 refusal
+sites" figure is the CENSUS's line metric. Live `MarkUncompilable` call
+sites are 95; production-compiler ones 93.)
+
+**5. Corpus population is ZERO, not three.** No corpus row exercises the
+latch — measured directly, not inferred from the differential passing. Three
+rows carry the read-inside-a-unit-then-rebind SHAPE and none can trip it,
+because the shape has FOUR ingredients and every one of the three is missing
+the third: `def` -> read inside a unit -> **the unit is CALLED** -> rebind. A
+fn unit is analysed at a CALL site, so `frozenReads` stays empty until the
+call happens. Write the four-ingredient shape into any future note; "no row
+carries a frozen read followed by a rebind" is right about the outcome and
+silent about the reason.
+
+**6. There is no READ-SITE position on the recorder side, but the recorder is
+not position-free.** `NoteFrozenRead` takes only a name and the refusal path
+is positionless end to end. `CheckState.CurWordPos` must NOT be used to fill
+the gap — it names the enclosing `def`/`fn`, which is a confidently wrong
+caret of exactly the kind `check_state.go` documents. Two things ARE
+available: the enclosing unit's own position, already in scope where the note
+is taken; and the read's true position at the core call site, as `stepWord`'s
+`val` parameter, one line below where `top.ID` is already handed to
+`NoteDefRead`.
+
+**7. The latch predicate is not what is wrong — its INPUT is.** The two
+conjuncts faithfully report what they are given. `frozenReads` is populated
+in core on `IsConcrete(top) && ModuleScopeBinding(...)`, i.e. on whether the
+CHECK-MODE value happened to be concrete at the read, used as a proxy for
+"the unit BAKED it". The bake/live decision is made later and independently
+in `resolveOperand`. The proxy is neither necessary nor sufficient, which is
+why the shape errs in both directions at once — and why a fix that edits the
+two-conjunct expression fixes neither. The next increment's real subject is
+that proxy.
+
+### Citation rot, fixed here and measured beyond here
+
+Three references this line owns pointed at line numbers that had moved: the
+fn-unit latch and the stored-handler twin were both cited at positions now
+occupied by unrelated code. Corrected, and now written as `file:line
+(symbol)` so the symbol survives the next drift.
+
+The wider rot is NOT swept here, only measured: `eng/go/emit.go` — a path
+that has not existed since the four-module split — is cited **52 times** in
+`design/REFUSAL-CLOSURE-S94-AUDIT.10.md` and appears in ten further design
+files. That is a mechanical sweep of its own, and bundling it into a findings
+commit would bury both.
+
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

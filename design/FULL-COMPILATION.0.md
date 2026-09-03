@@ -989,7 +989,8 @@ OpCollect answers.
 > comments.)
 
 Its stored-handler twin is a different failure. `NotifyNameRebound`
-(`compiler/go/emit.go:2721-2736`) refuses because module-scope def sites
+(`compiler/go/emit.go:3145`, the stored-handler arm) refuses because
+module-scope def sites
 execute only in the CHECK pass, so by VM time the def table already holds
 the pass-final binding and calls sequenced BEFORE the rebind read the wrong
 definition. Nothing about that program's split is value-dependent, and no
@@ -1443,7 +1444,7 @@ checker cannot fold it, the compiled lane REFUSES, by name:
 ```
 def r1 (go) end  def k fn [[][Integer][9]] end  def r2 (go) end
   -> bytecode compilation refused: module binding k rebound after a fn unit
-     baked its value                      (compiler/go/emit.go:2474)
+     baked its value      (compiler/go/emit.go:3159, the fn-unit arm)
 ```
 
 That is precisely one of the interim rebind-staleness latches §6.5 says the
