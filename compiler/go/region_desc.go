@@ -33,7 +33,8 @@ import core "github.com/boru-lang/boru/core/go"
 // k's record-time class as a value slot answers 5 where the interpreter
 // raises. Today the compiler declines that program rather than getting it
 // wrong ("module binding k rebound after a fn unit baked its value",
-// emit.go:2474) — one of the interim rebind-staleness latches §6.5 retires
+// compiler/go/emit.go:3159, NotifyNameRebound's fn-unit arm) — one of the
+// interim rebind-staleness latches §6.5 retires
 // once OpCollect re-derives. That pair is OpCollect's acceptance test: it
 // must ANSWER both spellings, not decline the second.
 type SlotSource uint8
