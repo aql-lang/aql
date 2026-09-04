@@ -2316,6 +2316,35 @@ func (e *Engine) stepWordVal(val Value, w WordInfo) error {
 	// function-only gate: for a fn binding it suppresses the call, and for
 	// any other binding it is the identity — the same spelling reads a slot
 	// whose kind is not known statically (NUR085).
+	//
+	// Freeze discipline, the `/v` READ. This path resolves and pushes the
+	// binding without passing through stepWord's substitution branches, so
+	// until 2026-09-04 neither the value arm nor the type arm saw a `/v` read
+	// and BOTH bakes escaped the latch. Measured, on the default lane:
+	//
+	//	def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  def T String  f
+	//	  interpreted -> true false      compiled -> true true
+	//	def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f
+	//	  interpreted -> 7 11            compiled -> 7 7
+	//
+	// The type row was reported by review on the type arm's own PR; the value
+	// row is older than that arm and had been open since the discipline
+	// landed. One more instance of the same structural fault the arms
+	// document: the note is attached to READ PATHS, so each path that
+	// resolves a binding its own way escapes it silently.
+	//
+	// The two predicates MIRROR the two stepWord arms exactly — a bare type
+	// node bakes its identity unconditionally, a value bakes only when it is
+	// concrete — so `/v` and the ordinary spelling cannot answer the freeze
+	// question two ways.
+	if e.Registry.analysisActive() && ModuleScopeBinding(e.Registry, w.Name) {
+		switch {
+		case IsBareTypeNode(v):
+			e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeType)
+		case IsConcrete(v):
+			e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeValue)
+		}
+	}
 	v.pos = val.pos
 	// A reference denotes DATA. When a parked forward in this paren
 	// scope is still collecting, deliver the reference through the

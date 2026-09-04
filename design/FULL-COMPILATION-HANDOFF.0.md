@@ -1460,6 +1460,27 @@ this buys is real but conservative and bounded: adding a NON-colliding overload
 lanes agreed on. Self-recursion does NOT refuse — `fact` reading its own name
 inside its own unit was the shape to check first, and it keeps compiling.
 
+### A THIRD instance of the same fault, found by review
+
+`T/v` and `k/v` resolve through `stepWordVal`, which reaches NEITHER of
+`stepWord`'s substitution branches — so both bakes escaped the latch while
+`resolveOperand` baked them exactly as it bakes the plain spelling. Codex
+raised the TYPE half on this line's own PR; measuring it showed the VALUE half
+beside it, and that one is OLDER than the type arm — it had been open since the
+freeze discipline first landed.
+
+	def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  def T String  f
+	  interpreted -> true false      compiled -> true true
+	def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f
+	  interpreted -> 7 11            compiled -> 7 7
+
+Three instances now, and they say the same thing in three registers: the note
+is attached to READ PATHS the way the notification is attached to HANDLERS, so
+every path that resolves a binding its own way escapes it silently. **The sweep
+above did not find this one** — it varied the binding kind and the rebind site,
+and never varied the SPELLING of the read. When the next author extends the
+matrix, spelling is the third axis.
+
 ### How far the sweep went, so the next author does not repeat it
 
 The matrix above (three bakes x two rebind sites x def/undef) was not the whole

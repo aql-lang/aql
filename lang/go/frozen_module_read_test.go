@@ -140,6 +140,24 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		// asserts is the REFUSAL and its reason rather than a value.
 		{`def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f  def g fn [[] [] [print 99]]  f`,
 			"g", "call target"},
+		// The `/v` SPELLING of a frozen read, both bakes. `T/v` and `k/v`
+		// resolve through stepWordVal, which reaches NEITHER of stepWord's
+		// substitution branches — so both walked straight past the latch while
+		// `resolveOperand` baked them exactly as it bakes the plain spelling.
+		//
+		// The TYPE row was found by review on the type arm's own PR. The VALUE
+		// row is OLDER than that arm: it had been open since the freeze
+		// discipline landed, and it is what says the fault is the read PATH
+		// rather than either arm. Measured on the default lane:
+		//
+		//	def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  def T String  f
+		//	  interpreted -> true false      compiled -> true true
+		//	def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f
+		//	  interpreted -> 7 11            compiled -> 7 7
+		{`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  def T String  f`, "T", "type"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  undef T  f`, "T", "type"},
+		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f`, "k", "value"},
+		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  undef k  f`, "k", "value"},
 	}
 	for _, c := range cases {
 		src := c.src
@@ -191,6 +209,11 @@ func TestModuleReadNoRebindStillCompiles(t *testing.T) {
 		`def g fn [[][Integer][1]]  g  def g fn [[][Integer][2]]  g`,
 		// and the 0-output twin of the same control.
 		`def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f  f`,
+		// The `/v` controls: the same reads with no rebind keep compiling, so
+		// the new note is keyed on an actual rebind rather than on the
+		// spelling.
+		`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  f`,
+		`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  f`,
 	}
 	for _, src := range srcs {
 		a, err := New()
