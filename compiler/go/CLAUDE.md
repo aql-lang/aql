@@ -36,12 +36,15 @@ Three rules specific to this module:
   `TestInactiveEmitMethodArms` / `TestInactiveConstructorSlots` in
   core); a new slot follows the same pattern — an anonymous default
   replaced at init is unreachable and fails the merged ADR-008 gate.
-- **The eng facade mirrors this surface.**
-  `eng/go/aliases_compiler.go` is GENERATED (`piecetool -facade`);
-  after changing the compiler's exported surface, regenerate it and
-  keep `eng/go/piece_map.tsv` current. Facade wrappers must remain
-  direct calls so they inline — the alloc-ceiling tests gate the
-  module boundary's cost.
+- **There is no eng facade any more.** This guide used to say
+  `eng/go/aliases_compiler.go` was GENERATED (`piecetool -facade`) and
+  had to be regenerated after changing the compiler's exported
+  surface. That file no longer exists: eng imports compiler directly,
+  so the facade was retired once nothing referenced it
+  (`eng/go/piece_map.tsv`'s own header records this). Changing the
+  compiler's exported surface owes nothing to eng. `piece_map.tsv`
+  survives, but it now assigns only the eng package's OWN files, gated
+  by `eng/go/piece_map_test.go`.
 
 **Installing S3 (`installDispatchBraid`).** The five check-side slots
 take `recordDispatchOutcome`, `tryFoldScalarConst`, `tryRecordPoly`,
