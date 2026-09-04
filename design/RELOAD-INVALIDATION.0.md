@@ -132,9 +132,10 @@ all three surfaces.
 >
 > Closed by the call-target arm of the freeze discipline
 > (`design/FULL-COMPILATION-HANDOFF.0.md`, Stage 4a-4), which also closed the
-> same hole for a baked TYPE identity. One arm of the family remains open and
-> is recorded as NUR117: the latch is skipped whenever the REBIND sits inside
-> a `do` body, for every bake kind.
+> same hole for a baked TYPE identity, and — in the same stage's second half —
+> for a rebind written inside a `do` or multi-run body, where the recorder is
+> suspended and the latch was never consulted at all (the record that carried
+> that arm is Resolved and deleted).
 
 **F2 — reload-soundness hole: runtime rebinds cannot invalidate
 compile-time refs.** `NotifyNameRebound` is an `EmitState` method gated

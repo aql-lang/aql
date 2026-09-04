@@ -158,6 +158,36 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		{`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  undef T  f`, "T", "type"},
 		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f`, "k", "value"},
 		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  undef k  f`, "k", "value"},
+		// The REBIND SITE axis — NUR117. A rebind written inside a `do` body
+		// reached NotifyNameRebound with the recorder SUSPENDED (its keep-defs
+		// body guard suspends for the run), so the latch was never consulted
+		// and the program compiled against a unit still holding the old bake.
+		// A `do` body's defs LEAK to the enclosing scope, so the rebind is as
+		// real as a top-level one:
+		//
+		//	interpreted 7 11        compiled 7 7
+		//
+		// NUR117 blamed the `len(openUnitRecs) == 0` guard. Measured, that was
+		// wrong — at the deciding call openUnitRecs is EMPTY and `suspended`
+		// is 1, so the guard would have passed. The early return was the
+		// exemption, which is why the latch now runs above it.
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]  f`, "k", "value"},
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [undef k]  f`, "k", "value"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [def T String]  f`, "T", "type"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [undef T]  f`, "T", "type"},
+		{`def g fn [[][Integer][1]]  def f fn [[] [Integer] [g]]  f  ` +
+			`do [def g fn [[][Integer][2]]]  f`, "g", "call target"},
+		// The MULTI-RUN twin of the same axis, which NUR117 recorded as
+		// already covered by the arm-resident machinery. It is not: an
+		// each/fold body leaks its LAST iteration's def to module scope, and
+		// `armBoundNames` only refuses a later TOP-LEVEL READ of the name —
+		// these rows reach the frozen unit through a CALL instead, so nothing
+		// saw them. Measured `7 [9] 11` interpreted against `7 [9] 7`
+		// compiled, and unchanged at two elements.
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  [1] each [def k 9  k]  f`, "k", "value"},
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  [1 2] each [def k 9  k]  f`, "k", "value"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  [1] each [def T String  1]  f`,
+			"T", "type"},
 	}
 	for _, c := range cases {
 		src := c.src
@@ -214,6 +244,17 @@ func TestModuleReadNoRebindStillCompiles(t *testing.T) {
 		// spelling.
 		`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  f`,
 		`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  f`,
+		// The NUR117 controls. A `do` body that rebinds NOTHING the unit
+		// froze must still compile — the latch stays keyed on an actual
+		// rebind of a baked name, not on "a `do` body is open" —
+		`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [1 add 2]  f`,
+		// and so must a rebind with no frozen read anywhere.
+		`def k 5  do [def k 9]  k`,
+		// A `do` INSIDE a fn body binds a frame-local, not a module binding,
+		// so it must not refuse: both publication gates test FnBodyDepth, and
+		// this row is what fails if either stops.
+		`def k 5  def f fn [[] [Integer] [k add 2]]  f  ` +
+			`def g fn [[] [Integer] [do [def z 1]  z]]  g  f`,
 	}
 	for _, src := range srcs {
 		a, err := New()

@@ -643,8 +643,18 @@ type EmitState struct {
 	// once-run is still once-run, and the outer adoption replays its
 	// leaks in note order.
 	keepBodyDepth int
-	keepTwinFloor int
-	keepTaints    [][2]int
+	// keepModuleDepth is the subset of keepBodyDepth whose runs are at
+	// MODULE scope (FnBodyDepth == 0 when the guard opened), i.e. whose defs
+	// the runtime really does leak to the enclosing scope. It exists so a
+	// rebind can tell WHY the recorder is suspended — see
+	// rebindReachesModuleScope (NUR117).
+	keepModuleDepth int
+	// multiRunModuleDepth is keepModuleDepth's twin for MultiRunBodyGuard —
+	// an each/fold body at module scope, whose last iteration's def leaks the
+	// same way a `do` body's does. Same reader, same reason.
+	multiRunModuleDepth int
+	keepTwinFloor       int
+	keepTaints          [][2]int
 	// lastKeepRange / lastKeepTaints publish the bracket when the
 	// outermost keep run closes, for the dispatch record that follows
 	// immediately (AdoptBodyTwins). The zero range is in-band: it is
@@ -1716,6 +1726,14 @@ func (es *EmitState) KeepDefsBodyGuard(r *core.Registry) func() {
 	//
 	// A nil registry publishes nothing, like the multi-run gate.
 	publish := r != nil && r.Check != nil && r.Check.FnBodyDepth == 0
+	// keepModuleDepth counts only the keep runs whose defs reach MODULE
+	// scope, which is the same FnBodyDepth == 0 test the publication gate
+	// above makes — a `do` inside a fn body binds frame-locals, and a rebind
+	// written there must not refuse. NotifyNameRebound reads it to tell a
+	// suspension that leaks from one that does not (NUR117).
+	if publish {
+		es.keepModuleDepth++
+	}
 	es.keepBodyDepth++
 	if es.keepBodyDepth == 1 {
 		es.keepTwinFloor = len(es.bindTwins)
@@ -1725,6 +1743,9 @@ func (es *EmitState) KeepDefsBodyGuard(r *core.Registry) func() {
 	return func() {
 		resume()
 		es.keepBodyDepth--
+		if publish {
+			es.keepModuleDepth--
+		}
 		if es.keepBodyDepth == 0 && publish {
 			es.lastKeepRange = [2]int{es.keepTwinFloor, len(es.bindTwins)}
 			es.lastKeepTaints = es.keepTaints
@@ -1777,10 +1798,24 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 	// A nil registry publishes nothing: the guard is called with one in the
 	// recorder's own settled tests.
 	publish := r != nil && r.Check != nil && r.Check.FnBodyDepth == 0
+	// Counted for the same reason KeepDefsBodyGuard counts its own: a
+	// multi-run body at MODULE scope leaks its last iteration's def to the
+	// enclosing scope, so a rebind written there is one the frozen-read latch
+	// has to see. Measured — `def k 5  def f fn [[] [Integer] [k add 2]]  f
+	// [1] each [def k 9  k]  f` answers `7 [9] 11` interpreted and `7 [9] 7`
+	// compiled. NUR117 recorded this arm as already covered by the
+	// arm-resident machinery; `armBoundNames` only refuses a later TOP-LEVEL
+	// READ of the name, and the row above reaches it through a CALL instead.
+	if publish {
+		es.multiRunModuleDepth++
+	}
 	from := len(es.bindTwins)
 	inner := es.BodyAnalysisGuard()
 	return func() {
 		inner()
+		if publish {
+			es.multiRunModuleDepth--
+		}
 		if !publish {
 			return
 		}
@@ -3117,7 +3152,30 @@ func (es *EmitState) storedHandlerDeps(body []core.Value) map[string]bool {
 // over stable module helpers (todo-api's live-todos, mini-redis's arg-at/kv-read,
 // never redefined) still compiles.
 func (es *EmitState) NotifyNameRebound(name string) {
-	if es == nil || !es.Active() {
+	if es == nil || !es.Compilable {
+		return
+	}
+	// THE FROZEN-READ LATCH RUNS FIRST, above the Active() gate, and that
+	// placement is the whole of NUR117's fix. A rebind written inside a `do`
+	// body reaches this function with the recorder SUSPENDED — KeepDefsBodyGuard
+	// suspends for the body run — so the Active() gate below returned before
+	// the latch was ever consulted, and the program compiled against a unit
+	// still holding the old bake:
+	//
+	//	def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]  f
+	//	  interpreted 7 11        compiled 7 7
+	//
+	// NUR117 recorded the cause as the `len(openUnitRecs) == 0` guard below.
+	// Measured, that reading was wrong: at the deciding call openUnitRecs is
+	// EMPTY and `suspended` is 1, so the guard would have passed and the
+	// early return is what exempted the rebind. The record is corrected.
+	//
+	// Everything below this block still needs Active(): the stored-ref
+	// poisoning walks refs whose recording this suspension is not part of.
+	if bake, frozen := es.frozenReads[name]; frozen && es.rebindReachesModuleScope() {
+		es.MarkUncompilable("module binding " + name + " rebound after a fn unit baked its " + bake.String())
+	}
+	if !es.Active() {
 		return
 	}
 	depHit := false
@@ -3163,28 +3221,39 @@ func (es *EmitState) NotifyNameRebound(name string) {
 	// unit holds the old tokens: refuse the whole program (interpreter
 	// fallback) rather than diverge. Macro-style defs never rebind in
 	// practice, so this hammer stays cold on real programs.
-	// A MODULE-SCOPE rebind (no unit open — a body-local def inside another
-	// unit's analysis shadows independently and must not poison) of a name
-	// some already-analysed unit BAKED (frozenReads): the frozen unit would
-	// keep the old artifact where the interpreter re-resolves, so refuse the
-	// whole program (interpreter fallback) rather than diverge. The reason
-	// names WHICH artifact went stale — value, type, or call target — because
-	// the three are repaired by three different mechanisms and a reader of the
-	// refusal is usually asking which one they are looking at.
-	//
-	// KNOWN HOLE — NUR117, measured 2026-09-04 and NOT closed here: the
-	// `len(es.openUnitRecs) == 0` guard also exempts a rebind performed inside
-	// a top-level `do` body, whose defs DO reach module scope — so
-	// `def k 5  def f fn [… [k add 2]]  f  do [def k 9]  f` still answers
-	// `7 7` against the interpreter's `7 11`. The hole is orthogonal to the
-	// bake kind (all three reproduce it) and pre-dates the type and call arms.
-	// Closing it needs the three-way separation the arm-resident work already
-	// owns — a `do` body's install reaches module scope, a fn body's does not,
-	// a multi-run body's is per-element — so it is recorded rather than
-	// patched in place.
-	if bake, frozen := es.frozenReads[name]; frozen && len(es.openUnitRecs) == 0 {
-		es.MarkUncompilable("module binding " + name + " rebound after a fn unit baked its " + bake.String())
+}
+
+// rebindReachesModuleScope reports whether a rebind seen RIGHT NOW is one the
+// runtime will perform against the module-scope binding set — the question the
+// frozen-read latch has to answer, and the one NUR117 got wrong by asking it
+// with a single `len(openUnitRecs) == 0` test.
+//
+// Three regimes, and two of them leak:
+//
+//   - NOT SUSPENDED, no unit open. The ordinary top-level rebind. Every call
+//     the latch already caught before NUR117 lands here.
+//   - SUSPENDED BY A LEAKING BODY RUN AT MODULE SCOPE. A `do` body, or an
+//     each/fold body: the recorder suspends for the body run, but the body's
+//     defs LEAK to the enclosing scope — a `do`'s by its keep-defs scoping, a
+//     multi-run body's as its last iteration's binding — so the rebind is as
+//     real as a top-level one. The equality `suspended == keepModuleDepth +
+//     multiRunModuleDepth` is what says every suspension in flight is one of
+//     those: a fn body, a branch arm, or any other guard nested inside raises
+//     `suspended` without raising either counter, and the equality fails. A
+//     `do` or an `each` inside a FN body raises neither (both publication
+//     gates test FnBodyDepth), so both are correctly excluded.
+//   - ANY OTHER OPEN UNIT. A body-local def inside another unit's analysis
+//     shadows independently and must not refuse — the original guard's own
+//     case, kept verbatim.
+//
+// The equality makes this ADDITIVE: an unrelated suspension in flight makes it
+// answer false, so the change can only ever add the `do`-body refusals it is
+// for, never remove one the latch already made.
+func (es *EmitState) rebindReachesModuleScope() bool {
+	if es == nil || len(es.openUnitRecs) != 0 {
+		return false
 	}
+	return es.suspended == es.keepModuleDepth+es.multiRunModuleDepth
 }
 
 // OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE

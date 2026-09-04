@@ -1499,14 +1499,14 @@ call-target and type arms be stated as closed rather than merely un-falsified:
 - `typeof 5 eq T`, and a type embedded in a map read through dot access.
 
 Zero divergences. Three axes are now swept — binding kind, rebind site,
-read spelling — and the only open cell is NUR117's.
+read spelling — and every cell is now closed.
 
 ### How far the sweep went, so the next author does not repeat it
 
 The matrix above (three bakes x two rebind sites x def/undef) was not the whole
 sweep. Fourteen further shapes were run through both lanes and are CLEAN, which
-is what licenses the claim that NUR117 is the sole remaining arm rather than
-the first one found:
+is what licensed treating the `do`-body arm (closed below) as the sole
+remainder rather than the first of many:
 
 - rebind inside an `if` arm, an `each` body, and a `for` body — all three bakes
   where applicable (family L's refusal and the arm-resident machinery own these);
@@ -1544,21 +1544,57 @@ callers rather than by any test. The note is now a function every site calls,
 and the pin asserts the REFUSAL rather than a value, since there is no value
 to assert.
 
-### What did NOT land, and why it is recorded instead
+### The REBIND-SITE axis, and why the record of it was wrong twice
 
-**NUR117 — the rebind that hides inside a `do` body.** The latch is guarded by
-`len(openUnitRecs) == 0`, whose stated reason is sound for a fn body. But a
-top-level `do` body opens a unit while its defs reach module scope, so every
-rebind written inside one is exempt:
+This arm was recorded as NUR117 and deferred, on the reading that the latch's
+`len(openUnitRecs) == 0` guard exempted it. Measuring it before writing the fix
+falsified that reading, and then a second one — so the record is Resolved and
+deleted, and what it got wrong is kept here, because both mistakes are the kind
+a reader would re-derive.
 
 	def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]  f
 	  interpreted 7 11        compiled 7 7
 
-It reproduces for all three bakes and for `undef`, which is what says the fault
-is the guard rather than any arm — and the VALUE row PRE-DATES this increment.
-Closing it needs the three-way separation the arm-resident work already owns
-(a `do` body's install reaches module scope, a fn body's does not, a multi-run
-body's is per-element), so it is recorded rather than patched in place.
+**WRONG THE FIRST TIME: the guard was not the exemption.** Instrumented, the
+deciding call arrives with `openUnitRecs` EMPTY and `suspended` at 1 — the
+guard would have passed. `KeepDefsBodyGuard` SUSPENDS for the body run, so
+`NotifyNameRebound` returned at its `!Active()` line and never consulted the
+table at all. The fix is therefore a PLACEMENT, not a predicate: the
+frozen-read latch now runs ABOVE that early return, and everything below it
+still needs `Active()` (the stored-ref poisoning walks refs this suspension is
+not part of).
+
+**WRONG THE SECOND TIME: the multi-run arm was not covered.** The record said
+an each/fold body's install "is per-element and already has its own machinery
+(`armBoundNames`, the arm-resident twins)". It is not per-element — the body
+leaks its LAST iteration's def to module scope — and `armBoundNames` only
+refuses a later TOP-LEVEL READ of the name. Reach the frozen unit through a
+CALL instead and nothing sees it:
+
+	def k 5  def f fn [[] [Integer] [k add 2]]  f  [1] each [def k 9  k]  f
+	  interpreted 7 [9] 11      compiled 7 [9] 7
+
+Found only because the `do` fix's own negative controls were being written; it
+is not a shape the earlier matrix contained.
+
+**What the fix actually asks.** "Is this rebind one the runtime performs
+against the module-scope binding set?" — and the answer is a THREE-way split
+over WHY the recorder is suspended, not over what is open:
+
+	suspended == keepModuleDepth + multiRunModuleDepth   (with no unit open)
+
+Both counters are raised only by body guards whose defs LEAK, and only at
+module scope — each reuses its guard's existing `FnBodyDepth == 0` publication
+gate, so a `do` or an `each` inside a fn body raises neither and stays
+correctly exempt. Any other suspension in flight — a fn body, a branch arm, an
+each nested inside a do — raises `suspended` alone and breaks the equality.
+
+**That equality is what makes the change ADDITIVE**, which is the property to
+preserve if this is ever touched again: it can only ever ADD the refusals it is
+for, never remove one the latch already made. The `if`-arm rebind, which fires
+today with `suspended == 0`, is unaffected.
+
+Measured cost: the corpus refusal ceiling stays at **0** with both arms.
 
 ### Two design claims this corrects
 

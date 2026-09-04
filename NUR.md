@@ -91,7 +91,6 @@ keep the two in sync in the same commit.
 | [NUR096](#nur096) | The check pass did not move with NUR095: a fn stored through a fn-SHAPE-typed member is APPLIED by both engines but still modelled by the checker as the inert fn it was before that retirement, so `TestCheckTypeSoundness` fails on the two multi-return `class.tsv` rows that pin it | adding the NUR095 retirement rows to `lang/spec/class.tsv`, 2026-08-20 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
-| [NUR117](#nur117) | The freeze discipline's latch is skipped whenever the REBIND sits inside a `do` body, because its guard is `no fn unit open` and a `do` body opens one — yet a top-level `do`'s defs reach module scope, so `def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]  f` answers `7 7` compiled against the interpreter's `7 11`. Orthogonal to WHAT the unit froze: the value, type and call-target arms all reproduce it | sweeping the binding-rebind matrix after closing the type and call-target arms, 2026-09-04 |
 | [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
@@ -280,62 +279,6 @@ Recorded so the divergence between an accepted ADR and the code is not lost;
 the fix is the maintainer's to direct.
 
 ---
-
-## NUR117 — the rebind that hides inside a `do` body defeats the freeze latch {#nur117}
-
-**Status:** Pending · **Recorded:** 2026-09-04 · **Surfaced by:** sweeping
-the binding-rebind matrix after closing the type and call-target arms of the
-freeze discipline (design/FULL-COMPILATION-HANDOFF.0.md, Stage 4a-4)
-
-**Rule:** the interpreter is the reference oracle — a program that compiles
-answers what the interpreter answers, or it refuses.
-
-**Divergence:** the freeze discipline refuses a module-scope rebind of a name
-some compiled unit baked. Its latch is guarded by `len(openUnitRecs) == 0`,
-whose stated reason is sound — "a body-local def inside another unit's
-analysis shadows independently and must not poison". But a **top-level `do`
-body opens a unit while its defs reach module scope**, so every rebind written
-inside one is exempted from a latch that should fire.
-
-```
-def k 5  def f fn [[] [Integer] [k add 2]]  f  def k 9        f
-  interpreted 7 11   compiled REFUSED -> falls back -> 7 11    correct
-
-def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]   f
-  interpreted 7 11   compiled 7 7                              MISCOMPILE
-```
-
-**It is orthogonal to what the unit froze.** The same substitution reproduces
-it for all three bakes, which is what says the fault is in the guard and not
-in any one arm:
-
-| what the unit baked | rebind at top level | rebind inside `do` |
-|---|---|---|
-| a value (`PUSH_CONST`) | refused | **`7 7`** vs `7 11` |
-| a type (`PUSH_TYPE`) | refused | **`true true`** vs `true false` |
-| a call target (`CALL_USER`) | refused | **`1 1`** vs `1 2` |
-
-The `undef` spelling reproduces it too, and is worse in the usual way: the
-compiled program answers where the interpreter raises `undefined_word`.
-
-**Consequence:** silent, on the default lane, with no flags — `boru run`
-prints the wrong number and exits 0. The value row PRE-DATES the type and
-call-target arms; it was not introduced by them, and the corpus cannot see any
-of it (the refusal ceiling is unmoved at zero either way).
-
-**Evidence:** the transcripts above, reproduced against this tree with
-`boru run` and `boru run -no-compile`; the guard is `NotifyNameRebound`'s
-fn-unit arm in `compiler/go/emit.go`, which carries a pointer to this record.
-
-**Verdict proposed:** **resolve by fix**, and the fix is not simply deleting
-the guard — the guard's own case is real, and a body-local `def` inside a fn
-body genuinely must not poison. What is needed is the distinction the guard
-elides: a `do` body's install reaches module scope, a fn body's does not, and
-a multi-run (`each`/`fold`) body's is per-element and already has its own
-machinery (`armBoundNames`, the arm-resident twins). That is the same
-three-way separation §6.5's arm-resident work already owns, which is why this
-is recorded here rather than patched in place.
-
 
 ## NUR114 — a compiled caret underlines one character where the interpreter underlines the token {#nur114}
 
