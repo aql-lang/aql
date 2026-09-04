@@ -712,6 +712,7 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
+				noteBakedCallTarget(es, r, name)
 				es.RecordUserCall(fnUnit, args, nil, pos)
 				return nil
 			}
@@ -762,6 +763,44 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 // fn name must already be bound (recursion). Generic and Body-less (native /
 // handler) overloads are skipped — a generic body needs per-call type bindings,
 // and a native handler has no boru body to analyse.
+// noteBakedCallTarget records that a compiled unit is about to bake a CALL
+// TARGET for module-scope binding `name`. `RecordUserCall(fnUnit, …)` names a
+// SPECIFIC compiled unit and the lowering emits CALL_USER / TAIL_CALL_USER to
+// it, so a later module-scope rebind of the name leaves the caller invoking
+// the old body while the interpreter dispatches the new one. Measured before
+// this note existed, on the default lane with no flags:
+//
+//	def helper fn [[x:Integer] [Integer] [x add 1]]
+//	def use fn [[x:Integer] [Integer] [helper x]]
+//	use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1
+//	  interpreted -> 2 101      compiled -> 2 2
+//
+// It is a FUNCTION, and every RecordUserCall site calls it, because the bug
+// this closes was caused by exactly the opposite arrangement one layer down:
+// `NotifyNameRebound` is invoked from individual def/undef HANDLERS, so each
+// binder that returned early skipped it silently. The first cut of this note
+// repeated that mistake — it sat inline at recordUserCallOrApply and missed
+// the ZERO-OUTPUT site below, which kept `def g fn [[] [] [print 1]]
+// def f fn [[] [] [g]]  f  def g fn [[] [] [print 99]]  f` printing `1 1`
+// against the interpreter's `1 99`. If a third RecordUserCall site appears,
+// it calls this.
+//
+// The registry is the DISPATCH's own (r), never the recorder's es.reg: es.reg
+// is the last registry BindRegistry saw, which after a call into a
+// boru-implemented module is that module's sub-registry, whose baselines are
+// not this call's (region_record.go carries a dispatch registry for the same
+// reason). NoteFrozenRead self-guards on an open unit, so a TOP-LEVEL call
+// records nothing — there analysis order is program order and the interpreter
+// makes the same dispatch.
+func noteBakedCallTarget(es core.EmitRecorder, r *core.Registry, name string) {
+	if r == nil || name == "" {
+		return
+	}
+	if core.ModuleScopeBinding(r, name) {
+		es.NoteFrozenRead(name, core.FrozenBakeCall)
+	}
+}
+
 // recordUserCallOrApply records a compiled-unit dispatch at a ReturnsFunc
 // record site: the §4.3 fn-value apply fallback where the call qualifies
 // (the outs slice is then COPIED with the freshened carrier in slot 0),
@@ -776,29 +815,7 @@ func recordUserCallOrApply(es core.EmitRecorder, r *core.Registry, name string, 
 		outs[0] = fresh
 		return outs
 	}
-	// The call TARGET is baked. `es.RecordUserCall(fnUnit, …)` names a
-	// SPECIFIC compiled unit, and the lowering emits CALL_USER/TAIL_CALL_USER
-	// to it — so a later module-scope rebind of `name` leaves the caller
-	// invoking the old body while the interpreter dispatches the new one.
-	// Measured before this note existed, on the default lane with no flags:
-	//
-	//	def helper fn [[x:Integer] [Integer] [x add 1]]
-	//	def use fn [[x:Integer] [Integer] [helper x]]
-	//	use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1
-	//	  interpreted -> 2 101      compiled -> 2 2
-	//
-	// The registry is the DISPATCH's own (r), never the recorder's es.reg:
-	// es.reg is the last registry BindRegistry saw, which after a call into a
-	// boru-implemented module is that module's sub-registry, and the baselines
-	// it would answer against are not this read's (region_record.go carries a
-	// dispatch registry for the same reason).
-	//
-	// NoteFrozenRead self-guards on an open unit, so a top-level call records
-	// nothing: there, analysis order is program order and the interpreter
-	// makes the same dispatch.
-	if core.ModuleScopeBinding(r, name) {
-		es.NoteFrozenRead(name, core.FrozenBakeCall)
-	}
+	noteBakedCallTarget(es, r, name)
 	es.RecordUserCall(fnUnit, args, outs, pos)
 	return outs
 }

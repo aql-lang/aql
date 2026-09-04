@@ -127,6 +127,19 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		// the interpreter raises undefined_word.
 		{`def g fn [[][Integer][1]]  def f fn [[] [Integer] [g]]  f  undef g (fnsig [[] [Integer]])  f`,
 			"g", "call target"},
+		// The ZERO-OUTPUT call site, and the row that says why it needs its
+		// own pin. `BuildFnBodyReturnsFn` records a 0-output CALL_USER through
+		// a SECOND RecordUserCall site, which the first cut of the call-target
+		// note missed — it sat inline at recordUserCallOrApply, so a fn with no
+		// declared returns kept baking a stale target.
+		//
+		// The divergence it guards is INVISIBLE to the differential: a 0-output
+		// fn leaves no value to compare, so both lanes return `[]` and only
+		// stdout differs (`1 1` compiled against the interpreter's `1 99`).
+		// That is exactly why the site was missed, and it is why what this row
+		// asserts is the REFUSAL and its reason rather than a value.
+		{`def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f  def g fn [[] [] [print 99]]  f`,
+			"g", "call target"},
 	}
 	for _, c := range cases {
 		src := c.src
@@ -176,6 +189,8 @@ func TestModuleReadNoRebindStillCompiles(t *testing.T) {
 		`def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]  fact 5`,
 		// and so does a rebind with no unit between it and the call.
 		`def g fn [[][Integer][1]]  g  def g fn [[][Integer][2]]  g`,
+		// and the 0-output twin of the same control.
+		`def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f  f`,
 	}
 	for _, src := range srcs {
 		a, err := New()

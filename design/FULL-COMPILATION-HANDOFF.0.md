@@ -1460,6 +1460,49 @@ this buys is real but conservative and bounded: adding a NON-colliding overload
 lanes agreed on. Self-recursion does NOT refuse — `fact` reading its own name
 inside its own unit was the shape to check first, and it keeps compiling.
 
+### How far the sweep went, so the next author does not repeat it
+
+The matrix above (three bakes x two rebind sites x def/undef) was not the whole
+sweep. Fourteen further shapes were run through both lanes and are CLEAN, which
+is what licenses the claim that NUR117 is the sole remaining arm rather than
+the first one found:
+
+- rebind inside an `if` arm, an `each` body, and a `for` body — all three bakes
+  where applicable (family L's refusal and the arm-resident machinery own these);
+- word EXTENSIONS (`def add fn [[a:Flag b:Flag] …]`, a dispatch binding pushed
+  without passing through `installDef`), both the re-extend and the
+  signature-undef spelling;
+- a module namespace read inside a unit (`MathUtil.sqrt`);
+- compound value rebinds — map, list and string — which route through the value
+  arm as expected;
+- a class-type rebind;
+- a two-level call chain where the rebind is below both units.
+
+Zero divergences. The sweep harness is a dozen lines of shell around
+`boru run` vs `boru run -no-compile`; it is worth rebuilding rather than
+reasoning, because three of this session's four findings came out of it and
+none came out of reading.
+
+### The same mistake, one layer down, caught by the same method
+
+Worth recording because it happened WHILE writing the fix for it. The
+call-target note went in inline at `recordUserCallOrApply` — one of the
+`RecordUserCall` call sites — which is structurally the arrangement the root
+cause above condemns: a note attached to CALL SITES rather than to a funnel.
+It missed the second site, `BuildFnBodyReturnsFn`'s ZERO-OUTPUT
+`RecordUserCall`, and a 0-output fn kept baking a stale target:
+
+	def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f  def g fn [[] [] [print 99]]  f
+	  interpreted -> 1 99      compiled -> 1 1
+
+**And the differential is structurally blind to it**, which is the part to
+carry forward: a 0-output fn leaves no value, so both lanes return `[]` and
+the divergence is only on stdout. No value-comparing gate can see this family.
+Found by re-reading the diff against the enumeration of `RecordUserCall`
+callers rather than by any test. The note is now a function every site calls,
+and the pin asserts the REFUSAL rather than a value, since there is no value
+to assert.
+
 ### What did NOT land, and why it is recorded instead
 
 **NUR117 — the rebind that hides inside a `do` body.** The latch is guarded by
