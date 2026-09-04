@@ -2467,6 +2467,37 @@ func (e *Engine) stepWord(val Value) error {
 			// the stored body any more. A bare node never dispatches,
 			// so the fn-shape Quoted special case the body push needed
 			// is gone with the body.
+			//
+			// Freeze discipline, TYPE half. A module-scope type binding read
+			// inside an open fn/closure unit BAKES: resolveOperand's bare-
+			// type-node arm returns a typeOperand, which lowers to OpPushType
+			// carrying the node's IDENTITY, chosen at compile time. The node
+			// it names stays live, but the ID does not, so a later rebind of
+			// the NAME leaves the unit resolving the old node while the
+			// interpreter re-resolves the name per call (NUR097's late half,
+			// which the single binding store gives type names too).
+			//
+			// Measured before this note existed — a silent wrong answer on
+			// the DEFAULT lane, not a -force-compile curiosity:
+			//
+			//	def T Integer  def f fn [[] [Boolean] [5 is T]]  f  def T String  f
+			//	  interpreted -> true false      compiled -> true true
+			//
+			// and the `undef` twin answers `true true` where the interpreter
+			// raises undefined_word, because an ALIAS binding is not Minted
+			// and so retires no node (basic/go/native_definition.go's undef
+			// type arm) — the baked ID keeps resolving after its binding is
+			// gone. The value-name twin of both rows has been refused since
+			// the freeze discipline landed; only the type half was missing.
+			//
+			// No IsConcrete conjunct here, deliberately. On the value side
+			// that test is a PROXY for "the unit baked it" and is neither
+			// necessary nor sufficient; here the bake is unconditional — a
+			// bare type node reaching resolveOperand has exactly one arm —
+			// so the real decision is available and the proxy is not needed.
+			if e.Registry.analysisActive() && ModuleScopeBinding(e.Registry, w.Name) {
+				e.Registry.analysisRecorder().NoteFrozenRead(w.Name)
+			}
 			push := NewTypeLiteral(entry.TypeDef)
 			push.pos = val.pos
 			e.Tape.Set(e.Pointer, push)

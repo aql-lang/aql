@@ -23,6 +23,17 @@ import (
 	"testing"
 )
 
+// frozenReason is the latch's own text (compiler/go/emit.go, NotifyNameRebound's
+// fn-unit arm). Each row below asserts it EXACTLY, and that is not decoration:
+// MarkUncompilable is FIRST-REASON-WINS, so a row that only checks `reason != ""`
+// passes whenever ANY other refusal fires first — including one introduced by the
+// very change under review. Until 2026-09-04 nothing in the tree named this
+// string, so the latch could have been deleted outright with these rows still
+// green. Assert the text, or the pin is not a pin.
+func frozenReason(name string) string {
+	return "module binding " + name + " rebound after a fn unit baked its value"
+}
+
 // TestModuleReadRebindRefusesAndMatches — the miscompile pin: the rebind
 // program refuses with the named reason and the fallback matches the
 // interpreter's documented dynamic-read result.
@@ -31,12 +42,13 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
-	cases := []string{
+	// bound is the name the row rebinds — the one the refusal must name.
+	cases := []struct{ src, bound string }{
 		// The documented module-dynamic case (scalar read baked as a const).
-		`def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  def x 2  f 0`,
+		{`def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  def x 2  f 0`, "x"},
 		// The splice twin: the macro payload fires into the unit's tokens at
 		// analysis time; a rebind would leave the old tokens frozen.
-		`def op (quote [1 add 2])  def f fn [[n:Integer] [Any] [do [n drop word op]]]  f 0  def op (quote [10 mul 4])  f 0`,
+		{`def op (quote [1 add 2])  def f fn [[n:Integer] [Any] [do [n drop word op]]]  f 0  def op (quote [10 mul 4])  f 0`, "op"},
 		// The UNDEF twin. `undef` reaches the SAME NotifyNameRebound as `def`
 		// (basic/go/native_definition.go), and until 2026-09-03 no case here
 		// exercised it. Measured by suppressing the guard at emit.go and
@@ -44,7 +56,7 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		// raises `undefined_word` — the unit's baked const outlives the very
 		// binding that produced it, so the compiled body cannot tell that `k`
 		// stopped existing.
-		`def k 5  def f fn [[] [Integer] [k add 2]]  f  undef k  f`,
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  undef k  f`, "k"},
 		// The CROSS-FAMILY twin, and the one a live operand ALONE cannot fix.
 		// Measured the same way: compiles to `7 7` where the interpreter
 		// raises `type_error: f: return value 1: expected Integer, got
@@ -61,9 +73,35 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		// eventually makes this read live therefore owes a signature DECISION
 		// as well as an operand, and this row is what refuses to let that step
 		// supply the operand while keeping the stale selection.
-		`def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f`,
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f`, "k"},
+		// The TYPE twin, and the row that says the discipline is about
+		// BINDINGS rather than about values. A type name lives in the SAME
+		// single binding store (lang/go/CLAUDE.md "Registry Bindings"), so a
+		// module-scope type read inside a unit freezes exactly as a value
+		// read does — resolveOperand's bare-type-node arm returns a
+		// typeOperand and the unit lowers to OpPushType carrying the node's
+		// compile-time IDENTITY.
+		//
+		// Until 2026-09-04 BOTH halves of the discipline missed it. The read
+		// never travels stepWord's simple-value substitution branch (the
+		// type-literal arm returns first), so NoteFrozenRead was never
+		// attempted; and `def`/`undef`'s capitalised arms returned before
+		// every recorder notification, so NotifyNameRebound was never called
+		// for a type name at all. Measured on the DEFAULT lane — plain `boru
+		// run`, no flags, no -force-compile:
+		//
+		//	interpreted -> true false      compiled -> true true
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  def T String  f`, "T"},
+		// The type UNDEF twin, worse in the same way the value one is: an
+		// ALIAS binding is not Minted, so undef retires no lattice node
+		// (basic/go/native_definition.go's undef type arm) and the unit's
+		// baked ID keeps resolving after its binding is gone.
+		//
+		//	interpreted -> raises undefined_word      compiled -> true true
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  undef T  f`, "T"},
 	}
-	for _, src := range cases {
+	for _, c := range cases {
+		src := c.src
 		a, err := New()
 		if err != nil {
 			t.Fatalf("New: %v", err)
@@ -74,8 +112,8 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		}
 		if prog != nil {
 			t.Errorf("%q: a module rebind after a unit baked the binding must refuse; compiled instead", src)
-		} else if reason == "" {
-			t.Errorf("%q: refusal must carry a named reason", src)
+		} else if want := frozenReason(c.bound); reason != want {
+			t.Errorf("%q: refusal must be the frozen-read latch's own; want %q, got %q", src, want, reason)
 		}
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
 		if compiled {
@@ -91,19 +129,31 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 // NEVER-rebound module binding keeps compiling (the freeze is keyed on actual
 // rebinds, not on "reads a module ref").
 func TestModuleReadNoRebindStillCompiles(t *testing.T) {
-	src := `def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  f 10`
-	a, err := New()
-	if err != nil {
-		t.Fatalf("New: %v", err)
+	srcs := []string{
+		`def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  f 10`,
+		// The TYPE control, and the one that bounds the 2026-09-04 fix. The
+		// new note fires on EVERY module-scope type read inside a unit, so
+		// this row is what says the latch still needs a REBIND to trip: a
+		// type read in a unit, called twice, must keep compiling.
+		`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  f`,
+		// And the type read that is REBOUND but never read inside a unit —
+		// the other side of the same bound. Nothing froze, so nothing refuses.
+		`def T Integer  5 is T  def T String  5 is T`,
 	}
-	prog, reason, _, cerr := a.CompileCheck(src)
-	if cerr != nil || prog == nil {
-		t.Fatalf("%q: must compile; reason=%q err=%v", src, reason, cerr)
-	}
-	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
-	if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: want compiled parity; compiled=%v gotC=%v errC=%v gotI=%v errI=%v",
-			src, compiled, gotC, errC, gotI, errI)
+	for _, src := range srcs {
+		a, err := New()
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		prog, reason, _, cerr := a.CompileCheck(src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%q: must compile; reason=%q err=%v", src, reason, cerr)
+		}
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: want compiled parity; compiled=%v gotC=%v errC=%v gotI=%v errI=%v",
+				src, compiled, gotC, errC, gotI, errI)
+		}
 	}
 }
 

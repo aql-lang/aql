@@ -700,7 +700,23 @@ func DefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		// the kernel type installer — the same path the `type` word
 		// uses — so object/predicate lattice-minting and all
 		// type-installation validation happen in exactly one place.
-		return nil, core.InstallType(r, name, body)
+		if err := core.InstallType(r, name, body); err != nil {
+			return nil, err
+		}
+		// A type name is a BINDING in the same single store, so it carries
+		// the same rebind hazards a value def does. Until this call existed
+		// the capitalised arm returned before EVERY recorder notification,
+		// so neither the frozen-read latch nor the stored-handler dep
+		// poisoning ever saw a type rebind. Measured miscompile on the
+		// DEFAULT lane:
+		//
+		//	def T Integer  def f fn [[] [Boolean] [5 is T]]  f  def T String  f
+		//	  interpreted -> true false      compiled -> true true
+		//
+		// The read half of the discipline is core's stepWord type-literal
+		// arm (NoteFrozenRead); this is the rebind half that arms it.
+		r.Check.Recorder().NotifyNameRebound(name)
+		return nil, nil
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
@@ -1442,6 +1458,16 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		// covered by BindingSandbox's partition — this records the BINDING
 		// removal, which is the half a twin has to replay.
 		r.NoteBindTransition(core.BindUndef, name, core.SrcPos{})
+		// The rebind half of the freeze discipline, for the same reason the
+		// def type arm carries it: the twin above replays WHERE the binding
+		// went, and this notifies WHAT IS IN THE BYTECODE that read it. The
+		// undef row is the worse of the two — an ALIAS binding is not Minted,
+		// so nothing is retired above and a unit's baked OpPushType ID keeps
+		// resolving after its binding is gone:
+		//
+		//	def T Integer  def f fn [[] [Boolean] [5 is T]]  f  undef T  f
+		//	  interpreted -> raises undefined_word    compiled -> true true
+		r.Check.Recorder().NotifyNameRebound(name)
 		return nil, nil
 	}
 	// An undef of a LOOP-CARRIED def exposes the previous binding while the
