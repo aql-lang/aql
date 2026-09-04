@@ -190,3 +190,47 @@ func TestBindingReadFunnelNegatives(t *testing.T) {
 	var nilE *Engine
 	nilE.noteBindingRead("k", NewInteger(5))
 }
+
+// The funnel's own guards. They are unreachable from a running program by
+// construction — a live pass always has a registry and a CheckState — so they
+// are driven here, and they exist because ADR-005 forbids the alternative of
+// letting a nil deref reach a user.
+func TestRebindFunnelGuards(t *testing.T) {
+	noteRebind(nil, "k")
+	r, rec := funnelRegistry(t)
+	saved := r.Check
+	r.Check = nil
+	noteRebind(r, "k")
+	r.Check = saved
+	noteRebind(r, "")
+	if len(rec.rebound) != 0 {
+		t.Errorf("a nil registry, a nil CheckState and an empty name must all notify nothing; got %v", rec.rebound)
+	}
+}
+
+// UninstallType's three arms beyond the happy path: no registry, no binding to
+// remove, and the MINTED case, where the lattice node is retired with the
+// binding. The alias case (Minted false) is the one the happy-path row above
+// covers — `def T Integer` ADOPTS Integer's node, and retiring it there would
+// delete a builtin's identity from the ID index.
+func TestUninstallTypeArms(t *testing.T) {
+	if UninstallType(nil, "T") {
+		t.Error("a nil registry removes nothing")
+	}
+	r, _ := funnelRegistry(t)
+	if UninstallType(r, "NeverBound") {
+		t.Error("an unbound name removes nothing")
+	}
+
+	minted := r.Types.MintType("Mz", TInteger)
+	r.Defs.PushType("Mz", minted, NewTypeLiteral(minted))
+	if r.Types.LookupByID(minted.ID) == nil {
+		t.Fatal("the minted node must be in the ID index before the undef")
+	}
+	if !UninstallType(r, "Mz") {
+		t.Fatal("a bound type must be removed")
+	}
+	if r.Types.LookupByID(minted.ID) != nil {
+		t.Error("a MINTED node must be retired with its binding")
+	}
+}
