@@ -712,7 +712,10 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
-				noteBakedCallTarget(es, r, name)
+				// nameCopy, not name, for the same reason every sibling in this
+				// closure uses it: the snapshot at the top of
+				// BuildFnBodyReturnsFn is what the closure is entitled to read.
+				noteBakedCallTarget(es, r, nameCopy)
 				es.RecordUserCall(fnUnit, args, nil, pos)
 				return nil
 			}
