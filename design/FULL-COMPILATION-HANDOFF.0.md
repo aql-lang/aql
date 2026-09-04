@@ -1481,6 +1481,26 @@ above did not find this one** — it varied the binding kind and the rebind site
 and never varied the SPELLING of the read. When the next author extends the
 matrix, spelling is the third axis.
 
+### The spelling axis, swept after the fact
+
+Once `/v` showed that the SPELLING of a read is a real axis, seventeen further
+spellings were run through both lanes. All clean, which is what lets the
+call-target and type arms be stated as closed rather than merely un-falsified:
+
+- `k/q` and `T/q` (quote — an Atom, no bake), `k/s` (an arg-order modifier),
+  `(k)` (paren), and `word k` (the splice, already pinned);
+- a module TYPE in a PARAM annotation (`fn [[x:T] …]`) and in a RETURN
+  annotation (`fn [[] [T] …]`) — the two positions where a type name is read
+  by the signature rather than by the body;
+- a type reached through a `refine`, a class FIELD type, `make T`, an
+  `fnsig` over it, a `tor` union of two module types, `Type of [T/q]`, and a
+  type stored in a list and read back out;
+- a type read transitively, through a second fn the caller invokes;
+- `typeof 5 eq T`, and a type embedded in a map read through dot access.
+
+Zero divergences. Three axes are now swept — binding kind, rebind site,
+read spelling — and the only open cell is NUR117's.
+
 ### How far the sweep went, so the next author does not repeat it
 
 The matrix above (three bakes x two rebind sites x def/undef) was not the whole
