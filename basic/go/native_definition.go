@@ -1496,6 +1496,16 @@ func UndefFnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, fmt.Errorf("undef: expected fn undef spec, got %s", args[1].String())
 	}
 	UninstallFnSigs(r, name, undefInfo)
+	// A signature undef is a rebind: it removes overloads from a live binding,
+	// so a unit that baked a call to one of them now names a body the
+	// interpreter would no longer reach. This arm returned before every
+	// recorder notification until 2026-09-04, which made
+	// `def g fn [[][Integer][1]]  def f fn [[][Integer][g]]  f
+	//  undef g (fnsig [[] [Integer]])  f` answer `1 1` compiled where the
+	// interpreter raises undefined_word. Same shape as the `def`/`undef` type
+	// arms: the notification is attached to HANDLERS rather than to the
+	// binding store, so each binder that forgets it is a silent miscompile.
+	r.Check.Recorder().NotifyNameRebound(name)
 	return nil, nil
 }
 

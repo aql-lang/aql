@@ -776,6 +776,29 @@ func recordUserCallOrApply(es core.EmitRecorder, r *core.Registry, name string, 
 		outs[0] = fresh
 		return outs
 	}
+	// The call TARGET is baked. `es.RecordUserCall(fnUnit, …)` names a
+	// SPECIFIC compiled unit, and the lowering emits CALL_USER/TAIL_CALL_USER
+	// to it — so a later module-scope rebind of `name` leaves the caller
+	// invoking the old body while the interpreter dispatches the new one.
+	// Measured before this note existed, on the default lane with no flags:
+	//
+	//	def helper fn [[x:Integer] [Integer] [x add 1]]
+	//	def use fn [[x:Integer] [Integer] [helper x]]
+	//	use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1
+	//	  interpreted -> 2 101      compiled -> 2 2
+	//
+	// The registry is the DISPATCH's own (r), never the recorder's es.reg:
+	// es.reg is the last registry BindRegistry saw, which after a call into a
+	// boru-implemented module is that module's sub-registry, and the baselines
+	// it would answer against are not this read's (region_record.go carries a
+	// dispatch registry for the same reason).
+	//
+	// NoteFrozenRead self-guards on an open unit, so a top-level call records
+	// nothing: there, analysis order is program order and the interpreter
+	// makes the same dispatch.
+	if core.ModuleScopeBinding(r, name) {
+		es.NoteFrozenRead(name, core.FrozenBakeCall)
+	}
 	es.RecordUserCall(fnUnit, args, outs, pos)
 	return outs
 }

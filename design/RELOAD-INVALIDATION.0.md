@@ -41,7 +41,7 @@ tier needs anyway.
 | | whole-program `CALL_USER` unit | compile-time stored ref | runtime-stamped detached ref |
 |---|---|---|---|
 | reachable via | `CALL_USER` in the program stream — **no per-call seam** | `InvokeCallback` seam | `InvokeCallback` seam |
-| freshness | `frozenReads` + `NotifyNameRebound` → whole-program refusal, **compile-time only** | `depNames` + `poisoned`, **compile-time only** (`DepSnap == nil` ⇒ vacuously fresh at runtime) | `DepSnap {Depth, Gen}` validated **per invoke** (`DepsFresh`) |
+| freshness | `frozenReads` + `NotifyNameRebound` → whole-program refusal, **compile-time only** (this cell was FALSE for a baked CALL TARGET until 2026-09-04 — see the correction under §3 F1) | `depNames` + `poisoned`, **compile-time only** (`DepSnap == nil` ⇒ vacuously fresh at runtime) | `DepSnap {Depth, Gen}` validated **per invoke** (`DepsFresh`) |
 | on staleness | program interprets wholesale | that handler interprets forever | JIT re-stamp (`RestampBox`, ≤ 3 lifetime tries), then interpreter |
 
 ### 2.2 The hot-path cost today (constraint-3 audit)
@@ -114,6 +114,27 @@ semantics; it restores *late binding* but not *point-in-program* binding.
 The whole-program hammer would have refused this program had the read
 been in an ordinary unit. A regression spec must pin `6 105 12` across
 all three surfaces.
+
+> **CORRECTION, measured 2026-09-04.** That last sentence was false when it
+> was written, and so was the §2.1 table cell it rests on. The hammer refuses
+> a read whose VALUE a unit baked; it had no arm at all for a read whose CALL
+> TARGET the lowering baked, because a fn name falls through `stepWord` to
+> `Lookup` and dispatches — it never travels the simple-value substitution
+> branch, so `NoteFrozenRead` was never even attempted and `frozenReads` stayed
+> empty. The read in an ordinary unit therefore did NOT refuse:
+>
+> ```boru
+> def helper fn [[x:Integer] [Integer] [x add 1]]
+> def use    fn [[x:Integer] [Integer] [helper x]]
+> use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1
+> #   interpreted -> 2 101      compiled -> 2 2
+> ```
+>
+> Closed by the call-target arm of the freeze discipline
+> (`design/FULL-COMPILATION-HANDOFF.0.md`, Stage 4a-4), which also closed the
+> same hole for a baked TYPE identity. One arm of the family remains open and
+> is recorded as NUR117: the latch is skipped whenever the REBIND sits inside
+> a `do` body, for every bake kind.
 
 **F2 — reload-soundness hole: runtime rebinds cannot invalidate
 compile-time refs.** `NotifyNameRebound` is an `EmitState` method gated

@@ -208,7 +208,7 @@ type EmitRecorder interface {
 	RecordDefRebind(name string, v Value, pos SrcPos)
 	RecordDynBind(name string, v Value, pos SrcPos)
 	NoteDefRead(id, name string)
-	NoteFrozenRead(name string)
+	NoteFrozenRead(name string, bake FrozenBake)
 	RefuseCarriedUndef(name string)
 	NotifyNameRebound(name string)
 	RegisterLocal(id string) int
@@ -345,7 +345,7 @@ func (inactiveEmit) MarkValueDef(Value)                         {}
 func (inactiveEmit) RecordDefRebind(string, Value, SrcPos)      {}
 func (inactiveEmit) RefuseCarriedUndef(string)                  {}
 func (inactiveEmit) NotifyNameRebound(string)                   {}
-func (inactiveEmit) NoteFrozenRead(string)                      {}
+func (inactiveEmit) NoteFrozenRead(string, FrozenBake)          {}
 func (inactiveEmit) RegisterLocal(string) int                   { return -1 }
 func (inactiveEmit) RememberOriginal(Value)                     {}
 func (inactiveEmit) RememberStrippedOriginals([]Value, []Value) {}
@@ -405,3 +405,56 @@ var (
 	NewEmitStateHook    = inactiveEmitStateHook
 	NewIsolatedEmitHook = inactiveIsolatedEmitHook
 )
+
+// FrozenBake names WHAT a compiled fn/closure unit froze about a module-scope
+// binding it read. It is the argument to NoteFrozenRead, and the whole reason
+// that note takes one at all: the freeze discipline defends three DIFFERENT
+// baked artifacts, they are repaired by three different mechanisms, and a
+// name-keyed bit cannot tell a router which one it is looking at.
+//
+// The three were not enumerated from the design — each was measured as a
+// LIVE, SILENT divergence on the default lane, in that order:
+//
+//	def k 5        def f fn [[] [Integer] [k add 2]]   f  def k 9       f
+//	def T Integer  def f fn [[] [Boolean] [5 is T]]    f  def T String  f
+//	def g fn [[][Integer][1]]  def f fn [[][Integer][g]]  f  def g fn [[][Integer][2]]  f
+//
+// The interpreter answers `7 11`, `true false` and `1 2`; before each arm
+// existed the compiled lane answered `7 7`, `true true` and `1 1`.
+//
+// The zero value is INVALID, per the kernel's "No Zero-Value Overload
+// (CRITICAL)" rule: a note that reached no classifier is a defect, not a
+// value bake. NoteFrozenRead drops it rather than guessing.
+type FrozenBake uint8
+
+const (
+	// FrozenBakeNone is the invalid zero.
+	FrozenBakeNone FrozenBake = iota
+	// FrozenBakeValue — the read's VALUE is interned and lowered to a
+	// PUSH_CONST inside the unit. Repaired by making the read live.
+	FrozenBakeValue
+	// FrozenBakeType — the read is a bare type node lowered to a PUSH_TYPE
+	// carrying the node's compile-time IDENTITY. The node stays live; the ID
+	// does not, so a rebind of the NAME leaves the unit on the old node.
+	FrozenBakeType
+	// FrozenBakeCall — the read is a fn NAME whose call the lowering resolved
+	// to a specific compiled unit (CALL_USER / TAIL_CALL_USER). Repaired only
+	// by a runtime LOOKUP at the call — §6.9's OpDispatchGeneric — because no
+	// operand substitution re-resolves a call target the lowering already
+	// chose.
+	FrozenBakeCall
+)
+
+// String names the bake in the refusal a rebind produces, so the diagnostic
+// says which artifact went stale rather than always saying "its value".
+func (b FrozenBake) String() string {
+	switch b {
+	case FrozenBakeValue:
+		return "value"
+	case FrozenBakeType:
+		return "type"
+	case FrozenBakeCall:
+		return "call target"
+	}
+	return "binding"
+}

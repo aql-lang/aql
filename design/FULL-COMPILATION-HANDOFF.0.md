@@ -1366,6 +1366,183 @@ files. That is a mechanical sweep of its own, and bundling it into a findings
 commit would bury both.
 
 
+## Stage 4a-4: the freeze discipline was guarding one binding kind of three (2026-09-04)
+
+The revised order above names "give `frozenReads` its site structure" as the
+next increment, and Stage 4a-3's finding #7 sharpens it to "the real subject is
+the proxy". Both were sent out to be measured against the tree before anything
+was written, the same method Stage 4a-3 used. **The proxy is not what was
+wrong. What was wrong is that two of the three things a unit can freeze were
+not being noted at all**, and each was a live, silent miscompile on the DEFAULT
+lane — `boru run`, no flags, exit 0, wrong number.
+
+### The three bakes, and the two that had no gate
+
+A compiled unit can freeze a module-scope binding three ways. `resolveOperand`
+has exactly one value-bake chokepoint and one type return; the third is not an
+operand at all, it is the call target the lowering chose.
+
+| the unit bakes | as | had a gate before this |
+|---|---|---|
+| the read's VALUE | `PUSH_CONST` | yes — the original freeze discipline |
+| the read's TYPE identity | `PUSH_TYPE` | **no** |
+| the CALL TARGET | `CALL_USER` / `TAIL_CALL_USER` | **no** |
+
+```
+def k 5                    def f fn [[] [Integer] [k add 2]]   f  def k 9       f
+def T Integer              def f fn [[] [Boolean] [5 is T]]    f  def T String  f
+def g fn [[][Integer][1]]  def f fn [[][Integer][g]]           f  def g fn [[][Integer][2]]  f
+```
+
+The interpreter answers `7 11`, `true false`, `1 2`. The first refused and fell
+back. The second and third compiled and answered `7 7`… no — `true true` and
+`1 1`. Each `undef` twin is worse in the same way every time: the compiled
+program ANSWERS where the interpreter raises `undefined_word`, because the
+baked artifact outlives the binding that produced it.
+
+**The call-target row is the one to take seriously.** It is not an exotic
+shape — define a helper, define a caller, call it, redefine the helper:
+
+	def helper fn [[x:Integer] [Integer] [x add 1]]
+	def use    fn [[x:Integer] [Integer] [helper x]]
+	use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1
+	  interpreted -> 2 101      compiled -> 2 2
+
+That is a REPL session and it is what `reload` does. The disassembly is the
+§6.5 lesson in four lines — the twin replays the rebind correctly at pc 0003
+and the call target does not move:
+
+	0003 BIND_TWIN   w2   ; bind twin def-replace g @depth 1 (replay)
+	0004 CALL_USER   f0   ; f/0
+	fn f0 f/0: 0000 TAIL_CALL_USER f1   ; g/0     <- the OLD unit
+	fn f1 g/0: 0000 PUSH_CONST k0 ; 1
+
+### The root cause is structural, and it will recur
+
+`NotifyNameRebound` is called from HANDLERS, not from the binding store. Before
+this increment there were two call sites, both in `basic/go/native_definition.go`,
+both on the lowercase arms of `def` and `undef`. Every other binder returned
+before reaching one:
+
+- `DefHandler`'s capitalised arm returned `core.InstallType(...)` directly.
+- `UndefHandler`'s capitalised arm returned after `NoteBindTransition`.
+- `UndefFnHandler` returned after `UninstallFnSigs` — no notification of any kind.
+
+And on the READ side the same shape: a type name never travels `stepWord`'s
+simple-value substitution branch (the type-literal arm returns first), so
+`NoteFrozenRead` was never even attempted for it; a fn name falls through to
+`Lookup` and dispatches, so it was never attempted there either.
+
+**So the discipline was never wrong; it was never asked.** Write that down,
+because the next binder added to this language inherits it: a rebind
+notification attached to handlers is a notification each new handler can
+silently forget, and each forgetting is a miscompile generator. The durable
+fix is to seat it on the binding store; that is a separate change and is not
+made here.
+
+### What landed
+
+Both missing arms of the discipline, on both halves — the note and the
+notification — plus the table's first structure. `frozenReads` is now
+`map[string]core.FrozenBake` rather than `map[string]bool`: value, type, or
+call target, first bake winning, and the refusal NAMES it ("… baked its call
+target"). That is the site structure the revised order asked for, in the form
+the defects actually demanded rather than the form the plan guessed: a router
+asking "can OpCollect answer this one?" needs the KIND before it needs the
+position, because the three kinds are repaired by three different mechanisms
+and only one of them is a region's business.
+
+**Cost, measured: zero.** `test/go/langspec/compiled_coverage_test.go`'s
+refusal ceiling stays at 0 across all three arms — the corpus contains none of
+these shapes, exactly as the population measurement predicts. The over-refusal
+this buys is real but conservative and bounded: adding a NON-colliding overload
+(`def g fn [[x:Integer] …]` beside a 0-arg `g`) now refuses a program the two
+lanes agreed on. Self-recursion does NOT refuse — `fact` reading its own name
+inside its own unit was the shape to check first, and it keeps compiling.
+
+### What did NOT land, and why it is recorded instead
+
+**NUR117 — the rebind that hides inside a `do` body.** The latch is guarded by
+`len(openUnitRecs) == 0`, whose stated reason is sound for a fn body. But a
+top-level `do` body opens a unit while its defs reach module scope, so every
+rebind written inside one is exempt:
+
+	def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]  f
+	  interpreted 7 11        compiled 7 7
+
+It reproduces for all three bakes and for `undef`, which is what says the fault
+is the guard rather than any arm — and the VALUE row PRE-DATES this increment.
+Closing it needs the three-way separation the arm-resident work already owns
+(a `do` body's install reaches module scope, a fn body's does not, a multi-run
+body's is per-element), so it is recorded rather than patched in place.
+
+### Two design claims this corrects
+
+`design/RELOAD-INVALIDATION.0.md` is wrong in two places, both load-bearing,
+and both in the same direction — they credit the whole-program hammer with
+coverage it does not have:
+
+- §2.1's audit table gives the whole-program `CALL_USER` unit's freshness as
+  "`frozenReads` + `NotifyNameRebound` → whole-program refusal". For a CALL
+  target that was false: the read never populated `frozenReads`, so nothing
+  refused. True as of this increment, and worth re-reading as a claim that
+  only became true by being checked.
+- §3 F1 says "The whole-program hammer would have refused this program had the
+  read been in an ordinary unit." The `helper`/`use` program above IS the read
+  in an ordinary unit, and it was not refused.
+
+### Corrections to this file's own earlier findings
+
+Measured this session, with instrumentation since reverted:
+
+- **Stage 4a-3 finding #2 undercounts.** "Two of them install a fresh
+  `NewEmitState()`" — it is FOUR (`tryReturnedClosure`, `compileStoredFnUnit`,
+  `compileStoredBody`, `compileStoredParamBody`); only `recordClosureDispatch`
+  forks. And the five named boundaries are not all of them: `CheckState.IsolateEmit`
+  installs a fresh state and fires DURING the compile pass on the state later
+  Finalized, and `StampDetachedSig` arms another through
+  `fork.Check = &core.CheckState{…}` + `BeginCompilePass`, which escapes a
+  `.Emit =` grep entirely.
+- **The anchor question finding #2 leaves open has an answer: the
+  `*fnUnitRec` POINTER, never the int index.** `fnRecs` is `[]*fnUnitRec` and
+  the fork copies POINTERS, so a shared-prefix unit is the same object in both
+  states while a fresh probe's units are pointers no other state holds — the
+  collision finding #2 predicts (measured: a probe wrote its frozen read at
+  open-unit index 0 while the real state already owned an unrelated index 0)
+  cannot happen to a pointer. It survives `Rollback` (fnRecs is append-only;
+  Rollback bails when the count changed) and resolves to a Program unit
+  (Finalize walks fnRecs one-for-one into `Program.Fns`). Pointer identity
+  removes ALIASING but not the DISCARD: a probe's entries are still dropped,
+  and a stored-probe case with a nested `each` unit was measured accumulating
+  and discarding one. Today's name-keyed map is insensitive to that because
+  the real pass re-runs the same body and re-notes; a per-site table would not
+  be, and would need an explicit merge-back keyed on
+  `check.FnAnalysisKey` (which contains no EmitState-derived data).
+- **Finding #5's "corpus population is ZERO" is right about the LATCH and
+  wrong as a statement about the table.** 68 of 2447 def-bearing corpus rows
+  populate `frozenReads`; none trips the latch, because none is followed by a
+  module-scope rebind. A per-site redesign has 68 live rows to keep working.
+- **Finding #6's "one line below" is five.** `NoteDefRead` and the frozen-read
+  gate are five lines apart in `stepWord`, and the file has since moved again.
+  The substantive half holds: the read's true position is `stepWord`'s `val`,
+  and it is the ONLY place it exists — measured, the compiler side cannot
+  recover it, because at the bake `v.Pos()` is the DEF-SITE literal (or 0:0),
+  not the read.
+- **Finding #7's two error directions both land somewhere other than where it
+  implies.** The over-refusal is NOT flex/Store — those read as CARRIERS, so
+  `IsConcrete` is false, the note never fires, and they already route live to
+  `OpLookupDynScope`. It is an INLINE top-level body: `def k 5  do [k add 2]
+  def k 9  do [k add 2]` opens a fnRec, so the "no-op at top level" exemption
+  misses it, yet the emitter records a SEPARATE closure per site (`f0` bakes
+  5, `f1` bakes 9) and the program is correct with the latch suppressed. Cost
+  today is performance, not correctness. And for every read that DOES reach
+  the predicate the two conjuncts are locally faithful — 17 concrete
+  module-scope reads, all baking; 11 non-concrete, all live; zero
+  counterexamples either way. The proxy's fault is not in the expression. It
+  is in what the expression is never asked about, which is what this increment
+  found.
+
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

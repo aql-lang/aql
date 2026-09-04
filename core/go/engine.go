@@ -2496,7 +2496,7 @@ func (e *Engine) stepWord(val Value) error {
 			// bare type node reaching resolveOperand has exactly one arm —
 			// so the real decision is available and the proxy is not needed.
 			if e.Registry.analysisActive() && ModuleScopeBinding(e.Registry, w.Name) {
-				e.Registry.analysisRecorder().NoteFrozenRead(w.Name)
+				e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeType)
 			}
 			push := NewTypeLiteral(entry.TypeDef)
 			push.pos = val.pos
@@ -2563,7 +2563,7 @@ func (e *Engine) stepWord(val Value) error {
 				// the interpreter re-resolves the name per call — a later module
 				// rebind would diverge. Note it so NotifyNameRebound refuses.
 				if IsConcrete(top) && ModuleScopeBinding(e.Registry, w.Name) {
-					e.Registry.analysisRecorder().NoteFrozenRead(w.Name)
+					e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeValue)
 				}
 			}
 			// A def'd word binds a VALUE: push it as-is. Lists bind like

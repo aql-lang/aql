@@ -894,16 +894,29 @@ type EmitState struct {
 	// recorded result as VARIADIC (SetCatchVariadic / catchVariadicFor —
 	// the fallible multi-value `do` body, plan Phase 5 L-DO).
 	catchVariadicPending bool
-	// frozenReads holds the module-scope binding names whose CONCRETE values
-	// a fn/closure UNIT analysis read (NoteFrozenRead) — the value bakes into
-	// the unit (a const, or splice-fired tokens) that re-runs on every call,
-	// where the interpreter re-resolves the name per call. A LATER module-
-	// scope rebind of such a name (NotifyNameRebound) therefore marks the
-	// program uncompilable: `def x 1  def f fn [… [x add y]]  f 0  def x 2
-	// f 0` compiled to 1 1 against the interpreter's documented 1 2 (module-
-	// level dynamic reads, lang/go/CLAUDE.md "Closures and Capture") before
-	// this freeze discipline. Nil until the first unit-baked read.
-	frozenReads map[string]bool
+	// frozenReads maps a module-scope binding name a fn/closure UNIT analysis
+	// read to WHAT that unit froze about it (core.FrozenBake). The unit
+	// re-runs on every call while the interpreter re-resolves the name per
+	// call, so a LATER module-scope rebind (NotifyNameRebound) marks the
+	// program uncompilable — interpreter fallback, correct values.
+	//
+	// It carries the BAKE KIND rather than a bare bool because the three
+	// kinds are repaired by three different mechanisms, and each was measured
+	// as a live, silent divergence on the default lane before its arm existed
+	// (see core.FrozenBake for the three programs). A router that must decide
+	// "can OpCollect answer this one?" cannot ask a name→bool.
+	//
+	// FIRST BAKE WINS, mirroring MarkUncompilable's first-reason rule: the
+	// map's job is to name a hazard, and a name frozen two ways is refused by
+	// either. Nil until the first unit-baked read.
+	//
+	// DELIBERATELY absent from emitCheckpoint and Rollback. The sole consumer
+	// only ever calls MarkUncompilable and nothing deletes from the map, so a
+	// RETAINED entry can only OVER-refuse; the miscompile direction is a
+	// MISSING entry, which Rollback structurally cannot produce. Adding it to
+	// the checkpoint as a "gap fix" would convert a conservative refusal into
+	// a silent wrong answer — see the handoff's Stage 4a-3 finding #3.
+	frozenReads map[string]core.FrozenBake
 
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
@@ -3152,11 +3165,25 @@ func (es *EmitState) NotifyNameRebound(name string) {
 	// practice, so this hammer stays cold on real programs.
 	// A MODULE-SCOPE rebind (no unit open — a body-local def inside another
 	// unit's analysis shadows independently and must not poison) of a name
-	// some already-analysed unit baked CONCRETELY (frozenReads): the frozen
-	// unit would keep the old value where the interpreter re-resolves, so
-	// refuse the whole program (interpreter fallback) rather than diverge.
-	if len(es.openUnitRecs) == 0 && es.frozenReads[name] {
-		es.MarkUncompilable("module binding " + name + " rebound after a fn unit baked its value")
+	// some already-analysed unit BAKED (frozenReads): the frozen unit would
+	// keep the old artifact where the interpreter re-resolves, so refuse the
+	// whole program (interpreter fallback) rather than diverge. The reason
+	// names WHICH artifact went stale — value, type, or call target — because
+	// the three are repaired by three different mechanisms and a reader of the
+	// refusal is usually asking which one they are looking at.
+	//
+	// KNOWN HOLE — NUR117, measured 2026-09-04 and NOT closed here: the
+	// `len(es.openUnitRecs) == 0` guard also exempts a rebind performed inside
+	// a top-level `do` body, whose defs DO reach module scope — so
+	// `def k 5  def f fn [… [k add 2]]  f  do [def k 9]  f` still answers
+	// `7 7` against the interpreter's `7 11`. The hole is orthogonal to the
+	// bake kind (all three reproduce it) and pre-dates the type and call arms.
+	// Closing it needs the three-way separation the arm-resident work already
+	// owns — a `do` body's install reaches module scope, a fn body's does not,
+	// a multi-run body's is per-element — so it is recorded rather than
+	// patched in place.
+	if bake, frozen := es.frozenReads[name]; frozen && len(es.openUnitRecs) == 0 {
+		es.MarkUncompilable("module binding " + name + " rebound after a fn unit baked its " + bake.String())
 	}
 }
 
@@ -6524,14 +6551,19 @@ func zeroArgFnOut(outs []core.Value) bool {
 // NoteDefRead records that value ID was produced by reading binding `name`
 // (stepWord's simple-value substitution). Consulted by resolveOperand's
 // dynamic-scope rescue when the value has no compiled home.
-// NoteFrozenRead records a CONCRETE module-scope binding read that happened
-// INSIDE an open fn/closure unit analysis: the value bakes into the unit
-// (const / splice-fired tokens) and is frozen across calls, so a later
-// module-scope rebind must refuse the program (NotifyNameRebound). No-op at
-// top level, where analysis order equals program order and the bake is the
-// read the interpreter makes.
-func (es *EmitState) NoteFrozenRead(name string) {
-	if !es.Active() || name == "" || len(es.openUnitRecs) == 0 {
+// NoteFrozenRead records a module-scope binding read that happened INSIDE an
+// open fn/closure unit analysis, and WHAT the unit froze about it: a value
+// baked as a const, a type baked as an identity, or a call target baked as a
+// unit index. All three are frozen across calls where the interpreter
+// re-resolves the name per call, so a later module-scope rebind must refuse
+// the program (NotifyNameRebound). No-op at top level, where analysis order
+// equals program order and the bake is the read the interpreter makes.
+//
+// An unclassified note (FrozenBakeNone) is DROPPED rather than recorded as
+// some default: the refusal it would produce names a bake, and naming the
+// wrong one is worse than the caller's bug going unrecorded here.
+func (es *EmitState) NoteFrozenRead(name string, bake core.FrozenBake) {
+	if !es.Active() || name == "" || bake == core.FrozenBakeNone || len(es.openUnitRecs) == 0 {
 		return
 	}
 	// A read attributed to a STORED-REF unit (a service/minilang handler, a
@@ -6548,9 +6580,14 @@ func (es *EmitState) NoteFrozenRead(name string) {
 		return
 	}
 	if es.frozenReads == nil {
-		es.frozenReads = map[string]bool{}
+		es.frozenReads = map[string]core.FrozenBake{}
 	}
-	es.frozenReads[name] = true
+	// First bake wins — see the field doc. A name frozen two ways refuses
+	// either way, so the second note has nothing to add and overwriting would
+	// make the refusal's text depend on analysis order.
+	if _, seen := es.frozenReads[name]; !seen {
+		es.frozenReads[name] = bake
+	}
 }
 
 func (es *EmitState) NoteDefRead(id, name string) {

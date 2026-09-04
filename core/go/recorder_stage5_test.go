@@ -124,7 +124,7 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 	e.RecordDefRebind("n", Value{}, SrcPos{})
 	e.RecordDynBind("n", Value{}, SrcPos{})
 	e.NoteDefRead("id", "n")
-	e.NoteFrozenRead("n")
+	e.NoteFrozenRead("n", FrozenBakeValue)
 	e.NotifyNameRebound("n")
 	if got := e.RegisterLocal("id"); got != -1 {
 		t.Fatalf("inactive RegisterLocal must be -1, got %d", got)
