@@ -2337,14 +2337,7 @@ func (e *Engine) stepWordVal(val Value, w WordInfo) error {
 	// node bakes its identity unconditionally, a value bakes only when it is
 	// concrete — so `/v` and the ordinary spelling cannot answer the freeze
 	// question two ways.
-	if e.Registry.analysisActive() && ModuleScopeBinding(e.Registry, w.Name) {
-		switch {
-		case IsBareTypeNode(v):
-			e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeType)
-		case IsConcrete(v):
-			e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeValue)
-		}
-	}
+	e.noteBindingRead(w.Name, v)
 	v.pos = val.pos
 	// A reference denotes DATA. When a parked forward in this paren
 	// scope is still collecting, deliver the reference through the
@@ -2524,10 +2517,8 @@ func (e *Engine) stepWord(val Value) error {
 			// necessary nor sufficient; here the bake is unconditional — a
 			// bare type node reaching resolveOperand has exactly one arm —
 			// so the real decision is available and the proxy is not needed.
-			if e.Registry.analysisActive() && ModuleScopeBinding(e.Registry, w.Name) {
-				e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeType)
-			}
 			push := NewTypeLiteral(entry.TypeDef)
+			e.noteBindingRead(w.Name, push)
 			push.pos = val.pos
 			e.Tape.Set(e.Pointer, push)
 			return e.stepLiteral()
@@ -2591,9 +2582,7 @@ func (e *Engine) stepWord(val Value) error {
 				// an open fn/closure unit bakes into the unit across calls, where
 				// the interpreter re-resolves the name per call — a later module
 				// rebind would diverge. Note it so NotifyNameRebound refuses.
-				if IsConcrete(top) && ModuleScopeBinding(e.Registry, w.Name) {
-					e.Registry.analysisRecorder().NoteFrozenRead(w.Name, FrozenBakeValue)
-				}
+				e.noteBindingRead(w.Name, top)
 			}
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated

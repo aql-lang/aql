@@ -39,6 +39,14 @@ func InstallFrameBinding(r *Registry, name string, body Value) {
 }
 
 func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
+	// The rebind notification, seated with the operation rather than with the
+	// `def` word (core/go/rebind_notify.go). `!shadow` is the same test every
+	// twin note below makes: a SHADOWING install is InstallFrameBinding's —
+	// a param or a capture, scoped to one call — not a rebind of the
+	// module-scope name a unit could have baked.
+	if !shadow {
+		noteRebind(r, name)
+	}
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 
 	// Attribute a body-local def to its enclosing fn for the dynamic-scope
@@ -248,6 +256,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 // entries by Registry.Lookup → aggregateDispatch, so no explicit re-register
 // is needed.
 func UninstallDef(r *Registry, name string) {
+	noteRebind(r, name)
 	r.Defs.Pop(name)
 	// Recorded AFTER the pop so Depth is the post-transition depth, which is
 	// what a twin has to reproduce (§6.5).
@@ -745,6 +754,10 @@ func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) 
 // the entry is sufficient — the dispatch table is rebuilt on demand by
 // Registry.Lookup → aggregateDispatch from whatever entries remain.
 func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
+	// Unconditional, and deliberately WIDER than the twin notes below: those
+	// fire only when a removal COMMITS, so a sig-undef whose every match is
+	// locked would notify nothing while still being a rebind the user wrote.
+	noteRebind(r, name)
 	stack := r.Defs.Stack(name)
 	if len(stack) == 0 {
 		return

@@ -780,13 +780,15 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 //
 // It is a FUNCTION, and every RecordUserCall site calls it, because the bug
 // this closes was caused by exactly the opposite arrangement one layer down:
-// `NotifyNameRebound` is invoked from individual def/undef HANDLERS, so each
-// binder that returned early skipped it silently. The first cut of this note
-// repeated that mistake — it sat inline at recordUserCallOrApply and missed
-// the ZERO-OUTPUT site below, which kept `def g fn [[] [] [print 1]]
-// def f fn [[] [] [g]]  f  def g fn [[] [] [print 99]]  f` printing `1 1`
-// against the interpreter's `1 99`. If a third RecordUserCall site appears,
-// it calls this.
+// `NotifyNameRebound` used to be invoked from individual def/undef HANDLERS,
+// so each binder that returned early skipped it silently. (Both halves are
+// funnelled now — core/go/rebind_notify.go, gated by
+// `TestBindingOpsNotifyRebind`.) The first cut of this note repeated that
+// mistake before the funnels existed: it sat inline at recordUserCallOrApply
+// and missed the ZERO-OUTPUT site below, which kept
+// `def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f
+// def g fn [[] [] [print 99]]  f` printing `1 1` against the interpreter's
+// `1 99`. If a third RecordUserCall site appears, it calls this.
 //
 // The registry is the DISPATCH's own (r), never the recorder's es.reg: es.reg
 // is the last registry BindRegistry saw, which after a call into a

@@ -1433,12 +1433,13 @@ simple-value substitution branch (the type-literal arm returns first), so
 `NoteFrozenRead` was never even attempted for it; a fn name falls through to
 `Lookup` and dispatches, so it was never attempted there either.
 
-**So the discipline was never wrong; it was never asked.** Write that down,
-because the next binder added to this language inherits it: a rebind
+**So the discipline was never wrong; it was never asked.** A rebind
 notification attached to handlers is a notification each new handler can
-silently forget, and each forgetting is a miscompile generator. The durable
-fix is to seat it on the binding store; that is a separate change and is not
-made here.
+silently forget, and each forgetting is a miscompile generator.
+
+**The durable fix LANDED — see "The funnels" below.** Both halves are seated
+now: the notification on core's binding OPERATIONS, the read note on one
+classifier, and `core/go/rebind_funnel_test.go` fails if either is bypassed.
 
 ### What landed
 
@@ -1595,6 +1596,58 @@ for, never remove one the latch already made. The `if`-arm rebind, which fires
 today with `suspended == 0`, is unaffected.
 
 Measured cost: the corpus refusal ceiling stays at **0** with both arms.
+
+### The funnels: the structural fix (2026-09-04)
+
+Six miscompiles in this stage, and every one of them the same shape — a binder
+or a read path that never reached the discipline. Fixing the six instances left
+the CLASS open, so both halves are now seated on funnels
+(`core/go/rebind_notify.go`).
+
+**The notification** moved off basic's `def`/`undef` word handlers onto core's
+binding OPERATIONS: `installDef` (under `!shadow`), `UninstallDef`,
+`InstallType`, `UninstallFnSigs`, and a new `UninstallType` — the capitalised
+undef, which had been written inline in the handler and was thereby the one
+unbinder notifying nothing at all. A word library cannot bind a name without
+calling one of these, so it cannot skip the notification by construction.
+
+**Two floors were rejected, and the reasons are the design:**
+
+- **`DefTable.Push` and friends** are too low. They carry frame bindings, guard
+  narrowings, generic parameter installs and carrier joins as well as user
+  rebinds, so a narrowing push at module scope (`if (k is Integer) […]`) would
+  refuse every program with a frozen `k`. The SEMANTIC binding operation is the
+  level at which "the user rebound this name" is actually true.
+- **`NoteBindTransition`** looks like a free ride — it is already seated at
+  exactly these sites — but its population is NARROWER in two directions that
+  each lose a refusal. It suppresses on `RolledBackBodyDepth > 0`, which drops
+  the `if`-arm rebind the latch refuses today; and `UninstallFnSigs` notes only
+  when a removal COMMITS, so a sig-undef whose every match is locked would stop
+  notifying. The two answer different questions — "what must the VM replay"
+  versus "what might have gone stale in the bytecode" — and the second is
+  deliberately the wider set.
+
+The funnel makes no scope decision: every call is unconditional and
+`rebindReachesModuleScope` decides. Keeping it dumb is what lets a new binding
+operation join without re-deriving that reasoning.
+
+**The read note** moved off the three resolution branches onto one classifier,
+`Engine.noteBindingRead`. The branches had each carried their own copy of the
+decision and the copies disagreed — the type arm noted unconditionally, the
+value arm required `IsConcrete`, and the `/v` arm noted nothing — which is
+precisely how `T/v` and `k/v` escaped. Now every path hands the classifier the
+RESOLVED value and gets the same answer by construction.
+
+**`core/go/rebind_funnel_test.go` is the part that closes the class.** It
+drives every binding operation and every read path and fails, with a message
+naming the funnel, if one stops going through it. Verified non-vacuous both
+ways: removing the `InstallType` seat fails the operation row, removing the
+`/v` routing fails both read rows. The frame-binding negative is there too —
+it is the row that fails if anyone "simplifies" the funnel down onto
+`DefTable.Push`.
+
+Cost: the corpus refusal ceiling is unmoved at **0**, and every end-to-end pin
+keeps its exact refusal text, so the firing set is unchanged.
 
 ### Two design claims this corrects
 
