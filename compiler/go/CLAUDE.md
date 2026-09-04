@@ -21,8 +21,10 @@ Three rules specific to this module:
 
 - **No upward imports.** The chain is core -> check -> compiler ->
   eng, and compiler requires check and core ONLY. Never name an eng
-  symbol here: eng reaches the compiler through its generated facade
-  and through core's compiled-runtime hooks, never the other way.
+  symbol here: eng imports the compiler directly and reaches it
+  through core's compiled-runtime hooks, never the other way. (This
+  used to say "through its generated facade"; see the bullet below —
+  that facade is gone.)
 - **The compiler is the ACTIVE half of its seams.** It declares no
   slot table of its own; it installs into the ones below it, all at
   init: `check.DispatchBraid` (S3) from `dispatch_hooks_install.go`,
