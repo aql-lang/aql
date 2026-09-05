@@ -2687,6 +2687,66 @@ pinned and lost their coverage pragmas). The corpus differential is clean
 and no corpus row refuses (the deopt adds no refusal site;
 `runIslandResolved` is the interp-entry census's existing site).
 
+## A code body's read of a captured fn-holding local deopts too (2026-09-05, the tenth increment)
+
+**What was left.** The ninth increment skipped closure units, so a `[…]`
+body a native runs inside the caller's frame (each, do, fold, for) still
+pushed the slot for a bare read of the enclosing fn's body-local: `def j
+(m get "f")  [1] each [j]` was `[fn]` for `[42]`, `[1 2] each [j]` over a
+1-arg lambda `[fn (Integer) fn (Integer)]` for `[3 6]`, `do [j]` `fn` for
+42, `do [j typeof]` Function for Integer (default lane, exit 0).
+
+**The mechanism.** `compileClosureBody` seats a non-escaping code body's
+tokens on its unit (`SetUnitBody`; a lambda value — `fnval` — a stored fn
+and a spawned body escape the frame their bindings live in and seat
+none). `planDeopts` then plans a closure unit's points as a fn unit's,
+with one difference: a CAPTURED value's home is its capture slot
+(`deoptPoint.slot`; `deoptConsumer` matches the consumer by that slot),
+so the atPush test keys on the slot and an at-event test names it
+directly. The island reads the captured names through the registry, so
+the ENCLOSING unit must bind them: at the closure's finish
+`seedParentDeopt` reads the parent's root frame — still open, at
+`fnUnitRec.rootFrame` — and admits each captured name the tail spells
+when the parent binds it from a re-pushable source (a root-level def of a
+literal or of a single-output call, or a param); a def of the name inside
+one of the parent's nested open frames (the arm the closure sits in)
+declines. The parent then keeps that environment even when it plans no
+points of its own (`planDeoptsEnv`) and, should a later event make a
+seeded name unbindable, drops its children's points with it
+(`dropDeoptChildren`). The code body runs inside the parent's frame
+(each, do call it there), so the parent's `BIND_DYN_SCOPE` entries are
+live when the closure's island runs; the closure's own RET follows the
+island (the nested run's top RET).
+
+**Measured** (TestBodyLocalDeoptParity, eleven more rows): `[1] each [j]`
+[42], `[1 2] each [j]` [3 6], plain data `[5]` and `[6 7]`, `do [j]` 42,
+`do [j typeof]` Integer, `do [(j typeof)]` Integer, `do [def y 1  j]` 42,
+`if true [do [j]] [0]` 42, `[1] each [j] size` 1, `5  do [j]  add` 47.
+`for 2 [j]` and `[1 2] fold [j] 0` agree on the value and the message and
+differ only in the return-contract error's position (1:24 against the
+call site) — NUR118, pre-existing, the same on their plain-data twins.
+`[1] each [(j typeof)]` and `[1 2] fold [j add] 0` refuse before the
+point is planned ("result above a literal (Stage 3)", pre-existing) and a
+lambda body over the local (`[1] each [x:Integer => [j]]`) refuses at the
+code-body word — sound fallbacks both. Compiler pins:
+TestPlanDeoptsCaptureSeedsParent (the capture point, the seeded parent,
+the dropped children, a rebind of the name in one of the parent's OPEN
+nested frames — the arm the closure sits in, whose bind is popped with
+it — and the top-level body with no enclosing unit),
+TestPlanDeoptsChildSeededNames (a unit that plans points of its own and
+carries a child's seeded names binds the union) and
+TestSeatUnitDeoptsUnpromoted (an at-push point with neither a capture
+slot nor a promoted source seats nothing, and a diverging body seats no
+points at all); the lambda and stored-fn units keep their slot push
+(TestPlanDeoptsDeclines).
+The corpus differential is clean and no corpus row refuses.
+
+**Still open on NUR123.** `j/v` renders `fn` for the interpreter's `fn j`
+(NUR119); a point whose statement the compiled stack cannot match
+declines (`5  j typeof`, `x {a: j} size add`); a body-local read in a
+lambda value's body (`([] => [j])`) escapes the frame and keeps its slot
+push.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

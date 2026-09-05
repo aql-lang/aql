@@ -314,6 +314,19 @@ func TestBodyLocalDeoptParity(t *testing.T) {
 		{hM + `[def y (m get "g")  def j (m get "f")  j typeof]]  h {f: ([] => [42]) g: 1}`, "Integer"},
 		{hM + `[def y (m get "g")  def j (m get "f")  j typeof]]  h {f: 5 g: 1}`, "Integer"},
 		{hM + `[def j (m get "f")  def y 5  {a: j}  drop  y add 5]]  h {f: ([] => [42])}`, "10"},
+		// a CODE BODY's read of the captured local (the tenth increment):
+		// the closure unit deopts on its capture slot, the parent binds j
+		{hM + `[def j (m get "f")  [1] each [j]]]  h {f: ([] => [42])}`, "[42] — was [fn]"},
+		{hM + `[def j (m get "f")  [1 2] each [j]]]  h {f: (z:Integer => [mul 3 z])}`, "[3 6] — was [fn (Integer) fn (Integer)]"},
+		{hM + `[def j (m get "f")  [1] each [j]]]  h {f: 5}`, "[5]"},
+		{hM + `[def j (m get "f")  [1 2] each [j add]]]  h {f: 5}`, "[6 7]"},
+		{hM + `[def j (m get "f")  do [j]]]  h {f: ([] => [42])}`, "42 — was fn"},
+		{hM + `[def j (m get "f")  do [j typeof]]]  h {f: ([] => [42])}`, "Integer"},
+		{hM + `[def j (m get "f")  do [(j typeof)]]]  h {f: ([] => [42])}`, "Integer"},
+		{hM + `[def j (m get "f")  do [def y 1  j]]]  h {f: ([] => [42])}`, "42"},
+		{hM + `[def j (m get "f")  if true [do [j]] [0]]]  h {f: ([] => [42])}`, "42"},
+		{hM + `[def j (m get "f")  [1] each [j] size]]  h {f: ([] => [42])}`, "1"},
+		{hM + `[def j (m get "f")  5  do [j]  add]]  h {f: ([] => [42])}`, "47"},
 	}
 	for _, c := range rows {
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)

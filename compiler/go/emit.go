@@ -1258,6 +1258,13 @@ type fnUnitRec struct {
 	deopts     []deoptPoint
 	deoptEnv   bool
 	deoptNames map[string]bool
+	// rootFrame is the index in EmitState.frames of the unit's root frame
+	// while it is open (a closure's finish reads its parent's events there
+	// to seed the parent's binds — seedParentDeopt); deoptChildren are the
+	// closure units whose islands read this unit's bindings, dropped with
+	// their points when the unit cannot bind them after all.
+	rootFrame     int
+	deoptChildren []int
 }
 
 // deoptPoint is one gradual word read the unit lowers as a DEOPT
@@ -1267,6 +1274,7 @@ type fnUnitRec struct {
 // before any of the statement's effects) and that statement's Body token.
 type deoptPoint struct {
 	seq   int
+	slot  int // a CAPTURE's frame slot (the value's home in a closure unit); -1 for a producer (seq)
 	name  string
 	pos   core.SrcPos
 	start core.SrcPos
@@ -4592,6 +4600,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 		u.capID[cb.Value.ID] = true
 	}
 	resume := es.beginFragment()
+	rec.rootFrame = len(es.frames) - 1
 	es.fnArm = true
 	finish = func(bodyStk []core.Value) {
 		resume()
@@ -9760,15 +9769,21 @@ func seatUnitDeopts(flw *lowerer, rec *fnUnitRec, cf *CompiledFn, diverged bool)
 			flw.deopts = append(flw.deopts, d)
 			continue
 		}
-		// Tested where the read's value is pushed: the value is the def's
-		// promoted source (a deopt unit promotes the sources its islands
-		// read), so its slot names the point.
-		if slot, ok := rec.promoted[d.seq]; ok {
-			if flw.deoptAtSlot == nil {
-				flw.deoptAtSlot = map[int]deoptPoint{}
+		// Tested where the read's value is pushed: a capture's own slot, or
+		// the def's promoted source (a deopt unit promotes the sources its
+		// islands read).
+		slot := d.slot
+		if slot < 0 {
+			s, ok := rec.promoted[d.seq]
+			if !ok {
+				continue
 			}
-			flw.deoptAtSlot[slot] = d
+			slot = s
 		}
+		if flw.deoptAtSlot == nil {
+			flw.deoptAtSlot = map[int]deoptPoint{}
+		}
+		flw.deoptAtSlot[slot] = d
 	}
 }
 
@@ -9799,31 +9814,44 @@ func stampDeoptRet(cf *CompiledFn, retPC int) {
 // no effect of the statement runs twice (deoptPointFor). A start that is no
 // Body token, a unit with no body and a closure unit keep the slot push.
 func (es *EmitState) planDeopts(u *emitUnit, rec *fnUnitRec) {
-	if rec.closure || len(rec.body) == 0 || len(rec.wordReadNames) == 0 {
+	// A lambda value or a stored / spawned body escapes the frame its
+	// bindings live in; a code body a native runs in place (each, do, fold,
+	// for) does not, and plans like a fn unit.
+	if (rec.closure && (rec.lambdaUnit || rec.storedRefUnit)) || len(rec.body) == 0 || len(rec.wordReadNames) == 0 {
+		es.planDeoptsEnv(u, rec)
 		return
 	}
 	for id, name := range rec.wordReadNames {
 		if rec.wordReads[id] > 0 || rec.wordReadCredit[id] > 0 {
 			continue
 		}
-		pr, produced := es.producedBy[id]
-		if !produced || u.enclosingBindIDs[id] {
-			continue
+		seq, slot := -1, -1
+		if u.capID[id] {
+			slot = u.localByID[id]
+		} else {
+			pr, produced := es.producedBy[id]
+			if !produced || u.enclosingBindIDs[id] {
+				continue
+			}
+			seq = pr.seq
 		}
-		if d, ok := es.deoptPointFor(u, rec, id, pr.seq, name, rec.wordReadFirst[id]); ok {
+		if d, ok := es.deoptPointFor(u, rec, id, seq, slot, name, rec.wordReadFirst[id]); ok {
 			rec.deopts = append(rec.deopts, d)
 		}
 	}
 	if len(rec.deopts) == 0 {
+		es.planDeoptsEnv(u, rec)
 		return
 	}
 	// The island reads the names the body's tail spells (from the earliest
 	// statement on, code bodies and literals included): those params and
-	// defs must be registry-visible at the deopt. A def the island reads
-	// whose source has no re-pushable home — a fragment result, a variadic
-	// or multi-output producer, a def made inside a branch or loop body —
-	// would refuse the whole unit at its bind (lowerDynBind), so the points
-	// decline instead and the reads keep their slot push.
+	// defs must be registry-visible at the deopt — this unit's own, or for
+	// a closure's captures the enclosing unit's (seedParentDeopt). A def the
+	// island reads whose source has no re-pushable home — a fragment
+	// result, a variadic or multi-output producer, a def made inside a
+	// branch or loop body — would refuse the whole unit at its bind
+	// (lowerDynBind), so the points decline instead and the reads keep
+	// their slot push.
 	minTok := len(rec.body)
 	for _, d := range rec.deopts {
 		if d.token < minTok {
@@ -9832,8 +9860,12 @@ func (es *EmitState) planDeopts(u *emitUnit, rec *fnUnitRec) {
 	}
 	names := map[string]bool{}
 	collectWordNames(rec.body[minTok:], names)
-	if !es.deoptDefsBindable(rec, names) {
+	for n := range rec.deoptNames {
+		names[n] = true
+	}
+	if !es.deoptDefsBindable(rec.frag.events, names) || (rec.closure && !es.seedParentDeopt(rec, names)) {
 		rec.deopts = nil
+		es.dropDeoptChildren(rec)
 		return
 	}
 	rec.deoptEnv = true
@@ -9841,6 +9873,77 @@ func (es *EmitState) planDeopts(u *emitUnit, rec *fnUnitRec) {
 	u.deoptEnv = true
 	u.deoptNames = names
 	sort.Slice(rec.deopts, func(i, j int) bool { return posAfter(rec.deopts[j].start, rec.deopts[i].start) })
+}
+
+// planDeoptsEnv keeps the environment a unit's closure children seeded on
+// it (seedParentDeopt) when the unit plans no points of its own — the
+// children's islands read its bindings — or drops the children's points
+// when the unit cannot bind the names after all (a def of one made inside
+// a later branch or loop body).
+func (es *EmitState) planDeoptsEnv(u *emitUnit, rec *fnUnitRec) {
+	if len(rec.deoptNames) == 0 {
+		return
+	}
+	if !es.deoptDefsBindable(rec.frag.events, rec.deoptNames) {
+		es.dropDeoptChildren(rec)
+		return
+	}
+	rec.deoptEnv = true
+	u.deoptEnv = true
+	u.deoptNames = rec.deoptNames
+}
+
+// dropDeoptChildren clears the points of every closure unit whose islands
+// read this unit's bindings, with the unit's own seeded names.
+func (es *EmitState) dropDeoptChildren(rec *fnUnitRec) {
+	for _, c := range rec.deoptChildren {
+		child := es.fnRecs[c]
+		child.deopts, child.deoptEnv, child.deoptNames = nil, false, nil
+	}
+	rec.deoptNames, rec.deoptChildren = nil, nil
+}
+
+// seedParentDeopt asks the enclosing unit to bind, registry-visibly, the
+// CAPTURED names a closure's islands spell: a code body runs inside the
+// enclosing frame (each, do, fold, for call it there), so the parent's
+// binds are live when the island runs. The parent's root frame is still
+// open — its events so far decide whether each name can bind (a root-level
+// def of a literal or a single-output call, or a param); a def of the
+// name inside one of the parent's open nested frames (the arm the closure
+// sits in) cannot. Reports false when the closure has no enclosing unit
+// or a captured name cannot be bound.
+func (es *EmitState) seedParentDeopt(rec *fnUnitRec, names map[string]bool) bool {
+	captured := map[string]bool{}
+	for i, n := range rec.locals {
+		if i >= rec.nParams && n != "" && names[n] {
+			captured[n] = true
+		}
+	}
+	if len(captured) == 0 {
+		return true
+	}
+	if len(es.openUnitRecs) < 2 {
+		return false
+	}
+	parent := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-2]]
+	if parent.rootFrame < 0 || parent.rootFrame >= len(es.frames) || !es.deoptDefsBindable(es.frames[parent.rootFrame], captured) {
+		return false
+	}
+	for f := parent.rootFrame + 1; f < len(es.frames); f++ {
+		for i := range es.frames[f] {
+			if ev := &es.frames[f][i]; ev.kind == evDynBind && ev.dyn != nil && captured[ev.dyn.name] {
+				return false
+			}
+		}
+	}
+	if parent.deoptNames == nil {
+		parent.deoptNames = map[string]bool{}
+	}
+	for n := range captured {
+		parent.deoptNames[n] = true
+	}
+	parent.deoptChildren = append(parent.deoptChildren, es.openUnitRecs[len(es.openUnitRecs)-1])
+	return true
 }
 
 // collectWordNames adds every word name spelled in tokens — inside lists,
@@ -9878,8 +9981,7 @@ func collectWordNames(tokens []core.Value, names map[string]bool) {
 // single-output call's result that no fragment owns; a def bound inside a
 // branch or loop body, from a fragment result, a variadic or a
 // multi-output producer, or of a FN value, cannot.
-func (es *EmitState) deoptDefsBindable(rec *fnUnitRec, names map[string]bool) bool {
-	events := rec.frag.events
+func (es *EmitState) deoptDefsBindable(events []EmitEvent, names map[string]bool) bool {
 	bySeq := map[int]*EmitEvent{}
 	for i := range events {
 		bySeq[events[i].seq] = &events[i]
@@ -9948,13 +10050,15 @@ func (es *EmitState) deoptDefsBindable(rec *fnUnitRec, names map[string]bool) bo
 // consumptions there, or an earlier event's result no def consumed — is a
 // value the compiled stack still lacks, so such a point is declined and
 // the read keeps its slot push (best effort). The def binding the read's
-// own name is its binding, not a consumer.
-func (es *EmitState) deoptPointFor(u *emitUnit, rec *fnUnitRec, id string, seq int, name string, first core.SrcPos) (deoptPoint, bool) {
-	ci, direct := es.deoptConsumer(rec, id, seq)
+// own name is its binding, not a consumer. A closure unit's CAPTURED value
+// lives in its capture slot (slot >= 0) rather than at a producer (seq).
+func (es *EmitState) deoptPointFor(u *emitUnit, rec *fnUnitRec, id string, seq, slot int, name string, first core.SrcPos) (deoptPoint, bool) {
+	ci, direct := es.deoptConsumer(rec, id, seq, slot)
 	d, ok := es.deoptStatementStart(rec, seq, name, first, ci, direct)
 	if !ok {
 		return d, false
 	}
+	d.slot = slot
 	if es.deoptDeferred(u, rec, &d, ci) {
 		return d, false
 	}
@@ -9967,8 +10071,11 @@ func (es *EmitState) deoptPointFor(u *emitUnit, rec *fnUnitRec, id string, seq i
 // or holds, that read: `def k j`, `def k (j)`; the def binding the value
 // straight from its producer, `def j (m get "f")`, is its binding, not a
 // consumer). -1 when nothing consumes it.
-func (es *EmitState) deoptConsumer(rec *fnUnitRec, id string, seq int) (int, bool) {
+func (es *EmitState) deoptConsumer(rec *fnUnitRec, id string, seq, slot int) (int, bool) {
 	events := rec.frag.events
+	is := func(op EmitOperand) bool {
+		return (op.kind == opEvent && seq >= 0 && op.idx == seq) || (op.kind == opLocal && slot >= 0 && op.idx == slot)
+	}
 	readIn := func(t int) bool {
 		for _, q := range rec.localReads[id] {
 			if bodyTokenContaining(rec.body, q) == t {
@@ -9980,18 +10087,18 @@ func (es *EmitState) deoptConsumer(rec *fnUnitRec, id string, seq int) (int, boo
 	for i := range events {
 		ev := &events[i]
 		uses, direct := false, false
-		if ev.kind == evDynBind && ev.dyn != nil && ev.dyn.srcSeq == seq {
+		if ev.kind == evDynBind && ev.dyn != nil && ((seq >= 0 && ev.dyn.srcSeq == seq) || is(ev.dyn.src)) {
 			if t := bodyTokenAt(rec.body, ev.dyn.pos); t >= 0 && t+1 < len(rec.body) && readIn(t+1) {
 				uses = true
 			}
 		}
 		forEachOperand(ev, func(op EmitOperand) {
-			if op.kind == opEvent && op.idx == seq {
+			if is(op) {
 				uses, direct = true, true
 			}
 		})
 		forEachFragmentOperand(ev, func(op EmitOperand) {
-			if op.kind == opEvent && op.idx == seq {
+			if is(op) {
 				uses = true
 			}
 		})
@@ -10012,7 +10119,7 @@ func (es *EmitState) deoptStatementStart(rec *fnUnitRec, seq int, name string, f
 	events := rec.frag.events
 	readTok := bodyTokenAt(rec.body, first)
 	contTok := bodyTokenContaining(rec.body, first)
-	d := deoptPoint{seq: seq, name: name, pos: first, start: first}
+	d := deoptPoint{seq: seq, slot: -1, name: name, pos: first, start: first}
 	switch {
 	case ci < 0:
 		if readTok < 0 {
@@ -10254,7 +10361,7 @@ func (es *EmitState) deoptDeferred(u *emitUnit, rec *fnUnitRec, d *deoptPoint, c
 	if ci >= 0 && !d.atPush {
 		unsafe := false
 		forEachOperand(&events[ci], func(op EmitOperand) {
-			if !(op.kind == opEvent && op.idx == d.seq) && deferred(op) {
+			if !((op.kind == opEvent && op.idx == d.seq) || (op.kind == opLocal && op.idx == d.slot)) && deferred(op) {
 				unsafe = true
 			}
 		})

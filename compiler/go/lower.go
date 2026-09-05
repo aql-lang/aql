@@ -613,7 +613,9 @@ func (lw *lowerer) emitDeoptsBefore(p core.SrcPos) {
 			continue
 		}
 		spec := DeoptSpec{Name: d.name, Pos: d.pos, Slot: -1, Depth: -1, Token: d.token, RetPC: -1}
-		if slot, ok := lw.promoted[d.seq]; ok {
+		if d.slot >= 0 {
+			spec.Slot = d.slot
+		} else if slot, ok := lw.promoted[d.seq]; ok {
 			spec.Slot = slot
 		} else {
 			for i := len(lw.vm) - 1; i >= 0; i-- {

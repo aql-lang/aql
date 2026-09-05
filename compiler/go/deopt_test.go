@@ -185,10 +185,23 @@ func TestPlanDeoptsDeclines(t *testing.T) {
 	}
 	es, u, rec, _ = deoptUnit(t, []core.Value{deoptTok("j", 43), deoptTok("typeof", 45)}, 43,
 		EmitEvent{seq: 3, kind: evCall, call: emitCall{word: "typeof", nout: 1, pos: deoptAt(45), ops: []EmitOperand{EventOperand(1, 0)}}})
-	rec.closure = true
+	// A lambda value's unit and a stored fn's escape the frame their
+	// bindings live in: no points. A code body's unit (each, do) plans
+	// like a fn unit.
+	rec.closure, rec.lambdaUnit = true, true
 	es.planDeopts(u, rec)
 	if len(rec.deopts) != 0 {
-		t.Error("a closure unit keeps its slot push")
+		t.Error("a lambda unit keeps its slot push")
+	}
+	rec.lambdaUnit, rec.storedRefUnit = false, true
+	es.planDeopts(u, rec)
+	if len(rec.deopts) != 0 {
+		t.Error("a stored fn's unit keeps its slot push")
+	}
+	rec.storedRefUnit = false
+	es.planDeopts(u, rec)
+	if len(rec.deopts) != 1 {
+		t.Errorf("a code body's unit plans like a fn unit: %+v", rec.deopts)
 	}
 }
 
@@ -480,7 +493,7 @@ func TestEmitDeoptsBeforeStackHome(t *testing.T) {
 	cf := &CompiledFn{}
 	lw := &lowerer{es: NewEmitState(), p: &Program{}, code: &cf.Code, debug: &cf.Debug, deoptTable: &cf.Deopts,
 		vm:     []vmSlot{{seq: 7, idx: 0}, {seq: 8, idx: 0}},
-		deopts: []deoptPoint{{seq: 7, name: "j", start: deoptAt(3), token: 1}, {seq: 9, name: "k", start: deoptAt(5), token: 2}, {seq: 7, name: "j", start: deoptAt(9), token: 4}}}
+		deopts: []deoptPoint{{seq: 7, slot: -1, name: "j", start: deoptAt(3), token: 1}, {seq: 9, slot: -1, name: "k", start: deoptAt(5), token: 2}, {seq: 7, slot: -1, name: "j", start: deoptAt(9), token: 4}}}
 	lw.emitDeoptsBefore(deoptAt(6))
 	if len(cf.Deopts) != 1 || cf.Deopts[0].Slot != -1 || cf.Deopts[0].Depth != 1 || cf.Deopts[0].Token != 1 || len(cf.Code) != 1 || cf.Code[0].Op != OpDeoptIfFn {
 		t.Errorf("a stack-resident value tests at its depth: %+v %+v", cf.Deopts, cf.Code)
@@ -510,5 +523,139 @@ func TestPromoteLateDynBindDeoptNames(t *testing.T) {
 	}
 	if _, ok := rec.promoted[4]; ok {
 		t.Errorf("a def the island never reads keeps its stack home: %+v", rec.promoted)
+	}
+}
+
+// TestPlanDeoptsCaptureSeedsParent pins the closure arm (the tenth
+// increment): a code body's read of a CAPTURED fn-holding local is a point
+// on the capture's slot, and the enclosing unit is asked to bind the name
+// (seedParentDeopt) — declined when the closure has no enclosing unit, or
+// when the parent's root frame binds the name from no re-pushable source,
+// or when a nested open frame of the parent rebinds it.
+func TestPlanDeoptsCaptureSeedsParent(t *testing.T) {
+	es := NewEmitState()
+	m := core.NewCarrier(core.TMap)
+	parentUnit, _, ok := es.StartFnCompile("k", "h", nil, []core.Value{m}, []*core.Type{core.TAny}, []string{"m"}, nil, false, core.SrcPos{})
+	if !ok {
+		t.Fatal("parent unit")
+	}
+	parent := es.fnRecs[parentUnit]
+	j := core.NewDynamicCarrier(core.TAny)
+	es.producedBy[j.ID] = producer{seq: 1}
+	// The parent's root frame so far: `def j (m get "f")`.
+	es.frames[parent.rootFrame] = []EmitEvent{
+		{seq: 1, kind: evCall, call: emitCall{word: "get", nout: 1, pos: deoptAt(33), ops: []EmitOperand{localOperand(0)}}},
+		{seq: 2, kind: evDynBind, dyn: &emitDynBind{name: "j", srcSeq: 1, pos: deoptAt(28)}},
+	}
+	// The closure unit `[j typeof]` capturing j.
+	cap := core.CapturedBinding{Name: "j", Value: j}
+	childUnit, _, ok := es.StartFnCompile("c", "each$body", nil, nil, nil, nil, []core.CapturedBinding{cap}, false, core.SrcPos{})
+	if !ok {
+		t.Fatal("closure unit")
+	}
+	u := es.units[len(es.units)-1]
+	rec := es.fnRecs[childUnit]
+	rec.closure = true
+	rec.frag = &EmitFragment{events: []EmitEvent{{seq: 5, kind: evCall, call: emitCall{word: "typeof", nout: 1, pos: deoptAt(47), ops: []EmitOperand{localOperand(0)}}}}}
+	es.SetUnitBody(childUnit, []core.Value{deoptTok("j", 45), deoptTok("typeof", 47)})
+	es.NoteWordRead(j, "j", deoptAt(45))
+	es.NoteLocalRead(j.ID, deoptAt(45))
+	es.planDeopts(u, rec)
+	if len(rec.deopts) != 1 || rec.deopts[0].slot != 0 || !rec.deopts[0].atPush || !parent.deoptNames["j"] || len(parent.deoptChildren) != 1 {
+		t.Errorf("a captured read plans on its slot and seeds the parent: %+v parent=%v children=%v", rec.deopts, parent.deoptNames, parent.deoptChildren)
+	}
+	// The parent, planning no points of its own, keeps the seeded env —
+	// and drops the child's points when it cannot bind the name after all
+	// (a variadic source).
+	parent.frag = &EmitFragment{events: es.frames[parent.rootFrame]}
+	pu := es.units[len(es.units)-2]
+	es.planDeopts(pu, parent)
+	if !parent.deoptEnv || !pu.deoptEnv {
+		t.Error("the parent keeps the environment its child seeded")
+	}
+	es.eventInfo[1] = eventFlags{variadicResult: true}
+	parent.deoptEnv, pu.deoptEnv = false, false
+	es.planDeopts(pu, parent)
+	if parent.deoptEnv || len(rec.deopts) != 0 || rec.deoptEnv {
+		t.Errorf("an unbindable name drops the child's points: env=%v child=%+v", parent.deoptEnv, rec.deopts)
+	}
+	// A def of the captured name inside one of the parent's OPEN NESTED
+	// frames (the arm the closure sits in) declines: that bind is popped
+	// with the arm, so the island would read an unbound name.
+	es3 := NewEmitState()
+	m3 := core.NewCarrier(core.TMap)
+	p3, _, _ := es3.StartFnCompile("k", "h", nil, []core.Value{m3}, []*core.Type{core.TAny}, []string{"m"}, nil, false, core.SrcPos{})
+	parent3 := es3.fnRecs[p3]
+	j3 := core.NewDynamicCarrier(core.TAny)
+	es3.producedBy[j3.ID] = producer{seq: 1}
+	es3.frames[parent3.rootFrame] = []EmitEvent{
+		{seq: 1, kind: evCall, call: emitCall{word: "get", nout: 1, pos: deoptAt(33), ops: []EmitOperand{localOperand(0)}}},
+		{seq: 2, kind: evDynBind, dyn: &emitDynBind{name: "j", srcSeq: 1, pos: deoptAt(28)}},
+	}
+	// The arm frame the closure sits in rebinds j.
+	es3.frames = append(es3.frames, []EmitEvent{{seq: 7, kind: evDynBind, dyn: &emitDynBind{name: "j", srcSeq: -1, val: core.NewInteger(1), pos: deoptAt(40)}}})
+	cap3 := core.CapturedBinding{Name: "j", Value: j3}
+	c3, _, _ := es3.StartFnCompile("c", "each$body", nil, nil, nil, nil, []core.CapturedBinding{cap3}, false, core.SrcPos{})
+	u3 := es3.units[len(es3.units)-1]
+	rec3 := es3.fnRecs[c3]
+	rec3.closure = true
+	rec3.frag = &EmitFragment{events: []EmitEvent{{seq: 5, kind: evCall, call: emitCall{word: "typeof", nout: 1, pos: deoptAt(47), ops: []EmitOperand{localOperand(0)}}}}}
+	es3.SetUnitBody(c3, []core.Value{deoptTok("j", 45), deoptTok("typeof", 47)})
+	es3.NoteWordRead(j3, "j", deoptAt(45))
+	es3.NoteLocalRead(j3.ID, deoptAt(45))
+	es3.planDeopts(u3, rec3)
+	if len(rec3.deopts) != 0 || parent3.deoptNames["j"] {
+		t.Errorf("a rebind in the parent's open arm declines: %+v parent=%v", rec3.deopts, parent3.deoptNames)
+	}
+	// No enclosing unit: a top-level code body declines.
+	es2 := NewEmitState()
+	top, _, _ := es2.StartFnCompile("c", "each$body", nil, nil, nil, nil, []core.CapturedBinding{cap}, false, core.SrcPos{})
+	u2 := es2.units[len(es2.units)-1]
+	rec2 := es2.fnRecs[top]
+	rec2.closure = true
+	rec2.frag = &EmitFragment{events: []EmitEvent{{seq: 5, kind: evCall, call: emitCall{word: "typeof", nout: 1, pos: deoptAt(47), ops: []EmitOperand{localOperand(0)}}}}}
+	es2.SetUnitBody(top, []core.Value{deoptTok("j", 45), deoptTok("typeof", 47)})
+	es2.NoteWordRead(j, "j", deoptAt(45))
+	es2.NoteLocalRead(j.ID, deoptAt(45))
+	es2.planDeopts(u2, rec2)
+	if len(rec2.deopts) != 0 {
+		t.Errorf("a code body with no enclosing unit declines: %+v", rec2.deopts)
+	}
+}
+
+// TestPlanDeoptsChildSeededNames pins the unit that plans points of its
+// OWN and also carries names a closure child seeded on it: the island's
+// name set is the union, so the child's captured def binds too.
+func TestPlanDeoptsChildSeededNames(t *testing.T) {
+	es, u, rec, _ := deoptUnit(t, []core.Value{deoptTok("j", 43), deoptTok("typeof", 45)}, 43,
+		deoptCall(3, "typeof", 45, EventOperand(1, 0)))
+	rec.deoptNames = map[string]bool{"seeded": true}
+	es.planDeopts(u, rec)
+	if len(rec.deopts) != 1 || !u.deoptNames["seeded"] || !u.deoptNames["typeof"] {
+		t.Errorf("a child's seeded names join the unit's own: %+v names=%v", rec.deopts, u.deoptNames)
+	}
+}
+
+// TestSeatUnitDeoptsUnpromoted pins the at-push point whose value has
+// neither a capture slot nor a promoted source: nothing to key the test
+// on, so the read keeps its slot push.
+func TestSeatUnitDeoptsUnpromoted(t *testing.T) {
+	cf := &CompiledFn{}
+	flw := &lowerer{}
+	rec := &fnUnitRec{deoptEnv: true, body: []core.Value{deoptTok("j", 1)},
+		deopts: []deoptPoint{{seq: 4, slot: -1, name: "j", atPush: true}}}
+	seatUnitDeopts(flw, rec, cf, false)
+	if len(flw.deoptAtSlot) != 0 || len(flw.deopts) != 0 {
+		t.Errorf("an unpromoted at-push point seats nothing: %+v %+v", flw.deoptAtSlot, flw.deopts)
+	}
+	rec.promoted = map[int]int{4: 2}
+	seatUnitDeopts(flw, rec, cf, false)
+	if d, ok := flw.deoptAtSlot[2]; !ok || d.name != "j" {
+		t.Errorf("a promoted source seats on its slot: %+v", flw.deoptAtSlot)
+	}
+	flw2 := &lowerer{}
+	seatUnitDeopts(flw2, rec, cf, true)
+	if flw2.deoptTable != nil {
+		t.Error("a diverging body seats no points")
 	}
 }
