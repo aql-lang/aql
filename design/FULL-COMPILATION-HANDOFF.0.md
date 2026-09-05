@@ -2442,12 +2442,13 @@ declared every param Any and `g "s"` over a `z:Integer` lambda RAN the
 closure (`[0]`) where the interpreter no-matches. A lambda's unit now
 carries its contract (`lamParamContract`, seated by
 `recordClosureDispatch` and `tryReturnedClosure`), the bridge declares
-it, and a unit without one declines the bridge rather than guess. Two things stay open on
-NUR123's record: the GRADUAL read consumed outside the residual (`[[k:Any]
-[Any][k typeof]]  h ([] => [42])` is Integer interpreted, Function
-compiled — the faithful fix is the same word dispatch at the READ site
-under a runtime "is it a fn" test, a per-read op rather than the residual
-replay). A NOTES-only difference in the no-match error turned out to be
+it, and a unit without one declines the bridge rather than guess. One thing stays open on
+NUR123's record: the GRADUAL read the pass never types as a fn (the next
+section re-measures it: a body-local bound to a container element, `def j
+(m get "f")  j` is 42 interpreted and `fn` compiled, while a gradual
+PARAM's read refuses — the faithful fix is the same word dispatch at the
+READ site under a runtime "is it a fn" test, a per-read op rather than the
+residual replay). A NOTES-only difference in the no-match error turned out to be
 an interpreter diagnostic wart: `sigError`'s written-tuple walk did not
 stop at engine markers, so a no-match at a body's end listed the frame's
 DefCleanup marker as the argument the caller supplied (`… and __dc (a
@@ -2469,16 +2470,16 @@ own pc, the VM reads the current unit's — `closureRetAt`); five in-unit
 rows joined `lang/go/lambda_return_count_test.go`. NUR120's number stays
 retired: same defect, same fix line, pinned in the same file.
 
-**Two more findings, recorded, not fixed.** NUR124: a stack-shuffle word
+**Two more findings, recorded.** NUR124 (not fixed): a stack-shuffle word
 that moves a produced closure to the top RETURNS it, and the interpreter
 re-steps a native's returned fn where it lands — `[(mk 3)] each [5 swap]`
 is `[15]` interpreted and `[fn (Integer)]` compiled, `[5 over]` 45 against
 `fn`, `[5 swap drop]` each_error against `[5]` (the top-level spellings
 refuse; the code-body one over a produced closure compiles through the
-shuffle fold). NUR125: the check pass PANICS (recovered as
+shuffle fold). NUR125: the check pass PANICKED (recovered as
 internal_error) on `def h fn [[k:Any][Any][{a: k}]]  h ([] => [42])` — a
 map literal over a gradual param holding a fn; both lanes, pre-existing at
-89822d8.
+89822d8; resolved in the next section.
 
 **Blocker (a), re-sized again.** The lambda-unit arm still waits (task:
 the returned closure's RetSpec on `tryReturnedClosure`'s operand, then
@@ -2489,6 +2490,49 @@ innermost unit when the capture is one of its locals — the lambda unit
 needs only the replay arming the user-fn path now has (`!rec.closure` is
 the gate to widen, with the count discipline of a user fn), and NUR122's
 bare-spelling widening is moot because the replay dispatches by name.
+
+## The word path's nil-handler guard (NUR125), and NUR123's leftover re-measured (2026-09-05)
+
+**NUR125, resolved; number retired.** The panic was a nil function call in
+`execMatch`. The check pass's `RunFnBodyOnce` (check/go/carrier.go) binds a
+named parameter by pushing the ARGUMENT onto `Defs` — a concrete lambda
+value included, so the binding holds a FnDefInfo that no `installDef` ever
+gave a handler-bearing signature — and a map literal's const-fold sub-run
+(`concreteEvalOnce`, check mode off) then dispatched the bare read of `k`
+by name, the interpreter's word path over a bound FnDefInfo, into a
+signature whose `DispatchHandler()` is nil. ADR-005 allows an error and
+never a panic: `execMatch` now raises `internal_error` ("no runnable
+implementation for `k` on the word path") on a nil runner, the fold
+declines on it, and the literal records normally. The program's check pass
+is clean, the interpreter answers `{a:42}`, and the compiled lane REFUSES
+it (NUR123's strict accounting, below) and answers the same. Pinned in
+`core/go/engine_word_read_test.go` (the raw push, the error — no panic)
+and as refusal rows in `lang/go/word_read_dispatch_test.go`; the raw push
+itself is left as it is, the guard being the ADR-005 floor under every
+caller of the word path.
+
+**NUR123's leftover, re-measured on this tree.** The record's first draft
+called the gradual PARAM read consumed outside the residual divergent
+(`[[k:Any][Any][k typeof]]  h ([] => [42])` "Integer / Function"). It is
+not: the pass re-runs a gradual param under the argument's RUNTIME type — a
+`Function` carrier when the call passed a fn (an instrumented build shows
+`carrier=true parent=Function fnTyped=true` on the second run, after the
+`dynamic(Any)` first) — so `NoteWordRead` counts the read strictly and
+every consumption outside the residual refuses ("bare read of `k` is
+consumed where the interpreter dispatches it"): `k typeof`, `[k]`,
+`{a: k}`, `{a: (k)}` all refuse and answer the interpreter's value. What
+stays open is the gradual read the pass never types as a fn: a body-local
+bound to a CONTAINER ELEMENT, which the Map carrier types as
+`dynamic(Any)` on every run —
+
+    def h fn [[m:Map][Any][def j (m get "f")  j]]  h {f: ([] => [42])}
+        42 interpreted, fn compiled;   j typeof: Integer / Function;
+        {a: j}: {a:42} / {a:fn}   — default lane, exit 0, compiled
+
+— noted best-effort (`Dynamic`, admits a fn), and the residual spelling
+did not seat the replay either. The record carries the new witnesses; the
+fix is the per-read op (the same word dispatch at the read site under a
+runtime "is it a fn" test), the next increment.
 
 ## What the ledger excludes, and why each exclusion was measured
 

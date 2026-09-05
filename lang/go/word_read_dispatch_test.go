@@ -99,6 +99,14 @@ func TestWordReadDispatchRefuses(t *testing.T) {
 		{wrF + `[g drop  g/v]]  f ([] => [42])`, "read both bare and by /v"},
 		{wrF + `[g/v drop  g]]  f ([] => [42])`, "read both bare and by /v"},
 		{wrF + `[g typeof]]  f ([] => [42])`, "consumed where the interpreter dispatches it"},
+		// a GRADUAL param bound to a fn at the call: the pass re-runs the
+		// body under the argument's RUNTIME type (a Function carrier), so
+		// the strict accounting applies — these refuse, they never diverged
+		// (the map-literal spelling's CHECK pass is the NUR125 pin below).
+		{`def h fn [[k:Any][Any][{a: k}]]  h ([] => [42])`, "consumed where the interpreter dispatches it"},
+		{`def h fn [[k:Any][Any][{a: (k)}]]  h ([] => [42])`, "consumed where the interpreter dispatches it"},
+		{`def h fn [[k:Any][Any][[k]]]  h ([] => [42])`, "consumed where the interpreter dispatches it"},
+		{`def h fn [[k:Any][Any][k typeof]]  h ([] => [42])`, "consumed where the interpreter dispatches it"},
 	}
 	for _, c := range rows {
 		a, err := New()
@@ -118,5 +126,49 @@ func TestWordReadDispatchRefuses(t *testing.T) {
 		}
 		gotC, _, errC, gotI, errI := runBothEngines(t, c.src)
 		requireParity(t, c.src, gotC, errC, gotI, errI)
+	}
+}
+
+// TestGradualFnParamMapLiteralCheckIsClean pins NUR125 (resolved 2026-09-05):
+// the check pass over a map literal whose value is a bare read of a gradual
+// param bound to a fn PANICKED (recovered as internal_error, both lanes,
+// exit 1). The check run binds a concrete lambda argument by pushing it as
+// a plain def — a FnDefInfo no installDef gave a runner — and the literal's
+// const-fold sub-run dispatched the bare read by name into a signature
+// whose DispatchHandler is nil. execMatch now raises internal_error on a
+// nil runner (ADR-005: an error, never a panic), the fold declines on it,
+// and the literal records normally: the check pass is clean, and both lanes
+// answer the interpreter's value (the compiled lane through the refusal
+// pinned above). Boru.Check is the entry point that reached the fold;
+// CompileCheck never did, so the refusal rows alone could not pin it.
+func TestGradualFnParamMapLiteralCheckIsClean(t *testing.T) {
+	for _, src := range []string{
+		`def h fn [[k:Any][Any][{a: k}]]  h ([] => [42])`,
+		`def h fn [[k:Any][Any][{a: (k)}]]  h ([] => [42])`,
+		`def h fn [[k:Any][Any][{a: k}]]  h 5  h ([] => [42])`,
+		`def h fn [[k:Any n:Integer][Any][{a: k, b: n}]]  h ([] => [42]) 1`,
+	} {
+		a, err := New()
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		res, cerr := a.Check(src)
+		if cerr != nil || len(res.Diagnostics) != 0 {
+			t.Errorf("%q: check must be clean: err=%v diags=%v", src, cerr, res.Diagnostics)
+		}
+	}
+	// the negative twin: a gradual param whose fn does not match its read
+	// stays the interpreter's no_signature diagnostic, not a clean pass
+	a, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	src := `def h fn [[k:Any][Any][{a: k}]]  h (z:Integer => [z])`
+	res, cerr := a.Check(src)
+	if cerr != nil {
+		t.Fatalf("%q: check error: %v", src, cerr)
+	}
+	if len(res.Diagnostics) != 1 || !strings.Contains(fmt.Sprint(res.Diagnostics[0]), "cannot call `k`") {
+		t.Errorf("%q: want one no_signature diagnostic naming k, got %v", src, res.Diagnostics)
 	}
 }

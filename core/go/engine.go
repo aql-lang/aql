@@ -3377,7 +3377,22 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 	}
 
-	results, err := match.Sig.DispatchHandler()(match.Args, ctx, nil, e.Registry)
+	handler := match.Sig.DispatchHandler()
+	if handler == nil {
+		// A signature with no runner on the WORD path: an un-installed body
+		// — a lambda value pushed as a plain def (the check pass's
+		// RunFnBodyOnce binds a concrete fn argument that way) — whose
+		// dispatch would otherwise call a nil function. The const-fold
+		// sub-run (check mode off) reached exactly that for a map literal
+		// over an Any param holding a 0-arg lambda and PANICKED
+		// (`def h fn [[k:Any][Any][{a: k}]]  h ([] => [42])`, NUR125). An
+		// error is what ADR-005 allows: the fold declines on it and the
+		// literal records normally.
+		return makeBoruErrorAt("internal_error",
+			"no runnable implementation for `"+match.Name+"` on the word path (an un-installed fn body)",
+			match.Name, e.effectiveSource(), "this is a bug in boru; please report it", e.currentPos())
+	}
+	results, err := handler(match.Args, ctx, nil, e.Registry)
 	if err != nil {
 		return e.stampErrPos(e.maybeAddFnShapeHint(err))
 	}
