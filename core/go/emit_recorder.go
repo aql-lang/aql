@@ -77,7 +77,15 @@ type EmitRecorder interface {
 	// all, which is FnBodyDepth == 0. A do body re-analysed at depth
 	// inside a called fn's body has an empty bracket by construction, and
 	// publishing it would overwrite the outer do's.
-	KeepDefsBodyGuard(r *Registry) func()
+	//
+	// bodyID is the body Value's ID, and it is what lets the recorder hand
+	// the body's START state to the compile re-run that follows: the guard
+	// clones the binding table when it opens and publishes the clone keyed
+	// by this ID when it closes (Stage 4b — a leaking body's re-run must
+	// begin where the interpreter's single run began, not where the
+	// suspended analysis run left off). Empty when the caller has no body
+	// value; nothing is published then.
+	KeepDefsBodyGuard(r *Registry, bodyID string) func()
 	// MultiRunBodyGuard is BodyAnalysisGuard for a HIGHER-ORDER body
 	// analysis run (analyseHigherOrderBodyVals — each/fold/scan…, the
 	// bodies the runtime re-runs per element): the same suspension and
@@ -208,7 +216,13 @@ type EmitRecorder interface {
 	RecordDefRebind(name string, v Value, pos SrcPos)
 	RecordDynBind(name string, v Value, pos SrcPos)
 	NoteDefRead(id, name string)
-	NoteFrozenRead(name string, bake FrozenBake)
+	// NoteFrozenRead's gen is the binding's DefTable generation
+	// (DefTable.Gen) at the read, taken by the caller from the registry the
+	// read resolved in. It is the staleness key of the binding-sensitive
+	// unit memo (compiler StartFnCompile): a finished unit whose bake was
+	// noted at generation g is reusable at a later call site exactly while
+	// Gen(name) is still g there.
+	NoteFrozenRead(name string, bake FrozenBake, gen int64)
 	RefuseCarriedUndef(name string)
 	NotifyNameRebound(name string)
 	RegisterLocal(id string) int
@@ -282,7 +296,7 @@ func (inactiveEmit) BindRegistry(*Registry)                                 {}
 func (inactiveEmit) TopFrameOnly() bool                                     { return true }
 func (inactiveEmit) SuspendedNow() bool                                     { return false }
 func (inactiveEmit) BodyAnalysisGuard() func()                              { return func() {} }
-func (inactiveEmit) KeepDefsBodyGuard(*Registry) func()                     { return func() {} }
+func (inactiveEmit) KeepDefsBodyGuard(*Registry, string) func()             { return func() {} }
 func (inactiveEmit) MultiRunBodyGuard(*Registry, string) func()             { return func() {} }
 func (inactiveEmit) RecordDynUndef(string, SrcPos)                          {}
 func (inactiveEmit) FnBodyGuard() func()                                    { return func() {} }
@@ -345,7 +359,7 @@ func (inactiveEmit) MarkValueDef(Value)                         {}
 func (inactiveEmit) RecordDefRebind(string, Value, SrcPos)      {}
 func (inactiveEmit) RefuseCarriedUndef(string)                  {}
 func (inactiveEmit) NotifyNameRebound(string)                   {}
-func (inactiveEmit) NoteFrozenRead(string, FrozenBake)          {}
+func (inactiveEmit) NoteFrozenRead(string, FrozenBake, int64)   {}
 func (inactiveEmit) RegisterLocal(string) int                   { return -1 }
 func (inactiveEmit) RememberOriginal(Value)                     {}
 func (inactiveEmit) RememberStrippedOriginals([]Value, []Value) {}

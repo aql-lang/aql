@@ -521,6 +521,10 @@ type emitDynBind struct {
 type EmitFragment struct {
 	events   []EmitEvent
 	startSeq int
+	// id is the fragment's monotone identity (beginFragment) — the key the
+	// residual-order hazard is tracked under (unit_memo.go). 0 is the root
+	// frame, which never has one.
+	id int
 	// residualN is the RECORDED carrier-residual count for a branch ARM (the
 	// number of runtime values the interpreter leaves) — set by RecordBranch. The
 	// lowerer requires the lowered sim residual to match it exactly: a genuine
@@ -904,29 +908,31 @@ type EmitState struct {
 	// recorded result as VARIADIC (SetCatchVariadic / catchVariadicFor —
 	// the fallible multi-value `do` body, plan Phase 5 L-DO).
 	catchVariadicPending bool
-	// frozenReads maps a module-scope binding name a fn/closure UNIT analysis
-	// read to WHAT that unit froze about it (core.FrozenBake). The unit
-	// re-runs on every call while the interpreter re-resolves the name per
-	// call, so a LATER module-scope rebind (NotifyNameRebound) marks the
-	// program uncompilable — interpreter fallback, correct values.
-	//
-	// It carries the BAKE KIND rather than a bare bool because the three
-	// kinds are repaired by three different mechanisms, and each was measured
-	// as a live, silent divergence on the default lane before its arm existed
-	// (see core.FrozenBake for the three programs). A router that must decide
-	// "can OpCollect answer this one?" cannot ask a name→bool.
-	//
-	// FIRST BAKE WINS, mirroring MarkUncompilable's first-reason rule: the
-	// map's job is to name a hazard, and a name frozen two ways is refused by
-	// either. Nil until the first unit-baked read.
-	//
-	// DELIBERATELY absent from emitCheckpoint and Rollback. The sole consumer
-	// only ever calls MarkUncompilable and nothing deletes from the map, so a
-	// RETAINED entry can only OVER-refuse; the miscompile direction is a
-	// MISSING entry, which Rollback structurally cannot produce. Adding it to
-	// the checkpoint as a "gap fix" would convert a conservative refusal into
-	// a silent wrong answer — see the handoff's Stage 4a-3 finding #3.
-	frozenReads map[string]core.FrozenBake
+	// bodyStarts holds, keyed by body value ID, the binding table a leaking
+	// body's analysis run STARTED from (published by KeepDefsBodyGuard /
+	// MultiRunBodyGuard at close, claimed by tryRecordClosure's takeBodyEnv)
+	// — the compile re-run's environment (unit_memo.go). The frozen-read
+	// table this replaced (a program-wide name→bake map) now lives on each
+	// fnUnitRec (bakes / frozen), because the question it answers is per
+	// unit: which call sites can still reuse this unit.
+	bodyStarts map[string]bodyStart
+	// fragSeq / fragIDs: the monotone fragment identity counter and the ids
+	// of the OPEN fragment frames (parallel to frames[1:]; the root frame is
+	// id 0 and is never on the stack). See beginFragment.
+	fragSeq int
+	fragIDs []int
+	// fragReads / bindHazard / storeHazard drive the residual-order hazard
+	// (unit_memo.go residualReadHazard), keyed by fragment id: the names a
+	// fragment has read, and the names (by name) or loop-carried slots (by
+	// slot) it, or a fragment nested in it, then rebound while that read
+	// was already in it. Refusal-direction only, so — like the frozenReads
+	// table they replaced — they are DELIBERATELY absent from
+	// emitCheckpoint and Rollback: a retained entry can only over-refuse,
+	// and the miscompile direction is a missing one, which Rollback
+	// structurally cannot produce.
+	fragReads   map[readKey]bool
+	bindHazard  map[readKey]bool
+	storeHazard map[slotKey]bool
 
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
@@ -1120,6 +1126,12 @@ type fnUnitRec struct {
 	// program frozen-read hammer is for ordinary CALL_USER units, which
 	// have no per-unit fallback.
 	storedRefUnit bool
+	// bakes / frozen are the unit's baked enclosing-scope reads (unit_memo.go):
+	// bakes maps each name to the binding's DefTable generation at the read —
+	// the memo's staleness key — and frozen to WHAT was baked (the escaping
+	// latch's refusal text). Nil until the first such read.
+	bakes  map[string]int64
+	frozen map[string]core.FrozenBake
 	// variadic marks a VARIADIC-RETURNING fn: its body residual leaves a
 	// runtime-variable count (a `[]`-declared recursive accumulator, an
 	// `if c [] [a b]`). A call to it marks the call result variadic (lowerUserCall)
@@ -1362,6 +1374,26 @@ func (es *EmitState) forkForProbe() *EmitState {
 	// def-event population (`_`-named body defs) or the probe's verdict is
 	// about a different unit.
 	p.armResidentDepth = es.armResidentDepth
+	// The residual-order hazard tables too (unit_memo.go): a read the real
+	// state saw in an enclosing fragment must count against a bind the
+	// probe records, or the probe admits a residual the real compile then
+	// refuses program-wide instead of declining to the island. The open
+	// fragment ids ride along so the probe marks the same frames; its own
+	// fragments continue the counter past the real state's.
+	p.fragSeq = es.fragSeq
+	p.fragIDs = append([]int(nil), es.fragIDs...)
+	p.fragReads = make(map[readKey]bool, len(es.fragReads))
+	for k, v := range es.fragReads {
+		p.fragReads[k] = v
+	}
+	p.bindHazard = make(map[readKey]bool, len(es.bindHazard))
+	for k, v := range es.bindHazard {
+		p.bindHazard[k] = v
+	}
+	p.storeHazard = make(map[slotKey]bool, len(es.storeHazard))
+	for k, v := range es.storeHazard {
+		p.storeHazard[k] = v
+	}
 	return p
 }
 
@@ -1661,14 +1693,21 @@ func (es *EmitState) PeekCaptureArm() bool {
 func (es *EmitState) beginFragment() func() {
 	es.frames = append(es.frames, nil)
 	es.fragFloors = append(es.fragFloors, es.seq)
+	// A monotone fragment identity (unit_memo.go's residual-order hazard
+	// keys on it): two sibling arms can share a start seq when no event
+	// separates them, so the seq is not an identity.
+	es.fragSeq++
+	es.fragIDs = append(es.fragIDs, es.fragSeq)
 	return func() {
 		n := len(es.frames) - 1
 		es.captured = &EmitFragment{
 			events:   es.frames[n],
 			startSeq: es.fragFloors[len(es.fragFloors)-1],
+			id:       es.fragIDs[len(es.fragIDs)-1],
 		}
 		es.frames = es.frames[:n]
 		es.fragFloors = es.fragFloors[:len(es.fragFloors)-1]
+		es.fragIDs = es.fragIDs[:len(es.fragIDs)-1]
 	}
 }
 
@@ -1703,9 +1742,21 @@ func (es *EmitState) BodyAnalysisGuard() func() {
 // dispatch record that follows (AdoptBodyTwins). Fragment capture never
 // arms for a do body (ArmBranchCapture is the `if` hook), so this guard
 // does not consult the capture arm. Nil-safe.
-func (es *EmitState) KeepDefsBodyGuard(r *core.Registry) func() {
+func (es *EmitState) KeepDefsBodyGuard(r *core.Registry, bodyID string) func() {
 	if es == nil {
 		return func() {}
+	}
+	// The body's START state, for the compile re-run that follows the run
+	// (unit_memo.go, the body re-run environment). Cloned at open — before
+	// the run leaks anything — and published at close, at any scope: a `do`
+	// inside a fn body leaks into that frame and its re-run needs the start
+	// just the same. Only a run whose close finds the recorder ACTIVE
+	// publishes (publishBodyStart): a run nested inside another suspended
+	// run records nothing, and its body is re-run — guard and all — during
+	// the outer body's own compile.
+	var start *core.DefTable
+	if r != nil && bodyID != "" && r.Defs != nil {
+		start = r.Defs.Clone()
 	}
 	// THE PUBLICATION GATE, exactly MultiRunBodyGuard's and for the same
 	// reason. A keep run at FnBodyDepth > 0 can note NO twin
@@ -1751,6 +1802,7 @@ func (es *EmitState) KeepDefsBodyGuard(r *core.Registry) func() {
 			es.lastKeepTaints = es.keepTaints
 			es.keepTaints = nil
 		}
+		es.publishBodyStart(bodyID, r, start, false)
 	}
 }
 
@@ -1809,6 +1861,17 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 	if publish {
 		es.multiRunModuleDepth++
 	}
+	// The body's START state for the compile re-run (unit_memo.go), cloned
+	// before the run leaks its last iteration's defs. Published at close
+	// whatever the publication gate says — a multi-run body inside a fn
+	// body leaks into that frame, and its re-run needs the start too — but
+	// a later ROUND of one fixed point keeps the FIRST round's start: the
+	// later round began from the previous round's leak, not from the
+	// body's start.
+	var start *core.DefTable
+	if r != nil && bodyID != "" && r.Defs != nil {
+		start = r.Defs.Clone()
+	}
 	from := len(es.bindTwins)
 	inner := es.BodyAnalysisGuard()
 	return func() {
@@ -1816,6 +1879,8 @@ func (es *EmitState) MultiRunBodyGuard(r *core.Registry, bodyID string) func() {
 		if publish {
 			es.multiRunModuleDepth--
 		}
+		laterRound := es.lastMultiRun.bodyID == bodyID && es.lastMultiRun.evSeq == es.seq
+		es.publishBodyStart(bodyID, r, start, laterRound)
 		if !publish {
 			return
 		}
@@ -1868,6 +1933,7 @@ func (es *EmitState) RecordDynUndef(name string, pos core.SrcPos) {
 	es.appendEvent(EmitEvent{kind: evDynBind, dyn: &emitDynBind{
 		name: name, srcSeq: -1, pos: pos, residentTwin: -1, undef: true,
 	}})
+	es.noteBindHazard(name)
 }
 
 // TakeFragment returns the last captured fragment (nil when the
@@ -3172,7 +3238,14 @@ func (es *EmitState) NotifyNameRebound(name string) {
 	//
 	// Everything below this block still needs Active(): the stored-ref
 	// poisoning walks refs whose recording this suspension is not part of.
-	if bake, frozen := es.frozenReads[name]; frozen && es.rebindReachesModuleScope() {
+	//
+	// Since Stage 4b the latch fires only for a bake held by an ESCAPING unit
+	// (unit_memo.go): every other unit is re-recorded at its next call site
+	// by the binding-sensitive memo, so a rebind is no longer a hazard for
+	// it. An escaping unit's later "call" is an apply of the value it
+	// escaped into, which the memo cannot see, so for those the refusal —
+	// same text — is still the only sound answer.
+	if bake, frozen := es.frozenInEscapingUnit(name); frozen && es.rebindReachesModuleScope() {
 		es.MarkUncompilable("module binding " + name + " rebound after a fn unit baked its " + bake.String())
 	}
 	if !es.Active() {
@@ -3544,8 +3617,7 @@ func (es *EmitState) RecordBranch(b core.BranchRecord) {
 			return EmitOperand{}, false, true
 		}
 		op, ok := es.resolveOperand(stk[len(stk)-1])
-		if !ok || residualLeadReStepped(stk) {
-			es.MarkUncompilable("if: " + name + "-branch result of unknown provenance")
+		if !es.residualStands("if: "+name+"-branch ", stk[len(stk)-1], op, ok && !residualLeadReStepped(stk), frag, "result") {
 			return EmitOperand{}, false, false
 		}
 		return op, true, true
@@ -4257,6 +4329,7 @@ func (es *EmitState) RecordDefRebind(name string, v core.Value, pos core.SrcPos)
 		return
 	}
 	es.appendEvent(EmitEvent{kind: evStore, store: &emitStore{src: src, slot: slot, pos: pos}})
+	es.noteStoreHazard(name, slot)
 }
 
 // RefuseCarriedUndef marks the program uncompilable when `undef` targets a
@@ -4405,9 +4478,13 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 	if !es.Active() {
 		return -1, nil, false
 	}
-	if u, hit := es.fnUnits[key]; hit {
+	if u, hit := es.fnUnits[key]; hit && !es.unitStale(u) {
 		return u, nil, true
 	}
+	// A miss, or a STALE hit: the memoised unit baked a binding this call
+	// site sees differently (unit_memo.go). Compile a fresh unit for this
+	// site and re-point the key at it; the stale unit keeps serving the
+	// sites that already reference it.
 	unit = len(es.fnRecs)
 	// Slot→name table (debug only): params in slots 0..n-1, then captures.
 	locals := make([]string, 0, len(args)+len(captures))
@@ -4488,8 +4565,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 				if !okOut {
 					op, okOut = es.resolveOperand(v)
 				}
-				if !okOut {
-					es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
+				if !es.residualStands("fn "+name+": ", v, op, okOut, rec.frag, "body result") {
 					return
 				}
 				ops = append(ops, op)
@@ -5228,9 +5304,14 @@ func (es *EmitState) RecordLoop(start, end, step core.Value, bodyRef core.EmitFr
 				}
 			}
 			bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
-			if !ok {
-				es.MarkUncompilable("for: body result of unknown provenance")
+			if !es.residualStands("for: ", bodyStk[len(bodyStk)-1], bodyOut, ok, body, "body result") {
 				return
+			}
+			for i := range bodyStk[:len(bodyStk)-1] {
+				if op, okOp := es.resolveOperand(bodyStk[i]); okOp &&
+					!es.residualStands("for: ", bodyStk[i], op, true, body, "") {
+					return
+				}
 			}
 			// ALL-INERT residual (`for 3 [1 2]`): no entry is event-produced,
 			// so the residualN reconciliation cannot seat them from the sim —
@@ -5252,8 +5333,7 @@ func (es *EmitState) RecordLoop(start, end, step core.Value, bodyRef core.EmitFr
 			lp.bodyOut, lp.hasBodyOut, lp.multiOut = bodyOut, true, true
 		} else {
 			bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
-			if !ok {
-				es.MarkUncompilable("for: body result of unknown provenance")
+			if !es.residualStands("for: ", bodyStk[len(bodyStk)-1], bodyOut, ok, body, "body result") {
 				return
 			}
 			lp.bodyOut, lp.hasBodyOut = bodyOut, true
@@ -6631,38 +6711,11 @@ func zeroArgFnOut(outs []core.Value) bool {
 // An unclassified note (FrozenBakeNone) is DROPPED rather than recorded as
 // some default: the refusal it would produce names a bake, and naming the
 // wrong one is worse than the caller's bug going unrecorded here.
-func (es *EmitState) NoteFrozenRead(name string, bake core.FrozenBake) {
-	if !es.Active() || name == "" || bake == core.FrozenBakeNone || len(es.openUnitRecs) == 0 {
-		return
-	}
-	// A read attributed to a STORED-REF unit (a service/minilang handler, a
-	// spawn body) is not recorded HERE: its rebind handling lives in
-	// NotifyNameRebound directly. Per-ref poisoning (the PR #243 discipline)
-	// still covers unit-internal rebinds, but a MODULE-SCOPE rebind of a
-	// stored-ref dep now refuses the whole program there too — poisoning's
-	// CallBoru fallback reads pass-hoisted def state, not point-in-program
-	// state (the F1 miscompile, design/RELOAD-INVALIDATION.0.md §3; interim
-	// until §5.6's bind twins). So the skip below does not exempt stored-ref
-	// deps from the hammer; it only keeps their reads out of frozenReads,
-	// whose entries would otherwise double-report the same rebind.
-	if rec := es.openUnitRecs[len(es.openUnitRecs)-1]; rec >= 0 && rec < len(es.fnRecs) && es.fnRecs[rec].storedRefUnit {
-		return
-	}
-	if es.frozenReads == nil {
-		es.frozenReads = map[string]core.FrozenBake{}
-	}
-	// First bake wins — see the field doc. A name frozen two ways refuses
-	// either way, so the second note has nothing to add and overwriting would
-	// make the refusal's text depend on analysis order.
-	if _, seen := es.frozenReads[name]; !seen {
-		es.frozenReads[name] = bake
-	}
-}
-
 func (es *EmitState) NoteDefRead(id, name string) {
 	if !es.Active() || id == "" || name == "" {
 		return
 	}
+	es.noteFragRead(name)
 	if es.armBoundNames[name] {
 		// The name's runtime binding exists only through arm-resident
 		// installs — count, values, and definedness are body-run-dependent
@@ -6914,6 +6967,7 @@ func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 		root: root, depth: depth, spliceDepth: spliceDepth,
 		residentTwin: -1,
 	}})
+	es.noteBindHazard(name)
 }
 
 // dynScopeRescue is resolveOperand's last resort inside a fn unit: a value

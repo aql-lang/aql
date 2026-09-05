@@ -91,6 +91,7 @@ keep the two in sync in the same commit.
 | [NUR096](#nur096) | The check pass did not move with NUR095: a fn stored through a fn-SHAPE-typed member is APPLIED by both engines but still modelled by the checker as the inert fn it was before that retirement, so `TestCheckTypeSoundness` fails on the two multi-return `class.tsv` rows that pin it | adding the NUR095 retirement rows to `lang/spec/class.tsv`, 2026-08-20 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
+| [NUR118](#nur118) | A compiled fn's RETURN-CONTRACT error blames the body's first token where the interpreter blames the CALL SITE: `def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}` raises the same `type_error: f: return value 1: expected Integer, got ProperString` on both lanes, at `1:43` (the call) interpreted and `1:30` (the body) compiled. The compiled RET check is stamped with the unit's own position because one unit serves every call site (compiler StartFnCompile's fnPos) — a documented limitation that became reachable from a corpus-style row when the binding-sensitive unit memo let `def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f` compile (Stage 4b); the row pins code and message and excludes the position | Stage 4b's cross-family rebind row, 2026-09-04 |
 | [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
 | [NUR101](#nur101) | BROAD's placement depended on ENCLOSING CONTEXT: `(mk 1) 2` places (`fn (Integer) 2`) while `((mk 1) 2)` dispatches (`3`). **RULED 2026-08-26 "place uniformly"; the ruling's PREMISE was then FALSIFIED 2026-08-27** — the survivor count IS the question, and the enclosing group is a SECOND decision, not a modifier of the first. The interpreter was right all along; the COMPILER carried five silent miscompiles in both directions, hidden by 75 parity assertions that use post-Stage-J `Run` (the compiled path) as their interpreter oracle. See [design/PAREN-RESTEP-RULE.0.md](design/PAREN-RESTEP-RULE.0.md) | re-measuring §5.4 after #402, 2026-08-25; ruled 2026-08-26; ruling's premise falsified by measurement 2026-08-27 |
@@ -277,6 +278,56 @@ value, so removing site 1's gate needs a replacement contract, not a deletion
 — and naming that contract is a design call the register should not pre-empt.
 Recorded so the divergence between an accepted ADR and the code is not lost;
 the fix is the maintainer's to direct.
+
+---
+
+## NUR118 — a compiled return-contract error blames the definition where the interpreter blames the call {#nur118}
+
+**Status:** Pending · **Recorded:** 2026-09-04 · **Surfaced by:** the
+binding-sensitive unit memo (Stage 4b) letting a cross-family rebind row
+compile
+
+**Rule:** the two lanes agree on errors, and — NUR108 established — the
+position is part of the error a user meets.
+
+**Divergence:** same code, same message, same secondary span (the
+declaration); a different PRIMARY row and column. Measured on the tree
+before Stage 4b touched it, so it is pre-existing and reachable from any
+compiled fn whose declared return fails at run time:
+
+```
+def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}
+
+interp   --> 1:43   (the call `f`)
+compiled --> 1:30   (the body's first token, `m`)
+```
+
+**Where it comes from, traced not guessed.** The interpreter's return
+check (`__RC`) raises at the CALL, whose token position it has. The
+compiled RET check is stamped from the unit's debug table, and a unit is
+compiled ONCE for every call site, so it cannot carry any one site's
+column: `StartFnCompile` takes the body's first-token position as the
+unit's `fnPos` precisely so the error is not reported at an unknown
+position (its own comment says "It cannot equal the interpreter's
+call-site column (one unit serves every call site)").
+
+**Why it surfaced now.** `def k 5  def f fn [[] [Integer] [k add 2]]  f
+def k "x"  f` used to REFUSE under the frozen-read latch and run on the
+interpreter; under the memo the second call re-records `f` against the
+String binding, the unit compiles, and its RET raises the interpreter's
+own type_error — at the definition. lang/go's
+`TestModuleReadCrossFamilyRebindCompiles` pins code and message and
+excludes the position, naming this record.
+
+**Not a NUR114 duplicate.** NUR114 is the caret's WIDTH at a position the
+lanes agree on; this is the position itself, for one error class.
+
+**Proposed verdict:** resolve by fix — the RET check needs the CALL
+SITE's position, which the VM has (the caller's pc and its debug entry)
+at the moment the callee's RET runs; the stamp should read it from the
+frame it returns to rather than from the unit. Until then the row
+excludes the position, and every other compiled return-contract error
+divergence of this shape is this record's.
 
 ---
 

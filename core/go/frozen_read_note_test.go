@@ -17,14 +17,17 @@ import "testing"
 // every other method stays a no-op — only this one arm is under test.
 type frozenRecorder struct {
 	inactiveEmit
-	got map[string]FrozenBake
+	got  map[string]FrozenBake
+	gens map[string]int64
 }
 
-func (f *frozenRecorder) NoteFrozenRead(name string, bake FrozenBake) {
+func (f *frozenRecorder) NoteFrozenRead(name string, bake FrozenBake, gen int64) {
 	if f.got == nil {
 		f.got = map[string]FrozenBake{}
+		f.gens = map[string]int64{}
 	}
 	f.got[name] = bake
+	f.gens[name] = gen
 }
 
 // frozenReadEngine arms a compile pass with a capturing recorder and returns
@@ -50,6 +53,15 @@ func TestStepWordTypeReadNotesFrozenBake(t *testing.T) {
 	}
 	if got, ok := rec.got["T"]; !ok || got != FrozenBakeType {
 		t.Errorf("a module-scope type read must note a TYPE bake; got %v (present=%v)", got, ok)
+	}
+	// The note carries the binding's generation as of the read — the memo's
+	// staleness key. A later rebind of T moves it, which is the whole point.
+	if want := e.Registry.Defs.Gen("T"); rec.gens["T"] != want {
+		t.Errorf("the note must carry Gen(T) at the read: got %d, want %d", rec.gens["T"], want)
+	}
+	e.Registry.Defs.PushType("T", TString, NewTypeLiteral(TString))
+	if e.Registry.Defs.Gen("T") == rec.gens["T"] {
+		t.Error("a rebind must move the generation the note carried, or no memo can see it")
 	}
 }
 

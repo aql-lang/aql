@@ -313,7 +313,11 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 		es.armResidentDepth++
 		defer func() { es.armResidentDepth-- }()
 	}
-	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos) {
+	// The body's compile re-run runs in the environment its analysis run
+	// STARTED from (unit_memo.go): claimed here, applied around every
+	// compile inside recordClosureDispatch.
+	env := es.takeBodyEnv(body, spec)
+	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos, env) {
 		return false
 	}
 	// A once-run defs-keeping body (`do`) compiled to a closure unit makes
@@ -404,9 +408,11 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	if foreignFnHome(r, fd) {
 		restore := check.ShareCheckStateFrom(fd.Registry, r)
 		defer restore()
-		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos)
+		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos, nil)
 	}
-	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos)
+	// A lambda body is a fn body: its defs are frame-locals and nothing
+	// leaks, so it needs no re-run environment.
+	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos, nil)
 }
 
 // foreignFnHome reports whether fd is a fn VALUE that was DEFINED in another
@@ -572,7 +578,7 @@ func fnValueRetSpec(fd *core.FnDefInfo, lam *core.Signature, fnPos core.SrcPos) 
 // M2d): each compiles to its OWN closure unit under the SAME shared token
 // shape (extraNoEvalHookSlots only nominates them on a LambdaSharesTokenShape
 // word) and rides as a second opClosure operand.
-func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, retSpec *ClosureRetSpec, pos core.SrcPos) bool {
+func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, retSpec *ClosureRetSpec, pos core.SrcPos, env *bodyRunEnv) bool {
 	// The probe fork below needs the CONCRETE EmitState; both callers only
 	// reach here through an active recording state, so a non-EmitState
 	// recorder (the inactive no-op) declining is the unreachable belt.
@@ -658,14 +664,26 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	// A strip-input word compiles count-agnostic (the runtime nets one value
 	// from either admitted shape — stripResidualShapeOK screens the rest).
 	countAgnostic := spec.EmptyBodyErrors || spec.StripsUnconsumedInput
+	// Every compile below — probe, real, each extra hook — runs the body in
+	// the environment its analysis run started from (unit_memo.go), entered
+	// afresh per compile and exited back to the leaked table after. An
+	// environment that cannot be built declines the closure.
+	compile := func(toks []core.Value, names []string, caps []core.CapturedBinding) (int, bool) {
+		prev, ok := env.enter(r)
+		if !ok {
+			return -1, false
+		}
+		defer env.exit(r, prev)
+		return compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, toks, inputs, names, caps, shape, pos)
+	}
 	probe := real.forkForProbe()
 	r.Check.Emit = probe
-	probeUnit, probeOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
+	probeUnit, probeOk := compile(bodyToks, paramNames, captures)
 	for _, ex := range extras {
 		if !probeOk { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			break
 		}
-		_, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		_, exOk := compile(ex.toks, ex.names, ex.caps)
 		probeOk = probeOk && exOk
 	}
 	r.Check.Emit = real
@@ -700,8 +718,17 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
 	recsBefore := len(real.fnRecs)
-	unit, realOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
-	if !realOk || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	unit, realOk := compile(bodyToks, paramNames, captures)
+	// REACHABLE since Stage 4b (unit_memo.go), not a defensive arm: the
+	// probe carries no producedBy, so an enclosing binding read whose value
+	// an EVENT produced (`k` after a leaking `do` rebound it) bakes as a
+	// const in the probe and routes LIVE in the real compile — and the
+	// residual-order hazard refuses the live read where it admitted the
+	// const. The real state is already marked with the hazard's reason;
+	// this decline hands the dispatch to its own refusal path (first reason
+	// wins). `def k 5  do [ k  def k 9  k ]  do [ k  def k 12  k ]` pins it
+	// (lang/go/analysis_order_test.go).
+	if !realOk || unit < 0 {
 		return false
 	}
 	// The closure latch for the arm-residency bridge: THIS unit, and
@@ -712,7 +739,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	real.lastClosure = closureLatch{unit: unit, fresh: unit == recsBefore && len(real.fnRecs) > recsBefore}
 	var extraOps map[int]EmitOperand
 	for _, ex := range extras {
-		exUnit, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		exUnit, exOk := compile(ex.toks, ex.names, ex.caps)
 		if !exOk || exUnit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return false
 		}

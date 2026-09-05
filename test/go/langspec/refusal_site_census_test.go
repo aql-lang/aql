@@ -31,7 +31,7 @@ import (
 // terminal arm emits a generic lowering instead of latching a refusal.
 // Never raise it: a new refusal site is new debt, and the design's whole
 // claim is that the count only falls.
-const refusalSiteCeiling = 96 // 96 (2026-08-25, Stage-1 baseline) -> 0 (Stage 9)
+const refusalSiteCeiling = 93 // 96 (2026-08-25, Stage-1 baseline) -> 93 (2026-09-04, Stage 4b: the residual-order hazard shares the residual-provenance arm at its four sites) -> 0 (Stage 9)
 
 // refusalSites counts MarkUncompilable call sites per module, skipping test
 // files (their sites are fixtures and helpers, not compiler machinery) and

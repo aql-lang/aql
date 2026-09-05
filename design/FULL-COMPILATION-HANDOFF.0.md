@@ -1716,6 +1716,209 @@ Measured this session, with instrumentation since reverted:
   found.
 
 
+## Stage 4b: analysis order is program order — for units (2026-09-04)
+
+The handoff's revised order (Stage 4a-2) named the next increment as "give
+`frozenReads` its site structure, convert the latch into an obligation
+discharged at `Finalize`, then `OpCollect`". Measuring the tree before
+writing any of it changed the plan, the same way Stage 4a-3's measurement
+did: the frozen-read class is not a routing problem and never was. **It is
+the unit MEMO.** `FnAnalysisKey` keys a fn/closure unit on scope, name,
+argument types, captures and body position, and omits the BINDINGS of the
+enclosing-scope names the body reads — so a unit analysed at one program
+point is reused at every later call site whatever the bindings are there.
+Every frozen-read miscompile, and every refusal the discipline made to
+prevent one, is that omission seen from a different side.
+
+### Twelve more silent miscompiles, two mechanisms
+
+Sweeping the rebind-site axis with reads placed BEFORE the rebind — a
+placement no earlier sweep had varied — found the class was wider than the
+memo. Default lane, exit 0, wrong answer, all on the tree at `9bf9662`:
+
+	def k 5  do [ k  def k 9  k ]                                          5 9      -> 9 9
+	def m {a:1}  do [ m  def m {a:2}  m ]                                  {a:1} {a:2} -> {a:2} {a:2}
+	def k 5  do [ def t k  def k 9  t ]                                    5        -> 9
+	def k 5  [1 2] each [ k  def k 9 ]                                     [5 9]    -> [9 9]
+	def k 5  [1 2] each [ k  def k (k add 1) ]                             [5 6]    -> [6 7]
+	def k 5  [1 2] fold [ k  add  def k 9 ] 0                              7 0      -> 11 0
+	def k 5  [1 2] scan [ k  add  def k 9 ] 0                              [1 7] 0  -> [1 11] 0
+	def k 5  for 2 [ k  def k 9 ]                                          5 9      -> 9 9
+	def k 5  def f fn [[] [Integer] [k add 2]]  do [ f  def k 9  f ]      7 11     -> 11 11
+	def k 5  def f fn [[] [Integer] [k add 2]]  [1 2] each [ f  def k 9 ] [7 11]   -> [11 11]
+	def k 5  def f fn [[] [Integer] [k add 2]]  def g fn [[] [Integer] [do [ k  def k 9  k ] add]]  g   14 -> 18
+	def k 5  def f fn [[] [Integer] [k add 2]]  def g fn [[] [Integer] [def k 9  f]]  g  f            11 7 -> 11 11
+
+Two mechanisms, and neither is the latch's:
+
+- **The leaked-state re-run.** A leaking body — a `do` body, or an
+  each/fold/scan body the runtime re-runs per element — is analysed once
+  with recording SUSPENDED (`KeepDefsBodyGuard` / `MultiRunBodyGuard`) and
+  then RE-RUN to compile (`tryRecordClosure` → `recordClosureDispatch`'s
+  probe and real compiles). The re-run began from the state the first run
+  LEAKED, so every read before the body's own rebind baked the rebound
+  value. `do [ k  def k 9  k ]` compiled to `PUSH_CONST 9; PUSH_CONST 9`,
+  and the fn-calling variants baked 9 into `f`'s unit because `f` was first
+  analysed during the re-run, after the leak. This is at every scope — the
+  `do` inside `g` shows it in a fn frame — and it is what NUR117's arm
+  could not see: that arm refused a rebind AFTER a unit had recorded, and
+  here the unit records after the rebind.
+- **The caller-frame shadow.** `g`'s frame-local `def k 9` shadows the
+  module `k`; `f` called from `g` reads 9 by dynamic scope, and the unit
+  the memo kept for `f` — baked under `g`'s frame — served the top-level
+  call too. The freeze discipline's `ModuleScopeBinding` gate never
+  looked: from `f`'s baseline the caller's frame-local IS an enclosing
+  binding.
+
+### What landed (`compiler/go/unit_memo.go`)
+
+**A. The memo is binding-sensitive.** `NoteFrozenRead` now carries the
+binding's `DefTable.Gen` at the read (core passes it from the registry the
+read resolved in; the type arm registers its read's value ID too, as the
+value arm always did) and records it on the OPEN unit — `fnUnitRec.bakes`,
+alongside `frozen` (the kind, for the refusal's noun). `StartFnCompile`
+treats a FINISHED memo hit as stale when any bake — the unit's own, or one
+reachable through the units it calls, polys or pushes as closures
+(`forEachUnitRef`, the one reachability walk) — has a generation that has
+moved, and compiles a fresh unit for that site; the stale unit keeps
+serving the sites that already reference it. An unfinished unit is never
+stale (in-flight recursion must reuse it). The program-wide `frozenReads`
+map is gone.
+
+**B. The body re-run environment.** Both guards clone `r.Defs` when a body
+run opens and publish the clone at close, keyed by body ID
+(`KeepDefsBodyGuard` grew a `bodyID` parameter for it; a later fixed-point
+round keeps the FIRST round's start). `tryRecordClosure` claims it and
+`recordClosureDispatch` swaps it in around every compile — probe, real,
+each extra hook — through the new `core.Registry.SwapDefs`, restoring the
+leaked table after. A `do` body re-runs from its start (it runs once, so
+the re-run IS the run). A multi-run body re-runs from its start with every
+name it rebound replaced by `JoinCarriers` of the start and end carriers:
+iteration-varying, hence non-concrete, hence a live read with a runtime
+re-match downstream — which is exactly the lookup half §6.9 asks for, in
+the one place the memo cannot supply it. Types the body installed are
+carried over from the leaked table rather than restored to absent: a
+minted node's lattice part survives either way, and a re-run that
+re-defines the name over a surviving part without its binding trips the
+parts conflict `RunCarrierBodyKeepDefs` already records.
+
+**C. The latch narrows to escaping units.** `NotifyNameRebound`'s
+frozen-read refusal now fires only for a bake held by — or reachable from —
+a unit whose reference ESCAPES into a value (a returned closure, a stamped
+fn value, a fn-value closure body): its later "call" is an apply of the
+value, invisible to the memo. Same text. Everything else is the memo's.
+NUR117's counters and `rebindReachesModuleScope` stay, serving that arm.
+
+**D. The residual-order hazard is refused, not fixed.** A RE-PUSHABLE
+residual read — a live `OpLookupDynScope`, or a loop-carried slot — is
+re-pushed at the END of its fragment, after a bind of the same name the
+fragment recorded later than the read. Pre-existing and independent of
+the memo: `def k (1 add 4)  def f fn [[] [Integer Integer] [k  def k 9
+k]]  f` answered `9 9` for `5 9`, and the `for` row above is the
+loop-carried form. `residualReadHazard` refuses it by name at the unit
+finish, a branch arm and a loop body — through `residualStands`, the ONE
+`MarkUncompilable` site those four settlements now share with their
+"result of unknown provenance" arm: the refusal-site census
+(`refusalSiteCeiling`) caught the first cut's four new sites at once
+(100 against 96), and the fold took the count to 93, where the ceiling
+now sits. The hazard is keyed by FRAGMENT
+IDENTITY (`EmitFragment.id`, monotone from `beginFragment`): a read in a
+nested fragment reaches the enclosing residual only through the nested
+construct's result, and two sibling arms can share a start seq, so neither
+depth nor seq is an identity. The first cut keyed on name and seq and
+refused every `def acc 0  for n [def acc (acc add 1)]  acc` in the tree —
+the post-loop read is AFTER the store, but the body's read was before it.
+The precise fix — a per-read snapshot event — needs per-read identity the
+recorder does not have (every read of a binding carries the binding's own
+value ID); recorded as the follow-on.
+
+**E. A probe/real asymmetry the hazard made visible.** `forkForProbe`
+gives the probe fresh emission tables — no `producedBy` — so an enclosing
+binding read whose value an EVENT produced (`k` after a leaking `do`
+rebound it: `def k 5  do [ k  def k 9  k ]  do [ k  def k 12  k ]`) bakes
+as a const in the probe and routes LIVE (`OpLookupDynScope`) in the real
+compile. Before this increment the two verdicts agreed by accident (a live
+read never refused); the hazard refuses the live read, so the real compile
+can now decline after a clean probe. `recordClosureDispatch`'s post-real
+guard is therefore a reachable arm, not the defensive one its
+`//covergate:allow` claimed — the pragma is gone and the row pins it. The
+principled fix is a probe that carries the routing tables the real compile
+consults (`producedBy`, `eventInfo`), so the two compile the SAME unit; it
+was not attempted here because it changes every closure probe's verdict
+across the corpus and wants its own measurement.
+
+### Measured
+
+Over the 70-program sweep (every shape above plus the Stage 4a-4 matrix):
+**0 divergences**, and 18 refusals, every one sound — 6 under the residual
+hazard, 4 multi-run bodies whose closure declines because the joined read
+is in the residual (`code-body word each (Stage 2)`), and 8 that refused
+the same way before. Every row of `TestModuleReadRebindRefusesAndMatches`
+(27, all refusals) now splits three ways: value / type / call-target /
+transitive / 0-output / `/v` / do-body rebinds COMPILE with parity
+(`TestModuleReadRebindCompilesWithParity`); the `undef` rows refuse on
+check diagnostics (the re-recorded unit reads a name that is gone — the
+interpreter's undefined_word, one pass earlier); the multi-run rows refuse
+at the arm-residency read gate. The cross-family row (`def k "x"`) compiles
+and raises f's return type_error — and exposed NUR118, a PRE-EXISTING
+blame-position divergence of every compiled return-contract error
+(measured on the tree before this stage: `1:43` interpreted, `1:30`
+compiled for `def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}`).
+
+Corpus refusal ceiling: unmoved at 0. `cover-gate-core` 100%. The
+`for`-loop body word `for` is untouched: `AnalyseLoopBody` already joins
+between rounds, and its recorded round reads the joined carrier through
+the loop-carried slot — the `for` row above was the residual-order
+hazard, not the leak.
+
+### What this corrects in the plan
+
+- **Stage 4a-2's revised order is superseded.** "Convert the latch into a
+  Finalize obligation, then OpCollect" was written on the premise that the
+  latch guards a lowering decision. It guards a MEMO decision, which is
+  made at `StartFnCompile`, and that is where it is now made correctly.
+  `OpCollect`'s acceptance pair (`w k 1` → 5, then the raise) answers both
+  spellings today: the second `go` re-records against `k`'s fn binding and
+  the unit compiles the interpreter's strict-barrier raise.
+- **Stage 4a-3 finding #7** ("the next increment's real subject is the
+  proxy") was right about the proxy being the wrong input and wrong about
+  where the fix goes: the `IsConcrete` proxy still feeds `frozen` — for the
+  escaping latch, where over-noting only over-refuses — and the memo asks a
+  different question (has the binding moved), for which the proxy's
+  imprecision costs at most a spare unit.
+- **§6.5's payoff paragraph and "The payoff gates, measured".** The
+  frozen-read gate leaves the `OpDispatchGeneric` list: it is re-filed
+  under the memo, closed for every unit the memo can re-record, and kept
+  only for escaping units. The stored-handler, family-L and NUR037 gates
+  are untouched by this stage and stay filed where that section put them.
+- **`design/RELOAD-INVALIDATION.0.md` §2.1's freshness cell** for the
+  whole-program `CALL_USER` unit is corrected in place a second time: the
+  answer is per-site re-recording, not whole-program refusal.
+
+### What the next author should not re-derive
+
+- The memo's staleness key is `DefTable.Gen`, per name, read from the
+  registry the unit's body resolves in (`fnUnitRec.reg`). It moves on
+  every push / pop / replace / truncate / set of that name — including a
+  frame-local push in a caller — which is exactly why the caller-frame
+  shadow is caught for free and why a fn with a body-local literal `def`
+  is NOT recompiled per call: its own def is fn-scoped, and fn-scoped reads
+  are never bakes.
+- `forEachUnitRef` is the one reachability primitive. A new way for a unit
+  to reference another unit must join it or both the staleness walk and the
+  escaping latch go blind — `TestUnitStaleWalksEveryReference` enumerates
+  the edges it knows.
+- The environment must be entered afresh per compile from its own clone;
+  the probe mutates the table it runs on.
+- `takeBodyEnv` claims the start exactly once; a guard close that finds the
+  recorder suspended publishes nothing (its body is re-run, guard and all,
+  during the outer compile), which is what bounds the live clones to one
+  per open nesting level.
+- No end-to-end row pins the escaping latch's text: every returned-closure
+  shape that would reach it at top level refuses earlier on its residual
+  shape. The compiler unit tests pin it; the first such shape to compile
+  owes `lang/go/frozen_module_read_test.go` its row.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

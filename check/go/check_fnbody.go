@@ -802,7 +802,7 @@ func noteBakedCallTarget(es core.EmitRecorder, r *core.Registry, name string) {
 		return
 	}
 	if core.ModuleScopeBinding(r, name) {
-		es.NoteFrozenRead(name, core.FrozenBakeCall)
+		es.NoteFrozenRead(name, core.FrozenBakeCall, r.Defs.Gen(name))
 	}
 }
 

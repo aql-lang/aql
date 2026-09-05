@@ -20,8 +20,10 @@ import "testing"
 // funnelRecorder captures both halves of the discipline.
 type funnelRecorder struct {
 	inactiveEmit
-	rebound map[string]int
-	reads   map[string]FrozenBake
+	rebound  map[string]int
+	reads    map[string]FrozenBake
+	gens     map[string]int64
+	defReads map[string]string
 }
 
 func (f *funnelRecorder) NotifyNameRebound(name string) {
@@ -31,11 +33,23 @@ func (f *funnelRecorder) NotifyNameRebound(name string) {
 	f.rebound[name]++
 }
 
-func (f *funnelRecorder) NoteFrozenRead(name string, bake FrozenBake) {
+func (f *funnelRecorder) NoteFrozenRead(name string, bake FrozenBake, gen int64) {
 	if f.reads == nil {
 		f.reads = map[string]FrozenBake{}
+		f.gens = map[string]int64{}
 	}
 	f.reads[name] = bake
+	f.gens[name] = gen
+}
+
+// NoteDefRead is captured too: a TYPE read must register its value ID against
+// the name exactly as a value read does, or the compiler's resolveOperand can
+// name one kind of read and not the other.
+func (f *funnelRecorder) NoteDefRead(id, name string) {
+	if f.defReads == nil {
+		f.defReads = map[string]string{}
+	}
+	f.defReads[id] = name
 }
 
 func funnelRegistry(t *testing.T) (*Registry, *funnelRecorder) {
@@ -161,6 +175,21 @@ func TestBindingReadsNoteThroughTheFunnel(t *testing.T) {
 			if got != c.want {
 				t.Errorf("%s classified the bake as %v, want %v — the paths must not "+
 					"answer the freeze question two ways", c.what, got, c.want)
+			}
+			if want := r.Defs.Gen("k"); rec.gens["k"] != want {
+				t.Errorf("%s must note Gen(k) at the read (%d), got %d", c.what, want, rec.gens["k"])
+			}
+			if c.want == FrozenBakeType {
+				// The type arm names its read like the value arm does.
+				named := false
+				for _, n := range rec.defReads {
+					if n == "k" {
+						named = true
+					}
+				}
+				if !named {
+					t.Errorf("%s must register the read's value ID against the name (NoteDefRead)", c.what)
+				}
 			}
 		})
 	}

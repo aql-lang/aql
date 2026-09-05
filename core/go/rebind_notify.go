@@ -126,6 +126,14 @@ func UninstallType(r *Registry, name string) bool {
 // NoteFrozenRead self-guards on an open unit, so a TOP-LEVEL read records
 // nothing: there analysis order is program order and the bake IS the read the
 // interpreter makes.
+//
+// The note carries the binding's GENERATION (DefTable.Gen) as of this read,
+// from the registry the read resolved in — the key the compiler's
+// binding-sensitive unit memo compares at a later call site. A type read also
+// registers the read's value ID against the name (NoteDefRead), exactly as
+// stepWord's value arm already does for a value read: the two arms must be
+// nameable the same way downstream, or a resolution path that only one of
+// them takes answers the freeze question differently.
 func (e *Engine) noteBindingRead(name string, v Value) {
 	if e == nil || e.Registry == nil || name == "" || !e.Registry.analysisActive() {
 		return
@@ -133,10 +141,12 @@ func (e *Engine) noteBindingRead(name string, v Value) {
 	if !ModuleScopeBinding(e.Registry, name) {
 		return
 	}
+	gen := e.Registry.Defs.Gen(name)
 	switch {
 	case IsBareTypeNode(v):
-		e.Registry.analysisRecorder().NoteFrozenRead(name, FrozenBakeType)
+		e.Registry.analysisRecorder().NoteDefRead(v.ID, name)
+		e.Registry.analysisRecorder().NoteFrozenRead(name, FrozenBakeType, gen)
 	case IsConcrete(v):
-		e.Registry.analysisRecorder().NoteFrozenRead(name, FrozenBakeValue)
+		e.Registry.analysisRecorder().NoteFrozenRead(name, FrozenBakeValue, gen)
 	}
 }

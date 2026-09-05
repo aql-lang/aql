@@ -10,12 +10,18 @@ package lang
 //	def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  def x 2  f 0
 //	interpreter: 1 2      compiled (before the fix): 1 1   ← MISCOMPILE
 //
-// The fix: NoteFrozenRead records such reads (engine.go stepWord), and
-// NotifyNameRebound marks the program uncompilable on a later module-scope
-// rebind — interpreter fallback, correct result. STORED-REF units (service
-// handlers, spawn bodies) are exempt: their rebind safety is the precise
-// per-ref poisoning (TestCompiledStoredHandlerFreezeRedefine), which keeps
-// the rest of the program compiled.
+// The first fix (2026-09-03/04) REFUSED such programs: NoteFrozenRead
+// recorded the read and NotifyNameRebound marked the program uncompilable on
+// a later module-scope rebind — interpreter fallback, correct result. Stage
+// 4b (compiler/go/unit_memo.go) replaced the refusal with a binding-sensitive
+// unit memo: the note now records the binding's generation on the unit, and
+// the call after the rebind re-records the unit instead of reusing the stale
+// one. The refusal survives only for a unit whose reference ESCAPES into a
+// value (a returned closure, a stamped fn value), which no later call site
+// can refresh. STORED-REF units (service handlers, spawn bodies) are exempt
+// either way: their rebind safety is the precise per-ref poisoning
+// (TestCompiledStoredHandlerFreezeRedefine), which keeps the rest of the
+// program compiled.
 
 import (
 	"fmt"
@@ -23,171 +29,143 @@ import (
 	"testing"
 )
 
-// frozenReason is the latch's own text (compiler/go/emit.go, NotifyNameRebound's
-// fn-unit arm). Each row below asserts it EXACTLY, and that is not decoration:
-// MarkUncompilable is FIRST-REASON-WINS, so a row that only checks `reason != ""`
-// passes whenever ANY other refusal fires first — including one introduced by the
-// very change under review. Until 2026-09-04 nothing in the tree named this
-// string, so the latch could have been deleted outright with these rows still
-// green. Assert the text, or the pin is not a pin.
-func frozenReason(name, bake string) string {
-	return "module binding " + name + " rebound after a fn unit baked its " + bake
-}
+// The latch's own text — "module binding <name> rebound after a fn unit
+// baked its <bake>" — is pinned EXACTLY where it can still fire, in
+// compiler/go/frozen_read_test.go (NotifyNameRebound's escaping-unit arm).
+// No end-to-end row pins it here, and that is a measured gap, not an
+// oversight: every returned-closure shape that would reach the latch at top
+// level refuses earlier on its own residual shape (`(mk 1) 2` → "call result
+// above a literal"; `def h (mk 1)  h 2` → "unconsumed fn-value carrier"), so
+// the first such shape to compile is the one that owes this file its row.
+// MarkUncompilable is FIRST-REASON-WINS, which is why that row must assert
+// the text and not merely `reason != ""`.
 
-// TestModuleReadRebindRefusesAndMatches — the miscompile pin: the rebind
-// program refuses with the named reason and the fallback matches the
-// interpreter's documented dynamic-read result.
-func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
-	// Legacy refusal+fallback-parity contract: pins the one-release
-	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
-	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("BORU_COMPILE_FALLBACK", "1")
-	// bound is the name the row rebinds and bake is the artifact the unit
-	// froze — the refusal must name both, because the three bakes are
-	// repaired by three different mechanisms.
-	cases := []struct{ src, bound, bake string }{
+// TestModuleReadRebindCompilesWithParity — the rows that REFUSED under the
+// frozen-read latch until Stage 4b, and now compile: the unit memo is
+// binding-sensitive (compiler/go/unit_memo.go), so the call after the rebind
+// re-records the unit against the new binding instead of reusing the one
+// baked before it. Each row was a measured miscompile before its arm of the
+// discipline existed (the "before" column), then a refusal, and is now a
+// compiled program that agrees with the interpreter. bound / bake name what
+// the row rebinds and what the unit had baked — the three artifacts the
+// three arms defend, all repaired by the one mechanism.
+func TestModuleReadRebindCompilesWithParity(t *testing.T) {
+	cases := []struct{ src, bound, bake, before string }{
 		// The documented module-dynamic case (scalar read baked as a const).
-		{`def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  def x 2  f 0`, "x", "value"},
-		// The splice twin: the macro payload fires into the unit's tokens at
-		// analysis time; a rebind would leave the old tokens frozen.
-		{`def op (quote [1 add 2])  def f fn [[n:Integer] [Any] [do [n drop word op]]]  f 0  def op (quote [10 mul 4])  f 0`, "op", "value"},
-		// The UNDEF twin. `undef` reaches the SAME NotifyNameRebound as `def`
-		// (basic/go/native_definition.go), and until 2026-09-03 no case here
-		// exercised it. Measured by suppressing the guard at emit.go and
-		// rebuilding: the program compiles to `7 7` where the interpreter
-		// raises `undefined_word` — the unit's baked const outlives the very
-		// binding that produced it, so the compiled body cannot tell that `k`
-		// stopped existing.
-		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  undef k  f`, "k", "value"},
-		// The CROSS-FAMILY twin, and the one a live operand ALONE cannot fix.
-		// Measured the same way: compiles to `7 7` where the interpreter
-		// raises `type_error: f: return value 1: expected Integer, got
-		// ProperString` over the value `'x2'`.
-		//
-		// What separates it from the first case is the EMITTED SHAPE. The unit
-		// lowers to two `PUSH_CONST`s feeding a MONO `CALL_NATIVE add (Number,
-		// Number)` — a signature chosen at compile time FROM the frozen value.
-		// `OpCallNative` invokes that BAKED signature's handler directly
-		// (eng/go/vm.go) and never rematches, so making the read live without
-		// re-deciding the signature does not reproduce the interpreter at all:
-		// the interpreter rematches to `add`'s String arm and concatenates,
-		// and only f's declared `[Integer]` return catches it. Whatever
-		// eventually makes this read live therefore owes a signature DECISION
-		// as well as an operand, and this row is what refuses to let that step
-		// supply the operand while keeping the stale selection.
-		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f`, "k", "value"},
-		// The TYPE twin, and the row that says the discipline is about
-		// BINDINGS rather than about values. A type name lives in the SAME
-		// single binding store (lang/go/CLAUDE.md "Registry Bindings"), so a
-		// module-scope type read inside a unit freezes exactly as a value
-		// read does — resolveOperand's bare-type-node arm returns a
-		// typeOperand and the unit lowers to OpPushType carrying the node's
-		// compile-time IDENTITY.
-		//
-		// Until 2026-09-04 BOTH halves of the discipline missed it. The read
-		// never travels stepWord's simple-value substitution branch (the
-		// type-literal arm returns first), so NoteFrozenRead was never
-		// attempted; and `def`/`undef`'s capitalised arms returned before
-		// every recorder notification, so NotifyNameRebound was never called
-		// for a type name at all. Measured on the DEFAULT lane — plain `boru
-		// run`, no flags, no -force-compile:
+		{`def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  def x 2  f 0`, "x", "value", "1 1 for 1 2"},
+		// The TYPE twin: a type name lives in the SAME single binding store
+		// (lang/go/CLAUDE.md "Registry Bindings"), so a module-scope type
+		// read inside a unit froze exactly as a value read did — the unit
+		// lowered to OpPushType carrying the node's compile-time IDENTITY.
+		// Measured on the DEFAULT lane before its arm existed:
 		//
 		//	interpreted -> true false      compiled -> true true
-		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  def T String  f`, "T", "type"},
-		// The type UNDEF twin, worse in the same way the value one is: an
-		// ALIAS binding is not Minted, so undef retires no lattice node
-		// (basic/go/native_definition.go's undef type arm) and the unit's
-		// baked ID keeps resolving after its binding is gone.
-		//
-		//	interpreted -> raises undefined_word      compiled -> true true
-		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  undef T  f`, "T", "type"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  def T String  f`, "T", "type", "true true for true false"},
 		// The CALL-TARGET family, and the plainest shape in this file: define
 		// a helper, define a caller, call it, redefine the helper. That is the
 		// documented late-binding half of NUR097 and it is what a REPL session
 		// or a hot reload does, so it is not an edge case the corpus merely
-		// happens to lack.
-		//
-		// The unit lowers to `TAIL_CALL_USER f1` naming a SPECIFIC compiled
-		// unit. The bind twin replays `def-replace helper` correctly beside
-		// it — verified by disassembly — and the call target does not move,
-		// which is the §6.5 lesson exactly: the twins fix where the registry
-		// is, and this gate defends what is in the bytecode. Measured on the
-		// default lane before this arm existed:
+		// happens to lack. The unit lowered to `TAIL_CALL_USER f1` naming a
+		// SPECIFIC compiled unit; the bind twin replayed `def-replace helper`
+		// correctly beside it and the call target did not move (§6.5's
+		// lesson: the twins fix where the registry is, the memo fixes what
+		// is in the bytecode). Measured on the default lane before its arm:
 		//
 		//	interpreted -> 2 101      compiled -> 2 2
 		{`def helper fn [[x:Integer] [Integer] [x add 1]]  def use fn [[x:Integer] [Integer] [helper x]]  ` +
-			`use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1`, "helper", "call target"},
+			`use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1`, "helper", "call target", "2 2 for 2 101"},
 		// Transitively: the rebind is two call levels below the unit that
-		// froze it. `1 9` interpreted, `1 1` compiled.
+		// froze it — the memo's staleness walks the unit-reference graph.
+		// `1 9` interpreted, `1 1` compiled before the arm.
 		{`def a fn [[][Integer][1]]  def b fn [[][Integer][a]]  def c fn [[][Integer][b]]  c  ` +
-			`def a fn [[][Integer][9]]  c`, "a", "call target"},
-		// The SIGNATURE-UNDEF twin. `undef g (fnsig …)` reaches UndefFnHandler,
-		// which called UninstallFnSigs and returned — no recorder notification
-		// of any kind, the same shape as the type arms. Compiled `1 1` where
-		// the interpreter raises undefined_word.
-		{`def g fn [[][Integer][1]]  def f fn [[] [Integer] [g]]  f  undef g (fnsig [[] [Integer]])  f`,
-			"g", "call target"},
-		// The ZERO-OUTPUT call site, and the row that says why it needs its
-		// own pin. `BuildFnBodyReturnsFn` records a 0-output CALL_USER through
-		// a SECOND RecordUserCall site, which the first cut of the call-target
-		// note missed — it sat inline at recordUserCallOrApply, so a fn with no
-		// declared returns kept baking a stale target.
-		//
-		// The divergence it guards is INVISIBLE to the differential: a 0-output
-		// fn leaves no value to compare, so both lanes return `[]` and only
-		// stdout differs (`1 1` compiled against the interpreter's `1 99`).
-		// That is exactly why the site was missed, and it is why what this row
-		// asserts is the REFUSAL and its reason rather than a value.
+			`def a fn [[][Integer][9]]  c`, "a", "call target", "1 1 for 1 9"},
+		// The ZERO-OUTPUT call site: a 0-output CALL_USER recorded through a
+		// SECOND RecordUserCall site, whose divergence is INVISIBLE to the
+		// differential — a 0-output fn leaves no value to compare, so both
+		// lanes return `[]` and only stdout differs (`1 1` compiled against
+		// the interpreter's `1 99` before the arm). What this row can assert
+		// is that it compiles and agrees on the (empty) residual.
 		{`def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f  def g fn [[] [] [print 99]]  f`,
-			"g", "call target"},
+			"g", "call target", "prints 1 1 for 1 99"},
 		// The `/v` SPELLING of a frozen read, both bakes. `T/v` and `k/v`
 		// resolve through stepWordVal, which reaches NEITHER of stepWord's
 		// substitution branches — so both walked straight past the latch while
 		// `resolveOperand` baked them exactly as it bakes the plain spelling.
-		//
-		// The TYPE row was found by review on the type arm's own PR. The VALUE
-		// row is OLDER than that arm: it had been open since the freeze
-		// discipline landed, and it is what says the fault is the read PATH
-		// rather than either arm. Measured on the default lane:
+		// The TYPE row was found by review on the type arm's own PR; the VALUE
+		// row is OLDER than that arm. Measured on the default lane:
 		//
 		//	def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  def T String  f
 		//	  interpreted -> true false      compiled -> true true
 		//	def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f
 		//	  interpreted -> 7 11            compiled -> 7 7
-		{`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  def T String  f`, "T", "type"},
-		{`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  undef T  f`, "T", "type"},
-		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f`, "k", "value"},
-		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  undef k  f`, "k", "value"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  def T String  f`, "T", "type", "true true for true false"},
+		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  def k 9  f`, "k", "value", "7 7 for 7 11"},
 		// The REBIND SITE axis — NUR117. A rebind written inside a `do` body
-		// reached NotifyNameRebound with the recorder SUSPENDED (its keep-defs
-		// body guard suspends for the run), so the latch was never consulted
-		// and the program compiled against a unit still holding the old bake.
-		// A `do` body's defs LEAK to the enclosing scope, so the rebind is as
-		// real as a top-level one:
-		//
-		//	interpreted 7 11        compiled 7 7
-		//
-		// NUR117 blamed the `len(openUnitRecs) == 0` guard. Measured, that was
-		// wrong — at the deciding call openUnitRecs is EMPTY and `suspended`
-		// is 1, so the guard would have passed. The early return was the
-		// exemption, which is why the latch now runs above it.
-		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]  f`, "k", "value"},
-		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [undef k]  f`, "k", "value"},
-		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [def T String]  f`, "T", "type"},
-		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [undef T]  f`, "T", "type"},
+		// reached NotifyNameRebound with the recorder SUSPENDED, so the latch
+		// was never consulted and the program compiled against a unit still
+		// holding the old bake (`7 7` for `7 11`). A `do` body's defs LEAK to
+		// the enclosing scope, so the rebind is as real as a top-level one —
+		// and the memo sees it exactly as it sees a top-level one: the leaked
+		// binding's generation moved.
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [def k 9]  f`, "k", "value", "7 7 for 7 11"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [def T String]  f`, "T", "type", "true true for true false"},
 		{`def g fn [[][Integer][1]]  def f fn [[] [Integer] [g]]  f  ` +
-			`do [def g fn [[][Integer][2]]]  f`, "g", "call target"},
-		// The MULTI-RUN twin of the same axis, which NUR117 recorded as
-		// already covered by the arm-resident machinery. It is not: an
-		// each/fold body leaks its LAST iteration's def to module scope, and
-		// `armBoundNames` only refuses a later TOP-LEVEL READ of the name —
-		// these rows reach the frozen unit through a CALL instead, so nothing
-		// saw them. Measured `7 [9] 11` interpreted against `7 [9] 7`
-		// compiled, and unchanged at two elements.
-		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  [1] each [def k 9  k]  f`, "k", "value"},
-		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  [1 2] each [def k 9  k]  f`, "k", "value"},
+			`do [def g fn [[][Integer][2]]]  f`, "g", "call target", "1 1 for 1 2"},
+	}
+	for _, c := range cases {
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
+		if !compiled {
+			t.Errorf("%q: the rebind of %s (%s baked) must compile under the binding-sensitive memo "+
+				"(before its arm: %s); compiled=false err=%v", c.src, c.bound, c.bake, c.before, errC)
+			continue
+		}
+		requireParity(t, c.src, gotC, errC, gotI, errI)
+	}
+}
+
+// TestModuleReadRebindSoundFallbacks — the rows the memo hands to the
+// interpreter rather than compiling, each pinned with its reason. The UNDEF
+// rows re-analyse the unit against a name that is gone, so the check pass
+// reports undefined_word and the program refuses on check diagnostics — the
+// interpreter then raises the same undefined_word at run time. The MULTI-RUN
+// rows reach the frozen unit through a top-level read after an each body
+// bound the name, which the arm-residency gate refuses (the runtime binding
+// is per-element, or absent at zero iterations). Each refusal's fallback is
+// parity with the interpreter; a row that starts compiling has graduated and
+// moves to the parity test with its interpreter answer.
+func TestModuleReadRebindSoundFallbacks(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	const armRead = "twin regime: read of `k` after a multi-run body binds it"
+	cases := []struct{ src, reason string }{
+		// The UNDEF twins: `undef` reaches the same rebind notification as
+		// `def`, and the re-recorded unit reads a name the pass no longer
+		// binds. Before the discipline's arms: `7 7` where the interpreter
+		// raises undefined_word; `true true` for the type; `1 1` for the
+		// sig-undef of a call target.
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  undef k  f`, "check diagnostics"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  undef T  f`, "check diagnostics"},
+		{`def g fn [[][Integer][1]]  def f fn [[] [Integer] [g]]  f  undef g (fnsig [[] [Integer]])  f`, "check diagnostics"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T/v]]  f  undef T  f`, "check diagnostics"},
+		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  undef k  f`, "check diagnostics"},
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [undef k]  f`, "check diagnostics"},
+		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [undef T]  f`, "check diagnostics"},
+		// The splice twin: the macro payload fires into the unit's tokens at
+		// analysis time; the re-recorded unit fires the NEW payload, whose
+		// shape (`10 mul 4` under `n drop`) the closure lowering declines —
+		// the fn-value-call boundary refusal, a sound fallback.
+		{`def op (quote [1 add 2])  def f fn [[n:Integer] [Any] [do [n drop word op]]]  f 0  def op (quote [10 mul 4])  f 0`,
+			"dynamic value precedes residual args (fn-value-call boundary)"},
+		// The MULTI-RUN twin of the rebind-site axis: an each body leaks its
+		// LAST iteration's def to module scope, and the top-level read after
+		// it is the arm-residency gate's. Measured `7 [9] 11` interpreted
+		// against `7 [9] 7` compiled before the arm.
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  [1] each [def k 9  k]  f`, armRead},
+		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  [1 2] each [def k 9  k]  f`, armRead},
 		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  [1] each [def T String  1]  f`,
-			"T", "type"},
+			"twin regime: a bind transition has no stream placement"},
 	}
 	for _, c := range cases {
 		src := c.src
@@ -200,9 +178,11 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 			t.Fatalf("CompileCheck(%q): %v", src, cerr)
 		}
 		if prog != nil {
-			t.Errorf("%q: a module rebind after a unit baked the binding must refuse; compiled instead", src)
-		} else if want := frozenReason(c.bound, c.bake); reason != want {
-			t.Errorf("%q: refusal must be the frozen-read latch's own; want %q, got %q", src, want, reason)
+			t.Errorf("%q: compiled — this shape has graduated; move it to the parity rows", src)
+			continue
+		}
+		if !strings.Contains(reason, c.reason) {
+			t.Errorf("%q: refusal drifted: want %q in %q", src, c.reason, reason)
 		}
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
 		if compiled {
@@ -211,6 +191,39 @@ func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
 			t.Errorf("%q: engine divergence: compiled=%v/%v interp=%v/%v", src, gotC, errC, gotI, errI)
 		}
+	}
+}
+
+// TestModuleReadCrossFamilyRebindCompiles — the CROSS-FAMILY twin, the row
+// that once said a live operand alone could not repair the bake: the unit had
+// lowered to two PUSH_CONSTs feeding a MONO `CALL_NATIVE add (Number, Number)`
+// chosen from the frozen value, so making the read live without re-deciding
+// the signature could not reproduce the interpreter. The memo re-records the
+// unit against the String binding instead, so the second call's unit selects
+// add's String arm at analysis, concatenates to 'x2', and f's declared
+// [Integer] return raises — the interpreter's own type_error, same code, same
+// message.
+//
+// What still differs is the BLAME POSITION: the compiled RET check blames the
+// body's first token where the interpreter blames the call site (NUR118 —
+// pre-existing for every compiled return-contract error, measured on the
+// tree before this row could reach it). The row therefore compares the
+// error's first line, not its rendering.
+func TestModuleReadCrossFamilyRebindCompiles(t *testing.T) {
+	src := "def k 5  def f fn [[] [Integer] [k add 2]]  f  def k \"x\"  f"
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if !compiled {
+		t.Fatalf("%q: must compile under the binding-sensitive memo; err=%v", src, errC)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("%q: value divergence: compiled=%v interp=%v", src, gotC, gotI)
+	}
+	if errC == nil || errI == nil {
+		t.Fatalf("%q: both lanes must raise f's return type_error; compiled=%v interp=%v", src, errC, errI)
+	}
+	firstLine := func(err error) string { return strings.SplitN(err.Error(), "\n", 2)[0] }
+	if firstLine(errC) != firstLine(errI) {
+		t.Errorf("%q: error divergence beyond the NUR118 position: compiled=%q interp=%q", src, firstLine(errC), firstLine(errI))
 	}
 }
 
