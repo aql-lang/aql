@@ -238,3 +238,80 @@ func TestFnResidualReplayReasonArms(t *testing.T) {
 		t.Errorf("a seated read arms the replay and passes the accounting: %q w=%d", r, rec.dynFrameW)
 	}
 }
+
+// TestNoteWordReadBodyLocalProducer pins the producer admission (NUR123's
+// leftover, 2026-09-05): a value an event of THIS unit produced and a
+// body-local `def` bound (`def j (m get "f")  j`) resolves through the
+// event, not a slot, and is the unit's word read all the same — named,
+// and gradual (never strict); a value neither local nor produced here, or
+// produced but bound in an ENCLOSING scope, is not this unit's to seat; a
+// binding read both bare and by `/v` is never seated (wordReadName) — that
+// mix is the accounting's refusal.
+func TestNoteWordReadBodyLocalProducer(t *testing.T) {
+	es, rec, _, _ := wordReadUnit(t)
+	u := es.units[len(es.units)-1]
+	j := core.NewDynamicCarrier(core.TAny)
+	es.NoteWordRead(j, "j", core.SrcPos{Row: 1, Col: 40})
+	if rec.wordReadNames[j.ID] != "" {
+		t.Error("a value neither local nor produced here is not this unit's read")
+	}
+	es.producedBy[j.ID] = producer{seq: 3}
+	es.NoteWordRead(j, "j", core.SrcPos{Row: 1, Col: 40})
+	if rec.wordReadNames[j.ID] != "j" || rec.wordReads[j.ID] != 0 || rec.wordReadPos[j.ID].Col != 40 {
+		t.Errorf("a body-local producer's value is named at its read, gradual: %v %v %v", rec.wordReadNames, rec.wordReads, rec.wordReadPos)
+	}
+	k := core.NewDynamicCarrier(core.TAny)
+	es.producedBy[k.ID] = producer{seq: 2}
+	if u.enclosingBindIDs == nil {
+		u.enclosingBindIDs = map[string]bool{}
+	}
+	u.enclosingBindIDs[k.ID] = true
+	es.NoteWordRead(k, "k", core.SrcPos{Row: 1, Col: 44})
+	if rec.wordReadNames[k.ID] != "" {
+		t.Error("an enclosing-scope binding's value is not this unit's to seat")
+	}
+	if es.wordReadName(rec, j) != "j" {
+		t.Error("the produced value reads as its word")
+	}
+	es.NoteValRead(j.ID)
+	if es.wordReadName(rec, j) != "" {
+		t.Error("a binding read both bare and by /v is the accounting's, never a seat")
+	}
+}
+
+// TestReplayIsBodyTailWordReadAnchor pins the read anchor (NUR123): a
+// word-read entry orders by its READ position whatever its producer's seq —
+// an event between the producer and the read ran before the dispatch on
+// both lanes and is admitted (`def j (m get "f")  def y 1  j`); an event
+// after the read reorders and declines (`… j  def y 1`); a produced value
+// beside the read keeps its own seq anchor.
+func TestReplayIsBodyTailWordReadAnchor(t *testing.T) {
+	es := NewEmitState()
+	evAt := func(seq, col int) EmitEvent {
+		return EmitEvent{seq: seq, kind: evCall, call: emitCall{pos: core.SrcPos{Row: 1, Col: col}}}
+	}
+	j := core.NewDynamicCarrier(core.TAny)
+	es.producedBy[j.ID] = producer{seq: 1}
+	j.SetPos(core.SrcPos{Row: 1, Col: 50})
+	frag := &EmitFragment{events: []EmitEvent{evAt(1, 33), evAt(2, 45)}}
+	if !es.replayIsBodyTailAnchored(frag, []core.Value{j}, []bool{true}) {
+		t.Error("an event before the read is admitted whatever its seq")
+	}
+	if es.replayIsBodyTail(frag, []core.Value{j}) {
+		t.Error("the same window anchored at its producer declines the later event")
+	}
+	frag = &EmitFragment{events: []EmitEvent{evAt(1, 33), evAt(2, 60)}}
+	if es.replayIsBodyTailAnchored(frag, []core.Value{j}, []bool{true}) {
+		t.Error("an event after the read reorders — decline")
+	}
+	r := core.NewDynamicCarrier(core.TAny)
+	es.producedBy[r.ID] = producer{seq: 2}
+	frag = &EmitFragment{events: []EmitEvent{evAt(1, 33), evAt(2, 45), evAt(3, 48)}}
+	if !es.replayIsBodyTailAnchored(frag, []core.Value{r, j}, []bool{false, true}) {
+		t.Error("an event after the produced value's seq but before the read is admitted")
+	}
+	frag = &EmitFragment{events: []EmitEvent{evAt(1, 33), evAt(2, 45), evAt(3, 55)}}
+	if es.replayIsBodyTailAnchored(frag, []core.Value{r, j}, []bool{false, true}) {
+		t.Error("an event after both anchors declines")
+	}
+}

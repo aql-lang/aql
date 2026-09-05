@@ -9575,7 +9575,14 @@ func (es *EmitState) NoteWordRead(v core.Value, name string, pos core.SrcPos) {
 	}
 	u := es.units[len(es.units)-1]
 	if _, isLocal := u.localByID[v.ID]; !isLocal {
-		return
+		// A body-local `def` bound to a value an event of THIS unit
+		// produced (`def j (m get "f")  j`) resolves through its producing
+		// event, not a slot — resolveOperand's events-first rule — and is
+		// this unit's read all the same; an ENCLOSING-scope binding's
+		// value (enclosingBindIDs, resolveOperand's own test) is not.
+		if _, produced := es.producedBy[v.ID]; !produced || u.enclosingBindIDs[v.ID] {
+			return
+		}
 	}
 	rec := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
 	if rec.wordReadNames == nil {
@@ -9722,6 +9729,13 @@ func (es *EmitState) wordReadName(rec *fnUnitRec, v core.Value) string {
 	if es == nil || rec == nil || v.ID == "" || v.Quoted || es.applyPending(v.ID) {
 		return ""
 	}
+	// A binding read both bare and by `/v` shares one value ID across two
+	// dispatch semantics: the residual entry may be the `/v` delivery, not
+	// the word. That mix is the accounting's refusal (wordReadAccounting),
+	// never a seat.
+	if rec.valReads[v.ID] > 0 {
+		return ""
+	}
 	return rec.wordReadNames[v.ID]
 }
 
@@ -9769,18 +9783,21 @@ func (es *EmitState) noteWordReadReplay(u *emitUnit, rec *fnUnitRec, vals []core
 	}
 	window := vals[len(vals)-w:]
 	names := es.dynFrameWordsFor(u, rec, window)
-	// The tail test anchors on source positions when no window value was
-	// event-produced; a word-read entry is anchored at its READ, not at
-	// the binding's value (a param carrier carries the declaration's
-	// position, which precedes every body event — `[def y 1  g]` would
-	// never read as a tail).
+	// A word-read entry is anchored at its READ, not at the binding's
+	// value: a param carrier carries the declaration's position and a
+	// body-local's value its producer's, both of which precede every
+	// body event — `[def y 1  g]` and `[def j (m get "f")  def y 1  j]`
+	// would never read as tails. SetPos overrides (WithPosAt keeps an
+	// existing position, which every such value has).
 	anchored := append([]core.Value(nil), window...)
+	wordRead := make([]bool, len(window))
 	for i := range anchored {
-		if names[i].Name != "" {
-			anchored[i] = core.WithPosAt(anchored[i], names[i].Pos)
+		if names[i].Name != "" && names[i].Pos.Row > 0 {
+			anchored[i].SetPos(names[i].Pos)
+			wordRead[i] = true
 		}
 	}
-	if !es.replayIsBodyTail(rec.frag, anchored) || replayValueApplicables(window, names) > 1 {
+	if !es.replayIsBodyTailAnchored(rec.frag, anchored, wordRead) || replayValueApplicables(window, names) > 1 {
 		return !strict
 	}
 	rec.dynFrameW = w
@@ -9838,18 +9855,39 @@ func replayApplicables(window []core.Value) int {
 //     read. With events but no positioned window value, the order cannot
 //     be proven and the replay declines.
 func (es *EmitState) replayIsBodyTail(frag *EmitFragment, window []core.Value) bool {
+	return es.replayIsBodyTailAnchored(frag, window, nil)
+}
+
+// replayIsBodyTailAnchored is replayIsBodyTail with the window's WORD-READ
+// entries (wordRead[i], NUR123) anchored at their READ rather than at their
+// producer: the interpreter dispatches the word where the read stands, so
+// every event positioned before the read ran before the dispatch on both
+// lanes — a body-local's producer and its `def`, an unrelated `def y 1` —
+// and only an event after the read reorders (`def j (m get "f")  def y 1
+// j` arms; `def j (m get "f")  j drop  j` does not).
+func (es *EmitState) replayIsBodyTailAnchored(frag *EmitFragment, window []core.Value, wordRead []bool) bool {
 	if frag == nil || len(frag.events) == 0 {
 		return true
 	}
 	anchorSeq := -1
-	for _, v := range window {
+	readAnchor := core.SrcPos{}
+	for i, v := range window {
+		if i < len(wordRead) && wordRead[i] {
+			if p := v.Pos(); posAfter(p, readAnchor) {
+				readAnchor = p
+			}
+			continue
+		}
 		if pr, ok := es.producedBy[v.ID]; ok && pr.seq > anchorSeq {
 			anchorSeq = pr.seq
 		}
 	}
-	if anchorSeq >= 0 {
+	if anchorSeq >= 0 || readAnchor.Row > 0 {
 		for i := range frag.events {
 			if frag.events[i].seq <= anchorSeq {
+				continue
+			}
+			if readAnchor.Row > 0 && !posAfter(eventPos(frag.events[i]), readAnchor) {
 				continue
 			}
 			// A dyn-BIND of a value the window itself READS is not a
@@ -9885,6 +9923,11 @@ func (es *EmitState) replayIsBodyTail(frag *EmitFragment, window []core.Value) b
 		}
 	}
 	return true
+}
+
+// posAfter reports whether p lies after q in source order.
+func posAfter(p, q core.SrcPos) bool {
+	return p.Row > q.Row || (p.Row == q.Row && p.Col > q.Col)
 }
 
 // windowReadsID reports whether the replay window holds the value with the

@@ -172,3 +172,64 @@ func TestGradualFnParamMapLiteralCheckIsClean(t *testing.T) {
 		t.Errorf("%q: want one no_signature diagnostic naming k, got %v", src, res.Diagnostics)
 	}
 }
+
+// TestBodyLocalWordReadParity pins NUR123's leftover as far as the residual
+// reaches (2026-09-05): a body-local `def` bound to a CONTAINER ELEMENT the
+// pass types dynamic(Any) on every run — `def j (m get "f")  j` answered
+// `fn` for the interpreter's 42, exit 0 — resolves through its producing
+// event, not a slot, so NoteWordRead never counted it. A body-local
+// producer of the unit is now the unit's word read (gradual: named, never
+// strict), the tail test anchors a word read at its READ rather than at
+// the value's producer (an event between the two ran before the dispatch
+// on both lanes), and the VM's no-match reads the INSTALLED binding — the
+// interpreter's "group the call in parens" help line included. Full-text
+// parity (positions, notes and help) on every row.
+//
+// Still open on the record: the same read consumed OUTSIDE the residual
+// (`j typeof`, `{a: j}`, an if/each/do body, the stack-collected `j j add`
+// — which the VM's no-match deferral hands back to the interpreter, slow
+// and right) or followed by an event (`j  def y 1`, `j  5 drop`), which
+// keep the slot push — a gradual read is best effort — and the `/v` render
+// (NUR119).
+func TestBodyLocalWordReadParity(t *testing.T) {
+	const hM = `def h fn [[m:Map][Any]`
+	rows := []struct{ src, want string }{
+		{hM + `[def j (m get "f")  j]]  h {f: ([] => [42])}`, "42 — was fn"},
+		{hM + `[def j (m get "f")  j]]  h {f: 5}`, "5 — plain data, no island"},
+		{hM + `[def j (m get "f")  j]]  h {f: (z:Integer => [z])}`, "cannot call `j` — with the interpreter's forward-args help line"},
+		{hM + `[def j (m get "f")  j]]  h {f: (fn [[a:Integer] [Integer] [a add 1]])}`, "cannot call `j`"},
+		{hM + `[def j (m get "f")  j]]  h {f: add/v}`, "cannot call `j`"},
+		{hM + `[def j (m get "f")  j 3]]  h {f: (z:Integer => [mul 3 z])}`, "9"},
+		{hM + `[def j (m get "f")  def y 1  j]]  h {f: ([] => [42])}`, "42 — a def between the producer and the read"},
+		{hM + `[def j (m get "f")  def y 1  j y]]  h {f: (z:Integer => [mul 3 z])}`, "3"},
+		{hM + `[def j (m get "f")  j drop  j]]  h {f: ([] => [42])}`, "42 — the first read consumed, the second seated"},
+		{hM + `[def j m.f  j]]  h {f: ([] => [42])}`, "42 — the member spelling"},
+		{`def h fn [[m:Map x:Integer][Any][def j (m get "f")  x j]]  h {f: (z:Integer => [mul 3 z])} 5`, "15 — the word collects the frame's stack"},
+		{`def h fn [[xs:List][Any][def j (xs get 0)  j]]  h [([] => [42])]`, "42 — a list element"},
+		{hM + `[def j (m get "f")  (j)]]  h {f: ([] => [42])}`, "42"},
+		{`def mk fn [[] [Function] [([] => [42])]]  def f fn [[] [Any] [def r (mk)  r]]  f`, "42 — a returned closure bound to a body-local"},
+		{`def f fn [[x:Integer] [Any] [def r (x add 1)  r]]  f 4`, "5 — a plain computed local"},
+	}
+	for _, c := range rows {
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
+		if !compiled {
+			t.Errorf("%q (%s): must compile natively; err=%v", c.src, c.want, errC)
+			continue
+		}
+		requireParity(t, c.src, gotC, errC, gotI, errI)
+	}
+	// the top-level spelling has no frame to seat in: the Stage-3 refusal
+	// it always had, and the interpreter's answer
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	a, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	src := `def m {f: ([] => [42])}  def j (m get "f")  j`
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog != nil || !strings.Contains(reason, "fn value read from a container auto-dispatches") {
+		t.Errorf("%q: want the Stage-3 container refusal, got prog=%v reason=%q err=%v", src, prog != nil, reason, cerr)
+	}
+	gotC, _, errC, gotI, errI := runBothEngines(t, src)
+	requireParity(t, src, gotC, errC, gotI, errI)
+}

@@ -2534,6 +2534,49 @@ did not seat the replay either. The record carries the new witnesses; the
 fix is the per-read op (the same word dispatch at the read site under a
 runtime "is it a fn" test), the next increment.
 
+## The gradual body-local's residual read seats (2026-09-05, the eighth increment)
+
+**Root cause, located.** The engine noted the read; the emitter's
+`NoteWordRead` dropped it at its first gate — `u.localByID[v.ID]` — because
+a body-local `def` bound to a computed value is read through its PRODUCING
+EVENT (resolveOperand's events-first rule), never through a slot: the
+locals table held only the param. Three things fix the residual spelling:
+a body-local producer of the unit (`producedBy` hit, not an
+`enclosingBindIDs` snapshot — resolveOperand's own test) counts as the
+unit's word read, named and gradual; the tail test anchors a word-read
+entry at its READ (`replayIsBodyTailAnchored`, `SetPos` — `WithPosAt` keeps
+an existing position, which a produced value and a param carrier both have,
+so the sixth increment's anchoring had never applied), admitting every
+event between the producer and the read as run-before-dispatch on both
+lanes and declining only an event after the read; and the VM's word-read
+no-match reads the INSTALLED binding (`Registry.Lookup`) with the closure
+bridge carrying `BarrierPos = len(params)` as `compileFnDef` resolves it,
+so the "group the call in parens" help line appears on both lanes. A
+binding read both bare and by `/v` is kept out of the seat
+(`wordReadName`) so the accounting's refusal stays the one that names the
+mix. Measured on the family (`lang/go/word_read_dispatch_test.go`,
+TestBodyLocalWordReadParity, full-text parity):
+
+    def j (m get "f")  j           42 / 42   (was fn)     {f: 5} → 5, no island
+    … j 3                          9         … def y 1  j     42      … j drop  j   42
+    … x j (stack-collect)          15        … m.f  j         42      … (j)         42
+    … {f: (z:Integer => [z])}      cannot call `j`, help line and all, both lanes
+
+**Still open, best-effort slot pushes.** The read consumed outside the
+residual (`j typeof` Integer / Function, `{a: j}`, `if true [j] [0]`, `[1]
+each [j]`, `do [j]`) or followed by an event (`j  def y 1`, `j  5 drop`):
+42 interpreted, `fn` compiled, exit 0. `j j add` reaches the VM's
+CALL_NATIVE_POLY no-match deferral and answers 84 through the interpreter
+(slow, not wrong — and not a native compile). `j/v` renders `fn` for the
+interpreter's `fn j` (NUR119). Refusing a gradual read consumed elsewhere
+would refuse every `def n (m get "k")  n add 1` in the corpus, so the fix
+is a per-read DEOPT: after the read's push, an op that tests the value at
+run time and, on a fn, hands the rest of the body (the source tokens from
+the read on) to the interpreter with every frame name registry-visible
+(OpBindDynScope for the params and the defs so far), then jumps to the
+unit's RET with the island's residual — the residual replay generalised to
+a mid-body start. Closure units decline it at first.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

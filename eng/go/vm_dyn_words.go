@@ -87,11 +87,15 @@ func (vc *vmContext) callDynFrameWords(reg *core.Registry, words []compiler.DynF
 	// at the region's foot, the one word-read entry. A matched lead that the
 	// Apply kernel declined (an interpreter-only body) and every other
 	// shape keep the island.
+	// The diagnostic reads the INSTALLED binding (Registry.Lookup), as the
+	// interpreter's own sigError does: installDef compiles a stored fn
+	// value's signatures (compileFnDef resolves BarrierAllForward to the
+	// param count), and the no-match's "group the call in parens" help
+	// keys on that compiled barrier — a raw FnDefInfo would lose the line.
 	if len(installed) == 1 && words[0].Name != "" && len(prefix) == 0 && dynFrameSimpleWindow(region) {
-		if fd, isFn := lead.Data.(core.FnDefInfo); isFn && wordLeadNoMatch(lead, region[1:]) {
-			fd.Name = words[0].Name
+		if fd := reg.Lookup(words[0].Name); fd != nil && wordLeadNoMatch(lead, region[1:]) {
 			args := append([]core.Value(nil), region[1:]...)
-			return nil, true, core.NoMatchDiag(vc.r.Source, words[0].Name, &fd, args, words[0].Pos, core.ReorderHintFor(words[0].Name, &fd, args))
+			return nil, true, core.NoMatchDiag(vc.r.Source, words[0].Name, fd, args, words[0].Pos, core.ReorderHintFor(words[0].Name, fd, args))
 		}
 	}
 	results, err := runIslandResolved(reg, prefix, tokens)
@@ -173,7 +177,12 @@ func (vc *vmContext) closureAsWord(reg *core.Registry, v core.Value) (core.Value
 		}
 	}
 	body := v
-	sig := core.Signature{Params: params, BarrierPos: core.BarrierAllForward, Impl: core.Go(func(a []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+	// All-forward as the interpreter INSTALLS it: compileFnDef resolves a
+	// boru fn's BarrierAllForward to len(Params), which is what its no-match
+	// diagnostic reads (HasForwardSigs — the "group the call in parens"
+	// suggestion); the bridge carries the same value so the two lanes'
+	// diagnostics agree line for line.
+	sig := core.Signature{Params: params, BarrierPos: len(params), Impl: core.Go(func(a []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
 		return vc.invokeClosureOn(reg, body, append([]core.Value(nil), a...))
 	})}
 	core.NormalizeSig(&sig)
