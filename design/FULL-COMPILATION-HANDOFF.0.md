@@ -2070,6 +2070,74 @@ why the first cut found nothing inside units.
 Not done here: the `[Any Any]` rewind-after-count-check shape, and the
 0-arg-overload twin (`m.e 5 m.e 7`, NUR035's guard) — both refuse soundly.
 
+## Where the frontier stands after these four increments (2026-09-05)
+
+The frontier ledger (`test/go/langspec/frontier_spec_test.go`) went 102 →
+84 across the third and fourth increments. What is left, by family and by
+MEASURED blocker — each row below was run on both lanes on this tree, and
+the shapes that already compile are named so the next author starts from
+the boundary, not from the family's label:
+
+- **22 × "body result of unknown provenance" — the closure-capture family**
+  (Church encodings, combinators, parser combinators). Returned closures
+  that CAPTURE the factory's params already compile when the inner body is
+  the Stage-G paren-apply shape over typed params: `def app fn
+  [[g:Function][Function][( fn [[x:Integer][Integer][(g x)]] )]]  def h
+  (app (z:Integer => [mul 3 z]))  (h 5)` is `15` on both lanes
+  (`PUSH_CLOSURE` + `CALL_DYN_TRAIL_TOP`). Three separate blockers sit
+  beside it, each measured: (a) a BARE-NAME apply of a captured Function
+  with a forward arg (`[g x]`, no paren) refuses; (b) a `/v` READ of a
+  captured fn returned as data (`[g/v]`) refuses; (c) an `Any`-typed inner
+  param (`[[x:Any][Any][(g x)]]`) refuses at the lead window's argument
+  gate ("cannot prove its argument non-function"). The Church rows use all
+  three at once (`x:Any => [x/v]`, `f/v apply` chains), so they graduate
+  only when all three land; the parser-combinator rows are (a) plus the
+  `if` arms. Sizing: three increments, (c) first — it is the gate the
+  fourth increment's probe already reasons about (a parked result is not a
+  fn that dispatches).
+- **8 × "def-bound computed fn apply"** (`def h (FnUtil.compose …)  (h 5)`,
+  the FnUtil combinators). A def-read of a computed Go-impl closure is a
+  WORD dispatch in the interpreter (MatchSignature over the value's own
+  signatures); `OpCallDynamic`'s island runs value semantics, which leave
+  a named Go-impl fn as data. `OpCallDynApplyTop` — `apply`-word
+  semantics over a paren-bounded window — is the candidate lowering for
+  the PAREN spelling (`(h 5)`: the window is the whole arg set, so arity
+  need not be known); the bare spelling (`h 5`) needs the arity and stays.
+  Note the same shape over a COMPILED factory's closure already compiles
+  (`def h (mk 1)  (h 2)` is 3) because `producerReturnedClosureArity`
+  knows the arity; measured today, `def keep fn [[g:Function][Function][(
+  fn [[x:Integer][Integer][x add 1]] )]]  def h (keep …)  (h 5)` refuses
+  under this reason even so — the arity recovery declines when the
+  closure carries an unused capture, worth one look before the op.
+- **8 × "check diagnostics"** — not one mechanism (L-DO variadic regions,
+  the staged Church spellings, the `/v` hold on a def-bound computed fn,
+  the strict-lane FnUtil rows). Leave until the families above move.
+- **5 × "computed closure at a word's argument slot"** and **3 × "fn-value
+  -call boundary"** (family C's leftovers: the stack form `5 m.p m.p 7`,
+  a computed first argument, a lambda member `m.l 5 m.l 7`). All three
+  leftovers are the ARRIVAL model declining to claim the apply
+  (`tryMemberFnArrivalDispatch`: no forward literal window, an anonymous
+  member), after which the member read stays a dynamic value under a
+  later window. The lambda-member row is the smallest: admit an anonymous
+  single-sig member with a boru body.
+- **The `[Any Any]` rewind-after-count-check shape** (`def g fn [[] [Any
+  Any] [mk 7]]  g` is `8` interpreted): the check model does not perform
+  the frame rewind that a passing return-count check enables, so the
+  unit's out count is wrong before any lowering could be. A check-model
+  change, not a compiler one; refuses soundly today.
+- **The probe/real asymmetry** (Stage 4b, E): a closure probe that carries
+  `producedBy`/`eventInfo` so the probe and the real compile judge the
+  same unit. Changes every closure probe's verdict; wants the whole-corpus
+  differential as its gate.
+
+Two rules this line paid for today, worth keeping in front of every
+increment: measure the INTERPRETER first, with the shape's siblings (the
+paren, the body frame, the fn body, the multi-output twin), because the
+compiled lane's existing model may be wrong in the same place the new
+family is (the returned-closure park hid inside family C); and check the
+lane answers on the DEFAULT lane, since `-force-compile` refuses where the
+default lane silently compiles.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
