@@ -2340,6 +2340,156 @@ RetSpec, then the arm, then decide whether NUR122's bare-spelling
 widening is acceptable under a record or needs the island to re-label
 first.
 
+## The bare fn-binding read is a word dispatch (NUR123), and two more findings (2026-09-05, the sixth increment)
+
+Measuring blocker (a)'s parity rows on the tree after NUR120/NUR121 landed
+turned up a sixth default-lane class, older than this branch and broader
+than (a): **a bare read of a frame binding that holds a fn is a WORD
+dispatch on the interpreter and was a slot push on the compiled lane.**
+`stepWord` does not substitute a binding whose value is a FnDefInfo — it
+"goes through normal Lookup", the registered-word path under the binding
+name (`installDef` re-labels the value `Name = name` at bind time): a 0-arg
+fn fires, an n-arg fn collects forward from the tokens after it and from
+the frame's stack below it, a no-match raises `cannot call `g``; the one
+exception is a pending forward whose next slot expects a Function, which
+takes the value as data. The check model binds a CARRIER for the param
+(the fn-carrier side table for `g:Function`, `Defs` for `x:Any`), nothing
+can dispatch a carrier, so the read landed in the residual as a value and
+lowered as `PUSH_LOCAL`. Exit 0 on the default lane: `def f fn
+[[g:Function][Any][g]]  f ([] => [42])` answered `fn` for 42; `f
+(z:Integer => [z])` answered `fn (Integer)` where the interpreter raises;
+`def id fn [[x:Any][Any][x]]  id ([] => [42])` answered `fn`; `(g)`, `def
+y 1  g`, a quoted arg, a returned closure and a named 0-arg lambda the
+same (NUR123's table has thirteen rows). The count-mismatch replay
+already existed for `[g x]`; what it lacked was the NAME — its island
+re-stepped the VALUE (NUR122's park) — and the count-MATCHING residual
+never armed it at all.
+
+**What landed.** The classification is the engine's, made where the read
+happens: `Engine.noteWordRead` (both bare-read paths — the `Defs` value
+branch and the fn-carrier side-table branch) notes a fn-typed or gradual
+carrier read with no Function-expecting forward pending through the new
+`EmitRecorder.NoteWordRead(v, name, pos)`, and `stepWordVal` notes a `/v`
+read through `NoteValRead`. The emitter counts them on the innermost open
+unit (`fnUnitRec.wordReads` — fn-typed reads strictly; gradual ones name
+themselves only) and at the unit's finish ARMS the whole-frame replay
+over a residual carrying such a read whatever the count
+(`noteWordReadReplay`: `dynFrameWindow`, the body-tail test anchored at
+the READ's position rather than the carrier's — a param carrier has none,
+and `[def y 1  g]` never read as a tail — and at most one value-semantics
+applicable beside the word reads), recording the names and positions per
+token (`fnUnitRec.dynFrameWords` → `CompiledFn.DynFrameWords`, keyed by
+the op's unit-local pc; `noteDynFrameReplay`'s count-mismatch arming
+records them too). The VM's `callDynFrame` reads the table
+(`callDynFrameWords`): a region whose word-read entries hold plain data
+and nothing appliable is the residual already and skips the island (the
+identity fn over 5 costs no interpreter run); otherwise each fn-valued
+word-read entry is installed as a frame binding under its name
+(`InstallFrameBinding` — the interpreter's own param install, unquoted as
+its arrival path delivers it), a compiled closure first bridged to a
+FnDefInfo carrying one handler-bearing signature over the unit's declared
+param types whose handler runs the closure on the VM (`closureAsWord`),
+and the region re-steps with the WORD at the read's position in the
+value's place — the interpreter's own dispatch, errors and positions
+included — with the bindings popped in reverse afterwards. Then the
+accounting: every fn-typed read the engine noted must be seated in the
+window or consumed by a fn-value apply lowering (`creditWordRead` from
+`RecordDynApply` and `RegisterTrailingApply` — accepted lowerings whose
+0-arg and no-match faces are NUR122's), else the unit refuses
+(`wordReadAccounting`): a list or map literal's member, an if-arm's
+residual, a stack-collected argument, and a binding read both bare and by
+`/v` (one value ID, two dispatch semantics — `[g drop g/v]` would have
+FIRED the `/v` value) refuse soundly. A gradual read is best effort: it
+arms when seatable and otherwise keeps the slot push it always had —
+refusing it would refuse every `m k get` over an Any param, measured on
+the corpus's own fn bodies (`TestDynScopeCaptureDef`,
+`TestDoMapValueEvalNoDynEnv` fell over on the first cut).
+
+**Measured.** Every fn-typed witness agrees on both lanes now, value and
+error text alike (`lang/go/word_read_dispatch_test.go`, 27 parity rows and
+7 refusal rows); the corpus stays at 0 refusals; `compiler/go/
+word_read_test.go`, `eng/go/vm_dyn_words_test.go` and
+`core/go/engine_word_read_test.go` pin the arms. The two rows of
+`lang/spec/frontier/frontier-fnparam-deref.tsv` — the maintainer's
+2026-08-15 ruling that a bare name is a CALL, held open because the
+compiler read the param as a value — graduated into `fn-value.tsv` §7
+(`typeof (grab nought)` is Integer on both lanes, `typeof (hold dbl)`
+raises `cannot call `c`` on both) and the file is retired; frontier
+ledger 84 → 82, corpus 7670 rows.
+
+Three gates shaped the landing, each a measurement the first cut failed.
+The interp-entry census (ceiling 33, a downward ratchet) rose to 44 when
+the words island ran BEFORE the Apply kernel's frame push — `[act s]`
+over a compiled lambda had entered the callee as a frame and now
+islanded — so the kernel runs first and the words island takes only what
+it declines; a word-read lead over plain data that matches NO prefix of
+the tokens after it (`wordLeadNoMatch`: the interpreter's forward
+collection takes what a signature needs and leaves the rest, so `[g x]`
+over a 0-arg g FIRES) raises the no-match natively through `NoMatchDiag`,
+the builder the interpreter's own dispatch uses, with no island; and the
+`hold dbl` row still counted one `Engine.Run` — `InstallFrameBinding` →
+`InstallFnDef` → the registry's `OnRegisterHook`, dynamic help's example
+generator, which RUNS an engine for every fn-valued param bind on the
+interpreter too. A shadowing install fires no register hook now
+(`installFnDef`'s `hook` arm): a per-call frame binding is not a
+registration. The refusal-site census (93, never rises) took the two new
+refusals only once the three replay verdicts shared one site
+(`fnResidualReplayReason`), and `Finalize` went over the gocyclo cap
+until the words-table seat became `seatDynFrameWords`. One more, found
+measuring the bridge: a closure unit recorded no declared param types
+(`SetUnitParamTypes` was the CALL_USER site's), so the first bridge
+declared every param Any and `g "s"` over a `z:Integer` lambda RAN the
+closure (`[0]`) where the interpreter no-matches. A lambda's unit now
+carries its contract (`lamParamContract`, seated by
+`recordClosureDispatch` and `tryReturnedClosure`), the bridge declares
+it, and a unit without one declines the bridge rather than guess. Two things stay open on
+NUR123's record: the GRADUAL read consumed outside the residual (`[[k:Any]
+[Any][k typeof]]  h ([] => [42])` is Integer interpreted, Function
+compiled — the faithful fix is the same word dispatch at the READ site
+under a runtime "is it a fn" test, a per-read op rather than the residual
+replay). A NOTES-only difference in the no-match error turned out to be
+an interpreter diagnostic wart: `sigError`'s written-tuple walk did not
+stop at engine markers, so a no-match at a body's end listed the frame's
+DefCleanup marker as the argument the caller supplied (`… and __dc (a
+__DC)`). Both walks stop at a Mark, a Move or an internal marker now
+(`isEngineMarker`), the full-corpus gate — which compares notes — holds,
+and the `hold dbl` row graduates with byte-identical diagnostics. NUR122 is narrowed: the whole-frame replay's
+two witnesses agree now; the paren window `(g x)` keeps value semantics
+(credited as an accepted read) and its empty-name no-match stays.
+
+**The in-unit face of NUR120, found on the way.** `Program.ClosureRet` was
+keyed by `len(p.Code)` from INSIDE a fn unit's lowerer — the main code's
+length, a pc no unit ever reaches — so every closure pushed inside a fn
+body lost its callback contract: `def f fn [[] [Any] [each (x:Integer =>
+[x 1]) [1 2]]]  f` answered `[1 1]` compiled where the interpreter raises
+the count error, and the named `cb/v` twin inside a fn the same (exit 0,
+on the tree that closed NUR120). The table is per code now
+(`CompiledFn.ClosureRet`, the lowerer keys its own emission target at its
+own pc, the VM reads the current unit's — `closureRetAt`); five in-unit
+rows joined `lang/go/lambda_return_count_test.go`. NUR120's number stays
+retired: same defect, same fix line, pinned in the same file.
+
+**Two more findings, recorded, not fixed.** NUR124: a stack-shuffle word
+that moves a produced closure to the top RETURNS it, and the interpreter
+re-steps a native's returned fn where it lands — `[(mk 3)] each [5 swap]`
+is `[15]` interpreted and `[fn (Integer)]` compiled, `[5 over]` 45 against
+`fn`, `[5 swap drop]` each_error against `[5]` (the top-level spellings
+refuse; the code-body one over a produced closure compiles through the
+shuffle fold). NUR125: the check pass PANICS (recovered as
+internal_error) on `def h fn [[k:Any][Any][{a: k}]]  h ([] => [42])` — a
+map literal over a gradual param holding a fn; both lanes, pre-existing at
+89822d8.
+
+**Blocker (a), re-sized again.** The lambda-unit arm still waits (task:
+the returned closure's RetSpec on `tryReturnedClosure`'s operand, then
+`DynApplyLeadEligible`'s `lambdaUnit` discipline). The word-read machinery
+is what that arm should ride: a `[g x]` inside a returned closure is a
+word read of a CAPTURE, and `NoteWordRead` already counts it on the
+innermost unit when the capture is one of its locals — the lambda unit
+needs only the replay arming the user-fn path now has (`!rec.closure` is
+the gate to widen, with the count discipline of a user fn), and NUR122's
+bare-spelling widening is moot because the replay dispatches by name.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

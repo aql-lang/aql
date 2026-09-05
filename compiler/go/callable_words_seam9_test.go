@@ -118,7 +118,7 @@ func TestW9EmptyContainerConst(t *testing.T) {
 func TestW9RecordClosureDispatchInactive(t *testing.T) {
 	r := newTestRegistry(t)
 	// The inactive recorder is not a *EmitState → the whole path declines.
-	if recordClosureDispatch(r, "w", core.CallableSpec{}, nil, nil, nil, nil, nil, nil, ClosureInValue, nil, nil, nil, core.SrcPos{}, nil) {
+	if recordClosureDispatch(r, "w", core.CallableSpec{}, nil, nil, nil, nil, nil, nil, ClosureInValue, nil, nil, nil, nil, core.SrcPos{}, nil) {
 		t.Error("an inactive recorder should decline the closure dispatch")
 	}
 }

@@ -955,7 +955,7 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 // The *dynEnter return is the Apply kernel's outcome: non-nil means the callee
 // carried a compiled unit of THIS program and the run loop should enter it as a
 // frame (vm_dyn_apply.go), rather than the handler having islanded it.
-func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
+func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int, words []compiler.DynFrameWord) ([]core.Value, *dynEnter, error) {
 	switch op {
 	case compiler.OpCallDynTrailTop:
 		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
@@ -971,7 +971,7 @@ func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, 
 	case compiler.OpCallDynApplyTop:
 		return vc.callDynApplyTop(reg, arg, stack, curDebug, pc)
 	case compiler.OpCallDynFrame:
-		return vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
+		return vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc, words)
 	case compiler.OpCallDynMethod:
 		return vc.callDynMethod(reg, &vc.p.DynMethods[arg], stack, curDebug, pc)
 	default:
@@ -1364,6 +1364,19 @@ func (vc *vmContext) callDynamicMixed(reg *core.Registry, w int, stack []core.Va
 	return append(stack[:base], results...), nil
 }
 
+// closureRetAt reads the callback return contract keyed at a PUSH_CLOSURE's
+// pc in the table of the code that holds it: the main program's for the
+// top-level code (unit < 0), the unit's own otherwise — the pc spaces
+// overlap, so the table must be the emitting code's (CompiledFn.ClosureRet).
+func closureRetAt(p *compiler.Program, unit, pc int) (compiler.ClosureRetSpec, bool) {
+	if unit < 0 {
+		spec, has := p.ClosureRet[pc]
+		return spec, has
+	}
+	spec, has := p.Fns[unit].ClosureRet[pc]
+	return spec, has
+}
+
 // callDynFrame replays the CURRENT frame's end-of-body residual through a
 // nested interpreter run — the whole-frame dynamic-apply window
 // (OpCallDynFrame). The top w stack entries are the TOKEN region (the values
@@ -1377,7 +1390,7 @@ func (vc *vmContext) callDynamicMixed(reg *core.Registry, w int, stack []core.Va
 // turns out to have — and a non-callable value stays data. The run's residual
 // replaces the whole frame region; the following RET applies the fn's return
 // discipline (checkReturnContract, RetReplay).
-func (vc *vmContext) callDynFrame(reg *core.Registry, w, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
+func (vc *vmContext) callDynFrame(reg *core.Registry, w, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int, words []compiler.DynFrameWord) ([]core.Value, *dynEnter, error) {
 	if w < 1 || len(stack)-frameBase < w {
 		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYN_FRAME underflow")
 	}
@@ -1404,6 +1417,19 @@ func (vc *vmContext) callDynFrame(reg *core.Registry, w, frameBase int, stack []
 	if len(tokens) > 0 && dynFrameSimpleWindow(tokens) {
 		if ent := vc.dynApplyEnter(tokens[0], tokens[1:]); ent != nil && (len(prefix) == 0 || ent.allForward) {
 			return stack[:base], ent, nil
+		}
+	}
+	// A region carrying BARE READS of fn-valued bindings re-steps them as
+	// the WORDS the interpreter dispatches (NUR123, vm_dyn_words.go) — after
+	// the Apply kernel above, whose frame push IS the word dispatch when the
+	// lead matches (a match is a match under either semantics) and costs no
+	// interpreter entry; the words island takes what it declines (a 0-arg
+	// fn at a non-lead entry, a no-match, a callee with no compiled unit).
+	// A region whose reads hold plain data at run time is the residual as
+	// it stands and skips the island.
+	if len(words) > 0 {
+		if st, handled, err := vc.callDynFrameWords(reg, words, frameBase, base, stack, curDebug, pc); handled {
+			return st, nil, err
 		}
 	}
 	results, err := runIslandResolved(reg, prefix, tokens)
@@ -2005,7 +2031,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			// pc: the unit is shared across fn values with identical bodies and
 			// inputs, so the contract belongs to the value (see
 			// core.ClosurePayload.RetTypes).
-			if spec, has := p.ClosureRet[pc]; has {
+			if spec, has := closureRetAt(p, curUnit, pc); has {
 				cl.RetTypes, cl.RetPatterns = spec.Types, spec.Patterns
 				cl.RetDecl, cl.RetName, cl.RetPos = spec.Decl, spec.Name, spec.Pos
 			}
@@ -2190,7 +2216,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			if len(frames) > 0 {
 				fb = frames[len(frames)-1].stackBase
 			}
-			ns, ent, err := vc.callDynFamily(curReg, in.Op, int(in.Arg), fb, stack, curDebug, pc)
+			ns, ent, err := vc.callDynFamily(curReg, in.Op, int(in.Arg), fb, stack, curDebug, pc, dynFrameWordsAt(p, curUnit, pc))
 			if err != nil {
 				return nil, err
 			}

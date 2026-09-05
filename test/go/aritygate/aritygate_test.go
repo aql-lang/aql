@@ -104,6 +104,12 @@ var pinnedAritySites = map[string]int{
 	"eng/go/vm_dyn_apply.go":    3,
 	"eng/go/vm_rematch.go":      2,
 	"eng/go/vm_poly_nomatch.go": 3,
+	// closureAsWord bridges a compiled closure to a handler-bearing FnDefInfo
+	// so the interpreter's WORD dispatch can match it (NUR123): the bridge
+	// DECLARES the callee's signature from the unit's own param count and
+	// types — the argument rule's input, not a decision about what a closure
+	// of a given arity may do; a closure of any arity takes the same path.
+	"eng/go/vm_dyn_words.go": 1,
 
 	// ── NUR100 §1, a NAMED DIVERGENCE: RunPredicate decides whether a
 	//    function may act as a predicate at all by counting its parameters.

@@ -65,6 +65,15 @@ func TestLambdaReturnCountParity(t *testing.T) {
 		{`def g fn [[] [Integer Integer] [1 2]]  def f fn [[] [Integer] [g]]  f`, "f: expected 1, got 2 — on both lanes"},
 		{`def g fn [[] [] [7]]  def f fn [[] [Integer] [g]]  f`, "7"},
 		{`def g ([] => [7])  def f fn [[] [Integer] [g]]  f`, "7 — a lambda callee tail-calls under its placeholder count"},
+		// the same callbacks INSIDE a fn unit: the contract is keyed in the
+		// unit's own table (CompiledFn.ClosureRet) — keyed program-wide at
+		// the main code's length it was lost, and `[1 1]` came back with
+		// exit 0 (measured 2026-09-05, the in-unit face of NUR120)
+		{`def f fn [[] [Any] [each (x:Integer => [x 1]) [1 2]]]  f`, "in-unit lambda callback — was [1 1]"},
+		{`def f fn [[n:Integer] [Any] [each (x:Integer => [x n]) [1 2]]]  f 9`, "in-unit capturing lambda — was [9 9]"},
+		{`def f fn [[] [Any] [def cb fn [[x:Integer][Integer][x 1]]  each cb/v [1 2]]]  f`, "in-unit named callback — was [1 1]"},
+		{`def f fn [[] [Any] [[1 2] each (x:Integer => [x 1]) size]]  f`, "in-unit, consumed — was 2"},
+		{`def f fn [[] [Any] [[1 2] each (x:Integer => [x add 1])]]  f`, "[2 3] — the in-unit 1-value body"},
 		// 1-value bodies: nothing changes
 		{`def f ([x:Integer] => [mul 2 x])  f 5`, "10"},
 		{`def f ([x:Integer] => [x])  f 5`, "5"},

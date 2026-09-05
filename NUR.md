@@ -92,6 +92,9 @@ keep the two in sync in the same commit.
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
 | [NUR122](#nur122) | A bare-name dispatch of a fn-typed frame binding whose runtime value does not match is a NAMED no-match on the interpreter and something else on the compiled lane: `def f fn [[g:Function x:Integer][Integer][g x]]  f (z:String => [z]) 5` raises `signature_error: cannot call `g`` interpreted and `type_error: f: expected 1 return value(s), got 2 — [fn (String) 5]` compiled (the frame replay parks the value); the paren spelling `(g x)` raises the no-match with an EMPTY name (`cannot call `` `) at the body's position; a 0-arg `g` fires interpreted (`[42 5]`) and parks compiled (`[fn 5]`). Same shape family as NUR119: the compiled value has no binding name and no named-dispatch semantics | measuring the closure-capture family's blocker (a), 2026-09-05 |
+| [NUR123](#nur123) | A BARE READ of a frame binding holding a fn is a WORD dispatch on the interpreter (stepWord routes a bound FnDefInfo through Registry.Lookup: a 0-arg fn fires, a no-match raises `cannot call `g``) and was a slot PUSH on the compiled lane: `def f fn [[g:Function][Any][g]]  f ([] => [42])` answered `fn` for 42, `def id fn [[x:Any][Any][x]]  id ([] => [42])` the same, `f (z:Integer => [z])` answered `fn (Integer)` for the interpreter's error — default lane, exit 0. Fixed for the fn-body residual (the replay re-steps the read as the word; fn-typed reads elsewhere refuse); OPEN for a GRADUAL (`x:Any`) read consumed outside the residual (`[[k:Any][Any][k typeof]]  h ([] => [42])` is Integer / Function) | measuring the closure-capture family's blocker (a), 2026-09-05 |
+| [NUR124](#nur124) | A stack-shuffle word's result puts a produced closure on TOP and the interpreter RE-STEPS it there: `def mk fn [[k:Integer][Function][(z:Integer => [mul k z])]]  [(mk 3)] each [5 swap]` is `[15]` interpreted and `[fn (Integer)]` compiled; `[5 over]` is `[45]` / `[fn (Integer)]`; `[5 swap drop]` raises each_error interpreted and answers `[5]` compiled — default lane, exit 0. The top-level spellings refuse ("function value reaches swap (Stage 3)"); inside a code body over a produced closure the shuffle fold compiles | measuring NUR123's closure bridge, 2026-09-05 |
+| [NUR125](#nur125) | The check pass PANICS (recovered as `internal_error: invalid memory address or nil pointer dereference`) on a map literal whose value is a bare read of an `Any` param bound to a fn: `def h fn [[k:Any][Any][{a: k}]]  h ([] => [42])` — both lanes, exit 1; the Function-typed twin (`{a:42}`), a plain value (`{a:5}`) and a module-scope fn (`{a:42}`) are fine | measuring NUR123's container reads, 2026-09-05 |
 | [NUR119](#nur119) | A fn value read through a PARAM's `/v` renders under the PARAM's name on the interpreter and under its own name on the compiled lane: `def app fn [[g:Function][Function][g/v]]  (app (z:Integer => [mul 3 z]))` renders `fn g(Integer)` interpreted and `fn (Integer)` compiled, and `def sq (z:Integer => [mul z z])  … app sq/v` renders `fn g(Integer)` against `fn sq(Integer)`. Same value, one render — the interpreter's frame binding re-labels the fn under the name it is read through, and a compiled unit pushes the raw runtime value. Pre-existing for the paren-placed spelling; the bare and args-following spellings refuse (`unconsumed fn-value carrier in residual (closure render)`, callResultRenderKnown) rather than diverge | measured 2026-09-05 while fixing the returned-closure park |
 | [NUR118](#nur118) | A compiled fn's RETURN-CONTRACT error blames the body's first token where the interpreter blames the CALL SITE: `def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}` raises the same `type_error: f: return value 1: expected Integer, got ProperString` on both lanes, at `1:43` (the call) interpreted and `1:30` (the body) compiled. The compiled RET check is stamped with the unit's own position because one unit serves every call site (compiler StartFnCompile's fnPos) — a documented limitation that became reachable from a corpus-style row when the binding-sensitive unit memo let `def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f` compile (Stage 4b); the row pins code and message and excludes the position | Stage 4b's cross-family rebind row, 2026-09-04 |
 | [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
@@ -283,6 +286,152 @@ the fix is the maintainer's to direct.
 
 ---
 
+## NUR125 — the check pass panics on a map literal over a gradual param that holds a fn {#nur125}
+
+**Status:** Pending. **Found:** 2026-09-05, measuring the container reads
+of NUR123.
+
+**Rule:** panics never occur (ADR-005); a check-pass failure is a
+diagnostic, not a recovered runtime error.
+
+**Measured, both lanes (the interpreter's own check pass):**
+
+```
+def h fn [[k:Any][Any][{a: k}]]  h ([] => [42])
+    check error: [boru/internal_error]: internal engine error: runtime error: invalid memory address or nil pointer dereference
+def h fn [[k:Function][Any][{a: k}]]  h ([] => [42])     {a:42}
+def h fn [[k:Any][Any][{a: k}]]  h 5                     {a:5}
+def k ([] => [42])  {a: k}                               {a:42}
+```
+
+The map literal's value is a bare read of the `Any` param; at the call
+site the param holds a 0-arg lambda. The Function-typed twin, a plain
+value and a module-scope fn all evaluate. Not measured further here: the
+panic is caught and reported, so no lane answers, but a nil dereference
+in the check pass is a defect on its own (the recovery hides where it
+happens). Root cause not yet located.
+
+## NUR124 — a stack-shuffle word's result re-steps a produced closure on the interpreter only {#nur124}
+
+**Status:** Pending. **Found:** 2026-09-05, measuring the closure bridge of
+NUR123.
+
+**Rule:** a program matches or refuses; the two lanes agree on values.
+
+**Divergence, measured on the default lane, exit 0:**
+
+```
+def mk fn [[k:Integer][Function][(z:Integer => [mul k z])]]  [(mk 3)] each [5 swap]
+    interpreted  [15]              compiled  [fn (Integer)]
+… [(mk 3)] each [5 over]
+    interpreted  [45]              compiled  [fn (Integer)]
+… [(mk 3)] each [5 swap drop]
+    interpreted  each_error: body produced no result     compiled  [5]
+… [(mk 3)] each [dup drop 5]
+    interpreted  [5]               compiled  [5]
+```
+
+A native word's returned fn is RE-STEPPED where it lands
+(design/PAREN-RESTEP-RULE.0.md: the park applies to a USER fn's single
+result only), and a stack-shuffle word that moves a closure to the top
+returns it: the interpreter applies it to the value now beneath it
+(`5 swap` → 15, `5 over` → 45). The compiled lane trusts the shuffle over a
+dynamically-shaped stack (`DynStackShuffleWords`) and lays the closure out
+as data. The top-level spellings (`5 (mk 3) swap`, `5 g/v swap`) refuse
+("computed closure at a word's argument slot", "function value reaches
+swap (Stage 3)"); the code-body spelling over a produced closure is the
+one that compiles. A module-scope named lambda (`[g/v] each [5 swap]`)
+agrees on both lanes (`[15]`) — the re-step rule is keyed on the value's
+origin, which is itself the ADR-016 hazard.
+
+## NUR123 — a bare read of a fn-valued frame binding is a word dispatch the compiled lane never made {#nur123}
+
+**Status:** Pending — FIXED for the fn-body residual and for every fn-typed
+read (2026-09-05, the sixth increment); OPEN for a GRADUAL read consumed
+outside the residual. **Found:** 2026-09-05, measuring the closure-capture
+family's blocker (a) on the tree after NUR120/NUR121 landed.
+
+**Rule:** a program matches or refuses; the two lanes agree on values and
+errors.
+
+**Observed.** The interpreter's `stepWord` does not substitute a binding
+whose value is a fn: a FnDefInfo entry "goes through normal Lookup"
+(`core/go/engine.go`), i.e. a bare read of a frame binding — a param, a
+capture, a body-local `def` — whose RUNTIME value is a fn is a WORD dispatch
+under the binding name (`installDef` re-labels the value `Name = name` at
+bind time): a 0-arg fn FIRES, an n-arg fn collects forward from the tokens
+after it and from the frame's stack below it, a no-match raises
+`signature_error: cannot call `g``; only a pending forward whose next slot
+expects a Function takes the value as data. The check model binds a CARRIER
+for the same param (a `Function` carrier through the fn-carrier side table,
+an `Any` carrier through `Defs`), which no signature can dispatch, so the
+read was recorded as a value and the emitter lowered it as a slot push; the
+apply lowerings that later reached the value ran VALUE semantics (NUR122's
+park), and a value nothing applied was RETURNED. Default lane, exit 0:
+
+| program | interpreted | compiled, before |
+|---|---|---|
+| `def f fn [[g:Function][Any][g]]  f ([] => [42])` | `42` | `fn` |
+| `def f fn [[g:Function][Any][g]]  f (z:Integer => [z])` | `signature_error: cannot call `g`` | `fn (Integer)` |
+| `def f fn [[g:Function][Any][g]]  f add/v` | `signature_error: cannot call `g`` | `fn add(…)` |
+| `def f fn [[g:Function][Any][(g)]]  f (z:Integer => [z])` | `signature_error: cannot call `g`` | `fn (Integer)` |
+| `def f fn [[g:Function][Any][def y 1  g]]  f ([] => [42])` | `42` | `fn` |
+| `def id fn [[x:Any][Any][x]]  id ([] => [42])` | `42` | `fn` |
+| `def f fn [[g:Function][Any][g]]  def g0 ([] => [42])  f g0/v` | `42` | `fn g0` |
+| `def f fn [[g:Function][Any][g]]  f (quote ([] => [42]))` | `42` | `fn` |
+| `def f fn [[g:Function][Integer][g]]  f ([] => [42])` | `42` | `type_error: … expected Integer, got Function` |
+| `def f fn [[g:Function][Any][[g]]]  f ([] => [42])` | `[42]` | `[fn]` |
+| `def f fn [[g:Function][Any][if true [g] [0]]]  f ([] => [42])` | `42` | `fn` |
+| `def f fn [[g:Function][Any][g typeof]]  f ([] => [42])` | `Integer` | `Function` |
+| `def h fn [[k:Any][Any][k]]  def f fn [[g:Function][Any][h g]]  f ([] => [42])` | strict-barrier `signature_error` | `42` |
+
+**Fixed (the sixth increment).** The ENGINE classifies the read where it
+happens (`Engine.noteWordRead` → `EmitRecorder.NoteWordRead`: a fn-typed or
+gradual carrier read bare with no Function-expecting forward pending; a
+`/v` read is `NoteValRead`), the emitter counts the reads per unit, and at
+the unit's finish a residual carrying such a read arms the whole-frame
+replay whatever the count (`noteWordReadReplay`, `fnUnitRec.dynFrameWords`
+→ `CompiledFn.DynFrameWords`, keyed by the op's unit-local pc). The VM's
+`callDynFrame` then installs each fn-valued word-read entry as a frame
+binding under its name (`InstallFrameBinding`, the interpreter's own
+param install; a compiled closure is first bridged to a handler-bearing
+FnDefInfo, `closureAsWord`) and re-steps the region with the WORD in the
+value's place — the interpreter's own dispatch, errors and positions
+included — popping the bindings afterwards; a region whose reads hold
+plain data at run time is the residual already and skips the island. Every
+fn-typed read must then be accounted for — seated in the window, or
+consumed by a fn-value apply lowering (`creditWordRead`: the paren window,
+the trailing apply) — else the unit refuses (`wordReadAccounting`): a
+container member, an if-arm residual, a stack-collected argument, and a
+binding read both bare and by `/v` (one value ID, two dispatch semantics)
+all refuse soundly. Every row above bar the last three now agrees on both
+lanes (`lang/go/word_read_dispatch_test.go`), the container and arm rows
+refuse, and `[x g]`, `g 3`, the quoted arg, the returned closure and the
+named 0-arg lambda agree too. A word-read lead over plain data that
+matches NO prefix of the tokens after it raises the no-match natively
+(`NoMatchDiag`, the interpreter's own builder — no island); the Apply
+kernel's frame push still runs first, so a matching lead never islands.
+A compiled closure is bridged under the lambda's OWN declared param
+contract (`lamParamContract` → `CompiledFn.Params`), so `g "s"` over a
+`z:Integer` lambda no-matches on both lanes (the first bridge declared
+Any and ran the closure over the String — `[0]` for the interpreter's
+error, caught before landing).
+The two `frontier-fnparam-deref.tsv` rows (ruled 2026-08-15: a bare name
+is a call) graduated into `lang/spec/fn-value.tsv` §7 and the file is
+retired; the interp-entry census stays at its ceiling.
+
+**Open.** A GRADUAL read (an `x:Any` param, a Dynamic local) is arming
+best-effort only: consumed outside the residual it keeps the slot push,
+because refusing it would refuse every `m k get` over an Any param — so
+`def h fn [[k:Any][Any][k typeof]]  h ([] => [42])` still answers
+`Function` for the interpreter's `Integer`, and `[[k]]` still `[fn]` for
+`[42]`. The faithful fix is the same word dispatch at the read site under a
+runtime "is it a fn" test; it needs a per-read op rather than the residual
+replay. (The interpreter's no-match NOTES used to list the frame's
+DefCleanup marker as a stray argument — `… and __dc (a __DC)` — because
+the written-tuple walk did not stop at engine markers; fixed with this
+increment, `isEngineMarker`, so the two lanes' notes agree byte for byte.)
+
 ## NUR122 — a compiled fn-value apply has no name and no named-dispatch semantics {#nur122}
 
 **Status:** Pending. **Found:** 2026-09-05, measuring the closure-capture
@@ -318,6 +467,18 @@ error contract Stage 3's Apply kernel owes (design/FULL-COMPILATION.0.md
 §6.4) and NUR119's re-label is its value half: a compiled frame local
 read as a fn carries its binding name, and the apply of a NAMED value
 dispatches as the interpreter's word does.
+
+**Narrowed 2026-09-05 (the sixth increment, NUR123).** The whole-frame
+replay now re-steps a BARE-READ lead as the WORD the interpreter
+dispatches (`CompiledFn.DynFrameWords`: the VM installs the fn-valued read
+as a frame binding under its name and runs the region through the
+interpreter's own word dispatch), so the first two witnesses above agree
+on both lanes — `f (z:String => [z]) 5` raises `cannot call `g`` compiled
+too, and `f ([] => [42]) 5` reports `[42 5]`. What remains is the PAREN
+WINDOW spelling: `(g x)` lowers to `CALL_DYN_TRAIL_TOP` under value
+semantics, and its no-match still carries the empty name at the unit's
+position (the third witness). That lowering is credited as an accepted
+read of `g` (NUR123's accounting), so the record stays open for it.
 
 ## NUR119 — a fn value read through a param's `/v` renders under the param's name on one lane only {#nur119}
 

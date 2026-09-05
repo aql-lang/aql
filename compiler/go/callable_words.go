@@ -316,7 +316,7 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 	// STARTED from (unit_memo.go): claimed here, applied around every
 	// compile inside recordClosureDispatch.
 	env := es.takeBodyEnv(body, spec)
-	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos, env) {
+	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, nil, pos, env) {
 		return false
 	}
 	// A once-run defs-keeping body (`do`) compiled to a closure unit makes
@@ -407,11 +407,42 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	if foreignFnHome(r, fd) {
 		restore := check.ShareCheckStateFrom(fd.Registry, r)
 		defer restore()
-		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos, nil)
+		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), lamParamContract(lam), pos, nil)
 	}
 	// A lambda body is a fn body: its defs are frame-locals and nothing
 	// leaks, so it needs no re-run environment.
-	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos, nil)
+	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), lamParamContract(lam), pos, nil)
+}
+
+// lamParamContract is a lambda's declared PARAM contract — the types and
+// patterns MatchSignature reads — recorded on its closure unit
+// (CompiledFn.Params / ParamPatterns, SetUnitParamTypes) so a runtime that
+// must dispatch the closure BY NAME can declare the same signature the
+// interpreter's frame binding carries (the VM's closureAsWord bridge,
+// NUR123): a `z:Integer` lambda read as the word `g` and handed a String
+// must no-match there exactly as it does on the interpreter. A param with
+// no type (a pattern-only param) declares Any with its pattern. Nil for a
+// nil signature.
+func lamParamContract(lam *core.Signature) *ClosureParamSpec {
+	if lam == nil {
+		return nil
+	}
+	spec := &ClosureParamSpec{Types: make([]*core.Type, len(lam.Params)), Patterns: make([]*core.Value, len(lam.Params))}
+	for i, p := range lam.Params {
+		spec.Types[i] = p.Type
+		if spec.Types[i] == nil {
+			spec.Types[i] = core.TAny
+		}
+		spec.Patterns[i] = p.Pattern
+	}
+	return spec
+}
+
+// ClosureParamSpec is a closure unit's declared param contract, seated by
+// recordClosureDispatch / tryReturnedClosure (lamParamContract).
+type ClosureParamSpec struct {
+	Types    []*core.Type
+	Patterns []*core.Value
 }
 
 // foreignFnHome reports whether fd is a fn VALUE that was DEFINED in another
@@ -589,7 +620,7 @@ func fnValueRetSpec(fd *core.FnDefInfo, lam *core.Signature, fnPos core.SrcPos) 
 // M2d): each compiles to its OWN closure unit under the SAME shared token
 // shape (extraNoEvalHookSlots only nominates them on a LambdaSharesTokenShape
 // word) and rides as a second opClosure operand.
-func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, retSpec *ClosureRetSpec, pos core.SrcPos, env *bodyRunEnv) bool {
+func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, retSpec *ClosureRetSpec, paramSpec *ClosureParamSpec, pos core.SrcPos, env *bodyRunEnv) bool {
 	// The probe fork below needs the CONCRETE EmitState; both callers only
 	// reach here through an active recording state, so a non-EmitState
 	// recorder (the inactive no-op) declining is the unreachable belt.
@@ -748,6 +779,10 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	// extra-hook compiles below so a walk hook's unit never masquerades as
 	// the body's.
 	real.lastClosure = closureLatch{unit: unit, fresh: unit == recsBefore && len(real.fnRecs) > recsBefore}
+	// A lambda's declared param contract rides on its unit (lamParamContract).
+	if paramSpec != nil {
+		real.SetUnitParamTypes(unit, paramSpec.Types, paramSpec.Patterns)
+	}
 	var extraOps map[int]EmitOperand
 	for _, ex := range extras {
 		exUnit, exOk := compile(ex.toks, ex.names, ex.caps)

@@ -1,0 +1,181 @@
+package eng
+
+import (
+	"github.com/boru-lang/boru/compiler/go"
+	"github.com/boru-lang/boru/core/go"
+)
+
+// dynFrameWordsAt is the word table of the OpCallDynFrame at pc in the code
+// that holds it (CompiledFn.DynFrameWords): the replay's token region is a
+// fn body's residual, so only a unit carries one — the main code never does.
+func dynFrameWordsAt(p *compiler.Program, unit, pc int) []compiler.DynFrameWord {
+	if unit < 0 || p == nil || unit >= len(p.Fns) {
+		return nil
+	}
+	return p.Fns[unit].DynFrameWords[pc]
+}
+
+// callDynFrameWords is the whole-frame replay for a token region carrying
+// BARE READS of frame bindings (CompiledFn.DynFrameWords — NUR123).
+//
+// The interpreter's stepWord does not substitute a binding whose value is a
+// fn: the read "goes through normal Lookup", a WORD dispatch under the
+// binding name — a 0-arg fn fires, an n-arg fn collects forward from the
+// tokens after it and from the frame's stack below it, a no-match raises
+// `cannot call `g“. The unit pushed the slot instead, so the region on the
+// stack holds the VALUE where the interpreter's tape held the WORD. Every
+// word-read entry that holds a fn at run time is installed as a frame
+// binding under its name (InstallFrameBinding — the interpreter's own
+// param install, which re-labels the fn under the name) and re-stepped as
+// that Word through the interpreter's own dispatch; a compiled closure is
+// bridged to a handler-bearing fn first (closureAsWord). A word-read entry
+// holding plain data at run time is what stepWord substitutes — the value
+// — and stays as it is; a region with no live fn and no tape-coupled token
+// is therefore the residual already and skips the island (the identity fn
+// over 5 costs no interpreter run).
+//
+// Returns handled=false when no entry converted, leaving the caller's
+// value-semantics path (the Apply kernel's frame push, or the plain island)
+// to decide exactly as it did before the words existed.
+func (vc *vmContext) callDynFrameWords(reg *core.Registry, words []compiler.DynFrameWord, frameBase, base int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, bool, error) {
+	region := stack[base:]
+	if !replayRegionLive(region, words) {
+		return stack, true, nil
+	}
+	prefix := append([]core.Value(nil), stack[frameBase:base]...)
+	tokens := append([]core.Value(nil), region...)
+	var installed []string
+	var lead core.Value
+	for i, w := range words {
+		// A QUOTED fn is data to a value re-step, but a word read dispatches
+		// the BINDING, which holds the fn whatever its quote state
+		// (`f (quote ([] => [42]))` fires it interpreted).
+		if w.Name == "" || i >= len(tokens) || !core.IsAppliableFn(tokens[i]) {
+			continue
+		}
+		fnv, ok := vc.closureAsWord(reg, tokens[i])
+		if !ok {
+			continue
+		}
+		// The interpreter's Function-slot arrival delivers a quoted fn
+		// UNQUOTED into the frame binding (stepWordVal's arrival path); the
+		// VM's CALL_USER binds the slot as delivered, so strip it here.
+		fnv.Quoted = false
+		core.InstallFrameBinding(reg, w.Name, fnv)
+		installed = append(installed, w.Name)
+		if i == 0 {
+			lead = fnv
+		}
+		tokens[i] = core.WithPosAt(core.NewWord(w.Name), w.Pos)
+	}
+	if len(installed) == 0 {
+		return nil, false, nil
+	}
+	// The frame bindings live for the island run only: popped in reverse,
+	// the exact inverse of the pushes (the interpreter's frame teardown).
+	defer func() {
+		for i := len(installed) - 1; i >= 0; i-- {
+			reg.Defs.Pop(installed[i])
+		}
+	}()
+	// A word-read FnDefInfo LEAD over plain data that matches nothing is the
+	// interpreter's no-match, raised here through the same builder its own
+	// dispatch uses (NoMatchDiag, the failing tuple in written order) — no
+	// island for an answer that is an error by construction. Only the shape
+	// the interpreter would decide from these tokens alone qualifies: an
+	// empty prefix (nothing below the region to stack-collect) and the lead
+	// at the region's foot, the one word-read entry. A matched lead that the
+	// Apply kernel declined (an interpreter-only body) and every other
+	// shape keep the island.
+	if len(installed) == 1 && words[0].Name != "" && len(prefix) == 0 && dynFrameSimpleWindow(region) {
+		if fd, isFn := lead.Data.(core.FnDefInfo); isFn && wordLeadNoMatch(lead, region[1:]) {
+			fd.Name = words[0].Name
+			args := append([]core.Value(nil), region[1:]...)
+			return nil, true, core.NoMatchDiag(vc.r.Source, words[0].Name, &fd, args, words[0].Pos, core.ReorderHintFor(words[0].Name, &fd, args))
+		}
+	}
+	results, err := runIslandResolved(reg, prefix, tokens)
+	if err != nil {
+		return nil, true, stampAt(err, curDebug, pc, vc.r)
+	}
+	if err := vc.screenResults(results, "dynamic frame result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (the replay island's results are interpreter residuals, tape-coupled only on a compiler bug) (§compiler)
+		return nil, true, err
+	}
+	return append(stack[:frameBase], results...), true, nil
+}
+
+// wordLeadNoMatch reports whether a word dispatch of the fn `lead` over the
+// forward tokens after it matches NOTHING. The interpreter's forward
+// collection takes as many tokens as a signature needs and leaves the rest
+// (`[g x]` over a 0-arg g FIRES g and leaves x for the count check), so the
+// question is whether ANY prefix of the tokens fills some overload — not
+// whether the whole window does.
+func wordLeadNoMatch(lead core.Value, args []core.Value) bool {
+	for n := 0; n <= len(args); n++ {
+		if core.MatchFnSig(lead, args[:n]) != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// replayRegionLive reports whether a replay token region holds anything the
+// interpreter's re-step would DO something with: an appliable fn at a
+// word-read entry (quoted or not — the binding dispatches), an unquoted one
+// elsewhere (the Apply kernel applies it), or a tape-coupled token. A region
+// of plain data re-steps to itself.
+func replayRegionLive(region []core.Value, words []compiler.DynFrameWord) bool {
+	for i, t := range region {
+		if core.IsAppliableFn(t) && (!t.Quoted || (i < len(words) && words[i].Name != "")) {
+			return true
+		}
+	}
+	return tapeCoupled(region)
+}
+
+// closureAsWord makes a fn value dispatchable by NAME through the
+// interpreter's word path. A FnDefInfo already is (InstallFrameBinding
+// installs its own overloads). A compiled closure (ClosurePayload) has no
+// signatures the interpreter can match, so it is bridged to a FnDefInfo
+// carrying ONE handler-bearing signature over the unit's declared param
+// types, whose handler runs the closure on the VM (invokeClosureOn — the
+// closure's own return contract applies there). Declines a closure whose
+// unit this context cannot resolve.
+func (vc *vmContext) closureAsWord(reg *core.Registry, v core.Value) (core.Value, bool) {
+	cl, ok := v.Data.(core.ClosurePayload)
+	if !ok {
+		return v, true
+	}
+	prog := vc.p
+	if fp, foreign := vc.closureProgram(cl); foreign {
+		prog = fp
+	}
+	if cl.Unit < 0 || cl.Unit >= len(prog.Fns) {
+		return v, false
+	}
+	fn := &prog.Fns[cl.Unit]
+	// The unit's DECLARED param contract (CompiledFn.Params / ParamPatterns,
+	// seated by lamParamContract for a lambda's unit) is the signature the
+	// interpreter's frame binding matches under — a `z:Integer` lambda handed
+	// a String no-matches there. A unit that recorded none (a token body)
+	// declines: guessing Any would apply where the interpreter refuses.
+	if len(fn.Params) != fn.NArgs {
+		return v, false
+	}
+	params := make([]core.FnParam, len(fn.Params))
+	for i, t := range fn.Params {
+		if t == nil {
+			t = core.TAny
+		}
+		params[i] = core.FnParam{Type: t}
+		if i < len(fn.ParamPatterns) && fn.ParamPatterns[i] != nil {
+			params[i].Pattern = fn.ParamPatterns[i]
+		}
+	}
+	body := v
+	sig := core.Signature{Params: params, BarrierPos: core.BarrierAllForward, Impl: core.Go(func(a []core.Value, _ map[string]core.Value, _ []core.Value, _ *core.Registry) ([]core.Value, error) {
+		return vc.invokeClosureOn(reg, body, append([]core.Value(nil), a...))
+	})}
+	core.NormalizeSig(&sig)
+	return core.NewFunction(core.FnDefInfo{Signatures: []core.Signature{sig}}), true
+}

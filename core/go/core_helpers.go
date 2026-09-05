@@ -121,7 +121,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 					if !shadow {
 						r.NoteBindTransition(BindDef, name, body.Pos())
 					}
-					if r.ready && r.OnRegisterHook != nil {
+					if !shadow && r.ready && r.OnRegisterHook != nil {
 						r.OnRegisterHook(name)
 					}
 					return
@@ -184,7 +184,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// Compile this definition's own overloads and push a single
 		// DefStack entry. The 0-arg fallback and cross-stack overloading
 		// are synthesised on demand by Registry.Lookup → aggregateDispatch.
-		InstallFnDef(r, name, fnDef, isStackOnly)
+		installFnDef(r, name, fnDef, !shadow, isStackOnly)
 		if !shadow {
 			// A REDEFINITION whose overlap filter dropped the colliding entry
 			// is a drop-then-push: the net depth is unchanged, so a twin that
@@ -646,6 +646,18 @@ func RetagTypedContainerArgs(params []FnParam, args []Value) []Value {
 // demand by Registry.Lookup → aggregateDispatch, so this entry stays its own
 // authored unit for targeted undef and overlap detection.
 func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) {
+	installFnDef(r, name, fnDef, true, stackOnly...)
+}
+
+// installFnDef is InstallFnDef with the register hook under the caller's
+// control. A SHADOWING frame binding (InstallFrameBinding — a per-call param
+// or capture, or the VM's word-read replay installing a fn-valued read for
+// one island run) is not a registration: the hook is dynamic help's example
+// generator, which RUNS an engine over the new word, so firing it per call
+// generated examples for a name that lives one frame and, in a compiled
+// program, counted as an unattributed interpreter entry (the interp-entry
+// census). A registration proper (`def`, a module export) keeps it.
+func installFnDef(r *Registry, name string, fnDef FnDefInfo, hook bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 	entry := fnDef
 	entry.Name = name
@@ -669,7 +681,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	// (design/FUNCTION-VALUE-SCOPE.0.md §7.3 item 3).
 	home, _ := FnHome(r, &fnDef)
 	home.analysisFnConstructionPass(name, entry)
-	if r.ready && r.OnRegisterHook != nil {
+	if hook && r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
 }

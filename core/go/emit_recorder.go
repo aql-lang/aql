@@ -222,6 +222,21 @@ type EmitRecorder interface {
 	RecordDefRebind(name string, v Value, pos SrcPos)
 	RecordDynBind(name string, v Value, pos SrcPos)
 	NoteDefRead(id, name string)
+	// NoteWordRead records a BARE READ of a frame binding that the
+	// interpreter would DISPATCH if the binding held a fn at run time —
+	// stepWord routes a bound FnDefInfo through Registry.Lookup under the
+	// binding name (a 0-arg fn fires, a no-match raises `cannot call
+	// `g``) — while the check model pushed a carrier (a fn-typed or
+	// gradual Any/Dynamic one) that lowers as a slot push. Noted only when
+	// no pending forward expects a Function at the read (that arrival
+	// delivers the VALUE on both engines). The compiler counts the reads
+	// per unit and refuses any it cannot re-step as a word (NUR123).
+	NoteWordRead(v Value, name string, pos SrcPos)
+	// NoteValRead records a `/v` read of a binding (stepWordVal): the value
+	// spelling, which the interpreter never dispatches. A binding read BOTH
+	// ways in one unit cannot be told apart in the residual (one value ID),
+	// so the compiler refuses the unit rather than guess (NUR123).
+	NoteValRead(id string)
 	// NoteFrozenRead's gen is the binding's DefTable generation
 	// (DefTable.Gen) at the read, taken by the caller from the registry the
 	// read resolved in. It is the staleness key of the binding-sensitive
@@ -319,6 +334,8 @@ func (inactiveEmit) PopInlineCtxBoundary()   {}
 
 func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
 func (inactiveEmit) NoteDefRead(string, string)          {}
+func (inactiveEmit) NoteWordRead(Value, string, SrcPos)  {}
+func (inactiveEmit) NoteValRead(string)                  {}
 func (inactiveEmit) Sites() map[string]int               { return nil }
 
 func (inactiveEmit) RecordCall(string, *Signature, []Value, []Value, SrcPos, bool, bool) {}

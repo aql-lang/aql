@@ -1169,6 +1169,28 @@ type fnUnitRec struct {
 	// replayed with the prefix resolved (see the opcode doc). Sets
 	// CompiledFn.RetReplay so the RET applies the CallBoru-path trim discipline.
 	dynFrameW int
+	// dynFrameWords is CompiledFn.DynFrameWords' entry for this unit's
+	// replay: the binding NAME under which each token-region entry was read
+	// bare ("" otherwise), so the VM re-steps a fn-valued read as the WORD
+	// the interpreter dispatches (NUR123). Nil when no entry is such a read.
+	dynFrameWords []DynFrameWord
+	// wordReads counts, per frame-local value ID, the BARE READS the engine
+	// noted as word dispatches (NoteWordRead: a fn-typed or gradual local
+	// read with no Function-expecting forward pending); wordReadNames is
+	// the binding name each was read under. wordReadCredit counts the reads
+	// a fn-value apply lowering consumed under value semantics (a paren
+	// window, a trailing apply) — an ACCEPTED lowering. valReads counts the
+	// `/v` reads of the same IDs. At the unit's finish every noted read must
+	// be credited or seated in the replay window, and no ID may have been
+	// read both ways, else the unit refuses (wordReadAccounting, NUR123).
+	wordReads      map[string]int
+	wordReadNames  map[string]string
+	wordReadPos    map[string]core.SrcPos // the LAST bare read's position, per ID
+	wordReadCredit map[string]int
+	valReads       map[string]int
+	// outOpsVals are the residual VALUES outOps were resolved from, in the
+	// same order — wordReadAccounting reads the replay window's IDs off it.
+	outOpsVals []core.Value
 	// retPrefix seats the unnamed-param frame-bottom re-pushes at UNIT START
 	// (before the body events), for a body whose residual holds a variadic
 	// apply-loop value region under an inert tail — the values must sit BELOW
@@ -1579,6 +1601,7 @@ func (es *EmitState) RegisterTrailingApply(fnID string, arity int) {
 		es.trailingApplies = map[string]int{}
 	}
 	es.trailingApplies[fnID] = arity
+	es.creditWordRead(fnID)
 }
 
 // TrailingApplyArity returns the registered arg count for a paren-bounded trailing
@@ -2644,6 +2667,12 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (EmitOper
 		return EmitOperand{}, false
 	}
 	es.fnRecs[unit].render = core.FormatFnDef(fd)
+	// The returned lambda's declared param contract rides on its unit, so a
+	// runtime that dispatches the closure BY NAME (the word-read replay's
+	// closureAsWord bridge, NUR123) declares the interpreter's signature.
+	if ps := lamParamContract(lam); ps != nil {
+		es.SetUnitParamTypes(unit, ps.Types, ps.Patterns)
+	}
 	return EmitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
 }
 
@@ -4653,9 +4682,28 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 			// undecomposable window) refuses → fall back. (A GENUINE count mismatch
 			// that happens to carry a fn value still errors in both engines, so the
 			// fallback is sound either way.)
-			if dynTrail == 0 && !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) &&
-				!es.noteDynFrameReplay(u, rec, vals, len(ops)-len(rec.returns)) {
-				es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
+			// The three replay verdicts share ONE refusal site (the refusal-site
+			// census only falls): the count-mismatch replay declining, the
+			// word-read replay unable to seat (NUR123), and the word-read
+			// accounting — see fnResidualReplayReason.
+			//
+			// A BARE READ of a fn-valued frame binding left in the residual is
+			// a WORD dispatch on the interpreter — stepWord routes a bound
+			// FnDefInfo through Registry.Lookup under the binding name: a
+			// 0-arg fn FIRES, an n-arg fn collects from the tokens after it and
+			// the frame's stack below it, a no-match raises `cannot call `g``
+			// — where this unit pushed the slot: `def f fn [[g:Function][Any]
+			// [g]]  f ([] => [42])` answered `fn` for the interpreter's 42, and
+			// `def id fn [[x:Any][Any][x]]  id ([] => [42])` the same, both
+			// exit 0 (NUR123, measured 2026-09-05). The count MATCHED, so the
+			// arm above never looked. Arm the whole-frame replay over the token
+			// region with the binding NAMES (fnUnitRec.dynFrameWords): the VM
+			// installs each fn-valued word-read entry as a frame binding and
+			// re-steps the region through the interpreter's own word dispatch;
+			// a plain-data entry (the identity fn over 5) skips the island. A
+			// residual the replay cannot seat refuses.
+			if reason := es.fnResidualReplayReason(u, rec, vals, ops, dynTrail); reason != "" {
+				es.MarkUncompilable("fn " + name + ": " + reason)
 				return
 			}
 			// A CLOSURE body whose residual carries an UNAPPLIED fn-value — a captured/
@@ -5009,6 +5057,9 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	if !core.IsFnValueResidual(fn) { // fn must be a genuine fn-value residual
 		return 0, false
 	}
+	// The paren window consumed a bare read of this local (NUR123
+	// accounting): an accepted value-semantics lowering.
+	es.creditWordRead(fn.ID)
 	// A QUOTED fn value at the trailing position stays INERT in the
 	// interpreter (the paren never collapses — `(1 2 (quote (fn …)))` leaves
 	// [1 2 fn]); only a READ-substituted arrival (unquoted by the check's
@@ -9011,7 +9062,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 		BindTwinEntries: append([]core.DefEntry(nil), es.bindTwinEntries...),
 		ReplayBase:      es.bindSnap,
 		ReplayReg:       es.progReg}
-	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*core.Signature]int{}, variadic: map[int]bool{}}
+	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, closureRet: &p.ClosureRet, sigIdx: map[*core.Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
 	// (counting the program residual) is promoted to a frame local so the
 	// single-consume stack discipline holds. Count the residual references,
@@ -9234,7 +9285,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			// an ordinary fn falls through to curReg == vc.r (the fork).
 			cf.Reg = rec.reg
 		}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, bindConsumes: collectResidentBindConsumes(rec.frag.events, rec.dead), isFnUnit: true}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, closureRet: &cf.ClosureRet, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, bindConsumes: collectResidentBindConsumes(rec.frag.events, rec.dead), isFnUnit: true}
 		es.emitDynParamBinds(flw, rec)
 		// The apply-loop replay's unnamed-param re-pushes seat at UNIT START —
 		// they must sit BELOW the loop's runtime value region, which exists only
@@ -9327,6 +9378,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			// (frame re-push prefix included); replay the top dynFrameW token-region
 			// entries against it and let the RET apply the RetReplay discipline.
 			if rec.dynFrameW > 0 {
+				seatDynFrameWords(&cf, len(cf.Code), rec.dynFrameWords)
 				flw.emit(OpCallDynFrame, rec.dynFrameW, rec.pos)
 			}
 			cf.RetReplay = rec.retReplay
@@ -9500,12 +9552,258 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []core
 				replayApplicables(vals[len(vals)-w:]) == 1 {
 				rec.dynFrameW = w
 				rec.retReplay = true
+				// A word-read lead in the window takes the interpreter's WORD
+				// dispatch in the replay (NUR123): `[g x]` over a 0-arg g
+				// fires it, over a mismatched g raises `cannot call `g``.
+				rec.dynFrameWords = es.dynFrameWordsFor(u, rec, vals[len(vals)-w:])
 				return true
 			}
 			return false
 		}
 	}
 	return true
+}
+
+// NoteWordRead counts a bare read of a fn-typed or gradual frame local on
+// the innermost open unit (EmitRecorder). A read of a value that is not a
+// local of that unit — a module-scope def, an enclosing unit's binding read
+// through a closure body — is not this unit's to seat and is not counted:
+// the closure paths refuse fn-typed carriers on their own gates.
+func (es *EmitState) NoteWordRead(v core.Value, name string, pos core.SrcPos) {
+	if !es.Active() || v.ID == "" || name == "" || len(es.openUnitRecs) == 0 {
+		return
+	}
+	u := es.units[len(es.units)-1]
+	if _, isLocal := u.localByID[v.ID]; !isLocal {
+		return
+	}
+	rec := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+	if rec.wordReadNames == nil {
+		rec.wordReadNames = map[string]string{}
+		rec.wordReadPos = map[string]core.SrcPos{}
+	}
+	rec.wordReadNames[v.ID] = name
+	rec.wordReadPos[v.ID] = pos
+	// Only a FN-TYPED read is accounted strictly: the interpreter
+	// dispatches it whatever the call passed. A GRADUAL read (an `x:Any`
+	// param, a Dynamic local) dispatches only when the runtime value is a
+	// fn; its residual read arms the replay best-effort, and its other
+	// consumptions keep the slot push — refusing them would refuse every
+	// `m k get` over an Any param (measured: the corpus's own fn bodies).
+	if core.IsFnTypedCarrier(v) {
+		if rec.wordReads == nil {
+			rec.wordReads = map[string]int{}
+		}
+		rec.wordReads[v.ID]++
+	}
+}
+
+// NoteValRead counts a `/v` read on the innermost open unit (EmitRecorder).
+func (es *EmitState) NoteValRead(id string) {
+	if !es.Active() || id == "" || len(es.openUnitRecs) == 0 {
+		return
+	}
+	rec := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+	if rec.valReads == nil {
+		rec.valReads = map[string]int{}
+	}
+	rec.valReads[id]++
+}
+
+// creditWordRead records that a fn-value apply lowering consumed one bare
+// read of the local `id` under value semantics — the paren window
+// (RecordDynApply) and the trailing apply (RegisterTrailingApply). Those
+// are accepted lowerings (their 0-arg and no-match faces are NUR122's), so
+// the read is accounted for.
+func (es *EmitState) creditWordRead(id string) {
+	if es == nil || id == "" || len(es.openUnitRecs) == 0 {
+		return
+	}
+	rec := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+	if rec.wordReads[id] == 0 {
+		return
+	}
+	if rec.wordReadCredit == nil {
+		rec.wordReadCredit = map[string]int{}
+	}
+	rec.wordReadCredit[id]++
+}
+
+// fnResidualReplayReason is the fn-unit finish's replay verdict over a
+// resolved residual, returning the refusal reason or "" — three arms behind
+// one MarkUncompilable site. (1) A USER fn whose residual COUNT mismatches
+// and carries a Function value, or a Dynamic value that may be one, is a
+// possible unapplied fn-value call: noteDynFrameReplay arms the whole-frame
+// replay, or the shape refuses (a mid-body apply failing the body-tail gate,
+// an undecomposable window). (2) A bare read of a fn-valued binding left in
+// the residual arms the replay whatever the count, or refuses when a
+// fn-typed one cannot seat (NUR123). (3) Every fn-typed bare read the engine
+// noted must be seated or credited (wordReadAccounting). Closure units take
+// none of the three: their count mismatch is the higher-order word's own
+// error and their reads are the enclosing frame's.
+func (es *EmitState) fnResidualReplayReason(u *emitUnit, rec *fnUnitRec, vals []core.Value, ops []EmitOperand, dynTrail int) string {
+	if dynTrail != 0 || rec.closure {
+		return ""
+	}
+	if len(rec.returns) > 0 && len(ops) != len(rec.returns) &&
+		!es.noteDynFrameReplay(u, rec, vals, len(ops)-len(rec.returns)) {
+		return "unapplied fn-value in body residual (dynamic apply not compiled in a fn body)"
+	}
+	if rec.dynFrameW == 0 && len(rec.returns) > 0 && !es.noteWordReadReplay(u, rec, vals) {
+		return "bare read of a fn-valued binding is a word dispatch the frame replay cannot seat (NUR123)"
+	}
+	rec.outOpsVals = vals
+	return es.wordReadAccounting(rec)
+}
+
+// wordReadAccounting is the unit-finish check that every bare read the
+// engine noted as a word dispatch (NUR123) has a faithful home: consumed by
+// a fn-value apply lowering (creditWordRead) or seated in the armed replay
+// window (dynFrameWords, which re-steps it as the word). A read the model
+// consumed anywhere else — a list or map literal's member, an if-arm's
+// residual, a stack-collected argument, a `def` — is a place where the
+// interpreter dispatched the binding and this unit pushed its slot; and a
+// binding read both bare and by `/v` shares one value ID across the two
+// spellings, so the residual cannot say which read it holds. Both refuse.
+// Returns the refusal reason, or "" when the unit's reads are accounted.
+func (es *EmitState) wordReadAccounting(rec *fnUnitRec) string {
+	if len(rec.wordReads) == 0 {
+		return ""
+	}
+	seated := map[string]int{}
+	if rec.dynFrameW > 0 && len(rec.dynFrameWords) > 0 {
+		window := rec.outOpsVals[len(rec.outOpsVals)-rec.dynFrameW:]
+		for i, v := range window {
+			if i < len(rec.dynFrameWords) && rec.dynFrameWords[i].Name != "" {
+				seated[v.ID]++
+			}
+		}
+	}
+	for id, n := range rec.wordReads {
+		name := rec.wordReadNames[id]
+		if rec.valReads[id] > 0 {
+			return "binding `" + name + "` is read both bare and by /v in one body (one value ID, two dispatch semantics — NUR123)"
+		}
+		if n > rec.wordReadCredit[id]+seated[id] {
+			return "bare read of `" + name + "` is consumed where the interpreter dispatches it (a container member, a branch residual, a stack-collected argument — NUR123)"
+		}
+	}
+	return ""
+}
+
+// seatDynFrameWords records a replay's word table on the unit at the pc of
+// the OpCallDynFrame about to be emitted (CompiledFn.DynFrameWords); a
+// replay with no word read records nothing.
+func seatDynFrameWords(cf *CompiledFn, pc int, words []DynFrameWord) {
+	if len(words) == 0 {
+		return
+	}
+	if cf.DynFrameWords == nil {
+		cf.DynFrameWords = map[int][]DynFrameWord{}
+	}
+	cf.DynFrameWords[pc] = words
+}
+
+// wordReadName reports the binding NAME a residual value was read under
+// when that read is a WORD DISPATCH on the interpreter, or "" when the value
+// is not such a read.
+//
+// The interpreter's stepWord substitutes a binding's value only for a
+// non-fn binding; a binding holding a FnDefInfo "goes through normal Lookup"
+// — a word dispatch by name (a 0-arg fn fires, a no-match raises `cannot
+// call `g“). The check model binds a CARRIER for the same param (a
+// Function carrier through the fn-carrier side table, an Any carrier
+// through Defs), which no signature can dispatch, so the read lands in the
+// residual as a value and lowers as a slot push (NUR123). The read is a
+// word read when the ENGINE noted it (NoteWordRead: the bare-read path, a
+// fn-admitting carrier, no Function-expecting forward pending) on this
+// unit; a `/v` value with a pending `apply` is the apply word's own.
+func (es *EmitState) wordReadName(rec *fnUnitRec, v core.Value) string {
+	if es == nil || rec == nil || v.ID == "" || v.Quoted || es.applyPending(v.ID) {
+		return ""
+	}
+	return rec.wordReadNames[v.ID]
+}
+
+// dynFrameWordsFor is the replay's word table for a token region: index i
+// names the binding region entry i was read bare under ("" otherwise). Nil
+// when no entry is a word read — the replay then keeps value semantics.
+func (es *EmitState) dynFrameWordsFor(u *emitUnit, rec *fnUnitRec, window []core.Value) []DynFrameWord {
+	var names []DynFrameWord
+	for i, v := range window {
+		if name := es.wordReadName(rec, v); name != "" {
+			if names == nil {
+				names = make([]DynFrameWord, len(window))
+			}
+			names[i] = DynFrameWord{Name: name, Pos: rec.wordReadPos[v.ID]}
+		}
+	}
+	return names
+}
+
+// noteWordReadReplay arms the whole-frame replay for a residual whose COUNT
+// matched but which carries a bare read of a fn-valued binding (NUR123):
+// the interpreter dispatches that read as a word, so the region must
+// re-step under the binding name (fnUnitRec.dynFrameWords). True when no
+// such read exists or the replay seated; false keeps the refusal — a read
+// the window cannot reach (an unnamed-param prefix position), a body whose
+// events run after the window's production, or a second value-semantics
+// applicable beside it (the flat re-step cannot order two).
+func (es *EmitState) noteWordReadReplay(u *emitUnit, rec *fnUnitRec, vals []core.Value) bool {
+	all := es.dynFrameWordsFor(u, rec, vals)
+	if all == nil {
+		return true
+	}
+	// A replay that cannot seat refuses only a FN-TYPED read (the
+	// interpreter dispatches it unconditionally); a gradual read keeps the
+	// slot push it always had — best effort, never a new refusal.
+	strict := false
+	for i, v := range vals {
+		if all[i].Name != "" && core.IsFnTypedCarrier(v) {
+			strict = true
+		}
+	}
+	w, ok := dynFrameWindow(u, rec, vals)
+	if !ok {
+		return !strict
+	}
+	window := vals[len(vals)-w:]
+	names := es.dynFrameWordsFor(u, rec, window)
+	// The tail test anchors on source positions when no window value was
+	// event-produced; a word-read entry is anchored at its READ, not at
+	// the binding's value (a param carrier carries the declaration's
+	// position, which precedes every body event — `[def y 1  g]` would
+	// never read as a tail).
+	anchored := append([]core.Value(nil), window...)
+	for i := range anchored {
+		if names[i].Name != "" {
+			anchored[i] = core.WithPosAt(anchored[i], names[i].Pos)
+		}
+	}
+	if !es.replayIsBodyTail(rec.frag, anchored) || replayValueApplicables(window, names) > 1 {
+		return !strict
+	}
+	rec.dynFrameW = w
+	rec.retReplay = true
+	rec.dynFrameWords = names
+	return true
+}
+
+// replayValueApplicables counts the window values the replay re-steps under
+// VALUE semantics that could apply — replayApplicables minus the word-read
+// entries, which re-step as WORDS through the interpreter's own dispatch
+// and need no one-applicable bound.
+func replayValueApplicables(window []core.Value, names []DynFrameWord) int {
+	n := 0
+	for i, v := range window {
+		if i < len(names) && names[i].Name != "" {
+			continue
+		}
+		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(core.TFunction)) {
+			n++
+		}
+	}
+	return n
 }
 
 // replayApplicables counts the window values the whole-frame replay's

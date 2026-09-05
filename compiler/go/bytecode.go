@@ -1080,6 +1080,14 @@ type Program struct {
 // CompiledFn is one compiled boru fn overload at one arg shape: its
 // own code unit with frame-relative locals (params in slots 0..N-1,
 // sig order).
+// DynFrameWord is one entry of CompiledFn.DynFrameWords: the binding NAME a
+// replayed token-region entry was read bare under, and the READ's source
+// position — where the interpreter anchors the dispatch's own errors.
+type DynFrameWord struct {
+	Name string
+	Pos  core.SrcPos
+}
+
 type CompiledFn struct {
 	Name    string
 	NParams int
@@ -1176,6 +1184,27 @@ type CompiledFn struct {
 	// Body-local iterator slots have no name (empty string). Purely
 	// metadata — the VM never reads it.
 	LocalNames []string
+	// ClosureRet is the unit-code twin of Program.ClosureRet: a closure
+	// PUSHED INSIDE THIS UNIT carries its callback return contract here,
+	// keyed by the push's unit-local pc. It has to be per unit: the pc
+	// spaces of the main code and of every unit overlap, so one program-wide
+	// map cannot address them — and until it was split, the unit lowerer
+	// keyed every in-unit push at the MAIN code's length, a pc the VM never
+	// reaches inside a unit, so `def f fn [[] [Any] [each (x:Integer => [x
+	// 1]) [1 2]]]  f` answered `[1 1]` compiled where the interpreter raises
+	// the count error (measured 2026-09-05, the in-unit face of NUR120).
+	ClosureRet map[int]ClosureRetSpec
+	// DynFrameWords names, per OpCallDynFrame (keyed by its unit-local pc),
+	// which entries of the replayed token region were BARE READS of a frame
+	// binding — index i of the slice is the i-th region entry (deepest
+	// first), "" for an entry that was not such a read. A bare read of a
+	// binding holding a fn is a WORD dispatch on the interpreter (stepWord
+	// routes a bound FnDefInfo through Registry.Lookup under the binding
+	// name: a 0-arg fn fires, a no-match raises `cannot call `g``), so the
+	// VM installs each such fn-valued entry as a frame binding and re-steps
+	// the region with the WORD in its place (vm.go callDynFrame, NUR123).
+	// Nil for a replay whose region holds no bare read.
+	DynFrameWords map[int][]DynFrameWord
 	// RetReplay marks a body that ends in a whole-frame dynamic-apply replay
 	// (OpCallDynFrame): its residual count is RUNTIME-variable, so the RET
 	// contract switches discipline. A FOREIGN-registry fn (Reg set, a module-

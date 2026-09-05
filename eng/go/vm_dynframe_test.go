@@ -14,11 +14,11 @@ import (
 func TestCallDynFrameUnderflow(t *testing.T) {
 	r := seam7Reg(t)
 	vc := seam7VC(r)
-	if _, _, err := vc.callDynFrame(r, 1, 0, nil, seam7Dbg, 0); err == nil ||
+	if _, _, err := vc.callDynFrame(r, 1, 0, nil, seam7Dbg, 0, nil); err == nil ||
 		!strings.Contains(err.Error(), "CALL_DYN_FRAME underflow") {
 		t.Errorf("empty-stack replay must underflow loudly, got %v", err)
 	}
-	if _, _, err := vc.callDynFrame(r, 0, 0, []core.Value{core.NewInteger(1)}, seam7Dbg, 0); err == nil {
+	if _, _, err := vc.callDynFrame(r, 0, 0, []core.Value{core.NewInteger(1)}, seam7Dbg, 0, nil); err == nil {
 		t.Error("a zero-width replay window is a mis-emit — must error")
 	}
 }
@@ -37,7 +37,7 @@ func TestCallDynFrameIslandError(t *testing.T) {
 	vc := seam7VC(r)
 	stack := []core.Value{core.NewInteger(9), fail, core.NewInteger(5)}
 	for _, frameBase := range []int{1, 0} {
-		_, _, err := vc.callDynFrame(vc.r, 2, frameBase, stack, seam7Dbg, 0)
+		_, _, err := vc.callDynFrame(vc.r, 2, frameBase, stack, seam7Dbg, 0, nil)
 		if err == nil || !strings.Contains(err.Error(), "cfail") {
 			t.Errorf("replay island (frameBase %d) must surface the applied fn's error, got %v", frameBase, err)
 		}

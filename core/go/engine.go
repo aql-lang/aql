@@ -383,13 +383,26 @@ func reorderForwardCandidates(tape *Tape, pointer int) []Value {
 	var written []Value
 	for i := pointer + 1; i < tape.Len() && len(written) < 4; i++ {
 		v := tape.At(i)
+		// An engine marker ends the written tuple exactly as it ends the
+		// stack one below: a fn frame's tail markers (the DefCleanup `__dc`,
+		// the pop-args `__pa`) sit right after the body's last token, and a
+		// no-match there used to list `__dc (a __DC)` as the argument the
+		// caller supplied — a marker no one wrote, in a user-facing note.
 		if !IsConcrete(v) || IsWord(v) || IsParenExpr(v) || IsForward(v) ||
-			IsOpenParen(v) || IsEnd(v) {
+			IsOpenParen(v) || IsEnd(v) || isEngineMarker(v) {
 			break
 		}
 		written = append(written, v)
 	}
 	return written
+}
+
+// isEngineMarker reports whether v is one of the engine's own control values
+// — a Mark, a Move, or an internal marker (`Word/__IN/…`: DefCleanup,
+// pop-args, the return check) — which never stand for an argument a user
+// wrote. Shared by the two failing-tuple walks.
+func isEngineMarker(v Value) bool {
+	return v.Parent != nil && (v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) || v.Parent.ConformsTo(TInternal))
 }
 
 // rematchWritten is the CHECK-TIME twin of sigError's written-tuple
@@ -404,7 +417,7 @@ func (e *Engine) rematchWritten() []Value {
 	var written []Value
 	for i := e.Pointer + 1; i < e.Tape.Len() && len(written) < 4; i++ {
 		v := e.Tape.At(i)
-		if IsWord(v) || IsParenExpr(v) || IsForward(v) || IsOpenParen(v) || IsEnd(v) {
+		if IsWord(v) || IsParenExpr(v) || IsForward(v) || IsOpenParen(v) || IsEnd(v) || isEngineMarker(v) {
 			break
 		}
 		if !IsConcrete(v) && !v.Carrier {
@@ -2356,6 +2369,9 @@ func (e *Engine) stepWordVal(val Value, w WordInfo) error {
 	// concrete — so `/v` and the ordinary spelling cannot answer the freeze
 	// question two ways.
 	e.noteBindingRead(w.Name, v)
+	if e.Registry.analysisActive() {
+		e.Registry.analysisRecorder().NoteValRead(v.ID)
+	}
 	v.pos = val.pos
 	// A reference denotes DATA. When a parked forward in this paren
 	// scope is still collecting, deliver the reference through the
@@ -2385,6 +2401,27 @@ func (e *Engine) stepWordVal(val Value, w WordInfo) error {
 	}
 	e.Pointer++
 	return nil
+}
+
+// noteWordRead tells the recorder that a bare read of a binding pushed a
+// check-mode CARRIER the interpreter would DISPATCH were the binding to hold
+// a fn at run time: a fn-typed carrier (a `g:Function` param), or a gradual
+// one (an `x:Any` param, a Dynamic value) whose static type admits a fn. The
+// runtime rule this mirrors is stepWord's own: a bound FnDefInfo is not
+// substituted, it "goes through normal Lookup" — a word dispatch under the
+// binding name — EXCEPT when a pending forward expects a Function, where
+// the value is delivered as data (the branch above the binding cases). A
+// concrete or non-fn-admitting carrier is a plain value substitution on
+// both engines and notes nothing.
+// pos is the READ's position (the word token's), which is where the
+// interpreter anchors the dispatch's errors (`cannot call `g“).
+func (e *Engine) noteWordRead(v Value, name string, pos SrcPos) {
+	if v.Quoted || e.hasPendingForwardExpectingFunction() {
+		return
+	}
+	if IsFnTypedCarrier(v) || (v.Dynamic && SigTypeMatches(v, TFunction)) {
+		e.Registry.analysisRecorder().NoteWordRead(v, name, pos)
+	}
 }
 
 // hasPendingForwardCollecting reports whether a parked Forward in the
@@ -2596,6 +2633,7 @@ func (e *Engine) stepWord(val Value) error {
 			// evaluated top.ID unconditionally on the run-mode hot path.
 			if e.Registry.analysisActive() {
 				e.Registry.analysisRecorder().NoteDefRead(top.ID, w.Name)
+				e.noteWordRead(top, w.Name, val.Pos())
 				// Freeze discipline: a CONCRETE module-scope binding read inside
 				// an open fn/closure unit bakes into the unit across calls, where
 				// the interpreter re-resolves the name per call — a later module
@@ -2740,6 +2778,7 @@ func (e *Engine) stepWord(val Value) error {
 			if cv, hit := CheckFnCarrierBind(e.Registry, w.Name); hit {
 				e.Registry.noteAnalysisUse(w.Name)
 				e.Registry.analysisRecorder().NoteDefRead(cv.ID, w.Name)
+				e.noteWordRead(cv, w.Name, val.Pos())
 				// Mark the pass: if it ends in a refusal anyway, the
 				// compile entry points keep the SILENT interpreter
 				// fallback this program class had before Stage 1 (the

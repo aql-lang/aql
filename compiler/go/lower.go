@@ -391,15 +391,19 @@ type loopCtx struct {
 }
 
 type lowerer struct {
-	es       *EmitState
-	p        *Program
-	code     *[]Instr       // current emission target (main or one fn unit)
-	debug    *[]core.SrcPos // 1:1 with code
-	sigIdx   map[*core.Signature]int
-	vm       []vmSlot
-	variadic map[int]bool // loop seqs: N runtime values, not one
-	promoted map[int]int  // value-def locals: producing event seq → frame local slot
-	dead     map[int]bool // single-result value-defs referenced zero times: drop the result
+	es    *EmitState
+	p     *Program
+	code  *[]Instr       // current emission target (main or one fn unit)
+	debug *[]core.SrcPos // 1:1 with code
+	// closureRet is the emission target's callback-contract table
+	// (Program.ClosureRet for the main code, CompiledFn.ClosureRet for a fn
+	// unit), keyed by the target's own pc — see pushOperand.
+	closureRet *map[int]ClosureRetSpec
+	sigIdx     map[*core.Signature]int
+	vm         []vmSlot
+	variadic   map[int]bool // loop seqs: N runtime values, not one
+	promoted   map[int]int  // value-def locals: producing event seq → frame local slot
+	dead       map[int]bool // single-result value-defs referenced zero times: drop the result
 	// bindConsumes marks DEAD producers whose result a root OpBindGlobal
 	// write-back consumes (Pop mode) instead of the producer-site dead-drop:
 	// the value stays live through the immediately-following evDynBind, which
@@ -525,11 +529,15 @@ func (lw *lowerer) pushOperand(op EmitOperand, pos core.SrcPos) {
 		// The contract rides on the VALUE, so it is keyed by THIS push's pc —
 		// the same unit pushed at another site may carry a different one, or
 		// none (see core.ClosurePayload's RetTypes comment).
+		// Keyed in the EMISSION TARGET's own table at the target's own pc: a
+		// fn unit's code has its own pc space (CompiledFn.ClosureRet), and
+		// the main code its own (Program.ClosureRet). Keying the program map
+		// at len(p.Code) from inside a unit lost every in-unit contract.
 		if op.closureRet != nil {
-			if lw.p.ClosureRet == nil {
-				lw.p.ClosureRet = map[int]ClosureRetSpec{}
+			if *lw.closureRet == nil {
+				*lw.closureRet = map[int]ClosureRetSpec{}
 			}
-			lw.p.ClosureRet[len(lw.p.Code)] = *op.closureRet
+			(*lw.closureRet)[len(*lw.code)] = *op.closureRet
 		}
 		lw.emit(OpPushClosure, op.closureUnit, pos)
 		lw.vm = lw.vm[:len(lw.vm)-len(op.closureCaps)]
