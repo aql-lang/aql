@@ -2633,6 +2633,7 @@ func (e *Engine) stepWord(val Value) error {
 			// evaluated top.ID unconditionally on the run-mode hot path.
 			if e.Registry.analysisActive() {
 				e.Registry.analysisRecorder().NoteDefRead(top.ID, w.Name)
+				e.Registry.analysisRecorder().NoteLocalRead(top.ID, val.Pos())
 				e.noteWordRead(top, w.Name, val.Pos())
 				// Freeze discipline: a CONCRETE module-scope binding read inside
 				// an open fn/closure unit bakes into the unit across calls, where
@@ -2778,6 +2779,7 @@ func (e *Engine) stepWord(val Value) error {
 			if cv, hit := CheckFnCarrierBind(e.Registry, w.Name); hit {
 				e.Registry.noteAnalysisUse(w.Name)
 				e.Registry.analysisRecorder().NoteDefRead(cv.ID, w.Name)
+				e.Registry.analysisRecorder().NoteLocalRead(cv.ID, val.Pos())
 				e.noteWordRead(cv, w.Name, val.Pos())
 				// Mark the pass: if it ends in a refusal anyway, the
 				// compile entry points keep the SILENT interpreter
@@ -7173,6 +7175,13 @@ func (e *Engine) stepDefCleanup(val Value, markerIdx int) error {
 	}
 	truncateFrameDefs(info)
 	return nil
+}
+
+// TruncateFrameDefs pops every def binding installed in reg since the
+// snapshot (Defs.Snapshot) — the DefCleanup marker's truncation duty, for a
+// caller that ran a body region outside a frame (the VM's deopt island).
+func TruncateFrameDefs(reg *Registry, snapshot map[string]int) {
+	truncateFrameDefs(DefCleanupInfo{Snapshot: snapshot, Registry: reg})
 }
 
 // truncateFrameDefs pops every def binding installed since the frame's

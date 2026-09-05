@@ -556,6 +556,9 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 					pats[i] = sigParams[i].Pattern
 				}
 				es.SetUnitParamTypes(fnUnit, pts, pats)
+				// The body tokens: what a per-read deopt hands to the
+				// interpreter (compiler planDeopts, NUR123).
+				es.SetUnitBody(fnUnit, bodyCopy)
 				// The RET-side twin: a declared union return degrades its
 				// *Type to Any, so without the pattern the compiled path —
 				// the DEFAULT path — enforces nothing while the interpreter

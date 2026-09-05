@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"maps"
+	"sort"
 
 	check "github.com/boru-lang/boru/check/go"
 	core "github.com/boru-lang/boru/core/go"
@@ -1024,6 +1025,13 @@ type emitUnit struct {
 	// (forEachOperand / promoteOperand closureCaps handling), which makes the
 	// closureCaps operand a re-pushable LOCAL so the captured VALUE is correct.
 	capID map[string]bool
+	// deoptEnv marks a unit carrying a per-read deopt (planDeopts, NUR123);
+	// deoptNames are the names its islands may read — every param and
+	// body-local def among them is registry-visible and every such def's
+	// computed source promoted, so an island runs under the interpreter's
+	// frame environment; the unit never tail-calls.
+	deoptEnv   bool
+	deoptNames map[string]bool
 	// enclosingIDs snapshots, at unit open, the value IDs of every compound
 	// (List/Map) binding visible in the DefTable — i.e. values an ENCLOSING
 	// scope already constructed. A compound const whose ID is in this set was
@@ -1183,9 +1191,13 @@ type fnUnitRec struct {
 	// `/v` reads of the same IDs. At the unit's finish every noted read must
 	// be credited or seated in the replay window, and no ID may have been
 	// read both ways, else the unit refuses (wordReadAccounting, NUR123).
-	wordReads      map[string]int
-	wordReadNames  map[string]string
-	wordReadPos    map[string]core.SrcPos // the LAST bare read's position, per ID
+	wordReads     map[string]int
+	wordReadNames map[string]string
+	wordReadPos   map[string]core.SrcPos // the LAST bare read's position, per ID
+	wordReadFirst map[string]core.SrcPos // the FIRST bare read's position, per ID (a deopt begins there)
+	// localReads is every bare read's position per value ID on this unit
+	// (NoteLocalRead) — the deferred-operand accounting of planDeopts.
+	localReads     map[string][]core.SrcPos
 	wordReadCredit map[string]int
 	valReads       map[string]int
 	// outOpsVals are the residual VALUES outOps were resolved from, in the
@@ -1239,6 +1251,33 @@ type fnUnitRec struct {
 	// if-chain) is promoted to a frame slot here, the same as at frame 0.
 	promoted map[int]int
 	dead     map[int]bool
+	// body is the fn's source body tokens (SetUnitBody); deopts the unit's
+	// per-read deopt points (planDeopts), lowered by the unit's lowerer;
+	// deoptEnv mirrors emitUnit.deoptEnv on the record.
+	body       []core.Value
+	deopts     []deoptPoint
+	deoptEnv   bool
+	deoptNames map[string]bool
+}
+
+// deoptPoint is one gradual word read the unit lowers as a DEOPT
+// (OpDeoptIfFn, NUR123): the read's value (its producing event's seq — a
+// body-local's computed source), its name and read position, the position
+// the statement holding the read begins at (start: where the test runs,
+// before any of the statement's effects) and that statement's Body token.
+type deoptPoint struct {
+	seq   int
+	name  string
+	pos   core.SrcPos
+	start core.SrcPos
+	token int
+	// atPush marks a point tested where the read's value is PUSHED as its
+	// consumer's operand (the consumer word follows the read on the
+	// stack: `a j add`, `j typeof`) — the compiled stack then holds
+	// exactly what the interpreter's held at the read. Otherwise the test
+	// runs before the first op of the statement (a forward consumer, a
+	// literal, a branch, a residual read an event follows).
+	atPush bool
 }
 
 // NewEmitState returns a fresh recording state.
@@ -4776,6 +4815,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 		// operands are its residual-equivalent extra references, and are rewritten
 		// for any promoted producer (planValueDefLocals rewrote the events in
 		// place, but outOps is a separate slice).
+		es.planDeopts(u, rec)
 		outSeqs := make([]int, 0, len(rec.outOps))
 		for _, op := range rec.outOps {
 			if op.kind == opEvent && op.resIdx == 0 {
@@ -4833,6 +4873,15 @@ func (es *EmitState) SetUnitParamTypes(unit int, paramTypes []*core.Type, paramP
 	}
 	es.fnRecs[unit].paramTypes = paramTypes
 	es.fnRecs[unit].paramPatterns = paramPatterns
+}
+
+// SetUnitBody seats a fn unit's source body tokens (EmitRecorder): the
+// stream a per-read deopt hands to the interpreter (planDeopts, NUR123).
+func (es *EmitState) SetUnitBody(unit int, body []core.Value) {
+	if unit < 0 || unit >= len(es.fnRecs) {
+		return
+	}
+	es.fnRecs[unit].body = body
 }
 
 // SetUnitReturnPatterns records the declared return PATTERNS for a compiled fn
@@ -8953,6 +9002,11 @@ func eventsBindDynScope(events []EmitEvent, names map[string]bool) bool {
 // a body-local def of a dyn-read name (evDynBind in its fragment tree), or a
 // PARAM some fn reads dynamically.
 func (es *EmitState) unitBindsDynScope(rec *fnUnitRec) bool {
+	// A deopt unit binds every name (emitDynParamBinds, lowerDynBind) and
+	// never tail-calls: its island runs under the frame's live bindings.
+	if rec.deoptEnv {
+		return true
+	}
 	// DynEnv mode: every unit with a NAMED param installs bindings at entry
 	// (emitDynParamBinds widens to all names), so tail calls are disabled
 	// exactly as for a targeted dyn-bound param.
@@ -8982,14 +9036,15 @@ func (es *EmitState) unitBindsDynScope(rec *fnUnitRec) bool {
 // where the interpreter's InstallFrameBinding makes them visible; the frame's
 // RET truncates them back.
 func (es *EmitState) emitDynParamBinds(flw *lowerer, rec *fnUnitRec) {
-	if len(es.dynScopeNames) == 0 && !es.dynEnv {
+	if len(es.dynScopeNames) == 0 && !es.dynEnv && !rec.deoptEnv {
 		return
 	}
 	for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
 		// DynEnv mode: every NAMED param dyn-binds (the interpreter's
 		// InstallFrameBinding makes all of them registry-visible; a dynamic
-		// code body may read any). Unnamed slots have no name to bind.
-		if rec.locals[i] == "" || (!es.dynEnv && !es.dynScopeNames[rec.locals[i]]) {
+		// code body may read any); a deopt unit binds the params its
+		// islands spell. Unnamed slots have no name to bind.
+		if rec.locals[i] == "" || (!es.dynEnv && !rec.deoptNames[rec.locals[i]] && !es.dynScopeNames[rec.locals[i]]) {
 			continue
 		}
 		flw.emit(OpPushLocal, i, rec.pos)
@@ -9286,6 +9341,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			cf.Reg = rec.reg
 		}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, closureRet: &cf.ClosureRet, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, bindConsumes: collectResidentBindConsumes(rec.frag.events, rec.dead), isFnUnit: true}
+		seatUnitDeopts(flw, rec, &cf, diverged)
 		es.emitDynParamBinds(flw, rec)
 		// The apply-loop replay's unnamed-param re-pushes seat at UNIT START —
 		// they must sit BELOW the loop's runtime value region, which exists only
@@ -9360,6 +9416,9 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			// operands (const / local / type) are pushed as a trailing
 			// tail above the last event result. This is the fn-unit mirror
 			// of the program-residual reconciliation below.
+			// A deopt point no event followed (a residual read the tail test
+			// declined) runs before the residual is laid out.
+			flw.emitDeoptsBefore(core.SrcPos{})
 			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0 || rec.dynTrailArity > 0 || rec.dynFrameW > 0, rec.retReplay, rec.pos); reason != "" {
 				return nil, reason, false
 			}
@@ -9382,7 +9441,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 				flw.emit(OpCallDynFrame, rec.dynFrameW, rec.pos)
 			}
 			cf.RetReplay = rec.retReplay
-			flw.emit(OpRet, 0, rec.pos)
+			stampDeoptRet(&cf, flw.emit(OpRet, 0, rec.pos))
 		}
 		// A fully diverging body (every path tail-calls) emits no RET —
 		// control leaves via the callee's eventual RET.
@@ -9591,6 +9650,12 @@ func (es *EmitState) NoteWordRead(v core.Value, name string, pos core.SrcPos) {
 	}
 	rec.wordReadNames[v.ID] = name
 	rec.wordReadPos[v.ID] = pos
+	if rec.wordReadFirst == nil {
+		rec.wordReadFirst = map[string]core.SrcPos{}
+	}
+	if _, seen := rec.wordReadFirst[v.ID]; !seen {
+		rec.wordReadFirst[v.ID] = pos
+	}
 	// Only a FN-TYPED read is accounted strictly: the interpreter
 	// dispatches it whatever the call passed. A GRADUAL read (an `x:Any`
 	// param, a Dynamic local) dispatches only when the runtime value is a
@@ -9603,6 +9668,22 @@ func (es *EmitState) NoteWordRead(v core.Value, name string, pos core.SrcPos) {
 		}
 		rec.wordReads[v.ID]++
 	}
+}
+
+// NoteLocalRead records a bare read's position per value ID on the
+// innermost open unit (EmitRecorder) — planDeopts' deferred-operand
+// accounting: a read written before a deopt's statement whose consumer
+// comes after it is a value the interpreter's stack holds at the
+// statement and the compiled stack does not yet.
+func (es *EmitState) NoteLocalRead(id string, pos core.SrcPos) {
+	if !es.Active() || id == "" || pos.Row == 0 || len(es.openUnitRecs) == 0 {
+		return
+	}
+	rec := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+	if rec.localReads == nil {
+		rec.localReads = map[string][]core.SrcPos{}
+	}
+	rec.localReads[id] = append(rec.localReads[id], pos)
 }
 
 // NoteValRead counts a `/v` read on the innermost open unit (EmitRecorder).
@@ -9661,6 +9742,566 @@ func (es *EmitState) fnResidualReplayReason(u *emitUnit, rec *fnUnitRec, vals []
 	}
 	rec.outOpsVals = vals
 	return es.wordReadAccounting(rec)
+}
+
+// seatUnitDeopts hands a deopt unit's points (planDeopts) to its lowerer:
+// the lowerer emits each where its statement begins, and the table and
+// the body ride on the unit for the VM. A diverging body has no RET to
+// resume at and seats none.
+func seatUnitDeopts(flw *lowerer, rec *fnUnitRec, cf *CompiledFn, diverged bool) {
+	if !rec.deoptEnv || diverged {
+		return
+	}
+	flw.deoptNames = rec.deoptNames
+	flw.deoptTable = &cf.Deopts
+	cf.Body = rec.body
+	for _, d := range rec.deopts {
+		if !d.atPush {
+			flw.deopts = append(flw.deopts, d)
+			continue
+		}
+		// Tested where the read's value is pushed: the value is the def's
+		// promoted source (a deopt unit promotes the sources its islands
+		// read), so its slot names the point.
+		if slot, ok := rec.promoted[d.seq]; ok {
+			if flw.deoptAtSlot == nil {
+				flw.deoptAtSlot = map[int]deoptPoint{}
+			}
+			flw.deoptAtSlot[slot] = d
+		}
+	}
+}
+
+// stampDeoptRet seats the unit's RET pc on every deopt point the lowerer
+// emitted (the island's residual continues there) and marks the RET's
+// discipline runtime-variable (RetReplay).
+func stampDeoptRet(cf *CompiledFn, retPC int) {
+	for i := range cf.Deopts {
+		cf.Deopts[i].RetPC = retPC
+	}
+	if len(cf.Deopts) > 0 {
+		cf.RetReplay = true
+	}
+}
+
+// planDeopts computes the unit's per-read deopt points (NUR123): a bare
+// read of a BODY-LOCAL bound to a value an event of this unit produced —
+// `def j (m get "f")  j typeof` — that the pass types dynamic(Any) and the
+// model consumed as a value where the whole-frame replay cannot re-step it
+// (a container member, an argument, a branch or loop body, a read an event
+// follows). The interpreter dispatches the binding as a WORD when it holds
+// a fn at run time. A fn-typed read is accounted strictly instead
+// (wordReadAccounting) and a read a fn-value apply lowering credited needs
+// none; a gradual PARAM's read is re-run under the argument's runtime type
+// and stays best effort here (a value that is a slot, not a producer). Each
+// point tests where the read's STATEMENT begins — the earliest of the first
+// consuming event, that event's operand producers and the first read — so
+// no effect of the statement runs twice (deoptPointFor). A start that is no
+// Body token, a unit with no body and a closure unit keep the slot push.
+func (es *EmitState) planDeopts(u *emitUnit, rec *fnUnitRec) {
+	if rec.closure || len(rec.body) == 0 || len(rec.wordReadNames) == 0 {
+		return
+	}
+	for id, name := range rec.wordReadNames {
+		if rec.wordReads[id] > 0 || rec.wordReadCredit[id] > 0 {
+			continue
+		}
+		pr, produced := es.producedBy[id]
+		if !produced || u.enclosingBindIDs[id] {
+			continue
+		}
+		if d, ok := es.deoptPointFor(u, rec, id, pr.seq, name, rec.wordReadFirst[id]); ok {
+			rec.deopts = append(rec.deopts, d)
+		}
+	}
+	if len(rec.deopts) == 0 {
+		return
+	}
+	// The island reads the names the body's tail spells (from the earliest
+	// statement on, code bodies and literals included): those params and
+	// defs must be registry-visible at the deopt. A def the island reads
+	// whose source has no re-pushable home — a fragment result, a variadic
+	// or multi-output producer, a def made inside a branch or loop body —
+	// would refuse the whole unit at its bind (lowerDynBind), so the points
+	// decline instead and the reads keep their slot push.
+	minTok := len(rec.body)
+	for _, d := range rec.deopts {
+		if d.token < minTok {
+			minTok = d.token
+		}
+	}
+	names := map[string]bool{}
+	collectWordNames(rec.body[minTok:], names)
+	if !es.deoptDefsBindable(rec, names) {
+		rec.deopts = nil
+		return
+	}
+	rec.deoptEnv = true
+	rec.deoptNames = names
+	u.deoptEnv = true
+	u.deoptNames = names
+	sort.Slice(rec.deopts, func(i, j int) bool { return posAfter(rec.deopts[j].start, rec.deopts[i].start) })
+}
+
+// collectWordNames adds every word name spelled in tokens — inside lists,
+// maps and paren groups too — to names.
+func collectWordNames(tokens []core.Value, names map[string]bool) {
+	for _, t := range tokens {
+		if t.Data == nil {
+			continue
+		}
+		if w, err := core.AsWord(t); err == nil {
+			names[w.Name] = true
+			continue
+		}
+		if inner, err := core.AsParenExpr(t); err == nil {
+			collectWordNames(inner, names)
+			continue
+		}
+		if l, err := core.AsList(t); err == nil {
+			collectWordNames(l.Slice(), names)
+			continue
+		}
+		if m, err := core.AsMap(t); err == nil {
+			for _, k := range m.Keys() {
+				if v, ok := m.Get(k); ok {
+					collectWordNames([]core.Value{v}, names)
+				}
+			}
+		}
+	}
+}
+
+// deoptDefsBindable reports whether every def among names that the unit
+// binds can be made registry-visible by lowerDynBind: a root-level bind of
+// an inert literal (or a value resolving to a const or a local), or of a
+// single-output call's result that no fragment owns; a def bound inside a
+// branch or loop body, from a fragment result, a variadic or a
+// multi-output producer, or of a FN value, cannot.
+func (es *EmitState) deoptDefsBindable(rec *fnUnitRec, names map[string]bool) bool {
+	events := rec.frag.events
+	bySeq := map[int]*EmitEvent{}
+	for i := range events {
+		bySeq[events[i].seq] = &events[i]
+	}
+	var nested func(frag *EmitFragment) bool
+	nested = func(frag *EmitFragment) bool {
+		if frag == nil {
+			return false
+		}
+		for i := range frag.events {
+			ev := &frag.events[i]
+			if ev.kind == evDynBind && ev.dyn != nil && names[ev.dyn.name] {
+				return true
+			}
+			for _, f := range childFragments(ev) {
+				if nested(f) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for i := range events {
+		ev := &events[i]
+		for _, f := range childFragments(ev) {
+			if nested(f) {
+				return false
+			}
+		}
+		if ev.kind != evDynBind || ev.dyn == nil || !names[ev.dyn.name] {
+			continue
+		}
+		if ev.dyn.srcSeq < 0 {
+			// A literal binding binds only what lowerDynBind can bake or
+			// re-push: inert data, or a value that resolves to a const or
+			// a local. A body-local FN def (`def check-paths fn […]`), a
+			// stripped carrier with no original, cannot — the unit would
+			// refuse at its bind, so the points decline instead.
+			if ev.dyn.src.kind == opNone && !core.IsInertConst(ev.dyn.val) {
+				if op, ok := es.resolveOperand(ev.dyn.val); !ok || (op.kind != opConst && op.kind != opLocal) {
+					return false
+				}
+			}
+			continue
+		}
+		src := bySeq[ev.dyn.srcSeq]
+		if !singleOutputCall(src) || es.eventInfo[ev.dyn.srcSeq].variadicResult {
+			return false
+		}
+	}
+	return true
+}
+
+// deoptPointFor places one deopt (planDeopts). The read's STATEMENT begins
+// at the read itself when its consumer follows it on the stack (`j
+// typeof`, `a j add` — tested at the read's push, atPush) or when nothing
+// consumes it (a residual read an event follows); at the consumer's own
+// token when the consumer is a forward word collecting the read (`def k
+// j`, `print j`, `for 1 [j]`) or a branch holding it in an arm (`if c [j]
+// [0]`); at the literal's or paren's token when the read sits inside one
+// (`{a: j}`, `(j typeof)`, `(j) typeof`). The start must be a body token,
+// and the interpreter's stack there must be the compiled stack at the
+// test: an operand of the consumer (a point tested before it) or of a
+// LATER root event written before the start — a literal, a bare read of
+// a local or a def whose reads before the start outnumber their
+// consumptions there, or an earlier event's result no def consumed — is a
+// value the compiled stack still lacks, so such a point is declined and
+// the read keeps its slot push (best effort). The def binding the read's
+// own name is its binding, not a consumer.
+func (es *EmitState) deoptPointFor(u *emitUnit, rec *fnUnitRec, id string, seq int, name string, first core.SrcPos) (deoptPoint, bool) {
+	ci, direct := es.deoptConsumer(rec, id, seq)
+	d, ok := es.deoptStatementStart(rec, seq, name, first, ci, direct)
+	if !ok {
+		return d, false
+	}
+	if es.deoptDeferred(u, rec, &d, ci) {
+		return d, false
+	}
+	return d, true
+}
+
+// deoptConsumer finds the first root event consuming the read's value —
+// as an operand (direct), inside one of its fragments, or as the source
+// of a def made THROUGH a read of it (the token after the def's name is,
+// or holds, that read: `def k j`, `def k (j)`; the def binding the value
+// straight from its producer, `def j (m get "f")`, is its binding, not a
+// consumer). -1 when nothing consumes it.
+func (es *EmitState) deoptConsumer(rec *fnUnitRec, id string, seq int) (int, bool) {
+	events := rec.frag.events
+	readIn := func(t int) bool {
+		for _, q := range rec.localReads[id] {
+			if bodyTokenContaining(rec.body, q) == t {
+				return true
+			}
+		}
+		return false
+	}
+	for i := range events {
+		ev := &events[i]
+		uses, direct := false, false
+		if ev.kind == evDynBind && ev.dyn != nil && ev.dyn.srcSeq == seq {
+			if t := bodyTokenAt(rec.body, ev.dyn.pos); t >= 0 && t+1 < len(rec.body) && readIn(t+1) {
+				uses = true
+			}
+		}
+		forEachOperand(ev, func(op EmitOperand) {
+			if op.kind == opEvent && op.idx == seq {
+				uses, direct = true, true
+			}
+		})
+		forEachFragmentOperand(ev, func(op EmitOperand) {
+			if op.kind == opEvent && op.idx == seq {
+				uses = true
+			}
+		})
+		if uses {
+			return i, direct
+		}
+	}
+	return -1, false
+}
+
+// deoptStatementStart places the point: at the read's push when its
+// consumer follows it on the stack (atPush); at the read when nothing
+// consumes it and an event follows (the replay's word island seats a lone
+// residual read instead); at the `if` before the arm holding it; at the
+// literal it sits in; at the def word or the forward word collecting it.
+// The start must be a body token.
+func (es *EmitState) deoptStatementStart(rec *fnUnitRec, seq int, name string, first core.SrcPos, ci int, direct bool) (deoptPoint, bool) {
+	events := rec.frag.events
+	readTok := bodyTokenAt(rec.body, first)
+	contTok := bodyTokenContaining(rec.body, first)
+	d := deoptPoint{seq: seq, name: name, pos: first, start: first}
+	switch {
+	case ci < 0:
+		if readTok < 0 {
+			return d, false
+		}
+		later := false
+		for i := range events {
+			if posAfter(eventPos(events[i]), first) {
+				later = true
+			}
+		}
+		if !later {
+			for _, w := range rec.dynFrameWords {
+				if w.Name == name {
+					return d, false
+				}
+			}
+			d.atPush = true
+		}
+	case readTok >= 0 && direct && posAfter(eventPos(events[ci]), first):
+		// Tested at the read's push when no event lies between the read
+		// and its consumer; otherwise (`j (m get "g") add` — the get runs
+		// before the push) before that event, where the stack is the
+		// read's.
+		d.atPush = true
+		for i := range events {
+			if p := eventPos(events[i]); p.Row > 0 && posAfter(p, first) && posAfter(eventPos(events[ci]), p) {
+				d.atPush = false
+				break
+			}
+		}
+	case events[ci].kind == evBranch || events[ci].kind == evLoop:
+		// A branch event stands at its condition, a loop at its count, or
+		// nowhere: the statement begins at the `if` / `for` word before
+		// the body holding the read (`if c [j] [0]`, `if c [0] [j]`, `for
+		// 2 [j]`) — the nearest one within the form.
+		if contTok < 0 {
+			return d, false
+		}
+		want := "if"
+		if events[ci].kind == evLoop {
+			want = "for"
+		}
+		t := -1
+		for k := contTok - 1; k >= 0 && k >= contTok-4; k-- {
+			if w, err := core.AsWord(rec.body[k]); err == nil && w.Name == want {
+				t = k
+				break
+			}
+		}
+		if t < 0 {
+			return d, false
+		}
+		d.start = rec.body[t].Pos()
+	default:
+		d.start = eventPos(events[ci])
+		if readTok < 0 {
+			// A read inside a LITERAL (`{a: j}`, `[j 1]`), a PAREN (`(j
+			// typeof)`, `[(j typeof)]`) or a loop body (`for 1 [j]`): the
+			// statement is the top-level token holding the read when its
+			// consumer is that token's own maker, an event inside it or a
+			// word after it (`(j) typeof`) — nothing of the token has run
+			// at the test — and the consuming word's own token when that
+			// word collects the token forward (`for 1 [j typeof]`). A read
+			// nested anywhere else (a body a closure unit owns) is not
+			// this unit's to place.
+			if contTok < 0 {
+				return d, false
+			}
+			tokPos := rec.body[contTok].Pos()
+			c := &events[ci].call
+			maker := events[ci].kind == evCall && (c.makeList || c.makeMap)
+			switch {
+			case maker || (d.start.Row > 0 && (bodyTokenContaining(rec.body, d.start) == contTok || posAfter(d.start, tokPos))):
+				d.start = tokPos
+			case bodyTokenAt(rec.body, d.start) < 0:
+				return d, false
+			}
+		}
+		// A def's event stands at its NAME token: the statement begins at
+		// the binding word before it (`def k j`).
+		if events[ci].kind == evDynBind {
+			if t := bodyTokenAt(rec.body, d.start); t > 0 && core.IsWord(rec.body[t-1]) {
+				d.start = rec.body[t-1].Pos()
+			} else {
+				return d, false
+			}
+		}
+	}
+	if d.token = bodyTokenAt(rec.body, d.start); d.token < 0 {
+		return d, false
+	}
+	return d, true
+}
+
+// deoptDeferred is the deferred-operand accounting over the events the
+// island takes over: an operand of a LATER root event (or of the residual)
+// the compiled stack still lacks at the start while the interpreter's
+// holds it — a literal written before the start (a pooled scalar counted
+// by canon against its consumptions, a compound by its own position), a
+// local or def read there more often than consumed, or the result of an
+// event before the consumer (promotion may defer its push; the island
+// produces nothing before the start) unless a def consumed that result —
+// the island reads it by name.
+func (es *EmitState) deoptDeferred(u *emitUnit, rec *fnUnitRec, d *deoptPoint, ci int) bool {
+	events := rec.frag.events
+	later := func(i int) bool {
+		if ci >= 0 {
+			return i > ci
+		}
+		return !posAfter(d.start, eventPos(events[i]))
+	}
+	readsBefore := func(id string) int {
+		n := 0
+		for _, p := range rec.localReads[id] {
+			if posAfter(d.start, p) {
+				n++
+			}
+		}
+		return n
+	}
+	consumedBefore := func(match func(EmitOperand) bool, matchVal func(core.Value) bool, bindSeq int) int {
+		n := 0
+		count := func(op EmitOperand) {
+			if match(op) {
+				n++
+			}
+		}
+		for i := range events {
+			if later(i) || i == ci {
+				continue
+			}
+			forEachOperand(&events[i], count)
+			forEachFragmentOperand(&events[i], count)
+			ev := &events[i]
+			if ev.kind != evDynBind || ev.dyn == nil {
+				continue
+			}
+			if bindSeq >= 0 && ev.dyn.srcSeq == bindSeq {
+				n++
+			}
+			// A def of a literal rides the literal verbatim (no operand):
+			// `def y 1` consumed its `1`.
+			if matchVal != nil && ev.dyn.srcSeq < 0 && ev.dyn.src.kind == opNone && ev.dyn.val.Data != nil && matchVal(ev.dyn.val) {
+				n++
+			}
+		}
+		return n
+	}
+	deferredRead := func(id string) bool {
+		pr, hasPr := es.producedBy[id]
+		slot, isLocal := u.localByID[id]
+		bindSeq := -1
+		if hasPr {
+			bindSeq = pr.seq
+		}
+		return readsBefore(id) > consumedBefore(func(op EmitOperand) bool {
+			return (op.kind == opEvent && hasPr && op.idx == pr.seq) || (op.kind == opLocal && isLocal && op.idx == slot)
+		}, nil, bindSeq)
+	}
+	deferredConst := func(c core.Value) bool {
+		if len(rec.localReads[c.ID]) > 0 {
+			return deferredRead(c.ID)
+		}
+		compound := isCompoundValue(c)
+		if p := c.Pos(); compound && p.Row > 0 {
+			return posAfter(d.start, p)
+		}
+		// A pooled scalar, or a compound the fold re-minted without its
+		// position: its tokens before the start against its consumptions.
+		canon := core.CanonValue(c)
+		sameCanon := func(v core.Value) bool {
+			return !core.IsWord(v) && isCompoundValue(v) == compound && core.CanonValue(v) == canon
+		}
+		tokens := 0
+		for _, t := range rec.body {
+			if q := t.Pos(); q.Row > 0 && posAfter(d.start, q) && sameCanon(t) {
+				tokens++
+			}
+		}
+		return tokens > 0 && tokens > consumedBefore(func(op EmitOperand) bool {
+			return op.kind == opConst && op.idx >= 0 && op.idx < len(es.consts) && core.CanonValue(es.consts[op.idx]) == canon
+		}, sameCanon, -1)
+	}
+	defBound := func(seq int) bool {
+		for i := range events {
+			if ev := &events[i]; ev.kind == evDynBind && ev.dyn != nil && ev.dyn.srcSeq == seq {
+				return true
+			}
+		}
+		return false
+	}
+	deferred := func(op EmitOperand) bool {
+		switch op.kind {
+		case opConst:
+			if op.idx >= 0 && op.idx < len(es.consts) {
+				return deferredConst(es.consts[op.idx])
+			}
+		case opLocal:
+			for id, slot := range u.localByID {
+				if slot == op.idx && deferredRead(id) {
+					return true
+				}
+			}
+		case opEvent:
+			for j := range events {
+				if events[j].seq != op.idx {
+					continue
+				}
+				if defBound(op.idx) {
+					// A def consumed it on both lanes (promoted to its slot
+					// here, bound in the interpreter's frame); the island
+					// reads it by name through the dyn-scope bind.
+					return false
+				}
+				p := eventPos(events[j])
+				return p.Row > 0 && posAfter(d.start, p)
+			}
+		}
+		return false
+	}
+	for i := range events {
+		if !later(i) {
+			continue
+		}
+		unsafe := false
+		forEachOperand(&events[i], func(op EmitOperand) {
+			if deferred(op) {
+				unsafe = true
+			}
+		})
+		if unsafe {
+			return true
+		}
+	}
+	// A point tested before its consumer's first op (never at the read's
+	// push, where the stack is exact) needs the consumer's own operands
+	// in hand too — the read's value aside.
+	if ci >= 0 && !d.atPush {
+		unsafe := false
+		forEachOperand(&events[ci], func(op EmitOperand) {
+			if !(op.kind == opEvent && op.idx == d.seq) && deferred(op) {
+				unsafe = true
+			}
+		})
+		if unsafe {
+			return true
+		}
+	}
+	// The residual's own inert operands are pushed last of all.
+	for _, op := range rec.outOps {
+		if op.kind != opEvent && deferred(op) {
+			return true
+		}
+	}
+	return false
+}
+
+// isCompoundValue reports a list or map value (never pooled as a const).
+func isCompoundValue(v core.Value) bool {
+	return v.Parent != nil && (v.Parent.Equal(core.TList) || v.Parent.Equal(core.TMap))
+}
+
+// bodyTokenContaining is the index of the last body token standing at or
+// before position p — the top-level token a nested position lies in — or
+// -1.
+func bodyTokenContaining(body []core.Value, p core.SrcPos) int {
+	at := -1
+	for i, t := range body {
+		q := t.Pos()
+		if q.Row == 0 || posAfter(q, p) {
+			continue
+		}
+		at = i
+	}
+	return at
+}
+
+// bodyTokenAt is the index of the body token standing at position p, or -1.
+func bodyTokenAt(body []core.Value, p core.SrcPos) int {
+	if p.Row == 0 {
+		return -1
+	}
+	for i, t := range body {
+		if q := t.Pos(); q.Row == p.Row && q.Col == p.Col {
+			return i
+		}
+	}
+	return -1
 }
 
 // wordReadAccounting is the unit-finish check that every bare read the
@@ -10076,6 +10717,10 @@ func eventPos(ev EmitEvent) core.SrcPos {
 		return ev.dyn.pos
 	case evBindTwin:
 		return ev.twin.pos
+	}
+	if ev.br == nil {
+		// A break / continue event carries no position.
+		return core.SrcPos{}
 	}
 	return ev.br.pos
 }

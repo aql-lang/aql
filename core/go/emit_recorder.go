@@ -222,6 +222,10 @@ type EmitRecorder interface {
 	RecordDefRebind(name string, v Value, pos SrcPos)
 	RecordDynBind(name string, v Value, pos SrcPos)
 	NoteDefRead(id, name string)
+	// NoteLocalRead records a bare read of a frame binding at its read
+	// position (both substitution paths of stepWord) — a per-read deopt's
+	// deferred-operand accounting (compiler planDeopts, NUR123).
+	NoteLocalRead(id string, pos SrcPos)
 	// NoteWordRead records a BARE READ of a frame binding that the
 	// interpreter would DISPATCH if the binding held a fn at run time —
 	// stepWord routes a bound FnDefInfo through Registry.Lookup under the
@@ -278,6 +282,9 @@ type EmitRecorder interface {
 	StartFnCompile(key, name string, fnReg *Registry, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool)
 	SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value)
 	SetUnitReturnPatterns(unit int, returnPatterns []*Value)
+	// SetUnitBody seats a fn unit's source body tokens (the sig's Boru body)
+	// — what a per-read deopt hands to the interpreter (compiler DeoptSpec).
+	SetUnitBody(unit int, body []Value)
 	SetUnitDecl(unit int, decl DeclSite)
 	UnitVariadic(unit int) bool
 	UnitNetsZero(unit int) bool
@@ -334,6 +341,7 @@ func (inactiveEmit) PopInlineCtxBoundary()   {}
 
 func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
 func (inactiveEmit) NoteDefRead(string, string)          {}
+func (inactiveEmit) NoteLocalRead(string, SrcPos)        {}
 func (inactiveEmit) NoteWordRead(Value, string, SrcPos)  {}
 func (inactiveEmit) NoteValRead(string)                  {}
 func (inactiveEmit) Sites() map[string]int               { return nil }
@@ -410,6 +418,7 @@ func (inactiveEmit) StartFnCompile(string, string, *Registry, []Value, []*Type, 
 }
 func (inactiveEmit) SetUnitParamTypes(int, []*Type, []*Value) {}
 func (inactiveEmit) SetUnitReturnPatterns(int, []*Value)      {}
+func (inactiveEmit) SetUnitBody(int, []Value)                 {}
 func (inactiveEmit) SetUnitDecl(int, DeclSite)                {}
 func (inactiveEmit) UnitVariadic(int) bool                    { return false }
 func (inactiveEmit) UnitNetsZero(int) bool                    { return false }

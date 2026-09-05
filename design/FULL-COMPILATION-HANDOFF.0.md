@@ -2577,6 +2577,116 @@ the read on) to the interpreter with every frame name registry-visible
 unit's RET with the island's residual — the residual replay generalised to
 a mid-body start. Closure units decline it at first.
 
+## A gradual read consumed anywhere deopts to the interpreter at its statement (2026-09-05, the ninth increment)
+
+**What was left.** After the eighth increment a body-local bound to a
+container element (`def j (m get "f")`, typed `dynamic(Any)` on every run)
+read bare in its unit's RESIDUAL seated the whole-frame replay; the same
+read consumed anywhere else — `j typeof`, `{a: j}`, `if true [j] [0]`, a
+read an event follows (`j  def y 1`), a def sourcing it (`def k j`) —
+kept the slot push and answered a fn value (or, for the def, a value)
+where the interpreter dispatches the binding as a WORD. Refusing a gradual
+read consumed elsewhere would refuse every `def n (m get "k")  n add 1`
+in the corpus; the check pass cannot type the element; so the read is
+guarded at RUN TIME.
+
+**The mechanism (OpDeoptIfFn, `CompiledFn.Deopts`, `CompiledFn.Body`).**
+At the unit's finish `planDeopts` turns each such read — a producer of
+the unit (resolveOperand's events-first rule), not fn-typed (those are
+accounted strictly), not credited to an apply lowering — into a deopt
+point placed where the statement holding the read BEGINS
+(`deoptPointFor`): at the read's own push when its consumer follows it on
+the stack (`j typeof`, `a j add`, `x j` — the compiled stack then holds
+exactly what the interpreter's held at the read: the lowerer emits the
+test in `pushOperand`, keyed by the promoted slot, `deoptAtSlot`); at the
+read itself, off the push, when an event runs between the read and that
+consumer (`j (m get "g") add`: the get runs before the push, so the test
+goes before the get, where the stack is the read's); before the
+consumer's first op when a forward word or a def collects the read (`def
+k j`, at the `def`; `def k (j)` likewise — the def's source HOLDS the
+read), a branch holds it in an arm (`if c [j] [0]`, at the `if`, found by
+scanning back from the arm) or a loop body holds it (`for 1 [j typeof]`,
+at the `for` — the loop event stands at its count); at the literal's or
+paren's own token when the read sits inside one (`{a: j}`, `[j 1]`, `(j
+typeof)`, `((m get "g") j add)`, `[(j typeof)]`) or a word after the paren
+consumes it (`(j) typeof`); at the read when nothing consumes it and an
+event follows (`j  def y 1`, `j  (m get "g") drop`). The check pass
+seats the fn's body tokens on the unit (`SetUnitBody`, from
+check_fnbody's `bodyCopy`) and the point names the body token the
+statement starts at. At run time the VM tests the binding's value; plain
+data costs the test alone; a fn hands the rest of the body to the
+interpreter (`deoptIfFn`: `runIslandResolved` over the frame region as
+the resolved prefix — the read's own stack entry dropped when it lives
+there — with the body tokens from the statement's token), tears down the
+defs the island made (`core.TruncateFrameDefs` over a snapshot taken at
+the deopt: the interpreter's __dc duty, done by hand since the marker is a
+frame-tape token), replaces the frame region with the island's residual
+and continues at the unit's RET, which applies the RetReplay discipline.
+A deopt unit runs under the interpreter's frame environment: every named
+param and every body-local def is registry-visible (`emitDynParamBinds`,
+`lowerDynBind`'s `unitDynEnv`; the bind's own source re-push is not a read
+— `lowerer.binding`), every def's computed source is promoted
+(`collectDynBindSources`, `promoteLateDynBind`), and the unit never
+tail-calls (`unitBindsDynScope`). The whole-frame replay's word island
+still seats a lone residual read; a deopt is planned only for the rest.
+
+**Soundness, and what declines.** The island is faithful only when the
+interpreter's stack at the statement's start is the compiled stack at
+the test. An operand of the consumer (for a point tested before it) or of
+a LATER root event, or an inert operand of the residual, written before
+the start — a literal (a pooled scalar counted by canon against its
+consumptions, a def of a literal consuming its own: `def y 1  for 1 [j
+typeof]`; a compound by its own position, or by canon when the fold
+re-minted it without one — `[1 2]  (j typeof)  drop` pushes the list
+FRESH after the drop, past the island's jump to RET, and answered no
+value at all before the accounting saw it), a local or def read there
+more often than consumed (`NoteLocalRead` records every bare read's
+position per unit — both of stepWord's substitution paths), or the
+result of an event before the start that no def consumed (a def-bound
+result is promoted to its slot here and bound in the interpreter's frame,
+and the island reads it by name: `def n (m size)  def j (m get "f")  j  n
+drop` is 42) — is a value the compiled stack still lacks, and such a
+point DECLINES (best effort, the slot push it always had): `5  j typeof`
+and `def y 5  y  j typeof` (both lanes raise the count error; the texts
+differ, `[5 Function]` for `[5 Integer]` — on NUR123's record), `x {a: j}
+size add`, `5 (j) add` (which the paren apply's runtime deferral then
+answers, 47 on both lanes). A unit whose island would spell a body-local
+FN def declines too (`deoptDefsBindable` mirrors `lowerDynBind`'s literal
+admission: inert data, or a value resolving to a const or a local — a fn
+value is neither), found by the corpus: `sift-check-detect`'s `(paths is
+None)` planned a point whose tail spells `def check-paths fn […]`, and
+eight `module-sift.tsv` rows refused at that bind. A read nested in a
+closure body is not this unit's to place: closure units (`[1] each [j]`, `do [j]`) keep their slot
+push — the read lives in the closure unit, whose frame is the driving
+handler's — the next increment. `j/v` still renders `fn` for the
+interpreter's `fn j` (NUR119).
+
+**Measured** (`lang/go/word_read_dispatch_test.go`,
+TestBodyLocalDeoptParity — 61 full-text parity rows): `j typeof` Integer,
+`{a: j}` {a:42}, `{a: j, b: (print "x")}` prints once, `if true [j] [0]`
+42 (and the else arm, a computed condition over a param, the if's result
+under `typeof`), `j  def y 1` 42, `j  5 drop` 42, `j j add` 84 natively,
+`5 j add` 47, `a j add` 43, `1 2 j drop add` 3, `def k j  k` the
+interpreter's "def is still waiting" error, a fn with effects fires once
+and effects before the statement never repeat (`print "before"  j
+typeof`), and every plain-data twin pays the test alone; the paren-nested
+reads (`(j typeof)` Integer — was Function, `(j) typeof`, `((m get "g") j
+add)` 43, `[(j typeof)]`, `{a: (j typeof)}`, `(j typeof) typeof` Number,
+`((print "in") j typeof)` prints `in fired`, `def y 5  (j typeof)  y add
+1  drop`), the loop body (`for 1 [j typeof]`, `for 1 [(j typeof)]`, `def
+y 1  for 1 [j typeof]`), `def k (j)  k` 42, `j (m get "g") add` 43, the
+def-bound result read by name (`def n (m size)  … j  n add` 43), an event
+after a residual read (`j  (m get "g") drop`, `j  print "x"`), a def the
+island never reads keeping its plain lowering (`def y (m get "g")  def j
+(m get "f")  j typeof`). Compiler pins: TestPlanDeoptsShapes,
+TestPlanDeoptsDeclines, TestPlanDeoptsNestedReads,
+TestPlanDeoptsAccounting, TestPlanDeoptsStartDeclines,
+TestEmitDeoptsBeforeStackHome, TestPromoteLateDynBindDeoptNames,
+TestBodyTokenHelpers; VM: TestDeoptIfFnArms (its three defensive arms are
+pinned and lost their coverage pragmas). The corpus differential is clean
+and no corpus row refuses (the deopt adds no refusal site;
+`runIslandResolved` is the interp-entry census's existing site).
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
@@ -2685,7 +2795,14 @@ position than the construct that produced the binding.
 - Do not relax `!fd.ArgsReversed` in `vmNativeApplicable` (a measured -7).
 - The interpreter stays the reference oracle. Islanding interpretation
   inside compiled code is not acceptable, and the interpreter is not an
-  escape hatch.
+  escape hatch. The word island (the sixth increment) and the per-read
+  deopt (the ninth and tenth) are the measured, bounded exception: they
+  enter the interpreter only through the interp-entry census's existing
+  site, only for a binding the check pass cannot type as a fn or as data
+  (a gradual read the interpreter dispatches as a WORD when the value is
+  a fn), and never to avoid a lowering the compiler could make — a
+  refusal there would refuse the corpus's own `def n (m get "k")  n add
+  1`, and a slot push there is a wrong answer.
 
 ## Where the tests live
 

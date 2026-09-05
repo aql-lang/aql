@@ -220,7 +220,7 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 		// neither the dyn-scope nor the global write-back arms may fire.
 		return ""
 	}
-	needDyn := lw.es != nil && (lw.es.dynEnv || (lw.es.dynScopeNames != nil && lw.es.dynScopeNames[d.name]))
+	needDyn := lw.es != nil && (lw.es.dynEnv || lw.deoptNames[d.name] || (lw.es.dynScopeNames != nil && lw.es.dynScopeNames[d.name]))
 	// A ROOT-unit def of a NON-concrete value additionally needs the
 	// cross-request write-back (OpBindGlobal): its binding persists past the
 	// run via keep-on-compile, and the kept check-pass value is a CARRIER —
@@ -335,7 +335,11 @@ func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 		}
 	}
 	if needDyn {
+		// The bind's own re-push of the source is not a READ of the name
+		// (a deopt tests at the consumer's push — deoptAtSlot).
+		lw.binding = true
 		lw.pushOperand(src, d.pos)
+		lw.binding = false
 		lw.emit(OpBindDynScope, lw.es.internUnpooled(core.NewString(d.name)), d.pos)
 		lw.vm = lw.vm[:len(lw.vm)-1]
 	}
@@ -442,6 +446,20 @@ type lowerer struct {
 	// caller writes it back to the unit's NumLocals after lowering so the VM
 	// allocates a frame large enough for the temps.
 	numLocals int
+	// deoptNames are a DEOPT unit's island-read names (planDeopts): a def
+	// among them binds registry-visibly and its computed source is
+	// promoted, as under dynEnv.
+	deoptNames map[string]bool
+	// deopts are the unit's pending deopt points (emitDeoptsBefore lowers
+	// each where its statement begins; deoptTable is the unit's table).
+	deopts     []deoptPoint
+	deoptTable *[]DeoptSpec
+	// deoptAtSlot holds the points tested where the read's value is pushed
+	// as an operand (deoptPoint.atPush), keyed by its frame slot.
+	deoptAtSlot map[int]deoptPoint
+	// binding marks a dyn-bind's own source re-push (lowerDynBind), which
+	// the deoptAtSlot hook must not take for the consumer's read.
+	binding bool
 }
 
 // allocLocal reserves a fresh frame-local slot in the current unit (for a
@@ -549,6 +567,14 @@ func (lw *lowerer) pushOperand(op EmitOperand, pos core.SrcPos) {
 	// operands are already on the stack); opNone never reaches here.
 	switch op.kind {
 	case opLocal:
+		if d, ok := lw.deoptAtSlot[op.idx]; ok && !lw.binding && lw.depth == 0 && lw.deoptTable != nil {
+			// The read's statement begins here (deoptPoint.atPush): the
+			// compiled stack holds exactly what the interpreter's held at
+			// the read. Tested once, at the first push.
+			delete(lw.deoptAtSlot, op.idx)
+			*lw.deoptTable = append(*lw.deoptTable, DeoptSpec{Name: d.name, Pos: d.pos, Slot: op.idx, Depth: -1, Token: d.token, RetPC: -1})
+			lw.emit(OpDeoptIfFn, len(*lw.deoptTable)-1, d.start)
+		}
 		lw.emit(OpPushLocal, op.idx, pos)
 	case opType:
 		lw.emit(OpPushType, op.idx, pos)
@@ -567,6 +593,43 @@ func (lw *lowerer) note() {
 	if len(lw.vm) > lw.maxDepth {
 		lw.maxDepth = len(lw.vm)
 	}
+}
+
+// emitDeoptsBefore lowers every pending deopt point (NUR123) whose
+// statement begins at or before position p — the first op of that
+// statement is about to be emitted at the unit's root level — as an
+// OpDeoptIfFn over the read value's current home: the frame local its
+// promoted producer stores to, or its entry on the simulated stack. The
+// zero position flushes every point left (a residual read no event
+// follows). A value with neither home keeps the slot push (best effort).
+func (lw *lowerer) emitDeoptsBefore(p core.SrcPos) {
+	if len(lw.deopts) == 0 || lw.deoptTable == nil || lw.depth > 0 {
+		return
+	}
+	kept := lw.deopts[:0]
+	for _, d := range lw.deopts {
+		if p.Row > 0 && posAfter(d.start, p) {
+			kept = append(kept, d)
+			continue
+		}
+		spec := DeoptSpec{Name: d.name, Pos: d.pos, Slot: -1, Depth: -1, Token: d.token, RetPC: -1}
+		if slot, ok := lw.promoted[d.seq]; ok {
+			spec.Slot = slot
+		} else {
+			for i := len(lw.vm) - 1; i >= 0; i-- {
+				if lw.vm[i].seq == d.seq && lw.vm[i].idx == 0 {
+					spec.Depth = len(lw.vm) - 1 - i
+					break
+				}
+			}
+			if spec.Depth < 0 {
+				continue
+			}
+		}
+		*lw.deoptTable = append(*lw.deoptTable, spec)
+		lw.emit(OpDeoptIfFn, len(*lw.deoptTable)-1, d.start)
+	}
+	lw.deopts = kept
 }
 
 func (lw *lowerer) emit(op Opcode, arg int, pos core.SrcPos) int {
@@ -638,6 +701,9 @@ func (lw *lowerer) verifyMarkWindow(ops []EmitOperand) string {
 func (lw *lowerer) lowerEvents(events []EmitEvent, scopeFloor int) string {
 	for i := range events {
 		ev := &events[i]
+		if lw.depth == 0 && len(lw.deopts) > 0 {
+			lw.emitDeoptsBefore(eventPos(*ev))
+		}
 		if lw.markBefore[ev.seq] {
 			lw.emit(OpStackMark, 0, eventPos(*ev))
 		}
@@ -1281,7 +1347,11 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []EmitEvent, extr
 	// Merged into forceOrder: a dyn-bound source needs exactly the forced
 	// promotion forceOrder describes (store once, re-push per use), so one
 	// set drives every trigger below without extra per-site conditions.
-	if dynBindSrc := es.collectDynBindSources(events); len(dynBindSrc) > 0 {
+	var deoptNames map[string]bool
+	if unit != nil {
+		deoptNames = unit.deoptNames
+	}
+	if dynBindSrc := es.collectDynBindSources(events, deoptNames); len(dynBindSrc) > 0 {
 		merged := make(map[int]bool, len(forceOrder)+len(dynBindSrc))
 		for k := range forceOrder {
 			merged[k] = true
@@ -1876,7 +1946,7 @@ func collectRootBindConsumes(events []EmitEvent, dead map[int]bool) map[int]bool
 // (OpBindGlobal) — the promotion set planValueDefLocals feeds into its
 // triggers so lowerDynBind can re-push each value from a frame slot for its
 // install.
-func (es *EmitState) collectDynBindSources(events []EmitEvent) map[int]bool {
+func (es *EmitState) collectDynBindSources(events []EmitEvent, deoptNames map[string]bool) map[int]bool {
 	dynBindSrc := map[int]bool{}
 	for i := range events {
 		if events[i].kind != evDynBind || events[i].dyn == nil || events[i].dyn.srcSeq < 0 {
@@ -1892,7 +1962,7 @@ func (es *EmitState) collectDynBindSources(events []EmitEvent) map[int]bool {
 		// event, so the peek fast path reads the live top and every lowering
 		// shape stays byte-identical; a source promoted by the ordinary
 		// triggers re-pushes in Pop mode instead.)
-		if es.dynEnv || (es.dynScopeNames != nil && es.dynScopeNames[events[i].dyn.name]) ||
+		if es.dynEnv || deoptNames[events[i].dyn.name] || (es.dynScopeNames != nil && es.dynScopeNames[events[i].dyn.name]) ||
 			// An ARM-RESIDENT body compile (the each-unit bracket, regime
 			// only): every def's computed source is force-promoted so the
 			// resident install can re-push it from a frame slot — a body
@@ -1944,7 +2014,7 @@ func singleOutputCall(ev *EmitEvent) bool {
 // is left untouched for lowerDynBind to refuse, a sound interpreter fallback
 // (never a wrong store).
 func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
-	if !es.dynEnv || rec == nil || rec.frag == nil {
+	if rec == nil || rec.frag == nil || !(es.dynEnv || rec.deoptEnv) {
 		return
 	}
 	allEvents, _, _ := collectPromotableEvents(rec.frag.events)
@@ -1960,6 +2030,10 @@ func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
 		}
 		seq := ev.dyn.srcSeq
 		if _, done := rec.promoted[seq]; done {
+			continue
+		}
+		if !es.dynEnv && !rec.deoptNames[ev.dyn.name] {
+			// A deopt unit promotes only the defs its islands read.
 			continue
 		}
 		// A VARIADIC-returning producer's static nout==1 is only the check-run
