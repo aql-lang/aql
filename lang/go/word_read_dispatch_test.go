@@ -233,3 +233,107 @@ func TestBodyLocalWordReadParity(t *testing.T) {
 	gotC, _, errC, gotI, errI := runBothEngines(t, src)
 	requireParity(t, src, gotC, errC, gotI, errI)
 }
+
+// TestBodyLocalDeoptParity pins the per-read DEOPT (NUR123, the ninth
+// increment): a bare read of a body-local the pass types dynamic(Any) —
+// `def j (m get "f")` over a Map param — consumed where the whole-frame
+// replay cannot re-step it (a container member, an argument, a branch arm,
+// a read an event follows, a def sourcing it) tests the binding's runtime
+// value where the statement holding the read begins and, on a fn, hands
+// the rest of the body to the interpreter (OpDeoptIfFn). Every row was a
+// `fn` for the interpreter's value, or a wrong answer for its error, on
+// the default lane with exit 0. Full-text parity; plain data pays the
+// test alone (the `{f: 5}` twins).
+func TestBodyLocalDeoptParity(t *testing.T) {
+	const hM = `def h fn [[m:Map][Any]`
+	rows := []struct{ src, want string }{
+		{hM + `[def j (m get "f")  j typeof]]  h {f: ([] => [42])}`, "Integer — was Function"},
+		{hM + `[def j (m get "f")  j typeof]]  h {f: 5}`, "Integer — plain data, the test alone"},
+		{hM + `[def j (m get "f")  {a: j}]]  h {f: ([] => [42])}`, "{a:42} — was {a:fn}"},
+		{hM + `[def j (m get "f")  {a: j}]]  h {f: "s"}`, "{a:'s'}"},
+		{hM + `[def j (m get "f")  {a: j, b: (print "x")}]]  h {f: ([] => [42])}`, "x once, {a:42} — the island runs the literal whole"},
+		{hM + `[def j (m get "f")  {a: j}]]  h {f: (z:Integer => [z])}`, "cannot call `j`"},
+		{hM + `[def j (m get "f")  [j 1] size]]  h {f: ([] => [42])}`, "2"},
+		{hM + `[def j (m get "f")  {a: j} get "a"]]  h {f: ([] => [42])}`, "42"},
+		{hM + `[def j (m get "f")  if true [j] [0]]]  h {f: ([] => [42])}`, "42 — was fn"},
+		{hM + `[def j (m get "f")  if false [0] [j]]]  h {f: ([] => [42])}`, "42"},
+		{hM + `[def j (m get "f")  if true [j] [0] typeof]]  h {f: ([] => [42])}`, "Integer"},
+		{`def h fn [[m:Map x:Integer][Any][def j (m get "f")  if (x gt 3) [j] [0]]]  h {f: ([] => [42])} 7`, "42"},
+		{`def h fn [[m:Map x:Integer][Any][def j (m get "f")  if (x gt 3) [j] [0]]]  h {f: ([] => [42])} 1`, "0"},
+		{hM + `[def j (m get "f")  j  def y 1]]  h {f: ([] => [42])}`, "42 — a read an event follows"},
+		{hM + `[def j (m get "f")  j  5 drop]]  h {f: ([] => [42])}`, "42"},
+		{hM + `[def j (m get "f")  j j add]]  h {f: ([] => [42])}`, "84 — both reads dispatch"},
+		{hM + `[def j (m get "f")  5 j add]]  h {f: ([] => [42])}`, "47 — the literal below the read is on the stack at the test"},
+		{hM + `[def a (m get "g")  def j (m get "f")  a j add]]  h {f: ([] => [42]) g: 1}`, "43"},
+		{hM + `[def j (m get "f")  1 2 j drop add]]  h {f: ([] => [42])}`, "3"},
+		{hM + `[def j (m get "f")  def k j  k]]  h {f: ([] => [42])}`, "def is still waiting — the interpreter's error, was 42"},
+		{hM + `[def j (m get "f")  def k j  k]]  h {f: 5}`, "5"},
+		{hM + `[def j (m get "f")  j typeof]]  h {f: ([] => [print "fired"  42])}`, "fired Integer — the fn's effects run once"},
+		{hM + `[def j (m get "f")  print "before"  j typeof]]  h {f: ([] => [print "fired"  42])}`, "before fired — effects before the statement never repeat"},
+		{hM + `[def j (m get "f")  j drop  j]]  h {f: ([] => [print "hi"  42])}`, "hi hi"},
+		// the paren-nested read: the paren is the statement
+		{hM + `[def j (m get "f")  (j typeof)]]  h {f: ([] => [42])}`, "Integer — was Function"},
+		{hM + `[def j (m get "f")  (j typeof)]]  h {f: 5}`, "Integer"},
+		{hM + `[def j (m get "f")  (j typeof)]]  h {f: (z:Integer => [z])}`, "cannot call `j`"},
+		{hM + `[def j (m get "f")  (j typeof)  5  drop]]  h {f: ([] => [42])}`, "Integer — was Function"},
+		{hM + `[def j (m get "f")  def y 5  (j typeof)  y add 1  drop]]  h {f: ([] => [42])}`, "Integer — was Function"},
+		{hM + `[def j (m get "f")  ((m get "g") j add)]]  h {f: ([] => [42]) g: 1}`, "43"},
+		{hM + `[def j (m get "f")  (1 j add)]]  h {f: ([] => [42])}`, "43"},
+		{hM + `[def j (m get "f")  (j 1 add)]]  h {f: ([] => [42])}`, "43"},
+		{hM + `[def j (m get "f")  (j) typeof]]  h {f: ([] => [42])}`, "Integer — was Function"},
+		{hM + `[def j (m get "f")  [(j typeof)]]]  h {f: ([] => [42])}`, "[Integer]"},
+		{hM + `[def j (m get "f")  {a: (j typeof)}]]  h {f: ([] => [42])}`, "{a:Integer}"},
+		{hM + `[def j (m get "f")  (j typeof) typeof]]  h {f: ([] => [42])}`, "Number"},
+		{hM + `[def j (m get "f")  (j typeof) (m get "g") drop]]  h {f: ([] => [42]) g: 1}`, "Integer"},
+		{hM + `[def j (m get "f")  print "before"  (j typeof)]]  h {f: ([] => [print "fired"  42])}`, "before fired"},
+		{hM + `[def j (m get "f")  ((print "in") j typeof)]]  h {f: ([] => [print "fired"  42])}`, "in fired — the paren runs whole in the island"},
+		{hM + `[def j (m get "f")  5  (j typeof)  drop]]  h {f: ([] => [42])}`, "5"},
+		{hM + `[def j (m get "f")  [1 2]  (j typeof)  drop]]  h {f: ([] => [42])}`, "[1 2]"},
+		{hM + `[def j (m get "f")  ([1 2] size)  (j typeof)  drop]]  h {f: ([] => [42])}`, "2"},
+		{hM + `[def j (m get "f")  def k (j)  k]]  h {f: ([] => [42])}`, "42 — the def's source holds the read"},
+		{hM + `[def j (m get "f")  def k (j)  k]]  h {f: 5}`, "5"},
+		// an event between the read and its stack consumer
+		{hM + `[def j (m get "f")  j (m get "g") add]]  h {f: ([] => [42]) g: 1}`, "43 — the get runs before the push: tested before it"},
+		{hM + `[def j (m get "f")  j (m get "g") add]]  h {f: 5 g: 1}`, "6"},
+		{hM + `[def j (m get "f")  (m get "g") j add]]  h {f: ([] => [42]) g: 1}`, "43"},
+		{hM + `[def j (m get "f")  j print "x" typeof]]  h {f: ([] => [42])}`, "x Integer"},
+		// a loop body: the for word is the statement
+		{hM + `[def j (m get "f")  for 1 [j typeof]]]  h {f: ([] => [42])}`, "Integer — was Function"},
+		{hM + `[def j (m get "f")  for 1 [(j typeof)]]]  h {f: ([] => [42])}`, "Integer"},
+		{hM + `[def j (m get "f")  def y 1  for 1 [j typeof]]]  h {f: ([] => [42])}`, "Integer — the def consumed its literal"},
+		// a def-bound result before the read: the island reads it by name
+		{hM + `[def n (m size)  def j (m get "f")  j  n drop]]  h {f: ([] => [42])}`, "42 — was fn"},
+		{hM + `[def n (m size)  def j (m get "f")  j  n add]]  h {f: ([] => [42])}`, "43"},
+		{hM + `[def n (m size)  def j (m get "f")  (j typeof)  n drop]]  h {f: ([] => [42])}`, "Integer"},
+		{hM + `[def j (m get "f")  j  def n (m size)  n drop]]  h {f: ([] => [42])}`, "42"},
+		// an event after a residual read
+		{hM + `[def j (m get "f")  j  (m get "g") drop]]  h {f: ([] => [42]) g: 1}`, "42"},
+		{hM + `[def j (m get "f")  j  print "x"]]  h {f: ([] => [42])}`, "x 42"},
+		{hM + `[def j (m get "f")  j  5 add 1  drop]]  h {f: ([] => [42])}`, "42"},
+		// a def the island never reads keeps its plain lowering
+		{hM + `[def y (m get "g")  def j (m get "f")  j typeof]]  h {f: ([] => [42]) g: 1}`, "Integer"},
+		{hM + `[def y (m get "g")  def j (m get "f")  j typeof]]  h {f: 5 g: 1}`, "Integer"},
+		{hM + `[def j (m get "f")  def y 5  {a: j}  drop  y add 5]]  h {f: ([] => [42])}`, "10"},
+		// a CODE BODY's read of the captured local (the tenth increment):
+		// the closure unit deopts on its capture slot, the parent binds j
+		{hM + `[def j (m get "f")  [1] each [j]]]  h {f: ([] => [42])}`, "[42] — was [fn]"},
+		{hM + `[def j (m get "f")  [1 2] each [j]]]  h {f: (z:Integer => [mul 3 z])}`, "[3 6] — was [fn (Integer) fn (Integer)]"},
+		{hM + `[def j (m get "f")  [1] each [j]]]  h {f: 5}`, "[5]"},
+		{hM + `[def j (m get "f")  [1 2] each [j add]]]  h {f: 5}`, "[6 7]"},
+		{hM + `[def j (m get "f")  do [j]]]  h {f: ([] => [42])}`, "42 — was fn"},
+		{hM + `[def j (m get "f")  do [j typeof]]]  h {f: ([] => [42])}`, "Integer"},
+		{hM + `[def j (m get "f")  do [(j typeof)]]]  h {f: ([] => [42])}`, "Integer"},
+		{hM + `[def j (m get "f")  do [def y 1  j]]]  h {f: ([] => [42])}`, "42"},
+		{hM + `[def j (m get "f")  if true [do [j]] [0]]]  h {f: ([] => [42])}`, "42"},
+		{hM + `[def j (m get "f")  [1] each [j] size]]  h {f: ([] => [42])}`, "1"},
+		{hM + `[def j (m get "f")  5  do [j]  add]]  h {f: ([] => [42])}`, "47"},
+	}
+	for _, c := range rows {
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
+		if !compiled {
+			t.Errorf("%q (%s): must compile natively; err=%v", c.src, c.want, errC)
+			continue
+		}
+		requireParity(t, c.src, gotC, errC, gotI, errI)
+	}
+}

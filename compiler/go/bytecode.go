@@ -488,6 +488,20 @@ const (
 	// The undef arm (a var param's balanced per-iteration teardown) pops
 	// the name's live top entry instead, consuming no stack.
 	OpBindResident
+	// OpDeoptIfFn is the per-read DEOPT of a gradual word read (NUR123): a
+	// bare read of a frame binding the pass types dynamic(Any) — a body-
+	// local bound to a container element — that the model consumed as a
+	// VALUE somewhere the whole-frame replay cannot re-step (a container
+	// member, an argument, a branch or loop body, a read an event follows).
+	// The interpreter dispatches the binding as a WORD when it holds a fn at
+	// run time, so the op tests the binding's runtime value where the
+	// statement holding the read begins — before any of its effects — and,
+	// on a fn, hands the REST OF THE BODY (Fns[unit].Body from the
+	// statement's token) to the interpreter with the frame's bindings
+	// registry-visible, then continues at the unit's RET with the island's
+	// residual as the frame region (CompiledFn.Deopts[Arg]). Plain data
+	// costs the test and nothing else.
+	OpDeoptIfFn
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -544,6 +558,7 @@ var opcodeNames = [...]string{
 	OpBindGlobal:           "BIND_GLOBAL",
 	OpLookupDynScopeData:   "LOOKUP_DYN_SCOPE_DATA",
 	OpBindTwin:             "BIND_TWIN",
+	OpDeoptIfFn:            "DEOPT_IF_FN",
 	OpBindResident:         "BIND_RESIDENT",
 }
 
@@ -1217,6 +1232,28 @@ type CompiledFn struct {
 	// same-registry fn keeps the frame-path contract (count error + type
 	// validation), which checkReturnContract already mirrors byte-identically.
 	RetReplay bool
+	// Body is the fn's source body tokens (the sig's Boru body, seated by
+	// SetUnitBody), the token stream a DEOPT hands to the interpreter from
+	// the deopting statement on. Nil for a unit that seated none (a
+	// closure body, a stored fn), which then records no deopt point.
+	Body []core.Value
+	// Deopts is the unit's per-read deopt table (OpDeoptIfFn's Arg).
+	Deopts []DeoptSpec
+}
+
+// DeoptSpec is one OpDeoptIfFn: the gradual word read it guards (Name, its
+// read position Pos), where the read's value lives at the op — a frame
+// local (Slot >= 0) or the operand stack Depth entries below the top (Slot
+// < 0; the island's prefix drops that entry, the interpreter's frame never
+// held it) — the Body token index the interpreter resumes from (Token) and
+// the unit's RET (RetPC) the VM continues at with the island's residual.
+type DeoptSpec struct {
+	Name  string
+	Pos   core.SrcPos
+	Slot  int
+	Depth int
+	Token int
+	RetPC int
 }
 
 // slotNames renders a CompiledFn's slot→name table for the
@@ -1344,6 +1381,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		case OpBindTwin:
 			tw := p.BindTwins[in.Arg]
 			fmt.Fprintf(sb, " w%-3d ; bind twin %s %s @depth %d (replay)", in.Arg, tw.Kind, tw.Name, tw.Depth)
+		case OpDeoptIfFn:
+			fmt.Fprintf(sb, " d%-3d ; deopt to the interpreter if the read holds a fn", in.Arg)
 		case OpBindResident:
 			rb := p.ResidentBinds[in.Arg]
 			arm := "install"

@@ -73,6 +73,13 @@ func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK 
 	// names; their rebind safety is the per-ref poisoning, so the frozen-
 	// read discipline skips them (see fnUnitRec.storedRefUnit).
 	es.fnRecs[unit].storedRefUnit = word == "storedfn" || word == "spawnbody"
+	// A code body a native runs inside the caller's frame (each, do, fold,
+	// for, …) seats its tokens for a per-read deopt (planDeopts, NUR123);
+	// an escaping body — a lambda value, a stored fn, a spawned body — has
+	// no frame to resume in and seats none.
+	if word != "fnval" && word != "storedfn" && word != "spawnbody" {
+		es.SetUnitBody(unit, bodyToks)
+	}
 	if finish == nil {
 		// Memo hit: the unit is already compiled in this state.
 		return unit, es.Active()

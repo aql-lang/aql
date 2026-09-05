@@ -1716,6 +1716,63 @@ func (vc *vmContext) bindDynScope(curReg *core.Registry, p *compiler.Program, ar
 	return stack[:len(stack)-1], nil
 }
 
+// deoptIfFn executes one OpDeoptIfFn (compiler.DeoptSpec, NUR123). The
+// guarded read is a bare read of a body-local the pass typed dynamic(Any);
+// the interpreter dispatches the binding as a WORD when it holds a fn at
+// run time, where this unit pushed the value. So when the value IS a fn the
+// rest of the body goes to the interpreter: the frame region below the
+// read (the read's own stack entry, if it has one, dropped — the
+// interpreter's frame never held it) is the resolved prefix, the unit's
+// Body tokens from the statement's token on are the region — followed by
+// the frame's def-cleanup duty over the frame's live bindings, so a def
+// the island makes tears down at its end as the interpreter's __dc does —
+// and the
+// frame's params and defs are registry-visible (the deopt unit's
+// BIND_DYN_SCOPE env). The island's residual replaces the frame region and
+// the run loop continues at the unit's RET (its RetReplay discipline).
+// Plain data costs the test and nothing else.
+func (vc *vmContext) deoptIfFn(reg *core.Registry, fn *compiler.CompiledFn, spec *compiler.DeoptSpec, frameBase int, stack, locals []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, bool, error) {
+	var v core.Value
+	at := -1
+	if spec.Slot >= 0 {
+		if spec.Slot >= len(locals) {
+			return nil, false, vmErrAt(curDebug, pc, "DEOPT_IF_FN bad slot")
+		}
+		v = locals[spec.Slot]
+	} else {
+		at = len(stack) - 1 - spec.Depth
+		if spec.Depth < 0 || at < frameBase {
+			return nil, false, vmErrAt(curDebug, pc, "DEOPT_IF_FN underflow")
+		}
+		v = stack[at]
+	}
+	if !core.IsAppliableFn(v) {
+		return stack, false, nil
+	}
+	if spec.Token < 0 || spec.Token >= len(fn.Body) || spec.RetPC < 0 {
+		return nil, false, vmErrAt(curDebug, pc, "DEOPT_IF_FN bad table entry")
+	}
+	prefix := append([]core.Value(nil), stack[frameBase:]...)
+	if at >= 0 {
+		i := at - frameBase
+		prefix = append(prefix[:i], prefix[i+1:]...)
+	}
+	tokens := append([]core.Value(nil), fn.Body[spec.Token:]...)
+	// The frame's def-cleanup duty, done by hand: a def the island makes
+	// tears down at its end, as the interpreter's __dc marker would (the
+	// marker itself is a frame-tape token, not an island residual).
+	snapshot := reg.Defs.Snapshot()
+	results, err := runIslandResolved(reg, prefix, tokens)
+	core.TruncateFrameDefs(reg, snapshot)
+	if err != nil {
+		return nil, false, stampAt(err, curDebug, pc, vc.r)
+	}
+	if err := vc.screenResults(results, "deopt result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (the island's results are interpreter residuals, tape-coupled only on a compiler bug) (§compiler)
+		return nil, false, err
+	}
+	return append(stack[:frameBase], results...), true, nil
+}
+
 // bindGlobal executes one OpBindGlobal — the cross-request persistence twin
 // of a top-level computed `def`: PEEK the runtime value (the stack is
 // untouched, so the lowering's fast path binds a value in place without
@@ -2364,6 +2421,20 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			locals = nl
 			enterUnit(int(in.Arg))
 			pc = -1
+		case compiler.OpDeoptIfFn:
+			fb := 0
+			if len(frames) > 0 {
+				fb = frames[len(frames)-1].stackBase
+			}
+			spec := &p.Fns[curUnit].Deopts[in.Arg]
+			ns, fired, err := vc.deoptIfFn(curReg, &p.Fns[curUnit], spec, fb, stack, locals, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			stack = ns
+			if fired {
+				pc = spec.RetPC - 1
+			}
 		case compiler.OpBindDynScope:
 			ns, err := vc.bindDynScope(curReg, p, int(in.Arg), stack, curDebug, pc)
 			if err != nil { //covergate:allow bindDynScope's only error paths are its own allow-listed defensive guards (underflow / bad name const), unreachable without a bytecode-level fault (§compiler)
