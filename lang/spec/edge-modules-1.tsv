@@ -61,6 +61,9 @@ import "boru:test" Test.$module is Assert.$module	true	a module may bind SEVERAL
 import "boru:test" Assert.$module.exports	['Assert' 'Test']	…which lists both exports
 import "boru:string-util" StringUtil.$module.kind eq "native"	true	builtin modules carry kind native
 import "boru:logic-util" LogicUtil.$module.name eq "boru:logic-util"	true	…and their boru: reference as the name
+import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module	true	a cache no-op: the binding keeps its ONE descriptor instance across a repeat import
+import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module	false	GOTCHA: re-import after undef REBUILDS the binding with a FRESH descriptor — identity is per-import-instance
+import "boru:array-util" import module [export "A" {x:1} export "B" {y:2}] import module [export "C" {z:3}] size (ArrayUtil.unique [A.$module B.$module C.$module])	2	the deq scan merges the SHARED descriptor (A/B — one instance) and keeps the distinct one (C)
 #
 # §7  import renaming and aliasing
 import [Foo Bar] module [export "Foo" {a:1}] Foo.a	ERROR:undefined_word	renaming REPLACES the original name — Foo is not bound

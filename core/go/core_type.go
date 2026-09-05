@@ -361,6 +361,10 @@ func InstallType(r *Registry, name string, body Value) error {
 	if err := validateTypeName(r, name); err != nil {
 		return err
 	}
+	// Seated with the operation, not with `def`'s capitalised arm, which
+	// returned this call's result directly and so reached no notification at
+	// all until 2026-09-04 (core/go/rebind_notify.go).
+	noteRebind(r, name)
 	if IsMicronType(body) {
 		// `def Baron refine Micron {foo:String}` route: the family
 		// Ideal's Construct produced a MicronTypeInfo body; mint the

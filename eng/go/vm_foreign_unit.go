@@ -70,6 +70,11 @@ func (vc *vmContext) runForeignUnit(ref *compiler.CompiledFnRef, args []core.Val
 			res, handled, err = nil, true, vmInternalError(rec, vc.r.Source)
 		}
 	}()
+	// The fn-VALUE seam's foreign arm: the hosted root RET takes the CallBoru
+	// discipline, as enterCallbackUnit's does for an in-program ref.
+	prev := vc.rootRetTrim
+	vc.rootRetTrim = true
+	defer func() { vc.rootRetTrim = prev }()
 	res, err = vc.hostForeign(ref.Prog, vc.r, ref.Unit, args, ref.Captures)
 	return res, true, err
 }
@@ -87,13 +92,17 @@ func (vc *vmContext) runForeignUnit(ref *compiler.CompiledFnRef, args []core.Val
 func (vc *vmContext) hostForeign(p *compiler.Program, reg *core.Registry, unit int, inputs, captures []core.Value) ([]core.Value, error) {
 	r := vc.r
 	sub := &vmContext{
-		p:          p,
-		r:          r,
-		ceiling:    vc.ceiling,
-		stepLimit:  vc.stepLimit,
-		steps:      vc.steps,
-		argsFloor:  r.Args.Depth(),
-		frameDepth: vc.frameDepth,
+		p:       p,
+		r:       r,
+		ceiling: vc.ceiling,
+		// The seam the host was entered through decides the hosted root RET's
+		// return discipline (runForeignUnit: the fn-VALUE seam; invokeClosureOn:
+		// the token seam).
+		rootRetTrim: vc.rootRetTrim,
+		stepLimit:   vc.stepLimit,
+		steps:       vc.steps,
+		argsFloor:   r.Args.Depth(),
+		frameDepth:  vc.frameDepth,
 	}
 	// Registered first so it runs last of this function's defers: the budget is
 	// handed back on every path, a bailed body included.

@@ -540,6 +540,16 @@ type ClosurePayload struct {
 	RetPatterns []*Value
 	RetDecl     DeclSite
 	RetName     string
+	// RetTrim marks a closure handed through the fn-VALUE seam
+	// (InvokeCallbackBody): the handler would hand a FnDefInfo to
+	// InvokeCallbackFn, whose CallBoru path checks the declared TYPES over
+	// the aligned residual and never raises on the COUNT
+	// (enforceCallBoruReturns) — walk's hooks, the map-iteration each/fold,
+	// filter's Function form. Off, the closure came through the TOKEN seam
+	// (InvokeBody: each over a list, apply, a paren call), where the fn
+	// value is stepped and __RC enforces the count. Set on the VALUE at the
+	// seam, never on the stored closure: the same closure can cross both.
+	RetTrim bool
 	// RetPos is where the callback REFERENCE was written (`cbad/v`), which is
 	// the position the interpreter anchors a return-contract error on: its
 	// ReturnCheckInfo.Pos, stamped onto the Function value by stampResultPos

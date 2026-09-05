@@ -69,6 +69,13 @@ func drainUndefinedAtoms(e *core.Engine) {
 //     identically to the interpreter. A BODY-LOCAL flex is a frame local, not a
 //     registry binding, so dyn-scoping it would miss — it keeps its local-slot
 //     lowering (or a sound refusal), left untagged.
+//   - a MODULE-FAMILY value bound at module scope — an `import`-bound namespace
+//     (`IO`, `StringUtil`) or a Module descriptor (`def m StringUtil.$module`):
+//     the same shape as the mutable reference, read as a VALUE (`IO deq IO`, a
+//     residual, an `eq` operand). A namespace is a pointer-shared map the
+//     const gate deliberately refuses (fn exports; ConstBakeable is closed to
+//     module instances), and its identity IS the binding's — so the read
+//     lowers to the same live lookup, which is also what honours a re-import.
 //
 // Extracted from stepWord so the hot dispatch path stays under the cyclomatic-
 // complexity gate.
@@ -76,8 +83,8 @@ func tagCheckModeDefRead(e *core.Engine, top *core.Value, name string) {
 	switch {
 	case top.Dynamic:
 		top.SetDynFrom(name)
-	case (core.IsFlexMap(*top) || core.IsFlexList(*top) || core.IsFlexXml(*top) || core.IsStore(*top)) &&
-		core.ModuleScopeBinding(e.Registry, name):
+	case (core.IsFlexMap(*top) || core.IsFlexList(*top) || core.IsFlexXml(*top) || core.IsStore(*top) ||
+		core.IsModuleFamilyValue(*top)) && core.ModuleScopeBinding(e.Registry, name):
 		top.SetDynFrom(name)
 	}
 }

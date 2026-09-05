@@ -20,7 +20,7 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 		t.Fatal("inactive SuspendedNow must be false")
 	}
 	e.BodyAnalysisGuard()()
-	e.KeepDefsBodyGuard(nil)()
+	e.KeepDefsBodyGuard(nil, "")()
 	e.MultiRunBodyGuard(nil, "b")()
 	e.RecordDynUndef("x", SrcPos{})
 	e.FnBodyGuard()()
@@ -124,7 +124,9 @@ func TestInactiveEmitMethodArms(t *testing.T) {
 	e.RecordDefRebind("n", Value{}, SrcPos{})
 	e.RecordDynBind("n", Value{}, SrcPos{})
 	e.NoteDefRead("id", "n")
-	e.NoteFrozenRead("n")
+	e.NoteWordRead(Value{}, "n", SrcPos{})
+	e.NoteValRead("id")
+	e.NoteFrozenRead("n", FrozenBakeValue, 0)
 	e.NotifyNameRebound("n")
 	if got := e.RegisterLocal("id"); got != -1 {
 		t.Fatalf("inactive RegisterLocal must be -1, got %d", got)

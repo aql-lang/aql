@@ -272,6 +272,29 @@ func checkRecordShapeArgs(r *core.Registry, name string, paramPatterns []*core.V
 	}
 }
 
+// LambdaCountContract is the run-time RETURN contract of an ANONYMOUS fn
+// (`=>` / `afn`). Its `Returns=[Any]` is a placeholder the analyser infers
+// past — BuildFnBodyReturnsFn nils it for AnalyseFnBody so the residual
+// carries the body's real type — but the interpreter enforces the
+// placeholder's COUNT at every dispatch boundary: the named call (`def f
+// (x:Integer => [x 1])  f 5`), the paren apply, the `apply` word and the
+// callback seam (`each (x:Integer => [x 1]) [1 2]`) all raise `expected 1
+// return value(s), got 2`, exactly as the verbose `fn [[x][Any][x 1]]` twin
+// does. A compiled unit therefore keeps a COUNT-ONLY contract — n `Any`
+// slots, which checkReturnContract enforces by count and never by type.
+// Measured 2026-09-05 (NUR120): with the placeholder dropped outright the
+// default lane answered `5 1` and `[1 1]` where the interpreter raises.
+func LambdaCountContract(n int) []*core.Type {
+	if n <= 0 {
+		return nil
+	}
+	out := make([]*core.Type, n)
+	for i := range out {
+		out[i] = core.TAny
+	}
+	return out
+}
+
 func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef core.FnDefInfo) core.ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*core.Value, len(s.Params))
@@ -281,7 +304,12 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 	}
 	declaredReturns := append([]*core.Type(nil), s.Returns...)
 	declaredReturnPatterns := append([]*core.Value(nil), s.ReturnPatterns...)
+	// The compiled unit's RET contract: a named fn's declaration as written;
+	// an anonymous lambda's placeholder count (LambdaCountContract), which
+	// stands at run time even though the ANALYSER below infers past it.
+	compileReturns := declaredReturns
 	if fnDef.Anonymous {
+		compileReturns = LambdaCountContract(len(s.Returns))
 		declaredReturns = nil
 		declaredReturnPatterns = nil
 	}
@@ -511,7 +539,7 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 			if len(bodyCopy) > 0 {
 				fnPos = bodyCopy[0].Pos()
 			}
-			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, r, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
+			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, r, genArgs, compileReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
 				fnUnit = -1
 			}
@@ -712,6 +740,10 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
+				// nameCopy, not name, for the same reason every sibling in this
+				// closure uses it: the snapshot at the top of
+				// BuildFnBodyReturnsFn is what the closure is entitled to read.
+				noteBakedCallTarget(es, r, nameCopy)
 				es.RecordUserCall(fnUnit, args, nil, pos)
 				return nil
 			}
@@ -762,6 +794,46 @@ func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 // fn name must already be bound (recursion). Generic and Body-less (native /
 // handler) overloads are skipped — a generic body needs per-call type bindings,
 // and a native handler has no boru body to analyse.
+// noteBakedCallTarget records that a compiled unit is about to bake a CALL
+// TARGET for module-scope binding `name`. `RecordUserCall(fnUnit, …)` names a
+// SPECIFIC compiled unit and the lowering emits CALL_USER / TAIL_CALL_USER to
+// it, so a later module-scope rebind of the name leaves the caller invoking
+// the old body while the interpreter dispatches the new one. Measured before
+// this note existed, on the default lane with no flags:
+//
+//	def helper fn [[x:Integer] [Integer] [x add 1]]
+//	def use fn [[x:Integer] [Integer] [helper x]]
+//	use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1
+//	  interpreted -> 2 101      compiled -> 2 2
+//
+// It is a FUNCTION, and every RecordUserCall site calls it, because the bug
+// this closes was caused by exactly the opposite arrangement one layer down:
+// `NotifyNameRebound` used to be invoked from individual def/undef HANDLERS,
+// so each binder that returned early skipped it silently. (Both halves are
+// funnelled now — core/go/rebind_notify.go, gated by
+// `TestBindingOpsNotifyRebind`.) The first cut of this note repeated that
+// mistake before the funnels existed: it sat inline at recordUserCallOrApply
+// and missed the ZERO-OUTPUT site below, which kept
+// `def g fn [[] [] [print 1]]  def f fn [[] [] [g]]  f
+// def g fn [[] [] [print 99]]  f` printing `1 1` against the interpreter's
+// `1 99`. If a third RecordUserCall site appears, it calls this.
+//
+// The registry is the DISPATCH's own (r), never the recorder's es.reg: es.reg
+// is the last registry BindRegistry saw, which after a call into a
+// boru-implemented module is that module's sub-registry, whose baselines are
+// not this call's (region_record.go carries a dispatch registry for the same
+// reason). NoteFrozenRead self-guards on an open unit, so a TOP-LEVEL call
+// records nothing — there analysis order is program order and the interpreter
+// makes the same dispatch.
+func noteBakedCallTarget(es core.EmitRecorder, r *core.Registry, name string) {
+	if r == nil || name == "" {
+		return
+	}
+	if core.ModuleScopeBinding(r, name) {
+		es.NoteFrozenRead(name, core.FrozenBakeCall, r.Defs.Gen(name))
+	}
+}
+
 // recordUserCallOrApply records a compiled-unit dispatch at a ReturnsFunc
 // record site: the §4.3 fn-value apply fallback where the call qualifies
 // (the outs slice is then COPIED with the freshened carrier in slot 0),
@@ -776,6 +848,7 @@ func recordUserCallOrApply(es core.EmitRecorder, r *core.Registry, name string, 
 		outs[0] = fresh
 		return outs
 	}
+	noteBakedCallTarget(es, r, name)
 	es.RecordUserCall(fnUnit, args, outs, pos)
 	return outs
 }

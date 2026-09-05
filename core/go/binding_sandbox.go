@@ -142,3 +142,29 @@ func (r *Registry) RestoreBindingsForReplay(s BindingSandbox) {
 	r.dispatchCache.reset()
 	r.Types.readmitRetired(s.typeIDs)
 }
+
+// SwapDefs installs dt as the registry's live binding table and returns the
+// table it replaced, resetting the dispatch cache exactly as RestoreBindings
+// does — the cache is keyed by per-name generation, and a table swapped in
+// from a clone shares the parent's generation timeline, so an entry cached
+// against the old table could otherwise be served for a name whose binding
+// the new table holds differently.
+//
+// It exists for the compile pass's body re-run (Stage 4b): a leaking body —
+// a `do` body, a higher-order body the runtime re-runs per element — is
+// analysed once with recording suspended and then RE-RUN to compile, and the
+// re-run must begin from the binding state the interpreter's single run
+// begins from, not from the state the analysis run leaked. The recorder
+// clones the table at the guard's open, swaps the clone in around each
+// compile, and swaps the leaked table back afterwards so the enclosing
+// analysis continues where the interpreter's run would have left it. A nil
+// table is refused: the registry always has a live table.
+func (r *Registry) SwapDefs(dt *DefTable) *DefTable {
+	if r == nil || dt == nil {
+		return nil
+	}
+	prev := r.Defs
+	r.Defs = dt
+	r.dispatchCache.reset()
+	return prev
+}

@@ -57,12 +57,16 @@ Two rules specific to this module:
   (`JoinCarriersHook`, `AnalysisImpl.AddUnique`): with their subjects
   core-resident there was nothing left to indirect. Prefer deleting a
   slot that way over keeping it for symmetry.
-- **The eng facade mirrors this surface.** `eng/go/aliases_core.go`
-  is GENERATED (`piecetool -facade`); after changing core's exported
-  surface, regenerate it (generic functions go in the hand-written
-  `eng/go/aliases_core_generic.go`) and keep `eng/go/piece_map.tsv`
-  current. Facade wrappers must remain direct calls so they inline —
-  the alloc-ceiling tests gate the module boundary's cost.
+- **There is no eng facade any more.** This guide used to say
+  `eng/go/aliases_core.go` was GENERATED (`piecetool -facade`) and had
+  to be regenerated after changing core's exported surface. That file
+  no longer exists: core, check and compiler are top-level modules and
+  eng imports them directly, so the facade that stood between them was
+  retired once nothing referenced it (`eng/go/piece_map.tsv`'s own
+  header records this). Changing core's exported surface owes nothing
+  to eng. `piece_map.tsv` survives, but it now assigns only the eng
+  package's OWN files, and `eng/go/piece_map_test.go` gates that — a
+  new core symbol does not belong in it.
 
 Coverage: `make cover-gate-core` gates core/go by its own suite
 (floor ratcheting to 100, design/ENG-FOUR-PIECE.0.md Stage 5), on

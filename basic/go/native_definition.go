@@ -383,12 +383,6 @@ func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
 	r.Check.Recorder().RecordDefRebind(name, value, pos)
-	// A def of a name that some ALREADY-COMPILED stored handler / spawn body
-	// reads makes that frozen unit stale (the interpreter resolves the new
-	// binding at CALL time). Poison such refs so Finalize leaves them unstamped
-	// and InvokeCallback falls back to CallBoru. A first-time def of a fresh name
-	// poisons nothing (no existing ref lists it as a dep).
-	r.Check.Recorder().NotifyNameRebound(name)
 	// Record the def site for the dynamic-scope binder pass: if some fn body
 	// READS this name with no lexical home (OpLookupDynScope), the lowering
 	// installs a registry-visible OpBindDynScope twin here so the runtime
@@ -700,6 +694,10 @@ func DefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		// the kernel type installer — the same path the `type` word
 		// uses — so object/predicate lattice-minting and all
 		// type-installation validation happen in exactly one place.
+		// The rebind notification is InstallType's own now
+		// (core/go/rebind_notify.go) — this arm returning the installer's
+		// result directly is exactly how a type rebind reached no
+		// notification at all before the funnel existed.
 		return nil, core.InstallType(r, name, body)
 	}
 	if err := ValidateWordName(name); err != nil {
@@ -1424,35 +1422,20 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		// of Phase 2's universal `def` — design/TYPE-UNIFORM.10.md):
 		// a capitalised name is a TYPE binding, so pop it from the single
 		// binding store and retire the minted lattice type.
-		entry, ok := r.Defs.PopEntry(name)
-		if !ok {
+		// The pop, the mint retirement, the ledger note and the rebind
+		// notification are all core.UninstallType's — it is a BINDING
+		// OPERATION, and it was inline here until 2026-09-04, which is how it
+		// came to be the one unbinder that notified nothing.
+		if !core.UninstallType(r, name) {
 			return nil, r.BoruError("undef_error",
 				fmt.Sprintf("undef %s: no such type binding", name), "undef")
 		}
-		// Retire only a node THIS binding minted. An alias binding
-		// ADOPTS an existing canonical node (`def Foo Integer` binds
-		// the Integer node itself — core.InstallType's alias arm), so
-		// retiring it here would delete a builtin's or another
-		// binding's identity from the ID index.
-		if entry.TypeDef != nil && entry.Minted {
-			r.Types.Retire(entry.TypeDef)
-		}
-		// A capitalised undef pops through PopEntry, not UninstallDef, so it
-		// needs its own ledger note (§6.5). The RETIREMENT above is already
-		// covered by BindingSandbox's partition — this records the BINDING
-		// removal, which is the half a twin has to replay.
-		r.NoteBindTransition(core.BindUndef, name, core.SrcPos{})
 		return nil, nil
 	}
 	// An undef of a LOOP-CARRIED def exposes the previous binding while the
 	// carried frame slot still holds the rebound value — compiled reads would
 	// diverge; refuse and let the interpreter own the shape.
 	r.Check.Recorder().RefuseCarriedUndef(name)
-	// An undef of a name that some ALREADY-COMPILED stored handler / spawn body
-	// reads makes that frozen unit stale (the interpreter resolves the exposed
-	// or re-established binding at CALL time). Poison such refs so InvokeCallback
-	// falls back to CallBoru. Mirrors the def-site NotifyNameRebound.
-	r.Check.Recorder().NotifyNameRebound(name)
 	// The fn-carrier side table is a SECOND binding store for this name
 	// (installDef declines a computed fn, so the name lives only there).
 	// Drop it in step with the Defs pop, or the table outlives the binding

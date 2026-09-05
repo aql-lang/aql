@@ -33,7 +33,7 @@ import (
 // `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
-func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK, takesTop bool, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, pos core.SrcPos) (int, bool) {
+func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK bool, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, pos core.SrcPos) (int, bool) {
 	// Closure compilation is emit-cluster machinery: it writes recording
 	// internals (fnRecs), so it needs the CONCRETE EmitState. A pass without
 	// one (the inactive recorder) declines exactly as the nil field did —
@@ -69,7 +69,6 @@ func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK,
 	es.fnRecs[unit].inShape = shape
 	es.fnRecs[unit].closure = true
 	es.fnRecs[unit].lambdaUnit = word == "fnval"
-	es.fnRecs[unit].takesTop = takesTop
 	// The two stored-ref compile paths use these eng-internal synthetic
 	// names; their rebind safety is the per-ref poisoning, so the frozen-
 	// read discipline skips them (see fnUnitRec.storedRefUnit).
@@ -313,7 +312,11 @@ func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, 
 		es.armResidentDepth++
 		defer func() { es.armResidentDepth-- }()
 	}
-	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, pos) {
+	// The body's compile re-run runs in the environment its analysis run
+	// STARTED from (unit_memo.go): claimed here, applied around every
+	// compile inside recordClosureDispatch.
+	env := es.takeBodyEnv(body, spec)
+	if !recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, nil, nil, pos, env) {
 		return false
 	}
 	// A once-run defs-keeping body (`do`) compiled to a closure unit makes
@@ -404,9 +407,42 @@ func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpe
 	if foreignFnHome(r, fd) {
 		restore := check.ShareCheckStateFrom(fd.Registry, r)
 		defer restore()
-		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos)
+		return recordClosureDispatch(fd.Registry, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), lamParamContract(lam), pos, nil)
 	}
-	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), pos)
+	// A lambda body is a fn body: its defs are frame-locals and nothing
+	// leaks, so it needs no re-run environment.
+	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, fnValueRetSpec(fd, lam, fnPos), lamParamContract(lam), pos, nil)
+}
+
+// lamParamContract is a lambda's declared PARAM contract — the types and
+// patterns MatchSignature reads — recorded on its closure unit
+// (CompiledFn.Params / ParamPatterns, SetUnitParamTypes) so a runtime that
+// must dispatch the closure BY NAME can declare the same signature the
+// interpreter's frame binding carries (the VM's closureAsWord bridge,
+// NUR123): a `z:Integer` lambda read as the word `g` and handed a String
+// must no-match there exactly as it does on the interpreter. A param with
+// no type (a pattern-only param) declares Any with its pattern. Nil for a
+// nil signature.
+func lamParamContract(lam *core.Signature) *ClosureParamSpec {
+	if lam == nil {
+		return nil
+	}
+	spec := &ClosureParamSpec{Types: make([]*core.Type, len(lam.Params)), Patterns: make([]*core.Value, len(lam.Params))}
+	for i, p := range lam.Params {
+		spec.Types[i] = p.Type
+		if spec.Types[i] == nil {
+			spec.Types[i] = core.TAny
+		}
+		spec.Patterns[i] = p.Pattern
+	}
+	return spec
+}
+
+// ClosureParamSpec is a closure unit's declared param contract, seated by
+// recordClosureDispatch / tryReturnedClosure (lamParamContract).
+type ClosureParamSpec struct {
+	Types    []*core.Type
+	Patterns []*core.Value
 }
 
 // foreignFnHome reports whether fd is a fn VALUE that was DEFINED in another
@@ -544,14 +580,26 @@ func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Va
 // fnValueRetSpec is the callback fn value's return contract, or nil when there
 // is none to carry.
 //
-// An ANONYMOUS lambda declines, and it is not a nicety: FnDefInfo.Anonymous
-// carries a deliberately conservative static Returns=[Any] placeholder
-// (lang/go/CLAUDE.md, "Lambda Syntax") rather than a user-written declaration,
-// and the analyser infers the real result instead. Only a NAMED fn's
-// declaration is a contract.
+// An ANONYMOUS lambda carries a COUNT-ONLY contract. FnDefInfo.Anonymous
+// marks a deliberately conservative static Returns=[Any] placeholder
+// (lang/go/CLAUDE.md, "Lambda Syntax") rather than a user-written
+// declaration, and the analyser infers the real result TYPE instead — but the
+// interpreter's callback seam enforces the placeholder's COUNT (`each
+// (x:Integer => [x 1]) [1 2]` raises `each: element 0: … expected 1 return
+// value(s), got 2`), so the value must carry it or the compiled callback
+// answers `[1 1]` (NUR120, measured 2026-09-05). No type, no declaration
+// span beyond the sig's own (a lambda has none): check.LambdaCountContract.
 func fnValueRetSpec(fd *core.FnDefInfo, lam *core.Signature, fnPos core.SrcPos) *ClosureRetSpec {
-	if fd == nil || fd.Anonymous || lam == nil || len(lam.Returns) == 0 {
+	if fd == nil || lam == nil || len(lam.Returns) == 0 {
 		return nil
+	}
+	if fd.Anonymous {
+		return &ClosureRetSpec{
+			Types: check.LambdaCountContract(len(lam.Returns)),
+			Decl:  lam.Decl,
+			Name:  fd.Name,
+			Pos:   fnPos,
+		}
 	}
 	return &ClosureRetSpec{
 		Types:    lam.Returns,
@@ -572,7 +620,7 @@ func fnValueRetSpec(fd *core.FnDefInfo, lam *core.Signature, fnPos core.SrcPos) 
 // M2d): each compiles to its OWN closure unit under the SAME shared token
 // shape (extraNoEvalHookSlots only nominates them on a LambdaSharesTokenShape
 // word) and rides as a second opClosure operand.
-func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, retSpec *ClosureRetSpec, pos core.SrcPos) bool {
+func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, retSpec *ClosureRetSpec, paramSpec *ClosureParamSpec, pos core.SrcPos, env *bodyRunEnv) bool {
 	// The probe fork below needs the CONCRETE EmitState; both callers only
 	// reach here through an active recording state, so a non-EmitState
 	// recorder (the inactive no-op) declining is the unreachable belt.
@@ -658,14 +706,26 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	// A strip-input word compiles count-agnostic (the runtime nets one value
 	// from either admitted shape — stripResidualShapeOK screens the rest).
 	countAgnostic := spec.EmptyBodyErrors || spec.StripsUnconsumedInput
+	// Every compile below — probe, real, each extra hook — runs the body in
+	// the environment its analysis run started from (unit_memo.go), entered
+	// afresh per compile and exited back to the leaked table after. An
+	// environment that cannot be built declines the closure.
+	compile := func(toks []core.Value, names []string, caps []core.CapturedBinding) (int, bool) {
+		prev, ok := env.enter(r)
+		if !ok {
+			return -1, false
+		}
+		defer env.exit(r, prev)
+		return compileClosureBody(r, word, spec.BodyOut, countAgnostic, toks, inputs, names, caps, shape, pos)
+	}
 	probe := real.forkForProbe()
 	r.Check.Emit = probe
-	probeUnit, probeOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
+	probeUnit, probeOk := compile(bodyToks, paramNames, captures)
 	for _, ex := range extras {
 		if !probeOk { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			break
 		}
-		_, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		_, exOk := compile(ex.toks, ex.names, ex.caps)
 		probeOk = probeOk && exOk
 	}
 	r.Check.Emit = real
@@ -700,8 +760,17 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
 	recsBefore := len(real.fnRecs)
-	unit, realOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
-	if !realOk || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	unit, realOk := compile(bodyToks, paramNames, captures)
+	// REACHABLE since Stage 4b (unit_memo.go), not a defensive arm: the
+	// probe carries no producedBy, so an enclosing binding read whose value
+	// an EVENT produced (`k` after a leaking `do` rebound it) bakes as a
+	// const in the probe and routes LIVE in the real compile — and the
+	// residual-order hazard refuses the live read where it admitted the
+	// const. The real state is already marked with the hazard's reason;
+	// this decline hands the dispatch to its own refusal path (first reason
+	// wins). `def k 5  do [ k  def k 9  k ]  do [ k  def k 12  k ]` pins it
+	// (lang/go/analysis_order_test.go).
+	if !realOk || unit < 0 {
 		return false
 	}
 	// The closure latch for the arm-residency bridge: THIS unit, and
@@ -710,9 +779,13 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	// extra-hook compiles below so a walk hook's unit never masquerades as
 	// the body's.
 	real.lastClosure = closureLatch{unit: unit, fresh: unit == recsBefore && len(real.fnRecs) > recsBefore}
+	// A lambda's declared param contract rides on its unit (lamParamContract).
+	if paramSpec != nil {
+		real.SetUnitParamTypes(unit, paramSpec.Types, paramSpec.Patterns)
+	}
 	var extraOps map[int]EmitOperand
 	for _, ex := range extras {
-		exUnit, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		exUnit, exOk := compile(ex.toks, ex.names, ex.caps)
 		if !exOk || exUnit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return false
 		}

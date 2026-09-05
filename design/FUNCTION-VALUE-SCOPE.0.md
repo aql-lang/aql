@@ -816,8 +816,9 @@ with it since the M1 wave.
   `path-modifier.tsv:62-67`, `frontier-chained-apply.tsv:25`,
   `module-parselang.tsv:120`) — so any fix must preserve it.
 
-  Both divergent rows are in
-  `lang/spec/frontier/frontier-fnparam-deref.tsv`.
+  Both rows GRADUATED 2026-09-05 (NUR123: the compiled lane re-steps a bare
+  read of a fn-valued frame binding as the WORD, `CompiledFn.DynFrameWords`)
+  and live in `lang/spec/fn-value.tsv` §7; the frontier file is retired.
 
   **RULED, 2026-08-15 (maintainer): a bare name is a CALL; `/r` is how you
   ask for the value. Arity discrimination is explicitly rejected**, and

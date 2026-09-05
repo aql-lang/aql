@@ -56,6 +56,46 @@ enclosing context" — was a correct OBSERVATION with the wrong subject: the
 context does not modify a placement decision, it IS a second, separate
 decision, taken one paren out.
 
+### 2.1 The bare call — MEASURED 2026-09-05
+
+The table above places a fn a PAREN produced. A fn a bare USER CALL returns
+is parked by the same rewind logic, and the compiled lane had never asked:
+its residual lowering applied every lead a paren had not placed, so the
+first row below compiled to `8` on the default lane, exit 0, older than
+every stage on the full-compilation branch. Against the interpreter, with
+`def mk fn [[] [Function] [([y:Integer] => [y add 1])]]`:
+
+| program | interpreted | compiled, before |
+|---|---|---|
+| `mk 7` | `fn (Integer) 7` — **places** | `8` |
+| `mk 7 add 1` | `fn (Integer) 8` — **places** | `9` |
+| `mk2 1 7` (mk2 takes an arg) | `fn (Integer) 7` — **places** | `8` |
+| `m.p 5 7` over `{p: mk/v}` (the arrival apply) | `fn (Integer) 7` — **places** | `8` |
+| `def f fn [[] [Any] [MathUtil.sqrt/v]]  f 16.0` | `fn sqrt(Number) 16.0` — **places** | `4.0` |
+| `(mk 7)` | `8` — **applies** (the paren, two survivors) | `8` |
+| `do [mk 7]` | `8` — **applies** (the body frame rewinds) | `8` |
+| `do [mk] 7` | `8` — **applies** (a NATIVE word's returned fn auto-applies to what follows) | `8` |
+| `def g fn [[] [Any] [mk 7]]  g` | `type_error … got 2 — [fn (Integer) 7]` (the return check runs BEFORE the frame would rewind) | `8` |
+| `def g fn [[] [Any Any] [mk 7]]  g` | `8` — **applies** (the count passes, then the frame rewinds) | refused |
+
+So the rule has a second clause the first section did not need: **a user
+fn's single result is placed data where it lands**, and only a rewind (a
+paren, a body frame) over two or more survivors, or a read that dispatches
+(a bare name, a member read), turns it into a call. A NATIVE word's returned
+fn is different — its delivery re-steps it — and a MULTI-output user call's
+leading fn was rewound inside its own frame before returning, which the
+check model does not perform, so the caller-side apply arm stands in for
+that rewind.
+
+The compiled twin is `callResultPlaced` (`compiler/go/emit.go`): a
+single-output user call's result, or a user member's arrival-apply result,
+that no enclosing paren re-stepped and no read delivered is laid out as
+data by `resolveDynamicApply`, and inside a fn unit is not a "possible
+unapplied call" for the frame replay, so the count mismatch raises the
+interpreter's type_error. Pinned both ways in
+`lang/go/returned_closure_park_test.go`; the `[Any Any]` row stays a sound
+refusal (the rewind-after-count-check shape is not modelled).
+
 ## 3. What the compiler was doing
 
 Five silent miscompiles, in both directions, all one root cause: **the paren

@@ -290,22 +290,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// varyRefusalLedger ("islanded").
 	`[10 20] each [drop 1 2 3 1 pick]`: {why: "full-stack word in a code body: the fold declines outside the top unit; the island seam owns it", failsWith: "islanded"},
 
-	// Bare deref of a Function-typed PARAM where no argument is available
-	// (design/FUNCTION-VALUE-SCOPE.0.md §11 rule 3, §12.4). The SLOT is fine —
-	// stepWord's TFunction intercept binds the argument as a reference. Reading
-	// the bound param in the body is what diverges: the interpreter treats a
-	// bare name as a CALL (arity 0 applies, arity >=1 raises), the compiler
-	// treats a param as a VALUE slot (RegisterLocal) and yields the Function.
-	// RULED 2026-08-15 (maintainer): a bare name is a CALL; `/v` is how you ask
-	// for the value, and arity discrimination is explicitly rejected. So the
-	// INTERPRETER is correct in both rows and the compiler is wrong. The middle
-	// case (arity >=1 WITH arguments) already agrees on both engines and is
-	// pinned green five times in the main corpus.
-	//
-	// Graduation = the compiler treats a bare Function-bound name as a call.
-	`def nought fn [[] [Integer] [7]] def grab fn [[f:Function] [Any] [f]] typeof (grab nought)`:          {why: "arity-0 Function param read bare: a bare name is a CALL (ruled 2026-08-15), so applying is correct and the compiler is wrong to yield the Function", failsWith: "value parity"},
-	`def dbl fn [[n:Integer] [Integer] [n mul 2]] def hold fn [[c:Function] [Any] [c]] typeof (hold dbl)`: {why: "arity-1 Function param read bare with no argument: a bare name is a CALL, so raising is correct and the compiler is wrong to yield the Function", failsWith: "parity"},
-
 	// Cross-module fn value in a higher-order word's CLOSURE slot
 	// (design/FUNCTION-VALUE-SCOPE.0.md §12.3) — GRADUATED 2026-08-27
 	// (Stage 3) into lang/spec/module-fnvalue-boundary.tsv §4.
@@ -379,16 +363,10 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// results in one program residual exceed the Stage-1 lowering. Sound
 	// interpreter fallback. Graduation = multi-dynamic-result residual
 	// lowering; the rows then move to lang/spec/fn-value.tsv §6.
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 m.p 7`:                                {why: "NUR038 seal: twin value-call residual", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 1 m.p 2 m.p 3`:                          {why: "NUR038 seal: triple value-call residual", failsWith: "fn-value-call boundary"},
-	`def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/v} end m.g 1 2 m.g 3 4`:      {why: "NUR038 seal: two-arg twin windows", failsWith: "fn-value-call boundary"},
-	`import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/v}] end M.p 5 M.p 7`:               {why: "NUR038 seal: module-export twins (the original shape)", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end 5 m.p m.p 7`:                                {why: "NUR038 seal: stack form then forward form", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7`:                        {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
-	`def m {l: ([x:Any] => [x])} end m.l 5 m.l 7`:                                                    {why: "NUR038 seal: lambda twins", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/v} end m.p 5 h 7`: {why: "NUR038 seal: value call then bare-word call", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 end m.p 7`:                            {why: "NUR038 seal: explicit end seals", failsWith: "fn-value-call boundary"},
-	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7`:              {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end 5 m.p m.p 7`:                   {why: "NUR038 seal: stack form then forward form", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7`:           {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
+	`def m {l: ([x:Any] => [x])} end m.l 5 m.l 7`:                                       {why: "NUR038 seal: lambda twins", failsWith: "fn-value-call boundary"},
+	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7`: {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
 
 	// Namespace capture at a macro-expanded call site (the NUR038 wrapper
 	// retirement's re-bucketed refusal — see frontier-capture-namespace.tsv):
@@ -437,39 +415,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// import's own `Sift` twin), so AdoptBodyTwins had nothing to walk.
 	// KeepDefsBodyGuard now publishes only at FnBodyDepth == 0, exactly as
 	// its multi-run sibling does, and the row compiles with parity.)
-
-	// NUR031 Module-descriptor equality (frontier-nur031-module-eq.tsv):
-	// semantically green — the descriptor is an identity-equal opaque
-	// handle since 2026-08-02 — but a `$module` synthetic read has no
-	// bakeable operand home, so the operand reaching eq/deq carries no
-	// static provenance. The PRE-fix binary refuses the identical shape:
-	// the fix changed the answer, not the compile status. Graduation =
-	// a static provenance representation for the module-namespace
-	// synthetics (the capture-namespace family above); the rows then
-	// move back into edge-modules-1.tsv and compare-restrict.tsv.
-	`import module [export "M" {a:1}] M.$module eq M.$module`:                                                                                                             {why: "NUR031: descriptor reflexive eq", failsWith: "operand of unknown provenance"},
-	`import module [export "M" {a:1}] M.$module deq M.$module`:                                                                                                            {why: "NUR031: descriptor reflexive deq", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module`:                                                                            {why: "NUR031: distinct descriptors are not eq", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module`:                                                                           {why: "NUR031: distinct descriptors are not deq", failsWith: "operand of unknown provenance"},
-	`import "boru:array-util" import module [export "A" {x:1} export "B" {y:2}] import module [export "C" {z:3}] size (ArrayUtil.unique [A.$module B.$module C.$module])`: {why: "NUR031: the Module handle family in unique's DeqIndex", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module eq C.$module`:                                                                           {why: "NUR031: one module, many namespaces — one shared descriptor", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1} export "B" {y:2}] A.$module deq B.$module`:                                                                                           {why: "NUR031: sibling namespaces of ONE module share a descriptor (deq mirrors eq)", failsWith: "operand of unknown provenance"},
-	`import "boru:test" Test.$module eq Assert.$module`:                                                                                                                   {why: "NUR031: a native module's sibling namespaces share one descriptor", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module`:                                                                        {why: "NUR031: repeat import is a cache no-op — same descriptor instance", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module`:                                               {why: "NUR031: re-import after undef mints a FRESH descriptor (identity is per-import-instance)", failsWith: "operand of unknown provenance"},
-
-	// NUR031 Function-value equality (frontier-nur031-fn-eq.tsv): the
-	// second half of the record — eq is the identity token, deq is canon
-	// content. Semantically green; refused for a reason unrelated to
-	// equality, and one the PRE-fix binary refuses identically: a function
-	// VALUE reaching a non-inert word is declined outright by
-	// EmitState.RecordCallOperands. Graduation = a compiled representation
-	// for a function value as an operand (the Stage-3 fn-value work); the
-	// rows then move to compare-restrict.tsv and fn-value.tsv.
-	// The namespace rows refuse for the MODULE-synthetic reason above, not
-	// the fn-value one: a namespace binding has no bakeable operand home.
-	`import "boru:io" IO deq IO`:                          {why: "NUR031: a function-exporting namespace is deq-reflexive — the record's acceptance signal", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" StringUtil deq StringUtil`: {why: "NUR031: …and so is every other native module's namespace", failsWith: "operand of unknown provenance"},
 
 	// NUR067 — await's winner-takes-all modes (frontier-await-winner.tsv):
 	// `first` / `any` hand back the winning branch's WHOLE residual, 0-or-more

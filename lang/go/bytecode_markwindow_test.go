@@ -133,10 +133,27 @@ func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 
 	// The same shape with `f` hoisted to MODULE scope: NUR037's admission
 	// predicate does not fire (a module-scope callback compiles fine), so
-	// the program reaches the mark window and declines there — this is the
-	// row that keeps verifyMarkWindow's own decline exercised now that the
-	// fn-local twin above refuses earlier.
+	// the program reaches the wrap unit's own finish.
+	//
+	// Re-diagnosed 2026-09-05 (NUR120): the `=>` lambda now carries its
+	// placeholder's COUNT contract (check.LambdaCountContract — the
+	// interpreter enforces it at the named call), so the unit's finish sees a
+	// 2-value model residual against 1 declared, with a dynamic value that
+	// may be an unapplied fn in it, and refuses on the count path one stage
+	// before the mark window's verify. Same sound refusal, earlier and truer
+	// diagnosis (the fourth for this row). Parity is what this test guards
+	// and it holds.
 	mwRefusedWithParity(t,
 		`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  def wrap ([] => [do [(f 5) 2] error [dot code]])  wrap`,
+		"fn wrap: unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
+
+	// A CONTRACT-FREE twin (a named fn declaring no returns — no count
+	// check at its finish) is the row that keeps verifyMarkWindow's own
+	// decline exercised: the program-level window arms on the variadic CALL
+	// event but the lowered stack is the unit's seated results, not the
+	// window's event slots, so the verify pins the mismatch and the program
+	// falls back whole.
+	mwRefusedWithParity(t,
+		`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  def wrap fn [[] [] [do [(f 5) 2] error [dot code]]]  wrap`,
 		"mark-window residual does not match the lowered stack")
 }

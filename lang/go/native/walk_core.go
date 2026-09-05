@@ -169,7 +169,8 @@ func callWalkHook(r *Registry, h walkHook, arg Value) error {
 		return err
 	}
 	if h.closure {
-		_, err := InvokeBody(r, h.body, []Value{arg})
+		// The fn-VALUE seam: the lambda branch above is InvokeCallbackFn's.
+		_, err := InvokeCallbackBody(r, h.body, []Value{arg})
 		return err
 	}
 	_, _, err := runQuotationBody(r, h.tokens, []Value{arg})

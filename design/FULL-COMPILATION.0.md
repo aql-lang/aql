@@ -2544,6 +2544,20 @@ close, not the twins'.
 > additionally need a BINDER half that makes a conditionally- or
 > frame-locally-bound name registry-visible at VM time. The gate-by-gate
 > measurement is in the handoff's "The payoff gates, measured".
+>
+> **MEASURED AGAIN 2026-09-04 (Stage 4b): the FROZEN-READ gate leaves that
+> list too.** It was never a lookup problem: the stale `PUSH_CONST` is in a
+> unit the MEMO reused at a call site whose bindings had moved
+> (`FnAnalysisKey` omits the enclosing bindings a body reads). The memo is
+> now binding-sensitive — each unit records the `DefTable.Gen` of every
+> enclosing binding it baked, and a later call site whose generation has
+> moved compiles a fresh unit — so `1 2` compiles with parity, and so do
+> the type, call-target, `/v` and do-body rebinds. The refusal survives
+> only for a unit whose reference ESCAPES into a value. The same stage
+> found and closed the leaked-state re-run of `do`/each/fold/scan bodies
+> (twelve further default-lane miscompiles) with a body re-run
+> environment. The remaining three gates are unchanged by it. See the
+> handoff's "Stage 4b".
 
 **WHICH TRANSITIONS ACTUALLY NEED A TWIN — enumerated 2026-08-30, because the
 raw site count is misleading by an order of magnitude.** Grepping `r.Defs`

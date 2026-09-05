@@ -15,7 +15,7 @@ func TestW9CompileClosureBodyInactive(t *testing.T) {
 	r := newTestRegistry(t)
 	// A fresh registry has the inactive (no-op) recorder, so es is a typed-nil
 	// *EmitState and StartFnCompile declines.
-	unit, ok := compileClosureBody(r, "w", 1, false, false,
+	unit, ok := compileClosureBody(r, "w", 1, false,
 		[]core.Value{core.NewWord("x")}, []core.Value{core.NewInteger(1)}, nil, nil, ClosureInValue, core.SrcPos{})
 	if ok || unit != -1 {
 		t.Errorf("inactive recorder should decline: unit=%d ok=%v", unit, ok)
@@ -118,7 +118,7 @@ func TestW9EmptyContainerConst(t *testing.T) {
 func TestW9RecordClosureDispatchInactive(t *testing.T) {
 	r := newTestRegistry(t)
 	// The inactive recorder is not a *EmitState → the whole path declines.
-	if recordClosureDispatch(r, "w", core.CallableSpec{}, nil, nil, nil, nil, nil, nil, ClosureInValue, nil, nil, nil, core.SrcPos{}) {
+	if recordClosureDispatch(r, "w", core.CallableSpec{}, nil, nil, nil, nil, nil, nil, ClosureInValue, nil, nil, nil, nil, core.SrcPos{}, nil) {
 		t.Error("an inactive recorder should decline the closure dispatch")
 	}
 }

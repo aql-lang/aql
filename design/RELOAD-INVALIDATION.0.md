@@ -41,7 +41,7 @@ tier needs anyway.
 | | whole-program `CALL_USER` unit | compile-time stored ref | runtime-stamped detached ref |
 |---|---|---|---|
 | reachable via | `CALL_USER` in the program stream — **no per-call seam** | `InvokeCallback` seam | `InvokeCallback` seam |
-| freshness | `frozenReads` + `NotifyNameRebound` → whole-program refusal, **compile-time only** | `depNames` + `poisoned`, **compile-time only** (`DepSnap == nil` ⇒ vacuously fresh at runtime) | `DepSnap {Depth, Gen}` validated **per invoke** (`DepsFresh`) |
+| freshness | per-site RE-RECORDING, **compile-time only**: each unit records the `DefTable.Gen` of every enclosing binding it baked, and a later call site whose generation has moved compiles a fresh unit (Stage 4b, `compiler/go/unit_memo.go`); a unit whose reference escapes into a value keeps the whole-program refusal (this cell read "`frozenReads` + `NotifyNameRebound` → whole-program refusal" until 2026-09-04, and was FALSE for a baked CALL TARGET until the same day — see the corrections under §3 F1) | `depNames` + `poisoned`, **compile-time only** (`DepSnap == nil` ⇒ vacuously fresh at runtime) | `DepSnap {Depth, Gen}` validated **per invoke** (`DepsFresh`) |
 | on staleness | program interprets wholesale | that handler interprets forever | JIT re-stamp (`RestampBox`, ≤ 3 lifetime tries), then interpreter |
 
 ### 2.2 The hot-path cost today (constraint-3 audit)
@@ -114,6 +114,36 @@ semantics; it restores *late binding* but not *point-in-program* binding.
 The whole-program hammer would have refused this program had the read
 been in an ordinary unit. A regression spec must pin `6 105 12` across
 all three surfaces.
+
+> **CORRECTION, measured 2026-09-04.** That last sentence was false when it
+> was written, and so was the §2.1 table cell it rests on. The hammer refuses
+> a read whose VALUE a unit baked; it had no arm at all for a read whose CALL
+> TARGET the lowering baked, because a fn name falls through `stepWord` to
+> `Lookup` and dispatches — it never travels the simple-value substitution
+> branch, so `NoteFrozenRead` was never even attempted and `frozenReads` stayed
+> empty. The read in an ordinary unit therefore did NOT refuse:
+>
+> ```boru
+> def helper fn [[x:Integer] [Integer] [x add 1]]
+> def use    fn [[x:Integer] [Integer] [helper x]]
+> use 1  def helper fn [[x:Integer] [Integer] [x add 100]]  use 1
+> #   interpreted -> 2 101      compiled -> 2 2
+> ```
+>
+> Closed by the call-target arm of the freeze discipline
+> (`design/FULL-COMPILATION-HANDOFF.0.md`, Stage 4a-4), which also closed the
+> same hole for a baked TYPE identity, and — in the same stage's second half —
+> for a rebind written inside a `do` or multi-run body, where the recorder is
+> suspended and the latch was never consulted at all (the record that carried
+> that arm is Resolved and deleted).
+>
+> **And then the hammer itself went (Stage 4b, later the same day).** The
+> read in an ordinary unit no longer refuses at all: the unit memo is
+> binding-sensitive, so the second `use 1` re-records `use` against the new
+> `helper` and the program compiles `2 101`. Whole-program refusal remains
+> only for a unit whose reference escapes into a value — the stored-ref
+> column's per-ref poisoning is the other survivor, and F1's point-in-program
+> finding stands for it.
 
 **F2 — reload-soundness hole: runtime rebinds cannot invalidate
 compile-time refs.** `NotifyNameRebound` is an `EmitState` method gated

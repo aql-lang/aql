@@ -52,7 +52,7 @@ func TestMultiRunBodyGuardLatch(t *testing.T) {
 	// do-adoption fence must not weaken when the guard is the multi-run
 	// flavor (`do [[1 2] each [def x 5]]`).
 	es = NewEmitState()
-	keepEnd := es.KeepDefsBodyGuard(r)
+	keepEnd := es.KeepDefsBodyGuard(r, "")
 	end = es.MultiRunBodyGuard(r, "body-3")
 	note(es, "leak")
 	end()

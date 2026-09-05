@@ -117,6 +117,22 @@ def s (context) (s deq s)	true	…and deq to itself
 (do [raise "boom"]) deq (do [raise "boom"])	true	deq agrees with eq on an Error
 (do [raise "boom"]) eq (do [raise "bang"])	false	different messages are not equal
 (do [raise bad_input "x"]) eq (do [raise other "x"])	false	different codes are not equal
+# The Module descriptor half GRADUATED 2026-09-05 out of
+# lang/spec/frontier/frontier-nur031-module-eq.tsv and
+# frontier-nur031-fn-eq.tsv (the namespace rows): a `$module` read now
+# records its dispatch and the namespace reads live (OpLookupDynScope),
+# so the operand reaching eq/deq has a compiled home. The identity these
+# rows pin is the boxed *ModuleDesc pointer, which the live read and the
+# runtime `dot` both preserve.
+import module [export "M" {a:1}] M.$module eq M.$module	true	a Module descriptor is reflexively eq — an identity-equal opaque handle
+import module [export "M" {a:1}] M.$module deq M.$module	true	…and reflexively deq: identity IS its deep value, like the timer handles
+import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module	false	two module instances are never eq…
+import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module	false	…nor deq — identity-only, the descriptors' contents are never compared
+import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module eq C.$module	true	the shared instance is also eq — the eq analogue of the shared-instance `is` row
+import module [export "A" {x:1} export "B" {y:2}] A.$module deq B.$module	true	…and deq mirrors eq: identity IS the descriptor's deep value
+import "boru:test" Test.$module eq Assert.$module	true	the same holds for a native module's sibling namespaces
+import "boru:io" IO deq IO	true	a function-exporting namespace is deq to itself — the fn fall-through, closed
+import "boru:string-util" StringUtil deq StringUtil	true	…and so is every other native module's namespace
 
 # ── Function values: eq is identity, deq is content (NUR031) ─────────
 # GRADUATED 2026-08-27 (Stage 3) out of

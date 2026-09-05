@@ -127,7 +127,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// production shape (`do`'s check body run suspends via the keep
 	// guard, and the note fires inside it).
 	keepRunTwin := func(es *EmitState, row, col int) {
-		end := es.KeepDefsBodyGuard(reg)
+		end := es.KeepDefsBodyGuard(reg, "")
 		noteTwin(es, row, col)
 		end()
 	}
@@ -142,7 +142,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// Nil and inactive receivers are no-ops, like every EmitState method.
 	var nilES *EmitState
 	nilES.AdoptBodyTwins(body())
-	nilES.KeepDefsBodyGuard(nil)()
+	nilES.KeepDefsBodyGuard(nil, "")()
 
 	// Bracketed, at a body site: adopted (a real placed op), finalizes. A
 	// second adoption pass is a no-op — the twin is already placed.
@@ -161,7 +161,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// At no body site — and a positionless twin at ANY site — still
 	// unplaced, refuses (the each-body class; a synthesized transition).
 	es = NewEmitState()
-	es.KeepDefsBodyGuard(reg)()
+	es.KeepDefsBodyGuard(reg, "")()
 	keepRunTwin(es, 2, 1)
 	keepRunTwin(es, 0, 0)
 	es.AdoptBodyTwins(body())
@@ -180,7 +180,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	resume = es.Suspend()
 	noteTwin(es, 1, 6) // the each-analysis note: suspended, no keep bracket
 	resume()
-	es.KeepDefsBodyGuard(reg)() // the do's own body run notes nothing
+	es.KeepDefsBodyGuard(reg, "")() // the do's own body run notes nothing
 	es.AdoptBodyTwins(body())
 	if _, _, ok := es.Finalize(nil); ok {
 		t.Fatal("a twin noted outside the dispatch's own keep-defs run must not be adopted")
@@ -191,7 +191,7 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 	// one replay is wrong in count, so it must stay unplaced. A nested
 	// KEEP sub-run (do inside do) still adopts.
 	es = NewEmitState()
-	end := es.KeepDefsBodyGuard(reg)
+	end := es.KeepDefsBodyGuard(reg, "")
 	sub := es.BodyAnalysisGuard() // the nested each's body analysis
 	noteTwin(es, 1, 6)
 	sub()
@@ -201,8 +201,8 @@ func TestFinalizeBodyAdoption(t *testing.T) {
 		t.Fatal("a twin noted under a nested non-keep sub-run must not be adopted")
 	}
 	es = NewEmitState()
-	end = es.KeepDefsBodyGuard(reg)
-	inner := es.KeepDefsBodyGuard(reg) // do inside do: once-run composes
+	end = es.KeepDefsBodyGuard(reg, "")
+	inner := es.KeepDefsBodyGuard(reg, "") // do inside do: once-run composes
 	noteTwin(es, 1, 6)
 	inner()
 	end()

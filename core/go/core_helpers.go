@@ -39,6 +39,14 @@ func InstallFrameBinding(r *Registry, name string, body Value) {
 }
 
 func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
+	// The rebind notification, seated with the operation rather than with the
+	// `def` word (core/go/rebind_notify.go). `!shadow` is the same test every
+	// twin note below makes: a SHADOWING install is InstallFrameBinding's —
+	// a param or a capture, scoped to one call — not a rebind of the
+	// module-scope name a unit could have baked.
+	if !shadow {
+		noteRebind(r, name)
+	}
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 
 	// Attribute a body-local def to its enclosing fn for the dynamic-scope
@@ -113,7 +121,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 					if !shadow {
 						r.NoteBindTransition(BindDef, name, body.Pos())
 					}
-					if r.ready && r.OnRegisterHook != nil {
+					if !shadow && r.ready && r.OnRegisterHook != nil {
 						r.OnRegisterHook(name)
 					}
 					return
@@ -176,7 +184,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// Compile this definition's own overloads and push a single
 		// DefStack entry. The 0-arg fallback and cross-stack overloading
 		// are synthesised on demand by Registry.Lookup → aggregateDispatch.
-		InstallFnDef(r, name, fnDef, isStackOnly)
+		installFnDef(r, name, fnDef, !shadow, isStackOnly)
 		if !shadow {
 			// A REDEFINITION whose overlap filter dropped the colliding entry
 			// is a drop-then-push: the net depth is unchanged, so a twin that
@@ -248,6 +256,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 // entries by Registry.Lookup → aggregateDispatch, so no explicit re-register
 // is needed.
 func UninstallDef(r *Registry, name string) {
+	noteRebind(r, name)
 	r.Defs.Pop(name)
 	// Recorded AFTER the pop so Depth is the post-transition depth, which is
 	// what a twin has to reproduce (§6.5).
@@ -637,6 +646,18 @@ func RetagTypedContainerArgs(params []FnParam, args []Value) []Value {
 // demand by Registry.Lookup → aggregateDispatch, so this entry stays its own
 // authored unit for targeted undef and overlap detection.
 func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) {
+	installFnDef(r, name, fnDef, true, stackOnly...)
+}
+
+// installFnDef is InstallFnDef with the register hook under the caller's
+// control. A SHADOWING frame binding (InstallFrameBinding — a per-call param
+// or capture, or the VM's word-read replay installing a fn-valued read for
+// one island run) is not a registration: the hook is dynamic help's example
+// generator, which RUNS an engine over the new word, so firing it per call
+// generated examples for a name that lives one frame and, in a compiled
+// program, counted as an unattributed interpreter entry (the interp-entry
+// census). A registration proper (`def`, a module export) keeps it.
+func installFnDef(r *Registry, name string, fnDef FnDefInfo, hook bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 	entry := fnDef
 	entry.Name = name
@@ -660,7 +681,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	// (design/FUNCTION-VALUE-SCOPE.0.md §7.3 item 3).
 	home, _ := FnHome(r, &fnDef)
 	home.analysisFnConstructionPass(name, entry)
-	if r.ready && r.OnRegisterHook != nil {
+	if hook && r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
 }
@@ -745,6 +766,10 @@ func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) 
 // the entry is sufficient — the dispatch table is rebuilt on demand by
 // Registry.Lookup → aggregateDispatch from whatever entries remain.
 func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
+	// Unconditional, and deliberately WIDER than the twin notes below: those
+	// fire only when a removal COMMITS, so a sig-undef whose every match is
+	// locked would notify nothing while still being a rebind the user wrote.
+	noteRebind(r, name)
 	stack := r.Defs.Stack(name)
 	if len(stack) == 0 {
 		return

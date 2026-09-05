@@ -2032,6 +2032,12 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 // RetReplay arm defers to the interpreter), so leaving count alone here
 // keeps the two paths agreeing rather than trading one asymmetry for
 // another.
+// InPredicateCall reports whether a predicate body is executing (the
+// predicate-call bracket around RunPredicate): the CallBoru return
+// discipline skips its type check there, and the VM's mirror of that
+// discipline (eng checkCallBoruContract) asks the same question.
+func (r *Registry) InPredicateCall() bool { return r.predicateCalls > 0 }
+
 func (r *Registry) enforceCallBoruReturns(sig *FnSig, name string, result []Value) error {
 	if len(sig.Returns) == 0 || r.predicateCalls > 0 {
 		return nil

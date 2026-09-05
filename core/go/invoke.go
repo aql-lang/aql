@@ -38,6 +38,27 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	return RunResolved(r, inputs, BodyTokens(body))
 }
 
+// InvokeCallbackBody is the compiled-closure twin of InvokeCallbackFn — the
+// fn-VALUE seam. A handler that hands a FnDefInfo to InvokeCallbackFn (the
+// CallBoru discipline: the declared TYPES are checked over the aligned
+// residual, the COUNT is trimmed, never raised — enforceCallBoruReturns)
+// hands a compiled closure here, so the VM applies that same discipline
+// (ClosurePayload.RetTrim → checkClosureReturn). InvokeBody is the TOKEN
+// seam — each over a list, apply, a paren call — where the fn value is
+// stepped and __RC enforces the count; a closure must cross the seam its
+// handler's FnDefInfo path uses, or the lanes disagree: `walk … (m:Any =>
+// [m.path print])` runs clean interpreted and raised `expected 1 return
+// value(s), got 0` compiled once the lambda's count contract landed
+// (NUR120). Without the VM (no Invoker) a closure never reaches a handler,
+// so the fallback is InvokeBody's own.
+func InvokeCallbackBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
+	if cl, ok := body.Data.(ClosurePayload); ok && !cl.RetTrim {
+		cl.RetTrim = true
+		body = Value{Parent: body.Parent, Data: cl, Quoted: body.Quoted}
+	}
+	return InvokeBody(r, body, inputs)
+}
+
 // InvokeCallback runs a runtime fn VALUE (given its matched signature and the
 // per-call args) against the VM when the sig carries a compiled unit whose
 // program is stamped AND r can host a fresh run, else falling back to CallBoru —

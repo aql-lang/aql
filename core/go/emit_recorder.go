@@ -77,7 +77,15 @@ type EmitRecorder interface {
 	// all, which is FnBodyDepth == 0. A do body re-analysed at depth
 	// inside a called fn's body has an empty bracket by construction, and
 	// publishing it would overwrite the outer do's.
-	KeepDefsBodyGuard(r *Registry) func()
+	//
+	// bodyID is the body Value's ID, and it is what lets the recorder hand
+	// the body's START state to the compile re-run that follows: the guard
+	// clones the binding table when it opens and publishes the clone keyed
+	// by this ID when it closes (Stage 4b — a leaking body's re-run must
+	// begin where the interpreter's single run began, not where the
+	// suspended analysis run left off). Empty when the caller has no body
+	// value; nothing is published then.
+	KeepDefsBodyGuard(r *Registry, bodyID string) func()
 	// MultiRunBodyGuard is BodyAnalysisGuard for a HIGHER-ORDER body
 	// analysis run (analyseHigherOrderBodyVals — each/fold/scan…, the
 	// bodies the runtime re-runs per element): the same suspension and
@@ -172,6 +180,12 @@ type EmitRecorder interface {
 	RegisterTrailingApply(fnID string, arity int)
 	NoteMemberFnRead(id string, member Value)
 	MemberFnRead(id string) bool
+	// NoteCollectionHazard marks the fn-typed value id as an UNAPPLIED lead
+	// a later dispatch collected past (Engine.noteCollectionHazards,
+	// NUR121); CollectionHazard reads the mark. A marked lead is never
+	// lowered as an apply over the values after it.
+	NoteCollectionHazard(id string)
+	CollectionHazard(id string) bool
 	// Stage-0b promotions (design/ENG-FOUR-PIECE.0.md): the probes that
 	// used to require a concrete recorder assert outside the emit
 	// cluster. Inactive: false / zero / no-op.
@@ -208,7 +222,28 @@ type EmitRecorder interface {
 	RecordDefRebind(name string, v Value, pos SrcPos)
 	RecordDynBind(name string, v Value, pos SrcPos)
 	NoteDefRead(id, name string)
-	NoteFrozenRead(name string)
+	// NoteWordRead records a BARE READ of a frame binding that the
+	// interpreter would DISPATCH if the binding held a fn at run time —
+	// stepWord routes a bound FnDefInfo through Registry.Lookup under the
+	// binding name (a 0-arg fn fires, a no-match raises `cannot call
+	// `g``) — while the check model pushed a carrier (a fn-typed or
+	// gradual Any/Dynamic one) that lowers as a slot push. Noted only when
+	// no pending forward expects a Function at the read (that arrival
+	// delivers the VALUE on both engines). The compiler counts the reads
+	// per unit and refuses any it cannot re-step as a word (NUR123).
+	NoteWordRead(v Value, name string, pos SrcPos)
+	// NoteValRead records a `/v` read of a binding (stepWordVal): the value
+	// spelling, which the interpreter never dispatches. A binding read BOTH
+	// ways in one unit cannot be told apart in the residual (one value ID),
+	// so the compiler refuses the unit rather than guess (NUR123).
+	NoteValRead(id string)
+	// NoteFrozenRead's gen is the binding's DefTable generation
+	// (DefTable.Gen) at the read, taken by the caller from the registry the
+	// read resolved in. It is the staleness key of the binding-sensitive
+	// unit memo (compiler StartFnCompile): a finished unit whose bake was
+	// noted at generation g is reusable at a later call site exactly while
+	// Gen(name) is still g there.
+	NoteFrozenRead(name string, bake FrozenBake, gen int64)
 	RefuseCarriedUndef(name string)
 	NotifyNameRebound(name string)
 	RegisterLocal(id string) int
@@ -282,7 +317,7 @@ func (inactiveEmit) BindRegistry(*Registry)                                 {}
 func (inactiveEmit) TopFrameOnly() bool                                     { return true }
 func (inactiveEmit) SuspendedNow() bool                                     { return false }
 func (inactiveEmit) BodyAnalysisGuard() func()                              { return func() {} }
-func (inactiveEmit) KeepDefsBodyGuard(*Registry) func()                     { return func() {} }
+func (inactiveEmit) KeepDefsBodyGuard(*Registry, string) func()             { return func() {} }
 func (inactiveEmit) MultiRunBodyGuard(*Registry, string) func()             { return func() {} }
 func (inactiveEmit) RecordDynUndef(string, SrcPos)                          {}
 func (inactiveEmit) FnBodyGuard() func()                                    { return func() {} }
@@ -299,6 +334,8 @@ func (inactiveEmit) PopInlineCtxBoundary()   {}
 
 func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
 func (inactiveEmit) NoteDefRead(string, string)          {}
+func (inactiveEmit) NoteWordRead(Value, string, SrcPos)  {}
+func (inactiveEmit) NoteValRead(string)                  {}
 func (inactiveEmit) Sites() map[string]int               { return nil }
 
 func (inactiveEmit) RecordCall(string, *Signature, []Value, []Value, SrcPos, bool, bool) {}
@@ -335,6 +372,8 @@ func (inactiveEmit) RecordInterp([]InterpPart, []Value, Value, SrcPos) bool { re
 func (inactiveEmit) RegisterTrailingApply(string, int)                      {}
 func (inactiveEmit) NoteMemberFnRead(string, Value)                         {}
 func (inactiveEmit) MemberFnRead(string) bool                               { return false }
+func (inactiveEmit) NoteCollectionHazard(string)                            {}
+func (inactiveEmit) CollectionHazard(string) bool                           { return false }
 func (inactiveEmit) DynInputsProven(*Signature, []Value) bool               { return false }
 func (inactiveEmit) Materialise(v Value) (Value, bool)                      { return v, false }
 func (inactiveEmit) ZeroOutProduced(string) bool                            { return false }
@@ -345,7 +384,7 @@ func (inactiveEmit) MarkValueDef(Value)                         {}
 func (inactiveEmit) RecordDefRebind(string, Value, SrcPos)      {}
 func (inactiveEmit) RefuseCarriedUndef(string)                  {}
 func (inactiveEmit) NotifyNameRebound(string)                   {}
-func (inactiveEmit) NoteFrozenRead(string)                      {}
+func (inactiveEmit) NoteFrozenRead(string, FrozenBake, int64)   {}
 func (inactiveEmit) RegisterLocal(string) int                   { return -1 }
 func (inactiveEmit) RememberOriginal(Value)                     {}
 func (inactiveEmit) RememberStrippedOriginals([]Value, []Value) {}
@@ -405,3 +444,56 @@ var (
 	NewEmitStateHook    = inactiveEmitStateHook
 	NewIsolatedEmitHook = inactiveIsolatedEmitHook
 )
+
+// FrozenBake names WHAT a compiled fn/closure unit froze about a module-scope
+// binding it read. It is the argument to NoteFrozenRead, and the whole reason
+// that note takes one at all: the freeze discipline defends three DIFFERENT
+// baked artifacts, they are repaired by three different mechanisms, and a
+// name-keyed bit cannot tell a router which one it is looking at.
+//
+// The three were not enumerated from the design — each was measured as a
+// LIVE, SILENT divergence on the default lane, in that order:
+//
+//	def k 5        def f fn [[] [Integer] [k add 2]]   f  def k 9       f
+//	def T Integer  def f fn [[] [Boolean] [5 is T]]    f  def T String  f
+//	def g fn [[][Integer][1]]  def f fn [[][Integer][g]]  f  def g fn [[][Integer][2]]  f
+//
+// The interpreter answers `7 11`, `true false` and `1 2`; before each arm
+// existed the compiled lane answered `7 7`, `true true` and `1 1`.
+//
+// The zero value is INVALID, per the kernel's "No Zero-Value Overload
+// (CRITICAL)" rule: a note that reached no classifier is a defect, not a
+// value bake. NoteFrozenRead drops it rather than guessing.
+type FrozenBake uint8
+
+const (
+	// FrozenBakeNone is the invalid zero.
+	FrozenBakeNone FrozenBake = iota
+	// FrozenBakeValue — the read's VALUE is interned and lowered to a
+	// PUSH_CONST inside the unit. Repaired by making the read live.
+	FrozenBakeValue
+	// FrozenBakeType — the read is a bare type node lowered to a PUSH_TYPE
+	// carrying the node's compile-time IDENTITY. The node stays live; the ID
+	// does not, so a rebind of the NAME leaves the unit on the old node.
+	FrozenBakeType
+	// FrozenBakeCall — the read is a fn NAME whose call the lowering resolved
+	// to a specific compiled unit (CALL_USER / TAIL_CALL_USER). Repaired only
+	// by a runtime LOOKUP at the call — §6.9's OpDispatchGeneric — because no
+	// operand substitution re-resolves a call target the lowering already
+	// chose.
+	FrozenBakeCall
+)
+
+// String names the bake in the refusal a rebind produces, so the diagnostic
+// says which artifact went stale rather than always saying "its value".
+func (b FrozenBake) String() string {
+	switch b {
+	case FrozenBakeValue:
+		return "value"
+	case FrozenBakeType:
+		return "type"
+	case FrozenBakeCall:
+		return "call target"
+	}
+	return "binding"
+}

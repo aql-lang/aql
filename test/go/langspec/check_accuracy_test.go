@@ -81,6 +81,12 @@ var unflaggedPins = map[string]int{
 	// (`fnpred_invalid_spec`) and the unknown param type. Measured with
 	// BORU_LOG_UNFLAGGED=1; only the five membership rows remain.
 	"fnpred.tsv": 5,
+	// fn-value.tsv: the §7 bare read of a Function param (NUR123) — the
+	// checker binds a CARRIER for the param, which no signature can
+	// dispatch, so the no-match a 1-arg lambda raises when read with no
+	// argument is the runtime's (both lanes raise it; the interpreter's own
+	// word dispatch under the binding name).
+	"fn-value.tsv": 1,
 	// as.tsv: the weak-payload guard row is a RUNTIME-only refusal by
 	// design — the ascribed dispatch statically commits the base FlexMap
 	// overload (sound: the interpreter takes the same widened match), and
