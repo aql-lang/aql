@@ -6893,7 +6893,7 @@ func (es *EmitState) residualReadStable(v core.Value) bool {
 // which is what keeps §9b's family compiling.
 // argIsProducedClosure refuses a dispatch whose ARGUMENT is a compiled
 // closure this pass produced (a call result the recorder knows returned an
-// OpPushClosure — producerReturnedClosureArity). Such a value reaching a
+// OpPushClosure — producerReturnedClosure). Such a value reaching a
 // word's slot means the paren that should have APPLIED it did not collapse
 // into an apply, so the compiled program hands the word the FUNCTION where
 // the interpreter hands it the applied result.
@@ -6905,7 +6905,7 @@ func (es *EmitState) argIsProducedClosure(args []core.Value) bool {
 		if !core.IsAppliableFn(args[i]) {
 			continue
 		}
-		if _, produced := es.producerReturnedClosureArity(args[i].ID); produced {
+		if es.producerReturnedClosure(args[i].ID) {
 			es.MarkUncompilable(
 				"computed closure at a word's argument slot (its apply did not collapse — Stage 2)")
 			return true
@@ -6997,7 +6997,7 @@ func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 	// compiled code (that is what §9b's factory family does) and NOT fine
 	// for an interpreter RE-RUN to reach. recordCodeBodyClosureRead below
 	// catches the latter at the word that re-runs tokens.
-	if _, closure := es.producerReturnedClosureArity(v.ID); closure {
+	if es.producerReturnedClosure(v.ID) {
 		if es.dynBoundClosures == nil {
 			es.dynBoundClosures = map[string]bool{}
 		}
@@ -7539,16 +7539,46 @@ func isGetFamilyWord(w string) bool {
 
 // producerReturnedClosureArity resolves the declared arity of the closure a
 // leading fn-typed CARRIER holds, when its producer is a compiled user call
-// whose fn returns exactly one anonymous closure (the factory pattern).
+// whose fn returns exactly one anonymous lambda (the factory pattern).
 // Recoverable arity lets resolveDynamicApply distinguish the single N-arg
 // apply `(mk 5) 10 20` from a curried CHAIN `((mk 1) 2) 3` — the flattened
 // residual is identical for both, and committing one OpCallDynamic over a
 // chain leaks the intermediate closure (miscompile mechanism E,
 // nested-factory apply, design/MISCOMPILE-HUNT-FINDINGS.0.md).
+//
+// The factory returns its lambda one of two ways, and both are recoverable:
+// a CLOSURE when the body reads an enclosing binding (`( fn [[x:Integer]
+// [Integer][x add n]] )` over the factory's `n` — a PUSH_CLOSURE out op
+// naming the compiled unit), and a CONST when it captures nothing (`[x add
+// 1]` — the fold bakes the whole lambda as one value). Only the closure
+// arm existed, so every capture-free factory refused as "closure shape
+// unknown" though its arity is written on the const's own signature.
 func (es *EmitState) producerReturnedClosureArity(id string) (int, bool) {
-	pr, ok := es.producedBy[id]
+	op, ok := es.producerReturnedOutOp(id)
 	if !ok {
 		return 0, false
+	}
+	switch op.kind {
+	case opClosure:
+		cu := op.closureUnit
+		if cu < 0 || cu >= len(es.fnRecs) {
+			return 0, false
+		}
+		return es.fnRecs[cu].nParams, true
+	case opConst:
+		return constLambdaArity(es.consts, op.idx)
+	}
+	return 0, false
+}
+
+// producerReturnedOutOp is the single out op of the unit a compiled user
+// call ran for id's producer — the factory's one returned value, or
+// ok=false when the producer is anything else (a native call, a
+// multi-output unit, an unknown id).
+func (es *EmitState) producerReturnedOutOp(id string) (EmitOperand, bool) {
+	pr, ok := es.producedBy[id]
+	if !ok {
+		return EmitOperand{}, false
 	}
 	for _, fr := range es.frames {
 		for i := range fr {
@@ -7556,24 +7586,57 @@ func (es *EmitState) producerReturnedClosureArity(id string) (int, bool) {
 				continue
 			}
 			if fr[i].kind != evCallUser {
-				return 0, false
+				return EmitOperand{}, false
 			}
 			unit := fr[i].uc.unit
 			if unit < 0 || unit >= len(es.fnRecs) {
-				return 0, false
+				return EmitOperand{}, false
 			}
 			rec := es.fnRecs[unit]
-			if len(rec.outOps) != 1 || rec.outOps[0].kind != opClosure {
-				return 0, false
+			if len(rec.outOps) != 1 {
+				return EmitOperand{}, false
 			}
-			cu := rec.outOps[0].closureUnit
-			if cu < 0 || cu >= len(es.fnRecs) {
-				return 0, false
-			}
-			return es.fnRecs[cu].nParams, true
+			return rec.outOps[0], true
 		}
 	}
-	return 0, false
+	return EmitOperand{}, false
+}
+
+// producerReturnedClosure reports whether id holds a compiled CLOSURE this
+// pass produced (an OpPushClosure out op). That value is a ClosurePayload,
+// invokable only through the VM's re-entrant runner — the property the two
+// callers below guard. A capture-free lambda the fold baked as a CONST is
+// an ordinary interpreter-invokable fn value and is deliberately not one.
+func (es *EmitState) producerReturnedClosure(id string) bool {
+	op, ok := es.producerReturnedOutOp(id)
+	return ok && op.kind == opClosure
+}
+
+// constLambdaArity reads the arity off a baked ANONYMOUS lambda const —
+// one own signature with a boru body, no name and no module origin. The
+// exclusions are the fn-value apply's soundness argument (resolveDynamicApply):
+// OpCallDynamic runs anonymous-VALUE semantics, which leave a NAMED Go-impl
+// fn (`add/v`, a module export, a `FnUtil.const` result) as data where the
+// interpreter's word dispatch would apply it, so those keep the refusal.
+func constLambdaArity(consts []core.Value, idx int) (int, bool) {
+	if idx < 0 || idx >= len(consts) {
+		return 0, false
+	}
+	fd, ok := consts[idx].Data.(core.FnDefInfo)
+	if !ok || fd.Name != "" || fd.Module != "" {
+		return 0, false
+	}
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	lam, hasOwn := fd.FirstOwnSig()
+	if own != 1 || !hasOwn || len(lam.Body()) == 0 {
+		return 0, false
+	}
+	return len(lam.Params), true
 }
 
 // makeListRange reports whether any of a dispatch's args was produced by an

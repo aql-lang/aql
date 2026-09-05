@@ -2116,10 +2116,15 @@ the boundary, not from the family's label:
   need not be known); the bare spelling (`h 5`) needs the arity and stays.
   Note the same shape over a COMPILED factory's closure already compiles
   (`def h (mk 1)  (h 2)` is 3) because `producerReturnedClosureArity`
-  knows the arity; measured today, `def keep fn [[g:Function][Function][(
-  fn [[x:Integer][Integer][x add 1]] )]]  def h (keep …)  (h 5)` refuses
-  under this reason even so — the arity recovery declines when the
-  closure carries an unused capture, worth one look before the op.
+  knows the arity. *(The eleventh increment took that one look and the
+  guess here was wrong: `def keep fn [[g:Function][Function][( fn
+  [[x:Integer][Integer][x add 1]] )]]  def h (keep …)  (h 5)` refused not
+  for its unused capture but because the returned lambda captures
+  NOTHING, so the fold bakes it as a const rather than a closure. The
+  recovery now reads the arity off the const, and every shape in this
+  note's family compiles; what remains under this reason is the Go-impl
+  FnUtil family, whose word dispatch OpCallDynamic's value semantics
+  cannot reproduce.)*
 - **8 × "check diagnostics"** — not one mechanism (L-DO variadic regions,
   the staged Church spellings, the `/v` hold on a def-bound computed fn,
   the strict-lane FnUtil rows). Leave until the families above move.
@@ -2746,6 +2751,78 @@ The corpus differential is clean and no corpus row refuses.
 declines (`5  j typeof`, `x {a: j} size add`); a body-local read in a
 lambda value's body (`([] => [j])`) escapes the frame and keeps its slot
 push.
+
+## A capture-free factory's lambda carries its own arity (2026-09-05, the eleventh increment)
+
+**What was refused, and why the reason was half right.** A def-bound
+factory result applied by its binding's read — `def mk fn [[n:Integer]
+[Function] [( fn [[x:Integer][Integer][x add 1]] )]]  def h (mk 1)  (h
+2)` — refused as "def-bound computed fn apply (closure shape unknown —
+Stage 1)". The shape was not unknown; the recovery was looking in one
+place. `producerReturnedClosureArity` answered only when the factory
+unit's single out op was an `opClosure`, which happens exactly when the
+returned lambda CAPTURES something (`[x add n]` over the factory's `n`
+lowers to PUSH_CLOSURE). A capture-free lambda is a constant, so the fold
+bakes the whole thing as ONE const value (`PUSH_CONST … (Function)`,
+with its body compiled beside it as a `storedfn$body` unit) and the
+recovery declined — though the arity is written on that const's own
+signature.
+
+**The measurement that separated them.** Nine factory rows on the default
+lane: every one whose returned lambda reads an enclosing binding compiled
+already; every capture-free twin refused, whatever the factory's own
+params, whatever the spelling (`fn [[…]]` or `=>`), and whatever the
+inner param's type. The discriminator is the CAPTURE, not the arity, not
+the gradual param, and not (as the ledger's note guessed) an unused one.
+
+**The mechanism.** `producerReturnedOutOp` is the walk both questions
+share; two callers now ask different things of it.
+`producerReturnedClosureArity` gains a CONST arm — `constLambdaArity`
+reads the arity off a baked ANONYMOUS lambda: one own signature, a boru
+body, no name, no module origin. Those exclusions ARE the fn-value
+apply's soundness argument (`resolveDynamicApply`): OpCallDynamic runs
+anonymous-VALUE semantics, which leave a NAMED Go-impl fn — `add/v`, a
+module export, a `FnUtil.const` result — as data where the interpreter's
+word dispatch would apply it, so those keep the refusal.
+`producerReturnedClosure` is the OTHER question, and it had been sharing
+the same function by accident: `argIsProducedClosure` and the
+dyn-bound-closure note guard a ClosurePayload — a value only the VM's
+re-entrant runner can invoke — which a const-baked lambda is NOT. Left
+merged, the const arm made `def mk fn [[] [Function] [([] => [42])]]  def
+f fn [[g:Function][Any][g]]  f (mk)` refuse where it had compiled; split,
+it compiles again. The split is the increment's real lesson: one helper
+was answering "what arity" and "is this a payload" at once, and only the
+first was ever true of a const.
+
+**What graduated, measured on both lanes.** The def-bound apply family:
+`(h 2)`, the bare `h 2`, the zero-param factory, the `=>` spelling, the
+gradual inner param (`[[x:Any][Any][x typeof]]` — Integer on both lanes),
+the multi-arg callee, and the factory that takes a Function it never uses
+(the ledger's "unused capture" note, now explained). And the trailing
+KEEPQ family, whose refusal had a different stated cause — "runtime quote
+state unknown" — that turns out to have been an ARITY problem all along:
+`CALL_DYN_TRAIL_KEEPQ` already decides the quote at RUN time (inert when
+quoted, applied when not), and what it lacked was the callee's arity to
+trim the window with. `def choose fn [[][Function][quote (fn [[a:Integer
+z:Integer][Integer][a add z]])]] (1 2 choose)` is `1 2 fn (Integer,
+Integer)` on both lanes, its unquoted twin is `3`, and a 1-arg callee
+under a 2-wide window trims to `1 3`.
+
+**What still refuses, and each was measured.** A callee with more params
+than the window has values (the interpreter leaves it unapplied and
+nothing here models that); a factory whose ARMS return different lambdas
+(no one provable shape — the row that keeps the graduation honest); a
+curried chain `((h 2) 3)`; two applies of one binding; a named Go-impl or
+module fn value. The park's own rows are untouched: `(mk 1) 2` is still
+`fn (Integer) 2`.
+
+**Pins.** `lang/go/returned_closure_park_test.go` (the def-bound apply and
+its paren twin as parity rows, moved off the fallback list),
+`lang/go/bytecode_dynapply_body_test.go` (both quote polarities, the
+window trim, and the two standing refusals),
+`compiler/go/zz_triage_split_check_test.go` (TestConstLambdaArity over
+the anonymous / named / module / Go-impl / two-signature axis, and
+TestProducerReturnedClosureConstArm holding the two questions apart).
 
 ## What the ledger excludes, and why each exclusion was measured
 
