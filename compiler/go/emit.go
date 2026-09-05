@@ -8564,7 +8564,17 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// residue is now visible rather than hidden behind a blanket refusal.
 	for i := range residual {
 		if core.IsFnTypedCarrier(residual[i]) {
-			if (es.placedNotReStepped(residual[i]) || es.callResultPlaced(residual[i])) && !es.isDefRead(residual[i]) {
+			// A parked call result passes this RENDER gate only when the
+			// compiler knows how the value renders — the callee returns a
+			// compiled anonymous closure (callResultRenderKnown). A user fn
+			// that returns a fn it was HANDED (`def app fn
+			// [[g:Function][Function][g/v]]`) renders that value under the
+			// param's name on the interpreter (`fn g(Integer)`), which the
+			// raw runtime value cannot reproduce; that shape keeps the
+			// refusal (NUR119).
+			if (es.placedNotReStepped(residual[i]) ||
+				(es.callResultPlaced(residual[i]) && es.callResultRenderKnown(residual[i]))) &&
+				!es.isDefRead(residual[i]) {
 				continue
 			}
 			return residual, 0, "unconsumed fn-value carrier in residual (closure render)"
@@ -9853,6 +9863,48 @@ func (es *EmitState) callResultPlacedIn(v core.Value, frag *EmitFragment) bool {
 		return false
 	}
 	return true
+}
+
+// callResultRenderKnown reports whether the user call that produced v
+// returns a COMPILED ANONYMOUS CLOSURE — its single out operand is an
+// opClosure whose unit carries the interpreter's render string
+// (tryReturnedClosure stamps it) — so the parked value renders
+// byte-identically on both lanes. Any other fn-valued result (a fn the
+// callee was handed, a member's, a poly call's) is unknown here: the
+// interpreter may render it under a binding name the runtime value does
+// not carry (NUR119), and the residual gate keeps its refusal.
+func (es *EmitState) callResultRenderKnown(v core.Value) bool {
+	if es == nil || v.ID == "" {
+		return false
+	}
+	pr, ok := es.producedBy[v.ID]
+	if !ok {
+		return false
+	}
+	ev := es.eventBySeq(pr.seq)
+	if ev == nil || ev.kind != evCallUser || ev.uc.poly != nil || ev.uc.unit < 0 || ev.uc.unit >= len(es.fnRecs) {
+		return false
+	}
+	rec := es.fnRecs[ev.uc.unit]
+	if rec == nil || len(rec.outOps) != 1 {
+		return false
+	}
+	out := rec.outOps[0]
+	switch out.kind {
+	case opClosure:
+		cu := out.closureUnit
+		return cu >= 0 && cu < len(es.fnRecs) && es.fnRecs[cu] != nil && es.fnRecs[cu].render != ""
+	case opConst:
+		// A CAPTURE-FREE lambda literal bakes as a const FnDefInfo (the
+		// returned-closure path declines it on purpose); the interpreter
+		// formats that very value, so its render is the compiler's too.
+		if out.idx < 0 || out.idx >= len(es.consts) {
+			return false
+		}
+		_, isFn := es.consts[out.idx].Data.(core.FnDefInfo)
+		return isFn
+	}
+	return false
 }
 
 // userMemberFn reports whether word names a module binding holding a user

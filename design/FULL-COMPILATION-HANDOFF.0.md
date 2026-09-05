@@ -2067,6 +2067,17 @@ The probe's unit-side lookup searches the unit's captured fragment first
 events off the frame stack by the time its residual is settled, which is
 why the first cut found nothing inside units.
 
+The park's first cut widened one hazard the old refusal had been holding:
+a user fn that returns a fn it was HANDED (`def app fn
+[[g:Function][Function][g/v]]  app (z:Integer => [mul 3 z])`) renders
+that value under the PARAM's name on the interpreter (`fn g(Integer)`) and
+under its own on the compiled lane (`fn (Integer)`) — same value, one
+render. `callResultRenderKnown` restores the residual's render gate for
+every parked call result except one whose callee returns a compiled
+anonymous closure carrying its render string (the `mk 7` shape). The
+paren-placed spelling of that render difference pre-dates this branch,
+and the `Any`-typed twin slips the gate; both are NUR119.
+
 Not done here: the `[Any Any]` rewind-after-count-check shape, and the
 0-arg-overload twin (`m.e 5 m.e 7`, NUR035's guard) — both refuse soundly.
 
@@ -2129,6 +2140,21 @@ the boundary, not from the family's label:
   `producedBy`/`eventInfo` so the probe and the real compile judge the
   same unit. Changes every closure probe's verdict; wants the whole-corpus
   differential as its gate.
+
+A test-suite note, recorded because it cost a belt run: `test/go/langspec`
+died once today with `fatal error: concurrent map read and map write` in
+`DefTable.TopEntry` under `TestDiagnosticSurfaceParity`'s check pass (a
+`tand` unify resolving a predicate ref), with NO goroutine in the dump still
+writing a def table. The sweep runs two workers, each with its own
+`lang.New()` per row, so the writer was a goroutine that had already
+finished — an async body a corpus row spawns (`module-time.tsv`'s
+`TimeUtil.timeout` / `interval` rows, `module-io`, `module-net`) running
+inside the same row's registry while its check pass was still reading.
+Pre-existing and rare: the same package passed four belts and three
+coverage runs the same day on trees that differ only by a residual-gate
+predicate. If it recurs, the fix is in the check pass of the timer words
+(run the body synchronously under check, or fence the registry), not in
+the compiler.
 
 Two rules this line paid for today, worth keeping in front of every
 increment: measure the INTERPRETER first, with the shape's siblings (the

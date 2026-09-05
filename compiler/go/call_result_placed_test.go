@@ -140,3 +140,68 @@ func TestUserMemberFn(t *testing.T) {
 		t.Error("a boru body on any overload makes a user fn")
 	}
 }
+
+// callResultRenderKnown admits a parked call result to the residual's render
+// gate only when the callee returns a COMPILED ANONYMOUS CLOSURE whose
+// render string the compiler carries; every other producer is unknown.
+func TestCallResultRenderKnown(t *testing.T) {
+	var nilES *EmitState
+	v := core.NewInteger(1)
+	v.ID = "v-r"
+	if nilES.callResultRenderKnown(v) {
+		t.Error("a nil recorder knows no render")
+	}
+	es := NewEmitState()
+	if es.callResultRenderKnown(core.NewInteger(1)) || es.callResultRenderKnown(v) {
+		t.Error("an identity-less or unproduced value has no known render")
+	}
+	es.producedBy = map[string]producer{"v-r": {seq: 9}}
+	es.frames[0] = append(es.frames[0], EmitEvent{seq: 9, kind: evCall, call: emitCall{word: "w", nout: 1}})
+	if es.callResultRenderKnown(v) {
+		t.Error("a native call's result is not a compiled closure")
+	}
+	es.frames[0][0] = EmitEvent{seq: 9, kind: evCallUser, uc: emitUserCall{unit: 5, nout: 1}}
+	if es.callResultRenderKnown(v) {
+		t.Error("a unit index the state cannot resolve is unknown")
+	}
+	es.frames[0][0].uc.unit = 0
+	es.frames[0][0].uc.poly = &emitUserPolySpec{}
+	if es.callResultRenderKnown(v) {
+		t.Error("a poly user call has no single committed unit")
+	}
+	es.frames[0][0].uc.poly = nil
+	es.fnRecs = []*fnUnitRec{{name: "app"}, {name: "fnval$body"}}
+	if es.callResultRenderKnown(v) {
+		t.Error("a unit returning no closure operand is unknown")
+	}
+	es.fnRecs[0].outOps = []EmitOperand{localOperand(0)}
+	if es.callResultRenderKnown(v) {
+		t.Error("a unit returning a local (a fn it was handed) is unknown")
+	}
+	es.fnRecs[0].outOps = []EmitOperand{{kind: opClosure, closureUnit: 1}}
+	if es.callResultRenderKnown(v) {
+		t.Error("a closure unit without a render string is unknown")
+	}
+	es.fnRecs[1].render = "fn (Integer)"
+	if !es.callResultRenderKnown(v) {
+		t.Error("a returned compiled closure with its render string is known")
+	}
+	es.fnRecs[0].outOps = []EmitOperand{{kind: opClosure, closureUnit: 7}}
+	if es.callResultRenderKnown(v) {
+		t.Error("a closure unit index the state cannot resolve is unknown")
+	}
+	// A capture-free lambda literal is a const FnDefInfo the interpreter
+	// formats itself; any other const, or an unresolvable index, is unknown.
+	es.fnRecs[0].outOps = []EmitOperand{ConstOperand(0)}
+	if es.callResultRenderKnown(v) {
+		t.Error("a const index the state cannot resolve is unknown")
+	}
+	es.consts = []core.Value{core.NewInteger(3)}
+	if es.callResultRenderKnown(v) {
+		t.Error("a non-fn const is not a rendered closure")
+	}
+	es.consts = []core.Value{{Parent: core.TFunction, Data: core.FnDefInfo{Anonymous: true}}}
+	if !es.callResultRenderKnown(v) {
+		t.Error("a const fn value renders as the interpreter formats it")
+	}
+}

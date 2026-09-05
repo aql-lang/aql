@@ -91,6 +91,7 @@ keep the two in sync in the same commit.
 | [NUR096](#nur096) | The check pass did not move with NUR095: a fn stored through a fn-SHAPE-typed member is APPLIED by both engines but still modelled by the checker as the inert fn it was before that retirement, so `TestCheckTypeSoundness` fails on the two multi-return `class.tsv` rows that pin it | adding the NUR095 retirement rows to `lang/spec/class.tsv`, 2026-08-20 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
+| [NUR119](#nur119) | A fn value read through a PARAM's `/v` renders under the PARAM's name on the interpreter and under its own name on the compiled lane: `def app fn [[g:Function][Function][g/v]]  (app (z:Integer => [mul 3 z]))` renders `fn g(Integer)` interpreted and `fn (Integer)` compiled, and `def sq (z:Integer => [mul z z])  … app sq/v` renders `fn g(Integer)` against `fn sq(Integer)`. Same value, one render — the interpreter's frame binding re-labels the fn under the name it is read through, and a compiled unit pushes the raw runtime value. Pre-existing for the paren-placed spelling; the bare and args-following spellings refuse (`unconsumed fn-value carrier in residual (closure render)`, callResultRenderKnown) rather than diverge | measured 2026-09-05 while fixing the returned-closure park |
 | [NUR118](#nur118) | A compiled fn's RETURN-CONTRACT error blames the body's first token where the interpreter blames the CALL SITE: `def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}` raises the same `type_error: f: return value 1: expected Integer, got ProperString` on both lanes, at `1:43` (the call) interpreted and `1:30` (the body) compiled. The compiled RET check is stamped with the unit's own position because one unit serves every call site (compiler StartFnCompile's fnPos) — a documented limitation that became reachable from a corpus-style row when the binding-sensitive unit memo let `def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f` compile (Stage 4b); the row pins code and message and excludes the position | Stage 4b's cross-family rebind row, 2026-09-04 |
 | [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
 | [NUR109](#nur109) | `parse` over an unbound def-scoped parser name raises `parse_error: the parser is not a usable function value` compiled and `parse_unknown_lang: no parser "op" is registered` interpreted. `TestParseFnDispatchMissParity`'s own header argues the compiled answer is the right one and asserted both lanes gave it — reading the interp side from `Run` | completing the NUR106 oracle sweep, 2026-08-27 |
@@ -280,6 +281,46 @@ Recorded so the divergence between an accepted ADR and the code is not lost;
 the fix is the maintainer's to direct.
 
 ---
+
+## NUR119 — a fn value read through a param's `/v` renders under the param's name on one lane only {#nur119}
+
+**Status:** Pending. **Found:** 2026-09-05, measuring the returned-closure
+park (`design/PAREN-RESTEP-RULE.0.md` §2.1).
+
+**Observed.** A user fn that returns a fn it was HANDED, read through the
+param's `/v`:
+
+```
+def app fn [[g:Function][Function][g/v]]  (app (z:Integer => [mul 3 z]))
+    interpreted  fn g(Integer)        compiled  fn (Integer)
+def sq (z:Integer => [mul z z])  def app fn [[g:Function][Function][g/v]]  app sq/v
+    interpreted  fn g(Integer)        compiled  refused (closure render)
+```
+
+The VALUE is the same function on both lanes (apply it and both answer
+alike); only its render differs. The interpreter's frame binding re-labels
+the fn under the name it is read through — `sq` becomes `g` inside `app` —
+and a compiled unit pushes the raw runtime value, which carries its own
+name (or none, for a compiled closure).
+
+**Pre-existing** for the paren-placed spelling (`(app …)`, one survivor,
+placed by the paren) on every binary measured. The bare and
+args-following spellings (`app (…)`, `app (…) 7`) used to REFUSE the
+residual ("unconsumed fn-value carrier in residual (closure render)") or
+APPLY it (`21` — the returned-closure park miscompile, fixed the same day);
+they now refuse under the render gate: `callResultRenderKnown` admits a
+parked call result only when the callee returns a compiled anonymous
+closure whose render string the compiler carries. The `Any`-typed twin
+(`[[g:Function][Any][g/v]]`) is not a fn-typed carrier and slips the gate:
+`app (…)` renders `fn (Integer)` against `fn g(Integer)` on the default
+lane, exit 0 — the one live divergence this record leaves open.
+
+**Proposed verdict.** Resolve by fix, on the compiled side: the VM's
+`/v` read of a fn-typed frame local (or the frame entry's param binding)
+re-labels the value under the binding name exactly as the interpreter
+does, so a compiled unit returns the same render. Until then the render
+gate holds the fn-typed shapes to the interpreter and this record names
+the `Any`-typed one.
 
 ## NUR118 — a compiled return-contract error blames the definition where the interpreter blames the call {#nur118}
 

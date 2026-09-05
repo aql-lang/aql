@@ -29,8 +29,7 @@ func TestReturnedClosureParkParity(t *testing.T) {
 		{`def mk2 fn [[x:Integer] [Function] [([y:Integer] => [y add x])]]  mk2 1 7`, "fn (Integer) 7 — was 8"},
 		{`def mk2 fn [[x:Integer] [Function] [([y:Integer] => [y add x])]]  (mk2 1) 7`, "paren-placed, one survivor"},
 		// parked: the arrival apply of a USER member returning a closure
-		{`def mk fn [[x:Any] [Function] [([y:Integer] => [y add 1])]]  def m {p: mk/v}  m.p 5 7`, "fn (Integer) 7 — was 8"},
-		{`def mk fn [[x:Any] [Any] [([y:Integer] => [y add 1])]]  def m {p: mk/v}  m.p 5 7`, "an Any-typed return: the same park"},
+		{`def mk fn [[x:Any] [Any] [([y:Integer] => [y add 1])]]  def m {p: mk/v}  m.p 5 7`, "an Any-typed return of the arrival apply: parked — was 8"},
 		// parked: a Go-impl fn value returned by a user fn
 		{`import "boru:math-util" def f fn [[] [Any] [MathUtil.sqrt/v]]  f 16.0`, "fn sqrt(Number) 16.0 — was 4.0"},
 		// family C: two dynamic results live at once are two placed values
@@ -99,6 +98,19 @@ func TestReturnedClosureParkSoundFallbacks(t *testing.T) {
 	rows := []struct{ src, reason string }{
 		{mk1 + `  def g fn [[] [Any Any] [mk 7]] g`, "dynamic value precedes residual args (fn-value-call boundary)"},
 		{mk1 + `  def h (mk) h 7`, "def-bound computed fn apply"},
+		// A user fn returning a fn it was HANDED: the interpreter renders the
+		// value under the PARAM's name (`fn g(Integer)`), which the raw
+		// runtime value cannot reproduce — the residual's render gate holds
+		// (callResultRenderKnown; NUR119 records the paren-placed and
+		// Any-typed spellings that pre-date it).
+		{`def app fn [[g:Function][Function][g/v]]  app (z:Integer => [mul 3 z])`, "unconsumed fn-value carrier in residual (closure render)"},
+		{`def app fn [[g:Function][Function][g/v]]  app (z:Integer => [mul 3 z]) 7`, "unconsumed fn-value carrier in residual (closure render)"},
+		{`def sq (z:Integer => [mul z z])  def app fn [[g:Function][Function][g/v]]  app sq/v`, "unconsumed fn-value carrier in residual (closure render)"},
+		// The arrival apply of a user member returning a FUNCTION (`m.p 5 7`
+		// over `{p: mk/v}`): parked, and its render is unknowable — the
+		// member is applied through the island, not a compiled unit — so
+		// the gate holds. It compiled to 8 before the park.
+		{`def mk fn [[x:Any] [Function] [([y:Integer] => [y add 1])]]  def m {p: mk/v}  m.p 5 7`, "unconsumed fn-value carrier in residual (closure render)"},
 	}
 	for _, c := range rows {
 		a, err := New()
