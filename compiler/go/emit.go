@@ -8394,7 +8394,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// value's statement boundary — see methodShapeAnnotated.
 	applyDynamic := false
 	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) &&
-		!es.leadPlacedNotRead(residual[0]) {
+		!es.leadPlacedNotRead(residual[0]) && !es.callResultPlaced(residual[0]) {
 		applyDynamic = !anyDynamicTail(residual)
 	}
 	// Leading Function CARRIER (the factory pattern: a returned closure now
@@ -8424,7 +8424,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// and that the interpreter still applies. Placement is the question, not
 	// how the lead was named.
 	if !applyDynamic && len(residual) >= 2 && core.IsFnTypedCarrier(residual[0]) &&
-		!es.leadPlacedNotRead(residual[0]) {
+		!es.leadPlacedNotRead(residual[0]) && !es.callResultPlaced(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 		// When the carrier's closure arity is statically recoverable (its
 		// producer is a compiled factory fn returning one anonymous closure),
@@ -8524,7 +8524,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 		// Gated on NOT re-stepped, not merely on placed: an enclosing paren
 		// undoes the placement one level out (`((mk 1) 2)` is 3), and that
 		// shape is a real apply the machinery above owns.
-		if es.placedNotReStepped(residual[i]) {
+		if es.placedNotReStepped(residual[i]) || es.callResultPlaced(residual[i]) {
 			continue
 		}
 		if residual[i].Dynamic &&
@@ -8564,7 +8564,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// residue is now visible rather than hidden behind a blanket refusal.
 	for i := range residual {
 		if core.IsFnTypedCarrier(residual[i]) {
-			if es.placedNotReStepped(residual[i]) && !es.isDefRead(residual[i]) {
+			if (es.placedNotReStepped(residual[i]) || es.callResultPlaced(residual[i])) && !es.isDefRead(residual[i]) {
 				continue
 			}
 			return residual, 0, "unconsumed fn-value carrier in residual (closure render)"
@@ -9426,6 +9426,13 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []core
 				continue
 			}
 		}
+		// A user call's returned closure is PARKED where it lands — the frame
+		// never re-steps it (callResultPlaced) — so it is not a possible
+		// unapplied call: the count mismatch is genuine, and the RET raises
+		// the interpreter's type_error over the same two values.
+		if es.callResultPlacedIn(v, rec.frag) {
+			continue
+		}
 		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(core.TFunction)) {
 			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) &&
 				replayApplicables(vals[len(vals)-w:]) == 1 {
@@ -9766,6 +9773,111 @@ func (es *EmitState) leadPlacedNotRead(v core.Value) bool {
 // only question left is whether the value sits inert.
 func (es *EmitState) placedNotReStepped(v core.Value) bool {
 	return es.parenPlacedMemberFn(v) && !es.parenReSteppedFn(v)
+}
+
+// callResultPlaced reports whether v is the single RESULT of a completed
+// USER-FN call that no enclosing paren re-stepped and no read delivered. The
+// interpreter PARKS such a value where it lands: a user fn's returned
+// closure is placed data (`mk 7` is `fn (Integer) 7`, `mk 7 add 1` is
+// `fn (Integer) 8`, and inside a fn body `[mk 7]` is a two-value residual
+// the return check rejects), and only a paren rewind over two or more
+// survivors (`(mk 7)` is 8) or a read that dispatches — a bare name, a
+// member read — turns it into a call (design/PAREN-RESTEP-RULE.0.md). The
+// residual lowerings must therefore lay such a lead out as data, never
+// apply it; before this probe the fn-carrier and dynamic-lead arms applied
+// every lead a paren had not placed, and `mk 7` compiled to 8 (measured
+// 2026-09-05; design/FULL-COMPILATION-HANDOFF.0.md, "A returned closure is
+// parked").
+//
+// Three things do NOT park, and each keeps the arm it had:
+//   - a MULTI-output user call: its frame rewound over its own survivors
+//     before returning (`def g fn [[] [Any Any] [mk 7]]  g` is 8), which
+//     the check model did not perform, so the caller-side apply arm is
+//     that rewind's compiled twin;
+//   - a NATIVE word's returned Function, re-stepped by its own delivery —
+//     a code body's frame rewinds (`do [mk 7]` is 8) and a returned fn
+//     auto-applies to what follows (`do [mk] 7` is 8, `(FnUtil.const 7)
+//     99` islands);
+//   - a def-read lead (a bare name always calls, ADR-011) and a pinpointed
+//     member read (the arrival model's).
+//
+// The arrival apply of a USER member (`m.p 5` over `{p: mk/v}`, recorded
+// as a dyn-method event) is a user call by another route, so its single
+// result parks too (`m.p 5 7` is `fn (Integer) 7`).
+func (es *EmitState) callResultPlaced(v core.Value) bool {
+	return es.callResultPlacedIn(v, nil)
+}
+
+// callResultPlacedIn is callResultPlaced for a value produced inside a
+// captured fragment — a fn unit's own residual at finish, after
+// TakeFragment moved its events off the frame stack.
+func (es *EmitState) callResultPlacedIn(v core.Value, frag *EmitFragment) bool {
+	if es == nil || v.ID == "" {
+		return false
+	}
+	pr, ok := es.producedBy[v.ID]
+	if !ok {
+		return false
+	}
+	var ev *EmitEvent
+	if frag != nil {
+		for i := range frag.events {
+			if frag.events[i].seq == pr.seq {
+				ev = &frag.events[i]
+				break
+			}
+		}
+	}
+	if ev == nil {
+		ev = es.eventBySeq(pr.seq)
+	}
+	if ev == nil {
+		return false
+	}
+	switch ev.kind {
+	case evCallUser:
+		if ev.uc.nout != 1 {
+			return false
+		}
+	case evCall:
+		if ev.call.dynMethod == nil || ev.call.nout != 1 || !es.userMemberFn(ev.call.word) {
+			return false
+		}
+	default:
+		return false
+	}
+	if es.parenReSteppedFn(v) || es.isDefRead(v) {
+		return false
+	}
+	if _, member := es.MemberFnReadValue(v.ID); member {
+		return false
+	}
+	return true
+}
+
+// userMemberFn reports whether word names a module binding holding a user
+// fn (a boru body on some overload) — the member a dyn-method event applied
+// (tryMemberFnArrivalDispatch records the member fn's NAME as the word).
+// A Go-impl member, a class method, or the paren-apply pseudo-word resolve
+// to nothing here and keep their arms.
+func (es *EmitState) userMemberFn(word string) bool {
+	if es == nil || es.reg == nil || word == "" {
+		return false
+	}
+	v, ok := es.reg.Defs.Top(word)
+	if !ok {
+		return false
+	}
+	fd, isFn := v.Data.(core.FnDefInfo)
+	if !isFn {
+		return false
+	}
+	for i := range fd.Signatures {
+		if len(fd.Signatures[i].Body()) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // isDefRead reports whether v arrived through a read of a def-bound name —

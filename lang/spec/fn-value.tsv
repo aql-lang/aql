@@ -122,6 +122,17 @@ import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/v} ] end  
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 add 1	6	a sealed call composes with a following word statement
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end (m.p 5) (m.p 7)	5 7	explicit parens as the seal — graduated from the frontier 2026-08-27
 def i fn [[x:Integer] [Integer] [x add 1]] end def m {i: i/v} end m.i 5 m.i 7	6 8	typed twins — the type gate already isolated these; unchanged
+#     Six more twin-call rows GRADUATED 2026-09-05 out of that frontier
+#     file: a user call's single result is PARKED data where it lands
+#     (design/PAREN-RESTEP-RULE.0.md, the bare-call rows), so two dynamic
+#     results in one residual are two placed values, not an auto-dispatch
+#     hazard — the residual lowering now lays them out as such.
+def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 m.p 7	5 7	consecutive Any-param value calls each bind their own arg
+def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 1 m.p 2 m.p 3	1 2 3	three in a row — every window closes at its own statement
+def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/v} end m.g 1 2 m.g 3 4	102 304	two-arg windows close at their own arity, not at the next call
+import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/v}] end M.p 5 M.p 7	5 7	module-export twins seal identically (the original NUR038 shape)
+def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/v} end m.p 5 h 7	5 7	value call then bare-word call (the word barrier, unchanged)
+def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 end m.p 7	5 7	explicit `end` as the seal (unchanged)
 #
 # §7  fn-local fns as higher-order body words REFUSE compilation (NUR037).
 #     A fn bound by `def … fn` INSIDE another fn and then NAMED as a

@@ -111,6 +111,14 @@ func TestModuleReadRebindCompilesWithParity(t *testing.T) {
 		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [def T String]  f`, "T", "type", "true true for true false"},
 		{`def g fn [[][Integer][1]]  def f fn [[] [Integer] [g]]  f  ` +
 			`do [def g fn [[][Integer][2]]]  f`, "g", "call target", "1 1 for 1 2"},
+		// The SPLICE twin: the macro payload fires into the unit's tokens at
+		// analysis time, and the re-recorded unit fires the NEW payload. Its
+		// two Any-typed call results were a residual the lowering refused
+		// ("dynamic value precedes residual args") until a user call's single
+		// result was recognised as PARKED data (callResultPlaced,
+		// design/PAREN-RESTEP-RULE.0.md §2.1); it compiles with parity now.
+		{`def op (quote [1 add 2])  def f fn [[n:Integer] [Any] [do [n drop word op]]]  f 0  def op (quote [10 mul 4])  f 0`,
+			"op", "splice payload", "refused (fn-value-call boundary) for 3 40"},
 	}
 	for _, c := range cases {
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
@@ -152,12 +160,6 @@ func TestModuleReadRebindSoundFallbacks(t *testing.T) {
 		{`def k 5  def f fn [[] [Integer] [k/v add 2]]  f  undef k  f`, "check diagnostics"},
 		{`def k 5  def f fn [[] [Integer] [k add 2]]  f  do [undef k]  f`, "check diagnostics"},
 		{`def T Integer  def f fn [[] [Boolean] [5 is T]]  f  do [undef T]  f`, "check diagnostics"},
-		// The splice twin: the macro payload fires into the unit's tokens at
-		// analysis time; the re-recorded unit fires the NEW payload, whose
-		// shape (`10 mul 4` under `n drop`) the closure lowering declines —
-		// the fn-value-call boundary refusal, a sound fallback.
-		{`def op (quote [1 add 2])  def f fn [[n:Integer] [Any] [do [n drop word op]]]  f 0  def op (quote [10 mul 4])  f 0`,
-			"dynamic value precedes residual args (fn-value-call boundary)"},
 		// The MULTI-RUN twin of the rebind-site axis: an each body leaks its
 		// LAST iteration's def to module scope, and the top-level read after
 		// it is the arm-residency gate's. Measured `7 [9] 11` interpreted

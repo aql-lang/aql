@@ -379,16 +379,10 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// results in one program residual exceed the Stage-1 lowering. Sound
 	// interpreter fallback. Graduation = multi-dynamic-result residual
 	// lowering; the rows then move to lang/spec/fn-value.tsv §6.
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 m.p 7`:                                {why: "NUR038 seal: twin value-call residual", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 1 m.p 2 m.p 3`:                          {why: "NUR038 seal: triple value-call residual", failsWith: "fn-value-call boundary"},
-	`def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/v} end m.g 1 2 m.g 3 4`:      {why: "NUR038 seal: two-arg twin windows", failsWith: "fn-value-call boundary"},
-	`import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/v}] end M.p 5 M.p 7`:               {why: "NUR038 seal: module-export twins (the original shape)", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end 5 m.p m.p 7`:                                {why: "NUR038 seal: stack form then forward form", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7`:                        {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
-	`def m {l: ([x:Any] => [x])} end m.l 5 m.l 7`:                                                    {why: "NUR038 seal: lambda twins", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/v} end m.p 5 h 7`: {why: "NUR038 seal: value call then bare-word call", failsWith: "fn-value-call boundary"},
-	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 end m.p 7`:                            {why: "NUR038 seal: explicit end seals", failsWith: "fn-value-call boundary"},
-	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7`:              {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end 5 m.p m.p 7`:                   {why: "NUR038 seal: stack form then forward form", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7`:           {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
+	`def m {l: ([x:Any] => [x])} end m.l 5 m.l 7`:                                       {why: "NUR038 seal: lambda twins", failsWith: "fn-value-call boundary"},
+	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7`: {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
 
 	// Namespace capture at a macro-expanded call site (the NUR038 wrapper
 	// retirement's re-bucketed refusal — see frontier-capture-namespace.tsv):

@@ -2021,6 +2021,55 @@ an extension result with no ID reaching a consumer — is answered here only
 for the module family; `setProducedAt`'s comment says why the general mint
 is not free.
 
+## A returned closure is parked (2026-09-05)
+
+Found while sizing family C (the NUR038-seal twin-result rows, "dynamic
+value precedes residual args"). Measuring what the interpreter does with a
+callable RESULT followed by a later value — the question family C turns on
+— exposed a silent default-lane miscompile older than every stage on this
+branch: `def mk fn [[] [Function] [([y:Integer] => [y add 1])]]  mk 7`
+compiled to `8` against the interpreter's `fn (Integer) 7`. A user fn's
+returned closure is PARKED where it lands; only a paren rewind over two or
+more survivors, or a read that dispatches, applies it
+(design/PAREN-RESTEP-RULE.0.md, whose new §2.1 carries the measured
+table). `resolveDynamicApply`'s fn-carrier and dynamic-lead arms applied
+every lead a paren had NOT placed — the `leadPlacedNotRead` conjunction
+answered "placed by a paren?" and nothing asked "produced by a call?".
+
+What landed (`compiler/go/emit.go`):
+
+- `callResultPlaced` / `callResultPlacedIn`: a single-output user call's
+  result, or a user member's arrival-apply result (the dyn-method event
+  `tryMemberFnArrivalDispatch` records — `userMemberFn` checks the word
+  names a boru-bodied fn), that no enclosing paren re-stepped and no read
+  delivered, is placed data. Wired into the dynamic-lead and fn-carrier
+  arms, the precedes-args loop and the unconsumed-carrier loop of
+  `resolveDynamicApply`, and into `noteDynFrameReplay`, where a parked
+  result is not a possible unapplied call — so `def g fn [[] [Any] [mk
+  7]]  g` compiles to the RET count check and raises the interpreter's
+  `type_error … got 2 — [fn (Integer) 7]` instead of replaying the frame
+  to `8`.
+- Three things deliberately do NOT park, each measured: a NATIVE word's
+  returned fn (`do [mk] 7` is `8` — its delivery re-steps it), a
+  MULTI-output user call's leading fn (`def g fn [[] [Any Any] [mk 7]] g`
+  is `8` — its own frame rewound before returning; the shape stays a
+  refusal because the check model does not perform that rewind), and a
+  def-read or member-read lead (dispatches).
+- Family C's twin-result residual (`m.p 5 m.p 7`) is two placed values
+  now: six of the nine frontier rows graduate to `fn-value.tsv` §6. The
+  three that stay carry the dynamic result UNDER a later window (the stack
+  form, a computed first argument, a lambda member). Stage 4b's splice
+  fallback row (`… do [n drop word op] …`, two Any-typed call results)
+  was the same shape and graduates with them — `3 40` on both lanes.
+
+The probe's unit-side lookup searches the unit's captured fragment first
+(`callResultPlacedIn(v, rec.frag)`): `TakeFragment` has moved the unit's
+events off the frame stack by the time its residual is settled, which is
+why the first cut found nothing inside units.
+
+Not done here: the `[Any Any]` rewind-after-count-check shape, and the
+0-arg-overload twin (`m.e 5 m.e 7`, NUR035's guard) — both refuse soundly.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

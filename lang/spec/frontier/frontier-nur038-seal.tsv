@@ -11,17 +11,16 @@
 # interpreter fallback (differential-clean). Graduation = the residual
 # lowering handling multiple dynamic results, at which point the ledger
 # entries delete and the rows move to lang/spec/fn-value.tsv §6.
-def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 m.p 7	5 7	consecutive Any-param value calls each bind their own arg
-def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 1 m.p 2 m.p 3	1 2 3	three in a row — every window closes at its own statement
-def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/v} end m.g 1 2 m.g 3 4	102 304	two-arg windows close at their own arity, not at the next call
-import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/v}] end M.p 5 M.p 7	5 7	module-export twins seal identically (the original NUR038 shape)
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end 5 m.p m.p 7	5 7	stack form then forward form — the seal is form-agnostic
 def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p (1 add 2) m.p 7	3 7	a computed first argument still seals before the second call
 def m {l: ([x:Any] => [x])} end m.l 5 m.l 7	5 7	afn lambda values seal too
-def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/v} end m.p 5 h 7	5 7	value call then bare-word call (the word barrier, unchanged)
 # The explicit-paren row GRADUATED 2026-08-27 (Stage 3) and now lives in
 # lang/spec/fn-value.tsv §6: it compiles natively and answers `5 7` on both
-# lanes. Its siblings below still refuse — they are the UNSEALED spellings,
-# where the residual really does carry a dynamic value ahead of later args.
-def f fn [[x:Any] [Any] [x]] end def m {p: f/v} end m.p 5 end m.p 7	5 7	explicit `end` as the seal (unchanged)
+# lanes. SIX MORE GRADUATED there 2026-09-05 — the twin, triple, two-arg,
+# module-export, bare-word and explicit-`end` rows: a user call's single
+# result is PARKED data where it lands (design/PAREN-RESTEP-RULE.0.md, the
+# bare-call rows), so two dynamic results in one residual are two placed
+# values. What is left here are the spellings whose residual carries the
+# dynamic result UNDER a later window (the stack form, a computed first
+# argument, a lambda member, the 0-arg overload twin).
 def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/v} end m.e 5 m.e 7	5 7	an arg-bearing overload wins over its 0-arg twin, per statement (the NUR035 guard holds under the seal)
