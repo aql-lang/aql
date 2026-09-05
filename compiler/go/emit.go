@@ -849,6 +849,9 @@ type EmitState struct {
 	// binder/call-graph reachability model (dynamicScopeReachable). See
 	// NoteDefRead.
 	defReads map[string]string
+	// collectionHazard marks fn-typed value IDs a later dispatch collected
+	// past while they sat unapplied (NoteCollectionHazard, NUR121).
+	collectionHazard map[string]bool
 	// dynBoundClosures names the dyn-scope binds whose value is a COMPILED
 	// closure (a ClosurePayload). Applying one from compiled code is fine —
 	// §9b's factory family does exactly that — but an interpreter RE-RUN
@@ -1206,15 +1209,6 @@ type fnUnitRec struct {
 	// the split's bookkeeping half, and each admission must bring its own
 	// probe evidence (the Stage-G discipline).
 	lambdaUnit bool
-	// takesTop marks a closure whose driving handler reads only the TOP of the
-	// body residual (each / fold / scan / filter / rand-list-of —
-	// CallableSpec.BodyResultTop). For such a unit, finish DROPS the unconsumed
-	// values the body leaves below its top result (notably the per-invocation
-	// input a body that ignores its element leaves on the stack, `each [add 1 0]`
-	// → `[input, 3]`): the handler never reads below the top, so the RET keeps
-	// only the events plus the trailing tail. A whole-residual handler (`do`)
-	// leaves this false, keeping the strict in-order reconciliation.
-	takesTop bool
 	// promoted / dead are the value-def-local plan for THIS unit's body —
 	// computed by planValueDefLocals at finish (while the unit is still live) and
 	// read by the lowerer (flw.promoted / flw.dead) when the unit lowers. Mirrors
@@ -1278,8 +1272,8 @@ func residualForceOrder(ops []EmitOperand, vals []core.Value) map[int]bool {
 
 // residualForceOrderFor picks the out-of-order promotion set for a fn-unit's
 // finished residual. It is nil for the fn-value / trailing-apply shapes
-// (dynTrail != 0) and for a TRIMMED residual (len(ops) != len(vals) after
-// trimToTopResult, in-order by construction). Otherwise, an ARMED whole-frame
+// (dynTrail != 0) and for a residual whose operand count no longer matches
+// its values (in-order by construction). Otherwise, an ARMED whole-frame
 // replay (dynFrameW > 0) uses replayForceOrder (re-push the token region in
 // exact order — the stylesheet-apply `[nd (rules get …)]` shape); every other
 // residual uses residualForceOrder (the `do [x 1 add 2]` → [const-x, event]
@@ -2626,7 +2620,7 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (EmitOper
 	r.Check.Emit = probe
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return EmitOperand{}, false
@@ -2645,7 +2639,7 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (EmitOper
 		es.dynEnv = true
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return EmitOperand{}, false
 	}
@@ -2683,7 +2677,7 @@ func (es *EmitState) compileStoredFnUnit(fd core.FnDefInfo, sigIdx int, pos core
 	probe.storedGradualDepth = es.storedGradualDepth
 	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
-	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "storedfn", 0, true, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		// Surface the probe's refusal for the -compile-report attribution
@@ -2698,7 +2692,7 @@ func (es *EmitState) compileStoredFnUnit(fd core.FnDefInfo, sigIdx int, pos core
 	if probe.dynEnv {
 		es.dynEnv = true
 	}
-	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "storedfn", 0, true, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		// Reachable: a body the probe pass accepted can still refuse in the
 		// real pass (the variation sweep produces such shapes — a splice-
@@ -2768,7 +2762,7 @@ func (es *EmitState) compileStoredBody(bodyList core.Value) (core.Value, bool) {
 	probe.storedGradualDepth = es.storedGradualDepth
 	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
-	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
+	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	r.Check.Emit = es
 	if !probeOK {
 		return core.Value{}, false
@@ -2777,7 +2771,7 @@ func (es *EmitState) compileStoredBody(bodyList core.Value) (core.Value, bool) {
 	if probe.dynEnv {
 		es.dynEnv = true
 	}
-	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
+	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return core.Value{}, false
 	}
@@ -2855,14 +2849,14 @@ func (es *EmitState) compileStoredParamBody(bodyList core.Value, params []core.F
 	probe.storedGradualDepth = es.storedGradualDepth
 	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
-	_, probeOK := compileClosureBody(r, "storedfn", core.BodyOutResidual, true, false, tokens, inputs, names, nil, ClosureInValue, bodyList.Pos())
+	_, probeOK := compileClosureBody(r, "storedfn", core.BodyOutResidual, true, tokens, inputs, names, nil, ClosureInValue, bodyList.Pos())
 	r.Check.Emit = es
 	if !probeOK {
 		return core.Value{}, false
 	}
 	// Probe-terminal environment mode → real pass (see tryReturnedClosure).
 	es.dynEnv = es.dynEnv || probe.dynEnv
-	unit, realOK := compileClosureBody(r, "storedfn", core.BodyOutResidual, true, false, tokens, inputs, names, nil, ClosureInValue, bodyList.Pos())
+	unit, realOK := compileClosureBody(r, "storedfn", core.BodyOutResidual, true, tokens, inputs, names, nil, ClosureInValue, bodyList.Pos())
 	if !realOK || unit < 0 {
 		// Unlike compileStoredBody's spawn shape, the real pass CAN decline
 		// after a clean probe here: it records into the LIVE mid-recording
@@ -4636,8 +4630,10 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 			// higher-order word's OWN runtime error (each_error "body produced no
 			// result"), a different taxonomy — so a closure keeps refusing and
 			// islands, letting the interpreter raise the matching error. An
-			// UNDECLARED fn (an anonymous lambda whose Returns were nilled, or a
-			// 0-return fn) is NOT count-checked: its residual is taken as-is.
+			// UNDECLARED fn (a 0-return fn, or a closure body compiled
+			// count-agnostic) is NOT count-checked: its residual is taken as-is.
+			// An anonymous lambda is DECLARED here — its placeholder's count
+			// (check.LambdaCountContract) is the contract its RET enforces.
 			if dynTrail == 0 && rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
 				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
@@ -4679,17 +4675,19 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 				es.MarkUncompilable("closure " + name + ": unapplied fn-value in body residual (dynamic apply not lowered)")
 				return
 			}
-			// A TOP-TAKING closure's driving handler reads only the top of the body
-			// residual (each / fold / scan / filter — CallableSpec.BodyResultTop), so
-			// the values the body leaves BELOW its result — notably the per-invocation
-			// input a body that ignores its element leaves on the stack (`each [add 1
-			// 0]` → [input, 3]) — are never observed and are dropped here. Without this,
-			// the residual [inert-input, computed-result] refuses at the RET (an event
-			// above an inert, "result above a literal"), even though the handler only
-			// ever reads the top.
-			if dynTrail == 0 && rec.takesTop && len(ops) > 1 {
-				ops = trimToTopResult(ops)
-			}
+			// A closure body's residual is kept WHOLE, even under a driving
+			// handler that reads only its top (each / fold / scan / filter —
+			// CallableSpec.BodyResultTop). The values below the top are what a
+			// fn VALUE's return contract counts: the interpreter's callback
+			// seam runs the fn's own __RC before the handler reads the top, so
+			// `def f fn [[n:Integer][Integer][n 1]]  each f/v [1 2]` raises
+			// `expected 1 return value(s), got 2` there — and a compile-time
+			// trim to the top (the former trimToTopResult) hid the second value
+			// from checkClosureReturn and answered `[1 1]` (NUR120). The
+			// out-of-order shape the trim once sidestepped (`each [add 1 0]` →
+			// [inert input, event]) is handled by residualForceOrderFor's
+			// promotion below, and a raw token body carries no contract, so
+			// the handler reads its top exactly as before.
 			// A per-iteration APPLY-LOOP's variadic value region in the residual,
 			// under an inert tail: the RET takes the replay trim discipline.
 			if dynTrail == 0 && rec.dynFrameW == 0 && !rec.closure && len(rec.returns) > 0 {
@@ -4764,26 +4762,6 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 		es.openUnitRecs = es.openUnitRecs[:len(es.openUnitRecs)-1]
 	}
 	return unit, finish, true
-}
-
-// trimToTopResult drops the operands a TOP-TAKING closure body leaves BELOW its
-// result. The driving handler (each / fold / scan / filter) reads only the top of
-// the body residual, so everything beneath it is never observed. The residual is
-// [leading-inerts…, events…, trailing-inerts…]; the leading inerts are the values
-// the body left below its first COMPUTED result — the per-invocation input a body
-// that ignores its element leaves on the stack (`each [add 1 0]` → [input, 3]).
-// Keeping from the first EVENT operand preserves the events (physically on the
-// sim stack) and the trailing tail (which carries the top) while dropping those
-// leading inerts; a residual with NO event is pure data whose only result is the
-// TOP operand. Only called for len(ops) > 1; never drops an event (the top is at
-// or after the first event) or a trailing inert.
-func trimToTopResult(ops []EmitOperand) []EmitOperand {
-	for i := range ops {
-		if ops[i].kind == opEvent {
-			return ops[i:]
-		}
-	}
-	return ops[len(ops)-1:]
 }
 
 // RecordUserCall records one call of a compiled fn unit. args are in
@@ -5038,6 +5016,11 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	// strips the STORED value's construction-time quote to mirror the read
 	// (callDynTrailTop), so an inline-quote must never record the apply.
 	if fn.Quoted {
+		return 0, false
+	}
+	// A lead a later dispatch collected past (NUR121): its argument is that
+	// dispatch's result, not what the interpreter's lead would collect.
+	if es.hazardLead(fn) {
 		return 0, false
 	}
 	// The lowered apply (OpCallDynTrailTop) nets EXACTLY ONE value (nout: 1
@@ -7141,6 +7124,61 @@ func (es *EmitState) NoteMemberFnRead(id string, member core.Value) {
 	es.memberFnReads[id] = member
 }
 
+// NoteCollectionHazard / CollectionHazard are the recorder side of the
+// check pass's collection-hazard note (Engine.noteCollectionHazards,
+// NUR121): the fn-typed value id sat unapplied below a value a later
+// dispatch stack-collected in the same scope, so an apply of id over the
+// values after it would run over that dispatch's RESULT. Every lead
+// lowering declines a marked id — RecordDynApply (the paren lead window
+// records through it), noteDynFrameReplay, resolveDynamicApply's lead arms.
+func (es *EmitState) NoteCollectionHazard(id string) {
+	if !es.Active() || id == "" {
+		return
+	}
+	if es.collectionHazard == nil {
+		es.collectionHazard = map[string]bool{}
+	}
+	es.collectionHazard[id] = true
+}
+
+func (es *EmitState) CollectionHazard(id string) bool {
+	return es != nil && es.collectionHazard[id]
+}
+
+// hazardLead reports whether v is a marked lead the lowerings must decline:
+// marked, and EAGER — a lead the interpreter dispatches where it is read (a
+// param / capture word, a native word's fn result, an `args.N` read). A
+// PLACED lead is lazy: a paren-placed single survivor is re-stepped only at
+// the enclosing paren's close, over whatever survives there, and a user
+// call's returned closure is parked where it lands (callResultPlaced) — so
+// `((mk) 7 add 1)` is 9 on both lanes and the apply over add's result IS the
+// interpreter's, hazard mark or not.
+func (es *EmitState) hazardLead(v core.Value) bool { return es.hazardLeadIn(v, nil) }
+
+// hazardLeadIn is hazardLead with the fragment whose events produced v (a
+// unit's finish, an arm): the placed-call-result exclusion must find the
+// producing event where it lives.
+func (es *EmitState) hazardLeadIn(v core.Value, frag *EmitFragment) bool {
+	return es.CollectionHazard(v.ID) && !es.parenPlacedMemberFn(v) && !es.callResultPlacedIn(v, frag) && !es.applyPending(v.ID)
+}
+
+// applyPending reports whether the innermost open unit holds a PENDING
+// `apply` for the fn value id (a `/v`-read value the elided apply dispatch
+// registered): such a value is applied by the apply word at ITS position,
+// never eagerly where it was read, so it is not a collection-hazard lead —
+// the pending-apply discipline at the unit's finish owns it.
+func (es *EmitState) applyPending(id string) bool {
+	if es == nil || len(es.units) == 0 {
+		return false
+	}
+	for _, p := range es.units[len(es.units)-1].pendingApply {
+		if p == id {
+			return true
+		}
+	}
+	return false
+}
+
 // memberFnRead reports whether id was tagged by noteMemberFnRead.
 func (es *EmitState) MemberFnRead(id string) bool {
 	if es == nil || es.memberFnReads == nil {
@@ -8393,6 +8431,17 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []core.Value) ([]
 	// its apply, and a decline there means the residual tail may cross the
 	// value's statement boundary — see methodShapeAnnotated.
 	applyDynamic := false
+	// A fn-value lead a later dispatch collected past, ANYWHERE in the
+	// residual (NUR121: `g x add 1` — the model's `add` took `x`, so the
+	// residual's args are its RESULT, not the lead's; `do [(f 5) 2] drop` —
+	// the model's drop took the 2 the frame's rewind would have applied the
+	// lead to, leaving the lead alone), refuses before any arm can apply it;
+	// a placed (lazy) lead is the arms' own business (hazardLead).
+	for _, v := range residual {
+		if es.hazardLead(v) {
+			return residual, 0, "fn-value lead's argument was collected by a later dispatch (NUR121)"
+		}
+	}
 	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) &&
 		!es.leadPlacedNotRead(residual[0]) && !es.callResultPlaced(residual[0]) {
 		applyDynamic = !anyDynamicTail(residual)
@@ -9444,6 +9493,9 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []core
 			continue
 		}
 		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(core.TFunction)) {
+			// (A lead a later dispatch collected past — `[g x add 1]`, whose
+			// replay would run over add's result, NUR121 — never reaches here:
+			// residualStands refused it while resolving the residual above.)
 			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) &&
 				replayApplicables(vals[len(vals)-w:]) == 1 {
 				rec.dynFrameW = w

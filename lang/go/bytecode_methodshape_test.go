@@ -162,6 +162,12 @@ func TestShapedMethodCapturingMemberStaysRefused(t *testing.T) {
 // WRONG value pre-M2c (the leading OpCallDynamic applied c.add to the add
 // result AND the next statement's size result — probe-confirmed divergence
 // on the committed tree). It must now refuse, with faithful fallback.
+//
+// Re-diagnosed 2026-09-05 (NUR121): the collection-hazard mark names the
+// same fact one stage earlier — the next statement's `size` stack-collected
+// past the unapplied `c.add` lead, so any apply of that lead over the
+// residual would run over `size`'s result. Same sound refusal, earlier and
+// truer diagnosis; the methodShapeAnnotated decline still stands behind it.
 func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
 	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
@@ -169,7 +175,7 @@ func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	fnValueM2Refusal(t, "computed arg in the statement window",
 		`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "n") ; c.add (1 add 2) ; Log.measurements size`,
-		"dynamic value precedes residual args")
+		"fn-value lead's argument was collected by a later dispatch (NUR121)")
 }
 
 // --- the shape-claim violation: internal_error → interpreter re-run --------

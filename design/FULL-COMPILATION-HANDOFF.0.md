@@ -2164,6 +2164,182 @@ family is (the returned-closure park hid inside family C); and check the
 lane answers on the DEFAULT lane, since `-force-compile` refuses where the
 default lane silently compiles.
 
+## Two silent miscompiles found measuring the closure-capture family (2026-09-05)
+
+The fifth increment set out to land the closure-capture family's blocker
+(c) and landed none of it: measuring the gate turned up two DEFAULT-lane
+miscompiles older than this branch, each with several witnesses, and the
+rule is that a wrong answer with exit 0 outranks a frontier row. Both are
+fixed and pinned; (c) is re-sized below, and (a) has a plan and a measured
+obstacle.
+
+**NUR120 (resolved, number retired) — a lambda's return count.** A `=>` /
+`afn` lambda carries a `Returns=[Any]` PLACEHOLDER that the analyser infers
+past for the result TYPE; the interpreter enforces its COUNT at every
+dispatch boundary — the named call, the paren apply, the `apply` word, a
+member read, a Function param, and the callback seam. The compiled lane
+dropped it three ways: `BuildFnBodyReturnsFn` nilled the declared returns
+for the unit's RET as well as for the analyser; `fnValueRetSpec` declined
+to carry a contract on the closure value; and under a `BodyResultTop`
+word the closure body was TRIMMED to its top value at compile time
+(`trimToTopResult`), which hid the count from `checkClosureReturn` for
+NAMED fns too — and, for a 2-return declaration, raised where the
+interpreter passes. Measured, all exit 0: `def f ([x:Integer] => [x 1])
+f 5` answered `5 1`; `5 (…) apply` likewise; `each ([x:Integer] => [x 1])
+[1 2]` answered `[1 1]`; `def f fn [[n:Integer][Integer][n 1]]  each f/v
+[1 2]` answered `[1 1]`; the verbose `fn [[x][Any][x 1]]` twin was
+enforced on both lanes all along. Fix: `check.LambdaCountContract` (n
+`Any` slots — a count, never a type) is the compiled unit's RET contract
+and the closure value's `RetTypes` for an anonymous lambda; the trim is
+retired (the out-of-order residual it once sidestepped is
+`residualForceOrderFor`'s promotion now); the VM's `checkClosureReturn`
+enforces the count over the WHOLE residual with the unit's own unnamed
+allowance, exactly as `__RC` does — the frameless `checkReturnContract`
+never raised on an over-count. Pinned on both lanes by
+`lang/go/lambda_return_count_test.go` (every path, plus the 1-value
+bodies and the allowances). What remains is pre-existing: the NUR118
+position, and on two value-applied paths a callee name and a missing
+position (the NUR118 addendum).
+
+The count contract then met the interpreter's OTHER seam, and the corpus
+said so (`walk {…} {…} (m:Any => [m.path print])` raised `expected 1
+return value(s), got 0` compiled and ran clean interpreted). A handler
+that hands a FnDefInfo to `InvokeCallbackFn` runs it through CallBoru,
+whose return discipline is `enforceCallBoruReturns` (NUR069): the
+declared TYPES are checked head-to-head over the aligned residual (the
+surplus sits at the bottom) and the COUNT is never raised — `walk`'s
+hooks, `each`/`fold` over a MAP, `filter`'s Function form. The TOKEN seam
+(`InvokeBody`: `each` over a list, `apply`, a paren call) steps the fn
+value and `__RC` enforces the count. The compiled lane had ONE discipline
+for both — and it was wrong for NAMED fns on the fn-value seam before
+this increment (`walk … cb/v` over a 0-value body raised compiled; an
+`[Integer Integer]` declaration over one value raised compiled). So the
+seam is now explicit: `core.InvokeCallbackBody` is the compiled-closure
+twin of `InvokeCallbackFn` (it stamps `ClosurePayload.RetTrim` on the
+VALUE at the seam, never on the stored closure — the same closure can
+cross both), the three handler branches that route a compiled closure
+where their FnDefInfo path routes to `InvokeCallbackFn` call it
+(`invokeBodyTop`, `runFilterCallback`, `callWalkHook`), and the VM applies
+`checkCallBoruContract` — the mirror of `enforceCallBoruReturns`, predicate
+skip included — from `checkClosureReturn` under `RetTrim` and from the root
+RET of a unit entered through `RunUnit` / `runUnitNested` /
+`runForeignUnit` (`enterCallbackUnit`, `vmContext.rootRetTrim`; a closure
+the body invokes through the token seam clears it). Pinned by
+`TestLambdaReturnCountOnTheFnValueSeam`.
+
+**NUR121 (resolved, number retired) — the collection hazard.** A
+fn-typed CARRIER the check model leaves unapplied — a `g:Function` param
+or capture read as a word, an `args.0` read — lets a LATER dispatch in the
+same scope stack-collect the argument the interpreter's `g` would have
+taken first, and every lowering that applies a lead to the values after
+it then applies `g` to that dispatch's RESULT: `def f fn [[g:Function
+x:Integer][Integer][g x add 1]]  f (z:Integer => [mul 3 z]) 5` is 16
+interpreted and was 18 compiled. Five witnesses on the current tree, all
+default lane, exit 0: the bare body `[g x add 1]` (the whole-frame
+replay), the paren lead window `(g x add 1)`, the unnamed-param replay
+`args.0 args.1 add 1` bare and in a paren, and the same window inside a
+returned closure. Nothing in the recorded trace tells these apart from
+`(g (add x 1))`, where the nested paren seals `g` off and 18 is right on
+both lanes: the operands and events are identical, only the paren SCOPE
+differs — and the scope is the engine's. So the engine notes it where a
+stack collection and its scope are both in hand
+(`Engine.noteCollectionHazards`, at execMatch's check-mode splice and
+the full-stack fold): every unapplied fn-typed value below the lowest
+stack-collected index in the same paren scope is marked
+(`EmitRecorder.NoteCollectionHazard`), never reaching into a frame's
+resolved-argument prefix (`FrameOpenInfo.ArgSpan`, the run's `StartAt`
+prefix — arguments are inert). The three lowerings decline a marked
+EAGER lead (`EmitState.hazardLead`): `RecordDynApply` (the paren lead
+window records through it), `noteDynFrameReplay`, and
+`resolveDynamicApply`'s two lead arms. A PLACED lead is lazy and keeps
+its lowering — a paren-placed single survivor re-steps only at the
+enclosing close over what survives there, and a user call's returned
+closure is parked (design/PAREN-RESTEP-RULE.0.md) — so `((mk) 7 add 1)`
+is still 9 and `((args.0) args.1 add 1)` still 18 on both lanes; the
+first cut refused those and the parity pins caught it. A marked eager
+lead left ANYWHERE in a residual refuses too (`residualStands`, the
+program residual in Finalize): `[g x drop]` and `do [(f 5) 2] drop`
+answered `fn (Integer)` where the interpreter answers the count error
+and nothing — the lead had no args after it for the arms to see.
+
+The corpus then named the class's other face: a REWINDING code-body frame.
+`do [mk 7] add 1` — a returned closure parked inside a `do` — is 71
+interpreted (the do's close re-steps the parked value over 7, then add)
+and was 80 compiled (the model's `add` took the 7, then the outer residual
+applied the closure to 8); `do [(f 5) 2] add 1` likewise 21 against 30.
+The do's OUT is a native word's result, eager by the park rule, and the
+hazard mark catches it. Four `bytecode-migrated.tsv` rows of the shape
+`do [(f 5) 2] error [dot code]` refused under the first cut, and the
+mark-window pins (`TestMarkWindowDoCatchCompiles`) said why that was
+wrong: the L-DO do-catch lowering re-steps the whole region at the
+program's end, and `error`'s catch clause is a STRIP-INPUT hop that
+passes a non-error region through untouched — the one later collection
+that is transparent by construction, which is what the mark window's
+claim ("every residual entry re-marked through strip-input hops") encodes.
+So the scan marks nothing for a `StripsUnconsumedInput` word, the four
+rows compile through the window as before, and only a collection that
+CONSUMES (`add 1`, `drop`) marks the lead. A `/v`-read value with a
+PENDING `apply` is excluded on the same principle (the apply word owns it
+at its own position), which keeps the mid-body-apply pins on their own
+diagnosis. Compiling the consuming shapes means the do body applying its
+placed lead at its OWN close (the frame-rewind model — Stage 5's regions),
+not widening the coarse rule.
+The rule is coarse in one measured direction: `do [mk 7 8] add 1` is
+`70 9` on both lanes (a 1-arg lead never reaches the 8 that `add`
+collected) and refuses anyway, because a `do` out carries no arity; an
+arity-aware mark (`producerReturnedClosureArity` at the consumer, the
+scan recording the gap) is the refinement, when a row pays for it. Pinned
+by `core/go/engine_collection_hazard_test.go` (the scan's scope),
+`compiler/go/collection_hazard_test.go` (each consumer), and
+`lang/go/collection_hazard_test.go` (ten witnesses as sound fallbacks,
+twelve admitted twins as parity).
+
+**NUR122 (pending) — the nameless compiled apply.** Measuring the
+fallbacks also measured the error lane of the fn-value apply that
+ALREADY compiles: `def f fn [[g:Function x:Integer][Integer][g x]]  f
+(z:String => [z]) 5` raises `signature_error: cannot call `g``
+interpreted and `type_error: f: expected 1 return value(s), got 2 — [fn
+(String) 5]` compiled (the whole-frame replay's island parks an
+anonymous no-match as data); the paren spelling raises the no-match
+with an EMPTY name at the body's position; a 0-arg `g` fires interpreted
+and parks compiled. Every non-erroring program in the family agrees;
+this is the error contract Stage 3's Apply kernel owes (§6.4), and
+NUR119's re-label is its value half. Recorded, not fixed.
+
+**Blocker (c), re-sized.** The gradual-argument gate
+(`parenLeadFnApplyIdx`, TestS5BParenLeadFnApplyIdxGradualArgDeclines)
+is not a compiler increment. `(g x)` with `x:Any` and a fn-valued x at
+run time is a WORD dispatch of `g` under its binding name, three-way on
+`g`'s own slot type: a `Function` slot resolves `x` to its value and
+APPLIES (`hasPendingForwardExpectingFunction`); an `Any` slot steps `x`
+and raises the strict-barrier text (`g is still waiting for 1
+argument(s) when `x` begins its own dispatch`); any other slot rejects
+`x`'s type before stepping it and raises the lead's own no-match. A
+faithful lowering needs the binding NAMES at run time (NUR119), a
+word-semantics island over the frame's bindings (the value island parks
+where the word raises — NUR122), and, for a compiled-closure `g`, a
+FnDefInfo to dispatch by word (a ClosurePayload has none). That is Stage
+3's Apply error contract, not a gate to widen; the pin stands.
+
+**Blocker (a), measured, not landed.** A lambda unit (a returned fn
+VALUE's own named-param frame, `fnval`) count-refuses `[g x]` before
+`noteDynFrameReplay` runs (the closure count check is user-fn-only). The
+arm is one line — a lambdaUnit with `nUnnamed == 0` takes the user-fn
+discipline, and `closureResidualHasUnappliedFn` is skipped when
+`dynFrameW > 0` — and with it `(h 5)` answers 15, `[g x y]` -3,
+`[def y (add x 1)  g y]` 18. Two things stopped it landing this
+increment: the whole-frame replay's island PARKS a no-match where the
+interpreter's word dispatch raises (NUR122 — the same divergence the
+paren spelling carries, but the bare spelling would add the 0-arg-fires
+case to it), and a returned closure's `ClosurePayload` carries no
+`RetTypes`, so a 2-value body that the arm lets through returns two
+values where the interpreter raises the count error — `tryReturnedClosure`
+must attach `fnValueRetSpec(fd, lam, pos)` to its `opClosure` operand
+first (`EmitOperand.closureRet` exists for exactly this). Land the
+RetSpec, then the arm, then decide whether NUR122's bare-spelling
+widening is acceptable under a record or needs the island to re-label
+first.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

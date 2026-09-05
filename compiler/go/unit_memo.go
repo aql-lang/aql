@@ -509,19 +509,25 @@ func (es *EmitState) residualReadHazard(v core.Value, op EmitOperand, frag *Emit
 // caller — a fn unit's finish, a branch arm, a loop body — and reports
 // whether it stands. ok is the caller's own resolution verdict (resolveOperand
 // and whatever the site layers on it); a residual the caller could not
-// resolve refuses as "<what> of unknown provenance", and a resolved one
-// refuses under residualReadHazard. Both refusals share this ONE
-// MarkUncompilable site on purpose: the refusal-site census
-// (test/go/langspec) is a downward ratchet over call sites, and the hazard
-// is a second reason at the same four sites, not a fifth site.
+// resolve refuses as "<what> of unknown provenance", a resolved one refuses
+// under residualReadHazard, and a fn-value lead a later dispatch collected
+// past refuses as the collection hazard (hazardLead, NUR121 — `[g x drop]`
+// leaves the model's `g` where the interpreter's `g` already ran over `x`).
+// All three refusals share this ONE MarkUncompilable site on purpose: the
+// refusal-site census (test/go/langspec) is a downward ratchet over call
+// sites, and each hazard is another reason at the same four sites, not a
+// fifth site.
 func (es *EmitState) residualStands(prefix string, v core.Value, op EmitOperand, ok bool, frag *EmitFragment, what string) bool {
 	if es == nil {
 		return false
 	}
 	reason := ""
-	if !ok {
+	switch {
+	case !ok:
 		reason = what + " of unknown provenance"
-	} else {
+	case es.hazardLeadIn(v, frag):
+		reason = what + " is a fn-value lead a later dispatch collected past (NUR121)"
+	default:
 		reason = es.residualReadHazard(v, op, frag)
 	}
 	if reason == "" {

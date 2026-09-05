@@ -145,6 +145,10 @@ type vmContext struct {
 	// test-describe, each — which needs the VM seam there just as the main
 	// registry does). Restored to nil at run end by runProgram's defer.
 	foreignInvokers []*core.Registry
+	// rootRetTrim marks a re-entrant run entered through the fn-VALUE seam
+	// (enterCallbackUnit): its root RET applies the CallBoru return
+	// discipline (checkCallBoruContract) rather than __RC's.
+	rootRetTrim bool
 	// frameDepth counts live VM activations — user-call frames AND re-entrant
 	// run() invocations (a closure invoked from a native handler via
 	// invokeClosure starts a FRESH run with its own frames slice). The per-run
@@ -281,8 +285,20 @@ func RunUnit(ref *compiler.CompiledFnRef, r *core.Registry, args []core.Value) (
 		return nil, fmt.Errorf("bytecode: unit index %d out of range", ref.Unit)
 	}
 	return runVMEntry(ref.Prog, r, core.StepLimitFor(r, core.DefaultStepLimit), func(vc *vmContext) ([]core.Value, error) {
-		return vc.enterBodyUnit(r, ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures))
+		return vc.enterCallbackUnit(r, ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures))
 	})
+}
+
+// enterCallbackUnit is enterBodyUnit for the fn-VALUE seam (RunUnit and
+// runUnitNested — InvokeCallback's compiled path): the unit's root RET takes
+// the CallBoru return discipline (rootRetTrim → checkCallBoruContract)
+// instead of __RC's. The flag is scoped to this entry: a closure the body
+// invokes through the TOKEN seam (invokeClosureOn) enters with it cleared.
+func (vc *vmContext) enterCallbackUnit(reg *core.Registry, unit int, locals []core.Value) ([]core.Value, error) {
+	prev := vc.rootRetTrim
+	vc.rootRetTrim = true
+	defer func() { vc.rootRetTrim = prev }()
+	return vc.enterBodyUnit(reg, unit, locals)
 }
 
 // enterBodyUnit is the VM's SINGLE re-entrant body-entry point: every path
@@ -447,7 +463,7 @@ func (vc *vmContext) runUnitNested(h any, args []core.Value) ([]core.Value, bool
 	if ref.Prog != vc.p {
 		return vc.runForeignUnit(ref, args)
 	}
-	res, err := vc.enterBodyUnit(vc.r, ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures))
+	res, err := vc.enterCallbackUnit(vc.r, ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures))
 	return res, true, err
 }
 
@@ -479,17 +495,27 @@ func (vc *vmContext) invokeClosureOn(reg *core.Registry, body core.Value, inputs
 	// it runs in that program's own nested context rather than against vc.p
 	// (see closureProgram for why this became reachable).
 	if p, foreign := vc.closureProgram(cl); foreign {
+		// The token seam's foreign arm: the hosted root RET takes __RC's
+		// discipline, whatever seam the enclosing unit was entered through.
+		prev := vc.rootRetTrim
+		vc.rootRetTrim = false
+		defer func() { vc.rootRetTrim = prev }()
 		return vc.hostForeign(p, reg, cl.Unit, shapeInputs(cl, inputs), cl.Captures)
 	}
 	// Inputs fill the leading param slots, captures the trailing ones
 	// (StartFnCompile registers params before captures) — the same split
 	// RunUnit and runUnitNested bind, so it uses the same helper rather than
 	// a second copy of the loop.
+	// The TOKEN seam's entry: the root RET takes __RC's discipline, whatever
+	// seam the enclosing unit was entered through.
+	prev := vc.rootRetTrim
+	vc.rootRetTrim = false
 	res, err := vc.enterBodyUnit(reg, cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], shapeInputs(cl, inputs), cl.Captures))
+	vc.rootRetTrim = prev
 	if err != nil {
 		return res, err
 	}
-	return checkClosureReturn(vc.r, cl, res)
+	return checkClosureReturn(vc.r, cl, res, vc.p.Fns[cl.Unit].NUnnamed)
 }
 
 // checkClosureReturn applies a CALLBACK fn value's own declared return to the
@@ -508,16 +534,39 @@ func (vc *vmContext) invokeClosureOn(reg *core.Registry, body core.Value, inputs
 //	  interpreted  each: element 0: [boru/type_error]: cbad: return value 1: …
 //	  compiled     [1 2]        — the declaration went unenforced
 //
-// A closure with no contract (a raw token body, or an anonymous lambda whose
-// Returns=[Any] is a placeholder) passes through untouched.
-func checkClosureReturn(r *core.Registry, cl core.ClosurePayload, res []core.Value) ([]core.Value, error) {
+// A closure with no contract (a raw token body, or a named fn declaring no
+// returns) passes through untouched. An anonymous lambda's Returns=[Any]
+// placeholder is a COUNT contract (compiler fnValueRetSpec /
+// check.LambdaCountContract): the interpreter's seam raises `expected 1
+// return value(s), got 2` for `each (x:Integer => [x 1]) [1 2]`.
+//
+// The COUNT is enforced here, over the whole residual, because the frameless
+// checkReturnContract below only trims the unnamed-input allowance and checks
+// the top values' types — it never raised on an over-count, so a 2-value body
+// under a 1-return contract answered `[1 1]` (NUR120, measured 2026-09-05).
+// nUnnamed is the closure unit's own allowance: an unnamed-param fn value
+// (`fn [[Integer][Integer][add 1 0]]`) leaves its untouched input at the
+// frame bottom exactly as the interpreter's frame does, and __RC discards up
+// to that many extra bottom values before counting.
+func checkClosureReturn(r *core.Registry, cl core.ClosurePayload, res []core.Value, nUnnamed int) ([]core.Value, error) {
 	if len(cl.RetTypes) == 0 {
 		return res, nil
 	}
 	// The same contract check the frame path runs at RET, over the produced
 	// residual: an overlay CompiledFn is how applyRetContract already hands a
 	// value's contract to unit-shaped machinery.
-	fn := &compiler.CompiledFn{Name: cl.RetName, Returns: cl.RetTypes, ReturnPatterns: cl.RetPatterns, Decl: cl.RetDecl}
+	fn := &compiler.CompiledFn{Name: cl.RetName, Returns: cl.RetTypes, ReturnPatterns: cl.RetPatterns, Decl: cl.RetDecl, NUnnamed: nUnnamed}
+	// The fn-VALUE seam (InvokeCallbackBody): the interpreter's handler
+	// would run this value through CallBoru, whose return discipline is
+	// enforceCallBoruReturns — types over the aligned residual, no count.
+	if cl.RetTrim {
+		return res, checkCallBoruContract(r, fn, res, cl.RetPos)
+	}
+	if extra := len(res) - len(cl.RetTypes); extra > nUnnamed {
+		// Allowance spent from the bottom — report the top values, the same
+		// slice the interpreter reports (design/DIAGNOSTIC-VALUES.0.md).
+		return res, vmReturnCountErr(r, fn, len(cl.RetTypes), len(res)-nUnnamed, res[nUnnamed:], cl.RetPos)
+	}
 	return checkReturnContract(r, fn, res, 0, false, cl.RetPos)
 }
 
@@ -2402,7 +2451,19 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 						contract = ov
 					}
 				}
-				trimmed, err := checkReturnContract(r, contract, stack, stackBase, len(frames) > 0, core.SrcPos{})
+				var trimmed []core.Value
+				var err error
+				if len(frames) == 0 && vc.rootRetTrim {
+					// The root RET of a unit entered through the fn-VALUE seam
+					// (RunUnit / runUnitNested: InvokeCallback's compiled path):
+					// the interpreter's CallBoru would have run this body, so
+					// its return discipline is enforceCallBoruReturns — types
+					// over the aligned residual, never the count (`walk … cb/v`
+					// over a 0-value body runs clean interpreted).
+					trimmed, err = stack, checkCallBoruContract(r, contract, stack, core.SrcPos{})
+				} else {
+					trimmed, err = checkReturnContract(r, contract, stack, stackBase, len(frames) > 0, core.SrcPos{})
+				}
 				if err != nil {
 					return nil, stampAt(err, curDebug, pc, r)
 				}
@@ -2845,6 +2906,40 @@ func checkReturnContract(r *core.Registry, fn *compiler.CompiledFn, stack []core
 		}
 	}
 	return stack, nil
+}
+
+// checkCallBoruContract is the VM's mirror of the interpreter's CallBoru
+// return discipline (core enforceCallBoruReturns, NUR069): the declared
+// return TYPES are checked head-to-head over the residual — position k of
+// the declaration against res[extra+k], the surplus (unconsumed unnamed
+// inputs, a longer residual) sitting at the bottom — and the COUNT is never
+// raised: a guard predicate signals with a None residual, a lambda's
+// placeholder `[Any]` sits over a side-effect body, and both are legitimate
+// on this seam. Nothing is checked inside a predicate call, exactly as the
+// interpreter skips there. res is returned untouched: the handler reads the
+// residual it was always handed (the top, for a top-taking word).
+func checkCallBoruContract(r *core.Registry, fn *compiler.CompiledFn, res []core.Value, at core.SrcPos) error {
+	rets := fn.Returns
+	if len(rets) == 0 || (r != nil && r.InPredicateCall()) {
+		return nil
+	}
+	extra := len(res) - len(rets)
+	if extra < 0 {
+		extra = 0
+	}
+	n := len(res) - extra
+	for k := 0; k < n; k++ {
+		v := res[extra+k]
+		if !v.Is(core.CanonicalType(r, rets[k])) {
+			return vmReturnTypeErr(r, fn, k+1, rets[k], v, at)
+		}
+		if pat := fn.ReturnPattern(k); pat != nil {
+			if _, ok := core.Unify(*pat, v); !ok {
+				return vmReturnTypeErr(r, fn, k+1, pat, v, at)
+			}
+		}
+	}
+	return nil
 }
 
 // vmMakeMap pops the values of an OpMakeMap assembly off the top of stack and

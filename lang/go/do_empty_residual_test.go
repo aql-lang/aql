@@ -8,7 +8,14 @@ import (
 )
 
 // TestDoEmptyResidualAgreesAcrossEngines pins the arity model for a `do` body
-// that leaves NOTHING — the shapes that agree, and the one that does not.
+// that leaves NOTHING — the shapes that agree, and the one that did not.
+//
+// CLOSED 2026-09-05: the each-over-a-net-zero-do row agrees on both lanes
+// since the compile-time top trim of callback bodies was retired (NUR120 —
+// the each body's residual is kept whole, and the seam's own discipline
+// decides what the handler sees). The history below is kept because the
+// five model-layer attempts it records are still the constraints any change
+// to the `do` arity model has to satisfy; the row now pins the agreement.
 //
 // A non-empty body with an empty residual has two runtime shapes:
 //
@@ -67,9 +74,9 @@ func TestDoEmptyResidualAgreesAcrossEngines(t *testing.T) {
 		// then the INTERPRETER's answer, which is canonical here.
 		wantDiverge bool
 	}{
-		// The open divergence.
+		// The formerly open divergence (closed 2026-09-05, see the header).
 		{name: "each over a net-zero do body",
-			src: `[1 2 3] each [ do [ 9 drop ] ]`, want: "[[1 2 3]]", wantDiverge: true},
+			src: `[1 2 3] each [ do [ 9 drop ] ]`, want: "[[1 2 3]]"},
 
 		// The shapes that DO agree, and that any fix must keep agreeing. These
 		// are not filler: 1-5 above each broke at least one of them, so they

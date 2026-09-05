@@ -91,6 +91,7 @@ keep the two in sync in the same commit.
 | [NUR096](#nur096) | The check pass did not move with NUR095: a fn stored through a fn-SHAPE-typed member is APPLIED by both engines but still modelled by the checker as the inert fn it was before that retirement, so `TestCheckTypeSoundness` fails on the two multi-return `class.tsv` rows that pin it | adding the NUR095 retirement rows to `lang/spec/class.tsv`, 2026-08-20 |
 | [NUR092](#nur092) | `varyRefusalLedger`'s stale arm is corpus-sensitive: adding an UNRELATED spec row can displace a seed from the hash-ordered 32-seed sample, empty a bucket, and instruct the author to delete a ledger entry whose refusal class is still live at larger breadth | adding NUR091's spec rows, 2026-08-19 |
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
+| [NUR122](#nur122) | A bare-name dispatch of a fn-typed frame binding whose runtime value does not match is a NAMED no-match on the interpreter and something else on the compiled lane: `def f fn [[g:Function x:Integer][Integer][g x]]  f (z:String => [z]) 5` raises `signature_error: cannot call `g`` interpreted and `type_error: f: expected 1 return value(s), got 2 — [fn (String) 5]` compiled (the frame replay parks the value); the paren spelling `(g x)` raises the no-match with an EMPTY name (`cannot call `` `) at the body's position; a 0-arg `g` fires interpreted (`[42 5]`) and parks compiled (`[fn 5]`). Same shape family as NUR119: the compiled value has no binding name and no named-dispatch semantics | measuring the closure-capture family's blocker (a), 2026-09-05 |
 | [NUR119](#nur119) | A fn value read through a PARAM's `/v` renders under the PARAM's name on the interpreter and under its own name on the compiled lane: `def app fn [[g:Function][Function][g/v]]  (app (z:Integer => [mul 3 z]))` renders `fn g(Integer)` interpreted and `fn (Integer)` compiled, and `def sq (z:Integer => [mul z z])  … app sq/v` renders `fn g(Integer)` against `fn sq(Integer)`. Same value, one render — the interpreter's frame binding re-labels the fn under the name it is read through, and a compiled unit pushes the raw runtime value. Pre-existing for the paren-placed spelling; the bare and args-following spellings refuse (`unconsumed fn-value carrier in residual (closure render)`, callResultRenderKnown) rather than diverge | measured 2026-09-05 while fixing the returned-closure park |
 | [NUR118](#nur118) | A compiled fn's RETURN-CONTRACT error blames the body's first token where the interpreter blames the CALL SITE: `def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}` raises the same `type_error: f: return value 1: expected Integer, got ProperString` on both lanes, at `1:43` (the call) interpreted and `1:30` (the body) compiled. The compiled RET check is stamped with the unit's own position because one unit serves every call site (compiler StartFnCompile's fnPos) — a documented limitation that became reachable from a corpus-style row when the binding-sensitive unit memo let `def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f` compile (Stage 4b); the row pins code and message and excludes the position | Stage 4b's cross-family rebind row, 2026-09-04 |
 | [NUR114](#nur114) | A compiled diagnostic's caret is always ONE character wide where the interpreter underlines the whole token: the compiler's debug table is `[]core.SrcPos` carrying only row and column, so `stampAt` has no token text to set `BoruError.Src` from and the renderer's `caretCount = len(sub)` falls to its minimum of 1. Found while closing NUR108 — the positions now match exactly and the underline still does not | closing NUR108, 2026-08-30 |
@@ -282,6 +283,42 @@ the fix is the maintainer's to direct.
 
 ---
 
+## NUR122 — a compiled fn-value apply has no name and no named-dispatch semantics {#nur122}
+
+**Status:** Pending. **Found:** 2026-09-05, measuring the closure-capture
+family's blocker (a).
+
+**Rule:** the two lanes agree on errors (NUR108: the message, the code,
+and the position are all part of the error a user meets).
+
+**Divergence, measured on the default lane:**
+
+```
+def f fn [[g:Function x:Integer][Integer][g x]]  f (z:String => [z]) 5
+    interpreted  signature_error: cannot call `g` — no signature matches the arguments   (1:43)
+    compiled     type_error: f: expected 1 return value(s), got 2 — [fn (String) 5]         (1:43)
+def f fn [[g:Function x:Integer][Integer][g x]]  f ([] => [42]) 5
+    interpreted  type_error: f: expected 1 return value(s), got 2 — [42 5]
+    compiled     type_error: f: expected 1 return value(s), got 2 — [fn 5]
+def app fn [[g:Function][Function][( fn [[x:Integer][Integer][(g x)]] )]]  def h (app (z:String => [z]))  (h 5)
+    interpreted  signature_error: cannot call `g` — no signature matches the arguments   (1:64)
+    compiled     signature_error: cannot call `` — no signature matches the arguments    (1:80)
+```
+
+The interpreter reads `g` as a WORD bound in the frame: the value is
+re-labelled under the binding name (NUR119) and dispatched as a NAMED fn,
+so a no-match raises and a 0-arg lambda fires. The compiled lane holds the
+raw runtime value: the whole-frame replay's island re-steps it under
+VALUE semantics (an anonymous fn that matches nothing is data — it parks,
+and the RET's count check reports the parked pair), and the paren
+window's `CALL_DYN_TRAIL_TOP` dispatches it under its own empty name at
+the unit's position. Every program in the family that does NOT error
+agrees on both lanes; the divergence is the error lane only. This is the
+error contract Stage 3's Apply kernel owes (design/FULL-COMPILATION.0.md
+§6.4) and NUR119's re-label is its value half: a compiled frame local
+read as a fn carries its binding name, and the apply of a NAMED value
+dispatches as the interpreter's word does.
+
 ## NUR119 — a fn value read through a param's `/v` renders under the param's name on one lane only {#nur119}
 
 **Status:** Pending. **Found:** 2026-09-05, measuring the returned-closure
@@ -342,6 +379,16 @@ def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}
 interp   --> 1:43   (the call `f`)
 compiled --> 1:30   (the body's first token, `m`)
 ```
+
+**A second flavour, measured 2026-09-05 (closing NUR120):** where the
+contract is applied to a fn VALUE at invoke time rather than at a unit's
+RET — a lambda read from a map member (`def m {f: ([x:Integer] => [x
+1])}  m.f 5`) or handed to a Function param and called inside a user fn
+(`def ap fn [[g:Function][Any][(g 5)]]  ap ([x:Integer] => [x 1])`) —
+the compiled count error carries NO position at all (`--> source position
+unknown`) where the interpreter blames the call (`1:36`, `1:31`). Same
+code, same message; the closure value's RetPos is the fn's own position,
+empty for an inline lambda at those two seams.
 
 **Where it comes from, traced not guessed.** The interpreter's return
 check (`__RC`) raises at the CALL, whose token position it has. The

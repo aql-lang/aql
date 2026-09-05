@@ -33,7 +33,7 @@ import (
 // `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
-func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK, takesTop bool, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, pos core.SrcPos) (int, bool) {
+func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK bool, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, pos core.SrcPos) (int, bool) {
 	// Closure compilation is emit-cluster machinery: it writes recording
 	// internals (fnRecs), so it needs the CONCRETE EmitState. A pass without
 	// one (the inactive recorder) declines exactly as the nil field did —
@@ -69,7 +69,6 @@ func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK,
 	es.fnRecs[unit].inShape = shape
 	es.fnRecs[unit].closure = true
 	es.fnRecs[unit].lambdaUnit = word == "fnval"
-	es.fnRecs[unit].takesTop = takesTop
 	// The two stored-ref compile paths use these eng-internal synthetic
 	// names; their rebind safety is the per-ref poisoning, so the frozen-
 	// read discipline skips them (see fnUnitRec.storedRefUnit).
@@ -550,14 +549,26 @@ func lambdaHookCompatible(r *core.Registry, fd *core.FnDefInfo, inputs []core.Va
 // fnValueRetSpec is the callback fn value's return contract, or nil when there
 // is none to carry.
 //
-// An ANONYMOUS lambda declines, and it is not a nicety: FnDefInfo.Anonymous
-// carries a deliberately conservative static Returns=[Any] placeholder
-// (lang/go/CLAUDE.md, "Lambda Syntax") rather than a user-written declaration,
-// and the analyser infers the real result instead. Only a NAMED fn's
-// declaration is a contract.
+// An ANONYMOUS lambda carries a COUNT-ONLY contract. FnDefInfo.Anonymous
+// marks a deliberately conservative static Returns=[Any] placeholder
+// (lang/go/CLAUDE.md, "Lambda Syntax") rather than a user-written
+// declaration, and the analyser infers the real result TYPE instead — but the
+// interpreter's callback seam enforces the placeholder's COUNT (`each
+// (x:Integer => [x 1]) [1 2]` raises `each: element 0: … expected 1 return
+// value(s), got 2`), so the value must carry it or the compiled callback
+// answers `[1 1]` (NUR120, measured 2026-09-05). No type, no declaration
+// span beyond the sig's own (a lambda has none): check.LambdaCountContract.
 func fnValueRetSpec(fd *core.FnDefInfo, lam *core.Signature, fnPos core.SrcPos) *ClosureRetSpec {
-	if fd == nil || fd.Anonymous || lam == nil || len(lam.Returns) == 0 {
+	if fd == nil || lam == nil || len(lam.Returns) == 0 {
 		return nil
+	}
+	if fd.Anonymous {
+		return &ClosureRetSpec{
+			Types: check.LambdaCountContract(len(lam.Returns)),
+			Decl:  lam.Decl,
+			Name:  fd.Name,
+			Pos:   fnPos,
+		}
 	}
 	return &ClosureRetSpec{
 		Types:    lam.Returns,
@@ -674,7 +685,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 			return -1, false
 		}
 		defer env.exit(r, prev)
-		return compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, toks, inputs, names, caps, shape, pos)
+		return compileClosureBody(r, word, spec.BodyOut, countAgnostic, toks, inputs, names, caps, shape, pos)
 	}
 	probe := real.forkForProbe()
 	r.Check.Emit = probe

@@ -2620,6 +2620,7 @@ func RunFnBodyOnce(r *core.Registry, name string, paramNames []string, body, arg
 			hasUnnamed = true
 		}
 	}
+	unnamedCount := len(input)
 	input = append(input, body...)
 
 	// Record whether this frame has stack-flowing unnamed params so a body
@@ -2632,6 +2633,10 @@ func RunFnBodyOnce(r *core.Registry, name string, paramNames []string, body, arg
 	defer func() { r.Check.ArgsFrameUnnamed = prevUnnamed }()
 
 	sub := core.New(r)
+	// The unnamed inputs are the frame's resolved-argument prefix: inert
+	// data the collection-hazard scan must never mark (Engine.InertPrefix —
+	// an unnamed Function param at the frame bottom collects nothing).
+	sub.InertPrefix = unnamedCount
 	// When this body is being RECORDED into a compiled CALLBACK unit (a
 	// stored-fn / spawn body — see compileStoredFnUnit / compileStoredBody,
 	// name "storedfn$body" / "spawnbody$body"), mark the body sub-engine

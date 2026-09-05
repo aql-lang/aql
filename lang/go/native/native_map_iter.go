@@ -89,10 +89,12 @@ func (mb mapBody) fold(reg *Registry, acc Value, k string, v Value, i, n int64) 
 	return runQuotationBody(reg, mb.tokens, []Value{acc, v})
 }
 
-// invokeBodyTop runs a (closure) body via the InvokeBody seam and returns its
-// residual top of stack — the closure mirror of runQuotationBody.
+// invokeBodyTop runs a (closure) body via the fn-VALUE seam
+// (InvokeCallbackBody — the closure twin of callLambda's InvokeCallbackFn, so
+// a compiled lambda's return contract is applied as CallBoru's would be) and
+// returns its residual top of stack — the closure mirror of runQuotationBody.
 func invokeBodyTop(reg *Registry, body Value, inputs []Value) (Value, bool, error) {
-	res, err := InvokeBody(reg, body, inputs)
+	res, err := InvokeCallbackBody(reg, body, inputs)
 	if err != nil {
 		return Value{}, false, err
 	}

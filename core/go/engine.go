@@ -156,6 +156,19 @@ type Engine struct {
 	// (arguments are inert; design/ARG-SEMANTICS-UNIFICATION.0.md).
 	// Consumed (zeroed) by Run so it cannot leak into a later reuse.
 	StartAt int
+	// InertPrefix is a one-shot declaration for the next Run: its leading
+	// InertPrefix tape values are call-site-resolved ARGUMENTS laid out
+	// before the body (a fn-body analysis pushes the unnamed params this way,
+	// check AnalyseFnBody), inert by the arguments-are-inert rule even though
+	// the pointer starts at 0. Consumed (zeroed) by Run into inertPrefix.
+	InertPrefix int
+	// inertPrefix is the tape index just past the resolved-argument prefix
+	// of the CURRENT run (StartAt as consumed by Run, or InertPrefix): the
+	// values below it are call-site-resolved arguments the pointer never
+	// steps as calls, so a Function value there can never collect a
+	// neighbour. The collection-hazard scan (noteCollectionHazards, NUR121)
+	// stops at it.
+	inertPrefix int
 	// voidGroups records the candidate consumers of paren groups that
 	// resolved to ZERO values in the current statement: the pending
 	// word names sitting below such a group when it closed. A
@@ -1327,6 +1340,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// the same index of the NEXT program into stack-only mode (NUR038).
 	e.sealFnValue = false
 	e.Pointer = e.consumeStartAt()
+	e.inertPrefix = e.Pointer
+	if e.InertPrefix > e.inertPrefix {
+		e.inertPrefix = e.InertPrefix
+	}
+	e.InertPrefix = 0
 
 	// stepLimit is always set by the constructors (New / NewTop); the
 	// defensive check that used to substitute a default if the field
@@ -3179,6 +3197,10 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				}
 			}
 			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
+			// A full-stack word reads the WHOLE scope: every fn-typed value
+			// in it is a collection hazard (noteCollectionHazards' rule
+			// applied to the scope's own base).
+			e.noteCollectionHazardsBelow(base, e.Pointer)
 			results := match.Sig.checkFullStackFn()(match.Args, preserved, e.Registry)
 			// Compile pass: a full-stack word over a provably-exact stack
 			// folds statically — the dispatch elides and the fold's outputs
@@ -3231,6 +3253,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// dispatch reads its own position from, so without this every opcode
 		// downstream records 0:0 (NUR113).
 		stampCallResultPositions(results, pos)
+		e.noteCollectionHazards(match.Sig, sortedIndices)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 
@@ -3380,6 +3403,84 @@ func (e *Engine) maybeAddFnShapeHint(err error) error {
 		Message: "this is a typed-binding context expecting a function value — did you mean `" + boruErr.Src + "/q`?",
 	})
 	return boruErr
+}
+
+// noteCollectionHazards is the check pass's COLLECTION-HAZARD note (NUR121).
+// A fn-typed value the model leaves UNAPPLIED on its stack — a Function
+// carrier read from a param or capture, a fn value with no static
+// signatures — would, at run time, collect the values written after it
+// before any later word runs: `g x add 1` is `(g x) add 1`. The model
+// cannot dispatch such a value, so a later word's STACK collection reaches
+// past it and takes what it would have collected (`add 1` takes `x`), and
+// every lowering that applies a lead to the values after it — the paren
+// lead window, the whole-frame replay, the residual's fn-carrier arm —
+// then applies `g` to `add`'s RESULT (18 for the interpreter's 16).
+// Nothing in the recorded trace tells this apart from `(g (add x 1))`,
+// where the nested paren seals `g` off and 18 is right on both lanes: the
+// operands and events are the same, only the SCOPE differs — and the
+// scope is the engine's. So the engine notes it here, at the one point
+// where a stack collection and its scope are both in hand: every
+// unapplied fn-typed value sitting BELOW the lowest stack-collected index
+// in the same paren scope is marked, and the lowerings decline a marked
+// lead (EmitRecorder.CollectionHazard).
+//
+// The scope stops at the nearest open paren, and never reaches into a
+// frame's resolved-argument prefix — FrameOpenInfo.ArgSpan after that
+// paren, or the run's StartAt prefix (inertPrefix) — because those values
+// are call-site-resolved arguments the pointer never steps: a Function
+// there collects nothing (arguments are inert). Forward-collected indices
+// (past the pointer) consume nothing below the word and mark nothing. A
+// STRIP-INPUT hop (CallableSpec.StripsUnconsumedInput — `error`'s catch
+// clause) marks nothing either: on the path where a lead below it could
+// apply, the hop passes the region through untouched, which is exactly
+// what the mark-window lowering re-steps at the program's end
+// (`do [(f 5) 2] error [dot code]` — the L-DO do-catch rows).
+func (e *Engine) noteCollectionHazards(sig *Signature, sortedIndices []int) {
+	if len(sortedIndices) == 0 || sortedIndices[0] >= e.Pointer {
+		return
+	}
+	if sig != nil && sig.Callable != nil && sig.Callable.StripsUnconsumedInput {
+		return
+	}
+	e.noteCollectionHazardsBelow(-1, sortedIndices[0])
+}
+
+// noteCollectionHazardsBelow marks the unapplied fn-typed values at tape
+// indices in [floor, top) that belong to top's paren scope (floor -1 walks
+// down to the scope's own open paren). See noteCollectionHazards.
+func (e *Engine) noteCollectionHazardsBelow(floor, top int) {
+	es := e.Registry.analysisRecorder()
+	if !es.Active() {
+		return
+	}
+	open := -1
+	for j := top - 1; j >= 0 && j >= floor; j-- {
+		if IsOpenParen(e.Tape.At(j)) {
+			open = j
+			break
+		}
+	}
+	lo := open + 1
+	if open >= 0 {
+		if info, ok := e.Tape.At(open).Data.(FrameOpenInfo); ok && info.ArgSpan > 0 {
+			lo += info.ArgSpan
+		}
+	}
+	if lo < e.inertPrefix {
+		lo = e.inertPrefix
+	}
+	if floor > lo {
+		lo = floor
+	}
+	for j := lo; j < top; j++ {
+		v := e.Tape.At(j)
+		if v.Quoted || IsForward(v) || IsMark(v) || IsMove(v) || IsOpenParen(v) {
+			continue
+		}
+		if IsFnValueResidual(v) || IsFnTypedCarrier(v) || (v.Dynamic && SigTypeMatches(v, TFunction)) {
+			es.NoteCollectionHazard(v.ID)
+		}
+	}
 }
 
 // spliceMatchResults replaces the word and its matched args on the
@@ -7636,7 +7737,11 @@ func (e *Engine) parenLeadFnApplyIdx(es EmitRecorder, openIdx, closeIdx, count, 
 	for i := openIdx + 1; i < closeIdx; i++ {
 		v := e.Tape.At(i)
 		if IsRecordableLiteral(v) {
-			if !v.Dynamic && !v.Quoted && IsFnTypedCarrier(v) && es.DynApplyLeadEligible(v) {
+			// A lead whose argument a LATER dispatch already collected in
+			// this scope (`(g x add 1)`: the model's `add` took `x`) is a
+			// collection hazard — the window's argument is that dispatch's
+			// result, not the lead's (NUR121).
+			if !v.Dynamic && !v.Quoted && IsFnTypedCarrier(v) && es.DynApplyLeadEligible(v) && !es.CollectionHazard(v.ID) {
 				return i
 			}
 			break

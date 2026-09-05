@@ -180,6 +180,12 @@ type EmitRecorder interface {
 	RegisterTrailingApply(fnID string, arity int)
 	NoteMemberFnRead(id string, member Value)
 	MemberFnRead(id string) bool
+	// NoteCollectionHazard marks the fn-typed value id as an UNAPPLIED lead
+	// a later dispatch collected past (Engine.noteCollectionHazards,
+	// NUR121); CollectionHazard reads the mark. A marked lead is never
+	// lowered as an apply over the values after it.
+	NoteCollectionHazard(id string)
+	CollectionHazard(id string) bool
 	// Stage-0b promotions (design/ENG-FOUR-PIECE.0.md): the probes that
 	// used to require a concrete recorder assert outside the emit
 	// cluster. Inactive: false / zero / no-op.
@@ -349,6 +355,8 @@ func (inactiveEmit) RecordInterp([]InterpPart, []Value, Value, SrcPos) bool { re
 func (inactiveEmit) RegisterTrailingApply(string, int)                      {}
 func (inactiveEmit) NoteMemberFnRead(string, Value)                         {}
 func (inactiveEmit) MemberFnRead(string) bool                               { return false }
+func (inactiveEmit) NoteCollectionHazard(string)                            {}
+func (inactiveEmit) CollectionHazard(string) bool                           { return false }
 func (inactiveEmit) DynInputsProven(*Signature, []Value) bool               { return false }
 func (inactiveEmit) Materialise(v Value) (Value, bool)                      { return v, false }
 func (inactiveEmit) ZeroOutProduced(string) bool                            { return false }

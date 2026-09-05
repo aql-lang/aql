@@ -145,7 +145,8 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 // Boolean predicate result.
 func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
 	if IsCompiledClosure(cb) {
-		return InvokeBody(r, cb, cbArgs)
+		// The fn-VALUE seam: the FnDefInfo branch below is InvokeCallbackFn's.
+		return InvokeCallbackBody(r, cb, cbArgs)
 	}
 	sig := MatchFnSig(cb, cbArgs)
 	if sig == nil {
