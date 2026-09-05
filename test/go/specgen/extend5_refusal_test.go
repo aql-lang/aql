@@ -7,12 +7,17 @@ import (
 )
 
 // TestExtendLayerCompileBucket pins -extend5's compile-refusal bucket with a
-// SYNTHETIC passing root whose one-atom extensions refuse: a module-export
-// value left on the stack has no static materialisation, so `<root> drop`
-// (and friends) classify as compile-refused. The pipeline test's generated
-// alphabet corpus stopped producing this bucket when OpDispatchRematch
-// compiled its last refusing candidates — a user-supplied corpus still can,
-// so the arm is pinned here with one.
+// SYNTHETIC passing root whose one-atom extensions refuse: a fn body whose
+// result is a FRAME-LOCAL module value (`def m (module […])` inside the fn)
+// has no bind operand for the popped-with-the-frame binding, so the unit
+// refuses "body result of unknown provenance" and `<root> drop` (and
+// friends) classify as compile-refused whatever follows the call. (The
+// root this test first used, a module value left on the TOP-LEVEL stack,
+// graduated 2026-09-05 — module-family values read live — which is why
+// the refusal has to live inside a fn unit now.) The pipeline test's
+// generated alphabet corpus stopped producing this bucket when
+// OpDispatchRematch compiled its last refusing candidates — a
+// user-supplied corpus still can, so the arm is pinned here with one.
 func TestExtendLayerCompileBucket(t *testing.T) {
 	dir := t.TempDir()
 	passing := filepath.Join(dir, "passing.tsv")
@@ -20,7 +25,7 @@ func TestExtendLayerCompileBucket(t *testing.T) {
 	// render); the pass1 file is empty so every extension of the root is a
 	// candidate.
 	if err := os.WriteFile(passing,
-		[]byte("def m (module [export \"X\" {a: 1}]) m\tModule(inline)\n"), 0o644); err != nil {
+		[]byte("def f fn [[] [Any] [def m (module [export \"X\" {a: 1}]) m]] f\tModule(inline)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	pass1 := filepath.Join(dir, "pass1.tsv")
@@ -43,7 +48,7 @@ func TestExtendLayerCompileBucket(t *testing.T) {
 	}
 	found := false
 	for _, r := range rows {
-		if r.input == `def m (module [export "X" {a: 1}]) m drop` {
+		if r.input == `def f fn [[] [Any] [def m (module [export "X" {a: 1}]) m]] f drop` {
 			found = true
 			if r.expected == "" {
 				t.Error("the compile bucket row must carry the refusal reason")

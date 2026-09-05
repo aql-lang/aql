@@ -5855,6 +5855,17 @@ func (es *EmitState) RecordCall(word string, sig *core.Signature, args, outs []c
 	es.eventInfo[seq] = gf
 	var argIDs map[string]bool
 	for i := range outs {
+		// A MODULE-FAMILY result with NO identity — the shared descriptor a
+		// `$module` read surfaces (`ns.Module` is a stored Value, never
+		// minted) — takes the event's: without an ID the registration below
+		// is a no-op and the value reaches its consumer (`eq`, a residual)
+		// with no compiled home. Minting here is what makes the recorded
+		// dispatch (recordCallElided declines to elide it) reachable
+		// downstream; the outs slice is the carrierResults return, so the
+		// ID flows to the consumer exactly as the de-collision mint does.
+		if outs[i].ID == "" && core.IsModuleFamilyValue(outs[i]) {
+			outs[i].ID = core.GenerateID(core.IDPrefixForType(outs[i].Parent))
+		}
 		if pr, ok := es.producedBy[outs[i].ID]; ok && pr.seq != seq {
 			if argIDs == nil {
 				argIDs = make(map[string]bool, len(args))
@@ -5963,8 +5974,18 @@ func (es *EmitState) recordCallElided(word string, sig *core.Signature, args, ou
 	// and the program falls back.
 	if (core.IsGetWord(word) || core.IsGetrWord(word)) && len(outs) == 1 && core.IsConcrete(outs[0]) {
 		switch outs[0].Data.(type) {
-		case core.FnDefInfo, core.ExtensionPayload:
+		case core.FnDefInfo:
 			return true
+		case core.ExtensionPayload:
+			// A Module DESCRIPTOR (`M.$module`) is the one extension result
+			// that flows as a VALUE — eq/deq identity (NUR031), a residual,
+			// a def body — and the const gate refuses it on purpose, so an
+			// elided read has no downstream home. Record the real dispatch
+			// instead: the namespace operand reads live (dynScopeRescue's
+			// module-family arm) and the runtime `dot` returns the shared
+			// descriptor instance, so identity holds exactly as interpreted.
+			// Any other extension result keeps the elision it had.
+			return outs[0].Parent == nil || !outs[0].Parent.Equal(core.TModule)
 		}
 	}
 	return false
@@ -6991,13 +7012,20 @@ func (es *EmitState) dynScopeRescue(v core.Value) (EmitOperand, bool) {
 		return EmitOperand{}, false
 	}
 	if len(es.units) <= 1 {
-		// Top level: only an S5 first-value loop bind reads through the
-		// registry here (its value has no event/local home by construction;
-		// the splice bind installed the runtime binding before any read).
+		// Top level: an S5 first-value loop bind reads through the registry
+		// here (its value has no event/local home by construction; the
+		// splice bind installed the runtime binding before any read), and so
+		// does a MODULE-FAMILY value — an import-bound namespace or a Module
+		// descriptor read as a VALUE (`IO deq IO`, `M.$module eq M.$module`,
+		// a namespace residual): the const gate refuses it on purpose (a
+		// pointer-shared map of fn exports; ConstBakeable is closed to module
+		// instances), its identity is the binding's, and the live lookup is
+		// what honours a re-import after undef. Inside a unit the same read
+		// already routes live through the enclosing-binding arm below.
 		// Widening this arm to every def-read name poisons dynScopeNames
 		// for defs whose bind then cannot lower (probe-pinned: the quoted
 		// interp-body def refused "unknown provenance").
-		if es.loopSplitBinds[name] {
+		if es.loopSplitBinds[name] || core.IsModuleFamilyValue(v) {
 			if es.dynScopeNames == nil {
 				es.dynScopeNames = map[string]bool{}
 			}
@@ -8715,11 +8743,54 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value)
 			return nil, "residual value of unknown provenance"
 		}
 		if !core.IsInertConst(lit) {
+			// A MODULE-FAMILY residual (an import-bound namespace, a Module
+			// descriptor bound by def) materialises as a map the const gate
+			// refuses on purpose; it re-reads the live binding instead
+			// (dynScopeRescue's module-family arm), sound while that binding
+			// still holds the very instance the read saw — the residual
+			// re-push runs at the END of the program, so a rebind in between
+			// would surface the later value where the interpreter pushed the
+			// earlier one.
+			if core.IsModuleFamilyValue(rv) {
+				if op, okDyn := es.dynScopeRescue(rv); okDyn && es.moduleResidualStable(rv) {
+					ops = append(ops, op)
+					continue
+				}
+			}
 			return nil, "residual value not statically materialisable"
 		}
 		ops = append(ops, ConstOperand(es.intern(lit)))
 	}
 	return ops, ""
+}
+
+// moduleResidualStable reports whether the binding a module-family residual
+// was read from STILL holds the same instance — the namespace facet or the
+// boxed descriptor, compared by pointer, which is the identity `eq`/`deq`
+// compare (NUR031). It is the residual-position twin of residualReadStable
+// for reads whose value carries no ID to key a generation on (the namespace
+// `import` binds is a stored Value, never minted).
+func (es *EmitState) moduleResidualStable(v core.Value) bool {
+	if es == nil || es.reg == nil {
+		return false
+	}
+	name := v.DynFrom()
+	if name == "" {
+		name = es.defReads[v.ID]
+	}
+	if name == "" {
+		return false
+	}
+	top, ok := es.reg.Defs.Top(name)
+	if !ok || !core.IsModuleFamilyValue(top) {
+		return false
+	}
+	if ns := core.ModuleNSOf(v); ns != nil {
+		return core.ModuleNSOf(top) == ns
+	}
+	tv, okT := top.Data.(core.ExtensionPayload)
+	vv, okV := v.Data.(core.ExtensionPayload)
+	return okT && okV && tv.Body == vv.Body
 }
 
 // Finalize linearises the recorded events into a Program. residual

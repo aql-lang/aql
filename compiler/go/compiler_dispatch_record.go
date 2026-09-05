@@ -235,6 +235,13 @@ func tryFoldModuleConst(r *core.Registry, word string, sig *core.Signature, args
 	for _, a := range args {
 		switch {
 		case core.IsModuleFamilyValue(a):
+			// A module value some EVENT produced — a `$module` descriptor
+			// read that recorded its dispatch (recordCallElided) — is on the
+			// runtime stack; folding over it would orphan that event, so the
+			// consumer records a real dispatch over it instead.
+			if es.AlreadyProduced(a.ID) {
+				return false
+			}
 			sawModule = true
 		case core.IsBareTypeNode(a):
 			// a type operand (the target of `convert Map …` / `… is Module`)

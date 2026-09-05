@@ -450,6 +450,32 @@ instruction is untouched by it, and three of these four do.
   either nothing (the original NUR037 bug) or an outer same-named binding
   the twins did replay, which is worse than the refusal.
 
+**RE-MEASURED 2026-09-05, on the Stage 4b tree (binding-sensitive memo,
+body re-run environment).** The three gates that stayed on the §6.9 list
+are exactly as load-bearing as above, and Stage 4b was never going to
+move them — each is a shape the memo cannot reach:
+
+- Stored-handler dep-rebind (F1, `6 105 12`): the default lane still
+  refuses `module binding bonus rebound after a stored handler captured it
+  as a dep` and the interpreter answers; `-force-compile` refuses. A stored
+  handler is a fn VALUE, i.e. an escaping unit by construction, so the memo
+  has no call site to re-record — the apply is through the value.
+- Family L: both `if` arms still refuse (`fn 'g' redefined inside a
+  conditional body (branch/loop) shadows an outer overload`), taken or not,
+  and so does a loop body that RUNS (`for 1`, `for n` with `n` 1, `[1]
+  each`). A loop body that provably never runs (`for 0`, `for n` with `n`
+  0, `[] each`) compiles and answers the outer overload (`101`), agreeing
+  with the interpreter — the redefinition is never analysed, so
+  `CondBodyDepth` never sees it. Sound in both directions.
+- NUR037: both pinned shapes (`for-each [step] xs`, `each [step] xs` over
+  a fn-local `step`) still refuse `code-body names fn-local fn`; the
+  interpreter answers `{x:true y:true}` and `[2 3]`.
+
+Nothing here is a memo problem. All three want the runtime LOOKUP half —
+and family L and NUR037 the BINDER half — that the paragraph below files
+them under; the memo's contribution is only that the frozen-read gate no
+longer keeps them company.
+
 **What this changes about the plan.** The four gates leave the twins'
 payoff list and re-file under §6.9 (`OpDispatchGeneric` — the lookup half)
 plus, for family L and NUR037, a BINDER half that makes a conditionally- or
@@ -1918,6 +1944,82 @@ hazard, not the leak.
   shape that would reach it at top level refuses earlier on its residual
   shape. The compiler unit tests pin it; the first such shape to compile
   owes `lang/go/frozen_module_read_test.go` its row.
+
+## Module-family values read live (2026-09-05)
+
+The frontier ledger's largest contained family after Stage 4b, measured
+before choosing it: of 102 ledgered refusals, 34 are "unknown provenance",
+and 12 of those are one mechanism — NUR031's Module-descriptor and
+namespace identity rows (`M.$module eq M.$module`, `IO deq IO`, the
+per-import-instance and shared-descriptor rows), every one green on the
+interpreter and refused `operand of unknown provenance or not statically
+materialisable`. A namespace RESIDUAL (`import "boru:io" IO`) refused the
+sibling `residual value not statically materialisable`. Inside a fn unit
+the namespace read already compiled: the enclosing-binding arm of
+`dynScopeRescue` routes it to `OpLookupDynScope`. Top level had no arm.
+
+Two facts decided the shape of the fix:
+
+- **The const gate refuses these values ON PURPOSE.** A namespace is a
+  pointer-shared map of fn exports; a descriptor is an extension payload,
+  and `ConstBakeable`'s contract names module instances among the types
+  that must not implement it (`core/go/typebehavior.go`). Baking was
+  therefore never the answer; the live read is — the same read the unit
+  path already makes, and the one that honours a re-import after `undef`
+  (`edge-modules-1.tsv`'s GOTCHA row: identity is per-import-instance).
+- **A `$module` read was ELIDED as a compile-time name resolution**
+  (`recordCallElided`'s ExtensionPayload arm, meant for the export-fn and
+  namespace resolutions the real dispatch records elsewhere), so its result
+  — the shared descriptor, `ns.Module`, a stored Value that is NEVER minted
+  — reached `eq` with no event and no ID. `setProducedAt` refuses an empty
+  ID by design (a `""` key would alias every identity-less value onto one
+  producer), so even an un-elided dispatch registered nothing.
+
+What landed, five small parts in the seams that already existed:
+
+1. `tagCheckModeDefRead` (check) tags a module-scope MODULE-FAMILY read
+   with `DynFrom`, exactly as it tags a module-scope flex — the name channel
+   that does not depend on the value having an ID.
+2. `dynScopeRescue`'s top-level arm admits `IsModuleFamilyValue(v)` beside
+   the S5 loop bind; `resolveResidualOperands` tries the same rescue for a
+   module-family residual, gated by `moduleResidualStable` — the binding
+   must still hold the very instance (namespace facet pointer, or boxed
+   `*ModuleDesc` pointer), because the residual re-push runs at the END of
+   the program (`def x IO  x  def x 5` refuses; `def x IO  x  def x IO`
+   compiles).
+3. `recordCallElided` no longer elides a `dot`/`get` whose result is a
+   Module instance; `RecordCall` mints the event's identity for a
+   module-family out with no ID (targeted — the general empty-ID case keeps
+   `setProducedAt`'s refusal and its reasons).
+4. `tryFoldModuleConst` declines when a module-family operand is
+   event-produced: `typeof MathUtil.$module` and `MathUtil.$module.name`
+   used to fold over the elided descriptor; folding over an event would
+   orphan it, so they record a real dispatch now. Same answers; two
+   instructions instead of a const.
+5. `lowerDynBind` emits no bind op for a ROOT def of a module-family value
+   with no producing event (`def m (module […])`): the check pass installed
+   the binding and it survives to run time, kept or replayed by its twin
+   (a concrete captured entry), so the promised live read resolves it. A
+   frame-local def of one keeps the refusal.
+
+Measured: all 12 rows graduate (the ledger's `stale entry` rule fired for
+each; the rows moved into `compare-restrict.tsv`'s opaque-Ideal section
+and `edge-modules-1.tsv` §6, and both frontier files retired with them),
+whole-corpus differential clean, refusal-site census unchanged at 93, and
+`lang/go/bytecode_loop_provenance_test.go`'s two shapes — a Module
+instance as a for-body result, which had been the minimal in-repo
+UNSEATABLE value — compile with parity and are re-pinned as such. The
+frontier ledger stands at 90 rows. The end-to-end pins are
+`lang/go/module_value_read_test.go`; `TestModuleResidualStable` drives the
+stability gate's nameless and nil-registry arms.
+
+What this does not do: a frame-local `def m (module […])` inside a fn body
+still refuses (`fn f: body result of unknown provenance`) — the binding is
+popped with the frame, and giving it an `OpBindDynScope` needs an operand
+for a value no event produced. And the general question the elision hid —
+an extension result with no ID reaching a consumer — is answered here only
+for the module family; `setProducedAt`'s comment says why the general mint
+is not free.
 
 ## What the ledger excludes, and why each exclusion was measured
 

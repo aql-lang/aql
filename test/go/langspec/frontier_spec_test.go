@@ -438,39 +438,6 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// KeepDefsBodyGuard now publishes only at FnBodyDepth == 0, exactly as
 	// its multi-run sibling does, and the row compiles with parity.)
 
-	// NUR031 Module-descriptor equality (frontier-nur031-module-eq.tsv):
-	// semantically green — the descriptor is an identity-equal opaque
-	// handle since 2026-08-02 — but a `$module` synthetic read has no
-	// bakeable operand home, so the operand reaching eq/deq carries no
-	// static provenance. The PRE-fix binary refuses the identical shape:
-	// the fix changed the answer, not the compile status. Graduation =
-	// a static provenance representation for the module-namespace
-	// synthetics (the capture-namespace family above); the rows then
-	// move back into edge-modules-1.tsv and compare-restrict.tsv.
-	`import module [export "M" {a:1}] M.$module eq M.$module`:                                                                                                             {why: "NUR031: descriptor reflexive eq", failsWith: "operand of unknown provenance"},
-	`import module [export "M" {a:1}] M.$module deq M.$module`:                                                                                                            {why: "NUR031: descriptor reflexive deq", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module`:                                                                            {why: "NUR031: distinct descriptors are not eq", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module`:                                                                           {why: "NUR031: distinct descriptors are not deq", failsWith: "operand of unknown provenance"},
-	`import "boru:array-util" import module [export "A" {x:1} export "B" {y:2}] import module [export "C" {z:3}] size (ArrayUtil.unique [A.$module B.$module C.$module])`: {why: "NUR031: the Module handle family in unique's DeqIndex", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module eq C.$module`:                                                                           {why: "NUR031: one module, many namespaces — one shared descriptor", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1} export "B" {y:2}] A.$module deq B.$module`:                                                                                           {why: "NUR031: sibling namespaces of ONE module share a descriptor (deq mirrors eq)", failsWith: "operand of unknown provenance"},
-	`import "boru:test" Test.$module eq Assert.$module`:                                                                                                                   {why: "NUR031: a native module's sibling namespaces share one descriptor", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module`:                                                                        {why: "NUR031: repeat import is a cache no-op — same descriptor instance", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module`:                                               {why: "NUR031: re-import after undef mints a FRESH descriptor (identity is per-import-instance)", failsWith: "operand of unknown provenance"},
-
-	// NUR031 Function-value equality (frontier-nur031-fn-eq.tsv): the
-	// second half of the record — eq is the identity token, deq is canon
-	// content. Semantically green; refused for a reason unrelated to
-	// equality, and one the PRE-fix binary refuses identically: a function
-	// VALUE reaching a non-inert word is declined outright by
-	// EmitState.RecordCallOperands. Graduation = a compiled representation
-	// for a function value as an operand (the Stage-3 fn-value work); the
-	// rows then move to compare-restrict.tsv and fn-value.tsv.
-	// The namespace rows refuse for the MODULE-synthetic reason above, not
-	// the fn-value one: a namespace binding has no bakeable operand home.
-	`import "boru:io" IO deq IO`:                          {why: "NUR031: a function-exporting namespace is deq-reflexive — the record's acceptance signal", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" StringUtil deq StringUtil`: {why: "NUR031: …and so is every other native module's namespace", failsWith: "operand of unknown provenance"},
-
 	// NUR067 — await's winner-takes-all modes (frontier-await-winner.tsv):
 	// `first` / `any` hand back the winning branch's WHOLE residual, 0-or-more
 	// values — a count that can EXCEED any static seat, the direction the L-DO

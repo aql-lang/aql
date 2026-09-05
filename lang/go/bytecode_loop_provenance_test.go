@@ -5,18 +5,16 @@ import (
 	"testing"
 )
 
-// The for-lowering's unknown-provenance refusals (eng emit.go RecordLoop): a
-// loop body ending on a value the recorder cannot seat — no producing event,
-// no frame local, not materialisable as a const (a Module instance bound by a
-// module-scope def is the minimal in-repo shape) — refuses soundly in BOTH
-// net arms: the multi-value residual branch (net drivers) and the
-// single-value branch. Each pairs the reason pin with interpreter-fallback
-// parity, per the "slow, not wrong" doctrine.
-func TestForBodyUnknownProvenanceRefuses(t *testing.T) {
-	// Legacy refusal+fallback-parity contract: pins the one-release
-	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
-	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+// A loop body ending on a MODULE INSTANCE bound by a module-scope def was
+// the minimal in-repo shape of a value the for-lowering could not seat — no
+// producing event, no frame local, not materialisable as a const — and this
+// test pinned the "for: body result of unknown provenance" refusal in both
+// net arms. GRADUATED 2026-09-05: a module-family value reads LIVE
+// (dynScopeRescue's module-family arm, OpLookupDynScope) and a root def of
+// one needs no bind op (lowerDynBind), so both shapes compile with parity.
+// The for-lowering's residual settlement (residualStands) keeps its pins
+// through the residual-order hazard rows in analysis_order_test.go.
+func TestForBodyModuleValueCompiles(t *testing.T) {
 	cases := []struct{ name, src string }{
 		{"multi-value residual", `def m (module [export "X" {a: 1}]) for 2 [9 m]`},
 		{"single-value", `def m (module [export "X" {a: 1}]) for 2 [m]`},
@@ -31,8 +29,8 @@ func TestForBodyUnknownProvenanceRefuses(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CompileCheck: %v", err)
 			}
-			if prog != nil || reason != "for: body result of unknown provenance" {
-				t.Fatalf("prog=%v reason=%q — want the unknown-provenance refusal", prog, reason)
+			if prog == nil {
+				t.Fatalf("must compile natively (the module value reads live); refused: %q", reason)
 			}
 
 			b, err := New()
@@ -43,8 +41,8 @@ func TestForBodyUnknownProvenanceRefuses(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RunCompiled: %v", err)
 			}
-			if compiled {
-				t.Fatal("the refused program must fall back to the interpreter")
+			if !compiled {
+				t.Fatal("the program must run on the compiled lane")
 			}
 			i, err := New()
 			if err != nil {
@@ -55,7 +53,7 @@ func TestForBodyUnknownProvenanceRefuses(t *testing.T) {
 				t.Fatalf("Run: %v", err)
 			}
 			if fmt.Sprintf("%v", gotC) != fmt.Sprintf("%v", gotI) {
-				t.Errorf("fallback parity: compiled-path %v != interp %v", gotC, gotI)
+				t.Errorf("lane parity: compiled %v != interp %v", gotC, gotI)
 			}
 		})
 	}
