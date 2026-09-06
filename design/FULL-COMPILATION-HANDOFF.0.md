@@ -3258,11 +3258,29 @@ whichever is live.
 are unchanged. Every module suite is clean, which matters here because
 `resolveOperand` is a hot, central function.
 
-**Still open**: `( fn [[x:Integer][Any][do [j] typeof]] )` answers `Function`
-for the interpreter's `Integer`. There the `typeof` consumes the do's result
-as an OPERAND mid-recording, not as the body residual at finish — a different
-resolution path that the guard does not reach. NUR124 (a stack-shuffle word
-re-stepping a produced closure) is untouched.
+**A correction this increment owes itself.** It first shipped with
+`( fn [[x:Integer][Any][do [j] typeof]] )` recorded as still open, explained
+as "the `typeof` consumes the do's result as an OPERAND mid-recording — a
+different resolution path the guard does not reach". That reading was wrong.
+It IS the same guard; the guard's own index was off by one. `beginFragment`
+appends to `es.frames` and `es.fragFloors` together, but `es.frames` opens
+with a ROOT frame it never pushed a floor for, so frame n's floor is
+`fragFloors[n-1]`. Indexing them as parallel put every recording-time
+resolution out of range, so that arm silently declined and only the
+finish-time `rec.frag` arm ever fired — which is exactly why the body-residual
+forms were fixed and the operand form was not. With the index corrected
+`do [j] typeof` answers `Integer` on both lanes.
+
+The pin was complicit and is worth naming: `TestProducedInCurrentUnit` set
+`fragFloors: []int{0, 5}` against `rootFrame: 1` and asserted index 1 — it was
+written to match the implementation rather than the invariant, so it passed
+over the bug and only failed once the code was right. It now states the
+frames/floors relationship explicitly and covers `rootFrame == 0`, the root
+frame that has no floor of its own.
+
+**Still open**: NUR124 (a stack-shuffle word re-stepping a produced closure)
+is untouched — `def mk fn [[k:Integer][Function][(z:Integer => [mul k z])]]
+[(mk 3)] each [5 swap]` is `[15]` interpreted and `[fn (Integer)]` compiled.
 
 ## What the ledger excludes, and why each exclusion was measured
 

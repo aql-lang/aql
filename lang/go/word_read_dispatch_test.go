@@ -379,6 +379,14 @@ func TestLambdaValueBodyDeoptParity(t *testing.T) {
 		{hf + `[do [j]]] )]]  def q (h {f: 5})  (q 7)`, "5 — plain data"},
 		{hf + `[(do [j])]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — the paren twin"},
 		{hf + `[do [j typeof]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — the point fires INSIDE the do body"},
+		// The OPERAND form: `typeof` consumes the do's result while the body is
+		// still recording, so it resolves through the fragFloors arm of
+		// producedInCurrentUnit rather than the finish-time rec.frag arm. It was
+		// recorded as still diverging when this increment first landed, on the
+		// reading that the guard did not reach that path — wrong: the guard's
+		// own floor index was off by one (es.frames opens with a root frame
+		// carrying no floor), so the recording-time arm never fired at all.
+		{hf + `[do [j] typeof]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — was Function"},
 	}
 	for _, c := range rows {
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
