@@ -742,9 +742,34 @@ runtime value under ANONYMOUS semantics, hence the empty name, and stamps the
 unit's position rather than the call site's. The interpreter reads `g` as a
 WORD bound in the frame and dispatches it NAMED.
 
-So the increment is to treat an apply whose head is a fn-typed LOCAL as a deopt
-point too, not only a bare read — the binding machinery it needs
-(emitDynParamBinds) is already in place and already runs for this unit shape.
+So the increment is to give that apply the binding NAME its dispatch lacks.
+
+**Measured further 2026-09-06, and the family is NOT lambda-specific.** A paren
+apply of a fn-typed PARAM loses the name in a plain fn body too, and there the
+position is lost outright rather than merely misplaced — a simpler witness than
+the one above:
+
+```
+def app3 fn [[g:Function][Integer][(g 5)]]  app3 (z:String => [z])
+    interpreted  signature_error: cannot call `g` … (1:37)
+    compiled     signature_error: cannot call `` …  (source position unknown)
+```
+
+Two boundaries, both measured: the divergence is on the ERROR path only — the
+succeeding twin `app3 (z:Integer => [z mul 2])` is 10 on both lanes — and the
+no-paren spelling `[g x]` inside a lambda REFUSES instead ("fn app2: body result
+of unknown provenance"), a sound fallback.
+
+That narrows the fix below a deopt. The values already agree; only the dispatch's
+NAME and POSITION are wrong. The model is `callDynFrameWords`
+(eng/go/vm_dyn_words.go), which the NUR123 work built for the BARE READ case: it
+carries a `DynFrameWord` table of name+position, installs each live fn under its
+binding name (InstallFrameBinding, the interpreter's own param install) and
+re-steps it through the interpreter's dispatch — which is precisely what makes
+that path answer `cannot call \`g\``. `CALL_DYN_TRAIL_TOP` has no equivalent
+table, so its head dispatches anonymously. The increment is to give it one: the
+recorder knows the apply's head resolved to a named local, and the VM already
+knows what to do with that name.
 
 The interpreter reads `g` as a WORD bound in the frame: the value is
 re-labelled under the binding name (NUR119) and dispatched as a NAMED fn,
