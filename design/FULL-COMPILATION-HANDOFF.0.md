@@ -2943,7 +2943,12 @@ the whole fragment tree is measured NOT sufficient: the promotion loop
 iterates the same restricted set, so the producer is still not a
 candidate. The remaining work is to make an intermediate producer inside
 a multi-value arm promotable without disturbing that arm's residual
-values — the distinction the walk's own comment protects.
+values — the distinction the walk's own comment protects. The planner
+cannot draw it today: `fragmentResultSeqs` marks only the single out
+operands and a multi-value arm's residual values appear in no recorded
+list (`EmitFragment.residualOps` covers only the inert multi-out loop
+body), so the increment begins in the RECORDER by capturing that list and
+only then extends the walk.
 
 **Measured.** Every value kind a capture can hold (Integer, String, List,
 a computed param expression, two computed captures at once, the param

@@ -401,9 +401,20 @@ leaves the push unchanged — the producer still is not a promotion
 CANDIDATE, because the promotion loop iterates the restricted set too.
 The fix therefore has to make an intermediate producer inside a
 multi-value arm promotable WITHOUT disturbing that arm's residual values,
-which is the distinction the quoted comment is protecting. That is a
-design change in the promotion walk, not a patch, and it is the whole of
-what remains here. Three standalone reproductions (an `if` arm with an
+which is the distinction the quoted comment is protecting.
+
+**And the planner cannot draw that distinction today**, which is the
+concrete first step. `fragmentResultSeqs` marks only the SINGLE out
+operands (`thenOut`, `elsOut`, `condOut`, `bodyOut`), and
+`fragResultStaysOnSim` protects only what it marks; a multi-value arm's
+several residual values are on the fragment's sim at lowering and appear
+in no recorded operand list (`EmitFragment.residualOps` carries them only
+for the INERT multi-out loop body). So recursing into such an arm would
+expose producers the planner has no way to recognise as its residuals.
+The increment therefore begins in the RECORDER — capture a multi-value
+arm's residual operand list — and only then extends the walk. That is
+why this is a design change, not a patch, and it is the whole of what
+remains here. Three standalone reproductions (an `if` arm with an
 each-body lambda, a `case` arm, and a bare fn body) all compile, so the
 corpus row is the reproduction.
 
