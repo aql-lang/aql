@@ -480,10 +480,17 @@ That row parks the result exactly as `5 (mk 3)` does and then APPLIES it,
 because the trailing `apply` word dispatches the parked value on purpose. So
 the guard needs a signal separating "a later word dispatches this parked value"
 from "nothing does". **`applyPending` is NOT that signal** — measured: the
-`apply` row still refuses with it excluded, so the pending-apply mark is not set
-for the program residual at that point. Two things follow for the next attempt:
-the fix site is `trailingApply`, and the missing discriminator is the recorded
-provenance of the `apply` word, not the pending-apply list.
+`apply` row still refuses with it excluded. The code says why, so the next
+attempt need not re-measure it: `applyPending` reads
+`es.units[len(es.units)-1].pendingApply`, a UNIT-scoped list, and returns false
+outright when no fn unit is open — which is the program residual's case. The
+registration site is explicit about the same boundary: "Top-level applies
+(`len(units) == 1`) keep today's refusal: the program residual has no
+equivalent single-consumer window." So the mark is not merely absent here, it
+is structurally unavailable by design. Two things follow for the next attempt:
+the fix site is `trailingApply`, and the missing discriminator has to be
+program-level provenance for the `apply` word — the pending-apply list cannot
+supply it.
 
 Two shapes the fix must also leave alone, both already passing: a member or
 dynamic read (`5 m.f`, `[..] r.one-of`) is no call result and must keep the
