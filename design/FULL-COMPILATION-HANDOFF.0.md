@@ -2928,10 +2928,16 @@ COUNTING gap, not a rewrite one. `RewritePromotedRefs` already recurses
 into fragments and rewrites `closureCaps`, but the producer never enters
 `planValueDefLocals`'s `captured` set, though an event capture does reach
 the push (`EVENTCAP unit=23 kind=2 idx=165` at `vault_tui.boru:1106`).
-`eachClosureCap` scans a call's `ops`, a user call's, a fallback's ins, a
-loop's range/bodyOut and a branch's cond/arms — so start by finding where
-a `RecordClosureCall` BODY's closure operand is stored and whether that
-position is among them.
+Three hypotheses were then tested and eliminated (the detail is on
+NUR126): the body operand is NOT kept outside `ev.call.ops`
+(`RecordClosureCall` appends an ordinary `evCall` whose `ops[bodyPos]` is
+the closure); the planner does not see-and-decline it (its walk never
+reports that capture); and it is not the unit's residual closure needing
+the capture mark (seeding `captured` from `rec.outOps` changes nothing,
+and no residual carries it). What remains is a FRAGMENT's own operand
+list — an arm's out/residual ops, or a loop's carried init — which
+`eachClosureCap` does not scan and `appendResidualSeqs` is not applied
+to. Start there.
 
 **Measured.** Every value kind a capture can hold (Integer, String, List,
 a computed param expression, two computed captures at once, the param

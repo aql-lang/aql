@@ -362,14 +362,27 @@ a REWRITE gap — `RewritePromotedRefs` already recurses into fragments and
 producer (event seq 165 in that unit) never enters
 `planValueDefLocals`'s `captured` set at all, though an event capture
 does reach the push there (`EVENTCAP unit=23 kind=2 idx=165 pos={1106 23
-each}`). `eachClosureCap` scans a call's `ops`, a user call's, a
-fallback's ins, a loop's range/bodyOut and a branch's cond/arms — so the
-next step is to find where a `RecordClosureCall` body's closure operand
-is stored and whether that position is among them; a body operand kept
-outside `ev.call.ops` would explain the miss exactly. Three standalone
-reproductions (an `if` arm with an each-body lambda, a `case` arm, and a
-bare fn body) all compile, so the shape needs the module's nesting to
-appear.
+each}`). Three hypotheses were then tested and ELIMINATED, so the next attempt
+need not repeat them:
+
+1. *A body operand kept outside `ev.call.ops`.* No —
+   `RecordClosureCall` appends an ordinary `evCall` whose `ops[bodyPos]`
+   IS the closure operand, a position `eachClosureCap` scans.
+2. *The planner sees it but declines to promote.* No — an instrumented
+   run shows the walk never sees that capture at all (`PLANCAP` never
+   reports idx 165, while `PUSHCAP unit=23 capidx=165` fires at
+   `vault_tui.boru:1106`).
+3. *It is the unit's RESIDUAL closure, needing the capture mark rather
+   than a plain reference.* No — seeding the planner's `captured` set
+   from `rec.outOps`' closure captures leaves the push unchanged, and a
+   probe shows no unit's residual carries that capture at all.
+
+What remains is that the operand reaches the push through a FRAGMENT's
+own operand list (an arm's out/residual ops, or a loop's carried init) —
+lists `eachClosureCap` does not scan and `appendResidualSeqs` is not
+applied to. That is where to look next. Three standalone reproductions
+(an `if` arm with an each-body lambda, a `case` arm, and a bare fn body)
+all compile, so the corpus row is the reproduction.
 
 **Not fixed, and now correctly attributed** (it was hidden behind the
 bogus constant): the same shape with a FN-valued capture read bare as the
