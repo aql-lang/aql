@@ -2261,6 +2261,44 @@ func (es *EmitState) eventBySeq(seq int) *EmitEvent {
 // resolveOperand maps a dispatch value to its provenance: a prior
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RememberOriginal saved).
+// producedInCurrentUnit reports whether the value's producing event was
+// recorded INSIDE the unit now open — at or above that unit's own sequence
+// floor — rather than in an enclosing frame.
+//
+// It guards the capture override below, whose reason is precisely that the
+// producing event "lives in the parent frame and is unreachable from inside
+// the body". When the event is this unit's OWN, that reason does not apply
+// and the override is wrong: a native that returns its argument unchanged
+// keeps the carrier's identity, so `( fn [[x:Integer][Any][do [j]]] )` over a
+// captured `j` had the do's RESULT resolve back to the capture slot. The
+// lowering then emitted `CALL_NATIVE do; DROP; PUSH_LOCAL`, discarding the
+// call's value — and with it the word dispatch the body's deopt island had
+// just performed, so the lambda answered `fn` for the interpreter's 42. The
+// same shape in a plain fn body always agreed, which is what located the
+// override rather than `do` or the deopt.
+func (es *EmitState) producedInCurrentUnit(id string) bool {
+	pr, ok := es.producedBy[id]
+	if !ok || len(es.openUnitRecs) == 0 {
+		return false
+	}
+	rec := es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+	if rec == nil {
+		return false
+	}
+	// The unit's own sequence floor. While its body records, the live floor is
+	// the one beginFragment pushed for its root frame; by the time the finish
+	// callback resolves the body RESIDUAL that frame is closed and the floor
+	// has moved onto rec.frag (the same value the provenance sweep below
+	// compares against).
+	switch {
+	case rec.frag != nil:
+		return pr.seq > rec.frag.startSeq
+	case rec.rootFrame >= 0 && rec.rootFrame < len(es.fragFloors):
+		return pr.seq >= es.fragFloors[rec.rootFrame]
+	}
+	return false
+}
+
 func (es *EmitState) resolveOperand(v core.Value) (EmitOperand, bool) {
 	// A CAPTURE of the CURRENT unit overrides events-first: the captured value
 	// may carry a producedBy entry from the ENCLOSING unit (a computed
@@ -2273,7 +2311,7 @@ func (es *EmitState) resolveOperand(v core.Value) (EmitOperand, bool) {
 	// parent-side promotion of the computed def — see forEachOperand /
 	// promoteOperand closureCaps handling.)
 	if cur := es.units[len(es.units)-1]; cur != nil && cur.capID[v.ID] {
-		if slot, ok := cur.localByID[v.ID]; ok {
+		if slot, ok := cur.localByID[v.ID]; ok && !es.producedInCurrentUnit(v.ID) {
 			return localOperand(slot), true
 		}
 	}

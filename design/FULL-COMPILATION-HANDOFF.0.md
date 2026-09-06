@@ -3199,6 +3199,71 @@ directions of the new gate — own param and capture, an island-made def, a
 native, the bare literal-word that caused this, and the two rejects (an
 enclosing unit's param and its frame def).
 
+## A capture's slot overrode an event of the unit's OWN body (2026-09-06, the sixteenth increment, NUR123)
+
+**The remainder the fifteenth increment named, confirmed and located.** That
+increment recorded `( fn [[x:Integer][Any][do [j]]] )` as still answering `fn`
+for the interpreter's 42, and said it was not a deopt gap. Measuring the
+family fixed the discriminator exactly, and it is not `do` either:
+
+```
+def h fn [[m:Map][Any][def j (m get "f")  do [j]]]                    agrees   ← a PLAIN fn body
+( fn [[x:Integer][Any][do [j typeof]]] )                              agrees   ← the point fires inside
+( fn [[x:Integer][Any][do [j]]] )                                     42 vs fn ← a LAMBDA body
+```
+
+The same `do [j]` agrees in a plain fn body and diverges in a lambda, so the
+ENCLOSING UNIT KIND is the variable. The two disassemblies say why:
+
+```
+plain fn body            lambda body
+CALL_NATIVE do           CALL_NATIVE do
+RET                      DROP            ← the call's result, discarded
+                         PUSH_LOCAL l1   ← the raw capture slot returned instead
+                         RET
+```
+
+**Cause.** `do` returns its body's value unchanged, so the result carrier IS
+`j`'s carrier. `resolveOperand` opens with an override:
+
+```go
+if cur := es.units[len(es.units)-1]; cur != nil && cur.capID[v.ID] {
+	if slot, ok := cur.localByID[v.ID]; ok {
+		return localOperand(slot), true
+	}
+}
+```
+
+whose own comment gives its reason — the captured value "may carry a
+producedBy entry from the ENCLOSING unit … but that event lives in the parent
+frame and is unreachable from inside the body". Here the producing event is in
+THIS unit's own frame, so the reason does not hold; the override sent the
+residual back to the slot, the lowering dropped the call, and with it went the
+word dispatch the body's deopt island had just performed.
+
+**The change** is that guard, one predicate wide: `producedInCurrentUnit`
+takes the capture slot only when the producing event is NOT this unit's own.
+
+**Which floor is live depends on when resolution runs**, and the first attempt
+missed it — worth recording, because it looked like the fix simply did not
+work. While the body records, the unit's floor is the one `beginFragment`
+pushed for its root frame (`es.fragFloors[rec.rootFrame]`); by the time the
+`finish` callback resolves the body RESIDUAL that frame is closed and the
+floor has moved onto `rec.frag.startSeq` — the same value the provenance
+sweep a few lines below already compares against. The predicate reads
+whichever is live.
+
+**Measured**: `do [j]` and its paren twin `(do [j])` agree where they answered
+`fn`; the plain-fn-body row, the `do [j typeof]` row and the plain-data twin
+are unchanged. Every module suite is clean, which matters here because
+`resolveOperand` is a hot, central function.
+
+**Still open**: `( fn [[x:Integer][Any][do [j] typeof]] )` answers `Function`
+for the interpreter's `Integer`. There the `typeof` consumes the do's result
+as an OPERAND mid-recording, not as the body residual at finish — a different
+resolution path that the guard does not reach. NUR124 (a stack-shuffle word
+re-stepping a produced closure) is untouched.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

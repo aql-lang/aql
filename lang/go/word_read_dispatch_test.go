@@ -371,6 +371,14 @@ func TestLambdaValueBodyDeoptParity(t *testing.T) {
 		{hf + `[if (x gt 3) [j] [0]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — a dynamic condition"},
 		{hf + `[if true [j] [0] typeof]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — was Function"},
 		{hf + `[[1] each [j]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "[42] — was the error `did you mean h or q?`"},
+		// the sixteenth increment: the do body's value IS j's value, so its
+		// result carrier is j's carrier and resolveOperand's capture override
+		// sent the RESIDUAL back to the slot — the lowering emitted
+		// `CALL_NATIVE do; DROP; PUSH_LOCAL`, discarding the island's dispatch.
+		{hf + `[do [j]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — was fn"},
+		{hf + `[do [j]]] )]]  def q (h {f: 5})  (q 7)`, "5 — plain data"},
+		{hf + `[(do [j])]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — the paren twin"},
+		{hf + `[do [j typeof]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — the point fires INSIDE the do body"},
 	}
 	for _, c := range rows {
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
@@ -379,6 +387,21 @@ func TestLambdaValueBodyDeoptParity(t *testing.T) {
 			continue
 		}
 		requireParity(t, c.src, gotC, errC, gotI, errI)
+	}
+}
+
+// The same `do [j]` in a PLAIN fn body always agreed — that contrast is what
+// located the fault in resolveOperand's capture override rather than in `do`
+// or in the deopt, so it is pinned as the control it served as.
+func TestDoBodyCaptureResidualPlainFn(t *testing.T) {
+	src := `def h fn [[m:Map][Any][def j (m get "f")  do [j]]]  h {f: ([] => [42])}`
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if !compiled {
+		t.Fatalf("%q: must compile natively; err=%v", src, errC)
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+	if fmt.Sprint(gotC) != "[42]" {
+		t.Errorf("%q = %v, want [42]", src, gotC)
 	}
 }
 

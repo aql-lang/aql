@@ -748,3 +748,50 @@ func TestSeatUnitDeoptsUnpromoted(t *testing.T) {
 		t.Error("a diverging body seats no points")
 	}
 }
+
+// producedInCurrentUnit guards resolveOperand's capture override: the override
+// takes the capture slot because the producing event "lives in the parent
+// frame", so it must not fire when the event is the OPEN unit's own. Which
+// floor answers that depends on when resolution runs — the live fragment floor
+// while the body records, rec.frag.startSeq once the finish callback resolves
+// the body residual and that frame is closed.
+func TestProducedInCurrentUnit(t *testing.T) {
+	es := NewEmitState()
+	es.producedBy["own"] = producer{seq: 7}
+	es.producedBy["outer"] = producer{seq: 2}
+
+	if es.producedInCurrentUnit("own") {
+		t.Error("no open unit: nothing is this unit's own")
+	}
+
+	// A nil record (a slot reserved before its unit opened) declines.
+	es.fnRecs = append(es.fnRecs, nil)
+	es.openUnitRecs = []int{0}
+	if es.producedInCurrentUnit("own") {
+		t.Error("a nil unit record declines")
+	}
+
+	// Recording: the live floor is the one beginFragment pushed.
+	rec := &fnUnitRec{name: "fnval$body", rootFrame: 1}
+	es.fnRecs = append(es.fnRecs, rec)
+	es.openUnitRecs = []int{1}
+	es.fragFloors = []int{0, 5}
+	if !es.producedInCurrentUnit("own") || es.producedInCurrentUnit("outer") {
+		t.Error("recording: seq at or above the unit's frame floor is its own, below it is not")
+	}
+	if es.producedInCurrentUnit("absent") {
+		t.Error("a value with no producing event is never this unit's own")
+	}
+
+	// Out of range (the frame already popped, no frag yet) declines.
+	rec.rootFrame = 9
+	if es.producedInCurrentUnit("own") {
+		t.Error("a rootFrame past the live floors declines")
+	}
+
+	// Finish: the root frame is closed, so the fragment carries the floor.
+	rec.frag = &EmitFragment{startSeq: 5}
+	if !es.producedInCurrentUnit("own") || es.producedInCurrentUnit("outer") {
+		t.Error("finish: the fragment's startSeq is the floor")
+	}
+}

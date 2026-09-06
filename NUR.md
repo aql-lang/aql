@@ -468,11 +468,15 @@ ARM or a nested `each` body of that lambda body (2026-09-06, the
 fifteenth increment: `[if true [j] [0]]` is 42 where it answered `fn`,
 `[[1] each [j]]` is [42] where it raised ``did you mean `h` or `q`?``); OPEN for a declined
 point (a literal or a read pushed before the statement and still pending
-at the test: `5  j typeof`), for a `do` body nested in a lambda body
-(`( fn [[x:Integer][Any][do [j]]] )` still answers `fn` for 42 — measured
-2026-09-06 as a RESIDUAL-IDENTITY defect, not a missing deopt: the
-`do$body` unit does carry its point, but the do's result carrier IS the
-captured local's, so the lowering re-pushes the slot and DROPs the call) and for
+at the test: `5  j typeof`), for a `do` body's result CONSUMED by a
+later word in a lambda body (`( fn [[x:Integer][Any][do [j] typeof]] )`
+answers `Function` for the interpreter's `Integer`; the bare
+`( fn [[x:Integer][Any][do [j]]] )` and its paren twin were closed by the
+sixteenth increment, 2026-09-06 — a RESIDUAL-IDENTITY defect, not a
+missing deopt: the `do$body` unit does carry its point, but the do's
+result carrier IS the captured local's, so resolveOperand's
+capture-override sent the residual back to the slot and the lowering
+DROPped the call) and for
 the `/v` render (NUR119). A read inside a BRANCH ARM of a lambda body,
 and an `each` body nested in one, were closed by the fifteenth increment
 (2026-09-06). **Found:** 2026-09-05, measuring the closure-capture
