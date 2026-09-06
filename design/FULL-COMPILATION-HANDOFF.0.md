@@ -2934,10 +2934,16 @@ NUR126): the body operand is NOT kept outside `ev.call.ops`
 the closure); the planner does not see-and-decline it (its walk never
 reports that capture); and it is not the unit's residual closure needing
 the capture mark (seeding `captured` from `rec.outOps` changes nothing,
-and no residual carries it). What remains is a FRAGMENT's own operand
-list — an arm's out/residual ops, or a loop's carried init — which
-`eachClosureCap` does not scan and `appendResidualSeqs` is not applied
-to. Start there.
+and no residual carries it). The mechanism is now traced (the caller path at the
+push): the closure is an ordinary call operand inside a MULTI-VALUE arm,
+and `collectPromotableEvents` recurses only into `residualN <= 1`
+fragments — so the planner sees neither the capture nor the producer,
+while `lowerFragment` lowers the arm regardless. Collecting captures over
+the whole fragment tree is measured NOT sufficient: the promotion loop
+iterates the same restricted set, so the producer is still not a
+candidate. The remaining work is to make an intermediate producer inside
+a multi-value arm promotable without disturbing that arm's residual
+values — the distinction the walk's own comment protects.
 
 **Measured.** Every value kind a capture can hold (Integer, String, List,
 a computed param expression, two computed captures at once, the param

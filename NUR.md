@@ -377,12 +377,35 @@ need not repeat them:
    from `rec.outOps`' closure captures leaves the push unchanged, and a
    probe shows no unit's residual carries that capture at all.
 
-What remains is that the operand reaches the push through a FRAGMENT's
-own operand list (an arm's out/residual ops, or a loop's carried init) —
-lists `eachClosureCap` does not scan and `appendResidualSeqs` is not
-applied to. That is where to look next. Three standalone reproductions
-(an `if` arm with an each-body lambda, a `case` arm, and a bare fn body)
-all compile, so the corpus row is the reproduction.
+**The mechanism, traced 2026-09-05 by dumping the caller path at the
+push.** The closure is an ordinary call operand — but the call lives
+inside a MULTI-VALUE arm, and `collectPromotableEvents` deliberately
+stops there:
+
+```go
+// Only recurse into a SINGLE-result fragment … A MULTI-value arm
+// (residualN>1 …) leaves several residual values on the sim stack, and
+// promotion / dead-drop would wrongly store or drop one of them
+if frag != nil && frag.residualN <= 1 {
+```
+
+So for a closure inside such an arm the planner sees neither the capture
+(its walk runs over the restricted event set) nor the producer (the
+promotion loop iterates the same set), while `lowerFragment` lowers the
+arm regardless and pushes the capture. Every earlier observation follows
+from that one line.
+
+**Measured, and NOT sufficient**: collecting captures over the whole
+fragment tree (a capture-only walk, separate from the promotion walk)
+leaves the push unchanged — the producer still is not a promotion
+CANDIDATE, because the promotion loop iterates the restricted set too.
+The fix therefore has to make an intermediate producer inside a
+multi-value arm promotable WITHOUT disturbing that arm's residual values,
+which is the distinction the quoted comment is protecting. That is a
+design change in the promotion walk, not a patch, and it is the whole of
+what remains here. Three standalone reproductions (an `if` arm with an
+each-body lambda, a `case` arm, and a bare fn body) all compile, so the
+corpus row is the reproduction.
 
 **Not fixed, and now correctly attributed** (it was hidden behind the
 bogus constant): the same shape with a FN-valued capture read bare as the
