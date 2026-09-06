@@ -169,8 +169,8 @@ func (es *EmitState) forEachUnitRef(rec *fnUnitRec, fn func(int)) {
 // walkFrag visits every event of a fragment tree — the fragment's own
 // events, then each branch's condition/then/else fragments and each loop's
 // body, recursively — and every operand the fragment itself carries outside
-// its events (a loop body's inert residual re-push and its per-iteration
-// apply).
+// its events (a fragment's captured residual re-push — a loop body's inert
+// list or a branch arm's whole one — and the body's per-iteration apply).
 func walkFrag(frag *EmitFragment, evFn func(*EmitEvent), opFn func(EmitOperand)) {
 	if frag == nil {
 		return

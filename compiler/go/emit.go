@@ -535,10 +535,14 @@ type EmitFragment struct {
 	// without this the extra slot would compile an unsound duplicate value. 0 ==
 	// unset (non-arm fragments: a loop body / condition expects one value).
 	residualN int
-	// residualOps carries a multi-out LOOP body's full residual operand list
-	// when every entry is INERT (const/local/type — no events): the
-	// reconciliation re-pushes them in order per iteration (`for 3 [1 2]`).
-	// Function-typed entries were screened at RecordLoop (parked-fn hazard).
+	// residualOps carries a fragment's full residual operand list, which
+	// lowerFragment re-pushes in order when the lowering left the sim empty.
+	// A multi-out LOOP body is captured only when every entry is INERT
+	// (const/local/type — no events), because it re-pushes on EVERY iteration
+	// (`for 3 [1 2]`); a branch ARM runs once per taken path, so
+	// captureArmResidual admits event entries too and planValueDefLocals
+	// force-promotes each to a frame local first. Function-typed entries were
+	// screened at capture time (parked-fn hazard).
 	residualOps []EmitOperand
 	// applyArgs, when non-empty, marks a loop body that left a LEADING fn VALUE
 	// (a returned closure / Function carrier on the sim top after the body events)
@@ -3849,11 +3853,11 @@ func (es *EmitState) RecordBranch(b core.BranchRecord) {
 	// lowering leaves an extra sim artifact (see EmitFragment.residualN).
 	if ev.br.then != nil {
 		ev.br.then.residualN = len(b.ThenStk)
-		es.captureInertArmResidual(ev.br.then, b.ThenStk)
+		es.captureArmResidual(ev.br.then, b.ThenStk)
 	}
 	if ev.br.els != nil {
 		ev.br.els.residualN = len(b.ElsStk)
-		es.captureInertArmResidual(ev.br.els, b.ElsStk)
+		es.captureArmResidual(ev.br.els, b.ElsStk)
 	}
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
@@ -5291,17 +5295,26 @@ func (es *EmitState) RecordDynApplyName(name string, args []core.Value, fn, out 
 	return true
 }
 
-// captureInertArmResidual mirrors the loop side's all-inert residual capture
-// (RecordLoop's net-drivers arm) for a BRANCH arm: a multi-value arm whose
-// residual is entirely inert (consts/locals — nothing event-produced) leaves
-// nothing on the lowering sim, so lowerFragment's all-inert re-push arm needs
-// the resolved operand list to reconstruct it per taken path (`if c [99]
-// [1 2]` — the 1-vs-2 variadic merge). The parked-fn screen matches the
-// loop's: a Function value in the region auto-applies in the interpreter when
-// a later value lands above it, so a verbatim re-push would diverge — leave
-// those uncaptured (the arm then keeps its refusal). Single-value arms
-// (residualN < 2) never need the capture.
-func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []core.Value) {
+// captureArmResidual mirrors the loop side's all-inert residual capture
+// (RecordLoop's net-drivers arm) for a BRANCH arm: a multi-value arm's residual
+// is recorded as a resolved operand list so lowerFragment's re-push arm can
+// reconstruct it per taken path (`if c [99] [1 2]` — the 1-vs-2 variadic
+// merge). Unlike the loop side the list MAY name event-produced values: an arm
+// runs ONCE per taken path, so a residual event promoted to a frame local
+// (planValueDefLocals force-promotes every entry of a whole-captured arm
+// residual) re-pushes from its slot in exact residual order, exactly as the
+// PROGRAM residual's forceOrder linearisation already does. Without the whole
+// list the lowerer could only COUNT the sim slots, and a stray leftover made
+// the count match while the values did not: `if true [def c (7777 add 1) 99
+// (each …)] [7 8]` seated the `add` result where the interpreter leaves 99.
+// A loop body keeps the all-inert restriction (its residual re-pushes on EVERY
+// iteration, where a frame slot holds only the last one) — RecordLoop screens
+// that list itself. The parked-fn screen matches the loop's: a Function value
+// in the region auto-applies in the interpreter when a later value lands above
+// it, so a verbatim re-push would diverge — leave those uncaptured (the arm
+// then keeps its refusal). Single-value arms (residualN < 2) never need the
+// capture.
+func (es *EmitState) captureArmResidual(frag *EmitFragment, stk []core.Value) {
 	if frag == nil || len(stk) < 2 {
 		return
 	}
@@ -5311,7 +5324,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []core.Valu
 			return
 		}
 		op, ok := es.resolveOperand(stk[i])
-		if !ok || op.kind == opEvent {
+		if !ok {
 			return
 		}
 		ops = append(ops, op)

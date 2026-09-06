@@ -93,7 +93,7 @@ keep the two in sync in the same commit.
 | [NUR110](#nur110) | A FRESH `def` inside a branch that DID NOT RUN binds the name anyway in the compiled lane: `if false [def op 1] [0] end op` answers `[0 1]` compiled and `undefined_word` interpreted. The family-L CondBodyDepth gate only fires when a redefinition DROPS an existing overload, so shadowing is refused and fresh definition is not | measuring NUR109's premise, 2026-08-28 |
 | [NUR122](#nur122) | A bare-name dispatch of a fn-typed frame binding whose runtime value does not match is a NAMED no-match on the interpreter and something else on the compiled lane: `def f fn [[g:Function x:Integer][Integer][g x]]  f (z:String => [z]) 5` raises `signature_error: cannot call `g`` interpreted and `type_error: f: expected 1 return value(s), got 2 — [fn (String) 5]` compiled (the frame replay parks the value); the paren spelling `(g x)` raises the no-match with an EMPTY name (`cannot call `` `) at the body's position; a 0-arg `g` fires interpreted (`[42 5]`) and parks compiled (`[fn 5]`); and inside a RETURNED closure the same paren spelling over a captured NAMED fn names that fn instead of the param — `def app fn [[g:Function][Function][( fn [[x:Integer][Integer][(g x)]] )]]  def h (app add/v)  (h 5)` raises `cannot call `g`` at 1:64 interpreted and `cannot call `add`` at 1:80 compiled, both exit 1 (measured 2026-09-05 on main, a COMPILING row). Same shape family as NUR119: the compiled value has no binding name and no named-dispatch semantics | measuring the closure-capture family's blocker (a), 2026-09-05 |
 | [NUR123](#nur123) | A BARE READ of a frame binding holding a fn is a WORD dispatch on the interpreter (stepWord routes a bound FnDefInfo through Registry.Lookup: a 0-arg fn fires, a no-match raises `cannot call `g``) and was a slot PUSH on the compiled lane: `def f fn [[g:Function][Any][g]]  f ([] => [42])` answered `fn` for 42, `def id fn [[x:Any][Any][x]]  id ([] => [42])` the same, `f (z:Integer => [z])` answered `fn (Integer)` for the interpreter's error — default lane, exit 0. Fixed for the fn-body residual (the replay re-steps the read as the word; fn-typed reads elsewhere refuse); FIXED for a gradual body-local's read (`def h fn [[m:Map][Any][def j (m get "f")  j]]  h {f: ([] => [42])}` is 42 on both lanes: its residual read seats the replay, and any other consumption — `j typeof`, `{a: j}`, `(j typeof)`, `(j) typeof`, `if true [j] [0]`, `for 1 [j typeof]`, `j (m get "g") add`, `j  def y 1`, `def k j`, `def k (j)` — deopts to the interpreter at its statement when the binding holds a fn; a point whose statement the compiled stack cannot match declines to the slot push: `5  j typeof` raises `[5 Function]` for the interpreter's `[5 Integer]`); FIXED inside a CODE BODY a native runs in the frame (`[1] each [j]` [42], `do [j]` 42 — the closure unit deopts on its capture slot and the enclosing unit binds the name; a lambda VALUE's body does NOT: `def h fn [[m:Map][Function][def j (m get "f")  ( fn [[x:Integer][Any][j]] )]]  def q (h {f: ([] => [42])})  (q 7)` compiles and answers `fn` for the interpreter's `42` — corrected 2026-09-05, the twelfth increment, where the bogus-constant capture NUR126 fixed had been hiding it); OPEN for the declined points and NUR119's render (a gradual PARAM's read refuses instead: the pass re-runs it under the argument's runtime type; re-measured 2026-09-05) | measuring the closure-capture family's blocker (a), 2026-09-05 |
-| [NUR126](#nur126) | RESOLVED (2026-09-05, the twelfth increment). A RETURNED lambda's captured COMPUTED value was baked as an unrelated CONSTANT: `def h fn [[m:Map][Function][def j (m get "f")  ( fn [[x:Integer][Any][j]] )]]  def q (h {f: ([] => [42])})  (q 7)` answered `7` — the caller's own argument — for the interpreter's `42`, and the factory's bytecode DROPped the computed value and pushed `PUSH_CONST` over the producing event's SEQ read as a const index (the disassembler panics on it: index out of range). The promotion planner never counted a RESIDUAL closure's captures, so their producers got no frame slot | measuring the closure-capture family after the eleventh increment, 2026-09-05 |
+| [NUR126](#nur126) | RESOLVED (2026-09-05, the twelfth and thirteenth increments). A RETURNED lambda's captured COMPUTED value was baked as an unrelated CONSTANT: `def h fn [[m:Map][Function][def j (m get "f")  ( fn [[x:Integer][Any][j]] )]]  def q (h {f: ([] => [42])})  (q 7)` answered `7` — the caller's own argument — for the interpreter's `42`, and the factory's bytecode DROPped the computed value and pushed `PUSH_CONST` over the producing event's SEQ read as a const index (the disassembler panics on it: index out of range). The promotion planner never counted a RESIDUAL closure's captures, so their producers got no frame slot. The thirteenth increment closed the nested-fragment half: a multi-value branch ARM's residual is now RECORDED whole (`captureArmResidual`), so the planner may walk into the arm and force-promote its residual events — which also fixed the arm's own count-only reconciliation (`if true [ def c (7777 add 1)  99 (each [ (r:Integer => [ r add c ]) apply ] [1 2]) ] [ 7 8 ]` answered `7778 [7778 7779]` for the interpreter's `99 [7779 7780]`). An arm whose residual LEADS with a parked Function still declines the capture (the auto-apply screen) — the corpus's two vault-tui sites | measuring the closure-capture family after the eleventh increment, 2026-09-05 |
 | [NUR124](#nur124) | A stack-shuffle word's result puts a produced closure on TOP and the interpreter RE-STEPS it there: `def mk fn [[k:Integer][Function][(z:Integer => [mul k z])]]  [(mk 3)] each [5 swap]` is `[15]` interpreted and `[fn (Integer)]` compiled; `[5 over]` is `[45]` / `[fn (Integer)]`; `[5 swap drop]` raises each_error interpreted and answers `[5]` compiled — default lane, exit 0. The top-level spellings refuse ("function value reaches swap (Stage 3)"); inside a code body over a produced closure the shuffle fold compiles | measuring NUR123's closure bridge, 2026-09-05 |
 | [NUR119](#nur119) | A fn value read through a PARAM's `/v` renders under the PARAM's name on the interpreter and under its own name on the compiled lane: `def app fn [[g:Function][Function][g/v]]  (app (z:Integer => [mul 3 z]))` renders `fn g(Integer)` interpreted and `fn (Integer)` compiled, and `def sq (z:Integer => [mul z z])  … app sq/v` renders `fn g(Integer)` against `fn sq(Integer)`. Same value, one render — the interpreter's frame binding re-labels the fn under the name it is read through, and a compiled unit pushes the raw runtime value. Pre-existing for the paren-placed spelling; the bare and args-following spellings refuse (`unconsumed fn-value carrier in residual (closure render)`, callResultRenderKnown) rather than diverge | measured 2026-09-05 while fixing the returned-closure park |
 | [NUR118](#nur118) | A compiled fn's RETURN-CONTRACT error blames the body's first token where the interpreter blames the CALL SITE: `def f fn [[m:Map] [Integer] [m get "a"]]  f {a:"s"}` raises the same `type_error: f: return value 1: expected Integer, got ProperString` on both lanes, at `1:43` (the call) interpreted and `1:30` (the body) compiled. The compiled RET check is stamped with the unit's own position because one unit serves every call site (compiler StartFnCompile's fnPos) — a documented limitation that became reachable from a corpus-style row when the binding-sensitive unit memo let `def k 5  def f fn [[] [Integer] [k add 2]]  f  def k "x"  f` compile (Stage 4b); the row pins code and message and excludes the position | Stage 4b's cross-family rebind row, 2026-09-04 |
@@ -343,44 +343,10 @@ hold, a capture used with the lambda's own param, two computed captures,
 and a second instance of the same factory keeping its own value) and in
 the compiler (TestAppendResidualSeqs over the operand kinds).
 
-**Still open: a capture produced inside a NESTED FRAGMENT.** A def made
-in a branch or case ARM, captured by a lambda built in that same arm,
-reaches the push as an opEvent still — the planner promotes producers at
-the unit's root, not inside an arm. The corpus has two such sites
-(`lang/go/modules/vault_tui.boru:1106` and :1109 — `def cols
-(vt-rtable-cols scr.name)` captured by `(rec:Map => [ vt-rrow cols rec
-])` inside a `case` arm), reached by `module-vault-tui.tsv` L21 and L24.
-Both rows pass today because the closures they build are never invoked
-(L21 reads the map's KEYS; L24 errors on a missing terminal backend), so
-the wrong capture is unobserved — which is exactly why a refusing latch
-was tried here and then withdrawn: it cost those two rows against a
-corpus refusal ceiling of 0 while fixing nothing observable.
-
-**Narrowed 2026-09-05 by instrumenting the planner.** The capture is not
-a REWRITE gap — `RewritePromotedRefs` already recurses into fragments and
-`promoteOperand` rewrites `closureCaps`. It is a COUNTING gap: the
-producer (event seq 165 in that unit) never enters
-`planValueDefLocals`'s `captured` set at all, though an event capture
-does reach the push there (`EVENTCAP unit=23 kind=2 idx=165 pos={1106 23
-each}`). Three hypotheses were then tested and ELIMINATED, so the next attempt
-need not repeat them:
-
-1. *A body operand kept outside `ev.call.ops`.* No —
-   `RecordClosureCall` appends an ordinary `evCall` whose `ops[bodyPos]`
-   IS the closure operand, a position `eachClosureCap` scans.
-2. *The planner sees it but declines to promote.* No — an instrumented
-   run shows the walk never sees that capture at all (`PLANCAP` never
-   reports idx 165, while `PUSHCAP unit=23 capidx=165` fires at
-   `vault_tui.boru:1106`).
-3. *It is the unit's RESIDUAL closure, needing the capture mark rather
-   than a plain reference.* No — seeding the planner's `captured` set
-   from `rec.outOps`' closure captures leaves the push unchanged, and a
-   probe shows no unit's residual carries that capture at all.
-
-**The mechanism, traced 2026-09-05 by dumping the caller path at the
-push.** The closure is an ordinary call operand — but the call lives
-inside a MULTI-VALUE arm, and `collectPromotableEvents` deliberately
-stops there:
+**Was open: a capture produced inside a NESTED FRAGMENT** — a def made in a
+branch or case ARM, captured by a lambda built in that same arm, reached the
+push as an opEvent still, because `collectPromotableEvents` deliberately
+stopped at a multi-value arm:
 
 ```go
 // Only recurse into a SINGLE-result fragment … A MULTI-value arm
@@ -389,34 +355,60 @@ stops there:
 if frag != nil && frag.residualN <= 1 {
 ```
 
-So for a closure inside such an arm the planner sees neither the capture
-(its walk runs over the restricted event set) nor the producer (the
-promotion loop iterates the same set), while `lowerFragment` lowers the
-arm regardless and pushes the capture. Every earlier observation follows
-from that one line.
+Three hypotheses were eliminated on the way to that line and need not be
+retried: the body operand is NOT kept outside `ev.call.ops`
+(`RecordClosureCall` appends an ordinary `evCall` whose `ops[bodyPos]` IS the
+closure operand); the planner does NOT see the capture and decline it (an
+instrumented run shows the walk never reaches it); and it is NOT the unit's
+residual closure (seeding `captured` from `rec.outOps` changes nothing). A
+capture-only walk over the whole fragment tree was also measured and is NOT
+sufficient — the promotion LOOP iterates the same restricted set.
 
-**Measured, and NOT sufficient**: collecting captures over the whole
-fragment tree (a capture-only walk, separate from the promotion walk)
-leaves the push unchanged — the producer still is not a promotion
-CANDIDATE, because the promotion loop iterates the restricted set too.
-The fix therefore has to make an intermediate producer inside a
-multi-value arm promotable WITHOUT disturbing that arm's residual values,
-which is the distinction the quoted comment is protecting.
+**Fixed 2026-09-05 (the thirteenth increment) for an arm whose residual is
+recordable.** The blocker was that the planner could not tell an arm's
+residual values from its intermediates: `fragmentResultSeqs` marks only the
+single out operands and a multi-value arm's residual appeared in no recorded
+list. It does now — `captureArmResidual` (compiler/go/emit.go, the branch
+twin of `RecordLoop`'s all-inert capture) records the whole residual as
+resolved operands, EVENT entries included, because an arm runs once per taken
+path. `armRepushableResidual` then opens the walk into such an arm,
+`armResidualForceSeqs` force-promotes each residual event to a frame slot
+(exempting it from `fragResultStaysOnSim`), and `RewritePromotedRefs` rewrites
+`frag.residualOps` so `lowerFragment`'s re-push arm reads the slots. The arm
+now lowers exactly as the PROGRAM residual always has: store each computed
+value, then push the whole residual in the interpreter's order.
 
-**And the planner cannot draw that distinction today**, which is the
-concrete first step. `fragmentResultSeqs` marks only the SINGLE out
-operands (`thenOut`, `elsOut`, `condOut`, `bodyOut`), and
-`fragResultStaysOnSim` protects only what it marks; a multi-value arm's
-several residual values are on the fragment's sim at lowering and appear
-in no recorded operand list (`EmitFragment.residualOps` carries them only
-for the INERT multi-out loop body). So recursing into such an arm would
-expose producers the planner has no way to recognise as its residuals.
-The increment therefore begins in the RECORDER — capture a multi-value
-arm's residual operand list — and only then extends the walk. That is
-why this is a design change, not a patch, and it is the whole of what
-remains here. Three standalone reproductions (an `if` arm with an
-each-body lambda, a `case` arm, and a bare fn body) all compile, so the
-corpus row is the reproduction.
+That closed a second, larger divergence the same measurement exposed — the
+arm's residual was only COUNTED, so a stray leftover made the count match
+while the values did not:
+
+```
+if true [ def c (7777 add 1)  99 (each [ (r:Integer => [ r add c ]) apply ] [1 2]) ] [ 7 8 ]
+    interpreted  99 [7779 7780]        compiled  7778 [7778 7779]
+def m {a: 3}  if true [ def c (m get "a")  99 (each [ … ]) ] [ 7 8 ]
+    interpreted  99 [4 5]              compiled  3 [1 2]
+```
+
+Four such exit-0 wrong answers are fixed and five arms that refused ("branch
+leaves extra values") now compile; pinned in lang
+(`multivalue_arm_residual_test.go`, parity plus the declines) and in the
+compiler (`TestCaptureArmResidualArms`, `TestArmRepushableResidual`).
+
+**Still open, and now named exactly: an arm whose residual LEADS with a
+parked Function.** `captureArmResidual` keeps the loop side's screen — a
+Function value in the region auto-applies in the interpreter when a later
+value lands above it — so such an arm declines the capture and keeps the
+count-only path. That is precisely the corpus's two remaining sites:
+`lang/go/modules/vault_tui.boru:1105` and :1108 (`def cols (vt-rtable-cols
+scr.name)` captured by `(rec:Map => [ vt-rrow cols rec ])`), whose `case` arm
+leaves four values led by the deferred `Tui.table` member — measured
+`ARMCAP decline fn n=4 at 0`. They are reached by `module-vault-tui.tsv` L21
+and L24 and pass today only because the closures they build are never invoked
+(L21 reads the map's KEYS; L24 errors on a missing terminal backend), so the
+wrong capture is unobserved — which is also why a refusing latch was tried
+here and withdrawn: it cost those two rows against a corpus refusal ceiling of
+0 while fixing nothing observable. Admitting a parked Function to the re-push
+is the parked-fn auto-apply family (NUR121, NUR124), not this record.
 
 **Not fixed, and now correctly attributed** (it was hidden behind the
 bogus constant): the same shape with a FN-valued capture read bare as the

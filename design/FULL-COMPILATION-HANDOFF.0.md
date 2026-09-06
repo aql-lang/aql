@@ -2966,6 +2966,94 @@ interpreter dispatches the binding as a word and answers 42 — a live
 divergence the constant had been masking. The record now says so, and the
 fix is the deopt inside a lambda unit named above.
 
+## A multi-value branch arm's residual is now RECORDED, not counted (2026-09-05, the thirteenth increment, NUR126)
+
+**What was measured first.** The twelfth increment left NUR126 half open: a
+def made inside a branch or `case` ARM and captured by a lambda built in the
+same arm still reached `pushOperand` as an `opEvent`, and that switch's
+`default` emitted `PUSH_CONST <event seq>`. The corpus's only witnesses were
+two vault-tui sites whose closures are never invoked, so the trace was run
+back to a standalone one:
+
+```
+if true [ def c (7777 add 1)  99 (each [ (r:Integer => [ r add c ]) apply ] [1 2]) ] [ 7 8 ]
+    interpreted  99 [7779 7780]        compiled  7778 [7778 7779]     ← default lane, exit 0
+def m {a: 3}  if true [ def c (m get "a")  99 (each [ … ]) ] [ 7 8 ]
+    interpreted  99 [4 5]              compiled  3 [1 2]
+```
+
+The disassembly named both faults at once:
+
+```
+0005 CALL_NATIVE s0   ; add          ← 7778, and the global bind does not pop it
+0006 BIND_GLOBAL g0
+0008 PUSH_CONST  k1   ; 7777         ← the capture, lowered as a const over the event seq
+0010 CALL_NATIVE s1   ; each
+```
+
+The literal `99` was never pushed at all. `lowerFragment`'s multi-value arm
+path only COUNTED the sim slots (`len(lw.vm) == frag.residualN`), so the
+`add`'s leftover filled the slot the interpreter holds `99` in and the count
+matched anyway. The capture was the same defect one layer up:
+`collectPromotableEvents` refuses to walk a `residualN>1` fragment, so the
+arm's interior was never a promotion candidate.
+
+**Why the planner could not fix it alone.** Both faults are the same missing
+fact — the planner has no record of WHICH values a multi-value arm leaves.
+`fragmentResultSeqs` marks only the single out operands (`thenOut`, `elsOut`,
+`condOut`, `bodyOut`); the several residual values of a multi-value arm lived
+on the lowering sim and in no recorded list. So the increment begins in the
+RECORDER.
+
+**The change.** `captureArmResidual` (compiler/go/emit.go) replaces
+`captureInertArmResidual`: it records a multi-value ARM's residual as a
+resolved operand list with EVENT entries admitted, where the loop side keeps
+the all-inert restriction — a `for` body re-pushes its residual on every
+iteration, and a frame slot would hold only the last value; an arm runs once
+per taken path. Then, in the lowerer:
+
+- `armRepushableResidual` opens `collectPromotableEvents`' walk (both passes,
+  so the fragment ids stay in lockstep) into an arm captured whole;
+- `armResidualForceSeqs` names that residual's event entries and
+  `planValueDefLocals` merges them into `forceOrder`, exempting them from
+  `fragResultStaysOnSim` — the top entry IS the arm's out operand, which the
+  stay-on-the-sim rule would otherwise pin;
+- `RewritePromotedRefs` rewrites `frag.residualOps` so the re-push reads the
+  allocated slots rather than the producing seqs.
+
+The arm then lowers exactly as the PROGRAM residual always has — store each
+computed value, push the whole residual in the interpreter's order:
+
+```
+0006 STORE_LOCAL l0     ; the add
+0007 PUSH_LOCAL  l0     ; … for the bind
+0010 PUSH_LOCAL  l0     ; … and for the capture
+0013 STORE_LOCAL l1     ; the each result
+0014 PUSH_CONST  k5     ; 99
+0015 PUSH_LOCAL  l1
+```
+
+**Measured payoff.** Over the twelve rows now pinned in
+`lang/go/multivalue_arm_residual_test.go`: four exit-0 wrong answers become
+correct, five arms that refused ("branch leaves extra values") compile, and
+three unchanged shapes (a single-value arm, both directions of the all-inert
+`if c [99] [1 2]` merge) lower as before. The langspec differential, the
+whole-corpus fallback suite, the combination matrix and the property
+differential are clean, with no new refusal.
+
+**What it does NOT reach, named exactly.** The screen `captureArmResidual`
+inherits from the loop side — decline a residual containing a parked
+Function, whose auto-apply the interpreter performs when a later value lands
+above it — is what still excludes the corpus's own two sites.
+`lang/go/modules/vault_tui.boru:1105` and :1108 sit in a `case` arm that
+leaves FOUR values led by the deferred `Tui.table` member, so the capture
+declines at entry 0 (`ARMCAP decline fn n=4 at 0`) and the arm keeps the
+count-only path with its bogus capture. Those rows pass only because the
+closures are never invoked. Admitting a parked Function to the re-push is the
+auto-apply family (NUR121, NUR124), not this increment, and a refusing latch
+was already tried and withdrawn here: it costs those two rows against a
+corpus refusal ceiling of 0 while fixing nothing observable.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
