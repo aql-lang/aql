@@ -4825,12 +4825,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 		// for any promoted producer (planValueDefLocals rewrote the events in
 		// place, but outOps is a separate slice).
 		es.planDeopts(u, rec)
-		outSeqs := make([]int, 0, len(rec.outOps))
-		for _, op := range rec.outOps {
-			if op.kind == opEvent && op.resIdx == 0 {
-				outSeqs = append(outSeqs, op.idx)
-			}
-		}
+		outSeqs := appendResidualSeqs(nil, rec.outOps)
 		rec.promoted, rec.dead = es.planValueDefLocals(u, rec.frag.events, outSeqs, forceOrder)
 		for i := range rec.outOps {
 			promoteOperand(&rec.outOps[i], rec.promoted)
@@ -7569,6 +7564,29 @@ func (es *EmitState) producerReturnedClosureArity(id string) (int, bool) {
 		return constLambdaArity(es.consts, op.idx)
 	}
 	return 0, false
+}
+
+// appendResidualSeqs collects the producing-event seqs a residual's
+// operands reference — the unit's own out-ops AND, for a closure operand,
+// its lexical CAPTURES. A capture is an enclosing-scope operand like any
+// other: unless the promotion planner counts it, its producer is never
+// given a frame slot, the operand stays an opEvent, and the closure push
+// materialises it through pushOperand's const arm — baking the event's
+// SEQ as a const index (NUR126). The event-stream operands are surfaced
+// by forEachOperand's closure arm for exactly this reason; a RESIDUAL
+// closure (a returned lambda) reaches the planner only through here.
+func appendResidualSeqs(dst []int, ops []EmitOperand) []int {
+	for _, op := range ops {
+		switch op.kind {
+		case opEvent:
+			if op.resIdx == 0 {
+				dst = append(dst, op.idx)
+			}
+		case opClosure:
+			dst = appendResidualSeqs(dst, op.closureCaps)
+		}
+	}
+	return dst
 }
 
 // producerReturnedOutOp is the single out op of the unit a compiled user

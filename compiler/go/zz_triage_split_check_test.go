@@ -1598,3 +1598,34 @@ func TestIsolateEmitAndBudget(t *testing.T) {
 	nilC.IsolateEmit()()
 	nilC.IsolateBudget()()
 }
+
+// TestAppendResidualSeqs pins the promotion planner's residual input
+// (NUR126): a residual closure's lexical CAPTURES are enclosing-scope
+// operands and must be counted, or their producers are never promoted to
+// frame locals and the closure push materialises an event operand through
+// pushOperand's const arm — baking the event's SEQ as a const index.
+func TestAppendResidualSeqs(t *testing.T) {
+	cap0 := EventOperand(4, 0)
+	cap1 := EventOperand(5, 0)
+	nested := EmitOperand{kind: opClosure, closureUnit: 1, closureCaps: []EmitOperand{cap1}}
+	ops := []EmitOperand{
+		EventOperand(2, 0), // a plain residual event
+		EventOperand(3, 1), // a non-zero result index is not a promotion candidate
+		ConstOperand(9),    // a const references no producer
+		localOperand(0),    // nor a local
+		{kind: opClosure, closureUnit: 0, closureCaps: []EmitOperand{cap0, nested}},
+	}
+	got := appendResidualSeqs(nil, ops)
+	want := []int{2, 4, 5}
+	if len(got) != len(want) {
+		t.Fatalf("seqs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("seqs = %v, want %v", got, want)
+		}
+	}
+	if n := appendResidualSeqs(nil, nil); len(n) != 0 {
+		t.Errorf("an empty residual references nothing: %v", n)
+	}
+}

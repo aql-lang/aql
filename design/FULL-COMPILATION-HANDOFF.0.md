@@ -2099,8 +2099,14 @@ the boundary, not from the family's label:
   beside it, each measured: (a) a BARE-NAME apply of a captured Function
   with a forward arg (`[g x]`, no paren) refuses; (b) a `/v` READ of a
   captured fn returned as data (`[g/v]`) refuses; (c) an `Any`-typed inner
-  param (`[[x:Any][Any][(g x)]]`) refuses at the lead window's argument
-  gate ("cannot prove its argument non-function"). The Church rows use all
+  param (`[[x:Any][Any][(g x)]]`) refuses. *(Corrected 2026-09-05, the
+  attempted twelfth increment, by surfacing the closure PROBE's own
+  reason: (a) and (c) are ONE refusal — "closure fnval$body: body value
+  count differs from declared returns", the count check that fires before
+  the replay classifier a fn unit reaches — and (c)'s named gate,
+  "cannot prove its argument non-function", does not appear at all. The
+  outer "fn app: body result of unknown provenance" every one reports is
+  just the factory seeing an unresolvable closure operand.)* The Church rows use all
   three at once (`x:Any => [x/v]`, `f/v apply` chains), so they graduate
   only when all three land; the parser-combinator rows are (a) plus the
   `if` arms. Sizing: three increments, (c) first — it is the gate the
@@ -2823,6 +2829,115 @@ window trim, and the two standing refusals),
 `compiler/go/zz_triage_split_check_test.go` (TestConstLambdaArity over
 the anonymous / named / module / Go-impl / two-signature axis, and
 TestProducerReturnedClosureConstArm holding the two questions apart).
+
+## The twelfth increment was attempted and reverted, and what it measured (2026-09-05)
+
+**The blocker chain, corrected.** Surfacing the closure PROBE's own
+refusal (a temporary print at `tryReturnedClosure`'s `!probeOK`) shows
+the 22-row closure-capture family's blockers (a) and (c) are ONE refusal,
+not two gates: `closure fnval$body: body value count differs from
+declared returns`. A lambda VALUE's body whose residual is a
+word-dispatch window (`[g x]` over a captured g leaves [g, x] in the
+model) is count-refused before it can reach the replay classifier a fn
+unit reaches. The `Any`-typed paren twin refuses identically; the gate
+the ledger named ("cannot prove its argument non-function") never fires.
+`[if … [(g x)] [0]]` refuses earlier still ("if: then-branch result of
+unknown provenance") and `[g/v]` alone as "unapplied fn-value in body
+residual".
+
+**The attempt.** Four edits, each measured: the replay classifier admits
+a lambda unit (`rec.closure && !rec.lambdaUnit`); the closure count
+refusal defers to it; `closureResidualHasUnappliedFn` skips an armed
+replay (`rec.dynFrameW > 0`); and — found by the sweep —
+`tryReturnedClosure` stamps the count contract its operand had been
+missing (`fnValueRetSpec`, the same spec the callback path uses; without
+it `[g x 1]` answered `15 1` where the interpreter raises). With all
+four, `[g x]` and `[x g]` compile and answer 15.
+
+**Why it was reverted.** The whole-frame replay islands VALUES; the
+interpreter steps TOKENS. Succeeding dispatches agree; FAILING ones do
+not. `def app fn [[g:Function][Function][( fn [[x:Integer][Integer][g
+x]] )]]  def h (app (z:String => [z]))  (h 5)` raises the same headline
+at the same position on both lanes, but the interpreter's notes read
+`candidate `g (String)` takes 1 argument, but none were supplied` (its
+forward token is the WORD `x`) where the island's read `the argument was
+5 (an Integer)` (its region already holds the 5). Making more programs
+compile at the price of more live error-text divergences is the trade
+this line has refused before.
+
+**The mechanism that can.** The ninth increment's DEOPT hands the
+interpreter the BODY TOKENS (`CompiledFn.Body` from the statement's
+token), which reproduces `g x` exactly — notes and all. The tenth
+increment excluded `fnval` units from `planDeopts` because a lambda
+value escapes the frame its bindings live in; but a lambda value applied
+through the VM runs in its OWN frame, whose params and captures are its
+locals, so a SELF-CONTAINED deopt (params and captures bound at the
+closure's entry, no parent seeding) is the shape to try next. The
+missing `closureRet` stamp above is real either way — today unobservable
+only because the count check refuses first.
+
+**Recorded beside it**: NUR122 gains a third witness, live on main — the
+already-compiling paren form over a captured NAMED fn names that fn
+where the interpreter names the param (`cannot call `add`` at 1:80
+against `cannot call `g`` at 1:64).
+
+## A returned lambda's computed capture was baked as a constant (2026-09-05, the twelfth increment, NUR126)
+
+**Found by walking away from a refusal.** The attempted blocker-(a) work
+above ended in a revert; measuring what a lambda VALUE's body does with a
+GRADUAL capture — the shape NUR123's record listed as open — turned up a
+wrong ANSWER instead: `def h fn [[m:Map][Function][def j (m get "f")  (
+fn [[x:Integer][Any][j]] )]]  def q (h {f: ([] => [42])})  (q 7)` answered
+`7`, the caller's own argument, for the interpreter's `42`. The factory's
+bytecode computed the capture, DROPped it, and pushed `PUSH_CONST` over
+the producing event's SEQ read as a const index. The same emit panics the
+disassembler outright when that index is out of range — which is how the
+defect was confirmed rather than guessed.
+
+**The invariant that broke.** `pushOperand` materialises const, local and
+type operands only ("event operands are already on the stack", its own
+comment), and its switch ends in a `default` that treats everything else
+as a const. Nothing enforced that; the enforcement was supposed to come
+from upstream, where `planValueDefLocals` promotes a producer that
+something still references and `forEachOperand` deliberately surfaces a
+closure's captures so a def used ONLY as a capture is counted. A RETURNED
+lambda never passes through that walk — its closure operand is the unit's
+RESIDUAL — and the planner's residual input listed the out-ops' own event
+seqs with captures invisible.
+
+**The fix is one walk.** `appendResidualSeqs` collects the seqs a residual
+references INCLUDING each closure's captures (recursing through nested
+closures), and the fn-unit planner takes it; the capture then lowers as
+`STORE_LOCAL` + `PUSH_LOCAL`.
+
+**A latch was tried beside it, and withdrawn — the reason is worth
+keeping.** `EmitState.capFail` made pushOperand record a capture it could
+not materialise so Finalize would refuse rather than ship the const push.
+It cost two corpus rows: `def cols (vt-rtable-cols scr.name)` captured by
+a lambda inside the SAME `case` arm (`vault_tui.boru:1106`, :1109) is a
+producer the planner promotes only at a unit's ROOT, so it still reaches
+the push as an event. Those rows pass today because the closures they
+build are never invoked — the wrong capture is unobserved — so the latch
+would have traded two compiling rows, against a refusal ceiling of 0, for
+no observable correctness. Promotion INSIDE an arm is the increment that
+closes it; until then the shape is recorded on NUR126 with its two corpus
+sites rather than guarded.
+
+**Measured.** Every value kind a capture can hold (Integer, String, List,
+a computed param expression, two computed captures at once, the param
+itself), the capture used together with the lambda's own param, and a
+second instance of the same factory keeping its own captured value — all
+agree on both lanes and compile natively
+(`lang/go/closure_capture_promotion_test.go`). The rows that refuse still
+refuse for their pre-existing reasons ("fn h: body result of unknown
+provenance"), and the corpus differential is clean with no new refusal.
+
+**One thing this corrects.** NUR123's record said a lambda VALUE's body
+"refuses soundly". It does not: with the bogus constant gone, the
+fn-valued capture read bare as the body answers `fn` where the
+interpreter dispatches the binding as a word and answers 42 — a live
+divergence the constant had been masking. The record now says so, and the
+fix is the deopt inside a lambda unit named above.
 
 ## What the ledger excludes, and why each exclusion was measured
 
