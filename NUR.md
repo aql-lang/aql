@@ -457,6 +457,39 @@ anyway. The `(mk 3) 5` twin agrees on both lanes (`fn (Integer) 5`), which is
 what places the fault on the value's ARRIVAL above an existing residual rather
 than on the apply itself.
 
+**The site is located, and one fix was tried and WITHDRAWN** (2026-09-06). The
+boundary is exact: the residual must be exactly `[literal, 1-arg closure]` —
+`(mk 3) 5`, `5 (mk 3) 7` and `1 2 (mk 3)` all agree, and the rest of the family
+refuses. That is the shape `resolveDynamicApply`'s `trailingApply` helper
+accepts: an event-produced single-output fn on the sim top over a plain static
+arg. Every SIBLING arm of `resolveDynamicApply` consults the park rule
+(`callResultPlaced` / `placedNotReStepped`); `trailingApply` checks only the
+shape, so the arity-1 apply fires on a value the paren placed with one
+survivor.
+
+Adding `callResultPlaced` there does remove the miscompile — the row refuses
+("residual shape beyond Stage 1 (call result above a literal)"), a sound
+fallback rather than a wrong answer — but it costs a corpus row against a
+refusal ceiling of 0, so it was withdrawn:
+
+```
+recursion.tsv:L48  def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] 10 (mk2 5) apply
+```
+
+That row parks the result exactly as `5 (mk 3)` does and then APPLIES it,
+because the trailing `apply` word dispatches the parked value on purpose. So
+the guard needs a signal separating "a later word dispatches this parked value"
+from "nothing does". **`applyPending` is NOT that signal** — measured: the
+`apply` row still refuses with it excluded, so the pending-apply mark is not set
+for the program residual at that point. Two things follow for the next attempt:
+the fix site is `trailingApply`, and the missing discriminator is the recorded
+provenance of the `apply` word, not the pending-apply list.
+
+Two shapes the fix must also leave alone, both already passing: a member or
+dynamic read (`5 m.f`, `[..] r.one-of`) is no call result and must keep the
+arm; and the paren-bounded `(a b comp)` shape collapses at the paren
+(engine.go's trailing fn-value apply) and never reaches here.
+
 A native word's returned fn is RE-STEPPED where it lands
 (design/PAREN-RESTEP-RULE.0.md: the park applies to a USER fn's single
 result only), and a stack-shuffle word that moves a closure to the top
