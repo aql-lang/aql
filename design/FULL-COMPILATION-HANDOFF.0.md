@@ -2923,6 +2923,16 @@ no observable correctness. Promotion INSIDE an arm is the increment that
 closes it; until then the shape is recorded on NUR126 with its two corpus
 sites rather than guarded.
 
+Instrumenting the planner narrowed that increment's first move: this is a
+COUNTING gap, not a rewrite one. `RewritePromotedRefs` already recurses
+into fragments and rewrites `closureCaps`, but the producer never enters
+`planValueDefLocals`'s `captured` set, though an event capture does reach
+the push (`EVENTCAP unit=23 kind=2 idx=165` at `vault_tui.boru:1106`).
+`eachClosureCap` scans a call's `ops`, a user call's, a fallback's ins, a
+loop's range/bodyOut and a branch's cond/arms — so start by finding where
+a `RecordClosureCall` BODY's closure operand is stored and whether that
+position is among them.
+
 **Measured.** Every value kind a capture can hold (Integer, String, List,
 a computed param expression, two computed captures at once, the param
 itself), the capture used together with the lambda's own param, and a

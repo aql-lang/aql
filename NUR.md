@@ -354,8 +354,22 @@ Both rows pass today because the closures they build are never invoked
 (L21 reads the map's KEYS; L24 errors on a missing terminal backend), so
 the wrong capture is unobserved — which is exactly why a refusing latch
 was tried here and then withdrawn: it cost those two rows against a
-corpus refusal ceiling of 0 while fixing nothing observable. The
-promotion inside an arm is the increment that closes it.
+corpus refusal ceiling of 0 while fixing nothing observable.
+
+**Narrowed 2026-09-05 by instrumenting the planner.** The capture is not
+a REWRITE gap — `RewritePromotedRefs` already recurses into fragments and
+`promoteOperand` rewrites `closureCaps`. It is a COUNTING gap: the
+producer (event seq 165 in that unit) never enters
+`planValueDefLocals`'s `captured` set at all, though an event capture
+does reach the push there (`EVENTCAP unit=23 kind=2 idx=165 pos={1106 23
+each}`). `eachClosureCap` scans a call's `ops`, a user call's, a
+fallback's ins, a loop's range/bodyOut and a branch's cond/arms — so the
+next step is to find where a `RecordClosureCall` body's closure operand
+is stored and whether that position is among them; a body operand kept
+outside `ev.call.ops` would explain the miss exactly. Three standalone
+reproductions (an `if` arm with an each-body lambda, a `case` arm, and a
+bare fn body) all compile, so the shape needs the module's nesting to
+appear.
 
 **Not fixed, and now correctly attributed** (it was hidden behind the
 bogus constant): the same shape with a FN-valued capture read bare as the
