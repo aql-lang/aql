@@ -3054,6 +3054,216 @@ auto-apply family (NUR121, NUR124), not this increment, and a refusing latch
 was already tried and withdrawn here: it costs those two rows against a
 corpus refusal ceiling of 0 while fixing nothing observable.
 
+## A lambda VALUE's body plans its deopt from its OWN frame (2026-09-06, the fourteenth increment, NUR123)
+
+**The shape the twelfth increment uncovered.** With NUR126's bogus constant
+gone, a fn-valued capture read bare as a returned lambda's whole body stood
+exposed as a live divergence — the interpreter dispatches the binding as a
+WORD, the compiled lane pushed the slot:
+
+```
+def h fn [[m:Map][Function][def j (m get "f")  ( fn [[x:Integer][Any][j]] )]]  def q (h {f: ([] => [42])})  (q 7)
+    interpreted  42            compiled  fn          ← default lane, exit 0
+… [[x:Integer][Any][j typeof]] …
+    interpreted  Integer       compiled  Function
+```
+
+The `{f: 5}` twins agreed on both lanes throughout, which is what places the
+fault on the word-dispatch rule and not on the capture.
+
+**Why the tenth increment could not reach it, and where its reasoning was
+half right.** `callable_words.go` withheld the body tokens from every
+escaping unit:
+
+```go
+// an escaping body — a lambda value, a stored fn, a spawned body — has
+// no frame to resume in and seats none.
+if word != "fnval" && word != "storedfn" && word != "spawnbody" {
+	es.SetUnitBody(unit, bodyToks)
+}
+```
+
+and `planDeopts` bailed to `planDeoptsEnv` for the same units. The reason
+given is true of ONE frame and false of another. `seedParentDeopt` — the
+code-body route — asks the ENCLOSING unit to bind the captured names
+registry-visibly, which is sound precisely because `each` / `do` / `fold` /
+`for` run the body IN that frame. A returned lambda is applied later, when
+the factory's frame is gone, so that route is genuinely unavailable. But the
+lambda's OWN frame is live for the whole apply, and its captures ride in
+slots `nParams…nParams+nCaps-1` — so the unit can bind them itself.
+
+**The change, in three seams already built.** `callable_words.go` seats body
+tokens for `fnval` (a `storedfn` / `spawnbody` is invoked by the host outside
+any such call and still seats none). `planDeopts` routes such a unit through
+a new `lambdaNamesSelfBound` instead of `seedParentDeopt`: every name the
+island spells must be one of this unit's own locals (a param or a capture), a
+def the island's own tokens make, or a word the registry resolves — anything
+else would have resolved from the factory's frame and the points decline, as
+they did before. `emitDynParamBinds` then extends its EXISTING
+`OpPushLocal` + `OpBindDynScope` loop over the capture slots for such a unit,
+so `RET` truncates them exactly as it already does for params.
+
+**Measured**: nine rows agree that did not — the bare read, `j typeof`, a
+read inside a list literal, the capture used with the lambda's own param
+(`x j add` → 49), two reads that both dispatch (`j j add` → 84), the plain-data
+twins that pay the test alone, and a fn whose effects must run exactly once.
+Two shapes keep the whole-program refusal, a sound interpreter fallback:
+`{a: j}` as the lambda's body ("body result of unknown provenance") and two
+factory instances live at once ("fn value precedes residual args").
+
+**Still open, measured against the pre-change binary so it is not read as a
+regression**: a read inside a BRANCH ARM of a lambda body —
+`( fn [[x:Integer][Any][if true [j] [0]]] )` — still answers `fn` for the
+interpreter's 42. The arm plans no point and keeps its slot push, exactly as
+every lambda body did before this increment. That and the declined points
+(`5  j typeof`) are what remains of NUR123 besides NUR119's render.
+
+## The lambda-body deopt's own gate was too strict (2026-09-06, the fifteenth increment, NUR123)
+
+**What the fourteenth increment left, and what it actually was.** That
+increment recorded one shape still diverging — a read inside a BRANCH ARM of a
+lambda body. Measuring the family first, before touching the arm machinery,
+split it in a way that named a different cause:
+
+```
+( fn [[x:Integer][Any][if (x gt 3) [j] [0]]] )     agrees      ← a DYNAMIC condition
+( fn [[x:Integer][Any][if true    [j] [0]]] )      42 vs fn    ← a CONSTANT one
+```
+
+Both put the read in an arm, so the arm was not the discriminator. The
+disassembly confirmed it: the dynamic row emits `BIND_DYN_SCOPE` for both the
+param and the capture and then `DEOPT_IF_FN`; the constant row emits neither,
+so the unit had planned no points at all. An instrumented run placed the
+decline precisely — `deoptPointFor` returned ok for both, and the post-loop
+gate rejected the constant row over the name `true`:
+
+```
+SELFBOUND reject "true" own=map[j:true x:true] made=map[] all=map[if:true j:true true:true]
+```
+
+`lambdaNamesSelfBound` had been written as a REGISTRY-membership test: a name
+the islands spell must be an own local, a def the island makes, or a word
+`Registry.Lookup` resolves. `true` is spelled as a word and is not a registry
+entry, so a token that needs no binding at all declined the whole point.
+
+**The rule that is actually load-bearing.** A lambda serves its islands from
+its own frame, so the ONE name it cannot serve is one an ENCLOSING unit
+supplies — that unit's own def or its param — and that this lambda did not
+capture: the island would read it out of a frame that no longer exists.
+Everything else resolves exactly as the interpreter resolves it there: this
+unit's own locals, a def the island's own tokens make, a native or module
+word, a top-level (global) def that outlives every frame, and a bare
+literal-word. The test now scans the still-open enclosing units — their
+`locals` and their root frame's `evDynBind`s — instead of the registry.
+
+**A second gap the same rows exposed.** A nested code body inside a lambda
+(`( fn [[x:Integer][Any][[1] each [j]]] )`) routes through `seedParentDeopt`,
+which asks the PARENT to bind — and the parent is the lambda. It reached
+`planDeoptsEnv`, which set `deoptEnv` but not `lambdaDeopt`, so
+`emitDynParamBinds` bound the params only and the child's island could not
+resolve the capture. Marking it there (behind the same
+`lambdaNamesSelfBound` check) closes it.
+
+**Measured**: six of the seven rows in the family agree that did not —
+`if true [j] [0]`, its else-arm twin, the arm under a trailing `typeof`, the
+already-working dynamic-condition row, the plain-data twin, and
+`[1] each [j]`, which had been raising ``did you mean `h` or `q`?`` where the
+interpreter answers `[42]` (a wrong ERROR, not just a wrong value).
+
+**Still open, and NOT a deopt gap** — worth stating precisely, because the
+obvious guess is wrong. `( fn [[x:Integer][Any][do [j]]] )` answers `fn` for
+the interpreter's 42, but the deopt machinery is working there: the lambda
+binds `j` and the `do$body` unit carries its `DEOPT_IF_FN`, exactly as the
+`each` row does. The fault is in the lambda body's RESIDUAL model:
+
+```
+0002 PUSH_LOCAL  l1     ; j
+0003 PUSH_CLOSURE f2    ; do$body
+0004 CALL_NATIVE s0     ; do (List)
+0005 DROP               ; ← the do's result, discarded
+0006 PUSH_LOCAL  l1     ; ← and the raw slot returned in its place
+0007 RET
+```
+
+The `do` body's value IS `j`'s value, so its result carrier is `j`'s carrier;
+`resolveOperand` maps the body's residual back to the LOCAL, the lowering
+re-pushes the slot and drops the call — losing the dispatch the island
+performed. That is a residual-identity defect in the same family, not a
+missing deopt point, and it needs its own increment.
+
+**One contract this changes on purpose.** `compiler/go/deopt_test.go` asserted
+"a lambda unit keeps its slot push". That was the pre-fourteenth-increment
+contract; the test now asserts the current one (a lambda plans from its own
+frame and carries `lambdaDeopt`), and `TestLambdaNamesSelfBound` covers both
+directions of the new gate — own param and capture, an island-made def, a
+native, the bare literal-word that caused this, and the two rejects (an
+enclosing unit's param and its frame def).
+
+## A capture's slot overrode an event of the unit's OWN body (2026-09-06, the sixteenth increment, NUR123)
+
+**The remainder the fifteenth increment named, confirmed and located.** That
+increment recorded `( fn [[x:Integer][Any][do [j]]] )` as still answering `fn`
+for the interpreter's 42, and said it was not a deopt gap. Measuring the
+family fixed the discriminator exactly, and it is not `do` either:
+
+```
+def h fn [[m:Map][Any][def j (m get "f")  do [j]]]                    agrees   ← a PLAIN fn body
+( fn [[x:Integer][Any][do [j typeof]]] )                              agrees   ← the point fires inside
+( fn [[x:Integer][Any][do [j]]] )                                     42 vs fn ← a LAMBDA body
+```
+
+The same `do [j]` agrees in a plain fn body and diverges in a lambda, so the
+ENCLOSING UNIT KIND is the variable. The two disassemblies say why:
+
+```
+plain fn body            lambda body
+CALL_NATIVE do           CALL_NATIVE do
+RET                      DROP            ← the call's result, discarded
+                         PUSH_LOCAL l1   ← the raw capture slot returned instead
+                         RET
+```
+
+**Cause.** `do` returns its body's value unchanged, so the result carrier IS
+`j`'s carrier. `resolveOperand` opens with an override:
+
+```go
+if cur := es.units[len(es.units)-1]; cur != nil && cur.capID[v.ID] {
+	if slot, ok := cur.localByID[v.ID]; ok {
+		return localOperand(slot), true
+	}
+}
+```
+
+whose own comment gives its reason — the captured value "may carry a
+producedBy entry from the ENCLOSING unit … but that event lives in the parent
+frame and is unreachable from inside the body". Here the producing event is in
+THIS unit's own frame, so the reason does not hold; the override sent the
+residual back to the slot, the lowering dropped the call, and with it went the
+word dispatch the body's deopt island had just performed.
+
+**The change** is that guard, one predicate wide: `producedInCurrentUnit`
+takes the capture slot only when the producing event is NOT this unit's own.
+
+**Which floor is live depends on when resolution runs**, and the first attempt
+missed it — worth recording, because it looked like the fix simply did not
+work. While the body records, the unit's floor is the one `beginFragment`
+pushed for its root frame (`es.fragFloors[rec.rootFrame]`); by the time the
+`finish` callback resolves the body RESIDUAL that frame is closed and the
+floor has moved onto `rec.frag.startSeq` — the same value the provenance
+sweep a few lines below already compares against. The predicate reads
+whichever is live.
+
+**Measured**: `do [j]` and its paren twin `(do [j])` agree where they answered
+`fn`; the plain-fn-body row, the `do [j typeof]` row and the plain-data twin
+are unchanged. Every module suite is clean, which matters here because
+`resolveOperand` is a hot, central function.
+
+**Still open**: `( fn [[x:Integer][Any][do [j] typeof]] )` answers `Function`
+for the interpreter's `Integer`. There the `typeof` consumes the do's result
+as an OPERAND mid-recording, not as the body residual at finish — a different
+resolution path that the guard does not reach. NUR124 (a stack-shuffle word
+re-stepping a produced closure) is untouched.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

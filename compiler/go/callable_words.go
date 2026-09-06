@@ -74,10 +74,14 @@ func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK 
 	// read discipline skips them (see fnUnitRec.storedRefUnit).
 	es.fnRecs[unit].storedRefUnit = word == "storedfn" || word == "spawnbody"
 	// A code body a native runs inside the caller's frame (each, do, fold,
-	// for, …) seats its tokens for a per-read deopt (planDeopts, NUR123);
-	// an escaping body — a lambda value, a stored fn, a spawned body — has
-	// no frame to resume in and seats none.
-	if word != "fnval" && word != "storedfn" && word != "spawnbody" {
+	// for, …) seats its tokens for a per-read deopt (planDeopts, NUR123).
+	// A LAMBDA VALUE seats them too: the frame it resumes in is its OWN —
+	// live for the whole apply, with its captures in slots — not the
+	// factory's, which is gone by then (planDeopts routes it through
+	// lambdaNamesSelfBound instead of seedParentDeopt for exactly that
+	// reason). A stored fn or a spawned body is invoked by the host outside
+	// any such call and seats none.
+	if word != "storedfn" && word != "spawnbody" {
 		es.SetUnitBody(unit, bodyToks)
 	}
 	if finish == nil {

@@ -337,3 +337,102 @@ func TestBodyLocalDeoptParity(t *testing.T) {
 		requireParity(t, c.src, gotC, errC, gotI, errI)
 	}
 }
+
+// TestLambdaValueBodyDeoptParity pins the fourteenth increment: NUR123's
+// word-dispatch rule reaching a lambda VALUE's own body. The tenth increment
+// closed the rule for a code body a native runs IN the enclosing frame
+// (each, do, fold, for) and deliberately withheld the body tokens from an
+// escaping unit — "no frame to resume in". Half of that was right: the
+// FACTORY's frame is gone by the time the returned lambda is applied, so
+// seedParentDeopt's promise does not hold. But the lambda's OWN frame is
+// live for the whole apply, with its captures in slots, so it plans from
+// there instead (lambdaNamesSelfBound + emitDynParamBinds over the capture
+// slots). Before it, every row below answered `fn` / `Function` for the
+// interpreter's value, on the default lane with exit 0.
+func TestLambdaValueBodyDeoptParity(t *testing.T) {
+	const hf = `def h fn [[m:Map][Function][def j (m get "f")  ( fn [[x:Integer][Any]`
+	rows := []struct{ src, want string }{
+		{hf + `[j]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — was fn"},
+		{hf + `[j]] )]]  def q (h {f: 5})  (q 7)`, "5 — plain data, the test alone"},
+		{hf + `[j]] )]]  def q (h {f: "s"})  (q 7)`, "s"},
+		{hf + `[j typeof]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — was Function"},
+		{hf + `[j typeof]] )]]  def q (h {f: 5})  (q 7)`, "Integer"},
+		{hf + `[[j 1] size]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "2 — the read inside a list literal"},
+		{hf + `[x j add]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "49 — the capture and the lambda's own param together"},
+		{hf + `[j j add]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "84 — both reads dispatch"},
+		{hf + `[j typeof]] )]]  def q (h {f: ([] => [print "fired"  42])})  (q 7)`, "fired Integer — the fn's effects run once"},
+		// the fifteenth increment: a read inside a BRANCH ARM of that body,
+		// and inside a nested code body. The `if true` rows are the ones the
+		// registry-membership form of lambdaNamesSelfBound declined, over the
+		// bare word `true`; the each row raised a WRONG ERROR before it.
+		{hf + `[if true [j] [0]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — was fn"},
+		{hf + `[if true [j] [0]]] )]]  def q (h {f: 5})  (q 7)`, "5 — plain data"},
+		{hf + `[if false [0] [j]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — the else arm"},
+		{hf + `[if (x gt 3) [j] [0]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — a dynamic condition"},
+		{hf + `[if true [j] [0] typeof]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — was Function"},
+		{hf + `[[1] each [j]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "[42] — was the error `did you mean h or q?`"},
+		// the sixteenth increment: the do body's value IS j's value, so its
+		// result carrier is j's carrier and resolveOperand's capture override
+		// sent the RESIDUAL back to the slot — the lowering emitted
+		// `CALL_NATIVE do; DROP; PUSH_LOCAL`, discarding the island's dispatch.
+		{hf + `[do [j]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — was fn"},
+		{hf + `[do [j]]] )]]  def q (h {f: 5})  (q 7)`, "5 — plain data"},
+		{hf + `[(do [j])]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — the paren twin"},
+		{hf + `[do [j typeof]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — the point fires INSIDE the do body"},
+	}
+	for _, c := range rows {
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
+		if !compiled {
+			t.Errorf("%q (%s): must compile natively; err=%v", c.src, c.want, errC)
+			continue
+		}
+		requireParity(t, c.src, gotC, errC, gotI, errI)
+	}
+}
+
+// The same `do [j]` in a PLAIN fn body always agreed — that contrast is what
+// located the fault in resolveOperand's capture override rather than in `do`
+// or in the deopt, so it is pinned as the control it served as.
+func TestDoBodyCaptureResidualPlainFn(t *testing.T) {
+	src := `def h fn [[m:Map][Any][def j (m get "f")  do [j]]]  h {f: ([] => [42])}`
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if !compiled {
+		t.Fatalf("%q: must compile natively; err=%v", src, errC)
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+	if fmt.Sprint(gotC) != "[42]" {
+		t.Errorf("%q = %v, want [42]", src, gotC)
+	}
+}
+
+// The lambda-body deopt's own boundaries, each measured. A read the island
+// cannot seat, and a factory whose result the residual model cannot place,
+// keep the whole-program refusal — a sound interpreter fallback, never a
+// wrong answer. The `if` arm row is the one shape still DIVERGING (pinned
+// as the interpreter's answer via the fallback lane, not as parity on a
+// compiled run): a read inside a branch arm of a lambda body plans no point
+// and keeps its slot push, exactly as it did before this increment.
+func TestLambdaValueBodyDeoptRefusals(t *testing.T) {
+	const hf = `def h fn [[m:Map][Function][def j (m get "f")  ( fn [[x:Integer][Any]`
+	refuse := []struct{ src, reason string }{
+		{hf + `[{a: j}]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "body result of unknown provenance"},
+		{hf + `[j]] )]]  def q (h {f: ([] => [42])})  def r (h {f: 5})  (q 7) (r 1)`, "fn value precedes residual args"},
+	}
+	for _, c := range refuse {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check: %v", c.src, cerr)
+		}
+		if prog != nil {
+			t.Errorf("%q: want a refusal, got a compiled program", c.src)
+			continue
+		}
+		if !strings.Contains(reason, c.reason) {
+			t.Errorf("%q: refusal = %q, want %q", c.src, reason, c.reason)
+		}
+	}
+}
