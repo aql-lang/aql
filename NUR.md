@@ -463,11 +463,19 @@ increment: `def h fn [[m:Map][Function][def j (m get "f")  ( fn
 [[x:Integer][Any][j]] )]]  def q (h {f: ([] => [42])})  (q 7)` is 42 on
 both lanes, where it answered `fn`; the escaping unit seats its body
 tokens after all and plans from its OWN frame — its captures ride in slots
-for the whole apply — instead of the enclosing one); OPEN for a declined
+for the whole apply — instead of the enclosing one), and inside a BRANCH
+ARM or a nested `each` body of that lambda body (2026-09-06, the
+fifteenth increment: `[if true [j] [0]]` is 42 where it answered `fn`,
+`[[1] each [j]]` is [42] where it raised ``did you mean `h` or `q`?``); OPEN for a declined
 point (a literal or a read pushed before the statement and still pending
-at the test: `5  j typeof`), for a read inside a BRANCH ARM of a lambda
-body (`( fn [[x:Integer][Any][if true [j] [0]]] )` still answers `fn` for
-42 — the arm plans no point) and for the `/v` render (NUR119). **Found:** 2026-09-05, measuring the closure-capture
+at the test: `5  j typeof`), for a `do` body nested in a lambda body
+(`( fn [[x:Integer][Any][do [j]]] )` still answers `fn` for 42 — measured
+2026-09-06 as a RESIDUAL-IDENTITY defect, not a missing deopt: the
+`do$body` unit does carry its point, but the do's result carrier IS the
+captured local's, so the lowering re-pushes the slot and DROPs the call) and for
+the `/v` render (NUR119). A read inside a BRANCH ARM of a lambda body,
+and an `each` body nested in one, were closed by the fifteenth increment
+(2026-09-06). **Found:** 2026-09-05, measuring the closure-capture
 family's blocker (a) on the tree after NUR120/NUR121 landed.
 
 **Rule:** a program matches or refuses; the two lanes agree on values and

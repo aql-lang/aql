@@ -10014,9 +10014,19 @@ func (es *EmitState) planDeopts(u *emitUnit, rec *fnUnitRec) {
 // the whole call, and emitDynParamBinds makes them registry-visible under
 // their names. So a name the islands spell is servable when it is one of
 // those, a def the island's own tokens make, or a word the registry already
-// resolves (a native, a module export). Anything else would have resolved
-// from the factory's frame, and the points decline instead — the reads keep
-// their slot push, which is the pre-existing behaviour for every lambda.
+// resolves.
+//
+// So the ONE name that cannot be served is one an ENCLOSING unit supplies —
+// its own def or param — and that this lambda did not capture: the island
+// would read it out of a frame that no longer exists. Everything else the
+// island spells resolves exactly as the interpreter resolves it there: this
+// unit's own locals, a def the island's own tokens make, a native or module
+// word, a top-level (global) def that outlives every frame, and a bare
+// literal-word like `true`. That last one is why this is NOT a
+// registry-membership test: it was one at first, and `if true [j] [0]` was
+// the witness — `true` is spelled as a word, `Registry.Lookup` does not
+// resolve it, and the whole point declined over a token that needs no
+// binding at all.
 func (es *EmitState) lambdaNamesSelfBound(rec *fnUnitRec, names map[string]bool) bool {
 	own := map[string]bool{}
 	for i, n := range rec.locals {
@@ -10024,18 +10034,28 @@ func (es *EmitState) lambdaNamesSelfBound(rec *fnUnitRec, names map[string]bool)
 			own[n] = true
 		}
 	}
-	made := map[string]bool{}
 	for i := range rec.frag.events {
 		if ev := &rec.frag.events[i]; ev.kind == evDynBind && ev.dyn != nil {
-			made[ev.dyn.name] = true
+			own[ev.dyn.name] = true
 		}
 	}
-	for n := range names {
-		if own[n] || made[n] {
+	// The units still open around this one: their frame defs and their
+	// params are exactly what dies with the factory's frame.
+	for i := 0; i+1 < len(es.openUnitRecs); i++ {
+		p := es.fnRecs[es.openUnitRecs[i]]
+		for _, n := range p.locals {
+			if n != "" && names[n] && !own[n] {
+				return false
+			}
+		}
+		if p.rootFrame < 0 || p.rootFrame >= len(es.frames) {
 			continue
 		}
-		if es.reg == nil || es.reg.Lookup(n) == nil {
-			return false
+		for k := range es.frames[p.rootFrame] {
+			ev := &es.frames[p.rootFrame][k]
+			if ev.kind == evDynBind && ev.dyn != nil && names[ev.dyn.name] && !own[ev.dyn.name] {
+				return false
+			}
 		}
 	}
 	return true
@@ -10053,6 +10073,20 @@ func (es *EmitState) planDeoptsEnv(u *emitUnit, rec *fnUnitRec) {
 	if !es.deoptDefsBindable(rec.frag.events, rec.deoptNames) {
 		es.dropDeoptChildren(rec)
 		return
+	}
+	// A LAMBDA seeded by its own closure child (`( fn [[x:Integer][Any][do
+	// [j]]] )` — the do-body's island reads the lambda's capture `j`) binds
+	// from its OWN frame, exactly as it does when it plans points itself:
+	// the child runs INSIDE this lambda's call, so these slots are live, but
+	// the factory's frame that `j` came from is not. Without the mark
+	// emitDynParamBinds would bind the params only and the child's island
+	// would not resolve the name.
+	if rec.closure && (rec.lambdaUnit || rec.storedRefUnit) {
+		if !es.lambdaNamesSelfBound(rec, rec.deoptNames) {
+			es.dropDeoptChildren(rec)
+			return
+		}
+		rec.lambdaDeopt = true
 	}
 	rec.deoptEnv = true
 	u.deoptEnv = true

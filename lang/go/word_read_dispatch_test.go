@@ -361,6 +361,16 @@ func TestLambdaValueBodyDeoptParity(t *testing.T) {
 		{hf + `[x j add]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "49 — the capture and the lambda's own param together"},
 		{hf + `[j j add]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "84 — both reads dispatch"},
 		{hf + `[j typeof]] )]]  def q (h {f: ([] => [print "fired"  42])})  (q 7)`, "fired Integer — the fn's effects run once"},
+		// the fifteenth increment: a read inside a BRANCH ARM of that body,
+		// and inside a nested code body. The `if true` rows are the ones the
+		// registry-membership form of lambdaNamesSelfBound declined, over the
+		// bare word `true`; the each row raised a WRONG ERROR before it.
+		{hf + `[if true [j] [0]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — was fn"},
+		{hf + `[if true [j] [0]]] )]]  def q (h {f: 5})  (q 7)`, "5 — plain data"},
+		{hf + `[if false [0] [j]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — the else arm"},
+		{hf + `[if (x gt 3) [j] [0]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "42 — a dynamic condition"},
+		{hf + `[if true [j] [0] typeof]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "Integer — was Function"},
+		{hf + `[[1] each [j]]] )]]  def q (h {f: ([] => [42])})  (q 7)`, "[42] — was the error `did you mean h or q?`"},
 	}
 	for _, c := range rows {
 		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)

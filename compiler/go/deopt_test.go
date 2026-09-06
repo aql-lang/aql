@@ -185,23 +185,112 @@ func TestPlanDeoptsDeclines(t *testing.T) {
 	}
 	es, u, rec, _ = deoptUnit(t, []core.Value{deoptTok("j", 43), deoptTok("typeof", 45)}, 43,
 		EmitEvent{seq: 3, kind: evCall, call: emitCall{word: "typeof", nout: 1, pos: deoptAt(45), ops: []EmitOperand{EventOperand(1, 0)}}})
-	// A lambda value's unit and a stored fn's escape the frame their
-	// bindings live in: no points. A code body's unit (each, do) plans
-	// like a fn unit.
+	// A lambda value's unit plans from its OWN frame (the fourteenth
+	// increment): the factory's frame is gone by apply time, but this unit's
+	// params and captures ride in slots for the whole call, so the point
+	// stands and lambdaDeopt marks emitDynParamBinds to bind the captures
+	// too. Here every name the island spells is the unit's own — the param
+	// `m` and the def `j` the fragment itself makes. A code body's unit
+	// (each, do) plans like a fn unit, through seedParentDeopt instead.
 	rec.closure, rec.lambdaUnit = true, true
 	es.planDeopts(u, rec)
-	if len(rec.deopts) != 0 {
-		t.Error("a lambda unit keeps its slot push")
+	if len(rec.deopts) != 1 || !rec.lambdaDeopt {
+		t.Errorf("a lambda unit plans from its own frame: %+v lambdaDeopt=%v", rec.deopts, rec.lambdaDeopt)
 	}
+	rec.deopts, rec.lambdaDeopt = nil, false
 	rec.lambdaUnit, rec.storedRefUnit = false, true
 	es.planDeopts(u, rec)
-	if len(rec.deopts) != 0 {
-		t.Error("a stored fn's unit keeps its slot push")
+	if len(rec.deopts) != 1 || !rec.lambdaDeopt {
+		t.Errorf("a stored fn's unit takes the same own-frame route: %+v", rec.deopts)
 	}
-	rec.storedRefUnit = false
+	rec.deopts, rec.lambdaDeopt = nil, false
+	rec.closure, rec.storedRefUnit = false, false
 	es.planDeopts(u, rec)
-	if len(rec.deopts) != 1 {
+	if len(rec.deopts) != 1 || rec.lambdaDeopt {
 		t.Errorf("a code body's unit plans like a fn unit: %+v", rec.deopts)
+	}
+}
+
+// planDeoptsEnv's LAMBDA arm: a lambda seeded by a closure child (the child's
+// island reads a name from this lambda's frame) binds from its own slots and
+// is marked lambdaDeopt, so emitDynParamBinds covers its captures too. When a
+// seeded name is one only an ENCLOSING unit supplies — gone with the factory's
+// frame by apply time — the seeding is withdrawn instead: the child's points
+// drop and both units keep their slot pushes.
+func TestPlanDeoptsEnvLambdaArm(t *testing.T) {
+	mk := func(seeded string) (*EmitState, *emitUnit, *fnUnitRec, *fnUnitRec) {
+		es := NewEmitState()
+		outer := &fnUnitRec{name: "h", nParams: 1, locals: []string{"m"}, rootFrame: 0, frag: &EmitFragment{}}
+		lam := &fnUnitRec{name: "fnval$body", nParams: 1, caps: []core.CapturedBinding{{Name: "j"}},
+			locals: []string{"x", "j"}, closure: true, lambdaUnit: true, frag: &EmitFragment{},
+			deoptNames: map[string]bool{seeded: true}}
+		kid := &fnUnitRec{name: "do$body", deopts: []deoptPoint{{name: seeded}}, deoptEnv: true,
+			deoptNames: map[string]bool{seeded: true}, frag: &EmitFragment{}}
+		es.fnRecs = append(es.fnRecs, outer, lam, kid)
+		lam.deoptChildren = []int{2}
+		es.frames = [][]EmitEvent{{}}
+		es.openUnitRecs = []int{0, 1}
+		return es, &emitUnit{}, lam, kid
+	}
+
+	// `j` is the lambda's own capture: the seeding stands.
+	es, u, lam, kid := mk("j")
+	es.planDeoptsEnv(u, lam)
+	if !lam.deoptEnv || !lam.lambdaDeopt || len(kid.deopts) != 1 {
+		t.Errorf("a servable seeded name keeps the child's points: env=%v lambdaDeopt=%v kid=%d",
+			lam.deoptEnv, lam.lambdaDeopt, len(kid.deopts))
+	}
+	if !u.deoptEnv || len(u.deoptNames) != 1 {
+		t.Errorf("the unit carries the island's names: %v %v", u.deoptEnv, u.deoptNames)
+	}
+
+	// `m` is the ENCLOSING unit's param, which the lambda did not capture:
+	// the factory frame that holds it is gone by apply time.
+	es, u, lam, kid = mk("m")
+	es.planDeoptsEnv(u, lam)
+	if lam.deoptEnv || lam.lambdaDeopt || len(kid.deopts) != 0 || kid.deoptEnv {
+		t.Errorf("an unservable seeded name withdraws the seeding: env=%v lambdaDeopt=%v kid=%d/%v",
+			lam.deoptEnv, lam.lambdaDeopt, len(kid.deopts), kid.deoptEnv)
+	}
+}
+
+// lambdaNamesSelfBound: a lambda serves its islands from its own frame, so
+// the ONE name it cannot serve is one an ENCLOSING unit supplies and it did
+// not capture — that binding dies with the factory's frame. A bare word the
+// registry does not resolve (`true`) needs no binding and must not decline
+// the point; that over-strict registry test was the `if true [j] [0]`
+// witness.
+func TestLambdaNamesSelfBound(t *testing.T) {
+	es := NewEmitState()
+	parent := &fnUnitRec{name: "h", nParams: 1, locals: []string{"m"}, rootFrame: 0,
+		frag: &EmitFragment{}}
+	child := &fnUnitRec{name: "fnval$body", nParams: 1, caps: []core.CapturedBinding{{Name: "j"}},
+		locals: []string{"x", "j"},
+		frag: &EmitFragment{events: []EmitEvent{
+			{seq: 9, kind: evDynBind, dyn: &emitDynBind{name: "k"}},
+		}}}
+	es.fnRecs = append(es.fnRecs, parent, child)
+	es.frames = [][]EmitEvent{{
+		{seq: 1, kind: evDynBind, dyn: &emitDynBind{name: "outer"}},
+	}}
+	es.openUnitRecs = []int{0, 1}
+
+	cases := []struct {
+		name  string
+		names map[string]bool
+		want  bool
+	}{
+		{"its own param and capture", map[string]bool{"x": true, "j": true}, true},
+		{"a def the island itself makes", map[string]bool{"k": true}, true},
+		{"a native the registry resolves", map[string]bool{"typeof": true}, true},
+		{"a bare literal-word the registry does not", map[string]bool{"true": true}, true},
+		{"an ENCLOSING unit's param", map[string]bool{"m": true}, false},
+		{"an ENCLOSING unit's frame def", map[string]bool{"outer": true}, false},
+	}
+	for _, c := range cases {
+		if got := es.lambdaNamesSelfBound(child, c.names); got != c.want {
+			t.Errorf("%s: lambdaNamesSelfBound = %v, want %v", c.name, got, c.want)
+		}
 	}
 }
 

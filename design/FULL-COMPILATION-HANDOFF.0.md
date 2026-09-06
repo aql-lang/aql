@@ -3118,6 +3118,87 @@ interpreter's 42. The arm plans no point and keeps its slot push, exactly as
 every lambda body did before this increment. That and the declined points
 (`5  j typeof`) are what remains of NUR123 besides NUR119's render.
 
+## The lambda-body deopt's own gate was too strict (2026-09-06, the fifteenth increment, NUR123)
+
+**What the fourteenth increment left, and what it actually was.** That
+increment recorded one shape still diverging — a read inside a BRANCH ARM of a
+lambda body. Measuring the family first, before touching the arm machinery,
+split it in a way that named a different cause:
+
+```
+( fn [[x:Integer][Any][if (x gt 3) [j] [0]]] )     agrees      ← a DYNAMIC condition
+( fn [[x:Integer][Any][if true    [j] [0]]] )      42 vs fn    ← a CONSTANT one
+```
+
+Both put the read in an arm, so the arm was not the discriminator. The
+disassembly confirmed it: the dynamic row emits `BIND_DYN_SCOPE` for both the
+param and the capture and then `DEOPT_IF_FN`; the constant row emits neither,
+so the unit had planned no points at all. An instrumented run placed the
+decline precisely — `deoptPointFor` returned ok for both, and the post-loop
+gate rejected the constant row over the name `true`:
+
+```
+SELFBOUND reject "true" own=map[j:true x:true] made=map[] all=map[if:true j:true true:true]
+```
+
+`lambdaNamesSelfBound` had been written as a REGISTRY-membership test: a name
+the islands spell must be an own local, a def the island makes, or a word
+`Registry.Lookup` resolves. `true` is spelled as a word and is not a registry
+entry, so a token that needs no binding at all declined the whole point.
+
+**The rule that is actually load-bearing.** A lambda serves its islands from
+its own frame, so the ONE name it cannot serve is one an ENCLOSING unit
+supplies — that unit's own def or its param — and that this lambda did not
+capture: the island would read it out of a frame that no longer exists.
+Everything else resolves exactly as the interpreter resolves it there: this
+unit's own locals, a def the island's own tokens make, a native or module
+word, a top-level (global) def that outlives every frame, and a bare
+literal-word. The test now scans the still-open enclosing units — their
+`locals` and their root frame's `evDynBind`s — instead of the registry.
+
+**A second gap the same rows exposed.** A nested code body inside a lambda
+(`( fn [[x:Integer][Any][[1] each [j]]] )`) routes through `seedParentDeopt`,
+which asks the PARENT to bind — and the parent is the lambda. It reached
+`planDeoptsEnv`, which set `deoptEnv` but not `lambdaDeopt`, so
+`emitDynParamBinds` bound the params only and the child's island could not
+resolve the capture. Marking it there (behind the same
+`lambdaNamesSelfBound` check) closes it.
+
+**Measured**: six of the seven rows in the family agree that did not —
+`if true [j] [0]`, its else-arm twin, the arm under a trailing `typeof`, the
+already-working dynamic-condition row, the plain-data twin, and
+`[1] each [j]`, which had been raising ``did you mean `h` or `q`?`` where the
+interpreter answers `[42]` (a wrong ERROR, not just a wrong value).
+
+**Still open, and NOT a deopt gap** — worth stating precisely, because the
+obvious guess is wrong. `( fn [[x:Integer][Any][do [j]]] )` answers `fn` for
+the interpreter's 42, but the deopt machinery is working there: the lambda
+binds `j` and the `do$body` unit carries its `DEOPT_IF_FN`, exactly as the
+`each` row does. The fault is in the lambda body's RESIDUAL model:
+
+```
+0002 PUSH_LOCAL  l1     ; j
+0003 PUSH_CLOSURE f2    ; do$body
+0004 CALL_NATIVE s0     ; do (List)
+0005 DROP               ; ← the do's result, discarded
+0006 PUSH_LOCAL  l1     ; ← and the raw slot returned in its place
+0007 RET
+```
+
+The `do` body's value IS `j`'s value, so its result carrier is `j`'s carrier;
+`resolveOperand` maps the body's residual back to the LOCAL, the lowering
+re-pushes the slot and drops the call — losing the dispatch the island
+performed. That is a residual-identity defect in the same family, not a
+missing deopt point, and it needs its own increment.
+
+**One contract this changes on purpose.** `compiler/go/deopt_test.go` asserted
+"a lambda unit keeps its slot push". That was the pre-fourteenth-increment
+contract; the test now asserts the current one (a lambda plans from its own
+frame and carries `lambdaDeopt`), and `TestLambdaNamesSelfBound` covers both
+directions of the new gate — own param and capture, an island-made def, a
+native, the bare literal-word that caused this, and the two rejects (an
+enclosing unit's param and its frame def).
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
