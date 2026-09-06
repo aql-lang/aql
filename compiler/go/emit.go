@@ -1247,6 +1247,12 @@ type fnUnitRec struct {
 	// the split's bookkeeping half, and each admission must bring its own
 	// probe evidence (the Stage-G discipline).
 	lambdaUnit bool
+	// lambdaDeopt marks a lambda unit whose deopt points were planned from
+	// its OWN frame (planDeopts' lambdaNamesSelfBound route, not
+	// seedParentDeopt): emitDynParamBinds then binds its captures as well as
+	// its params, so the island resolves every name it spells without the
+	// factory frame being live.
+	lambdaDeopt bool
 	// promoted / dead are the value-def-local plan for THIS unit's body —
 	// computed by planValueDefLocals at finish (while the unit is still live) and
 	// read by the lowerer (flw.promoted / flw.dead) when the unit lowers. Mirrors
@@ -9142,7 +9148,17 @@ func (es *EmitState) emitDynParamBinds(flw *lowerer, rec *fnUnitRec) {
 	if len(es.dynScopeNames) == 0 && !es.dynEnv && !rec.deoptEnv {
 		return
 	}
-	for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
+	// A LAMBDA unit's islands read its CAPTURES, not the enclosing frame's
+	// bindings: the lambda escapes its factory, so by apply time that frame
+	// is gone (which is why planDeopts' seedParentDeopt route is the code-body
+	// one). Its captures ride in slots nParams…nParams+nCaps-1, live for the
+	// whole call, so binding them here is the same duty done from this unit's
+	// own frame. Every other unit binds params only, exactly as before.
+	n := rec.nParams
+	if rec.lambdaDeopt {
+		n += len(rec.caps)
+	}
+	for i := 0; i < n && i < len(rec.locals); i++ {
 		// DynEnv mode: every NAMED param dyn-binds (the interpreter's
 		// InstallFrameBinding makes all of them registry-visible; a dynamic
 		// code body may read any); a deopt unit binds the params its
@@ -9908,13 +9924,18 @@ func stampDeoptRet(cf *CompiledFn, retPC int) {
 // no effect of the statement runs twice (deoptPointFor). A start that is no
 // Body token, a unit with no body and a closure unit keep the slot push.
 func (es *EmitState) planDeopts(u *emitUnit, rec *fnUnitRec) {
-	// A lambda value or a stored / spawned body escapes the frame its
-	// bindings live in; a code body a native runs in place (each, do, fold,
-	// for) does not, and plans like a fn unit.
-	if (rec.closure && (rec.lambdaUnit || rec.storedRefUnit)) || len(rec.body) == 0 || len(rec.wordReadNames) == 0 {
+	if len(rec.body) == 0 || len(rec.wordReadNames) == 0 {
 		es.planDeoptsEnv(u, rec)
 		return
 	}
+	// A lambda value or a stored / spawned body escapes the frame its
+	// bindings live in, so the code-body route below (seedParentDeopt — the
+	// enclosing unit binds the captured names, valid because each / do /
+	// fold / for run the body IN that frame) is unavailable to it. It plans
+	// from its OWN frame instead: every name its islands spell must be one
+	// of this unit's locals — a param or a CAPTURE, both live for the whole
+	// call — or a def the island itself makes.
+	lambda := rec.closure && (rec.lambdaUnit || rec.storedRefUnit)
 	for id, name := range rec.wordReadNames {
 		if rec.wordReads[id] > 0 || rec.wordReadCredit[id] > 0 {
 			continue
@@ -9957,16 +9978,67 @@ func (es *EmitState) planDeopts(u *emitUnit, rec *fnUnitRec) {
 	for n := range rec.deoptNames {
 		names[n] = true
 	}
-	if !es.deoptDefsBindable(rec.frag.events, names) || (rec.closure && !es.seedParentDeopt(rec, names)) {
+	ok := es.deoptDefsBindable(rec.frag.events, names)
+	switch {
+	case !ok:
+	case lambda:
+		// Planned from this unit's OWN frame: every name the islands spell
+		// must be a local of this lambda (a param or a capture — both live
+		// for the whole call, and emitDynParamBinds binds them), a def the
+		// island itself makes, or a word the registry resolves. A name that
+		// is none of those would have resolved from the FACTORY's frame,
+		// which is gone by apply time, so the points decline.
+		ok = es.lambdaNamesSelfBound(rec, names)
+	case rec.closure:
+		ok = es.seedParentDeopt(rec, names)
+	}
+	if !ok {
 		rec.deopts = nil
 		es.dropDeoptChildren(rec)
 		return
 	}
+	rec.lambdaDeopt = lambda
 	rec.deoptEnv = true
 	rec.deoptNames = names
 	u.deoptEnv = true
 	u.deoptNames = names
 	sort.Slice(rec.deopts, func(i, j int) bool { return posAfter(rec.deopts[j].start, rec.deopts[i].start) })
+}
+
+// lambdaNamesSelfBound reports whether a LAMBDA / stored-ref unit can serve
+// its islands from its own frame. Such a unit escapes the frame its captured
+// bindings came from — by apply time the factory's frame is gone — so
+// seedParentDeopt's promise (the enclosing unit binds the names, valid while
+// each / do / fold / for run the body IN that frame) does not hold. What DOES
+// hold is the unit's own locals: params and captures both ride in slots for
+// the whole call, and emitDynParamBinds makes them registry-visible under
+// their names. So a name the islands spell is servable when it is one of
+// those, a def the island's own tokens make, or a word the registry already
+// resolves (a native, a module export). Anything else would have resolved
+// from the factory's frame, and the points decline instead — the reads keep
+// their slot push, which is the pre-existing behaviour for every lambda.
+func (es *EmitState) lambdaNamesSelfBound(rec *fnUnitRec, names map[string]bool) bool {
+	own := map[string]bool{}
+	for i, n := range rec.locals {
+		if n != "" && i < rec.nParams+len(rec.caps) {
+			own[n] = true
+		}
+	}
+	made := map[string]bool{}
+	for i := range rec.frag.events {
+		if ev := &rec.frag.events[i]; ev.kind == evDynBind && ev.dyn != nil {
+			made[ev.dyn.name] = true
+		}
+	}
+	for n := range names {
+		if own[n] || made[n] {
+			continue
+		}
+		if es.reg == nil || es.reg.Lookup(n) == nil {
+			return false
+		}
+	}
+	return true
 }
 
 // planDeoptsEnv keeps the environment a unit's closure children seeded on

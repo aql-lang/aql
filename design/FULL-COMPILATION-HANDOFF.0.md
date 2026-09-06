@@ -3054,6 +3054,70 @@ auto-apply family (NUR121, NUR124), not this increment, and a refusing latch
 was already tried and withdrawn here: it costs those two rows against a
 corpus refusal ceiling of 0 while fixing nothing observable.
 
+## A lambda VALUE's body plans its deopt from its OWN frame (2026-09-06, the fourteenth increment, NUR123)
+
+**The shape the twelfth increment uncovered.** With NUR126's bogus constant
+gone, a fn-valued capture read bare as a returned lambda's whole body stood
+exposed as a live divergence — the interpreter dispatches the binding as a
+WORD, the compiled lane pushed the slot:
+
+```
+def h fn [[m:Map][Function][def j (m get "f")  ( fn [[x:Integer][Any][j]] )]]  def q (h {f: ([] => [42])})  (q 7)
+    interpreted  42            compiled  fn          ← default lane, exit 0
+… [[x:Integer][Any][j typeof]] …
+    interpreted  Integer       compiled  Function
+```
+
+The `{f: 5}` twins agreed on both lanes throughout, which is what places the
+fault on the word-dispatch rule and not on the capture.
+
+**Why the tenth increment could not reach it, and where its reasoning was
+half right.** `callable_words.go` withheld the body tokens from every
+escaping unit:
+
+```go
+// an escaping body — a lambda value, a stored fn, a spawned body — has
+// no frame to resume in and seats none.
+if word != "fnval" && word != "storedfn" && word != "spawnbody" {
+	es.SetUnitBody(unit, bodyToks)
+}
+```
+
+and `planDeopts` bailed to `planDeoptsEnv` for the same units. The reason
+given is true of ONE frame and false of another. `seedParentDeopt` — the
+code-body route — asks the ENCLOSING unit to bind the captured names
+registry-visibly, which is sound precisely because `each` / `do` / `fold` /
+`for` run the body IN that frame. A returned lambda is applied later, when
+the factory's frame is gone, so that route is genuinely unavailable. But the
+lambda's OWN frame is live for the whole apply, and its captures ride in
+slots `nParams…nParams+nCaps-1` — so the unit can bind them itself.
+
+**The change, in three seams already built.** `callable_words.go` seats body
+tokens for `fnval` (a `storedfn` / `spawnbody` is invoked by the host outside
+any such call and still seats none). `planDeopts` routes such a unit through
+a new `lambdaNamesSelfBound` instead of `seedParentDeopt`: every name the
+island spells must be one of this unit's own locals (a param or a capture), a
+def the island's own tokens make, or a word the registry resolves — anything
+else would have resolved from the factory's frame and the points decline, as
+they did before. `emitDynParamBinds` then extends its EXISTING
+`OpPushLocal` + `OpBindDynScope` loop over the capture slots for such a unit,
+so `RET` truncates them exactly as it already does for params.
+
+**Measured**: nine rows agree that did not — the bare read, `j typeof`, a
+read inside a list literal, the capture used with the lambda's own param
+(`x j add` → 49), two reads that both dispatch (`j j add` → 84), the plain-data
+twins that pay the test alone, and a fn whose effects must run exactly once.
+Two shapes keep the whole-program refusal, a sound interpreter fallback:
+`{a: j}` as the lambda's body ("body result of unknown provenance") and two
+factory instances live at once ("fn value precedes residual args").
+
+**Still open, measured against the pre-change binary so it is not read as a
+regression**: a read inside a BRANCH ARM of a lambda body —
+`( fn [[x:Integer][Any][if true [j] [0]]] )` — still answers `fn` for the
+interpreter's 42. The arm plans no point and keeps its slot push, exactly as
+every lambda body did before this increment. That and the declined points
+(`5  j typeof`) are what remains of NUR123 besides NUR119's render.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
