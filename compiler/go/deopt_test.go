@@ -771,11 +771,15 @@ func TestProducedInCurrentUnit(t *testing.T) {
 		t.Error("a nil unit record declines")
 	}
 
-	// Recording: the live floor is the one beginFragment pushed.
+	// Recording: the live floor is the one beginFragment pushed for this
+	// unit's frame. beginFragment appends to es.frames and es.fragFloors
+	// together, but es.frames OPENS with a root frame it never pushed a floor
+	// for — so frame n's floor is fragFloors[n-1]. Here the unit's frame is 1
+	// and its floor is the single entry.
 	rec := &fnUnitRec{name: "fnval$body", rootFrame: 1}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.openUnitRecs = []int{1}
-	es.fragFloors = []int{0, 5}
+	es.fragFloors = []int{5}
 	if !es.producedInCurrentUnit("own") || es.producedInCurrentUnit("outer") {
 		t.Error("recording: seq at or above the unit's frame floor is its own, below it is not")
 	}
@@ -783,11 +787,17 @@ func TestProducedInCurrentUnit(t *testing.T) {
 		t.Error("a value with no producing event is never this unit's own")
 	}
 
-	// Out of range (the frame already popped, no frag yet) declines.
+	// Out of range (the frame already popped, no frag yet) declines, and so
+	// does frame 0 — the root frame is nobody's unit and has no floor.
 	rec.rootFrame = 9
 	if es.producedInCurrentUnit("own") {
 		t.Error("a rootFrame past the live floors declines")
 	}
+	rec.rootFrame = 0
+	if es.producedInCurrentUnit("own") {
+		t.Error("the root frame has no floor of its own")
+	}
+	rec.rootFrame = 1
 
 	// Finish: the root frame is closed, so the fragment carries the floor.
 	rec.frag = &EmitFragment{startSeq: 5}

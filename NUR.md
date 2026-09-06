@@ -466,17 +466,20 @@ tokens after all and plans from its OWN frame — its captures ride in slots
 for the whole apply — instead of the enclosing one), and inside a BRANCH
 ARM or a nested `each` body of that lambda body (2026-09-06, the
 fifteenth increment: `[if true [j] [0]]` is 42 where it answered `fn`,
-`[[1] each [j]]` is [42] where it raised ``did you mean `h` or `q`?``); OPEN for a declined
-point (a literal or a read pushed before the statement and still pending
-at the test: `5  j typeof`), for a `do` body's result CONSUMED by a
-later word in a lambda body (`( fn [[x:Integer][Any][do [j] typeof]] )`
-answers `Function` for the interpreter's `Integer`; the bare
-`( fn [[x:Integer][Any][do [j]]] )` and its paren twin were closed by the
-sixteenth increment, 2026-09-06 — a RESIDUAL-IDENTITY defect, not a
-missing deopt: the `do$body` unit does carry its point, but the do's
-result carrier IS the captured local's, so resolveOperand's
-capture-override sent the residual back to the slot and the lowering
-DROPped the call) and for
+`[[1] each [j]]` is [42] where it raised ``did you mean `h` or `q`?``); and wherever a `do` body's result is the captured local
+itself — the bare `( fn [[x:Integer][Any][do [j]]] )`, its paren twin, and
+the OPERAND form `[do [j] typeof]` (2026-09-06, the sixteenth increment: a
+RESIDUAL-IDENTITY defect, not a missing deopt — the `do$body` unit does
+carry its point, but the do's result carrier IS the captured local's, so
+resolveOperand's capture-override sent the value back to the slot and the
+lowering DROPped the call). The operand form was first recorded as still
+open, on the reading that it took a resolution path the guard did not
+reach; that was WRONG and is corrected here — the guard's own frame-floor
+index was off by one (`es.frames` opens with a root frame carrying no
+floor, so frame n's floor is `fragFloors[n-1]`), which put every
+recording-time resolution out of range and let only the finish-time arm
+fire. OPEN for a declined point (a literal or a read pushed before the
+statement and still pending at the test: `5  j typeof`) and for
 the `/v` render (NUR119). A read inside a BRANCH ARM of a lambda body,
 and an `each` body nested in one, were closed by the fifteenth increment
 (2026-09-06). **Found:** 2026-09-05, measuring the closure-capture

@@ -2290,11 +2290,18 @@ func (es *EmitState) producedInCurrentUnit(id string) bool {
 	// callback resolves the body RESIDUAL that frame is closed and the floor
 	// has moved onto rec.frag (the same value the provenance sweep below
 	// compares against).
+	//
+	// The floors are pushed in lockstep with the frames, but es.frames opens
+	// with a ROOT frame that beginFragment never pushed a floor for — so the
+	// floor of frame n is fragFloors[n-1], not fragFloors[n]. Indexing them as
+	// parallel put every in-body resolution out of range and the guard silently
+	// declined: `do [j] typeof` kept the slot push while the body RESIDUAL form
+	// `do [j]`, which reads rec.frag instead, was already fixed.
 	switch {
 	case rec.frag != nil:
 		return pr.seq > rec.frag.startSeq
-	case rec.rootFrame >= 0 && rec.rootFrame < len(es.fragFloors):
-		return pr.seq >= es.fragFloors[rec.rootFrame]
+	case rec.rootFrame > 0 && rec.rootFrame <= len(es.fragFloors):
+		return pr.seq >= es.fragFloors[rec.rootFrame-1]
 	}
 	return false
 }
