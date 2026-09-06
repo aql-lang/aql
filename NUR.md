@@ -722,7 +722,29 @@ divergence, and the lambda-VALUE body's empty dispatch name with its position.
 The rule counts a position as part of the error (NUR108), so row two still
 diverges — but its value list, which was the substantive half, now matches.
 The remaining name/position pair belongs to the lambda body's own dispatch,
-which is the shape NUR123 also leaves last.
+which is the shape NUR123 also leaves last — and the disassembly names the
+mechanism, so the next increment does not start from scratch:
+
+```
+fn f1 fnval$body/2 (locals=2) [x g]:
+0000 PUSH_LOCAL  l0
+0001 PUSH_LOCAL  l1
+0002 CALL_DYN_TRAIL_TOP      <- no BIND_DYN_SCOPE, no DEOPT_IF_FN
+0003 RET
+```
+
+The fourteenth and fifteenth increments made a lambda body's BARE READ of a
+fn-holding capture deopt (planDeopts over rec.wordReadNames, with
+emitDynParamBinds binding params and captures registry-visibly). `(g x)` is a
+paren APPLY, not a read: no word read is recorded for `g`, so no point is
+planned, and the lowering emits CALL_DYN_TRAIL_TOP — which dispatches the
+runtime value under ANONYMOUS semantics, hence the empty name, and stamps the
+unit's position rather than the call site's. The interpreter reads `g` as a
+WORD bound in the frame and dispatches it NAMED.
+
+So the increment is to treat an apply whose head is a fn-typed LOCAL as a deopt
+point too, not only a bare read — the binding machinery it needs
+(emitDynParamBinds) is already in place and already runs for this unit shape.
 
 The interpreter reads `g` as a WORD bound in the frame: the value is
 re-labelled under the binding name (NUR119) and dispatched as a NAMED fn,
