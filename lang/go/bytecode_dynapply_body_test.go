@@ -127,16 +127,34 @@ func TestTrailingApplyQuoteDiscipline(t *testing.T) {
 		`(1 2 (quote (fn [[a:Integer b:Integer][Integer][a add b]])))`,
 		"[1 2 fn (Integer, Integer)]")
 	// An EVENT-provenance fn (a direct call result) has NO read substitution,
-	// so its runtime quote state is unknowable at check time: a QUOTED
-	// return stays inert in the interpreter (the strip would wrongly apply
-	// it — PR #280 review: compiled 3 vs interp [1 2 fn]) while an UNQUOTED
-	// return auto-applies (the un-collapsed model would wrongly stay
-	// residual). RecordDynApply REFUSES both — the interpreter owns the
-	// shape, parity through the fallback.
-	mustRefuseWithParity(t,
+	// so its runtime quote state is unknowable at CHECK time: a QUOTED
+	// return stays inert in the interpreter while an UNQUOTED return
+	// auto-applies. CALL_DYN_TRAIL_KEEPQ decides that at RUN time and was
+	// always the right op; what the refusal was really missing is the
+	// callee's ARITY, without which KeepQ would consume the whole window.
+	// A factory returning one anonymous lambda now yields it (the eleventh
+	// increment reads it off the baked const's own signature), so both
+	// polarities compile and the window trims to the callee's arity.
+	mustCompileWithParity(t,
 		`def choose fn [[][Function][quote (fn [[a:Integer z:Integer][Integer][a add z]])]] (1 2 choose)`,
-		"trailing fn-value apply over a call result")
-	mustRefuseWithParity(t,
+		"[1 2 fn (Integer, Integer)]")
+	mustCompileWithParity(t,
 		`def mk fn [[][Function][fn [[a:Integer z:Integer][Integer][a add z]]]] (1 2 (mk))`,
-		"trailing fn-value apply over a call result")
+		"[3]")
+	// The trim: a 1-arg callee under a 2-wide window takes the TOP value
+	// and the deeper one survives, as the interpreter leaves it.
+	mustCompileWithParity(t,
+		`def mk fn [[][Function][fn [[a:Integer][Integer][a add 1]]]] (1 2 (mk))`,
+		"[1 3]")
+	// More params than the window has values: the interpreter leaves the fn
+	// UNAPPLIED, and nothing here models that — the refusal stands.
+	mustRefuseWithParity(t,
+		`def mk fn [[][Function][fn [[a:Integer z:Integer y:Integer][Integer][a add z]]]] (1 2 (mk))`,
+		"trailing fn-value apply with fewer args than the callee's arity")
+	// A factory whose ARMS return different lambdas has no ONE provable
+	// shape, so the arity stays unknown and the standing refusal holds —
+	// the row that keeps this graduation honest.
+	mustRefuseWithParity(t,
+		`def choose fn [[c:Boolean][Function][if c [quote (fn [[a:Integer z:Integer][Integer][a add z]])] [fn [[a:Integer z:Integer][Integer][a mul z]]]]] (1 2 (choose false))`,
+		"trailing fn-value apply over a call result (runtime quote state unknown)")
 }

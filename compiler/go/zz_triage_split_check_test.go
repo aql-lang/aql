@@ -425,6 +425,81 @@ func TestProducerReturnedClosureArity(t *testing.T) {
 	}
 }
 
+// TestConstLambdaArity pins the CONST arm of the arity recovery (the
+// eleventh increment): a capture-free lambda the fold baked as one value
+// carries its arity on its own signature, and the exclusions are the
+// fn-value apply's soundness argument — only an ANONYMOUS boru lambda with
+// one own signature answers.
+func TestConstLambdaArity(t *testing.T) {
+	boru := func() core.SigImpl { return &core.BoruImpl{Body: []core.Value{core.NewInteger(1)}} }
+	lam := func(name, module string, sigs ...core.Signature) core.Value {
+		v := fnVal(sigs...)
+		fd := v.Data.(core.FnDefInfo)
+		fd.Name, fd.Module = name, module
+		v.Data = fd
+		return v
+	}
+	twoParam := core.Signature{Params: []core.FnParam{{Name: "a"}, {Name: "z"}}, Impl: boru()}
+	rows := []struct {
+		note string
+		v    core.Value
+		want int
+		ok   bool
+	}{
+		{"an anonymous two-param lambda", lam("", "", twoParam), 2, true},
+		{"a zero-param lambda", lam("", "", core.Signature{Impl: boru()}), 0, true},
+		{"a NAMED fn value (word dispatch, not value semantics)", lam("addone", "", twoParam), 0, false},
+		{"a MODULE export", lam("", "boru:fn-util", twoParam), 0, false},
+		{"a Go-impl fn (no boru body)", lam("", "", core.Signature{Params: []core.FnParam{{Name: "a"}}}), 0, false},
+		{"two own signatures — no one arity", lam("", "", twoParam, core.Signature{Params: []core.FnParam{{Name: "a"}}, Impl: boru()}), 0, false},
+	}
+	for _, c := range rows {
+		es := NewEmitState()
+		idx := es.internUnpooled(c.v)
+		got, ok := constLambdaArity(es.consts, idx)
+		if ok != c.ok || (ok && got != c.want) {
+			t.Errorf("%s: got (%d,%v), want (%d,%v)", c.note, got, ok, c.want, c.ok)
+		}
+	}
+	// A non-fn const, and an index outside the pool.
+	es := NewEmitState()
+	if _, ok := constLambdaArity(es.consts, es.internUnpooled(core.NewInteger(5))); ok {
+		t.Error("a plain value carries no arity")
+	}
+	if _, ok := constLambdaArity(es.consts, -1); ok {
+		t.Error("an out-of-range const index declines")
+	}
+	if _, ok := constLambdaArity(es.consts, len(es.consts)); ok {
+		t.Error("an index past the pool declines")
+	}
+}
+
+// TestProducerReturnedClosureConstArm pins the two questions apart: the
+// arity recovery answers for a baked lambda const, and the CLOSURE
+// predicate (which guards a ClosurePayload only the VM can invoke) does
+// not.
+func TestProducerReturnedClosureConstArm(t *testing.T) {
+	es := NewEmitState()
+	es.producedBy["u"] = producer{seq: 5}
+	lam := fnVal(core.Signature{Params: []core.FnParam{{Name: "x"}}, Impl: &core.BoruImpl{Body: []core.Value{core.NewInteger(1)}}})
+	es.fnRecs = []*fnUnitRec{{outOps: []EmitOperand{ConstOperand(es.internUnpooled(lam))}}}
+	es.frames[0] = []EmitEvent{{seq: 5, kind: evCallUser, uc: emitUserCall{unit: 0}}}
+	if arity, ok := es.producerReturnedClosureArity("u"); !ok || arity != 1 {
+		t.Errorf("a baked lambda's arity = (%d,%v), want (1,true)", arity, ok)
+	}
+	if es.producerReturnedClosure("u") {
+		t.Error("a baked lambda const is not a compiled closure payload")
+	}
+	es.fnRecs[0].outOps = []EmitOperand{{kind: opClosure, closureUnit: 1}}
+	es.fnRecs = append(es.fnRecs, &fnUnitRec{nParams: 3})
+	if !es.producerReturnedClosure("u") {
+		t.Error("a closure out op IS a compiled closure payload")
+	}
+	if _, ok := es.producerReturnedOutOp("nope"); ok {
+		t.Error("an unproduced id has no out op")
+	}
+}
+
 func TestRecordCallOperandsInertFnBake(t *testing.T) {
 	es := NewEmitState()
 	sig := &core.Signature{Args: []*core.Type{core.TFunction}, FnInertArgs: map[int]bool{0: true}}
@@ -1522,4 +1597,35 @@ func TestIsolateEmitAndBudget(t *testing.T) {
 	var nilC *core.CheckState
 	nilC.IsolateEmit()()
 	nilC.IsolateBudget()()
+}
+
+// TestAppendResidualSeqs pins the promotion planner's residual input
+// (NUR126): a residual closure's lexical CAPTURES are enclosing-scope
+// operands and must be counted, or their producers are never promoted to
+// frame locals and the closure push materialises an event operand through
+// pushOperand's const arm — baking the event's SEQ as a const index.
+func TestAppendResidualSeqs(t *testing.T) {
+	cap0 := EventOperand(4, 0)
+	cap1 := EventOperand(5, 0)
+	nested := EmitOperand{kind: opClosure, closureUnit: 1, closureCaps: []EmitOperand{cap1}}
+	ops := []EmitOperand{
+		EventOperand(2, 0), // a plain residual event
+		EventOperand(3, 1), // a non-zero result index is not a promotion candidate
+		ConstOperand(9),    // a const references no producer
+		localOperand(0),    // nor a local
+		{kind: opClosure, closureUnit: 0, closureCaps: []EmitOperand{cap0, nested}},
+	}
+	got := appendResidualSeqs(nil, ops)
+	want := []int{2, 4, 5}
+	if len(got) != len(want) {
+		t.Fatalf("seqs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("seqs = %v, want %v", got, want)
+		}
+	}
+	if n := appendResidualSeqs(nil, nil); len(n) != 0 {
+		t.Errorf("an empty residual references nothing: %v", n)
+	}
 }

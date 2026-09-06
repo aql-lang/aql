@@ -35,6 +35,11 @@ func TestReturnedClosureParkParity(t *testing.T) {
 		// family C: two dynamic results live at once are two placed values
 		{`def f fn [[x:Any] [Any] [x]] def m {p: f/v} m.p 5 m.p 7`, "5 7 — was refused"},
 		{`def f fn [[x:Any] [Any] [x]] def m {p: f/v} m.p 5 7`, "5 7"},
+		// a def-bound factory result applies by its BINDING's read, and its
+		// arity is provable off the baked lambda's own signature (the
+		// eleventh increment) — the paren and the bare read alike
+		{mk1 + `  def h (mk) h 7`, "8 — was refused, the closure shape unknown"},
+		{mk1 + `  def h (mk) (h 7)`, "8"},
 		// still applies: a paren rewind over two survivors
 		{mk1 + `  (mk 7)`, "8"},
 		{mk1 + `  ((mk) 7)`, "8"},
@@ -97,7 +102,6 @@ func TestReturnedClosureParkSoundFallbacks(t *testing.T) {
 	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	rows := []struct{ src, reason string }{
 		{mk1 + `  def g fn [[] [Any Any] [mk 7]] g`, "dynamic value precedes residual args (fn-value-call boundary)"},
-		{mk1 + `  def h (mk) h 7`, "def-bound computed fn apply"},
 		// A user fn returning a fn it was HANDED: the interpreter renders the
 		// value under the PARAM's name (`fn g(Integer)`), which the raw
 		// runtime value cannot reproduce — the residual's render gate holds

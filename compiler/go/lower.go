@@ -1,6 +1,10 @@
 package compiler
 
-import core "github.com/boru-lang/boru/core/go"
+import (
+	"maps"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // The bytecode lowerer — the second half of the compile pass. EmitState
 // (emit.go) RECORDS a classified event trace during the check run; the
@@ -960,6 +964,43 @@ func childFragments(ev *EmitEvent) []*EmitFragment {
 	return nil
 }
 
+// armRepushableResidual reports whether frag is a BRANCH ARM (childFragments
+// slot 1 or 2 of an evBranch) whose MULTI-value residual RecordBranch captured
+// WHOLE — every entry resolved to an operand, none of them a parked Function.
+// Such an arm no longer has to leave its residual seated on the fragment's
+// simulated stack: planValueDefLocals force-promotes each event entry to a
+// frame local and lowerFragment re-pushes the captured list in exact order,
+// the same linearisation the PROGRAM residual's forceOrder already uses. That
+// is what makes the arm's INTERIOR promotable — a `def` inside it can move to
+// a slot (and so be read by a closure capture) without stranding the residual.
+// A loop body is excluded: its residual re-pushes on every iteration, where a
+// frame slot would hold only the last one.
+func armRepushableResidual(ev *EmitEvent, fi int, frag *EmitFragment) bool {
+	return ev.kind == evBranch && fi > 0 && frag != nil &&
+		frag.residualN > 1 && len(frag.residualOps) == frag.residualN
+}
+
+// armResidualForceSeqs returns the event seqs that ARE a whole-captured
+// multi-value arm's residual. planValueDefLocals promotes each to a frame slot
+// (and skips its stay-on-the-sim exemption) so lowerFragment's re-push arm
+// finds an EMPTY sim and reconstructs the residual from the captured list.
+func armResidualForceSeqs(allEvents []*EmitEvent) map[int]bool {
+	force := map[int]bool{}
+	for _, ev := range allEvents {
+		for fi, frag := range childFragments(ev) {
+			if !armRepushableResidual(ev, fi, frag) {
+				continue
+			}
+			for _, op := range frag.residualOps {
+				if op.kind == opEvent {
+					force[op.idx] = true
+				}
+			}
+		}
+	}
+	return force
+}
+
 // forEachFragmentOperand calls fn for every operand recorded INSIDE ev's body
 // fragments, recursing through nested branches / loops. A reference whose
 // producer lives OUTSIDE the fragment (the enclosing computation) crosses the
@@ -1048,6 +1089,12 @@ func RewritePromotedRefs(ev *EmitEvent, promoted map[int]int) {
 		if frag == nil {
 			continue
 		}
+		// A whole-captured arm residual names its event entries by producing
+		// seq; once those are promoted the list must read the SLOTS, or
+		// lowerFragment's re-push would push the seq as a const index.
+		for i := range frag.residualOps {
+			promoteOperand(&frag.residualOps[i], promoted)
+		}
 		for i := range frag.events {
 			RewritePromotedRefs(&frag.events[i], promoted)
 		}
@@ -1086,14 +1133,17 @@ func collectPromotableEvents(events []EmitEvent) ([]*EmitEvent, map[int]bool, ma
 				fragInternal[evs[i].seq] = true
 			}
 			fragID[evs[i].seq] = id
-			for _, frag := range childFragments(&evs[i]) {
+			for fi, frag := range childFragments(&evs[i]) {
 				// Only recurse into a SINGLE-result fragment (a single-value branch
 				// arm residualN==1, or a loop body / condition residualN==0). A
 				// MULTI-value arm (residualN>1, e.g. `[n mul 2 m (n sub 1)]`) leaves
 				// several residual values on the sim stack, and promotion / dead-drop
 				// would wrongly store or drop one of them ("branch leaves extra
-				// values") — leave those untouched.
-				if frag != nil && frag.residualN <= 1 {
+				// values") — leave those untouched. EXCEPT when RecordBranch captured
+				// that residual WHOLE (armRepushableResidual): the residual then
+				// re-pushes from the captured operand list, so the arm's interior is
+				// as promotable as any single-value arm's.
+				if frag != nil && (frag.residualN <= 1 || armRepushableResidual(&evs[i], fi, frag)) {
 					nextID++
 					walk(frag.events, nextID)
 				}
@@ -1156,7 +1206,7 @@ func collectPromotableEvents(events []EmitEvent) ([]*EmitEvent, map[int]bool, ma
 			fi := 0
 			outsFor := fragmentOuts(ev)
 			for _, frag := range frags {
-				if frag != nil && frag.residualN <= 1 {
+				if frag != nil && (frag.residualN <= 1 || armRepushableResidual(ev, fi, frag)) {
 					nextID++
 					childID := nextID
 					if fi < len(outsFor) && outsFor[fi] != nil {
@@ -1444,6 +1494,21 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []EmitEvent, extr
 	var dead map[int]bool
 	allEvents, fragInternal, crossFragRef := collectPromotableEvents(events)
 	fragResult := fragmentResultSeqs(allEvents)
+	// armForce names the event entries of a whole-captured MULTI-value arm
+	// residual. Each must land in a frame slot: lowerFragment then finds the
+	// arm's sim EMPTY and re-pushes the whole residual from the captured list,
+	// in the interpreter's exact order. They join forceOrder (the program
+	// residual's own linearisation trigger) and are exempt from the
+	// stay-on-the-sim rule below — the top entry IS the arm's out operand, so
+	// without the exemption fragResultStaysOnSim would pin it to the sim and
+	// the re-push would never fire.
+	armForce := armResidualForceSeqs(allEvents)
+	if len(armForce) > 0 {
+		merged := make(map[int]bool, len(forceOrder)+len(armForce))
+		maps.Copy(merged, forceOrder)
+		maps.Copy(merged, armForce)
+		forceOrder = merged
+	}
 	// captured marks producers referenced by a CLOSURE CAPTURE (an each/fold/scan
 	// body's lexical capture of an enclosing value-def). The capture resolves to a
 	// frame local re-pushed at OpPushClosure (promoteOperand rewrites closureCaps);
@@ -1496,7 +1561,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []EmitEvent, extr
 		// consumes it — lowerFragment resets the sim per fragment, so the only
 		// sound delivery is a unit-frame local (the trie-insert `def kid
 		// (find-kid …)` in the outer arm, referenced as the inner if's arm-out).
-		if es.fragResultStaysOnSim(ev.seq, refs, fragResult, fragInternal, crossFragRef) {
+		if !armForce[ev.seq] && es.fragResultStaysOnSim(ev.seq, refs, fragResult, fragInternal, crossFragRef) {
 			continue
 		}
 		// A DEAD branch value-def — `def _ (if c [t] [e])` whose merge result is never

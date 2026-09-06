@@ -7,32 +7,33 @@ import (
 	core "github.com/boru-lang/boru/core/go"
 )
 
-// captureInertArmResidual (the branch-arm twin of RecordLoop's all-inert
-// capture): an all-inert multi-value arm residual is captured for the
-// lowering's re-push; a parked Function, a value with no resolvable
-// provenance, an event-produced entry, and a single-value arm all decline
+// captureArmResidual (the branch-arm twin of RecordLoop's all-inert capture):
+// a multi-value arm residual is captured whole for the lowering's re-push —
+// EVENT-produced entries included, since planValueDefLocals force-promotes
+// each to a frame slot before the re-push reads it. A parked Function, a value
+// with no resolvable provenance, and a single-value arm all decline
 // (residualOps stays nil — the arm keeps its refusal or its single-out path).
-func TestCaptureInertArmResidualArms(t *testing.T) {
+func TestCaptureArmResidualArms(t *testing.T) {
 	r := seam7Reg(t)
 	es := NewEmitState()
 	es.BindRegistry(r)
 
 	frag := &EmitFragment{}
-	es.captureInertArmResidual(frag, []core.Value{core.NewInteger(1), core.NewInteger(2)})
+	es.captureArmResidual(frag, []core.Value{core.NewInteger(1), core.NewInteger(2)})
 	if len(frag.residualOps) != 2 {
 		t.Fatalf("all-inert capture = %d ops, want 2", len(frag.residualOps))
 	}
 
-	es.captureInertArmResidual(nil, []core.Value{core.NewInteger(1), core.NewInteger(2)}) // nil frag: no panic
+	es.captureArmResidual(nil, []core.Value{core.NewInteger(1), core.NewInteger(2)}) // nil frag: no panic
 
 	single := &EmitFragment{}
-	es.captureInertArmResidual(single, []core.Value{core.NewInteger(1)})
+	es.captureArmResidual(single, []core.Value{core.NewInteger(1)})
 	if single.residualOps != nil {
 		t.Error("a single-value arm must not capture")
 	}
 
 	fnArm := &EmitFragment{}
-	es.captureInertArmResidual(fnArm, []core.Value{core.NewInteger(1), core.NewCarrier(core.TFunction)})
+	es.captureArmResidual(fnArm, []core.Value{core.NewInteger(1), core.NewCarrier(core.TFunction)})
 	if fnArm.residualOps != nil {
 		t.Error("a parked-fn arm must not capture (the auto-apply hazard)")
 	}
@@ -41,9 +42,20 @@ func TestCaptureInertArmResidualArms(t *testing.T) {
 	dyn.Dynamic = true
 	dyn.ID = ""
 	dynArm := &EmitFragment{}
-	es.captureInertArmResidual(dynArm, []core.Value{core.NewInteger(1), dyn})
+	es.captureArmResidual(dynArm, []core.Value{core.NewInteger(1), dyn})
 	if dynArm.residualOps != nil {
 		t.Error("an unresolvable entry must not capture")
+	}
+
+	// An EVENT-produced entry is captured (the loop side's restriction lifted
+	// for arms): the operand names its producing seq, which RewritePromotedRefs
+	// rewrites to the frame slot planValueDefLocals allocated.
+	produced := core.NewCarrier(core.TInteger)
+	es.setProduced(produced, 4)
+	evArm := &EmitFragment{}
+	es.captureArmResidual(evArm, []core.Value{core.NewInteger(1), produced})
+	if len(evArm.residualOps) != 2 || evArm.residualOps[1].kind != opEvent || evArm.residualOps[1].idx != 4 {
+		t.Fatalf("event-bearing capture = %+v, want the producing seq as entry 1", evArm.residualOps)
 	}
 }
 
@@ -95,5 +107,43 @@ func TestRecordTypedBindInactiveDeclines(t *testing.T) {
 	if _, ok := es.RecordTypedBind(core.TypedBindSpec{Kind: core.TypedBindPredicate, Name: "x"},
 		core.NewInteger(1), core.NewInteger(1), core.SrcPos{}); ok {
 		t.Fatal("a suspended recorder must decline the typed-bind record")
+	}
+}
+
+// armRepushableResidual admits ONLY a branch ARM (childFragments slot 1/2)
+// whose multi-value residual was captured whole; armResidualForceSeqs then
+// names that residual's EVENT entries — the seqs planValueDefLocals must move
+// to frame slots so lowerFragment's re-push arm finds an empty sim.
+func TestArmRepushableResidual(t *testing.T) {
+	whole := &EmitFragment{residualN: 2, residualOps: []EmitOperand{ConstOperand(0), EventOperand(3, 0)}}
+	br := &EmitEvent{seq: 9, kind: evBranch, br: &emitBranch{condFrag: whole, then: whole, els: nil}}
+	cases := []struct {
+		name string
+		ev   *EmitEvent
+		fi   int
+		frag *EmitFragment
+		want bool
+	}{
+		{"a whole-captured then arm", br, 1, whole, true},
+		{"the CONDITION fragment (slot 0) is not an arm", br, 0, whole, false},
+		{"a nil fragment", br, 2, nil, false},
+		{"a single-value arm", br, 1, &EmitFragment{residualN: 1}, false},
+		{"a partial capture", br, 1, &EmitFragment{residualN: 2}, false},
+		{"a LOOP body", &EmitEvent{kind: evLoop, loop: &emitLoop{}}, 0, whole, false},
+	}
+	for _, c := range cases {
+		if got := armRepushableResidual(c.ev, c.fi, c.frag); got != c.want {
+			t.Errorf("%s: armRepushableResidual = %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	force := armResidualForceSeqs([]*EmitEvent{br, {seq: 1, kind: evCall, call: emitCall{}}})
+	if len(force) != 1 || !force[3] {
+		t.Fatalf("armResidualForceSeqs = %v, want only the event entry seq 3", force)
+	}
+	// A branch whose arms decline the capture contributes nothing.
+	plain := &EmitEvent{seq: 8, kind: evBranch, br: &emitBranch{then: &EmitFragment{residualN: 2}}}
+	if got := armResidualForceSeqs([]*EmitEvent{plain}); len(got) != 0 {
+		t.Errorf("a partial-capture arm forced %v, want none", got)
 	}
 }

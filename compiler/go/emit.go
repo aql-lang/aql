@@ -535,10 +535,14 @@ type EmitFragment struct {
 	// without this the extra slot would compile an unsound duplicate value. 0 ==
 	// unset (non-arm fragments: a loop body / condition expects one value).
 	residualN int
-	// residualOps carries a multi-out LOOP body's full residual operand list
-	// when every entry is INERT (const/local/type — no events): the
-	// reconciliation re-pushes them in order per iteration (`for 3 [1 2]`).
-	// Function-typed entries were screened at RecordLoop (parked-fn hazard).
+	// residualOps carries a fragment's full residual operand list, which
+	// lowerFragment re-pushes in order when the lowering left the sim empty.
+	// A multi-out LOOP body is captured only when every entry is INERT
+	// (const/local/type — no events), because it re-pushes on EVERY iteration
+	// (`for 3 [1 2]`); a branch ARM runs once per taken path, so
+	// captureArmResidual admits event entries too and planValueDefLocals
+	// force-promotes each to a frame local first. Function-typed entries were
+	// screened at capture time (parked-fn hazard).
 	residualOps []EmitOperand
 	// applyArgs, when non-empty, marks a loop body that left a LEADING fn VALUE
 	// (a returned closure / Function carrier on the sim top after the body events)
@@ -3849,11 +3853,11 @@ func (es *EmitState) RecordBranch(b core.BranchRecord) {
 	// lowering leaves an extra sim artifact (see EmitFragment.residualN).
 	if ev.br.then != nil {
 		ev.br.then.residualN = len(b.ThenStk)
-		es.captureInertArmResidual(ev.br.then, b.ThenStk)
+		es.captureArmResidual(ev.br.then, b.ThenStk)
 	}
 	if ev.br.els != nil {
 		ev.br.els.residualN = len(b.ElsStk)
-		es.captureInertArmResidual(ev.br.els, b.ElsStk)
+		es.captureArmResidual(ev.br.els, b.ElsStk)
 	}
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
@@ -4825,12 +4829,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 		// for any promoted producer (planValueDefLocals rewrote the events in
 		// place, but outOps is a separate slice).
 		es.planDeopts(u, rec)
-		outSeqs := make([]int, 0, len(rec.outOps))
-		for _, op := range rec.outOps {
-			if op.kind == opEvent && op.resIdx == 0 {
-				outSeqs = append(outSeqs, op.idx)
-			}
-		}
+		outSeqs := appendResidualSeqs(nil, rec.outOps)
 		rec.promoted, rec.dead = es.planValueDefLocals(u, rec.frag.events, outSeqs, forceOrder)
 		for i := range rec.outOps {
 			promoteOperand(&rec.outOps[i], rec.promoted)
@@ -5296,17 +5295,26 @@ func (es *EmitState) RecordDynApplyName(name string, args []core.Value, fn, out 
 	return true
 }
 
-// captureInertArmResidual mirrors the loop side's all-inert residual capture
-// (RecordLoop's net-drivers arm) for a BRANCH arm: a multi-value arm whose
-// residual is entirely inert (consts/locals — nothing event-produced) leaves
-// nothing on the lowering sim, so lowerFragment's all-inert re-push arm needs
-// the resolved operand list to reconstruct it per taken path (`if c [99]
-// [1 2]` — the 1-vs-2 variadic merge). The parked-fn screen matches the
-// loop's: a Function value in the region auto-applies in the interpreter when
-// a later value lands above it, so a verbatim re-push would diverge — leave
-// those uncaptured (the arm then keeps its refusal). Single-value arms
-// (residualN < 2) never need the capture.
-func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []core.Value) {
+// captureArmResidual mirrors the loop side's all-inert residual capture
+// (RecordLoop's net-drivers arm) for a BRANCH arm: a multi-value arm's residual
+// is recorded as a resolved operand list so lowerFragment's re-push arm can
+// reconstruct it per taken path (`if c [99] [1 2]` — the 1-vs-2 variadic
+// merge). Unlike the loop side the list MAY name event-produced values: an arm
+// runs ONCE per taken path, so a residual event promoted to a frame local
+// (planValueDefLocals force-promotes every entry of a whole-captured arm
+// residual) re-pushes from its slot in exact residual order, exactly as the
+// PROGRAM residual's forceOrder linearisation already does. Without the whole
+// list the lowerer could only COUNT the sim slots, and a stray leftover made
+// the count match while the values did not: `if true [def c (7777 add 1) 99
+// (each …)] [7 8]` seated the `add` result where the interpreter leaves 99.
+// A loop body keeps the all-inert restriction (its residual re-pushes on EVERY
+// iteration, where a frame slot holds only the last one) — RecordLoop screens
+// that list itself. The parked-fn screen matches the loop's: a Function value
+// in the region auto-applies in the interpreter when a later value lands above
+// it, so a verbatim re-push would diverge — leave those uncaptured (the arm
+// then keeps its refusal). Single-value arms (residualN < 2) never need the
+// capture.
+func (es *EmitState) captureArmResidual(frag *EmitFragment, stk []core.Value) {
 	if frag == nil || len(stk) < 2 {
 		return
 	}
@@ -5316,7 +5324,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []core.Valu
 			return
 		}
 		op, ok := es.resolveOperand(stk[i])
-		if !ok || op.kind == opEvent {
+		if !ok {
 			return
 		}
 		ops = append(ops, op)
@@ -6893,7 +6901,7 @@ func (es *EmitState) residualReadStable(v core.Value) bool {
 // which is what keeps §9b's family compiling.
 // argIsProducedClosure refuses a dispatch whose ARGUMENT is a compiled
 // closure this pass produced (a call result the recorder knows returned an
-// OpPushClosure — producerReturnedClosureArity). Such a value reaching a
+// OpPushClosure — producerReturnedClosure). Such a value reaching a
 // word's slot means the paren that should have APPLIED it did not collapse
 // into an apply, so the compiled program hands the word the FUNCTION where
 // the interpreter hands it the applied result.
@@ -6905,7 +6913,7 @@ func (es *EmitState) argIsProducedClosure(args []core.Value) bool {
 		if !core.IsAppliableFn(args[i]) {
 			continue
 		}
-		if _, produced := es.producerReturnedClosureArity(args[i].ID); produced {
+		if es.producerReturnedClosure(args[i].ID) {
 			es.MarkUncompilable(
 				"computed closure at a word's argument slot (its apply did not collapse — Stage 2)")
 			return true
@@ -6997,7 +7005,7 @@ func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 	// compiled code (that is what §9b's factory family does) and NOT fine
 	// for an interpreter RE-RUN to reach. recordCodeBodyClosureRead below
 	// catches the latter at the word that re-runs tokens.
-	if _, closure := es.producerReturnedClosureArity(v.ID); closure {
+	if es.producerReturnedClosure(v.ID) {
 		if es.dynBoundClosures == nil {
 			es.dynBoundClosures = map[string]bool{}
 		}
@@ -7539,16 +7547,69 @@ func isGetFamilyWord(w string) bool {
 
 // producerReturnedClosureArity resolves the declared arity of the closure a
 // leading fn-typed CARRIER holds, when its producer is a compiled user call
-// whose fn returns exactly one anonymous closure (the factory pattern).
+// whose fn returns exactly one anonymous lambda (the factory pattern).
 // Recoverable arity lets resolveDynamicApply distinguish the single N-arg
 // apply `(mk 5) 10 20` from a curried CHAIN `((mk 1) 2) 3` — the flattened
 // residual is identical for both, and committing one OpCallDynamic over a
 // chain leaks the intermediate closure (miscompile mechanism E,
 // nested-factory apply, design/MISCOMPILE-HUNT-FINDINGS.0.md).
+//
+// The factory returns its lambda one of two ways, and both are recoverable:
+// a CLOSURE when the body reads an enclosing binding (`( fn [[x:Integer]
+// [Integer][x add n]] )` over the factory's `n` — a PUSH_CLOSURE out op
+// naming the compiled unit), and a CONST when it captures nothing (`[x add
+// 1]` — the fold bakes the whole lambda as one value). Only the closure
+// arm existed, so every capture-free factory refused as "closure shape
+// unknown" though its arity is written on the const's own signature.
 func (es *EmitState) producerReturnedClosureArity(id string) (int, bool) {
-	pr, ok := es.producedBy[id]
+	op, ok := es.producerReturnedOutOp(id)
 	if !ok {
 		return 0, false
+	}
+	switch op.kind {
+	case opClosure:
+		cu := op.closureUnit
+		if cu < 0 || cu >= len(es.fnRecs) {
+			return 0, false
+		}
+		return es.fnRecs[cu].nParams, true
+	case opConst:
+		return constLambdaArity(es.consts, op.idx)
+	}
+	return 0, false
+}
+
+// appendResidualSeqs collects the producing-event seqs a residual's
+// operands reference — the unit's own out-ops AND, for a closure operand,
+// its lexical CAPTURES. A capture is an enclosing-scope operand like any
+// other: unless the promotion planner counts it, its producer is never
+// given a frame slot, the operand stays an opEvent, and the closure push
+// materialises it through pushOperand's const arm — baking the event's
+// SEQ as a const index (NUR126). The event-stream operands are surfaced
+// by forEachOperand's closure arm for exactly this reason; a RESIDUAL
+// closure (a returned lambda) reaches the planner only through here.
+func appendResidualSeqs(dst []int, ops []EmitOperand) []int {
+	for _, op := range ops {
+		switch op.kind {
+		case opEvent:
+			if op.resIdx == 0 {
+				dst = append(dst, op.idx)
+			}
+		case opClosure:
+			dst = appendResidualSeqs(dst, op.closureCaps)
+		}
+	}
+	return dst
+}
+
+// producerReturnedOutOp is the single out op of the unit a compiled user
+// call ran for id's producer — the factory's one returned value, or
+// ok=false when the producer is anything else (a native call, a
+// multi-output unit, an unknown id).
+func (es *EmitState) producerReturnedOutOp(id string) (EmitOperand, bool) {
+	pr, ok := es.producedBy[id]
+	if !ok {
+		return EmitOperand{}, false
 	}
 	for _, fr := range es.frames {
 		for i := range fr {
@@ -7556,24 +7617,57 @@ func (es *EmitState) producerReturnedClosureArity(id string) (int, bool) {
 				continue
 			}
 			if fr[i].kind != evCallUser {
-				return 0, false
+				return EmitOperand{}, false
 			}
 			unit := fr[i].uc.unit
 			if unit < 0 || unit >= len(es.fnRecs) {
-				return 0, false
+				return EmitOperand{}, false
 			}
 			rec := es.fnRecs[unit]
-			if len(rec.outOps) != 1 || rec.outOps[0].kind != opClosure {
-				return 0, false
+			if len(rec.outOps) != 1 {
+				return EmitOperand{}, false
 			}
-			cu := rec.outOps[0].closureUnit
-			if cu < 0 || cu >= len(es.fnRecs) {
-				return 0, false
-			}
-			return es.fnRecs[cu].nParams, true
+			return rec.outOps[0], true
 		}
 	}
-	return 0, false
+	return EmitOperand{}, false
+}
+
+// producerReturnedClosure reports whether id holds a compiled CLOSURE this
+// pass produced (an OpPushClosure out op). That value is a ClosurePayload,
+// invokable only through the VM's re-entrant runner — the property the two
+// callers below guard. A capture-free lambda the fold baked as a CONST is
+// an ordinary interpreter-invokable fn value and is deliberately not one.
+func (es *EmitState) producerReturnedClosure(id string) bool {
+	op, ok := es.producerReturnedOutOp(id)
+	return ok && op.kind == opClosure
+}
+
+// constLambdaArity reads the arity off a baked ANONYMOUS lambda const —
+// one own signature with a boru body, no name and no module origin. The
+// exclusions are the fn-value apply's soundness argument (resolveDynamicApply):
+// OpCallDynamic runs anonymous-VALUE semantics, which leave a NAMED Go-impl
+// fn (`add/v`, a module export, a `FnUtil.const` result) as data where the
+// interpreter's word dispatch would apply it, so those keep the refusal.
+func constLambdaArity(consts []core.Value, idx int) (int, bool) {
+	if idx < 0 || idx >= len(consts) {
+		return 0, false
+	}
+	fd, ok := consts[idx].Data.(core.FnDefInfo)
+	if !ok || fd.Name != "" || fd.Module != "" {
+		return 0, false
+	}
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	lam, hasOwn := fd.FirstOwnSig()
+	if own != 1 || !hasOwn || len(lam.Body()) == 0 {
+		return 0, false
+	}
+	return len(lam.Params), true
 }
 
 // makeListRange reports whether any of a dispatch's args was produced by an
