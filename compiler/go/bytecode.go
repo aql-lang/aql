@@ -1220,6 +1220,24 @@ type CompiledFn struct {
 	// the region with the WORD in its place (vm.go callDynFrame, NUR123).
 	// Nil for a replay whose region holds no bare read.
 	DynFrameWords map[int][]DynFrameWord
+	// DynApplyName names the BINDING the head of a paren-bounded trailing
+	// fn-value apply was read under, per OpCallDynTrailTop /
+	// OpCallDynTrailKeepQ (keyed by its unit-local pc), together with the
+	// READ's source position.
+	//
+	// The op applies a VALUE, so its own no-match diagnostic had no name and
+	// no position to give: the interpreter reads `g` as a WORD (stepWord
+	// routes a bound FnDefInfo through Registry.Lookup) and raises `cannot
+	// call `g`` at the read, while the compiled lane raised `cannot call
+	// ``. That is the same divergence DynFrameWords closes for the replay,
+	// at the one dispatch shape the replay never reaches — a paren-bounded
+	// apply whose window the recorder resolved statically. The applied fn
+	// is a frame SLOT, never a registry binding, so the VM cannot recover
+	// the name at run time; it has to ride in the bytecode.
+	//
+	// Nil for an apply whose head was not a bare read (an event-produced
+	// fn, a `/v` delivery) — the nameless diagnostic stays exactly as it was.
+	DynApplyName map[int]DynFrameWord
 	// RetReplay marks a body that ends in a whole-frame dynamic-apply replay
 	// (OpCallDynFrame): its residual count is RUNTIME-variable, so the RET
 	// contract switches discipline. A FOREIGN-registry fn (Reg set, a module-

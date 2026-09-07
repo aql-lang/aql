@@ -407,11 +407,16 @@ type lowerer struct {
 	// (Program.ClosureRet for the main code, CompiledFn.ClosureRet for a fn
 	// unit), keyed by the target's own pc — see pushOperand.
 	closureRet *map[int]ClosureRetSpec
-	sigIdx     map[*core.Signature]int
-	vm         []vmSlot
-	variadic   map[int]bool // loop seqs: N runtime values, not one
-	promoted   map[int]int  // value-def locals: producing event seq → frame local slot
-	dead       map[int]bool // single-result value-defs referenced zero times: drop the result
+	// dynApplyName is the emission target's trailing-apply name table
+	// (CompiledFn.DynApplyName), keyed by the target's own pc — see
+	// seatDynApplyName. Nil for the main code, whose applies name no frame
+	// binding.
+	dynApplyName *map[int]DynFrameWord
+	sigIdx       map[*core.Signature]int
+	vm           []vmSlot
+	variadic     map[int]bool // loop seqs: N runtime values, not one
+	promoted     map[int]int  // value-def locals: producing event seq → frame local slot
+	dead         map[int]bool // single-result value-defs referenced zero times: drop the result
 	// bindConsumes marks DEAD producers whose result a root OpBindGlobal
 	// write-back consumes (Pop mode) instead of the producer-site dead-drop:
 	// the value stays live through the immediately-following evDynBind, which
@@ -636,6 +641,21 @@ func (lw *lowerer) emitDeoptsBefore(p core.SrcPos) {
 		lw.emit(OpDeoptIfFn, len(*lw.deoptTable)-1, d.start)
 	}
 	lw.deopts = kept
+}
+
+// seatDynApplyName records a trailing fn-value apply's head binding name at
+// the pc of the OpCallDynTrailTop / OpCallDynTrailKeepQ about to be emitted
+// (CompiledFn.DynApplyName), so the op's no-match diagnostic can name and
+// point at the read the interpreter dispatches. An apply with no bare-read
+// head, and the main code (no frame to bind), record nothing.
+func (lw *lowerer) seatDynApplyName(w DynFrameWord) {
+	if lw.dynApplyName == nil || w.Name == "" {
+		return
+	}
+	if *lw.dynApplyName == nil {
+		*lw.dynApplyName = map[int]DynFrameWord{}
+	}
+	(*lw.dynApplyName)[len(*lw.code)] = w
 }
 
 func (lw *lowerer) emit(op Opcode, arg int, pos core.SrcPos) int {
@@ -2202,6 +2222,13 @@ func (lw *lowerer) lowerCall(ev *EmitEvent) string {
 			// An event-provenance fn: the runtime quote state survives
 			// (no read substitution to mirror) — see OpCallDynTrailKeepQ.
 			op = OpCallDynTrailKeepQ
+		}
+		// The head's binding name for the op's own no-match diagnostic. The
+		// `apply` word's flavour is excluded: applyHandler re-steps the fn
+		// against the whole preceding stack, a different dispatch whose
+		// diagnostics this pair does not describe.
+		if op != OpCallDynApplyTop {
+			lw.seatDynApplyName(c.dynApplyName)
 		}
 		lw.emit(op, c.dynApply, c.pos)
 	} else if c.dynMixed {
