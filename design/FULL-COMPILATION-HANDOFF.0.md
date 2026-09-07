@@ -3443,14 +3443,34 @@ def f fn [[g:Function][Integer][(g 5)]]            PUSH_CONST 5, written [5]
 So the proposed operand-kind fix would have answered that row wrong while
 looking right on every literal row it was derived from.
 
-**What closing it actually needs.** A signal neither lane has today. The engine
-notes only fn-admitting bare reads — `noteWordRead` gates on
-`IsFnTypedCarrier(v)` or a gradual carrier admitting Function — because its
-purpose was NUR123's word dispatch, where only fn-valued reads matter. The
-written tuple needs EVERY bare read marked, whatever its type, so the apply
-can count its leading run. That is a kernel seam in core/go with its own 100%
-gate, plus the two ops' diagnostics; it is a properly-scoped increment of its
-own, not a rider on this one.
+**What closing it actually needs — and a fourth correction, to this section's
+own first draft.** It first read that the fix needed a signal neither lane has,
+because `noteWordRead` gates on `IsFnTypedCarrier(v)` or a gradual carrier
+admitting Function, and filed the next increment as a core/go kernel change.
+That was wrong, and reading one line further would have shown it: both engine
+bare-read sites (engine.go ~2636 and ~2782) call `NoteLocalRead(id, pos)`
+UNCONDITIONALLY, right beside the gated `noteWordRead`, recording every bare
+read's value ID on the innermost open unit. Probed over this family it
+discriminates exactly, and it gets the row operand kind could not:
+
+```
+(g 5)                          localReads 0   written
+(g (1 add 1))                  localReads 0   written
+(g y)          y a param       localReads 1   not written
+def y 7  (g y) folded to const localReads 1   not written
+def y (1 add 6)  (g y)         localReads 1   not written
+```
+
+`localReads` gets the folded row right precisely because it records the
+syntactic fact — a bare read happened — rather than anything about the
+lowering. So `noteWordRead`'s gate stays exactly as it is, NUR123's
+fn-dispatch signal, and is NOT relaxed; the next increment is a compiler and
+VM change (count the leading run at RecordDynApply, seat one integer, truncate
+the args handed to NoMatchDiag at both diagnostic sites), not a kernel one.
+
+The pattern is the same one this section already records twice: the first
+reading of a gate's absence was drawn from where the search stopped, not from
+what the code does.
 
 **Pins**: `TestWrittenTuplePrefixRule` and
 `TestWrittenTupleConstFoldedLocalDeclines` in
