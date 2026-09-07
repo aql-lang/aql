@@ -3389,6 +3389,75 @@ loudly if either half moves.
 compiled 1:43) and the written tuple above; NUR124's discriminator and its new
 fifth witness; NUR119.
 
+## The written tuple is a PREFIX, and the nineteenth increment's rule was wrong (2026-09-07, the twentieth increment, NUR122)
+
+A measurement increment. Nothing is fixed here; what changes is the recorded
+rule, which the next attempt would otherwise have built on. Everything below
+is pre-existing, byte-identical on `120fb37`.
+
+**What the nineteenth increment recorded.** Parity stops at the notes when the
+argument is a WORD, and three rows suggested the discriminator was operand
+kind: `opConst` and `opEvent` written, `opLocal` not. That was recorded rather
+than encoded precisely because three rows are not a rule — and the instinct
+was right, because it is wrong three separate ways.
+
+**(1) It is a PREFIX, not a filter.** Forward collection walks the tokens after
+the head left to right and stops at the first WORD read, which the pointer had
+already substituted onto the value stack. Over a 3-param callee:
+
+```
+(g 5 6 y)   written [5 6]
+(g 5 y 6)   written [5]      <- decisive: a filter would say [5 6]
+(g y 5 6)   written []
+```
+
+`(g 5 y 6)` is the row that separates the two readings, and it cannot exist in
+the one-argument family: over one argument a prefix and a filter are the same
+function.
+
+**(2) It spans TWO ops.** Those multi-argument rows lower to `OpCallDynFrame`,
+the whole-frame replay — not `OpCallDynTrailTop`, which multi-argument applies
+never reach. The replay's own no-match hands its entire arg window to
+`NoMatchDiag`, exactly the fault the trailing apply has. So a fix scoped to the
+op the nineteenth increment touched would have closed half the family.
+
+The reason the first sweep missed all of this is worth recording, because it
+looked like evidence: every two-parameter row it tried was spelled
+`(z:String w:String => …)`, which parses as a **Map**, not a lambda. All seven
+died at check time with `got (Map)`, and the sweep read that as "multi-argument
+applies do not reach this op" — a conclusion drawn from a syntax error. The
+correct spelling is `([z:String w:String] => …)`. A row that dies at check time
+is not a row about runtime behaviour, and this line has now been fooled by that
+twice in two days (the other was `b5`, a check-time row read as a
+counterexample to the rule it was silent about).
+
+**(3) The discriminator is SYNTACTIC, not an operand kind.** A body-local bound
+to a literal folds its read to `PUSH_CONST` — byte-identical to the operand a
+written literal produces — and is still not written:
+
+```
+def f fn [[g:Function][Integer][def y 7  (g y)]]   PUSH_CONST 7, written []
+def f fn [[g:Function][Integer][(g 5)]]            PUSH_CONST 5, written [5]
+```
+
+So the proposed operand-kind fix would have answered that row wrong while
+looking right on every literal row it was derived from.
+
+**What closing it actually needs.** A signal neither lane has today. The engine
+notes only fn-admitting bare reads — `noteWordRead` gates on
+`IsFnTypedCarrier(v)` or a gradual carrier admitting Function — because its
+purpose was NUR123's word dispatch, where only fn-valued reads matter. The
+written tuple needs EVERY bare read marked, whatever its type, so the apply
+can count its leading run. That is a kernel seam in core/go with its own 100%
+gate, plus the two ops' diagnostics; it is a properly-scoped increment of its
+own, not a rider on this one.
+
+**Pins**: `TestWrittenTuplePrefixRule` and
+`TestWrittenTupleConstFoldedLocalDeclines` in
+lang/go/dyn_apply_head_name_test.go, which fail if any of the three findings
+moves — including the interpreter side, so a change in its collection
+behaviour surfaces as a failing record rather than a silent drift.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.
