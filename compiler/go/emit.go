@@ -205,6 +205,7 @@ type emitCall struct {
 	dynApply          int                   // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
 	dynApplyUnquote   bool                  // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
 	dynApplyKeepQuote bool                  // the dynApply fn is EVENT-provenance (a direct call result, no read substitution): lower to OpCallDynTrailKeepQ, which preserves the runtime quote state (quoted stays data)
+	dynApplyName      DynFrameWord          // the BINDING name (and read position) the apply's head was read bare under, seated on the unit at the emitted pc (CompiledFn.DynApplyName); zero when the head was not a bare read
 	dynMixed          bool                  // forward-drift window (REFUSAL-CLOSURE §1): island the len(ops) laid-out window [residual(s), dynamic value, word const, forward literal] verbatim via OpCallDynamicMixed — the island's own dispatch performs the interpreter's forward collection over the LIVE top value
 	makeMap           bool                  // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys           []string
@@ -5165,6 +5166,10 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	if !core.IsFnValueResidual(fn) { // fn must be a genuine fn-value residual
 		return 0, false
 	}
+	// The head's binding name for the lowered op's own diagnostics
+	// (CompiledFn.DynApplyName) — read BEFORE the pendingApply consume below,
+	// which is what tells a bare read apart from an `apply`-word arrival.
+	headName := es.dynApplyHeadName(es.openUnitRec(), fn)
 	// The paren window consumed a bare read of this local (NUR123
 	// accounting): an accepted value-semantics lowering.
 	es.creditWordRead(fn.ID)
@@ -5279,7 +5284,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 		unquote = true
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote, dynApplyKeepQuote: keepQuote}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote, dynApplyKeepQuote: keepQuote, dynApplyName: headName}})
 	es.setProduced(out, seq)
 	return len(args), true
 }
@@ -9504,7 +9509,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			// an ordinary fn falls through to curReg == vc.r (the fork).
 			cf.Reg = rec.reg
 		}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, closureRet: &cf.ClosureRet, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, bindConsumes: collectResidentBindConsumes(rec.frag.events, rec.dead), isFnUnit: true}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, closureRet: &cf.ClosureRet, dynApplyName: &cf.DynApplyName, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, bindConsumes: collectResidentBindConsumes(rec.frag.events, rec.dead), isFnUnit: true}
 		seatUnitDeopts(flw, rec, &cf, diverged)
 		es.emitDynParamBinds(flw, rec)
 		// The apply-loop replay's unnamed-param re-pushes seat at UNIT START —
@@ -9590,6 +9595,11 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 			// full [args…, fn] (fn on top); collapse them to the one applied value with
 			// OpCallDynTrailTop before the RET (the captured/param fn auto-applies to
 			// its args exactly as the interpreter's paren auto-dispatch).
+			// No DynApplyName is seated here. Measured (cover-gate, 2026-09-06):
+			// every body-tail dynTrail the corpus reaches carries the `apply`
+			// flavour, so a name seated on this route would be dead code — the
+			// paren body-tail form the seat was written for either refuses or
+			// lowers through the EVENT route (lowerCall), which does seat it.
 			if rec.dynTrailArity > 0 {
 				op := OpCallDynTrailTop
 				if rec.dynTrailApply {
@@ -10730,6 +10740,30 @@ func (es *EmitState) wordReadName(rec *fnUnitRec, v core.Value) string {
 		return ""
 	}
 	return rec.wordReadNames[v.ID]
+}
+
+// openUnitRec is the INNERMOST open fn-unit record — the frame a recording
+// site is currently inside — or nil in the main code, which has no frame.
+func (es *EmitState) openUnitRec() *fnUnitRec {
+	if len(es.openUnitRecs) == 0 {
+		return nil
+	}
+	return es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]]
+}
+
+// dynApplyHeadName is CompiledFn.DynApplyName's entry for a trailing fn-value
+// apply whose head is v: the binding NAME v was read bare under and the
+// READ's position. The interpreter dispatches such a read as a WORD, so its
+// no-match names the binding and points at the read (`cannot call `g“ at
+// 1:37); the compiled apply holds a frame SLOT with neither, which is the
+// whole reason the pair has to ride in the bytecode. Zero when the head was
+// not a bare read (an event-produced fn, a `/v` delivery) — there the
+// interpreter has no binding name to print either.
+func (es *EmitState) dynApplyHeadName(rec *fnUnitRec, v core.Value) DynFrameWord {
+	if name := es.wordReadName(rec, v); name != "" {
+		return DynFrameWord{Name: name, Pos: rec.wordReadPos[v.ID]}
+	}
+	return DynFrameWord{}
 }
 
 // dynFrameWordsFor is the replay's word table for a token region: index i

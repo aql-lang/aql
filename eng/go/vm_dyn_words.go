@@ -15,6 +15,16 @@ func dynFrameWordsAt(p *compiler.Program, unit, pc int) []compiler.DynFrameWord 
 	return p.Fns[unit].DynFrameWords[pc]
 }
 
+// dynApplyNameAt is the head-binding name of the trailing fn-value apply at
+// pc in the code that holds it (CompiledFn.DynApplyName): only a fn unit
+// carries one — a main-code apply names no frame binding.
+func dynApplyNameAt(p *compiler.Program, unit, pc int) compiler.DynFrameWord {
+	if unit < 0 || p == nil || unit >= len(p.Fns) {
+		return compiler.DynFrameWord{}
+	}
+	return p.Fns[unit].DynApplyName[pc]
+}
+
 // callDynFrameWords is the whole-frame replay for a token region carrying
 // BARE READS of frame bindings (CompiledFn.DynFrameWords — NUR123).
 //

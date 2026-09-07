@@ -3282,6 +3282,113 @@ frame that has no floor of its own.
 is untouched — `def mk fn [[k:Integer][Function][(z:Integer => [mul k z])]]
 [(mk 3)] each [5 swap]` is `[15]` interpreted and `[fn (Integer)]` compiled.
 
+## The trailing apply's head carries its binding name (2026-09-06, the nineteenth increment, NUR122)
+
+**The divergence.** The interpreter reads the head of `(g 5)` as a WORD —
+`stepWord` routes a bound `FnDefInfo` through `Registry.Lookup` — so a no-match
+names the binding, anchors the caret at the read, and explains the failing
+overloads from the fn it found. The compiled apply holds a frame SLOT, which
+carries none of that:
+
+```
+def app3 fn [[g:Function][Integer][(g 5)]]  app3 (z:String => [z])
+    interpreted  cannot call `g` … --> 1:37 … candidate `g (String)` … help: group the call in parens …
+    compiled     cannot call ``   … --> source position unknown
+```
+
+NUR122 had already located this and named the model — `callDynFrameWords`
+carries a `DynFrameWord` name+position table for the whole-frame replay — so
+this increment started from a boundary, not from scratch.
+
+**What the measurement changed about the plan.** The record's disassembly
+showed a lambda-body witness and inferred the fault was the lambda's. Five rows
+said otherwise. The two-argument paren apply `(g 5 6)` AGREES, and so does the
+no-paren `g x`: both lower to `CALL_DYN_FRAME`, which already has the table. So
+the fault is not lambda-specific and not `CALL_DYN_TRAIL_TOP`-generic — it is
+exactly the ops that reach `callDynTrailTop`. And the op has TWO lowering
+routes, not one: the body-tail apply (`[(g 5)]`, seated in emit.go where the
+whole residual collapses) and the event apply (`[1 add (g 5)]`,
+`[def t (g 5) t]`, seated in lower.go where the result seats as an operand).
+Fixing only the route the witness used would have left the other two shapes
+diverging.
+
+**The fix.** `CompiledFn.DynApplyName` maps the pc of an `OpCallDynTrailTop` /
+`OpCallDynTrailKeepQ` to the binding name its head was read bare under and that
+read's position, seated by both routes from the same `wordReadNames` /
+`wordReadPos` tables NUR123's replay reads. `RecordDynApply` captures the pair
+BEFORE it consumes the `pendingApply` entry — that consume is what tells a bare
+read apart from an `apply`-word arrival, whose flavour
+(`OpCallDynApplyTop`, a different dispatch) is deliberately not seated. The VM
+builds the no-match through `NoMatchDiag` with the APPLIED fn rather than
+`RuntimeNoMatch`'s registry lookup, since a frame binding is a slot on this
+lane and `Registry.Lookup` finds nothing.
+
+**One reconciliation the name alone did not buy.** A boru fn authored without a
+`|` boundary carries `BarrierPos == BarrierAllForward` (-1). Registration
+resolves that sentinel to the sig's arg count (`upsertFnDef`), and the
+diagnostic reads the RESOLVED value through `HasForwardSigs` to decide the
+"group the call in parens" help — so the interpreter printed that line and the
+raw const, still carrying -1, did not. The tempting fix was to widen
+`HasForwardSigs` to accept the sentinel, which is a no-op for every
+registry-held caller. It was not taken: engine.go dispatches a raw fn VALUE at
+the pointer through the same predicate, and that value can carry -1, so
+widening it would move dispatch mode, not just a help line. `installedSigView`
+resolves the sentinel for the diagnostic only. Same reconciliation
+`closureAsWord` already makes for the replay's bridge, and for the same reason.
+
+**Measured**: `(g 5)` is byte-identical on both lanes — message, code, caret,
+both notes and the help — for a plain fn body, a lambda VALUE's body, an event
+apply consumed by a native word and one consumed by a value-def. NUR122's two
+lambda witnesses agree on name and position (`g` at 1:64; the capture row named
+`add` at 1:80 before). The succeeding twins are unchanged, as they always
+agreed.
+
+**The boundary, and why it was recorded rather than guessed.** Parity is
+byte-for-byte when the argument is a LITERAL or paren-computed (`(g 5)`,
+`(g (1 add 1))`) and stops at the NOTES when it is a WORD (`(g y)`, `(g j)`):
+the pointer substitutes a word onto the value stack before the head dispatches,
+so the interpreter's forward window consumed no token and reports `takes 1
+argument, but none were supplied` where the compiled lane names the value it
+applied. This is the same remainder the attempted twelfth increment measured —
+the replay islands values, the interpreter steps tokens. Four rows suggested a
+discriminator (operand kind: const and event are written, local is not), which
+is exactly the kind of rule this line has been wrong about before, so it is
+recorded with its witnesses and left to its own increment. Both lanes raise the
+same signature_error under the same name at the same place, and the succeeding
+twin agrees exactly, so the residue is note-only.
+
+**Two corrections cover-gate made to this increment.** Both were mine, and
+neither showed up in `make test`.
+
+The seat was written for BOTH lowering routes on the reasoning that either
+could carry a bare-read head. It cannot: every body-tail `dynTrail` the corpus
+reaches carries the `apply` flavour, so the emit.go arm was dead code from the
+moment it was written — the paren body-tail form it was written for either
+refuses or lowers through the EVENT route, which is what actually seats the
+name for `(g 5)`. The parity rows had been passing through lower.go all along.
+The seat, its `rec.dynTrailName` field and its capture are gone, with the
+measurement recorded at the site. Any per-op discrimination at that site has
+the same problem, so there is no narrower version of it to keep: the honest
+form is not to write it.
+
+The other correction is the one worth generalising. Adding a NAMED arm to
+`noMatchIfSigged` made its existing NAMELESS arm unreachable — every no-match
+the corpus reaches now carries a name. A new branch can strand an old one, and
+a 100% floor is what catches that; a suite that only asks "did anything break"
+never will. The fix was not to delete the correct fallback but to find the
+shape that genuinely reaches it — a `/v` delivery head, a value delivery rather
+than the word dispatch the interpreter names — and pin it. That witness turned
+out to carry a pre-existing divergence of its own, byte-identical on `120fb37`,
+now recorded as NUR124's fifth witness: the compiled lane APPLIES a /v-parked
+fn where the interpreter leaves it as data, because `callDynTrailTop` strips
+the applied copy's quote to mirror a read-substituted arrival. The pin asserts
+only the nameless diagnostic and that the interpreter still parks, so it fails
+loudly if either half moves.
+
+**Still open**: NUR122's position-only row (`f ([] => [42]) 5`, interp 2:1 vs
+compiled 1:43) and the written tuple above; NUR124's discriminator and its new
+fifth witness; NUR119.
+
 ## What the ledger excludes, and why each exclusion was measured
 
 Each of these was arrived at by instrumenting and counting, not by reading.

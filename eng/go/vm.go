@@ -955,10 +955,10 @@ func (vc *vmContext) callDynamic(reg *core.Registry, n int, trailing bool, stack
 // The *dynEnter return is the Apply kernel's outcome: non-nil means the callee
 // carried a compiled unit of THIS program and the run loop should enter it as a
 // frame (vm_dyn_apply.go), rather than the handler having islanded it.
-func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int, words []compiler.DynFrameWord) ([]core.Value, *dynEnter, error) {
+func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, frameBase int, stack []core.Value, curDebug []core.SrcPos, pc int, words []compiler.DynFrameWord, head compiler.DynFrameWord) ([]core.Value, *dynEnter, error) {
 	switch op {
 	case compiler.OpCallDynTrailTop:
-		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
+		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc, head)
 	case compiler.OpCallDynTrailKeepQ:
 		// The event-provenance flavour: the runtime quote state survives
 		// (no read substitution to mirror). A Quoted fn stays data — the
@@ -967,7 +967,7 @@ func (vc *vmContext) callDynFamily(reg *core.Registry, op compiler.Opcode, arg, 
 		if top := len(stack) - 1; top >= 0 && stack[top].Quoted {
 			return stack, nil, nil
 		}
-		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
+		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc, head)
 	case compiler.OpCallDynApplyTop:
 		return vc.callDynApplyTop(reg, arg, stack, curDebug, pc)
 	case compiler.OpCallDynFrame:
@@ -999,7 +999,7 @@ func (vc *vmContext) callDynamicOp(reg *core.Registry, op compiler.Opcode, arg i
 // for ANY arity (unlike OpCallDynamicTrailing's 1-arg rotation). The args slice is
 // the same stack-order window callDynamic's leading case feeds, so the closure /
 // island binding matches the proven leading path.
-func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]core.Value, *dynEnter, error) {
+func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Value, curDebug []core.SrcPos, pc int, head compiler.DynFrameWord) ([]core.Value, *dynEnter, error) {
 	r := vc.r
 	if len(stack) < n+1 {
 		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYN_TRAIL_TOP underflow")
@@ -1041,7 +1041,7 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 	if !core.IsAppliableFn(fnVal) {
 		return stack, nil, nil // not callable: [args, fn] is already the interpreter's trailing residual
 	}
-	if err := noMatchIfSigged(reg, fnVal, args, curDebug, pc, r); err != nil {
+	if err := noMatchIfSigged(reg, fnVal, args, curDebug, pc, r, head); err != nil {
 		return nil, nil, err
 	}
 	if fnDef, ok := fnVal.Data.(core.FnDefInfo); ok && vmNativeApplicable(vc.r, fnDef) {
@@ -1092,7 +1092,7 @@ func (vc *vmContext) callDynTrailTop(reg *core.Registry, n int, stack []core.Val
 // signatures to consult, so it keeps the data behaviour: MatchFnSig's nil is
 // "no opinion" there, and the length check below is what separates the two
 // readings of nil.
-func noMatchIfSigged(reg *core.Registry, fnVal core.Value, args []core.Value, curDebug []core.SrcPos, pc int, r *core.Registry) error {
+func noMatchIfSigged(reg *core.Registry, fnVal core.Value, args []core.Value, curDebug []core.SrcPos, pc int, r *core.Registry, head compiler.DynFrameWord) error {
 	// Three ways a value has NO own signatures worth consulting here, all
 	// meaning the same thing — this guard has no opinion, leave the window to
 	// the paths below:
@@ -1115,7 +1115,45 @@ func noMatchIfSigged(reg *core.Registry, fnVal core.Value, args []core.Value, cu
 	if core.MatchFnSig(fnVal, args) != nil {
 		return nil
 	}
+	// A head the recorder saw read BARE under a frame binding
+	// (CompiledFn.DynApplyName): the interpreter dispatched that read as a
+	// WORD, so it names the binding, anchors the caret at the read, and
+	// explains the failing overloads from the fn it found. The applied value
+	// IS that fn here, so hand it to the same builder the interpreter's own
+	// dispatch uses rather than looking the name up — a frame binding is a
+	// SLOT on this lane, and Registry.Lookup would find nothing.
+	if head.Name != "" {
+		view := installedSigView(fnDef)
+		return stampAt(core.NoMatchDiag(r.Source, head.Name, &view, args, head.Pos, core.ReorderHintFor(head.Name, &view, args)), curDebug, pc, r)
+	}
 	return stampAt(core.RuntimeNoMatch(reg, fnDef.Name, args), curDebug, pc, r)
+}
+
+// installedSigView is fnDef as the interpreter's REGISTRY holds it, for the
+// no-match diagnostic only.
+//
+// A boru fn authored without a `|` boundary carries BarrierPos ==
+// BarrierAllForward (-1); registration resolves that sentinel to the sig's arg
+// count (registry.go upsertFnDef), and the diagnostic reads the RESOLVED value
+// — HasForwardSigs is what gates the "group the call in parens" suggestion. The
+// interpreter dispatches the head through its INSTALLED binding and so prints
+// that line; the compiled lane applies the const, which still carries -1, and
+// dropped it. This is the same reconciliation closureAsWord makes for the
+// replay's bridge (vm_dyn_words.go), kept local to the diagnostic: the shared
+// predicate also picks the DISPATCH mode for a raw fn value at the pointer
+// (engine.go), which this must not move.
+//
+// Copies the signature slice — the const is shared program state.
+func installedSigView(fnDef core.FnDefInfo) core.FnDefInfo {
+	sigs := make([]core.Signature, len(fnDef.Signatures))
+	copy(sigs, fnDef.Signatures)
+	for i := range sigs {
+		if sigs[i].BarrierPos == core.BarrierAllForward {
+			sigs[i].BarrierPos = sigs[i].TotalArgs()
+		}
+	}
+	fnDef.Signatures = sigs
+	return fnDef
 }
 
 // callDynApplyTop is callDynTrailTop under the `apply` WORD's semantics
@@ -2273,7 +2311,7 @@ func (vc *vmContext) run(startUnit int, locals []core.Value, stack []core.Value)
 			if len(frames) > 0 {
 				fb = frames[len(frames)-1].stackBase
 			}
-			ns, ent, err := vc.callDynFamily(curReg, in.Op, int(in.Arg), fb, stack, curDebug, pc, dynFrameWordsAt(p, curUnit, pc))
+			ns, ent, err := vc.callDynFamily(curReg, in.Op, int(in.Arg), fb, stack, curDebug, pc, dynFrameWordsAt(p, curUnit, pc), dynApplyNameAt(p, curUnit, pc))
 			if err != nil {
 				return nil, err
 			}

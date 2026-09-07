@@ -27,6 +27,50 @@ func TestDynFrameWordsAt(t *testing.T) {
 	}
 }
 
+// TestDynApplyNameAt pins the trailing apply's head-name lookup
+// (CompiledFn.DynApplyName, the nineteenth increment) — same guards as the
+// replay's table, one entry rather than a slice.
+func TestDynApplyNameAt(t *testing.T) {
+	if dynApplyNameAt(nil, 0, 0).Name != "" || dynApplyNameAt(&compiler.Program{}, -1, 0).Name != "" ||
+		dynApplyNameAt(&compiler.Program{}, 0, 0).Name != "" {
+		t.Error("a nil program, the main code and an out-of-range unit name nothing")
+	}
+	p := &compiler.Program{Fns: []compiler.CompiledFn{{DynApplyName: map[int]compiler.DynFrameWord{
+		3: {Name: "g", Pos: core.SrcPos{Row: 1, Col: 37}},
+	}}}}
+	if w := dynApplyNameAt(p, 0, 3); w.Name != "g" || w.Pos.Col != 37 {
+		t.Errorf("the unit's table reads back by pc: %+v", w)
+	}
+	if dynApplyNameAt(p, 0, 4).Name != "" {
+		t.Error("an unkeyed pc names nothing")
+	}
+}
+
+// TestInstalledSigView pins the barrier reconciliation the head name needed:
+// registration resolves BarrierAllForward (-1) to the sig's arg count, and
+// the no-match diagnostic reads the RESOLVED value to decide the forward-args
+// help. An already-resolved barrier is left alone, and the source fn is never
+// mutated — a compiled const is shared program state.
+func TestInstalledSigView(t *testing.T) {
+	src := core.FnDefInfo{Signatures: []core.Signature{
+		{Params: []core.FnParam{{Type: core.TString}}, BarrierPos: core.BarrierAllForward},
+		{Params: []core.FnParam{{Type: core.TString}, {Type: core.TString}}, BarrierPos: 0},
+	}}
+	view := installedSigView(src)
+	if view.Signatures[0].BarrierPos != 1 {
+		t.Errorf("the sentinel resolves to the arg count: %d", view.Signatures[0].BarrierPos)
+	}
+	if view.Signatures[1].BarrierPos != 0 {
+		t.Errorf("an explicit stack-only barrier is left alone: %d", view.Signatures[1].BarrierPos)
+	}
+	if !view.HasForwardSigs() {
+		t.Error("the resolved view is what gates the forward-args help")
+	}
+	if src.Signatures[0].BarrierPos != core.BarrierAllForward {
+		t.Error("the source fn must not be mutated")
+	}
+}
+
 func TestReplayRegionLive(t *testing.T) {
 	fn := core.NewFunction(core.FnDefInfo{})
 	quoted := fn
